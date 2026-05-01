@@ -1,0 +1,35 @@
+name: bug
+description: Report a bug
+labels: [bug, needs-triage]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug! Please fill out the form below.
+        For security issues, do **not** open a public issue — see SECURITY.md.
+  - type: input
+    id: version
+    attributes:
+      label: Loom version
+      placeholder: "v0.x.y or commit sha"
+    validations:
+      required: true
+  - type: input
+    id: deployment
+    attributes:
+      label: Deployment
+      placeholder: "docker / helm / binary / kustomize / dev"
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: Steps to reproduce, expected vs actual.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs (with sensitive values redacted)
+      render: shell

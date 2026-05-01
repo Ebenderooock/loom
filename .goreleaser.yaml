@@ -1,0 +1,109 @@
+version: 2
+
+project_name: loom
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: loom
+    main: ./cmd/loom
+    binary: loom
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+      - freebsd
+    goarch:
+      - amd64
+      - arm64
+      - arm
+    goarm:
+      - "7"
+    ignore:
+      - goos: darwin
+        goarch: arm
+      - goos: windows
+        goarch: arm
+      - goos: freebsd
+        goarch: arm
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+      - -X github.com/loomctl/loom/internal/buildinfo.Version={{.Version}}
+      - -X github.com/loomctl/loom/internal/buildinfo.Commit={{.Commit}}
+      - -X github.com/loomctl/loom/internal/buildinfo.Date={{.Date}}
+
+archives:
+  - id: default
+    formats: [tar.gz]
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}{{ with .Arm }}v{{ . }}{{ end }}
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files:
+      - LICENSE
+      - README.md
+      - CHANGELOG.md
+
+checksum:
+  name_template: checksums.txt
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-snapshot-{{ .ShortCommit }}"
+
+changelog:
+  sort: asc
+  use: github
+  filters:
+    exclude:
+      - "^chore:"
+      - "^docs:"
+      - "^test:"
+      - Merge pull request
+
+dockers:
+  - image_templates:
+      - "ghcr.io/loomctl/loom:{{ .Version }}-amd64"
+    use: buildx
+    dockerfile: deploy/docker/Dockerfile.goreleaser
+    build_flag_templates:
+      - "--platform=linux/amd64"
+      - "--label=org.opencontainers.image.source=https://github.com/loomctl/loom"
+      - "--label=org.opencontainers.image.version={{ .Version }}"
+      - "--label=org.opencontainers.image.licenses=AGPL-3.0-only"
+  - image_templates:
+      - "ghcr.io/loomctl/loom:{{ .Version }}-arm64"
+    use: buildx
+    goarch: arm64
+    dockerfile: deploy/docker/Dockerfile.goreleaser
+    build_flag_templates:
+      - "--platform=linux/arm64"
+      - "--label=org.opencontainers.image.source=https://github.com/loomctl/loom"
+      - "--label=org.opencontainers.image.version={{ .Version }}"
+      - "--label=org.opencontainers.image.licenses=AGPL-3.0-only"
+
+docker_manifests:
+  - name_template: "ghcr.io/loomctl/loom:{{ .Version }}"
+    image_templates:
+      - "ghcr.io/loomctl/loom:{{ .Version }}-amd64"
+      - "ghcr.io/loomctl/loom:{{ .Version }}-arm64"
+  - name_template: "ghcr.io/loomctl/loom:latest"
+    image_templates:
+      - "ghcr.io/loomctl/loom:{{ .Version }}-amd64"
+      - "ghcr.io/loomctl/loom:{{ .Version }}-arm64"
+
+sboms:
+  - artifacts: archive
+
+release:
+  prerelease: auto
+  draft: false
+  github:
+    owner: loomctl
+    name: loom
