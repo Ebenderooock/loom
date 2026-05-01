@@ -54,6 +54,10 @@ real values look like. Every key gets an `example:` line.
 | `scheduler.enabled` | `LOOM_SCHEDULER_ENABLED` | bool | `true` | no | Master switch for the in-process job scheduler. |
 | `scheduler.timezone` | `LOOM_SCHEDULER_TIMEZONE` | string | `Local` | no | IANA name (e.g. `UTC`, `Europe/Stockholm`) used to interpret cron expressions. |
 | `scheduler.shutdown_grace` | `LOOM_SCHEDULER_SHUTDOWN_GRACE` | int (s) | `30` | no | Seconds in-flight handlers may keep running after `SIGTERM`. |
+| `indexers.search_timeout` | `LOOM_INDEXERS_SEARCH_TIMEOUT` | int (s) | `15` | no | Per-indexer ceiling for fan-out search calls. |
+| `indexers.max_parallel` | `LOOM_INDEXERS_MAX_PARALLEL` | int | `8` | no | Maximum number of concurrent indexer Search calls during fan-out. |
+| `indexers.health_check_schedule` | `LOOM_INDEXERS_HEALTH_CHECK_SCHEDULE` | string (cron) | `*/10 * * * *` | no | 5-field cron expression (no seconds field) controlling the periodic health sweep. |
+| `indexers.health_check_timeout` | `LOOM_INDEXERS_HEALTH_CHECK_TIMEOUT` | int (s) | `10` | no | Per-indexer ceiling for the periodic health check `Test()` call. |
 
 ### Per-key examples
 
@@ -104,6 +108,12 @@ scheduler:
   enabled: true                         # example: run the cron scheduler
   timezone: "Europe/Stockholm"          # example: IANA name; "Local" follows host TZ
   shutdown_grace: 30                    # example: seconds to let jobs finish on SIGTERM
+
+indexers:
+  search_timeout: 15                    # example: per-indexer fan-out ceiling, seconds
+  max_parallel: 8                       # example: concurrent Search calls during a single fan-out
+  health_check_schedule: "*/10 * * * *" # example: 5-field cron — every 10 minutes
+  health_check_timeout: 10              # example: per-indexer Test() ceiling, seconds
 ```
 
 ### Validation rules
@@ -118,6 +128,10 @@ The loader rejects configurations that fail any of the following at start-up:
 - `storage.engine` ∈ {"", sqlite, postgres}
 - `scheduler.timezone` is a valid IANA name or the literal `Local`
 - `scheduler.shutdown_grace` ≥ 0
+- `indexers.search_timeout` > 0
+- `indexers.max_parallel` > 0
+- `indexers.health_check_schedule` parses as a 5-field cron expression
+- `indexers.health_check_timeout` > 0
 
 ## YAML example
 

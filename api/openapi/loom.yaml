@@ -30,6 +30,8 @@ tags:
     description: Liveness, readiness and metrics probes.
   - name: system
     description: Build / runtime metadata.
+  - name: indexers
+    description: Indexer CRUD, capabilities, manual health checks, and aggregated search.
 
 paths:
   /healthz:
@@ -130,6 +132,223 @@ paths:
                     buildDate: "2025-05-01T13:50:14Z"
                     engine: "sqlite"
 
+  /api/v1/indexers/:
+    get:
+      tags: [indexers]
+      summary: List configured indexers.
+      operationId: listIndexers
+      security:
+        - apiKey: []
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "200":
+          description: Wrapped list of indexer definitions, each with the latest health row.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [indexers]
+                properties:
+                  indexers:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/IndexerWithHealth"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      tags: [indexers]
+      summary: Create an indexer.
+      operationId: createIndexer
+      security:
+        - apiKey: []
+        - bearerAuth: []
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/IndexerCreate"
+      responses:
+        "201":
+          description: Indexer created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Indexer"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/v1/indexers/{id}:
+    parameters:
+      - $ref: "#/components/parameters/IndexerID"
+    get:
+      tags: [indexers]
+      summary: Get an indexer.
+      operationId: getIndexer
+      security:
+        - apiKey: []
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "200":
+          description: Indexer definition with latest health row.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IndexerWithHealth"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      tags: [indexers]
+      summary: Replace an indexer.
+      operationId: replaceIndexer
+      security:
+        - apiKey: []
+        - bearerAuth: []
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/IndexerCreate"
+      responses:
+        "200":
+          description: Updated indexer definition.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Indexer"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [indexers]
+      summary: Partially update an indexer.
+      operationId: patchIndexer
+      security:
+        - apiKey: []
+        - bearerAuth: []
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/IndexerPatch"
+      responses:
+        "200":
+          description: Updated indexer definition.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Indexer"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [indexers]
+      summary: Delete an indexer.
+      operationId: deleteIndexer
+      security:
+        - apiKey: []
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "204":
+          description: Indexer deleted.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/indexers/{id}/caps:
+    parameters:
+      - $ref: "#/components/parameters/IndexerID"
+    get:
+      tags: [indexers]
+      summary: Capability descriptor for a single indexer.
+      operationId: getIndexerCaps
+      security:
+        - apiKey: []
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "200":
+          description: Indexer capabilities.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Caps"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/indexers/{id}/test:
+    parameters:
+      - $ref: "#/components/parameters/IndexerID"
+    post:
+      tags: [indexers]
+      summary: Run an immediate health check; persists the result.
+      operationId: testIndexer
+      security:
+        - apiKey: []
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "200":
+          description: Outcome of the test plus measured latency. The same row is persisted into `indexer_health`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TestResult"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/indexers/search:
+    post:
+      tags: [indexers]
+      summary: Fan-out search across enabled indexers.
+      operationId: searchIndexers
+      security:
+        - apiKey: []
+        - bearerAuth: []
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SearchRequest"
+      responses:
+        "200":
+          description: Aggregated results plus per-source error map.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AggregatedResults"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
 components:
   schemas:
     HealthStatus:
@@ -158,6 +377,264 @@ components:
           type: string
           enum: [sqlite, postgres]
           description: Active storage engine.
+
+    Indexer:
+      type: object
+      required: [id, kind, name, enabled, priority, categories, tags]
+      properties:
+        id:
+          type: string
+          description: Slug identifier; generated from kind+name when omitted on create.
+        kind:
+          type: string
+          description: Factory key (e.g. `builtin/null`, `newznab`).
+        name:
+          type: string
+        enabled:
+          type: boolean
+        priority:
+          type: integer
+          minimum: 0
+          maximum: 100
+        config:
+          description: Free-form, kind-specific configuration object.
+          type: object
+          additionalProperties: true
+        categories:
+          type: array
+          description: Newznab category IDs.
+          items:
+            type: integer
+        tags:
+          type: array
+          items:
+            type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    IndexerWithHealth:
+      allOf:
+        - $ref: "#/components/schemas/Indexer"
+        - type: object
+          properties:
+            health:
+              $ref: "#/components/schemas/IndexerHealth"
+
+    IndexerCreate:
+      type: object
+      required: [kind, name]
+      properties:
+        id:
+          type: string
+        kind:
+          type: string
+        name:
+          type: string
+        enabled:
+          type: boolean
+          default: true
+        priority:
+          type: integer
+          default: 25
+        config:
+          type: object
+          additionalProperties: true
+        categories:
+          type: array
+          items:
+            type: integer
+        tags:
+          type: array
+          items:
+            type: string
+
+    IndexerPatch:
+      type: object
+      description: Any subset of fields. Omitted fields are left untouched.
+      properties:
+        name:
+          type: string
+        enabled:
+          type: boolean
+        priority:
+          type: integer
+        config:
+          type: object
+          additionalProperties: true
+        categories:
+          type: array
+          items:
+            type: integer
+        tags:
+          type: array
+          items:
+            type: string
+
+    IndexerHealth:
+      type: object
+      required: [indexer_id, status, last_checked_at]
+      properties:
+        indexer_id:
+          type: string
+        status:
+          type: string
+          enum: [ok, degraded, failed, unknown]
+        last_checked_at:
+          type: string
+          format: date-time
+        last_success_at:
+          type: string
+          format: date-time
+        latency_ms:
+          type: integer
+          description: Round-trip time of the last `Test()` call, in milliseconds.
+        last_error:
+          type: string
+          description: Last error message, if any.
+
+    TestResult:
+      type: object
+      required: [ok, latency_ms]
+      properties:
+        ok:
+          type: boolean
+        latency_ms:
+          type: integer
+        error:
+          type: string
+
+    Caps:
+      type: object
+      required: [search_types, categories, supported_ids]
+      properties:
+        search_types:
+          type: array
+          description: Newznab-style search modes (e.g. `search`, `tv-search`, `movie-search`).
+          items:
+            type: string
+        categories:
+          type: array
+          items:
+            type: integer
+        supported_ids:
+          type: array
+          description: External ID schemes accepted in searches (e.g. `imdb`, `tvdb`, `tmdb`).
+          items:
+            type: string
+
+    SearchRequest:
+      type: object
+      required: [query]
+      properties:
+        query:
+          type: string
+        categories:
+          type: array
+          items:
+            type: integer
+        indexer_ids:
+          type: array
+          description: Restrict the fan-out to this subset of indexer IDs.
+          items:
+            type: string
+        timeout_ms:
+          type: integer
+          description: Per-indexer ceiling override for this call only.
+
+    Result:
+      type: object
+      required: [indexer_id, title, link]
+      properties:
+        indexer_id:
+          type: string
+        title:
+          type: string
+        link:
+          type: string
+          format: uri
+        info_url:
+          type: string
+          format: uri
+        size_bytes:
+          type: integer
+          format: int64
+        seeders:
+          type: integer
+        leechers:
+          type: integer
+        publish_date:
+          type: string
+          format: date-time
+        categories:
+          type: array
+          items:
+            type: integer
+
+    AggregatedResults:
+      type: object
+      required: [results, errors]
+      properties:
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/Result"
+        errors:
+          type: object
+          description: Per-indexer error messages, keyed by indexer ID. Empty object when all sources succeeded.
+          additionalProperties:
+            type: string
+
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              examples: [bad_request, not_found, conflict, internal]
+            message:
+              type: string
+
+  parameters:
+    IndexerID:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+
+  responses:
+    BadRequest:
+      description: The request body or parameters could not be processed.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+    Unauthorized:
+      description: Missing or invalid credentials.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+    NotFound:
+      description: The requested resource does not exist.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+    Conflict:
+      description: A resource with the same identifier already exists.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
 
   securitySchemes:
     apiKey:

@@ -36,6 +36,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `scheduler.timezone`, `scheduler.shutdown_grace`. Migration
   `0005_scheduled_jobs_status.sql` adds `enabled`, `last_status`,
   `last_error` columns on both engines. ADR-0006.
+- **Phase 2a — indexer core.** Pluggable indexer abstraction in
+  `internal/indexers`: an `Indexer` interface, a concurrency-safe
+  `Registry` with bounded fan-out search, an engine-dispatched
+  `Repository` over sqlc-generated SQLite and Postgres queries, a
+  `Service` orchestrator with hydration and CRUD, a `HealthChecker`
+  hosted by the persistent scheduler, and the first kind
+  (`builtin/null`) used to exercise the full surface end-to-end.
+  HTTP routes under `/api/v1/indexers/*` (list, create, get,
+  replace, patch, delete, caps, test, search) with a structured
+  `{error:{code,message}}` envelope. Storage migration adds the
+  `indexers` and `indexer_health` tables on both engines. New config
+  keys: `indexers.search_timeout`, `indexers.max_parallel`,
+  `indexers.health_check_schedule`, `indexers.health_check_timeout`.
+  ADR-0007.
 - **Documentation baseline.** `docs/` developer documentation
   (architecture, configuration, observability, storage, API,
   development, deployment, security), per-package `doc.go` comments,
