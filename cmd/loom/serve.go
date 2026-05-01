@@ -74,6 +74,13 @@ func cmdServe(ctx context.Context, args []string) error {
 		return fmt.Errorf("init auth: %w", err)
 	}
 
+	sched, err := buildScheduler(ctx, cfg, db, logger)
+	if err != nil {
+		return fmt.Errorf("init scheduler: %w", err)
+	}
+	sched.Start(ctx)
+	defer sched.Stop()
+
 	srv, err := server.New(cfg, logger, tel, db, authSvc)
 	if err != nil {
 		return fmt.Errorf("init server: %w", err)

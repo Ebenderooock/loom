@@ -34,6 +34,7 @@ type Config struct {
 	Debug     DebugConfig     `mapstructure:"debug"`
 	CORS      CORSConfig      `mapstructure:"cors"`
 	OTel      OTelConfig      `mapstructure:"otel"`
+	Scheduler SchedulerConfig `mapstructure:"scheduler"`
 }
 
 type HTTPConfig struct {
@@ -123,6 +124,21 @@ type CORSConfig struct {
 type OTelConfig struct {
 	Enabled  bool   `mapstructure:"enabled"`
 	Endpoint string `mapstructure:"endpoint"`
+}
+
+// SchedulerConfig controls the persistent cron scheduler.
+//
+//   - Enabled gates the dispatch loop. False disables registration
+//     side-effects too, useful for one-shot CLI subcommands that share
+//     the same wiring.
+//   - Timezone is the IANA name (or "Local") cron expressions are
+//     interpreted in.
+//   - ShutdownGrace bounds how long a SIGTERM waits for in-flight jobs
+//     before abandoning them.
+type SchedulerConfig struct {
+	Enabled       bool   `mapstructure:"enabled"`
+	Timezone      string `mapstructure:"timezone"`
+	ShutdownGrace int    `mapstructure:"shutdown_grace"`
 }
 
 var (
@@ -285,6 +301,10 @@ func applyDefaults(v *viper.Viper) {
 	v.SetDefault("storage.engine", "sqlite")
 	v.SetDefault("storage.sqlite.path", "/data/loom.db")
 	v.SetDefault("storage.postgres.dsn", "")
+
+	v.SetDefault("scheduler.enabled", true)
+	v.SetDefault("scheduler.timezone", "Local")
+	v.SetDefault("scheduler.shutdown_grace", 30)
 }
 
 // bindLegacyEnv preserves the un-prefixed environment variable shape used

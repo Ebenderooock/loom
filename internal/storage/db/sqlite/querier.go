@@ -14,15 +14,25 @@ type Querier interface {
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
 	GetAPIKeyByHash(ctx context.Context, keyHash string) (ApiKey, error)
 	GetAPIKeyByID(ctx context.Context, id int64) (ApiKey, error)
+	GetScheduledJob(ctx context.Context, name string) (ScheduledJob, error)
 	GetSchemaMeta(ctx context.Context, key string) (string, error)
 	GetUserByID(ctx context.Context, id int64) (User, error)
 	GetUserByUsername(ctx context.Context, username string) (User, error)
 	ListAPIKeysForUser(ctx context.Context, userID int64) ([]ApiKey, error)
+	ListScheduledJobs(ctx context.Context) ([]ScheduledJob, error)
+	RecordScheduledJobRun(ctx context.Context, arg RecordScheduledJobRunParams) error
 	RevokeAPIKey(ctx context.Context, arg RevokeAPIKeyParams) error
+	SetScheduledJobEnabled(ctx context.Context, arg SetScheduledJobEnabledParams) error
+	SetScheduledJobNextRun(ctx context.Context, arg SetScheduledJobNextRunParams) error
 	SetSchemaMeta(ctx context.Context, arg SetSchemaMetaParams) error
 	TouchAPIKey(ctx context.Context, id int64) error
 	UpdateUserOIDC(ctx context.Context, arg UpdateUserOIDCParams) (User, error)
 	UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) error
+	// Inserts a job row on first registration; on conflict (same name) only
+	// the schedule and payload are refreshed so callers can change cron
+	// expressions in code without manual intervention. Run-status fields
+	// (last_run_at, last_status, last_error, next_run_at) are preserved.
+	UpsertScheduledJob(ctx context.Context, arg UpsertScheduledJobParams) (ScheduledJob, error)
 }
 
 var _ Querier = (*Queries)(nil)
