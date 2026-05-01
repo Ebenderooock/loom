@@ -1,0 +1,189 @@
+openapi: 3.1.0
+info:
+  title: Loom API
+  version: 0.1.0-alpha
+  summary: Native HTTP API for Loom — unified media automation.
+  description: |
+    Loom's native API is served under `/api/v1/*`. Wire-compatible
+    surfaces (`/api/v3/*` for Radarr / Sonarr, `/api/v1/*` for Prowlarr)
+    are added in Phase 7 and are documented separately.
+
+    This specification covers only the routes implemented today. The
+    PR template requires every new route to be reflected here.
+  license:
+    name: AGPL-3.0-only
+    identifier: AGPL-3.0-only
+  contact:
+    name: Loom maintainers
+    url: https://github.com/loomctl/loom
+servers:
+  - url: http://localhost:8989
+    description: Local dev server.
+  - url: https://{host}
+    description: Self-hosted instance behind a reverse proxy.
+    variables:
+      host:
+        default: loom.example.com
+
+tags:
+  - name: health
+    description: Liveness, readiness and metrics probes.
+  - name: system
+    description: Build / runtime metadata.
+
+paths:
+  /healthz:
+    get:
+      tags: [health]
+      summary: Liveness probe.
+      operationId: getHealthz
+      responses:
+        "200":
+          description: Process is up.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+              examples:
+                ok:
+                  value: { status: ok }
+
+  /livez:
+    get:
+      tags: [health]
+      summary: Liveness probe (alias).
+      operationId: getLivez
+      responses:
+        "200":
+          description: Process is up.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+              examples:
+                alive:
+                  value: { status: alive }
+
+  /readyz:
+    get:
+      tags: [health]
+      summary: Readiness probe — DB ping plus internal ready flag.
+      operationId: getReadyz
+      responses:
+        "200":
+          description: Ready to serve traffic.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+              examples:
+                ready:
+                  value: { status: ready }
+        "503":
+          description: Not ready (still starting, or DB unreachable).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+              examples:
+                starting:
+                  value: { status: starting }
+                dbUnreachable:
+                  value: { status: db unreachable }
+
+  /metrics:
+    get:
+      tags: [health]
+      summary: Prometheus metrics exposition.
+      operationId: getMetrics
+      responses:
+        "200":
+          description: Prometheus text exposition format.
+          content:
+            text/plain; version=0.0.4:
+              schema:
+                type: string
+              examples:
+                sample:
+                  value: |
+                    # HELP go_goroutines Number of goroutines that currently exist.
+                    # TYPE go_goroutines gauge
+                    go_goroutines 12
+
+  /api/v1/system/status:
+    get:
+      tags: [system]
+      summary: Build and runtime metadata.
+      operationId: getSystemStatus
+      responses:
+        "200":
+          description: Build metadata.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SystemStatus"
+              examples:
+                sample:
+                  value:
+                    version: "0.1.0-alpha"
+                    commit: "10bdae3"
+                    buildDate: "2025-05-01T13:50:14Z"
+                    engine: "sqlite"
+
+components:
+  schemas:
+    HealthStatus:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          description: Probe status verb.
+          examples: [ok, alive, ready, starting, "db unreachable"]
+
+    SystemStatus:
+      type: object
+      required: [version, commit, buildDate, engine]
+      properties:
+        version:
+          type: string
+          description: Loom semver (or `dev` for unstamped builds).
+        commit:
+          type: string
+          description: Short git commit SHA.
+        buildDate:
+          type: string
+          description: Build timestamp (RFC 3339, UTC).
+        engine:
+          type: string
+          enum: [sqlite, postgres]
+          description: Active storage engine.
+
+  securitySchemes:
+    apiKey:
+      type: apiKey
+      in: header
+      name: X-Api-Key
+      description: |
+        Long-lived API key. Issued via the UI / `loom apikey` CLI in
+        Phase 1c. Stored at rest as a SHA-256 hash plus a 4-character
+        non-secret prefix.
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: opaque
+      description: |
+        Bearer token (placeholder for OIDC access tokens). Auth routes
+        consuming this scheme land in Phase 1c.
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: loom_session
+      description: |
+        HTTP-only session cookie issued by the forms-login flow.
+        Auth routes consuming this scheme land in Phase 1c.
+
+# Endpoints implemented today are intentionally unauthenticated; once
+# the Phase 1c auth PR lands, security requirements will be applied
+# at the operation level.
+security: []
