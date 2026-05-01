@@ -38,3 +38,7 @@ web/coverage/
 
 # Logs
 *.log
+web/storybook-static
+web/playwright-report/
+web/test-results/
+web/*.tsbuildinfo
