@@ -117,6 +117,17 @@ durable across restarts. At-most-one execution per job is enforced
 per-process, and shutdown gives in-flight handlers a configurable
 grace before abandoning them.
 
+## Indexers
+
+See [indexers.md](indexers.md). The `internal/indexers` package owns
+the search-aggregation layer. A `Service` orchestrates a persistent
+`Repository` (engine-dispatch over the sqlc-generated SQLite and
+Postgres query packages), an in-memory `Registry` of live indexers,
+and a `HealthChecker` that runs as a scheduler job. New source
+kinds plug in by registering a `Factory` for their kind string;
+Phase 2a ships only `builtin/null` so the surface can be exercised
+end-to-end before Cardigann/Newznab/Torznab kinds land.
+
 ## Observability
 
 See [observability.md](observability.md). slog JSON logs, Prometheus
@@ -134,4 +145,6 @@ The native API is `/api/v1/*`; wire-compat surfaces are added in Phase 7.
 - ADR-0003 — API: REST + WebSocket native, gRPC internal, OpenAPI 3.1.
 - ADR-0004 — Authentication strategy.
 - ADR-0005 — Observability strategy.
+- ADR-0006 — Persistent scheduler (cron + scheduled_jobs).
+- ADR-0007 — Indexer abstraction.
 - Project plan (mirrored as [ROADMAP.md](../ROADMAP.md)).

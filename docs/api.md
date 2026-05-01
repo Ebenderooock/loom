@@ -29,6 +29,15 @@ in `api/openapi/loom.yaml`.
 | `GET` | `/metrics` | none | `200 text/plain; version=0.0.4` | Prometheus exposition. |
 | `GET` | `/api/v1/system/status` | none (today) | `200 application/json` (`SystemStatus`) | Build metadata. |
 | `GET\|POST` | `/debug/pprof/*` | gated by `debug.pprof` | varies | Standard `net/http/pprof` handlers. |
+| `GET` | `/api/v1/indexers/` | apiKey/bearer/cookie | `200 application/json` (`[]DefinitionWithHealth`) | List configured indexers with the latest health row. |
+| `POST` | `/api/v1/indexers/` | apiKey/bearer/cookie | `201 application/json` (`Definition`) | Create an indexer. |
+| `GET` | `/api/v1/indexers/{id}` | apiKey/bearer/cookie | `200 application/json` (`DefinitionWithHealth`) | Fetch a single indexer + its latest health row. |
+| `PUT` | `/api/v1/indexers/{id}` | apiKey/bearer/cookie | `200 application/json` (`Definition`) | Replace an existing indexer's full definition. |
+| `PATCH` | `/api/v1/indexers/{id}` | apiKey/bearer/cookie | `200 application/json` (`Definition`) | Partially update an existing indexer. |
+| `DELETE` | `/api/v1/indexers/{id}` | apiKey/bearer/cookie | `204` | Remove an indexer. |
+| `GET` | `/api/v1/indexers/{id}/caps` | apiKey/bearer/cookie | `200 application/json` (`Caps`) | Per-indexer capability descriptor. |
+| `POST` | `/api/v1/indexers/{id}/test` | apiKey/bearer/cookie | `200 application/json` (`Health`) | Run an immediate health check; persists the result. |
+| `POST` | `/api/v1/indexers/search` | apiKey/bearer/cookie | `200 application/json` (`AggregatedResults`) | Fan-out search across all (or a subset of) enabled indexers. |
 
 `SystemStatus` is `{ version, commit, buildDate, engine }` — the database
 engine name is included so readiness tooling can confirm what backend
@@ -81,6 +90,46 @@ The OpenAPI spec defines three security schemes ahead of the handlers:
 
 The endpoints that consume them land with the Phase 1c auth PR. See
 ADR-0004 and [auth.md](auth.md).
+
+## Indexers (Phase 2a)
+
+The indexer routes accept and emit JSON. Conceptual reference lives
+in [indexers.md](indexers.md); routes are summarised below.
+
+```bash
+# Create
+curl -sS -X POST -H "X-Api-Key: $LOOM_KEY" -H "Content-Type: application/json" \
+  -d '{"id":"demo","kind":"builtin/null","name":"Demo","enabled":true,"priority":25,"categories":[2000]}' \
+  http://localhost:8989/api/v1/indexers/
+
+# List
+curl -sS -H "X-Api-Key: $LOOM_KEY" http://localhost:8989/api/v1/indexers/
+
+# Manual health check
+curl -sS -X POST -H "X-Api-Key: $LOOM_KEY" \
+  http://localhost:8989/api/v1/indexers/demo/test
+
+# Fan-out search
+curl -sS -X POST -H "X-Api-Key: $LOOM_KEY" -H "Content-Type: application/json" \
+  -d '{"query":"ubuntu","categories":[4000]}' \
+  http://localhost:8989/api/v1/indexers/search
+```
+
+### Error envelope
+
+Indexer endpoints reply to 4xx/5xx responses with a structured
+envelope:
+
+```json
+{ "error": { "code": "not_found", "message": "indexer not found" } }
+```
+
+This is **not** the same shape used by the auth package (which today
+emits `{"error":"<msg>"}`). Clients should branch on response status
+before parsing the body, or accept either shape via
+`{ "error": <string|{"code":"...","message":"..."}> }`. The
+discrepancy is tracked for unification in a later phase; the
+indexer envelope is the long-term direction.
 
 ## Adding a route
 
