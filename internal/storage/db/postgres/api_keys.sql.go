@@ -66,6 +66,26 @@ func (q *Queries) GetAPIKeyByHash(ctx context.Context, keyHash string) (ApiKey, 
 	return i, err
 }
 
+const getAPIKeyByID = `-- name: GetAPIKeyByID :one
+SELECT id, user_id, name, key_hash, prefix, last_used_at, created_at, expires_at FROM api_keys WHERE id = $1 LIMIT 1
+`
+
+func (q *Queries) GetAPIKeyByID(ctx context.Context, id int64) (ApiKey, error) {
+	row := q.db.QueryRowContext(ctx, getAPIKeyByID, id)
+	var i ApiKey
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Name,
+		&i.KeyHash,
+		&i.Prefix,
+		&i.LastUsedAt,
+		&i.CreatedAt,
+		&i.ExpiresAt,
+	)
+	return i, err
+}
+
 const listAPIKeysForUser = `-- name: ListAPIKeysForUser :many
 SELECT id, user_id, name, key_hash, prefix, last_used_at, created_at, expires_at FROM api_keys WHERE user_id = $1 ORDER BY created_at DESC
 `
@@ -113,5 +133,14 @@ type RevokeAPIKeyParams struct {
 
 func (q *Queries) RevokeAPIKey(ctx context.Context, arg RevokeAPIKeyParams) error {
 	_, err := q.db.ExecContext(ctx, revokeAPIKey, arg.ID, arg.UserID)
+	return err
+}
+
+const touchAPIKey = `-- name: TouchAPIKey :exec
+UPDATE api_keys SET last_used_at = NOW() WHERE id = $1
+`
+
+func (q *Queries) TouchAPIKey(ctx context.Context, id int64) error {
+	_, err := q.db.ExecContext(ctx, touchAPIKey, id)
 	return err
 }

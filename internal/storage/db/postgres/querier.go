@@ -9,13 +9,20 @@ import (
 )
 
 type Querier interface {
+	CountUsers(ctx context.Context) (int64, error)
 	CreateAPIKey(ctx context.Context, arg CreateAPIKeyParams) (ApiKey, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
 	GetAPIKeyByHash(ctx context.Context, keyHash string) (ApiKey, error)
+	GetAPIKeyByID(ctx context.Context, id int64) (ApiKey, error)
+	GetSchemaMeta(ctx context.Context, key string) (string, error)
 	GetUserByID(ctx context.Context, id int64) (User, error)
 	GetUserByUsername(ctx context.Context, username string) (User, error)
 	ListAPIKeysForUser(ctx context.Context, userID int64) ([]ApiKey, error)
 	RevokeAPIKey(ctx context.Context, arg RevokeAPIKeyParams) error
+	SetSchemaMeta(ctx context.Context, arg SetSchemaMetaParams) error
+	TouchAPIKey(ctx context.Context, id int64) error
+	UpdateUserOIDC(ctx context.Context, arg UpdateUserOIDCParams) (User, error)
+	UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) error
 }
 
 var _ Querier = (*Queries)(nil)
