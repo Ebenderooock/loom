@@ -20,6 +20,28 @@ type ApiKey struct {
 	ExpiresAt  sql.NullTime `json:"expires_at"`
 }
 
+type Indexer struct {
+	ID             string    `json:"id"`
+	Kind           string    `json:"kind"`
+	Name           string    `json:"name"`
+	Enabled        int64     `json:"enabled"`
+	Priority       int64     `json:"priority"`
+	ConfigJson     string    `json:"config_json"`
+	CategoriesJson string    `json:"categories_json"`
+	TagsJson       string    `json:"tags_json"`
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
+}
+
+type IndexerHealth struct {
+	IndexerID     string        `json:"indexer_id"`
+	Status        string        `json:"status"`
+	LastCheckedAt time.Time     `json:"last_checked_at"`
+	LastSuccessAt sql.NullTime  `json:"last_success_at"`
+	LatencyMs     sql.NullInt64 `json:"latency_ms"`
+	LastError     string        `json:"last_error"`
+}
+
 type ScheduledJob struct {
 	ID         int64        `json:"id"`
 	Name       string       `json:"name"`

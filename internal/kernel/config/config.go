@@ -35,6 +35,27 @@ type Config struct {
 	CORS      CORSConfig      `mapstructure:"cors"`
 	OTel      OTelConfig      `mapstructure:"otel"`
 	Scheduler SchedulerConfig `mapstructure:"scheduler"`
+	Indexers  IndexersConfig  `mapstructure:"indexers"`
+}
+
+// IndexersConfig governs the indexer core (search fan-out + periodic
+// health checks). All durations are seconds.
+//
+//   - SearchTimeoutSec is the per-indexer ceiling applied during a
+//     fan-out search; an indexer that doesn't return inside the
+//     ceiling contributes a per-source error and the rest of the
+//     fan-out is unaffected.
+//   - MaxParallel caps the number of concurrent in-flight indexer
+//     calls during a fan-out.
+//   - HealthCheckSchedule is a 5-field cron expression evaluated by
+//     the scheduler (which is not running with WithSeconds=true). The
+//     default fires every ten minutes.
+//   - HealthCheckTimeoutSec bounds a single Test() call.
+type IndexersConfig struct {
+	SearchTimeoutSec      int    `mapstructure:"search_timeout"`
+	MaxParallel           int    `mapstructure:"max_parallel"`
+	HealthCheckSchedule   string `mapstructure:"health_check_schedule"`
+	HealthCheckTimeoutSec int    `mapstructure:"health_check_timeout"`
 }
 
 type HTTPConfig struct {
@@ -305,6 +326,11 @@ func applyDefaults(v *viper.Viper) {
 	v.SetDefault("scheduler.enabled", true)
 	v.SetDefault("scheduler.timezone", "Local")
 	v.SetDefault("scheduler.shutdown_grace", 30)
+
+	v.SetDefault("indexers.search_timeout", 15)
+	v.SetDefault("indexers.max_parallel", 8)
+	v.SetDefault("indexers.health_check_schedule", "*/10 * * * *")
+	v.SetDefault("indexers.health_check_timeout", 10)
 }
 
 // bindLegacyEnv preserves the un-prefixed environment variable shape used
@@ -355,6 +381,15 @@ func (c *Config) Validate() error {
 	default:
 		return fmt.Errorf("invalid storage.engine %q (want sqlite|postgres)", c.Storage.Engine)
 	}
+	if c.Indexers.SearchTimeoutSec < 0 {
+		return fmt.Errorf("indexers.search_timeout must be non-negative")
+	}
+	if c.Indexers.MaxParallel < 0 {
+		return fmt.Errorf("indexers.max_parallel must be non-negative")
+	}
+	if c.Indexers.HealthCheckTimeoutSec < 0 {
+		return fmt.Errorf("indexers.health_check_timeout must be non-negative")
+	}
 	return nil
 }
 
@@ -376,5 +411,3 @@ func envOr(key, fallback string) string {
 	}
 	return fallback
 }
-
-

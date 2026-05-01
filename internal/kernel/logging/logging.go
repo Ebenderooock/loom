@@ -14,15 +14,15 @@ import (
 
 // Sensitive keys whose values are redacted before emission.
 var sensitiveKeys = map[string]struct{}{
-	"password":     {},
-	"passwd":       {},
-	"secret":       {},
-	"token":        {},
-	"api_key":      {},
-	"apikey":       {},
+	"password":      {},
+	"passwd":        {},
+	"secret":        {},
+	"token":         {},
+	"api_key":       {},
+	"apikey":        {},
 	"authorization": {},
-	"cookie":       {},
-	"set-cookie":   {},
+	"cookie":        {},
+	"set-cookie":    {},
 }
 
 // New returns a configured *slog.Logger.

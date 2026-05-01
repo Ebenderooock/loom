@@ -11,16 +11,25 @@ import (
 type Querier interface {
 	CountUsers(ctx context.Context) (int64, error)
 	CreateAPIKey(ctx context.Context, arg CreateAPIKeyParams) (ApiKey, error)
+	CreateIndexer(ctx context.Context, arg CreateIndexerParams) (Indexer, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
+	DeleteIndexer(ctx context.Context, id string) error
 	GetAPIKeyByHash(ctx context.Context, keyHash string) (ApiKey, error)
 	GetAPIKeyByID(ctx context.Context, id int64) (ApiKey, error)
+	GetIndexer(ctx context.Context, id string) (Indexer, error)
+	GetIndexerHealth(ctx context.Context, indexerID string) (IndexerHealth, error)
 	GetScheduledJob(ctx context.Context, name string) (ScheduledJob, error)
 	GetSchemaMeta(ctx context.Context, key string) (string, error)
 	GetUserByID(ctx context.Context, id int64) (User, error)
 	GetUserByUsername(ctx context.Context, username string) (User, error)
 	ListAPIKeysForUser(ctx context.Context, userID int64) ([]ApiKey, error)
+	ListEnabledIndexers(ctx context.Context) ([]Indexer, error)
+	ListIndexerHealth(ctx context.Context) ([]IndexerHealth, error)
+	ListIndexers(ctx context.Context) ([]Indexer, error)
 	ListScheduledJobs(ctx context.Context) ([]ScheduledJob, error)
+	PatchIndexer(ctx context.Context, arg PatchIndexerParams) (Indexer, error)
 	RecordScheduledJobRun(ctx context.Context, arg RecordScheduledJobRunParams) error
+	ReplaceIndexer(ctx context.Context, arg ReplaceIndexerParams) (Indexer, error)
 	RevokeAPIKey(ctx context.Context, arg RevokeAPIKeyParams) error
 	SetScheduledJobEnabled(ctx context.Context, arg SetScheduledJobEnabledParams) error
 	SetScheduledJobNextRun(ctx context.Context, arg SetScheduledJobNextRunParams) error
@@ -28,6 +37,7 @@ type Querier interface {
 	TouchAPIKey(ctx context.Context, id int64) error
 	UpdateUserOIDC(ctx context.Context, arg UpdateUserOIDCParams) (User, error)
 	UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) error
+	UpsertIndexerHealth(ctx context.Context, arg UpsertIndexerHealthParams) error
 	UpsertScheduledJob(ctx context.Context, arg UpsertScheduledJobParams) (ScheduledJob, error)
 }
 
