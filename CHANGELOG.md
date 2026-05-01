@@ -25,6 +25,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **Phase 1e — frontend scaffold.** React 18 + TypeScript + Vite +
   TanStack Router/Query + shadcn/ui + Tailwind app under `web/`,
   including ESLint flat config, Prettier, Storybook, Playwright. (`1b2fb09`)
+- **Phase 1d — persistent scheduler.** Cron-driven scheduler in
+  `internal/kernel/scheduler` backed by `robfig/cron/v3` and the
+  `scheduled_jobs` table. Run history (`last_run_at`, `next_run_at`,
+  `last_status`, `last_error`) survives restarts. Idempotent
+  `Register`, per-job `TryLock` to prevent overlapping runs,
+  bounded-grace shutdown, configurable timezone, and a built-in
+  `system.housekeeping` job (`PRAGMA optimize` / `VACUUM ANALYZE`
+  every 6 hours). New config keys: `scheduler.enabled`,
+  `scheduler.timezone`, `scheduler.shutdown_grace`. Migration
+  `0005_scheduled_jobs_status.sql` adds `enabled`, `last_status`,
+  `last_error` columns on both engines. ADR-0006.
 - **Documentation baseline.** `docs/` developer documentation
   (architecture, configuration, observability, storage, API,
   development, deployment, security), per-package `doc.go` comments,
@@ -33,7 +44,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
-- *(none yet)*
+- **Scheduler API replaced.** The Phase-1a in-memory ticker scheduler
+  has been removed. `scheduler.Register` now takes a unique job name,
+  a cron expression, a `HandlerFunc(ctx) error`, and an optional
+  payload, and persists through a `Store`. Callers must construct the
+  scheduler via `scheduler.New(cfg, store, logger, clock)`; the
+  binary wires this in `cmd/loom/scheduler.go`.
 
 ### Fixed
 

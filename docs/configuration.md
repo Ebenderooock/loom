@@ -51,6 +51,9 @@ real values look like. Every key gets an `example:` line.
 | `cors.allowed_origins` | `LOOM_CORS_ALLOWED_ORIGINS` | []string | `[]` | no | Allow-list for the chi-cors middleware. |
 | `otel.enabled` | `LOOM_OTEL_ENABLED` | bool | `false` | no | Enable the OpenTelemetry SDK. |
 | `otel.endpoint` | `LOOM_OTEL_ENDPOINT` | string | `""` | no | Same role as `telemetry.otlp_endpoint`; explicit OTel block. |
+| `scheduler.enabled` | `LOOM_SCHEDULER_ENABLED` | bool | `true` | no | Master switch for the in-process job scheduler. |
+| `scheduler.timezone` | `LOOM_SCHEDULER_TIMEZONE` | string | `Local` | no | IANA name (e.g. `UTC`, `Europe/Stockholm`) used to interpret cron expressions. |
+| `scheduler.shutdown_grace` | `LOOM_SCHEDULER_SHUTDOWN_GRACE` | int (s) | `30` | no | Seconds in-flight handlers may keep running after `SIGTERM`. |
 
 ### Per-key examples
 
@@ -96,6 +99,11 @@ cors:
 otel:
   enabled: true                         # example: turn the OTel SDK on
   endpoint: "http://otel:4318"          # example: same as telemetry.otlp_endpoint
+
+scheduler:
+  enabled: true                         # example: run the cron scheduler
+  timezone: "Europe/Stockholm"          # example: IANA name; "Local" follows host TZ
+  shutdown_grace: 30                    # example: seconds to let jobs finish on SIGTERM
 ```
 
 ### Validation rules
@@ -108,6 +116,8 @@ The loader rejects configurations that fail any of the following at start-up:
 - `telemetry.trace_ratio` ∈ [0, 1]
 - `auth.mode` ∈ {forms, apikey, oidc, proxy, disabled}
 - `storage.engine` ∈ {"", sqlite, postgres}
+- `scheduler.timezone` is a valid IANA name or the literal `Local`
+- `scheduler.shutdown_grace` ≥ 0
 
 ## YAML example
 

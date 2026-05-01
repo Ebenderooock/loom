@@ -106,6 +106,17 @@ loom/
 See [storage.md](storage.md). One schema, two engines (SQLite default,
 Postgres optional), goose-managed migrations, sqlc-typed queries.
 
+## Scheduling
+
+See [scheduler.md](scheduler.md). Recurring work runs through a
+persistent, cron-driven scheduler (`internal/kernel/scheduler`) backed
+by `robfig/cron/v3`. Job definitions live in code; the
+`scheduled_jobs` table records `last_run_at`, `next_run_at`,
+`last_status`, and `last_error` so schedules and run history are
+durable across restarts. At-most-one execution per job is enforced
+per-process, and shutdown gives in-flight handlers a configurable
+grace before abandoning them.
+
 ## Observability
 
 See [observability.md](observability.md). slog JSON logs, Prometheus

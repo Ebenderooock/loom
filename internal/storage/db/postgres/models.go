@@ -22,15 +22,18 @@ type ApiKey struct {
 }
 
 type ScheduledJob struct {
-	ID        int64           `json:"id"`
-	Name      string          `json:"name"`
-	Schedule  string          `json:"schedule"`
-	LastRunAt sql.NullTime    `json:"last_run_at"`
-	NextRunAt sql.NullTime    `json:"next_run_at"`
-	Paused    bool            `json:"paused"`
-	Payload   json.RawMessage `json:"payload"`
-	CreatedAt time.Time       `json:"created_at"`
-	UpdatedAt time.Time       `json:"updated_at"`
+	ID         int64           `json:"id"`
+	Name       string          `json:"name"`
+	Schedule   string          `json:"schedule"`
+	LastRunAt  sql.NullTime    `json:"last_run_at"`
+	NextRunAt  sql.NullTime    `json:"next_run_at"`
+	Paused     bool            `json:"paused"`
+	Payload    json.RawMessage `json:"payload"`
+	CreatedAt  time.Time       `json:"created_at"`
+	UpdatedAt  time.Time       `json:"updated_at"`
+	Enabled    bool            `json:"enabled"`
+	LastStatus string          `json:"last_status"`
+	LastError  string          `json:"last_error"`
 }
 
 type SchemaMetum struct {
