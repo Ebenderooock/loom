@@ -1,0 +1,40 @@
+# Binaries
+/loom
+/dist/
+/bin/
+*.exe
+*.test
+*.out
+
+# Go
+/vendor/
+*.prof
+
+# Node / frontend
+web/node_modules/
+web/dist/
+web/.vite/
+web/coverage/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# Local config & data
+/config/
+/data/
+*.db
+*.db-journal
+*.sqlite
+*.sqlite-journal
+.env
+.env.local
+
+# Generated
+/api/generated/
+/web/src/api/generated/
+
+# Logs
+*.log

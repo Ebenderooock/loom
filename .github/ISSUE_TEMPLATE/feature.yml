@@ -1,0 +1,20 @@
+name: feature
+description: Request a feature or enhancement
+labels: [enhancement, needs-triage]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What user problem are you trying to solve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: Sketch of the solution.
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered

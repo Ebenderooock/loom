@@ -1,0 +1,19 @@
+# Used by GoReleaser, which provides the prebuilt binary.
+FROM gcr.io/distroless/static-debian12:nonroot
+LABEL org.opencontainers.image.source="https://github.com/loomctl/loom"
+LABEL org.opencontainers.image.licenses="AGPL-3.0-only"
+LABEL org.opencontainers.image.title="Loom"
+
+USER nonroot:nonroot
+WORKDIR /
+COPY loom /usr/local/bin/loom
+
+EXPOSE 8989
+VOLUME ["/config", "/media"]
+
+ENV LOOM_HTTP_ADDR=:8989 \
+    LOOM_CONFIG_DIR=/config \
+    LOOM_DATA_DIR=/config
+
+ENTRYPOINT ["/usr/local/bin/loom"]
+CMD ["serve"]

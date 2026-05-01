@@ -1,0 +1,55 @@
+version: "2"
+
+run:
+  timeout: 5m
+  tests: true
+
+linters:
+  default: none
+  enable:
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - gocritic
+    - gosec
+    - misspell
+    - unconvert
+    - unparam
+    - revive
+    - bodyclose
+    - contextcheck
+    - errorlint
+    - nilerr
+    - prealloc
+
+  settings:
+    gosec:
+      excludes:
+        - G104  # errcheck handles
+    revive:
+      rules:
+        - name: var-naming
+        - name: exported
+          arguments: ["disableStutteringCheck"]
+
+  exclusions:
+    rules:
+      - path: _test\.go
+        linters:
+          - errcheck
+          - gosec
+          - unparam
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/loomctl/loom
+
+issues:
+  max-same-issues: 0

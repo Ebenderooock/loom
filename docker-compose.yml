@@ -1,0 +1,70 @@
+services:
+  loom:
+    image: ghcr.io/loomctl/loom:latest
+    container_name: loom
+    restart: unless-stopped
+    ports:
+      - "8989:8989"
+    environment:
+      LOOM_LOG_LEVEL: info
+      LOOM_HTTP_ADDR: ":8989"
+      # Switch to Postgres by uncommenting:
+      # LOOM_DATABASE_URL: "postgres://loom:loom@postgres:5432/loom?sslmode=disable"
+    volumes:
+      - ./data/loom:/config
+      - ./media:/media
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/loom", "healthcheck"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  qbittorrent:
+    image: lscr.io/linuxserver/qbittorrent:latest
+    container_name: qbittorrent
+    restart: unless-stopped
+    environment:
+      PUID: "1000"
+      PGID: "1000"
+      WEBUI_PORT: "8080"
+    ports:
+      - "8080:8080"
+      - "6881:6881"
+      - "6881:6881/udp"
+    volumes:
+      - ./data/qbittorrent:/config
+      - ./media/downloads:/downloads
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./deploy/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prom-data:/prometheus
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - grafana-data:/var/lib/grafana
+
+  # postgres:
+  #   image: postgres:16-alpine
+  #   environment:
+  #     POSTGRES_USER: loom
+  #     POSTGRES_PASSWORD: loom
+  #     POSTGRES_DB: loom
+  #   volumes:
+  #     - ./data/postgres:/var/lib/postgresql/data
+
+volumes:
+  prom-data:
+  grafana-data:
