@@ -11,6 +11,7 @@ import (
 
 	"github.com/loomctl/loom/internal/kernel/config"
 	"github.com/loomctl/loom/internal/kernel/logging"
+	"github.com/loomctl/loom/internal/kernel/telemetry"
 	"github.com/loomctl/loom/internal/server"
 )
 
@@ -44,7 +45,21 @@ func cmdServe(ctx context.Context, args []string) error {
 		"data_dir", cfg.DataDir,
 	)
 
-	srv, err := server.New(cfg, logger)
+	tel, err := telemetry.Init(ctx, cfg)
+	if err != nil {
+		return fmt.Errorf("init telemetry: %w", err)
+	}
+
+	if cfg.HotReload {
+		config.OnConfigChange(func(_ *config.Config) {
+			logger.Info("config reloaded")
+		})
+		if config.StartWatch() {
+			logger.Info("config hot-reload watching", "path", *configPath)
+		}
+	}
+
+	srv, err := server.New(cfg, logger, tel)
 	if err != nil {
 		return fmt.Errorf("init server: %w", err)
 	}
@@ -66,6 +81,9 @@ func cmdServe(ctx context.Context, args []string) error {
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		logger.Error("graceful shutdown failed", "err", err)
 		return err
+	}
+	if err := tel.Shutdown(shutdownCtx); err != nil {
+		logger.Error("telemetry shutdown failed", "err", err)
 	}
 	logger.Info("stopped cleanly")
 	return nil
