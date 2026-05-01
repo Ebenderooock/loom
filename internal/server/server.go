@@ -44,16 +44,15 @@ type Server struct {
 
 // New constructs a Server but does not start listening. The caller must
 // have already constructed *telemetry.Telemetry (typically via
-// telemetry.Init in serve.go).
-func New(cfg *config.Config, logger *slog.Logger, tel *telemetry.Telemetry) (*Server, error) {
+// telemetry.Init in serve.go) and an open storage.DB (with migrations
+// applied). The Server takes ownership of db and will Close() it on
+// Shutdown.
+func New(cfg *config.Config, logger *slog.Logger, tel *telemetry.Telemetry, db storage.DB) (*Server, error) {
 	if tel == nil {
 		return nil, errors.New("server: telemetry must not be nil")
 	}
-	ctx := context.Background()
-
-	db, err := storage.Open(ctx, cfg.Database)
-	if err != nil {
-		return nil, fmt.Errorf("storage: %w", err)
+	if db == nil {
+		return nil, errors.New("server: db must not be nil")
 	}
 
 	s := &Server{
@@ -123,7 +122,7 @@ func (s *Server) newMux() http.Handler {
 				"version":   buildinfo.Version,
 				"commit":    buildinfo.Commit,
 				"buildDate": buildinfo.Date,
-				"engine":    s.db.Engine(),
+				"engine":    string(s.db.Engine()),
 			})
 		})
 	})
@@ -256,14 +255,11 @@ func (s *Server) Start() error {
 	return nil
 }
 
-// Shutdown stops the listener and releases resources. Telemetry is owned
-// by the caller (serve.go) and shut down separately.
+// Shutdown stops the listener. The DB and Telemetry are owned by the
+// caller (serve.go) and shut down separately.
 func (s *Server) Shutdown(ctx context.Context) error {
 	s.ready.Store(false)
-	if err := s.httpSrv.Shutdown(ctx); err != nil {
-		return err
-	}
-	return s.db.Close()
+	return s.httpSrv.Shutdown(ctx)
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

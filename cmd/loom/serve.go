@@ -13,6 +13,7 @@ import (
 	"github.com/loomctl/loom/internal/kernel/logging"
 	"github.com/loomctl/loom/internal/kernel/telemetry"
 	"github.com/loomctl/loom/internal/server"
+	"github.com/loomctl/loom/internal/storage"
 )
 
 func cmdServe(ctx context.Context, args []string) error {
@@ -50,6 +51,15 @@ func cmdServe(ctx context.Context, args []string) error {
 		return fmt.Errorf("init telemetry: %w", err)
 	}
 
+	db, err := storage.Open(ctx, cfg.Storage, logger)
+	if err != nil {
+		return fmt.Errorf("open storage: %w", err)
+	}
+	defer db.Close()
+	if err := db.Migrate(ctx); err != nil {
+		return fmt.Errorf("migrate storage: %w", err)
+	}
+
 	if cfg.HotReload {
 		config.OnConfigChange(func(_ *config.Config) {
 			logger.Info("config reloaded")
@@ -59,7 +69,7 @@ func cmdServe(ctx context.Context, args []string) error {
 		}
 	}
 
-	srv, err := server.New(cfg, logger, tel)
+	srv, err := server.New(cfg, logger, tel, db)
 	if err != nil {
 		return fmt.Errorf("init server: %w", err)
 	}
@@ -114,6 +124,36 @@ func defaultHealthURL() string {
 	return "http://127.0.0.1:8989"
 }
 
-func cmdMigrate(_ context.Context, _ []string) error {
-	return errors.New("migrate: not implemented yet (Phase 8)")
+func cmdMigrate(ctx context.Context, args []string) error {
+	fs := flag.NewFlagSet("migrate", flag.ContinueOnError)
+	configPath := fs.String("config", "", "path to loom.yaml (overrides $LOOM_CONFIG_DIR/loom.yaml)")
+	importMode := fs.Bool("import", false, "import data from radarr/sonarr/prowlarr (Phase 8 — not implemented)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	if *importMode {
+		return errors.New("migrate --import: not implemented yet (Phase 8)")
+	}
+
+	cfg, err := config.Load(*configPath)
+	if err != nil {
+		return fmt.Errorf("load config: %w", err)
+	}
+	logger, err := logging.New(cfg.Log)
+	if err != nil {
+		return fmt.Errorf("init logger: %w", err)
+	}
+
+	db, err := storage.Open(ctx, cfg.Storage, logger)
+	if err != nil {
+		return fmt.Errorf("open storage: %w", err)
+	}
+	defer db.Close()
+
+	if err := db.Migrate(ctx); err != nil {
+		return fmt.Errorf("migrate: %w", err)
+	}
+	logger.Info("migrate complete", "engine", string(db.Engine()))
+	return nil
 }
