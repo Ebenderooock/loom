@@ -1,0 +1,6 @@
+# Default code-owners.
+#
+# Placeholder pointing at the future @loomctl/loom-maintainers GitHub team.
+# Replace with finer-grained ownership as modules ship in Phases 2-11.
+
+*       @loom-maintainers
