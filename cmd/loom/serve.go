@@ -78,10 +78,19 @@ func cmdServe(ctx context.Context, args []string) error {
 	if err != nil {
 		return fmt.Errorf("init scheduler: %w", err)
 	}
+
+	indexerSvc, err := buildIndexerService(ctx, cfg, db, logger)
+	if err != nil {
+		return fmt.Errorf("init indexers: %w", err)
+	}
+	if err := registerIndexerHealthJob(ctx, sched, cfg, indexerSvc); err != nil {
+		return fmt.Errorf("register indexer health job: %w", err)
+	}
+
 	sched.Start(ctx)
 	defer sched.Stop()
 
-	srv, err := server.New(cfg, logger, tel, db, authSvc)
+	srv, err := server.New(cfg, logger, tel, db, authSvc, indexerSvc)
 	if err != nil {
 		return fmt.Errorf("init server: %w", err)
 	}

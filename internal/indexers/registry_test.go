@@ -1,0 +1,152 @@
+package indexers_test
+
+import (
+	"context"
+	"errors"
+	"sync"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	"github.com/loomctl/loom/internal/indexers"
+)
+
+// fakeIndexer is a minimal Indexer used by registry/search/health
+// tests. Behaviour is configured via fields rather than ctor args so
+// table tests can override only the bits they care about.
+type fakeIndexer struct {
+	id        string
+	name      string
+	caps      indexers.Caps
+	delay     time.Duration
+	results   []indexers.Result
+	searchErr error
+	testErr   error
+	calls     atomic.Int32
+}
+
+func (f *fakeIndexer) ID() string          { return f.id }
+func (f *fakeIndexer) Name() string        { return f.name }
+func (f *fakeIndexer) Caps() indexers.Caps { return f.caps }
+func (f *fakeIndexer) Search(ctx context.Context, _ indexers.Query) (*indexers.Results, error) {
+	f.calls.Add(1)
+	if f.delay > 0 {
+		select {
+		case <-time.After(f.delay):
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
+	if f.searchErr != nil {
+		return nil, f.searchErr
+	}
+	return &indexers.Results{IndexerID: f.id, Items: f.results, Total: len(f.results)}, nil
+}
+func (f *fakeIndexer) Test(ctx context.Context) error {
+	if f.delay > 0 {
+		select {
+		case <-time.After(f.delay):
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+	return f.testErr
+}
+
+func TestRegistryConcurrentRegisterGet(t *testing.T) {
+	t.Parallel()
+	r := indexers.NewRegistry()
+	var wg sync.WaitGroup
+	for i := 0; i < 50; i++ {
+		i := i
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			id := byte('a' + (i % 26))
+			_ = r.Register(&fakeIndexer{id: string(id) + "-id", name: "n"})
+		}()
+		go func() {
+			defer wg.Done()
+			_, _ = r.Get("a-id")
+			_ = r.List()
+		}()
+	}
+	wg.Wait()
+	if r.Len() == 0 {
+		t.Fatal("expected at least one registration")
+	}
+}
+
+func TestRegistrySearchTimeoutGivesPartial(t *testing.T) {
+	t.Parallel()
+	r := indexers.NewRegistry()
+	fast := &fakeIndexer{id: "fast", results: []indexers.Result{{IndexerID: "fast", Title: "ok"}}}
+	slow := &fakeIndexer{id: "slow", delay: 200 * time.Millisecond}
+	if err := r.Register(fast); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Register(slow); err != nil {
+		t.Fatal(err)
+	}
+
+	out := r.Search(context.Background(), indexers.Query{Term: "x"}, indexers.SearchOptions{
+		PerIndexerTimeout: 25 * time.Millisecond,
+	})
+	if len(out.Results) != 1 {
+		t.Fatalf("want 1 result, got %d", len(out.Results))
+	}
+	if _, ok := out.Errors["slow"]; !ok {
+		t.Fatalf("want slow error, errors=%v", out.Errors)
+	}
+}
+
+func TestRegistrySearchSelectsByID(t *testing.T) {
+	t.Parallel()
+	r := indexers.NewRegistry()
+	a := &fakeIndexer{id: "a", results: []indexers.Result{{Title: "A"}}}
+	b := &fakeIndexer{id: "b", results: []indexers.Result{{Title: "B"}}}
+	_ = r.Register(a)
+	_ = r.Register(b)
+	out := r.Search(context.Background(), indexers.Query{}, indexers.SearchOptions{IndexerIDs: []string{"a"}})
+	if len(out.Results) != 1 || out.Results[0].Title != "A" {
+		t.Fatalf("unexpected results: %#v", out.Results)
+	}
+}
+
+func TestRegistrySearchSurfacesIndexerError(t *testing.T) {
+	t.Parallel()
+	r := indexers.NewRegistry()
+	bad := &fakeIndexer{id: "bad", searchErr: errors.New("upstream 500")}
+	_ = r.Register(bad)
+	out := r.Search(context.Background(), indexers.Query{}, indexers.SearchOptions{})
+	if len(out.Results) != 0 {
+		t.Fatalf("expected no results, got %d", len(out.Results))
+	}
+	if msg, ok := out.Errors["bad"]; !ok || msg == "" {
+		t.Fatalf("missing error for bad indexer: %v", out.Errors)
+	}
+}
+
+func TestRegistryReplaceAndRemove(t *testing.T) {
+	t.Parallel()
+	r := indexers.NewRegistry()
+	first := &fakeIndexer{id: "x", name: "first"}
+	second := &fakeIndexer{id: "x", name: "second"}
+	if err := r.Register(first); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Register(second); err == nil {
+		t.Fatal("expected duplicate register error")
+	}
+	if err := r.Replace(second); err != nil {
+		t.Fatalf("Replace: %v", err)
+	}
+	got, ok := r.Get("x")
+	if !ok || got.Name() != "second" {
+		t.Fatalf("Replace did not swap entry: got=%#v ok=%v", got, ok)
+	}
+	r.Remove("x")
+	if _, ok := r.Get("x"); ok {
+		t.Fatal("Remove did not delete")
+	}
+}

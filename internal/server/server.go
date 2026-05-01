@@ -26,6 +26,7 @@ import (
 
 	"github.com/loomctl/loom/internal/auth"
 	"github.com/loomctl/loom/internal/buildinfo"
+	"github.com/loomctl/loom/internal/indexers"
 	"github.com/loomctl/loom/internal/kernel/config"
 	"github.com/loomctl/loom/internal/kernel/eventbus"
 	"github.com/loomctl/loom/internal/kernel/telemetry"
@@ -34,14 +35,15 @@ import (
 
 // Server holds wired dependencies for the HTTP listener.
 type Server struct {
-	cfg     *config.Config
-	logger  *slog.Logger
-	httpSrv *http.Server
-	tel     *telemetry.Telemetry
-	db      storage.DB
-	bus     eventbus.Bus
-	authSvc *auth.Service
-	ready   atomic.Bool
+	cfg        *config.Config
+	logger     *slog.Logger
+	httpSrv    *http.Server
+	tel        *telemetry.Telemetry
+	db         storage.DB
+	bus        eventbus.Bus
+	authSvc    *auth.Service
+	indexerSvc *indexers.Service
+	ready      atomic.Bool
 }
 
 // New constructs a Server but does not start listening. The caller must
@@ -49,8 +51,9 @@ type Server struct {
 // telemetry.Init in serve.go) and an open storage.DB (with migrations
 // applied). The Server takes ownership of db and will Close() it on
 // Shutdown. authSvc may be nil for low-level tests; production callers
-// pass a fully wired *auth.Service.
-func New(cfg *config.Config, logger *slog.Logger, tel *telemetry.Telemetry, db storage.DB, authSvc *auth.Service) (*Server, error) {
+// pass a fully wired *auth.Service. indexerSvc may be nil to disable
+// the /api/v1/indexers/* surface.
+func New(cfg *config.Config, logger *slog.Logger, tel *telemetry.Telemetry, db storage.DB, authSvc *auth.Service, indexerSvc *indexers.Service) (*Server, error) {
 	if tel == nil {
 		return nil, errors.New("server: telemetry must not be nil")
 	}
@@ -59,12 +62,13 @@ func New(cfg *config.Config, logger *slog.Logger, tel *telemetry.Telemetry, db s
 	}
 
 	s := &Server{
-		cfg:     cfg,
-		logger:  logger,
-		tel:     tel,
-		db:      db,
-		bus:     eventbus.NewInProc(),
-		authSvc: authSvc,
+		cfg:        cfg,
+		logger:     logger,
+		tel:        tel,
+		db:         db,
+		bus:        eventbus.NewInProc(),
+		authSvc:    authSvc,
+		indexerSvc: indexerSvc,
 	}
 
 	mux := s.newMux()
@@ -121,6 +125,18 @@ func (s *Server) newMux() http.Handler {
 
 	if s.authSvc != nil {
 		s.authSvc.Mount(r)
+	}
+
+	// Indexer routes go behind the project's auth.RequireAuth — when
+	// auth is disabled (mode=disabled) RequireAuth is a no-op, so
+	// dev/test deployments still work.
+	if s.indexerSvc != nil {
+		r.Group(func(r chi.Router) {
+			if s.authSvc != nil {
+				r.Use(s.authSvc.RequireAuth)
+			}
+			s.indexerSvc.Mount(r)
+		})
 	}
 
 	r.Group(func(r chi.Router) {
