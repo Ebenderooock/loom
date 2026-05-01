@@ -70,7 +70,7 @@ working:
 > and `/api/v1/system/status` endpoints. Library/indexer/download
 > functionality lands in later phases.
 
-### Docker (single container)
+### Docker (single container, post-Phase-1 — image not yet published)
 
 ```bash
 docker run --rm -p 8989:8989 \
@@ -79,7 +79,28 @@ docker run --rm -p 8989:8989 \
   ghcr.io/loomctl/loom:latest
 ```
 
-Open <http://localhost:8989/healthz>.
+Open <http://localhost:8989/healthz>. The image lands publicly with
+the first tagged release (Phase 11). Until then, prefer the from-source
+path below.
+
+### From source (works today)
+
+Requires Go 1.23+ and Make. This path produces a working binary
+against the current `master`.
+
+```bash
+git clone https://github.com/loomctl/loom.git
+cd loom
+make build
+mkdir -p ./run
+LOOM_CONFIG_DIR=./run \
+LOOM_DATA_DIR=./run \
+LOOM_STORAGE_SQLITE_PATH=./run/loom.db \
+  ./dist/loom serve
+# in another terminal:
+curl -s http://localhost:8989/api/v1/system/status
+# {"buildDate":"...","commit":"...","engine":"sqlite","version":"..."}
+```
 
 ### Docker Compose (with Prometheus + Grafana + qBittorrent)
 

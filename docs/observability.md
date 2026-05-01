@@ -41,6 +41,29 @@ chi's `RequestID` middleware) which is logged on the access-log line.
 - Standard Go-runtime + process collectors are pre-registered.
 - Exposition format: `text/plain; version=0.0.4`.
 
+### Curl the metrics endpoint
+
+The default Prometheus collectors are mounted out of the box, so a fresh
+`loom serve` already exposes hundreds of useful series. Confirm with:
+
+```bash
+$ curl -s http://localhost:8989/metrics | head -20
+# HELP go_build_info Build information about the main Go module.
+# TYPE go_build_info gauge
+go_build_info{checksum="",path="github.com/loomctl/loom",version="..."} 1
+# HELP go_gc_duration_seconds A summary of the wall-time pause (stop-the-world) duration in garbage collection cycles.
+# TYPE go_gc_duration_seconds summary
+go_gc_duration_seconds{quantile="0"} 3.1e-05
+go_gc_duration_seconds{quantile="0.25"} 5.3e-05
+go_gc_duration_seconds{quantile="0.5"} 5.9e-05
+# HELP go_goroutines Number of goroutines that currently exist.
+# TYPE go_goroutines gauge
+go_goroutines 9
+# HELP process_resident_memory_bytes Resident memory size in bytes.
+# TYPE process_resident_memory_bytes gauge
+process_resident_memory_bytes 2.1827584e+07
+```
+
 ### Sample `prometheus.yml` scrape
 
 The repo ships `deploy/prometheus.yml`:
@@ -62,9 +85,10 @@ included `docker-compose.yml` already wires this up.
 
 ### Grafana dashboards
 
-A Loom-curated dashboard set will land in Phase 11. Until then, the Go
-runtime and process collectors are enough to chart memory, GC pauses,
-and goroutine count out of the box.
+A Loom-curated dashboard set will land in Phase 11 at
+`deploy/grafana/loom.json` (placeholder — file does not exist yet).
+Until then, the Go runtime and process collectors are enough to chart
+memory, GC pauses, and goroutine count out of the box.
 
 ## Traces
 

@@ -34,6 +34,34 @@ in `api/openapi/loom.yaml`.
 engine name is included so readiness tooling can confirm what backend
 this instance is running against.
 
+### Try every route with curl
+
+Boot the binary on the default port (`make build && ./dist/loom serve`)
+or hit your container, then:
+
+```bash
+$ curl -s http://localhost:8989/healthz
+{"status":"ok"}
+
+$ curl -s http://localhost:8989/livez
+{"status":"alive"}
+
+$ curl -s http://localhost:8989/readyz
+{"status":"ready"}        # or HTTP 503 with {"status":"not ready","reason":"..."}
+
+$ curl -s http://localhost:8989/api/v1/system/status
+{"buildDate":"2026-05-01T02:27:12Z","commit":"e561225","engine":"sqlite","version":"e561225"}
+
+$ curl -s http://localhost:8989/metrics | head -3
+# HELP go_build_info Build information about the main Go module.
+# TYPE go_build_info gauge
+go_build_info{checksum="",path="github.com/loomctl/loom",version="..."} 1
+
+# pprof is gated by debug.pprof: true
+$ curl -s http://localhost:8989/debug/pprof/goroutine?debug=1 | head -1
+goroutine profile: total 9
+```
+
 ## Headers, middleware, and conventions
 
 - Every response includes `X-Request-Id` (echoed from the request when

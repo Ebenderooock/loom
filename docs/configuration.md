@@ -12,9 +12,9 @@ when a reload event fires (currently `log.level` and `log.format`); changing
 a non-safe key in the YAML file at runtime is logged and ignored until the
 next restart.
 
-> **Auth keys.** The `auth.*` block is being implemented in Phase 1c and is
-> intentionally omitted from the table below. It will be documented in
-> [auth.md](auth.md) once the Phase 1c PR lands.
+> **Auth keys.** The full `auth.*` block landed with Phase 1c (commit
+> `3f28c1c`); see [auth.md](auth.md) for the auth-specific reference.
+> Core kernel/transport/storage keys live below.
 
 ## Environment variable mapping
 
@@ -23,6 +23,9 @@ keys also accept legacy un-prefixed names for backwards compatibility with
 pre-Viper deployments; these are noted in the Env column.
 
 ## Reference (Phase 1a)
+
+The table is the at-a-glance view; the per-key examples below show what
+real values look like. Every key gets an `example:` line.
 
 | YAML path | Env var | Type | Default | Hot-reload | Description |
 |---|---|---|---|---|---|
@@ -48,6 +51,52 @@ pre-Viper deployments; these are noted in the Env column.
 | `cors.allowed_origins` | `LOOM_CORS_ALLOWED_ORIGINS` | []string | `[]` | no | Allow-list for the chi-cors middleware. |
 | `otel.enabled` | `LOOM_OTEL_ENABLED` | bool | `false` | no | Enable the OpenTelemetry SDK. |
 | `otel.endpoint` | `LOOM_OTEL_ENDPOINT` | string | `""` | no | Same role as `telemetry.otlp_endpoint`; explicit OTel block. |
+
+### Per-key examples
+
+```yaml
+config_dir: /config                     # example: where loom.yaml lives
+data_dir: /config                       # example: writable state directory
+hot_reload: true                        # example: watch loom.yaml for safe-key changes
+
+http:
+  addr: ":8989"                         # example: bind all interfaces, port 8989
+  read_timeout: 30                      # example: 30s for slow uploaders
+  write_timeout: 60                     # example: 60s ceiling for streaming responses
+  shutdown_timeout: 30                  # example: 30s grace on SIGTERM
+  url_base: "/loom"                     # example: behind a /loom path prefix
+
+log:
+  level: info                           # example: debug | info | warn | error
+  format: json                          # example: json (prod) | text (dev)
+
+telemetry:
+  prometheus: true                      # example: keep /metrics on
+  profiling: false                      # example: legacy alias; prefer debug.pprof
+  trace_ratio: 0.05                     # example: sample 5% of traces
+  otlp_endpoint: "http://otel:4318"     # example: OTLP/HTTP collector
+
+database:
+  url: "postgres://loom:loom@db:5432/loom?sslmode=disable"  # example: legacy alias for storage.postgres.dsn
+
+storage:
+  engine: sqlite                        # example: sqlite | postgres
+  sqlite:
+    path: /config/loom.db               # example: single-file, container-friendly
+  postgres:
+    dsn: "postgres://loom:loom@db:5432/loom?sslmode=require" # example: prod with TLS
+
+debug:
+  pprof: true                           # example: enable /debug/pprof/* (gate behind a private network)
+
+cors:
+  allowed_origins:                      # example: front-end on a different host
+    - "https://media.example.com"
+
+otel:
+  enabled: true                         # example: turn the OTel SDK on
+  endpoint: "http://otel:4318"          # example: same as telemetry.otlp_endpoint
+```
 
 ### Validation rules
 
