@@ -10,6 +10,17 @@ import (
 	"database/sql"
 )
 
+const countUsers = `-- name: CountUsers :one
+SELECT COUNT(*) FROM users
+`
+
+func (q *Queries) CountUsers(ctx context.Context) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countUsers)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createUser = `-- name: CreateUser :one
 INSERT INTO users (username, password_hash, email, role)
 VALUES (?, ?, ?, ?)
@@ -79,4 +90,46 @@ func (q *Queries) GetUserByUsername(ctx context.Context, username string) (User,
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const updateUserOIDC = `-- name: UpdateUserOIDC :one
+UPDATE users
+SET email = ?, role = ?, updated_at = CURRENT_TIMESTAMP
+WHERE id = ?
+RETURNING id, username, password_hash, email, role, created_at, updated_at
+`
+
+type UpdateUserOIDCParams struct {
+	Email sql.NullString `json:"email"`
+	Role  string         `json:"role"`
+	ID    int64          `json:"id"`
+}
+
+func (q *Queries) UpdateUserOIDC(ctx context.Context, arg UpdateUserOIDCParams) (User, error) {
+	row := q.db.QueryRowContext(ctx, updateUserOIDC, arg.Email, arg.Role, arg.ID)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Username,
+		&i.PasswordHash,
+		&i.Email,
+		&i.Role,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const updateUserPassword = `-- name: UpdateUserPassword :exec
+UPDATE users SET password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?
+`
+
+type UpdateUserPasswordParams struct {
+	PasswordHash string `json:"password_hash"`
+	ID           int64  `json:"id"`
+}
+
+func (q *Queries) UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) error {
+	_, err := q.db.ExecContext(ctx, updateUserPassword, arg.PasswordHash, arg.ID)
+	return err
 }

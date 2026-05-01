@@ -24,6 +24,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
 
+	"github.com/loomctl/loom/internal/auth"
 	"github.com/loomctl/loom/internal/buildinfo"
 	"github.com/loomctl/loom/internal/kernel/config"
 	"github.com/loomctl/loom/internal/kernel/eventbus"
@@ -39,6 +40,7 @@ type Server struct {
 	tel     *telemetry.Telemetry
 	db      storage.DB
 	bus     eventbus.Bus
+	authSvc *auth.Service
 	ready   atomic.Bool
 }
 
@@ -46,8 +48,9 @@ type Server struct {
 // have already constructed *telemetry.Telemetry (typically via
 // telemetry.Init in serve.go) and an open storage.DB (with migrations
 // applied). The Server takes ownership of db and will Close() it on
-// Shutdown.
-func New(cfg *config.Config, logger *slog.Logger, tel *telemetry.Telemetry, db storage.DB) (*Server, error) {
+// Shutdown. authSvc may be nil for low-level tests; production callers
+// pass a fully wired *auth.Service.
+func New(cfg *config.Config, logger *slog.Logger, tel *telemetry.Telemetry, db storage.DB, authSvc *auth.Service) (*Server, error) {
 	if tel == nil {
 		return nil, errors.New("server: telemetry must not be nil")
 	}
@@ -56,11 +59,12 @@ func New(cfg *config.Config, logger *slog.Logger, tel *telemetry.Telemetry, db s
 	}
 
 	s := &Server{
-		cfg:    cfg,
-		logger: logger,
-		tel:    tel,
-		db:     db,
-		bus:    eventbus.NewInProc(),
+		cfg:     cfg,
+		logger:  logger,
+		tel:     tel,
+		db:      db,
+		bus:     eventbus.NewInProc(),
+		authSvc: authSvc,
 	}
 
 	mux := s.newMux()
@@ -114,6 +118,10 @@ func (s *Server) newMux() http.Handler {
 	})
 
 	r.Handle("/metrics", s.tel.Handler())
+
+	if s.authSvc != nil {
+		s.authSvc.Mount(r)
+	}
 
 	r.Group(func(r chi.Router) {
 		r.Use(etagMiddleware)

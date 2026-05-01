@@ -36,6 +36,10 @@ func run(ctx context.Context, args []string) error {
 		return cmdHealthcheck(ctx, args[1:])
 	case "migrate":
 		return cmdMigrate(ctx, args[1:])
+	case "api-key":
+		return cmdAPIKey(ctx, args[1:])
+	case "user":
+		return cmdUser(ctx, args[1:])
 	case "help", "--help", "-h":
 		return usage(os.Stdout)
 	default:
@@ -53,6 +57,8 @@ Usage:
 Commands:
   serve         Run the loom server
   migrate       Migrate from radarr/sonarr/prowlarr databases
+  api-key       Manage API keys (create|list|revoke)
+  user          Manage users (create|passwd)
   healthcheck   Probe the local server (used by Docker HEALTHCHECK)
   version       Print version info
   help          Show this message

@@ -80,6 +80,34 @@ type PostgresConfig struct {
 type AuthConfig struct {
 	Mode             string   `mapstructure:"mode"`
 	TrustedProxyCIDR []string `mapstructure:"trusted_proxy_cidr"`
+
+	SessionSecret string `mapstructure:"session_secret"`
+	SessionTTL    int    `mapstructure:"session_ttl"`
+	CookieSecure  bool   `mapstructure:"cookie_secure"`
+
+	OIDC  OIDCConfig  `mapstructure:"oidc"`
+	Proxy ProxyConfig `mapstructure:"proxy"`
+}
+
+type OIDCConfig struct {
+	Enabled       bool     `mapstructure:"enabled"`
+	IssuerURL     string   `mapstructure:"issuer_url"`
+	ClientID      string   `mapstructure:"client_id"`
+	ClientSecret  string   `mapstructure:"client_secret"`
+	RedirectURL   string   `mapstructure:"redirect_url"`
+	Scopes        []string `mapstructure:"scopes"`
+	UsernameClaim string   `mapstructure:"username_claim"`
+	EmailClaim    string   `mapstructure:"email_claim"`
+	RoleClaim     string   `mapstructure:"role_claim"`
+	AdminGroups   []string `mapstructure:"admin_groups"`
+}
+
+type ProxyConfig struct {
+	Enabled      bool     `mapstructure:"enabled"`
+	TrustedCIDRs []string `mapstructure:"trusted_cidrs"`
+	UserHeader   string   `mapstructure:"user_header"`
+	EmailHeader  string   `mapstructure:"email_header"`
+	GroupsHeader string   `mapstructure:"groups_header"`
 }
 
 type DebugConfig struct {
@@ -230,6 +258,22 @@ func applyDefaults(v *viper.Viper) {
 
 	v.SetDefault("auth.mode", "forms")
 	v.SetDefault("auth.trusted_proxy_cidr", []string{})
+	v.SetDefault("auth.session_secret", "")
+	v.SetDefault("auth.session_ttl", 30*24*3600)
+	v.SetDefault("auth.cookie_secure", false)
+
+	v.SetDefault("auth.oidc.enabled", false)
+	v.SetDefault("auth.oidc.scopes", []string{"openid", "profile", "email"})
+	v.SetDefault("auth.oidc.username_claim", "preferred_username")
+	v.SetDefault("auth.oidc.email_claim", "email")
+	v.SetDefault("auth.oidc.role_claim", "groups")
+	v.SetDefault("auth.oidc.admin_groups", []string{})
+
+	v.SetDefault("auth.proxy.enabled", false)
+	v.SetDefault("auth.proxy.trusted_cidrs", []string{"127.0.0.1/32", "::1/128"})
+	v.SetDefault("auth.proxy.user_header", "Remote-User")
+	v.SetDefault("auth.proxy.email_header", "Remote-Email")
+	v.SetDefault("auth.proxy.groups_header", "Remote-Groups")
 
 	v.SetDefault("debug.pprof", false)
 
