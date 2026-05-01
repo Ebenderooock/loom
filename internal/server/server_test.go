@@ -15,6 +15,7 @@ import (
 
 	"github.com/loomctl/loom/internal/kernel/config"
 	"github.com/loomctl/loom/internal/kernel/telemetry"
+	"github.com/loomctl/loom/internal/storage"
 )
 
 func newTestServer(t *testing.T) *Server {
@@ -25,17 +26,26 @@ func newTestServer(t *testing.T) *Server {
 	if err != nil {
 		t.Fatal(err)
 	}
+	cfg.Storage = config.StorageConfig{
+		Engine: "sqlite",
+		SQLite: config.SQLiteConfig{Path: t.TempDir() + "/loom.db"},
+	}
 	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
 	tel, err := telemetry.New(context.Background(), cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
-	s, err := New(cfg, logger, tel)
+	db, err := storage.Open(context.Background(), cfg.Storage, logger)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, err := New(cfg, logger, tel, db)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
 		_ = s.Shutdown(context.Background())
+		_ = db.Close()
 		_ = tel.Shutdown(context.Background())
 	})
 	return s
@@ -193,13 +203,22 @@ func TestCORSPreflightWhenConfigured(t *testing.T) {
 		t.Fatal(err)
 	}
 	cfg.CORS.AllowedOrigins = []string{"https://example.com"}
+	cfg.Storage = config.StorageConfig{
+		Engine: "sqlite",
+		SQLite: config.SQLiteConfig{Path: t.TempDir() + "/loom.db"},
+	}
 	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
 	tel, err := telemetry.New(context.Background(), cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = tel.Shutdown(context.Background()) })
-	s, err := New(cfg, logger, tel)
+	db, err := storage.Open(context.Background(), cfg.Storage, logger)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	s, err := New(cfg, logger, tel, db)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -237,15 +256,24 @@ func TestPprofGated(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	cfg.Storage = config.StorageConfig{
+		Engine: "sqlite",
+		SQLite: config.SQLiteConfig{Path: t.TempDir() + "/loom.db"},
+	}
 	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
 	tel, err := telemetry.New(context.Background(), cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = tel.Shutdown(context.Background()) })
+	db, err := storage.Open(context.Background(), cfg.Storage, logger)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
 
 	// Default: pprof disabled.
-	s, err := New(cfg, logger, tel)
+	s, err := New(cfg, logger, tel, db)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -258,7 +286,8 @@ func TestPprofGated(t *testing.T) {
 	// Enabled.
 	cfg2, _ := config.Load("")
 	cfg2.Debug.Pprof = true
-	s2, err := New(cfg2, logger, tel)
+	cfg2.Storage = cfg.Storage
+	s2, err := New(cfg2, logger, tel, db)
 	if err != nil {
 		t.Fatal(err)
 	}

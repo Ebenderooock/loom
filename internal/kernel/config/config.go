@@ -29,6 +29,7 @@ type Config struct {
 	Log       LogConfig       `mapstructure:"log"`
 	Telemetry TelemetryConfig `mapstructure:"telemetry"`
 	Database  DatabaseConfig  `mapstructure:"database"`
+	Storage   StorageConfig   `mapstructure:"storage"`
 	Auth      AuthConfig      `mapstructure:"auth"`
 	Debug     DebugConfig     `mapstructure:"debug"`
 	CORS      CORSConfig      `mapstructure:"cors"`
@@ -57,6 +58,23 @@ type TelemetryConfig struct {
 
 type DatabaseConfig struct {
 	URL string `mapstructure:"url"`
+}
+
+// StorageConfig selects the persistence engine and engine-specific options.
+// Engine must be "sqlite" or "postgres". Only the matching sub-block is
+// consulted by storage.Open.
+type StorageConfig struct {
+	Engine   string         `mapstructure:"engine"`
+	SQLite   SQLiteConfig   `mapstructure:"sqlite"`
+	Postgres PostgresConfig `mapstructure:"postgres"`
+}
+
+type SQLiteConfig struct {
+	Path string `mapstructure:"path"`
+}
+
+type PostgresConfig struct {
+	DSN string `mapstructure:"dsn"`
 }
 
 type AuthConfig struct {
@@ -219,6 +237,10 @@ func applyDefaults(v *viper.Viper) {
 
 	v.SetDefault("otel.enabled", false)
 	v.SetDefault("otel.endpoint", "")
+
+	v.SetDefault("storage.engine", "sqlite")
+	v.SetDefault("storage.sqlite.path", "/data/loom.db")
+	v.SetDefault("storage.postgres.dsn", "")
 }
 
 // bindLegacyEnv preserves the un-prefixed environment variable shape used
@@ -263,6 +285,11 @@ func (c *Config) Validate() error {
 	case "forms", "apikey", "oidc", "proxy", "disabled":
 	default:
 		return fmt.Errorf("invalid auth.mode %q", c.Auth.Mode)
+	}
+	switch strings.ToLower(c.Storage.Engine) {
+	case "", "sqlite", "postgres":
+	default:
+		return fmt.Errorf("invalid storage.engine %q (want sqlite|postgres)", c.Storage.Engine)
 	}
 	return nil
 }
