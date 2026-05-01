@@ -17,6 +17,56 @@ The selector is `storage.engine` (`sqlite` | `postgres`). The legacy
 `LOOM_DATABASE_URL` environment variable is also honoured: a value
 starting with `postgres://` switches to Postgres.
 
+### DSN cookbook
+
+SQLite — the path is a plain filesystem path; Loom creates parent dirs:
+
+```yaml
+# Container default — single file under the persistent volume.
+storage:
+  engine: sqlite
+  sqlite:
+    path: /config/loom.db
+
+# System-package install on Linux.
+storage:
+  engine: sqlite
+  sqlite:
+    path: /var/lib/loom/loom.db
+
+# In-memory DB, useful for tests only — wiped at exit.
+storage:
+  engine: sqlite
+  sqlite:
+    path: ":memory:"
+```
+
+Postgres — Loom passes the DSN straight to `pgx`. Use any
+`pgx`-supported form (URL or key=value):
+
+```yaml
+# Local dev, plaintext.
+storage:
+  engine: postgres
+  postgres:
+    dsn: "postgres://loom:loom@localhost:5432/loom?sslmode=disable"
+
+# Production over TLS, verifying the server cert.
+storage:
+  engine: postgres
+  postgres:
+    dsn: "postgres://loom:s3cret@db.internal:5432/loom?sslmode=verify-full&sslrootcert=/etc/ssl/ca.pem"
+
+# Managed Postgres with SNI (RDS, Cloud SQL, etc.).
+storage:
+  engine: postgres
+  postgres:
+    dsn: "postgres://loom@loom.cluster-xxx.eu-west-2.rds.amazonaws.com:5432/loom?sslmode=require"
+
+# Legacy — set LOOM_DATABASE_URL only; engine auto-selects from scheme.
+# LOOM_DATABASE_URL=postgres://loom:loom@localhost:5432/loom?sslmode=disable
+```
+
 ### SQLite specifics
 
 - Driver: `modernc.org/sqlite` (pure Go — no CGO required).

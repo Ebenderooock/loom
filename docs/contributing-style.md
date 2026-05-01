@@ -66,6 +66,54 @@ merging:
 - [ ] CHANGELOG entry added under `[Unreleased]`.
 - [ ] PR title follows Conventional Commits.
 
+## Readability principles
+
+We treat readable code and readable docs as a feature, not a polish step.
+A reviewer should be able to skim a file once and understand what it
+does. Apply this filter on every PR — both yours and your reviewees.
+
+### Code readability
+
+- **Names tell what they do.** `findMovieByTMDBID` over `lookup`,
+  `pendingDownloads` over `pd`. Single-letter names are reserved for
+  loop indices and standard receivers.
+- **One concept per package.** A package whose name needs an "and" is
+  two packages. Keep imports flowing in one direction.
+- **Functions stay short.** Aim for ~30 lines; split aggressively.
+  `gocyclo` and `funlen` (when we enable them) will police this.
+- **Errors read as sentences and carry context.** `fmt.Errorf("open
+  config %q: %w", path, err)`, never `errors.New("error")`. Inspect
+  with `errors.Is` / `errors.As`, not string matching.
+- **Comments explain why, not what.** The code shows the what. Save
+  comments for non-obvious decisions, invariants, or links to the
+  upstream issue.
+- **Public symbols are documented.** Every exported Go identifier has
+  a `// Name does X` comment (`revive`'s `exported` rule). Same for
+  exported TS types.
+- **No clever one-liners.** A clear five-line block beats a
+  six-function pipeline that needs a debugger to read.
+- **TypeScript is strict.** `strict: true` in `tsconfig.json`; no
+  `any` without a justifying comment; prefer `unknown` + a narrowing
+  type guard.
+
+### Documentation readability
+
+- **Plain English first.** Write for a competent friend who has not
+  read this codebase. Define jargon the first time it appears.
+- **Show, don't tell.** Every config key has an example value. Every
+  endpoint has a `curl` line. Every command is pasteable as-is.
+- **Active voice, present tense.** "Loom reads the config" beats
+  "the config is read by Loom".
+- **Front-load the answer.** Lead each section with the one-line
+  takeaway; details follow.
+- **One topic per page, kept short.** If a doc page passes ~600
+  lines, split it. Cross-link instead of duplicating.
+- **Examples are tested.** If a snippet doesn't run today (e.g.
+  unreleased Docker image, future phase), label it as such next to
+  the snippet.
+- **Status is honest.** Use 🚧 / ⏳ / ✅ tags or "Phase N" labels for
+  not-yet-built surfaces. Don't pretend a placeholder is real.
+
 ## Documentation requirements
 
 Every PR must:

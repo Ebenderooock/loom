@@ -27,6 +27,9 @@ Closes #
 - [ ] No upstream code copied from Radarr/Sonarr/Prowlarr (clean-room
       policy — see `CONTRIBUTING.md`).
 - [ ] No secrets, API keys, or PII added.
+- [ ] Passes readability check (names tell what they do; functions short;
+      docs use plain English with examples). See
+      [`docs/contributing-style.md`](../docs/contributing-style.md#readability-principles).
 
 ## Documentation checklist
 
