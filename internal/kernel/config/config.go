@@ -1,105 +1,129 @@
 // Package config loads layered configuration:
-//   defaults < $LOOM_CONFIG_DIR/loom.yaml < environment (LOOM_*) < flags.
 //
-// This Phase-0 implementation supports defaults + env. YAML loading and the
-// hot-reload watcher land in Phase 1 alongside Viper.
+//	defaults < $LOOM_CONFIG_DIR/loom.yaml (or --config) < environment (LOOM_*) < flags.
+//
+// Backed by spf13/viper. Hot-reload of safe-to-change keys (log.level,
+// log.format) is gated by Config.HotReload and only fires when a YAML file
+// was actually loaded.
 package config
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
+	"sync"
+
+	"github.com/fsnotify/fsnotify"
+	"github.com/spf13/viper"
 )
 
 // Config is the root of all runtime configuration.
 type Config struct {
-	ConfigDir string
-	DataDir   string
+	ConfigDir string `mapstructure:"config_dir"`
+	DataDir   string `mapstructure:"data_dir"`
+	HotReload bool   `mapstructure:"hot_reload"`
 
-	HTTP      HTTPConfig
-	Log       LogConfig
-	Telemetry TelemetryConfig
-	Database  DatabaseConfig
-	Auth      AuthConfig
+	HTTP      HTTPConfig      `mapstructure:"http"`
+	Log       LogConfig       `mapstructure:"log"`
+	Telemetry TelemetryConfig `mapstructure:"telemetry"`
+	Database  DatabaseConfig  `mapstructure:"database"`
+	Auth      AuthConfig      `mapstructure:"auth"`
+	Debug     DebugConfig     `mapstructure:"debug"`
+	CORS      CORSConfig      `mapstructure:"cors"`
+	OTel      OTelConfig      `mapstructure:"otel"`
 }
 
 type HTTPConfig struct {
-	Addr            string
-	ReadTimeout     int // seconds
-	WriteTimeout    int
-	ShutdownTimeout int
-	URLBase         string // e.g. "/loom" when reverse-proxied at a sub-path
+	Addr            string `mapstructure:"addr"`
+	ReadTimeout     int    `mapstructure:"read_timeout"`
+	WriteTimeout    int    `mapstructure:"write_timeout"`
+	ShutdownTimeout int    `mapstructure:"shutdown_timeout"`
+	URLBase         string `mapstructure:"url_base"`
 }
 
 type LogConfig struct {
-	Level  string // debug | info | warn | error
-	Format string // json | text
+	Level  string `mapstructure:"level"`
+	Format string `mapstructure:"format"`
 }
 
 type TelemetryConfig struct {
-	OTLPEndpoint string
-	Prometheus   bool
-	TraceRatio   float64
-	Profiling    bool
+	OTLPEndpoint string  `mapstructure:"otlp_endpoint"`
+	Prometheus   bool    `mapstructure:"prometheus"`
+	TraceRatio   float64 `mapstructure:"trace_ratio"`
+	Profiling    bool    `mapstructure:"profiling"`
 }
 
 type DatabaseConfig struct {
-	URL string // empty => SQLite at <DataDir>/loom.db
+	URL string `mapstructure:"url"`
 }
 
 type AuthConfig struct {
-	Mode             string // forms | apikey | oidc | proxy | disabled (dev-only)
-	TrustedProxyCIDR []string
+	Mode             string   `mapstructure:"mode"`
+	TrustedProxyCIDR []string `mapstructure:"trusted_proxy_cidr"`
 }
 
-// Load returns a Config built from defaults overlayed with environment.
-// Path is reserved for the YAML file and is honored once Viper is wired in.
-func Load(path string) (*Config, error) {
-	cfg := defaults()
+type DebugConfig struct {
+	Pprof bool `mapstructure:"pprof"`
+}
 
-	if v := os.Getenv("LOOM_CONFIG_DIR"); v != "" {
-		cfg.ConfigDir = v
+type CORSConfig struct {
+	AllowedOrigins []string `mapstructure:"allowed_origins"`
+}
+
+// OTelConfig controls OpenTelemetry trace export. Prometheus metrics live
+// under TelemetryConfig and are always exposed on /metrics regardless.
+type OTelConfig struct {
+	Enabled  bool   `mapstructure:"enabled"`
+	Endpoint string `mapstructure:"endpoint"`
+}
+
+var (
+	stateMu sync.Mutex
+	state   *watchState
+)
+
+type watchState struct {
+	v        *viper.Viper
+	cfg      *Config
+	handlers []func(*Config)
+	started  bool
+}
+
+// Load returns a Config built from defaults < YAML file < env. The path
+// argument, when non-empty, points at a YAML file and overrides the
+// default lookup of $LOOM_CONFIG_DIR/loom.yaml.
+func Load(path string) (*Config, error) {
+	v := viper.New()
+	v.SetEnvPrefix("LOOM")
+	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+	v.AutomaticEnv()
+	applyDefaults(v)
+	bindLegacyEnv(v)
+
+	if path != "" {
+		v.SetConfigFile(path)
+	} else {
+		dir := envOr("LOOM_CONFIG_DIR", v.GetString("config_dir"))
+		v.SetConfigName("loom")
+		v.SetConfigType("yaml")
+		v.AddConfigPath(dir)
 	}
-	if v := os.Getenv("LOOM_DATA_DIR"); v != "" {
-		cfg.DataDir = v
-	}
-	if v := os.Getenv("LOOM_HTTP_ADDR"); v != "" {
-		cfg.HTTP.Addr = v
-	}
-	if v := os.Getenv("LOOM_HTTP_URL_BASE"); v != "" {
-		cfg.HTTP.URLBase = v
-	}
-	if v := os.Getenv("LOOM_LOG_LEVEL"); v != "" {
-		cfg.Log.Level = v
-	}
-	if v := os.Getenv("LOOM_LOG_FORMAT"); v != "" {
-		cfg.Log.Format = v
-	}
-	if v := os.Getenv("LOOM_OTLP_ENDPOINT"); v != "" {
-		cfg.Telemetry.OTLPEndpoint = v
-	}
-	if v := os.Getenv("LOOM_PROMETHEUS"); v != "" {
-		cfg.Telemetry.Prometheus = parseBool(v, cfg.Telemetry.Prometheus)
-	}
-	if v := os.Getenv("LOOM_PROFILING"); v != "" {
-		cfg.Telemetry.Profiling = parseBool(v, cfg.Telemetry.Profiling)
-	}
-	if v := os.Getenv("LOOM_TRACE_RATIO"); v != "" {
-		if f, err := strconv.ParseFloat(v, 64); err == nil {
-			cfg.Telemetry.TraceRatio = f
+	if err := v.ReadInConfig(); err != nil {
+		var nf viper.ConfigFileNotFoundError
+		var pe *os.PathError
+		// Missing file is fine; surface real parse errors only.
+		if !errors.As(err, &nf) && !errors.As(err, &pe) {
+			return nil, fmt.Errorf("read config: %w", err)
 		}
 	}
-	if v := os.Getenv("LOOM_DATABASE_URL"); v != "" {
-		cfg.Database.URL = v
-	}
-	if v := os.Getenv("LOOM_AUTH_MODE"); v != "" {
-		cfg.Auth.Mode = v
+
+	cfg := &Config{}
+	if err := v.Unmarshal(cfg); err != nil {
+		return nil, fmt.Errorf("unmarshal config: %w", err)
 	}
 
-	// path is honored in Phase 1 by Viper; for now ensure dirs exist.
-	_ = path
 	if err := os.MkdirAll(cfg.ConfigDir, 0o755); err != nil {
 		return nil, fmt.Errorf("create config dir: %w", err)
 	}
@@ -110,27 +134,110 @@ func Load(path string) (*Config, error) {
 	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}
+
+	stateMu.Lock()
+	state = &watchState{v: v, cfg: cfg}
+	stateMu.Unlock()
 	return cfg, nil
 }
 
-func defaults() *Config {
+// OnConfigChange registers a callback invoked with a freshly-unmarshaled
+// Config every time the underlying YAML file changes. It is a no-op
+// unless StartWatch has been called and a config file was actually loaded.
+// Only safe-to-change keys (log.level, log.format) should be acted on by
+// the callback.
+func OnConfigChange(fn func(*Config)) {
+	stateMu.Lock()
+	defer stateMu.Unlock()
+	if state == nil {
+		return
+	}
+	state.handlers = append(state.handlers, fn)
+}
+
+// StartWatch enables hot-reload of the loaded config file. Idempotent;
+// callable only after Load. Returns false if no file was loaded or watch
+// is already running.
+func StartWatch() bool {
+	stateMu.Lock()
+	defer stateMu.Unlock()
+	if state == nil || state.started {
+		return false
+	}
+	if state.v.ConfigFileUsed() == "" {
+		return false
+	}
+	state.started = true
+	state.v.OnConfigChange(func(_ fsnotify.Event) {
+		stateMu.Lock()
+		fresh := &Config{}
+		if err := state.v.Unmarshal(fresh); err != nil {
+			stateMu.Unlock()
+			return
+		}
+		if err := fresh.Validate(); err != nil {
+			stateMu.Unlock()
+			return
+		}
+		state.cfg = fresh
+		handlers := append([]func(*Config){}, state.handlers...)
+		stateMu.Unlock()
+		for _, h := range handlers {
+			h(fresh)
+		}
+	})
+	state.v.WatchConfig()
+	return true
+}
+
+func applyDefaults(v *viper.Viper) {
 	cwd, _ := os.Getwd()
-	return &Config{
-		ConfigDir: filepath.Join(cwd, "config"),
-		DataDir:   filepath.Join(cwd, "config"),
-		HTTP: HTTPConfig{
-			Addr:            ":8989",
-			ReadTimeout:     30,
-			WriteTimeout:    60,
-			ShutdownTimeout: 30,
-		},
-		Log: LogConfig{Level: "info", Format: "json"},
-		Telemetry: TelemetryConfig{
-			Prometheus: true,
-			TraceRatio: 0.0,
-			Profiling:  false,
-		},
-		Auth: AuthConfig{Mode: "forms"},
+	v.SetDefault("config_dir", filepath.Join(cwd, "config"))
+	v.SetDefault("data_dir", filepath.Join(cwd, "config"))
+	v.SetDefault("hot_reload", false)
+
+	v.SetDefault("http.addr", ":8989")
+	v.SetDefault("http.read_timeout", 30)
+	v.SetDefault("http.write_timeout", 60)
+	v.SetDefault("http.shutdown_timeout", 30)
+	v.SetDefault("http.url_base", "")
+
+	v.SetDefault("log.level", "info")
+	v.SetDefault("log.format", "json")
+
+	v.SetDefault("telemetry.prometheus", true)
+	v.SetDefault("telemetry.trace_ratio", 0.0)
+	v.SetDefault("telemetry.profiling", false)
+	v.SetDefault("telemetry.otlp_endpoint", "")
+
+	v.SetDefault("auth.mode", "forms")
+	v.SetDefault("auth.trusted_proxy_cidr", []string{})
+
+	v.SetDefault("debug.pprof", false)
+
+	v.SetDefault("cors.allowed_origins", []string{})
+
+	v.SetDefault("otel.enabled", false)
+	v.SetDefault("otel.endpoint", "")
+}
+
+// bindLegacyEnv preserves the un-prefixed environment variable shape used
+// before viper landed (LOOM_PROMETHEUS, LOOM_TRACE_RATIO, …) so existing
+// deployments and tests keep working alongside the auto-bound shape
+// (LOOM_TELEMETRY_PROMETHEUS, …).
+func bindLegacyEnv(v *viper.Viper) {
+	binds := map[string]string{
+		"telemetry.prometheus":    "LOOM_PROMETHEUS",
+		"telemetry.profiling":     "LOOM_PROFILING",
+		"telemetry.trace_ratio":   "LOOM_TRACE_RATIO",
+		"telemetry.otlp_endpoint": "LOOM_OTLP_ENDPOINT",
+		"auth.mode":               "LOOM_AUTH_MODE",
+		"database.url":            "LOOM_DATABASE_URL",
+		"otel.enabled":            "LOOM_OTEL_ENABLED",
+		"otel.endpoint":           "LOOM_OTEL_ENDPOINT",
+	}
+	for key, env := range binds {
+		_ = v.BindEnv(key, env)
 	}
 }
 
@@ -160,6 +267,8 @@ func (c *Config) Validate() error {
 	return nil
 }
 
+// parseBool retains its pre-viper behavior so callers (and tests) can keep
+// poking at values that come in from non-viper sources (e.g. ad-hoc flags).
 func parseBool(s string, fallback bool) bool {
 	switch strings.ToLower(strings.TrimSpace(s)) {
 	case "1", "true", "yes", "on":
@@ -169,3 +278,12 @@ func parseBool(s string, fallback bool) bool {
 	}
 	return fallback
 }
+
+func envOr(key, fallback string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return fallback
+}
+
+
