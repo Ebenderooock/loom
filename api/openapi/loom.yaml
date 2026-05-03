@@ -34,6 +34,11 @@ tags:
     description: Indexer CRUD, capabilities, manual health checks, and aggregated search.
   - name: proxies
     description: Outbound proxy records (HTTP/HTTPS/SOCKS5/FlareSolverr) attachable to indexers.
+  - name: download-clients
+    description: |
+      Download client CRUD, manual health checks, and per-client operations
+      (categories, free-space, item add/list/pause/resume). See
+      `docs/downloads.md` and ADR-0014 for the design rationale.
   - name: aggregator
     description: |
       Prowlarr-compatible Newznab/Torznab aggregator surface. Wraps every enabled
@@ -654,6 +659,356 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
+  /api/v1/download-clients/:
+    get:
+      tags: [download-clients]
+      summary: List configured download clients with their last-known health.
+      operationId: listDownloadClients
+      security:
+        - apiKey: []
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "200":
+          description: All download clients.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [download_clients]
+                properties:
+                  download_clients:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/DownloadClient"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      tags: [download-clients]
+      summary: Create a download client.
+      operationId: createDownloadClient
+      security:
+        - apiKey: []
+        - bearerAuth: []
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DownloadClientCreate"
+      responses:
+        "201":
+          description: Created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DownloadClient"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          description: A client with this id already exists.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/v1/download-clients/{id}:
+    parameters:
+      - $ref: "#/components/parameters/DownloadClientID"
+    get:
+      tags: [download-clients]
+      summary: Fetch a single download client + health.
+      operationId: getDownloadClient
+      security:
+        - apiKey: []
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "200":
+          description: Found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DownloadClient"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      tags: [download-clients]
+      summary: Replace a download client.
+      operationId: replaceDownloadClient
+      security:
+        - apiKey: []
+        - bearerAuth: []
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DownloadClientCreate"
+      responses:
+        "200":
+          description: Replaced.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DownloadClient"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [download-clients]
+      summary: Partially update a download client.
+      operationId: patchDownloadClient
+      security:
+        - apiKey: []
+        - bearerAuth: []
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DownloadClientPatch"
+      responses:
+        "200":
+          description: Updated.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DownloadClient"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [download-clients]
+      summary: Delete a download client.
+      operationId: deleteDownloadClient
+      security:
+        - apiKey: []
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "204":
+          description: Deleted.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/download-clients/{id}/test:
+    parameters:
+      - $ref: "#/components/parameters/DownloadClientID"
+    post:
+      tags: [download-clients]
+      summary: Probe a download client and persist the resulting health row.
+      operationId: testDownloadClient
+      security:
+        - apiKey: []
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "200":
+          description: Probe outcome.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok]
+                properties:
+                  ok:
+                    type: boolean
+                  error:
+                    type: string
+                  health:
+                    $ref: "#/components/schemas/DownloadClientHealth"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/download-clients/{id}/categories:
+    parameters:
+      - $ref: "#/components/parameters/DownloadClientID"
+    get:
+      tags: [download-clients]
+      summary: List categories advertised by the download client.
+      operationId: listDownloadCategories
+      security:
+        - apiKey: []
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "200":
+          description: Categories.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [categories]
+                properties:
+                  categories:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/DownloadCategory"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/download-clients/{id}/free-space:
+    parameters:
+      - $ref: "#/components/parameters/DownloadClientID"
+    get:
+      tags: [download-clients]
+      summary: Report free space (bytes) reported by the download client. -1 if unknown.
+      operationId: getDownloadFreeSpace
+      security:
+        - apiKey: []
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "200":
+          description: Free-space report.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DownloadFreeSpace"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/download-clients/{id}/items:
+    parameters:
+      - $ref: "#/components/parameters/DownloadClientID"
+    get:
+      tags: [download-clients]
+      summary: |
+        List active items in the download client. Pass `?ids=a,b` (comma
+        separated) to limit to specific item ids; omit for all.
+      operationId: listDownloadItems
+      security:
+        - apiKey: []
+        - bearerAuth: []
+        - cookieAuth: []
+      parameters:
+        - name: ids
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Comma-separated item ids; empty/omitted = all.
+      responses:
+        "200":
+          description: Items.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/DownloadItem"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      tags: [download-clients]
+      summary: Submit a new download (magnet, torrent URL, NZB URL, etc.).
+      operationId: addDownloadItem
+      security:
+        - apiKey: []
+        - bearerAuth: []
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DownloadAddRequest"
+      responses:
+        "202":
+          description: Accepted.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DownloadAddResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/download-clients/{id}/pause:
+    parameters:
+      - $ref: "#/components/parameters/DownloadClientID"
+    post:
+      tags: [download-clients]
+      summary: |
+        Pause one or more items. Body `{"ids":["a","b"]}` is optional; an empty
+        body pauses all active items.
+      operationId: pauseDownloadItems
+      security:
+        - apiKey: []
+        - bearerAuth: []
+        - cookieAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DownloadIDsRequest"
+      responses:
+        "200":
+          description: OK.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/download-clients/{id}/resume:
+    parameters:
+      - $ref: "#/components/parameters/DownloadClientID"
+    post:
+      tags: [download-clients]
+      summary: |
+        Resume one or more items. Body `{"ids":["a","b"]}` is optional; an
+        empty body resumes all paused items.
+      operationId: resumeDownloadItems
+      security:
+        - apiKey: []
+        - bearerAuth: []
+        - cookieAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DownloadIDsRequest"
+      responses:
+        "200":
+          description: OK.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
 components:
   schemas:
     HealthStatus:
@@ -1240,7 +1595,210 @@ components:
             message:
               type: string
 
+    DownloadClient:
+      type: object
+      required: [id, name, kind, protocol, enabled, priority]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        kind:
+          type: string
+          description: Kind identifier (e.g. `qbittorrent`, `transmission`, `builtin/null`).
+        protocol:
+          type: string
+          enum: [torrent, usenet]
+        enabled:
+          type: boolean
+        priority:
+          type: integer
+          description: Lower wins when multiple clients accept the same protocol.
+        category_default:
+          type: string
+        save_path_default:
+          type: string
+        remove_completed:
+          type: boolean
+        remove_failed:
+          type: boolean
+        config:
+          type: object
+          description: Kind-specific JSON config blob.
+          additionalProperties: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        health:
+          $ref: "#/components/schemas/DownloadClientHealth"
+
+    DownloadClientCreate:
+      type: object
+      required: [name, kind, protocol]
+      properties:
+        id:
+          type: string
+          description: Optional. Auto-generated if omitted.
+        name:
+          type: string
+        kind:
+          type: string
+        protocol:
+          type: string
+          enum: [torrent, usenet]
+        enabled:
+          type: boolean
+        priority:
+          type: integer
+        category_default:
+          type: string
+        save_path_default:
+          type: string
+        remove_completed:
+          type: boolean
+        remove_failed:
+          type: boolean
+        config:
+          type: object
+          additionalProperties: true
+
+    DownloadClientPatch:
+      type: object
+      properties:
+        name:
+          type: string
+        enabled:
+          type: boolean
+        priority:
+          type: integer
+        category_default:
+          type: string
+        save_path_default:
+          type: string
+        remove_completed:
+          type: boolean
+        remove_failed:
+          type: boolean
+
+    DownloadClientHealth:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [unknown, ok, warning, error]
+        last_checked_at:
+          type: string
+          format: date-time
+        last_error:
+          type: string
+        consecutive_failures:
+          type: integer
+        last_free_space_bytes:
+          type: integer
+          format: int64
+
+    DownloadCategory:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        save_path:
+          type: string
+
+    DownloadFreeSpace:
+      type: object
+      required: [bytes]
+      properties:
+        bytes:
+          type: integer
+          format: int64
+          description: Free space in bytes. -1 when the client cannot report it.
+
+    DownloadItem:
+      type: object
+      required: [id, name, status]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        status:
+          type: string
+          description: Lifecycle verb (e.g. `queued`, `downloading`, `seeding`, `completed`, `paused`, `failed`).
+        category:
+          type: string
+        save_path:
+          type: string
+        size_bytes:
+          type: integer
+          format: int64
+        downloaded_bytes:
+          type: integer
+          format: int64
+        progress:
+          type: number
+          format: float
+        eta_seconds:
+          type: integer
+        ratio:
+          type: number
+          format: float
+        error:
+          type: string
+
+    DownloadAddRequest:
+      type: object
+      description: |
+        Submit a new download. Provide at least one of `magnet`, `url`, or
+        `content` (base64). `category` and `save_path` override client defaults.
+      properties:
+        magnet:
+          type: string
+        url:
+          type: string
+        content:
+          type: string
+          format: byte
+          description: Base64-encoded .torrent or .nzb file.
+        category:
+          type: string
+        save_path:
+          type: string
+        paused:
+          type: boolean
+
+    DownloadAddResult:
+      type: object
+      required: [id]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+
+    DownloadIDsRequest:
+      type: object
+      description: |
+        Optional body for pause/resume. Empty/omitted body acts on all matching
+        items in the client.
+      properties:
+        ids:
+          type: array
+          items:
+            type: string
+
   parameters:
+    DownloadClientID:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
     IndexerID:
       name: id
       in: path

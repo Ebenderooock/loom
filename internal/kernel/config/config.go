@@ -36,6 +36,7 @@ type Config struct {
 	OTel      OTelConfig      `mapstructure:"otel"`
 	Scheduler SchedulerConfig `mapstructure:"scheduler"`
 	Indexers  IndexersConfig  `mapstructure:"indexers"`
+	Downloads DownloadsConfig `mapstructure:"downloads"`
 }
 
 // IndexersConfig governs the indexer core (search fan-out + periodic
@@ -59,6 +60,22 @@ type IndexersConfig struct {
 	HealthCheckTimeoutSec int              `mapstructure:"health_check_timeout"`
 	Proxies               ProxiesConfig    `mapstructure:"proxies"`
 	Cardigann             CardigannConfig  `mapstructure:"cardigann"`
+}
+
+// DownloadsConfig governs the download-client core (Phase 3a).
+//
+//   - OperationTimeoutSec is the per-client ceiling for fan-out
+//     calls (status, free-space, test).
+//   - MaxParallel caps concurrent in-flight client calls.
+//   - HealthCheckSchedule is a 5-field cron expression (no seconds).
+//     The default fires every five minutes — download clients tend
+//     to be on the same network as Loom and tolerate frequent probes.
+//   - HealthCheckTimeoutSec bounds a single Test() call.
+type DownloadsConfig struct {
+	OperationTimeoutSec   int    `mapstructure:"operation_timeout"`
+	MaxParallel           int    `mapstructure:"max_parallel"`
+	HealthCheckSchedule   string `mapstructure:"health_check_schedule"`
+	HealthCheckTimeoutSec int    `mapstructure:"health_check_timeout"`
 }
 
 // CardigannConfig governs the Cardigann YAML definition loader
@@ -357,6 +374,11 @@ func applyDefaults(v *viper.Viper) {
 	v.SetDefault("indexers.proxies.flaresolverr_default_timeout", 60)
 	v.SetDefault("indexers.proxies.test_probe_url", "https://www.google.com/generate_204")
 	v.SetDefault("indexers.cardigann.definitions_dir", "")
+
+	v.SetDefault("downloads.operation_timeout", 15)
+	v.SetDefault("downloads.max_parallel", 8)
+	v.SetDefault("downloads.health_check_schedule", "*/5 * * * *")
+	v.SetDefault("downloads.health_check_timeout", 10)
 }
 
 // bindLegacyEnv preserves the un-prefixed environment variable shape used
@@ -415,6 +437,15 @@ func (c *Config) Validate() error {
 	}
 	if c.Indexers.HealthCheckTimeoutSec < 0 {
 		return fmt.Errorf("indexers.health_check_timeout must be non-negative")
+	}
+	if c.Downloads.OperationTimeoutSec < 0 {
+		return fmt.Errorf("downloads.operation_timeout must be non-negative")
+	}
+	if c.Downloads.MaxParallel < 0 {
+		return fmt.Errorf("downloads.max_parallel must be non-negative")
+	}
+	if c.Downloads.HealthCheckTimeoutSec < 0 {
+		return fmt.Errorf("downloads.health_check_timeout must be non-negative")
 	}
 	return nil
 }

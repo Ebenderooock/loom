@@ -9,6 +9,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Phase 3a — Download client abstraction.** New
+  `internal/downloads/` package providing a pluggable download-client
+  registry that mirrors the indexer subsystem: `DownloadClient`
+  interface, in-process registry with timeout-bounded fan-out, dual
+  SQLite/Postgres repository, service layer with hydrate-on-startup,
+  scheduled `downloads.health` job, and a chi-mounted HTTP surface at
+  `/api/v1/download-clients` (CRUD + `test`, `categories`,
+  `free-space`, `items`, `pause`, `resume`). Migration `0010` adds
+  `download_clients` and `download_client_health` on both engines.
+  A no-op `builtin/null` driver ships in-tree so the rest of the
+  stack is exercisable without configuring a real client; subsequent
+  drivers register themselves via `downloads.RegisterKind(...)` from
+  their own `init()`. A new `downloads:` config block (with
+  `operation_timeout`, `max_parallel`, `health_check_schedule`, and
+  `health_check_timeout`) wires defaults; transport composition reuses
+  `internal/indexers/throttle` so FlareSolverr/SOCKS/HTTP proxies
+  apply uniformly. See [`docs/downloads.md`](docs/downloads.md) and
+  [ADR-0014](docs/adr/0014-download-clients-abstraction.md).
+
 - **Phase 2f — Per-indexer rate limiting and retry/backoff.** Every
   outbound indexer request now passes through a token-bucket rate
   limiter (default 60 req/min, burst 5) followed by an exponential-
