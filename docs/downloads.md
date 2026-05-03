@@ -120,3 +120,14 @@ onto Loom's `ItemStatus` enum. See
 [`docs/downloads-sabnzbd.md`](downloads-sabnzbd.md) and
 [ADR-0016](adr/0016-sabnzbd-download-client-kind.md) for the operator
 guide and design rationale.
+
+## Supported kinds
+
+| Kind                  | Protocol | Status        | Docs                                                       |
+| --------------------- | -------- | ------------- | ---------------------------------------------------------- |
+| `builtin/null`        | torrent  | ✅ shipped    | (in-tree no-op; see [ADR-0014](adr/0014-download-clients-abstraction.md)) |
+| `qbittorrent`         | torrent  | ✅ shipped    | [docs/downloads-qbittorrent.md](downloads-qbittorrent.md) |
+| `transmission`        | torrent  | ⏳ planned    |                                                            |
+| `deluge`              | torrent  | ⏳ planned    |                                                            |
+| `sabnzbd`             | usenet   | ⏳ planned    |                                                            |
+| `nzbget`              | usenet   | ⏳ planned    |                                                            |

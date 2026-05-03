@@ -9,6 +9,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Phase 3b — qBittorrent download client.** First real driver on the
+  Phase 3a download-client abstraction. New
+  `internal/downloads/qbittorrent/` package speaks the qBittorrent v2
+  Web API (qBittorrent 4.1+ and 5.x), authenticates via cookie-based
+  `/auth/login`, persists the SID in an `http.CookieJar`, and
+  transparently re-logs in once on a 403. Supports magnet / raw
+  `.torrent` / URL adds via `/torrents/add` (multipart), with the v1
+  infohash returned client-side as the item id. `Status` maps the
+  qBittorrent state vocabulary onto Loom's `ItemStatus` enum in a
+  single audited table; `Pause`, `Resume`, `Remove(deleteFiles)`,
+  `Categories`, `FreeSpace`, and `Test` round-trip the matching v2
+  endpoints. Outbound HTTP composes the same proxy + throttle stack
+  as indexers via `downloads.TransportForDefinition`. `OpenAPI` adds
+  a `QbittorrentConfig` schema documenting the recognised `config`
+  blob. See [`docs/downloads-qbittorrent.md`](docs/downloads-qbittorrent.md)
+  and [ADR-0015](docs/adr/0015-qbittorrent-download-client.md).
+
 - **Phase 3e — SABnzbd download client.** First Usenet driver on the
   Phase 3a download-client abstraction. New
   `internal/downloads/sabnzbd/` package speaks the SABnzbd JSON API
