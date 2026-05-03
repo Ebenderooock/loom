@@ -9,6 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Phase 2f — Per-indexer rate limiting and retry/backoff.** Every
+  outbound indexer request now passes through a token-bucket rate
+  limiter (default 60 req/min, burst 5) followed by an exponential-
+  backoff retry loop (default 3 retries, capped at 30s) that honours
+  `Retry-After` on 429/503 responses. Defaults can be overridden per
+  indexer via three new optional fields on the API object —
+  `rate_limit_per_min`, `rate_limit_burst`, `retry_max_attempts` —
+  and the response surfaces a `rate_limit` block showing both the
+  configured override and the effective value. Migration `0009`
+  adds nullable INTEGER columns on `indexers` for both SQLite and
+  Postgres. Four new Prometheus metrics under `loom_indexer_*`
+  expose request outcomes, latency, retries, and rate-limit wait
+  time. New package `internal/indexers/throttle`. See
+  [`docs/indexers-rate-limits.md`](docs/indexers-rate-limits.md) and
+  [ADR-0013](docs/adr/0013-per-indexer-rate-limiting-and-retry.md).
+
 - **Phase 2b — Cardigann YAML definition loader.** New `cardigann`
   indexer kind that loads tracker definitions from
   `<data_dir>/definitions/cardigann/` (override via

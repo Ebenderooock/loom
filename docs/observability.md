@@ -90,6 +90,21 @@ A Loom-curated dashboard set will land in Phase 11 at
 Until then, the Go runtime and process collectors are enough to chart
 memory, GC pauses, and goroutine count out of the box.
 
+### Indexer traffic-shaping metrics
+
+The throttle layer in front of every indexer publishes four series
+under `loom_indexer_*`:
+
+| Metric | Labels | Meaning |
+|---|---|---|
+| `loom_indexer_request_total` | `indexer`, `kind`, `outcome` | Final outcome of every outbound HTTP request. `outcome` ∈ `success`, `client_error`, `server_error`, `error`. |
+| `loom_indexer_request_duration_seconds` | `indexer`, `kind` | Wall-clock latency including any rate-limit wait and retry sleeps. |
+| `loom_indexer_retries_total` | `indexer`, `reason` | Retry attempts performed. `reason` ∈ `rate_limited` (429), `unavailable` (503), `network_error`. |
+| `loom_indexer_ratelimit_wait_seconds` | `indexer` | Time blocked on the per-indexer token bucket before the request was admitted. |
+
+See [`docs/indexers-rate-limits.md`](indexers-rate-limits.md) for
+example PromQL queries and tuning advice.
+
 ## Traces
 
 - OpenTelemetry SDK with an OTLP/HTTP exporter.

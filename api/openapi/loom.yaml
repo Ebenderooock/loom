@@ -745,6 +745,39 @@ components:
           properties:
             health:
               $ref: "#/components/schemas/IndexerHealth"
+            rate_limit:
+              $ref: "#/components/schemas/IndexerRateLimit"
+
+    IndexerRateLimit:
+      type: object
+      description: |
+        Per-indexer rate-limit + retry configuration. The first three
+        fields reflect the overrides stored on the row (any may be
+        absent); the `effective_*` fields are what the runtime is
+        actually applying after defaults are merged in.
+      required: [effective_per_minute, effective_burst, effective_max_retries]
+      properties:
+        per_minute:
+          type: integer
+          minimum: 1
+          description: Override for the token-bucket fill rate (req/min). Absent when the row stores NULL.
+        burst:
+          type: integer
+          minimum: 1
+          description: Override for the token-bucket capacity. Absent when the row stores NULL.
+        max_retries:
+          type: integer
+          minimum: 0
+          description: Override for the retry budget. Absent when the row stores NULL.
+        effective_per_minute:
+          type: integer
+          description: Per-minute fill rate the runtime is using.
+        effective_burst:
+          type: integer
+          description: Burst capacity the runtime is using.
+        effective_max_retries:
+          type: integer
+          description: Retry budget the runtime is using.
 
     IndexerCreate:
       type: object
@@ -776,6 +809,18 @@ components:
         proxy_id:
           type: string
           description: Optional `proxies.id` to attach on creation.
+        rate_limit_per_min:
+          type: integer
+          minimum: 1
+          description: Optional override for the token-bucket fill rate. Omit to use the package default (60 req/min).
+        rate_limit_burst:
+          type: integer
+          minimum: 1
+          description: Optional override for the token-bucket capacity. Omit to use the package default (5).
+        retry_max_attempts:
+          type: integer
+          minimum: 0
+          description: Optional override for the retry budget. Pass `0` to disable retries entirely; omit to use the package default (3).
 
     IndexerPatch:
       type: object
@@ -802,6 +847,18 @@ components:
           type: string
           nullable: true
           description: Set to a proxy ID to pin outbound traffic. Send `null` (or empty string) to clear the existing pin.
+        rate_limit_per_min:
+          type: integer
+          minimum: 1
+          description: Set the token-bucket fill rate override. Omit to leave unchanged.
+        rate_limit_burst:
+          type: integer
+          minimum: 1
+          description: Set the token-bucket capacity override. Omit to leave unchanged.
+        retry_max_attempts:
+          type: integer
+          minimum: 0
+          description: Set the retry budget override. Pass `0` to disable retries; omit to leave unchanged.
 
     IndexerHealth:
       type: object

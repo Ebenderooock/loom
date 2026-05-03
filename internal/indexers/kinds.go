@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net/http"
 	"sync"
+
+	"github.com/loomctl/loom/internal/indexers/throttle"
 )
 
 // Factory builds a live Indexer from a persisted Definition. Each kind
@@ -36,7 +38,36 @@ var (
 
 	transportMu       sync.RWMutex
 	transportProvider TransportProvider
+
+	rateLimitMu       sync.RWMutex
+	rateLimitProvider RateLimitProvider
 )
+
+// RateLimitProvider returns the per-indexer Config that should govern
+// outbound HTTP for the given indexer ID. The Service implements this
+// interface and registers itself at startup; tests can install a
+// stub via SetRateLimitProvider. A nil provider, or a missing row,
+// means "use throttle.Defaults()".
+type RateLimitProvider interface {
+	RateLimitFor(indexerID string) (throttle.Config, bool)
+}
+
+// SetRateLimitProvider installs the package-global RateLimitProvider.
+// Passing nil clears it (TransportForDefinition then falls back to
+// throttle defaults).
+func SetRateLimitProvider(p RateLimitProvider) {
+	rateLimitMu.Lock()
+	rateLimitProvider = p
+	rateLimitMu.Unlock()
+}
+
+// CurrentRateLimitProvider returns the currently installed
+// RateLimitProvider, or nil if none has been set.
+func CurrentRateLimitProvider() RateLimitProvider {
+	rateLimitMu.RLock()
+	defer rateLimitMu.RUnlock()
+	return rateLimitProvider
+}
 
 // SetTransportProvider installs the package-global TransportProvider.
 // Kind factories should call CurrentTransportProvider() inside their
@@ -59,18 +90,38 @@ func CurrentTransportProvider() TransportProvider {
 }
 
 // TransportForDefinition is a thin convenience wrapper used by kind
-// factories. It looks up the current TransportProvider and resolves
-// def.ProxyID, returning http.DefaultTransport when no provider is
-// installed or when no proxy is requested.
+// factories. It composes the outbound transport stack:
+//
+//	base → proxy → throttle (rate-limit + retry)
+//
+// The proxy lookup is delegated to the registered TransportProvider
+// (Phase 2e); the throttle layer wraps the result using the per-
+// indexer Config supplied by the registered RateLimitProvider, or
+// throttle.Defaults() when no provider is installed. When no proxy
+// is requested we still apply throttle on top of http.DefaultTransport
+// so rate limiting works in tests and minimal deployments.
 func TransportForDefinition(def Definition) (http.RoundTripper, error) {
-	if def.ProxyID == "" {
-		return http.DefaultTransport, nil
+	// Step 1: pick the base / proxy transport.
+	var (
+		base http.RoundTripper = http.DefaultTransport
+		err  error
+	)
+	if def.ProxyID != "" {
+		if p := CurrentTransportProvider(); p != nil {
+			base, err = p.TransportFor(def.ProxyID)
+			if err != nil {
+				return nil, err
+			}
+		}
 	}
-	p := CurrentTransportProvider()
-	if p == nil {
-		return http.DefaultTransport, nil
+	// Step 2: wrap with the per-indexer throttle layer.
+	cfg := throttle.Defaults()
+	if rp := CurrentRateLimitProvider(); rp != nil {
+		if c, ok := rp.RateLimitFor(def.ID); ok {
+			cfg = throttle.Resolve(c)
+		}
 	}
-	return p.TransportFor(def.ProxyID)
+	return throttle.Wrap(base, def.ID, string(def.Kind), cfg, throttle.Options{}), nil
 }
 
 // RegisterKind installs f as the factory for kind. It is idempotent;

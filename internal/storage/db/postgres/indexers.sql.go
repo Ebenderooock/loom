@@ -15,21 +15,36 @@ import (
 )
 
 const createIndexer = `-- name: CreateIndexer :one
-INSERT INTO indexers (id, kind, name, enabled, priority, config_json, categories_json, tags_json, proxy_id, created_at, updated_at)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())
-RETURNING id, kind, name, enabled, priority, config_json, categories_json, tags_json, created_at, updated_at, proxy_id
+INSERT INTO indexers (
+    id, kind, name, enabled, priority,
+    config_json, categories_json, tags_json,
+    proxy_id,
+    rate_limit_per_min, rate_limit_burst, retry_max_attempts,
+    created_at, updated_at
+)
+VALUES (
+    $1, $2, $3, $4, $5,
+    $6, $7, $8,
+    $9,
+    $10, $11, $12,
+    NOW(), NOW()
+)
+RETURNING id, kind, name, enabled, priority, config_json, categories_json, tags_json, created_at, updated_at, proxy_id, rate_limit_per_min, rate_limit_burst, retry_max_attempts
 `
 
 type CreateIndexerParams struct {
-	ID             string          `json:"id"`
-	Kind           string          `json:"kind"`
-	Name           string          `json:"name"`
-	Enabled        bool            `json:"enabled"`
-	Priority       int32           `json:"priority"`
-	ConfigJson     json.RawMessage `json:"config_json"`
-	CategoriesJson json.RawMessage `json:"categories_json"`
-	TagsJson       json.RawMessage `json:"tags_json"`
-	ProxyID        sql.NullString  `json:"proxy_id"`
+	ID               string          `json:"id"`
+	Kind             string          `json:"kind"`
+	Name             string          `json:"name"`
+	Enabled          bool            `json:"enabled"`
+	Priority         int32           `json:"priority"`
+	ConfigJson       json.RawMessage `json:"config_json"`
+	CategoriesJson   json.RawMessage `json:"categories_json"`
+	TagsJson         json.RawMessage `json:"tags_json"`
+	ProxyID          sql.NullString  `json:"proxy_id"`
+	RateLimitPerMin  sql.NullInt32   `json:"rate_limit_per_min"`
+	RateLimitBurst   sql.NullInt32   `json:"rate_limit_burst"`
+	RetryMaxAttempts sql.NullInt32   `json:"retry_max_attempts"`
 }
 
 func (q *Queries) CreateIndexer(ctx context.Context, arg CreateIndexerParams) (Indexer, error) {
@@ -43,6 +58,9 @@ func (q *Queries) CreateIndexer(ctx context.Context, arg CreateIndexerParams) (I
 		arg.CategoriesJson,
 		arg.TagsJson,
 		arg.ProxyID,
+		arg.RateLimitPerMin,
+		arg.RateLimitBurst,
+		arg.RetryMaxAttempts,
 	)
 	var i Indexer
 	err := row.Scan(
@@ -57,6 +75,9 @@ func (q *Queries) CreateIndexer(ctx context.Context, arg CreateIndexerParams) (I
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.ProxyID,
+		&i.RateLimitPerMin,
+		&i.RateLimitBurst,
+		&i.RetryMaxAttempts,
 	)
 	return i, err
 }
@@ -71,7 +92,7 @@ func (q *Queries) DeleteIndexer(ctx context.Context, id string) error {
 }
 
 const getIndexer = `-- name: GetIndexer :one
-SELECT id, kind, name, enabled, priority, config_json, categories_json, tags_json, created_at, updated_at, proxy_id FROM indexers WHERE id = $1 LIMIT 1
+SELECT id, kind, name, enabled, priority, config_json, categories_json, tags_json, created_at, updated_at, proxy_id, rate_limit_per_min, rate_limit_burst, retry_max_attempts FROM indexers WHERE id = $1 LIMIT 1
 `
 
 func (q *Queries) GetIndexer(ctx context.Context, id string) (Indexer, error) {
@@ -89,6 +110,9 @@ func (q *Queries) GetIndexer(ctx context.Context, id string) (Indexer, error) {
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.ProxyID,
+		&i.RateLimitPerMin,
+		&i.RateLimitBurst,
+		&i.RetryMaxAttempts,
 	)
 	return i, err
 }
@@ -113,7 +137,7 @@ func (q *Queries) GetIndexerHealth(ctx context.Context, indexerID string) (Index
 }
 
 const listEnabledIndexers = `-- name: ListEnabledIndexers :many
-SELECT id, kind, name, enabled, priority, config_json, categories_json, tags_json, created_at, updated_at, proxy_id FROM indexers WHERE enabled = TRUE ORDER BY priority ASC, name ASC
+SELECT id, kind, name, enabled, priority, config_json, categories_json, tags_json, created_at, updated_at, proxy_id, rate_limit_per_min, rate_limit_burst, retry_max_attempts FROM indexers WHERE enabled = TRUE ORDER BY priority ASC, name ASC
 `
 
 func (q *Queries) ListEnabledIndexers(ctx context.Context) ([]Indexer, error) {
@@ -137,6 +161,9 @@ func (q *Queries) ListEnabledIndexers(ctx context.Context) ([]Indexer, error) {
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.ProxyID,
+			&i.RateLimitPerMin,
+			&i.RateLimitBurst,
+			&i.RetryMaxAttempts,
 		); err != nil {
 			return nil, err
 		}
@@ -187,7 +214,7 @@ func (q *Queries) ListIndexerHealth(ctx context.Context) ([]IndexerHealth, error
 }
 
 const listIndexers = `-- name: ListIndexers :many
-SELECT id, kind, name, enabled, priority, config_json, categories_json, tags_json, created_at, updated_at, proxy_id FROM indexers ORDER BY priority ASC, name ASC
+SELECT id, kind, name, enabled, priority, config_json, categories_json, tags_json, created_at, updated_at, proxy_id, rate_limit_per_min, rate_limit_burst, retry_max_attempts FROM indexers ORDER BY priority ASC, name ASC
 `
 
 func (q *Queries) ListIndexers(ctx context.Context) ([]Indexer, error) {
@@ -211,6 +238,9 @@ func (q *Queries) ListIndexers(ctx context.Context) ([]Indexer, error) {
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.ProxyID,
+			&i.RateLimitPerMin,
+			&i.RateLimitBurst,
+			&i.RetryMaxAttempts,
 		); err != nil {
 			return nil, err
 		}
@@ -233,7 +263,7 @@ SET name      = COALESCE($2, name),
     tags_json = COALESCE($5, tags_json),
     updated_at = NOW()
 WHERE id = $1
-RETURNING id, kind, name, enabled, priority, config_json, categories_json, tags_json, created_at, updated_at, proxy_id
+RETURNING id, kind, name, enabled, priority, config_json, categories_json, tags_json, created_at, updated_at, proxy_id, rate_limit_per_min, rate_limit_burst, retry_max_attempts
 `
 
 type PatchIndexerParams struct {
@@ -265,35 +295,44 @@ func (q *Queries) PatchIndexer(ctx context.Context, arg PatchIndexerParams) (Ind
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.ProxyID,
+		&i.RateLimitPerMin,
+		&i.RateLimitBurst,
+		&i.RetryMaxAttempts,
 	)
 	return i, err
 }
 
 const replaceIndexer = `-- name: ReplaceIndexer :one
 UPDATE indexers
-SET kind            = $2,
-    name            = $3,
-    enabled         = $4,
-    priority        = $5,
-    config_json     = $6,
-    categories_json = $7,
-    tags_json       = $8,
-    proxy_id        = $9,
-    updated_at      = NOW()
+SET kind               = $2,
+    name               = $3,
+    enabled            = $4,
+    priority           = $5,
+    config_json        = $6,
+    categories_json    = $7,
+    tags_json          = $8,
+    proxy_id           = $9,
+    rate_limit_per_min = $10,
+    rate_limit_burst   = $11,
+    retry_max_attempts = $12,
+    updated_at         = NOW()
 WHERE id = $1
-RETURNING id, kind, name, enabled, priority, config_json, categories_json, tags_json, created_at, updated_at, proxy_id
+RETURNING id, kind, name, enabled, priority, config_json, categories_json, tags_json, created_at, updated_at, proxy_id, rate_limit_per_min, rate_limit_burst, retry_max_attempts
 `
 
 type ReplaceIndexerParams struct {
-	ID             string          `json:"id"`
-	Kind           string          `json:"kind"`
-	Name           string          `json:"name"`
-	Enabled        bool            `json:"enabled"`
-	Priority       int32           `json:"priority"`
-	ConfigJson     json.RawMessage `json:"config_json"`
-	CategoriesJson json.RawMessage `json:"categories_json"`
-	TagsJson       json.RawMessage `json:"tags_json"`
-	ProxyID        sql.NullString  `json:"proxy_id"`
+	ID               string          `json:"id"`
+	Kind             string          `json:"kind"`
+	Name             string          `json:"name"`
+	Enabled          bool            `json:"enabled"`
+	Priority         int32           `json:"priority"`
+	ConfigJson       json.RawMessage `json:"config_json"`
+	CategoriesJson   json.RawMessage `json:"categories_json"`
+	TagsJson         json.RawMessage `json:"tags_json"`
+	ProxyID          sql.NullString  `json:"proxy_id"`
+	RateLimitPerMin  sql.NullInt32   `json:"rate_limit_per_min"`
+	RateLimitBurst   sql.NullInt32   `json:"rate_limit_burst"`
+	RetryMaxAttempts sql.NullInt32   `json:"retry_max_attempts"`
 }
 
 func (q *Queries) ReplaceIndexer(ctx context.Context, arg ReplaceIndexerParams) (Indexer, error) {
@@ -307,6 +346,9 @@ func (q *Queries) ReplaceIndexer(ctx context.Context, arg ReplaceIndexerParams) 
 		arg.CategoriesJson,
 		arg.TagsJson,
 		arg.ProxyID,
+		arg.RateLimitPerMin,
+		arg.RateLimitBurst,
+		arg.RetryMaxAttempts,
 	)
 	var i Indexer
 	err := row.Scan(
@@ -321,6 +363,9 @@ func (q *Queries) ReplaceIndexer(ctx context.Context, arg ReplaceIndexerParams) 
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.ProxyID,
+		&i.RateLimitPerMin,
+		&i.RateLimitBurst,
+		&i.RetryMaxAttempts,
 	)
 	return i, err
 }
@@ -339,6 +384,35 @@ type SetIndexerProxyIDParams struct {
 
 func (q *Queries) SetIndexerProxyID(ctx context.Context, arg SetIndexerProxyIDParams) error {
 	_, err := q.db.ExecContext(ctx, setIndexerProxyID, arg.ID, arg.ProxyID)
+	return err
+}
+
+const setIndexerRateLimit = `-- name: SetIndexerRateLimit :exec
+UPDATE indexers
+SET rate_limit_per_min = $2,
+    rate_limit_burst   = $3,
+    retry_max_attempts = $4,
+    updated_at         = NOW()
+WHERE id = $1
+`
+
+type SetIndexerRateLimitParams struct {
+	ID               string        `json:"id"`
+	RateLimitPerMin  sql.NullInt32 `json:"rate_limit_per_min"`
+	RateLimitBurst   sql.NullInt32 `json:"rate_limit_burst"`
+	RetryMaxAttempts sql.NullInt32 `json:"retry_max_attempts"`
+}
+
+// Phase 2f: write the three rate-limit dials atomically. NULLs mean
+// "fall back to the package default at runtime". Used by POST/PUT
+// handlers and by the rate-limit PATCH path.
+func (q *Queries) SetIndexerRateLimit(ctx context.Context, arg SetIndexerRateLimitParams) error {
+	_, err := q.db.ExecContext(ctx, setIndexerRateLimit,
+		arg.ID,
+		arg.RateLimitPerMin,
+		arg.RateLimitBurst,
+		arg.RetryMaxAttempts,
+	)
 	return err
 }
 

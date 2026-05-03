@@ -61,6 +61,12 @@ real values look like. Every key gets an `example:` line.
 | `indexers.proxies.flaresolverr_default_timeout` | `LOOM_INDEXERS_PROXIES_FLARESOLVERR_DEFAULT_TIMEOUT` | int (s) | `60` | no | Default `maxTimeout` (in seconds) sent on FlareSolverr `request.get` calls when the proxy row leaves it unset. |
 | `indexers.proxies.test_probe_url` | `LOOM_INDEXERS_PROXIES_TEST_PROBE_URL` | string | `https://www.google.com/generate_204` | no | URL fetched by `POST /api/v1/proxies/{id}/test` for HTTP/HTTPS/SOCKS5 proxies. |
 
+> **Per-indexer rate limiting and retry/backoff** are configured on
+> the indexer row itself (`rate_limit_per_min`, `rate_limit_burst`,
+> `retry_max_attempts`) — there are no global config knobs. See
+> [`indexers-rate-limits.md`](indexers-rate-limits.md) for defaults
+> and the per-row API surface.
+
 ### Per-key examples
 
 ```yaml

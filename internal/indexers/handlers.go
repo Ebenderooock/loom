@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+
+	"github.com/loomctl/loom/internal/indexers/throttle"
 )
 
 // Mount attaches every /api/v1/indexers/* route to r. It does not
@@ -74,6 +76,12 @@ type createRequest struct {
 	Categories []Category      `json:"categories,omitempty"`
 	Tags       []string        `json:"tags,omitempty"`
 	ProxyID    string          `json:"proxy_id,omitempty"`
+
+	// Phase 2f rate-limit dials. All optional; when omitted the row
+	// stores NULL and the runtime falls back to throttle.Defaults().
+	RateLimitPerMin  *int `json:"rate_limit_per_min,omitempty"`
+	RateLimitBurst   *int `json:"rate_limit_burst,omitempty"`
+	RetryMaxAttempts *int `json:"retry_max_attempts,omitempty"`
 }
 
 func (s *Service) handleCreate(w http.ResponseWriter, r *http.Request) {
@@ -123,7 +131,14 @@ func (s *Service) handleCreate(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "create_failed", err.Error())
 		return
 	}
-	writeJSON(w, http.StatusCreated, saved)
+	if rateLimitPresent(req.RateLimitPerMin, req.RateLimitBurst, req.RetryMaxAttempts) {
+		if err := s.SetRateLimit(r.Context(), saved.ID, rateLimitConfigFrom(req.RateLimitPerMin, req.RateLimitBurst, req.RetryMaxAttempts)); err != nil {
+			writeError(w, http.StatusInternalServerError, "create_rate_limit_failed", err.Error())
+			return
+		}
+	}
+	dh, _ := s.GetWithHealth(r.Context(), saved.ID)
+	writeJSON(w, http.StatusCreated, dh)
 }
 
 // --- list / get -----------------------------------------------------
@@ -139,7 +154,7 @@ func (s *Service) handleList(w http.ResponseWriter, r *http.Request) {
 
 func (s *Service) handleGet(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
-	def, err := s.Get(r.Context(), id)
+	dh, err := s.GetWithHealth(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", "indexer not found")
@@ -147,10 +162,6 @@ func (s *Service) handleGet(w http.ResponseWriter, r *http.Request) {
 		}
 		writeError(w, http.StatusInternalServerError, "get_failed", err.Error())
 		return
-	}
-	dh := DefinitionWithHealth{Definition: def}
-	if h, herr := s.repo.GetHealth(r.Context(), id); herr == nil {
-		dh.Health = &h
 	}
 	writeJSON(w, http.StatusOK, dh)
 }
@@ -166,6 +177,12 @@ type replaceRequest struct {
 	Categories []Category      `json:"categories,omitempty"`
 	Tags       []string        `json:"tags,omitempty"`
 	ProxyID    string          `json:"proxy_id,omitempty"`
+
+	// Phase 2f rate-limit dials. Same nullable-on-the-wire semantics
+	// as createRequest: omit to leave the row's column NULL.
+	RateLimitPerMin  *int `json:"rate_limit_per_min,omitempty"`
+	RateLimitBurst   *int `json:"rate_limit_burst,omitempty"`
+	RetryMaxAttempts *int `json:"retry_max_attempts,omitempty"`
 }
 
 func (s *Service) handleReplace(w http.ResponseWriter, r *http.Request) {
@@ -203,7 +220,14 @@ func (s *Service) handleReplace(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "replace_failed", err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, saved)
+	if rateLimitPresent(req.RateLimitPerMin, req.RateLimitBurst, req.RetryMaxAttempts) {
+		if err := s.SetRateLimit(r.Context(), saved.ID, rateLimitConfigFrom(req.RateLimitPerMin, req.RateLimitBurst, req.RetryMaxAttempts)); err != nil {
+			writeError(w, http.StatusInternalServerError, "replace_rate_limit_failed", err.Error())
+			return
+		}
+	}
+	dh, _ := s.GetWithHealth(r.Context(), saved.ID)
+	writeJSON(w, http.StatusOK, dh)
 }
 
 // --- patch ----------------------------------------------------------
@@ -216,6 +240,14 @@ type patchRequest struct {
 	// ProxyID is tri-state on the wire: omitted = unchanged, null or
 	// "" = clear, "id" = set. nullableString captures all three.
 	ProxyID nullableString `json:"proxy_id,omitempty"`
+
+	// Phase 2f: nil pointers leave the column unchanged; non-nil
+	// values overwrite. Pass an explicit 0 to retry_max_attempts to
+	// disable retries; pass a positive integer to PerMinute/Burst to
+	// override the package default.
+	RateLimitPerMin  *int `json:"rate_limit_per_min,omitempty"`
+	RateLimitBurst   *int `json:"rate_limit_burst,omitempty"`
+	RetryMaxAttempts *int `json:"retry_max_attempts,omitempty"`
 }
 
 // nullableString is a JSON-tri-state string. Use .Set to test
@@ -261,7 +293,22 @@ func (s *Service) handlePatch(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "patch_failed", err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, saved)
+	// Patch keeps the "nil = unchanged" convention for rate-limit
+	// fields too: only update when at least one was supplied. We
+	// merge with the persisted values so a partial PATCH that only
+	// changes burst doesn't blow away PerMinute/MaxRetries.
+	if req.RateLimitPerMin != nil || req.RateLimitBurst != nil || req.RetryMaxAttempts != nil {
+		current, _ := s.repo.GetRateLimit(r.Context(), saved.ID)
+		// Convert "unset" sentinels to nil pointers so the merge is
+		// correct: PerMinute=0 → nil; MaxRetries=-1 → nil.
+		merged := mergeRateLimit(current, req.RateLimitPerMin, req.RateLimitBurst, req.RetryMaxAttempts)
+		if err := s.SetRateLimit(r.Context(), saved.ID, merged); err != nil {
+			writeError(w, http.StatusInternalServerError, "patch_rate_limit_failed", err.Error())
+			return
+		}
+	}
+	dh, _ := s.GetWithHealth(r.Context(), saved.ID)
+	writeJSON(w, http.StatusOK, dh)
 }
 
 // --- delete ---------------------------------------------------------
@@ -343,6 +390,59 @@ func (s *Service) handleSearch(w http.ResponseWriter, r *http.Request) {
 	timeout := time.Duration(req.TimeoutMS) * time.Millisecond
 	out := s.Search(r.Context(), q, req.IndexerIDs, timeout)
 	writeJSON(w, http.StatusOK, out)
+}
+
+// rateLimitPresent reports whether any of the three rate-limit fields
+// was provided on a request body. Used by handleCreate / handleReplace
+// to decide whether to issue the SetRateLimit call.
+func rateLimitPresent(perMin, burst, maxRetries *int) bool {
+	return perMin != nil || burst != nil || maxRetries != nil
+}
+
+// rateLimitConfigFrom maps create/replace request fields into a
+// throttle.Config. Unset pointers become "use the default" sentinels
+// (zero for PerMinute/Burst, -1 for MaxRetries) so the repository can
+// store them as NULL.
+func rateLimitConfigFrom(perMin, burst, maxRetries *int) throttle.Config {
+	cfg := throttle.Config{MaxRetries: -1}
+	if perMin != nil && *perMin > 0 {
+		cfg.PerMinute = *perMin
+	}
+	if burst != nil && *burst > 0 {
+		cfg.Burst = *burst
+	}
+	if maxRetries != nil && *maxRetries >= 0 {
+		cfg.MaxRetries = *maxRetries
+	}
+	return cfg
+}
+
+// mergeRateLimit applies a partial PATCH on top of a current Config,
+// preserving any fields the caller didn't touch. It accepts the same
+// nullable convention as the create/replace request fields.
+func mergeRateLimit(current throttle.Config, perMin, burst, maxRetries *int) throttle.Config {
+	if perMin != nil {
+		if *perMin > 0 {
+			current.PerMinute = *perMin
+		} else {
+			current.PerMinute = 0
+		}
+	}
+	if burst != nil {
+		if *burst > 0 {
+			current.Burst = *burst
+		} else {
+			current.Burst = 0
+		}
+	}
+	if maxRetries != nil {
+		if *maxRetries >= 0 {
+			current.MaxRetries = *maxRetries
+		} else {
+			current.MaxRetries = -1
+		}
+	}
+	return current
 }
 
 // generateID derives a stable, URL-safe slug from kind + name when the

@@ -130,6 +130,7 @@ The [`docs/`](docs/) directory is the source of truth.
 - [Storage](docs/storage.md)
 - [API](docs/api.md) (and [`api/openapi/loom.yaml`](api/openapi/loom.yaml))
 - [Indexers — aggregator (Newznab/Torznab)](docs/indexers-aggregator.md)
+- [Indexers — rate limits and retry/backoff](docs/indexers-rate-limits.md)
 - [Security](docs/security.md)
 - [Development setup](docs/development.md)
 - [Contributing & code style](docs/contributing-style.md)
