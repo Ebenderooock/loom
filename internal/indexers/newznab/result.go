@@ -148,12 +148,17 @@ func mapNewznabAttrs(attrs []rssAttr, r *indexers.Result) {
 	}
 }
 
-// mapTorznabAttrs surfaces seeders, peers, and infohash. Quality and
-// resolution come through as `category`/`videoresolution` depending
-// on the tracker; we keep the simpler subset.
+// mapTorznabAttrs surfaces seeders, peers, infohash, and magneturl.
+// The torznab spec lets trackers report either `peers` directly or
+// only `leechers`; we reconcile both shapes so callers see a
+// consistent Peers value. Seeders/Peers are stored as *int so a
+// genuine "0 seeders right now" is distinguishable from "indexer did
+// not report this attribute at all".
 func mapTorznabAttrs(attrs []rssAttr, r *indexers.Result) {
-	var seeders, leechers int
-	var seedersSeen bool
+	var (
+		seeders, leechers     int
+		seedersSeen, peersSet bool
+	)
 	for _, a := range attrs {
 		switch strings.ToLower(a.Name) {
 		case "size":
@@ -163,27 +168,35 @@ func mapTorznabAttrs(attrs []rssAttr, r *indexers.Result) {
 		case "seeders":
 			seeders = parseInt(a.Value)
 			seedersSeen = true
-			r.Seeders = seeders
+			r.Seeders = intPtr(seeders)
 		case "peers":
-			r.Peers = parseInt(a.Value)
+			r.Peers = intPtr(parseInt(a.Value))
+			peersSet = true
 		case "leechers":
 			leechers = parseInt(a.Value)
 		case "infohash":
-			// Stash on Quality for now since Result has no
-			// dedicated infohash field; UI/wire-compat layers
-			// project it back. Documented in result_attr.md
-			// (see docs/indexers-newznab.md).
-			r.Quality = a.Value
+			r.Infohash = strings.TrimSpace(a.Value)
+		case "magneturl":
+			r.MagnetURI = strings.TrimSpace(a.Value)
 		case "category":
 			if id := parseInt(a.Value); id != 0 {
 				r.Category = appendUnique(r.Category, indexers.Category(id))
 			}
 		}
 	}
-	if seedersSeen && r.Peers == 0 && leechers > 0 {
-		r.Peers = seeders + leechers
+	// When the upstream only reported `leechers`, synthesise Peers
+	// as seeders+leechers per the torznab convention. We only do
+	// this if we actually saw a seeders attribute, so we never
+	// fabricate a Peers value out of thin air for indexers that
+	// omit both fields.
+	if !peersSet && seedersSeen && leechers > 0 {
+		r.Peers = intPtr(seeders + leechers)
 	}
 }
+
+// intPtr is a small helper for setting *int fields on Result without
+// scattering literal `&v` expressions everywhere.
+func intPtr(v int) *int { return &v }
 
 // mapCategoryStrings turns the "<category>5040</category>" list into
 // typed Category IDs, ignoring non-numeric labels (some trackers emit

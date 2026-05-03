@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- **Indexers — first-class torrent fields on `Result`.** Added
+  `Infohash`, `MagnetURI`, and switched `Seeders`/`Peers` to `*int` on
+  `internal/indexers.Result` so torrent metadata no longer rides on
+  the unrelated `Quality` field. Torznab parsing populates all four
+  from the matching `<torznab:attr>` tags; Usenet results leave the
+  torrent fields zero/nil, which lets callers tell "indexer didn't
+  report this" apart from "torrent has zero seeders right now". The
+  OpenAPI `Result` schema gains `infohash`, `peers` (replacing the
+  unused `leechers` placeholder), `magnet_uri`, and `quality`
+  properties with descriptions.
+
 ### Added
 
 - **Phase 0 — bootstrap.** Repository skeleton, AGPL-3.0 license,

@@ -16,6 +16,7 @@
       <torznab:attr name="peers" value="125"/>
       <torznab:attr name="leechers" value="5"/>
       <torznab:attr name="infohash" value="DEADBEEFCAFE0000DEADBEEFCAFE0000DEADBEEF"/>
+      <torznab:attr name="magneturl" value="magnet:?xt=urn:btih:DEADBEEFCAFE0000DEADBEEFCAFE0000DEADBEEF"/>
       <torznab:attr name="size" value="3145728000"/>
     </item>
     <item>

@@ -935,10 +935,40 @@ components:
         size_bytes:
           type: integer
           format: int64
+        quality:
+          type: string
+          description: |
+            Free-form release quality / release-group label
+            (e.g. `1080p`, `WEB-DL`). Optional; not all indexers
+            advertise this field.
+        infohash:
+          type: string
+          description: |
+            BitTorrent v1 infohash as a 40-character hex string.
+            Empty for Usenet results and for torrent indexers that
+            omit the attribute.
         seeders:
           type: integer
-        leechers:
+          nullable: true
+          description: |
+            Torrent seeder count reported by the indexer. Omitted
+            (null) for Usenet results, where the concept does not
+            apply. A value of `0` means "no seeders right now" and
+            is distinct from "not reported".
+        peers:
           type: integer
+          nullable: true
+          description: |
+            Torrent peer count (seeders + leechers, per the Torznab
+            spec). Omitted for Usenet results. When upstream reports
+            only `leechers`, Loom synthesises this as
+            `seeders + leechers`.
+        magnet_uri:
+          type: string
+          description: |
+            Optional `magnet:` link. Some trackers advertise one in
+            addition to (or instead of) a `.torrent` `link`. Empty
+            when not provided.
         publish_date:
           type: string
           format: date-time

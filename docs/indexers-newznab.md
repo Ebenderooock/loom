@@ -152,7 +152,28 @@ fixed at `0` (a later phase adds pagination).
 | `Test` returns `newznab: malformed xml`                            | The upstream sent HTML (e.g. a Cloudflare interstitial). Verify the URL is reachable and not behind a captcha.                           |
 | Health flips to `degraded` after a sweep                           | Upstream returned `429 Too Many Requests`. Loom will keep the indexer enabled but back off; raise the upstream's rate limit if you can.  |
 | Search returns 0 items but caps shows the mode is available        | Some indexers reject `tvsearch` without a `tvdbid`. Provide one in the search query, or fall back to plain `q`.                          |
-| Torrent results have an empty `quality` field that holds an infohash | Phase 2c stashes the torznab infohash on `Result.Quality` because the `Result` struct does not yet have a dedicated infohash field. ADR-0008 documents the carve-out and a later phase will add a proper field. |
+
+## Result fields
+
+Both flavours emit `indexers.Result` rows with the shared metadata
+(`title`, `link`, `info_url`, `pub_date`, `size`, `categories`,
+`quality`). The torrent-specific fields below are populated only by
+the Torznab path; Usenet (Newznab) results leave them at their zero
+values, which lets a caller tell "indexer didn't say" apart from "the
+torrent really has zero seeders right now".
+
+| Field        | Type     | Newznab (usenet)  | Torznab (torrent)                                              |
+| ------------ | -------- | ----------------- | -------------------------------------------------------------- |
+| `quality`    | string   | from `quality` attr if present | empty unless the tracker carries it explicitly                |
+| `infohash`   | string   | always empty      | 40-character hex from `<torznab:attr name="infohash" .../>`    |
+| `seeders`    | *int     | always nil        | from `<torznab:attr name="seeders" .../>`; `0` is a real value |
+| `peers`      | *int     | always nil        | from `peers`; falls back to `seeders + leechers` when only `leechers` is present |
+| `magnet_uri` | string   | always empty      | from `<torznab:attr name="magneturl" .../>` when advertised    |
+
+`seeders` and `peers` are pointer-valued so a JSON consumer can
+distinguish "field omitted because this is a Usenet release" (`null`
+in JSON) from a torrent that genuinely has zero seeders right now
+(`0`). The wire shape is documented in the OpenAPI `Result` schema.
 
 ## See also
 
