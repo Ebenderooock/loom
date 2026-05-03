@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/loomctl/loom/internal/indexers"
+	"github.com/loomctl/loom/internal/indexers/newznab"
 	"github.com/loomctl/loom/internal/kernel/config"
 	"github.com/loomctl/loom/internal/kernel/scheduler"
 	"github.com/loomctl/loom/internal/storage"
@@ -19,15 +20,23 @@ import (
 // are not fatal: the Service logs them and the affected indexers are
 // skipped, so a single broken row never blocks startup.
 func buildIndexerService(ctx context.Context, cfg *config.Config, db storage.DB, logger *slog.Logger) (*indexers.Service, error) {
-	var repo indexers.Repository
+	var (
+		repo indexers.Repository
+		caps indexers.CapsCache
+	)
 	switch db.Engine() {
 	case storage.EngineSQLite:
 		repo = indexers.NewSQLiteRepository(db.DB())
+		caps = indexers.NewSQLiteCapsCache(db.DB())
 	case storage.EnginePostgres:
 		repo = indexers.NewPostgresRepository(db.DB())
+		caps = indexers.NewPostgresCapsCache(db.DB())
 	default:
 		return nil, fmt.Errorf("indexers: unsupported storage engine %q", string(db.Engine()))
 	}
+
+	// Wire the caps cache before hydrate so factories see it.
+	newznab.SetCapsCache(caps)
 
 	svc, err := indexers.NewService(indexers.ServiceOptions{
 		Repository:         repo,

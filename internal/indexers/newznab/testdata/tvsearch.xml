@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:newznab="http://www.newznab.com/DTD/2010/feeds/attributes/">
+  <channel>
+    <title>Demo Newznab</title>
+    <description>Sample TV search</description>
+    <newznab:response offset="0" total="2"/>
+    <item>
+      <title>Some.Show.S02E03.1080p.WEB.x264-RLSGRP</title>
+      <guid isPermaLink="false">abc123</guid>
+      <link>https://example/api?t=get&amp;id=abc123</link>
+      <comments>https://example/details/abc123</comments>
+      <pubDate>Mon, 02 Sep 2024 11:14:00 +0000</pubDate>
+      <description>HD release</description>
+      <category>5040</category>
+      <enclosure url="https://example/api?t=get&amp;id=abc123" length="2147483648" type="application/x-nzb"/>
+      <newznab:attr name="category" value="5040"/>
+      <newznab:attr name="size" value="2147483648"/>
+      <newznab:attr name="grabs" value="42"/>
+      <newznab:attr name="files" value="11"/>
+      <newznab:attr name="group" value="alt.binaries.tv"/>
+      <newznab:attr name="quality" value="1080p"/>
+    </item>
+    <item>
+      <title>Older.Show.S01E12.720p.HDTV.x264-OTHER</title>
+      <guid isPermaLink="false">def456</guid>
+      <link>https://example/api?t=get&amp;id=def456</link>
+      <pubDate>Sun, 01 Sep 2024 10:00:00 +0000</pubDate>
+      <category>5040</category>
+      <enclosure url="https://example/api?t=get&amp;id=def456" length="1073741824" type="application/x-nzb"/>
+      <newznab:attr name="category" value="5040"/>
+      <newznab:attr name="size" value="1073741824"/>
+      <newznab:attr name="grabs" value="3"/>
+    </item>
+  </channel>
+</rss>

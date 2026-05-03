@@ -90,7 +90,7 @@ func (q *Queries) GetIndexer(ctx context.Context, id string) (Indexer, error) {
 }
 
 const getIndexerHealth = `-- name: GetIndexerHealth :one
-SELECT indexer_id, status, last_checked_at, last_success_at, latency_ms, last_error FROM indexer_health WHERE indexer_id = $1 LIMIT 1
+SELECT indexer_id, status, last_checked_at, last_success_at, latency_ms, last_error, last_caps_json FROM indexer_health WHERE indexer_id = $1 LIMIT 1
 `
 
 func (q *Queries) GetIndexerHealth(ctx context.Context, indexerID string) (IndexerHealth, error) {
@@ -103,6 +103,7 @@ func (q *Queries) GetIndexerHealth(ctx context.Context, indexerID string) (Index
 		&i.LastSuccessAt,
 		&i.LatencyMs,
 		&i.LastError,
+		&i.LastCapsJson,
 	)
 	return i, err
 }
@@ -146,7 +147,7 @@ func (q *Queries) ListEnabledIndexers(ctx context.Context) ([]Indexer, error) {
 }
 
 const listIndexerHealth = `-- name: ListIndexerHealth :many
-SELECT indexer_id, status, last_checked_at, last_success_at, latency_ms, last_error FROM indexer_health
+SELECT indexer_id, status, last_checked_at, last_success_at, latency_ms, last_error, last_caps_json FROM indexer_health
 `
 
 func (q *Queries) ListIndexerHealth(ctx context.Context) ([]IndexerHealth, error) {
@@ -165,6 +166,7 @@ func (q *Queries) ListIndexerHealth(ctx context.Context) ([]IndexerHealth, error
 			&i.LastSuccessAt,
 			&i.LatencyMs,
 			&i.LastError,
+			&i.LastCapsJson,
 		); err != nil {
 			return nil, err
 		}

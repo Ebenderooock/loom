@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:torznab="http://torznab.com/schemas/2015/feed">
+  <channel>
+    <title>Demo Torznab</title>
+    <description>Sample torrent search</description>
+    <item>
+      <title>Ubuntu.24.04.LTS.iso</title>
+      <guid isPermaLink="false">torrent-1</guid>
+      <link>https://example/dl/torrent-1.torrent</link>
+      <comments>https://example/details/torrent-1</comments>
+      <pubDate>Mon, 02 Sep 2024 11:14:00 +0000</pubDate>
+      <category>4000</category>
+      <enclosure url="https://example/dl/torrent-1.torrent" length="3145728000" type="application/x-bittorrent"/>
+      <torznab:attr name="category" value="4000"/>
+      <torznab:attr name="seeders" value="120"/>
+      <torznab:attr name="peers" value="125"/>
+      <torznab:attr name="leechers" value="5"/>
+      <torznab:attr name="infohash" value="DEADBEEFCAFE0000DEADBEEFCAFE0000DEADBEEF"/>
+      <torznab:attr name="size" value="3145728000"/>
+    </item>
+    <item>
+      <title>Another.Release.x264</title>
+      <guid isPermaLink="false">torrent-2</guid>
+      <link>https://example/dl/torrent-2.torrent</link>
+      <pubDate>Mon, 02 Sep 2024 09:00:00 +0000</pubDate>
+      <category>2040</category>
+      <enclosure url="https://example/dl/torrent-2.torrent" length="2200000000" type="application/x-bittorrent"/>
+      <torznab:attr name="seeders" value="0"/>
+      <torznab:attr name="leechers" value="3"/>
+      <torznab:attr name="infohash" value="0000FEEDFACE0000FEEDFACE0000FEEDFACE0000"/>
+    </item>
+  </channel>
+</rss>

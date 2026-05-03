@@ -34,12 +34,13 @@ type Indexer struct {
 }
 
 type IndexerHealth struct {
-	IndexerID     string        `json:"indexer_id"`
-	Status        string        `json:"status"`
-	LastCheckedAt time.Time     `json:"last_checked_at"`
-	LastSuccessAt sql.NullTime  `json:"last_success_at"`
-	LatencyMs     sql.NullInt64 `json:"latency_ms"`
-	LastError     string        `json:"last_error"`
+	IndexerID     string         `json:"indexer_id"`
+	Status        string         `json:"status"`
+	LastCheckedAt time.Time      `json:"last_checked_at"`
+	LastSuccessAt sql.NullTime   `json:"last_success_at"`
+	LatencyMs     sql.NullInt64  `json:"latency_ms"`
+	LastError     string         `json:"last_error"`
+	LastCapsJson  sql.NullString `json:"last_caps_json"`
 }
 
 type ScheduledJob struct {

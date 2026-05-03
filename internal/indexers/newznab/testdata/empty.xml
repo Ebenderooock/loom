@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:newznab="http://www.newznab.com/DTD/2010/feeds/attributes/">
+  <channel>
+    <title>Demo</title>
+    <description>No results</description>
+    <newznab:response offset="0" total="0"/>
+  </channel>
+</rss>
