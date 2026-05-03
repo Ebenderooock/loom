@@ -13,6 +13,11 @@ import (
 // Mount attaches every /api/v1/indexers/* route to r. It does not
 // install authentication — the caller wraps r in the project's
 // auth.RequireAuth middleware (see internal/server/server.go).
+//
+// Any RouteMounter passed via ServiceOptions.RouteExtensions is
+// invoked here too, sharing the same auth scope as the indexer
+// routes. Phase 2e uses this to attach /api/v1/proxies/* without
+// editing server.go.
 func (s *Service) Mount(r chi.Router) {
 	r.Route("/api/v1/indexers", func(r chi.Router) {
 		r.Get("/", s.handleList)
@@ -27,6 +32,11 @@ func (s *Service) Mount(r chi.Router) {
 			r.Post("/test", s.handleTest)
 		})
 	})
+	for _, ext := range s.routeExtensions {
+		if ext != nil {
+			ext(r)
+		}
+	}
 }
 
 // errorBody is the project-wide error envelope returned by the
@@ -63,6 +73,7 @@ type createRequest struct {
 	Config     json.RawMessage `json:"config,omitempty"`
 	Categories []Category      `json:"categories,omitempty"`
 	Tags       []string        `json:"tags,omitempty"`
+	ProxyID    string          `json:"proxy_id,omitempty"`
 }
 
 func (s *Service) handleCreate(w http.ResponseWriter, r *http.Request) {
@@ -101,6 +112,7 @@ func (s *Service) handleCreate(w http.ResponseWriter, r *http.Request) {
 		Config:     req.Config,
 		Categories: req.Categories,
 		Tags:       req.Tags,
+		ProxyID:    req.ProxyID,
 	}
 	saved, err := s.Create(r.Context(), def)
 	if err != nil {
@@ -153,6 +165,7 @@ type replaceRequest struct {
 	Config     json.RawMessage `json:"config,omitempty"`
 	Categories []Category      `json:"categories,omitempty"`
 	Tags       []string        `json:"tags,omitempty"`
+	ProxyID    string          `json:"proxy_id,omitempty"`
 }
 
 func (s *Service) handleReplace(w http.ResponseWriter, r *http.Request) {
@@ -175,6 +188,7 @@ func (s *Service) handleReplace(w http.ResponseWriter, r *http.Request) {
 		Config:     req.Config,
 		Categories: req.Categories,
 		Tags:       req.Tags,
+		ProxyID:    req.ProxyID,
 	}
 	saved, err := s.Replace(r.Context(), def)
 	if err != nil {
@@ -199,6 +213,25 @@ type patchRequest struct {
 	Enabled  *bool     `json:"enabled,omitempty"`
 	Priority *int      `json:"priority,omitempty"`
 	Tags     *[]string `json:"tags,omitempty"`
+	// ProxyID is tri-state on the wire: omitted = unchanged, null or
+	// "" = clear, "id" = set. nullableString captures all three.
+	ProxyID nullableString `json:"proxy_id,omitempty"`
+}
+
+// nullableString is a JSON-tri-state string. Use .Set to test
+// presence and .Value for the (possibly empty) string.
+type nullableString struct {
+	Set   bool
+	Value string
+}
+
+func (n *nullableString) UnmarshalJSON(b []byte) error {
+	n.Set = true
+	if string(b) == "null" {
+		n.Value = ""
+		return nil
+	}
+	return json.Unmarshal(b, &n.Value)
 }
 
 func (s *Service) handlePatch(w http.ResponseWriter, r *http.Request) {
@@ -208,13 +241,18 @@ func (s *Service) handlePatch(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid_body", err.Error())
 		return
 	}
-	saved, err := s.Patch(r.Context(), Patch{
+	patch := Patch{
 		ID:       id,
 		Name:     req.Name,
 		Enabled:  req.Enabled,
 		Priority: req.Priority,
 		Tags:     req.Tags,
-	})
+	}
+	if req.ProxyID.Set {
+		v := req.ProxyID.Value
+		patch.ProxyID = &v
+	}
+	saved, err := s.Patch(r.Context(), patch)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", "indexer not found")

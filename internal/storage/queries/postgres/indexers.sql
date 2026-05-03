@@ -1,6 +1,6 @@
 -- name: CreateIndexer :one
-INSERT INTO indexers (id, kind, name, enabled, priority, config_json, categories_json, tags_json, created_at, updated_at)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())
+INSERT INTO indexers (id, kind, name, enabled, priority, config_json, categories_json, tags_json, proxy_id, created_at, updated_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())
 RETURNING *;
 
 -- name: GetIndexer :one
@@ -21,6 +21,7 @@ SET kind            = $2,
     config_json     = $6,
     categories_json = $7,
     tags_json       = $8,
+    proxy_id        = $9,
     updated_at      = NOW()
 WHERE id = $1
 RETURNING *;
@@ -34,6 +35,12 @@ SET name      = COALESCE(sqlc.narg('name'), name),
     updated_at = NOW()
 WHERE id = $1
 RETURNING *;
+
+-- name: SetIndexerProxyID :exec
+UPDATE indexers
+SET proxy_id = $2,
+    updated_at = NOW()
+WHERE id = $1;
 
 -- name: DeleteIndexer :exec
 DELETE FROM indexers WHERE id = $1;

@@ -66,6 +66,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `?apikey=`) are tolerated by `parseConfig`. Search routes between
   modes based on the inbound `Query` (imdb/tmdb → movie, tvdb /
   season → tvsearch, otherwise plain search). ADR-0008.
+- **Phase 2e — Indexer outbound proxies.** New
+  `internal/indexers/proxies` package and `proxies` table
+  (migration 0008) with full CRUD at `/api/v1/proxies/*`.
+  Supported kinds: `http`, `https`, `socks5`, and `flaresolverr`.
+  Indexers gain a nullable `proxy_id` FK; setting it routes all
+  outbound traffic from that indexer through the matching proxy
+  row. The proxies service implements a new
+  `indexers.TransportProvider` interface and caches one
+  `http.RoundTripper` per proxy ID; the cache is invalidated on
+  any Replace/Patch/Delete. The FlareSolverr transport POSTs
+  `request.get` to `<URL>/v1` and synthesises a Go `*http.Response`
+  from the solution envelope; opt-in `session_mode: shared`
+  reuses one FlareSolverr session per proxy row. `DELETE` on a
+  proxy that any indexer still pins returns `409 proxy_in_use`
+  with `details.indexer_ids` enumerating the blockers.
+  `POST /api/v1/proxies/{id}/test` runs a real probe (HTTP fetch
+  for HTTP/HTTPS/SOCKS5; `sessions.list` for FlareSolverr). New
+  kernel keys `indexers.proxies.flaresolverr_default_timeout` and
+  `indexers.proxies.test_probe_url`. New direct dependency:
+  `golang.org/x/net/proxy` (SOCKS5). ADR-0009.
 - **Documentation baseline.** `docs/` developer documentation
   (architecture, configuration, observability, storage, API,
   development, deployment, security), per-package `doc.go` comments,
@@ -80,6 +100,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   payload, and persists through a `Store`. Callers must construct the
   scheduler via `scheduler.New(cfg, store, logger, clock)`; the
   binary wires this in `cmd/loom/scheduler.go`.
+- **Newznab/Torznab `httpClientFactory` signature.** The internal
+  `httpClientFactory` in `internal/indexers/newznab` now takes
+  `(cfg, def)` (was `(cfg)`) so it can resolve a per-definition
+  `http.RoundTripper` via `indexers.TransportForDefinition`. Affects
+  in-tree callers only; no public API change.
 
 ### Fixed
 

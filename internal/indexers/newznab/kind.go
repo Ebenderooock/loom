@@ -42,14 +42,23 @@ func currentCapsCache() indexers.CapsCache {
 
 // httpClientFactory is overridable by tests so they can hand the
 // Client a transport pointing at httptest.NewServer without resorting
-// to monkey-patching.
-var httpClientFactory = func(cfg Config) *http.Client {
-	return &http.Client{Timeout: cfg.Timeout.duration()}
+// to monkey-patching. The default builder honours per-indexer
+// proxies via indexers.TransportForDefinition; if no provider is
+// installed (or def.ProxyID is empty) the indexer ends up with
+// http.DefaultTransport.
+var httpClientFactory = func(cfg Config, def indexers.Definition) *http.Client {
+	rt, err := indexers.TransportForDefinition(def)
+	if err != nil || rt == nil {
+		rt = http.DefaultTransport
+	}
+	return &http.Client{Timeout: cfg.Timeout.duration(), Transport: rt}
 }
 
 // SetHTTPClientFactory installs a custom builder. Production callers
-// don't need this; tests use it to inject httptest transports.
-func SetHTTPClientFactory(f func(cfg Config) *http.Client) {
+// don't need this; tests use it to inject httptest transports. The
+// builder receives both the parsed Config and the source Definition
+// so tests can branch on def.ProxyID, ID, or anything else they need.
+func SetHTTPClientFactory(f func(cfg Config, def indexers.Definition) *http.Client) {
 	httpClientFactory = f
 }
 
@@ -63,7 +72,7 @@ func factoryFor(flavour attrFlavour) indexers.Factory {
 			return nil, fmt.Errorf("indexer %q (%s): %w", def.ID, flavour.kind(), err)
 		}
 		cfg.attrFlavour = flavour
-		client := NewClient(def.ID, def.Name, cfg, httpClientFactory(cfg), currentCapsCache())
+		client := NewClient(def.ID, def.Name, cfg, httpClientFactory(cfg, def), currentCapsCache())
 		return client, nil
 	}
 }

@@ -170,8 +170,13 @@ type Definition struct {
 	Config     json.RawMessage `json:"config"`
 	Categories []Category      `json:"categories"`
 	Tags       []string        `json:"tags"`
-	CreatedAt  time.Time       `json:"created_at"`
-	UpdatedAt  time.Time       `json:"updated_at"`
+	// ProxyID, when non-empty, references a row in the `proxies`
+	// table and routes this indexer's outbound HTTP through that
+	// proxy. Empty means "use the default transport" (Phase 2c
+	// behaviour).
+	ProxyID   string    `json:"proxy_id,omitempty"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 // Health is the persisted shape of an indexer_health row.

@@ -1,6 +1,6 @@
 -- name: CreateIndexer :one
-INSERT INTO indexers (id, kind, name, enabled, priority, config_json, categories_json, tags_json, created_at, updated_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+INSERT INTO indexers (id, kind, name, enabled, priority, config_json, categories_json, tags_json, proxy_id, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
 RETURNING *;
 
 -- name: GetIndexer :one
@@ -21,6 +21,7 @@ SET kind            = ?,
     config_json     = ?,
     categories_json = ?,
     tags_json       = ?,
+    proxy_id        = ?,
     updated_at      = CURRENT_TIMESTAMP
 WHERE id = ?
 RETURNING *;
@@ -34,6 +35,16 @@ SET name      = COALESCE(sqlc.narg('name'), name),
     updated_at = CURRENT_TIMESTAMP
 WHERE id = sqlc.arg('id')
 RETURNING *;
+
+-- name: SetIndexerProxyID :exec
+-- Used by PATCH /api/v1/indexers/{id} to attach (or clear, when the
+-- value is NULL) a proxy. We can't fold this into PatchIndexer with
+-- COALESCE alone because "no change" and "explicit clear" need to be
+-- distinguishable, and our other patch fields use COALESCE-on-NULL.
+UPDATE indexers
+SET proxy_id = ?,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = ?;
 
 -- name: DeleteIndexer :exec
 DELETE FROM indexers WHERE id = ?;

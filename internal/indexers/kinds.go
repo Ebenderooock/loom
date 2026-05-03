@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"sync"
 )
 
@@ -13,13 +14,64 @@ import (
 // and after CRUD operations.
 type Factory func(ctx context.Context, def Definition) (Indexer, error)
 
+// TransportProvider returns the http.RoundTripper that an indexer
+// kind should use for outbound HTTP. proxyID is the Definition's
+// ProxyID — empty means "use the default transport". Implementations
+// must return a non-nil RoundTripper; on lookup failure they should
+// fall back to http.DefaultTransport rather than blocking the build.
+//
+// The interface is small on purpose: it lets the proxies package
+// (Phase 2e) inject per-indexer routing without dragging the kinds
+// package into the proxies type tree.
+type TransportProvider interface {
+	TransportFor(proxyID string) (http.RoundTripper, error)
+}
+
 // kindRegistry is the package-global catalogue of factories. It is
 // safe for concurrent reads after init; writes happen via
 // RegisterKind and are guarded by a mutex.
 var (
 	kindMu       sync.RWMutex
 	kindHandlers = make(map[Kind]Factory)
+
+	transportMu       sync.RWMutex
+	transportProvider TransportProvider
 )
+
+// SetTransportProvider installs the package-global TransportProvider.
+// Kind factories should call CurrentTransportProvider() inside their
+// build function to honour per-indexer proxy selection. Passing nil
+// reverts to "no provider" (kinds will fall back to default
+// transports).
+func SetTransportProvider(p TransportProvider) {
+	transportMu.Lock()
+	transportProvider = p
+	transportMu.Unlock()
+}
+
+// CurrentTransportProvider returns the currently installed
+// TransportProvider, or nil if none has been set. Kind factories
+// should treat nil as "use http.DefaultTransport".
+func CurrentTransportProvider() TransportProvider {
+	transportMu.RLock()
+	defer transportMu.RUnlock()
+	return transportProvider
+}
+
+// TransportForDefinition is a thin convenience wrapper used by kind
+// factories. It looks up the current TransportProvider and resolves
+// def.ProxyID, returning http.DefaultTransport when no provider is
+// installed or when no proxy is requested.
+func TransportForDefinition(def Definition) (http.RoundTripper, error) {
+	if def.ProxyID == "" {
+		return http.DefaultTransport, nil
+	}
+	p := CurrentTransportProvider()
+	if p == nil {
+		return http.DefaultTransport, nil
+	}
+	return p.TransportFor(def.ProxyID)
+}
 
 // RegisterKind installs f as the factory for kind. It is idempotent;
 // re-registering the same kind overwrites the previous factory, which

@@ -9,6 +9,7 @@ import (
 
 	"github.com/loomctl/loom/internal/indexers"
 	"github.com/loomctl/loom/internal/indexers/newznab"
+	"github.com/loomctl/loom/internal/indexers/proxies"
 	"github.com/loomctl/loom/internal/kernel/config"
 	"github.com/loomctl/loom/internal/kernel/scheduler"
 	"github.com/loomctl/loom/internal/storage"
@@ -21,16 +22,19 @@ import (
 // skipped, so a single broken row never blocks startup.
 func buildIndexerService(ctx context.Context, cfg *config.Config, db storage.DB, logger *slog.Logger) (*indexers.Service, error) {
 	var (
-		repo indexers.Repository
-		caps indexers.CapsCache
+		repo        indexers.Repository
+		caps        indexers.CapsCache
+		proxiesRepo proxies.Repository
 	)
 	switch db.Engine() {
 	case storage.EngineSQLite:
 		repo = indexers.NewSQLiteRepository(db.DB())
 		caps = indexers.NewSQLiteCapsCache(db.DB())
+		proxiesRepo = proxies.NewSQLiteRepository(db.DB())
 	case storage.EnginePostgres:
 		repo = indexers.NewPostgresRepository(db.DB())
 		caps = indexers.NewPostgresCapsCache(db.DB())
+		proxiesRepo = proxies.NewPostgresRepository(db.DB())
 	default:
 		return nil, fmt.Errorf("indexers: unsupported storage engine %q", string(db.Engine()))
 	}
@@ -38,12 +42,26 @@ func buildIndexerService(ctx context.Context, cfg *config.Config, db storage.DB,
 	// Wire the caps cache before hydrate so factories see it.
 	newznab.SetCapsCache(caps)
 
+	// Build the proxies service first so its TransportFor is
+	// installed before HydrateAll constructs any newznab clients.
+	proxiesSvc, err := proxies.NewService(proxies.ServiceOptions{
+		Repository:          proxiesRepo,
+		Logger:              logger,
+		FlareSolverrTimeout: time.Duration(cfg.Indexers.Proxies.FlareSolverrDefaultTimeoutSec) * time.Second,
+		TestProbeURL:        cfg.Indexers.Proxies.TestProbeURL,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("proxies: %w", err)
+	}
+	indexers.SetTransportProvider(proxiesSvc)
+
 	svc, err := indexers.NewService(indexers.ServiceOptions{
 		Repository:         repo,
 		Logger:             logger,
 		SearchTimeout:      time.Duration(cfg.Indexers.SearchTimeoutSec) * time.Second,
 		MaxParallel:        cfg.Indexers.MaxParallel,
 		HealthCheckTimeout: time.Duration(cfg.Indexers.HealthCheckTimeoutSec) * time.Second,
+		RouteExtensions:    []indexers.RouteMounter{proxiesSvc.Mount},
 	})
 	if err != nil {
 		return nil, err

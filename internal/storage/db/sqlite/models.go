@@ -21,16 +21,17 @@ type ApiKey struct {
 }
 
 type Indexer struct {
-	ID             string    `json:"id"`
-	Kind           string    `json:"kind"`
-	Name           string    `json:"name"`
-	Enabled        int64     `json:"enabled"`
-	Priority       int64     `json:"priority"`
-	ConfigJson     string    `json:"config_json"`
-	CategoriesJson string    `json:"categories_json"`
-	TagsJson       string    `json:"tags_json"`
-	CreatedAt      time.Time `json:"created_at"`
-	UpdatedAt      time.Time `json:"updated_at"`
+	ID             string         `json:"id"`
+	Kind           string         `json:"kind"`
+	Name           string         `json:"name"`
+	Enabled        int64          `json:"enabled"`
+	Priority       int64          `json:"priority"`
+	ConfigJson     string         `json:"config_json"`
+	CategoriesJson string         `json:"categories_json"`
+	TagsJson       string         `json:"tags_json"`
+	CreatedAt      time.Time      `json:"created_at"`
+	UpdatedAt      time.Time      `json:"updated_at"`
+	ProxyID        sql.NullString `json:"proxy_id"`
 }
 
 type IndexerHealth struct {
@@ -41,6 +42,16 @@ type IndexerHealth struct {
 	LatencyMs     sql.NullInt64  `json:"latency_ms"`
 	LastError     string         `json:"last_error"`
 	LastCapsJson  sql.NullString `json:"last_caps_json"`
+}
+
+type Proxy struct {
+	ID         string    `json:"id"`
+	Kind       string    `json:"kind"`
+	Name       string    `json:"name"`
+	Enabled    int64     `json:"enabled"`
+	ConfigJson string    `json:"config_json"`
+	CreatedAt  time.Time `json:"created_at"`
+	UpdatedAt  time.Time `json:"updated_at"`
 }
 
 type ScheduledJob struct {
