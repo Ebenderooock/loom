@@ -9,6 +9,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Phase 3f — NZBGet download client.** Second Usenet driver on the
+  Phase 3a download-client abstraction. New
+  `internal/downloads/nzbget/` package speaks NZBGet's JSON-RPC 2.0
+  endpoint at `<base_path>/jsonrpc` (NZBGet 21+), authenticating
+  with HTTP Basic (`ControlUsername`/`ControlPassword`) on every
+  request and surfacing JSON-RPC `error` envelopes as typed errors
+  (`ErrAuth`, `ErrServer`, `ErrNotFound`, `ErrUpstream`,
+  `ErrMissingNZBID`, `ErrMalformedNZB`, `ErrConfig`). `Add` covers
+  both URL fetches (URL passed as `NZBFilename` with empty
+  `NZBContent`, server-side fetch on NZBGet 17+) and raw `.nzb`
+  uploads (base64-encoded `NZBContent`), via NZBGet's positional
+  `append(NZBFilename, NZBContent, Category, Priority, AddToTop,
+  AddPaused, DupeKey, DupeScore, DupeMode, PostProcessParameters)`
+  signature; tag conventions cover `priority`, `add_to_top`,
+  `add_paused`, `dupekey`, `dupescore`, `dupemode`, and
+  `pp_<name>=<value>` post-process pass-through. `Status` merges
+  `listgroups(0)` and `history(false)` into a single
+  `[]downloads.Item`, mapping NZBGet's 17-string queue + history
+  vocabulary onto Loom's `ItemStatus` enum in two audited tables;
+  `Pause`/`Resume` dispatch on the id list (global
+  `pausedownload`/`resumedownload` for empty, `editqueue` with
+  `GroupPause`/`GroupResume` for specific ids); `Remove`
+  distinguishes `GroupDelete` (preserves history + on-disk bytes)
+  from `GroupFinalDelete` (purges both) on `deleteFiles`;
+  `Categories` parses `Category{N}.Name`/`Category{N}.DestDir` from
+  NZBGet's `config()` RPC with a 30s in-process TTL cache that
+  rides out transient errors; `FreeSpace` reads
+  `status().FreeDiskSpaceMB` (binary MB→bytes) returning `-1` when
+  absent; `Test` issues `version()`. Outbound HTTP composes the
+  same proxy + throttle stack as indexers via
+  `downloads.TransportForDefinition`. OpenAPI adds an
+  `NzbgetConfig` schema documenting the recognised `config` blob.
+  XML-RPC fallback, server-side category writes, history retention
+  controls, speed-limit control, and TLS-skip are deferred. See
+  [`docs/downloads-nzbget.md`](docs/downloads-nzbget.md) and
+  [ADR-0019](docs/adr/0019-nzbget-download-client-kind.md).
+
 - **Phase 3b — qBittorrent download client.** First real driver on the
   Phase 3a download-client abstraction. New
   `internal/downloads/qbittorrent/` package speaks the qBittorrent v2

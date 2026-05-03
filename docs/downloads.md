@@ -130,4 +130,4 @@ guide and design rationale.
 | `transmission`        | torrent  | ⏳ planned    |                                                            |
 | `deluge`              | torrent  | ⏳ planned    |                                                            |
 | `sabnzbd`             | usenet   | ⏳ planned    |                                                            |
-| `nzbget`              | usenet   | ⏳ planned    |                                                            |
+| `nzbget`              | usenet   | ✅ shipped    | [docs/downloads-nzbget.md](downloads-nzbget.md)            |
