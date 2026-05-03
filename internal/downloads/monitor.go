@@ -25,9 +25,9 @@ type Monitor struct {
 	checkInterval time.Duration
 
 	mu sync.Mutex
-	// lastCompleted tracks the per-client items we saw as completed
-	// in the last check, so we only emit new completions.
-	lastCompleted map[string]map[string]bool // clientID -> itemID -> seen
+	// lastCompleted tracks the item IDs we've already emitted as completed
+	// so we only emit new completions.
+	lastCompleted map[string]bool // itemID -> seen
 }
 
 // MonitorOptions wires a Monitor.
@@ -65,7 +65,7 @@ func NewMonitor(opts MonitorOptions) (*Monitor, error) {
 		logger:        opts.Logger.With("module", "downloads/monitor"),
 		clock:         opts.Clock,
 		checkInterval: opts.CheckInterval,
-		lastCompleted: make(map[string]map[string]bool),
+		lastCompleted: make(map[string]bool),
 	}
 
 	m.logger.Info("monitor initialized", "interval", opts.CheckInterval)
@@ -106,30 +106,12 @@ func (m *Monitor) emitCompletions(ctx context.Context, items []Item) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	// Build a map of completed items by client in this sweep.
-	thisRun := make(map[string]map[string]bool) // clientID -> itemID -> seen
+	// Build a map of completed items in this sweep.
+	thisRun := make(map[string]bool) // itemID -> seen
 	for _, item := range items {
 		if item.Status == StatusItemCompleted {
-			if _, ok := thisRun[item.ID]; !ok {
-				thisRun[item.ID] = make(map[string]bool)
-			}
-			// For completed items, we extract the client ID from the item's
-			// Category or metadata. Since the Item structure does not carry
-			// the client ID explicitly, we infer it from the status response.
-			// In practice, the Registry.Status aggregation will group items
-			// by client, but here we treat it as a flat list. We emit based
-			// on the item's presence in the results; the client can be
-			// inferred from context. TODO: extend Item to carry ClientID.
-
-			// For now, emit if we haven't seen this item before.
-			wasCompleted := false
-			for _, clientCompleted := range m.lastCompleted {
-				if clientCompleted[item.ID] {
-					wasCompleted = true
-					break
-				}
-			}
-			if !wasCompleted {
+			// Emit if we haven't seen this item before.
+			if !m.lastCompleted[item.ID] {
 				_ = m.bus.Publish(ctx, &DownloadCompletedEvent{
 					DownloadID:  item.ID,
 					ClientID:    "", // Inferred from context; TODO: add to Item.
@@ -140,6 +122,7 @@ func (m *Monitor) emitCompletions(ctx context.Context, items []Item) {
 				m.logger.Info("monitor: emitted DownloadCompleted",
 					"item_id", item.ID, "title", item.Title)
 			}
+			thisRun[item.ID] = true
 		}
 	}
 

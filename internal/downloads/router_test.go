@@ -55,7 +55,7 @@ func TestRouterQueuedOnSuccess(t *testing.T) {
 	t.Parallel()
 
 	bus := &capturingBus{}
-	router, clock := newTestRouter(t, bus)
+	router, _ := newTestRouter(t, bus)
 	defer router.Close()
 
 	// Register a test client.
@@ -76,8 +76,8 @@ func TestRouterQueuedOnSuccess(t *testing.T) {
 		MagnetURI: "",
 	}
 
-	// Invoke the router's handler directly.
-	err := router.handleIndexerResult(context.Background(), result)
+	// Invoke the router's handler directly with wrapped event.
+	err := router.handleIndexerResult(context.Background(), &IndexerResultEvent{Result: result})
 	if err != nil {
 		t.Fatalf("handleIndexerResult: %v", err)
 	}
@@ -123,7 +123,7 @@ func TestRouterFailsOnAddError(t *testing.T) {
 	}
 
 	// Invoke the router's handler.
-	err := router.handleIndexerResult(context.Background(), result)
+	err := router.handleIndexerResult(context.Background(), &IndexerResultEvent{Result: result})
 	if err != nil {
 		t.Fatalf("handleIndexerResult: %v", err)
 	}
@@ -159,7 +159,7 @@ func TestRouterNoClientsConfigured(t *testing.T) {
 	}
 
 	// Invoke the router's handler.
-	err := router.handleIndexerResult(context.Background(), result)
+	err := router.handleIndexerResult(context.Background(), &IndexerResultEvent{Result: result})
 	if err != nil {
 		t.Fatalf("handleIndexerResult: %v", err)
 	}
@@ -196,7 +196,7 @@ func TestRouterFiltersLowSeedTorrents(t *testing.T) {
 	}
 
 	// Invoke the router's handler.
-	err := router.handleIndexerResult(context.Background(), result)
+	err := router.handleIndexerResult(context.Background(), &IndexerResultEvent{Result: result})
 	if err != nil {
 		t.Fatalf("handleIndexerResult: %v", err)
 	}
@@ -229,7 +229,7 @@ func TestRouterAcceptsUsenetResults(t *testing.T) {
 	}
 
 	// Invoke the router's handler.
-	err := router.handleIndexerResult(context.Background(), result)
+	err := router.handleIndexerResult(context.Background(), &IndexerResultEvent{Result: result})
 	if err != nil {
 		t.Fatalf("handleIndexerResult: %v", err)
 	}
@@ -332,6 +332,9 @@ func (r *testRepository) Get(ctx context.Context, id string) (Definition, error)
 	return Definition{}, nil
 }
 func (r *testRepository) List(ctx context.Context) ([]Definition, error) {
+	return []Definition{}, nil
+}
+func (r *testRepository) ListEnabled(ctx context.Context) ([]Definition, error) {
 	return []Definition{}, nil
 }
 func (r *testRepository) Replace(ctx context.Context, def Definition) (Definition, error) {

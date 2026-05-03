@@ -9,6 +9,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Phase 3g — Download routing and monitoring.** Bridges indexer intake
+  pipeline and download clients via two interconnected services. `Router`
+  subscribes to indexer results, applies quality filtering (simple
+  seeder-based heuristics for Phase 3; full semantic rules deferred to
+  Phase 5), and queues high-quality results on configured download clients
+  in priority order. `Monitor` periodically polls clients for status
+  updates and emits completion events with duplicate prevention. Both
+  services emit typed events (`TopicDownloadQueued`, `TopicDownloadFailed`,
+  `TopicDownloadCompleted`) on the event bus for downstream consumption.
+  Quality filter: rejects torrents with 0 seeders, accepts Usenet results
+  (nil seeders), accepts torrents with >0 seeders. New event types:
+  `IndexerResultEvent` wraps `indexers.Result` for bus compatibility;
+  `DownloadQueuedEvent`, `DownloadFailureEvent`, `DownloadCompletedEvent`
+  carry origin result IDs, client IDs, download IDs, and timestamps. See
+  [ADR-0020](docs/adr/0020-download-routing-and-monitoring.md) for design
+  rationale and limitations (ClientID inference, flat item tracking).
+
 - **Phase 3f — NZBGet download client.** Second Usenet driver on the
   Phase 3a download-client abstraction. New
   `internal/downloads/nzbget/` package speaks NZBGet's JSON-RPC 2.0
