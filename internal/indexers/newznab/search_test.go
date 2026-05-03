@@ -54,14 +54,20 @@ func TestParseSearchResponse_TorznabSeedersInfohash(t *testing.T) {
 		t.Fatalf("Items = %d, want 2", len(got.Items))
 	}
 	first := got.Items[0]
-	if first.Seeders != 120 {
-		t.Errorf("first.Seeders = %d, want 120", first.Seeders)
+	if first.Seeders == nil || *first.Seeders != 120 {
+		t.Errorf("first.Seeders = %v, want *120", first.Seeders)
 	}
-	if first.Peers != 125 {
-		t.Errorf("first.Peers = %d, want 125", first.Peers)
+	if first.Peers == nil || *first.Peers != 125 {
+		t.Errorf("first.Peers = %v, want *125", first.Peers)
 	}
-	if first.Quality == "" || !strings.HasPrefix(first.Quality, "DEADBEEF") {
-		t.Errorf("first infohash (Quality) = %q", first.Quality)
+	if first.Infohash != "DEADBEEFCAFE0000DEADBEEFCAFE0000DEADBEEF" {
+		t.Errorf("first.Infohash = %q", first.Infohash)
+	}
+	if !strings.HasPrefix(first.MagnetURI, "magnet:?xt=urn:btih:DEADBEEF") {
+		t.Errorf("first.MagnetURI = %q", first.MagnetURI)
+	}
+	if first.Quality != "" {
+		t.Errorf("first.Quality = %q, want empty (no longer carries infohash)", first.Quality)
 	}
 	if first.Size != 3145728000 {
 		t.Errorf("first.Size = %d", first.Size)
@@ -69,8 +75,39 @@ func TestParseSearchResponse_TorznabSeedersInfohash(t *testing.T) {
 
 	second := got.Items[1]
 	// seeders=0 + leechers=3 → peers should fall back to 0+3.
-	if second.Peers != 3 {
-		t.Errorf("second.Peers = %d, want 3 (leecher fallback)", second.Peers)
+	if second.Peers == nil || *second.Peers != 3 {
+		t.Errorf("second.Peers = %v, want *3 (leecher fallback)", second.Peers)
+	}
+	if second.Seeders == nil || *second.Seeders != 0 {
+		t.Errorf("second.Seeders = %v, want *0", second.Seeders)
+	}
+	if second.Infohash != "0000FEEDFACE0000FEEDFACE0000FEEDFACE0000" {
+		t.Errorf("second.Infohash = %q", second.Infohash)
+	}
+	if second.MagnetURI != "" {
+		t.Errorf("second.MagnetURI = %q, want empty", second.MagnetURI)
+	}
+}
+
+func TestParseSearchResponse_NewznabLeavesTorrentFieldsZero(t *testing.T) {
+	t.Parallel()
+	got, err := parseSearchResponse(loadFixture(t, "tvsearch.xml"), "ix-1", flavourNewznab)
+	if err != nil {
+		t.Fatalf("parseSearchResponse: %v", err)
+	}
+	for i, item := range got.Items {
+		if item.Seeders != nil {
+			t.Errorf("items[%d].Seeders = %v, want nil for usenet", i, item.Seeders)
+		}
+		if item.Peers != nil {
+			t.Errorf("items[%d].Peers = %v, want nil for usenet", i, item.Peers)
+		}
+		if item.Infohash != "" {
+			t.Errorf("items[%d].Infohash = %q, want empty for usenet", i, item.Infohash)
+		}
+		if item.MagnetURI != "" {
+			t.Errorf("items[%d].MagnetURI = %q, want empty for usenet", i, item.MagnetURI)
+		}
 	}
 }
 

@@ -110,6 +110,13 @@ type Query struct {
 // Result is one row from a single indexer's search response. Field
 // names follow the Newznab item shape closely so wire-compat layers
 // can map cheaply.
+//
+// Torrent-specific fields (Infohash, Seeders, Peers, MagnetURI) are
+// populated only by torrent-flavoured indexers (Torznab and friends).
+// Usenet results leave them at their zero values: empty strings for
+// Infohash/MagnetURI, nil for the *int counters. Use pointer-nil as
+// the "not applicable" signal — a torrent with zero seeders is still
+// distinguishable from a usenet release that has no seeder concept.
 type Result struct {
 	IndexerID string     `json:"indexer_id"`
 	Title     string     `json:"title"`
@@ -118,10 +125,34 @@ type Result struct {
 	InfoURL   string     `json:"info_url,omitempty"`
 	PubDate   time.Time  `json:"pub_date,omitempty"`
 	Size      int64      `json:"size,omitempty"`
-	Seeders   int        `json:"seeders,omitempty"`
-	Peers     int        `json:"peers,omitempty"`
 	Category  []Category `json:"categories,omitempty"`
-	Quality   string     `json:"quality,omitempty"`
+
+	// Quality is a free-form release-quality / release-group string
+	// (e.g. "1080p", "WEB-DL"). Optional; some indexers don't carry
+	// it at all.
+	Quality string `json:"quality,omitempty"`
+
+	// Infohash is the BitTorrent v1 infohash as a 40-character
+	// lowercase or uppercase hex string. Empty for Usenet results
+	// and for torrent indexers that omit the attribute.
+	Infohash string `json:"infohash,omitempty"`
+
+	// Seeders is the upstream-reported seeder count for torrent
+	// results. Nil for Usenet results, where the concept does not
+	// apply. Zero (a non-nil pointer to 0) is a real torrent value
+	// meaning "no seeders right now".
+	Seeders *int `json:"seeders,omitempty"`
+
+	// Peers is the upstream-reported peer count (seeders +
+	// leechers, per the Torznab spec). Nil for Usenet results.
+	// When upstream reports only `leechers` we synthesise this as
+	// seeders + leechers so callers don't have to.
+	Peers *int `json:"peers,omitempty"`
+
+	// MagnetURI is an optional `magnet:` link supplied by some
+	// trackers in addition to (or instead of) a `.torrent` Link.
+	// Empty when the indexer does not advertise one.
+	MagnetURI string `json:"magnet_uri,omitempty"`
 }
 
 // Results is the whole-of-search response from a single indexer. Total
