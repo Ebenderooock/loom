@@ -32,6 +32,8 @@ tags:
     description: Build / runtime metadata.
   - name: indexers
     description: Indexer CRUD, capabilities, manual health checks, and aggregated search.
+  - name: proxies
+    description: Outbound proxy records (HTTP/HTTPS/SOCKS5/FlareSolverr) attachable to indexers.
 
 paths:
   /healthz:
@@ -349,6 +351,183 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
 
+  /api/v1/proxies/:
+    get:
+      tags: [proxies]
+      summary: List configured outbound proxies.
+      operationId: listProxies
+      security:
+        - apiKey: []
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "200":
+          description: Array of proxies wrapped in a `proxies` envelope.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [proxies]
+                properties:
+                  proxies:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Proxy"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      tags: [proxies]
+      summary: Create an outbound proxy.
+      operationId: createProxy
+      security:
+        - apiKey: []
+        - bearerAuth: []
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProxyCreate"
+      responses:
+        "201":
+          description: Newly persisted proxy.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Proxy"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/v1/proxies/{id}:
+    parameters:
+      - $ref: "#/components/parameters/ProxyID"
+    get:
+      tags: [proxies]
+      summary: Fetch one proxy by ID.
+      operationId: getProxy
+      security:
+        - apiKey: []
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "200":
+          description: Single proxy row.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Proxy"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      tags: [proxies]
+      summary: Replace a proxy's full definition.
+      operationId: replaceProxy
+      security:
+        - apiKey: []
+        - bearerAuth: []
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProxyCreate"
+      responses:
+        "200":
+          description: Replaced proxy.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Proxy"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [proxies]
+      summary: Partially update a proxy.
+      operationId: patchProxy
+      security:
+        - apiKey: []
+        - bearerAuth: []
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProxyPatch"
+      responses:
+        "200":
+          description: Patched proxy.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Proxy"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [proxies]
+      summary: Delete a proxy.
+      operationId: deleteProxy
+      security:
+        - apiKey: []
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "204":
+          description: Deleted.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: |
+            One or more indexers still reference this proxy. The error envelope's
+            `details.indexer_ids` enumerates them.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProxyInUseError"
+
+  /api/v1/proxies/{id}/test:
+    parameters:
+      - $ref: "#/components/parameters/ProxyID"
+    post:
+      tags: [proxies]
+      summary: Probe the proxy.
+      description: |
+        For HTTP/HTTPS/SOCKS5 proxies, fetches the configured probe URL
+        through the proxy and reports status + latency. For FlareSolverr,
+        issues a `sessions.list` command instead.
+      operationId: testProxy
+      security:
+        - apiKey: []
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "200":
+          description: Probe outcome.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProxyTestResult"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
 components:
   schemas:
     HealthStatus:
@@ -420,6 +599,9 @@ components:
           type: array
           items:
             type: string
+        proxy_id:
+          type: string
+          description: Optional reference to a `proxies.id`. When set, all outbound HTTP traffic from this indexer is routed through the matching proxy row.
         created_at:
           type: string
           format: date-time
@@ -462,6 +644,9 @@ components:
           type: array
           items:
             type: string
+        proxy_id:
+          type: string
+          description: Optional `proxies.id` to attach on creation.
 
     IndexerPatch:
       type: object
@@ -484,6 +669,10 @@ components:
           type: array
           items:
             type: string
+        proxy_id:
+          type: string
+          nullable: true
+          description: Set to a proxy ID to pin outbound traffic. Send `null` (or empty string) to clear the existing pin.
 
     IndexerHealth:
       type: object
@@ -549,6 +738,147 @@ components:
           type: integer
         error:
           type: string
+
+    Proxy:
+      type: object
+      required: [id, kind, name, enabled, config]
+      properties:
+        id:
+          type: string
+        kind:
+          type: string
+          enum: [http, https, socks5, flaresolverr]
+        name:
+          type: string
+        enabled:
+          type: boolean
+        config:
+          oneOf:
+            - $ref: "#/components/schemas/ProxyHTTPConfig"
+            - $ref: "#/components/schemas/ProxySOCKS5Config"
+            - $ref: "#/components/schemas/ProxyFlareSolverrConfig"
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    ProxyCreate:
+      type: object
+      required: [kind, name, config]
+      properties:
+        id:
+          type: string
+        kind:
+          type: string
+          enum: [http, https, socks5, flaresolverr]
+        name:
+          type: string
+        enabled:
+          type: boolean
+          default: true
+        config:
+          oneOf:
+            - $ref: "#/components/schemas/ProxyHTTPConfig"
+            - $ref: "#/components/schemas/ProxySOCKS5Config"
+            - $ref: "#/components/schemas/ProxyFlareSolverrConfig"
+
+    ProxyPatch:
+      type: object
+      description: Any subset of fields. When `kind` is supplied, `config` must match the new kind.
+      properties:
+        name:
+          type: string
+        enabled:
+          type: boolean
+        kind:
+          type: string
+          enum: [http, https, socks5, flaresolverr]
+        config:
+          oneOf:
+            - $ref: "#/components/schemas/ProxyHTTPConfig"
+            - $ref: "#/components/schemas/ProxySOCKS5Config"
+            - $ref: "#/components/schemas/ProxyFlareSolverrConfig"
+
+    ProxyHTTPConfig:
+      type: object
+      required: [url]
+      description: Used by both `http` and `https` kinds.
+      properties:
+        url:
+          type: string
+          format: uri
+          description: Proxy URL, e.g. `http://gateway:3128` or `https://gateway:3128`.
+        username:
+          type: string
+        password:
+          type: string
+
+    ProxySOCKS5Config:
+      type: object
+      required: [address]
+      properties:
+        address:
+          type: string
+          description: SOCKS5 endpoint as `host:port`.
+        username:
+          type: string
+        password:
+          type: string
+
+    ProxyFlareSolverrConfig:
+      type: object
+      required: [url]
+      properties:
+        url:
+          type: string
+          format: uri
+          description: Base URL of the FlareSolverr instance (no trailing slash).
+        max_timeout_ms:
+          type: integer
+          description: Per-request maxTimeout sent to FlareSolverr. Defaults to the kernel `flaresolverr_default_timeout`.
+        session_mode:
+          type: string
+          enum: ["", none, shared]
+          description: |
+            `shared` lazily creates one FlareSolverr session per proxy row and
+            reuses it across requests. Empty/`none` disables session reuse.
+
+    ProxyTestResult:
+      type: object
+      required: [ok, latency_ms]
+      properties:
+        ok:
+          type: boolean
+        latency_ms:
+          type: integer
+        status_code:
+          type: integer
+          description: HTTP status returned by the probe (or FlareSolverr `sessions.list`).
+        error:
+          type: string
+
+    ProxyInUseError:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              enum: [proxy_in_use]
+            message:
+              type: string
+            details:
+              type: object
+              properties:
+                indexer_ids:
+                  type: array
+                  items:
+                    type: string
 
     Caps:
       type: object
@@ -647,6 +977,12 @@ components:
 
   parameters:
     IndexerID:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+    ProxyID:
       name: id
       in: path
       required: true

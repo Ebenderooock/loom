@@ -51,11 +51,25 @@ type Config struct {
 //     the scheduler (which is not running with WithSeconds=true). The
 //     default fires every ten minutes.
 //   - HealthCheckTimeoutSec bounds a single Test() call.
+//   - Proxies governs Phase 2e per-indexer outbound proxies.
 type IndexersConfig struct {
-	SearchTimeoutSec      int    `mapstructure:"search_timeout"`
-	MaxParallel           int    `mapstructure:"max_parallel"`
-	HealthCheckSchedule   string `mapstructure:"health_check_schedule"`
-	HealthCheckTimeoutSec int    `mapstructure:"health_check_timeout"`
+	SearchTimeoutSec      int            `mapstructure:"search_timeout"`
+	MaxParallel           int            `mapstructure:"max_parallel"`
+	HealthCheckSchedule   string         `mapstructure:"health_check_schedule"`
+	HealthCheckTimeoutSec int            `mapstructure:"health_check_timeout"`
+	Proxies               ProxiesConfig  `mapstructure:"proxies"`
+}
+
+// ProxiesConfig configures the proxies subsystem (Phase 2e).
+//
+//   - FlareSolverrDefaultTimeoutSec applies when a FlareSolverr proxy
+//     row leaves max_timeout_sec at zero. FlareSolverr exposes the
+//     timeout in milliseconds; the package multiplies by 1000.
+//   - TestProbeURL is the URL POST /api/v1/proxies/{id}/test fetches
+//     to verify connectivity. Defaults to a small static endpoint.
+type ProxiesConfig struct {
+	FlareSolverrDefaultTimeoutSec int    `mapstructure:"flaresolverr_default_timeout"`
+	TestProbeURL                  string `mapstructure:"test_probe_url"`
 }
 
 type HTTPConfig struct {
@@ -331,6 +345,8 @@ func applyDefaults(v *viper.Viper) {
 	v.SetDefault("indexers.max_parallel", 8)
 	v.SetDefault("indexers.health_check_schedule", "*/10 * * * *")
 	v.SetDefault("indexers.health_check_timeout", 10)
+	v.SetDefault("indexers.proxies.flaresolverr_default_timeout", 60)
+	v.SetDefault("indexers.proxies.test_probe_url", "https://www.google.com/generate_204")
 }
 
 // bindLegacyEnv preserves the un-prefixed environment variable shape used

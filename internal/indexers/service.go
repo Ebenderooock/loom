@@ -7,6 +7,8 @@ import (
 	"log/slog"
 	"sync"
 	"time"
+
+	"github.com/go-chi/chi/v5"
 )
 
 // Clock is the small time abstraction the package uses so tests can
@@ -30,7 +32,18 @@ type ServiceOptions struct {
 	SearchTimeout      time.Duration
 	MaxParallel        int
 	HealthCheckTimeout time.Duration
+	// RouteExtensions are additional sub-mounters that Mount calls
+	// inside the same auth-protected /api/v1 group as the indexer
+	// routes. The proxies handler is wired here so cmd/loom can
+	// attach the proxy CRUD endpoints without editing server.go.
+	RouteExtensions []RouteMounter
 }
+
+// RouteMounter mounts additional routes onto the Service router. The
+// chi.Router argument is already inside the project's /api/v1 group;
+// implementations should call r.Route("/api/v1/<thing>", ...) just
+// like Service.Mount does.
+type RouteMounter func(chi.Router)
 
 // Service is the orchestrator that the HTTP layer depends on. It owns
 // the lifecycle that links a persisted Definition to a live Indexer
@@ -43,6 +56,7 @@ type Service struct {
 	searchTimeout      time.Duration
 	maxParallel        int
 	healthCheckTimeout time.Duration
+	routeExtensions    []RouteMounter
 
 	mu sync.Mutex // serialises CRUD against the registry
 }
@@ -78,6 +92,7 @@ func NewService(opts ServiceOptions) (*Service, error) {
 		searchTimeout:      opts.SearchTimeout,
 		maxParallel:        opts.MaxParallel,
 		healthCheckTimeout: opts.HealthCheckTimeout,
+		routeExtensions:    opts.RouteExtensions,
 	}, nil
 }
 

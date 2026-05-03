@@ -34,6 +34,7 @@ type Indexer struct {
 	TagsJson       json.RawMessage `json:"tags_json"`
 	CreatedAt      time.Time       `json:"created_at"`
 	UpdatedAt      time.Time       `json:"updated_at"`
+	ProxyID        sql.NullString  `json:"proxy_id"`
 }
 
 type IndexerHealth struct {
@@ -44,6 +45,16 @@ type IndexerHealth struct {
 	LatencyMs     sql.NullInt32         `json:"latency_ms"`
 	LastError     string                `json:"last_error"`
 	LastCapsJson  pqtype.NullRawMessage `json:"last_caps_json"`
+}
+
+type Proxy struct {
+	ID         string          `json:"id"`
+	Kind       string          `json:"kind"`
+	Name       string          `json:"name"`
+	Enabled    bool            `json:"enabled"`
+	ConfigJson json.RawMessage `json:"config_json"`
+	CreatedAt  time.Time       `json:"created_at"`
+	UpdatedAt  time.Time       `json:"updated_at"`
 }
 
 type ScheduledJob struct {

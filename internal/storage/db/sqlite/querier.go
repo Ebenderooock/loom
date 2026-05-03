@@ -13,13 +13,16 @@ type Querier interface {
 	CountUsers(ctx context.Context) (int64, error)
 	CreateAPIKey(ctx context.Context, arg CreateAPIKeyParams) (ApiKey, error)
 	CreateIndexer(ctx context.Context, arg CreateIndexerParams) (Indexer, error)
+	CreateProxy(ctx context.Context, arg CreateProxyParams) (Proxy, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
 	DeleteIndexer(ctx context.Context, id string) error
+	DeleteProxy(ctx context.Context, id string) error
 	GetAPIKeyByHash(ctx context.Context, keyHash string) (ApiKey, error)
 	GetAPIKeyByID(ctx context.Context, id int64) (ApiKey, error)
 	GetIndexer(ctx context.Context, id string) (Indexer, error)
 	GetIndexerCapsCache(ctx context.Context, indexerID string) (sql.NullString, error)
 	GetIndexerHealth(ctx context.Context, indexerID string) (IndexerHealth, error)
+	GetProxy(ctx context.Context, id string) (Proxy, error)
 	GetScheduledJob(ctx context.Context, name string) (ScheduledJob, error)
 	GetSchemaMeta(ctx context.Context, key string) (string, error)
 	GetUserByID(ctx context.Context, id int64) (User, error)
@@ -27,12 +30,21 @@ type Querier interface {
 	ListAPIKeysForUser(ctx context.Context, userID int64) ([]ApiKey, error)
 	ListEnabledIndexers(ctx context.Context) ([]Indexer, error)
 	ListIndexerHealth(ctx context.Context) ([]IndexerHealth, error)
+	ListIndexerIDsByProxyID(ctx context.Context, proxyID sql.NullString) ([]string, error)
 	ListIndexers(ctx context.Context) ([]Indexer, error)
+	ListProxies(ctx context.Context) ([]Proxy, error)
 	ListScheduledJobs(ctx context.Context) ([]ScheduledJob, error)
 	PatchIndexer(ctx context.Context, arg PatchIndexerParams) (Indexer, error)
+	PatchProxy(ctx context.Context, arg PatchProxyParams) (Proxy, error)
 	RecordScheduledJobRun(ctx context.Context, arg RecordScheduledJobRunParams) error
 	ReplaceIndexer(ctx context.Context, arg ReplaceIndexerParams) (Indexer, error)
+	ReplaceProxy(ctx context.Context, arg ReplaceProxyParams) (Proxy, error)
 	RevokeAPIKey(ctx context.Context, arg RevokeAPIKeyParams) error
+	// Used by PATCH /api/v1/indexers/{id} to attach (or clear, when the
+	// value is NULL) a proxy. We can't fold this into PatchIndexer with
+	// COALESCE alone because "no change" and "explicit clear" need to be
+	// distinguishable, and our other patch fields use COALESCE-on-NULL.
+	SetIndexerProxyID(ctx context.Context, arg SetIndexerProxyIDParams) error
 	SetScheduledJobEnabled(ctx context.Context, arg SetScheduledJobEnabledParams) error
 	SetScheduledJobNextRun(ctx context.Context, arg SetScheduledJobNextRunParams) error
 	SetSchemaMeta(ctx context.Context, arg SetSchemaMetaParams) error

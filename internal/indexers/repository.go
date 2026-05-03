@@ -32,12 +32,14 @@ type Repository interface {
 
 // Patch carries the optional fields acceptable on PATCH /indexers/{id}.
 // Nil pointers mean "leave unchanged"; non-nil values are applied.
+// ProxyID is a tri-state: nil = unchanged, *""  = clear, *"id" = set.
 type Patch struct {
 	ID       string
 	Name     *string
 	Enabled  *bool
 	Priority *int
 	Tags     *[]string
+	ProxyID  *string
 }
 
 // --- SQLite adapter -------------------------------------------------
@@ -67,6 +69,7 @@ func (s *sqliteRepo) Create(ctx context.Context, def Definition) (Definition, er
 		ConfigJson:     string(cfg),
 		CategoriesJson: string(cats),
 		TagsJson:       string(tags),
+		ProxyID:        nullString(def.ProxyID),
 	})
 	if err != nil {
 		return Definition{}, fmt.Errorf("create indexer %q: %w", def.ID, err)
@@ -115,6 +118,7 @@ func (s *sqliteRepo) Replace(ctx context.Context, def Definition) (Definition, e
 		ConfigJson:     string(cfg),
 		CategoriesJson: string(cats),
 		TagsJson:       string(tags),
+		ProxyID:        nullString(def.ProxyID),
 	})
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -149,6 +153,19 @@ func (s *sqliteRepo) Patch(ctx context.Context, p Patch) (Definition, error) {
 			return Definition{}, ErrNotFound
 		}
 		return Definition{}, fmt.Errorf("patch indexer %q: %w", p.ID, err)
+	}
+	if p.ProxyID != nil {
+		if err := s.q.SetIndexerProxyID(ctx, dbsqlite.SetIndexerProxyIDParams{
+			ProxyID: nullString(*p.ProxyID),
+			ID:      p.ID,
+		}); err != nil {
+			return Definition{}, fmt.Errorf("patch indexer proxy %q: %w", p.ID, err)
+		}
+		// Re-read so the returned Definition reflects the new proxy.
+		row, err = s.q.GetIndexer(ctx, p.ID)
+		if err != nil {
+			return Definition{}, fmt.Errorf("reload indexer %q: %w", p.ID, err)
+		}
 	}
 	return defFromSQLite(row)
 }
@@ -220,6 +237,7 @@ func defFromSQLite(row dbsqlite.Indexer) (Definition, error) {
 		Config:     json.RawMessage(row.ConfigJson),
 		Categories: cats,
 		Tags:       tags,
+		ProxyID:    row.ProxyID.String,
 		CreatedAt:  row.CreatedAt,
 		UpdatedAt:  row.UpdatedAt,
 	}, nil
@@ -281,6 +299,7 @@ func (p *pgRepo) Create(ctx context.Context, def Definition) (Definition, error)
 		ConfigJson:     cfg,
 		CategoriesJson: cats,
 		TagsJson:       tags,
+		ProxyID:        nullString(def.ProxyID),
 	})
 	if err != nil {
 		return Definition{}, fmt.Errorf("create indexer %q: %w", def.ID, err)
@@ -329,6 +348,7 @@ func (p *pgRepo) Replace(ctx context.Context, def Definition) (Definition, error
 		ConfigJson:     cfg,
 		CategoriesJson: cats,
 		TagsJson:       tags,
+		ProxyID:        nullString(def.ProxyID),
 	})
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -363,6 +383,18 @@ func (p *pgRepo) Patch(ctx context.Context, pp Patch) (Definition, error) {
 			return Definition{}, ErrNotFound
 		}
 		return Definition{}, fmt.Errorf("patch indexer %q: %w", pp.ID, err)
+	}
+	if pp.ProxyID != nil {
+		if err := p.q.SetIndexerProxyID(ctx, dbpg.SetIndexerProxyIDParams{
+			ID:      pp.ID,
+			ProxyID: nullString(*pp.ProxyID),
+		}); err != nil {
+			return Definition{}, fmt.Errorf("patch indexer proxy %q: %w", pp.ID, err)
+		}
+		row, err = p.q.GetIndexer(ctx, pp.ID)
+		if err != nil {
+			return Definition{}, fmt.Errorf("reload indexer %q: %w", pp.ID, err)
+		}
 	}
 	return defFromPG(row)
 }
@@ -434,6 +466,7 @@ func defFromPG(row dbpg.Indexer) (Definition, error) {
 		Config:     row.ConfigJson,
 		Categories: cats,
 		Tags:       tags,
+		ProxyID:    row.ProxyID.String,
 		CreatedAt:  row.CreatedAt,
 		UpdatedAt:  row.UpdatedAt,
 	}, nil
@@ -531,4 +564,14 @@ func boolToInt(b bool) int64 {
 		return 1
 	}
 	return 0
+}
+
+// nullString lifts an empty string to NULL for the wire-format. Both
+// engines model `proxy_id` as nullable; the repository keeps the
+// public API stringy and translates here.
+func nullString(s string) sql.NullString {
+	if s == "" {
+		return sql.NullString{}
+	}
+	return sql.NullString{String: s, Valid: true}
 }

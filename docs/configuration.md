@@ -58,6 +58,8 @@ real values look like. Every key gets an `example:` line.
 | `indexers.max_parallel` | `LOOM_INDEXERS_MAX_PARALLEL` | int | `8` | no | Maximum number of concurrent indexer Search calls during fan-out. |
 | `indexers.health_check_schedule` | `LOOM_INDEXERS_HEALTH_CHECK_SCHEDULE` | string (cron) | `*/10 * * * *` | no | 5-field cron expression (no seconds field) controlling the periodic health sweep. |
 | `indexers.health_check_timeout` | `LOOM_INDEXERS_HEALTH_CHECK_TIMEOUT` | int (s) | `10` | no | Per-indexer ceiling for the periodic health check `Test()` call. |
+| `indexers.proxies.flaresolverr_default_timeout` | `LOOM_INDEXERS_PROXIES_FLARESOLVERR_DEFAULT_TIMEOUT` | int (s) | `60` | no | Default `maxTimeout` (in seconds) sent on FlareSolverr `request.get` calls when the proxy row leaves it unset. |
+| `indexers.proxies.test_probe_url` | `LOOM_INDEXERS_PROXIES_TEST_PROBE_URL` | string | `https://www.google.com/generate_204` | no | URL fetched by `POST /api/v1/proxies/{id}/test` for HTTP/HTTPS/SOCKS5 proxies. |
 
 ### Per-key examples
 
@@ -114,6 +116,9 @@ indexers:
   max_parallel: 8                       # example: concurrent Search calls during a single fan-out
   health_check_schedule: "*/10 * * * *" # example: 5-field cron — every 10 minutes
   health_check_timeout: 10              # example: per-indexer Test() ceiling, seconds
+  proxies:
+    flaresolverr_default_timeout: 60    # example: 60-second default for FlareSolverr request.get
+    test_probe_url: "https://www.google.com/generate_204"  # example: 204-no-content probe target
 ```
 
 ### Validation rules
@@ -132,6 +137,7 @@ The loader rejects configurations that fail any of the following at start-up:
 - `indexers.max_parallel` > 0
 - `indexers.health_check_schedule` parses as a 5-field cron expression
 - `indexers.health_check_timeout` > 0
+- `indexers.proxies.flaresolverr_default_timeout` ≥ 0 (0 falls back to the package default 60s)
 
 ## YAML example
 

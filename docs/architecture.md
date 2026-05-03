@@ -132,6 +132,21 @@ their caps document via `CapsCache` to `indexer_health.last_caps_json`,
 so a restart doesn't blank-state every feed. See
 [indexers-newznab.md](indexers-newznab.md).
 
+Phase 2e adds **outbound proxies** as first-class records
+(`internal/indexers/proxies`). Each `proxies` row carries a
+`kind` (HTTP/HTTPS/SOCKS5/FlareSolverr), name, enabled flag, and
+kind-specific config; an indexer row may pin itself to a proxy via
+the new nullable `proxy_id` column. The proxies package implements
+the `indexers.TransportProvider` interface, returning a cached
+`http.RoundTripper` per proxy ID; the newznab kind threads that
+RoundTripper into its `*http.Client` so any indexer transparently
+routes through its proxy without per-kind wiring. FlareSolverr
+proxies use a custom RoundTripper that POSTs to `/v1` and
+synthesises a Go `*http.Response` from the FlareSolverr solution
+envelope. CRUD lives at `/api/v1/proxies/*` (registered as a
+`RouteExtension` of the indexers Service so it shares the same auth
+scope). See [indexers-proxies.md](indexers-proxies.md).
+
 ## Observability
 
 See [observability.md](observability.md). slog JSON logs, Prometheus
@@ -152,4 +167,5 @@ The native API is `/api/v1/*`; wire-compat surfaces are added in Phase 7.
 - ADR-0006 — Persistent scheduler (cron + scheduled_jobs).
 - ADR-0007 — Indexer abstraction.
 - ADR-0008 — Newznab + Torznab outbound client.
+- ADR-0009 — Indexer outbound proxies.
 - Project plan (mirrored as [ROADMAP.md](../ROADMAP.md)).

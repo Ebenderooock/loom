@@ -38,6 +38,13 @@ in `api/openapi/loom.yaml`.
 | `GET` | `/api/v1/indexers/{id}/caps` | apiKey/bearer/cookie | `200 application/json` (`Caps`) | Per-indexer capability descriptor. |
 | `POST` | `/api/v1/indexers/{id}/test` | apiKey/bearer/cookie | `200 application/json` (`Health`) | Run an immediate health check; persists the result. |
 | `POST` | `/api/v1/indexers/search` | apiKey/bearer/cookie | `200 application/json` (`AggregatedResults`) | Fan-out search across all (or a subset of) enabled indexers. |
+| `GET` | `/api/v1/proxies/` | apiKey/bearer/cookie | `200 application/json` (`{"proxies":[Proxy]}`) | List configured outbound proxies. |
+| `POST` | `/api/v1/proxies/` | apiKey/bearer/cookie | `201 application/json` (`Proxy`) | Create a proxy (HTTP/HTTPS/SOCKS5/FlareSolverr). |
+| `GET` | `/api/v1/proxies/{id}` | apiKey/bearer/cookie | `200 application/json` (`Proxy`) | Fetch one proxy. |
+| `PUT` | `/api/v1/proxies/{id}` | apiKey/bearer/cookie | `200 application/json` (`Proxy`) | Replace an existing proxy's full definition. |
+| `PATCH` | `/api/v1/proxies/{id}` | apiKey/bearer/cookie | `200 application/json` (`Proxy`) | Partially update a proxy. |
+| `DELETE` | `/api/v1/proxies/{id}` | apiKey/bearer/cookie | `204` or `409 application/json` | Remove a proxy. Returns 409 `proxy_in_use` (with `details.indexer_ids`) when any indexer still references it. |
+| `POST` | `/api/v1/proxies/{id}/test` | apiKey/bearer/cookie | `200 application/json` (`ProxyTestResult`) | Probe the proxy: HTTP/SOCKS5 fetch the configured probe URL; FlareSolverr issues `sessions.list`. |
 
 `SystemStatus` is `{ version, commit, buildDate, engine }` — the database
 engine name is included so readiness tooling can confirm what backend
@@ -143,6 +150,29 @@ curl -sS -X POST -H "X-Api-Key: $LOOM_KEY" -H "Content-Type: application/json" \
 # Probe caps (cached to indexer_health.last_caps_json)
 curl -sS -H "X-Api-Key: $LOOM_KEY" \
   http://localhost:8989/api/v1/indexers/hydra-news/caps
+```
+
+### Proxies (Phase 2e)
+
+Indexers may pin outbound traffic through a proxy row. Conceptual
+reference lives in [indexers-proxies.md](indexers-proxies.md). All
+routes share the indexer auth scope.
+
+```bash
+# Create an HTTP proxy
+curl -sS -X POST -H "X-Api-Key: $LOOM_KEY" -H "Content-Type: application/json" \
+  -d '{
+    "kind":"http","name":"Squid","enabled":true,
+    "config":{"url":"http://squid.lan:3128","username":"u","password":"p"}
+  }' http://localhost:8989/api/v1/proxies/
+
+# Pin an existing indexer to that proxy
+curl -sS -X PATCH -H "X-Api-Key: $LOOM_KEY" -H "Content-Type: application/json" \
+  -d '{"proxy_id":"http-squid"}' http://localhost:8989/api/v1/indexers/hydra-news
+
+# Test the proxy
+curl -sS -X POST -H "X-Api-Key: $LOOM_KEY" \
+  http://localhost:8989/api/v1/proxies/http-squid/test
 ```
 
 ### Error envelope

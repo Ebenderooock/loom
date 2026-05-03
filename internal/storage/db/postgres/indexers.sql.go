@@ -15,9 +15,9 @@ import (
 )
 
 const createIndexer = `-- name: CreateIndexer :one
-INSERT INTO indexers (id, kind, name, enabled, priority, config_json, categories_json, tags_json, created_at, updated_at)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())
-RETURNING id, kind, name, enabled, priority, config_json, categories_json, tags_json, created_at, updated_at
+INSERT INTO indexers (id, kind, name, enabled, priority, config_json, categories_json, tags_json, proxy_id, created_at, updated_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())
+RETURNING id, kind, name, enabled, priority, config_json, categories_json, tags_json, created_at, updated_at, proxy_id
 `
 
 type CreateIndexerParams struct {
@@ -29,6 +29,7 @@ type CreateIndexerParams struct {
 	ConfigJson     json.RawMessage `json:"config_json"`
 	CategoriesJson json.RawMessage `json:"categories_json"`
 	TagsJson       json.RawMessage `json:"tags_json"`
+	ProxyID        sql.NullString  `json:"proxy_id"`
 }
 
 func (q *Queries) CreateIndexer(ctx context.Context, arg CreateIndexerParams) (Indexer, error) {
@@ -41,6 +42,7 @@ func (q *Queries) CreateIndexer(ctx context.Context, arg CreateIndexerParams) (I
 		arg.ConfigJson,
 		arg.CategoriesJson,
 		arg.TagsJson,
+		arg.ProxyID,
 	)
 	var i Indexer
 	err := row.Scan(
@@ -54,6 +56,7 @@ func (q *Queries) CreateIndexer(ctx context.Context, arg CreateIndexerParams) (I
 		&i.TagsJson,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ProxyID,
 	)
 	return i, err
 }
@@ -68,7 +71,7 @@ func (q *Queries) DeleteIndexer(ctx context.Context, id string) error {
 }
 
 const getIndexer = `-- name: GetIndexer :one
-SELECT id, kind, name, enabled, priority, config_json, categories_json, tags_json, created_at, updated_at FROM indexers WHERE id = $1 LIMIT 1
+SELECT id, kind, name, enabled, priority, config_json, categories_json, tags_json, created_at, updated_at, proxy_id FROM indexers WHERE id = $1 LIMIT 1
 `
 
 func (q *Queries) GetIndexer(ctx context.Context, id string) (Indexer, error) {
@@ -85,6 +88,7 @@ func (q *Queries) GetIndexer(ctx context.Context, id string) (Indexer, error) {
 		&i.TagsJson,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ProxyID,
 	)
 	return i, err
 }
@@ -109,7 +113,7 @@ func (q *Queries) GetIndexerHealth(ctx context.Context, indexerID string) (Index
 }
 
 const listEnabledIndexers = `-- name: ListEnabledIndexers :many
-SELECT id, kind, name, enabled, priority, config_json, categories_json, tags_json, created_at, updated_at FROM indexers WHERE enabled = TRUE ORDER BY priority ASC, name ASC
+SELECT id, kind, name, enabled, priority, config_json, categories_json, tags_json, created_at, updated_at, proxy_id FROM indexers WHERE enabled = TRUE ORDER BY priority ASC, name ASC
 `
 
 func (q *Queries) ListEnabledIndexers(ctx context.Context) ([]Indexer, error) {
@@ -132,6 +136,7 @@ func (q *Queries) ListEnabledIndexers(ctx context.Context) ([]Indexer, error) {
 			&i.TagsJson,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.ProxyID,
 		); err != nil {
 			return nil, err
 		}
@@ -182,7 +187,7 @@ func (q *Queries) ListIndexerHealth(ctx context.Context) ([]IndexerHealth, error
 }
 
 const listIndexers = `-- name: ListIndexers :many
-SELECT id, kind, name, enabled, priority, config_json, categories_json, tags_json, created_at, updated_at FROM indexers ORDER BY priority ASC, name ASC
+SELECT id, kind, name, enabled, priority, config_json, categories_json, tags_json, created_at, updated_at, proxy_id FROM indexers ORDER BY priority ASC, name ASC
 `
 
 func (q *Queries) ListIndexers(ctx context.Context) ([]Indexer, error) {
@@ -205,6 +210,7 @@ func (q *Queries) ListIndexers(ctx context.Context) ([]Indexer, error) {
 			&i.TagsJson,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.ProxyID,
 		); err != nil {
 			return nil, err
 		}
@@ -227,7 +233,7 @@ SET name      = COALESCE($2, name),
     tags_json = COALESCE($5, tags_json),
     updated_at = NOW()
 WHERE id = $1
-RETURNING id, kind, name, enabled, priority, config_json, categories_json, tags_json, created_at, updated_at
+RETURNING id, kind, name, enabled, priority, config_json, categories_json, tags_json, created_at, updated_at, proxy_id
 `
 
 type PatchIndexerParams struct {
@@ -258,6 +264,7 @@ func (q *Queries) PatchIndexer(ctx context.Context, arg PatchIndexerParams) (Ind
 		&i.TagsJson,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ProxyID,
 	)
 	return i, err
 }
@@ -271,9 +278,10 @@ SET kind            = $2,
     config_json     = $6,
     categories_json = $7,
     tags_json       = $8,
+    proxy_id        = $9,
     updated_at      = NOW()
 WHERE id = $1
-RETURNING id, kind, name, enabled, priority, config_json, categories_json, tags_json, created_at, updated_at
+RETURNING id, kind, name, enabled, priority, config_json, categories_json, tags_json, created_at, updated_at, proxy_id
 `
 
 type ReplaceIndexerParams struct {
@@ -285,6 +293,7 @@ type ReplaceIndexerParams struct {
 	ConfigJson     json.RawMessage `json:"config_json"`
 	CategoriesJson json.RawMessage `json:"categories_json"`
 	TagsJson       json.RawMessage `json:"tags_json"`
+	ProxyID        sql.NullString  `json:"proxy_id"`
 }
 
 func (q *Queries) ReplaceIndexer(ctx context.Context, arg ReplaceIndexerParams) (Indexer, error) {
@@ -297,6 +306,7 @@ func (q *Queries) ReplaceIndexer(ctx context.Context, arg ReplaceIndexerParams) 
 		arg.ConfigJson,
 		arg.CategoriesJson,
 		arg.TagsJson,
+		arg.ProxyID,
 	)
 	var i Indexer
 	err := row.Scan(
@@ -310,8 +320,26 @@ func (q *Queries) ReplaceIndexer(ctx context.Context, arg ReplaceIndexerParams) 
 		&i.TagsJson,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ProxyID,
 	)
 	return i, err
+}
+
+const setIndexerProxyID = `-- name: SetIndexerProxyID :exec
+UPDATE indexers
+SET proxy_id = $2,
+    updated_at = NOW()
+WHERE id = $1
+`
+
+type SetIndexerProxyIDParams struct {
+	ID      string         `json:"id"`
+	ProxyID sql.NullString `json:"proxy_id"`
+}
+
+func (q *Queries) SetIndexerProxyID(ctx context.Context, arg SetIndexerProxyIDParams) error {
+	_, err := q.db.ExecContext(ctx, setIndexerProxyID, arg.ID, arg.ProxyID)
+	return err
 }
 
 const upsertIndexerHealth = `-- name: UpsertIndexerHealth :exec
