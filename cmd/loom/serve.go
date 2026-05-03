@@ -9,6 +9,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/loomctl/loom/internal/indexers/newznabserver"
 	"github.com/loomctl/loom/internal/kernel/config"
 	"github.com/loomctl/loom/internal/kernel/logging"
 	"github.com/loomctl/loom/internal/kernel/telemetry"
@@ -90,7 +91,18 @@ func cmdServe(ctx context.Context, args []string) error {
 	sched.Start(ctx)
 	defer sched.Stop()
 
-	srv, err := server.New(cfg, logger, tel, db, authSvc, indexerSvc)
+	aggSvc, err := newznabserver.NewServer(newznabserver.Options{
+		Search:    indexerSvc,
+		Auth:      authSvc,
+		Logger:    logger,
+		Title:     "Loom",
+		Strapline: "Loom Newznab/Torznab aggregator",
+	})
+	if err != nil {
+		return fmt.Errorf("init aggregator: %w", err)
+	}
+
+	srv, err := server.New(cfg, logger, tel, db, authSvc, indexerSvc, aggSvc)
 	if err != nil {
 		return fmt.Errorf("init server: %w", err)
 	}
