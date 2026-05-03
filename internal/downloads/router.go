@@ -70,8 +70,14 @@ func (r *Router) handleIndexerResult(ctx context.Context, ev eventbus.Event) err
 
 	// Early return if no clients are configured or enabled.
 	if r.svc.registry.Len() == 0 {
-		r.logger.Debug("router skipping result: no download clients configured",
-			"indexer_id", result.IndexerID, "title", result.Title)
+		r.logger.Warn("router: no clients available",
+			"indexer_id", result.IndexerID)
+		_ = r.bus.Publish(ctx, &DownloadFailureEvent{
+			OriginResultID: result.GUID,
+			ClientID:       "",
+			Error:          "no download clients available",
+			FailedAt:       r.clock.Now(),
+		})
 		return nil
 	}
 

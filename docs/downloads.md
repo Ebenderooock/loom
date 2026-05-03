@@ -131,3 +131,43 @@ guide and design rationale.
 | `deluge`              | torrent  | ⏳ planned    |                                                            |
 | `sabnzbd`             | usenet   | ⏳ planned    |                                                            |
 | `nzbget`              | usenet   | ✅ shipped    | [docs/downloads-nzbget.md](downloads-nzbget.md)            |
+
+## Routing & Monitoring (Phase 3g)
+
+Loom Phase 3g introduces the download routing and monitoring layer, which bridges the indexer intake pipeline and download clients.
+
+### Router Service
+
+The `Router` service subscribes to indexer result events and automatically queues high-quality results on configured download clients. It implements a simple quality filter (seeder-based) and attempts clients in priority order, falling back to any available client on failure.
+
+**Quality filtering (Phase 3):**
+- Reject torrents with 0 seeders
+- Accept Usenet results (no seeders field)
+- Accept torrents with >0 seeders
+
+Full semantic filtering (resolution, codec, release groups, language) is deferred to Phase 5.
+
+**Event emission:**
+- `TopicDownloadQueued` — result successfully queued on a client
+- `TopicDownloadFailed` — all clients unavailable or all failed to queue
+- Events include origin result ID, client ID, download ID, and timestamp for traceability
+
+### Monitor Service
+
+The `Monitor` service periodically polls all registered download clients for status updates and emits completion events. It tracks completed items to avoid duplicate event emission across sweeps.
+
+**Periodic invocation:** The Monitor is designed to be called by the scheduler (kernel phase integration pending). Each `Run()` call fans out Status queries across all clients and emits `TopicDownloadCompleted` events for newly-completed items.
+
+**Event emission:**
+- `TopicDownloadCompleted` — item transitioned to completed status in this sweep (not previously seen as completed)
+
+### Event Topics
+
+The download orchestration layer defines three new event bus topics:
+
+- `downloads.queued` — result successfully routed to a download client
+- `downloads.failed` — result failed to route (no clients or all clients failed)
+- `downloads.completed` — download item completed
+
+See [ADR-0020](adr/0020-download-routing-and-monitoring.md) for the full design rationale.
+

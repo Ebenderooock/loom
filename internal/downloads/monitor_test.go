@@ -5,6 +5,8 @@ import (
 	"log/slog"
 	"testing"
 	"time"
+
+	"github.com/loomctl/loom/internal/kernel/eventbus"
 )
 
 type capturingBusForMonitor struct {
@@ -196,13 +198,3 @@ func (c *fakeClientWithStatus) Remove(ctx context.Context, ids []string, deleteF
 func (c *fakeClientWithStatus) Categories(ctx context.Context) ([]Category, error) { return nil, nil }
 func (c *fakeClientWithStatus) FreeSpace(ctx context.Context) (int64, error)       { return 0, nil }
 func (c *fakeClientWithStatus) Test(ctx context.Context) error                    { return nil }
-
-// Define a simple event bus interface stub for tests.
-type eventbus interface {
-	Publish(context.Context, Event) error
-	Subscribe(string, func(context.Context, Event) error) func()
-}
-
-type Event interface {
-	Topic() string
-}
