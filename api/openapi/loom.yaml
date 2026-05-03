@@ -1719,6 +1719,43 @@ components:
           format: int64
           description: Free space in bytes. -1 when the client cannot report it.
 
+    # Per-kind config blob shapes. The `config` field on
+    # DownloadClient/DownloadClientCreate is `additionalProperties: true`;
+    # these schemas document the recognised shape per kind so generators
+    # can offer typed input. New kinds append a sibling schema here.
+    QbittorrentConfig:
+      type: object
+      description: |
+        Configuration blob for `kind: qbittorrent`. Persisted in the
+        `download_clients.config` JSON column. qBittorrent 4.1+ is
+        required for the v2 Web API; v5.x is supported with no
+        additional opt-in.
+      required: [host]
+      properties:
+        host:
+          type: string
+          description: Hostname or IP of the qBittorrent Web UI.
+        port:
+          type: integer
+          description: TCP port the Web UI listens on (e.g. `8080`).
+        tls:
+          type: boolean
+          description: Set to `true` when the Web UI is served over HTTPS.
+        base_path:
+          type: string
+          default: "/"
+          description: |
+            URL prefix when qBittorrent is behind a reverse proxy
+            subpath (e.g. `/qbt`). Defaults to `/`.
+        username:
+          type: string
+          description: Web UI username.
+        password:
+          type: string
+          format: password
+          writeOnly: true
+          description: Web UI password. Never returned on read responses.
+
     SabnzbdConfig:
       type: object
       description: |
