@@ -9,6 +9,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Phase 4a — Metadata service foundation.** Pluggable abstraction layer
+  for movie, series, and episode metadata sourced from external providers
+  (TMDB, TVDB, MusicBrainz). New `internal/metadata/` package implements
+  a three-tier lookup strategy: in-process cache (TTL 30min for search
+  results, 7d for full details, cleaned every 5min), persistent SQL
+  repository (SQLite/Postgres, append-mostly with soft expiration),
+  and pluggable provider interface (`MetadataProvider` with
+  `FindMovie()`, `FindSeries()`, `FindEpisode()`). Service is
+  non-blocking (3s per provider, 10s total timeout) and returns first
+  successful result or nil on timeout. Metadata is immutable once cached;
+  updates require explicit refresh. All types: `MovieMetadata`,
+  `SeriesMetadata`, `EpisodeMetadata` carry external IDs (TMDB, IMDB,
+  TVDB) as optional pointers for flexible lookup. Repository is
+  engine-neutral; implementations dispatch to raw SQL for both SQLite
+  and Postgres. Cache uses `sync.Mutex` and is safe for concurrent use.
+  Migration 0011 creates `metadata_movies`, `metadata_series`,
+  `metadata_episodes` tables with indexes on external IDs. See
+  [ADR-0021](docs/adr/0021-metadata-abstraction.md) for design rationale
+  and [metadata.md](docs/metadata.md) for integration patterns. Tests:
+  13 cases passing with `-race` flag (cache TTL, repository CRUD, service
+  lookup chain, timeouts, concurrency). Deferred to Phase 5+: Redis
+  caching, provider fallback strategies, metadata refresh webhooks,
+  confidence scoring.
+
 - **Phase 3g — Download routing and monitoring.** Bridges indexer intake
   pipeline and download clients via two interconnected services. `Router`
   subscribes to indexer results, applies quality filtering (simple
