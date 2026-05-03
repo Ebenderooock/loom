@@ -124,9 +124,13 @@ the search-aggregation layer. A `Service` orchestrates a persistent
 `Repository` (engine-dispatch over the sqlc-generated SQLite and
 Postgres query packages), an in-memory `Registry` of live indexers,
 and a `HealthChecker` that runs as a scheduler job. New source
-kinds plug in by registering a `Factory` for their kind string;
-Phase 2a ships only `builtin/null` so the surface can be exercised
-end-to-end before Cardigann/Newznab/Torznab kinds land.
+kinds plug in by registering a `Factory` for their kind string.
+Phase 2a shipped `builtin/null` to exercise the abstraction
+end-to-end. Phase 2c adds first-class `newznab` and `torznab` kinds
+(`internal/indexers/newznab`) that share a single `Client` and persist
+their caps document via `CapsCache` to `indexer_health.last_caps_json`,
+so a restart doesn't blank-state every feed. See
+[indexers-newznab.md](indexers-newznab.md).
 
 ## Observability
 
@@ -147,4 +151,5 @@ The native API is `/api/v1/*`; wire-compat surfaces are added in Phase 7.
 - ADR-0005 — Observability strategy.
 - ADR-0006 — Persistent scheduler (cron + scheduled_jobs).
 - ADR-0007 — Indexer abstraction.
+- ADR-0008 — Newznab + Torznab outbound client.
 - Project plan (mirrored as [ROADMAP.md](../ROADMAP.md)).

@@ -4,10 +4,9 @@ Loom's indexer subsystem is the search-aggregation layer that connects
 client UIs (and the Radarr/Sonarr/Prowlarr wire-compat surfaces in
 later phases) to upstream torrent and Usenet sources. This document
 covers the Phase 2a core: persistence, registry, fan-out search, and
-periodic health checks. Real source kinds (Cardigann, Newznab,
-Torznab) land in later phases; this phase ships only `builtin/null`,
-a stub that always returns zero results and is used to exercise the
-HTTP surface end-to-end.
+periodic health checks. Phase 2c adds first-class `newznab` and
+`torznab` kinds — see [indexers-newznab.md](indexers-newznab.md) for
+their config schema, curl examples, and the caps-cache lifecycle.
 
 ## Concepts
 

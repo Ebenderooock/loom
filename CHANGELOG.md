@@ -50,6 +50,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   keys: `indexers.search_timeout`, `indexers.max_parallel`,
   `indexers.health_check_schedule`, `indexers.health_check_timeout`.
   ADR-0007.
+- **Phase 2c — Newznab + Torznab outbound client.** First-class
+  support for querying existing Newznab and Torznab feeds, registered
+  under kinds `newznab` and `torznab`. Single-binary client at
+  `internal/indexers/newznab` covers `t=caps`, `t=search`,
+  `t=tvsearch`, and `t=movie`, with typed error taxonomy
+  (`ErrAuthFailed`, `ErrCapsParse`, `ErrRateLimited`, `ErrUpstream`,
+  `ErrTimeout`, `ErrMalformedXML`). Caps documents are cached on
+  `indexer_health.last_caps_json` so a restart doesn't blank-state
+  every indexer; the cache is wired through a new `CapsCache`
+  interface (`internal/indexers/caps_cache.go`) with both engine
+  implementations. Storage migration `0007_indexer_caps_cache.sql`
+  adds the column on both engines (TEXT on SQLite, JSONB on
+  Postgres). Operator slip-ups (trailing `/` on URL, embedded
+  `?apikey=`) are tolerated by `parseConfig`. Search routes between
+  modes based on the inbound `Query` (imdb/tmdb → movie, tvdb /
+  season → tvsearch, otherwise plain search). ADR-0008.
 - **Documentation baseline.** `docs/` developer documentation
   (architecture, configuration, observability, storage, API,
   development, deployment, security), per-package `doc.go` comments,

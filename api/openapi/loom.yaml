@@ -387,7 +387,13 @@ components:
           description: Slug identifier; generated from kind+name when omitted on create.
         kind:
           type: string
-          description: Factory key (e.g. `builtin/null`, `newznab`).
+          description: |
+            Factory key. Built-in kinds: `builtin/null`. Real source
+            kinds: `newznab`, `torznab`.
+          enum:
+            - builtin/null
+            - newznab
+            - torznab
         name:
           type: string
         enabled:
@@ -397,9 +403,14 @@ components:
           minimum: 0
           maximum: 100
         config:
-          description: Free-form, kind-specific configuration object.
-          type: object
-          additionalProperties: true
+          description: |
+            Free-form, kind-specific configuration. The shape is
+            documented per kind; for `newznab` and `torznab` it
+            matches `NewznabConfig`.
+          oneOf:
+            - $ref: "#/components/schemas/NewznabConfig"
+            - type: object
+              additionalProperties: true
         categories:
           type: array
           description: Newznab category IDs.
@@ -495,6 +506,38 @@ components:
         last_error:
           type: string
           description: Last error message, if any.
+
+    NewznabConfig:
+      type: object
+      description: |
+        Configuration shape used by both the `newznab` and `torznab`
+        kinds. Operator slip-ups are tolerated: a trailing `/` on
+        `url` is stripped, and an embedded `?apikey=` is extracted
+        into `api_key` when that field is empty.
+      required: [url, api_key]
+      properties:
+        url:
+          type: string
+          format: uri
+          description: Base URL of the upstream feed (e.g. `https://nzbhydra.example/api`).
+        api_key:
+          type: string
+          description: Per-indexer API key.
+        user_agent:
+          type: string
+          description: Optional override for the outbound User-Agent header.
+        timeout:
+          type: string
+          description: Go duration string (e.g. `30s`, `2m`). Default `30s`.
+          example: 30s
+        category_map:
+          type: object
+          description: Optional alias → upstream category IDs map (reserved for future use).
+          additionalProperties:
+            type: array
+            items:
+              type: integer
+
 
     TestResult:
       type: object

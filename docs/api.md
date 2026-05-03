@@ -115,6 +115,36 @@ curl -sS -X POST -H "X-Api-Key: $LOOM_KEY" -H "Content-Type: application/json" \
   http://localhost:8989/api/v1/indexers/search
 ```
 
+### Newznab + Torznab (Phase 2c)
+
+Loom registers two real source kinds, `newznab` and `torznab`, in
+addition to `builtin/null`. They share a single config schema and
+parser; only the extended-attribute namespace differs. Full reference
+lives in [indexers-newznab.md](indexers-newznab.md).
+
+```bash
+# Create a Newznab indexer (e.g. NZBHydra2 or Prowlarr)
+curl -sS -X POST -H "X-Api-Key: $LOOM_KEY" -H "Content-Type: application/json" \
+  -d '{
+    "id": "hydra-news",
+    "kind": "newznab",
+    "name": "NZBHydra2",
+    "enabled": true,
+    "priority": 50,
+    "config": {
+      "url": "https://nzbhydra.example/api",
+      "api_key": "abcdef0123456789",
+      "timeout": "20s"
+    },
+    "categories": [2000, 5000, 7000]
+  }' \
+  http://localhost:8989/api/v1/indexers/
+
+# Probe caps (cached to indexer_health.last_caps_json)
+curl -sS -H "X-Api-Key: $LOOM_KEY" \
+  http://localhost:8989/api/v1/indexers/hydra-news/caps
+```
+
 ### Error envelope
 
 Indexer endpoints reply to 4xx/5xx responses with a structured

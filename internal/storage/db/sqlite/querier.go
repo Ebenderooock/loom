@@ -6,6 +6,7 @@ package dbsqlite
 
 import (
 	"context"
+	"database/sql"
 )
 
 type Querier interface {
@@ -17,6 +18,7 @@ type Querier interface {
 	GetAPIKeyByHash(ctx context.Context, keyHash string) (ApiKey, error)
 	GetAPIKeyByID(ctx context.Context, id int64) (ApiKey, error)
 	GetIndexer(ctx context.Context, id string) (Indexer, error)
+	GetIndexerCapsCache(ctx context.Context, indexerID string) (sql.NullString, error)
 	GetIndexerHealth(ctx context.Context, indexerID string) (IndexerHealth, error)
 	GetScheduledJob(ctx context.Context, name string) (ScheduledJob, error)
 	GetSchemaMeta(ctx context.Context, key string) (string, error)
@@ -35,6 +37,7 @@ type Querier interface {
 	SetScheduledJobNextRun(ctx context.Context, arg SetScheduledJobNextRunParams) error
 	SetSchemaMeta(ctx context.Context, arg SetSchemaMetaParams) error
 	TouchAPIKey(ctx context.Context, id int64) error
+	UpdateIndexerCapsCache(ctx context.Context, arg UpdateIndexerCapsCacheParams) error
 	UpdateUserOIDC(ctx context.Context, arg UpdateUserOIDCParams) (User, error)
 	UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) error
 	UpsertIndexerHealth(ctx context.Context, arg UpsertIndexerHealthParams) error
