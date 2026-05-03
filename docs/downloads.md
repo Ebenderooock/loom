@@ -110,3 +110,13 @@ Credentials in the `config` JSON blob are stored at rest in plaintext,
 matching the existing indexers/proxies convention. ADR-0014 captures
 the rationale and the future plan to add at-rest encryption uniformly
 across the three subsystems.
+
+## SABnzbd
+
+The `sabnzbd` kind ships in-tree as the first Usenet driver on this
+abstraction. It speaks the SABnzbd 3.x+ JSON API, authenticates with
+the operator's apikey, and maps SAB's queue and history vocabularies
+onto Loom's `ItemStatus` enum. See
+[`docs/downloads-sabnzbd.md`](downloads-sabnzbd.md) and
+[ADR-0016](adr/0016-sabnzbd-download-client-kind.md) for the operator
+guide and design rationale.
