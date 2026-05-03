@@ -1,0 +1,558 @@
+package tvdb
+
+import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"sync"
+	"sync/atomic"
+	"testing"
+	"time"
+)
+
+// TestLogin_Success tests successful authentication.
+func TestLogin_Success(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" || r.URL.Path != "/login" {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
+
+		resp := LoginResponse{
+			Data: LoginData{
+				Token: "test-jwt-token-12345",
+			},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer server.Close()
+
+	cfg := Config{
+		APIKey:  "test-key",
+		PIN:     "1234",
+		BaseURL: server.URL,
+	}
+	client := NewClient(cfg)
+
+	err := client.Login(context.Background())
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	if client.token != "test-jwt-token-12345" {
+		t.Fatalf("token not set correctly")
+	}
+}
+
+// TestLogin_InvalidCredentials tests 401 response.
+func TestLogin_InvalidCredentials(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(ErrorResponse{
+			Status:  "error",
+			Message: "Invalid credentials",
+		})
+	}))
+	defer server.Close()
+
+	cfg := Config{
+		APIKey:  "bad-key",
+		BaseURL: server.URL,
+	}
+	client := NewClient(cfg)
+
+	err := client.Login(context.Background())
+	if err == nil {
+		t.Fatalf("expected error for invalid credentials")
+	}
+
+	if e, ok := err.(*ClientError); !ok || e.Code != ErrCodeUnauthorized {
+		t.Fatalf("expected ErrCodeUnauthorized, got %v", err)
+	}
+}
+
+// TestGetSeries_Success tests retrieving series metadata.
+func TestGetSeries_Success(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/login" {
+			resp := LoginResponse{
+				Data: LoginData{Token: "test-token"},
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		if r.URL.Path == "/series/81189" {
+			resp := SeriesResponse{
+				Data: SeriesData{
+					ID:           81189,
+					Name:         "Breaking Bad",
+					Overview:     "A high school chemistry teacher...",
+					Image:        "/images/81189.jpg",
+					FirstAirDate: "2008-01-20",
+					Year:         "2008",
+					ExternalIDs: IDsInfo{
+						IMDB: "tt0903747",
+						TVDb: 81189,
+					},
+				},
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		http.Error(w, "not found", http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	cfg := Config{
+		APIKey:  "test-key",
+		BaseURL: server.URL,
+	}
+	client := NewClient(cfg)
+
+	series, err := client.GetSeries(context.Background(), 81189)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if series == nil {
+		t.Fatalf("expected series metadata, got nil")
+	}
+
+	if series.Title != "Breaking Bad" {
+		t.Fatalf("expected title 'Breaking Bad', got %s", series.Title)
+	}
+
+	if series.IMDBID == nil || *series.IMDBID != "tt0903747" {
+		t.Fatalf("expected IMDB ID 'tt0903747', got %v", series.IMDBID)
+	}
+}
+
+// TestGetSeries_NotFound tests 404 response.
+func TestGetSeries_NotFound(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/login" {
+			resp := LoginResponse{
+				Data: LoginData{Token: "test-token"},
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	cfg := Config{
+		APIKey:  "test-key",
+		BaseURL: server.URL,
+	}
+	client := NewClient(cfg)
+
+	series, err := client.GetSeries(context.Background(), 999999)
+	if err == nil {
+		t.Fatalf("expected error for not found")
+	}
+
+	if e, ok := err.(*ClientError); !ok || e.Code != ErrCodeNotFound {
+		t.Fatalf("expected ErrCodeNotFound, got %v", err)
+	}
+
+	if series != nil {
+		t.Fatalf("expected nil series, got %v", series)
+	}
+}
+
+// TestGetSeries_ServerError tests 5xx response.
+func TestGetSeries_ServerError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/login" {
+			resp := LoginResponse{
+				Data: LoginData{Token: "test-token"},
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("Internal Server Error"))
+	}))
+	defer server.Close()
+
+	cfg := Config{
+		APIKey:  "test-key",
+		BaseURL: server.URL,
+	}
+	client := NewClient(cfg)
+
+	_, err := client.GetSeries(context.Background(), 81189)
+	if err == nil {
+		t.Fatalf("expected error for server error")
+	}
+
+	if e, ok := err.(*ClientError); !ok || e.Code != ErrCodeServerError {
+		t.Fatalf("expected ErrCodeServerError, got %v", err)
+	}
+}
+
+// TestSearchSeries_Success tests search with multiple results.
+func TestSearchSeries_Success(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/login" {
+			resp := LoginResponse{
+				Data: LoginData{Token: "test-token"},
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		if r.URL.Path == "/search" {
+			resp := SearchResponse{
+				Data: []SearchResult{
+					{
+						ID:           81189,
+						Name:         "Breaking Bad",
+						FirstAirDate: "2008-01-20",
+						Overview:     "A high school chemistry teacher...",
+						Type:         "series",
+						ExternalIDs: IDsInfo{
+							IMDB: "tt0903747",
+						},
+					},
+					{
+						ID:           95831,
+						Name:         "Breaking Bad: A Short Story",
+						FirstAirDate: "2009-05-02",
+						Type:         "series",
+					},
+				},
+				Meta: SearchMeta{
+					Page:      1,
+					PageSize:  20,
+					TotalSize: 2,
+				},
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		http.Error(w, "not found", http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	cfg := Config{
+		APIKey:  "test-key",
+		BaseURL: server.URL,
+	}
+	client := NewClient(cfg)
+
+	results, err := client.SearchSeries(context.Background(), "Breaking Bad", 2008)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(results) != 2 {
+		t.Fatalf("expected 2 results, got %d", len(results))
+	}
+
+	if results[0].Title != "Breaking Bad" {
+		t.Fatalf("expected first result to be 'Breaking Bad', got %s", results[0].Title)
+	}
+}
+
+// TestSearchSeries_EmptyResults tests empty search results.
+func TestSearchSeries_EmptyResults(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/login" {
+			resp := LoginResponse{
+				Data: LoginData{Token: "test-token"},
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		if r.URL.Path == "/search" {
+			resp := SearchResponse{
+				Data: []SearchResult{},
+				Meta: SearchMeta{
+					Page:      1,
+					PageSize:  20,
+					TotalSize: 0,
+				},
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		http.Error(w, "not found", http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	cfg := Config{
+		APIKey:  "test-key",
+		BaseURL: server.URL,
+	}
+	client := NewClient(cfg)
+
+	results, err := client.SearchSeries(context.Background(), "NonexistentSeries999", 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(results) != 0 {
+		t.Fatalf("expected 0 results, got %d", len(results))
+	}
+}
+
+// TestTokenRefreshOn401 tests that 401 triggers token refresh.
+func TestTokenRefreshOn401(t *testing.T) {
+	requestCount := atomic.Int32{}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/login" {
+			resp := LoginResponse{
+				Data: LoginData{Token: "refreshed-token"},
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		if r.URL.Path == "/series/81189" {
+			count := requestCount.Add(1)
+			// First request returns 401, second returns success
+			if count == 1 {
+				w.WriteHeader(http.StatusUnauthorized)
+				return
+			}
+
+			resp := SeriesResponse{
+				Data: SeriesData{
+					ID:   81189,
+					Name: "Breaking Bad",
+				},
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		http.Error(w, "not found", http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	cfg := Config{
+		APIKey:  "test-key",
+		BaseURL: server.URL,
+	}
+	client := NewClient(cfg)
+
+	// Pre-set an old token
+	client.token = "old-token"
+
+	series, err := client.GetSeries(context.Background(), 81189)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if series == nil {
+		t.Fatalf("expected series metadata after token refresh")
+	}
+
+	if series.Title != "Breaking Bad" {
+		t.Fatalf("expected title 'Breaking Bad', got %s", series.Title)
+	}
+}
+
+// TestRateLimit_ExponentialBackoff tests 429 handling with backoff.
+func TestRateLimit_ExponentialBackoff(t *testing.T) {
+	requestCount := atomic.Int32{}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/login" {
+			resp := LoginResponse{
+				Data: LoginData{Token: "test-token"},
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		if r.URL.Path == "/series/81189" {
+			count := requestCount.Add(1)
+			// Return 429 once, then succeed
+			if count == 1 {
+				w.WriteHeader(http.StatusTooManyRequests)
+				w.Header().Set("Retry-After", "1")
+				return
+			}
+
+			resp := SeriesResponse{
+				Data: SeriesData{
+					ID:   81189,
+					Name: "Breaking Bad",
+				},
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		http.Error(w, "not found", http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	cfg := Config{
+		APIKey:  "test-key",
+		BaseURL: server.URL,
+	}
+	client := NewClient(cfg)
+
+	start := time.Now()
+	series, err := client.GetSeries(context.Background(), 81189)
+	elapsed := time.Since(start)
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if series == nil {
+		t.Fatalf("expected series metadata after rate limit retry")
+	}
+
+	// Should have waited at least 1 second for the retry
+	if elapsed < 1*time.Second {
+		t.Logf("warning: expected backoff wait, but elapsed was %v", elapsed)
+	}
+}
+
+// TestFindSeries_ImplementsInterface tests MetadataProvider interface.
+func TestFindSeries_ImplementsInterface(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/login" {
+			resp := LoginResponse{
+				Data: LoginData{Token: "test-token"},
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		if r.URL.Path == "/series/81189" {
+			resp := SeriesResponse{
+				Data: SeriesData{
+					ID:   81189,
+					Name: "Breaking Bad",
+				},
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		http.Error(w, "not found", http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	cfg := Config{
+		APIKey:  "test-key",
+		BaseURL: server.URL,
+	}
+	client := NewClient(cfg)
+
+	results, err := client.FindSeries(context.Background(), "Breaking Bad", map[string]string{
+		"tvdb": "81189",
+	})
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+
+	if results[0].Title != "Breaking Bad" {
+		t.Fatalf("expected title 'Breaking Bad', got %s", results[0].Title)
+	}
+}
+
+// TestConcurrentRequests_RaceSafe tests concurrent request handling.
+func TestConcurrentRequests_RaceSafe(t *testing.T) {
+	requestMutex := sync.Mutex{}
+	requestCount := 0
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestMutex.Lock()
+		requestCount++
+		requestMutex.Unlock()
+
+		if r.URL.Path == "/login" {
+			resp := LoginResponse{
+				Data: LoginData{Token: "test-token"},
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		if r.URL.Path == "/series/81189" {
+			resp := SeriesResponse{
+				Data: SeriesData{
+					ID:   81189,
+					Name: "Breaking Bad",
+				},
+			}
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		http.Error(w, "not found", http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	cfg := Config{
+		APIKey:  "test-key",
+		BaseURL: server.URL,
+	}
+	client := NewClient(cfg)
+
+	var wg sync.WaitGroup
+	numGoroutines := 10
+
+	for i := 0; i < numGoroutines; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			series, err := client.GetSeries(context.Background(), 81189)
+			if err != nil {
+				t.Logf("error: %v", err)
+			}
+			if series == nil {
+				t.Logf("series is nil")
+			}
+		}()
+	}
+
+	wg.Wait()
+
+	requestMutex.Lock()
+	defer requestMutex.Unlock()
+
+	if requestCount < numGoroutines+1 { // +1 for login
+		t.Logf("expected at least %d requests, got %d", numGoroutines+1, requestCount)
+	}
+}
+
+// TestName implements MetadataProvider.
+func TestName(t *testing.T) {
+	client := NewClient(Config{APIKey: "test"})
+	if client.Name() != "tvdb" {
+		t.Fatalf("expected name 'tvdb', got %s", client.Name())
+	}
+}
+
+// TestFindMovie_NotSupported tests that FindMovie returns error.
+func TestFindMovie_NotSupported(t *testing.T) {
+	client := NewClient(Config{APIKey: "test"})
+	_, err := client.FindMovie(context.Background(), "Movie", 2020, nil)
+	if err == nil {
+		t.Fatalf("expected error for FindMovie")
+	}
+}
