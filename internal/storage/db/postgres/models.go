@@ -23,6 +23,39 @@ type ApiKey struct {
 	ExpiresAt  sql.NullTime `json:"expires_at"`
 }
 
+type DownloadClient struct {
+	ID              string          `json:"id"`
+	Name            string          `json:"name"`
+	Kind            string          `json:"kind"`
+	Protocol        string          `json:"protocol"`
+	Enabled         bool            `json:"enabled"`
+	Priority        int32           `json:"priority"`
+	Host            string          `json:"host"`
+	Port            int32           `json:"port"`
+	Tls             bool            `json:"tls"`
+	Username        string          `json:"username"`
+	Password        string          `json:"password"`
+	ConfigJson      json.RawMessage `json:"config_json"`
+	CategoryDefault string          `json:"category_default"`
+	SavePathDefault string          `json:"save_path_default"`
+	RemoveCompleted bool            `json:"remove_completed"`
+	RemoveFailed    bool            `json:"remove_failed"`
+	CreatedAt       time.Time       `json:"created_at"`
+	UpdatedAt       time.Time       `json:"updated_at"`
+}
+
+type DownloadClientHealth struct {
+	ClientID            string          `json:"client_id"`
+	Status              string          `json:"status"`
+	LastCheckedAt       time.Time       `json:"last_checked_at"`
+	LastSuccessAt       sql.NullTime    `json:"last_success_at"`
+	LastFailureAt       sql.NullTime    `json:"last_failure_at"`
+	LastError           string          `json:"last_error"`
+	ConsecutiveFailures int32           `json:"consecutive_failures"`
+	LastFreeSpaceBytes  sql.NullInt64   `json:"last_free_space_bytes"`
+	LastCategoriesJson  json.RawMessage `json:"last_categories_json"`
+}
+
 type Indexer struct {
 	ID               string          `json:"id"`
 	Kind             string          `json:"kind"`

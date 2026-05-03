@@ -12,13 +12,17 @@ import (
 type Querier interface {
 	CountUsers(ctx context.Context) (int64, error)
 	CreateAPIKey(ctx context.Context, arg CreateAPIKeyParams) (ApiKey, error)
+	CreateDownloadClient(ctx context.Context, arg CreateDownloadClientParams) (DownloadClient, error)
 	CreateIndexer(ctx context.Context, arg CreateIndexerParams) (Indexer, error)
 	CreateProxy(ctx context.Context, arg CreateProxyParams) (Proxy, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
+	DeleteDownloadClient(ctx context.Context, id string) error
 	DeleteIndexer(ctx context.Context, id string) error
 	DeleteProxy(ctx context.Context, id string) error
 	GetAPIKeyByHash(ctx context.Context, keyHash string) (ApiKey, error)
 	GetAPIKeyByID(ctx context.Context, id int64) (ApiKey, error)
+	GetDownloadClient(ctx context.Context, id string) (DownloadClient, error)
+	GetDownloadClientHealth(ctx context.Context, clientID string) (DownloadClientHealth, error)
 	GetIndexer(ctx context.Context, id string) (Indexer, error)
 	GetIndexerCapsCache(ctx context.Context, indexerID string) (sql.NullString, error)
 	GetIndexerHealth(ctx context.Context, indexerID string) (IndexerHealth, error)
@@ -28,15 +32,20 @@ type Querier interface {
 	GetUserByID(ctx context.Context, id int64) (User, error)
 	GetUserByUsername(ctx context.Context, username string) (User, error)
 	ListAPIKeysForUser(ctx context.Context, userID int64) ([]ApiKey, error)
+	ListDownloadClientHealth(ctx context.Context) ([]DownloadClientHealth, error)
+	ListDownloadClients(ctx context.Context) ([]DownloadClient, error)
+	ListEnabledDownloadClients(ctx context.Context) ([]DownloadClient, error)
 	ListEnabledIndexers(ctx context.Context) ([]Indexer, error)
 	ListIndexerHealth(ctx context.Context) ([]IndexerHealth, error)
 	ListIndexerIDsByProxyID(ctx context.Context, proxyID sql.NullString) ([]string, error)
 	ListIndexers(ctx context.Context) ([]Indexer, error)
 	ListProxies(ctx context.Context) ([]Proxy, error)
 	ListScheduledJobs(ctx context.Context) ([]ScheduledJob, error)
+	PatchDownloadClient(ctx context.Context, arg PatchDownloadClientParams) (DownloadClient, error)
 	PatchIndexer(ctx context.Context, arg PatchIndexerParams) (Indexer, error)
 	PatchProxy(ctx context.Context, arg PatchProxyParams) (Proxy, error)
 	RecordScheduledJobRun(ctx context.Context, arg RecordScheduledJobRunParams) error
+	ReplaceDownloadClient(ctx context.Context, arg ReplaceDownloadClientParams) (DownloadClient, error)
 	ReplaceIndexer(ctx context.Context, arg ReplaceIndexerParams) (Indexer, error)
 	ReplaceProxy(ctx context.Context, arg ReplaceProxyParams) (Proxy, error)
 	RevokeAPIKey(ctx context.Context, arg RevokeAPIKeyParams) error
@@ -56,6 +65,7 @@ type Querier interface {
 	UpdateIndexerCapsCache(ctx context.Context, arg UpdateIndexerCapsCacheParams) error
 	UpdateUserOIDC(ctx context.Context, arg UpdateUserOIDCParams) (User, error)
 	UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) error
+	UpsertDownloadClientHealth(ctx context.Context, arg UpsertDownloadClientHealthParams) error
 	UpsertIndexerHealth(ctx context.Context, arg UpsertIndexerHealthParams) error
 	// Inserts a job row on first registration; on conflict (same name) only
 	// the schedule and payload are refreshed so callers can change cron

@@ -88,6 +88,14 @@ func cmdServe(ctx context.Context, args []string) error {
 		return fmt.Errorf("register indexer health job: %w", err)
 	}
 
+	downloadSvc, err := buildDownloadService(ctx, cfg, db, logger)
+	if err != nil {
+		return fmt.Errorf("init downloads: %w", err)
+	}
+	if err := registerDownloadHealthJob(ctx, sched, cfg, downloadSvc); err != nil {
+		return fmt.Errorf("register download health job: %w", err)
+	}
+
 	sched.Start(ctx)
 	defer sched.Stop()
 
@@ -106,6 +114,7 @@ func cmdServe(ctx context.Context, args []string) error {
 	if err != nil {
 		return fmt.Errorf("init server: %w", err)
 	}
+	srv.SetDownloads(downloadSvc)
 
 	errCh := make(chan error, 1)
 	go func() { errCh <- srv.Start() }()

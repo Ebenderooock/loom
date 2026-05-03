@@ -26,6 +26,7 @@ import (
 
 	"github.com/loomctl/loom/internal/auth"
 	"github.com/loomctl/loom/internal/buildinfo"
+	"github.com/loomctl/loom/internal/downloads"
 	"github.com/loomctl/loom/internal/indexers"
 	"github.com/loomctl/loom/internal/indexers/newznabserver"
 	"github.com/loomctl/loom/internal/kernel/config"
@@ -44,6 +45,7 @@ type Server struct {
 	bus        eventbus.Bus
 	authSvc    *auth.Service
 	indexerSvc *indexers.Service
+	downloadSvc *downloads.Service
 	aggSvc     *newznabserver.Server
 	ready      atomic.Bool
 }
@@ -85,6 +87,16 @@ func New(cfg *config.Config, logger *slog.Logger, tel *telemetry.Telemetry, db s
 		ErrorLog:          slog.NewLogLogger(logger.Handler(), slog.LevelError),
 	}
 	return s, nil
+}
+
+// SetDownloads installs the download-client service and rebuilds the
+// HTTP handler so the new routes are reachable. Must be called before
+// Start.
+func (s *Server) SetDownloads(svc *downloads.Service) {
+	s.downloadSvc = svc
+	if s.httpSrv != nil {
+		s.httpSrv.Handler = s.newMux()
+	}
 }
 
 func (s *Server) newMux() http.Handler {
@@ -140,6 +152,16 @@ func (s *Server) newMux() http.Handler {
 				r.Use(s.authSvc.RequireAuth)
 			}
 			s.indexerSvc.Mount(r)
+		})
+	}
+
+	// Download-client routes — Phase 3a.
+	if s.downloadSvc != nil {
+		r.Group(func(r chi.Router) {
+			if s.authSvc != nil {
+				r.Use(s.authSvc.RequireAuth)
+			}
+			s.downloadSvc.Mount(r)
 		})
 	}
 
