@@ -97,6 +97,67 @@ The service is safe for concurrent use:
 
 All tests pass with `-race` flag.
 
+## Metadata Providers
+
+### TMDB Provider
+
+The TMDB (TheMovieDB) provider (`internal/metadata/tmdb`) sources movie and TV series metadata.
+
+**Configuration:**
+```bash
+export LOOM_METADATA_TMDB_APIKEY=your_tmdb_api_key
+```
+
+**API Key:** Obtain at https://www.themoviedb.org/settings/api
+
+**Supported:**
+- `FindMovie()` — Movies by title/year or external IDs
+- `FindSeries()` — TV series by title or external IDs
+- `FindEpisode()` — Episodes by series ID + season/episode (if available)
+
+**Limitations:**
+- Static API key (no per-user rate limit customization)
+- Rate limit: 40 req/10s
+
+### TVDB Provider
+
+The TVDB (TheTVDB) provider (`internal/metadata/tvdb`) specializes in TV series and episode metadata.
+
+**Configuration:**
+```bash
+export LOOM_METADATA_TVDB_APIKEY=your_tvdb_api_key
+export LOOM_METADATA_TVDB_PIN=optional_pin_for_higher_limits  # optional
+```
+
+**API Key:** Obtain at https://www.thetvdb.com/api-information
+
+**Authentication:**
+- TVDB v4 uses JWT tokens (session-based, not static)
+- Login via `/login` endpoint with API key + optional PIN
+- Token valid 24 hours; auto-refreshed on 401 response
+- Token stored in-memory (no persistence)
+
+**Supported:**
+- `GetSeries(ctx, tvdbID)` — Series by TVDB ID
+- `SearchSeries(ctx, query, year)` — Series search by title
+- `FindSeries()` — Implements MetadataProvider interface
+- `FindEpisode()` — Requires episode TVDB ID (not season/episode directly)
+
+**Limitations:**
+- TV-only (no movie support)
+- Episode lookup requires episode TVDB ID (future: add list-then-get pattern)
+
+**Rate Limiting:**
+- Free tier: 30 req/10s (180 req/min)
+- With PIN: Higher limits (user-specific)
+- Implementation: Exponential backoff (1s → 60s) + Retry-After header
+- Jitter: ±10% to prevent thundering herd
+
+**Data Coverage:**
+- TVDB and TMDB have different series coverage
+- Combined: higher hit rate for international/niche series
+- Fallback: if TVDB unavailable, service tries TMDB
+
 ## Integration Points
 
 ### Movies Module (Phase 5)
@@ -109,10 +170,17 @@ All tests pass with `-race` flag.
 - Calls `Service.FindEpisode()` for episode metadata
 - Stores TVDB series ID foreign key in `series.tvdb_id`
 
-### Providers (Future Phases)
-- TMDB provider implements `MetadataProvider` interface
-- TVDB provider implements `MetadataProvider` interface
-- Registered at startup; new providers drop in without code changes
+### Provider Registration
+Providers are registered at startup in order of preference:
+```go
+providers := []MetadataProvider{
+    tvdbProvider,   // Try TVDB first (TV-focused)
+    tmdbProvider,   // Fall back to TMDB
+}
+svc := NewService(repo, providers)
+```
+
+Non-blocking: if TVDB times out or fails, service continues to TMDB.
 
 ## Deferred to Phase 5+
 
