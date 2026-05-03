@@ -9,6 +9,8 @@ import { LibraryPage } from "@/pages/library";
 import { ActivityPage } from "@/pages/activity";
 import { CalendarPage } from "@/pages/calendar";
 import { SettingsPage } from "@/pages/settings";
+import { IndexersPage } from "@/pages/indexers";
+import { ProxiesPage } from "@/pages/proxies";
 import { NotFoundPage } from "@/pages/not-found";
 
 const rootRoute = createRootRoute({
@@ -46,11 +48,25 @@ const settingsRoute = createRoute({
   component: SettingsPage,
 });
 
+const indexersRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/indexers",
+  component: IndexersPage,
+});
+
+const proxiesRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/proxies",
+  component: ProxiesPage,
+});
+
 const routeTree = rootRoute.addChildren([
   indexRoute,
   libraryRoute,
   activityRoute,
   calendarRoute,
+  indexersRoute,
+  proxiesRoute,
   settingsRoute,
 ]);
 

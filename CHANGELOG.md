@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **Phase 2g — indexer & proxy management UI.** New `/indexers` and
+  `/proxies` pages in the React frontend, with create/edit/delete
+  dialogs, manual search per indexer (via the fan-out endpoint scoped
+  with `indexer_ids`), health badges with a 24 h staleness rule,
+  credential-masked proxy URLs, and PATCH null-vs-omit `proxy_id`
+  semantics matching the OpenAPI contract. Typed fetch client parses
+  the `{error: {code, message}}` envelope into an `ApiError`, surfacing
+  `409 proxy_in_use` inline. See
+  [`docs/web/indexers-ui.md`](docs/web/indexers-ui.md) and
+  [ADR-0010](docs/adr/0010-indexers-and-proxies-ui.md).
+
 ### Changed
 
 - **Indexers — first-class torrent fields on `Result`.** Added

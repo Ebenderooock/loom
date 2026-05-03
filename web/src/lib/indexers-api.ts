@@ -1,0 +1,369 @@
+// Typed fetch wrappers for the Loom indexer + proxy REST endpoints.
+// The shapes mirror api/openapi/loom.yaml; keep them in sync if the
+// contract changes. We hand-write rather than codegen because the
+// surface is small and the codegen toolchain is not yet wired up.
+
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { UseQueryOptions } from "@tanstack/react-query";
+
+// ---------- Types ----------
+
+export type IndexerKind = "newznab" | "torznab" | "builtin/null";
+export type ProxyKind = "http" | "https" | "socks5" | "flaresolverr";
+
+export interface IndexerHealth {
+  indexer_id: string;
+  status: "ok" | "degraded" | "failed" | "unknown";
+  last_checked_at: string;
+  last_success_at?: string;
+  latency_ms?: number;
+  last_error?: string;
+}
+
+export interface NewznabConfig {
+  url: string;
+  api_key: string;
+  user_agent?: string;
+  timeout?: string;
+}
+
+export interface Indexer {
+  id: string;
+  kind: IndexerKind | string;
+  name: string;
+  enabled: boolean;
+  priority: number;
+  config?: NewznabConfig | Record<string, unknown>;
+  categories: number[];
+  tags: string[];
+  proxy_id?: string;
+  created_at?: string;
+  updated_at?: string;
+  health?: IndexerHealth;
+}
+
+export interface IndexerCreate {
+  id?: string;
+  kind: IndexerKind | string;
+  name: string;
+  enabled?: boolean;
+  priority?: number;
+  config?: Record<string, unknown>;
+  categories?: number[];
+  tags?: string[];
+  proxy_id?: string;
+}
+
+// IndexerPatch encodes the "null vs unset" distinction for proxy_id:
+//   - undefined  → field omitted from request, proxy unchanged
+//   - null       → field sent as JSON null, proxy detached
+//   - string     → field sent as that ID, proxy attached
+export interface IndexerPatch {
+  name?: string;
+  enabled?: boolean;
+  priority?: number;
+  config?: Record<string, unknown>;
+  categories?: number[];
+  tags?: string[];
+  proxy_id?: string | null;
+}
+
+export interface ProxyHTTPConfig {
+  url: string;
+  username?: string;
+  password?: string;
+}
+export interface ProxySOCKS5Config {
+  address: string;
+  username?: string;
+  password?: string;
+}
+export interface ProxyFlareSolverrConfig {
+  url: string;
+  max_timeout_ms?: number;
+  session_mode?: "" | "none" | "shared";
+}
+export type ProxyConfig =
+  | ProxyHTTPConfig
+  | ProxySOCKS5Config
+  | ProxyFlareSolverrConfig;
+
+export interface Proxy {
+  id: string;
+  kind: ProxyKind;
+  name: string;
+  enabled: boolean;
+  config: ProxyConfig;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface ProxyCreate {
+  id?: string;
+  kind: ProxyKind;
+  name: string;
+  enabled?: boolean;
+  config: ProxyConfig;
+}
+
+export interface ProxyPatch {
+  name?: string;
+  enabled?: boolean;
+  kind?: ProxyKind;
+  config?: ProxyConfig;
+}
+
+export interface TestResult {
+  ok: boolean;
+  latency_ms: number;
+  error?: string;
+  status_code?: number;
+}
+
+export interface SearchResult {
+  indexer_id: string;
+  title: string;
+  link: string;
+  info_url?: string;
+  size_bytes?: number;
+  seeders?: number;
+  leechers?: number;
+  publish_date?: string;
+  categories?: number[];
+}
+
+export interface AggregatedResults {
+  results: SearchResult[];
+  errors: Record<string, string>;
+}
+
+// ---------- HTTP helpers ----------
+
+export class ApiError extends Error {
+  status: number;
+  code?: string;
+  details?: unknown;
+  constructor(status: number, message: string, code?: string, details?: unknown) {
+    super(message);
+    this.status = status;
+    this.code = code;
+    this.details = details;
+  }
+}
+
+async function request<T>(
+  method: string,
+  path: string,
+  body?: unknown,
+  signal?: AbortSignal,
+): Promise<T> {
+  const init: RequestInit = { method, signal };
+  if (body !== undefined) {
+    init.headers = { "Content-Type": "application/json" };
+    init.body = JSON.stringify(body);
+  }
+  const res = await fetch(path, init);
+  if (res.status === 204) {
+    return undefined as T;
+  }
+  const text = await res.text();
+  let parsed: unknown;
+  if (text.length > 0) {
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      parsed = undefined;
+    }
+  }
+  if (!res.ok) {
+    // Loom returns {error: {code, message, details?}} envelopes.
+    const env = parsed as
+      | { error?: { code?: string; message?: string; details?: unknown } }
+      | undefined;
+    const message =
+      env?.error?.message ??
+      (typeof parsed === "string" ? parsed : undefined) ??
+      `${method} ${path} failed: ${res.status} ${res.statusText}`;
+    throw new ApiError(res.status, message, env?.error?.code, env?.error?.details);
+  }
+  return parsed as T;
+}
+
+// ---------- Indexer endpoints ----------
+
+export const indexerKeys = {
+  all: ["indexers"] as const,
+  list: () => [...indexerKeys.all, "list"] as const,
+  detail: (id: string) => [...indexerKeys.all, "detail", id] as const,
+};
+
+export async function listIndexers(signal?: AbortSignal): Promise<Indexer[]> {
+  const env = await request<{ indexers: Indexer[] }>(
+    "GET",
+    "/api/v1/indexers/",
+    undefined,
+    signal,
+  );
+  return env.indexers ?? [];
+}
+
+export async function createIndexer(body: IndexerCreate): Promise<Indexer> {
+  return request<Indexer>("POST", "/api/v1/indexers/", body);
+}
+
+export async function patchIndexer(
+  id: string,
+  body: IndexerPatch,
+): Promise<Indexer> {
+  return request<Indexer>("PATCH", `/api/v1/indexers/${encodeURIComponent(id)}`, body);
+}
+
+export async function deleteIndexer(id: string): Promise<void> {
+  await request<void>("DELETE", `/api/v1/indexers/${encodeURIComponent(id)}`);
+}
+
+export async function testIndexer(id: string): Promise<TestResult> {
+  return request<TestResult>(
+    "POST",
+    `/api/v1/indexers/${encodeURIComponent(id)}/test`,
+  );
+}
+
+export interface SearchParams {
+  q: string;
+  indexer_ids?: string[];
+  categories?: number[];
+  timeout_ms?: number;
+}
+
+export async function searchIndexers(
+  params: SearchParams,
+): Promise<AggregatedResults> {
+  return request<AggregatedResults>("POST", "/api/v1/indexers/search", {
+    query: params.q,
+    indexer_ids: params.indexer_ids,
+    categories: params.categories,
+    timeout_ms: params.timeout_ms,
+  });
+}
+
+// ---------- Proxy endpoints ----------
+
+export const proxyKeys = {
+  all: ["proxies"] as const,
+  list: () => [...proxyKeys.all, "list"] as const,
+  detail: (id: string) => [...proxyKeys.all, "detail", id] as const,
+};
+
+export async function listProxies(signal?: AbortSignal): Promise<Proxy[]> {
+  const env = await request<{ proxies: Proxy[] }>(
+    "GET",
+    "/api/v1/proxies/",
+    undefined,
+    signal,
+  );
+  return env.proxies ?? [];
+}
+
+export async function createProxy(body: ProxyCreate): Promise<Proxy> {
+  return request<Proxy>("POST", "/api/v1/proxies/", body);
+}
+
+export async function patchProxy(id: string, body: ProxyPatch): Promise<Proxy> {
+  return request<Proxy>("PATCH", `/api/v1/proxies/${encodeURIComponent(id)}`, body);
+}
+
+export async function deleteProxy(id: string): Promise<void> {
+  await request<void>("DELETE", `/api/v1/proxies/${encodeURIComponent(id)}`);
+}
+
+export async function testProxy(id: string): Promise<TestResult> {
+  return request<TestResult>(
+    "POST",
+    `/api/v1/proxies/${encodeURIComponent(id)}/test`,
+  );
+}
+
+// ---------- React Query hooks ----------
+
+export function useIndexers(
+  options?: Omit<UseQueryOptions<Indexer[], Error>, "queryKey" | "queryFn">,
+) {
+  return useQuery<Indexer[], Error>({
+    queryKey: indexerKeys.list(),
+    queryFn: ({ signal }) => listIndexers(signal),
+    ...options,
+  });
+}
+
+export function useProxies(
+  options?: Omit<UseQueryOptions<Proxy[], Error>, "queryKey" | "queryFn">,
+) {
+  return useQuery<Proxy[], Error>({
+    queryKey: proxyKeys.list(),
+    queryFn: ({ signal }) => listProxies(signal),
+    ...options,
+  });
+}
+
+export function useCreateIndexer() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: createIndexer,
+    onSuccess: () => qc.invalidateQueries({ queryKey: indexerKeys.all }),
+  });
+}
+
+export function usePatchIndexer() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, patch }: { id: string; patch: IndexerPatch }) =>
+      patchIndexer(id, patch),
+    onSuccess: () => qc.invalidateQueries({ queryKey: indexerKeys.all }),
+  });
+}
+
+export function useDeleteIndexer() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: deleteIndexer,
+    onSuccess: () => qc.invalidateQueries({ queryKey: indexerKeys.all }),
+  });
+}
+
+export function useTestIndexer() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: testIndexer,
+    onSuccess: () => qc.invalidateQueries({ queryKey: indexerKeys.all }),
+  });
+}
+
+export function useCreateProxy() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: createProxy,
+    onSuccess: () => qc.invalidateQueries({ queryKey: proxyKeys.all }),
+  });
+}
+
+export function usePatchProxy() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, patch }: { id: string; patch: ProxyPatch }) =>
+      patchProxy(id, patch),
+    onSuccess: () => qc.invalidateQueries({ queryKey: proxyKeys.all }),
+  });
+}
+
+export function useDeleteProxy() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: deleteProxy,
+    onSuccess: () => qc.invalidateQueries({ queryKey: proxyKeys.all }),
+  });
+}
+
+export function useTestProxy() {
+  return useMutation({ mutationFn: testProxy });
+}

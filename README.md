@@ -50,7 +50,7 @@ Emby keep working unchanged.
 | Logging | `slog` JSON, PII-redacted | Per-module loggers (rolling) |
 | Config | Layered Viper (defaults → file → env → flags), hot-reload for safe keys | Live config UI (Phase 9) |
 | Auth | _In progress (Phase 1c)_ | Forms + API keys + OIDC + reverse-proxy header trust |
-| Frontend | React 18 + TS + Vite + TanStack Router/Query + shadcn/ui + Tailwind scaffold | Library, Discover, Activity, Calendar (Phases 5–9) |
+| Frontend | React 18 + TS + Vite + TanStack Router/Query + shadcn/ui + Tailwind scaffold; **Indexers & Proxies management pages** ([docs](docs/web/indexers-ui.md)) | Library, Discover, Activity, Calendar (Phases 5–9) |
 
 ## Wire-compatibility (Phase 7)
 

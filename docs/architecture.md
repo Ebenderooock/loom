@@ -80,7 +80,7 @@ loom/
 ├── api/
 │   ├── openapi/loom.yaml      # native API spec
 │   └── compat/                # captured upstream specs we mimic
-├── web/                       # React + TS app (Vite)
+├── web/                       # React + TS app (Vite); Indexers & Proxies UI live here (see docs/web/indexers-ui.md)
 ├── deploy/
 │   ├── docker/                # Dockerfile (distroless), compose example
 │   ├── helm/loom/             # Helm chart                    (Phase 11)
