@@ -9,6 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Phase 2b — Cardigann YAML definition loader.** New `cardigann`
+  indexer kind that loads tracker definitions from
+  `<data_dir>/definitions/cardigann/` (override via
+  `indexers.cardigann.definitions_dir`) and drives login + search
+  flows through CSS/XPath selectors and a small filter chain. The
+  API never accepts inline definitions — operators distribute YAML
+  out-of-band — and the indexer config references a definition by
+  filename. Implements the form/post/cookie login modes, the
+  most-used filters (replace, trim, regexp, querystring, prepend,
+  append, split, lowercase, uppercase, join), and the standard
+  Newznab category-name lookup (`Movies/HD`, `TV/HD`, …). New
+  package `internal/indexers/cardigann`. See
+  [`docs/indexers-cardigann.md`](docs/indexers-cardigann.md) and
+  [ADR-0012](docs/adr/0012-cardigann-yaml-definition-loader.md).
+
 - **Phase 2d — Newznab/Torznab aggregator server.** Loom now
   presents every enabled indexer as a single Prowlarr-compatible
   Newznab/Torznab endpoint, mounted at both `/api` (the canonical

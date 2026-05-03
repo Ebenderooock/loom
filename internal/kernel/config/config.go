@@ -53,11 +53,20 @@ type Config struct {
 //   - HealthCheckTimeoutSec bounds a single Test() call.
 //   - Proxies governs Phase 2e per-indexer outbound proxies.
 type IndexersConfig struct {
-	SearchTimeoutSec      int            `mapstructure:"search_timeout"`
-	MaxParallel           int            `mapstructure:"max_parallel"`
-	HealthCheckSchedule   string         `mapstructure:"health_check_schedule"`
-	HealthCheckTimeoutSec int            `mapstructure:"health_check_timeout"`
-	Proxies               ProxiesConfig  `mapstructure:"proxies"`
+	SearchTimeoutSec      int              `mapstructure:"search_timeout"`
+	MaxParallel           int              `mapstructure:"max_parallel"`
+	HealthCheckSchedule   string           `mapstructure:"health_check_schedule"`
+	HealthCheckTimeoutSec int              `mapstructure:"health_check_timeout"`
+	Proxies               ProxiesConfig    `mapstructure:"proxies"`
+	Cardigann             CardigannConfig  `mapstructure:"cardigann"`
+}
+
+// CardigannConfig governs the Cardigann YAML definition loader
+// (Phase 2b). DefinitionsDir defaults to <DataDir>/definitions/cardigann
+// when left blank; relative paths are resolved against the working
+// directory at boot.
+type CardigannConfig struct {
+	DefinitionsDir string `mapstructure:"definitions_dir"`
 }
 
 // ProxiesConfig configures the proxies subsystem (Phase 2e).
@@ -347,6 +356,7 @@ func applyDefaults(v *viper.Viper) {
 	v.SetDefault("indexers.health_check_timeout", 10)
 	v.SetDefault("indexers.proxies.flaresolverr_default_timeout", 60)
 	v.SetDefault("indexers.proxies.test_probe_url", "https://www.google.com/generate_204")
+	v.SetDefault("indexers.cardigann.definitions_dir", "")
 }
 
 // bindLegacyEnv preserves the un-prefixed environment variable shape used

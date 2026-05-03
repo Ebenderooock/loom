@@ -60,7 +60,8 @@ working:
 - `/api/v3/*` — Radarr v3 (Overseerr, Jellyseerr, Notifiarr).
 - `/api/v3/*` and v4 — Sonarr (Overseerr, Bazarr).
 - `/api/v1/*` — Prowlarr v1 (used by Sonarr/Radarr-as-clients).
-- Cardigann YAML indexer definitions (Jackett / Prowlarr ecosystem).
+- Cardigann YAML indexer definitions (Jackett / Prowlarr ecosystem) —
+  see [`docs/indexers-cardigann.md`](docs/indexers-cardigann.md).
 - Newznab / Torznab (inbound and outbound).
 - Download clients: qBittorrent, Transmission, Deluge, rTorrent, SABnzbd, NZBGet.
 

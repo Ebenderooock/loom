@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"path/filepath"
 	"time"
 
 	"github.com/loomctl/loom/internal/indexers"
+	"github.com/loomctl/loom/internal/indexers/cardigann"
 	"github.com/loomctl/loom/internal/indexers/newznab"
 	"github.com/loomctl/loom/internal/indexers/proxies"
 	"github.com/loomctl/loom/internal/kernel/config"
@@ -54,6 +56,22 @@ func buildIndexerService(ctx context.Context, cfg *config.Config, db storage.DB,
 		return nil, fmt.Errorf("proxies: %w", err)
 	}
 	indexers.SetTransportProvider(proxiesSvc)
+
+	// Boot the Cardigann definition loader. A missing or empty
+	// directory is non-fatal: the kind simply has no definitions to
+	// resolve, and any indexer rows pointing at a missing definition
+	// surface a clear error at hydrate time.
+	cardigannDir := cfg.Indexers.Cardigann.DefinitionsDir
+	if cardigannDir == "" {
+		cardigannDir = filepath.Join(cfg.DataDir, "definitions", "cardigann")
+	}
+	cardLoader := cardigann.NewLoader(cardigannDir)
+	if _, loadErrs := cardLoader.Reload(); len(loadErrs) > 0 {
+		for _, lerr := range loadErrs {
+			logger.Warn("cardigann definition skipped", "err", lerr)
+		}
+	}
+	cardigann.SetLoader(cardLoader)
 
 	svc, err := indexers.NewService(indexers.ServiceOptions{
 		Repository:         repo,
