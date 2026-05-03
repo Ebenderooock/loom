@@ -25,7 +25,8 @@ Radarr + Sonarr + Prowlarr. These pages cover the project as it stands today
 | [API](api.md) | Native `/api/v1/*` and (Phase 7) wire-compat surfaces. |
 | [Authentication](auth.md) | _Stub — lands in Phase 1c._ |
 | [Contributing & code style](contributing-style.md) | Commit format, PR review checklist, doc-update policy. |
-| [Architecture decision records](adr/) | Numbered ADRs (ADR-0001 … ADR-0005). |
+| [Architecture decision records](adr/) | Numbered ADRs (ADR-0001 … ADR-0010). |
+| [Web UI — Indexers & Proxies](web/indexers-ui.md) | Walkthrough of the frontend management pages. |
 
 ## For maintainers
 

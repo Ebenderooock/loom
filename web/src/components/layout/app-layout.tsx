@@ -6,6 +6,8 @@ import {
   Library,
   ListTodo,
   Menu,
+  Network,
+  Radio,
   Search,
   Settings,
 } from "lucide-react";
@@ -34,7 +36,14 @@ import {
 import { cn } from "@/lib/utils";
 
 interface NavItem {
-  to: "/" | "/library" | "/activity" | "/calendar" | "/settings";
+  to:
+    | "/"
+    | "/library"
+    | "/activity"
+    | "/calendar"
+    | "/indexers"
+    | "/proxies"
+    | "/settings";
   label: string;
   Icon: typeof LayoutDashboard;
 }
@@ -44,6 +53,8 @@ const NAV: NavItem[] = [
   { to: "/library", label: "Library", Icon: Library },
   { to: "/activity", label: "Activity", Icon: ListTodo },
   { to: "/calendar", label: "Calendar", Icon: Calendar },
+  { to: "/indexers", label: "Indexers", Icon: Radio },
+  { to: "/proxies", label: "Proxies", Icon: Network },
   { to: "/settings", label: "Settings", Icon: Settings },
 ];
 
