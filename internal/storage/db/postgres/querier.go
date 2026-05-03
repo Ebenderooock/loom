@@ -43,6 +43,10 @@ type Querier interface {
 	ReplaceProxy(ctx context.Context, arg ReplaceProxyParams) (Proxy, error)
 	RevokeAPIKey(ctx context.Context, arg RevokeAPIKeyParams) error
 	SetIndexerProxyID(ctx context.Context, arg SetIndexerProxyIDParams) error
+	// Phase 2f: write the three rate-limit dials atomically. NULLs mean
+	// "fall back to the package default at runtime". Used by POST/PUT
+	// handlers and by the rate-limit PATCH path.
+	SetIndexerRateLimit(ctx context.Context, arg SetIndexerRateLimitParams) error
 	SetScheduledJobEnabled(ctx context.Context, arg SetScheduledJobEnabledParams) error
 	SetScheduledJobNextRun(ctx context.Context, arg SetScheduledJobNextRunParams) error
 	SetSchemaMeta(ctx context.Context, arg SetSchemaMetaParams) error

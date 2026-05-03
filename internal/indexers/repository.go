@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/loomctl/loom/internal/indexers/throttle"
 	dbpg "github.com/loomctl/loom/internal/storage/db/postgres"
 	dbsqlite "github.com/loomctl/loom/internal/storage/db/sqlite"
 	"github.com/sqlc-dev/pqtype"
@@ -28,6 +29,18 @@ type Repository interface {
 	UpsertHealth(ctx context.Context, h Health) error
 	GetHealth(ctx context.Context, id string) (Health, error)
 	ListHealth(ctx context.Context) (map[string]Health, error)
+
+	// GetRateLimit returns the persisted rate-limit config for the
+	// indexer. Fields left NULL in the database are returned as zero
+	// in the Config; callers should use throttle.Resolve to apply
+	// defaults. Returns ErrNotFound if no row matches.
+	GetRateLimit(ctx context.Context, id string) (throttle.Config, error)
+
+	// SetRateLimit persists the per-indexer rate-limit dials. Zero or
+	// negative values are stored as NULL so the runtime falls back to
+	// throttle.Defaults() — pass throttle.Defaults() explicitly to
+	// stamp the defaults into the row instead.
+	SetRateLimit(ctx context.Context, id string, cfg throttle.Config) error
 }
 
 // Patch carries the optional fields acceptable on PATCH /indexers/{id}.
@@ -173,6 +186,34 @@ func (s *sqliteRepo) Patch(ctx context.Context, p Patch) (Definition, error) {
 func (s *sqliteRepo) Delete(ctx context.Context, id string) error {
 	if err := s.q.DeleteIndexer(ctx, id); err != nil {
 		return fmt.Errorf("delete indexer %q: %w", id, err)
+	}
+	return nil
+}
+
+func (s *sqliteRepo) GetRateLimit(ctx context.Context, id string) (throttle.Config, error) {
+	row, err := s.q.GetIndexer(ctx, id)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return throttle.Config{}, ErrNotFound
+		}
+		return throttle.Config{}, fmt.Errorf("get rate limit %q: %w", id, err)
+	}
+	return throttle.Config{
+		PerMinute:  intFromNullInt64(row.RateLimitPerMin),
+		Burst:      intFromNullInt64(row.RateLimitBurst),
+		MaxRetries: maxRetriesFromNullInt64(row.RetryMaxAttempts),
+	}, nil
+}
+
+func (s *sqliteRepo) SetRateLimit(ctx context.Context, id string, cfg throttle.Config) error {
+	params := dbsqlite.SetIndexerRateLimitParams{
+		ID:               id,
+		RateLimitPerMin:  nullInt64FromPositive(cfg.PerMinute),
+		RateLimitBurst:   nullInt64FromPositive(cfg.Burst),
+		RetryMaxAttempts: nullInt64FromMaxRetries(cfg.MaxRetries),
+	}
+	if err := s.q.SetIndexerRateLimit(ctx, params); err != nil {
+		return fmt.Errorf("set rate limit %q: %w", id, err)
 	}
 	return nil
 }
@@ -406,6 +447,34 @@ func (p *pgRepo) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
+func (p *pgRepo) GetRateLimit(ctx context.Context, id string) (throttle.Config, error) {
+	row, err := p.q.GetIndexer(ctx, id)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return throttle.Config{}, ErrNotFound
+		}
+		return throttle.Config{}, fmt.Errorf("get rate limit %q: %w", id, err)
+	}
+	return throttle.Config{
+		PerMinute:  intFromNullInt32(row.RateLimitPerMin),
+		Burst:      intFromNullInt32(row.RateLimitBurst),
+		MaxRetries: maxRetriesFromNullInt32(row.RetryMaxAttempts),
+	}, nil
+}
+
+func (p *pgRepo) SetRateLimit(ctx context.Context, id string, cfg throttle.Config) error {
+	params := dbpg.SetIndexerRateLimitParams{
+		ID:               id,
+		RateLimitPerMin:  nullInt32FromPositive(cfg.PerMinute),
+		RateLimitBurst:   nullInt32FromPositive(cfg.Burst),
+		RetryMaxAttempts: nullInt32FromMaxRetries(cfg.MaxRetries),
+	}
+	if err := p.q.SetIndexerRateLimit(ctx, params); err != nil {
+		return fmt.Errorf("set rate limit %q: %w", id, err)
+	}
+	return nil
+}
+
 func (p *pgRepo) UpsertHealth(ctx context.Context, h Health) error {
 	params := dbpg.UpsertIndexerHealthParams{
 		IndexerID:     h.IndexerID,
@@ -574,4 +643,67 @@ func nullString(s string) sql.NullString {
 		return sql.NullString{}
 	}
 	return sql.NullString{String: s, Valid: true}
+}
+
+// --- Rate-limit nullable-integer helpers -----------------------------
+//
+// PerMinute and Burst use the convention "<= 0 means use default", so
+// we collapse those to NULL. MaxRetries uses "< 0 means use default,
+// 0 means never retry" — we have to preserve the explicit 0 by storing
+// it as 0 and only NULLing when the caller asked for the default.
+
+func nullInt64FromPositive(v int) sql.NullInt64 {
+	if v <= 0 {
+		return sql.NullInt64{}
+	}
+	return sql.NullInt64{Int64: int64(v), Valid: true}
+}
+
+func nullInt64FromMaxRetries(v int) sql.NullInt64 {
+	if v < 0 {
+		return sql.NullInt64{}
+	}
+	return sql.NullInt64{Int64: int64(v), Valid: true}
+}
+
+func intFromNullInt64(v sql.NullInt64) int {
+	if !v.Valid {
+		return 0
+	}
+	return int(v.Int64)
+}
+
+func maxRetriesFromNullInt64(v sql.NullInt64) int {
+	if !v.Valid {
+		return -1 // sentinel for "use default"
+	}
+	return int(v.Int64)
+}
+
+func nullInt32FromPositive(v int) sql.NullInt32 {
+	if v <= 0 {
+		return sql.NullInt32{}
+	}
+	return sql.NullInt32{Int32: int32(v), Valid: true}
+}
+
+func nullInt32FromMaxRetries(v int) sql.NullInt32 {
+	if v < 0 {
+		return sql.NullInt32{}
+	}
+	return sql.NullInt32{Int32: int32(v), Valid: true}
+}
+
+func intFromNullInt32(v sql.NullInt32) int {
+	if !v.Valid {
+		return 0
+	}
+	return int(v.Int32)
+}
+
+func maxRetriesFromNullInt32(v sql.NullInt32) int {
+	if !v.Valid {
+		return -1
+	}
+	return int(v.Int32)
 }

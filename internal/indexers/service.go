@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+
+	"github.com/loomctl/loom/internal/indexers/throttle"
 )
 
 // Clock is the small time abstraction the package uses so tests can
@@ -172,7 +174,8 @@ func (s *Service) Get(ctx context.Context, id string) (Definition, error) {
 	return s.repo.Get(ctx, id)
 }
 
-// List returns every persisted Definition with health attached.
+// List returns every persisted Definition with health and rate-limit
+// attached.
 func (s *Service) List(ctx context.Context) ([]DefinitionWithHealth, error) {
 	defs, err := s.repo.List(ctx)
 	if err != nil {
@@ -188,15 +191,136 @@ func (s *Service) List(ctx context.Context) ([]DefinitionWithHealth, error) {
 		if h, ok := healths[d.ID]; ok {
 			dh.Health = &h
 		}
+		// Best-effort: a missing rate_limit row is fine — the response
+		// just shows the package defaults via newRateLimitView.
+		if cfg, gerr := s.repo.GetRateLimit(ctx, d.ID); gerr == nil {
+			dh.RateLimit = newRateLimitView(cfg)
+		} else {
+			dh.RateLimit = newRateLimitView(throttle.Config{MaxRetries: -1})
+		}
 		out = append(out, dh)
 	}
 	return out, nil
 }
 
+// GetWithHealth is the single-row sibling of List: returns the
+// definition, health, and resolved rate-limit view in one call.
+func (s *Service) GetWithHealth(ctx context.Context, id string) (DefinitionWithHealth, error) {
+	def, err := s.repo.Get(ctx, id)
+	if err != nil {
+		return DefinitionWithHealth{}, err
+	}
+	dh := DefinitionWithHealth{Definition: def}
+	if h, herr := s.repo.GetHealth(ctx, id); herr == nil {
+		dh.Health = &h
+	}
+	if cfg, gerr := s.repo.GetRateLimit(ctx, id); gerr == nil {
+		dh.RateLimit = newRateLimitView(cfg)
+	} else {
+		dh.RateLimit = newRateLimitView(throttle.Config{MaxRetries: -1})
+	}
+	return dh, nil
+}
+
 // DefinitionWithHealth is the API-facing pair returned by List/Get.
+// RateLimit is attached when the indexer has any persisted rate-limit
+// row; nil means the runtime is using package defaults (which are
+// documented in docs/indexers-rate-limits.md). We expose the resolved
+// values here too — `effective_*` — so the UI doesn't have to repeat
+// the defaulting logic on the client.
 type DefinitionWithHealth struct {
 	Definition
-	Health *Health `json:"health,omitempty"`
+	Health    *Health         `json:"health,omitempty"`
+	RateLimit *RateLimitView  `json:"rate_limit,omitempty"`
+}
+
+// RateLimitView is the JSON-friendly mirror of throttle.Config plus
+// the fully-resolved values that the transport will actually use.
+// NULLable database columns surface as nil pointers so operators can
+// see "this field is unset" distinctly from "this field is zero".
+type RateLimitView struct {
+	PerMinute          *int `json:"per_minute,omitempty"`
+	Burst              *int `json:"burst,omitempty"`
+	MaxRetries         *int `json:"max_retries,omitempty"`
+	EffectivePerMinute int  `json:"effective_per_minute"`
+	EffectiveBurst     int  `json:"effective_burst"`
+	EffectiveMaxRetries int `json:"effective_max_retries"`
+}
+
+func newRateLimitView(cfg throttle.Config) *RateLimitView {
+	resolved := throttle.Resolve(cfg)
+	v := &RateLimitView{
+		EffectivePerMinute:  resolved.PerMinute,
+		EffectiveBurst:      resolved.Burst,
+		EffectiveMaxRetries: resolved.MaxRetries,
+	}
+	if cfg.PerMinute > 0 {
+		p := cfg.PerMinute
+		v.PerMinute = &p
+	}
+	if cfg.Burst > 0 {
+		b := cfg.Burst
+		v.Burst = &b
+	}
+	if cfg.MaxRetries >= 0 {
+		m := cfg.MaxRetries
+		v.MaxRetries = &m
+	}
+	return v
+}
+
+// RateLimitFor implements RateLimitProvider. The transport layer calls
+// this every time it builds a RoundTripper for an indexer; returning
+// (cfg, true) means "use these explicit values", (zero, false) means
+// "fall back to throttle defaults". A bare repository error is logged
+// and treated as "unset" — we'd rather lose a custom limit than fail
+// to build a transport at startup.
+func (s *Service) RateLimitFor(indexerID string) (throttle.Config, bool) {
+	cfg, err := s.repo.GetRateLimit(context.Background(), indexerID)
+	if err != nil {
+		if !errors.Is(err, ErrNotFound) {
+			s.logger.Warn("rate-limit lookup failed",
+				"id", indexerID, "err", err)
+		}
+		return throttle.Config{}, false
+	}
+	if cfg.PerMinute == 0 && cfg.Burst == 0 && cfg.MaxRetries < 0 {
+		return throttle.Config{}, false
+	}
+	return cfg, true
+}
+
+// SetRateLimit persists per-indexer rate-limit dials and rebuilds the
+// live instance so the new transport composition takes effect on the
+// next request. Pass throttle.Config{} (all zeros, MaxRetries=0 OK)
+// with values you want stored; use throttle.Defaults() to stamp the
+// package defaults explicitly.
+func (s *Service) SetRateLimit(ctx context.Context, id string, cfg throttle.Config) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if err := s.repo.SetRateLimit(ctx, id, cfg); err != nil {
+		return err
+	}
+	// Rehydrate so the transport picks up the new config. We tolerate
+	// a hydrate failure here (e.g. an unknown kind) the same way the
+	// other write paths do — log and continue.
+	def, err := s.repo.Get(ctx, id)
+	if err != nil {
+		return nil
+	}
+	if def.Enabled {
+		if herr := s.hydrateOne(ctx, def); herr != nil {
+			s.logger.Warn("rate-limit: hydrate failed", "id", id, "err", herr)
+		}
+	}
+	return nil
+}
+
+// GetRateLimit returns the persisted Config for id (zero values where
+// columns are NULL). Use throttle.Resolve to apply defaults.
+func (s *Service) GetRateLimit(ctx context.Context, id string) (throttle.Config, error) {
+	return s.repo.GetRateLimit(ctx, id)
 }
 
 // Replace overwrites the persisted row and the live instance.

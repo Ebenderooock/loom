@@ -1,6 +1,18 @@
 -- name: CreateIndexer :one
-INSERT INTO indexers (id, kind, name, enabled, priority, config_json, categories_json, tags_json, proxy_id, created_at, updated_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+INSERT INTO indexers (
+    id, kind, name, enabled, priority,
+    config_json, categories_json, tags_json,
+    proxy_id,
+    rate_limit_per_min, rate_limit_burst, retry_max_attempts,
+    created_at, updated_at
+)
+VALUES (
+    ?, ?, ?, ?, ?,
+    ?, ?, ?,
+    ?,
+    ?, ?, ?,
+    CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+)
 RETURNING *;
 
 -- name: GetIndexer :one
@@ -14,15 +26,18 @@ SELECT * FROM indexers WHERE enabled = 1 ORDER BY priority ASC, name ASC;
 
 -- name: ReplaceIndexer :one
 UPDATE indexers
-SET kind            = ?,
-    name            = ?,
-    enabled         = ?,
-    priority        = ?,
-    config_json     = ?,
-    categories_json = ?,
-    tags_json       = ?,
-    proxy_id        = ?,
-    updated_at      = CURRENT_TIMESTAMP
+SET kind               = ?,
+    name               = ?,
+    enabled            = ?,
+    priority           = ?,
+    config_json        = ?,
+    categories_json    = ?,
+    tags_json          = ?,
+    proxy_id           = ?,
+    rate_limit_per_min = ?,
+    rate_limit_burst   = ?,
+    retry_max_attempts = ?,
+    updated_at         = CURRENT_TIMESTAMP
 WHERE id = ?
 RETURNING *;
 
@@ -44,6 +59,17 @@ RETURNING *;
 UPDATE indexers
 SET proxy_id = ?,
     updated_at = CURRENT_TIMESTAMP
+WHERE id = ?;
+
+-- name: SetIndexerRateLimit :exec
+-- Phase 2f: write the three rate-limit dials atomically. NULLs mean
+-- "fall back to the package default at runtime". Used by POST/PUT
+-- handlers and by the rate-limit PATCH path.
+UPDATE indexers
+SET rate_limit_per_min = ?,
+    rate_limit_burst   = ?,
+    retry_max_attempts = ?,
+    updated_at         = CURRENT_TIMESTAMP
 WHERE id = ?;
 
 -- name: DeleteIndexer :exec

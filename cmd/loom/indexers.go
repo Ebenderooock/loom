@@ -88,6 +88,9 @@ func buildIndexerService(ctx context.Context, cfg *config.Config, db storage.DB,
 	if err := svc.HydrateAll(ctx); err != nil {
 		logger.Warn("indexer hydrate failed", "err", err)
 	}
+	// Wire the rate-limit provider after the service exists so the
+	// throttle transport can resolve per-indexer overrides.
+	indexers.SetRateLimitProvider(svc)
 	return svc, nil
 }
 

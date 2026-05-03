@@ -21,17 +21,20 @@ type ApiKey struct {
 }
 
 type Indexer struct {
-	ID             string         `json:"id"`
-	Kind           string         `json:"kind"`
-	Name           string         `json:"name"`
-	Enabled        int64          `json:"enabled"`
-	Priority       int64          `json:"priority"`
-	ConfigJson     string         `json:"config_json"`
-	CategoriesJson string         `json:"categories_json"`
-	TagsJson       string         `json:"tags_json"`
-	CreatedAt      time.Time      `json:"created_at"`
-	UpdatedAt      time.Time      `json:"updated_at"`
-	ProxyID        sql.NullString `json:"proxy_id"`
+	ID               string         `json:"id"`
+	Kind             string         `json:"kind"`
+	Name             string         `json:"name"`
+	Enabled          int64          `json:"enabled"`
+	Priority         int64          `json:"priority"`
+	ConfigJson       string         `json:"config_json"`
+	CategoriesJson   string         `json:"categories_json"`
+	TagsJson         string         `json:"tags_json"`
+	CreatedAt        time.Time      `json:"created_at"`
+	UpdatedAt        time.Time      `json:"updated_at"`
+	ProxyID          sql.NullString `json:"proxy_id"`
+	RateLimitPerMin  sql.NullInt64  `json:"rate_limit_per_min"`
+	RateLimitBurst   sql.NullInt64  `json:"rate_limit_burst"`
+	RetryMaxAttempts sql.NullInt64  `json:"retry_max_attempts"`
 }
 
 type IndexerHealth struct {

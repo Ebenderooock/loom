@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/loomctl/loom/internal/indexers"
+	"github.com/loomctl/loom/internal/indexers/throttle"
 	"github.com/loomctl/loom/internal/kernel/config"
 	"github.com/loomctl/loom/internal/storage"
 )
@@ -103,6 +104,54 @@ func TestSQLiteRepositoryCRUD(t *testing.T) {
 	}
 	if _, err := repo.Get(ctx, "null-1"); err == nil {
 		t.Fatal("expected ErrNotFound after Delete")
+	}
+}
+
+func TestSQLiteRepositoryRateLimitRoundTrip(t *testing.T) {
+	t.Parallel()
+	_, raw := openTestDB(t)
+	repo := indexers.NewSQLiteRepository(raw)
+	ctx := context.Background()
+
+	if _, err := repo.Create(ctx, indexers.Definition{
+		ID: "rl-1", Kind: indexers.KindNull, Name: "RL One", Enabled: true, Priority: 25,
+	}); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	// Default state: every column is NULL → repository returns
+	// zero-value Config so Resolve() picks the package defaults.
+	got, err := repo.GetRateLimit(ctx, "rl-1")
+	if err != nil {
+		t.Fatalf("GetRateLimit (initial): %v", err)
+	}
+	if got.PerMinute != 0 || got.Burst != 0 || got.MaxRetries != -1 {
+		t.Fatalf("expected zero/sentinel values, got %#v", got)
+	}
+
+	want := throttle.Config{PerMinute: 30, Burst: 2, MaxRetries: 5}
+	if err := repo.SetRateLimit(ctx, "rl-1", want); err != nil {
+		t.Fatalf("SetRateLimit: %v", err)
+	}
+	got, err = repo.GetRateLimit(ctx, "rl-1")
+	if err != nil {
+		t.Fatalf("GetRateLimit (after set): %v", err)
+	}
+	if got != want {
+		t.Fatalf("round-trip mismatch: got %#v want %#v", got, want)
+	}
+
+	// Setting MaxRetries=0 must persist as 0, not "use default".
+	zero := throttle.Config{PerMinute: 30, Burst: 2, MaxRetries: 0}
+	if err := repo.SetRateLimit(ctx, "rl-1", zero); err != nil {
+		t.Fatalf("SetRateLimit zero: %v", err)
+	}
+	got, err = repo.GetRateLimit(ctx, "rl-1")
+	if err != nil {
+		t.Fatalf("GetRateLimit (after zero): %v", err)
+	}
+	if got.MaxRetries != 0 {
+		t.Fatalf("expected MaxRetries=0 to persist, got %d", got.MaxRetries)
 	}
 }
 
