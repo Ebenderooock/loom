@@ -2,6 +2,7 @@ import * as React from "react";
 import { Link, Outlet, useRouterState } from "@tanstack/react-router";
 import {
   Calendar,
+  Download,
   LayoutDashboard,
   Library,
   ListTodo,
@@ -42,6 +43,7 @@ interface NavItem {
     | "/activity"
     | "/calendar"
     | "/indexers"
+    | "/downloads"
     | "/proxies"
     | "/settings";
   label: string;
@@ -54,6 +56,7 @@ const NAV: NavItem[] = [
   { to: "/activity", label: "Activity", Icon: ListTodo },
   { to: "/calendar", label: "Calendar", Icon: Calendar },
   { to: "/indexers", label: "Indexers", Icon: Radio },
+  { to: "/downloads", label: "Downloads", Icon: Download },
   { to: "/proxies", label: "Proxies", Icon: Network },
   { to: "/settings", label: "Settings", Icon: Settings },
 ];
