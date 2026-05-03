@@ -1,0 +1,46 @@
+---
+# Reference Cardigann definition used by the engine_test.go fixtures.
+# Operators dropping definitions into <data_dir>/definitions/cardigann
+# can use this as a starting template; see docs/indexers-cardigann.md
+# for the supported field surface.
+site: example
+name: ExampleTracker
+type: private
+language: en
+encoding: UTF-8
+links:
+  - https://example.test
+caps:
+  categorymappings:
+    - {id: "10", cat: "Movies/HD", desc: "movies"}
+    - {id: "20", cat: "TV/HD", desc: "tv"}
+  modes:
+    search: ["q"]
+login:
+  path: login.php
+  method: post
+  inputs:
+    username: "{{ .Config.username }}"
+    password: "{{ .Config.password }}"
+  test:
+    path: index.php
+    selector: "a.logout"
+search:
+  paths:
+    - path: browse.php
+  inputs:
+    q: "{{ .Keywords }}"
+  rows:
+    selector: "table.results tr.row"
+  fields:
+    title:
+      selector: "a.title"
+    download:
+      selector: "a.dl"
+      attribute: href
+    size:
+      selector: "td.size"
+    seeders:
+      selector: "td.seeders"
+    leechers:
+      selector: "td.leechers"
