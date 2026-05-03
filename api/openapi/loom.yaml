@@ -1790,6 +1790,44 @@ components:
             Config → General → Security. Never returned on read
             responses.
 
+    NzbgetConfig:
+      type: object
+      description: |
+        Configuration blob for `kind: nzbget`. Persisted in the
+        `download_clients.config` JSON column. NZBGet 21+ is
+        targeted; the kind speaks JSON-RPC 2.0 at `<base_path>/jsonrpc`
+        and authenticates with HTTP Basic Auth on every request.
+      required: [host, username, password]
+      properties:
+        host:
+          type: string
+          description: Hostname or IP of the NZBGet control interface.
+        port:
+          type: integer
+          description: TCP port NZBGet listens on (e.g. `6789`).
+        tls:
+          type: boolean
+          description: Set to `true` when NZBGet is fronted by HTTPS.
+        base_path:
+          type: string
+          default: "/"
+          description: |
+            URL prefix when NZBGet is behind a reverse proxy subpath.
+            Defaults to `/`. The kind appends `jsonrpc` so a leading
+            `/` is required.
+        username:
+          type: string
+          description: |
+            NZBGet `ControlUsername`. Configured under Settings →
+            Security in the NZBGet web UI.
+        password:
+          type: string
+          format: password
+          writeOnly: true
+          description: |
+            NZBGet `ControlPassword`. Never returned on read
+            responses.
+
     DownloadItem:
       type: object
       required: [id, name, status]
