@@ -7,6 +7,13 @@ covers the Phase 2a core: persistence, registry, fan-out search, and
 periodic health checks. Phase 2c adds first-class `newznab` and
 `torznab` kinds — see [indexers-newznab.md](indexers-newznab.md) for
 their config schema, curl examples, and the caps-cache lifecycle.
+Phase 2d adds an aggregator that **exposes** the indexer set as a
+single Prowlarr-compatible Newznab/Torznab endpoint —
+see [indexers-aggregator.md](indexers-aggregator.md). Phase 2b adds
+the `cardigann` kind, which loads YAML tracker definitions from disk
+and turns them into runnable indexers — see
+[indexers-cardigann.md](indexers-cardigann.md) for the YAML schema,
+trust model, and a worked walkthrough.
 
 ## Concepts
 

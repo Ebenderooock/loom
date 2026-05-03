@@ -27,6 +27,7 @@ import (
 	"github.com/loomctl/loom/internal/auth"
 	"github.com/loomctl/loom/internal/buildinfo"
 	"github.com/loomctl/loom/internal/indexers"
+	"github.com/loomctl/loom/internal/indexers/newznabserver"
 	"github.com/loomctl/loom/internal/kernel/config"
 	"github.com/loomctl/loom/internal/kernel/eventbus"
 	"github.com/loomctl/loom/internal/kernel/telemetry"
@@ -43,6 +44,7 @@ type Server struct {
 	bus        eventbus.Bus
 	authSvc    *auth.Service
 	indexerSvc *indexers.Service
+	aggSvc     *newznabserver.Server
 	ready      atomic.Bool
 }
 
@@ -52,8 +54,9 @@ type Server struct {
 // applied). The Server takes ownership of db and will Close() it on
 // Shutdown. authSvc may be nil for low-level tests; production callers
 // pass a fully wired *auth.Service. indexerSvc may be nil to disable
-// the /api/v1/indexers/* surface.
-func New(cfg *config.Config, logger *slog.Logger, tel *telemetry.Telemetry, db storage.DB, authSvc *auth.Service, indexerSvc *indexers.Service) (*Server, error) {
+// the /api/v1/indexers/* surface. aggSvc may be nil to disable the
+// Newznab/Torznab aggregator at /api and /api/v1/aggregate.
+func New(cfg *config.Config, logger *slog.Logger, tel *telemetry.Telemetry, db storage.DB, authSvc *auth.Service, indexerSvc *indexers.Service, aggSvc *newznabserver.Server) (*Server, error) {
 	if tel == nil {
 		return nil, errors.New("server: telemetry must not be nil")
 	}
@@ -69,6 +72,7 @@ func New(cfg *config.Config, logger *slog.Logger, tel *telemetry.Telemetry, db s
 		bus:        eventbus.NewInProc(),
 		authSvc:    authSvc,
 		indexerSvc: indexerSvc,
+		aggSvc:     aggSvc,
 	}
 
 	mux := s.newMux()
@@ -137,6 +141,14 @@ func (s *Server) newMux() http.Handler {
 			}
 			s.indexerSvc.Mount(r)
 		})
+	}
+
+	// Newznab/Torznab aggregator. Mounted OUTSIDE the JSON
+	// auth.RequireAuth group because clients (Sonarr, Radarr,
+	// Prowlarr) supply credentials via the ?apikey= query param and
+	// expect Newznab XML errors, not JSON.
+	if s.aggSvc != nil {
+		s.aggSvc.Mount(r)
 	}
 
 	r.Group(func(r chi.Router) {

@@ -90,6 +90,26 @@ func (s *Service) identityFromSession(ctx context.Context, cookieValue string) (
 	}, nil
 }
 
+// VerifyAPIKey looks the presented key up by hash and returns nil when
+// it maps to a non-expired credential. ErrUnauthenticated is returned
+// for unknown, malformed, or expired keys; any other error indicates
+// a storage failure and should be treated as a 5xx by callers.
+//
+// The method is exported so handlers that cannot use the standard
+// RequireAuth middleware (for example wire-compat surfaces that must
+// emit a non-JSON error format) can still validate the same API keys
+// without re-implementing the lookup.
+func (s *Service) VerifyAPIKey(ctx context.Context, presented string) error {
+	if strings.TrimSpace(presented) == "" {
+		return ErrUnauthenticated
+	}
+	if _, err := ParseAPIKey(presented); err != nil {
+		return ErrUnauthenticated
+	}
+	_, err := s.identityFromAPIKey(ctx, presented)
+	return err
+}
+
 func (s *Service) identityFromAPIKey(ctx context.Context, presented string) (*Identity, error) {
 	hash := HashAPIKey(presented)
 	k, err := s.store.GetAPIKeyByHash(ctx, hash)

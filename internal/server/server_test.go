@@ -39,7 +39,7 @@ func newTestServer(t *testing.T) *Server {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s, err := New(cfg, logger, tel, db, nil, nil)
+	s, err := New(cfg, logger, tel, db, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -218,7 +218,7 @@ func TestCORSPreflightWhenConfigured(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = db.Close() })
-	s, err := New(cfg, logger, tel, db, nil, nil)
+	s, err := New(cfg, logger, tel, db, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -273,7 +273,7 @@ func TestPprofGated(t *testing.T) {
 	t.Cleanup(func() { _ = db.Close() })
 
 	// Default: pprof disabled.
-	s, err := New(cfg, logger, tel, db, nil, nil)
+	s, err := New(cfg, logger, tel, db, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -287,7 +287,7 @@ func TestPprofGated(t *testing.T) {
 	cfg2, _ := config.Load("")
 	cfg2.Debug.Pprof = true
 	cfg2.Storage = cfg.Storage
-	s2, err := New(cfg2, logger, tel, db, nil, nil)
+	s2, err := New(cfg2, logger, tel, db, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

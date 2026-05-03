@@ -9,6 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Phase 2d — Newznab/Torznab aggregator server.** Loom now
+  presents every enabled indexer as a single Prowlarr-compatible
+  Newznab/Torznab endpoint, mounted at both `/api` (the canonical
+  Prowlarr-compat path) and `/api/v1/aggregate` (Loom-namespaced
+  alias). Supports `t=caps`, `t=search`, `t=movie`, `t=tvsearch`,
+  `t=music`, `t=book`. Caps document is the union of every
+  indexer's modes/categories/supported IDs. Authentication is via
+  the existing API key store, supplied as `?apikey=…` (with
+  `X-Api-Key` accepted as a fallback) and surfaced as Newznab-shape
+  XML errors. Per-indexer failures during a fan-out are logged and
+  dropped from the response rather than failing the whole request,
+  matching Prowlarr's partial-success semantics. New package
+  `internal/indexers/newznabserver`. See
+  [`docs/indexers-aggregator.md`](docs/indexers-aggregator.md) and
+  [ADR-0011](docs/adr/0011-newznab-aggregator-server.md).
+
 - **Phase 2g — indexer & proxy management UI.** New `/indexers` and
   `/proxies` pages in the React frontend, with create/edit/delete
   dialogs, manual search per indexer (via the fan-out endpoint scoped

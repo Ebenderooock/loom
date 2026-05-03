@@ -34,6 +34,12 @@ tags:
     description: Indexer CRUD, capabilities, manual health checks, and aggregated search.
   - name: proxies
     description: Outbound proxy records (HTTP/HTTPS/SOCKS5/FlareSolverr) attachable to indexers.
+  - name: aggregator
+    description: |
+      Prowlarr-compatible Newznab/Torznab aggregator surface. Wraps every enabled
+      indexer behind a single endpoint that Sonarr/Radarr/Lidarr clients can be pointed
+      at. See `docs/indexers-aggregator.md` for the full user guide and ADR-0011 for
+      the design rationale.
 
 paths:
   /healthz:
@@ -351,6 +357,126 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
 
+  /api:
+    get:
+      tags: [aggregator]
+      summary: Newznab/Torznab aggregator (Prowlarr-compat path).
+      description: |
+        Single endpoint that fans a Newznab/Torznab query out across every enabled
+        indexer and returns the merged result as RSS 2.0 with `newznab:` / `torznab:`
+        extension elements. This is the canonical Prowlarr-compat path; Sonarr,
+        Radarr, and Lidarr default to it. See `docs/indexers-aggregator.md` for the
+        full parameter set, error semantics, and example client configuration.
+
+        Authentication is via the `apikey` query parameter (or `X-Api-Key` header
+        as a fallback). Errors are returned as Newznab-shape XML, not the JSON
+        envelope used elsewhere in this spec.
+      operationId: aggregatorRoot
+      parameters:
+        - in: query
+          name: t
+          required: true
+          schema:
+            type: string
+            enum: [caps, search, movie, tvsearch, music, book]
+          description: Newznab function to invoke.
+        - in: query
+          name: apikey
+          required: true
+          schema:
+            type: string
+          description: Loom API key (any active key).
+        - in: query
+          name: q
+          schema: { type: string }
+          description: Free-text search term.
+        - in: query
+          name: cat
+          schema: { type: string }
+          description: Comma-separated list of Newznab category IDs.
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1 }
+        - in: query
+          name: imdbid
+          schema: { type: string }
+          description: IMDb ID for `t=movie`.
+        - in: query
+          name: tmdbid
+          schema: { type: string }
+          description: TMDB ID for `t=movie`.
+        - in: query
+          name: tvdbid
+          schema: { type: string }
+          description: TVDB ID for `t=tvsearch`.
+        - in: query
+          name: season
+          schema: { type: integer, minimum: 0 }
+        - in: query
+          name: ep
+          schema: { type: integer, minimum: 0 }
+      responses:
+        "200":
+          description: |
+            RSS 2.0 channel with newznab/torznab extension elements (for searches),
+            or a `<caps>` document (for `t=caps`). See the Newznab API spec for the
+            full schema; Loom does not duplicate it here.
+          content:
+            application/xml:
+              schema:
+                type: string
+                description: RSS 2.0 / caps XML document.
+        "400":
+          description: |
+            Newznab-shape XML error document (not the JSON envelope used elsewhere).
+          content:
+            application/xml:
+              schema:
+                type: string
+        "401":
+          description: |
+            Newznab-shape XML error document; missing or invalid apikey.
+          content:
+            application/xml:
+              schema:
+                type: string
+
+  /api/v1/aggregate:
+    get:
+      tags: [aggregator]
+      summary: Newznab/Torznab aggregator (Loom-namespaced alias).
+      description: |
+        Identical to `GET /api`. Provided so operators that already reverse-proxy
+        `/api/v1/*` can keep the aggregator under the same prefix.
+      operationId: aggregatorAlias
+      parameters:
+        - $ref: "#/paths/~1api/get/parameters/0"
+        - $ref: "#/paths/~1api/get/parameters/1"
+        - $ref: "#/paths/~1api/get/parameters/2"
+        - $ref: "#/paths/~1api/get/parameters/3"
+        - $ref: "#/paths/~1api/get/parameters/4"
+        - $ref: "#/paths/~1api/get/parameters/5"
+        - $ref: "#/paths/~1api/get/parameters/6"
+        - $ref: "#/paths/~1api/get/parameters/7"
+        - $ref: "#/paths/~1api/get/parameters/8"
+        - $ref: "#/paths/~1api/get/parameters/9"
+      responses:
+        "200":
+          description: See `GET /api`.
+          content:
+            application/xml:
+              schema: { type: string }
+        "400":
+          description: See `GET /api`.
+          content:
+            application/xml:
+              schema: { type: string }
+        "401":
+          description: See `GET /api`.
+          content:
+            application/xml:
+              schema: { type: string }
+
   /api/v1/proxies/:
     get:
       tags: [proxies]
@@ -568,11 +694,12 @@ components:
           type: string
           description: |
             Factory key. Built-in kinds: `builtin/null`. Real source
-            kinds: `newznab`, `torznab`.
+            kinds: `newznab`, `torznab`, `cardigann`.
           enum:
             - builtin/null
             - newznab
             - torznab
+            - cardigann
         name:
           type: string
         enabled:
@@ -585,9 +712,11 @@ components:
           description: |
             Free-form, kind-specific configuration. The shape is
             documented per kind; for `newznab` and `torznab` it
-            matches `NewznabConfig`.
+            matches `NewznabConfig`, for `cardigann` it matches
+            `CardigannConfig`.
           oneOf:
             - $ref: "#/components/schemas/NewznabConfig"
+            - $ref: "#/components/schemas/CardigannConfig"
             - type: object
               additionalProperties: true
         categories:
@@ -726,6 +855,55 @@ components:
             type: array
             items:
               type: integer
+
+    CardigannConfig:
+      type: object
+      description: |
+        Configuration shape used by the `cardigann` kind. The
+        definition referenced by `definition_id` must already be
+        present on disk under the configured `definitions_dir`
+        (default `<data_dir>/definitions/cardigann/`); the API does
+        not accept inline definitions to keep arbitrary remote YAML
+        out of the trust boundary.
+      required: [definition_id]
+      properties:
+        definition_id:
+          type: string
+          description: Filename (without `.yml`/`.yaml`) of the on-disk definition.
+        username:
+          type: string
+          description: Tracker username (form-login flow).
+        password:
+          type: string
+          description: Tracker password (form-login flow).
+        passkey:
+          type: string
+          description: Optional per-user RSS / download passkey templated into search inputs.
+        cookie:
+          type: string
+          description: |
+            Pre-baked `name=value; name2=value2` cookie string, used
+            when the tracker requires a manual session import instead
+            of form login.
+        credentials:
+          type: object
+          description: Free-form additional credentials exposed to login/search templates as `{{ .Config.<key> }}`.
+          additionalProperties:
+            type: string
+        category_overrides:
+          type: object
+          description: |
+            Operator override for site-category-id → Newznab-category-id
+            mapping. Wins over the definition's `categorymappings`.
+          additionalProperties:
+            type: integer
+        user_agent:
+          type: string
+          description: Optional override for the outbound User-Agent header.
+        timeout:
+          type: string
+          description: Go duration string (e.g. `30s`, `2m`). Default `30s`.
+          example: 30s
 
 
     TestResult:
