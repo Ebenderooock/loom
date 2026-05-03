@@ -1719,6 +1719,40 @@ components:
           format: int64
           description: Free space in bytes. -1 when the client cannot report it.
 
+    SabnzbdConfig:
+      type: object
+      description: |
+        Configuration blob for `kind: sabnzbd`. Persisted in the
+        `download_clients.config` JSON column. SABnzbd 3.x and newer
+        is required; the kind speaks the `output=json` API and
+        authenticates with the operator's apikey on every request.
+      required: [host, apikey]
+      properties:
+        host:
+          type: string
+          description: Hostname or IP of the SABnzbd Web UI.
+        port:
+          type: integer
+          description: TCP port SABnzbd listens on (e.g. `8080`).
+        tls:
+          type: boolean
+          description: Set to `true` when SABnzbd is served over HTTPS.
+        base_path:
+          type: string
+          default: "/"
+          description: |
+            URL prefix when SABnzbd is behind a reverse proxy subpath
+            (e.g. `/sabnzbd`). Defaults to `/`. The kind appends
+            `api?...` to this path so a leading `/` is required.
+        apikey:
+          type: string
+          format: password
+          writeOnly: true
+          description: |
+            SABnzbd general API key. Find it in SABnzbd under
+            Config → General → Security. Never returned on read
+            responses.
+
     DownloadItem:
       type: object
       required: [id, name, status]

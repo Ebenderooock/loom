@@ -9,6 +9,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Phase 3e — SABnzbd download client.** First Usenet driver on the
+  Phase 3a download-client abstraction. New
+  `internal/downloads/sabnzbd/` package speaks the SABnzbd JSON API
+  (SABnzbd 3.x and newer), authenticating with the operator's apikey
+  on every request and surfacing SAB's HTTP-200 `{"status":false,"error":...}`
+  envelope as typed errors (`ErrAuth`, `ErrServer`, `ErrNotFound`,
+  `ErrUpstream`, `ErrMalformedNZB`, `ErrConfig`). `Add` covers both
+  URL fetches (`mode=addurl`) and raw `.nzb` uploads
+  (`mode=addfile`, multipart), encoding category, priority, script,
+  and post-processing via tag-prefixed `AddRequest.Tags`. `Status`
+  merges the live queue and recent history into a single
+  `[]downloads.Item`, mapping SAB's queue + history vocabularies onto
+  Loom's `ItemStatus` enum in two audited tables; `Pause`, `Resume`,
+  `Remove(deleteFiles)` (with queue→history fallback), `Categories`
+  (rich `get_config` with `get_cats` fallback, filtering SAB's `*`
+  default sentinel), `FreeSpace` (incomplete dir, GB-string→bytes),
+  and `Test` (`mode=version`) round-trip the matching endpoints.
+  Outbound HTTP composes the same proxy + throttle stack as indexers
+  via `downloads.TransportForDefinition`. OpenAPI adds a
+  `SabnzbdConfig` schema documenting the recognised `config` blob.
+  Server-config management, post-processing scripts management,
+  speed-limit control, and TLS-skip are deferred. See
+  [`docs/downloads-sabnzbd.md`](docs/downloads-sabnzbd.md) and
+  [ADR-0016](docs/adr/0016-sabnzbd-download-client-kind.md).
+
 - **Phase 3a — Download client abstraction.** New
   `internal/downloads/` package providing a pluggable download-client
   registry that mirrors the indexer subsystem: `DownloadClient`
