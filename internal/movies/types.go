@@ -237,18 +237,18 @@ type QualityProfileItem struct {
 
 // QualityProfile represents a named collection of quality tiers with preferences.
 type QualityProfile struct {
-	ID              string                 `json:"id"`
-	Name            string                 `json:"name"`
-	UpgradeAllowed  bool                   `json:"upgrade_allowed"`
-	Cutoff          string                 `json:"cutoff"`                    // quality definition ID
-	Language        string                 `json:"language,omitempty"`         // ISO 639-1 code
-	FormatItems     []map[string]interface{} `json:"format_items,omitempty"`   // custom format scores
-	Items           []QualityProfileItem   `json:"items"`                    // quality definitions
-	MinFormatScore  int                    `json:"min_format_score,omitempty"`
-	CutoffFormatScore int                  `json:"cutoff_format_score,omitempty"`
-	CreatedAt       time.Time              `json:"created_at"`
-	UpdatedAt       time.Time              `json:"updated_at"`
-	DeletedAt       *time.Time             `json:"deleted_at,omitempty"`
+	ID                string                  `json:"id"`
+	Name              string                  `json:"name"`
+	UpgradeAllowed    bool                    `json:"upgrade_allowed"`
+	Cutoff            string                  `json:"cutoff"`                   // quality definition ID
+	Language          string                  `json:"language,omitempty"`        // ISO 639-1 code
+	FormatItems       []CustomFormatScore     `json:"format_items,omitempty"`   // custom format scores
+	Items             []QualityProfileItem    `json:"items"`                    // quality definitions
+	MinFormatScore    int                     `json:"min_format_score,omitempty"`
+	CutoffFormatScore int                     `json:"cutoff_format_score,omitempty"`
+	CreatedAt         time.Time               `json:"created_at"`
+	UpdatedAt         time.Time               `json:"updated_at"`
+	DeletedAt         *time.Time              `json:"deleted_at,omitempty"`
 }
 
 // CreateQualityDefinitionRequest is the payload for adding a quality definition.
@@ -295,4 +295,77 @@ type UpdateQualityProfileRequest struct {
 	Items              []QualityProfileItem     `json:"items,omitempty"`
 	MinFormatScore     *int                     `json:"min_format_score,omitempty"`
 	CutoffFormatScore  *int                     `json:"cutoff_format_score,omitempty"`
+}
+
+// CustomFormatScore represents the score assigned to a custom format within a quality profile.
+type CustomFormatScore struct {
+	CustomFormatID string `json:"custom_format_id"`
+	Score          int    `json:"score"` // positive or negative score
+}
+
+// CustomFormatFilterCondition is the type of condition used in a custom format filter.
+type CustomFormatFilterCondition string
+
+const (
+	// Exact match
+	ConditionEquals CustomFormatFilterCondition = "equals"
+	// Regex pattern match
+	ConditionRegex CustomFormatFilterCondition = "regex"
+	// Numeric range (value should be "min,max" or "min," or ",max")
+	ConditionRange CustomFormatFilterCondition = "range"
+	// Member of a list (value should be comma-separated)
+	ConditionIn CustomFormatFilterCondition = "in"
+	// Numeric comparison operators
+	ConditionGreaterThan CustomFormatFilterCondition = "gt"
+	ConditionGreaterThanOrEqual CustomFormatFilterCondition = "gte"
+	ConditionLessThan CustomFormatFilterCondition = "lt"
+	ConditionLessThanOrEqual CustomFormatFilterCondition = "lte"
+)
+
+// CustomFormatFilter represents a single filter condition within a custom format.
+type CustomFormatFilter struct {
+	ID                 string                         `json:"id"`
+	CustomFormatID     string                         `json:"custom_format_id"`
+	Field              string                         `json:"field"`           // codec, source, year, bitdepth, etc.
+	Condition          CustomFormatFilterCondition    `json:"condition"`       // equals, regex, range, in, gt, gte, lt, lte
+	Value              string                         `json:"value"`           // field-specific value
+	Order              int                            `json:"order"`           // display order
+	CreatedAt          time.Time                      `json:"created_at"`
+	UpdatedAt          time.Time                      `json:"updated_at"`
+}
+
+// CustomFormat represents a named set of filters and tags for scoring releases.
+type CustomFormat struct {
+	ID          string                    `json:"id"`
+	Name        string                    `json:"name"`
+	Description string                    `json:"description,omitempty"`
+	Tags        []string                  `json:"tags,omitempty"`           // user-defined tags (e.g., "hdr", "anime", "4k")
+	Filters     []CustomFormatFilter      `json:"filters"`                  // all filters use implicit AND logic
+	CreatedAt   time.Time                 `json:"created_at"`
+	UpdatedAt   time.Time                 `json:"updated_at"`
+	DeletedAt   *time.Time                `json:"deleted_at,omitempty"`
+}
+
+// CreateCustomFormatRequest is the payload for adding a custom format.
+type CreateCustomFormatRequest struct {
+	Name        string                   `json:"name"`
+	Description string                   `json:"description,omitempty"`
+	Tags        []string                 `json:"tags,omitempty"`
+	Filters     []CreateCustomFormatFilterRequest `json:"filters"`
+}
+
+// CreateCustomFormatFilterRequest is the payload for a filter within a custom format creation.
+type CreateCustomFormatFilterRequest struct {
+	Field     string                         `json:"field"`
+	Condition CustomFormatFilterCondition    `json:"condition"`
+	Value     string                         `json:"value"`
+	Order     int                            `json:"order,omitempty"`
+}
+
+// UpdateCustomFormatRequest is the payload for updating a custom format.
+type UpdateCustomFormatRequest struct {
+	Name        *string                  `json:"name,omitempty"`
+	Description *string                  `json:"description,omitempty"`
+	Tags        []string                 `json:"tags,omitempty"`
+	Filters     []CreateCustomFormatFilterRequest `json:"filters,omitempty"`
 }

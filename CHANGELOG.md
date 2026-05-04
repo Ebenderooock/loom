@@ -9,6 +9,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Phase 5c — Custom formats with Radarr-compatible scoring.** Extends Phase 5b (quality
+  definitions/profiles) with flexible release scoring rules. Implements
+  `internal/movies/custom_formats.go` service layer with `ValidateCustomFormat()`,
+  `EvaluateCustomFormats()`, and stateless filter matching. Eight condition types:
+  equals, regex, range, in, gt, gte, lt, lte. Eight allowed fields: codec, source,
+  year, bitdepth, resolution, hdr, audio, language. Filters use implicit AND logic
+  (all must match). Score formula: FinalScore = (quality_tier_order × 100) +
+  sum(matching_custom_format_scores). Database migration `0014_custom_formats.sql`
+  adds `custom_formats` and `custom_format_filters` tables with soft-delete support
+  and CASCADE delete for atomicity. Repository layer implements full CRUD
+  (AddCustomFormat, GetCustomFormat, UpdateCustomFormat, DeleteCustomFormat,
+  ListCustomFormats, GetCustomFormatByName). Service integration delegates to
+  custom format service. HTTP handlers: 6 endpoints (list, create, get by ID,
+  update, delete, test). OpenAPI spec updated with CustomFormat, CustomFormatFilter,
+  and request/response schemas. Comprehensive unit tests (15+) cover field
+  allowlist, condition validation, filter matching, edge cases, ReDoS protection.
+  See [ADR-0026](docs/adr/0026-custom-formats-architecture.md) for design
+  rationale and future work (Phase 5d: release-name parser for numeric conditions,
+  Phase 5e: OR logic support, performance optimization). All tests pass `-race`.
+
 - **Phase 4e — Metadata orchestration router.** Builds on Phase 4a–4d
   (metadata service + providers TMDB, TVDB, MusicBrainz) with a concurrent
   fan-out layer that returns the first successful metadata match within a
