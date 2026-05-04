@@ -247,6 +247,14 @@ func Load(path string) (*Config, error) {
 		return nil, fmt.Errorf("unmarshal config: %w", err)
 	}
 
+	// Resolve relative sqlite paths relative to config directory
+	if cfg.Storage.SQLite.Path != "" && !filepath.IsAbs(cfg.Storage.SQLite.Path) && cfg.Storage.SQLite.Path != ":memory:" {
+		cfg.Storage.SQLite.Path = filepath.Join(cfg.ConfigDir, cfg.Storage.SQLite.Path)
+	} else if cfg.Storage.SQLite.Path == "" {
+		// If no path configured, set it relative to config dir
+		cfg.Storage.SQLite.Path = filepath.Join(cfg.ConfigDir, "data", "loom.db")
+	}
+
 	if err := os.MkdirAll(cfg.ConfigDir, 0o755); err != nil {
 		return nil, fmt.Errorf("create config dir: %w", err)
 	}
@@ -360,7 +368,8 @@ func applyDefaults(v *viper.Viper) {
 	v.SetDefault("otel.endpoint", "")
 
 	v.SetDefault("storage.engine", "sqlite")
-	v.SetDefault("storage.sqlite.path", "/data/loom.db")
+	// Don't set a default sqlite path here; it's handled in Load() after file reading
+	// v.SetDefault("storage.sqlite.path", "/data/loom.db")
 	v.SetDefault("storage.postgres.dsn", "")
 
 	v.SetDefault("scheduler.enabled", true)

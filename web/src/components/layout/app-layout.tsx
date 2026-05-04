@@ -11,6 +11,7 @@ import {
   Radio,
   Search,
   Settings,
+  Rss,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -44,6 +45,7 @@ interface NavItem {
     | "/calendar"
     | "/indexers"
     | "/downloads"
+    | "/sources"
     | "/proxies"
     | "/settings";
   label: string;
@@ -57,6 +59,7 @@ const NAV: NavItem[] = [
   { to: "/calendar", label: "Calendar", Icon: Calendar },
   { to: "/indexers", label: "Indexers", Icon: Radio },
   { to: "/downloads", label: "Downloads", Icon: Download },
+  { to: "/sources", label: "Sources", Icon: Rss },
   { to: "/proxies", label: "Proxies", Icon: Network },
   { to: "/settings", label: "Settings", Icon: Settings },
 ];

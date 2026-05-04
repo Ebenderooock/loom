@@ -7,12 +7,15 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"path/filepath"
 	"time"
 
+	"github.com/loomctl/loom/internal/appconfig"
 	"github.com/loomctl/loom/internal/indexers/newznabserver"
 	"github.com/loomctl/loom/internal/kernel/config"
 	"github.com/loomctl/loom/internal/kernel/logging"
 	"github.com/loomctl/loom/internal/kernel/telemetry"
+	"github.com/loomctl/loom/internal/rss"
 	"github.com/loomctl/loom/internal/server"
 	"github.com/loomctl/loom/internal/storage"
 )
@@ -47,6 +50,19 @@ func cmdServe(ctx context.Context, args []string) error {
 		"data_dir", cfg.DataDir,
 	)
 
+	// Load app configuration (loom.json)
+	appCfgPath := filepath.Join(cfg.ConfigDir, "loom.json")
+	appCfg, err := appconfig.Load(appCfgPath)
+	if err != nil {
+		logger.Error("failed to load app config, creating default", "path", appCfgPath, "err", err)
+		// Create default config on first run
+		appCfg = appconfig.NewDefault()
+		if err := appCfg.Save(appCfgPath); err != nil {
+			return fmt.Errorf("save default app config: %w", err)
+		}
+		logger.Info("default app config created", "path", appCfgPath)
+	}
+
 	tel, err := telemetry.Init(ctx, cfg)
 	if err != nil {
 		return fmt.Errorf("init telemetry: %w", err)
@@ -70,7 +86,7 @@ func cmdServe(ctx context.Context, args []string) error {
 		}
 	}
 
-	authSvc, err := buildAuthService(ctx, cfg, db, logger)
+	authSvc, err := buildAuthService(ctx, cfg, db, appCfg, appCfgPath, logger)
 	if err != nil {
 		return fmt.Errorf("init auth: %w", err)
 	}
@@ -96,6 +112,20 @@ func cmdServe(ctx context.Context, args []string) error {
 		return fmt.Errorf("register download health job: %w", err)
 	}
 
+	moviesSvc, err := buildMoviesService(ctx, cfg, db, logger)
+	if err != nil {
+		return fmt.Errorf("init movies: %w", err)
+	}
+
+	rssSvc := rss.NewSourcesService(logger, db)
+
+	// Initialize RSS sync manager and load user sources
+	rssMgr, err := buildRSSManager(ctx, sched, db, logger)
+	if err != nil {
+		return fmt.Errorf("init RSS sync manager: %w", err)
+	}
+	_ = rssMgr // rssMgr is used via scheduler jobs; keep reference to prevent GC
+
 	sched.Start(ctx)
 	defer sched.Stop()
 
@@ -110,11 +140,13 @@ func cmdServe(ctx context.Context, args []string) error {
 		return fmt.Errorf("init aggregator: %w", err)
 	}
 
-	srv, err := server.New(cfg, logger, tel, db, authSvc, indexerSvc, aggSvc)
+	srv, err := server.New(cfg, appCfg, logger, tel, db, authSvc, indexerSvc, moviesSvc, aggSvc)
 	if err != nil {
 		return fmt.Errorf("init server: %w", err)
 	}
 	srv.SetDownloads(downloadSvc)
+	srv.SetRSS(rssSvc)
+	srv.SetMovies(moviesSvc)
 
 	errCh := make(chan error, 1)
 	go func() { errCh <- srv.Start() }()

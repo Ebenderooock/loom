@@ -12,11 +12,30 @@ import { SettingsPage } from "@/pages/settings";
 import { IndexersPage } from "@/pages/indexers";
 import { ProxiesPage } from "@/pages/proxies";
 import { DownloadsPage } from "@/pages/downloads";
+import { SourcesPage } from "@/pages/sources";
+import { SetupPage } from "@/pages/setup";
 import { NotFoundPage } from "@/pages/not-found";
+import { useAuth } from "@/hooks/use-auth";
+
+function RootComponent() {
+  const { isSetupComplete } = useAuth();
+
+  if (!isSetupComplete) {
+    return <SetupPage />;
+  }
+
+  return <AppLayout />;
+}
 
 const rootRoute = createRootRoute({
-  component: AppLayout,
+  component: RootComponent,
   notFoundComponent: NotFoundPage,
+});
+
+const setupRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/setup",
+  component: SetupPage,
 });
 
 const indexRoute = createRoute({
@@ -67,7 +86,14 @@ const downloadsRoute = createRoute({
   component: DownloadsPage,
 });
 
+const sourcesRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/sources",
+  component: SourcesPage,
+});
+
 const routeTree = rootRoute.addChildren([
+  setupRoute,
   indexRoute,
   libraryRoute,
   activityRoute,
@@ -75,6 +101,7 @@ const routeTree = rootRoute.addChildren([
   indexersRoute,
   proxiesRoute,
   downloadsRoute,
+  sourcesRoute,
   settingsRoute,
 ]);
 
