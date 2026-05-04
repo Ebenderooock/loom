@@ -149,6 +149,7 @@ func TestValidateFilterValueReDoS(t *testing.T) {
 
 // TestFilterMatches tests the individual filter matching logic.
 func TestFilterMatches(t *testing.T) {
+	svc := NewCustomFormatService(nil)
 	tests := []struct {
 		name   string
 		filter CustomFormatFilter
@@ -178,7 +179,7 @@ func TestFilterMatches(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := filterMatches(tt.filter, tt.input)
+			got := svc.(*customFormatService).filterMatches(tt.filter, tt.input, nil)
 			if got != tt.want {
 				t.Errorf("filterMatches(%v, %q) = %v, want %v", tt.filter.Condition, tt.input, got, tt.want)
 			}
@@ -225,6 +226,7 @@ func TestCustomFormatFilterOrder(t *testing.T) {
 
 // BenchmarkFilterMatches benchmarks the regex matching performance.
 func BenchmarkFilterMatches(b *testing.B) {
+	svc := NewCustomFormatService(nil)
 	filter := CustomFormatFilter{
 		Condition: ConditionRegex,
 		Value:     "x264",
@@ -233,7 +235,7 @@ func BenchmarkFilterMatches(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		filterMatches(filter, input)
+		svc.(*customFormatService).filterMatches(filter, input, nil)
 	}
 }
 
@@ -305,3 +307,102 @@ func TestRegexCompilationCache(t *testing.T) {
 		}
 	}
 }
+
+// TestNumericFilterConditions tests numeric filter evaluation with parsed release metadata.
+func TestNumericFilterConditions(t *testing.T) {
+	svc := NewCustomFormatService(nil)
+
+	tests := []struct {
+		name       string
+		releaseName string
+		field      string
+		condition  CustomFormatFilterCondition
+		value      string
+		wantMatch  bool
+	}{
+		// Bitdepth tests
+		{"bitdepth 10-bit equals", "Movie.2024.1080p.10-bit.BluRay", "bitdepth", ConditionGreaterThanOrEqual, "10", true},
+		{"bitdepth 10-bit less than", "Movie.2024.1080p.10-bit.BluRay", "bitdepth", ConditionLessThan, "12", true},
+		{"bitdepth 10-bit range", "Movie.2024.1080p.10-bit.BluRay", "bitdepth", ConditionRange, "8,10", true},
+		{"bitdepth 8-bit (implicit) less than 10", "Movie.2024.1080p.BluRay", "bitdepth", ConditionLessThan, "10", true},
+		{"bitdepth 12-bit greater than 10", "Movie.2024.1080p.12-bit.BluRay", "bitdepth", ConditionGreaterThan, "10", true},
+		{"bitdepth 10-bit not in range", "Movie.2024.1080p.10-bit.BluRay", "bitdepth", ConditionRange, "12,14", false},
+
+		// Year tests
+		{"year 2024 equals", "Movie.2024.1080p.BluRay", "year", ConditionGreaterThanOrEqual, "2024", true},
+		{"year 2023 less than 2024", "Movie.2023.1080p.BluRay", "year", ConditionLessThan, "2024", true},
+		{"year 2020 in range", "Movie.2020.1080p.BluRay", "year", ConditionRange, "2015,2025", true},
+		{"year 2010 not greater than 2020", "Movie.2010.1080p.BluRay", "year", ConditionGreaterThan, "2020", false},
+		{"year with bracket format", "Movie.[2024].1080p.BluRay", "year", ConditionGreaterThanOrEqual, "2020", true},
+
+		// Resolution tests
+		{"resolution 1080p equals", "Movie.1080p.BluRay", "resolution", ConditionGreaterThanOrEqual, "1080", true},
+		{"resolution 720p less than 1080p", "Movie.720p.BluRay", "resolution", ConditionLessThan, "1080", true},
+		{"resolution 2160p in range", "Movie.2160p.BluRay", "resolution", ConditionRange, "1080,2160", true},
+		{"resolution 480p not greater than 1080", "Movie.480p.BluRay", "resolution", ConditionGreaterThan, "1080", false},
+		{"resolution 2160p 4K", "Movie.4K.BluRay", "resolution", ConditionGreaterThanOrEqual, "2160", true},
+
+		// Edge cases
+		{"no year found, field zero", "Movie.NoYear.1080p.BluRay", "year", ConditionGreaterThan, "0", false},
+		{"no resolution found", "Movie.SD.BluRay", "resolution", ConditionGreaterThan, "100", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			format := &CustomFormat{
+				Name: "test",
+				Filters: []CustomFormatFilter{
+					{Field: tt.field, Condition: tt.condition, Value: tt.value},
+				},
+			}
+
+			// Evaluate using the custom format service
+			matched := svc.(*customFormatService).matchesAllFilters(format, tt.releaseName)
+			if matched != tt.wantMatch {
+				t.Errorf("expected match=%v, got %v for %q with %s %s %s",
+					tt.wantMatch, matched, tt.releaseName, tt.field, tt.condition, tt.value)
+			}
+		})
+	}
+}
+
+// TestNumericFilterRangeFormat tests the range format parsing for numeric conditions.
+func TestNumericFilterRangeFormat(t *testing.T) {
+	svc := NewCustomFormatService(nil)
+
+	tests := []struct {
+		name        string
+		releaseName string
+		field       string
+		rangeValue  string
+		wantMatch   bool
+	}{
+		{"bitdepth in range", "Movie.10-bit.mkv", "bitdepth", "8,10", true},
+		{"bitdepth below range", "Movie.8-bit.mkv", "bitdepth", "10,12", false},
+		{"bitdepth above range", "Movie.12-bit.mkv", "bitdepth", "8,10", false},
+		{"year in range", "Movie.2023.mkv", "year", "2020,2025", true},
+		{"year below range", "Movie.2019.mkv", "year", "2020,2025", false},
+		{"resolution in range", "Movie.1080p.mkv", "resolution", "720,1080", true},
+		// Open-ended ranges
+		{"bitdepth at least 10", "Movie.10-bit.mkv", "bitdepth", "10,", true},
+		{"year up to 2025", "Movie.2024.mkv", "year", ",2025", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			format := &CustomFormat{
+				Name: "test",
+				Filters: []CustomFormatFilter{
+					{Field: tt.field, Condition: ConditionRange, Value: tt.rangeValue},
+				},
+			}
+
+			matched := svc.(*customFormatService).matchesAllFilters(format, tt.releaseName)
+			if matched != tt.wantMatch {
+				t.Errorf("expected match=%v, got %v for %q with range %s",
+					tt.wantMatch, matched, tt.releaseName, tt.rangeValue)
+			}
+		})
+	}
+}
+

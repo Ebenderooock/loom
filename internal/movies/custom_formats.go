@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/loomctl/loom/internal/parser"
 )
 
 // CustomFormatRepository defines database operations for custom formats.
@@ -156,8 +158,11 @@ func (cfs *customFormatService) EvaluateCustomFormats(ctx context.Context, relea
 // matchesAllFilters checks if all filters in the custom format match the release name.
 // All filters use AND logic (all must match).
 func (cfs *customFormatService) matchesAllFilters(format *CustomFormat, releaseName string) bool {
+	// Parse release name once to extract metadata
+	release := parser.Parse(releaseName)
+
 	for _, filter := range format.Filters {
-		if !cfs.filterMatches(filter, releaseName) {
+		if !cfs.filterMatches(filter, releaseName, release) {
 			return false
 		}
 	}
@@ -165,7 +170,8 @@ func (cfs *customFormatService) matchesAllFilters(format *CustomFormat, releaseN
 }
 
 // filterMatches checks if a single filter matches the release name.
-func (cfs *customFormatService) filterMatches(filter CustomFormatFilter, releaseName string) bool {
+// release is the parsed metadata extracted from the release name; can be nil for non-numeric conditions.
+func (cfs *customFormatService) filterMatches(filter CustomFormatFilter, releaseName string, release *parser.Release) bool {
 	switch filter.Condition {
 	case ConditionEquals:
 		// Case-insensitive exact match
@@ -187,10 +193,99 @@ func (cfs *customFormatService) filterMatches(filter CustomFormatFilter, release
 		}
 		return false
 	case ConditionRange, ConditionGreaterThan, ConditionGreaterThanOrEqual, ConditionLessThan, ConditionLessThanOrEqual:
-		// Numeric comparison
-		// For now, these are not evaluated on release name but on parsed metadata
-		// TODO: integrate with parser for codec bitdepth, year, etc.
+		// Numeric comparison using parsed release metadata
+		return cfs.evaluateNumericCondition(filter, release)
+	default:
 		return false
+	}
+}
+
+// evaluateNumericCondition evaluates numeric filter conditions based on parsed release metadata.
+func (cfs *customFormatService) evaluateNumericCondition(filter CustomFormatFilter, release *parser.Release) bool {
+	if release == nil {
+		return false
+	}
+
+	// Determine the release field to compare
+	var releaseValue int
+	switch strings.ToLower(filter.Field) {
+	case "bitdepth":
+		releaseValue = release.Bitdepth
+	case "year":
+		releaseValue = release.Year
+	case "resolution":
+		releaseValue = release.Resolution
+	default:
+		// Unknown field
+		return false
+	}
+
+	// If the field was not extracted (zero value), treat it as no match
+	// Some fields like year and resolution might legitimately be 0, but bitdepth
+	// of 0 means 8-bit which is valid; however, if the filter explicitly requires it,
+	// it should be marked
+	if releaseValue == 0 && filter.Field != "bitdepth" {
+		return false
+	}
+
+	// Evaluate based on condition
+	switch filter.Condition {
+	case ConditionGreaterThan:
+		filterValue, err := strconv.Atoi(filter.Value)
+		if err != nil {
+			return false
+		}
+		return releaseValue > filterValue
+	case ConditionGreaterThanOrEqual:
+		filterValue, err := strconv.Atoi(filter.Value)
+		if err != nil {
+			return false
+		}
+		return releaseValue >= filterValue
+	case ConditionLessThan:
+		filterValue, err := strconv.Atoi(filter.Value)
+		if err != nil {
+			return false
+		}
+		return releaseValue < filterValue
+	case ConditionLessThanOrEqual:
+		filterValue, err := strconv.Atoi(filter.Value)
+		if err != nil {
+			return false
+		}
+		return releaseValue <= filterValue
+	case ConditionRange:
+		// Range format: "min,max" (e.g., "8,10" for bitdepth range)
+		parts := strings.Split(filter.Value, ",")
+		if len(parts) != 2 {
+			return false
+		}
+		minStr := strings.TrimSpace(parts[0])
+		maxStr := strings.TrimSpace(parts[1])
+
+		// Handle open-ended ranges (e.g., ",10" or "8,")
+		if minStr == "" && maxStr == "" {
+			return false // Both empty is invalid
+		}
+		if minStr != "" {
+			minVal, err := strconv.Atoi(minStr)
+			if err != nil {
+				return false
+			}
+			if releaseValue < minVal {
+				return false
+			}
+		}
+		if maxStr != "" {
+			maxVal, err := strconv.Atoi(maxStr)
+			if err != nil {
+				return false
+			}
+			if releaseValue > maxVal {
+				return false
+			}
+		}
+		return true
 	default:
 		return false
 	}
