@@ -6,6 +6,12 @@
         "shadcn@latest",
         "mcp"
       ]
+    },
+    "playwright": {
+      "command": "node",
+      "args": [
+        "./mcp-playwright/server.js"
+      ]
     }
   }
 }

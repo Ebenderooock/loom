@@ -1,0 +1,16 @@
+{
+  "name": "mcp-playwright",
+  "version": "1.0.0",
+  "description": "MCP server for running Playwright E2E tests",
+  "main": "server.js",
+  "type": "commonjs",
+  "bin": {
+    "mcp-playwright": "server.js"
+  },
+  "scripts": {
+    "start": "node server.js"
+  },
+  "keywords": ["mcp", "playwright", "testing"],
+  "author": "",
+  "license": "ISC"
+}
