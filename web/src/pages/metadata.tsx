@@ -1,7 +1,3 @@
-// MetadataPage provides the UI for searching metadata across providers,
-// viewing results, importing to cache, and monitoring cache statistics.
-// Mirrors the Indexers page patterns from Phase 2g.
-
 import * as React from "react";
 import { Plus, RefreshCw, Play } from "lucide-react";
 import { toast } from "sonner";
@@ -21,13 +17,6 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {
   useMetadataSearch,
   useMetadataImport,
@@ -55,13 +44,13 @@ function SearchForm({
   const [type, setType] = React.useState<MediaType>("movie");
   const [year, setYear] = React.useState<string>("");
 
-  function handleSubmit(e: React.FormEvent) {
+  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!query.trim()) {
       toast.error("Please enter a search query");
       return;
     }
-    onSearch(query, type, year ? parseInt(year) : undefined);
+    onSearch(query, type, year ? parseInt(year, 10) : undefined);
   }
 
   return (
@@ -78,15 +67,15 @@ function SearchForm({
         </div>
         <div>
           <label className="block text-sm font-medium mb-2">Type</label>
-          <Select value={type} onValueChange={(v) => setType(v as MediaType)}>
-            <SelectTrigger disabled={isLoading}>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="movie">Movie</SelectItem>
-              <SelectItem value="series">Series</SelectItem>
-            </SelectContent>
-          </Select>
+          <select
+            value={type}
+            onChange={(e) => setType(e.target.value as MediaType)}
+            disabled={isLoading}
+            className="w-full px-3 py-2 border border-border rounded-md bg-background text-sm"
+          >
+            <option value="movie">Movie</option>
+            <option value="series">Series</option>
+          </select>
         </div>
         <div>
           <label className="block text-sm font-medium mb-2">Year (optional)</label>
@@ -342,7 +331,7 @@ export function MetadataPage() {
 
   async function handleSearch(query: string, type: MediaType, year?: number) {
     try {
-      const res = await search.mutateAsync();
+      await search.mutateAsync();
       // Re-create mutation with correct params for next search
       const newSearch = useMetadataSearch(query, type, year);
       const results = await newSearch.mutateAsync();
