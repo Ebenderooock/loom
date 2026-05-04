@@ -31,6 +31,22 @@ type Repository interface {
 	DeleteMovieFile(ctx context.Context, id string) error
 	ListMovieFilesByMovie(ctx context.Context, movieID string) ([]*MovieFile, error)
 	GetMovieFileByPath(ctx context.Context, path string) (*MovieFile, error)
+
+	// Quality definitions
+	AddQualityDefinition(ctx context.Context, qd *QualityDefinition) error
+	GetQualityDefinition(ctx context.Context, id string) (*QualityDefinition, error)
+	UpdateQualityDefinition(ctx context.Context, qd *QualityDefinition) error
+	DeleteQualityDefinition(ctx context.Context, id string) error
+	ListQualityDefinitions(ctx context.Context) ([]*QualityDefinition, error)
+	GetQualityDefinitionByName(ctx context.Context, name string) (*QualityDefinition, error)
+
+	// Quality profiles
+	AddQualityProfile(ctx context.Context, qp *QualityProfile) error
+	GetQualityProfile(ctx context.Context, id string) (*QualityProfile, error)
+	UpdateQualityProfile(ctx context.Context, qp *QualityProfile) error
+	DeleteQualityProfile(ctx context.Context, id string) error
+	ListQualityProfiles(ctx context.Context) ([]*QualityProfile, error)
+	GetQualityProfileByName(ctx context.Context, name string) (*QualityProfile, error)
 }
 
 // NewRepository creates a new repository for the given database.
@@ -334,4 +350,301 @@ func (r *sqlRepo) GetMovieFileByPath(ctx context.Context, path string) (*MovieFi
 		_ = json.Unmarshal(mediaInfoBytes, &mf.MediaInfo)
 	}
 	return mf, nil
+}
+
+// Quality Definition methods
+
+// AddQualityDefinition adds a new quality definition to the database.
+func (r *sqlRepo) AddQualityDefinition(ctx context.Context, qd *QualityDefinition) error {
+	_, err := r.db.ExecContext(ctx,
+		`INSERT INTO quality_definitions (id, name, title, source, resolution, modifier, min_file_size, max_file_size, preferred_at, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		qd.ID, qd.Name, qd.Title, qd.Source, qd.Resolution, qd.Modifier, qd.MinFileSize, qd.MaxFileSize, qd.PreferredAt, qd.CreatedAt, qd.UpdatedAt,
+	)
+	return err
+}
+
+// GetQualityDefinition retrieves a quality definition by ID.
+func (r *sqlRepo) GetQualityDefinition(ctx context.Context, id string) (*QualityDefinition, error) {
+	qd := &QualityDefinition{}
+	err := r.db.QueryRowContext(ctx,
+		`SELECT id, name, title, source, resolution, modifier, min_file_size, max_file_size, preferred_at, created_at, updated_at, deleted_at
+		 FROM quality_definitions WHERE id = ? AND deleted_at IS NULL`,
+		id,
+	).Scan(&qd.ID, &qd.Name, &qd.Title, &qd.Source, &qd.Resolution, &qd.Modifier, &qd.MinFileSize, &qd.MaxFileSize, &qd.PreferredAt, &qd.CreatedAt, &qd.UpdatedAt, &qd.DeletedAt)
+	if err != nil {
+		return nil, err
+	}
+	return qd, nil
+}
+
+// UpdateQualityDefinition updates an existing quality definition.
+func (r *sqlRepo) UpdateQualityDefinition(ctx context.Context, qd *QualityDefinition) error {
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE quality_definitions
+		 SET name = ?, title = ?, source = ?, resolution = ?, modifier = ?, min_file_size = ?, max_file_size = ?, preferred_at = ?, updated_at = ?
+		 WHERE id = ?`,
+		qd.Name, qd.Title, qd.Source, qd.Resolution, qd.Modifier, qd.MinFileSize, qd.MaxFileSize, qd.PreferredAt, qd.UpdatedAt, qd.ID,
+	)
+	return err
+}
+
+// DeleteQualityDefinition soft-deletes a quality definition.
+func (r *sqlRepo) DeleteQualityDefinition(ctx context.Context, id string) error {
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE quality_definitions SET deleted_at = ? WHERE id = ?`,
+		time.Now(), id,
+	)
+	return err
+}
+
+// ListQualityDefinitions retrieves all non-deleted quality definitions.
+func (r *sqlRepo) ListQualityDefinitions(ctx context.Context) ([]*QualityDefinition, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT id, name, title, source, resolution, modifier, min_file_size, max_file_size, preferred_at, created_at, updated_at, deleted_at
+		 FROM quality_definitions WHERE deleted_at IS NULL ORDER BY title ASC`,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var defs []*QualityDefinition
+	for rows.Next() {
+		qd := &QualityDefinition{}
+		err := rows.Scan(&qd.ID, &qd.Name, &qd.Title, &qd.Source, &qd.Resolution, &qd.Modifier, &qd.MinFileSize, &qd.MaxFileSize, &qd.PreferredAt, &qd.CreatedAt, &qd.UpdatedAt, &qd.DeletedAt)
+		if err != nil {
+			return nil, err
+		}
+		defs = append(defs, qd)
+	}
+	return defs, rows.Err()
+}
+
+// GetQualityDefinitionByName retrieves a quality definition by name.
+func (r *sqlRepo) GetQualityDefinitionByName(ctx context.Context, name string) (*QualityDefinition, error) {
+	qd := &QualityDefinition{}
+	err := r.db.QueryRowContext(ctx,
+		`SELECT id, name, title, source, resolution, modifier, min_file_size, max_file_size, preferred_at, created_at, updated_at, deleted_at
+		 FROM quality_definitions WHERE name = ? AND deleted_at IS NULL`,
+		name,
+	).Scan(&qd.ID, &qd.Name, &qd.Title, &qd.Source, &qd.Resolution, &qd.Modifier, &qd.MinFileSize, &qd.MaxFileSize, &qd.PreferredAt, &qd.CreatedAt, &qd.UpdatedAt, &qd.DeletedAt)
+	if err != nil {
+		return nil, err
+	}
+	return qd, nil
+}
+
+// Quality Profile methods
+
+// AddQualityProfile adds a new quality profile to the database.
+func (r *sqlRepo) AddQualityProfile(ctx context.Context, qp *QualityProfile) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	formatItems, _ := json.Marshal(qp.FormatItems)
+
+	_, err = tx.ExecContext(ctx,
+		`INSERT INTO quality_profiles (id, name, upgrade_allowed, cutoff, language, format_items, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		qp.ID, qp.Name, qp.UpgradeAllowed, qp.Cutoff, qp.Language, string(formatItems), qp.CreatedAt, qp.UpdatedAt,
+	)
+	if err != nil {
+		return err
+	}
+
+	// Insert quality profile items
+	for _, item := range qp.Items {
+		_, err = tx.ExecContext(ctx,
+			`INSERT INTO quality_profile_items (profile_id, quality_definition_id, preferred, allowed)
+			 VALUES (?, ?, ?, ?)`,
+			qp.ID, item.ID, item.Preferred, item.Allowed,
+		)
+		if err != nil {
+			return err
+		}
+	}
+
+	return tx.Commit()
+}
+
+// GetQualityProfile retrieves a quality profile by ID.
+func (r *sqlRepo) GetQualityProfile(ctx context.Context, id string) (*QualityProfile, error) {
+	qp := &QualityProfile{}
+	var formatItemsStr string
+
+	err := r.db.QueryRowContext(ctx,
+		`SELECT id, name, upgrade_allowed, cutoff, language, format_items, created_at, updated_at, deleted_at
+		 FROM quality_profiles WHERE id = ? AND deleted_at IS NULL`,
+		id,
+	).Scan(&qp.ID, &qp.Name, &qp.UpgradeAllowed, &qp.Cutoff, &qp.Language, &formatItemsStr, &qp.CreatedAt, &qp.UpdatedAt, &qp.DeletedAt)
+	if err != nil {
+		return nil, err
+	}
+
+	if formatItemsStr != "" {
+		_ = json.Unmarshal([]byte(formatItemsStr), &qp.FormatItems)
+	}
+
+	// Fetch quality profile items
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT quality_definition_id, preferred, allowed FROM quality_profile_items WHERE profile_id = ?`,
+		id,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		item := QualityProfileItem{}
+		err := rows.Scan(&item.ID, &item.Preferred, &item.Allowed)
+		if err != nil {
+			return nil, err
+		}
+		qp.Items = append(qp.Items, item)
+	}
+
+	return qp, rows.Err()
+}
+
+// UpdateQualityProfile updates an existing quality profile.
+func (r *sqlRepo) UpdateQualityProfile(ctx context.Context, qp *QualityProfile) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	formatItems, _ := json.Marshal(qp.FormatItems)
+
+	_, err = tx.ExecContext(ctx,
+		`UPDATE quality_profiles
+		 SET name = ?, upgrade_allowed = ?, cutoff = ?, language = ?, format_items = ?, updated_at = ?
+		 WHERE id = ?`,
+		qp.Name, qp.UpgradeAllowed, qp.Cutoff, qp.Language, string(formatItems), qp.UpdatedAt, qp.ID,
+	)
+	if err != nil {
+		return err
+	}
+
+	// Delete old items and reinsert
+	_, err = tx.ExecContext(ctx, `DELETE FROM quality_profile_items WHERE profile_id = ?`, qp.ID)
+	if err != nil {
+		return err
+	}
+
+	for _, item := range qp.Items {
+		_, err = tx.ExecContext(ctx,
+			`INSERT INTO quality_profile_items (profile_id, quality_definition_id, preferred, allowed)
+			 VALUES (?, ?, ?, ?)`,
+			qp.ID, item.ID, item.Preferred, item.Allowed,
+		)
+		if err != nil {
+			return err
+		}
+	}
+
+	return tx.Commit()
+}
+
+// DeleteQualityProfile soft-deletes a quality profile.
+func (r *sqlRepo) DeleteQualityProfile(ctx context.Context, id string) error {
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE quality_profiles SET deleted_at = ? WHERE id = ?`,
+		time.Now(), id,
+	)
+	return err
+}
+
+// ListQualityProfiles retrieves all non-deleted quality profiles.
+func (r *sqlRepo) ListQualityProfiles(ctx context.Context) ([]*QualityProfile, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT id, name, upgrade_allowed, cutoff, language, format_items, created_at, updated_at, deleted_at
+		 FROM quality_profiles WHERE deleted_at IS NULL ORDER BY name ASC`,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var profiles []*QualityProfile
+	for rows.Next() {
+		qp := &QualityProfile{}
+		var formatItemsStr string
+		err := rows.Scan(&qp.ID, &qp.Name, &qp.UpgradeAllowed, &qp.Cutoff, &qp.Language, &formatItemsStr, &qp.CreatedAt, &qp.UpdatedAt, &qp.DeletedAt)
+		if err != nil {
+			return nil, err
+		}
+
+		if formatItemsStr != "" {
+			_ = json.Unmarshal([]byte(formatItemsStr), &qp.FormatItems)
+		}
+
+		// Fetch items for this profile
+		itemRows, err := r.db.QueryContext(ctx,
+			`SELECT quality_definition_id, preferred, allowed FROM quality_profile_items WHERE profile_id = ?`,
+			qp.ID,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		for itemRows.Next() {
+			item := QualityProfileItem{}
+			err := itemRows.Scan(&item.ID, &item.Preferred, &item.Allowed)
+			if err != nil {
+				itemRows.Close()
+				return nil, err
+			}
+			qp.Items = append(qp.Items, item)
+		}
+		itemRows.Close()
+
+		profiles = append(profiles, qp)
+	}
+	return profiles, rows.Err()
+}
+
+// GetQualityProfileByName retrieves a quality profile by name.
+func (r *sqlRepo) GetQualityProfileByName(ctx context.Context, name string) (*QualityProfile, error) {
+	qp := &QualityProfile{}
+	var formatItemsStr string
+
+	err := r.db.QueryRowContext(ctx,
+		`SELECT id, name, upgrade_allowed, cutoff, language, format_items, created_at, updated_at, deleted_at
+		 FROM quality_profiles WHERE name = ? AND deleted_at IS NULL`,
+		name,
+	).Scan(&qp.ID, &qp.Name, &qp.UpgradeAllowed, &qp.Cutoff, &qp.Language, &formatItemsStr, &qp.CreatedAt, &qp.UpdatedAt, &qp.DeletedAt)
+	if err != nil {
+		return nil, err
+	}
+
+	if formatItemsStr != "" {
+		_ = json.Unmarshal([]byte(formatItemsStr), &qp.FormatItems)
+	}
+
+	// Fetch quality profile items
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT quality_definition_id, preferred, allowed FROM quality_profile_items WHERE profile_id = ?`,
+		qp.ID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		item := QualityProfileItem{}
+		err := rows.Scan(&item.ID, &item.Preferred, &item.Allowed)
+		if err != nil {
+			return nil, err
+		}
+		qp.Items = append(qp.Items, item)
+	}
+
+	return qp, rows.Err()
 }

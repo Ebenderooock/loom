@@ -45,6 +45,11 @@ tags:
       indexer behind a single endpoint that Sonarr/Radarr/Lidarr clients can be pointed
       at. See `docs/indexers-aggregator.md` for the full user guide and ADR-0011 for
       the design rationale.
+  - name: quality
+    description: |
+      Quality definitions (resolution, source, codec metadata) and profiles
+      (named collections with cutoff/upgrade rules). See ADR-0005 for the design
+      and Radarr compatibility rationale.
 
 paths:
   /healthz:
@@ -1009,6 +1014,176 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
+  /api/v1/quality-definitions:
+    get:
+      tags: [quality]
+      summary: List all quality definitions.
+      operationId: listQualityDefinitions
+      responses:
+        "200":
+          description: OK.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/QualityDefinition"
+    post:
+      tags: [quality]
+      summary: Add a quality definition.
+      operationId: addQualityDefinition
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateQualityDefinitionRequest"
+      responses:
+        "201":
+          description: Quality definition created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QualityDefinition"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /api/v1/quality-definitions/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      tags: [quality]
+      summary: Get quality definition by ID.
+      operationId: getQualityDefinition
+      responses:
+        "200":
+          description: OK.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QualityDefinition"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [quality]
+      summary: Update quality definition.
+      operationId: updateQualityDefinition
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateQualityDefinitionRequest"
+      responses:
+        "200":
+          description: OK.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QualityDefinition"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [quality]
+      summary: Delete quality definition (soft delete).
+      operationId: deleteQualityDefinition
+      responses:
+        "204":
+          description: No content.
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/quality-profiles:
+    get:
+      tags: [quality]
+      summary: List all quality profiles.
+      operationId: listQualityProfiles
+      responses:
+        "200":
+          description: OK.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/QualityProfile"
+    post:
+      tags: [quality]
+      summary: Add a quality profile.
+      operationId: addQualityProfile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateQualityProfileRequest"
+      responses:
+        "201":
+          description: Quality profile created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QualityProfile"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /api/v1/quality-profiles/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      tags: [quality]
+      summary: Get quality profile by ID.
+      operationId: getQualityProfile
+      responses:
+        "200":
+          description: OK.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QualityProfile"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [quality]
+      summary: Update quality profile.
+      operationId: updateQualityProfile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateQualityProfileRequest"
+      responses:
+        "200":
+          description: OK.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QualityProfile"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [quality]
+      summary: Delete quality profile (soft delete).
+      operationId: deleteQualityProfile
+      responses:
+        "204":
+          description: No content.
+        "404":
+          $ref: "#/components/responses/NotFound"
+
 components:
   schemas:
     HealthStatus:
@@ -1900,6 +2075,192 @@ components:
           type: array
           items:
             type: string
+
+    QualityDefinition:
+      type: object
+      required: [id, name, source, resolution]
+      properties:
+        id:
+          type: string
+          description: Unique quality definition identifier (slugified name).
+        name:
+          type: string
+          description: Display name for the quality tier.
+        title:
+          type: string
+          description: Long-form title for UI display.
+        source:
+          type: string
+          description: Source tier (e.g. BluRay, WebRip, HDTV).
+        resolution:
+          type: string
+          description: Resolution tier (e.g. 1080p, 720p, 2160p).
+        modifier:
+          type: string
+          description: Optional modifier (e.g. REMUX, PROPER).
+        min_file_size:
+          type: integer
+          format: int64
+          description: Minimum file size in bytes.
+        max_file_size:
+          type: integer
+          format: int64
+          description: Maximum file size in bytes.
+        preferred_at:
+          type: integer
+          description: Ranking score for preference scoring.
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        deleted_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    CreateQualityDefinitionRequest:
+      type: object
+      required: [name, source, resolution]
+      properties:
+        name:
+          type: string
+        title:
+          type: string
+        source:
+          type: string
+        resolution:
+          type: string
+        modifier:
+          type: string
+        min_file_size:
+          type: integer
+          format: int64
+        max_file_size:
+          type: integer
+          format: int64
+        preferred_at:
+          type: integer
+
+    UpdateQualityDefinitionRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        title:
+          type: string
+        source:
+          type: string
+        resolution:
+          type: string
+        modifier:
+          type: string
+        min_file_size:
+          type: integer
+          format: int64
+        max_file_size:
+          type: integer
+          format: int64
+        preferred_at:
+          type: integer
+
+    QualityProfileItem:
+      type: object
+      required: [id, name, allowed]
+      properties:
+        id:
+          type: string
+          description: Quality definition ID.
+        name:
+          type: string
+          description: Quality definition name.
+        preferred:
+          type: boolean
+          description: Whether this quality is preferred.
+        allowed:
+          type: boolean
+          description: Whether this quality is allowed in the profile.
+
+    QualityProfile:
+      type: object
+      required: [id, name, cutoff, items]
+      properties:
+        id:
+          type: string
+          description: Unique profile identifier (slugified name).
+        name:
+          type: string
+          description: Profile name.
+        upgrade_allowed:
+          type: boolean
+          description: Whether upgrades are allowed after initial grab.
+        cutoff:
+          type: string
+          description: Quality definition ID that serves as upgrade target. Must exist in items and be allowed.
+        language:
+          type: string
+          description: ISO 639-1 language code.
+        format_items:
+          type: array
+          description: Custom format scoring array (placeholder for Phase 5c).
+          items:
+            type: object
+        min_format_score:
+          type: integer
+          description: Minimum format score threshold.
+        cutoff_format_score:
+          type: integer
+          description: Format score at which to stop upgrading.
+        items:
+          type: array
+          description: Quality definitions in this profile with allowed/preferred flags.
+          items:
+            $ref: "#/components/schemas/QualityProfileItem"
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        deleted_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    CreateQualityProfileRequest:
+      type: object
+      required: [name, cutoff, items]
+      properties:
+        name:
+          type: string
+        upgrade_allowed:
+          type: boolean
+        cutoff:
+          type: string
+          description: Quality definition ID that serves as upgrade target.
+        language:
+          type: string
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/QualityProfileItem"
+
+    UpdateQualityProfileRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        upgrade_allowed:
+          type: boolean
+        cutoff:
+          type: string
+        language:
+          type: string
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/QualityProfileItem"
 
   parameters:
     DownloadClientID:

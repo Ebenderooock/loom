@@ -23,6 +23,20 @@ type Service interface {
 	DeleteRootFolder(ctx context.Context, id string) error
 
 	ListMovieFiles(ctx context.Context, movieID string) ([]*MovieFile, error)
+
+	// Quality definitions
+	AddQualityDefinition(ctx context.Context, qd *QualityDefinition) error
+	GetQualityDefinition(ctx context.Context, id string) (*QualityDefinition, error)
+	UpdateQualityDefinition(ctx context.Context, qd *QualityDefinition) error
+	DeleteQualityDefinition(ctx context.Context, id string) error
+	ListQualityDefinitions(ctx context.Context) ([]*QualityDefinition, error)
+
+	// Quality profiles
+	AddQualityProfile(ctx context.Context, qp *QualityProfile) error
+	GetQualityProfile(ctx context.Context, id string) (*QualityProfile, error)
+	UpdateQualityProfile(ctx context.Context, qp *QualityProfile) error
+	DeleteQualityProfile(ctx context.Context, id string) error
+	ListQualityProfiles(ctx context.Context) ([]*QualityProfile, error)
 }
 
 // service implements the Service interface.
@@ -255,4 +269,148 @@ func (s *service) ListMovieFiles(ctx context.Context, movieID string) ([]*MovieF
 	}
 
 	return s.repo.ListMovieFilesByMovie(ctx, movieID)
+}
+
+// AddQualityDefinition adds a new quality definition.
+func (s *service) AddQualityDefinition(ctx context.Context, qd *QualityDefinition) error {
+	if qd == nil {
+		return fmt.Errorf("movies: quality definition required")
+	}
+	if qd.Name == "" {
+		return fmt.Errorf("movies: quality definition name required")
+	}
+	if qd.Source == "" {
+		return fmt.Errorf("movies: quality source required")
+	}
+	if qd.Resolution == "" {
+		return fmt.Errorf("movies: quality resolution required")
+	}
+
+	qd.CreatedAt = time.Now()
+	qd.UpdatedAt = time.Now()
+
+	return s.repo.AddQualityDefinition(ctx, qd)
+}
+
+// GetQualityDefinition retrieves a quality definition by ID.
+func (s *service) GetQualityDefinition(ctx context.Context, id string) (*QualityDefinition, error) {
+	if id == "" {
+		return nil, fmt.Errorf("movies: quality definition ID required")
+	}
+	return s.repo.GetQualityDefinition(ctx, id)
+}
+
+// UpdateQualityDefinition updates an existing quality definition.
+func (s *service) UpdateQualityDefinition(ctx context.Context, qd *QualityDefinition) error {
+	if qd == nil {
+		return fmt.Errorf("movies: quality definition required")
+	}
+	if qd.ID == "" {
+		return fmt.Errorf("movies: quality definition ID required")
+	}
+
+	qd.UpdatedAt = time.Now()
+	return s.repo.UpdateQualityDefinition(ctx, qd)
+}
+
+// DeleteQualityDefinition removes a quality definition.
+func (s *service) DeleteQualityDefinition(ctx context.Context, id string) error {
+	if id == "" {
+		return fmt.Errorf("movies: quality definition ID required")
+	}
+	return s.repo.DeleteQualityDefinition(ctx, id)
+}
+
+// ListQualityDefinitions retrieves all quality definitions.
+func (s *service) ListQualityDefinitions(ctx context.Context) ([]*QualityDefinition, error) {
+	return s.repo.ListQualityDefinitions(ctx)
+}
+
+// AddQualityProfile adds a new quality profile.
+func (s *service) AddQualityProfile(ctx context.Context, qp *QualityProfile) error {
+	if qp == nil {
+		return fmt.Errorf("movies: quality profile required")
+	}
+	if qp.Name == "" {
+		return fmt.Errorf("movies: quality profile name required")
+	}
+
+	// Validate profile
+	if err := s.validateQualityProfile(qp); err != nil {
+		return err
+	}
+
+	qp.CreatedAt = time.Now()
+	qp.UpdatedAt = time.Now()
+
+	return s.repo.AddQualityProfile(ctx, qp)
+}
+
+// GetQualityProfile retrieves a quality profile by ID.
+func (s *service) GetQualityProfile(ctx context.Context, id string) (*QualityProfile, error) {
+	if id == "" {
+		return nil, fmt.Errorf("movies: quality profile ID required")
+	}
+	return s.repo.GetQualityProfile(ctx, id)
+}
+
+// UpdateQualityProfile updates an existing quality profile.
+func (s *service) UpdateQualityProfile(ctx context.Context, qp *QualityProfile) error {
+	if qp == nil {
+		return fmt.Errorf("movies: quality profile required")
+	}
+	if qp.ID == "" {
+		return fmt.Errorf("movies: quality profile ID required")
+	}
+
+	// Validate profile
+	if err := s.validateQualityProfile(qp); err != nil {
+		return err
+	}
+
+	qp.UpdatedAt = time.Now()
+	return s.repo.UpdateQualityProfile(ctx, qp)
+}
+
+// DeleteQualityProfile removes a quality profile.
+func (s *service) DeleteQualityProfile(ctx context.Context, id string) error {
+	if id == "" {
+		return fmt.Errorf("movies: quality profile ID required")
+	}
+	return s.repo.DeleteQualityProfile(ctx, id)
+}
+
+// ListQualityProfiles retrieves all quality profiles.
+func (s *service) ListQualityProfiles(ctx context.Context) ([]*QualityProfile, error) {
+	return s.repo.ListQualityProfiles(ctx)
+}
+
+// validateQualityProfile validates a quality profile for consistency.
+func (s *service) validateQualityProfile(qp *QualityProfile) error {
+	if qp.Name == "" {
+		return fmt.Errorf("movies: quality profile name required")
+	}
+	if qp.Cutoff == "" {
+		return fmt.Errorf("movies: quality profile cutoff required")
+	}
+	if len(qp.Items) == 0 {
+		return fmt.Errorf("movies: quality profile must have at least one quality item")
+	}
+
+	// Verify cutoff is in items
+	cutoffFound := false
+	for _, item := range qp.Items {
+		if item.ID == qp.Cutoff {
+			cutoffFound = true
+			if !item.Allowed {
+				return fmt.Errorf("movies: cutoff quality %q must be in allowed items", qp.Cutoff)
+			}
+			break
+		}
+	}
+	if !cutoffFound {
+		return fmt.Errorf("movies: cutoff quality %q not found in profile items", qp.Cutoff)
+	}
+
+	return nil
 }
