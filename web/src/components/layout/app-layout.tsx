@@ -3,6 +3,7 @@ import { Link, Outlet, useRouterState } from "@tanstack/react-router";
 import {
   Calendar,
   Download,
+  Film,
   LayoutDashboard,
   Library,
   ListTodo,
@@ -41,6 +42,7 @@ interface NavItem {
   to:
     | "/"
     | "/library"
+    | "/movies"
     | "/activity"
     | "/calendar"
     | "/indexers"
@@ -55,6 +57,7 @@ interface NavItem {
 const NAV: NavItem[] = [
   { to: "/", label: "Dashboard", Icon: LayoutDashboard },
   { to: "/library", label: "Library", Icon: Library },
+  { to: "/movies", label: "Movies", Icon: Film },
   { to: "/activity", label: "Activity", Icon: ListTodo },
   { to: "/calendar", label: "Calendar", Icon: Calendar },
   { to: "/indexers", label: "Indexers", Icon: Radio },

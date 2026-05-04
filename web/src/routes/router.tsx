@@ -6,6 +6,7 @@ import {
 import { AppLayout } from "@/components/layout/app-layout";
 import { DashboardPage } from "@/pages/dashboard";
 import { LibraryPage } from "@/pages/library";
+import { MoviesPage } from "@/pages/movies";
 import { ActivityPage } from "@/pages/activity";
 import { CalendarPage } from "@/pages/calendar";
 import { SettingsPage } from "@/pages/settings";
@@ -48,6 +49,12 @@ const libraryRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/library",
   component: LibraryPage,
+});
+
+const moviesRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/movies",
+  component: MoviesPage,
 });
 
 const activityRoute = createRoute({
@@ -96,6 +103,7 @@ const routeTree = rootRoute.addChildren([
   setupRoute,
   indexRoute,
   libraryRoute,
+  moviesRoute,
   activityRoute,
   calendarRoute,
   indexersRoute,
