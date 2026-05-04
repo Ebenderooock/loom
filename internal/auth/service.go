@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/loomctl/loom/internal/appconfig"
 	"github.com/loomctl/loom/internal/storage"
 	dbpg "github.com/loomctl/loom/internal/storage/db/postgres"
 	dbsqlite "github.com/loomctl/loom/internal/storage/db/sqlite"
@@ -18,6 +19,8 @@ import (
 type ServiceOptions struct {
 	Store         Store
 	Logger        *slog.Logger
+	AppConfig     *appconfig.Config
+	AppConfigPath string
 	SessionSecret []byte
 	SessionTTL    time.Duration
 	CookieSecure  bool
@@ -30,6 +33,8 @@ type ServiceOptions struct {
 type Service struct {
 	store         Store
 	logger        *slog.Logger
+	appConfig     *appconfig.Config
+	appConfigPath string
 	sessionSecret []byte
 	sessionTTL    time.Duration
 	cookieSecure  bool
@@ -43,6 +48,12 @@ func NewService(opts ServiceOptions) (*Service, error) {
 	if opts.Store == nil {
 		return nil, errors.New("auth: store is required")
 	}
+	if opts.AppConfig == nil {
+		return nil, errors.New("auth: appConfig is required")
+	}
+	if opts.AppConfigPath == "" {
+		return nil, errors.New("auth: appConfigPath is required")
+	}
 	if len(opts.SessionSecret) < 16 {
 		return nil, errors.New("auth: session secret must be >= 16 bytes")
 	}
@@ -55,6 +66,8 @@ func NewService(opts ServiceOptions) (*Service, error) {
 	return &Service{
 		store:         opts.Store,
 		logger:        opts.Logger,
+		appConfig:     opts.AppConfig,
+		appConfigPath: opts.AppConfigPath,
 		sessionSecret: opts.SessionSecret,
 		sessionTTL:    opts.SessionTTL,
 		cookieSecure:  opts.CookieSecure,

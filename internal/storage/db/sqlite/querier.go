@@ -11,6 +11,7 @@ import (
 
 type Querier interface {
 	CountMovies(ctx context.Context) (int64, error)
+	CountUserSources(ctx context.Context) (int64, error)
 	CountUsers(ctx context.Context) (int64, error)
 	CreateAPIKey(ctx context.Context, arg CreateAPIKeyParams) (ApiKey, error)
 	CreateDownloadClient(ctx context.Context, arg CreateDownloadClientParams) (DownloadClient, error)
@@ -20,10 +21,12 @@ type Querier interface {
 	CreateProxy(ctx context.Context, arg CreateProxyParams) (Proxy, error)
 	CreateRootFolder(ctx context.Context, arg CreateRootFolderParams) (RootFolder, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
+	CreateUserSource(ctx context.Context, arg CreateUserSourceParams) (UserSource, error)
 	DeleteDownloadClient(ctx context.Context, id string) error
 	DeleteIndexer(ctx context.Context, id string) error
 	DeleteMovieFilesByMovieID(ctx context.Context, movieID string) error
 	DeleteProxy(ctx context.Context, id string) error
+	DeleteUserSource(ctx context.Context, id string) error
 	GetAPIKeyByHash(ctx context.Context, keyHash string) (ApiKey, error)
 	GetAPIKeyByID(ctx context.Context, id int64) (ApiKey, error)
 	GetDownloadClient(ctx context.Context, id string) (DownloadClient, error)
@@ -44,11 +47,14 @@ type Querier interface {
 	GetSchemaMeta(ctx context.Context, key string) (string, error)
 	GetUserByID(ctx context.Context, id int64) (User, error)
 	GetUserByUsername(ctx context.Context, username string) (User, error)
+	GetUserSource(ctx context.Context, id string) (UserSource, error)
+	GetUserSourceByName(ctx context.Context, name string) (UserSource, error)
 	ListAPIKeysForUser(ctx context.Context, userID int64) ([]ApiKey, error)
 	ListDownloadClientHealth(ctx context.Context) ([]DownloadClientHealth, error)
 	ListDownloadClients(ctx context.Context) ([]DownloadClient, error)
 	ListEnabledDownloadClients(ctx context.Context) ([]DownloadClient, error)
 	ListEnabledIndexers(ctx context.Context) ([]Indexer, error)
+	ListEnabledUserSources(ctx context.Context) ([]UserSource, error)
 	ListIndexerHealth(ctx context.Context) ([]IndexerHealth, error)
 	ListIndexerIDsByProxyID(ctx context.Context, proxyID sql.NullString) ([]string, error)
 	ListIndexers(ctx context.Context) ([]Indexer, error)
@@ -59,9 +65,12 @@ type Querier interface {
 	ListProxies(ctx context.Context) ([]Proxy, error)
 	ListRootFolders(ctx context.Context) ([]RootFolder, error)
 	ListScheduledJobs(ctx context.Context) ([]ScheduledJob, error)
+	ListUserSources(ctx context.Context) ([]UserSource, error)
+	ListUserSourcesByType(ctx context.Context, type_ string) ([]UserSource, error)
 	PatchDownloadClient(ctx context.Context, arg PatchDownloadClientParams) (DownloadClient, error)
 	PatchIndexer(ctx context.Context, arg PatchIndexerParams) (Indexer, error)
 	PatchProxy(ctx context.Context, arg PatchProxyParams) (Proxy, error)
+	PatchUserSource(ctx context.Context, arg PatchUserSourceParams) (UserSource, error)
 	RecordScheduledJobRun(ctx context.Context, arg RecordScheduledJobRunParams) error
 	ReplaceDownloadClient(ctx context.Context, arg ReplaceDownloadClientParams) (DownloadClient, error)
 	ReplaceIndexer(ctx context.Context, arg ReplaceIndexerParams) (Indexer, error)
@@ -92,6 +101,8 @@ type Querier interface {
 	UpdateRootFolderUnmappedCount(ctx context.Context, arg UpdateRootFolderUnmappedCountParams) error
 	UpdateUserOIDC(ctx context.Context, arg UpdateUserOIDCParams) (User, error)
 	UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) error
+	UpdateUserSource(ctx context.Context, arg UpdateUserSourceParams) (UserSource, error)
+	UpdateUserSourceLastSync(ctx context.Context, id string) (UserSource, error)
 	UpsertDownloadClientHealth(ctx context.Context, arg UpsertDownloadClientHealthParams) error
 	UpsertIndexerHealth(ctx context.Context, arg UpsertIndexerHealthParams) error
 	// Inserts a job row on first registration; on conflict (same name) only

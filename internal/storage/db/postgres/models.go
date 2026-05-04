@@ -191,6 +191,17 @@ type RootFolder struct {
 	DeletedAt     sql.NullTime `json:"deleted_at"`
 }
 
+type RssItem struct {
+	ID          string         `json:"id"`
+	Title       string         `json:"title"`
+	Link        sql.NullString `json:"link"`
+	PublishedAt sql.NullTime   `json:"published_at"`
+	SourceID    string         `json:"source_id"`
+	Guid        string         `json:"guid"`
+	CreatedAt   sql.NullTime   `json:"created_at"`
+	Raw         sql.NullString `json:"raw"`
+}
+
 type ScheduledJob struct {
 	ID         int64           `json:"id"`
 	Name       string          `json:"name"`
@@ -219,4 +230,15 @@ type User struct {
 	Role         string         `json:"role"`
 	CreatedAt    time.Time      `json:"created_at"`
 	UpdatedAt    time.Time      `json:"updated_at"`
+}
+
+type UserSource struct {
+	ID         string       `json:"id"`
+	Name       string       `json:"name"`
+	Type       string       `json:"type"`
+	Enabled    sql.NullBool `json:"enabled"`
+	Config     string       `json:"config"`
+	LastSyncAt sql.NullTime `json:"last_sync_at"`
+	CreatedAt  sql.NullTime `json:"created_at"`
+	UpdatedAt  sql.NullTime `json:"updated_at"`
 }

@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/loomctl/loom/internal/appconfig"
 	"github.com/loomctl/loom/internal/auth"
 	"github.com/loomctl/loom/internal/kernel/config"
 	"github.com/loomctl/loom/internal/storage"
@@ -13,7 +14,7 @@ import (
 // buildAuthService composes an *auth.Service from cfg + an opened storage
 // connection. It loads (or generates) the session secret out of
 // schema_meta and wires the OIDC + reverse-proxy helpers.
-func buildAuthService(ctx context.Context, cfg *config.Config, db storage.DB, logger *slog.Logger) (*auth.Service, error) {
+func buildAuthService(ctx context.Context, cfg *config.Config, db storage.DB, appCfg *appconfig.Config, appCfgPath string, logger *slog.Logger) (*auth.Service, error) {
 	store, err := auth.StoreFromDB(db)
 	if err != nil {
 		return nil, err
@@ -34,6 +35,8 @@ func buildAuthService(ctx context.Context, cfg *config.Config, db storage.DB, lo
 	return auth.NewService(auth.ServiceOptions{
 		Store:         store,
 		Logger:        logger,
+		AppConfig:     appCfg,
+		AppConfigPath: appCfgPath,
 		SessionSecret: secret,
 		SessionTTL:    ttl,
 		CookieSecure:  cfg.Auth.CookieSecure,

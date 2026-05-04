@@ -24,6 +24,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
 
+	"github.com/loomctl/loom/internal/appconfig"
 	"github.com/loomctl/loom/internal/auth"
 	"github.com/loomctl/loom/internal/buildinfo"
 	"github.com/loomctl/loom/internal/downloads"
@@ -32,12 +33,15 @@ import (
 	"github.com/loomctl/loom/internal/kernel/config"
 	"github.com/loomctl/loom/internal/kernel/eventbus"
 	"github.com/loomctl/loom/internal/kernel/telemetry"
+	"github.com/loomctl/loom/internal/movies"
+	"github.com/loomctl/loom/internal/rss"
 	"github.com/loomctl/loom/internal/storage"
 )
 
 // Server holds wired dependencies for the HTTP listener.
 type Server struct {
 	cfg        *config.Config
+	appCfg     *appconfig.Config
 	logger     *slog.Logger
 	httpSrv    *http.Server
 	tel        *telemetry.Telemetry
@@ -46,6 +50,8 @@ type Server struct {
 	authSvc    *auth.Service
 	indexerSvc *indexers.Service
 	downloadSvc *downloads.Service
+	moviesSvc  movies.Service
+	rssSvc     *rss.SourcesService
 	aggSvc     *newznabserver.Server
 	ready      atomic.Bool
 }
@@ -56,24 +62,30 @@ type Server struct {
 // applied). The Server takes ownership of db and will Close() it on
 // Shutdown. authSvc may be nil for low-level tests; production callers
 // pass a fully wired *auth.Service. indexerSvc may be nil to disable
-// the /api/v1/indexers/* surface. aggSvc may be nil to disable the
+// the /api/v1/indexers/* surface. moviesSvc may be nil to disable the
+// /api/v1/movies/* surface. aggSvc may be nil to disable the
 // Newznab/Torznab aggregator at /api and /api/v1/aggregate.
-func New(cfg *config.Config, logger *slog.Logger, tel *telemetry.Telemetry, db storage.DB, authSvc *auth.Service, indexerSvc *indexers.Service, aggSvc *newznabserver.Server) (*Server, error) {
+func New(cfg *config.Config, appCfg *appconfig.Config, logger *slog.Logger, tel *telemetry.Telemetry, db storage.DB, authSvc *auth.Service, indexerSvc *indexers.Service, moviesSvc movies.Service, aggSvc *newznabserver.Server) (*Server, error) {
 	if tel == nil {
 		return nil, errors.New("server: telemetry must not be nil")
 	}
 	if db == nil {
 		return nil, errors.New("server: db must not be nil")
 	}
+	if appCfg == nil {
+		return nil, errors.New("server: appCfg must not be nil")
+	}
 
 	s := &Server{
 		cfg:        cfg,
+		appCfg:     appCfg,
 		logger:     logger,
 		tel:        tel,
 		db:         db,
 		bus:        eventbus.NewInProc(),
 		authSvc:    authSvc,
 		indexerSvc: indexerSvc,
+		moviesSvc:  moviesSvc,
 		aggSvc:     aggSvc,
 	}
 
@@ -99,6 +111,24 @@ func (s *Server) SetDownloads(svc *downloads.Service) {
 	}
 }
 
+// SetMovies installs the movies service and rebuilds the HTTP handler
+// so the new routes are reachable. Must be called before Start.
+func (s *Server) SetMovies(svc movies.Service) {
+	s.moviesSvc = svc
+	if s.httpSrv != nil {
+		s.httpSrv.Handler = s.newMux()
+	}
+}
+
+// SetRSS installs the RSS sources service and rebuilds the HTTP handler
+// so the new routes are reachable. Must be called before Start.
+func (s *Server) SetRSS(svc *rss.SourcesService) {
+	s.rssSvc = svc
+	if s.httpSrv != nil {
+		s.httpSrv.Handler = s.newMux()
+	}
+}
+
 func (s *Server) newMux() http.Handler {
 	r := chi.NewRouter()
 
@@ -114,7 +144,7 @@ func (s *Server) newMux() http.Handler {
 			AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 			AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-Api-Key", "X-Request-Id"},
 			ExposedHeaders:   []string{"X-Request-Id"},
-			AllowCredentials: false,
+			AllowCredentials: true,
 			MaxAge:           300,
 		}))
 	}
@@ -162,6 +192,26 @@ func (s *Server) newMux() http.Handler {
 				r.Use(s.authSvc.RequireAuth)
 			}
 			s.downloadSvc.Mount(r)
+		})
+	}
+
+	// RSS sources routes — Phase 5e-c.
+	if s.rssSvc != nil {
+		r.Group(func(r chi.Router) {
+			if s.authSvc != nil {
+				r.Use(s.authSvc.RequireAuth)
+			}
+			s.rssSvc.Mount(r)
+		})
+	}
+
+	// Movies routes — Phase 5 (Radarr equivalent).
+	if s.moviesSvc != nil {
+		r.Group(func(r chi.Router) {
+			if s.authSvc != nil {
+				r.Use(s.authSvc.RequireAuth)
+			}
+			r.Mount("/api/v1/movies", movies.Router(s.moviesSvc))
 		})
 	}
 

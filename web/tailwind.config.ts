@@ -53,6 +53,35 @@ const config: Config = {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+        /* Extended color palette */
+        "purple": {
+          "midnight": "#2D1B69",
+          "rich": "#4A2C8F",
+          "soft": "#6B4BA1",
+        },
+        "teal": {
+          "electric": "#00BFA6",
+          "ocean": "#00897B",
+          "deep": "#00695C",
+        },
+        "indigo": {
+          "periwinkle": "#7986CB",
+          "soft": "#5C6BC0",
+          "deep": "#3949AB",
+        },
+        "neutral": {
+          "dark": "#1A1A2E",
+          "card": "#2A2A3E",
+          "light": "#F4F4F8",
+          "white": "#FFFFFF",
+          "muted": "#9E9E9E",
+        },
+        "semantic": {
+          "success": "#00C853",
+          "error": "#FF5252",
+          "warning": "#FFD740",
+          "info": "#40C4FF",
+        },
       },
       borderRadius: {
         lg: "var(--radius)",
