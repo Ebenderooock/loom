@@ -80,6 +80,94 @@ type IndexerHealth struct {
 	LastCapsJson  sql.NullString `json:"last_caps_json"`
 }
 
+type MetadataEpisode struct {
+	ID         string         `json:"id"`
+	SeriesID   string         `json:"series_id"`
+	Season     int64          `json:"season"`
+	Episode    int64          `json:"episode"`
+	TvdbID     sql.NullString `json:"tvdb_id"`
+	TmdbID     sql.NullString `json:"tmdb_id"`
+	Title      string         `json:"title"`
+	Overview   string         `json:"overview"`
+	AirDate    string         `json:"air_date"`
+	Runtime    int64          `json:"runtime"`
+	Rating     float64        `json:"rating"`
+	CachedJson string         `json:"cached_json"`
+	CachedAt   time.Time      `json:"cached_at"`
+	ExpiresAt  time.Time      `json:"expires_at"`
+}
+
+type MetadataMovie struct {
+	ID          string         `json:"id"`
+	TmdbID      sql.NullString `json:"tmdb_id"`
+	ImdbID      sql.NullString `json:"imdb_id"`
+	TvdbID      sql.NullString `json:"tvdb_id"`
+	Title       string         `json:"title"`
+	Year        sql.NullInt64  `json:"year"`
+	Overview    string         `json:"overview"`
+	PosterPath  string         `json:"poster_path"`
+	ReleaseDate string         `json:"release_date"`
+	Runtime     int64          `json:"runtime"`
+	Genres      string         `json:"genres"`
+	Rating      float64        `json:"rating"`
+	CachedJson  string         `json:"cached_json"`
+	CachedAt    time.Time      `json:"cached_at"`
+	ExpiresAt   time.Time      `json:"expires_at"`
+}
+
+type MetadataSeries struct {
+	ID           string         `json:"id"`
+	TmdbID       sql.NullString `json:"tmdb_id"`
+	ImdbID       sql.NullString `json:"imdb_id"`
+	TvdbID       sql.NullString `json:"tvdb_id"`
+	Title        string         `json:"title"`
+	Overview     string         `json:"overview"`
+	PosterPath   string         `json:"poster_path"`
+	FirstAirDate string         `json:"first_air_date"`
+	Genres       string         `json:"genres"`
+	Rating       float64        `json:"rating"`
+	Seasons      int64          `json:"seasons"`
+	CachedJson   string         `json:"cached_json"`
+	CachedAt     time.Time      `json:"cached_at"`
+	ExpiresAt    time.Time      `json:"expires_at"`
+}
+
+type Movie struct {
+	ID               string         `json:"id"`
+	Title            string         `json:"title"`
+	Year             int64          `json:"year"`
+	ImdbID           sql.NullString `json:"imdb_id"`
+	TmdbID           sql.NullString `json:"tmdb_id"`
+	TvdbID           sql.NullString `json:"tvdb_id"`
+	Overview         string         `json:"overview"`
+	Genres           string         `json:"genres"`
+	Runtime          int64          `json:"runtime"`
+	Rating           float64        `json:"rating"`
+	BackdropPath     string         `json:"backdrop_path"`
+	PosterPath       string         `json:"poster_path"`
+	MetadataProvider string         `json:"metadata_provider"`
+	LastSearchAt     sql.NullTime   `json:"last_search_at"`
+	MonitoringStatus string         `json:"monitoring_status"`
+	CreatedAt        time.Time      `json:"created_at"`
+	UpdatedAt        time.Time      `json:"updated_at"`
+	DeletedAt        sql.NullTime   `json:"deleted_at"`
+}
+
+type MovieFile struct {
+	ID        string       `json:"id"`
+	MovieID   string       `json:"movie_id"`
+	FilePath  string       `json:"file_path"`
+	Size      int64        `json:"size"`
+	Quality   string       `json:"quality"`
+	Format    string       `json:"format"`
+	MediaInfo string       `json:"media_info"`
+	FileDate  sql.NullTime `json:"file_date"`
+	DateAdded time.Time    `json:"date_added"`
+	CreatedAt time.Time    `json:"created_at"`
+	UpdatedAt time.Time    `json:"updated_at"`
+	DeletedAt sql.NullTime `json:"deleted_at"`
+}
+
 type Proxy struct {
 	ID         string    `json:"id"`
 	Kind       string    `json:"kind"`
@@ -88,6 +176,16 @@ type Proxy struct {
 	ConfigJson string    `json:"config_json"`
 	CreatedAt  time.Time `json:"created_at"`
 	UpdatedAt  time.Time `json:"updated_at"`
+}
+
+type RootFolder struct {
+	ID            string       `json:"id"`
+	Path          string       `json:"path"`
+	FreeSpace     int64        `json:"free_space"`
+	UnmappedCount int64        `json:"unmapped_count"`
+	CreatedAt     time.Time    `json:"created_at"`
+	UpdatedAt     time.Time    `json:"updated_at"`
+	DeletedAt     sql.NullTime `json:"deleted_at"`
 }
 
 type ScheduledJob struct {
