@@ -22,6 +22,10 @@ type Cache struct {
 	// cleanupTicker runs every 5 minutes to evict expired entries.
 	cleanupTicker *time.Ticker
 	cleanupDone   chan struct{}
+
+	// stats tracks cache hits and misses for monitoring
+	hits   int64
+	misses int64
 }
 
 // NewCache creates a new in-memory cache and starts a background cleanup
@@ -64,20 +68,24 @@ func (c *Cache) cleanup() {
 
 // Get retrieves a value from the cache if it exists and has not expired.
 // Returns (nil, false) if the key is not found or has expired.
+// Tracks hit/miss statistics.
 func (c *Cache) Get(key string) (interface{}, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	entry, exists := c.entries[key]
 	if !exists {
+		c.misses++
 		return nil, false
 	}
 
 	if time.Now().After(entry.expiresAt) {
 		delete(c.entries, key)
+		c.misses++
 		return nil, false
 	}
 
+	c.hits++
 	return entry.value, true
 }
 
@@ -119,6 +127,36 @@ func (c *Cache) Size() int {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return len(c.entries)
+}
+
+// Stats returns cache statistics including hit rate, miss rate, and size.
+func (c *Cache) Stats() CacheStats {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	total := c.hits + c.misses
+	hitRate := 0.0
+	missRate := 0.0
+
+	if total > 0 {
+		hitRate = float64(c.hits) / float64(total) * 100
+		missRate = float64(c.misses) / float64(total) * 100
+	}
+
+	return CacheStats{
+		HitRate:   hitRate,
+		MissRate:  missRate,
+		Entries:   len(c.entries),
+		CacheSize: len(c.entries),
+	}
+}
+
+// ResetStats clears the hit/miss counters (used for testing).
+func (c *Cache) ResetStats() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.hits = 0
+	c.misses = 0
 }
 
 // --- Cache TTL constants -----------------------------------------------

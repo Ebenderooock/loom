@@ -277,6 +277,56 @@ func (s *Service) FindEpisode(ctx context.Context, seriesID string, season, epis
 	return nil, nil
 }
 
+// FindMovieByQuery searches for movies matching a query and returns multiple results.
+// Used for UI search results, returns first 10 results.
+func (s *Service) FindMovieByQuery(ctx context.Context, query string, year int) ([]*MovieMetadata, error) {
+	results := make([]*MovieMetadata, 0)
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+
+	for _, provider := range s.providers {
+		providerCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		movies, err := provider.FindMovie(providerCtx, query, year, nil)
+		cancel()
+
+		if err != nil {
+			continue
+		}
+
+		results = append(results, movies...)
+		if len(results) >= 10 {
+			break
+		}
+	}
+
+	return results, nil
+}
+
+// FindSeriesByQuery searches for series matching a query and returns multiple results.
+// Used for UI search results, returns first 10 results.
+func (s *Service) FindSeriesByQuery(ctx context.Context, query string) ([]*SeriesMetadata, error) {
+	results := make([]*SeriesMetadata, 0)
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+
+	for _, provider := range s.providers {
+		providerCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		series, err := provider.FindSeries(providerCtx, query, nil)
+		cancel()
+
+		if err != nil {
+			continue
+		}
+
+		results = append(results, series...)
+		if len(results) >= 10 {
+			break
+		}
+	}
+
+	return results, nil
+}
+
 // --- Private helpers -----------------------------------------------
 
 // movieSearchKey generates a cache key for movie search by title+year.
