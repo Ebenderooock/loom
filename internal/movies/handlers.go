@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -50,6 +51,19 @@ func Router(service Service) chi.Router {
 	r.Get("/root-folders", listRootFolders(service))
 	r.Post("/root-folders", addRootFolder(service))
 	r.Delete("/root-folders/{id}", deleteRootFolder(service))
+
+	// Quality routes
+	r.Get("/quality-definitions", listQualityDefinitions(service))
+	r.Post("/quality-definitions", addQualityDefinition(service))
+	r.Get("/quality-definitions/{id}", getQualityDefinition(service))
+	r.Put("/quality-definitions/{id}", updateQualityDefinition(service))
+	r.Delete("/quality-definitions/{id}", deleteQualityDefinition(service))
+
+	r.Get("/quality-profiles", listQualityProfiles(service))
+	r.Post("/quality-profiles", addQualityProfile(service))
+	r.Get("/quality-profiles/{id}", getQualityProfile(service))
+	r.Put("/quality-profiles/{id}", updateQualityProfile(service))
+	r.Delete("/quality-profiles/{id}", deleteQualityProfile(service))
 
 	return r
 }
@@ -398,6 +412,286 @@ func deleteRootFolder(svc Service) http.HandlerFunc {
 		}
 
 		if err := svc.DeleteRootFolder(r.Context(), id); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+// Quality Definition Handlers
+
+func listQualityDefinitions(svc Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		defs, err := svc.ListQualityDefinitions(r.Context())
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(defs)
+	}
+}
+
+func addQualityDefinition(svc Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req CreateQualityDefinitionRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "invalid request body", http.StatusBadRequest)
+			return
+		}
+
+		title := req.Title
+		if title == "" {
+			title = req.Name
+		}
+
+		qd := &QualityDefinition{
+			ID:          strings.ToLower(strings.ReplaceAll(req.Name, " ", "-")),
+			Name:        req.Name,
+			Title:       title,
+			Source:      req.Source,
+			Resolution:  req.Resolution,
+			Modifier:    req.Modifier,
+			MinFileSize: req.MinFileSize,
+			MaxFileSize: req.MaxFileSize,
+			PreferredAt: req.PreferredAt,
+			CreatedAt:   time.Now(),
+			UpdatedAt:   time.Now(),
+		}
+
+		if err := svc.AddQualityDefinition(r.Context(), qd); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		json.NewEncoder(w).Encode(qd)
+	}
+}
+
+func getQualityDefinition(svc Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := chi.URLParam(r, "id")
+		if id == "" {
+			http.Error(w, "quality definition ID required", http.StatusBadRequest)
+			return
+		}
+
+		qd, err := svc.GetQualityDefinition(r.Context(), id)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusNotFound)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(qd)
+	}
+}
+
+func updateQualityDefinition(svc Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := chi.URLParam(r, "id")
+		if id == "" {
+			http.Error(w, "quality definition ID required", http.StatusBadRequest)
+			return
+		}
+
+		var req UpdateQualityDefinitionRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "invalid request body", http.StatusBadRequest)
+			return
+		}
+
+		qd, err := svc.GetQualityDefinition(r.Context(), id)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusNotFound)
+			return
+		}
+
+		if req.Name != nil {
+			qd.Name = *req.Name
+		}
+		if req.Title != nil {
+			qd.Title = *req.Title
+		}
+		if req.Source != nil {
+			qd.Source = *req.Source
+		}
+		if req.Resolution != nil {
+			qd.Resolution = *req.Resolution
+		}
+		if req.Modifier != nil {
+			qd.Modifier = *req.Modifier
+		}
+		if req.MinFileSize != nil {
+			qd.MinFileSize = *req.MinFileSize
+		}
+		if req.MaxFileSize != nil {
+			qd.MaxFileSize = *req.MaxFileSize
+		}
+		if req.PreferredAt != nil {
+			qd.PreferredAt = *req.PreferredAt
+		}
+
+		qd.UpdatedAt = time.Now()
+
+		if err := svc.UpdateQualityDefinition(r.Context(), qd); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(qd)
+	}
+}
+
+func deleteQualityDefinition(svc Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := chi.URLParam(r, "id")
+		if id == "" {
+			http.Error(w, "quality definition ID required", http.StatusBadRequest)
+			return
+		}
+
+		if err := svc.DeleteQualityDefinition(r.Context(), id); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+// Quality Profile Handlers
+
+func listQualityProfiles(svc Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		profiles, err := svc.ListQualityProfiles(r.Context())
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(profiles)
+	}
+}
+
+func addQualityProfile(svc Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req CreateQualityProfileRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "invalid request body", http.StatusBadRequest)
+			return
+		}
+
+		language := req.Language
+		if language == "" {
+			language = "en"
+		}
+
+		qp := &QualityProfile{
+			ID:             strings.ToLower(strings.ReplaceAll(req.Name, " ", "-")),
+			Name:           req.Name,
+			UpgradeAllowed: req.UpgradeAllowed,
+			Cutoff:         req.Cutoff,
+			Language:       language,
+			Items:          req.Items,
+			CreatedAt:      time.Now(),
+			UpdatedAt:      time.Now(),
+		}
+
+		if err := svc.AddQualityProfile(r.Context(), qp); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		json.NewEncoder(w).Encode(qp)
+	}
+}
+
+func getQualityProfile(svc Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := chi.URLParam(r, "id")
+		if id == "" {
+			http.Error(w, "quality profile ID required", http.StatusBadRequest)
+			return
+		}
+
+		qp, err := svc.GetQualityProfile(r.Context(), id)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusNotFound)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(qp)
+	}
+}
+
+func updateQualityProfile(svc Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := chi.URLParam(r, "id")
+		if id == "" {
+			http.Error(w, "quality profile ID required", http.StatusBadRequest)
+			return
+		}
+
+		var req UpdateQualityProfileRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "invalid request body", http.StatusBadRequest)
+			return
+		}
+
+		qp, err := svc.GetQualityProfile(r.Context(), id)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusNotFound)
+			return
+		}
+
+		if req.Name != nil {
+			qp.Name = *req.Name
+		}
+		if req.UpgradeAllowed != nil {
+			qp.UpgradeAllowed = *req.UpgradeAllowed
+		}
+		if req.Cutoff != nil {
+			qp.Cutoff = *req.Cutoff
+		}
+		if req.Language != nil {
+			qp.Language = *req.Language
+		}
+		if len(req.Items) > 0 {
+			qp.Items = req.Items
+		}
+
+		qp.UpdatedAt = time.Now()
+
+		if err := svc.UpdateQualityProfile(r.Context(), qp); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(qp)
+	}
+}
+
+func deleteQualityProfile(svc Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := chi.URLParam(r, "id")
+		if id == "" {
+			http.Error(w, "quality profile ID required", http.StatusBadRequest)
+			return
+		}
+
+		if err := svc.DeleteQualityProfile(r.Context(), id); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}

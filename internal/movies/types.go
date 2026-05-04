@@ -210,3 +210,89 @@ type MonitoringChangedEvent struct {
 
 // Topic returns the event topic.
 func (e *MonitoringChangedEvent) Topic() string { return TopicMonitoringChanged }
+
+// QualityDefinition represents a single quality tier (resolution, source, codec).
+type QualityDefinition struct {
+	ID           string    `json:"id"`
+	Name         string    `json:"name"`
+	Title        string    `json:"title,omitempty"`
+	Source       string    `json:"source"`        // e.g., "BluRay", "HDTV", "WebRip"
+	Resolution   string    `json:"resolution"`    // e.g., "1080p", "720p", "2160p"
+	Modifier     string    `json:"modifier,omitempty"` // e.g., "REMUX", "PROPER"
+	MinFileSize  int64     `json:"min_file_size,omitempty"` // bytes
+	MaxFileSize  int64     `json:"max_file_size,omitempty"` // bytes
+	PreferredAt  int       `json:"preferred_at"`  // order preference (lower = better)
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
+	DeletedAt    *time.Time `json:"deleted_at,omitempty"`
+}
+
+// QualityProfileItem represents a quality within a quality profile.
+type QualityProfileItem struct {
+	ID       string `json:"id"`
+	Name     string `json:"name"`
+	Preferred bool   `json:"preferred"`
+	Allowed  bool   `json:"allowed"`
+}
+
+// QualityProfile represents a named collection of quality tiers with preferences.
+type QualityProfile struct {
+	ID              string                 `json:"id"`
+	Name            string                 `json:"name"`
+	UpgradeAllowed  bool                   `json:"upgrade_allowed"`
+	Cutoff          string                 `json:"cutoff"`                    // quality definition ID
+	Language        string                 `json:"language,omitempty"`         // ISO 639-1 code
+	FormatItems     []map[string]interface{} `json:"format_items,omitempty"`   // custom format scores
+	Items           []QualityProfileItem   `json:"items"`                    // quality definitions
+	MinFormatScore  int                    `json:"min_format_score,omitempty"`
+	CutoffFormatScore int                  `json:"cutoff_format_score,omitempty"`
+	CreatedAt       time.Time              `json:"created_at"`
+	UpdatedAt       time.Time              `json:"updated_at"`
+	DeletedAt       *time.Time             `json:"deleted_at,omitempty"`
+}
+
+// CreateQualityDefinitionRequest is the payload for adding a quality definition.
+type CreateQualityDefinitionRequest struct {
+	Name         string `json:"name"`
+	Title        string `json:"title,omitempty"`
+	Source       string `json:"source"`
+	Resolution   string `json:"resolution"`
+	Modifier     string `json:"modifier,omitempty"`
+	MinFileSize  int64  `json:"min_file_size,omitempty"`
+	MaxFileSize  int64  `json:"max_file_size,omitempty"`
+	PreferredAt  int    `json:"preferred_at,omitempty"`
+}
+
+// UpdateQualityDefinitionRequest is the payload for updating a quality definition.
+type UpdateQualityDefinitionRequest struct {
+	Name        *string `json:"name,omitempty"`
+	Title       *string `json:"title,omitempty"`
+	Source      *string `json:"source,omitempty"`
+	Resolution  *string `json:"resolution,omitempty"`
+	Modifier    *string `json:"modifier,omitempty"`
+	MinFileSize *int64  `json:"min_file_size,omitempty"`
+	MaxFileSize *int64  `json:"max_file_size,omitempty"`
+	PreferredAt *int    `json:"preferred_at,omitempty"`
+}
+
+// CreateQualityProfileRequest is the payload for adding a quality profile.
+type CreateQualityProfileRequest struct {
+	Name               string                   `json:"name"`
+	UpgradeAllowed     bool                     `json:"upgrade_allowed"`
+	Cutoff             string                   `json:"cutoff"`
+	Language           string                   `json:"language,omitempty"`
+	Items              []QualityProfileItem     `json:"items"`
+	MinFormatScore     int                      `json:"min_format_score,omitempty"`
+	CutoffFormatScore  int                      `json:"cutoff_format_score,omitempty"`
+}
+
+// UpdateQualityProfileRequest is the payload for updating a quality profile.
+type UpdateQualityProfileRequest struct {
+	Name               *string                  `json:"name,omitempty"`
+	UpgradeAllowed     *bool                    `json:"upgrade_allowed,omitempty"`
+	Cutoff             *string                  `json:"cutoff,omitempty"`
+	Language           *string                  `json:"language,omitempty"`
+	Items              []QualityProfileItem     `json:"items,omitempty"`
+	MinFormatScore     *int                     `json:"min_format_score,omitempty"`
+	CutoffFormatScore  *int                     `json:"cutoff_format_score,omitempty"`
+}
