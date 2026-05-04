@@ -12,14 +12,19 @@ import (
 )
 
 type Querier interface {
+	CountMovies(ctx context.Context) (int64, error)
 	CountUsers(ctx context.Context) (int64, error)
 	CreateAPIKey(ctx context.Context, arg CreateAPIKeyParams) (ApiKey, error)
 	CreateDownloadClient(ctx context.Context, arg CreateDownloadClientParams) (DownloadClient, error)
 	CreateIndexer(ctx context.Context, arg CreateIndexerParams) (Indexer, error)
+	CreateMovie(ctx context.Context, arg CreateMovieParams) (Movie, error)
+	CreateMovieFile(ctx context.Context, arg CreateMovieFileParams) (MovieFile, error)
 	CreateProxy(ctx context.Context, arg CreateProxyParams) (Proxy, error)
+	CreateRootFolder(ctx context.Context, arg CreateRootFolderParams) (RootFolder, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
 	DeleteDownloadClient(ctx context.Context, id string) error
 	DeleteIndexer(ctx context.Context, id string) error
+	DeleteMovieFilesByMovieID(ctx context.Context, movieID string) error
 	DeleteProxy(ctx context.Context, id string) error
 	GetAPIKeyByHash(ctx context.Context, keyHash string) (ApiKey, error)
 	GetAPIKeyByID(ctx context.Context, id int64) (ApiKey, error)
@@ -28,7 +33,15 @@ type Querier interface {
 	GetIndexer(ctx context.Context, id string) (Indexer, error)
 	GetIndexerCapsCache(ctx context.Context, indexerID string) (pqtype.NullRawMessage, error)
 	GetIndexerHealth(ctx context.Context, indexerID string) (IndexerHealth, error)
+	GetMovie(ctx context.Context, id string) (Movie, error)
+	GetMovieBYTVDBID(ctx context.Context, tvdbID sql.NullString) (Movie, error)
+	GetMovieByIMDBID(ctx context.Context, imdbID sql.NullString) (Movie, error)
+	GetMovieByTMDBID(ctx context.Context, tmdbID sql.NullString) (Movie, error)
+	GetMovieFile(ctx context.Context, id string) (MovieFile, error)
+	GetMovieFileByPath(ctx context.Context, filePath string) (MovieFile, error)
 	GetProxy(ctx context.Context, id string) (Proxy, error)
+	GetRootFolder(ctx context.Context, id string) (RootFolder, error)
+	GetRootFolderByPath(ctx context.Context, path string) (RootFolder, error)
 	GetScheduledJob(ctx context.Context, name string) (ScheduledJob, error)
 	GetSchemaMeta(ctx context.Context, key string) (string, error)
 	GetUserByID(ctx context.Context, id int64) (User, error)
@@ -41,7 +54,12 @@ type Querier interface {
 	ListIndexerHealth(ctx context.Context) ([]IndexerHealth, error)
 	ListIndexerIDsByProxyID(ctx context.Context, proxyID sql.NullString) ([]string, error)
 	ListIndexers(ctx context.Context) ([]Indexer, error)
+	ListMovieFilesByMovieID(ctx context.Context, movieID string) ([]MovieFile, error)
+	ListMovies(ctx context.Context) ([]Movie, error)
+	ListMoviesByMonitoringStatus(ctx context.Context, monitoringStatus string) ([]Movie, error)
+	ListMoviesByYear(ctx context.Context, year int32) ([]Movie, error)
 	ListProxies(ctx context.Context) ([]Proxy, error)
+	ListRootFolders(ctx context.Context) ([]RootFolder, error)
 	ListScheduledJobs(ctx context.Context) ([]ScheduledJob, error)
 	PatchDownloadClient(ctx context.Context, arg PatchDownloadClientParams) (DownloadClient, error)
 	PatchIndexer(ctx context.Context, arg PatchIndexerParams) (Indexer, error)
@@ -51,16 +69,25 @@ type Querier interface {
 	ReplaceIndexer(ctx context.Context, arg ReplaceIndexerParams) (Indexer, error)
 	ReplaceProxy(ctx context.Context, arg ReplaceProxyParams) (Proxy, error)
 	RevokeAPIKey(ctx context.Context, arg RevokeAPIKeyParams) error
+	SearchMovies(ctx context.Context, arg SearchMoviesParams) ([]Movie, error)
 	SetIndexerProxyID(ctx context.Context, arg SetIndexerProxyIDParams) error
 	// Phase 2f: write the three rate-limit dials atomically. NULLs mean
 	// "fall back to the package default at runtime". Used by POST/PUT
 	// handlers and by the rate-limit PATCH path.
 	SetIndexerRateLimit(ctx context.Context, arg SetIndexerRateLimitParams) error
+	SetMonitoringStatus(ctx context.Context, arg SetMonitoringStatusParams) (Movie, error)
 	SetScheduledJobEnabled(ctx context.Context, arg SetScheduledJobEnabledParams) error
 	SetScheduledJobNextRun(ctx context.Context, arg SetScheduledJobNextRunParams) error
 	SetSchemaMeta(ctx context.Context, arg SetSchemaMetaParams) error
+	SoftDeleteMovie(ctx context.Context, id string) error
+	SoftDeleteMovieFile(ctx context.Context, id string) error
+	SoftDeleteRootFolder(ctx context.Context, id string) error
 	TouchAPIKey(ctx context.Context, id int64) error
 	UpdateIndexerCapsCache(ctx context.Context, arg UpdateIndexerCapsCacheParams) error
+	UpdateMovie(ctx context.Context, arg UpdateMovieParams) (Movie, error)
+	UpdateMovieFile(ctx context.Context, arg UpdateMovieFileParams) (MovieFile, error)
+	UpdateRootFolderFreeSpace(ctx context.Context, arg UpdateRootFolderFreeSpaceParams) error
+	UpdateRootFolderUnmappedCount(ctx context.Context, arg UpdateRootFolderUnmappedCountParams) error
 	UpdateUserOIDC(ctx context.Context, arg UpdateUserOIDCParams) (User, error)
 	UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) error
 	UpsertDownloadClientHealth(ctx context.Context, arg UpsertDownloadClientHealthParams) error
