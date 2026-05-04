@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/loomctl/loom/internal/indexers"
 	"github.com/loomctl/loom/internal/kernel/eventbus"
+	"github.com/loomctl/loom/internal/metadata"
 )
 
 // Router is a service that listens for indexer search results and routes
@@ -14,20 +16,26 @@ import (
 // pipeline from downloads, allowing each to run independently and recover
 // from transient failures without blocking the other. The router does not
 // persist state — it is a thin orchestration layer.
+//
+// After successfully queuing a download, it calls the metadata router
+// to enrich the result with movie/series/episode details, emitting
+// TopicMetadataEnriched or TopicMetadataFailure events on the event bus
+// (non-blocking, fire-and-forget).
 type Router struct {
-	svc    *Service
-	bus    eventbus.Bus
-	logger *slog.Logger
-	clock  Clock
+	svc            *Service
+	bus            eventbus.Bus
+	logger         *slog.Logger
+	clock          Clock
+	metadataRouter *metadata.Router
 
 	// unsubscribe is the function returned by Subscribe; stored so
 	// we can clean up on shutdown if needed.
 	unsubscribe func()
 }
 
-// NewRouter wires a Router to a downloads Service and event bus.
+// NewRouter wires a Router to a downloads Service, metadata Router, and event bus.
 // It immediately subscribes to indexer results but does not block.
-func NewRouter(svc *Service, bus eventbus.Bus, logger *slog.Logger, clock Clock) *Router {
+func NewRouter(svc *Service, metadataRouter *metadata.Router, bus eventbus.Bus, logger *slog.Logger, clock Clock) *Router {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -35,10 +43,11 @@ func NewRouter(svc *Service, bus eventbus.Bus, logger *slog.Logger, clock Clock)
 		clock = SystemClock{}
 	}
 	r := &Router{
-		svc:    svc,
-		bus:    bus,
-		logger: logger.With("module", "downloads/router"),
-		clock:  clock,
+		svc:            svc,
+		metadataRouter: metadataRouter,
+		bus:            bus,
+		logger:         logger.With("module", "downloads/router"),
+		clock:          clock,
 	}
 
 	// Subscribe to indexer results. The handler runs synchronously in
@@ -129,6 +138,12 @@ func (r *Router) handleIndexerResult(ctx context.Context, ev eventbus.Event) err
 			r.logger.Info("router queued result",
 				"indexer_id", result.IndexerID, "title", result.Title,
 				"client_id", res.ClientID, "download_id", res.ItemID)
+
+			// Enrich with metadata (non-blocking, fire-and-forget).
+			// Use a background context to avoid blocking the event handler,
+			// but add a short timeout to prevent resource leaks.
+			go r.enrichMetadata(result, res.ItemID)
+
 			return nil
 		}
 
@@ -220,4 +235,79 @@ func (r *Router) Close() error {
 		r.unsubscribe()
 	}
 	return nil
+}
+
+// enrichMetadata is called in a background goroutine to enrich an indexer
+// Result with metadata from all providers. It publishes TopicMetadataEnriched
+// or TopicMetadataFailure to the event bus (non-blocking, fire-and-forget).
+func (r *Router) enrichMetadata(result *indexers.Result, downloadID string) {
+	// Use a short timeout to prevent resource leaks; metadata router
+	// itself has a 10s internal timeout, but we don't want to block
+	// the background goroutine indefinitely.
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	if r.metadataRouter == nil {
+		r.logger.Debug("router: metadata router not configured, skipping enrichment",
+			"origin_result_id", result.GUID)
+		return
+	}
+
+	// Try to resolve as movie first, then series
+	movie, err := r.metadataRouter.ResolveMovie(ctx, result.Title, 0, map[string]string{})
+	if movie != nil {
+		if pubErr := r.bus.Publish(ctx, &metadata.MetadataEnrichedEvent{
+			OriginResultID:   result.GUID,
+			DownloadID:       downloadID,
+			Title:            result.Title,
+			MovieMetadata:    movie,
+			EnrichedAt:       r.clock.Now(),
+			SourceProvider:   "all", // Would track which provider matched if needed
+		}); pubErr != nil {
+			r.logger.Warn("router failed to publish MetadataEnriched event",
+				"origin_result_id", result.GUID, "err", pubErr)
+		} else {
+			r.logger.Debug("router enriched result with movie metadata",
+				"origin_result_id", result.GUID, "title", result.Title)
+		}
+		return
+	}
+
+	series, err := r.metadataRouter.ResolveSeries(ctx, result.Title, map[string]string{})
+	if series != nil {
+		if pubErr := r.bus.Publish(ctx, &metadata.MetadataEnrichedEvent{
+			OriginResultID:   result.GUID,
+			DownloadID:       downloadID,
+			Title:            result.Title,
+			SeriesMetadata:   series,
+			EnrichedAt:       r.clock.Now(),
+			SourceProvider:   "all",
+		}); pubErr != nil {
+			r.logger.Warn("router failed to publish MetadataEnriched event",
+				"origin_result_id", result.GUID, "err", pubErr)
+		} else {
+			r.logger.Debug("router enriched result with series metadata",
+				"origin_result_id", result.GUID, "title", result.Title)
+		}
+		return
+	}
+
+	// No metadata found; emit failure event (non-blocking, log only)
+	reason := "no match"
+	if err != nil {
+		reason = fmt.Sprintf("lookup failed: %v", err)
+	}
+	if pubErr := r.bus.Publish(ctx, &metadata.MetadataFailureEvent{
+		OriginResultID: result.GUID,
+		DownloadID:     downloadID,
+		Title:          result.Title,
+		Reason:         reason,
+		FailedAt:       r.clock.Now(),
+	}); pubErr != nil {
+		r.logger.Warn("router failed to publish MetadataFailure event",
+			"origin_result_id", result.GUID, "err", pubErr)
+	} else {
+		r.logger.Debug("router could not enrich result with metadata",
+			"origin_result_id", result.GUID, "title", result.Title, "reason", reason)
+	}
 }

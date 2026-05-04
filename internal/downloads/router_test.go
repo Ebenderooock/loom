@@ -9,6 +9,7 @@ import (
 
 	"github.com/loomctl/loom/internal/indexers"
 	"github.com/loomctl/loom/internal/kernel/eventbus"
+	"github.com/loomctl/loom/internal/metadata"
 )
 
 type testClock struct {
@@ -46,8 +47,12 @@ func newTestRouter(t *testing.T, bus eventbus.Bus) (*Router, *testClock) {
 		t.Fatalf("NewService: %v", err)
 	}
 
+	// For testing, we can pass nil for metadata router since enrichment is non-blocking.
+	// In real use, this would be initialized with actual providers.
+	var metadataRouter *metadata.Router
+
 	clock := &testClock{now: time.Now()}
-	router := NewRouter(svc, bus, slog.Default(), clock)
+	router := NewRouter(svc, metadataRouter, bus, slog.Default(), clock)
 	return router, clock
 }
 
