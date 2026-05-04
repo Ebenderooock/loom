@@ -9,6 +9,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Phase 4e — Metadata orchestration router.** Builds on Phase 4a–4d
+  (metadata service + providers TMDB, TVDB, MusicBrainz) with a concurrent
+  fan-out layer that returns the first successful metadata match within a
+  10-second total timeout (3s per provider, parallel execution). New
+  `internal/metadata/router.go` package implements `ResolveMovie()`,
+  `ResolveSeries()`, `ResolveEpisode()` methods that try external ID
+  lookups first, then fall back to title-based search. Uses `errgroup.Group`
+  for concurrent provider queries; avoids sequential bottleneck (3 providers
+  at 1s each = ~1s parallel, not 3s sequential). Router integrates with
+  downloads module: after successfully queuing a download, calls metadata
+  router in a background goroutine (non-blocking) to enrich with movie/series
+  metadata, emitting `TopicMetadataEnriched` or `TopicMetadataFailure`
+  events to downstream subscribers (search indexes, release tracking).
+  New event types: `MetadataEnrichedEvent` (download + matched metadata),
+  `MetadataFailureEvent` (download + reason). Configuration via env vars:
+  `LOOM_METADATA_PROVIDERS` (comma-separated list, default:
+  tmdb,tvdb,musicbrainz), `LOOM_METADATA_TIMEOUT` (default: 10s),
+  `LOOM_METADATA_CACHE_ENABLED` (default: true). Downloads router enhanced
+  with optional metadata router field; on successful download queue,
+  spawns background enrichment goroutine that publishes metadata events.
+  All router and downloads changes pass `-race` flag. See
+  [ADR-0025](docs/adr/0025-metadata-router-integration.md) for fan-out
+  rationale (why concurrent beats sequential, why total timeout beats
+  per-provider timeout) and integration pattern (non-blocking background
+  enrichment). Docs updated in `docs/metadata.md` with router section.
+  Tests: 10+ new tests covering resolve by ID, search fallback, no match,
+  timeout handling, partial results (first succeeds, others slow), concurrent
+  race-safe operations, config loading from env vars; all pass `-race`.
+
 - **Phase 4a — Metadata service foundation.** Pluggable abstraction layer
   for movie, series, and episode metadata sourced from external providers
   (TMDB, TVDB, MusicBrainz). New `internal/metadata/` package implements

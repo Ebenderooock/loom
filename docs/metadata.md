@@ -42,6 +42,90 @@ func (s *Service) FindEpisode(ctx context.Context, seriesID string, season, epis
 
 Returns `nil` if no providers yield a result or all timeout. Partial results are acceptable (first successful provider wins).
 
+## Metadata Router (Phase 4e)
+
+The router (`internal/metadata/router.go`) orchestrates concurrent metadata lookups across all providers, returning the first successful match within a 10-second total timeout.
+
+### Router API
+
+```go
+type Router struct { ... }
+
+// Resolve a movie by title/year or external IDs (fallback order: by ID, then search)
+func (r *Router) ResolveMovie(ctx, title, year, externalIDs) (*MovieMetadata, error)
+
+// Resolve a series by title or external IDs (fallback order: by ID, then search)
+func (r *Router) ResolveSeries(ctx, title, externalIDs) (*SeriesMetadata, error)
+
+// Resolve an episode by series ID and season/episode numbers
+func (r *Router) ResolveEpisode(ctx, seriesID, season, episode) (*EpisodeMetadata, error)
+```
+
+### Fan-Out Pattern
+
+All providers are queried **concurrently** using `errgroup.Group`:
+
+- **Latency**: 3 providers at 1s each = ~1s total (all start at t=0), not 3s sequential
+- **Timeout**: Single 10-second total timeout (per resolve call)
+- **Per-provider**: 3-second individual timeout; if provider times out, next one still runs
+- **First-win**: Returns immediately on first successful result
+- **Graceful degradation**: If all providers fail, returns last error; if all timeout, returns timeout error
+
+### Integration with Downloads Router
+
+After successfully queuing a download, the downloads router calls the metadata router in a **background goroutine** to enrich the result:
+
+1. Calls `ResolveMovie()` or `ResolveSeries()` (non-blocking)
+2. On success: emits `TopicMetadataEnriched` event (download Result + matched metadata)
+3. On failure: emits `TopicMetadataFailure` event (download Result + error reason)
+
+**Non-blocking design**: Enrichment doesn't hold up download routing; metadata availability doesn't affect download success.
+
+### Event Topics
+
+| Topic | Event Type | Use Case |
+|---|---|---|
+| `metadata.enriched` | `MetadataEnrichedEvent` | Download successfully enriched with movie/series/episode metadata |
+| `metadata.failure` | `MetadataFailureEvent` | Metadata lookup failed (timeout or no match) |
+
+Both events carry:
+- `OriginResultID` — indexer Result GUID for traceability
+- `Title` — human-readable name
+- `DownloadID` — per-client download identifier (if queued)
+- Metadata struct (if enriched) or reason string (if failure)
+
+Subscribers (e.g., search indexer, release tracker) use these events to:
+- Update search indexes with full metadata
+- Mark releases as "acquired with metadata" vs. "acquired but unmatched"
+- Trigger downstream workflows (e.g., move to watched folder)
+
+### Configuration
+
+```go
+type Config struct {
+    Providers    []string      // Enabled providers
+    Timeout      time.Duration // Per-resolve timeout (default: 10s)
+    CacheEnabled bool          // Use in-process cache (default: true)
+}
+```
+
+**Environment Variables:**
+
+| Var | Default | Example |
+|---|---|---|
+| `LOOM_METADATA_PROVIDERS` | `tmdb,tvdb,musicbrainz` | `tvdb,tmdb` |
+| `LOOM_METADATA_TIMEOUT` | `10s` | `15s` |
+| `LOOM_METADATA_CACHE_ENABLED` | `true` | `false` |
+
+### Race Safety
+
+- Router is safe for concurrent `Resolve*` calls
+- Uses `errgroup.Group` for concurrent provider queries
+- Downloads router background enrichment uses goroutines (not blocking)
+- All tests pass with `-race` flag
+
+
+
 ## Cache TTL
 
 | Tier | TTL | Use Case |
