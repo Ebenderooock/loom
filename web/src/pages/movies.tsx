@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AlertCircle, Plus, Trash2, Loader2 } from "lucide-react";
+import { useAuth } from "@/hooks/use-auth";
 
 interface RootFolder {
   id: string;
@@ -21,6 +22,7 @@ interface Movie {
 }
 
 export function MoviesPage() {
+  const { isAuthenticated } = useAuth();
   const [rootFolders, setRootFolders] = useState<RootFolder[]>([]);
   const [movies, setMovies] = useState<Movie[]>([]);
   const [newPath, setNewPath] = useState("");
@@ -28,14 +30,17 @@ export function MoviesPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  // Fetch root folders on mount
+  // Fetch root folders on mount (only when authenticated)
   useEffect(() => {
-    fetchRootFolders();
-    fetchMovies();
-  }, []);
+    if (isAuthenticated) {
+      fetchRootFolders();
+      fetchMovies();
+    }
+  }, [isAuthenticated]);
 
   const fetchRootFolders = async () => {
     try {
+      setError(null);
       const response = await fetch("http://localhost:8989/api/v1/movies/root-folders", {
         credentials: "include",
       });
@@ -56,9 +61,12 @@ export function MoviesPage() {
 
       if (!response.ok) throw new Error("Failed to fetch movies");
       const data = await response.json();
-      setMovies(data || []);
+      // Handle both paginated response {data: [...]} and direct array response
+      const moviesList = Array.isArray(data) ? data : (data?.data || []);
+      setMovies(moviesList);
     } catch (err) {
       console.error("Failed to fetch movies:", err);
+      setError("Failed to fetch movies");
     }
   };
 
