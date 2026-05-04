@@ -880,6 +880,8 @@ return
 }
 
 // Test if release name matches all filters
+cfService := NewCustomFormatService(Repository(nil)) // Note: using nil repo for stateless evaluation
+// Since we need the service from context, we'll use the logic directly
 matches := true
 for _, filter := range cf.Filters {
 // Simple pattern matching for testing
@@ -920,9 +922,4 @@ return false
 default:
 return false
 }
-}
-
-// slugify converts a name to a URL-safe slug (lowercase, spaces to hyphens).
-func slugify(name string) string {
-return strings.ToLower(strings.ReplaceAll(name, " ", "-"))
 }

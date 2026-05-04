@@ -37,6 +37,13 @@ type Service interface {
 	UpdateQualityProfile(ctx context.Context, qp *QualityProfile) error
 	DeleteQualityProfile(ctx context.Context, id string) error
 	ListQualityProfiles(ctx context.Context) ([]*QualityProfile, error)
+
+	// Custom formats
+	AddCustomFormat(ctx context.Context, cf *CustomFormat) error
+	GetCustomFormat(ctx context.Context, id string) (*CustomFormat, error)
+	UpdateCustomFormat(ctx context.Context, cf *CustomFormat) error
+	DeleteCustomFormat(ctx context.Context, id string) error
+	ListCustomFormats(ctx context.Context) ([]*CustomFormat, error)
 }
 
 // service implements the Service interface.
@@ -413,4 +420,34 @@ func (s *service) validateQualityProfile(qp *QualityProfile) error {
 	}
 
 	return nil
+}
+
+// AddCustomFormat adds a new custom format using the custom format service.
+func (s *service) AddCustomFormat(ctx context.Context, cf *CustomFormat) error {
+cfService := NewCustomFormatService(s.repo)
+return cfService.AddCustomFormat(ctx, cf)
+}
+
+// GetCustomFormat retrieves a custom format using the custom format service.
+func (s *service) GetCustomFormat(ctx context.Context, id string) (*CustomFormat, error) {
+cfService := NewCustomFormatService(s.repo)
+return cfService.GetCustomFormat(ctx, id)
+}
+
+// UpdateCustomFormat updates a custom format using the custom format service.
+func (s *service) UpdateCustomFormat(ctx context.Context, cf *CustomFormat) error {
+cfService := NewCustomFormatService(s.repo)
+return cfService.UpdateCustomFormat(ctx, cf)
+}
+
+// DeleteCustomFormat deletes a custom format using the custom format service.
+func (s *service) DeleteCustomFormat(ctx context.Context, id string) error {
+cfService := NewCustomFormatService(s.repo)
+return cfService.DeleteCustomFormat(ctx, id)
+}
+
+// ListCustomFormats lists all custom formats using the custom format service.
+func (s *service) ListCustomFormats(ctx context.Context) ([]*CustomFormat, error) {
+cfService := NewCustomFormatService(s.repo)
+return cfService.ListCustomFormats(ctx)
 }
