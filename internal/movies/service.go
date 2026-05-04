@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"sync"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 // Service defines the business logic interface for the movies module.
@@ -245,7 +247,10 @@ func (s *service) AddRootFolder(ctx context.Context, path string) (*RootFolder, 
 	}
 
 	rf := &RootFolder{
-		Path: path,
+		ID:        uuid.New().String(),
+		Path:      path,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
 	}
 
 	if err := s.repo.AddRootFolder(ctx, rf); err != nil {
