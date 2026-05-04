@@ -2,7 +2,6 @@
 // Implements TanStack Query patterns for search, import, stats, and provider tests.
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { UseQueryOptions } from "@tanstack/react-query";
 
 // ---------- Types ----------
 
