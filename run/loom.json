@@ -1,0 +1,12 @@
+{
+  "setup_complete": true,
+  "admin": {
+    "username": "admin",
+    "password_hash": "$argon2id$v=19$m=65536,t=2,p=2$cVpM9FkfgVRIJN/S0skxIw$qzpQoOadocrpGpsOxqI8pd+4PjLqH5hVfyUM6oy6tJA"
+  },
+  "persistence": {
+    "engine": "sqlite",
+    "path": "config/data/loom.db"
+  },
+  "libraries": []
+}

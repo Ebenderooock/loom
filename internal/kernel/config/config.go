@@ -362,7 +362,14 @@ func applyDefaults(v *viper.Viper) {
 
 	v.SetDefault("debug.pprof", false)
 
-	v.SetDefault("cors.allowed_origins", []string{})
+	// Default CORS origins for development (localhost:5173-5175 for frontend dev server)
+	// Production deployments should configure this explicitly in loom.yaml
+	v.SetDefault("cors.allowed_origins", []string{
+		"http://localhost:5173",
+		"http://localhost:5174",
+		"http://localhost:5175",
+		"http://localhost:3000",
+	})
 
 	v.SetDefault("otel.enabled", false)
 	v.SetDefault("otel.endpoint", "")

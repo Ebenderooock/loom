@@ -28,7 +28,7 @@ export function SetupPage() {
     setError(null);
 
     try {
-      const response = await fetch("http://localhost:8989/api/v1/auth/setup", {
+      const response = await fetch("http://localhost:8989/api/v1/auth/initialize", {
         method: "POST",
         credentials: "include",
         headers: {
