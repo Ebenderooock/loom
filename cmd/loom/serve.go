@@ -25,6 +25,7 @@ import (
 	"github.com/loomctl/loom/internal/kernel/logging"
 	"github.com/loomctl/loom/internal/kernel/telemetry"
 	"github.com/loomctl/loom/internal/notifications"
+	"github.com/loomctl/loom/internal/qualityprofiles"
 	"github.com/loomctl/loom/internal/rss"
 	"github.com/loomctl/loom/internal/safety"
 	"github.com/loomctl/loom/internal/scheduler"
@@ -234,6 +235,9 @@ func cmdServe(ctx context.Context, args []string) error {
 
 	// Build and wire the alt-title store
 	srv.SetAltTitles(alttitles.NewStore(db.DB()))
+
+	// Build and wire the quality profiles store
+	srv.SetQualityProfiles(qualityprofiles.NewStore(db.DB()))
 
 	// Build and wire the import pipeline
 	importMode := imports.ImportMode(cfg.MediaManagement.ImportMode)
