@@ -169,7 +169,7 @@ func (s *service) AddSeries(ctx context.Context, req *AddSeriesRequest) (*Series
 		SeriesType:       seriesType,
 		MetadataProvider: "tmdb",
 		QualityProfileID: req.QualityProfileID,
-		RootFolderID:     req.RootFolderID,
+		LibraryID:        req.LibraryID,
 		MonitoringStatus: monStatus,
 		SeasonFolder:     seasonFolder,
 		ReleaseDate:      getString(details, "first_air_date"),

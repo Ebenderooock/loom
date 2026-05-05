@@ -18,13 +18,6 @@ type Repository interface {
 	GetMovieByTMDBID(ctx context.Context, tmdbID string) (*Movie, error)
 	GetMovieByIMDBID(ctx context.Context, imdbID string) (*Movie, error)
 
-	AddRootFolder(ctx context.Context, rf *RootFolder) error
-	GetRootFolder(ctx context.Context, id string) (*RootFolder, error)
-	UpdateRootFolder(ctx context.Context, rf *RootFolder) error
-	DeleteRootFolder(ctx context.Context, id string) error
-	ListRootFolders(ctx context.Context) ([]*RootFolder, error)
-	GetRootFolderByPath(ctx context.Context, path string) (*RootFolder, error)
-
 	AddMovieFile(ctx context.Context, mf *MovieFile) error
 	GetMovieFile(ctx context.Context, id string) (*MovieFile, error)
 	UpdateMovieFile(ctx context.Context, mf *MovieFile) error
@@ -68,7 +61,7 @@ type sqlRepo struct {
 }
 
 // movie column list used by all SELECT queries
-const movieColumns = `id, title, year, imdb_id, tmdb_id, tvdb_id, overview, genres, runtime, rating, backdrop_path, poster_path, metadata_provider, quality_profile_id, root_folder_id, status, release_date, last_search_at, monitoring_status, created_at, updated_at, deleted_at`
+const movieColumns = `id, title, year, imdb_id, tmdb_id, tvdb_id, overview, genres, runtime, rating, backdrop_path, poster_path, metadata_provider, quality_profile_id, library_id, status, release_date, last_search_at, monitoring_status, created_at, updated_at, deleted_at`
 
 // scanMovie scans a movie row from the database.
 func scanMovie(scanner interface{ Scan(dest ...interface{}) error }) (*Movie, error) {
@@ -76,7 +69,7 @@ func scanMovie(scanner interface{ Scan(dest ...interface{}) error }) (*Movie, er
 	var genreBytes []byte
 	err := scanner.Scan(&movie.ID, &movie.Title, &movie.Year, &movie.IMDBID, &movie.TMDBID, &movie.TVDBID, &movie.Overview, &genreBytes,
 		&movie.Runtime, &movie.Rating, &movie.BackdropPath, &movie.PosterPath, &movie.MetadataProvider,
-		&movie.QualityProfileID, &movie.RootFolderID, &movie.Status, &movie.ReleaseDate,
+		&movie.QualityProfileID, &movie.LibraryID, &movie.Status, &movie.ReleaseDate,
 		&movie.LastSearchAt, &movie.MonitoringStatus, &movie.CreatedAt, &movie.UpdatedAt, &movie.DeletedAt)
 	if err != nil {
 		return nil, err
@@ -92,11 +85,11 @@ func scanMovie(scanner interface{ Scan(dest ...interface{}) error }) (*Movie, er
 func (r *sqlRepo) AddMovie(ctx context.Context, movie *Movie) error {
 	genreBytes, _ := json.Marshal(movie.Genres)
 	_, err := r.db.ExecContext(ctx,
-		`INSERT INTO movies (id, title, year, imdb_id, tmdb_id, tvdb_id, overview, genres, runtime, rating, backdrop_path, poster_path, metadata_provider, quality_profile_id, root_folder_id, status, release_date, monitoring_status, created_at, updated_at)
+		`INSERT INTO movies (id, title, year, imdb_id, tmdb_id, tvdb_id, overview, genres, runtime, rating, backdrop_path, poster_path, metadata_provider, quality_profile_id, library_id, status, release_date, monitoring_status, created_at, updated_at)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		movie.ID, movie.Title, movie.Year, movie.IMDBID, movie.TMDBID, movie.TVDBID, movie.Overview, string(genreBytes),
 		movie.Runtime, movie.Rating, movie.BackdropPath, movie.PosterPath, movie.MetadataProvider,
-		movie.QualityProfileID, movie.RootFolderID, movie.Status, movie.ReleaseDate,
+		movie.QualityProfileID, movie.LibraryID, movie.Status, movie.ReleaseDate,
 		movie.MonitoringStatus, movie.CreatedAt, movie.UpdatedAt,
 	)
 	return err
@@ -111,10 +104,10 @@ func (r *sqlRepo) UpdateMovie(ctx context.Context, movie *Movie) error {
 	genreBytes, _ := json.Marshal(movie.Genres)
 	_, err := r.db.ExecContext(ctx,
 		`UPDATE movies SET title = ?, year = ?, overview = ?, genres = ?, runtime = ?, rating = ?, backdrop_path = ?, poster_path = ?,
-		 quality_profile_id = ?, root_folder_id = ?, status = ?, release_date = ?, monitoring_status = ?, updated_at = ?
+		 quality_profile_id = ?, library_id = ?, status = ?, release_date = ?, monitoring_status = ?, updated_at = ?
 		 WHERE id = ? AND deleted_at IS NULL`,
 		movie.Title, movie.Year, movie.Overview, string(genreBytes), movie.Runtime, movie.Rating, movie.BackdropPath, movie.PosterPath,
-		movie.QualityProfileID, movie.RootFolderID, movie.Status, movie.ReleaseDate, movie.MonitoringStatus, movie.UpdatedAt, movie.ID,
+		movie.QualityProfileID, movie.LibraryID, movie.Status, movie.ReleaseDate, movie.MonitoringStatus, movie.UpdatedAt, movie.ID,
 	)
 	return err
 }
@@ -178,70 +171,6 @@ func (r *sqlRepo) GetMovieByTMDBID(ctx context.Context, tmdbID string) (*Movie, 
 func (r *sqlRepo) GetMovieByIMDBID(ctx context.Context, imdbID string) (*Movie, error) {
 	return scanMovie(r.db.QueryRowContext(ctx,
 		`SELECT `+movieColumns+` FROM movies WHERE imdb_id = ? AND deleted_at IS NULL`, imdbID))
-}
-
-// RootFolder operations
-
-func (r *sqlRepo) AddRootFolder(ctx context.Context, rf *RootFolder) error {
-	_, err := r.db.ExecContext(ctx,
-		`INSERT INTO root_folders (id, path, free_space, unmapped_count, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`,
-		rf.ID, rf.Path, rf.FreeSpace, rf.UnmappedCount, rf.CreatedAt, rf.UpdatedAt,
-	)
-	return err
-}
-
-func (r *sqlRepo) GetRootFolder(ctx context.Context, id string) (*RootFolder, error) {
-	rf := &RootFolder{}
-	err := r.db.QueryRowContext(ctx,
-		`SELECT id, path, free_space, unmapped_count, created_at, updated_at, deleted_at FROM root_folders WHERE id = ? AND deleted_at IS NULL`,
-		id,
-	).Scan(&rf.ID, &rf.Path, &rf.FreeSpace, &rf.UnmappedCount, &rf.CreatedAt, &rf.UpdatedAt, &rf.DeletedAt)
-	return rf, err
-}
-
-func (r *sqlRepo) UpdateRootFolder(ctx context.Context, rf *RootFolder) error {
-	_, err := r.db.ExecContext(ctx,
-		`UPDATE root_folders SET path = ?, free_space = ?, unmapped_count = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL`,
-		rf.Path, rf.FreeSpace, rf.UnmappedCount, rf.UpdatedAt, rf.ID,
-	)
-	return err
-}
-
-func (r *sqlRepo) DeleteRootFolder(ctx context.Context, id string) error {
-	_, err := r.db.ExecContext(ctx,
-		`UPDATE root_folders SET deleted_at = ?, updated_at = ? WHERE id = ?`,
-		time.Now(), time.Now(), id,
-	)
-	return err
-}
-
-func (r *sqlRepo) ListRootFolders(ctx context.Context) ([]*RootFolder, error) {
-	rows, err := r.db.QueryContext(ctx,
-		`SELECT id, path, free_space, unmapped_count, created_at, updated_at, deleted_at FROM root_folders WHERE deleted_at IS NULL ORDER BY path ASC`,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var folders []*RootFolder
-	for rows.Next() {
-		rf := &RootFolder{}
-		if err := rows.Scan(&rf.ID, &rf.Path, &rf.FreeSpace, &rf.UnmappedCount, &rf.CreatedAt, &rf.UpdatedAt, &rf.DeletedAt); err != nil {
-			return nil, err
-		}
-		folders = append(folders, rf)
-	}
-	return folders, rows.Err()
-}
-
-func (r *sqlRepo) GetRootFolderByPath(ctx context.Context, path string) (*RootFolder, error) {
-	rf := &RootFolder{}
-	err := r.db.QueryRowContext(ctx,
-		`SELECT id, path, free_space, unmapped_count, created_at, updated_at, deleted_at FROM root_folders WHERE path = ? AND deleted_at IS NULL`,
-		path,
-	).Scan(&rf.ID, &rf.Path, &rf.FreeSpace, &rf.UnmappedCount, &rf.CreatedAt, &rf.UpdatedAt, &rf.DeletedAt)
-	return rf, err
 }
 
 // MovieFile operations

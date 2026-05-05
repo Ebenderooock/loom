@@ -5,14 +5,14 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/loomctl/loom/internal/movies"
+	"github.com/loomctl/loom/internal/libraries"
 )
 
 // RegisterRoutes registers scanner endpoints on the given router.
 // These should be mounted under /api/v1/movies/scan
-func RegisterRoutes(r chi.Router, scanner *Scanner, movieSvc movies.Service) {
+func RegisterRoutes(r chi.Router, scanner *Scanner, libStore *libraries.Store) {
 	r.Route("/scan", func(r chi.Router) {
-		r.Post("/", startScan(scanner, movieSvc))
+		r.Post("/", startScan(scanner, libStore))
 		r.Get("/unmatched", getUnmatched(scanner))
 		r.Post("/match", matchFile(scanner))
 		r.Get("/{scanId}", getScanStatus(scanner))
@@ -20,10 +20,10 @@ func RegisterRoutes(r chi.Router, scanner *Scanner, movieSvc movies.Service) {
 }
 
 type startScanRequest struct {
-	RootFolderID string `json:"rootFolderId"`
+	LibraryID string `json:"libraryId"`
 }
 
-func startScan(s *Scanner, movieSvc movies.Service) http.HandlerFunc {
+func startScan(s *Scanner, libStore *libraries.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req startScanRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -31,18 +31,18 @@ func startScan(s *Scanner, movieSvc movies.Service) http.HandlerFunc {
 			return
 		}
 
-		if req.RootFolderID == "" {
-			http.Error(w, `{"error":"rootFolderId is required"}`, http.StatusBadRequest)
+		if req.LibraryID == "" {
+			http.Error(w, `{"error":"libraryId is required"}`, http.StatusBadRequest)
 			return
 		}
 
-		folder, err := movieSvc.GetRootFolder(r.Context(), req.RootFolderID)
+		lib, err := libStore.Get(r.Context(), req.LibraryID)
 		if err != nil {
-			http.Error(w, `{"error":"root folder not found"}`, http.StatusNotFound)
+			http.Error(w, `{"error":"library not found"}`, http.StatusNotFound)
 			return
 		}
 
-		scanID := s.StartScan(r.Context(), folder)
+		scanID := s.StartScan(r.Context(), lib.ID, lib.Path)
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusAccepted)
@@ -82,7 +82,7 @@ func getUnmatched(s *Scanner) http.HandlerFunc {
 type matchFileRequest struct {
 	UnmatchedID      string `json:"unmatchedId"`
 	TmdbID           string `json:"tmdbId"`
-	RootFolderID     string `json:"rootFolderId"`
+	LibraryID        string `json:"libraryId"`
 	QualityProfileID string `json:"qualityProfileId"`
 }
 
@@ -162,7 +162,7 @@ func matchFile(s *Scanner) http.HandlerFunc {
 			return
 		}
 
-		if err := s.MatchFile(r.Context(), req.UnmatchedID, req.TmdbID, req.RootFolderID, req.QualityProfileID); err != nil {
+		if err := s.MatchFile(r.Context(), req.UnmatchedID, req.TmdbID, req.LibraryID, req.QualityProfileID); err != nil {
 			http.Error(w, `{"error":"`+err.Error()+`"}`, http.StatusInternalServerError)
 			return
 		}

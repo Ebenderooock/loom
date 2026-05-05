@@ -446,7 +446,7 @@ func (s *Server) newMux() http.Handler {
 		if s.moviesSvc != nil {
 			moviesRouter := movies.RouterWithSearch(s.moviesSvc, s.indexerSvc)
 			if s.scannerSvc != nil {
-				scanner.RegisterRoutes(moviesRouter, s.scannerSvc, s.moviesSvc)
+				scanner.RegisterRoutes(moviesRouter, s.scannerSvc, s.libStore)
 			}
 			if s.organizerSvc != nil {
 				organizer.RegisterRoutes(moviesRouter, s.organizerSvc)

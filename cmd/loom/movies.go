@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/loomctl/loom/internal/kernel/config"
+	"github.com/loomctl/loom/internal/libraries"
 	"github.com/loomctl/loom/internal/metadata"
 	"github.com/loomctl/loom/internal/metadata/tmdb"
 	"github.com/loomctl/loom/internal/movies"
@@ -72,12 +73,12 @@ func (a *metadataSearcherAdapter) FindMovieByQuery(ctx context.Context, query st
 }
 
 // buildOrganizer constructs the file organizer backed by movies service and DB.
-func buildOrganizer(moviesSvc movies.Service, db storage.DB, logger *slog.Logger) *organizer.Organizer {
+func buildOrganizer(moviesSvc movies.Service, libStore *libraries.Store, db storage.DB, logger *slog.Logger) *organizer.Organizer {
 	repo := movies.NewRepository(db.DB())
 	configStore := organizer.NewSQLiteConfigStore(db.DB())
 
 	return organizer.New(
-		&organizer.MovieServiceAdapter{Svc: moviesSvc},
+		&organizer.MovieServiceAdapter{Svc: moviesSvc, LibStore: libStore},
 		&organizer.RepoFileUpdater{Repo: repo},
 		configStore,
 		logger,

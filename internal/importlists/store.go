@@ -78,7 +78,7 @@ func (s *Store) Get(ctx context.Context, id string) (*ImportList, error) {
 	l.URL = url.String
 	l.APIKey = apiKey.String
 	l.AccessToken = token.String
-	l.RootFolderPath = rootFolder.String
+	l.LibraryPath = rootFolder.String
 	if lastSync.Valid {
 		l.LastSync = &lastSync.Time
 	}
@@ -105,7 +105,7 @@ func (s *Store) Create(ctx context.Context, l *ImportList) error {
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		l.ID, l.Name, l.ListType, boolToInt(l.Enabled),
 		nullStr(l.URL), nullStr(l.APIKey), nullStr(l.AccessToken),
-		l.SyncIntervalMinutes, nullStr(l.RootFolderPath), l.QualityProfileID,
+		l.SyncIntervalMinutes, nullStr(l.LibraryPath), l.QualityProfileID,
 		l.MediaType, l.MonitorType, boolToInt(l.SearchOnAdd),
 		l.Settings, l.CreatedAt, l.UpdatedAt,
 	)
@@ -124,7 +124,7 @@ func (s *Store) Update(ctx context.Context, l *ImportList) error {
 		WHERE id = ?`,
 		l.Name, l.ListType, boolToInt(l.Enabled),
 		nullStr(l.URL), nullStr(l.APIKey), nullStr(l.AccessToken),
-		l.SyncIntervalMinutes, nullStr(l.RootFolderPath), l.QualityProfileID,
+		l.SyncIntervalMinutes, nullStr(l.LibraryPath), l.QualityProfileID,
 		l.MediaType, l.MonitorType, boolToInt(l.SearchOnAdd),
 		l.Settings, l.UpdatedAt, l.ID,
 	)
@@ -343,7 +343,7 @@ func scanList(row rowScanner) (*ImportList, error) {
 	l.URL = url.String
 	l.APIKey = apiKey.String
 	l.AccessToken = token.String
-	l.RootFolderPath = rootFolder.String
+	l.LibraryPath = rootFolder.String
 	if lastSync.Valid {
 		l.LastSync = &lastSync.Time
 	}

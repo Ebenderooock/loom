@@ -31,7 +31,8 @@ import {
 } from "@/components/movies";
 import { LibraryImportDialog } from "@/components/movies/library-import-dialog";
 import { OrganizeDialog } from "@/components/movies/organize-dialog";
-import type { Movie, RootFolder, QualityProfile, SortKey, ViewMode } from "@/components/movies";
+import { useLibraries } from "@/lib/libraries-api";
+import type { Movie, QualityProfile, SortKey, ViewMode } from "@/components/movies";
 
 
 // ─── Small helpers (page-local) ──────────────────────────────────────
@@ -102,7 +103,8 @@ function BulkDeleteDialog({
 export function MoviesPage() {
   const { isAuthenticated } = useAuth();
   const [movies, setMovies] = useState<Movie[]>([]);
-  const [rootFolders, setRootFolders] = useState<RootFolder[]>([]);
+  const { data: allLibraries = [] } = useLibraries();
+  const libraries = allLibraries.filter(l => l.media_type === "movie");
   const [qualityProfiles, setQualityProfiles] = useState<QualityProfile[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [addDialogOpen, setAddDialogOpen] = useState(false);
@@ -129,18 +131,13 @@ export function MoviesPage() {
     if (!isAuthenticated) return;
     setIsLoading(true);
     try {
-      const [moviesRes, foldersRes, profilesRes] = await Promise.all([
+      const [moviesRes, profilesRes] = await Promise.all([
         fetch("/api/v1/movies?limit=200", { credentials: "include" }),
-        fetch("/api/v1/movies/root-folders", { credentials: "include" }),
         fetch("/api/v1/movies/quality-profiles", { credentials: "include" }),
       ]);
       if (moviesRes.ok) {
         const data = await moviesRes.json();
         setMovies(Array.isArray(data) ? data : data.data ?? []);
-      }
-      if (foldersRes.ok) {
-        const data = await foldersRes.json();
-        setRootFolders(Array.isArray(data) ? data : []);
       }
       if (profilesRes.ok) {
         const data = await profilesRes.json();
@@ -293,10 +290,10 @@ export function MoviesPage() {
           </div>
           <h2 className="text-xl font-semibold mb-2">No movies yet</h2>
           <p className="text-sm text-muted-foreground max-w-sm mb-6">
-            Start building your library by adding movies from TMDB, or import existing movies from your root folders.
+            Start building your library by adding movies from TMDB, or import existing movies from your libraries.
           </p>
-          {rootFolders.length === 0 ? (
-            <p className="text-sm text-amber-500">⚠️ Add a root folder in Settings before adding movies</p>
+          {libraries.length === 0 ? (
+            <p className="text-sm text-amber-500">⚠️ Add a library in Settings before adding movies</p>
           ) : (
             <div className="flex gap-3">
               <Button variant="outline" size="lg" onClick={() => setImportDialogOpen(true)}>
@@ -368,7 +365,7 @@ export function MoviesPage() {
       <AddMovieDialog
         open={addDialogOpen}
         onOpenChange={setAddDialogOpen}
-        rootFolders={rootFolders}
+        libraries={libraries}
         qualityProfiles={qualityProfiles}
         existingTmdbIds={existingTmdbIds}
         onMovieAdded={fetchAll}
@@ -379,7 +376,7 @@ export function MoviesPage() {
         open={detailOpen}
         onOpenChange={setDetailOpen}
         profiles={qualityProfiles}
-        rootFolders={rootFolders}
+        libraries={libraries}
         onUpdated={handleMovieUpdated}
         onDeleted={handleMovieDeleted}
       />
@@ -394,7 +391,7 @@ export function MoviesPage() {
       <LibraryImportDialog
         open={importDialogOpen}
         onOpenChange={setImportDialogOpen}
-        rootFolders={rootFolders}
+        libraries={libraries}
         onImportComplete={fetchAll}
       />
 

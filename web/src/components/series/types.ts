@@ -1,8 +1,3 @@
-export interface RootFolder {
-  id: string;
-  path: string;
-}
-
 export interface QualityProfile {
   id: string;
   name: string;
@@ -32,7 +27,7 @@ export interface Series {
   status: string;
   seriesType: string;
   qualityProfileId: string;
-  rootFolderId: string;
+  libraryId: string;
   monitoringStatus: string;
   seasonFolder: boolean;
   releaseDate?: string;

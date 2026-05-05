@@ -35,7 +35,8 @@ import { toast } from "sonner";
 import { StatusBadge } from "./status-badge";
 import { ReleaseSearchDialog } from "@/components/search/release-search-dialog";
 import { AltTitlesSection } from "@/components/alt-titles";
-import type { Movie, QualityProfile, RootFolder, Credits, CreditPerson } from "./types";
+import type { Library } from "../../lib/libraries-api";
+import type { Movie, QualityProfile, Credits, CreditPerson } from "./types";
 import { TMDB_IMG } from "./types";
 
 // ─── Collapsible Section ──────────────────────────────────────────────
@@ -132,7 +133,7 @@ export function MovieDetailSheet({
   open,
   onOpenChange,
   profiles,
-  rootFolders,
+  libraries,
   onUpdated,
   onDeleted,
 }: {
@@ -140,7 +141,7 @@ export function MovieDetailSheet({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   profiles: QualityProfile[];
-  rootFolders: RootFolder[];
+  libraries: Library[];
   onUpdated: (updated: Movie) => void;
   onDeleted: (id: string) => void;
 }) {
@@ -177,9 +178,9 @@ export function MovieDetailSheet({
   if (!movie) return null;
 
   const profile = profiles.find(p => p.id === movie.qualityProfileId);
-  const folder = rootFolders.find(f => f.id === movie.rootFolderId);
+  const library = libraries.find(l => l.id === movie.libraryId);
   const isMonitored = movie.monitoringStatus === "monitored";
-  const moviePath = folder ? `${folder.path}/${movie.title} (${movie.year})` : null;
+  const moviePath = library ? `${library.path}/${movie.title} (${movie.year})` : null;
 
   const handleSave = async () => {
     setSaving(true);
@@ -482,10 +483,10 @@ export function MovieDetailSheet({
                     {profile?.name ?? "—"}
                   </div>
                 </DetailRow>
-                <DetailRow label="Root Folder">
-                  <span className="flex items-center gap-1 truncate" title={folder?.path}>
+                <DetailRow label="Library">
+                  <span className="flex items-center gap-1 truncate" title={library?.name}>
                     <FolderOpen className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                    {folder?.path ?? "—"}
+                    {library?.name ?? "—"}
                   </span>
                 </DetailRow>
                 <DetailRow label="Status">

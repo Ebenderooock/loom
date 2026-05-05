@@ -9,6 +9,7 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/loomctl/loom/internal/libraries"
 	"github.com/loomctl/loom/internal/movies"
 	"github.com/loomctl/loom/internal/series"
 )
@@ -17,11 +18,12 @@ import (
 type Matcher struct {
 	moviesSvc  movies.Service
 	seriesSvc  series.Service
+	libStore   *libraries.Store
 }
 
 // NewMatcher creates a Matcher backed by the movies and series services.
-func NewMatcher(moviesSvc movies.Service, seriesSvc series.Service) *Matcher {
-	return &Matcher{moviesSvc: moviesSvc, seriesSvc: seriesSvc}
+func NewMatcher(moviesSvc movies.Service, seriesSvc series.Service, libStore *libraries.Store) *Matcher {
+	return &Matcher{moviesSvc: moviesSvc, seriesSvc: seriesSvc, libStore: libStore}
 }
 
 // parsedRelease holds the extracted metadata from a release name.
@@ -113,12 +115,12 @@ func (m *Matcher) matchMovie(ctx context.Context, p parsedRelease) (*MatchResult
 		return &MatchResult{Matched: false}, nil
 	}
 
-	rootFolder, err := m.moviesSvc.GetRootFolder(ctx, best.RootFolderID)
+	lib, err := m.libStore.Get(ctx, best.LibraryID)
 	if err != nil {
-		return nil, fmt.Errorf("get root folder: %w", err)
+		return nil, fmt.Errorf("get library: %w", err)
 	}
 
-	destDir := filepath.Join(rootFolder.Path, sanitizeDirName(fmt.Sprintf("%s (%d)", best.Title, best.Year)))
+	destDir := filepath.Join(lib.Path, sanitizeDirName(fmt.Sprintf("%s (%d)", best.Title, best.Year)))
 	return &MatchResult{
 		Matched:   true,
 		MediaType: MediaTypeMovie,

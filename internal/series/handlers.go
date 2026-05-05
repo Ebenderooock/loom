@@ -67,7 +67,7 @@ func seriesToResponse(s *Series) map[string]interface{} {
 		"seriesType":       string(s.SeriesType),
 		"metadataProvider": s.MetadataProvider,
 		"qualityProfileId": s.QualityProfileID,
-		"rootFolderId":     s.RootFolderID,
+		"libraryId":        s.LibraryID,
 		"monitoringStatus": string(s.MonitoringStatus),
 		"seasonFolder":     s.SeasonFolder,
 		"releaseDate":      s.ReleaseDate,
@@ -424,8 +424,8 @@ func updateSeries(svc Service) http.HandlerFunc {
 		if req.QualityProfileID != nil {
 			sr.QualityProfileID = *req.QualityProfileID
 		}
-		if req.RootFolderID != nil {
-			sr.RootFolderID = *req.RootFolderID
+		if req.LibraryID != nil {
+			sr.LibraryID = *req.LibraryID
 		}
 		if req.SeasonFolder != nil {
 			sr.SeasonFolder = *req.SeasonFolder

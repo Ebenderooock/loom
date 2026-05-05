@@ -56,7 +56,7 @@ type ImportList struct {
 	APIKey              string     `json:"api_key,omitempty"`
 	AccessToken         string     `json:"access_token,omitempty"`
 	SyncIntervalMinutes int        `json:"sync_interval_minutes"`
-	RootFolderPath      string     `json:"root_folder_path,omitempty"`
+	LibraryPath         string     `json:"library_path,omitempty"`
 	QualityProfileID    string     `json:"quality_profile_id"`
 	MediaType           MediaType  `json:"media_type"`
 	MonitorType         MonitorType `json:"monitor_type"`

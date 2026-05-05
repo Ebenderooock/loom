@@ -6,7 +6,6 @@ export { AddMovieDialog } from "./add-movie-dialog";
 export { MovieDetailSheet } from "./movie-detail-sheet";
 export type {
   Movie,
-  RootFolder,
   QualityProfile,
   TMDBResult,
   SortKey,

@@ -179,12 +179,15 @@ func cmdServe(ctx context.Context, args []string) error {
 	srv.SetMovies(moviesSvc)
 	srv.SetCustomFormats(customformats.NewStore(db.DB()))
 
+	// Build and wire the libraries store (needed by scanner, organizer, imports)
+	libStore := libraries.NewStore(db.DB())
+
 	// Build and wire the library scanner
 	scannerSvc := buildScanner(moviesSvc, cfg, logger)
 	srv.SetScanner(scannerSvc)
 
 	// Build and wire the file organizer
-	organizerSvc := buildOrganizer(moviesSvc, db, logger)
+	organizerSvc := buildOrganizer(moviesSvc, libStore, db, logger)
 	if mode := cfg.MediaManagement.ImportMode; mode != "" {
 		organizerSvc.SetImportMode(mode)
 	}
@@ -225,8 +228,7 @@ func cmdServe(ctx context.Context, args []string) error {
 	importListSyncMgr.Start(ctx)
 	defer importListSyncMgr.Stop()
 
-	// Build and wire the libraries store and scanner
-	libStore := libraries.NewStore(db.DB())
+	// Wire the libraries scanner
 	libScanner := libraries.NewScanner(libStore, logger)
 	srv.SetLibraries(libStore, libScanner)
 
@@ -250,6 +252,7 @@ func cmdServe(ctx context.Context, args []string) error {
 		DownloadSvc: downloadSvc,
 		MoviesSvc:   moviesSvc,
 		SeriesSvc:   seriesSvc,
+		LibStore:    libStore,
 		NotifSvc:    notifSvc,
 		PostVal:     safety.NewPostValidator(safety.DefaultConfig()),
 		ReviewStore: safety.NewReviewStore(db.DB()),

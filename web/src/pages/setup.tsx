@@ -16,12 +16,13 @@ import {
   FolderOpen, Rss, Download, Trash2, Loader2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { createLibrary, deleteLibrary, type Library, MEDIA_TYPES } from "@/lib/libraries-api";
 
 type SetupStep =
   | "welcome"
   | "credentials"
   | "display-key"
-  | "root-folders"
+  | "libraries"
   | "indexers"
   | "download-clients"
   | "complete";
@@ -30,7 +31,7 @@ const STEPS: SetupStep[] = [
   "welcome",
   "credentials",
   "display-key",
-  "root-folders",
+  "libraries",
   "indexers",
   "download-clients",
   "complete",
@@ -40,7 +41,7 @@ const STEP_LABELS: Record<SetupStep, string> = {
   welcome: "Welcome",
   credentials: "Account",
   "display-key": "API Key",
-  "root-folders": "Folders",
+  "libraries": "Libraries",
   indexers: "Indexers",
   "download-clients": "Downloads",
   complete: "Done",
@@ -73,57 +74,46 @@ function StepIndicator({ current }: { current: SetupStep }) {
   );
 }
 
-// ─── Root Folders Step ────────────────────────────────────────────────
+// ─── Libraries Step ────────────────────────────────────────────────
 
-interface RootFolderItem {
-  id: string;
-  path: string;
-}
-
-function RootFoldersStep({
+function LibrariesStep({
   onNext,
   onBack,
 }: {
   onNext: () => void;
   onBack: () => void;
 }) {
-  const [folders, setFolders] = useState<RootFolderItem[]>([]);
+  const [libraries, setLibraries] = useState<Library[]>([]);
+  const [name, setName] = useState("");
   const [path, setPath] = useState("");
+  const [mediaType, setMediaType] = useState<string>("movie");
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const addFolder = async () => {
-    if (!path.trim()) return;
+  const addLib = async () => {
+    if (!name.trim() || !path.trim()) return;
     setAdding(true);
     setError(null);
     try {
-      const res = await fetch("/api/v1/movies/root-folders", {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ path: path.trim() }),
+      const created = await createLibrary({
+        name: name.trim(),
+        path: path.trim(),
+        media_type: mediaType as "movie" | "series" | "music",
       });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || "Failed to add folder");
-      }
-      const created = await res.json();
-      setFolders((prev) => [...prev, created]);
+      setLibraries((prev) => [...prev, created]);
+      setName("");
       setPath("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to add folder");
+      setError(err instanceof Error ? err.message : "Failed to add library");
     } finally {
       setAdding(false);
     }
   };
 
-  const removeFolder = async (id: string) => {
+  const removeLib = async (id: string) => {
     try {
-      await fetch(`/api/v1/movies/root-folders/${id}`, {
-        method: "DELETE",
-        credentials: "include",
-      });
-      setFolders((prev) => prev.filter((f) => f.id !== id));
+      await deleteLibrary(id);
+      setLibraries((prev) => prev.filter((l) => l.id !== id));
     } catch {
       /* ignore */
     }
@@ -133,9 +123,9 @@ function RootFoldersStep({
     <div className="bg-neutral-card rounded-lg shadow-lg p-8 space-y-6">
       <div className="text-center space-y-2">
         <FolderOpen className="w-8 h-8 text-teal-electric mx-auto" />
-        <h2 className="text-2xl font-bold text-neutral-light">Root Folders</h2>
+        <h2 className="text-2xl font-bold text-neutral-light">Libraries</h2>
         <p className="text-neutral-muted text-sm">
-          Add root folders where your movie/series libraries live
+          Add libraries where your movie/series collections live
         </p>
       </div>
 
@@ -149,32 +139,51 @@ function RootFoldersStep({
       <div className="space-y-3">
         <div className="flex gap-2">
           <Input
+            placeholder="Library name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            className="bg-neutral-dark border-purple-rich/30 text-neutral-light placeholder:text-neutral-muted focus:border-teal-electric"
+          />
+          <Select value={mediaType} onValueChange={setMediaType}>
+            <SelectTrigger className="w-32 bg-neutral-dark border-purple-rich/30 text-neutral-light">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {MEDIA_TYPES.map(mt => (
+                <SelectItem key={mt.value} value={mt.value}>{mt.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex gap-2">
+          <Input
             placeholder="/mnt/media/movies"
             value={path}
             onChange={(e) => setPath(e.target.value)}
             className="bg-neutral-dark border-purple-rich/30 text-neutral-light placeholder:text-neutral-muted focus:border-teal-electric"
-            onKeyDown={(e) => { if (e.key === "Enter") addFolder(); }}
+            onKeyDown={(e) => { if (e.key === "Enter") addLib(); }}
           />
           <Button
-            onClick={addFolder}
-            disabled={adding || !path.trim()}
+            onClick={addLib}
+            disabled={adding || !name.trim() || !path.trim()}
             className="bg-teal-electric hover:bg-teal-ocean text-neutral-dark shrink-0"
           >
-            {adding ? <Loader2 className="w-4 h-4 animate-spin" /> : "Add Folder"}
+            {adding ? <Loader2 className="w-4 h-4 animate-spin" /> : "Add Library"}
           </Button>
         </div>
 
-        {folders.length > 0 && (
+        {libraries.length > 0 && (
           <div className="space-y-1.5">
-            {folders.map((f) => (
+            {libraries.map((lib) => (
               <div
-                key={f.id}
+                key={lib.id}
                 className="flex items-center gap-2 bg-neutral-dark/50 rounded px-3 py-2 text-sm text-neutral-light"
               >
                 <FolderOpen className="w-4 h-4 text-teal-electric shrink-0" />
-                <span className="flex-1 truncate">{f.path}</span>
+                <span className="flex-1 truncate">{lib.name} — {lib.path}</span>
+                <span className="text-xs text-neutral-muted capitalize">{lib.media_type}</span>
                 <button
-                  onClick={() => removeFolder(f.id)}
+                  onClick={() => removeLib(lib.id)}
                   className="text-neutral-muted hover:text-semantic-error transition-colors"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
@@ -596,7 +605,7 @@ export function SetupPage() {
               {[
                 ["Create Admin Account", "Set up your credentials for Loom"],
                 ["Generate API Key", "Get an API key for integrations"],
-                ["Add Root Folders", "Point to your media libraries"],
+                ["Add Libraries", "Point to your media libraries"],
                 ["Configure Indexers", "Add sources to search for content"],
                 ["Download Client", "Set up a download client"],
               ].map(([title, desc]) => (
@@ -752,7 +761,7 @@ export function SetupPage() {
             </Alert>
 
             <Button
-              onClick={() => goTo("root-folders")}
+              onClick={() => goTo("libraries")}
               className="w-full bg-teal-electric hover:bg-teal-ocean text-neutral-dark font-medium"
             >
               Continue Setup
@@ -760,9 +769,9 @@ export function SetupPage() {
           </div>
         )}
 
-        {/* Root Folders Step */}
-        {step === "root-folders" && (
-          <RootFoldersStep
+        {/* Libraries Step */}
+        {step === "libraries" && (
+          <LibrariesStep
             onNext={() => goTo("indexers")}
             onBack={() => goTo("display-key")}
           />
@@ -772,7 +781,7 @@ export function SetupPage() {
         {step === "indexers" && (
           <IndexersStep
             onNext={() => goTo("download-clients")}
-            onBack={() => goTo("root-folders")}
+            onBack={() => goTo("libraries")}
           />
         )}
 
