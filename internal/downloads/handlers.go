@@ -1,6 +1,7 @@
 package downloads
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -18,6 +19,7 @@ func (s *Service) Mount(r chi.Router) {
 	r.Route("/api/v1/download-clients", func(r chi.Router) {
 		r.Get("/", s.handleList)
 		r.Post("/", s.handleCreate)
+		r.Post("/test", s.handleTestConfig)
 		r.Route("/{id}", func(r chi.Router) {
 			r.Get("/", s.handleGet)
 			r.Put("/", s.handleReplace)
@@ -308,6 +310,54 @@ func (s *Service) handleTest(w http.ResponseWriter, r *http.Request) {
 	out := testResponse{OK: err == nil}
 	if err != nil {
 		out.Error = err.Error()
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+// handleTestConfig tests a download client configuration without saving it.
+// POST /api/v1/download-clients/test  (no {id} param — uses request body)
+func (s *Service) handleTestConfig(w http.ResponseWriter, r *http.Request) {
+	var req createRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_body", err.Error())
+		return
+	}
+	if req.Kind == "" {
+		writeError(w, http.StatusBadRequest, "invalid_request", "kind is required")
+		return
+	}
+
+	def := Definition{
+		ID:       "_test_ephemeral",
+		Kind:     req.Kind,
+		Name:     req.Name,
+		Protocol: req.Protocol,
+		Enabled:  true,
+		Host:     req.Host,
+		Port:     req.Port,
+		TLS:      req.TLS,
+		Username: req.Username,
+		Password: req.Password,
+		Config:   req.Config,
+	}
+
+	c, err := build(r.Context(), def)
+	if err != nil {
+		writeJSON(w, http.StatusOK, testResponse{OK: false, Error: err.Error()})
+		return
+	}
+
+	ctx := r.Context()
+	if s.healthTimeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, s.healthTimeout)
+		defer cancel()
+	}
+
+	testErr := c.Test(ctx)
+	out := testResponse{OK: testErr == nil}
+	if testErr != nil {
+		out.Error = testErr.Error()
 	}
 	writeJSON(w, http.StatusOK, out)
 }

@@ -1,6 +1,7 @@
 package indexers
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -26,6 +27,7 @@ func (s *Service) Mount(r chi.Router) {
 		r.Get("/", s.handleList)
 		r.Post("/", s.handleCreate)
 		r.Post("/search", s.handleSearch)
+		r.Post("/test", s.handleTestConfig)
 		r.Get("/definitions", s.handleListDefinitions)
 		r.Route("/{id}", func(r chi.Router) {
 			r.Get("/", s.handleGet)
@@ -347,7 +349,52 @@ func (s *Service) handleTest(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, out)
 }
 
-// --- caps -----------------------------------------------------------
+// handleTestConfig tests an indexer configuration without saving it.
+// POST /api/v1/indexers/test  (no {id} param — uses request body)
+func (s *Service) handleTestConfig(w http.ResponseWriter, r *http.Request) {
+	var req createRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_body", err.Error())
+		return
+	}
+	if req.Kind == "" {
+		writeError(w, http.StatusBadRequest, "invalid_request", "kind is required")
+		return
+	}
+
+	def := Definition{
+		ID:      "_test_ephemeral",
+		Kind:    req.Kind,
+		Name:    req.Name,
+		Enabled: true,
+		Config:  req.Config,
+		ProxyID: req.ProxyID,
+	}
+
+	ix, err := build(r.Context(), def)
+	if err != nil {
+		writeJSON(w, http.StatusOK, testResponse{OK: false, Error: err.Error()})
+		return
+	}
+
+	timeout := s.healthCheckTimeout
+	ctx := r.Context()
+	var cancel context.CancelFunc
+	if timeout > 0 {
+		ctx, cancel = context.WithTimeout(ctx, timeout)
+		defer cancel()
+	}
+
+	started := time.Now()
+	testErr := ix.Test(ctx)
+	elapsed := time.Since(started)
+
+	out := testResponse{OK: testErr == nil, LatencyMS: elapsed.Milliseconds()}
+	if testErr != nil {
+		out.Error = testErr.Error()
+	}
+	writeJSON(w, http.StatusOK, out)
+}
 
 func (s *Service) handleCaps(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
