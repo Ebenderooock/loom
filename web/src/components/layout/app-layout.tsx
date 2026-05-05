@@ -268,7 +268,7 @@ function AppLayoutInner({ children }: { children?: React.ReactNode }) {
       <aside
         aria-label="Sidebar"
         className={cn(
-          "hidden shrink-0 border-r border-border bg-card md:flex md:flex-col md:sticky md:top-0 md:h-screen",
+          "hidden shrink-0 border-r border-border bg-card md:flex md:flex-col md:sticky md:top-0 md:h-screen md:min-h-0",
           collapsed ? "md:w-16" : "md:w-56",
         )}
       >
