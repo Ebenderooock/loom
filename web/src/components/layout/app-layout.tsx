@@ -3,11 +3,12 @@ import { Link, Outlet, useRouterState } from "@tanstack/react-router";
 import {
   Bell,
   Calendar,
+  ChevronDown,
   Download,
   Film,
+  FolderOpen,
   Languages,
   LayoutDashboard,
-  Library,
   ListPlus,
   ListTodo,
   Menu,
@@ -16,6 +17,7 @@ import {
   Radio,
   Search,
   Settings,
+  Shield,
   SlidersHorizontal,
   Rss,
   Tv,
@@ -46,47 +48,88 @@ import { cn } from "@/lib/utils";
 import { PageHeaderProvider, usePageHeader } from "@/hooks/use-page-header";
 
 interface NavItem {
-  to:
-    | "/"
-    | "/library"
-    | "/movies"
-    | "/series"
-    | "/activity"
-    | "/calendar"
-    | "/indexers"
-    | "/indexers/health"
-    | "/downloads"
-    | "/sources"
-    | "/proxies"
-    | "/notifications"
-    | "/language-profiles"
-    | "/custom-formats"
-    | "/quality-profiles"
-    | "/import-lists"
-    | "/settings";
+  to: string;
   label: string;
   Icon: typeof LayoutDashboard;
+  badge?: "review";
 }
 
-const NAV: NavItem[] = [
-  { to: "/", label: "Dashboard", Icon: LayoutDashboard },
-  { to: "/library", label: "Library", Icon: Library },
-  { to: "/movies", label: "Movies", Icon: Film },
-  { to: "/series", label: "TV Shows", Icon: Tv },
-  { to: "/activity", label: "Activity", Icon: ListTodo },
-  { to: "/calendar", label: "Calendar", Icon: Calendar },
-  { to: "/indexers", label: "Indexers", Icon: Radio },
-  { to: "/indexers/health", label: "Indexer Health", Icon: HeartPulse },
-  { to: "/downloads", label: "Downloads", Icon: Download },
-  { to: "/sources", label: "Sources", Icon: Rss },
-  { to: "/proxies", label: "Proxies", Icon: Network },
-  { to: "/notifications", label: "Notifications", Icon: Bell },
-  { to: "/language-profiles", label: "Languages", Icon: Languages },
-  { to: "/custom-formats", label: "Custom Formats", Icon: SlidersHorizontal },
-  { to: "/quality-profiles", label: "Quality Profiles", Icon: SlidersHorizontal },
-  { to: "/import-lists", label: "Import Lists", Icon: ListPlus },
-  { to: "/settings", label: "Settings", Icon: Settings },
+interface NavSection {
+  id: string;
+  label: string;
+  items: NavItem[];
+}
+
+const NAV_SECTIONS: NavSection[] = [
+  {
+    id: "main",
+    label: "",
+    items: [
+      { to: "/", label: "Dashboard", Icon: LayoutDashboard },
+    ],
+  },
+  {
+    id: "media",
+    label: "Media",
+    items: [
+      { to: "/movies", label: "Movies", Icon: Film },
+      { to: "/series", label: "TV Shows", Icon: Tv },
+      { to: "/calendar", label: "Calendar", Icon: Calendar },
+      { to: "/library", label: "Library", Icon: FolderOpen },
+    ],
+  },
+  {
+    id: "activity",
+    label: "Activity",
+    items: [
+      { to: "/downloads", label: "Queue", Icon: Download },
+      { to: "/activity", label: "History", Icon: ListTodo, badge: "review" },
+    ],
+  },
+  {
+    id: "search",
+    label: "Search",
+    items: [
+      { to: "/indexers", label: "Indexers", Icon: Radio },
+      { to: "/sources", label: "RSS Feeds", Icon: Rss },
+      { to: "/import-lists", label: "Import Lists", Icon: ListPlus },
+    ],
+  },
+  {
+    id: "profiles",
+    label: "Profiles",
+    items: [
+      { to: "/quality-profiles", label: "Quality", Icon: Shield },
+      { to: "/custom-formats", label: "Custom Formats", Icon: SlidersHorizontal },
+      { to: "/language-profiles", label: "Languages", Icon: Languages },
+    ],
+  },
+  {
+    id: "system",
+    label: "System",
+    items: [
+      { to: "/indexers/health", label: "Health", Icon: HeartPulse },
+      { to: "/notifications", label: "Notifications", Icon: Bell },
+      { to: "/proxies", label: "Proxies", Icon: Network },
+      { to: "/settings", label: "Settings", Icon: Settings },
+    ],
+  },
 ];
+
+function useReviewCount() {
+  const [count, setCount] = React.useState(0);
+  React.useEffect(() => {
+    const load = () =>
+      fetch("/api/v1/reviews/count")
+        .then((r) => r.json())
+        .then((b) => setCount(b.count ?? 0))
+        .catch(() => {});
+    load();
+    const interval = setInterval(load, 30_000);
+    return () => clearInterval(interval);
+  }, []);
+  return count;
+}
 
 function SidebarNav({
   collapsed,
@@ -97,56 +140,95 @@ function SidebarNav({
 }) {
   const router = useRouterState();
   const path = router.location.pathname;
+  const reviewCount = useReviewCount();
 
-  const [reviewCount, setReviewCount] = React.useState(0);
+  // Track which sections are expanded — all open by default
+  const [openSections, setOpenSections] = React.useState<Record<string, boolean>>(() =>
+    Object.fromEntries(NAV_SECTIONS.map((s) => [s.id, true]))
+  );
+
+  const toggleSection = (id: string) =>
+    setOpenSections((prev) => ({ ...prev, [id]: !prev[id] }));
+
+  // Auto-expand section containing the active route
   React.useEffect(() => {
-    fetch("/api/v1/reviews/count")
-      .then((r) => r.json())
-      .then((b) => setReviewCount(b.count ?? 0))
-      .catch(() => {});
-    const interval = setInterval(() => {
-      fetch("/api/v1/reviews/count")
-        .then((r) => r.json())
-        .then((b) => setReviewCount(b.count ?? 0))
-        .catch(() => {});
-    }, 30_000);
-    return () => clearInterval(interval);
-  }, []);
+    for (const section of NAV_SECTIONS) {
+      const hasActive = section.items.some(({ to }) =>
+        to === "/" ? path === "/" : path === to || path.startsWith(`${to}/`)
+      );
+      if (hasActive && !openSections[section.id]) {
+        setOpenSections((prev) => ({ ...prev, [section.id]: true }));
+      }
+    }
+  }, [path]);
 
   return (
-    <nav aria-label="Primary" className="flex flex-col gap-1 p-2">
-      {NAV.map(({ to, label, Icon }) => {
-        const active =
-          to === "/" ? path === "/" : path === to || path.startsWith(`${to}/`);
+    <nav aria-label="Primary" className="flex flex-col gap-0.5 p-2 overflow-y-auto flex-1">
+      {NAV_SECTIONS.map((section) => {
+        const isOpen = openSections[section.id];
+        const hasLabel = section.label !== "";
+
         return (
-          <Link
-            key={to}
-            to={to}
-            onClick={onNavigate}
-            className={cn(
-              "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
-              active
-                ? "bg-accent text-accent-foreground"
-                : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
-              collapsed && "justify-center px-2",
+          <div key={section.id}>
+            {/* Section header */}
+            {hasLabel && !collapsed && (
+              <button
+                onClick={() => toggleSection(section.id)}
+                className="flex w-full items-center justify-between px-3 py-1.5 mt-2 mb-0.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/60 hover:text-muted-foreground transition-colors"
+              >
+                {section.label}
+                <ChevronDown
+                  className={cn(
+                    "h-3 w-3 transition-transform duration-200",
+                    !isOpen && "-rotate-90"
+                  )}
+                />
+              </button>
             )}
-            aria-current={active ? "page" : undefined}
-          >
-            <Icon className="h-4 w-4" aria-hidden="true" />
-            {!collapsed && (
-              <span className="flex items-center gap-2">
-                {label}
-                {to === "/activity" && reviewCount > 0 && (
-                  <Badge
-                    variant="destructive"
-                    className="h-5 min-w-[1.25rem] px-1 text-xs"
+
+            {/* Collapsed: show a thin divider between sections */}
+            {hasLabel && collapsed && (
+              <div className="mx-2 my-2 border-t border-border/50" />
+            )}
+
+            {/* Nav items */}
+            {(isOpen || collapsed || !hasLabel) &&
+              section.items.map(({ to, label, Icon, badge }) => {
+                const active =
+                  to === "/" ? path === "/" : path === to || path.startsWith(`${to}/`);
+                return (
+                  <Link
+                    key={to}
+                    to={to}
+                    onClick={onNavigate}
+                    title={collapsed ? label : undefined}
+                    className={cn(
+                      "flex items-center gap-2.5 rounded-md px-3 py-1.5 text-[13px] font-medium transition-colors",
+                      active
+                        ? "bg-accent text-accent-foreground"
+                        : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+                      collapsed && "justify-center px-2",
+                    )}
+                    aria-current={active ? "page" : undefined}
                   >
-                    {reviewCount}
-                  </Badge>
-                )}
-              </span>
-            )}
-          </Link>
+                    <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
+                    {!collapsed && (
+                      <span className="flex items-center gap-2 truncate">
+                        {label}
+                        {badge === "review" && reviewCount > 0 && (
+                          <Badge
+                            variant="destructive"
+                            className="h-4 min-w-[1rem] px-1 text-[10px] leading-none"
+                          >
+                            {reviewCount}
+                          </Badge>
+                        )}
+                      </span>
+                    )}
+                  </Link>
+                );
+              })}
+          </div>
         );
       })}
     </nav>
@@ -192,7 +274,7 @@ function AppLayoutInner({ children }: { children?: React.ReactNode }) {
       >
         <Brand collapsed={collapsed} />
         <SidebarNav collapsed={collapsed} />
-        <div className="mt-auto border-t border-border p-2">
+        <div className="shrink-0 border-t border-border p-2">
           <Button
             variant="ghost"
             size="sm"
