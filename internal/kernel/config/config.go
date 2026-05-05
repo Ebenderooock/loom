@@ -210,11 +210,19 @@ type CORSConfig struct {
 	AllowedOrigins []string `mapstructure:"allowed_origins"`
 }
 
-// OTelConfig controls OpenTelemetry trace export. Prometheus metrics live
-// under TelemetryConfig and are always exposed on /metrics regardless.
+// OTelConfig controls OpenTelemetry trace and metric export. Prometheus
+// metrics live under TelemetryConfig and are always exposed on /metrics
+// regardless. When MetricsEnabled is true, metrics are also pushed via
+// OTLP so both Prometheus scraping and push-based collection work.
 type OTelConfig struct {
-	Enabled  bool   `mapstructure:"enabled"`
-	Endpoint string `mapstructure:"endpoint"`
+	Enabled         bool              `mapstructure:"enabled"`
+	Endpoint        string            `mapstructure:"endpoint"`
+	Protocol        string            `mapstructure:"protocol"`         // "grpc" or "http" (default "http")
+	Insecure        bool              `mapstructure:"insecure"`         // disable TLS (for local Grafana)
+	Headers         map[string]string `mapstructure:"headers"`          // custom headers (e.g. auth tokens)
+	MetricsEnabled  bool              `mapstructure:"metrics_enabled"`  // export metrics via OTLP too
+	MetricsInterval string            `mapstructure:"metrics_interval"` // e.g. "15s", "30s"
+	ServiceName     string            `mapstructure:"service_name"`     // defaults to "loom"
 }
 
 // SchedulerConfig controls the persistent cron scheduler.
@@ -403,6 +411,11 @@ func applyDefaults(v *viper.Viper) {
 
 	v.SetDefault("otel.enabled", false)
 	v.SetDefault("otel.endpoint", "")
+	v.SetDefault("otel.protocol", "http")
+	v.SetDefault("otel.insecure", false)
+	v.SetDefault("otel.metrics_enabled", false)
+	v.SetDefault("otel.metrics_interval", "15s")
+	v.SetDefault("otel.service_name", "loom")
 
 	v.SetDefault("storage.engine", "sqlite")
 	// Don't set a default sqlite path here; it's handled in Load() after file reading
@@ -452,6 +465,11 @@ func bindLegacyEnv(v *viper.Viper) {
 		"database.url":            "LOOM_DATABASE_URL",
 		"otel.enabled":            "LOOM_OTEL_ENABLED",
 		"otel.endpoint":           "LOOM_OTEL_ENDPOINT",
+		"otel.protocol":           "LOOM_OTEL_PROTOCOL",
+		"otel.insecure":           "LOOM_OTEL_INSECURE",
+		"otel.metrics_enabled":    "LOOM_OTEL_METRICS_ENABLED",
+		"otel.metrics_interval":   "LOOM_OTEL_METRICS_INTERVAL",
+		"otel.service_name":       "LOOM_OTEL_SERVICE_NAME",
 	}
 	for key, env := range binds {
 		_ = v.BindEnv(key, env)

@@ -1,6 +1,7 @@
 // Package telemetry wires Loom's observability stack:
 //
 //   - OpenTelemetry traces with an OTLP/HTTP exporter, gated by config.
+//   - OpenTelemetry metrics via OTLP push, gated by otel.metrics_enabled.
 //   - An always-on Prometheus registry exposed at /metrics with the
 //     standard process + go runtime collectors registered.
 //
@@ -14,17 +15,20 @@ import (
 	"errors"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	"go.opentelemetry.io/otel/metric"
 	mnoop "go.opentelemetry.io/otel/metric/noop"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/resource"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
 	"go.opentelemetry.io/otel/trace"
@@ -34,11 +38,12 @@ import (
 	"github.com/loomctl/loom/internal/kernel/config"
 )
 
-// Telemetry holds the lifecycle handles for trace exporters and the
-// Prometheus registry.
+// Telemetry holds the lifecycle handles for trace exporters, metric
+// exporters, and the Prometheus registry.
 type Telemetry struct {
 	registry *prometheus.Registry
 	tp       *sdktrace.TracerProvider
+	mp       *sdkmetric.MeterProvider
 	tracer   trace.Tracer
 	meter    metric.Meter
 	otelOn   bool
@@ -90,18 +95,30 @@ func New(ctx context.Context, cfg *config.Config) (*Telemetry, error) {
 }
 
 func (t *Telemetry) startOTel(ctx context.Context, cfg *config.Config) error {
-	opts := []otlptracehttp.Option{}
-	if ep := cfg.OTel.Endpoint; ep != "" {
-		opts = append(opts, otlptracehttp.WithEndpointURL(ep))
+	svcName := cfg.OTel.ServiceName
+	if svcName == "" {
+		svcName = "loom"
 	}
-	exp, err := otlptracehttp.New(ctx, opts...)
+	res, _ := resource.Merge(resource.Default(), resource.NewSchemaless(
+		semconv.ServiceName(svcName),
+		semconv.ServiceVersion(buildinfo.Version),
+	))
+
+	// --- Traces ---
+	traceOpts := []otlptracehttp.Option{}
+	if ep := cfg.OTel.Endpoint; ep != "" {
+		traceOpts = append(traceOpts, otlptracehttp.WithEndpointURL(ep))
+	}
+	if cfg.OTel.Insecure {
+		traceOpts = append(traceOpts, otlptracehttp.WithInsecure())
+	}
+	for k, v := range cfg.OTel.Headers {
+		traceOpts = append(traceOpts, otlptracehttp.WithHeaders(map[string]string{k: v}))
+	}
+	exp, err := otlptracehttp.New(ctx, traceOpts...)
 	if err != nil {
 		return err
 	}
-	res, _ := resource.Merge(resource.Default(), resource.NewSchemaless(
-		semconv.ServiceName("loom"),
-		semconv.ServiceVersion(buildinfo.Version),
-	))
 	ratio := cfg.Telemetry.TraceRatio
 	if ratio <= 0 {
 		ratio = 0
@@ -119,6 +136,36 @@ func (t *Telemetry) startOTel(ctx context.Context, cfg *config.Config) error {
 	t.tp = tp
 	t.tracer = tp.Tracer("github.com/loomctl/loom")
 	t.otelOn = true
+
+	// --- Metrics (OTLP push) ---
+	if cfg.OTel.MetricsEnabled {
+		metricOpts := []otlpmetrichttp.Option{}
+		if ep := cfg.OTel.Endpoint; ep != "" {
+			metricOpts = append(metricOpts, otlpmetrichttp.WithEndpointURL(ep))
+		}
+		if cfg.OTel.Insecure {
+			metricOpts = append(metricOpts, otlpmetrichttp.WithInsecure())
+		}
+		for k, v := range cfg.OTel.Headers {
+			metricOpts = append(metricOpts, otlpmetrichttp.WithHeaders(map[string]string{k: v}))
+		}
+		mexp, err := otlpmetrichttp.New(ctx, metricOpts...)
+		if err != nil {
+			return err
+		}
+		interval := 15 * time.Second
+		if d, parseErr := time.ParseDuration(cfg.OTel.MetricsInterval); parseErr == nil && d > 0 {
+			interval = d
+		}
+		mp := sdkmetric.NewMeterProvider(
+			sdkmetric.WithResource(res),
+			sdkmetric.WithReader(sdkmetric.NewPeriodicReader(mexp, sdkmetric.WithInterval(interval))),
+		)
+		otel.SetMeterProvider(mp)
+		t.mp = mp
+		t.meter = mp.Meter("github.com/loomctl/loom")
+	}
+
 	return nil
 }
 
@@ -145,12 +192,19 @@ func (t *Telemetry) OTelEnabled() bool { return t.otelOn }
 
 // Shutdown flushes any exporters. Safe to call multiple times.
 func (t *Telemetry) Shutdown(ctx context.Context) error {
-	if t == nil || t.tp == nil {
+	if t == nil {
 		return nil
 	}
-	err := t.tp.Shutdown(ctx)
-	t.tp = nil
-	return err
+	var errs []error
+	if t.mp != nil {
+		errs = append(errs, t.mp.Shutdown(ctx))
+		t.mp = nil
+	}
+	if t.tp != nil {
+		errs = append(errs, t.tp.Shutdown(ctx))
+		t.tp = nil
+	}
+	return errors.Join(errs...)
 }
 
 // Tracer returns the package-default tracer, or a no-op tracer if Init
