@@ -51,10 +51,16 @@ import {
   Search,
 } from "lucide-react";
 import { useSetPageHeader } from "@/hooks/use-page-header";
+import {
+  useMediaPreferences,
+  useUpdateMediaPreferences,
+  useParseReleaseName,
+} from "@/lib/media-info-api";
 
 const CATEGORIES = [
   { id: "general", label: "General" },
   { id: "media-management", label: "Media Management" },
+  { id: "media-preferences", label: "Media Preferences" },
   { id: "profiles", label: "Profiles" },
   { id: "indexers", label: "Indexers" },
   { id: "download-clients", label: "Download Clients" },
@@ -1979,12 +1985,282 @@ function RollingSearchPanel() {
 
 // ─── Settings Panels ────────────────────────────────────────────────────
 
+// ─── Media Preferences Panel ────────────────────────────────────────────
+
+const AUDIO_CODECS = [
+  "TrueHD Atmos", "DTS-HD MA", "DTS-X", "TrueHD", "DTS-HD",
+  "FLAC", "EAC3", "DTS", "AC3", "AAC", "OPUS", "MP3",
+];
+
+const SUB_LANGUAGES = [
+  { code: "en", label: "English" },
+  { code: "fr", label: "French" },
+  { code: "de", label: "German" },
+  { code: "es", label: "Spanish" },
+  { code: "it", label: "Italian" },
+  { code: "pt", label: "Portuguese" },
+  { code: "ja", label: "Japanese" },
+  { code: "ko", label: "Korean" },
+  { code: "zh", label: "Chinese" },
+  { code: "ru", label: "Russian" },
+  { code: "ar", label: "Arabic" },
+  { code: "hi", label: "Hindi" },
+  { code: "nl", label: "Dutch" },
+  { code: "sv", label: "Swedish" },
+  { code: "no", label: "Norwegian" },
+  { code: "da", label: "Danish" },
+  { code: "fi", label: "Finnish" },
+  { code: "pl", label: "Polish" },
+  { code: "tr", label: "Turkish" },
+];
+
+function MediaPreferencesPanel() {
+  const { data: prefs, isLoading } = useMediaPreferences();
+  const updateMut = useUpdateMediaPreferences();
+  const parseMut = useParseReleaseName();
+  const [testName, setTestName] = React.useState("");
+
+  const [audioOrder, setAudioOrder] = React.useState<string[]>([]);
+  const [subLangs, setSubLangs] = React.useState<string[]>([]);
+  const [requireSubs, setRequireSubs] = React.useState(false);
+  const [preferHDR, setPreferHDR] = React.useState(true);
+  const [preferAtmos, setPreferAtmos] = React.useState(true);
+  const [dirty, setDirty] = React.useState(false);
+
+  React.useEffect(() => {
+    if (prefs) {
+      setAudioOrder(prefs.preferred_audio ?? []);
+      setSubLangs(prefs.preferred_sub_languages ?? []);
+      setRequireSubs(prefs.require_subtitles);
+      setPreferHDR(prefs.prefer_hdr);
+      setPreferAtmos(prefs.prefer_atmos);
+      setDirty(false);
+    }
+  }, [prefs]);
+
+  const handleSave = () => {
+    updateMut.mutate(
+      {
+        preferred_audio: audioOrder,
+        preferred_sub_languages: subLangs,
+        require_subtitles: requireSubs,
+        prefer_hdr: preferHDR,
+        prefer_atmos: preferAtmos,
+      },
+      {
+        onSuccess: () => {
+          toast.success("Media preferences saved");
+          setDirty(false);
+        },
+        onError: () => toast.error("Failed to save media preferences"),
+      },
+    );
+  };
+
+  const moveAudio = (idx: number, dir: -1 | 1) => {
+    const next = [...audioOrder];
+    const target = idx + dir;
+    if (target < 0 || target >= next.length) return;
+    [next[idx], next[target]] = [next[target], next[idx]];
+    setAudioOrder(next);
+    setDirty(true);
+  };
+
+  const toggleAudio = (codec: string) => {
+    setAudioOrder((prev) => {
+      if (prev.includes(codec)) return prev.filter((c) => c !== codec);
+      return [...prev, codec];
+    });
+    setDirty(true);
+  };
+
+  const toggleSubLang = (code: string) => {
+    setSubLangs((prev) => {
+      if (prev.includes(code)) return prev.filter((c) => c !== code);
+      return [...prev, code];
+    });
+    setDirty(true);
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Audio Codec Priority */}
+      <div className="space-y-3">
+        <Label className="text-base font-medium">Audio Codec Priority</Label>
+        <p className="text-xs text-muted-foreground">
+          Select and reorder preferred audio codecs. Higher in the list = higher priority.
+        </p>
+        {audioOrder.length > 0 && (
+          <div className="space-y-1">
+            {audioOrder.map((codec, idx) => (
+              <div
+                key={codec}
+                className="flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm"
+              >
+                <GripVertical className="h-4 w-4 text-muted-foreground" />
+                <span className="flex-1">{codec}</span>
+                <Badge variant="secondary" className="text-xs">
+                  #{idx + 1}
+                </Badge>
+                <button
+                  type="button"
+                  onClick={() => moveAudio(idx, -1)}
+                  disabled={idx === 0}
+                  className="text-muted-foreground hover:text-foreground disabled:opacity-30"
+                >
+                  <ArrowUp className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => moveAudio(idx, 1)}
+                  disabled={idx === audioOrder.length - 1}
+                  className="text-muted-foreground hover:text-foreground disabled:opacity-30 rotate-180"
+                >
+                  <ArrowUp className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => toggleAudio(codec)}
+                  className="text-muted-foreground hover:text-destructive"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="flex flex-wrap gap-1.5">
+          {AUDIO_CODECS.filter((c) => !audioOrder.includes(c)).map((codec) => (
+            <button
+              key={codec}
+              type="button"
+              onClick={() => toggleAudio(codec)}
+              className="rounded-md border border-dashed px-2 py-1 text-xs text-muted-foreground hover:border-primary hover:text-foreground transition-colors"
+            >
+              + {codec}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Subtitle Languages */}
+      <div className="space-y-3">
+        <Label className="text-base font-medium">Preferred Subtitle Languages</Label>
+        <div className="flex flex-wrap gap-2">
+          {SUB_LANGUAGES.map((lang) => (
+            <label
+              key={lang.code}
+              className="flex items-center gap-1.5 text-sm"
+            >
+              <Checkbox
+                checked={subLangs.includes(lang.code)}
+                onCheckedChange={() => toggleSubLang(lang.code)}
+              />
+              {lang.label}
+            </label>
+          ))}
+        </div>
+      </div>
+
+      {/* Toggles */}
+      <div className="space-y-3">
+        <label className="flex items-center gap-2 text-sm">
+          <Checkbox
+            checked={requireSubs}
+            onCheckedChange={(v) => {
+              setRequireSubs(!!v);
+              setDirty(true);
+            }}
+          />
+          Require subtitles (penalize releases without subs)
+        </label>
+        <label className="flex items-center gap-2 text-sm">
+          <Checkbox
+            checked={preferHDR}
+            onCheckedChange={(v) => {
+              setPreferHDR(!!v);
+              setDirty(true);
+            }}
+          />
+          Prefer HDR releases
+        </label>
+        <label className="flex items-center gap-2 text-sm">
+          <Checkbox
+            checked={preferAtmos}
+            onCheckedChange={(v) => {
+              setPreferAtmos(!!v);
+              setDirty(true);
+            }}
+          />
+          Prefer Atmos audio
+        </label>
+      </div>
+
+      <Button onClick={handleSave} disabled={!dirty || updateMut.isPending}>
+        {updateMut.isPending && (
+          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+        )}
+        Save Preferences
+      </Button>
+
+      {/* Release name tester */}
+      <div className="space-y-3 border-t pt-4">
+        <Label className="text-base font-medium">Test Release Name</Label>
+        <p className="text-xs text-muted-foreground">
+          Parse a release name to see detected media info.
+        </p>
+        <div className="flex gap-2">
+          <Input
+            value={testName}
+            onChange={(e) => setTestName(e.target.value)}
+            placeholder="e.g. Movie.2024.2160p.BluRay.TrueHD.Atmos.7.1.x265-GROUP"
+            className="flex-1"
+          />
+          <Button
+            variant="secondary"
+            onClick={() => parseMut.mutate(testName)}
+            disabled={!testName.trim() || parseMut.isPending}
+          >
+            {parseMut.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Search className="h-4 w-4" />
+            )}
+          </Button>
+        </div>
+        {parseMut.data && (
+          <div className="rounded-md border bg-muted/50 p-3 text-sm space-y-1">
+            {Object.entries(parseMut.data).map(([k, v]) => (
+              <div key={k} className="flex gap-2">
+                <span className="font-medium w-32 shrink-0 text-muted-foreground">
+                  {k}:
+                </span>
+                <span>{Array.isArray(v) ? v.join(", ") || "—" : String(v) || "—"}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function SettingsContent({ category }: { category: Category }) {
   switch (category) {
     case "general":
       return <GeneralPanel />;
     case "media-management":
       return <MediaManagementPanel />;
+    case "media-preferences":
+      return <MediaPreferencesPanel />;
     case "profiles":
       return <ProfilesPanel />;
     case "indexers":
