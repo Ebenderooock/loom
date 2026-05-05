@@ -17,6 +17,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Plus, Search, Film, Loader2, FolderSearch } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
 import { useSetPageHeader } from "@/hooks/use-page-header";
 import { toast } from "sonner";
@@ -172,6 +173,8 @@ export function MoviesPage() {
       list = list.filter(m => m.monitoringStatus === "monitored");
     } else if (monitoredFilter === "unmonitored") {
       list = list.filter(m => m.monitoringStatus === "unmonitored");
+    } else if (monitoredFilter === "archived") {
+      list = list.filter(m => m.monitoringStatus === "unmonitored");
     }
     return sortMovies(list, sortKey);
   }, [movies, filterText, statusFilter, profileFilter, monitoredFilter, sortKey]);
@@ -308,15 +311,16 @@ export function MoviesPage() {
       ) : viewMode === "grid" ? (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 gap-4">
           {processed.map(movie => (
-            <MovieCard
-              key={movie.id}
-              movie={movie}
-              profiles={qualityProfiles}
-              selected={selectedIds.has(movie.id)}
-              selectMode={selectMode}
-              onToggleSelect={() => toggleSelect(movie.id)}
-              onClick={() => openDetail(movie)}
-            />
+            <div key={movie.id} className={cn(movie.monitoringStatus === "unmonitored" && "opacity-60")}>
+              <MovieCard
+                movie={movie}
+                profiles={qualityProfiles}
+                selected={selectedIds.has(movie.id)}
+                selectMode={selectMode}
+                onToggleSelect={() => toggleSelect(movie.id)}
+                onClick={() => openDetail(movie)}
+              />
+            </div>
           ))}
         </div>
       ) : (

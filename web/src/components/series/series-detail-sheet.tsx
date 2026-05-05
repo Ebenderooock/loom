@@ -27,11 +27,13 @@ import {
   Eye, EyeOff, Trash2, Pencil,
   Bookmark, BookmarkCheck, RefreshCw, ChevronRight, ChevronDown,
   Users, FileVideo, Search, FolderSearch,
+  Archive, ArchiveRestore,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { SeriesStatusBadge } from "./series-status-badge";
 import { ReleaseSearchDialog } from "@/components/search/release-search-dialog";
+import { AltTitlesSection } from "@/components/alt-titles";
 import type { Series, Season, Episode, QualityProfile, RootFolder, Credits, CreditPerson } from "./types";
 import { TMDB_IMG } from "./types";
 
@@ -409,6 +411,7 @@ export function SeriesDetailSheet({
     episode?: number;
     mediaType: "movie" | "episode" | "season" | "series";
   } | null>(null);
+  const [archiving, setArchiving] = useState(false);
 
   const openSearch = (ctx: typeof searchContext) => {
     setSearchContext(ctx);
@@ -515,6 +518,29 @@ export function SeriesDetailSheet({
     }
   };
 
+  const handleArchiveToggle = async () => {
+    if (!series) return;
+    setArchiving(true);
+    const isArchived = series.monitoringStatus === "unmonitored";
+    const endpoint = isArchived
+      ? `/api/v1/series/${series.id}/unarchive`
+      : `/api/v1/series/${series.id}/archive`;
+    try {
+      const res = await fetch(endpoint, { method: "POST", credentials: "include" });
+      if (res.ok) {
+        const newStatus = isArchived ? "monitored" : "unmonitored";
+        onUpdated({ ...series, monitoringStatus: newStatus });
+        toast.success(isArchived ? "Series unarchived" : "Series archived");
+      } else {
+        toast.error("Failed to update archive status");
+      }
+    } catch {
+      toast.error("Network error");
+    } finally {
+      setArchiving(false);
+    }
+  };
+
   const handleRefresh = async () => {
     setRefreshing(true);
     try {
@@ -614,6 +640,13 @@ export function SeriesDetailSheet({
               <Button size="sm" variant="outline" className="gap-1.5" title="Interactive search" onClick={() => openSearch({ title: series.title, query: series.title, mediaType: "series" })}>
                 <FolderSearch className="w-3.5 h-3.5" />Interactive
               </Button>
+              <Button size="sm" variant="outline" className="gap-1.5" onClick={handleArchiveToggle} disabled={archiving}>
+                {series.monitoringStatus === "unmonitored" ? (
+                  <><ArchiveRestore className="w-3.5 h-3.5" />Unarchive</>
+                ) : (
+                  <><Archive className="w-3.5 h-3.5" />Archive</>
+                )}
+              </Button>
               <Button size="sm" variant="destructive" className="gap-1.5 ml-auto" onClick={() => setDeleteOpen(true)}>
                 <Trash2 className="w-3.5 h-3.5" />Delete
               </Button>
@@ -694,6 +727,9 @@ export function SeriesDetailSheet({
                 </div>
               )}
             </CollapsibleSection>
+
+            {/* Alt Titles */}
+            <AltTitlesSection mediaId={series.id} mediaType="series" />
 
             {/* Seasons */}
             <CollapsibleSection title={`Seasons (${seasons.length})`} icon={FileVideo}>
