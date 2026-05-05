@@ -20,6 +20,7 @@ import { NotificationsPage } from "@/pages/notifications";
 import { LanguageProfilesPage } from "@/pages/language-profiles";
 import { IndexerHealthPage } from "@/pages/indexer-health";
 import { CustomFormatsPage } from "@/pages/custom-formats";
+import { ImportListsPage } from "@/pages/import-lists";
 import { NotFoundPage } from "@/pages/not-found";
 import { AuthPage } from "@/pages/auth";
 import { useAuth } from "@/hooks/use-auth";
@@ -145,6 +146,12 @@ const customFormatsRoute = createRoute({
   component: CustomFormatsPage,
 });
 
+const importListsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/import-lists",
+  component: ImportListsPage,
+});
+
 const routeTree = rootRoute.addChildren([
   setupRoute,
   indexRoute,
@@ -161,6 +168,7 @@ const routeTree = rootRoute.addChildren([
   notificationsRoute,
   languageProfilesRoute,
   customFormatsRoute,
+  importListsRoute,
   settingsRoute,
 ]);
 

@@ -22,6 +22,7 @@ type Service interface {
 	TestConnection(ctx context.Context, id string) error
 	Send(ctx context.Context, event EventType, title, message string, data map[string]any) error
 	ListHistory(ctx context.Context, limit int) ([]*HistoryEntry, error)
+	LogHistory(ctx context.Context, connID *string, eventType, title, message string, success bool, errMsg string) error
 }
 
 // service implements Service backed by SQLite.
@@ -261,6 +262,11 @@ func (s *service) ListHistory(ctx context.Context, limit int) ([]*HistoryEntry, 
 		entries = append(entries, h)
 	}
 	return entries, rows.Err()
+}
+
+// LogHistory records a notification send attempt (implements Service).
+func (s *service) LogHistory(ctx context.Context, connID *string, eventType, title, message string, success bool, errMsg string) error {
+	return s.logHistory(ctx, connID, eventType, title, message, success, errMsg)
 }
 
 // logHistory records a notification send attempt.

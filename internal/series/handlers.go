@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -28,12 +30,17 @@ func RouterWithSearch(svc Service, indexerSvc *indexers.Service) chi.Router {
 	r.Get("/search", searchSeries(svc))
 	r.Get("/lookup", lookupSeries(svc))
 
+	// Bulk operations (must be before /{id} wildcard)
+	r.Post("/bulk", bulkUpdateSeries(svc))
+
 	// Wildcard routes
 	r.Get("/{id}", getSeries(svc))
 	r.Put("/{id}", updateSeries(svc))
 	r.Delete("/{id}", deleteSeries(svc))
 	r.Put("/{id}/monitoring", setMonitoringStatus(svc))
 	r.Post("/{id}/refresh", refreshSeries(svc))
+	r.Post("/{id}/archive", archiveSeries(svc))
+	r.Post("/{id}/unarchive", unarchiveSeries(svc))
 	r.Get("/{id}/credits", getCredits(svc))
 	r.Get("/{id}/seasons", listSeasons(svc))
 	r.Get("/{id}/seasons/{seasonNum}/episodes", listEpisodes(svc))
@@ -123,6 +130,66 @@ func listSeries(svc Service) http.HandlerFunc {
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
+		}
+
+		// In-memory filtering
+		q := r.URL.Query()
+		if search := q.Get("search"); search != "" {
+			search = strings.ToLower(search)
+			filtered := list[:0]
+			for _, s := range list {
+				if strings.Contains(strings.ToLower(s.Title), search) {
+					filtered = append(filtered, s)
+				}
+			}
+			list = filtered
+		}
+		if status := q.Get("status"); status != "" {
+			filtered := list[:0]
+			for _, s := range list {
+				if string(s.Status) == status {
+					filtered = append(filtered, s)
+				}
+			}
+			list = filtered
+		}
+		if mon := q.Get("monitored"); mon != "" {
+			filtered := list[:0]
+			for _, s := range list {
+				if mon == "true" && s.MonitoringStatus == MonitoringMonitored {
+					filtered = append(filtered, s)
+				} else if mon == "false" && s.MonitoringStatus != MonitoringMonitored {
+					filtered = append(filtered, s)
+				}
+			}
+			list = filtered
+		}
+
+		// Sorting
+		sortField := q.Get("sort")
+		sortOrder := q.Get("order")
+		if sortField != "" {
+			sort.Slice(list, func(i, j int) bool {
+				var less bool
+				switch sortField {
+				case "title":
+					less = strings.ToLower(list[i].Title) < strings.ToLower(list[j].Title)
+				case "year":
+					less = list[i].Year < list[j].Year
+				case "added":
+					less = list[i].CreatedAt.Before(list[j].CreatedAt)
+				case "network":
+					less = strings.ToLower(list[i].Network) < strings.ToLower(list[j].Network)
+				case "rating":
+					less = list[i].Rating < list[j].Rating
+				default:
+					less = strings.ToLower(list[i].Title) < strings.ToLower(list[j].Title)
+				}
+				if sortOrder == "desc" {
+					return !less
+				}
+				return less
+			})
 		}
 
 		allStats, err := svc.GetAllEpisodeStats(r.Context())
@@ -545,5 +612,39 @@ func listEpisodes(svc Service) http.HandlerFunc {
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"data": response,
 		})
+	}
+}
+
+func archiveSeries(svc Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := chi.URLParam(r, "id")
+		if id == "" {
+			http.Error(w, "series ID required", http.StatusBadRequest)
+			return
+		}
+		if err := svc.SetMonitoringStatus(r.Context(), id, MonitoringUnmonitored); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		sr, _ := svc.GetSeries(r.Context(), id)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(seriesToResponse(sr))
+	}
+}
+
+func unarchiveSeries(svc Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := chi.URLParam(r, "id")
+		if id == "" {
+			http.Error(w, "series ID required", http.StatusBadRequest)
+			return
+		}
+		if err := svc.SetMonitoringStatus(r.Context(), id, MonitoringMonitored); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		sr, _ := svc.GetSeries(r.Context(), id)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(seriesToResponse(sr))
 	}
 }

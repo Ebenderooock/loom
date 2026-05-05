@@ -31,7 +31,6 @@ func (e *Engine) ScoreRelease(release ReleaseInfo) []FormatMatch {
 			matches = append(matches, FormatMatch{
 				CustomFormatID:   cf.ID,
 				CustomFormatName: cf.Name,
-				Score:            cf.Score,
 			})
 		}
 	}

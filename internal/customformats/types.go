@@ -28,13 +28,12 @@ type Specification struct {
 	Fields         map[string]any `json:"fields"`
 }
 
-// CustomFormat is a named, scored collection of specifications.
+// CustomFormat is a named collection of specifications.
 type CustomFormat struct {
 	ID                  string          `json:"id"`
 	Name                string          `json:"name"`
 	IncludeWhenRenaming bool            `json:"include_when_renaming"`
 	Specifications      []Specification `json:"specifications"`
-	Score               int             `json:"score"`
 	CreatedAt           string          `json:"created_at,omitempty"`
 	UpdatedAt           string          `json:"updated_at,omitempty"`
 }

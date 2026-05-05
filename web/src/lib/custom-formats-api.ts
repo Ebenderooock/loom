@@ -29,7 +29,6 @@ export interface CustomFormat {
   name: string;
   include_when_renaming: boolean;
   specifications: Specification[];
-  score: number;
   created_at?: string;
   updated_at?: string;
 }
