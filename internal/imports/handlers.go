@@ -16,6 +16,7 @@ func Router(pipeline *ImportPipeline) chi.Router {
 	r.Post("/reimport", handleReimport(pipeline))
 	r.Post("/scan", handleScanFolder(pipeline))
 	r.Get("/decisions", handleListDecisions(pipeline))
+	r.Post("/preview", handlePreviewImport(pipeline))
 	return r
 }
 
@@ -147,5 +148,32 @@ func handleListDecisions(p *ImportPipeline) http.HandlerFunc {
 			decisions = []*ImportDecision{}
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"data": decisions})
+	}
+}
+
+func handlePreviewImport(p *ImportPipeline) http.HandlerFunc {
+	type request struct {
+		Path string `json:"path"`
+	}
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req request
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+			return
+		}
+		if req.Path == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "path is required"})
+			return
+		}
+
+		results, err := p.PreviewImport(r.Context(), req.Path)
+		if err != nil {
+			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
+			return
+		}
+		if results == nil {
+			results = []ImportPreview{}
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"data": results})
 	}
 }

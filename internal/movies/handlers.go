@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -87,6 +88,9 @@ func RouterWithSearch(service Service, indexerSvc *indexers.Service) chi.Router 
 		r.Post("/{id}/test", testCustomFormat(service))
 	})
 
+	// Bulk operations (must be before /{id} wildcard)
+	r.Post("/bulk", bulkUpdateMovies(service))
+
 	r.Get("/files/{movieID}", listMovieFiles(service))
 
 	// Wildcard movie routes (must be last)
@@ -95,6 +99,8 @@ func RouterWithSearch(service Service, indexerSvc *indexers.Service) chi.Router 
 	r.Delete("/{id}", deleteMovie(service))
 	r.Put("/{id}/monitoring", setMonitoringStatus(service))
 	r.Post("/{id}/refresh", refreshMovie(service))
+	r.Post("/{id}/archive", archiveMovie(service))
+	r.Post("/{id}/unarchive", unarchiveMovie(service))
 	r.Get("/{id}/credits", getMovieCredits(service))
 
 	return r
@@ -147,6 +153,77 @@ func listMovies(svc Service) http.HandlerFunc {
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
+		}
+
+		// In-memory filtering
+		q := r.URL.Query()
+		if search := q.Get("search"); search != "" {
+			search = strings.ToLower(search)
+			filtered := movies[:0]
+			for _, m := range movies {
+				if strings.Contains(strings.ToLower(m.Title), search) {
+					filtered = append(filtered, m)
+				}
+			}
+			movies = filtered
+		}
+		if status := q.Get("status"); status != "" {
+			filtered := movies[:0]
+			for _, m := range movies {
+				if string(m.Status) == status {
+					filtered = append(filtered, m)
+				}
+			}
+			movies = filtered
+		}
+		if quality := q.Get("quality"); quality != "" {
+			filtered := movies[:0]
+			for _, m := range movies {
+				files, _ := svc.ListMovieFiles(r.Context(), m.ID)
+				for _, f := range files {
+					if strings.EqualFold(f.Quality, quality) {
+						filtered = append(filtered, m)
+						break
+					}
+				}
+			}
+			movies = filtered
+		}
+		if mon := q.Get("monitored"); mon != "" {
+			filtered := movies[:0]
+			for _, m := range movies {
+				if mon == "true" && m.MonitoringStatus == MonitoringStatusMonitored {
+					filtered = append(filtered, m)
+				} else if mon == "false" && m.MonitoringStatus != MonitoringStatusMonitored {
+					filtered = append(filtered, m)
+				}
+			}
+			movies = filtered
+		}
+
+		// Sorting
+		sortField := q.Get("sort")
+		sortOrder := q.Get("order")
+		if sortField != "" {
+			sort.Slice(movies, func(i, j int) bool {
+				var less bool
+				switch sortField {
+				case "title":
+					less = strings.ToLower(movies[i].Title) < strings.ToLower(movies[j].Title)
+				case "year":
+					less = movies[i].Year < movies[j].Year
+				case "added":
+					less = movies[i].CreatedAt.Before(movies[j].CreatedAt)
+				case "rating":
+					less = movies[i].Rating < movies[j].Rating
+				default:
+					less = strings.ToLower(movies[i].Title) < strings.ToLower(movies[j].Title)
+				}
+				if sortOrder == "desc" {
+					return !less
+				}
+				return less
+			})
 		}
 
 		response := make([]interface{}, 0, len(movies))
@@ -1064,4 +1141,38 @@ return false
 // slugify converts a name to a URL-safe slug (lowercase, spaces to hyphens).
 func slugify(name string) string {
 return strings.ToLower(strings.ReplaceAll(name, " ", "-"))
+}
+
+func archiveMovie(svc Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := chi.URLParam(r, "id")
+		if id == "" {
+			http.Error(w, "movie ID required", http.StatusBadRequest)
+			return
+		}
+		if err := svc.SetMonitoringStatus(r.Context(), id, MonitoringStatusUnmonitored); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		movie, _ := svc.GetMovie(r.Context(), id)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(movieToResponse(movie))
+	}
+}
+
+func unarchiveMovie(svc Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := chi.URLParam(r, "id")
+		if id == "" {
+			http.Error(w, "movie ID required", http.StatusBadRequest)
+			return
+		}
+		if err := svc.SetMonitoringStatus(r.Context(), id, MonitoringStatusMonitored); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		movie, _ := svc.GetMovie(r.Context(), id)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(movieToResponse(movie))
+	}
 }

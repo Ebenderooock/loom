@@ -45,19 +45,19 @@ func TestParseReleaseNameWebDL(t *testing.T) {
 func TestEngineScoreRelease(t *testing.T) {
 	formats := []CustomFormat{
 		{
-			ID: "prefer-hevc", Name: "Prefer HEVC", Score: 10,
+			ID: "prefer-hevc", Name: "Prefer HEVC",
 			Specifications: []Specification{
 				{Name: "x265", Implementation: ImplCodec, Fields: map[string]any{"value": "x265"}},
 			},
 		},
 		{
-			ID: "prefer-bluray", Name: "Prefer BluRay", Score: 5,
+			ID: "prefer-bluray", Name: "Prefer BluRay",
 			Specifications: []Specification{
 				{Name: "BluRay", Implementation: ImplSource, Fields: map[string]any{"value": "BluRay"}},
 			},
 		},
 		{
-			ID: "no-match", Name: "Prefer AV1", Score: 20,
+			ID: "no-match", Name: "Prefer AV1",
 			Specifications: []Specification{
 				{Name: "AV1", Implementation: ImplCodec, Fields: map[string]any{"value": "AV1"}},
 			},
@@ -71,15 +71,16 @@ func TestEngineScoreRelease(t *testing.T) {
 	if len(matches) != 2 {
 		t.Fatalf("got %d matches, want 2", len(matches))
 	}
+	// Scores now come from quality profiles, not from the format itself.
 	total := TotalScore(matches)
-	if total != 15 {
-		t.Errorf("total score = %d, want 15", total)
+	if total != 0 {
+		t.Errorf("total score = %d, want 0 (scores assigned by quality profiles)", total)
 	}
 }
 
 func TestNegateSpec(t *testing.T) {
 	cf := CustomFormat{
-		ID: "not-x264", Name: "Not x264", Score: 5,
+		ID: "not-x264", Name: "Not x264",
 		Specifications: []Specification{
 			{Name: "Not x264", Implementation: ImplCodec, Negate: true, Fields: map[string]any{"value": "x264"}},
 		},
@@ -103,7 +104,7 @@ func TestNegateSpec(t *testing.T) {
 
 func TestRequiredSpecMustMatch(t *testing.T) {
 	cf := CustomFormat{
-		ID: "test", Name: "Test", Score: 10,
+		ID: "test", Name: "Test",
 		Specifications: []Specification{
 			{Name: "Must be BluRay", Implementation: ImplSource, Required: true, Fields: map[string]any{"value": "BluRay"}},
 			{Name: "Prefer x265", Implementation: ImplCodec, Fields: map[string]any{"value": "x265"}},

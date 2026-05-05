@@ -5,9 +5,8 @@ package customformats
 func Presets() []CustomFormat {
 	return []CustomFormat{
 		{
-			ID:    "prefer-hevc",
-			Name:  "Prefer x265/HEVC",
-			Score: 10,
+			ID:   "prefer-hevc",
+			Name: "Prefer x265/HEVC",
 			Specifications: []Specification{
 				{
 					Name:           "x265/HEVC",
@@ -17,9 +16,8 @@ func Presets() []CustomFormat {
 			},
 		},
 		{
-			ID:    "prefer-atmos-truehd",
-			Name:  "Prefer Atmos/TrueHD",
-			Score: 15,
+			ID:   "prefer-atmos-truehd",
+			Name: "Prefer Atmos/TrueHD",
 			Specifications: []Specification{
 				{
 					Name:           "Atmos",
@@ -34,9 +32,8 @@ func Presets() []CustomFormat {
 			},
 		},
 		{
-			ID:    "avoid-lq-groups",
-			Name:  "Avoid LQ Groups",
-			Score: -50,
+			ID:   "avoid-lq-groups",
+			Name: "Avoid LQ Groups",
 			Specifications: []Specification{
 				{
 					Name:           "LQ Release Group",
@@ -46,9 +43,8 @@ func Presets() []CustomFormat {
 			},
 		},
 		{
-			ID:    "prefer-bluray",
-			Name:  "Prefer BluRay",
-			Score: 5,
+			ID:   "prefer-bluray",
+			Name: "Prefer BluRay",
 			Specifications: []Specification{
 				{
 					Name:           "BluRay Source",
@@ -58,9 +54,8 @@ func Presets() []CustomFormat {
 			},
 		},
 		{
-			ID:    "avoid-cam-ts",
-			Name:  "Avoid CAM/TS",
-			Score: -100,
+			ID:   "avoid-cam-ts",
+			Name: "Avoid CAM/TS",
 			Specifications: []Specification{
 				{
 					Name:           "CAM",

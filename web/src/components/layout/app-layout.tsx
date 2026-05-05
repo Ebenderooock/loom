@@ -8,6 +8,7 @@ import {
   Languages,
   LayoutDashboard,
   Library,
+  ListPlus,
   ListTodo,
   Menu,
   Network,
@@ -60,6 +61,7 @@ interface NavItem {
     | "/notifications"
     | "/language-profiles"
     | "/custom-formats"
+    | "/import-lists"
     | "/settings";
   label: string;
   Icon: typeof LayoutDashboard;
@@ -80,6 +82,7 @@ const NAV: NavItem[] = [
   { to: "/notifications", label: "Notifications", Icon: Bell },
   { to: "/language-profiles", label: "Languages", Icon: Languages },
   { to: "/custom-formats", label: "Custom Formats", Icon: SlidersHorizontal },
+  { to: "/import-lists", label: "Import Lists", Icon: ListPlus },
   { to: "/settings", label: "Settings", Icon: Settings },
 ];
 

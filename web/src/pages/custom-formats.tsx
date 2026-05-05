@@ -104,9 +104,6 @@ export function CustomFormatsPage() {
             <div key={cf.id} className="flex items-center justify-between px-4 py-3">
               <div className="flex items-center gap-3 min-w-0">
                 <span className="font-medium truncate">{cf.name}</span>
-                <Badge variant={cf.score >= 0 ? "secondary" : "destructive"} className="shrink-0">
-                  {cf.score >= 0 ? "+" : ""}{cf.score}
-                </Badge>
                 <span className="text-xs text-muted-foreground shrink-0">
                   {cf.specifications?.length ?? 0} spec{(cf.specifications?.length ?? 0) !== 1 ? "s" : ""}
                 </span>
@@ -151,7 +148,6 @@ function EditDialog({ initial, onClose }: { initial?: CustomFormat; onClose: () 
 
   const [id, setId] = React.useState(initial?.id ?? "");
   const [name, setName] = React.useState(initial?.name ?? "");
-  const [score, setScore] = React.useState(String(initial?.score ?? 0));
   const [includeRename, setIncludeRename] = React.useState(initial?.include_when_renaming ?? false);
   const [specs, setSpecs] = React.useState<Specification[]>(initial?.specifications ?? [{ ...EMPTY_SPEC }]);
 
@@ -164,7 +160,6 @@ function EditDialog({ initial, onClose }: { initial?: CustomFormat; onClose: () 
     const body: CustomFormat = {
       id: isEdit ? initial!.id : id,
       name,
-      score: parseInt(score, 10) || 0,
       include_when_renaming: includeRename,
       specifications: specs,
     };
@@ -186,7 +181,7 @@ function EditDialog({ initial, onClose }: { initial?: CustomFormat; onClose: () 
       <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{isEdit ? "Edit" : "Add"} Custom Format</DialogTitle>
-          <DialogDescription>Define matching rules and score.</DialogDescription>
+          <DialogDescription>Define matching rules.</DialogDescription>
         </DialogHeader>
 
         <div className="grid gap-4 py-2">
@@ -340,13 +335,10 @@ function TestDialog({ onClose }: { onClose: () => void }) {
                 <p className="text-muted-foreground text-sm">No custom formats matched.</p>
               ) : (
                 <div className="space-y-1">
-                  <p className="text-sm font-medium">Matches (total score: {result.score})</p>
+                  <p className="text-sm font-medium">Matches</p>
                   {result.matches.map((m) => (
                     <div key={m.custom_format_id} className="flex items-center justify-between text-sm rounded-md border px-3 py-2">
                       <span>{m.custom_format_name}</span>
-                      <Badge variant={m.score >= 0 ? "secondary" : "destructive"}>
-                        {m.score >= 0 ? "+" : ""}{m.score}
-                      </Badge>
                     </div>
                   ))}
                 </div>
@@ -363,26 +355,26 @@ function TestDialog({ onClose }: { onClose: () => void }) {
 
 const PRESETS: CustomFormat[] = [
   {
-    id: "prefer-hevc", name: "Prefer x265/HEVC", score: 10, include_when_renaming: false,
+    id: "prefer-hevc", name: "Prefer x265/HEVC", include_when_renaming: false,
     specifications: [{ name: "x265/HEVC", implementation: "CodecSpec", negate: false, required: false, fields: { value: "x265" } }],
   },
   {
-    id: "prefer-atmos-truehd", name: "Prefer Atmos/TrueHD", score: 15, include_when_renaming: false,
+    id: "prefer-atmos-truehd", name: "Prefer Atmos/TrueHD", include_when_renaming: false,
     specifications: [
       { name: "Atmos", implementation: "AudioSpec", negate: false, required: false, fields: { value: "Atmos" } },
       { name: "TrueHD", implementation: "AudioSpec", negate: false, required: false, fields: { value: "TrueHD" } },
     ],
   },
   {
-    id: "avoid-lq-groups", name: "Avoid LQ Groups", score: -50, include_when_renaming: false,
+    id: "avoid-lq-groups", name: "Avoid LQ Groups", include_when_renaming: false,
     specifications: [{ name: "LQ Group", implementation: "ReleaseTitleSpec", negate: false, required: false, fields: { value: "(?i)\\b(YIFY|YTS|EVO|SPARKS|RARBG|aXXo)\\b" } }],
   },
   {
-    id: "prefer-bluray", name: "Prefer BluRay", score: 5, include_when_renaming: false,
+    id: "prefer-bluray", name: "Prefer BluRay", include_when_renaming: false,
     specifications: [{ name: "BluRay", implementation: "SourceSpec", negate: false, required: false, fields: { value: "BluRay" } }],
   },
   {
-    id: "avoid-cam-ts", name: "Avoid CAM/TS", score: -100, include_when_renaming: false,
+    id: "avoid-cam-ts", name: "Avoid CAM/TS", include_when_renaming: false,
     specifications: [
       { name: "CAM", implementation: "SourceSpec", negate: false, required: false, fields: { value: "CAM" } },
       { name: "TS", implementation: "SourceSpec", negate: false, required: false, fields: { value: "TS" } },
@@ -412,7 +404,7 @@ function PresetsDialog({ onClose }: { onClose: () => void }) {
             <div key={p.id} className="flex items-center justify-between px-4 py-3">
               <div>
                 <p className="font-medium text-sm">{p.name}</p>
-                <p className="text-xs text-muted-foreground">Score: {p.score >= 0 ? "+" : ""}{p.score}</p>
+                <p className="text-xs text-muted-foreground">{p.specifications.length} spec{p.specifications.length !== 1 ? "s" : ""}</p>
               </div>
               <Button size="sm" variant="outline" onClick={() => handleImport(p)} disabled={createMut.isPending}>
                 Import

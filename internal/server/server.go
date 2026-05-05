@@ -60,6 +60,7 @@ import (
 	"github.com/loomctl/loom/internal/scheduler"
 	"github.com/loomctl/loom/internal/series"
 	"github.com/loomctl/loom/internal/storage"
+	"github.com/loomctl/loom/internal/validation"
 )
 
 // Server holds wired dependencies for the HTTP listener.
@@ -90,6 +91,8 @@ type Server struct {
 	aggSvc     *newznabserver.Server
 	altTitleStore *alttitles.Store
 	animeStore *anime.Store
+	validator        *validation.Validator
+	indexerRuleStore *indexers.RuleStore
 	importListStore  *importlists.Store
 	importListSync   *importlists.SyncManager
 	mediaInfoStore *mediainfo.Store
@@ -308,6 +311,22 @@ func (s *Server) SetEpisodeOrder(store *episodeorder.Store) {
 	}
 }
 
+// SetValidator installs the file validator and rebuilds the HTTP handler.
+func (s *Server) SetValidator(v *validation.Validator) {
+	s.validator = v
+	if s.httpSrv != nil {
+		s.httpSrv.Handler = s.newMux()
+	}
+}
+
+// SetIndexerRuleStore installs the indexer rule store and rebuilds the HTTP handler.
+func (s *Server) SetIndexerRuleStore(store *indexers.RuleStore) {
+	s.indexerRuleStore = store
+	if s.httpSrv != nil {
+		s.httpSrv.Handler = s.newMux()
+	}
+}
+
 // SetLibraries installs the libraries store and scanner, then rebuilds the HTTP handler.
 func (s *Server) SetLibraries(store *libraries.Store, scanner *libraries.Scanner) {
 	s.libStore = store
@@ -495,6 +514,16 @@ func (s *Server) newMux() http.Handler {
 		// Episode ordering routes
 		if s.episodeOrderStore != nil {
 			r.Mount("/api/v1/episode-order", episodeorder.Router(s.episodeOrderStore))
+		}
+
+		// Validation rules routes
+		if s.validator != nil {
+			r.Mount("/api/v1/validation", validation.Router(s.validator))
+		}
+
+		// Indexer rules and Jackett import routes
+		if s.indexerRuleStore != nil && s.indexerSvc != nil {
+			indexers.MountRuleRoutes(r, s.indexerRuleStore, s.indexerSvc)
 		}
 
 		// Library routes

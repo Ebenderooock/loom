@@ -459,3 +459,100 @@ func (p *ImportPipeline) ListHistory(ctx context.Context, limit, offset int) ([]
 	}
 	return records, rows.Err()
 }
+
+// ImportPreview describes what would happen if an import were triggered.
+type ImportPreview struct {
+	FilePath  string `json:"file_path"`
+	FileSize  int64  `json:"file_size"`
+	MediaType string `json:"media_type,omitempty"`
+	MediaID   string `json:"media_id,omitempty"`
+	Title     string `json:"title,omitempty"`
+	Action    string `json:"action"`
+	Reason    string `json:"reason"`
+	Quality   string `json:"quality,omitempty"`
+}
+
+// PreviewImport is a dry-run mode that returns what would happen without
+// actually importing. POST /api/v1/imports/preview uses this.
+func (p *ImportPipeline) PreviewImport(ctx context.Context, path string) ([]ImportPreview, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil, fmt.Errorf("path not found: %w", err)
+	}
+
+	var mediaFiles []string
+	if info.IsDir() {
+		mediaFiles, err = scanMediaFiles(path)
+		if err != nil {
+			return nil, fmt.Errorf("scan: %w", err)
+		}
+	} else {
+		ext := filepath.Ext(path)
+		if !mediaExtensions[ext] {
+			return nil, fmt.Errorf("not a media file: %s", path)
+		}
+		mediaFiles = []string{path}
+	}
+
+	var previews []ImportPreview
+	for _, mf := range mediaFiles {
+		preview := p.previewSingleFile(ctx, mf)
+		previews = append(previews, preview)
+	}
+	return previews, nil
+}
+
+func (p *ImportPipeline) previewSingleFile(ctx context.Context, filePath string) ImportPreview {
+	info, _ := os.Stat(filePath)
+	var fileSize int64
+	if info != nil {
+		fileSize = info.Size()
+	}
+
+	quality := ParseFileQuality(filePath)
+	qualityStr := ""
+	if quality.Resolution > 0 {
+		qualityStr = fmt.Sprintf("%dp", quality.Resolution)
+	}
+
+	preview := ImportPreview{
+		FilePath: filePath,
+		FileSize: fileSize,
+		Quality:  qualityStr,
+		Action:   "skip",
+		Reason:   "no match found",
+	}
+
+	match, err := p.matcher.Match(ctx, filepath.Base(filePath))
+	if err != nil {
+		preview.Action = "error"
+		preview.Reason = err.Error()
+		return preview
+	}
+
+	if !match.Matched {
+		return preview
+	}
+
+	preview.MediaType = string(match.MediaType)
+	preview.MediaID = match.MediaID
+	preview.Title = match.Title
+
+	destFile := filepath.Join(match.DestPath, filepath.Base(filePath))
+	if _, err := os.Stat(destFile); err == nil {
+		existing := ParseFileQuality(destFile)
+		incoming := ParseFileQuality(filePath)
+		if qualityScore(incoming) > qualityScore(existing) {
+			preview.Action = "upgrade"
+			preview.Reason = fmt.Sprintf("incoming quality score %d > existing %d", qualityScore(incoming), qualityScore(existing))
+		} else {
+			preview.Action = "skip"
+			preview.Reason = fmt.Sprintf("existing quality score %d >= incoming %d", qualityScore(existing), qualityScore(incoming))
+		}
+	} else {
+		preview.Action = "import"
+		preview.Reason = "no existing file at destination"
+	}
+
+	return preview
+}

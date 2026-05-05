@@ -21,7 +21,7 @@ func NewStore(db *sql.DB) *Store {
 // List returns all custom formats ordered by name.
 func (s *Store) List(ctx context.Context) ([]CustomFormat, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, name, include_when_renaming, specifications, score, created_at, updated_at
+		`SELECT id, name, include_when_renaming, specifications, created_at, updated_at
 		 FROM custom_formats ORDER BY name`)
 	if err != nil {
 		return nil, fmt.Errorf("list custom formats: %w", err)
@@ -33,7 +33,7 @@ func (s *Store) List(ctx context.Context) ([]CustomFormat, error) {
 // Get returns a single custom format by ID.
 func (s *Store) Get(ctx context.Context, id string) (*CustomFormat, error) {
 	row := s.db.QueryRowContext(ctx,
-		`SELECT id, name, include_when_renaming, specifications, score, created_at, updated_at
+		`SELECT id, name, include_when_renaming, specifications, created_at, updated_at
 		 FROM custom_formats WHERE id = ?`, id)
 	return scanFormat(row)
 }
@@ -46,9 +46,9 @@ func (s *Store) Create(ctx context.Context, cf *CustomFormat) error {
 	}
 	now := time.Now().UTC().Format(time.RFC3339)
 	_, err = s.db.ExecContext(ctx,
-		`INSERT INTO custom_formats (id, name, include_when_renaming, specifications, score, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		cf.ID, cf.Name, cf.IncludeWhenRenaming, string(specJSON), cf.Score, now, now)
+		`INSERT INTO custom_formats (id, name, include_when_renaming, specifications, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?)`,
+		cf.ID, cf.Name, cf.IncludeWhenRenaming, string(specJSON), now, now)
 	if err != nil {
 		return fmt.Errorf("create custom format: %w", err)
 	}
@@ -65,9 +65,9 @@ func (s *Store) Update(ctx context.Context, cf *CustomFormat) error {
 	}
 	now := time.Now().UTC().Format(time.RFC3339)
 	res, err := s.db.ExecContext(ctx,
-		`UPDATE custom_formats SET name=?, include_when_renaming=?, specifications=?, score=?, updated_at=?
+		`UPDATE custom_formats SET name=?, include_when_renaming=?, specifications=?, updated_at=?
 		 WHERE id=?`,
-		cf.Name, cf.IncludeWhenRenaming, string(specJSON), cf.Score, now, cf.ID)
+		cf.Name, cf.IncludeWhenRenaming, string(specJSON), now, cf.ID)
 	if err != nil {
 		return fmt.Errorf("update custom format: %w", err)
 	}
@@ -97,7 +97,7 @@ func scanFormats(rows *sql.Rows) ([]CustomFormat, error) {
 	for rows.Next() {
 		var cf CustomFormat
 		var specJSON string
-		if err := rows.Scan(&cf.ID, &cf.Name, &cf.IncludeWhenRenaming, &specJSON, &cf.Score, &cf.CreatedAt, &cf.UpdatedAt); err != nil {
+		if err := rows.Scan(&cf.ID, &cf.Name, &cf.IncludeWhenRenaming, &specJSON, &cf.CreatedAt, &cf.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("scan custom format: %w", err)
 		}
 		if err := json.Unmarshal([]byte(specJSON), &cf.Specifications); err != nil {
@@ -111,7 +111,7 @@ func scanFormats(rows *sql.Rows) ([]CustomFormat, error) {
 func scanFormat(row *sql.Row) (*CustomFormat, error) {
 	var cf CustomFormat
 	var specJSON string
-	if err := row.Scan(&cf.ID, &cf.Name, &cf.IncludeWhenRenaming, &specJSON, &cf.Score, &cf.CreatedAt, &cf.UpdatedAt); err != nil {
+	if err := row.Scan(&cf.ID, &cf.Name, &cf.IncludeWhenRenaming, &specJSON, &cf.CreatedAt, &cf.UpdatedAt); err != nil {
 		return nil, err
 	}
 	if err := json.Unmarshal([]byte(specJSON), &cf.Specifications); err != nil {
