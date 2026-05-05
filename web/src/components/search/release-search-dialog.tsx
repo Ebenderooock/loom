@@ -232,8 +232,8 @@ function GrabButton({
         variant="ghost"
         className="h-7 w-7"
         disabled={grabbing}
-        title={`Grab via ${clients[0].name}`}
-        onClick={() => doGrab(clients[0].id)}
+        title={`Grab via ${clients[0]!.name}`}
+        onClick={() => doGrab(clients[0]!.id)}
       >
         {grabbing ? (
           <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -537,11 +537,11 @@ export function ReleaseSearchDialog({
   onOpenChange,
   title,
   query: initialQuery,
-  tmdbId,
-  tvdbId,
-  imdbId,
-  season,
-  episode,
+  tmdbId: _tmdbId,
+  tvdbId: _tvdbId,
+  imdbId: _imdbId,
+  season: _season,
+  episode: _episode,
   mediaType,
 }: ReleaseSearchProps) {
   const [query, setQuery] = useState(initialQuery ?? title);

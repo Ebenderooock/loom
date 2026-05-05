@@ -16,7 +16,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Plus, Search, Film, Loader2, FolderSearch } from "lucide-react";
+import { Plus, Search, Film, FolderSearch } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
 import { useSetPageHeader } from "@/hooks/use-page-header";

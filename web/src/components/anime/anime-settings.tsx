@@ -146,7 +146,7 @@ export function AnimeSettings({ seriesId }: AnimeSettingsProps) {
       const groups = [...p.preferredGroups];
       const target = idx + dir;
       if (target < 0 || target >= groups.length) return p;
-      [groups[idx], groups[target]] = [groups[target], groups[idx]];
+      [groups[idx], groups[target]] = [groups[target]!, groups[idx]!];
       return { ...p, preferredGroups: groups };
     });
   }, []);

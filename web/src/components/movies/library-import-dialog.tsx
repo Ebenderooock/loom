@@ -81,7 +81,7 @@ export function LibraryImportDialog({
       setScanning(false);
       setMatchingFile(null);
       if (rootFolders.length === 1) {
-        setSelectedFolder(rootFolders[0].id);
+        setSelectedFolder(rootFolders[0]!.id);
       }
     }
   }, [open, rootFolders]);

@@ -25,7 +25,7 @@ export function SeriesToolbar({
   onSortKeyChange,
   viewMode,
   onViewModeChange,
-  profiles,
+  profiles: _profiles,
   selectMode,
   selectedCount,
   allSelected,
