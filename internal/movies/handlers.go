@@ -53,13 +53,6 @@ func RouterWithSearch(service Service, indexerSvc *indexers.Service) chi.Router 
 	r.Get("/search", searchMovies(service))
 	r.Get("/lookup", lookupMovies(service))
 
-	// Root folder routes (must be before /{id} wildcard)
-	r.Route("/root-folders", func(r chi.Router) {
-		r.Get("/", listRootFolders(service))
-		r.Post("/", addRootFolder(service))
-		r.Delete("/{id}", deleteRootFolder(service))
-	})
-
 	// Quality definition routes
 	r.Route("/quality-definitions", func(r chi.Router) {
 		r.Get("/", listQualityDefinitions(service))
@@ -122,7 +115,7 @@ func movieToResponse(m *Movie) map[string]interface{} {
 		"posterPath":       m.PosterPath,
 		"metadataProvider": m.MetadataProvider,
 		"qualityProfileId": m.QualityProfileID,
-		"rootFolderId":     m.RootFolderID,
+		"libraryId":        m.LibraryID,
 		"status":           string(m.Status),
 		"releaseDate":      m.ReleaseDate,
 		"monitoringStatus": string(m.MonitoringStatus),
@@ -348,7 +341,7 @@ func addMovie(svc Service, indexerSvc *indexers.Service) http.HandlerFunc {
 			PosterPath:       req.PosterPath,
 			MetadataProvider: req.MetadataProvider,
 			QualityProfileID: req.QualityProfileID,
-			RootFolderID:     req.RootFolderID,
+			LibraryID:        req.LibraryID,
 			Status:           status,
 			ReleaseDate:      req.ReleaseDate,
 			MonitoringStatus: MonitoringStatus(derefString(req.MonitoringStatus, string(MonitoringStatusMonitored))),
@@ -450,8 +443,8 @@ func updateMovie(svc Service) http.HandlerFunc {
 		if req.QualityProfileID != nil {
 			movie.QualityProfileID = *req.QualityProfileID
 		}
-		if req.RootFolderID != nil {
-			movie.RootFolderID = *req.RootFolderID
+		if req.LibraryID != nil {
+			movie.LibraryID = *req.LibraryID
 		}
 
 		if err := svc.UpdateMovie(r.Context(), movie); err != nil {
@@ -573,75 +566,6 @@ func listMovieFiles(svc Service) http.HandlerFunc {
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(response)
-	}
-}
-
-func listRootFolders(svc Service) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		folders, err := svc.ListRootFolders(r.Context())
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-
-		response := make([]map[string]interface{}, 0, len(folders))
-		for _, f := range folders {
-			response = append(response, map[string]interface{}{
-				"id":           f.ID,
-				"path":         f.Path,
-				"freeSpace":    f.FreeSpace,
-				"unmappedCount": f.UnmappedCount,
-				"createdAt":    f.CreatedAt.Format("2006-01-02T15:04:05Z"),
-				"updatedAt":    f.UpdatedAt.Format("2006-01-02T15:04:05Z"),
-			})
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(response)
-	}
-}
-
-func addRootFolder(svc Service) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		var req CreateRootFolderRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, "invalid request body", http.StatusBadRequest)
-			return
-		}
-
-		folder, err := svc.AddRootFolder(r.Context(), req.Path)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusCreated)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"id":           folder.ID,
-			"path":         folder.Path,
-			"freeSpace":    folder.FreeSpace,
-			"unmappedCount": folder.UnmappedCount,
-			"createdAt":    folder.CreatedAt.Format("2006-01-02T15:04:05Z"),
-			"updatedAt":    folder.UpdatedAt.Format("2006-01-02T15:04:05Z"),
-		})
-	}
-}
-
-func deleteRootFolder(svc Service) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		id := chi.URLParam(r, "id")
-		if id == "" {
-			http.Error(w, "folder ID required", http.StatusBadRequest)
-			return
-		}
-
-		if err := svc.DeleteRootFolder(r.Context(), id); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-
-		w.WriteHeader(http.StatusNoContent)
 	}
 }
 

@@ -14,6 +14,7 @@ import (
 
 	"github.com/loomctl/loom/internal/downloads"
 	"github.com/loomctl/loom/internal/kernel/eventbus"
+	"github.com/loomctl/loom/internal/libraries"
 	"github.com/loomctl/loom/internal/movies"
 	"github.com/loomctl/loom/internal/notifications"
 	"github.com/loomctl/loom/internal/safety"
@@ -27,6 +28,7 @@ type PipelineOptions struct {
 	DownloadSvc *downloads.Service
 	MoviesSvc   movies.Service
 	SeriesSvc   series.Service
+	LibStore    *libraries.Store
 	NotifSvc    notifications.Service
 	PostVal     *safety.PostValidator
 	ReviewStore *safety.ReviewStore
@@ -80,7 +82,7 @@ func NewPipeline(opts PipelineOptions) (*ImportPipeline, error) {
 		db:          opts.DB,
 		bus:         opts.Bus,
 		downloadSvc: opts.DownloadSvc,
-		matcher:     NewMatcher(opts.MoviesSvc, opts.SeriesSvc),
+		matcher:     NewMatcher(opts.MoviesSvc, opts.SeriesSvc, opts.LibStore),
 		notifSvc:    opts.NotifSvc,
 		postVal:     opts.PostVal,
 		reviewStore: opts.ReviewStore,

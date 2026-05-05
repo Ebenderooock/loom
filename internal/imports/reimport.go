@@ -165,11 +165,11 @@ func (p *ImportPipeline) resolveMediaDestination(ctx context.Context, mediaType 
 		if err != nil {
 			return nil, fmt.Errorf("get movie %s: %w", mediaID, err)
 		}
-		rootFolder, err := p.matcher.moviesSvc.GetRootFolder(ctx, movie.RootFolderID)
+		lib, err := p.matcher.libStore.Get(ctx, movie.LibraryID)
 		if err != nil {
-			return nil, fmt.Errorf("get root folder: %w", err)
+			return nil, fmt.Errorf("get library: %w", err)
 		}
-		destDir := filepath.Join(rootFolder.Path, sanitizeDirName(fmt.Sprintf("%s (%d)", movie.Title, movie.Year)))
+		destDir := filepath.Join(lib.Path, sanitizeDirName(fmt.Sprintf("%s (%d)", movie.Title, movie.Year)))
 		return &MatchResult{
 			Matched:   true,
 			MediaType: MediaTypeMovie,

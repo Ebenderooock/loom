@@ -29,7 +29,8 @@ import {
   SeriesDetailSheet,
   sortSeries,
 } from "@/components/series";
-import type { Series, RootFolder, QualityProfile, SeriesSortKey, ViewMode } from "@/components/series";
+import { useLibraries } from "@/lib/libraries-api";
+import type { Series, QualityProfile, SeriesSortKey, ViewMode } from "@/components/series";
 
 // ─── Skeletons ──────────────────────────────────────────────────────────
 
@@ -99,7 +100,8 @@ function BulkDeleteDialog({
 export function SeriesPage() {
   const { isAuthenticated } = useAuth();
   const [seriesList, setSeriesList] = useState<Series[]>([]);
-  const [rootFolders, setRootFolders] = useState<RootFolder[]>([]);
+  const { data: allLibraries = [] } = useLibraries();
+  const libraries = allLibraries.filter(l => l.media_type === "series");
   const [qualityProfiles, setQualityProfiles] = useState<QualityProfile[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [addDialogOpen, setAddDialogOpen] = useState(false);
@@ -123,18 +125,13 @@ export function SeriesPage() {
     if (!isAuthenticated) return;
     setIsLoading(true);
     try {
-      const [seriesRes, foldersRes, profilesRes] = await Promise.all([
+      const [seriesRes, profilesRes] = await Promise.all([
         fetch("/api/v1/series", { credentials: "include" }),
-        fetch("/api/v1/movies/root-folders", { credentials: "include" }),
         fetch("/api/v1/movies/quality-profiles", { credentials: "include" }),
       ]);
       if (seriesRes.ok) {
         const data = await seriesRes.json();
         setSeriesList(Array.isArray(data) ? data : data.data ?? []);
-      }
-      if (foldersRes.ok) {
-        const data = await foldersRes.json();
-        setRootFolders(Array.isArray(data) ? data : []);
       }
       if (profilesRes.ok) {
         const data = await profilesRes.json();
@@ -282,8 +279,8 @@ export function SeriesPage() {
           <p className="text-sm text-muted-foreground max-w-sm mb-6">
             Start building your library by adding TV series from TMDB.
           </p>
-          {rootFolders.length === 0 ? (
-            <p className="text-sm text-amber-500">⚠️ Add a root folder in Settings before adding series</p>
+          {libraries.length === 0 ? (
+            <p className="text-sm text-amber-500">⚠️ Add a library in Settings before adding series</p>
           ) : (
             <Button onClick={() => setAddDialogOpen(true)} size="lg">
               <Plus className="w-4 h-4 mr-1.5" /> Add Series
@@ -351,7 +348,7 @@ export function SeriesPage() {
       <AddSeriesDialog
         open={addDialogOpen}
         onOpenChange={setAddDialogOpen}
-        rootFolders={rootFolders}
+        libraries={libraries}
         qualityProfiles={qualityProfiles}
         existingTmdbIds={existingTmdbIds}
         onSeriesAdded={fetchAll}
@@ -362,7 +359,7 @@ export function SeriesPage() {
         open={detailOpen}
         onOpenChange={setDetailOpen}
         profiles={qualityProfiles}
-        rootFolders={rootFolders}
+        libraries={libraries}
         onUpdated={handleSeriesUpdated}
         onDeleted={handleSeriesDeleted}
       />

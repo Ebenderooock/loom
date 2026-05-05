@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/loomctl/loom/internal/libraries"
 	"github.com/loomctl/loom/internal/movies"
 )
 
@@ -21,7 +22,7 @@ type MovieProvider interface {
 	GetMovie(ctx context.Context, id string) (*movies.Movie, error)
 	ListMovies(ctx context.Context, limit, offset int) ([]*movies.Movie, error)
 	ListMovieFiles(ctx context.Context, movieID string) ([]*movies.MovieFile, error)
-	GetRootFolder(ctx context.Context, id string) (*movies.RootFolder, error)
+	GetLibraryPath(ctx context.Context, libraryID string) (string, error)
 }
 
 // FileUpdater updates movie file records after rename.
@@ -97,9 +98,9 @@ func (o *Organizer) PreviewMovie(ctx context.Context, movieID string) ([]RenameP
 		return nil, fmt.Errorf("organizer: get movie: %w", err)
 	}
 
-	rootFolder, err := o.movies.GetRootFolder(ctx, movie.RootFolderID)
+	rootFolderPath, err := o.movies.GetLibraryPath(ctx, movie.LibraryID)
 	if err != nil {
-		return nil, fmt.Errorf("organizer: get root folder: %w", err)
+		return nil, fmt.Errorf("organizer: get library path: %w", err)
 	}
 
 	files, err := o.movies.ListMovieFiles(ctx, movieID)
@@ -111,7 +112,7 @@ func (o *Organizer) PreviewMovie(ctx context.Context, movieID string) ([]RenameP
 	seen := make(map[string]bool)
 
 	for _, f := range files {
-		target := BuildTargetPath(rootFolder.Path, movie, f, cfg)
+		target := BuildTargetPath(rootFolderPath, movie, f, cfg)
 
 		// Check for collisions with other files in this batch
 		collision := false
@@ -174,7 +175,7 @@ func (o *Organizer) OrganizeMovie(ctx context.Context, movieID string) ([]Rename
 		return nil, err
 	}
 
-	rootFolder, err := o.movies.GetRootFolder(ctx, movie.RootFolderID)
+	rootFolderPath, err := o.movies.GetLibraryPath(ctx, movie.LibraryID)
 	if err != nil {
 		return nil, err
 	}
@@ -186,7 +187,7 @@ func (o *Organizer) OrganizeMovie(ctx context.Context, movieID string) ([]Rename
 
 	results := make([]RenameResult, 0, len(files))
 	for _, f := range files {
-		result := o.organizeFile(ctx, movie, f, rootFolder, cfg)
+		result := o.organizeFile(ctx, movie, f, rootFolderPath, cfg)
 		results = append(results, result)
 	}
 	return results, nil
@@ -212,8 +213,8 @@ func (o *Organizer) OrganizeMovies(ctx context.Context, movieIDs []string) ([]Re
 }
 
 // organizeFile handles the atomic rename of a single file.
-func (o *Organizer) organizeFile(ctx context.Context, movie *movies.Movie, file *movies.MovieFile, rootFolder *movies.RootFolder, cfg *NamingConfig) RenameResult {
-	target := BuildTargetPath(rootFolder.Path, movie, file, cfg)
+func (o *Organizer) organizeFile(ctx context.Context, movie *movies.Movie, file *movies.MovieFile, libraryPath string, cfg *NamingConfig) RenameResult {
+	target := BuildTargetPath(libraryPath, movie, file, cfg)
 
 	result := RenameResult{
 		FileID:  file.ID,
@@ -230,7 +231,7 @@ func (o *Organizer) organizeFile(ctx context.Context, movie *movies.Movie, file 
 
 	// Verify target is inside root folder (prevent path escape)
 	cleanTarget := filepath.Clean(target)
-	cleanRoot := filepath.Clean(rootFolder.Path)
+	cleanRoot := filepath.Clean(libraryPath)
 	if !strings.HasPrefix(cleanTarget, cleanRoot+string(filepath.Separator)) && cleanTarget != cleanRoot {
 		result.Error = "target path escapes root folder"
 		return result
@@ -276,7 +277,7 @@ func (o *Organizer) organizeFile(ctx context.Context, movie *movies.Movie, file 
 	}
 
 	// Clean up empty source directory
-	o.cleanEmptyDir(filepath.Dir(oldPath), rootFolder.Path)
+	o.cleanEmptyDir(filepath.Dir(oldPath), libraryPath)
 
 	result.Success = true
 	o.logger.Info("file organized",
@@ -493,7 +494,8 @@ func (s *SQLiteConfigStore) SaveNamingConfig(ctx context.Context, cfg *NamingCon
 
 // MovieServiceAdapter adapts movies.Service to the MovieProvider interface.
 type MovieServiceAdapter struct {
-	Svc movies.Service
+	Svc      movies.Service
+	LibStore *libraries.Store
 }
 
 func (a *MovieServiceAdapter) GetMovie(ctx context.Context, id string) (*movies.Movie, error) {
@@ -508,8 +510,12 @@ func (a *MovieServiceAdapter) ListMovieFiles(ctx context.Context, movieID string
 	return a.Svc.ListMovieFiles(ctx, movieID)
 }
 
-func (a *MovieServiceAdapter) GetRootFolder(ctx context.Context, id string) (*movies.RootFolder, error) {
-	return a.Svc.GetRootFolder(ctx, id)
+func (a *MovieServiceAdapter) GetLibraryPath(ctx context.Context, libraryID string) (string, error) {
+	lib, err := a.LibStore.Get(ctx, libraryID)
+	if err != nil {
+		return "", err
+	}
+	return lib.Path, nil
 }
 
 // RepoFileUpdater adapts movies.Repository to the FileUpdater interface.

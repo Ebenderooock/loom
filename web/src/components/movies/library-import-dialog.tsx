@@ -14,12 +14,12 @@ import {
   Search, ChevronRight,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import type { Library } from "../../lib/libraries-api";
 
 interface ScanResult {
   id: string;
   rootFolderId: string;
-  rootFolderPath: string;
-  status: "running" | "completed" | "failed";
+  rootFolderPath: string;  status: "running" | "completed" | "failed";
   totalFiles: number;
   matched: number;
   unmatched: number;
@@ -40,11 +40,6 @@ interface UnmatchedFile {
   source: string;
 }
 
-interface RootFolder {
-  id: string;
-  path: string;
-}
-
 interface TmdbResult {
   tmdb_id: string;
   title: string;
@@ -56,12 +51,12 @@ interface TmdbResult {
 export function LibraryImportDialog({
   open,
   onOpenChange,
-  rootFolders,
+  libraries,
   onImportComplete,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  rootFolders: RootFolder[];
+  libraries: Library[];
   onImportComplete: () => void;
 }) {
   const [scanning, setScanning] = useState(false);
@@ -80,11 +75,11 @@ export function LibraryImportDialog({
       setUnmatchedFiles([]);
       setScanning(false);
       setMatchingFile(null);
-      if (rootFolders.length === 1) {
-        setSelectedFolder(rootFolders[0]!.id);
+      if (libraries.length === 1) {
+        setSelectedFolder(libraries[0]!.id);
       }
     }
-  }, [open, rootFolders]);
+  }, [open, libraries]);
 
   const startScan = useCallback(async () => {
     if (!selectedFolder) return;
@@ -97,7 +92,7 @@ export function LibraryImportDialog({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ rootFolderId: selectedFolder }),
+        body: JSON.stringify({ libraryId: selectedFolder }),
       });
       const data = await res.json();
       const scanId = data.scanId;
@@ -156,7 +151,7 @@ export function LibraryImportDialog({
         body: JSON.stringify({
           unmatchedId,
           tmdbId,
-          rootFolderId: selectedFolder,
+          libraryId: selectedFolder,
           qualityProfileId: "",
         }),
       });
@@ -192,19 +187,19 @@ export function LibraryImportDialog({
           {!scanResult && !scanning && (
             <div className="space-y-4">
               <p className="text-sm text-muted-foreground">
-                Scan a root folder to discover and import existing movies. 
+                Scan a library to discover and import existing movies. 
                 Files will be matched against TMDB automatically.
               </p>
 
               <div className="space-y-2">
-                <label className="text-sm font-medium">Root Folder</label>
-                {rootFolders.length === 0 ? (
+                <label className="text-sm font-medium">Library</label>
+                {libraries.length === 0 ? (
                   <p className="text-sm text-destructive">
-                    No root folders configured. Add one in Settings first.
+                    No libraries configured. Add one in Settings first.
                   </p>
                 ) : (
                   <div className="space-y-1">
-                    {rootFolders.map(f => (
+                    {libraries.map(f => (
                       <button
                         key={f.id}
                         onClick={() => setSelectedFolder(f.id)}
@@ -219,6 +214,7 @@ export function LibraryImportDialog({
                     ))}
                   </div>
                 )}
+
               </div>
 
               <Button

@@ -8,7 +8,6 @@ export type {
   Series,
   Season,
   Episode,
-  RootFolder,
   QualityProfile,
   TMDBSeriesResult,
   CreditPerson,

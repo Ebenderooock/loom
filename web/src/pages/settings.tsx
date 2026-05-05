@@ -23,6 +23,12 @@ import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { NamingSettings } from "@/components/movies/naming-settings";
 import {
+  useLibraries,
+  useDeleteLibrary,
+  createLibrary,
+  formatBytes,
+} from "@/lib/libraries-api";
+import {
   Plus,
   Trash2,
   Folder,
@@ -75,27 +81,9 @@ type Category = (typeof CATEGORIES)[number]["id"];
 
 // ─── Types ──────────────────────────────────────────────────────────────
 
-interface RootFolder {
-  id: string;
-  path: string;
-  freeSpace: number;
-  unmappedCount: number;
-  createdAt: string;
-  updatedAt: string;
-}
-
-// ─── Root Folders Panel ─────────────────────────────────────────────────
-
-function formatBytes(bytes: number): string {
-  if (bytes <= 0) return "—";
-  const units = ["B", "KB", "MB", "GB", "TB"];
-  const i = Math.floor(Math.log(bytes) / Math.log(1024));
-  return `${(bytes / Math.pow(1024, i)).toFixed(1)} ${units[i]}`;
-}
+// ─── Libraries Panel ─────────────────────────────────────────────────
 
 // ─── Filesystem Browser Dialog ──────────────────────────────────────────
-
-type LibraryType = "movies" | "tvshows";
 
 interface DirEntry {
   name: string;
@@ -291,9 +279,9 @@ function FolderBrowserDialog({
   );
 }
 
-// ─── Add Root Folder Dialog (type chooser + folder picker) ──────────────
+// ─── Add Library Dialog (name + type + folder picker) ──────────────
 
-function AddRootFolderDialog({
+function AddLibraryDialog({
   open,
   onOpenChange,
   onAdded,
@@ -303,8 +291,9 @@ function AddRootFolderDialog({
   onAdded: () => void;
 }) {
   const [step, setStep] = React.useState<"type" | "path">("type");
-  const [libraryType, setLibraryType] = React.useState<LibraryType | null>(null);
+  const [mediaType, setMediaType] = React.useState<string | null>(null);
   const [showBrowser, setShowBrowser] = React.useState(false);
+  const [name, setName] = React.useState("");
   const [path, setPath] = React.useState("");
   const [adding, setAdding] = React.useState(false);
   const [error, setError] = React.useState("");
@@ -312,37 +301,34 @@ function AddRootFolderDialog({
   React.useEffect(() => {
     if (open) {
       setStep("type");
-      setLibraryType(null);
+      setMediaType(null);
+      setName("");
       setPath("");
       setError("");
     }
   }, [open]);
 
-  const selectType = (type: LibraryType) => {
-    setLibraryType(type);
+  const selectType = (type: string) => {
+    setMediaType(type);
     setStep("path");
   };
 
-  const addFolder = async (folderPath: string) => {
-    const trimmed = folderPath.trim();
-    if (!trimmed) return;
+  const addLibrary = async () => {
+    const trimmedName = name.trim();
+    const trimmedPath = path.trim();
+    if (!trimmedName || !trimmedPath || !mediaType) return;
     setAdding(true);
     setError("");
     try {
-      const res = await fetch("/api/v1/movies/root-folders", {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ path: trimmed }),
+      await createLibrary({
+        name: trimmedName,
+        path: trimmedPath,
+        media_type: mediaType as "movie" | "series" | "music",
       });
-      if (!res.ok) {
-        const text = await res.text();
-        throw new Error(text || "Failed to add root folder");
-      }
       onAdded();
       onOpenChange(false);
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Failed to add root folder");
+      setError(e instanceof Error ? e.message : "Failed to add library");
     } finally {
       setAdding(false);
     }
@@ -354,19 +340,19 @@ function AddRootFolderDialog({
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>
-              {step === "type" ? "Add Root Folder" : `Add ${libraryType === "movies" ? "Movies" : "TV Shows"} Folder`}
+              {step === "type" ? "Add Library" : `Add ${mediaType === "movie" ? "Movies" : mediaType === "series" ? "TV Shows" : "Music"} Library`}
             </DialogTitle>
           </DialogHeader>
 
           {step === "type" ? (
             <div className="space-y-3 py-2">
               <p className="text-sm text-muted-foreground">
-                What type of media will this folder contain?
+                What type of media will this library contain?
               </p>
               <div className="grid grid-cols-2 gap-3">
                 <button
                   type="button"
-                  onClick={() => selectType("movies")}
+                  onClick={() => selectType("movie")}
                   className="flex flex-col items-center gap-3 rounded-lg border-2 border-border p-6 hover:border-primary hover:bg-primary/5 transition-all group"
                 >
                   <div className="rounded-full bg-primary/10 p-3 group-hover:bg-primary/20 transition-colors">
@@ -381,7 +367,7 @@ function AddRootFolderDialog({
                 </button>
                 <button
                   type="button"
-                  onClick={() => selectType("tvshows")}
+                  onClick={() => selectType("series")}
                   className="flex flex-col items-center gap-3 rounded-lg border-2 border-border p-6 hover:border-primary hover:bg-primary/5 transition-all group"
                 >
                   <div className="rounded-full bg-primary/10 p-3 group-hover:bg-primary/20 transition-colors">
@@ -399,7 +385,7 @@ function AddRootFolderDialog({
           ) : (
             <div className="space-y-4 py-2">
               <p className="text-sm text-muted-foreground">
-                Choose where your {libraryType === "movies" ? "movies" : "TV shows"} are stored. You can type a path or browse the filesystem.
+                Give your library a name and choose where your {mediaType === "movie" ? "movies" : "TV shows"} are stored.
               </p>
 
               {error && (
@@ -408,14 +394,21 @@ function AddRootFolderDialog({
                 </div>
               )}
 
+              <Input
+                placeholder="Library name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className="text-sm"
+                autoFocus
+              />
+
               <div className="flex gap-2">
                 <Input
                   placeholder="/path/to/media"
                   value={path}
                   onChange={(e) => setPath(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && addFolder(path)}
+                  onKeyDown={(e) => e.key === "Enter" && addLibrary()}
                   className="font-mono text-sm"
-                  autoFocus
                 />
                 <Button
                   variant="outline"
@@ -433,11 +426,11 @@ function AddRootFolderDialog({
                 </Button>
                 <Button
                   size="sm"
-                  onClick={() => addFolder(path)}
-                  disabled={adding || !path.trim()}
+                  onClick={addLibrary}
+                  disabled={adding || !name.trim() || !path.trim()}
                 >
                   {adding ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Plus className="h-4 w-4 mr-1" />}
-                  Add Folder
+                  Add Library
                 </Button>
               </div>
             </div>
@@ -457,50 +450,31 @@ function AddRootFolderDialog({
   );
 }
 
-// ─── Root Folders Panel ─────────────────────────────────────────────────
+// ─── Libraries Panel ─────────────────────────────────────────────────
 
-function RootFoldersPanel() {
-  const [folders, setFolders] = React.useState<RootFolder[]>([]);
-  const [loading, setLoading] = React.useState(true);
-  const [error, setError] = React.useState("");
+function LibrariesPanel() {
+  const { data: libraries = [], refetch, isLoading } = useLibraries();
+  const deleteMutation = useDeleteLibrary();
   const [deletingId, setDeletingId] = React.useState<string | null>(null);
+  const [error, setError] = React.useState("");
   const [dialogOpen, setDialogOpen] = React.useState(false);
 
-  const fetchFolders = React.useCallback(async () => {
-    try {
-      const res = await fetch("/api/v1/movies/root-folders", { credentials: "include" });
-      if (!res.ok) throw new Error("Failed to fetch root folders");
-      setFolders(await res.json());
-    } catch {
-      setError("Failed to load root folders");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  React.useEffect(() => { fetchFolders(); }, [fetchFolders]);
-
-  const deleteFolder = async (id: string) => {
+  const handleDelete = async (id: string) => {
     setDeletingId(id);
     setError("");
     try {
-      const res = await fetch(`/api/v1/movies/root-folders/${id}`, {
-        method: "DELETE",
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error("Failed to delete root folder");
-      await fetchFolders();
+      await deleteMutation.mutateAsync(id);
     } catch {
-      setError("Failed to delete root folder");
+      setError("Failed to delete library");
     } finally {
       setDeletingId(null);
     }
   };
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="flex items-center gap-2 text-muted-foreground py-8 justify-center">
-        <Loader2 className="h-4 w-4 animate-spin" /> Loading root folders…
+        <Loader2 className="h-4 w-4 animate-spin" /> Loading libraries…
       </div>
     );
   }
@@ -509,9 +483,9 @@ function RootFoldersPanel() {
     <div className="space-y-6">
       <div className="flex items-start justify-between">
         <div>
-          <h3 className="text-sm font-medium mb-1">Root Folders</h3>
+          <h3 className="text-sm font-medium mb-1">Libraries</h3>
           <p className="text-xs text-muted-foreground">
-            Root folders are the directories where Loom stores your media files. Each movie or show is placed in a subfolder within the root folder you assign when adding it.
+            Libraries are the directories where Loom stores your media files. Each movie or show is placed in a subfolder within the library you assign when adding it.
           </p>
         </div>
         <Button size="sm" onClick={() => setDialogOpen(true)}>
@@ -525,36 +499,40 @@ function RootFoldersPanel() {
         </div>
       )}
 
-      {/* Folder list */}
-      {folders.length === 0 ? (
+      {/* Library list */}
+      {libraries.length === 0 ? (
         <div className="rounded-lg border border-dashed border-muted-foreground/30 py-10 text-center">
           <Folder className="h-10 w-10 mx-auto text-muted-foreground/40 mb-3" />
-          <p className="text-sm text-muted-foreground">No root folders configured</p>
+          <p className="text-sm text-muted-foreground">No libraries configured</p>
           <p className="text-xs text-muted-foreground/60 mt-1">
-            Click <strong>Add</strong> to configure your first media folder
+            Click <strong>Add</strong> to configure your first media library
           </p>
         </div>
       ) : (
         <div className="space-y-2">
-          {folders.map((folder) => (
+          {libraries.map((lib) => (
             <div
-              key={folder.id}
+              key={lib.id}
               className="flex items-center justify-between rounded-lg border border-border bg-card px-4 py-3 group hover:border-primary/30 transition-colors"
             >
               <div className="flex items-center gap-3 min-w-0">
                 <Folder className="h-5 w-5 text-primary shrink-0" />
                 <div className="min-w-0">
-                  <p className="text-sm font-mono truncate">{folder.path}</p>
+                  <p className="text-sm font-medium truncate">{lib.name}</p>
+                  <p className="text-xs font-mono text-muted-foreground truncate">{lib.path}</p>
                   <div className="flex items-center gap-3 mt-0.5">
-                    {folder.freeSpace > 0 && (
+                    <Badge variant="secondary" className="text-xs capitalize">
+                      {lib.media_type}
+                    </Badge>
+                    {lib.disk_space && lib.disk_space.free_bytes > 0 && (
                       <span className="flex items-center gap-1 text-xs text-muted-foreground">
                         <HardDrive className="h-3 w-3" />
-                        {formatBytes(folder.freeSpace)} free
+                        {formatBytes(lib.disk_space.free_bytes)} free
                       </span>
                     )}
-                    {folder.unmappedCount > 0 && (
+                    {lib.unmapped_count > 0 && (
                       <Badge variant="secondary" className="text-xs">
-                        {folder.unmappedCount} unmapped
+                        {lib.unmapped_count} unmapped
                       </Badge>
                     )}
                   </div>
@@ -564,10 +542,10 @@ function RootFoldersPanel() {
                 variant="ghost"
                 size="icon"
                 className="opacity-0 group-hover:opacity-100 text-destructive hover:text-destructive hover:bg-destructive/10 transition-opacity"
-                onClick={() => deleteFolder(folder.id)}
-                disabled={deletingId === folder.id}
+                onClick={() => handleDelete(lib.id)}
+                disabled={deletingId === lib.id}
               >
-                {deletingId === folder.id ? (
+                {deletingId === lib.id ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
                   <Trash2 className="h-4 w-4" />
@@ -578,10 +556,10 @@ function RootFoldersPanel() {
         </div>
       )}
 
-      <AddRootFolderDialog
+      <AddLibraryDialog
         open={dialogOpen}
         onOpenChange={setDialogOpen}
-        onAdded={fetchFolders}
+        onAdded={() => refetch()}
       />
     </div>
   );
@@ -592,7 +570,7 @@ function RootFoldersPanel() {
 function MediaManagementPanel() {
   return (
     <div className="space-y-8">
-      <RootFoldersPanel />
+      <LibrariesPanel />
       <NamingSettings />
       <ImportModePanel />
     </div>

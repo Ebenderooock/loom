@@ -52,7 +52,7 @@ func (s *SeriesScanner) StartSeriesScan(ctx context.Context, rootFolder string) 
 	scanID := uuid.New().String()[:8]
 	result := &ScanResult{
 		ID:             scanID,
-		RootFolderPath: rootFolder,
+		RootFolderPath: rootFolder,  // kept as "rootFolderPath" in JSON for backward compat
 		Status:         ScanStatusRunning,
 		StartedAt:      time.Now(),
 	}

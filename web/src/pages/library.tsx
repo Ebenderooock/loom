@@ -136,7 +136,7 @@ export function LibraryPage() {
           <CardContent className="flex flex-col items-center justify-center py-12 text-muted-foreground">
             <FolderOpen className="mb-4 h-12 w-12" />
             <p className="text-lg font-medium">No libraries configured</p>
-            <p className="text-sm">Add a root folder to start managing your media.</p>
+            <p className="text-sm">Add a library to start managing your media.</p>
           </CardContent>
         </Card>
       )}
@@ -404,7 +404,7 @@ function LibraryFormDialog({
           <DialogDescription>
             {isEdit
               ? "Update the library configuration."
-              : "Add a root folder to monitor for media files."}
+              : "Add a library to monitor for media files."}
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">

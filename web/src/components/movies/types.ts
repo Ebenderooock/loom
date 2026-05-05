@@ -1,8 +1,3 @@
-export interface RootFolder {
-  id: string;
-  path: string;
-}
-
 export interface QualityProfile {
   id: string;
   name: string;
@@ -24,7 +19,7 @@ export interface Movie {
   status: string;
   monitoringStatus: string;
   qualityProfileId: string;
-  rootFolderId: string;
+  libraryId: string;
   createdAt?: string;
   updatedAt?: string;
 }

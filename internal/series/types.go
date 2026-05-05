@@ -60,7 +60,7 @@ type Series struct {
 	SeriesType       SeriesType       `json:"series_type"`
 	MetadataProvider string           `json:"metadata_provider,omitempty"`
 	QualityProfileID string           `json:"quality_profile_id,omitempty"`
-	RootFolderID     string           `json:"root_folder_id,omitempty"`
+	LibraryID        string           `json:"library_id,omitempty"`
 	MonitoringStatus MonitoringStatus `json:"monitoring_status"`
 	SeasonFolder     bool             `json:"season_folder"`
 	ReleaseDate      string           `json:"release_date,omitempty"`
@@ -193,7 +193,7 @@ func (m *MediaInfoMap) Scan(value interface{}) error {
 type AddSeriesRequest struct {
 	TMDBID           string `json:"tmdbId"`
 	QualityProfileID string `json:"qualityProfileId"`
-	RootFolderID     string `json:"rootFolderId"`
+	LibraryID        string `json:"libraryId"`
 	MonitoringStatus string `json:"monitoringStatus,omitempty"`
 	SeriesType       string `json:"seriesType,omitempty"`
 	SeasonFolder     *bool  `json:"seasonFolder,omitempty"`
@@ -215,7 +215,7 @@ type UpdateSeriesRequest struct {
 	SeriesType       *string  `json:"seriesType,omitempty"`
 	MonitoringStatus *string  `json:"monitoringStatus,omitempty"`
 	QualityProfileID *string  `json:"qualityProfileId,omitempty"`
-	RootFolderID     *string  `json:"rootFolderId,omitempty"`
+	LibraryID        *string  `json:"libraryId,omitempty"`
 	SeasonFolder     *bool    `json:"seasonFolder,omitempty"`
 }
 

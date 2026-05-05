@@ -41,7 +41,7 @@ const (
 // ScanResult holds the outcome of a library scan.
 type ScanResult struct {
 	ID             string     `json:"id"`
-	RootFolderID   string     `json:"rootFolderId"`
+	LibraryID      string     `json:"libraryId"`
 	RootFolderPath string     `json:"rootFolderPath"`
 	Status         ScanStatus `json:"status"`
 	TotalFiles     int        `json:"totalFiles"`
@@ -93,12 +93,12 @@ func New(movieSvc movies.Service, meta MetadataSearcher, logger *slog.Logger) *S
 }
 
 // StartScan begins an async scan of the given root folder.
-func (s *Scanner) StartScan(ctx context.Context, rootFolder *movies.RootFolder) string {
+func (s *Scanner) StartScan(ctx context.Context, libraryID, libraryPath string) string {
 	scanID := uuid.New().String()[:8]
 	result := &ScanResult{
 		ID:             scanID,
-		RootFolderID:   rootFolder.ID,
-		RootFolderPath: rootFolder.Path,
+		LibraryID:      libraryID,
+		RootFolderPath: libraryPath,
 		Status:         ScanStatusRunning,
 		StartedAt:      time.Now(),
 	}
@@ -108,7 +108,7 @@ func (s *Scanner) StartScan(ctx context.Context, rootFolder *movies.RootFolder) 
 	s.unmatched[scanID] = nil
 	s.mu.Unlock()
 
-	go s.runScan(context.Background(), scanID, rootFolder)
+	go s.runScan(context.Background(), scanID, libraryPath)
 
 	return scanID
 }
@@ -139,7 +139,7 @@ func (s *Scanner) GetAllUnmatched() []*UnmatchedFile {
 }
 
 // MatchFile manually matches an unmatched file to a TMDB movie.
-func (s *Scanner) MatchFile(ctx context.Context, unmatchedID string, tmdbID string, rootFolderID string, qualityProfileID string) error {
+func (s *Scanner) MatchFile(ctx context.Context, unmatchedID string, tmdbID string, libraryID string, qualityProfileID string) error {
 	s.mu.Lock()
 	var target *UnmatchedFile
 	var scanID string
@@ -168,7 +168,7 @@ func (s *Scanner) MatchFile(ctx context.Context, unmatchedID string, tmdbID stri
 	}
 
 	meta := results[0]
-	if err := s.importFile(ctx, target.FilePath, target.Size, target.Quality, target.Source, meta, rootFolderID, qualityProfileID); err != nil {
+	if err := s.importFile(ctx, target.FilePath, target.Size, target.Quality, target.Source, meta, libraryID, qualityProfileID); err != nil {
 		return err
 	}
 
@@ -198,11 +198,11 @@ func (s *Scanner) failScan(scanID string, errMsg string) {
 	s.logger.Error("scan failed", "scanId", scanID, "error", errMsg)
 }
 
-func (s *Scanner) runScan(ctx context.Context, scanID string, rootFolder *movies.RootFolder) {
-	s.logger.Info("starting library scan", "scanId", scanID, "path", rootFolder.Path)
+func (s *Scanner) runScan(ctx context.Context, scanID string, libraryPath string) {
+	s.logger.Info("starting library scan", "scanId", scanID, "path", libraryPath)
 
 	// Walk the root folder and find video files
-	scanned, err := walkFolder(rootFolder.Path)
+	scanned, err := walkFolder(libraryPath)
 	if err != nil {
 		s.failScan(scanID, fmt.Sprintf("walk error: %v", err))
 		return
@@ -216,7 +216,7 @@ func (s *Scanner) runScan(ctx context.Context, scanID string, rootFolder *movies
 	s.logger.Info("found video files", "scanId", scanID, "count", len(scanned))
 
 	for _, sf := range scanned {
-		if err := s.processFile(ctx, scanID, sf, rootFolder); err != nil {
+		if err := s.processFile(ctx, scanID, sf, result.LibraryID); err != nil {
 			s.logger.Warn("failed to process file", "path", sf.Path, "err", err)
 			s.mu.Lock()
 			result.Errors = append(result.Errors, fmt.Sprintf("%s: %v", sf.Path, err))
@@ -303,7 +303,7 @@ func shouldIgnore(name string) bool {
 	return false
 }
 
-func (s *Scanner) processFile(ctx context.Context, scanID string, sf scannedFile, rootFolder *movies.RootFolder) error {
+func (s *Scanner) processFile(ctx context.Context, scanID string, sf scannedFile, libraryID string) error {
 	result := s.GetScan(scanID)
 
 	// Check if this file is already in the DB
@@ -340,7 +340,7 @@ func (s *Scanner) processFile(ctx context.Context, scanID string, sf scannedFile
 	result.Matched++
 	s.mu.Unlock()
 
-	if err := s.importFile(ctx, sf.Path, sf.Size, quality, sf.Rel.Source, matched, rootFolder.ID, ""); err != nil {
+	if err := s.importFile(ctx, sf.Path, sf.Size, quality, sf.Rel.Source, matched, libraryID, ""); err != nil {
 		return err
 	}
 
@@ -375,7 +375,7 @@ func (s *Scanner) findExistingFileByPath(ctx context.Context, path string) (bool
 	return false, fmt.Errorf("not implemented")
 }
 
-func (s *Scanner) importFile(ctx context.Context, filePath string, size int64, quality, source string, meta *metadata.MovieMetadata, rootFolderID, qualityProfileID string) error {
+func (s *Scanner) importFile(ctx context.Context, filePath string, size int64, quality, source string, meta *metadata.MovieMetadata, libraryID, qualityProfileID string) error {
 	tmdbID := ""
 	if meta.TMDBID != nil {
 		tmdbID = *meta.TMDBID
@@ -414,7 +414,7 @@ func (s *Scanner) importFile(ctx context.Context, filePath string, size int64, q
 			Rating:           meta.Rating,
 			Status:           movies.MovieStatusMissing,
 			MonitoringStatus: movies.MonitoringStatusMonitored,
-			RootFolderID:     rootFolderID,
+			LibraryID:        libraryID,
 			QualityProfileID: qualityProfileID,
 			CreatedAt:        now,
 			UpdatedAt:        now,

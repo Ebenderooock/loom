@@ -34,7 +34,8 @@ import { toast } from "sonner";
 import { SeriesStatusBadge } from "./series-status-badge";
 import { ReleaseSearchDialog } from "@/components/search/release-search-dialog";
 import { AltTitlesSection } from "@/components/alt-titles";
-import type { Series, Season, Episode, QualityProfile, RootFolder, Credits, CreditPerson } from "./types";
+import type { Library } from "../../lib/libraries-api";
+import type { Series, Season, Episode, QualityProfile, Credits, CreditPerson } from "./types";
 import { TMDB_IMG } from "./types";
 
 // ─── Helpers ──────────────────────────────────────────────────────────
@@ -379,7 +380,7 @@ export function SeriesDetailSheet({
   open,
   onOpenChange,
   profiles,
-  rootFolders,
+  libraries,
   onUpdated,
   onDeleted,
 }: {
@@ -387,7 +388,7 @@ export function SeriesDetailSheet({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   profiles: QualityProfile[];
-  rootFolders: RootFolder[];
+  libraries: Library[];
   onUpdated: (updated: Series) => void;
   onDeleted: (id: string) => void;
 }) {
@@ -448,7 +449,7 @@ export function SeriesDetailSheet({
   if (!series) return null;
 
   const profile = profiles.find(p => p.id === series.qualityProfileId);
-  const folder = rootFolders.find(f => f.id === series.rootFolderId);
+  const library = libraries.find(l => l.id === series.libraryId);
   const isMonitored = series.monitoringStatus === "monitored";
 
   const handleSave = async () => {
@@ -707,7 +708,7 @@ export function SeriesDetailSheet({
                 )}
                 <DetailRow label="Type"><span className="capitalize">{series.seriesType || "Standard"}</span></DetailRow>
                 {profile && <DetailRow label="Quality">{profile.name}</DetailRow>}
-                {folder && <DetailRow label="Root Folder">{folder.path}</DetailRow>}
+                {library && <DetailRow label="Library">{library.name}</DetailRow>}
               </div>
               {series.genres?.length > 0 && (
                 <div className="flex gap-1.5 flex-wrap mb-3">

@@ -45,7 +45,7 @@ type Movie struct {
 	PosterPath         string            `json:"poster_path,omitempty"`
 	MetadataProvider   string            `json:"metadata_provider,omitempty"`
 	QualityProfileID   string            `json:"quality_profile_id,omitempty"`
-	RootFolderID       string            `json:"root_folder_id,omitempty"`
+	LibraryID          string            `json:"library_id,omitempty"`
 	Status             MovieStatus       `json:"status"`
 	ReleaseDate        string            `json:"release_date,omitempty"`
 	LastSearchAt       *time.Time        `json:"last_search_at,omitempty"`
@@ -53,17 +53,6 @@ type Movie struct {
 	CreatedAt          time.Time         `json:"created_at"`
 	UpdatedAt          time.Time         `json:"updated_at"`
 	DeletedAt          *time.Time        `json:"deleted_at,omitempty"`
-}
-
-// RootFolder represents a filesystem path where movies are stored.
-type RootFolder struct {
-	ID            string     `json:"id"`
-	Path          string     `json:"path"`
-	FreeSpace     int64      `json:"free_space"`
-	UnmappedCount int        `json:"unmapped_count"`
-	CreatedAt     time.Time  `json:"created_at"`
-	UpdatedAt     time.Time  `json:"updated_at"`
-	DeletedAt     *time.Time `json:"deleted_at,omitempty"`
 }
 
 // MovieFile represents a single file on disk associated with a movie.
@@ -142,7 +131,7 @@ type CreateMovieRequest struct {
 	PosterPath       string       `json:"poster_path,omitempty"`
 	MetadataProvider string       `json:"metadata_provider,omitempty"`
 	QualityProfileID string       `json:"quality_profile_id"`
-	RootFolderID     string       `json:"root_folder_id"`
+	LibraryID        string       `json:"library_id"`
 	ReleaseDate      string       `json:"release_date,omitempty"`
 	MonitoringStatus *string      `json:"monitoring_status,omitempty"`
 	Search           bool         `json:"search,omitempty"`
@@ -160,7 +149,7 @@ type UpdateMovieRequest struct {
 	PosterPath       *string      `json:"poster_path,omitempty"`
 	MonitoringStatus *string      `json:"monitoring_status,omitempty"`
 	QualityProfileID *string      `json:"quality_profile_id,omitempty"`
-	RootFolderID     *string      `json:"root_folder_id,omitempty"`
+	LibraryID        *string      `json:"library_id,omitempty"`
 }
 
 // ListMoviesFilter is used to filter the movies list.
@@ -182,11 +171,6 @@ type ListMoviesResponse struct {
 // SearchMoviesResponse wraps search results.
 type SearchMoviesResponse struct {
 	Data []Movie `json:"data"`
-}
-
-// CreateRootFolderRequest is the payload for adding a root folder.
-type CreateRootFolderRequest struct {
-	Path string `json:"path"`
 }
 
 // SetMonitoringStatusRequest is the payload for updating monitoring status.

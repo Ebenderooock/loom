@@ -7,7 +7,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/loomctl/loom/internal/metadata"
 )
 
@@ -34,11 +33,6 @@ type Service interface {
 	DeleteMovie(ctx context.Context, id string) error
 	SetMonitoringStatus(ctx context.Context, movieID string, status MonitoringStatus) error
 	RefreshMovie(ctx context.Context, id string) error
-
-	GetRootFolder(ctx context.Context, id string) (*RootFolder, error)
-	AddRootFolder(ctx context.Context, path string) (*RootFolder, error)
-	ListRootFolders(ctx context.Context) ([]*RootFolder, error)
-	DeleteRootFolder(ctx context.Context, id string) error
 
 	ListMovieFiles(ctx context.Context, movieID string) ([]*MovieFile, error)
 	AddMovieFile(ctx context.Context, mf *MovieFile) error
@@ -353,61 +347,6 @@ func (s *service) RefreshMovie(ctx context.Context, id string) error {
 
 	s.cache.Delete(id)
 	return nil
-}
-
-// GetRootFolder retrieves a root folder by ID.
-func (s *service) GetRootFolder(ctx context.Context, id string) (*RootFolder, error) {
-	if id == "" {
-		return nil, fmt.Errorf("movies: root folder ID required")
-	}
-
-	return s.repo.GetRootFolder(ctx, id)
-}
-
-// AddRootFolder adds a new root folder.
-func (s *service) AddRootFolder(ctx context.Context, path string) (*RootFolder, error) {
-	if path == "" {
-		return nil, fmt.Errorf("movies: root folder path required")
-	}
-
-	// Check if path already exists
-	existing, err := s.repo.ListRootFolders(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("movies: add root folder: %w", err)
-	}
-
-	for _, f := range existing {
-		if f.Path == path {
-			return nil, fmt.Errorf("movies: root folder already exists")
-		}
-	}
-
-	rf := &RootFolder{
-		ID:        uuid.New().String(),
-		Path:      path,
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
-	}
-
-	if err := s.repo.AddRootFolder(ctx, rf); err != nil {
-		return nil, fmt.Errorf("movies: add root folder: %w", err)
-	}
-
-	return rf, nil
-}
-
-// ListRootFolders retrieves all root folders.
-func (s *service) ListRootFolders(ctx context.Context) ([]*RootFolder, error) {
-	return s.repo.ListRootFolders(ctx)
-}
-
-// DeleteRootFolder removes a root folder.
-func (s *service) DeleteRootFolder(ctx context.Context, id string) error {
-	if id == "" {
-		return fmt.Errorf("movies: root folder ID required")
-	}
-
-	return s.repo.DeleteRootFolder(ctx, id)
 }
 
 // ListMovieFiles retrieves all files for a movie.
