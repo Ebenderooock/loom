@@ -1,3 +1,4 @@
+-- +goose Up
 -- 0022_blocklist: Stalled/failed download blocklist
 CREATE TABLE IF NOT EXISTS blocklist (
     id           TEXT PRIMARY KEY,

@@ -1,3 +1,4 @@
+-- +goose Up
 -- 0023_import_history: Track file imports from download clients into the media library.
 CREATE TABLE IF NOT EXISTS import_history (
     id          TEXT PRIMARY KEY,
