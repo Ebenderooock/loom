@@ -2061,7 +2061,7 @@ function MediaPreferencesPanel() {
     const next = [...audioOrder];
     const target = idx + dir;
     if (target < 0 || target >= next.length) return;
-    [next[idx], next[target]] = [next[target], next[idx]];
+    [next[idx], next[target]] = [next[target]!, next[idx]!];
     setAudioOrder(next);
     setDirty(true);
   };

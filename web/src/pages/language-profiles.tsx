@@ -36,7 +36,6 @@ import {
   useCreateLanguageProfile,
   useUpdateLanguageProfile,
   useDeleteLanguageProfile,
-  type Language,
   type LanguagePriority,
   type LanguageProfile,
 } from "@/lib/language-profiles-api";
@@ -253,7 +252,7 @@ function ProfileDialog({
     setPriorities((prev) => {
       const items = [...prev];
       const [moved] = items.splice(dragIdx, 1);
-      items.splice(idx, 0, moved);
+      items.splice(idx, 0, moved!);
       return items;
     });
     setDragIdx(idx);

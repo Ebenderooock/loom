@@ -23,8 +23,8 @@ import {
   SheetDescription,
 } from "@/components/ui/sheet";
 import {
-  Loader2, Tv, Star, Calendar, Clock,
-  Eye, EyeOff, Trash2, Pencil,
+  Loader2, Tv, Star,
+  Trash2, Pencil,
   Bookmark, BookmarkCheck, RefreshCw, ChevronRight, ChevronDown,
   Users, FileVideo, Search, FolderSearch,
   Archive, ArchiveRestore,
@@ -156,8 +156,8 @@ function SeasonAccordion({
   seriesId,
   season,
   seriesTitle,
-  tmdbId,
-  imdbId,
+  tmdbId: _tmdbId,
+  imdbId: _imdbId,
   onSearchOpen,
 }: {
   seriesId: string;

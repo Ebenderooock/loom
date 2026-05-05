@@ -33,7 +33,7 @@ import {
 
 export function ImportListsPage() {
   const { setHeader } = usePageHeader();
-  React.useEffect(() => setHeader("Import Lists"), [setHeader]);
+  React.useEffect(() => setHeader({ title: "Import Lists" }), [setHeader]);
 
   const [tab, setTab] = React.useState<"lists" | "exclusions">("lists");
 

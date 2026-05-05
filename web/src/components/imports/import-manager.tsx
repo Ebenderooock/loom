@@ -41,7 +41,7 @@ import {
   useImportDecisions,
   useReimportFile,
 } from "@/lib/imports-api";
-import type { ScanResult, ImportDecision } from "@/lib/imports-api";
+import type { ScanResult } from "@/lib/imports-api";
 
 // ─── Helpers ────────────────────────────────────────────────────────────
 

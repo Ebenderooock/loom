@@ -16,7 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  Plus, Search, Loader2, Tv, Star, Check, ArrowLeft,
+  Plus, Search, Loader2, Tv, Check, ArrowLeft,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { RootFolder, QualityProfile, TMDBSeriesResult } from "./types";
