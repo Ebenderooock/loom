@@ -1,5 +1,12 @@
 package cardigann
 
+import (
+	"fmt"
+	"sort"
+
+	"gopkg.in/yaml.v3"
+)
+
 // Definition mirrors a single Cardigann YAML file. Field names and
 // nesting follow the upstream schema documented at
 // https://github.com/Cardigann/cardigann/blob/master/docs/definitions.md
@@ -10,11 +17,17 @@ package cardigann
 // not influence runtime behaviour. See docs/indexers-cardigann.md for
 // the supported / deferred matrix and the engine.go implementation.
 type Definition struct {
+	// ID is the Prowlarr-style identifier. Prowlarr uses `id:` where
+	// Cardigann uses `site:`. When both are present, Site takes
+	// precedence; when only ID is set it is copied to Site during
+	// validation.
+	ID string `yaml:"id,omitempty"`
+
 	// Site is the short, kebab-case identifier (e.g. "exampletracker").
 	// It is the document-level key used for cross-referencing inside
 	// Loom (definition_id in the indexer config) and matches the
 	// Cardigann convention.
-	Site string `yaml:"site"`
+	Site string `yaml:"site,omitempty"`
 
 	// Name is the human-readable tracker name shown in the UI.
 	Name string `yaml:"name"`
@@ -37,6 +50,14 @@ type Definition struct {
 	// Links are the candidate base URLs. The engine uses Links[0] as
 	// the working base URL; failover across links is deferred.
 	Links []string `yaml:"links"`
+
+	// LegacyLinks are old URLs that no longer work. Prowlarr includes
+	// these for migration purposes; Loom parses but ignores them.
+	LegacyLinks []string `yaml:"legacylinks,omitempty"`
+
+	// RequestDelay is a Prowlarr-specific rate-limit hint (ms between
+	// requests). Parsed but not enforced by Loom today.
+	RequestDelay int `yaml:"requestDelay,omitempty"`
 
 	// Caps describes search modes and the per-tracker → Newznab
 	// category mapping. Surfaced via Indexer.Caps().
@@ -68,8 +89,10 @@ type Definition struct {
 // Caps mirrors Cardigann's `caps:` block.
 type Caps struct {
 	// Categories is the legacy form: a flat map of tracker-side
-	// category name → Newznab numeric ID.
-	Categories map[string]int `yaml:"categories,omitempty"`
+	// category name → Newznab category name or numeric ID string.
+	// Prowlarr uses string values (e.g. "Movies/HD"); legacy
+	// Cardigann used numeric IDs. Both are accepted.
+	Categories map[string]string `yaml:"categories,omitempty"`
 
 	// CategoryMappings is the modern form: a list of {id, cat}
 	// entries linking a tracker-specific category id to a
@@ -98,11 +121,61 @@ type CategoryMapping struct {
 
 // Setting describes one operator-supplied credential or option.
 type Setting struct {
-	Name    string   `yaml:"name"`
-	Type    string   `yaml:"type,omitempty"`
-	Label   string   `yaml:"label,omitempty"`
-	Default string   `yaml:"default,omitempty"`
-	Options []string `yaml:"options,omitempty"`
+	Name    string         `yaml:"name"`
+	Type    string         `yaml:"type,omitempty"`
+	Label   string         `yaml:"label,omitempty"`
+	Default string         `yaml:"default,omitempty"`
+	Options SettingOptions `yaml:"options,omitempty"`
+}
+
+// SettingOptions handles both Prowlarr's map format ({4: created, 7: seeders})
+// and the legacy Cardigann slice format (["option1", "option2"]).
+type SettingOptions struct {
+	Map map[string]string
+}
+
+// UnmarshalYAML implements yaml.Unmarshaler so that options can be
+// decoded from either a YAML mapping or a sequence.
+func (o *SettingOptions) UnmarshalYAML(value *yaml.Node) error {
+	switch value.Kind {
+	case yaml.MappingNode:
+		m := make(map[string]string)
+		if err := value.Decode(&m); err != nil {
+			return err
+		}
+		o.Map = m
+	case yaml.SequenceNode:
+		var s []string
+		if err := value.Decode(&s); err != nil {
+			return err
+		}
+		m := make(map[string]string, len(s))
+		for _, v := range s {
+			m[v] = v
+		}
+		o.Map = m
+	case yaml.ScalarNode:
+		if value.Tag == "!!null" || value.Value == "" {
+			return nil
+		}
+		o.Map = map[string]string{value.Value: value.Value}
+	default:
+		return fmt.Errorf("unsupported YAML node kind %d for SettingOptions", value.Kind)
+	}
+	return nil
+}
+
+// Values returns the option keys in sorted order (useful for UI display).
+func (o SettingOptions) Values() []string {
+	if len(o.Map) == 0 {
+		return nil
+	}
+	keys := make([]string, 0, len(o.Map))
+	for k := range o.Map {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 // Login describes the form-based login handshake.
@@ -112,6 +185,36 @@ type Setting struct {
 // `cookie`. Any other value triggers an unsupported-mode error at
 // engine.Test() time so failures surface with a clear message rather
 // than silently producing zero results.
+
+// FlexStringSlice handles YAML values that can be either a scalar
+// string or a sequence of strings (Prowlarr uses ["value"] for headers).
+type FlexStringSlice []string
+
+// UnmarshalYAML implements yaml.Unmarshaler for FlexStringSlice.
+func (f *FlexStringSlice) UnmarshalYAML(value *yaml.Node) error {
+	switch value.Kind {
+	case yaml.ScalarNode:
+		*f = FlexStringSlice{value.Value}
+	case yaml.SequenceNode:
+		var s []string
+		if err := value.Decode(&s); err != nil {
+			return err
+		}
+		*f = FlexStringSlice(s)
+	default:
+		return fmt.Errorf("unsupported YAML node kind %d for FlexStringSlice", value.Kind)
+	}
+	return nil
+}
+
+// First returns the first value or empty string.
+func (f FlexStringSlice) First() string {
+	if len(f) > 0 {
+		return f[0]
+	}
+	return ""
+}
+
 type Login struct {
 	// Path is the login endpoint relative to the site base URL. It
 	// MUST be set for form/post logins.
@@ -142,9 +245,44 @@ type ErrorBlock struct {
 	// error message.
 	Selector string `yaml:"selector"`
 
-	// Message is an optional override surfaced verbatim instead of
-	// the selector's text content.
-	Message string `yaml:"message,omitempty"`
+	// Message handles both Prowlarr's nested {selector: "..."} format
+	// and the plain string used by legacy Cardigann definitions.
+	Message FlexMessage `yaml:"message,omitempty"`
+}
+
+// FlexMessage handles Prowlarr's SelectorBlock format ({selector: "span.msg"})
+// and the plain string format used by legacy Cardigann definitions.
+type FlexMessage struct {
+	Text     string // plain message text
+	Selector string // CSS selector to extract message (Prowlarr format)
+}
+
+// UnmarshalYAML implements yaml.Unmarshaler for FlexMessage.
+func (fm *FlexMessage) UnmarshalYAML(value *yaml.Node) error {
+	switch value.Kind {
+	case yaml.ScalarNode:
+		fm.Text = value.Value
+	case yaml.MappingNode:
+		var m struct {
+			Selector string `yaml:"selector"`
+			Text     string `yaml:"text"`
+		}
+		if err := value.Decode(&m); err != nil {
+			return err
+		}
+		fm.Selector = m.Selector
+		if m.Text != "" {
+			fm.Text = m.Text
+		}
+	default:
+		return fmt.Errorf("unsupported YAML node kind %d for FlexMessage", value.Kind)
+	}
+	return nil
+}
+
+// IsZero returns true if neither text nor selector is set.
+func (fm FlexMessage) IsZero() bool {
+	return fm.Text == "" && fm.Selector == ""
 }
 
 // LoginTest describes the post-login verification probe.
@@ -174,8 +312,9 @@ type Search struct {
 	// engine.go for the available context.
 	Inputs map[string]string `yaml:"inputs,omitempty"`
 
-	// Headers are extra HTTP headers (templated values).
-	Headers map[string]string `yaml:"headers,omitempty"`
+	// Headers are extra HTTP headers. Values can be a plain string or
+	// a list (Prowlarr format); the FlexStringSlice type handles both.
+	Headers map[string]FlexStringSlice `yaml:"headers,omitempty"`
 
 	// Rows is the selector that yields one node per release.
 	Rows RowsBlock `yaml:"rows"`
@@ -187,9 +326,34 @@ type Search struct {
 
 // SearchPath is one candidate search endpoint.
 type SearchPath struct {
-	Path     string `yaml:"path"`
-	Method   string `yaml:"method,omitempty"`
-	Response string `yaml:"response,omitempty"`
+	Path     string       `yaml:"path"`
+	Method   string       `yaml:"method,omitempty"`
+	Response FlexResponse `yaml:"response,omitempty"`
+}
+
+// FlexResponse handles Prowlarr's {type: json} map format and plain
+// string format for the response field.
+type FlexResponse struct {
+	Type string
+}
+
+// UnmarshalYAML implements yaml.Unmarshaler for FlexResponse.
+func (fr *FlexResponse) UnmarshalYAML(value *yaml.Node) error {
+	switch value.Kind {
+	case yaml.ScalarNode:
+		fr.Type = value.Value
+	case yaml.MappingNode:
+		var m struct {
+			Type string `yaml:"type"`
+		}
+		if err := value.Decode(&m); err != nil {
+			return err
+		}
+		fr.Type = m.Type
+	default:
+		return fmt.Errorf("unsupported YAML node kind %d for FlexResponse", value.Kind)
+	}
+	return nil
 }
 
 // RowsBlock is the selector that returns the per-release nodes.

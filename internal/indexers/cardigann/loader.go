@@ -214,8 +214,12 @@ func validate(def *Definition) error {
 	if def == nil {
 		return errors.New("definition is nil")
 	}
+	// Prowlarr uses `id:` where Cardigann uses `site:`. Accept either.
+	if strings.TrimSpace(def.Site) == "" && strings.TrimSpace(def.ID) != "" {
+		def.Site = strings.TrimSpace(def.ID)
+	}
 	if strings.TrimSpace(def.Site) == "" {
-		return errors.New("site is required")
+		return errors.New("site (or id) is required")
 	}
 	if strings.TrimSpace(def.Name) == "" {
 		return errors.New("name is required")
@@ -260,6 +264,68 @@ func definitionID(path string, def *Definition) string {
 		return strings.TrimSpace(def.Site)
 	}
 	return base
+}
+
+// LoadEmbedded merges definitions from an fs.FS (typically an embed.FS)
+// into the loader. User-supplied definitions loaded from disk take
+// precedence over embedded ones, so operators can override bundled
+// definitions by placing a file with the same name in the definitions
+// directory.
+func (l *Loader) LoadEmbedded(fsys fs.FS) (defs []*Definition, errs []error) {
+	walkErr := fs.WalkDir(fsys, ".", func(p string, d fs.DirEntry, werr error) error {
+		if werr != nil {
+			errs = append(errs, fmt.Errorf("cardigann: embedded walk %q: %w", p, werr))
+			return nil
+		}
+		if d.IsDir() {
+			return nil
+		}
+		if !isYAMLFile(p) {
+			return nil
+		}
+		data, err := fs.ReadFile(fsys, p)
+		if err != nil {
+			errs = append(errs, &LoadError{
+				Path: "embedded:" + p,
+				Hint: "unexpected read error on embedded file",
+				Err:  err,
+			})
+			return nil
+		}
+		def, err := ParseDefinition(data)
+		if err != nil {
+			errs = append(errs, &LoadError{
+				Path: "embedded:" + p,
+				Hint: "bundled definition failed validation",
+				Err:  err,
+			})
+			return nil
+		}
+		id := definitionID(p, def)
+
+		l.mu.RLock()
+		_, exists := l.all[id]
+		l.mu.RUnlock()
+
+		if exists {
+			// Disk definition takes precedence; skip the embedded one.
+			return nil
+		}
+
+		l.mu.Lock()
+		// Double-check after acquiring write lock.
+		if _, exists := l.all[id]; !exists {
+			l.all[id] = def
+			l.src[id] = "embedded:" + p
+			defs = append(defs, def)
+		}
+		l.mu.Unlock()
+		return nil
+	})
+	if walkErr != nil {
+		errs = append(errs, fmt.Errorf("cardigann: embedded walk: %w", walkErr))
+	}
+	return defs, errs
 }
 
 // isYAMLFile is true for paths whose lowercase extension is .yml or
