@@ -163,7 +163,7 @@ function SidebarNav({
   }, [path]);
 
   return (
-    <nav aria-label="Primary" className="flex flex-col gap-0.5 p-2 overflow-y-auto flex-1">
+    <nav aria-label="Primary" className="flex flex-col gap-0.5 p-2 overflow-y-auto flex-1 min-h-0 scrollbar-thin">
       {NAV_SECTIONS.map((section) => {
         const isOpen = openSections[section.id];
         const hasLabel = section.label !== "";
