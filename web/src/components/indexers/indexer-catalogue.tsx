@@ -3,7 +3,7 @@
 //   Step 2 — configure the selected definition (or Newznab/Torznab)
 
 import * as React from "react";
-import { ArrowLeft, Globe, Lock, Plus, Search, ShieldCheck } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Globe, Loader2, Lock, Plus, Search, ShieldCheck, XCircle } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -22,8 +22,10 @@ import {
   ApiError,
   useCreateIndexer,
   useDefinitions,
+  useTestIndexerConfig,
   type IndexerDefinition,
   type Proxy,
+  type TestResult,
 } from "@/lib/indexers-api";
 
 // ---- helpers -------------------------------------------------------
@@ -395,6 +397,8 @@ function CardigannConfigForm({
     }
     return init;
   });
+  const [testResult, setTestResult] = React.useState<TestResult | null>(null);
+  const testConfig = useTestIndexerConfig();
 
   function updateField(key: string, value: string) {
     setFields((prev) => ({ ...prev, [key]: value }));
@@ -406,6 +410,31 @@ function CardigannConfigForm({
     onSubmit(definition, fields, name, enabled, priority, proxyId);
   }
 
+  async function handleTest() {
+    setTestResult(null);
+    if (!name.trim()) return;
+    try {
+      const config: Record<string, unknown> = { definition_id: definition.id };
+      for (const [k, v] of Object.entries(fields)) {
+        if (v) config[k] = v;
+      }
+      const res = await testConfig.mutateAsync({
+        kind: "cardigann",
+        name: name.trim(),
+        config,
+        ...(proxyId ? { proxy_id: proxyId } : {}),
+      });
+      setTestResult(res);
+    } catch (err) {
+      setTestResult({
+        ok: false,
+        latency_ms: 0,
+        error: err instanceof Error ? err.message : "Test failed",
+      });
+    }
+  }
+
+  const siteUrl = definition.links?.[0];
   const settings = definition.settings ?? [];
 
   return (
@@ -425,6 +454,15 @@ function CardigannConfigForm({
         {typeBadge(definition.type)}
       </div>
 
+      {siteUrl ? (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Globe className="h-4 w-4" />
+          <a href={siteUrl} target="_blank" rel="noopener noreferrer" className="underline">
+            {siteUrl}
+          </a>
+        </div>
+      ) : null}
+
       {definition.description ? (
         <p className="text-sm text-muted-foreground">{definition.description}</p>
       ) : null}
@@ -435,6 +473,29 @@ function CardigannConfigForm({
           className="rounded-md border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-700 dark:text-red-300"
         >
           {topError}
+        </div>
+      ) : null}
+
+      {testResult ? (
+        <div
+          role="status"
+          className={`flex items-center gap-2 rounded-md border p-3 text-sm ${
+            testResult.ok
+              ? "border-green-500/40 bg-green-500/10 text-green-700 dark:text-green-300"
+              : "border-red-500/40 bg-red-500/10 text-red-700 dark:text-red-300"
+          }`}
+        >
+          {testResult.ok ? (
+            <>
+              <CheckCircle2 className="h-4 w-4" />
+              Connection successful ({testResult.latency_ms}ms)
+            </>
+          ) : (
+            <>
+              <XCircle className="h-4 w-4" />
+              {testResult.error || "Test failed"}
+            </>
+          )}
         </div>
       ) : null}
 
@@ -517,6 +578,21 @@ function CardigannConfigForm({
       <div className="mt-2 flex justify-end gap-2">
         <Button type="button" variant="ghost" onClick={onCancel}>
           Cancel
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          disabled={testConfig.isPending || !name.trim()}
+          onClick={handleTest}
+        >
+          {testConfig.isPending ? (
+            <>
+              <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+              Testing…
+            </>
+          ) : (
+            "Test"
+          )}
         </Button>
         <Button type="submit" disabled={submitting}>
           {submitting ? "Saving…" : "Add indexer"}
