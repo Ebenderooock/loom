@@ -368,6 +368,10 @@ func (s *Server) Bus() eventbus.Bus {
 func (s *Server) newMux() http.Handler {
 	r := chi.NewRouter()
 
+	// HTTP metrics middleware — registered early so it captures all requests.
+	httpMetrics := telemetry.NewHTTPMetrics(s.tel.Registry())
+	r.Use(httpMetrics.Handler)
+
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
 	r.Use(s.accessLog)
