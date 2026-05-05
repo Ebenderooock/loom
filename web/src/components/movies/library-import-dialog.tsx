@@ -18,8 +18,8 @@ import type { Library } from "../../lib/libraries-api";
 
 interface ScanResult {
   id: string;
-  rootFolderId: string;
-  rootFolderPath: string;  status: "running" | "completed" | "failed";
+  libraryId: string;
+  libraryPath: string;  status: "running" | "completed" | "failed";
   totalFiles: number;
   matched: number;
   unmatched: number;
@@ -233,7 +233,7 @@ export function LibraryImportDialog({
             <div className="space-y-4">
               <div className="flex items-center gap-2 text-sm">
                 <Loader2 className="w-4 h-4 animate-spin text-primary" />
-                <span>Scanning {scanResult.rootFolderPath}...</span>
+                <span>Scanning {scanResult.libraryPath}...</span>
               </div>
               <Progress value={progress} className="h-2" />
               <div className="grid grid-cols-3 gap-3 text-center">
