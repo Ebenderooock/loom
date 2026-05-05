@@ -502,6 +502,21 @@ func (s *Server) newMux() http.Handler {
 			r.Mount("/api/v1/libraries", libraries.Router(s.libStore, s.libScanner, s.logger))
 		}
 
+		// API key management routes
+		if s.apiKeyStore != nil {
+			r.Mount("/api/v1/api-keys", apikeys.Router(s.apiKeyStore, s.logger))
+		}
+
+		// Command queue routes
+		if s.cmdQueue != nil {
+			r.Mount("/api/v1/command", commands.Router(s.cmdQueue, s.logger))
+		}
+
+		// Quality profile routes
+		if s.qpStore != nil {
+			r.Mount("/api/v1/quality-profiles", qualityprofiles.Router(s.qpStore, s.logger))
+		}
+
 		// System status (authenticated)
 		r.Group(func(r chi.Router) {
 			r.Use(etagMiddleware)
