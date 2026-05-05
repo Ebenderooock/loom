@@ -11,6 +11,11 @@ import (
 	"github.com/loomctl/loom/internal/storage"
 )
 
+// buildAuthStore creates an auth Store from a storage.DB.
+func buildAuthStore(db storage.DB) (auth.Store, error) {
+	return auth.StoreFromDB(db)
+}
+
 // buildAuthService composes an *auth.Service from cfg + an opened storage
 // connection. It loads (or generates) the session secret out of
 // schema_meta and wires the OIDC + reverse-proxy helpers.

@@ -16,6 +16,19 @@ const (
 	MonitoringStatusDeleted     MonitoringStatus = "deleted"
 )
 
+// MovieStatus represents the current state of a movie in the library.
+type MovieStatus string
+
+const (
+	MovieStatusMissing              MovieStatus = "missing"
+	MovieStatusUnreleased           MovieStatus = "unreleased"
+	MovieStatusDownloading          MovieStatus = "downloading"
+	MovieStatusStoring              MovieStatus = "storing"
+	MovieStatusAvailableWrongQuality  MovieStatus = "available_wrong_quality"
+	MovieStatusAvailableRightQuality  MovieStatus = "available_right_quality"
+	MovieStatusAvailableHigherQuality MovieStatus = "available_higher_quality"
+)
+
 // Movie represents a movie in the library.
 type Movie struct {
 	ID                 string            `json:"id"`
@@ -31,6 +44,10 @@ type Movie struct {
 	BackdropPath       string            `json:"backdrop_path,omitempty"`
 	PosterPath         string            `json:"poster_path,omitempty"`
 	MetadataProvider   string            `json:"metadata_provider,omitempty"`
+	QualityProfileID   string            `json:"quality_profile_id,omitempty"`
+	RootFolderID       string            `json:"root_folder_id,omitempty"`
+	Status             MovieStatus       `json:"status"`
+	ReleaseDate        string            `json:"release_date,omitempty"`
 	LastSearchAt       *time.Time        `json:"last_search_at,omitempty"`
 	MonitoringStatus   MonitoringStatus  `json:"monitoring_status"`
 	CreatedAt          time.Time         `json:"created_at"`
@@ -124,7 +141,11 @@ type CreateMovieRequest struct {
 	BackdropPath     string       `json:"backdrop_path,omitempty"`
 	PosterPath       string       `json:"poster_path,omitempty"`
 	MetadataProvider string       `json:"metadata_provider,omitempty"`
+	QualityProfileID string       `json:"quality_profile_id"`
+	RootFolderID     string       `json:"root_folder_id"`
+	ReleaseDate      string       `json:"release_date,omitempty"`
 	MonitoringStatus *string      `json:"monitoring_status,omitempty"`
+	Search           bool         `json:"search,omitempty"`
 }
 
 // UpdateMovieRequest is the payload for updating a movie.
@@ -138,6 +159,8 @@ type UpdateMovieRequest struct {
 	BackdropPath     *string      `json:"backdrop_path,omitempty"`
 	PosterPath       *string      `json:"poster_path,omitempty"`
 	MonitoringStatus *string      `json:"monitoring_status,omitempty"`
+	QualityProfileID *string      `json:"quality_profile_id,omitempty"`
+	RootFolderID     *string      `json:"root_folder_id,omitempty"`
 }
 
 // ListMoviesFilter is used to filter the movies list.

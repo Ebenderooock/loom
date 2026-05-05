@@ -114,3 +114,31 @@ func buildPosterURL(posterPath string) string {
 	// Prepend CDN URL to relative path
 	return posterCDNURL + posterPath
 }
+
+// mapCreditsResponse converts a TMDb CreditsResponse to our Credits model.
+func mapCreditsResponse(resp *CreditsResponse) *metadata.Credits {
+	credits := &metadata.Credits{
+		Cast: make([]metadata.CreditPerson, 0, len(resp.Cast)),
+		Crew: make([]metadata.CreditPerson, 0, len(resp.Crew)),
+	}
+	for _, c := range resp.Cast {
+		credits.Cast = append(credits.Cast, metadata.CreditPerson{
+			ID:          c.ID,
+			Name:        c.Name,
+			Role:        c.Character,
+			Department:  "Acting",
+			ProfilePath: c.ProfilePath,
+			Order:       c.Order,
+		})
+	}
+	for _, c := range resp.Crew {
+		credits.Crew = append(credits.Crew, metadata.CreditPerson{
+			ID:          c.ID,
+			Name:        c.Name,
+			Role:        c.Job,
+			Department:  c.Department,
+			ProfilePath: c.ProfilePath,
+		})
+	}
+	return credits
+}

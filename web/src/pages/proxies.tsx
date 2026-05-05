@@ -5,6 +5,7 @@
 import * as React from "react";
 import { MoreHorizontal, Plus } from "lucide-react";
 import { toast } from "sonner";
+import { useSetPageHeader } from "@/hooks/use-page-header";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -77,6 +78,7 @@ function describeProxy(p: Proxy): string {
 }
 
 export function ProxiesPage() {
+  useSetPageHeader("Proxies");
   const proxiesQ = useProxies();
   const create = useCreateProxy();
   const patch = usePatchProxy();
@@ -148,13 +150,6 @@ export function ProxiesPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-end justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Proxies</h1>
-          <p className="text-sm text-muted-foreground">
-            Outbound proxies (HTTP/HTTPS/SOCKS5/FlareSolverr) you can attach to
-            indexers.
-          </p>
-        </div>
         <Button onClick={() => setDialog({ kind: "create" })} className="gap-2">
           <Plus className="h-4 w-4" />
           Add proxy

@@ -11,11 +11,14 @@ import (
 	"time"
 
 	"github.com/loomctl/loom/internal/appconfig"
+	"github.com/loomctl/loom/internal/downloads"
+	"github.com/loomctl/loom/internal/imports"
 	"github.com/loomctl/loom/internal/indexers/newznabserver"
 	"github.com/loomctl/loom/internal/kernel/config"
 	"github.com/loomctl/loom/internal/kernel/logging"
 	"github.com/loomctl/loom/internal/kernel/telemetry"
 	"github.com/loomctl/loom/internal/rss"
+	"github.com/loomctl/loom/internal/safety"
 	"github.com/loomctl/loom/internal/server"
 	"github.com/loomctl/loom/internal/storage"
 )
@@ -54,13 +57,17 @@ func cmdServe(ctx context.Context, args []string) error {
 	appCfgPath := filepath.Join(cfg.ConfigDir, "loom.json")
 	appCfg, err := appconfig.Load(appCfgPath)
 	if err != nil {
-		logger.Error("failed to load app config, creating default", "path", appCfgPath, "err", err)
-		// Create default config on first run
-		appCfg = appconfig.NewDefault()
-		if err := appCfg.Save(appCfgPath); err != nil {
-			return fmt.Errorf("save default app config: %w", err)
+		if os.IsNotExist(err) || errors.Is(err, os.ErrNotExist) {
+			// First run — create default config
+			appCfg = appconfig.NewDefault()
+			if err := appCfg.Save(appCfgPath); err != nil {
+				return fmt.Errorf("save default app config: %w", err)
+			}
+			logger.Info("default app config created", "path", appCfgPath)
+		} else {
+			// Parse/validation error — fail startup, don't overwrite user's config
+			return fmt.Errorf("load app config %s: %w", appCfgPath, err)
 		}
-		logger.Info("default app config created", "path", appCfgPath)
 	}
 
 	tel, err := telemetry.Init(ctx, cfg)
@@ -77,6 +84,9 @@ func cmdServe(ctx context.Context, args []string) error {
 		return fmt.Errorf("migrate storage: %w", err)
 	}
 
+	// Startup reconciliation: config is the source of truth for admin credentials.
+	// The auth service's ReconcileAdmin will be called after authSvc is created.
+
 	if cfg.HotReload {
 		config.OnConfigChange(func(_ *config.Config) {
 			logger.Info("config reloaded")
@@ -89,6 +99,15 @@ func cmdServe(ctx context.Context, args []string) error {
 	authSvc, err := buildAuthService(ctx, cfg, db, appCfg, appCfgPath, logger)
 	if err != nil {
 		return fmt.Errorf("init auth: %w", err)
+	}
+
+	// Reconcile admin user from config on startup.
+	// If setup_complete=true and admin credentials are in config, ensure DB matches.
+	// This enables: password reset via config edit, K8s pre-configured deployments.
+	if appCfg.SetupComplete && appCfg.Admin.Username != "" && appCfg.Admin.PasswordHash != "" {
+		if _, err := authSvc.ReconcileAdmin(ctx); err != nil {
+			return fmt.Errorf("reconcile admin from config: %w", err)
+		}
 	}
 
 	sched, err := buildScheduler(ctx, cfg, db, logger)
@@ -145,8 +164,56 @@ func cmdServe(ctx context.Context, args []string) error {
 		return fmt.Errorf("init server: %w", err)
 	}
 	srv.SetDownloads(downloadSvc)
+	srv.SetBlocklistStore(downloads.NewBlocklistStore(db.DB()))
 	srv.SetRSS(rssSvc)
 	srv.SetMovies(moviesSvc)
+
+	// Build and wire the library scanner
+	scannerSvc := buildScanner(moviesSvc, cfg, logger)
+	srv.SetScanner(scannerSvc)
+
+	// Build and wire the file organizer
+	organizerSvc := buildOrganizer(moviesSvc, db, logger)
+	if mode := cfg.MediaManagement.ImportMode; mode != "" {
+		organizerSvc.SetImportMode(mode)
+	}
+	srv.SetOrganizer(organizerSvc)
+
+	// Build and wire the TV series service
+	seriesSvc := buildSeriesService(db)
+	srv.SetSeries(seriesSvc)
+
+	// Build and wire the series scanner
+	seriesScannerSvc := buildSeriesScanner(seriesSvc, logger)
+	srv.SetSeriesScanner(seriesScannerSvc)
+
+	// Build and wire the notifications service
+	notifSvc := buildNotificationsService(db)
+	srv.SetNotifications(notifSvc)
+
+	// Build and wire the import pipeline
+	importMode := imports.ImportMode(cfg.MediaManagement.ImportMode)
+	if importMode == "" {
+		importMode = imports.ImportModeMove
+	}
+	importPipeline, err := imports.NewPipeline(imports.PipelineOptions{
+		DB:          db.DB(),
+		Bus:         srv.Bus(),
+		DownloadSvc: downloadSvc,
+		MoviesSvc:   moviesSvc,
+		SeriesSvc:   seriesSvc,
+		NotifSvc:    notifSvc,
+		PostVal:     safety.NewPostValidator(safety.DefaultConfig()),
+		ReviewStore: safety.NewReviewStore(db.DB()),
+		Logger:      logger,
+		ImportMode:  importMode,
+	})
+	if err != nil {
+		return fmt.Errorf("init import pipeline: %w", err)
+	}
+	importPipeline.Start()
+	defer importPipeline.Stop()
+	srv.SetImportPipeline(importPipeline)
 
 	errCh := make(chan error, 1)
 	go func() { errCh <- srv.Start() }()

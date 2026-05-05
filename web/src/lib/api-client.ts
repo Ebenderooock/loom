@@ -1,6 +1,6 @@
 import { useAuth } from "@/hooks/use-auth";
 
-const API_BASE_URL = "http://localhost:8989/api/v1";
+const API_BASE_URL = "/api/v1";
 
 export class ApiError extends Error {
   constructor(

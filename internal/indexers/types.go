@@ -153,6 +153,23 @@ type Result struct {
 	// trackers in addition to (or instead of) a `.torrent` Link.
 	// Empty when the indexer does not advertise one.
 	MagnetURI string `json:"magnet_uri,omitempty"`
+
+	// Freeleech indicates the release does not count against the
+	// user's download quota on the tracker (downloadvolumefactor=0).
+	Freeleech bool `json:"freeleech,omitempty"`
+
+	// Internal indicates the release was uploaded by the tracker's
+	// internal encoding group / staff.
+	Internal bool `json:"internal,omitempty"`
+
+	// Scene indicates the release originates from the Scene
+	// (pre-database match or explicit tracker tag).
+	Scene bool `json:"scene,omitempty"`
+
+	// Score is a computed ranking score (higher = better). Populated
+	// by the scoring middleware, not by individual indexer
+	// implementations.
+	Score float64 `json:"score"`
 }
 
 // Results is the whole-of-search response from a single indexer. Total
@@ -227,3 +244,32 @@ var ErrNotFound = errors.New("indexer not found")
 // ErrUnknownKind is returned when a Definition references a Kind that
 // has not been registered.
 var ErrUnknownKind = errors.New("unknown indexer kind")
+
+// CardigannDefSummary is a lightweight projection of a Cardigann YAML
+// definition used by the "list available definitions" API endpoint.
+type CardigannDefSummary struct {
+	ID          string
+	Name        string
+	Description string
+	Type        string
+	Language    string
+	Links       []string
+	Settings    []CardigannSettingSummary
+	Categories  []string // top-level Newznab categories (e.g. "Movies", "TV", "Audio")
+}
+
+// CardigannSettingSummary is one credential/option field from a YAML
+// definition.
+type CardigannSettingSummary struct {
+	Name    string
+	Type    string
+	Label   string
+	Default string
+}
+
+// DefinitionLister abstracts the ability to list available Cardigann
+// definitions. The cardigann package implements this so the handlers
+// package can use it without importing cardigann (avoiding a cycle).
+type DefinitionLister interface {
+	ListDefinitions() []CardigannDefSummary
+}

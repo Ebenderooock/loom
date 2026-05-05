@@ -109,13 +109,33 @@ type SearchOptions struct {
 	MaxParallel int
 }
 
+// IndexerDiagnostic records timing and status for a single indexer's
+// contribution to a fan-out search. Surfaced via the diagnostics
+// field of the search response.
+type IndexerDiagnostic struct {
+	Name           string `json:"name"`
+	Status         string `json:"status"` // "ok", "error", "timeout"
+	ResponseTimeMS int64  `json:"response_time_ms"`
+	ResultCount    int    `json:"result_count"`
+	ErrorMessage   string `json:"error_message,omitempty"`
+}
+
+// SearchDiagnostics carries observability metadata for a search
+// request — per-indexer breakdowns and overall timing.
+type SearchDiagnostics struct {
+	Indexers         []IndexerDiagnostic `json:"indexers"`
+	TotalResults     int                 `json:"total_results"`
+	SearchDurationMS int64               `json:"search_duration_ms"`
+}
+
 // AggregatedResults is what Registry.Search returns: the merged result
 // list plus a per-source error map for indexers that failed or timed
 // out. Errors keyed by indexer ID never appear in Results — the two
 // maps are disjoint.
 type AggregatedResults struct {
-	Results []Result          `json:"results"`
-	Errors  map[string]string `json:"errors"`
+	Results     []Result          `json:"results"`
+	Errors      map[string]string `json:"errors"`
+	Diagnostics *SearchDiagnostics `json:"diagnostics,omitempty"`
 }
 
 // Search fans q out across the indexers selected by opts. It returns
@@ -134,12 +154,15 @@ func (r *Registry) Search(ctx context.Context, q Query, opts SearchOptions) Aggr
 	sem := make(chan struct{}, limit)
 
 	type partial struct {
-		id  string
-		out *Results
-		err error
+		id      string
+		name    string
+		out     *Results
+		err     error
+		elapsed time.Duration
 	}
 	ch := make(chan partial, len(targets))
 	var wg sync.WaitGroup
+	searchStart := time.Now()
 
 	for _, ix := range targets {
 		wg.Add(1)
@@ -148,8 +171,9 @@ func (r *Registry) Search(ctx context.Context, q Query, opts SearchOptions) Aggr
 		go func() {
 			defer wg.Done()
 			defer func() { <-sem }()
+			start := time.Now()
 			res, err := runOne(ctx, ix, q, opts.PerIndexerTimeout)
-			ch <- partial{id: ix.ID(), out: res, err: err}
+			ch <- partial{id: ix.ID(), name: ix.Name(), out: res, err: err, elapsed: time.Since(start)}
 		}()
 	}
 
@@ -159,15 +183,35 @@ func (r *Registry) Search(ctx context.Context, q Query, opts SearchOptions) Aggr
 	}()
 
 	agg := AggregatedResults{Results: []Result{}, Errors: map[string]string{}}
+	diags := make([]IndexerDiagnostic, 0, len(targets))
 	for p := range ch {
+		d := IndexerDiagnostic{
+			Name:           p.name,
+			ResponseTimeMS: p.elapsed.Milliseconds(),
+		}
 		if p.err != nil {
 			agg.Errors[p.id] = p.err.Error()
-			continue
+			d.ErrorMessage = p.err.Error()
+			if errors.Is(p.err, context.DeadlineExceeded) {
+				d.Status = "timeout"
+			} else {
+				d.Status = "error"
+			}
+		} else if p.out != nil {
+			d.Status = "ok"
+			d.ResultCount = len(p.out.Items)
+			agg.Results = append(agg.Results, p.out.Items...)
+		} else {
+			d.Status = "ok"
 		}
-		if p.out == nil {
-			continue
-		}
-		agg.Results = append(agg.Results, p.out.Items...)
+		diags = append(diags, d)
+	}
+
+	sort.Slice(diags, func(i, j int) bool { return diags[i].Name < diags[j].Name })
+	agg.Diagnostics = &SearchDiagnostics{
+		Indexers:         diags,
+		TotalResults:     len(agg.Results),
+		SearchDurationMS: time.Since(searchStart).Milliseconds(),
 	}
 	return agg
 }

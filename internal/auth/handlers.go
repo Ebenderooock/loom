@@ -16,7 +16,6 @@ func (s *Service) Mount(r chi.Router) {
 	r.Route("/api/v1/auth", func(r chi.Router) {
 		r.Get("/status", s.handleStatus)
 		r.Post("/initialize", s.handleInitialize)
-		r.Post("/setup", s.handleSetup)
 		r.Post("/login", s.handleLogin)
 		r.Post("/logout", s.handleLogout)
 		r.Get("/oidc/login", s.handleOIDCLogin)
@@ -38,18 +37,17 @@ type statusResponse struct {
 }
 
 func (s *Service) handleStatus(w http.ResponseWriter, r *http.Request) {
-	count, err := s.store.CountUsers(r.Context())
-	if err != nil {
-		writeAuthError(w, http.StatusInternalServerError, "internal error")
-		return
-	}
+	// Setup is required ONLY if config.setup_complete is false.
+	// The config flag is the source of truth.
+	setupRequired := !s.appConfig.SetupComplete
 
 	resp := statusResponse{
-		SetupRequired: count == 0,
+		SetupRequired: setupRequired,
 	}
 
-	// Check if user is authenticated
-	id := IdentityFrom(r.Context())
+	// Check if user is authenticated (resolve directly since this route
+	// is not behind RequireAuth middleware)
+	id, _ := s.resolveIdentity(r)
 	if id != nil {
 		resp.IsAuthenticated = true
 		out := userOut{
@@ -87,14 +85,11 @@ type initializeResponse struct {
 }
 
 // handleInitialize sets up initial admin credentials and writes them to app config.
-// Only callable when no users exist and config.setup_complete is false.
+// Only callable when config.setup_complete is false.
+// The config flag is the authoritative source of truth for setup status.
 func (s *Service) handleInitialize(w http.ResponseWriter, r *http.Request) {
-	count, err := s.store.CountUsers(r.Context())
-	if err != nil {
-		writeAuthError(w, http.StatusInternalServerError, "internal error")
-		return
-	}
-	if count > 0 {
+	// Setup is blocked ONLY if config says it's complete
+	if s.appConfig.SetupComplete {
 		writeAuthError(w, http.StatusForbidden, "setup already complete")
 		return
 	}
@@ -117,46 +112,55 @@ func (s *Service) handleInitialize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Create user in database
-	u, err := s.store.CreateUser(r.Context(), CreateUserParams{
-		Username:     req.Username,
-		PasswordHash: hash,
-		Email:        strings.TrimSpace(req.Email),
-		Role:         "admin",
-	})
+	// Save to config FIRST (config is durable source of truth)
+	s.appConfig.SetupComplete = true
+	s.appConfig.Admin.Username = req.Username
+	s.appConfig.Admin.PasswordHash = hash
+	if err := s.appConfig.Save(s.appConfigPath); err != nil {
+		// Revert in-memory state
+		s.appConfig.SetupComplete = false
+		s.appConfig.Admin.Username = ""
+		s.appConfig.Admin.PasswordHash = ""
+		s.logger.Error("failed to save app config", "err", err)
+		writeAuthError(w, http.StatusInternalServerError, "save config")
+		return
+	}
+
+	// Reconcile admin user in database (upsert: preserves user ID and API keys)
+	u, err := s.ReconcileAdmin(r.Context())
 	if err != nil {
+		s.logger.Error("failed to reconcile admin user", "err", err)
 		writeAuthError(w, http.StatusInternalServerError, "create user")
 		return
 	}
 
-	// Generate API key for integrations
-	key, keyHash, prefix, err := GenerateAPIKey()
+	// Generate API key for integrations (only if user has none)
+	keys, err := s.store.ListAPIKeysForUser(r.Context(), u.ID)
 	if err != nil {
-		writeAuthError(w, http.StatusInternalServerError, "generate api key")
+		writeAuthError(w, http.StatusInternalServerError, "list api keys")
 		return
 	}
 
-	_, err = s.store.CreateAPIKey(r.Context(), CreateAPIKeyParams{
-		UserID:  u.ID,
-		Name:    "Default",
-		KeyHash: keyHash,
-		Prefix:  prefix,
-	})
-	if err != nil {
-		writeAuthError(w, http.StatusInternalServerError, "create api key")
-		return
-	}
-
-	// Update app config with credentials and mark setup complete
-	s.appConfig.SetupComplete = true
-	s.appConfig.Admin.Username = req.Username
-	s.appConfig.Admin.PasswordHash = hash
-
-	// Save config to file
-	if err := s.appConfig.Save(s.appConfigPath); err != nil {
-		s.logger.Error("failed to save app config", "err", err)
-		writeAuthError(w, http.StatusInternalServerError, "save config")
-		return
+	var apiKey string
+	if len(keys) == 0 {
+		key, keyHash, prefix, err := GenerateAPIKey()
+		if err != nil {
+			writeAuthError(w, http.StatusInternalServerError, "generate api key")
+			return
+		}
+		_, err = s.store.CreateAPIKey(r.Context(), CreateAPIKeyParams{
+			UserID:  u.ID,
+			Name:    "Default",
+			KeyHash: keyHash,
+			Prefix:  prefix,
+		})
+		if err != nil {
+			writeAuthError(w, http.StatusInternalServerError, "create api key")
+			return
+		}
+		apiKey = key
+	} else {
+		apiKey = keys[0].Prefix + "..."
 	}
 
 	// Issue session cookie
@@ -167,82 +171,7 @@ func (s *Service) handleInitialize(w http.ResponseWriter, r *http.Request) {
 
 	writeJSONStatus(w, http.StatusCreated, initializeResponse{
 		User:   toUserOut(u),
-		APIKey: key,
-	})
-}
-
-type setupRequest struct {
-	Username string `json:"username"`
-	Password string `json:"password"`
-	Email    string `json:"email"`
-}
-
-type setupResponse struct {
-	User   userOut `json:"user"`
-	APIKey string  `json:"api_key"`
-}
-
-func (s *Service) handleSetup(w http.ResponseWriter, r *http.Request) {
-	count, err := s.store.CountUsers(r.Context())
-	if err != nil {
-		writeAuthError(w, http.StatusInternalServerError, "internal error")
-		return
-	}
-	if count > 0 {
-		writeAuthError(w, http.StatusForbidden, "setup already complete")
-		return
-	}
-	var req setupRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeAuthError(w, http.StatusBadRequest, "invalid json")
-		return
-	}
-	req.Username = strings.TrimSpace(req.Username)
-	if req.Username == "" || req.Password == "" {
-		writeAuthError(w, http.StatusBadRequest, "username and password required")
-		return
-	}
-	hash, err := HashPassword(req.Password)
-	if err != nil {
-		writeAuthError(w, http.StatusInternalServerError, "hash password")
-		return
-	}
-	u, err := s.store.CreateUser(r.Context(), CreateUserParams{
-		Username:     req.Username,
-		PasswordHash: hash,
-		Email:        strings.TrimSpace(req.Email),
-		Role:         "admin",
-	})
-	if err != nil {
-		writeAuthError(w, http.StatusInternalServerError, "create user")
-		return
-	}
-
-	// Generate an API key for integrations
-	key, keyHash, prefix, err := GenerateAPIKey()
-	if err != nil {
-		writeAuthError(w, http.StatusInternalServerError, "generate api key")
-		return
-	}
-
-	_, err = s.store.CreateAPIKey(r.Context(), CreateAPIKeyParams{
-		UserID:  u.ID,
-		Name:    "Default",
-		KeyHash: keyHash,
-		Prefix:  prefix,
-	})
-	if err != nil {
-		writeAuthError(w, http.StatusInternalServerError, "create api key")
-		return
-	}
-
-	if err := IssueSessionCookie(w, r, s.sessionSecret, u.ID, s.sessionTTL, s.cookieSecure); err != nil {
-		writeAuthError(w, http.StatusInternalServerError, "issue session")
-		return
-	}
-	writeJSONStatus(w, http.StatusCreated, setupResponse{
-		User:   toUserOut(u),
-		APIKey: key,
+		APIKey: apiKey,
 	})
 }
 

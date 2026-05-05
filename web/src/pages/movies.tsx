@@ -1,449 +1,405 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogFooter,
+  DialogDescription,
 } from "@/components/ui/dialog";
-import { AlertCircle, Plus, Trash2, Loader2, Film, Folder } from "lucide-react";
+import {
+  Table,
+  TableBody,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Plus, Search, Film, Loader2, FolderSearch } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
+import { useSetPageHeader } from "@/hooks/use-page-header";
+import { toast } from "sonner";
+import {
+  MovieCard,
+  MovieListRow,
+  MovieToolbar,
+  AddMovieDialog,
+  MovieDetailSheet,
+  sortMovies,
+} from "@/components/movies";
+import { LibraryImportDialog } from "@/components/movies/library-import-dialog";
+import { OrganizeDialog } from "@/components/movies/organize-dialog";
+import type { Movie, RootFolder, QualityProfile, SortKey, ViewMode } from "@/components/movies";
 
-interface RootFolder {
-  id: string;
-  path: string;
-  createdAt: string;
+
+// ─── Small helpers (page-local) ──────────────────────────────────────
+
+function CardSkeleton() {
+  return <Skeleton className="aspect-[2/3] rounded-lg" />;
 }
 
-interface Movie {
-  id: string;
-  title: string;
-  year: number;
-  tmdbId: number;
-  posterPath?: string;
-  monitoringStatus: string;
+function GridSkeletons() {
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 gap-4">
+      {Array.from({ length: 12 }).map((_, i) => <CardSkeleton key={i} />)}
+    </div>
+  );
 }
 
-type AddLibraryStep = "type" | "input" | "browse" | "manual";
-type LibraryType = "movies" | "series";
+function ListSkeletons() {
+  return (
+    <div className="space-y-2">
+      {Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-12 w-full rounded-md" />)}
+    </div>
+  );
+}
+
+function BulkDeleteDialog({
+  open,
+  onOpenChange,
+  count,
+  onConfirm,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  count: number;
+  onConfirm: () => void;
+}) {
+  const [deleting, setDeleting] = useState(false);
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Delete {count} Movie{count !== 1 ? "s" : ""}</DialogTitle>
+          <DialogDescription>
+            This will remove {count} movie{count !== 1 ? "s" : ""} from your library. This cannot be undone.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="flex justify-end gap-2 mt-4">
+          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button
+            variant="destructive"
+            disabled={deleting}
+            onClick={async () => {
+              setDeleting(true);
+              await onConfirm();
+              setDeleting(false);
+              onOpenChange(false);
+            }}
+          >
+            Delete
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── Main Page ──────────────────────────────────────────────────────────
 
 export function MoviesPage() {
   const { isAuthenticated } = useAuth();
-  const [rootFolders, setRootFolders] = useState<RootFolder[]>([]);
   const [movies, setMovies] = useState<Movie[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
+  const [rootFolders, setRootFolders] = useState<RootFolder[]>([]);
+  const [qualityProfiles, setQualityProfiles] = useState<QualityProfile[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [addDialogOpen, setAddDialogOpen] = useState(false);
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [organizeDialogOpen, setOrganizeDialogOpen] = useState(false);
 
-  // Modal states
-  const [showAddLibraryModal, setShowAddLibraryModal] = useState(false);
-  const [addLibraryStep, setAddLibraryStep] = useState<AddLibraryStep>("type");
-  const [selectedType, setSelectedType] = useState<LibraryType | null>(null);
-  const [manualPath, setManualPath] = useState("");
-  const [modalError, setModalError] = useState<string | null>(null);
+  // Filters & sort
+  const [filterText, setFilterText] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [profileFilter, setProfileFilter] = useState("all");
+  const [monitoredFilter, setMonitoredFilter] = useState("all");
+  const [sortKey, setSortKey] = useState<SortKey>("title-asc");
+  const [viewMode, setViewMode] = useState<ViewMode>("grid");
 
-  // Fetch root folders on mount (only when authenticated)
-  useEffect(() => {
-    if (isAuthenticated) {
-      fetchRootFolders();
-      fetchMovies();
-    }
+  // Selection
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+
+  // Detail sheet
+  const [detailMovie, setDetailMovie] = useState<Movie | null>(null);
+  const [detailOpen, setDetailOpen] = useState(false);
+
+  const fetchAll = useCallback(async () => {
+    if (!isAuthenticated) return;
+    setIsLoading(true);
+    try {
+      const [moviesRes, foldersRes, profilesRes] = await Promise.all([
+        fetch("/api/v1/movies?limit=200", { credentials: "include" }),
+        fetch("/api/v1/movies/root-folders", { credentials: "include" }),
+        fetch("/api/v1/movies/quality-profiles", { credentials: "include" }),
+      ]);
+      if (moviesRes.ok) {
+        const data = await moviesRes.json();
+        setMovies(Array.isArray(data) ? data : data.data ?? []);
+      }
+      if (foldersRes.ok) {
+        const data = await foldersRes.json();
+        setRootFolders(Array.isArray(data) ? data : []);
+      }
+      if (profilesRes.ok) {
+        const data = await profilesRes.json();
+        setQualityProfiles(Array.isArray(data) ? data : []);
+      }
+    } catch { /* ignore */ } finally { setIsLoading(false); }
   }, [isAuthenticated]);
 
-  // Clear page-level success message after 3 seconds
-  useEffect(() => {
-    if (success) {
-      const timer = setTimeout(() => setSuccess(null), 3000);
-      return () => clearTimeout(timer);
+  useEffect(() => { fetchAll(); }, [fetchAll]);
+
+  const existingTmdbIds = useMemo(
+    () => new Set(movies.map(m => m.tmdbId).filter(Boolean) as string[]),
+    [movies],
+  );
+
+  // Filter + sort pipeline
+  const processed = useMemo(() => {
+    let list = movies;
+    if (filterText) {
+      const q = filterText.toLowerCase();
+      list = list.filter(m => m.title.toLowerCase().includes(q));
     }
-  }, [success]);
+    if (statusFilter !== "all") {
+      list = list.filter(m => m.status === statusFilter);
+    }
+    if (profileFilter !== "all") {
+      list = list.filter(m => m.qualityProfileId === profileFilter);
+    }
+    if (monitoredFilter === "monitored") {
+      list = list.filter(m => m.monitoringStatus === "monitored");
+    } else if (monitoredFilter === "unmonitored") {
+      list = list.filter(m => m.monitoringStatus === "unmonitored");
+    }
+    return sortMovies(list, sortKey);
+  }, [movies, filterText, statusFilter, profileFilter, monitoredFilter, sortKey]);
 
-  const fetchRootFolders = async () => {
-    try {
-      setError(null);
-      const response = await fetch("http://localhost:8989/api/v1/movies/root-folders", {
-        credentials: "include",
-      });
+  // Selection helpers
+  const selectMode = selectedIds.size > 0;
+  const allSelected = processed.length > 0 && processed.every(m => selectedIds.has(m.id));
 
-      if (!response.ok) throw new Error("Failed to fetch root folders");
-      const data = await response.json();
-      setRootFolders(data || []);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to fetch root folders");
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (allSelected) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(processed.map(m => m.id)));
     }
   };
 
-  const fetchMovies = async () => {
-    try {
-      const response = await fetch("http://localhost:8989/api/v1/movies/", {
-        credentials: "include",
-      });
+  const clearSelection = () => setSelectedIds(new Set());
 
-      if (!response.ok) throw new Error("Failed to fetch movies");
-      const data = await response.json();
-      // Handle both paginated response {data: [...]} and direct array response
-      const moviesList = Array.isArray(data) ? data : (data?.data || []);
-      setMovies(moviesList);
-    } catch (err) {
-      console.error("Failed to fetch movies:", err);
-      setError("Failed to fetch movies");
-    }
-  };
-
-  const addRootFolder = async (path: string) => {
-    if (!path.trim()) {
-      setModalError("Path is required");
-      return;
-    }
-
-    setIsLoading(true);
-    setModalError(null);
-
-    try {
-      const response = await fetch("http://localhost:8989/api/v1/movies/root-folders", {
-        method: "POST",
-        credentials: "include",
+  // Bulk actions
+  const handleBulkMonitoring = async (status: "monitored" | "unmonitored") => {
+    const ids = Array.from(selectedIds);
+    await Promise.all(ids.map(id =>
+      fetch(`/api/v1/movies/${id}/monitoring`, {
+        method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ path: path.trim() }),
-      });
-
-      if (!response.ok) {
-        const err = await response.json().catch(() => ({}));
-        throw new Error(err.error || "Failed to add root folder");
-      }
-
-      setSuccess("Root folder added successfully");
-      closeModal();
-      fetchRootFolders();
-    } catch (err) {
-      setModalError(err instanceof Error ? err.message : "Failed to add root folder");
-    } finally {
-      setIsLoading(false);
-    }
+        credentials: "include",
+        body: JSON.stringify({ status }),
+      }),
+    ));
+    setMovies(prev => prev.map(m => selectedIds.has(m.id) ? { ...m, monitoringStatus: status } : m));
+    clearSelection();
+    toast.success(`${ids.length} movie${ids.length !== 1 ? "s" : ""} set to ${status}`);
   };
 
-  const deleteRootFolder = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this root folder?")) return;
-
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      const response = await fetch(
-        `http://localhost:8989/api/v1/movies/root-folders/${id}`,
-        {
-          method: "DELETE",
-          credentials: "include",
-        }
-      );
-
-      if (!response.ok) throw new Error("Failed to delete root folder");
-
-      setSuccess("Root folder deleted successfully");
-      fetchRootFolders();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to delete root folder");
-    } finally {
-      setIsLoading(false);
-    }
+  const handleBulkDelete = async () => {
+    const ids = Array.from(selectedIds);
+    await Promise.all(ids.map(id => fetch(`/api/v1/movies/${id}`, { method: "DELETE", credentials: "include" })));
+    setMovies(prev => prev.filter(m => !selectedIds.has(m.id)));
+    clearSelection();
+    toast.success(`${ids.length} movie${ids.length !== 1 ? "s" : ""} deleted`);
   };
 
-  const closeModal = () => {
-    setShowAddLibraryModal(false);
-    setAddLibraryStep("type");
-    setSelectedType(null);
-    setManualPath("");
-    setModalError(null);
+  // Movie update/delete from detail sheet
+  const handleMovieUpdated = (updated: Movie) => {
+    setMovies(prev => prev.map(m => m.id === updated.id ? updated : m));
+    setDetailMovie(updated);
   };
 
-  if (!isAuthenticated) {
-    return (
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Movies</h1>
-        </div>
-        <Alert>
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>Please log in to access the movies library.</AlertDescription>
-        </Alert>
-      </div>
-    );
-  }
+  const handleMovieDeleted = (id: string) => {
+    setMovies(prev => prev.filter(m => m.id !== id));
+    setSelectedIds(prev => { const next = new Set(prev); next.delete(id); return next; });
+  };
+
+  const openDetail = (movie: Movie) => {
+    setDetailMovie(movie);
+    setDetailOpen(true);
+  };
+
+  // Stats
+  const totalMovies = movies.length;
+  const monitoredCount = movies.filter(m => m.monitoringStatus === "monitored").length;
+  const missingCount = movies.filter(m => m.status === "missing").length;
+
+  const subtitle = totalMovies > 0
+    ? `${totalMovies} movie${totalMovies !== 1 ? "s" : ""} • ${monitoredCount} monitored • ${missingCount} missing`
+    : undefined;
+  useSetPageHeader("Movies", subtitle);
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Movies</h1>
-        <p className="text-sm text-muted-foreground">
-          Manage your movie library and settings
-        </p>
-      </div>
+    <div className="px-6 pt-2 pb-6">
+      {/* Toolbar */}
+      {totalMovies > 0 ? (
+        <MovieToolbar
+          filterText={filterText}
+          onFilterTextChange={setFilterText}
+          statusFilter={statusFilter}
+          onStatusFilterChange={setStatusFilter}
+          profileFilter={profileFilter}
+          onProfileFilterChange={setProfileFilter}
+          monitoredFilter={monitoredFilter}
+          onMonitoredFilterChange={setMonitoredFilter}
+          sortKey={sortKey}
+          onSortKeyChange={setSortKey}
+          viewMode={viewMode}
+          onViewModeChange={setViewMode}
+          profiles={qualityProfiles}
+          selectMode={selectMode}
+          selectedCount={selectedIds.size}
+          allSelected={allSelected}
+          onToggleSelectAll={toggleSelectAll}
+          onClearSelection={clearSelection}
+          onBulkMonitor={() => handleBulkMonitoring("monitored")}
+          onBulkUnmonitor={() => handleBulkMonitoring("unmonitored")}
+          onBulkDelete={() => setBulkDeleteOpen(true)}
+          onAddMovie={() => setAddDialogOpen(true)}
+          onImportLibrary={() => setImportDialogOpen(true)}
+          onOrganize={() => setOrganizeDialogOpen(true)}
+        />
+      ) : null}
 
-      {/* Add Root Folder Section */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Library Folders</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {error && (
-            <Alert className="border-destructive/50 bg-destructive/10">
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription className="text-destructive">{error}</AlertDescription>
-            </Alert>
-          )}
-
-          {success && (
-            <Alert className="border-green-500/50 bg-green-500/10">
-              <AlertCircle className="h-4 w-4 text-green-600" />
-              <AlertDescription className="text-green-600">{success}</AlertDescription>
-            </Alert>
-          )}
-
-          <div className="flex justify-end">
-            <Button
-              onClick={() => setShowAddLibraryModal(true)}
-              className="gap-2"
-            >
-              <Plus className="h-4 w-4" />
-              Add Library
-            </Button>
+      {/* Content */}
+      {isLoading ? (
+        viewMode === "grid" ? <GridSkeletons /> : <ListSkeletons />
+      ) : totalMovies === 0 ? (
+        <div className="flex flex-col items-center justify-center py-24 text-center">
+          <div className="w-20 h-20 rounded-full bg-accent/10 flex items-center justify-center mb-6">
+            <Film className="w-10 h-10 text-accent" />
           </div>
-
-          {rootFolders.length > 0 ? (
-            <div className="space-y-2">
-              {rootFolders.map((folder) => (
-                <div
-                  key={folder.id}
-                  className="flex items-center justify-between p-3 bg-secondary rounded-lg"
-                >
-                  <div className="min-w-0">
-                    <p className="font-medium truncate">{folder.path}</p>
-                    <p className="text-sm text-muted-foreground">
-                      Added {new Date(folder.createdAt).toLocaleDateString()}
-                    </p>
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => deleteRootFolder(folder.id)}
-                    disabled={isLoading}
-                    className="text-destructive hover:text-destructive"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
-              ))}
-            </div>
+          <h2 className="text-xl font-semibold mb-2">No movies yet</h2>
+          <p className="text-sm text-muted-foreground max-w-sm mb-6">
+            Start building your library by adding movies from TMDB, or import existing movies from your root folders.
+          </p>
+          {rootFolders.length === 0 ? (
+            <p className="text-sm text-amber-500">⚠️ Add a root folder in Settings before adding movies</p>
           ) : (
-            <p className="text-sm text-muted-foreground text-center py-4">
-              No library folders configured yet
-            </p>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Movies List Section */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Your Movies ({movies.length})</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {movies.length > 0 ? (
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6">
-              {movies.map((movie) => (
-                <div key={movie.id} className="group cursor-pointer">
-                  <div className="aspect-[2/3] bg-secondary rounded-lg overflow-hidden mb-2 flex items-center justify-center">
-                    {movie.posterPath ? (
-                      <img
-                        src={movie.posterPath}
-                        alt={movie.title}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                      />
-                    ) : (
-                      <div className="text-center p-2">
-                        <p className="text-xs font-medium text-muted-foreground">{movie.title}</p>
-                      </div>
-                    )}
-                  </div>
-                  <p className="text-sm font-medium truncate">{movie.title}</p>
-                  <p className="text-xs text-muted-foreground">{movie.year}</p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {movie.monitoringStatus}
-                  </p>
-                </div>
-              ))}
+            <div className="flex gap-3">
+              <Button variant="outline" size="lg" onClick={() => setImportDialogOpen(true)}>
+                <FolderSearch className="w-4 h-4 mr-1.5" /> Import Existing
+              </Button>
+              <Button onClick={() => setAddDialogOpen(true)} size="lg">
+                <Plus className="w-4 h-4 mr-1.5" /> Add Movie
+              </Button>
             </div>
-          ) : (
-            <p className="text-sm text-muted-foreground text-center py-8">
-              No movies found. Add library folders and scan them to discover movies.
-            </p>
           )}
-        </CardContent>
-      </Card>
-
-      {/* Add Library Modal */}
-      <Dialog open={showAddLibraryModal} onOpenChange={setShowAddLibraryModal}>
-        <DialogContent className="sm:max-w-md">
-          {addLibraryStep === "type" && (
-            <>
-              <DialogHeader>
-                <DialogTitle>Add Library</DialogTitle>
-                <DialogDescription>
-                  What type of library do you want to add?
-                </DialogDescription>
-              </DialogHeader>
-              <div className="grid grid-cols-2 gap-4 py-4">
-                <button
-                  onClick={() => {
-                    setSelectedType("movies");
-                    setAddLibraryStep("input");
-                  }}
-                  className="flex flex-col items-center justify-center gap-3 p-6 border-2 border-border rounded-lg hover:border-primary hover:bg-accent transition-colors"
-                >
-                  <Film className="h-8 w-8" />
-                  <span className="font-medium">Movies</span>
-                </button>
-                <button
-                  onClick={() => {
-                    setSelectedType("series");
-                    setAddLibraryStep("input");
-                  }}
-                  className="flex flex-col items-center justify-center gap-3 p-6 border-2 border-border rounded-lg hover:border-primary hover:bg-accent transition-colors"
-                >
-                  <Film className="h-8 w-8" />
-                  <span className="font-medium">Series</span>
-                </button>
-              </div>
-            </>
-          )}
-
-          {addLibraryStep === "input" && (
-            <>
-              <DialogHeader>
-                <DialogTitle>Add {selectedType === "movies" ? "Movie" : "Series"} Library</DialogTitle>
-                <DialogDescription>
-                  Choose how to specify the library path
-                </DialogDescription>
-              </DialogHeader>
-              <div className="space-y-3 py-4">
-                <button
-                  onClick={() => setAddLibraryStep("browse")}
-                  className="w-full flex items-center justify-between p-4 border-2 border-border rounded-lg hover:border-primary hover:bg-accent transition-colors text-left"
-                >
-                  <div className="flex items-center gap-3">
-                    <Folder className="h-5 w-5" />
-                    <div>
-                      <p className="font-medium">Browse</p>
-                      <p className="text-sm text-muted-foreground">Choose from your file system</p>
-                    </div>
-                  </div>
-                </button>
-                <button
-                  onClick={() => setAddLibraryStep("manual")}
-                  className="w-full flex items-center justify-between p-4 border-2 border-border rounded-lg hover:border-primary hover:bg-accent transition-colors text-left"
-                >
-                  <div className="flex items-center gap-3">
-                    <AlertCircle className="h-5 w-5" />
-                    <div>
-                      <p className="font-medium">Enter Manually</p>
-                      <p className="text-sm text-muted-foreground">Type the full path</p>
-                    </div>
-                  </div>
-                </button>
-              </div>
-              <DialogFooter>
-                <Button
-                  variant="outline"
-                  onClick={() => setAddLibraryStep("type")}
-                >
-                  Back
-                </Button>
-              </DialogFooter>
-            </>
-          )}
-
-          {addLibraryStep === "browse" && (
-            <>
-              <DialogHeader>
-                <DialogTitle>Browse Library Folder</DialogTitle>
-                <DialogDescription>
-                  File browser coming soon. For now, please use manual entry.
-                </DialogDescription>
-              </DialogHeader>
-              <div className="py-4">
-                <p className="text-sm text-muted-foreground">
-                  File browser functionality will be available in a future update.
-                </p>
-              </div>
-              <DialogFooter>
-                <Button
-                  variant="outline"
-                  onClick={() => setAddLibraryStep("input")}
-                >
-                  Back
-                </Button>
-                <Button
-                  onClick={() => setAddLibraryStep("manual")}
-                >
-                  Use Manual Entry
-                </Button>
-              </DialogFooter>
-            </>
-          )}
-
-          {addLibraryStep === "manual" && (
-            <>
-              <DialogHeader>
-                <DialogTitle>Enter Library Path</DialogTitle>
-                <DialogDescription>
-                  Provide the full path to your {selectedType === "movies" ? "movies" : "series"} folder
-                </DialogDescription>
-              </DialogHeader>
-
-              {modalError && (
-                <Alert className="border-destructive/50 bg-destructive/10">
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertDescription className="text-destructive">{modalError}</AlertDescription>
-                </Alert>
-              )}
-
-              <div className="space-y-4 py-4">
-                <Input
-                  placeholder={selectedType === "movies" ? "/mnt/movies or /home/user/movies" : "/mnt/shows or /home/user/tv"}
-                  value={manualPath}
-                  onChange={(e) => setManualPath(e.target.value)}
-                  disabled={isLoading}
-                  autoFocus
+        </div>
+      ) : viewMode === "grid" ? (
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 gap-4">
+          {processed.map(movie => (
+            <MovieCard
+              key={movie.id}
+              movie={movie}
+              profiles={qualityProfiles}
+              selected={selectedIds.has(movie.id)}
+              selectMode={selectMode}
+              onToggleSelect={() => toggleSelect(movie.id)}
+              onClick={() => openDetail(movie)}
+            />
+          ))}
+        </div>
+      ) : (
+        <div className="border border-border rounded-lg overflow-hidden">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-10">
+                  <Checkbox checked={allSelected} onCheckedChange={toggleSelectAll} />
+                </TableHead>
+                <TableHead className="w-12" />
+                <TableHead>Title</TableHead>
+                <TableHead className="w-16">Year</TableHead>
+                <TableHead className="w-28">Status</TableHead>
+                <TableHead className="w-28">Quality</TableHead>
+                <TableHead className="w-12">Mon.</TableHead>
+                <TableHead className="w-16">Rating</TableHead>
+                <TableHead className="w-24">Added</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {processed.map(movie => (
+                <MovieListRow
+                  key={movie.id}
+                  movie={movie}
+                  profiles={qualityProfiles}
+                  selected={selectedIds.has(movie.id)}
+                  onToggleSelect={() => toggleSelect(movie.id)}
+                  onClick={() => openDetail(movie)}
                 />
-              </div>
-              <DialogFooter>
-                <Button
-                  variant="outline"
-                  onClick={() => setAddLibraryStep("input")}
-                  disabled={isLoading}
-                >
-                  Back
-                </Button>
-                <Button
-                  onClick={() => addRootFolder(manualPath)}
-                  disabled={isLoading || !manualPath.trim()}
-                >
-                  {isLoading ? (
-                    <><Loader2 className="h-4 w-4 animate-spin mr-2" />Adding...</>
-                  ) : (
-                    "Add Library"
-                  )}
-                </Button>
-              </DialogFooter>
-            </>
-          )}
-        </DialogContent>
-      </Dialog>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+
+      {processed.length === 0 && totalMovies > 0 && !isLoading && (
+        <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
+          <Search className="w-10 h-10 mb-3 opacity-30" />
+          <p className="text-sm">No movies match the current filters</p>
+        </div>
+      )}
+
+      {/* Dialogs & Sheets */}
+      <AddMovieDialog
+        open={addDialogOpen}
+        onOpenChange={setAddDialogOpen}
+        rootFolders={rootFolders}
+        qualityProfiles={qualityProfiles}
+        existingTmdbIds={existingTmdbIds}
+        onMovieAdded={fetchAll}
+      />
+
+      <MovieDetailSheet
+        movie={detailMovie}
+        open={detailOpen}
+        onOpenChange={setDetailOpen}
+        profiles={qualityProfiles}
+        rootFolders={rootFolders}
+        onUpdated={handleMovieUpdated}
+        onDeleted={handleMovieDeleted}
+      />
+
+      <BulkDeleteDialog
+        open={bulkDeleteOpen}
+        onOpenChange={setBulkDeleteOpen}
+        count={selectedIds.size}
+        onConfirm={handleBulkDelete}
+      />
+
+      <LibraryImportDialog
+        open={importDialogOpen}
+        onOpenChange={setImportDialogOpen}
+        rootFolders={rootFolders}
+        onImportComplete={fetchAll}
+      />
+
+      <OrganizeDialog
+        open={organizeDialogOpen}
+        onOpenChange={setOrganizeDialogOpen}
+        movies={movies}
+        onComplete={fetchAll}
+      />
     </div>
   );
 }

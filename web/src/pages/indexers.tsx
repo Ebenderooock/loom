@@ -5,6 +5,7 @@
 import * as React from "react";
 import { MoreHorizontal, Plus } from "lucide-react";
 import { toast } from "sonner";
+import { useSetPageHeader } from "@/hooks/use-page-header";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -27,13 +28,12 @@ import {
   type IndexerFormValues,
 } from "@/components/indexers/indexer-form";
 import {
-  toCreatePayload,
   toPatchPayload,
 } from "@/components/indexers/indexer-form-adapter";
+import { IndexerCatalogue } from "@/components/indexers/indexer-catalogue";
 import { SearchPanel } from "@/components/indexers/search-panel";
 import {
   ApiError,
-  useCreateIndexer,
   useDeleteIndexer,
   useIndexers,
   usePatchIndexer,
@@ -57,9 +57,9 @@ function errMessage(err: unknown, fallback: string): string {
 }
 
 export function IndexersPage() {
+  useSetPageHeader("Indexers");
   const indexersQ = useIndexers();
   const proxiesQ = useProxies();
-  const create = useCreateIndexer();
   const patch = usePatchIndexer();
   const del = useDeleteIndexer();
   const test = useTestIndexer();
@@ -77,17 +77,6 @@ export function IndexersPage() {
   function close() {
     setDialog({ kind: "closed" });
     setTopError(undefined);
-  }
-
-  async function handleCreate(values: IndexerFormValues) {
-    setTopError(undefined);
-    try {
-      await create.mutateAsync(toCreatePayload(values));
-      toast.success(`Indexer “${values.name}” added.`);
-      close();
-    } catch (err) {
-      setTopError(errMessage(err, "Could not create indexer"));
-    }
   }
 
   async function handlePatch(values: IndexerFormValues, original: Indexer) {
@@ -135,12 +124,6 @@ export function IndexersPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-end justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Indexers</h1>
-          <p className="text-sm text-muted-foreground">
-            Newznab- and Torznab-compatible feeds Loom uses to find releases.
-          </p>
-        </div>
         <Button onClick={() => setDialog({ kind: "create" })} className="gap-2">
           <Plus className="h-4 w-4" />
           Add indexer
@@ -273,32 +256,47 @@ export function IndexersPage() {
         </table>
       </div>
 
-      {/* Create / edit dialog */}
+      {/* Create dialog (catalogue) */}
       <Dialog
-        open={dialog.kind === "create" || dialog.kind === "edit"}
+        open={dialog.kind === "create"}
+        onOpenChange={(open) => {
+          if (!open) close();
+        }}
+      >
+        <DialogContent className="max-w-4xl">
+          <DialogHeader>
+            <DialogTitle>Add indexer</DialogTitle>
+            <DialogDescription>
+              Pick a bundled definition or add a Newznab/Torznab feed manually.
+            </DialogDescription>
+          </DialogHeader>
+          {dialog.kind === "create" ? (
+            <IndexerCatalogue
+              proxies={proxies}
+              onCreated={() => {
+                close();
+              }}
+              onCancel={close}
+            />
+          ) : null}
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit dialog */}
+      <Dialog
+        open={dialog.kind === "edit"}
         onOpenChange={(open) => {
           if (!open) close();
         }}
       >
         <DialogContent className="max-w-xl">
           <DialogHeader>
-            <DialogTitle>
-              {dialog.kind === "edit" ? "Edit indexer" : "Add indexer"}
-            </DialogTitle>
+            <DialogTitle>Edit indexer</DialogTitle>
             <DialogDescription>
               Configure how Loom talks to this Newznab- or Torznab-compatible
               feed.
             </DialogDescription>
           </DialogHeader>
-          {dialog.kind === "create" ? (
-            <IndexerForm
-              proxies={proxies}
-              onSubmit={(v) => handleCreate(v)}
-              onCancel={close}
-              submitting={create.isPending}
-              topError={topError}
-            />
-          ) : null}
           {dialog.kind === "edit" ? (
             <IndexerForm
               initial={dialog.indexer}

@@ -81,3 +81,29 @@ type ErrorResponse struct {
 	StatusMessage string `json:"status_message"`
 	Success    bool   `json:"success"`
 }
+
+// CreditsResponse wraps the cast and crew from TMDb /movie/{id}/credits.
+type CreditsResponse struct {
+	ID   int          `json:"id"`
+	Cast []CastEntry  `json:"cast"`
+	Crew []CrewEntry  `json:"crew"`
+}
+
+// CastEntry is a single cast member in a credits response.
+type CastEntry struct {
+	ID          int     `json:"id"`
+	Name        string  `json:"name"`
+	Character   string  `json:"character"`
+	ProfilePath string  `json:"profile_path"`
+	Order       int     `json:"order"`
+	KnownFor    string  `json:"known_for_department"`
+}
+
+// CrewEntry is a single crew member in a credits response.
+type CrewEntry struct {
+	ID          int    `json:"id"`
+	Name        string `json:"name"`
+	Job         string `json:"job"`
+	Department  string `json:"department"`
+	ProfilePath string `json:"profile_path"`
+}

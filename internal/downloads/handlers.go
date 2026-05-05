@@ -32,6 +32,8 @@ func (s *Service) Mount(r chi.Router) {
 			r.Post("/resume", s.handleResume)
 		})
 	})
+	// Aggregate activity endpoint across all download clients
+	r.Get("/api/v1/activity", s.handleActivity)
 	for _, ext := range s.routeExtensions {
 		if ext != nil {
 			ext(r)
@@ -481,4 +483,14 @@ func generateID(kind Kind, name string) string {
 		out = "x"
 	}
 	return prefix + "-" + out
+}
+
+// handleActivity returns aggregated download items from all configured clients.
+func (s *Service) handleActivity(w http.ResponseWriter, r *http.Request) {
+	opts := s.FanOutOpts(nil)
+	status := s.registry.Status(r.Context(), nil, opts)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"items":  status.Items,
+		"errors": status.Errors,
+	})
 }

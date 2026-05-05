@@ -25,18 +25,20 @@ type Config struct {
 	DataDir   string `mapstructure:"data_dir"`
 	HotReload bool   `mapstructure:"hot_reload"`
 
-	HTTP      HTTPConfig      `mapstructure:"http"`
-	Log       LogConfig       `mapstructure:"log"`
-	Telemetry TelemetryConfig `mapstructure:"telemetry"`
-	Database  DatabaseConfig  `mapstructure:"database"`
-	Storage   StorageConfig   `mapstructure:"storage"`
-	Auth      AuthConfig      `mapstructure:"auth"`
-	Debug     DebugConfig     `mapstructure:"debug"`
-	CORS      CORSConfig      `mapstructure:"cors"`
-	OTel      OTelConfig      `mapstructure:"otel"`
-	Scheduler SchedulerConfig `mapstructure:"scheduler"`
-	Indexers  IndexersConfig  `mapstructure:"indexers"`
-	Downloads DownloadsConfig `mapstructure:"downloads"`
+	HTTP            HTTPConfig            `mapstructure:"http"`
+	Log             LogConfig             `mapstructure:"log"`
+	Telemetry       TelemetryConfig       `mapstructure:"telemetry"`
+	Database        DatabaseConfig        `mapstructure:"database"`
+	Storage         StorageConfig         `mapstructure:"storage"`
+	Auth            AuthConfig            `mapstructure:"auth"`
+	Debug           DebugConfig           `mapstructure:"debug"`
+	CORS            CORSConfig            `mapstructure:"cors"`
+	OTel            OTelConfig            `mapstructure:"otel"`
+	Scheduler       SchedulerConfig       `mapstructure:"scheduler"`
+	Indexers        IndexersConfig        `mapstructure:"indexers"`
+	Downloads       DownloadsConfig       `mapstructure:"downloads"`
+	Safety          SafetyConfig          `mapstructure:"safety"`
+	MediaManagement MediaManagementConfig `mapstructure:"media_management"`
 }
 
 // IndexersConfig governs the indexer core (search fan-out + periodic
@@ -72,10 +74,38 @@ type IndexersConfig struct {
 //     to be on the same network as Loom and tolerate frequent probes.
 //   - HealthCheckTimeoutSec bounds a single Test() call.
 type DownloadsConfig struct {
-	OperationTimeoutSec   int    `mapstructure:"operation_timeout"`
-	MaxParallel           int    `mapstructure:"max_parallel"`
-	HealthCheckSchedule   string `mapstructure:"health_check_schedule"`
-	HealthCheckTimeoutSec int    `mapstructure:"health_check_timeout"`
+	OperationTimeoutSec   int         `mapstructure:"operation_timeout"`
+	MaxParallel           int         `mapstructure:"max_parallel"`
+	HealthCheckSchedule   string      `mapstructure:"health_check_schedule"`
+	HealthCheckTimeoutSec int         `mapstructure:"health_check_timeout"`
+	CheckForStalled       bool        `mapstructure:"check_for_stalled"`
+	StallTimeoutMin       int         `mapstructure:"stall_timeout"`
+	StallAction           string      `mapstructure:"stall_action"`
+	MaxRetries            int         `mapstructure:"max_retries"`
+}
+
+// SafetyConfig governs download safety validation (Phase 9).
+//
+//   - BlockDangerousExtensions prevents grabbing releases that contain
+//     known executable file types.
+//   - SuspiciousPatterns is a case-insensitive blocklist matched against
+//     release names.
+//   - MinMovieSizeMB / MaxMovieSizeMB flag size anomalies.
+type SafetyConfig struct {
+	BlockDangerousExtensions bool     `mapstructure:"block_dangerous_extensions"`
+	SuspiciousPatterns       []string `mapstructure:"suspicious_patterns"`
+	MinMovieSizeMB           int64    `mapstructure:"min_movie_size_mb"`
+	MaxMovieSizeMB           int64    `mapstructure:"max_movie_size_mb"`
+}
+
+// MediaManagementConfig governs how imported files are handled.
+//
+//   - ImportMode controls the file strategy when importing downloads:
+//     "move" (default) renames/copies; "hardlink" creates a hardlink
+//     to the source file; "hardlink_only" creates a hardlink and fails
+//     if hardlinking is not possible (e.g. cross-device).
+type MediaManagementConfig struct {
+	ImportMode string `mapstructure:"import_mode"`
 }
 
 // CardigannConfig governs the Cardigann YAML definition loader
@@ -395,6 +425,17 @@ func applyDefaults(v *viper.Viper) {
 	v.SetDefault("downloads.max_parallel", 8)
 	v.SetDefault("downloads.health_check_schedule", "*/5 * * * *")
 	v.SetDefault("downloads.health_check_timeout", 10)
+	v.SetDefault("downloads.check_for_stalled", true)
+	v.SetDefault("downloads.stall_timeout", 30)
+	v.SetDefault("downloads.stall_action", "remove")
+	v.SetDefault("downloads.max_retries", 3)
+
+	v.SetDefault("safety.block_dangerous_extensions", true)
+	v.SetDefault("safety.suspicious_patterns", []string{
+		"password", "passworded", "virus", "crack", "keygen", "patch",
+	})
+	v.SetDefault("safety.min_movie_size_mb", 50)
+	v.SetDefault("safety.max_movie_size_mb", 100000)
 }
 
 // bindLegacyEnv preserves the un-prefixed environment variable shape used

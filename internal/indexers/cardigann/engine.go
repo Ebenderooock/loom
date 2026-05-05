@@ -583,6 +583,20 @@ func (e *Engine) extractOne(node *goquery.Selection) (indexers.Result, bool) {
 	if cat := values["category"]; cat != "" {
 		r.Category = e.mapSiteCategory(cat)
 	}
+	// Tracker intelligence flags. downloadvolumefactor=0 means
+	// freeleech; the value is a multiplier extracted by the YAML
+	// definition's selector/case chain.
+	if dvf := values["downloadvolumefactor"]; dvf != "" {
+		r.Freeleech = dvf == "0" || dvf == "0.0"
+	}
+	// Some definitions carry an explicit "internal" or "scene" field
+	// via boolean-style selectors (presence of a CSS class or image).
+	if iv := values["_internal"]; iv != "" && iv != "0" {
+		r.Internal = true
+	}
+	if sv := values["_scene"]; sv != "" && sv != "0" {
+		r.Scene = true
+	}
 	// Resolve relative URLs against the site base.
 	r.Link = e.absoluteURL(r.Link)
 	r.InfoURL = e.absoluteURL(r.InfoURL)

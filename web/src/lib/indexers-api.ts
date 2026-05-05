@@ -123,6 +123,7 @@ export interface TestResult {
 export interface SearchResult {
   indexer_id: string;
   title: string;
+  guid?: string;
   link: string;
   info_url?: string;
   size_bytes?: number;
@@ -130,11 +131,34 @@ export interface SearchResult {
   leechers?: number;
   publish_date?: string;
   categories?: number[];
+  quality?: string;
+  magnet_uri?: string;
+  infohash?: string;
+  nzb_url?: string;
+  score?: number;
+  freeleech?: boolean;
+  internal?: boolean;
+  scene?: boolean;
+}
+
+export interface IndexerDiagnostic {
+  name: string;
+  status: "ok" | "error" | "timeout";
+  response_time_ms: number;
+  result_count: number;
+  error_message?: string;
+}
+
+export interface SearchDiagnostics {
+  indexers: IndexerDiagnostic[];
+  total_results: number;
+  search_duration_ms: number;
 }
 
 export interface AggregatedResults {
   results: SearchResult[];
   errors: Record<string, string>;
+  diagnostics?: SearchDiagnostics;
 }
 
 // ---------- HTTP helpers ----------
@@ -187,6 +211,52 @@ async function request<T>(
     throw new ApiError(res.status, message, env?.error?.code, env?.error?.details);
   }
   return parsed as T;
+}
+
+// ---------- Indexer definitions (Cardigann catalogue) ----------
+
+export interface IndexerDefinitionSetting {
+  name: string;
+  type?: string;
+  label?: string;
+  default?: string;
+}
+
+export interface IndexerDefinition {
+  id: string;
+  name: string;
+  description?: string;
+  type?: string;
+  language?: string;
+  links?: string[];
+  settings?: IndexerDefinitionSetting[];
+  categories?: string[];
+}
+
+export async function listDefinitions(signal?: AbortSignal): Promise<IndexerDefinition[]> {
+  const env = await request<{ data: IndexerDefinition[] }>(
+    "GET",
+    "/api/v1/indexers/definitions",
+    undefined,
+    signal,
+  );
+  return env.data ?? [];
+}
+
+export const definitionKeys = {
+  all: ["indexer-definitions"] as const,
+  list: () => [...definitionKeys.all, "list"] as const,
+};
+
+export function useDefinitions(
+  options?: Omit<UseQueryOptions<IndexerDefinition[], Error>, "queryKey" | "queryFn">,
+) {
+  return useQuery<IndexerDefinition[], Error>({
+    queryKey: definitionKeys.list(),
+    queryFn: ({ signal }) => listDefinitions(signal),
+    staleTime: Infinity,
+    ...options,
+  });
 }
 
 // ---------- Indexer endpoints ----------

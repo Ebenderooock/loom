@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
@@ -25,6 +26,7 @@ func (s *Service) Mount(r chi.Router) {
 		r.Get("/", s.handleList)
 		r.Post("/", s.handleCreate)
 		r.Post("/search", s.handleSearch)
+		r.Get("/definitions", s.handleListDefinitions)
 		r.Route("/{id}", func(r chi.Router) {
 			r.Get("/", s.handleGet)
 			r.Put("/", s.handleReplace)
@@ -389,7 +391,61 @@ func (s *Service) handleSearch(w http.ResponseWriter, r *http.Request) {
 	}
 	timeout := time.Duration(req.TimeoutMS) * time.Millisecond
 	out := s.Search(r.Context(), q, req.IndexerIDs, timeout)
+	ScoreResults(out.Results)
 	writeJSON(w, http.StatusOK, out)
+}
+
+// --- definitions ----------------------------------------------------
+
+func (s *Service) handleListDefinitions(w http.ResponseWriter, r *http.Request) {
+	if s.definitionLister == nil {
+		writeJSON(w, http.StatusOK, map[string]any{"data": []any{}})
+		return
+	}
+	all := s.definitionLister.ListDefinitions()
+
+	type settingJSON struct {
+		Name    string `json:"name"`
+		Type    string `json:"type,omitempty"`
+		Label   string `json:"label,omitempty"`
+		Default string `json:"default,omitempty"`
+	}
+	type defJSON struct {
+		ID          string        `json:"id"`
+		Name        string        `json:"name"`
+		Description string        `json:"description,omitempty"`
+		Type        string        `json:"type,omitempty"`
+		Language    string        `json:"language,omitempty"`
+		Links       []string      `json:"links,omitempty"`
+		Settings    []settingJSON `json:"settings,omitempty"`
+		Categories  []string      `json:"categories,omitempty"`
+	}
+
+	defs := make([]defJSON, 0, len(all))
+	for _, d := range all {
+		j := defJSON{
+			ID:          d.ID,
+			Name:        d.Name,
+			Description: d.Description,
+			Type:        d.Type,
+			Language:    d.Language,
+			Links:       d.Links,
+			Categories:  d.Categories,
+		}
+		for _, st := range d.Settings {
+			j.Settings = append(j.Settings, settingJSON{
+				Name:    st.Name,
+				Type:    st.Type,
+				Label:   st.Label,
+				Default: st.Default,
+			})
+		}
+		defs = append(defs, j)
+	}
+	sort.Slice(defs, func(i, j int) bool {
+		return strings.ToLower(defs[i].Name) < strings.ToLower(defs[j].Name)
+	})
+	writeJSON(w, http.StatusOK, map[string]any{"data": defs})
 }
 
 // rateLimitPresent reports whether any of the three rate-limit fields

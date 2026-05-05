@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import {
   Dialog,
   DialogContent,
@@ -8,6 +8,8 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -21,12 +23,16 @@ import {
   AlertTriangle,
   ChevronDown,
   ExternalLink,
+  Filter,
+  X,
+  Activity,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import {
   searchIndexers,
   type SearchResult,
+  type SearchDiagnostics,
   ApiError as IndexerApiError,
 } from "@/lib/indexers-api";
 import {
@@ -74,16 +80,84 @@ const CATEGORY_MAP: Record<string, number[]> = {
   episode: [5000],
 };
 
-function sortResults(results: SearchResult[]): SearchResult[] {
-  return [...results].sort((a, b) => {
-    // seeders desc
-    const sa = a.seeders ?? -1;
-    const sb = b.seeders ?? -1;
-    if (sb !== sa) return sb - sa;
-    // age asc (newer first)
-    const da = a.publish_date ? Date.parse(a.publish_date) : 0;
-    const db = b.publish_date ? Date.parse(b.publish_date) : 0;
-    return db - da;
+function qualityBadge(result: SearchResult): string {
+  const q = (result.quality || result.title || "").toLowerCase();
+  if (q.includes("2160p") || q.includes("4k")) return "2160p";
+  if (q.includes("1080p")) return "1080p";
+  if (q.includes("720p")) return "720p";
+  if (q.includes("480p")) return "480p";
+  return "SD";
+}
+
+const QUALITY_COLORS: Record<string, string> = {
+  "2160p": "bg-purple-500/15 text-purple-700 dark:text-purple-300",
+  "1080p": "bg-blue-500/15 text-blue-700 dark:text-blue-300",
+  "720p": "bg-green-500/15 text-green-700 dark:text-green-300",
+  "480p": "bg-yellow-500/15 text-yellow-700 dark:text-yellow-300",
+  SD: "bg-gray-500/15 text-gray-700 dark:text-gray-300",
+};
+
+const QUALITY_OPTIONS = ["2160p", "1080p", "720p", "480p", "SD"] as const;
+
+const MB = 1024 * 1024;
+const GB = 1024 * 1024 * 1024;
+
+// ─── Filter state ─────────────────────────────────────────────────────
+
+interface SearchFilters {
+  indexers: Set<string>;
+  qualities: Set<string>;
+  minSizeMB: string;
+  maxSizeGB: string;
+  minSeeders: string;
+  titleFilter: string;
+  freeleechOnly: boolean;
+}
+
+const EMPTY_FILTERS: SearchFilters = {
+  indexers: new Set(),
+  qualities: new Set(),
+  minSizeMB: "",
+  maxSizeGB: "",
+  minSeeders: "",
+  titleFilter: "",
+  freeleechOnly: false,
+};
+
+function countActiveFilters(f: SearchFilters): number {
+  let n = 0;
+  if (f.indexers.size > 0) n++;
+  if (f.qualities.size > 0) n++;
+  if (f.minSizeMB) n++;
+  if (f.maxSizeGB) n++;
+  if (f.minSeeders) n++;
+  if (f.titleFilter) n++;
+  if (f.freeleechOnly) n++;
+  return n;
+}
+
+function applyFilters(results: SearchResult[], f: SearchFilters): SearchResult[] {
+  return results.filter((r) => {
+    if (f.indexers.size > 0 && !f.indexers.has(r.indexer_id)) return false;
+    if (f.qualities.size > 0 && !f.qualities.has(qualityBadge(r))) return false;
+    if (f.minSizeMB) {
+      const min = parseFloat(f.minSizeMB);
+      if (!isNaN(min) && (r.size_bytes ?? 0) < min * MB) return false;
+    }
+    if (f.maxSizeGB) {
+      const max = parseFloat(f.maxSizeGB);
+      if (!isNaN(max) && (r.size_bytes ?? 0) > max * GB) return false;
+    }
+    if (f.minSeeders) {
+      const min = parseInt(f.minSeeders, 10);
+      if (!isNaN(min) && (r.seeders ?? 0) < min) return false;
+    }
+    if (f.titleFilter) {
+      const needle = f.titleFilter.toLowerCase();
+      if (!r.title.toLowerCase().includes(needle)) return false;
+    }
+    if (f.freeleechOnly && !r.freeleech) return false;
+    return true;
   });
 }
 
@@ -121,6 +195,8 @@ function GrabButton({
         await grab.mutateAsync({
           clientId,
           torrent_url: result.link,
+          magnet: result.magnet_uri,
+          nzb_url: result.nzb_url,
           title: result.title,
         });
         toast.success(`Grabbed: ${result.title}`);
@@ -196,6 +272,264 @@ function GrabButton({
   );
 }
 
+// ─── Search Diagnostics ───────────────────────────────────────────────
+
+function DiagnosticsPanel({ diagnostics }: { diagnostics: SearchDiagnostics }) {
+  const [expanded, setExpanded] = useState(false);
+  const okCount = diagnostics.indexers.filter((d) => d.status === "ok").length;
+  const errCount = diagnostics.indexers.filter((d) => d.status !== "ok").length;
+
+  return (
+    <div className="rounded-md border border-border bg-muted/30 text-sm">
+      <button
+        onClick={() => setExpanded((v) => !v)}
+        className="flex items-center gap-2 w-full px-3 py-1.5 text-muted-foreground hover:text-foreground transition-colors"
+      >
+        <Activity className="w-3.5 h-3.5 shrink-0" />
+        <span className="text-xs">
+          {diagnostics.total_results} results from {okCount} indexer{okCount !== 1 ? "s" : ""}
+          {errCount > 0 && (
+            <span className="text-amber-600 dark:text-amber-400"> ({errCount} failed)</span>
+          )}
+          {" · "}
+          {diagnostics.search_duration_ms}ms
+        </span>
+        <ChevronDown
+          className={cn(
+            "w-3.5 h-3.5 ml-auto transition-transform",
+            expanded && "rotate-180",
+          )}
+        />
+      </button>
+      {expanded && (
+        <div className="px-3 pb-2">
+          <div className="grid grid-cols-[1fr_auto_auto_auto] gap-x-4 gap-y-0.5 text-xs">
+            <span className="font-medium text-muted-foreground">Indexer</span>
+            <span className="font-medium text-muted-foreground">Status</span>
+            <span className="font-medium text-muted-foreground text-right">Time</span>
+            <span className="font-medium text-muted-foreground text-right">Results</span>
+            {diagnostics.indexers.map((d) => (
+              <div key={d.name} className="contents">
+                <span className="truncate">{d.name}</span>
+                <span>
+                  <span
+                    className={cn(
+                      "inline-block rounded px-1.5 py-0.5 text-[10px] font-semibold",
+                      d.status === "ok" && "bg-green-500/15 text-green-700 dark:text-green-300",
+                      d.status === "error" && "bg-red-500/15 text-red-700 dark:text-red-300",
+                      d.status === "timeout" && "bg-yellow-500/15 text-yellow-700 dark:text-yellow-300",
+                    )}
+                  >
+                    {d.status}
+                  </span>
+                </span>
+                <span className="text-right tabular-nums text-muted-foreground">
+                  {d.response_time_ms}ms
+                </span>
+                <span className="text-right tabular-nums text-muted-foreground">
+                  {d.result_count}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Filter Bar ───────────────────────────────────────────────────────
+
+function FilterBar({
+  results,
+  filters,
+  onChange,
+}: {
+  results: SearchResult[];
+  filters: SearchFilters;
+  onChange: (f: SearchFilters) => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const activeCount = countActiveFilters(filters);
+
+  const availableIndexers = useMemo(() => {
+    const ids = new Set<string>();
+    for (const r of results) ids.add(r.indexer_id);
+    return Array.from(ids).sort();
+  }, [results]);
+
+  const hasFreeleech = useMemo(
+    () => results.some((r) => r.freeleech),
+    [results],
+  );
+
+  const toggleIndexer = (id: string) => {
+    const next = new Set(filters.indexers);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    onChange({ ...filters, indexers: next });
+  };
+
+  const toggleQuality = (q: string) => {
+    const next = new Set(filters.qualities);
+    if (next.has(q)) next.delete(q);
+    else next.add(q);
+    onChange({ ...filters, qualities: next });
+  };
+
+  const clearAll = () => onChange({ ...EMPTY_FILTERS });
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          className="gap-1.5 h-7 text-xs"
+          onClick={() => setExpanded((v) => !v)}
+        >
+          <Filter className="w-3.5 h-3.5" />
+          Filters
+          {activeCount > 0 && (
+            <Badge variant="secondary" className="ml-1 h-4 min-w-4 px-1 text-[10px]">
+              {activeCount}
+            </Badge>
+          )}
+          <ChevronDown
+            className={cn(
+              "w-3 h-3 transition-transform",
+              expanded && "rotate-180",
+            )}
+          />
+        </Button>
+        {activeCount > 0 && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="gap-1 h-7 text-xs text-muted-foreground"
+            onClick={clearAll}
+          >
+            <X className="w-3 h-3" />
+            Clear
+          </Button>
+        )}
+        {/* Inline title filter (always visible) */}
+        <Input
+          value={filters.titleFilter}
+          onChange={(e) => onChange({ ...filters, titleFilter: e.target.value })}
+          placeholder="Filter by name…"
+          className="h-7 text-xs flex-1 max-w-xs"
+        />
+      </div>
+
+      {expanded && (
+        <div className="rounded-md border border-border bg-muted/30 p-3 space-y-3 text-xs">
+          {/* Row 1: Indexers + Quality */}
+          <div className="flex flex-wrap gap-4">
+            {/* Indexer multi-select */}
+            <div className="space-y-1">
+              <span className="font-medium text-muted-foreground">Indexer</span>
+              <div className="flex flex-wrap gap-1.5">
+                {availableIndexers.map((id) => (
+                  <label
+                    key={id}
+                    className="flex items-center gap-1 cursor-pointer select-none"
+                  >
+                    <Checkbox
+                      checked={filters.indexers.has(id)}
+                      onCheckedChange={() => toggleIndexer(id)}
+                      className="h-3.5 w-3.5"
+                    />
+                    <span className="truncate max-w-[8rem]">{id}</span>
+                  </label>
+                ))}
+                {availableIndexers.length === 0 && (
+                  <span className="text-muted-foreground italic">No indexers</span>
+                )}
+              </div>
+            </div>
+
+            {/* Quality checkboxes */}
+            <div className="space-y-1">
+              <span className="font-medium text-muted-foreground">Quality</span>
+              <div className="flex flex-wrap gap-1.5">
+                {QUALITY_OPTIONS.map((q) => (
+                  <label
+                    key={q}
+                    className="flex items-center gap-1 cursor-pointer select-none"
+                  >
+                    <Checkbox
+                      checked={filters.qualities.has(q)}
+                      onCheckedChange={() => toggleQuality(q)}
+                      className="h-3.5 w-3.5"
+                    />
+                    <span className={cn("rounded px-1 py-0.5 text-[10px] font-semibold", QUALITY_COLORS[q])}>
+                      {q}
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Row 2: Size + Seeders + Freeleech */}
+          <div className="flex flex-wrap items-end gap-4">
+            <div className="space-y-1">
+              <span className="font-medium text-muted-foreground">Min Size (MB)</span>
+              <Input
+                type="number"
+                min={0}
+                step="any"
+                value={filters.minSizeMB}
+                onChange={(e) => onChange({ ...filters, minSizeMB: e.target.value })}
+                className="h-7 w-24 text-xs"
+                placeholder="0"
+              />
+            </div>
+            <div className="space-y-1">
+              <span className="font-medium text-muted-foreground">Max Size (GB)</span>
+              <Input
+                type="number"
+                min={0}
+                step="any"
+                value={filters.maxSizeGB}
+                onChange={(e) => onChange({ ...filters, maxSizeGB: e.target.value })}
+                className="h-7 w-24 text-xs"
+                placeholder="∞"
+              />
+            </div>
+            <div className="space-y-1">
+              <span className="font-medium text-muted-foreground">Min Seeders</span>
+              <Input
+                type="number"
+                min={0}
+                value={filters.minSeeders}
+                onChange={(e) => onChange({ ...filters, minSeeders: e.target.value })}
+                className="h-7 w-20 text-xs"
+                placeholder="0"
+              />
+            </div>
+            {hasFreeleech && (
+              <label className="flex items-center gap-1.5 cursor-pointer select-none pb-1">
+                <Checkbox
+                  checked={filters.freeleechOnly}
+                  onCheckedChange={(v) =>
+                    onChange({ ...filters, freeleechOnly: v === true })
+                  }
+                  className="h-3.5 w-3.5"
+                />
+                <span className="rounded px-1.5 py-0.5 text-[10px] font-semibold bg-green-500/15 text-green-700 dark:text-green-300">
+                  Freeleech only
+                </span>
+              </label>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Dialog ───────────────────────────────────────────────────────────
 
 export function ReleaseSearchDialog({
@@ -213,12 +547,19 @@ export function ReleaseSearchDialog({
   const [query, setQuery] = useState(initialQuery ?? title);
   const [results, setResults] = useState<SearchResult[]>([]);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [diagnostics, setDiagnostics] = useState<SearchDiagnostics | null>(null);
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
   const [errorsExpanded, setErrorsExpanded] = useState(false);
+  const [filters, setFilters] = useState<SearchFilters>({ ...EMPTY_FILTERS });
 
   const { data: clients = [] } = useDownloads({ enabled: open });
   const enabledClients = clients.filter((c) => c.enabled);
+
+  const filteredResults = useMemo(
+    () => applyFilters(results, filters),
+    [results, filters],
+  );
 
   // Reset state when dialog opens with new context
   useEffect(() => {
@@ -226,8 +567,10 @@ export function ReleaseSearchDialog({
       setQuery(initialQuery ?? title);
       setResults([]);
       setErrors({});
+      setDiagnostics(null);
       setSearched(false);
       setErrorsExpanded(false);
+      setFilters({ ...EMPTY_FILTERS });
     }
   }, [open, title, initialQuery]);
 
@@ -238,14 +581,16 @@ export function ReleaseSearchDialog({
 
     setLoading(true);
     setSearched(true);
+    setFilters({ ...EMPTY_FILTERS });
     try {
       const res = await searchIndexers({
         q,
         categories: CATEGORY_MAP[mediaType],
         timeout_ms: 30000,
       });
-      setResults(sortResults(res.results ?? []));
+      setResults(res.results ?? []);
       setErrors(res.errors ?? {});
+      setDiagnostics(res.diagnostics ?? null);
     } catch (err) {
       const msg =
         err instanceof IndexerApiError
@@ -256,6 +601,7 @@ export function ReleaseSearchDialog({
       toast.error(msg);
       setResults([]);
       setErrors({});
+      setDiagnostics(null);
     } finally {
       setLoading(false);
     }
@@ -298,6 +644,9 @@ export function ReleaseSearchDialog({
           </Button>
         </form>
 
+        {/* Search diagnostics */}
+        {diagnostics && !loading && <DiagnosticsPanel diagnostics={diagnostics} />}
+
         {/* Indexer errors */}
         {errorEntries.length > 0 && (
           <div className="rounded-md border border-amber-500/40 bg-amber-500/10 text-sm">
@@ -328,6 +677,11 @@ export function ReleaseSearchDialog({
           </div>
         )}
 
+        {/* Filters */}
+        {searched && !loading && results.length > 0 && (
+          <FilterBar results={results} filters={filters} onChange={setFilters} />
+        )}
+
         {/* Results table */}
         <div className="flex-1 overflow-auto rounded-md border border-border">
           <table className="w-full text-sm">
@@ -336,6 +690,12 @@ export function ReleaseSearchDialog({
               <tr>
                 <th scope="col" className="px-3 py-2">
                   Title
+                </th>
+                <th scope="col" className="px-3 py-2 w-16">
+                  Quality
+                </th>
+                <th scope="col" className="px-3 py-2 w-14">
+                  Score
                 </th>
                 <th scope="col" className="px-3 py-2 w-20">
                   Size
@@ -358,27 +718,29 @@ export function ReleaseSearchDialog({
               {!searched && !loading && (
                 <tr>
                   <td
-                    colSpan={6}
+                    colSpan={8}
                     className="px-3 py-10 text-center text-muted-foreground"
                   >
                     Enter a query and click Search to find releases.
                   </td>
                 </tr>
               )}
-              {searched && !loading && results.length === 0 && (
+              {searched && !loading && filteredResults.length === 0 && (
                 <tr>
                   <td
-                    colSpan={6}
+                    colSpan={8}
                     className="px-3 py-10 text-center text-muted-foreground"
                   >
-                    No results found.
+                    {results.length === 0
+                      ? "No results found."
+                      : "No results match the current filters."}
                   </td>
                 </tr>
               )}
               {loading && (
                 <tr>
                   <td
-                    colSpan={6}
+                    colSpan={8}
                     className="px-3 py-10 text-center text-muted-foreground"
                   >
                     <Loader2 className="w-5 h-5 animate-spin inline-block mr-2" />
@@ -386,7 +748,9 @@ export function ReleaseSearchDialog({
                   </td>
                 </tr>
               )}
-              {results.map((r, idx) => (
+              {filteredResults.map((r, idx) => {
+                const qb = qualityBadge(r);
+                return (
                 <tr
                   key={`${r.indexer_id}-${r.link}-${idx}`}
                   className="border-t border-border hover:bg-accent/5 transition-colors"
@@ -395,6 +759,34 @@ export function ReleaseSearchDialog({
                     <div className="font-medium text-xs leading-snug line-clamp-2">
                       {r.title}
                     </div>
+                    {/* Tracker flags */}
+                    {(r.freeleech || r.internal || r.scene) && (
+                      <div className="flex gap-1 mt-0.5">
+                        {r.freeleech && (
+                          <span className="rounded px-1 py-0.5 text-[9px] font-semibold bg-green-500/15 text-green-700 dark:text-green-300">
+                            FL
+                          </span>
+                        )}
+                        {r.internal && (
+                          <span className="rounded px-1 py-0.5 text-[9px] font-semibold bg-blue-500/15 text-blue-700 dark:text-blue-300">
+                            Internal
+                          </span>
+                        )}
+                        {r.scene && (
+                          <span className="rounded px-1 py-0.5 text-[9px] font-semibold bg-orange-500/15 text-orange-700 dark:text-orange-300">
+                            Scene
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </td>
+                  <td className="px-3 py-2 whitespace-nowrap">
+                    <span className={cn("inline-block rounded px-1.5 py-0.5 text-[10px] font-semibold", QUALITY_COLORS[qb] ?? QUALITY_COLORS.SD)}>
+                      {qb}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2 tabular-nums text-xs text-muted-foreground whitespace-nowrap">
+                    {typeof r.score === "number" ? Math.round(r.score) : "—"}
                   </td>
                   <td className="px-3 py-2 tabular-nums text-xs text-muted-foreground whitespace-nowrap">
                     {formatBytes(r.size_bytes)}
@@ -431,7 +823,8 @@ export function ReleaseSearchDialog({
                     </div>
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -439,7 +832,9 @@ export function ReleaseSearchDialog({
         {/* Result count */}
         {searched && !loading && results.length > 0 && (
           <p className="text-xs text-muted-foreground text-right">
-            {results.length} result{results.length !== 1 ? "s" : ""}
+            {filteredResults.length === results.length
+              ? `${results.length} result${results.length !== 1 ? "s" : ""}`
+              : `${filteredResults.length} of ${results.length} results (filtered)`}
           </p>
         )}
       </DialogContent>

@@ -106,7 +106,6 @@ func (c *Client) SearchMovie(ctx context.Context, query string, year int) ([]*me
 	}
 
 	q := req.URL.Query()
-	q.Add("api_key", c.config.APIKey)
 	q.Add("query", query)
 	if year > 0 {
 		q.Add("year", strconv.Itoa(year))
@@ -159,7 +158,6 @@ func (c *Client) SearchTV(ctx context.Context, query string, year int) ([]*metad
 	}
 
 	q := req.URL.Query()
-	q.Add("api_key", c.config.APIKey)
 	q.Add("query", query)
 	if year > 0 {
 		q.Add("first_air_date_year", strconv.Itoa(year))
@@ -195,6 +193,22 @@ func (c *Client) SearchTV(ctx context.Context, query string, year int) ([]*metad
 	return results, nil
 }
 
+// GetMovieCredits fetches cast and crew for a movie by TMDb ID.
+func (c *Client) GetMovieCredits(ctx context.Context, tmdbID int) (*metadata.Credits, error) {
+	url := fmt.Sprintf("%s/movie/%d/credits", c.config.BaseURL, tmdbID)
+	body, err := c.doRequest(ctx, url)
+	if err != nil {
+		return nil, err
+	}
+
+	var resp CreditsResponse
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return nil, fmt.Errorf("tmdb: failed to unmarshal credits response: %w", err)
+	}
+
+	return mapCreditsResponse(&resp), nil
+}
+
 // GetEpisode fetches episode metadata by TV ID, season, and episode number.
 func (c *Client) GetEpisode(ctx context.Context, tvID, season, episode int) (*metadata.EpisodeMetadata, error) {
 	url := fmt.Sprintf("%s/tv/%d/season/%d/episode/%d", c.config.BaseURL, tvID, season, episode)
@@ -218,15 +232,22 @@ func (c *Client) doRequest(ctx context.Context, url string) ([]byte, error) {
 		return nil, NewNetworkError(err)
 	}
 
-	q := req.URL.Query()
-	q.Add("api_key", c.config.APIKey)
-	req.URL.RawQuery = q.Encode()
-
 	return c.doHTTPRequest(ctx, req)
 }
 
 // doHTTPRequest executes a request with exponential backoff on 429 (rate limit).
 func (c *Client) doHTTPRequest(ctx context.Context, req *http.Request) ([]byte, error) {
+	// Set auth: Bearer token for v4 JWT, or api_key param for v3 key
+	if len(c.config.APIKey) > 100 {
+		// JWT bearer token (v4 read access token)
+		req.Header.Set("Authorization", "Bearer "+c.config.APIKey)
+	} else {
+		// v3 API key
+		q := req.URL.Query()
+		q.Add("api_key", c.config.APIKey)
+		req.URL.RawQuery = q.Encode()
+	}
+
 	backoffDelay := c.backoffConfig.InitialDelay
 
 	for {

@@ -2,13 +2,24 @@ package cardigann
 
 import (
 	"context"
+	"embed"
 	"errors"
 	"fmt"
+	"io/fs"
 	"net/http"
+	"sort"
+	"strings"
 	"sync"
 
 	"github.com/loomctl/loom/internal/indexers"
 )
+
+//go:embed definitions/*.yml
+var bundledFS embed.FS
+
+// BundledFS returns the embedded filesystem containing the bundled
+// Cardigann YAML definitions shipped with the binary.
+func BundledFS() fs.FS { return bundledFS }
 
 // Kind is the registry key for this indexer kind.
 const Kind indexers.Kind = "cardigann"
@@ -36,6 +47,69 @@ func CurrentLoader() *Loader {
 	loaderMu.RLock()
 	defer loaderMu.RUnlock()
 	return defLoader
+}
+
+// LoaderDefinitionLister adapts a *Loader to the
+// indexers.DefinitionLister interface so it can be injected into the
+// Service without creating an import cycle.
+type LoaderDefinitionLister struct {
+	Loader *Loader
+}
+
+// ListDefinitions returns a summary of every loaded definition,
+// excluding info-type settings.
+func (l *LoaderDefinitionLister) ListDefinitions() []indexers.CardigannDefSummary {
+	if l.Loader == nil {
+		return nil
+	}
+	all := l.Loader.All()
+	out := make([]indexers.CardigannDefSummary, 0, len(all))
+	for id, d := range all {
+		s := indexers.CardigannDefSummary{
+			ID:          id,
+			Name:        d.Name,
+			Description: d.Description,
+			Type:        d.Type,
+			Language:    d.Language,
+			Links:       d.Links,
+		}
+		for _, st := range d.Settings {
+			if strings.HasPrefix(st.Type, "info") {
+				continue
+			}
+			s.Settings = append(s.Settings, indexers.CardigannSettingSummary{
+				Name:    st.Name,
+				Type:    st.Type,
+				Label:   st.Label,
+				Default: st.Default,
+			})
+		}
+		// Extract unique top-level Newznab categories from caps.
+		seen := make(map[string]bool)
+		for _, m := range d.Caps.CategoryMappings {
+			top := m.Cat
+			if i := strings.Index(top, "/"); i > 0 {
+				top = top[:i]
+			}
+			if top != "" && !seen[top] {
+				seen[top] = true
+				s.Categories = append(s.Categories, top)
+			}
+		}
+		for _, cat := range d.Caps.Categories {
+			top := cat
+			if i := strings.Index(top, "/"); i > 0 {
+				top = top[:i]
+			}
+			if top != "" && !seen[top] {
+				seen[top] = true
+				s.Categories = append(s.Categories, top)
+			}
+		}
+		sort.Strings(s.Categories)
+		out = append(out, s)
+	}
+	return out
 }
 
 // httpClientFactory mirrors the newznab pattern: tests override it to
