@@ -20,20 +20,21 @@ import {
   Plus, Search, Loader2, Film, Star, Check, Calendar, Clock, ArrowLeft,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { RootFolder, QualityProfile, TMDBResult } from "./types";
+import type { Library } from "../../lib/libraries-api";
+import type { QualityProfile, TMDBResult } from "./types";
 import { TMDB_IMG } from "./types";
 
 export function AddMovieDialog({
   open,
   onOpenChange,
-  rootFolders,
+  libraries,
   qualityProfiles,
   existingTmdbIds,
   onMovieAdded,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  rootFolders: RootFolder[];
+  libraries: Library[];
   qualityProfiles: QualityProfile[];
   existingTmdbIds: Set<string>;
   onMovieAdded: () => void;
@@ -42,8 +43,8 @@ export function AddMovieDialog({
   const [results, setResults] = useState<TMDBResult[]>([]);
   const [searching, setSearching] = useState(false);
   const [selectedMovie, setSelectedMovie] = useState<TMDBResult | null>(null);
+  const [selectedLibrary, setSelectedLibrary] = useState(libraries[0]?.id ?? "");
   const [selectedProfile, setSelectedProfile] = useState(qualityProfiles[0]?.id ?? "");
-  const [selectedFolder, setSelectedFolder] = useState(rootFolders[0]?.id ?? "");
   const [monitored, setMonitored] = useState(true);
   const [searchOnAdd, setSearchOnAdd] = useState(true);
   const [adding, setAdding] = useState(false);
@@ -57,13 +58,22 @@ export function AddMovieDialog({
       setResults([]);
       setSelectedMovie(null);
       setAddError("");
-      setSelectedProfile(qualityProfiles[0]?.id ?? "");
-      setSelectedFolder(rootFolders[0]?.id ?? "");
+      const firstLib = libraries[0];
+      setSelectedLibrary(firstLib?.id ?? "");
+      setSelectedProfile(firstLib?.quality_profile_id || (qualityProfiles[0]?.id ?? ""));
       setMonitored(true);
       setSearchOnAdd(true);
       setTimeout(() => searchInputRef.current?.focus(), 100);
     }
-  }, [open, qualityProfiles, rootFolders]);
+  }, [open, qualityProfiles, libraries]);
+
+  const handleLibraryChange = useCallback((libId: string) => {
+    setSelectedLibrary(libId);
+    const lib = libraries.find(l => l.id === libId);
+    if (lib?.quality_profile_id) {
+      setSelectedProfile(lib.quality_profile_id);
+    }
+  }, [libraries]);
 
   const doSearch = useCallback(async (term: string) => {
     if (term.length < 2) { setResults([]); return; }
@@ -82,7 +92,7 @@ export function AddMovieDialog({
   };
 
   const handleAdd = async () => {
-    if (!selectedMovie || !selectedFolder || !selectedProfile) return;
+    if (!selectedMovie || !selectedLibrary || !selectedProfile) return;
     setAdding(true);
     setAddError("");
     try {
@@ -104,7 +114,7 @@ export function AddMovieDialog({
           release_date: selectedMovie.release_date ?? "",
           metadata_provider: "tmdb",
           quality_profile_id: selectedProfile,
-          root_folder_id: selectedFolder,
+          library_id: selectedLibrary,
           monitoring_status: monitored ? "monitored" : "unmonitored",
           search: searchOnAdd,
         }),
@@ -173,10 +183,10 @@ export function AddMovieDialog({
               </div>
               <div className="mt-6 grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <label className="text-sm font-medium">Root Folder</label>
-                  <Select value={selectedFolder} onValueChange={setSelectedFolder}>
-                    <SelectTrigger><SelectValue placeholder="Select root folder" /></SelectTrigger>
-                    <SelectContent>{rootFolders.map(rf => <SelectItem key={rf.id} value={rf.id}>{rf.path}</SelectItem>)}</SelectContent>
+                  <label className="text-sm font-medium">Library</label>
+                  <Select value={selectedLibrary} onValueChange={handleLibraryChange}>
+                    <SelectTrigger><SelectValue placeholder="Select library" /></SelectTrigger>
+                    <SelectContent>{libraries.map(lib => <SelectItem key={lib.id} value={lib.id}>{lib.name}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-1.5">
@@ -198,7 +208,7 @@ export function AddMovieDialog({
               {addError && <p className="text-sm text-destructive mt-3">{addError}</p>}
               <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-border/50">
                 <Button variant="outline" onClick={() => setSelectedMovie(null)}>Cancel</Button>
-                <Button onClick={handleAdd} disabled={adding || !selectedFolder || !selectedProfile} className="min-w-[120px]">
+                <Button onClick={handleAdd} disabled={adding || !selectedLibrary || !selectedProfile} className="min-w-[120px]">
                   {adding ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Plus className="w-4 h-4 mr-1" /> Add Movie</>}
                 </Button>
               </div>
