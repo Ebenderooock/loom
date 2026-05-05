@@ -46,6 +46,7 @@ type ImportPipeline struct {
 	reviewStore *safety.ReviewStore
 	logger      *slog.Logger
 	importMode  ImportMode
+	decisionLog *DecisionLogger
 	unsub       func()
 }
 
@@ -74,6 +75,7 @@ func NewPipeline(opts PipelineOptions) (*ImportPipeline, error) {
 		opts.ImportMode = ImportModeMove
 	}
 
+	logger := opts.Logger.With("module", "imports")
 	return &ImportPipeline{
 		db:          opts.DB,
 		bus:         opts.Bus,
@@ -82,8 +84,9 @@ func NewPipeline(opts PipelineOptions) (*ImportPipeline, error) {
 		notifSvc:    opts.NotifSvc,
 		postVal:     opts.PostVal,
 		reviewStore: opts.ReviewStore,
-		logger:      opts.Logger.With("module", "imports"),
+		logger:      logger,
 		importMode:  opts.ImportMode,
+		decisionLog: NewDecisionLogger(opts.DB, logger),
 	}, nil
 }
 

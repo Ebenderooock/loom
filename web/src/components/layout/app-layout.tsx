@@ -5,14 +5,17 @@ import {
   Calendar,
   Download,
   Film,
+  Languages,
   LayoutDashboard,
   Library,
   ListTodo,
   Menu,
   Network,
+  HeartPulse,
   Radio,
   Search,
   Settings,
+  SlidersHorizontal,
   Rss,
   Tv,
 } from "lucide-react";
@@ -50,10 +53,13 @@ interface NavItem {
     | "/activity"
     | "/calendar"
     | "/indexers"
+    | "/indexers/health"
     | "/downloads"
     | "/sources"
     | "/proxies"
     | "/notifications"
+    | "/language-profiles"
+    | "/custom-formats"
     | "/settings";
   label: string;
   Icon: typeof LayoutDashboard;
@@ -67,10 +73,13 @@ const NAV: NavItem[] = [
   { to: "/activity", label: "Activity", Icon: ListTodo },
   { to: "/calendar", label: "Calendar", Icon: Calendar },
   { to: "/indexers", label: "Indexers", Icon: Radio },
+  { to: "/indexers/health", label: "Indexer Health", Icon: HeartPulse },
   { to: "/downloads", label: "Downloads", Icon: Download },
   { to: "/sources", label: "Sources", Icon: Rss },
   { to: "/proxies", label: "Proxies", Icon: Network },
   { to: "/notifications", label: "Notifications", Icon: Bell },
+  { to: "/language-profiles", label: "Languages", Icon: Languages },
+  { to: "/custom-formats", label: "Custom Formats", Icon: SlidersHorizontal },
   { to: "/settings", label: "Settings", Icon: Settings },
 ];
 

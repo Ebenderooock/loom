@@ -29,13 +29,16 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
 
+	"github.com/loomctl/loom/internal/anime"
 	"github.com/loomctl/loom/internal/appconfig"
 	"github.com/loomctl/loom/internal/auth"
 	"github.com/loomctl/loom/internal/buildinfo"
+	"github.com/loomctl/loom/internal/customformats"
 	"github.com/loomctl/loom/internal/downloads"
 	"github.com/loomctl/loom/internal/imports"
 	"github.com/loomctl/loom/internal/indexers"
 	"github.com/loomctl/loom/internal/indexers/newznabserver"
+	"github.com/loomctl/loom/internal/languages"
 	"github.com/loomctl/loom/internal/kernel/config"
 	"github.com/loomctl/loom/internal/kernel/eventbus"
 	"github.com/loomctl/loom/internal/kernel/telemetry"
@@ -45,6 +48,7 @@ import (
 	"github.com/loomctl/loom/internal/rss"
 	"github.com/loomctl/loom/internal/safety"
 	"github.com/loomctl/loom/internal/scanner"
+	"github.com/loomctl/loom/internal/scheduler"
 	"github.com/loomctl/loom/internal/series"
 	"github.com/loomctl/loom/internal/storage"
 )
@@ -71,7 +75,11 @@ type Server struct {
 	notifSvc   notifications.Service
 	reviewStore *safety.ReviewStore
 	importPipeline *imports.ImportPipeline
+	langStore   *languages.Store
+	customFormatStore *customformats.Store
+	rollingSearch  *scheduler.RollingSearcher
 	aggSvc     *newznabserver.Server
+	animeStore *anime.Store
 	ready      atomic.Bool
 }
 
@@ -198,9 +206,41 @@ func (s *Server) SetNotifications(svc notifications.Service) {
 	}
 }
 
+// SetRollingSearch installs the rolling-search scheduler and rebuilds the HTTP handler.
+func (s *Server) SetRollingSearch(rs *scheduler.RollingSearcher) {
+	s.rollingSearch = rs
+	if s.httpSrv != nil {
+		s.httpSrv.Handler = s.newMux()
+	}
+}
+
 // SetImportPipeline installs the import pipeline and rebuilds the HTTP handler.
 func (s *Server) SetImportPipeline(p *imports.ImportPipeline) {
 	s.importPipeline = p
+	if s.httpSrv != nil {
+		s.httpSrv.Handler = s.newMux()
+	}
+}
+
+// SetLanguages installs the language-profile store and rebuilds the HTTP handler.
+func (s *Server) SetLanguages(store *languages.Store) {
+	s.langStore = store
+	if s.httpSrv != nil {
+		s.httpSrv.Handler = s.newMux()
+	}
+}
+
+// SetCustomFormats installs the custom formats store and rebuilds the HTTP handler.
+func (s *Server) SetCustomFormats(store *customformats.Store) {
+	s.customFormatStore = store
+	if s.httpSrv != nil {
+		s.httpSrv.Handler = s.newMux()
+	}
+}
+
+// SetAnime installs the anime store and rebuilds the HTTP handler.
+func (s *Server) SetAnime(store *anime.Store) {
+	s.animeStore = store
 	if s.httpSrv != nil {
 		s.httpSrv.Handler = s.newMux()
 	}
@@ -312,9 +352,29 @@ func (s *Server) newMux() http.Handler {
 		// Manual review routes (download safety)
 		r.Mount("/api/v1/reviews", safety.Router(s.reviewStore))
 
+		// Rolling search routes
+		if s.rollingSearch != nil {
+			r.Mount("/api/v1/rolling-search", scheduler.Router(s.rollingSearch))
+		}
+
 		// Import pipeline routes
 		if s.importPipeline != nil {
 			r.Mount("/api/v1/imports", imports.Router(s.importPipeline))
+		}
+
+		// Custom formats routes
+		if s.customFormatStore != nil {
+			r.Mount("/api/v1/custom-formats", customformats.Router(s.customFormatStore, s.logger))
+		}
+
+		// Language profile routes
+		if s.langStore != nil {
+			languages.Mount(r, s.langStore)
+		}
+
+		// Anime routes
+		if s.animeStore != nil {
+			r.Mount("/api/v1/anime", anime.Router(s.animeStore))
 		}
 
 		// System status (authenticated)

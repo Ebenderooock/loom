@@ -41,6 +41,7 @@ func (s *Service) Mount(r chi.Router) {
 			ext(r)
 		}
 	}
+	s.mountSearchHealth(r)
 }
 
 // errorBody is the project-wide error envelope returned by the

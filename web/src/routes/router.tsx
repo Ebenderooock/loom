@@ -17,6 +17,9 @@ import { SourcesPage } from "@/pages/sources";
 import { SeriesPage } from "@/pages/series";
 import { SetupPage } from "@/pages/setup";
 import { NotificationsPage } from "@/pages/notifications";
+import { LanguageProfilesPage } from "@/pages/language-profiles";
+import { IndexerHealthPage } from "@/pages/indexer-health";
+import { CustomFormatsPage } from "@/pages/custom-formats";
 import { NotFoundPage } from "@/pages/not-found";
 import { AuthPage } from "@/pages/auth";
 import { useAuth } from "@/hooks/use-auth";
@@ -124,6 +127,24 @@ const notificationsRoute = createRoute({
   component: NotificationsPage,
 });
 
+const languageProfilesRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/language-profiles",
+  component: LanguageProfilesPage,
+});
+
+const indexerHealthRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/indexers/health",
+  component: IndexerHealthPage,
+});
+
+const customFormatsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/custom-formats",
+  component: CustomFormatsPage,
+});
+
 const routeTree = rootRoute.addChildren([
   setupRoute,
   indexRoute,
@@ -132,11 +153,14 @@ const routeTree = rootRoute.addChildren([
   seriesRoute,
   activityRoute,
   calendarRoute,
+  indexerHealthRoute,
   indexersRoute,
   proxiesRoute,
   downloadsRoute,
   sourcesRoute,
   notificationsRoute,
+  languageProfilesRoute,
+  customFormatsRoute,
   settingsRoute,
 ]);
 

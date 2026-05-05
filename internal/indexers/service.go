@@ -43,6 +43,10 @@ type ServiceOptions struct {
 	// DefinitionLister, when non-nil, provides the list of available
 	// Cardigann definitions for the catalogue API endpoint.
 	DefinitionLister DefinitionLister
+
+	// SearchHealthTracker, when non-nil, is used for search metrics.
+	// If nil, NewService creates one automatically.
+	SearchHealthTracker *SearchHealthTracker
 }
 
 // RouteMounter mounts additional routes onto the Service router. The
@@ -62,8 +66,9 @@ type Service struct {
 	searchTimeout      time.Duration
 	maxParallel        int
 	healthCheckTimeout time.Duration
-	routeExtensions    []RouteMounter
-	definitionLister   DefinitionLister
+	routeExtensions      []RouteMounter
+	definitionLister     DefinitionLister
+	searchHealthTracker  *SearchHealthTracker
 
 	mu sync.Mutex // serialises CRUD against the registry
 }
@@ -91,16 +96,21 @@ func NewService(opts ServiceOptions) (*Service, error) {
 	if opts.HealthCheckTimeout <= 0 {
 		opts.HealthCheckTimeout = 10 * time.Second
 	}
+	sht := opts.SearchHealthTracker
+	if sht == nil {
+		sht = NewSearchHealthTracker(opts.Registry)
+	}
 	return &Service{
-		repo:               opts.Repository,
-		registry:           opts.Registry,
-		logger:             opts.Logger.With("module", "indexers"),
-		clock:              opts.Clock,
-		searchTimeout:      opts.SearchTimeout,
-		maxParallel:        opts.MaxParallel,
-		healthCheckTimeout: opts.HealthCheckTimeout,
-		routeExtensions:    opts.RouteExtensions,
-		definitionLister:   opts.DefinitionLister,
+		repo:                opts.Repository,
+		registry:            opts.Registry,
+		logger:              opts.Logger.With("module", "indexers"),
+		clock:               opts.Clock,
+		searchTimeout:       opts.SearchTimeout,
+		maxParallel:         opts.MaxParallel,
+		healthCheckTimeout:  opts.HealthCheckTimeout,
+		routeExtensions:     opts.RouteExtensions,
+		definitionLister:    opts.DefinitionLister,
+		searchHealthTracker: sht,
 	}, nil
 }
 
@@ -422,12 +432,37 @@ func (s *Service) Search(ctx context.Context, q Query, ids []string, perTimeout 
 	if perTimeout <= 0 {
 		perTimeout = s.searchTimeout
 	}
-	return s.registry.Search(ctx, q, SearchOptions{
+	agg := s.registry.Search(ctx, q, SearchOptions{
 		IndexerIDs:        ids,
 		PerIndexerTimeout: perTimeout,
 		MaxParallel:       s.maxParallel,
 	})
+	// Record search metrics for each indexer.
+	if s.searchHealthTracker != nil && agg.Diagnostics != nil {
+		for _, d := range agg.Diagnostics.Indexers {
+			var indexerID string
+			for _, ix := range s.registry.List() {
+				if ix.Name() == d.Name {
+					indexerID = ix.ID()
+					break
+				}
+			}
+			if indexerID == "" {
+				continue
+			}
+			dur := time.Duration(d.ResponseTimeMS) * time.Millisecond
+			var searchErr error
+			if d.Status == "error" || d.Status == "timeout" {
+				searchErr = errors.New(d.ErrorMessage)
+			}
+			s.searchHealthTracker.RecordSearch(indexerID, dur, d.ResultCount, searchErr)
+		}
+	}
+	return agg
 }
+
+// SearchHealthTracker returns the search health tracker.
+func (s *Service) SearchHealthTracker() *SearchHealthTracker { return s.searchHealthTracker }
 
 // CapsFor returns the live capability snapshot for id.
 func (s *Service) CapsFor(id string) (Caps, bool) {
