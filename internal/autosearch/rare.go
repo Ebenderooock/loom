@@ -3,6 +3,7 @@ package autosearch
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"log/slog"
 	"time"
 )
@@ -90,7 +91,7 @@ func (r *RareContentStrategy) BuildSearchTerms(title string, year int, alternate
 	terms := []string{title}
 
 	if year > 0 {
-		terms = append(terms, title+" "+string(rune('0'+year/1000%10))+string(rune('0'+year/100%10))+string(rune('0'+year/10%10))+string(rune('0'+year%10)))
+		terms = append(terms, fmt.Sprintf("%s %d", title, year))
 	}
 
 	if r.config.UseAlternateTitles {
