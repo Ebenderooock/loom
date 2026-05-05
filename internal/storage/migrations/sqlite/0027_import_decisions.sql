@@ -1,3 +1,4 @@
+-- +goose Up
 -- 0027_import_decisions: Track every import decision for auditability.
 CREATE TABLE IF NOT EXISTS import_decisions (
     id              TEXT PRIMARY KEY,
