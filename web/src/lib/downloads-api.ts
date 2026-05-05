@@ -207,6 +207,34 @@ export async function testDownload(id: string): Promise<TestResult> {
   );
 }
 
+// ---------- Grab (send release to download client) ----------
+
+export interface GrabRequest {
+  magnet?: string;
+  torrent_url?: string;
+  nzb_url?: string;
+  title?: string;
+  category?: string;
+  save_path?: string;
+  tags?: string[];
+}
+
+export interface GrabResult {
+  client_id: string;
+  item_id: string;
+}
+
+export async function grabRelease(
+  clientId: string,
+  body: GrabRequest,
+): Promise<GrabResult> {
+  return request<GrabResult>(
+    "POST",
+    `/api/v1/download-clients/${encodeURIComponent(clientId)}/items`,
+    body,
+  );
+}
+
 // ---------- React Query hooks ----------
 
 /**
@@ -278,6 +306,18 @@ export function useTestDownload() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: testDownload,
+    onSuccess: () => qc.invalidateQueries({ queryKey: downloadKeys.all }),
+  });
+}
+
+/**
+ * Mutation hook to grab a release (send to a download client).
+ */
+export function useGrabRelease() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ clientId, ...body }: GrabRequest & { clientId: string }) =>
+      grabRelease(clientId, body),
     onSuccess: () => qc.invalidateQueries({ queryKey: downloadKeys.all }),
   });
 }
