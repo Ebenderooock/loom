@@ -103,6 +103,7 @@ type Server struct {
 	apiKeyStore *apikeys.Store
 	cmdQueue    *commands.Queue
 	qpStore     *qualityprofiles.Store
+	httpMetrics *telemetry.HTTPMetrics
 	ready      atomic.Bool
 }
 
@@ -138,6 +139,7 @@ func New(cfg *config.Config, appCfg *appconfig.Config, logger *slog.Logger, tel 
 		moviesSvc:   moviesSvc,
 		reviewStore: safety.NewReviewStore(db.DB()),
 		aggSvc:      aggSvc,
+		httpMetrics: telemetry.NewHTTPMetrics(tel.Registry()),
 	}
 
 	mux := s.newMux()
@@ -369,8 +371,7 @@ func (s *Server) newMux() http.Handler {
 	r := chi.NewRouter()
 
 	// HTTP metrics middleware — registered early so it captures all requests.
-	httpMetrics := telemetry.NewHTTPMetrics(s.tel.Registry())
-	r.Use(httpMetrics.Handler)
+	r.Use(s.httpMetrics.Handler)
 
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
@@ -576,6 +577,13 @@ func (s *Server) newMux() http.Handler {
 
 	if s.cfg.Debug.Pprof {
 		s.mountPprof(r)
+	}
+
+	// Embedded SPA catch-all — serves the React frontend when built with
+	// `-tags embed`. In dev mode spaHandler() returns nil and the Vite dev
+	// server on :5173 handles the UI.
+	if spa := spaHandler(); spa != nil {
+		r.NotFound(spa.ServeHTTP)
 	}
 
 	return r

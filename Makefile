@@ -17,9 +17,16 @@ LDFLAGS := -s -w \
 
 all: lint test build ## Lint, test, and build
 
-build: ## Build the loom binary
+build: ## Build the loom binary (API only, no embedded UI)
 	@mkdir -p $(DIST)
 	$(GO) build -trimpath -ldflags '$(LDFLAGS)' -o $(DIST)/$(BIN) ./cmd/loom
+
+build-all: web-build ## Build the loom binary with embedded React UI
+	@mkdir -p $(DIST)
+	$(GO) build -trimpath -tags embed -ldflags '$(LDFLAGS)' -o $(DIST)/$(BIN) ./cmd/loom
+
+web-build: ## Build the React frontend into web/dist
+	cd web && npm ci --no-audit --no-fund && npm run build
 
 test: ## Run unit tests with race detector and coverage
 	$(GO) test -race -count=1 -coverprofile=coverage.out ./...
@@ -52,6 +59,16 @@ dev: ## Run with auto-reload (requires `air`)
 
 clean: ## Remove build artifacts
 	rm -rf $(DIST) coverage.out
+
+cross: web-build ## Cross-compile for common platforms (Linux amd64, ARM64, Windows, macOS)
+	@mkdir -p $(DIST)
+	GOOS=linux   GOARCH=amd64 $(GO) build -trimpath -tags embed -ldflags '$(LDFLAGS)' -o $(DIST)/$(BIN)-linux-amd64   ./cmd/loom
+	GOOS=linux   GOARCH=arm64 $(GO) build -trimpath -tags embed -ldflags '$(LDFLAGS)' -o $(DIST)/$(BIN)-linux-arm64   ./cmd/loom
+	GOOS=linux   GOARCH=arm   GOARM=7 $(GO) build -trimpath -tags embed -ldflags '$(LDFLAGS)' -o $(DIST)/$(BIN)-linux-armv7 ./cmd/loom
+	GOOS=darwin  GOARCH=arm64 $(GO) build -trimpath -tags embed -ldflags '$(LDFLAGS)' -o $(DIST)/$(BIN)-darwin-arm64  ./cmd/loom
+	GOOS=darwin  GOARCH=amd64 $(GO) build -trimpath -tags embed -ldflags '$(LDFLAGS)' -o $(DIST)/$(BIN)-darwin-amd64  ./cmd/loom
+	GOOS=windows GOARCH=amd64 $(GO) build -trimpath -tags embed -ldflags '$(LDFLAGS)' -o $(DIST)/$(BIN)-windows-amd64.exe ./cmd/loom
+	@echo "Built binaries:" && ls -lh $(DIST)/$(BIN)-*
 
 docker: ## Build the local Docker image
 	docker build -t loom:dev -f deploy/docker/Dockerfile .
