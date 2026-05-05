@@ -17,6 +17,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Plus, Search, Tv, Loader2 } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
 import { useSetPageHeader } from "@/hooks/use-page-header";
 import { toast } from "sonner";
@@ -163,6 +164,8 @@ export function SeriesPage() {
       list = list.filter(s => s.monitoringStatus === "monitored");
     } else if (monitoredFilter === "unmonitored") {
       list = list.filter(s => s.monitoringStatus === "unmonitored");
+    } else if (monitoredFilter === "archived") {
+      list = list.filter(s => s.monitoringStatus === "unmonitored");
     }
     return sortSeries(list, sortKey);
   }, [seriesList, filterText, statusFilter, monitoredFilter, sortKey]);
@@ -290,15 +293,16 @@ export function SeriesPage() {
       ) : viewMode === "grid" ? (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 gap-4">
           {processed.map(s => (
-            <SeriesCard
-              key={s.id}
-              series={s}
-              profiles={qualityProfiles}
-              selected={selectedIds.has(s.id)}
-              selectMode={selectMode}
-              onToggleSelect={() => toggleSelect(s.id)}
-              onClick={() => openDetail(s)}
-            />
+            <div key={s.id} className={cn(s.monitoringStatus === "unmonitored" && "opacity-60")}>
+              <SeriesCard
+                series={s}
+                profiles={qualityProfiles}
+                selected={selectedIds.has(s.id)}
+                selectMode={selectMode}
+                onToggleSelect={() => toggleSelect(s.id)}
+                onClick={() => openDetail(s)}
+              />
+            </div>
           ))}
         </div>
       ) : (

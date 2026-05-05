@@ -28,11 +28,13 @@ import {
   Bookmark, BookmarkCheck, RefreshCw, ChevronRight,
   FolderOpen, HardDrive, Info, History, FileVideo,
   Download, Search, Users, Clapperboard,
+  Archive, ArchiveRestore,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { StatusBadge } from "./status-badge";
 import { ReleaseSearchDialog } from "@/components/search/release-search-dialog";
+import { AltTitlesSection } from "@/components/alt-titles";
 import type { Movie, QualityProfile, RootFolder, Credits, CreditPerson } from "./types";
 import { TMDB_IMG } from "./types";
 
@@ -153,6 +155,7 @@ export function MovieDetailSheet({
   const [credits, setCredits] = useState<Credits | null>(null);
   const [creditsLoading, setCreditsLoading] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [archiving, setArchiving] = useState(false);
 
   useEffect(() => {
     if (movie && open) {
@@ -242,6 +245,29 @@ export function MovieDetailSheet({
       toast.error("Network error");
     } finally {
       setDeleting(false);
+    }
+  };
+
+  const handleArchiveToggle = async () => {
+    if (!movie) return;
+    setArchiving(true);
+    const isArchived = movie.monitoringStatus === "unmonitored";
+    const endpoint = isArchived
+      ? `/api/v1/movies/${movie.id}/unarchive`
+      : `/api/v1/movies/${movie.id}/archive`;
+    try {
+      const res = await fetch(endpoint, { method: "POST", credentials: "include" });
+      if (res.ok) {
+        const newStatus = isArchived ? "monitored" : "unmonitored";
+        onUpdated({ ...movie, monitoringStatus: newStatus });
+        toast.success(isArchived ? "Movie unarchived" : "Movie archived");
+      } else {
+        toast.error("Failed to update archive status");
+      }
+    } catch {
+      toast.error("Network error");
+    } finally {
+      setArchiving(false);
     }
   };
 
@@ -341,6 +367,13 @@ export function MovieDetailSheet({
               <Button size="sm" variant="outline" className="gap-1.5" onClick={handleRefresh} disabled={refreshing}>
                 <RefreshCw className={cn("w-3.5 h-3.5", refreshing && "animate-spin")} />Refresh
               </Button>
+              <Button size="sm" variant="outline" className="gap-1.5" onClick={handleArchiveToggle} disabled={archiving}>
+                {movie.monitoringStatus === "unmonitored" ? (
+                  <><ArchiveRestore className="w-3.5 h-3.5" />Unarchive</>
+                ) : (
+                  <><Archive className="w-3.5 h-3.5" />Archive</>
+                )}
+              </Button>
               <Button size="sm" variant="destructive" className="gap-1.5 ml-auto" onClick={() => setDeleteOpen(true)}>
                 <Trash2 className="w-3.5 h-3.5" />Delete
               </Button>
@@ -436,6 +469,9 @@ export function MovieDetailSheet({
                 )}
               </div>
             </CollapsibleSection>
+
+            {/* ── Alt Titles ── */}
+            <AltTitlesSection mediaId={movie.id} mediaType="movie" />
 
             {/* ── Details Panel ── */}
             <CollapsibleSection title="Details" icon={HardDrive} defaultOpen>
