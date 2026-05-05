@@ -336,8 +336,16 @@ func matchErrorSelectors(body []byte, blocks []ErrorBlock) string {
 		if sel.Length() == 0 {
 			continue
 		}
-		if b.Message != "" {
-			return b.Message
+		// Plain text message takes precedence.
+		if b.Message.Text != "" {
+			return b.Message.Text
+		}
+		// Prowlarr-style: extract message from a nested CSS selector.
+		if b.Message.Selector != "" {
+			msgSel := sel.Find(b.Message.Selector)
+			if msgSel.Length() > 0 {
+				return strings.TrimSpace(msgSel.First().Text())
+			}
 		}
 		return strings.TrimSpace(sel.First().Text())
 	}
@@ -425,8 +433,8 @@ func (e *Engine) buildSearchRequest(q indexers.Query) (method, target string, pa
 	}
 
 	headers = http.Header{}
-	for k, tmpl := range e.def.Search.Headers {
-		v, terr := e.expandTemplate(tmpl, tctx)
+	for k, vals := range e.def.Search.Headers {
+		v, terr := e.expandTemplate(vals.First(), tctx)
 		if terr != nil {
 			return "", "", nil, nil, fmt.Errorf("cardigann: search header %q: %w", k, terr)
 		}
@@ -749,7 +757,15 @@ func (e *Engine) ensureCategories() {
 	allCats := map[indexers.Category]bool{}
 
 	for siteID, nzb := range e.def.Caps.Categories {
-		c := indexers.Category(nzb)
+		c, ok := newznabCategoryFromName(nzb)
+		if !ok {
+			// Try parsing as a numeric category ID for legacy format.
+			n, err := atoiSafe(nzb)
+			if err != nil {
+				continue
+			}
+			c = indexers.Category(n)
+		}
 		siteToNzb[siteID] = append(siteToNzb[siteID], c)
 		nzbToSite[c] = append(nzbToSite[c], siteID)
 		allCats[c] = true

@@ -13,7 +13,7 @@ LDFLAGS := -s -w \
 	-X $(PKG)/internal/buildinfo.Commit=$(COMMIT) \
 	-X $(PKG)/internal/buildinfo.Date=$(DATE)
 
-.PHONY: all build test lint fmt vet tidy run dev clean docker help
+.PHONY: all build test lint fmt vet tidy run dev clean docker sync-definitions help
 
 all: lint test build ## Lint, test, and build
 
@@ -55,6 +55,9 @@ clean: ## Remove build artifacts
 
 docker: ## Build the local Docker image
 	docker build -t loom:dev -f deploy/docker/Dockerfile .
+
+sync-definitions: ## Download Prowlarr v11 Cardigann definitions
+	@bash scripts/sync-prowlarr-defs.sh
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | \
