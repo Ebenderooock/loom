@@ -1,6 +1,6 @@
 # Roadmap
 
-This is the public mirror of Loom's 11-phase delivery plan. Phases ship
+This is the public mirror of Loom's delivery plan. Phases ship
 releasable artifacts (alpha → beta → rc → 1.0) and overlap where they
 are independent.
 
@@ -10,84 +10,114 @@ Legend: ✅ done · 🚧 in progress · ⏳ planned
 
 ## ✅ Phase 0 — Repo & engineering foundations
 
-- ✅ Initialise Go module, repo skeleton, AGPL-3.0 license.
+- ✅ Go module, repo skeleton, AGPL-3.0 license
 - ✅ CI: GitHub Actions for `go test`, `golangci-lint`, `govulncheck`,
-  frontend lint/build.
+  frontend lint/build
 - ✅ Release pipeline: GoReleaser → multi-arch binaries + Docker images
-  on `ghcr.io`.
-- ✅ ADR directory with the first five ADRs (language, storage, API,
-  auth, observability).
+- ✅ ADR directory with architectural decision records
 - ✅ Contributor docs: `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`,
-  `SECURITY.md`, issue templates.
+  `SECURITY.md`, issue templates
 
-## 🚧 Phase 1 — Platform kernel
+## ✅ Phase 1 — Platform kernel
 
-- ✅ Config: layered (defaults → file → env → flags) via Viper;
-  hot-reload for safe keys.
-- ✅ Logging: `slog` JSON; PII redaction.
-- ✅ Telemetry: OpenTelemetry SDK; OTLP exporter; Prometheus `/metrics`;
-  pprof gated by config.
-- ✅ Storage: SQLite + Postgres, goose migrations, sqlc query generation.
+- ✅ Config: layered (defaults → file → env → flags) with hot-reload
+- ✅ Logging: `slog` JSON with PII redaction
+- ✅ Telemetry: OpenTelemetry SDK, OTLP, Prometheus `/metrics`, pprof
+- ✅ Storage: SQLite with goose migrations (21 migrations), sqlc queries
 - ✅ Scheduler: in-memory cron + jittered intervals + one-shot tasks
-  (persistence to follow).
-- ✅ Event bus: in-process channels (NATS in split-mode lands in Phase 11).
-- ✅ HTTP server: chi router, request-ID, structured access logs, panic
-  recovery, gzip, ETag.
-- ✅ Health endpoints: `/healthz`, `/readyz`, `/livez`.
-- ✅ React app skeleton: Vite + TS + TanStack Router/Query + shadcn/ui +
-  Tailwind + Storybook + Playwright.
-- 🚧 Auth: forms login (argon2id), API keys, OIDC (Authelia / Authentik /
-  Keycloak / Entra), reverse-proxy header trust.
+- ✅ Event bus: in-process channels with async fan-out
+- ✅ HTTP server: chi router, request-ID, structured access logs, gzip, ETag
+- ✅ Health endpoints: `/healthz`, `/readyz`, `/livez`
+- ✅ React app: Vite + TS + TanStack Router/Query + shadcn/ui + Tailwind
+- ✅ Auth: forms login (argon2id), session cookies, setup flow
 
-## ⏳ Phase 2 — Indexer subsystem (Prowlarr-equivalent)
+## ✅ Phase 2 — Indexer subsystem (Prowlarr-equivalent)
 
-Cardigann YAML loader, Newznab/Torznab in/out, search aggregation,
-indexer health, proxies + FlareSolverr, manual search UI.
+- ✅ Cardigann YAML engine — 542 bundled indexer definitions
+- ✅ Newznab/Torznab protocol support
+- ✅ Search aggregation across multiple indexers
+- ✅ Proxy + FlareSolverr support
+- ✅ Manual search UI with release dialog
+- ✅ Indexer catalogue — searchable table with type/category filters
+- ✅ Search result scoring (quality + seeders + age + size, 0–100)
+- ✅ Search result filtering (indexer, quality, size, seeders, freeleech)
+- ✅ Per-indexer search diagnostics (timing, status, result counts)
+- ✅ Freeleech / tracker intelligence (FL/Internal/Scene detection)
 
-## ⏳ Phase 3 — Download client adapters
+## 🚧 Phase 3 — Download pipeline
 
-qBittorrent, Transmission, Deluge, rTorrent, SABnzbd, NZBGet. Queue,
-remote-path mappings, blocklist, redownload-on-failure.
+- ✅ Download grab flow (magnet URI + NZB)
+- ✅ Auto-search on add (background search when adding media)
+- ✅ Download activity tracking (live queue, progress, speed, ETA)
+- ✅ Hardlink-only import mode (move / hardlink / hardlink_only)
+- ⏳ qBittorrent, Transmission, Deluge, rTorrent, SABnzbd, NZBGet adapters
+- ⏳ Remote-path mappings, blocklist, redownload-on-failure
+- ⏳ Full import/post-processing pipeline
+- ⏳ Deterministic import behavior
+- ⏳ Smarter re-import logic
 
-## ⏳ Phase 4 — Metadata providers
+## 🚧 Phase 4 — Movies module (Radarr-equivalent)
 
-TMDB, TheTVDB v4, IMDB, Trakt, AniDB + AniList, image proxy/cache.
+- ✅ Movies service & CRUD API
+- ✅ Root folder management
+- ✅ Quality profiles & custom formats with scoring
+- ✅ Frontend movies page (poster grid, detail modal, search)
+- ⏳ Library scanning (filesystem discovery → metadata)
+- ⏳ RSS sync
+- ⏳ Collections & lists
+- ⏳ Calendar
 
-## ⏳ Phase 5 — Movies module (Radarr-equivalent)
+## 🚧 Phase 5 — Series module (Sonarr-equivalent)
 
-Library, root folders, quality profiles, Custom Formats, parser,
-RSS sync, import pipeline (hardlink/EXDEV-aware), lists, collections,
-calendar.
+- ✅ Series/season/episode data model & API
+- ✅ TMDB metadata integration
+- ✅ Frontend series page (season accordion, episode table)
+- ✅ Series library scanning with season-folder support
+- ⏳ Anime handling (AniDB/AniList mapping, absolute numbering)
+- ⏳ Multi-season pack support
+- ⏳ Specials & mini-series handling
+- ⏳ Alternate episode ordering (DVD, absolute, etc.)
 
-## ⏳ Phase 6 — Series module (Sonarr-equivalent)
+## ✅ Phase 6 — Notifications & automation
 
-Series → seasons → episodes, season packs, anime mapping, calendar,
-Sonarr v3 + v4 API shape parity.
+- ✅ Discord, Webhook, Gotify, Ntfy channels
+- ✅ Rich notification templates (Go text/template, per-channel overrides)
+- ✅ Event bus integration with async fan-out
+- ✅ Frontend notifications page (CRUD, test, template editor)
+- ⏳ Proactive health alerts
+- ⏳ Plugin SDK / custom scripts
 
-## ⏳ Phase 7 — Wire-compatibility surfaces
+## ✅ Phase 7 — Download safety
 
-`/api/v3/*` Radarr + Sonarr, `/api/v1/*` Prowlarr, Bazarr endpoints,
-compat acceptance test suite running real downstream apps in CI.
+- ✅ Bad release detection (dangerous extensions, suspicious patterns, size anomalies)
+- ✅ Post-download validation (video presence, no executables, no password archives)
+- ✅ Manual review queue with approve/reject
+- ✅ Frontend safety settings + Activity reviews tab
 
-## ⏳ Phase 8 — Migration tooling
+## ⏳ Phase 8 — Advanced custom formats
 
-`loom migrate import --from {radarr,sonarr,prowlarr}`, dry-run + diff,
-idempotent re-run, frontend wizard, side-by-side mode.
+- ⏳ AND/OR logic, nested conditions, reusable building blocks
+- ⏳ Custom format scoring integration with download decisions
+- ⏳ Metadata-aware post-download matching
 
-## ⏳ Phase 9 — Frontend feature parity & UX modernisation
+## ⏳ Phase 9 — Language & international support
 
-Unified library, discover, activity centre, calendar, settings deep-link
-search, themes, mobile-first, ⌘K palette, WCAG 2.2 AA, i18n.
+- ⏳ Language profiles (priority-based, per-library)
+- ⏳ Subtitle/audio track awareness
+- ⏳ International release handling (MULTi, dual-audio)
 
-## ⏳ Phase 10 — Notifications, automation & extensibility
+## ⏳ Phase 10 — Long-tail search & scale
 
-Discord / Slack / Telegram / Pushover / Pushbullet / Gotify / ntfy /
-Apprise / Email / Webhook / Notifiarr / MQTT, custom scripts (sandboxed),
-plugin SDK (out-of-process gRPC).
+- ⏳ Rolling missing search (scheduled, gradual)
+- ⏳ Quota-aware API call tracking
+- ⏳ Old/rare content search strategy
 
 ## ⏳ Phase 11 — Deployment, hardening & 1.0
 
-Distroless multi-arch images (non-root, RO rootfs), Helm chart,
-Kustomize overlays, Grafana dashboards, backup/restore CLI, SBOM
-(syft), image signing (cosign), SLSA provenance, performance
-benchmarks (Pi 5 + small VPS), public Docusaurus site, **1.0 release**.
+- ⏳ Indexer health dashboard (uptime, response times, error rates)
+- ⏳ Per-media indexer rules
+- ⏳ Distroless multi-arch images, Helm chart
+- ⏳ Grafana dashboards, backup/restore CLI
+- ⏳ Wire-compatibility: Radarr/Sonarr/Prowlarr API shape parity
+- ⏳ Migration tooling: `loom migrate import --from {radarr,sonarr,prowlarr}`
+- ⏳ Performance benchmarks, public documentation site, **1.0 release**
