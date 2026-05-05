@@ -31,6 +31,7 @@ import (
 
 	"github.com/loomctl/loom/internal/anime"
 	"github.com/loomctl/loom/internal/appconfig"
+	"github.com/loomctl/loom/internal/episodeorder"
 	"github.com/loomctl/loom/internal/auth"
 	"github.com/loomctl/loom/internal/buildinfo"
 	"github.com/loomctl/loom/internal/customformats"
@@ -45,6 +46,7 @@ import (
 	"github.com/loomctl/loom/internal/movies"
 	"github.com/loomctl/loom/internal/notifications"
 	"github.com/loomctl/loom/internal/organizer"
+	"github.com/loomctl/loom/internal/packs"
 	"github.com/loomctl/loom/internal/rss"
 	"github.com/loomctl/loom/internal/safety"
 	"github.com/loomctl/loom/internal/scanner"
@@ -80,6 +82,8 @@ type Server struct {
 	rollingSearch  *scheduler.RollingSearcher
 	aggSvc     *newznabserver.Server
 	animeStore *anime.Store
+	packsStore *packs.Store
+	episodeOrderStore *episodeorder.Store
 	ready      atomic.Bool
 }
 
@@ -246,6 +250,22 @@ func (s *Server) SetAnime(store *anime.Store) {
 	}
 }
 
+// SetPacks installs the packs store and rebuilds the HTTP handler.
+func (s *Server) SetPacks(store *packs.Store) {
+	s.packsStore = store
+	if s.httpSrv != nil {
+		s.httpSrv.Handler = s.newMux()
+	}
+}
+
+// SetEpisodeOrder installs the episode-order store and rebuilds the HTTP handler.
+func (s *Server) SetEpisodeOrder(store *episodeorder.Store) {
+	s.episodeOrderStore = store
+	if s.httpSrv != nil {
+		s.httpSrv.Handler = s.newMux()
+	}
+}
+
 // Bus returns the server's event bus for wiring pipelines.
 func (s *Server) Bus() eventbus.Bus {
 	return s.bus
@@ -375,6 +395,16 @@ func (s *Server) newMux() http.Handler {
 		// Anime routes
 		if s.animeStore != nil {
 			r.Mount("/api/v1/anime", anime.Router(s.animeStore))
+		}
+
+		// Packs routes
+		if s.packsStore != nil {
+			r.Mount("/api/v1/packs", packs.Router(s.packsStore))
+		}
+
+		// Episode ordering routes
+		if s.episodeOrderStore != nil {
+			r.Mount("/api/v1/episode-order", episodeorder.Router(s.episodeOrderStore))
 		}
 
 		// System status (authenticated)
