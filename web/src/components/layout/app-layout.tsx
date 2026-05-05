@@ -61,6 +61,7 @@ interface NavItem {
     | "/notifications"
     | "/language-profiles"
     | "/custom-formats"
+    | "/quality-profiles"
     | "/import-lists"
     | "/settings";
   label: string;
@@ -82,6 +83,7 @@ const NAV: NavItem[] = [
   { to: "/notifications", label: "Notifications", Icon: Bell },
   { to: "/language-profiles", label: "Languages", Icon: Languages },
   { to: "/custom-formats", label: "Custom Formats", Icon: SlidersHorizontal },
+  { to: "/quality-profiles", label: "Quality Profiles", Icon: SlidersHorizontal },
   { to: "/import-lists", label: "Import Lists", Icon: ListPlus },
   { to: "/settings", label: "Settings", Icon: Settings },
 ];

@@ -191,15 +191,9 @@ function EditDialog({ initial, onClose }: { initial?: CustomFormat; onClose: () 
               <Input id="cf-id" value={id} onChange={(e) => setId(e.target.value)} placeholder="prefer-hevc" />
             </div>
           )}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="grid gap-1.5">
-              <Label htmlFor="cf-name">Name</Label>
-              <Input id="cf-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Prefer x265" />
-            </div>
-            <div className="grid gap-1.5">
-              <Label htmlFor="cf-score">Score</Label>
-              <Input id="cf-score" type="number" value={score} onChange={(e) => setScore(e.target.value)} />
-            </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="cf-name">Name</Label>
+            <Input id="cf-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Prefer x265" />
           </div>
           <div className="flex items-center gap-2">
             <Checkbox id="cf-rename" checked={includeRename} onCheckedChange={(v) => setIncludeRename(!!v)} />
