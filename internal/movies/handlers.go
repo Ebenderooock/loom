@@ -1,7 +1,9 @@
 package movies
 
 import (
+	"context"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -9,6 +11,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/loomctl/loom/internal/indexers"
 )
 
 // derefString returns the value of a pointer or a default value if nil.
@@ -37,42 +40,62 @@ func derefFloat64(f *float64, def float64) float64 {
 
 // Router mounts movies endpoints on the given chi router.
 func Router(service Service) chi.Router {
+	return RouterWithSearch(service, nil)
+}
+
+// RouterWithSearch mounts movies endpoints with optional search-on-add support.
+func RouterWithSearch(service Service, indexerSvc *indexers.Service) chi.Router {
 	r := chi.NewRouter()
 
 	r.Get("/", listMovies(service))
-	r.Post("/", addMovie(service))
+	r.Post("/", addMovie(service, indexerSvc))
 	r.Get("/search", searchMovies(service))
+	r.Get("/lookup", lookupMovies(service))
+
+	// Root folder routes (must be before /{id} wildcard)
+	r.Route("/root-folders", func(r chi.Router) {
+		r.Get("/", listRootFolders(service))
+		r.Post("/", addRootFolder(service))
+		r.Delete("/{id}", deleteRootFolder(service))
+	})
+
+	// Quality definition routes
+	r.Route("/quality-definitions", func(r chi.Router) {
+		r.Get("/", listQualityDefinitions(service))
+		r.Post("/", addQualityDefinition(service))
+		r.Get("/{id}", getQualityDefinition(service))
+		r.Put("/{id}", updateQualityDefinition(service))
+		r.Delete("/{id}", deleteQualityDefinition(service))
+	})
+
+	// Quality profile routes
+	r.Route("/quality-profiles", func(r chi.Router) {
+		r.Get("/", listQualityProfiles(service))
+		r.Post("/", addQualityProfile(service))
+		r.Get("/{id}", getQualityProfile(service))
+		r.Put("/{id}", updateQualityProfile(service))
+		r.Delete("/{id}", deleteQualityProfile(service))
+	})
+
+	// Custom format routes
+	r.Route("/custom-formats", func(r chi.Router) {
+		r.Get("/", listCustomFormats(service))
+		r.Post("/", addCustomFormat(service))
+		r.Get("/{id}", getCustomFormat(service))
+		r.Put("/{id}", updateCustomFormat(service))
+		r.Delete("/{id}", deleteCustomFormat(service))
+		r.Post("/{id}/test", testCustomFormat(service))
+	})
+
+	r.Get("/files/{movieID}", listMovieFiles(service))
+
+	// Wildcard movie routes (must be last)
 	r.Get("/{id}", getMovie(service))
 	r.Put("/{id}", updateMovie(service))
 	r.Delete("/{id}", deleteMovie(service))
 	r.Put("/{id}/monitoring", setMonitoringStatus(service))
-
-	r.Get("/files/{movieID}", listMovieFiles(service))
-
-	r.Get("/root-folders", listRootFolders(service))
-	r.Post("/root-folders", addRootFolder(service))
-	r.Delete("/root-folders/{id}", deleteRootFolder(service))
-
-	// Quality routes
-	r.Get("/quality-definitions", listQualityDefinitions(service))
-	r.Post("/quality-definitions", addQualityDefinition(service))
-	r.Get("/quality-definitions/{id}", getQualityDefinition(service))
-	r.Put("/quality-definitions/{id}", updateQualityDefinition(service))
-	r.Delete("/quality-definitions/{id}", deleteQualityDefinition(service))
-
-	r.Get("/quality-profiles", listQualityProfiles(service))
-	r.Post("/quality-profiles", addQualityProfile(service))
-	r.Get("/quality-profiles/{id}", getQualityProfile(service))
-	r.Put("/quality-profiles/{id}", updateQualityProfile(service))
-	r.Delete("/quality-profiles/{id}", deleteQualityProfile(service))
-
-	// Custom format routes
-	r.Get("/custom-formats", listCustomFormats(service))
-	r.Post("/custom-formats", addCustomFormat(service))
-	r.Get("/custom-formats/{id}", getCustomFormat(service))
-	r.Put("/custom-formats/{id}", updateCustomFormat(service))
-	r.Delete("/custom-formats/{id}", deleteCustomFormat(service))
-	r.Post("/custom-formats/{id}/test", testCustomFormat(service))
+	r.Post("/{id}/refresh", refreshMovie(service))
+	r.Get("/{id}/credits", getMovieCredits(service))
 
 	return r
 }
@@ -92,6 +115,10 @@ func movieToResponse(m *Movie) map[string]interface{} {
 		"backdropPath":     m.BackdropPath,
 		"posterPath":       m.PosterPath,
 		"metadataProvider": m.MetadataProvider,
+		"qualityProfileId": m.QualityProfileID,
+		"rootFolderId":     m.RootFolderID,
+		"status":           string(m.Status),
+		"releaseDate":      m.ReleaseDate,
 		"monitoringStatus": string(m.MonitoringStatus),
 		"createdAt":        m.CreatedAt.Format("2006-01-02T15:04:05Z"),
 		"updatedAt":        m.UpdatedAt.Format("2006-01-02T15:04:05Z"),
@@ -163,6 +190,25 @@ func searchMovies(svc Service) http.HandlerFunc {
 	}
 }
 
+func lookupMovies(svc Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		term := r.URL.Query().Get("term")
+		if term == "" {
+			http.Error(w, "lookup term required", http.StatusBadRequest)
+			return
+		}
+
+		results, err := svc.LookupMovies(r.Context(), term)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(results)
+	}
+}
+
 func getMovie(svc Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id := chi.URLParam(r, "id")
@@ -186,7 +232,7 @@ func getMovie(svc Service) http.HandlerFunc {
 	}
 }
 
-func addMovie(svc Service) http.HandlerFunc {
+func addMovie(svc Service, indexerSvc *indexers.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req CreateMovieRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -194,8 +240,24 @@ func addMovie(svc Service) http.HandlerFunc {
 			return
 		}
 
+		// Use a slug-based ID but add a unique suffix to avoid collisions
+		slug := slugify(req.Title)
+		if req.Year > 0 {
+			slug = slug + "-" + strconv.Itoa(req.Year)
+		}
+
+		// Determine initial status based on release date
+		status := MovieStatusMissing
+		if req.ReleaseDate != "" {
+			if t, err := time.Parse("2006-01-02", req.ReleaseDate); err == nil {
+				if t.After(time.Now()) {
+					status = MovieStatusUnreleased
+				}
+			}
+		}
+
 		movie := &Movie{
-			ID:               strings.ToLower(strings.ReplaceAll(req.Title, " ", "-")),
+			ID:               slug,
 			Title:            req.Title,
 			Year:             req.Year,
 			IMDBID:           req.IMDBID,
@@ -208,7 +270,13 @@ func addMovie(svc Service) http.HandlerFunc {
 			BackdropPath:     req.BackdropPath,
 			PosterPath:       req.PosterPath,
 			MetadataProvider: req.MetadataProvider,
+			QualityProfileID: req.QualityProfileID,
+			RootFolderID:     req.RootFolderID,
+			Status:           status,
+			ReleaseDate:      req.ReleaseDate,
 			MonitoringStatus: MonitoringStatus(derefString(req.MonitoringStatus, string(MonitoringStatusMonitored))),
+			CreatedAt:        time.Now(),
+			UpdatedAt:        time.Now(),
 		}
 
 		if err := svc.AddMovie(r.Context(), movie); err != nil {
@@ -216,9 +284,37 @@ func addMovie(svc Service) http.HandlerFunc {
 			return
 		}
 
+		// Fire async indexer search if requested
+		if req.Search && indexerSvc != nil {
+			go fireMovieSearch(movie, indexerSvc)
+		}
+
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
 		json.NewEncoder(w).Encode(movieToResponse(movie))
+	}
+}
+
+// fireMovieSearch runs an indexer search for a movie in the background.
+func fireMovieSearch(movie *Movie, indexerSvc *indexers.Service) {
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	q := indexers.Query{
+		Term:       movie.Title,
+		Categories: []indexers.Category{indexers.CategoryMovies},
+	}
+	if movie.IMDBID != nil && *movie.IMDBID != "" {
+		q.IMDBID = *movie.IMDBID
+	}
+	if movie.TMDBID != nil && *movie.TMDBID != "" {
+		q.TMDBID = *movie.TMDBID
+	}
+
+	result := indexerSvc.Search(ctx, q, nil, 30*time.Second)
+	if len(result.Errors) > 0 {
+		slog.Warn("search-on-add had errors for movie",
+			"movie", movie.Title, "errors", result.Errors)
 	}
 }
 
@@ -274,6 +370,12 @@ func updateMovie(svc Service) http.HandlerFunc {
 		if req.MonitoringStatus != nil {
 			movie.MonitoringStatus = MonitoringStatus(*req.MonitoringStatus)
 		}
+		if req.QualityProfileID != nil {
+			movie.QualityProfileID = *req.QualityProfileID
+		}
+		if req.RootFolderID != nil {
+			movie.RootFolderID = *req.RootFolderID
+		}
 
 		if err := svc.UpdateMovie(r.Context(), movie); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -324,6 +426,43 @@ func setMonitoringStatus(svc Service) http.HandlerFunc {
 		movie, _ := svc.GetMovie(r.Context(), id)
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(movieToResponse(movie))
+	}
+}
+
+func refreshMovie(svc Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := chi.URLParam(r, "id")
+		if id == "" {
+			http.Error(w, "movie ID required", http.StatusBadRequest)
+			return
+		}
+
+		if err := svc.RefreshMovie(r.Context(), id); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{"success": true})
+	}
+}
+
+func getMovieCredits(svc Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := chi.URLParam(r, "id")
+		if id == "" {
+			http.Error(w, "movie ID required", http.StatusBadRequest)
+			return
+		}
+
+		credits, err := svc.GetMovieCredits(r.Context(), id)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(credits)
 	}
 }
 

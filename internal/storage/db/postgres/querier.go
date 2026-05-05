@@ -97,6 +97,7 @@ type Querier interface {
 	UpdateMovieFile(ctx context.Context, arg UpdateMovieFileParams) (MovieFile, error)
 	UpdateRootFolderFreeSpace(ctx context.Context, arg UpdateRootFolderFreeSpaceParams) error
 	UpdateRootFolderUnmappedCount(ctx context.Context, arg UpdateRootFolderUnmappedCountParams) error
+	UpdateUserAdmin(ctx context.Context, arg UpdateUserAdminParams) error
 	UpdateUserOIDC(ctx context.Context, arg UpdateUserOIDCParams) (User, error)
 	UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) error
 	UpdateUserSource(ctx context.Context, arg UpdateUserSourceParams) (UserSource, error)

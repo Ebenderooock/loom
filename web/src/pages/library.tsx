@@ -1,15 +1,11 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useSetPageHeader } from "@/hooks/use-page-header";
 
 export function LibraryPage() {
+  useSetPageHeader("Library");
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Library</h1>
-        <p className="text-sm text-muted-foreground">
-          Unified view of your movies and series.
-        </p>
-      </div>
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6">
         {Array.from({ length: 12 }).map((_, i) => (
           <Card key={i} className="overflow-hidden">

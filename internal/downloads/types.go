@@ -126,6 +126,7 @@ type Item struct {
 	UploadRate    int64      `json:"upload_rate,omitempty"`
 	Ratio         float64    `json:"ratio,omitempty"`
 	Message       string     `json:"message,omitempty"`
+	SavePath      string     `json:"save_path,omitempty"`
 }
 
 // DownloadClient is the abstraction every download kind implements.

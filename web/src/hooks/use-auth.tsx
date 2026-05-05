@@ -6,6 +6,7 @@ interface AuthContextType {
   isLoading: boolean;
   user: { id: number; username: string; email?: string; role: string } | null;
   logout: () => Promise<void>;
+  refreshAuth: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -21,35 +22,56 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Check auth status on mount
+  // Check auth status on mount and poll until authenticated (after setup)
   useEffect(() => {
+    let mounted = true;
+    let pollInterval: NodeJS.Timeout | null = null;
+
     const checkStatus = async () => {
       try {
-        const response = await fetch("http://localhost:8989/api/v1/auth/status", {
+        const response = await fetch("/api/v1/auth/status", {
           credentials: "include",
         });
 
-        if (response.ok) {
+        if (response.ok && mounted) {
           const data = await response.json();
           setIsSetupComplete(!data.setup_required);
           setIsAuthenticated(data.is_authenticated);
           if (data.user) {
             setUser(data.user);
           }
+          
+          // If setup is complete but not authenticated, poll for auth
+          // (happens when user just completed setup on this browser)
+          if (!data.setup_required && !data.is_authenticated && pollInterval === null) {
+            pollInterval = setInterval(checkStatus, 1000);
+          } else if (pollInterval) {
+            clearInterval(pollInterval);
+            pollInterval = null;
+          }
         }
       } catch (err) {
         console.error("Failed to check auth status:", err);
-      } finally {
-        setIsLoading(false);
       }
     };
 
-    checkStatus();
+    checkStatus().then(() => {
+      if (mounted) {
+        setIsLoading(false);
+      }
+    });
+
+    return () => {
+      mounted = false;
+      if (pollInterval) {
+        clearInterval(pollInterval);
+      }
+    };
   }, []);
 
   const logout = async () => {
     try {
-      await fetch("http://localhost:8989/api/v1/auth/logout", {
+      await fetch("/api/v1/auth/logout", {
         method: "POST",
         credentials: "include",
       });
@@ -59,13 +81,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setIsAuthenticated(false);
       setUser(null);
       // Refresh status from server
-      const response = await fetch("http://localhost:8989/api/v1/auth/status", {
+      const response = await fetch("/api/v1/auth/status", {
         credentials: "include",
       });
       if (response.ok) {
         const data = await response.json();
         setIsSetupComplete(!data.setup_required);
       }
+    }
+  };
+
+  const refreshAuth = async () => {
+    try {
+      const response = await fetch("/api/v1/auth/status", {
+        credentials: "include",
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setIsSetupComplete(!data.setup_required);
+        setIsAuthenticated(data.is_authenticated);
+        if (data.user) {
+          setUser(data.user);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to refresh auth status:", err);
     }
   };
 
@@ -77,6 +118,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isLoading,
         user,
         logout,
+        refreshAuth,
       }}
     >
       {isLoading ? (

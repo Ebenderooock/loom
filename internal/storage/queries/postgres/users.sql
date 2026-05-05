@@ -15,6 +15,9 @@ SELECT COUNT(*) FROM users;
 -- name: UpdateUserPassword :exec
 UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2;
 
+-- name: UpdateUserAdmin :exec
+UPDATE users SET username = $1, password_hash = $2, updated_at = NOW() WHERE id = $3;
+
 -- name: UpdateUserOIDC :one
 UPDATE users
 SET email = $1, role = $2, updated_at = NOW()

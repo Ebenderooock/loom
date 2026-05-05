@@ -1,6 +1,7 @@
 import * as React from "react";
 import { Link, Outlet, useRouterState } from "@tanstack/react-router";
 import {
+  Bell,
   Calendar,
   Download,
   Film,
@@ -13,9 +14,10 @@ import {
   Search,
   Settings,
   Rss,
+  Tv,
 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
   Sheet,
   SheetContent,
@@ -37,18 +39,21 @@ import {
   useCommandPalette,
 } from "@/components/command-palette";
 import { cn } from "@/lib/utils";
+import { PageHeaderProvider, usePageHeader } from "@/hooks/use-page-header";
 
 interface NavItem {
   to:
     | "/"
     | "/library"
     | "/movies"
+    | "/series"
     | "/activity"
     | "/calendar"
     | "/indexers"
     | "/downloads"
     | "/sources"
     | "/proxies"
+    | "/notifications"
     | "/settings";
   label: string;
   Icon: typeof LayoutDashboard;
@@ -58,12 +63,14 @@ const NAV: NavItem[] = [
   { to: "/", label: "Dashboard", Icon: LayoutDashboard },
   { to: "/library", label: "Library", Icon: Library },
   { to: "/movies", label: "Movies", Icon: Film },
+  { to: "/series", label: "TV Shows", Icon: Tv },
   { to: "/activity", label: "Activity", Icon: ListTodo },
   { to: "/calendar", label: "Calendar", Icon: Calendar },
   { to: "/indexers", label: "Indexers", Icon: Radio },
   { to: "/downloads", label: "Downloads", Icon: Download },
   { to: "/sources", label: "Sources", Icon: Rss },
   { to: "/proxies", label: "Proxies", Icon: Network },
+  { to: "/notifications", label: "Notifications", Icon: Bell },
   { to: "/settings", label: "Settings", Icon: Settings },
 ];
 
@@ -76,6 +83,22 @@ function SidebarNav({
 }) {
   const router = useRouterState();
   const path = router.location.pathname;
+
+  const [reviewCount, setReviewCount] = React.useState(0);
+  React.useEffect(() => {
+    fetch("/api/v1/reviews/count")
+      .then((r) => r.json())
+      .then((b) => setReviewCount(b.count ?? 0))
+      .catch(() => {});
+    const interval = setInterval(() => {
+      fetch("/api/v1/reviews/count")
+        .then((r) => r.json())
+        .then((b) => setReviewCount(b.count ?? 0))
+        .catch(() => {});
+    }, 30_000);
+    return () => clearInterval(interval);
+  }, []);
+
   return (
     <nav aria-label="Primary" className="flex flex-col gap-1 p-2">
       {NAV.map(({ to, label, Icon }) => {
@@ -96,7 +119,19 @@ function SidebarNav({
             aria-current={active ? "page" : undefined}
           >
             <Icon className="h-4 w-4" aria-hidden="true" />
-            {!collapsed && <span>{label}</span>}
+            {!collapsed && (
+              <span className="flex items-center gap-2">
+                {label}
+                {to === "/activity" && reviewCount > 0 && (
+                  <Badge
+                    variant="destructive"
+                    className="h-5 min-w-[1.25rem] px-1 text-xs"
+                  >
+                    {reviewCount}
+                  </Badge>
+                )}
+              </span>
+            )}
           </Link>
         );
       })}
@@ -119,9 +154,18 @@ function Brand({ collapsed }: { collapsed?: boolean }) {
 }
 
 export function AppLayout({ children }: { children?: React.ReactNode }) {
+  return (
+    <PageHeaderProvider>
+      <AppLayoutInner>{children}</AppLayoutInner>
+    </PageHeaderProvider>
+  );
+}
+
+function AppLayoutInner({ children }: { children?: React.ReactNode }) {
   const [collapsed, setCollapsed] = React.useState(false);
   const [mobileOpen, setMobileOpen] = React.useState(false);
   const { open: paletteOpen, setOpen: setPaletteOpen } = useCommandPalette();
+  const { header } = usePageHeader();
 
   return (
     <div className="flex min-h-screen w-full bg-background text-foreground">
@@ -150,84 +194,98 @@ export function AppLayout({ children }: { children?: React.ReactNode }) {
 
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-border bg-background/80 px-4 backdrop-blur">
-          <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
-            <SheetTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="md:hidden"
-                aria-label="Open navigation"
-              >
-                <Menu className="h-5 w-5" />
-              </Button>
-            </SheetTrigger>
-            <SheetContent side="left" className="w-64 p-0">
-              <SheetHeader className="border-b border-border p-4">
-                <SheetTitle>Loom</SheetTitle>
-              </SheetHeader>
-              <SidebarNav onNavigate={() => setMobileOpen(false)} />
-            </SheetContent>
-          </Sheet>
-
-          <div className="hidden flex-1 items-center md:flex">
-            <div className="relative w-full max-w-md">
-              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                type="search"
-                placeholder="Search Loom…"
-                className="pl-8"
-                aria-label="Global search"
-              />
-            </div>
-          </div>
-
-          <div className="ml-auto flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-2"
-              onClick={() => setPaletteOpen(true)}
-              aria-label="Open command palette"
-            >
-              <Search className="h-4 w-4" />
-              <span className="hidden sm:inline">Quick search</span>
-              <kbd className="hidden rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-[10px] font-medium sm:inline-block">
-                ⌘K
-              </kbd>
-            </Button>
-            <ThemeToggle />
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  aria-label="User menu"
-                  className="rounded-full"
-                >
-                  <span
-                    aria-hidden="true"
-                    className="flex h-8 w-8 items-center justify-center rounded-full bg-muted text-xs font-semibold"
+          {!paletteOpen ? (
+            <>
+              <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
+                <SheetTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="md:hidden"
+                    aria-label="Open navigation"
                   >
-                    LM
-                  </span>
+                    <Menu className="h-5 w-5" />
+                  </Button>
+                </SheetTrigger>
+                <SheetContent side="left" className="w-64 p-0">
+                  <SheetHeader className="border-b border-border p-4">
+                    <SheetTitle>Loom</SheetTitle>
+                  </SheetHeader>
+                  <SidebarNav onNavigate={() => setMobileOpen(false)} />
+                </SheetContent>
+              </Sheet>
+
+              {/* Page title + subtitle */}
+              {header.title && (
+                <div className="hidden md:flex items-baseline gap-2 min-w-0">
+                  <span className="text-sm font-semibold whitespace-nowrap">{header.title}</span>
+                  {header.subtitle && (
+                    <span className="text-xs text-muted-foreground whitespace-nowrap truncate">{header.subtitle}</span>
+                  )}
+                </div>
+              )}
+
+              <div className="flex-1" />
+
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-2"
+                  onClick={() => setPaletteOpen(true)}
+                  aria-label="Open command palette"
+                >
+                  <Search className="h-4 w-4" />
+                  <span className="hidden sm:inline">Quick Search</span>
+                  <kbd className="hidden rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-[10px] font-medium sm:inline-block">
+                    ⌘K
+                  </kbd>
                 </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuLabel>Signed in</DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem disabled>Profile</DropdownMenuItem>
-                <DropdownMenuItem disabled>Sign out</DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
+                <ThemeToggle />
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-label="User menu"
+                      className="rounded-full"
+                    >
+                      <span
+                        aria-hidden="true"
+                        className="flex h-8 w-8 items-center justify-center rounded-full bg-muted text-xs font-semibold"
+                      >
+                        LM
+                      </span>
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuLabel>Signed in</DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem disabled>Profile</DropdownMenuItem>
+                    <DropdownMenuItem disabled>Sign out</DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            </>
+          ) : (
+            <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} inline />
+          )}
         </header>
+
+        {/* Dimmed backdrop when search is open */}
+        {paletteOpen && (
+          <div
+            className="fixed inset-0 z-20 bg-black/50 backdrop-blur-[2px]"
+            style={{ top: "3.5rem" }}
+            onClick={() => setPaletteOpen(false)}
+          />
+        )}
 
         <main id="main" className="min-w-0 flex-1 overflow-x-hidden p-4 md:p-6">
           {children ?? <Outlet />}
         </main>
       </div>
 
-      <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
     </div>
   );
 }

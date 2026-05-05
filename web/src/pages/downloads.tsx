@@ -5,6 +5,7 @@
 import * as React from "react";
 import { MoreHorizontal, Plus } from "lucide-react";
 import { toast } from "sonner";
+import { useSetPageHeader } from "@/hooks/use-page-header";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -73,6 +74,7 @@ function toPatchPayload(
  * DownloadsPage component for managing download clients.
  */
 export function DownloadsPage() {
+  useSetPageHeader("Downloads");
   const downloadsQ = useDownloads();
   const create = useCreateDownload();
   const patch = usePatchDownload();
@@ -159,14 +161,6 @@ export function DownloadsPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-end justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">
-            Download Clients
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Torrent and Usenet download clients Loom uses to fetch releases.
-          </p>
-        </div>
         <Button onClick={() => setDialog({ kind: "create" })} className="gap-2">
           <Plus className="h-4 w-4" />
           Add client

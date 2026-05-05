@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
+import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -17,6 +18,7 @@ export function SetupPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
+  const { refreshAuth } = useAuth();
 
   const completeSetup = async () => {
     if (!username.trim() || !password.trim()) {
@@ -28,7 +30,7 @@ export function SetupPage() {
     setError(null);
 
     try {
-      const response = await fetch("http://localhost:8989/api/v1/auth/initialize", {
+      const response = await fetch("/api/v1/auth/initialize", {
         method: "POST",
         credentials: "include",
         headers: {
@@ -56,9 +58,14 @@ export function SetupPage() {
     }
   };
 
-  const handleCompleteSetup = () => {
-    // Navigate to dashboard - server auth is via session cookie
-    navigate({ to: "/" });
+  const handleCompleteSetup = async () => {
+    setStep("complete");
+    // Refresh auth state - will pick up the session cookie from initialize
+    await refreshAuth();
+    // Navigate to dashboard after a short delay for UX
+    setTimeout(() => {
+      navigate({ to: "/" });
+    }, 1500);
   };
 
   return (
@@ -71,7 +78,7 @@ export function SetupPage() {
               <img 
                 src="/loom-logo.png" 
                 alt="Loom Logo" 
-                className="w-24 h-24 mx-auto"
+                className="h-16 mx-auto object-contain"
               />
               <div className="space-y-2">
                 <h1 className="text-3xl font-bold text-neutral-light">Welcome to Loom</h1>
@@ -241,12 +248,7 @@ export function SetupPage() {
             </Alert>
 
             <Button
-              onClick={() => {
-                setStep("complete");
-                setTimeout(() => {
-                  navigate({ to: "/" });
-                }, 1500);
-              }}
+              onClick={handleCompleteSetup}
               className="w-full bg-teal-electric hover:bg-teal-ocean text-neutral-dark font-medium"
             >
               Continue to Dashboard

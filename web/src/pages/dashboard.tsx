@@ -8,19 +8,14 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { useSystemStatus } from "@/lib/api";
 import { CalendarDays, Film, ListTodo } from "lucide-react";
+import { useSetPageHeader } from "@/hooks/use-page-header";
 
 export function DashboardPage() {
   const { data, isLoading, isError, error } = useSystemStatus();
+  useSetPageHeader("Dashboard");
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
-        <p className="text-sm text-muted-foreground">
-          A quick look at your Loom instance.
-        </p>
-      </div>
-
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <Card>
           <CardHeader>

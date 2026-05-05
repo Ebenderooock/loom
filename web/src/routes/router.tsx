@@ -14,15 +14,28 @@ import { IndexersPage } from "@/pages/indexers";
 import { ProxiesPage } from "@/pages/proxies";
 import { DownloadsPage } from "@/pages/downloads";
 import { SourcesPage } from "@/pages/sources";
+import { SeriesPage } from "@/pages/series";
 import { SetupPage } from "@/pages/setup";
+import { NotificationsPage } from "@/pages/notifications";
 import { NotFoundPage } from "@/pages/not-found";
+import { AuthPage } from "@/pages/auth";
 import { useAuth } from "@/hooks/use-auth";
 
 function RootComponent() {
-  const { isSetupComplete } = useAuth();
+  const { isSetupComplete, isAuthenticated, isLoading } = useAuth();
 
+  if (isLoading) {
+    return <div className="w-screen h-screen bg-neutral-dark" />;
+  }
+
+  // If setup not complete, show setup flow
   if (!isSetupComplete) {
     return <SetupPage />;
+  }
+
+  // If setup complete but not authenticated, show login
+  if (!isAuthenticated) {
+    return <AuthPage />;
   }
 
   return <AppLayout />;
@@ -99,17 +112,31 @@ const sourcesRoute = createRoute({
   component: SourcesPage,
 });
 
+const seriesRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/series",
+  component: SeriesPage,
+});
+
+const notificationsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/notifications",
+  component: NotificationsPage,
+});
+
 const routeTree = rootRoute.addChildren([
   setupRoute,
   indexRoute,
   libraryRoute,
   moviesRoute,
+  seriesRoute,
   activityRoute,
   calendarRoute,
   indexersRoute,
   proxiesRoute,
   downloadsRoute,
   sourcesRoute,
+  notificationsRoute,
   settingsRoute,
 ]);
 

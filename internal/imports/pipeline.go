@@ -1,0 +1,458 @@
+package imports
+
+import (
+	"context"
+	"database/sql"
+	"fmt"
+	"log/slog"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+
+	"github.com/google/uuid"
+
+	"github.com/loomctl/loom/internal/downloads"
+	"github.com/loomctl/loom/internal/kernel/eventbus"
+	"github.com/loomctl/loom/internal/movies"
+	"github.com/loomctl/loom/internal/notifications"
+	"github.com/loomctl/loom/internal/safety"
+	"github.com/loomctl/loom/internal/series"
+)
+
+// PipelineOptions configures the ImportPipeline.
+type PipelineOptions struct {
+	DB          *sql.DB
+	Bus         eventbus.Bus
+	DownloadSvc *downloads.Service
+	MoviesSvc   movies.Service
+	SeriesSvc   series.Service
+	NotifSvc    notifications.Service
+	PostVal     *safety.PostValidator
+	ReviewStore *safety.ReviewStore
+	Logger      *slog.Logger
+	ImportMode  ImportMode
+}
+
+// ImportPipeline subscribes to download completion events, scans files,
+// matches them to library items, and imports them.
+type ImportPipeline struct {
+	db          *sql.DB
+	bus         eventbus.Bus
+	downloadSvc *downloads.Service
+	matcher     *Matcher
+	notifSvc    notifications.Service
+	postVal     *safety.PostValidator
+	reviewStore *safety.ReviewStore
+	logger      *slog.Logger
+	importMode  ImportMode
+	unsub       func()
+}
+
+// NewPipeline creates and wires an ImportPipeline. Call Start to
+// subscribe to the event bus.
+func NewPipeline(opts PipelineOptions) (*ImportPipeline, error) {
+	if opts.DB == nil {
+		return nil, fmt.Errorf("imports: db required")
+	}
+	if opts.Bus == nil {
+		return nil, fmt.Errorf("imports: event bus required")
+	}
+	if opts.DownloadSvc == nil {
+		return nil, fmt.Errorf("imports: download service required")
+	}
+	if opts.MoviesSvc == nil {
+		return nil, fmt.Errorf("imports: movies service required")
+	}
+	if opts.SeriesSvc == nil {
+		return nil, fmt.Errorf("imports: series service required")
+	}
+	if opts.Logger == nil {
+		opts.Logger = slog.Default()
+	}
+	if opts.ImportMode == "" {
+		opts.ImportMode = ImportModeMove
+	}
+
+	return &ImportPipeline{
+		db:          opts.DB,
+		bus:         opts.Bus,
+		downloadSvc: opts.DownloadSvc,
+		matcher:     NewMatcher(opts.MoviesSvc, opts.SeriesSvc),
+		notifSvc:    opts.NotifSvc,
+		postVal:     opts.PostVal,
+		reviewStore: opts.ReviewStore,
+		logger:      opts.Logger.With("module", "imports"),
+		importMode:  opts.ImportMode,
+	}, nil
+}
+
+// Start subscribes to download completion events.
+func (p *ImportPipeline) Start() {
+	p.unsub = p.bus.Subscribe(downloads.TopicDownloadCompleted, p.handleCompleted)
+	p.logger.Info("import pipeline started", "import_mode", p.importMode)
+}
+
+// Stop unsubscribes from the event bus.
+func (p *ImportPipeline) Stop() {
+	if p.unsub != nil {
+		p.unsub()
+	}
+}
+
+// handleCompleted processes a download completion event.
+func (p *ImportPipeline) handleCompleted(ctx context.Context, ev eventbus.Event) error {
+	completed, ok := ev.(*downloads.DownloadCompletedEvent)
+	if !ok {
+		return nil
+	}
+
+	p.logger.Info("download completed, starting import",
+		"download_id", completed.DownloadID,
+		"client_id", completed.ClientID,
+		"title", completed.Title,
+	)
+
+	downloadPath, err := p.resolveDownloadPath(ctx, completed)
+	if err != nil {
+		p.logger.Error("failed to resolve download path", "error", err, "title", completed.Title)
+		p.recordFailure(ctx, "", "", completed.Title, "", err)
+		return nil // don't block the event bus
+	}
+
+	if err := p.processImport(ctx, completed, downloadPath); err != nil {
+		p.logger.Error("import failed", "error", err, "title", completed.Title, "path", downloadPath)
+		return nil
+	}
+	return nil
+}
+
+// resolveDownloadPath determines the filesystem path of the completed download.
+func (p *ImportPipeline) resolveDownloadPath(ctx context.Context, ev *downloads.DownloadCompletedEvent) (string, error) {
+	if ev.ClientID == "" {
+		return "", fmt.Errorf("no client_id in completion event")
+	}
+
+	client, ok := p.downloadSvc.Registry().Get(ev.ClientID)
+	if !ok {
+		return "", fmt.Errorf("download client %q not found in registry", ev.ClientID)
+	}
+
+	items, err := client.Status(ctx, ev.DownloadID)
+	if err != nil {
+		return "", fmt.Errorf("query download status: %w", err)
+	}
+
+	for _, item := range items {
+		if item.ID == ev.DownloadID && item.SavePath != "" {
+			path := filepath.Join(item.SavePath, item.Title)
+			return path, nil
+		}
+	}
+
+	// Fallback: try the client definition's default save path
+	def, err := p.downloadSvc.Get(ctx, ev.ClientID)
+	if err != nil {
+		return "", fmt.Errorf("get client definition: %w", err)
+	}
+	if def.SavePathDefault != "" {
+		return filepath.Join(def.SavePathDefault, ev.Title), nil
+	}
+
+	return "", fmt.Errorf("could not determine download path for %q", ev.Title)
+}
+
+// processImport runs the full import pipeline for a single download.
+func (p *ImportPipeline) processImport(ctx context.Context, ev *downloads.DownloadCompletedEvent, downloadPath string) error {
+	// 1. Verify the path exists
+	info, err := os.Stat(downloadPath)
+	if err != nil {
+		return p.recordFailure(ctx, "", "", ev.Title, downloadPath, fmt.Errorf("download path not found: %w", err))
+	}
+
+	scanPath := downloadPath
+	if !info.IsDir() {
+		scanPath = filepath.Dir(downloadPath)
+	}
+
+	// 2. Scan for media files
+	mediaFiles, err := scanMediaFiles(scanPath)
+	if err != nil {
+		return p.recordFailure(ctx, "", "", ev.Title, downloadPath, fmt.Errorf("scan media files: %w", err))
+	}
+
+	// If the download path is a file itself and it's a media file, include it
+	if !info.IsDir() {
+		ext := filepath.Ext(downloadPath)
+		if mediaExtensions[ext] {
+			mediaFiles = []string{downloadPath}
+		}
+	}
+
+	if len(mediaFiles) == 0 {
+		return p.recordFailure(ctx, "", "", ev.Title, downloadPath, fmt.Errorf("no media files found in %s", scanPath))
+	}
+
+	// 3. Post-download safety validation
+	if p.postVal != nil {
+		result, err := p.postVal.ValidateDownload(scanPath)
+		if err != nil {
+			p.logger.Warn("post-validation error, continuing", "error", err)
+		} else if !result.Pass {
+			reason := strings.Join(result.Reasons, "; ")
+			p.logger.Warn("download flagged by post-validator",
+				"title", ev.Title, "reasons", reason)
+
+			if p.reviewStore != nil {
+				if _, err := p.reviewStore.Create(ctx, "download", ev.DownloadID, downloadPath, reason); err != nil {
+					p.logger.Error("failed to create review entry", "error", err)
+				}
+			}
+
+			return p.recordStatus(ctx, "", "", downloadPath, "", StatusPendingReview, reason)
+		}
+	}
+
+	// 4. Match and import each media file
+	var lastErr error
+	imported := 0
+	for _, mediaFile := range mediaFiles {
+		if err := p.importSingleFile(ctx, ev, mediaFile); err != nil {
+			p.logger.Error("failed to import file", "file", mediaFile, "error", err)
+			lastErr = err
+			continue
+		}
+		imported++
+	}
+
+	if imported == 0 && lastErr != nil {
+		return lastErr
+	}
+
+	p.logger.Info("import completed",
+		"title", ev.Title,
+		"imported", imported,
+		"total", len(mediaFiles),
+	)
+	return nil
+}
+
+// importSingleFile matches and imports a single media file.
+func (p *ImportPipeline) importSingleFile(ctx context.Context, ev *downloads.DownloadCompletedEvent, mediaFile string) error {
+	// Match file to library item
+	match, err := p.matcher.Match(ctx, ev.Title)
+	if err != nil {
+		return p.recordFailure(ctx, "", "", ev.Title, mediaFile, fmt.Errorf("match: %w", err))
+	}
+	if !match.Matched {
+		// Try matching by filename
+		match, err = p.matcher.Match(ctx, filepath.Base(mediaFile))
+		if err != nil {
+			return p.recordFailure(ctx, "", "", ev.Title, mediaFile, fmt.Errorf("match by filename: %w", err))
+		}
+	}
+	if !match.Matched {
+		return p.recordFailure(ctx, "", "", ev.Title, mediaFile, fmt.Errorf("no match found for %q", ev.Title))
+	}
+
+	// Build destination path
+	destFile := filepath.Join(match.DestPath, filepath.Base(mediaFile))
+
+	// Import the file
+	if err := importFile(mediaFile, destFile, p.importMode); err != nil {
+		return p.recordFailure(ctx, string(match.MediaType), match.MediaID, ev.Title, mediaFile, err)
+	}
+
+	// Update database
+	if err := p.updateLibrary(ctx, match, destFile, mediaFile); err != nil {
+		p.logger.Error("library update failed after import, cleaning up",
+			"error", err, "dest", destFile)
+		// Try to clean up the imported file
+		_ = os.Remove(destFile)
+		return p.recordFailure(ctx, string(match.MediaType), match.MediaID, ev.Title, mediaFile, err)
+	}
+
+	// Record success
+	if err := p.recordStatus(ctx, string(match.MediaType), match.MediaID, mediaFile, destFile, StatusImported, ""); err != nil {
+		p.logger.Error("failed to record import history", "error", err)
+	}
+
+	// Publish notification
+	p.publishNotification(ctx, match, destFile)
+
+	// Publish event
+	_ = p.bus.Publish(ctx, &ImportCompletedEvent{
+		MediaType: match.MediaType,
+		MediaID:   match.MediaID,
+		Title:     match.Title,
+		DestPath:  destFile,
+	})
+
+	return nil
+}
+
+// updateLibrary adds a file record to the appropriate service.
+func (p *ImportPipeline) updateLibrary(ctx context.Context, match *MatchResult, destFile, srcFile string) error {
+	info, err := os.Stat(destFile)
+	if err != nil {
+		// File was just imported; stat the source as fallback
+		info, err = os.Stat(srcFile)
+		if err != nil {
+			return fmt.Errorf("stat imported file: %w", err)
+		}
+	}
+
+	switch match.MediaType {
+	case MediaTypeMovie:
+		mf := &movies.MovieFile{
+			ID:        uuid.New().String(),
+			MovieID:   match.MediaID,
+			FilePath:  destFile,
+			Size:      info.Size(),
+			DateAdded: time.Now(),
+		}
+		return p.matcher.moviesSvc.AddMovieFile(ctx, mf)
+
+	case MediaTypeEpisode:
+		ef := &series.EpisodeFile{
+			ID:        uuid.New().String(),
+			EpisodeID: match.MediaID,
+			FilePath:  destFile,
+			FileSize:  info.Size(),
+		}
+		return p.matcher.seriesSvc.CreateEpisodeFile(ctx, ef)
+
+	default:
+		return fmt.Errorf("unknown media type: %s", match.MediaType)
+	}
+}
+
+// publishNotification sends a notification about a completed import.
+func (p *ImportPipeline) publishNotification(ctx context.Context, match *MatchResult, destFile string) {
+	if p.notifSvc == nil {
+		return
+	}
+	title := fmt.Sprintf("Imported: %s", match.Title)
+	msg := fmt.Sprintf("File imported to %s", destFile)
+	if err := p.notifSvc.Send(ctx, notifications.EventOnDownload, title, msg, map[string]any{
+		"media_type": string(match.MediaType),
+		"media_id":   match.MediaID,
+		"dest_path":  destFile,
+	}); err != nil {
+		p.logger.Warn("notification send failed", "error", err)
+	}
+}
+
+// recordFailure records a failed import in history and publishes a failure event.
+func (p *ImportPipeline) recordFailure(ctx context.Context, mediaType, mediaID, title, sourcePath string, importErr error) error {
+	errMsg := ""
+	if importErr != nil {
+		errMsg = importErr.Error()
+	}
+	if err := p.recordStatus(ctx, mediaType, mediaID, sourcePath, "", StatusFailed, errMsg); err != nil {
+		p.logger.Error("failed to record import failure", "error", err)
+	}
+	_ = p.bus.Publish(ctx, &ImportFailedEvent{
+		Title:      title,
+		SourcePath: sourcePath,
+		Error:      errMsg,
+	})
+
+	if p.notifSvc != nil {
+		msg := fmt.Sprintf("Import failed for %s: %s", title, errMsg)
+		_ = p.notifSvc.Send(ctx, notifications.EventOnDownload, "Import Failed", msg, map[string]any{
+			"title": title,
+			"error": errMsg,
+		})
+	}
+
+	return importErr
+}
+
+// recordStatus inserts a row into import_history.
+func (p *ImportPipeline) recordStatus(ctx context.Context, mediaType, mediaID, sourcePath, destPath string, status ImportStatus, errMsg string) error {
+	_, err := p.db.ExecContext(ctx,
+		`INSERT INTO import_history (id, media_type, media_id, source_path, dest_path, import_mode, status, error, imported_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		uuid.New().String(),
+		mediaType,
+		mediaID,
+		sourcePath,
+		destPath,
+		string(p.importMode),
+		string(status),
+		errMsg,
+		time.Now().UTC(),
+	)
+	return err
+}
+
+// ImportManual triggers an import for an arbitrary filesystem path.
+func (p *ImportPipeline) ImportManual(ctx context.Context, path string) error {
+	info, err := os.Stat(path)
+	if err != nil {
+		return fmt.Errorf("path not found: %w", err)
+	}
+
+	var mediaFiles []string
+	if info.IsDir() {
+		mediaFiles, err = scanMediaFiles(path)
+		if err != nil {
+			return fmt.Errorf("scan: %w", err)
+		}
+	} else {
+		ext := filepath.Ext(path)
+		if !mediaExtensions[ext] {
+			return fmt.Errorf("not a media file: %s", path)
+		}
+		mediaFiles = []string{path}
+	}
+
+	if len(mediaFiles) == 0 {
+		return fmt.Errorf("no media files found in %s", path)
+	}
+
+	fakeEvent := &downloads.DownloadCompletedEvent{
+		Title:       filepath.Base(path),
+		CompletedAt: time.Now(),
+	}
+
+	var lastErr error
+	for _, mf := range mediaFiles {
+		if err := p.importSingleFile(ctx, fakeEvent, mf); err != nil {
+			lastErr = err
+		}
+	}
+	return lastErr
+}
+
+// ListHistory returns import history records.
+func (p *ImportPipeline) ListHistory(ctx context.Context, limit, offset int) ([]*ImportRecord, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	rows, err := p.db.QueryContext(ctx,
+		`SELECT id, media_type, media_id, source_path, dest_path, import_mode, status, error, imported_at
+		 FROM import_history
+		 ORDER BY imported_at DESC
+		 LIMIT ? OFFSET ?`,
+		limit, offset,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("query import history: %w", err)
+	}
+	defer rows.Close()
+
+	var records []*ImportRecord
+	for rows.Next() {
+		var r ImportRecord
+		if err := rows.Scan(
+			&r.ID, &r.MediaType, &r.MediaID, &r.SourcePath, &r.DestPath,
+			&r.ImportMode, &r.Status, &r.Error, &r.ImportedAt,
+		); err != nil {
+			return nil, fmt.Errorf("scan import record: %w", err)
+		}
+		records = append(records, &r)
+	}
+	return records, rows.Err()
+}

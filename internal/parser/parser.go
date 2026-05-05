@@ -10,6 +10,7 @@ import (
 // Release represents parsed metadata extracted from a release name.
 type Release struct {
 	Name       string // Original release name
+	Title      string // Extracted clean title
 	Codec      string // h264, h265, av1, vp9, etc.
 	Bitdepth   int    // 8, 10, 12
 	Year       int    // Release year (YYYY format)
@@ -80,6 +81,9 @@ func Parse(releaseName string) *Release {
 	season, episode := extractSeasonEpisode(lower)
 	r.Season = season
 	r.Episode = episode
+
+	// Extract title (everything before year or quality markers)
+	r.Title = extractTitle(releaseName, r.Year)
 
 	return r
 }
@@ -221,4 +225,50 @@ func extractSeasonEpisode(lower string) (int, int) {
 	}
 
 	return season, episode
+}
+
+// extractTitle extracts a clean movie/show title from a release name.
+// It strips everything from the year or first quality/codec marker onward,
+// then cleans up separators.
+func extractTitle(name string, year int) string {
+	clean := name
+
+	// Remove file extension
+	if idx := strings.LastIndex(clean, "."); idx > 0 {
+		ext := strings.ToLower(clean[idx:])
+		if ext == ".mkv" || ext == ".mp4" || ext == ".avi" || ext == ".m4v" || ext == ".wmv" || ext == ".ts" || ext == ".flv" || ext == ".mov" {
+			clean = clean[:idx]
+		}
+	}
+
+	// Remove content in square brackets at the start (group tags like [GroupName])
+	p := getPattern("title_leading_bracket", `^\[.*?\]\s*`)
+	clean = p.ReplaceAllString(clean, "")
+
+	// Find the cutoff point: year in parentheses, year standalone, or first quality marker
+	cutPatterns := []string{
+		`\s*[\(\[]?\d{4}[\)\]]?[\s\.\-]`,        // year with optional parens/brackets
+		`(?i)\s*[\.\-\s](?:720p?|1080p?|2160p?|4k|uhd)`, // resolution
+		`(?i)\s*[\.\-\s](?:bluray|brrip|webrip|webdl|web[\-\s]dl|hdtv|dvdrip|remux)`, // source
+		`(?i)\s*[\.\-\s](?:h\.?264|h\.?265|hevc|x\.?264|x\.?265|avc)`,               // codec
+		`(?i)\s*[\.\-\s](?:proper|repack|rerip|internal|limited|directors|extended)`,  // tags
+	}
+
+	cutIdx := len(clean)
+	for _, pat := range cutPatterns {
+		re := regexp.MustCompile(pat)
+		if loc := re.FindStringIndex(clean); loc != nil && loc[0] < cutIdx {
+			cutIdx = loc[0]
+		}
+	}
+	clean = clean[:cutIdx]
+
+	// Replace common separators with spaces
+	clean = strings.NewReplacer(".", " ", "_", " ", "-", " ").Replace(clean)
+
+	// Collapse whitespace and trim
+	spaceRe := getPattern("multi_space", `\s+`)
+	clean = strings.TrimSpace(spaceRe.ReplaceAllString(clean, " "))
+
+	return clean
 }

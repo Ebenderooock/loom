@@ -79,6 +79,7 @@ func mapItem(t torrentInfo) downloads.Item {
 		UploadRate:      t.UpSpeed,
 		Ratio:           t.Ratio,
 		Message:         "",
+		SavePath:        t.SavePath,
 	}
 }
 

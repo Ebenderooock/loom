@@ -67,28 +67,17 @@ type sqlRepo struct {
 	db *sql.DB
 }
 
-// Movie operations
+// movie column list used by all SELECT queries
+const movieColumns = `id, title, year, imdb_id, tmdb_id, tvdb_id, overview, genres, runtime, rating, backdrop_path, poster_path, metadata_provider, quality_profile_id, root_folder_id, status, release_date, last_search_at, monitoring_status, created_at, updated_at, deleted_at`
 
-func (r *sqlRepo) AddMovie(ctx context.Context, movie *Movie) error {
-	genreBytes, _ := json.Marshal(movie.Genres)
-	_, err := r.db.ExecContext(ctx,
-		`INSERT INTO movies (id, title, year, imdb_id, tmdb_id, tvdb_id, overview, genres, runtime, rating, backdrop_path, poster_path, metadata_provider, monitoring_status, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		movie.ID, movie.Title, movie.Year, movie.IMDBID, movie.TMDBID, movie.TVDBID, movie.Overview, string(genreBytes),
-		movie.Runtime, movie.Rating, movie.BackdropPath, movie.PosterPath, movie.MetadataProvider, movie.MonitoringStatus, movie.CreatedAt, movie.UpdatedAt,
-	)
-	return err
-}
-
-func (r *sqlRepo) GetMovie(ctx context.Context, id string) (*Movie, error) {
+// scanMovie scans a movie row from the database.
+func scanMovie(scanner interface{ Scan(dest ...interface{}) error }) (*Movie, error) {
 	movie := &Movie{}
 	var genreBytes []byte
-	err := r.db.QueryRowContext(ctx,
-		`SELECT id, title, year, imdb_id, tmdb_id, tvdb_id, overview, genres, runtime, rating, backdrop_path, poster_path, metadata_provider, last_search_at, monitoring_status, created_at, updated_at, deleted_at
-		 FROM movies WHERE id = ? AND deleted_at IS NULL`,
-		id,
-	).Scan(&movie.ID, &movie.Title, &movie.Year, &movie.IMDBID, &movie.TMDBID, &movie.TVDBID, &movie.Overview, &genreBytes,
-		&movie.Runtime, &movie.Rating, &movie.BackdropPath, &movie.PosterPath, &movie.MetadataProvider, &movie.LastSearchAt, &movie.MonitoringStatus, &movie.CreatedAt, &movie.UpdatedAt, &movie.DeletedAt)
+	err := scanner.Scan(&movie.ID, &movie.Title, &movie.Year, &movie.IMDBID, &movie.TMDBID, &movie.TVDBID, &movie.Overview, &genreBytes,
+		&movie.Runtime, &movie.Rating, &movie.BackdropPath, &movie.PosterPath, &movie.MetadataProvider,
+		&movie.QualityProfileID, &movie.RootFolderID, &movie.Status, &movie.ReleaseDate,
+		&movie.LastSearchAt, &movie.MonitoringStatus, &movie.CreatedAt, &movie.UpdatedAt, &movie.DeletedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -98,28 +87,49 @@ func (r *sqlRepo) GetMovie(ctx context.Context, id string) (*Movie, error) {
 	return movie, nil
 }
 
+// Movie operations
+
+func (r *sqlRepo) AddMovie(ctx context.Context, movie *Movie) error {
+	genreBytes, _ := json.Marshal(movie.Genres)
+	_, err := r.db.ExecContext(ctx,
+		`INSERT INTO movies (id, title, year, imdb_id, tmdb_id, tvdb_id, overview, genres, runtime, rating, backdrop_path, poster_path, metadata_provider, quality_profile_id, root_folder_id, status, release_date, monitoring_status, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		movie.ID, movie.Title, movie.Year, movie.IMDBID, movie.TMDBID, movie.TVDBID, movie.Overview, string(genreBytes),
+		movie.Runtime, movie.Rating, movie.BackdropPath, movie.PosterPath, movie.MetadataProvider,
+		movie.QualityProfileID, movie.RootFolderID, movie.Status, movie.ReleaseDate,
+		movie.MonitoringStatus, movie.CreatedAt, movie.UpdatedAt,
+	)
+	return err
+}
+
+func (r *sqlRepo) GetMovie(ctx context.Context, id string) (*Movie, error) {
+	return scanMovie(r.db.QueryRowContext(ctx,
+		`SELECT `+movieColumns+` FROM movies WHERE id = ? AND deleted_at IS NULL`, id))
+}
+
 func (r *sqlRepo) UpdateMovie(ctx context.Context, movie *Movie) error {
 	genreBytes, _ := json.Marshal(movie.Genres)
 	_, err := r.db.ExecContext(ctx,
-		`UPDATE movies SET title = ?, year = ?, overview = ?, genres = ?, runtime = ?, rating = ?, backdrop_path = ?, poster_path = ?, monitoring_status = ?, updated_at = ?
+		`UPDATE movies SET title = ?, year = ?, overview = ?, genres = ?, runtime = ?, rating = ?, backdrop_path = ?, poster_path = ?,
+		 quality_profile_id = ?, root_folder_id = ?, status = ?, release_date = ?, monitoring_status = ?, updated_at = ?
 		 WHERE id = ? AND deleted_at IS NULL`,
-		movie.Title, movie.Year, movie.Overview, string(genreBytes), movie.Runtime, movie.Rating, movie.BackdropPath, movie.PosterPath, movie.MonitoringStatus, movie.UpdatedAt, movie.ID,
+		movie.Title, movie.Year, movie.Overview, string(genreBytes), movie.Runtime, movie.Rating, movie.BackdropPath, movie.PosterPath,
+		movie.QualityProfileID, movie.RootFolderID, movie.Status, movie.ReleaseDate, movie.MonitoringStatus, movie.UpdatedAt, movie.ID,
 	)
 	return err
 }
 
 func (r *sqlRepo) DeleteMovie(ctx context.Context, id string) error {
 	_, err := r.db.ExecContext(ctx,
-		`UPDATE movies SET deleted_at = ?, updated_at = ? WHERE id = ?`,
-		time.Now(), time.Now(), id,
+		`DELETE FROM movies WHERE id = ?`,
+		id,
 	)
 	return err
 }
 
 func (r *sqlRepo) ListMovies(ctx context.Context, limit int, offset int) ([]*Movie, error) {
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT id, title, year, imdb_id, tmdb_id, tvdb_id, overview, genres, runtime, rating, backdrop_path, poster_path, metadata_provider, last_search_at, monitoring_status, created_at, updated_at, deleted_at
-		 FROM movies WHERE deleted_at IS NULL ORDER BY updated_at DESC LIMIT ? OFFSET ?`,
+		`SELECT `+movieColumns+` FROM movies WHERE deleted_at IS NULL ORDER BY updated_at DESC LIMIT ? OFFSET ?`,
 		limit, offset,
 	)
 	if err != nil {
@@ -129,14 +139,9 @@ func (r *sqlRepo) ListMovies(ctx context.Context, limit int, offset int) ([]*Mov
 
 	var movies []*Movie
 	for rows.Next() {
-		movie := &Movie{}
-		var genreBytes []byte
-		if err := rows.Scan(&movie.ID, &movie.Title, &movie.Year, &movie.IMDBID, &movie.TMDBID, &movie.TVDBID, &movie.Overview, &genreBytes,
-			&movie.Runtime, &movie.Rating, &movie.BackdropPath, &movie.PosterPath, &movie.MetadataProvider, &movie.LastSearchAt, &movie.MonitoringStatus, &movie.CreatedAt, &movie.UpdatedAt, &movie.DeletedAt); err != nil {
+		movie, err := scanMovie(rows)
+		if err != nil {
 			return nil, err
-		}
-		if len(genreBytes) > 0 {
-			_ = json.Unmarshal(genreBytes, &movie.Genres)
 		}
 		movies = append(movies, movie)
 	}
@@ -146,8 +151,7 @@ func (r *sqlRepo) ListMovies(ctx context.Context, limit int, offset int) ([]*Mov
 func (r *sqlRepo) SearchMovies(ctx context.Context, query string) ([]*Movie, error) {
 	searchQuery := "%" + query + "%"
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT id, title, year, imdb_id, tmdb_id, tvdb_id, overview, genres, runtime, rating, backdrop_path, poster_path, metadata_provider, last_search_at, monitoring_status, created_at, updated_at, deleted_at
-		 FROM movies WHERE deleted_at IS NULL AND (title LIKE ? OR LOWER(title) LIKE LOWER(?)) ORDER BY year DESC, title ASC LIMIT 50`,
+		`SELECT `+movieColumns+` FROM movies WHERE deleted_at IS NULL AND (title LIKE ? OR LOWER(title) LIKE LOWER(?)) ORDER BY year DESC, title ASC LIMIT 50`,
 		searchQuery, searchQuery,
 	)
 	if err != nil {
@@ -157,14 +161,9 @@ func (r *sqlRepo) SearchMovies(ctx context.Context, query string) ([]*Movie, err
 
 	var movies []*Movie
 	for rows.Next() {
-		movie := &Movie{}
-		var genreBytes []byte
-		if err := rows.Scan(&movie.ID, &movie.Title, &movie.Year, &movie.IMDBID, &movie.TMDBID, &movie.TVDBID, &movie.Overview, &genreBytes,
-			&movie.Runtime, &movie.Rating, &movie.BackdropPath, &movie.PosterPath, &movie.MetadataProvider, &movie.LastSearchAt, &movie.MonitoringStatus, &movie.CreatedAt, &movie.UpdatedAt, &movie.DeletedAt); err != nil {
+		movie, err := scanMovie(rows)
+		if err != nil {
 			return nil, err
-		}
-		if len(genreBytes) > 0 {
-			_ = json.Unmarshal(genreBytes, &movie.Genres)
 		}
 		movies = append(movies, movie)
 	}
@@ -172,39 +171,13 @@ func (r *sqlRepo) SearchMovies(ctx context.Context, query string) ([]*Movie, err
 }
 
 func (r *sqlRepo) GetMovieByTMDBID(ctx context.Context, tmdbID string) (*Movie, error) {
-	movie := &Movie{}
-	var genreBytes []byte
-	err := r.db.QueryRowContext(ctx,
-		`SELECT id, title, year, imdb_id, tmdb_id, tvdb_id, overview, genres, runtime, rating, backdrop_path, poster_path, metadata_provider, last_search_at, monitoring_status, created_at, updated_at, deleted_at
-		 FROM movies WHERE tmdb_id = ? AND deleted_at IS NULL`,
-		tmdbID,
-	).Scan(&movie.ID, &movie.Title, &movie.Year, &movie.IMDBID, &movie.TMDBID, &movie.TVDBID, &movie.Overview, &genreBytes,
-		&movie.Runtime, &movie.Rating, &movie.BackdropPath, &movie.PosterPath, &movie.MetadataProvider, &movie.LastSearchAt, &movie.MonitoringStatus, &movie.CreatedAt, &movie.UpdatedAt, &movie.DeletedAt)
-	if err != nil {
-		return nil, err
-	}
-	if len(genreBytes) > 0 {
-		_ = json.Unmarshal(genreBytes, &movie.Genres)
-	}
-	return movie, nil
+	return scanMovie(r.db.QueryRowContext(ctx,
+		`SELECT `+movieColumns+` FROM movies WHERE tmdb_id = ? AND deleted_at IS NULL`, tmdbID))
 }
 
 func (r *sqlRepo) GetMovieByIMDBID(ctx context.Context, imdbID string) (*Movie, error) {
-	movie := &Movie{}
-	var genreBytes []byte
-	err := r.db.QueryRowContext(ctx,
-		`SELECT id, title, year, imdb_id, tmdb_id, tvdb_id, overview, genres, runtime, rating, backdrop_path, poster_path, metadata_provider, last_search_at, monitoring_status, created_at, updated_at, deleted_at
-		 FROM movies WHERE imdb_id = ? AND deleted_at IS NULL`,
-		imdbID,
-	).Scan(&movie.ID, &movie.Title, &movie.Year, &movie.IMDBID, &movie.TMDBID, &movie.TVDBID, &movie.Overview, &genreBytes,
-		&movie.Runtime, &movie.Rating, &movie.BackdropPath, &movie.PosterPath, &movie.MetadataProvider, &movie.LastSearchAt, &movie.MonitoringStatus, &movie.CreatedAt, &movie.UpdatedAt, &movie.DeletedAt)
-	if err != nil {
-		return nil, err
-	}
-	if len(genreBytes) > 0 {
-		_ = json.Unmarshal(genreBytes, &movie.Genres)
-	}
-	return movie, nil
+	return scanMovie(r.db.QueryRowContext(ctx,
+		`SELECT `+movieColumns+` FROM movies WHERE imdb_id = ? AND deleted_at IS NULL`, imdbID))
 }
 
 // RootFolder operations
@@ -592,7 +565,16 @@ func (r *sqlRepo) ListQualityProfiles(ctx context.Context) ([]*QualityProfile, e
 			_ = json.Unmarshal([]byte(formatItemsStr), &qp.FormatItems)
 		}
 
-		// Fetch items for this profile
+		profiles = append(profiles, qp)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	rows.Close()
+
+	// Fetch items for each profile (separate queries to avoid nested cursors
+	// which deadlock with SetMaxOpenConns(1)).
+	for _, qp := range profiles {
 		itemRows, err := r.db.QueryContext(ctx,
 			`SELECT quality_definition_id, preferred, allowed FROM quality_profile_items WHERE profile_id = ?`,
 			qp.ID,
@@ -603,18 +585,16 @@ func (r *sqlRepo) ListQualityProfiles(ctx context.Context) ([]*QualityProfile, e
 
 		for itemRows.Next() {
 			item := QualityProfileItem{}
-			err := itemRows.Scan(&item.ID, &item.Preferred, &item.Allowed)
-			if err != nil {
+			if err := itemRows.Scan(&item.ID, &item.Preferred, &item.Allowed); err != nil {
 				itemRows.Close()
 				return nil, err
 			}
 			qp.Items = append(qp.Items, item)
 		}
 		itemRows.Close()
-
-		profiles = append(profiles, qp)
 	}
-	return profiles, rows.Err()
+
+	return profiles, nil
 }
 
 // GetQualityProfileByName retrieves a quality profile by name.
@@ -810,13 +790,21 @@ return nil, err
 }
 defer rows.Close()
 
-var formats []*CustomFormat
+var ids []string
 for rows.Next() {
 var id string
-err := rows.Scan(&id)
-if err != nil {
+if err := rows.Scan(&id); err != nil {
 return nil, err
 }
+ids = append(ids, id)
+}
+if err := rows.Err(); err != nil {
+return nil, err
+}
+rows.Close()
+
+var formats []*CustomFormat
+for _, id := range ids {
 cf, err := r.GetCustomFormat(ctx, id)
 if err != nil {
 return nil, err
@@ -824,7 +812,7 @@ return nil, err
 formats = append(formats, cf)
 }
 
-return formats, rows.Err()
+return formats, nil
 }
 
 // GetCustomFormatByName retrieves a custom format by name.

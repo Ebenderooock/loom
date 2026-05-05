@@ -66,11 +66,19 @@ func buildIndexerService(ctx context.Context, cfg *config.Config, db storage.DB,
 		cardigannDir = filepath.Join(cfg.DataDir, "definitions", "cardigann")
 	}
 	cardLoader := cardigann.NewLoader(cardigannDir)
-	if _, loadErrs := cardLoader.Reload(); len(loadErrs) > 0 {
+	diskDefs, loadErrs := cardLoader.Reload()
+	if len(loadErrs) > 0 {
 		for _, lerr := range loadErrs {
 			logger.Warn("cardigann definition skipped", "err", lerr)
 		}
 	}
+	embDefs, embErrs := cardLoader.LoadEmbedded(cardigann.BundledFS())
+	if len(embErrs) > 0 {
+		for _, lerr := range embErrs {
+			logger.Warn("bundled cardigann definition skipped", "err", lerr)
+		}
+	}
+	logger.Info("cardigann definitions loaded", "disk", len(diskDefs), "bundled", len(embDefs))
 	cardigann.SetLoader(cardLoader)
 
 	svc, err := indexers.NewService(indexers.ServiceOptions{
@@ -80,6 +88,7 @@ func buildIndexerService(ctx context.Context, cfg *config.Config, db storage.DB,
 		MaxParallel:        cfg.Indexers.MaxParallel,
 		HealthCheckTimeout: time.Duration(cfg.Indexers.HealthCheckTimeoutSec) * time.Second,
 		RouteExtensions:    []indexers.RouteMounter{proxiesSvc.Mount},
+		DefinitionLister:   &cardigann.LoaderDefinitionLister{Loader: cardLoader},
 	})
 	if err != nil {
 		return nil, err

@@ -39,6 +39,10 @@ type ServiceOptions struct {
 	// routes. The proxies handler is wired here so cmd/loom can
 	// attach the proxy CRUD endpoints without editing server.go.
 	RouteExtensions []RouteMounter
+
+	// DefinitionLister, when non-nil, provides the list of available
+	// Cardigann definitions for the catalogue API endpoint.
+	DefinitionLister DefinitionLister
 }
 
 // RouteMounter mounts additional routes onto the Service router. The
@@ -59,6 +63,7 @@ type Service struct {
 	maxParallel        int
 	healthCheckTimeout time.Duration
 	routeExtensions    []RouteMounter
+	definitionLister   DefinitionLister
 
 	mu sync.Mutex // serialises CRUD against the registry
 }
@@ -95,6 +100,7 @@ func NewService(opts ServiceOptions) (*Service, error) {
 		maxParallel:        opts.MaxParallel,
 		healthCheckTimeout: opts.HealthCheckTimeout,
 		routeExtensions:    opts.RouteExtensions,
+		definitionLister:   opts.DefinitionLister,
 	}, nil
 }
 

@@ -83,3 +83,19 @@ type SearchSeriesParams struct {
 	TMDBID string
 	TVDBID string
 }
+
+// Credits holds cast and crew information for a movie or TV show.
+type Credits struct {
+	Cast []CreditPerson `json:"cast"`
+	Crew []CreditPerson `json:"crew"`
+}
+
+// CreditPerson represents a single person in cast or crew.
+type CreditPerson struct {
+	ID          int    `json:"id"`
+	Name        string `json:"name"`
+	Role        string `json:"role"`         // character name for cast, job title for crew
+	Department  string `json:"department"`   // e.g. "Directing", "Writing", "Acting"
+	ProfilePath string `json:"profile_path"` // TMDB image path (relative)
+	Order       int    `json:"order"`        // sort order (cast only)
+}

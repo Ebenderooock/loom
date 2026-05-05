@@ -121,6 +121,7 @@ func mapItem(hash string, t torrentStatus) downloads.Item {
 		UploadRate:      t.UPPayload,
 		Ratio:           t.Ratio,
 		Message:         t.Message,
+		SavePath:        t.SavePath,
 	}
 }
 

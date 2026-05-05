@@ -55,6 +55,7 @@ type Store interface {
 	GetUserByID(ctx context.Context, id int64) (User, error)
 	CountUsers(ctx context.Context) (int64, error)
 	UpdateUserPassword(ctx context.Context, id int64, hash string) error
+	UpdateUserAdmin(ctx context.Context, id int64, username, hash string) error
 	UpdateUserOIDC(ctx context.Context, id int64, email, role string) (User, error)
 
 	CreateAPIKey(ctx context.Context, arg CreateAPIKeyParams) (APIKey, error)
@@ -153,6 +154,14 @@ func (s SQLiteStore) CountUsers(ctx context.Context) (int64, error) {
 func (s SQLiteStore) UpdateUserPassword(ctx context.Context, id int64, hash string) error {
 	return s.Q.UpdateUserPassword(ctx, dbsqlite.UpdateUserPasswordParams{
 		ID:           id,
+		PasswordHash: hash,
+	})
+}
+
+func (s SQLiteStore) UpdateUserAdmin(ctx context.Context, id int64, username, hash string) error {
+	return s.Q.UpdateUserAdmin(ctx, dbsqlite.UpdateUserAdminParams{
+		ID:           id,
+		Username:     username,
 		PasswordHash: hash,
 	})
 }
@@ -292,6 +301,14 @@ func (s PostgresStore) CountUsers(ctx context.Context) (int64, error) {
 func (s PostgresStore) UpdateUserPassword(ctx context.Context, id int64, hash string) error {
 	return s.Q.UpdateUserPassword(ctx, dbpg.UpdateUserPasswordParams{
 		ID:           id,
+		PasswordHash: hash,
+	})
+}
+
+func (s PostgresStore) UpdateUserAdmin(ctx context.Context, id int64, username, hash string) error {
+	return s.Q.UpdateUserAdmin(ctx, dbpg.UpdateUserAdminParams{
+		ID:           id,
+		Username:     username,
 		PasswordHash: hash,
 	})
 }

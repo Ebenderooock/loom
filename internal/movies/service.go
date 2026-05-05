@@ -3,21 +3,37 @@ package movies
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"sync"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/loomctl/loom/internal/metadata"
 )
+
+// MetadataSearcher provides movie lookup from external providers (TMDB etc).
+type MetadataSearcher interface {
+	FindMovieByQuery(ctx context.Context, query string, year int) ([]*metadata.MovieMetadata, error)
+	FindMovieByTMDBID(ctx context.Context, tmdbID string) (*metadata.MovieMetadata, error)
+}
+
+// CreditsProvider fetches cast/crew from external providers.
+type CreditsProvider interface {
+	GetMovieCredits(ctx context.Context, tmdbID int) (*metadata.Credits, error)
+}
 
 // Service defines the business logic interface for the movies module.
 type Service interface {
 	ListMovies(ctx context.Context, limit, offset int) ([]*Movie, error)
 	SearchMovies(ctx context.Context, query string) ([]*Movie, error)
+	LookupMovies(ctx context.Context, term string) ([]*metadata.MovieMetadata, error)
 	GetMovie(ctx context.Context, id string) (*Movie, error)
+	GetMovieCredits(ctx context.Context, movieID string) (*metadata.Credits, error)
 	AddMovie(ctx context.Context, movie *Movie) error
 	UpdateMovie(ctx context.Context, movie *Movie) error
 	DeleteMovie(ctx context.Context, id string) error
 	SetMonitoringStatus(ctx context.Context, movieID string, status MonitoringStatus) error
+	RefreshMovie(ctx context.Context, id string) error
 
 	GetRootFolder(ctx context.Context, id string) (*RootFolder, error)
 	AddRootFolder(ctx context.Context, path string) (*RootFolder, error)
@@ -25,6 +41,7 @@ type Service interface {
 	DeleteRootFolder(ctx context.Context, id string) error
 
 	ListMovieFiles(ctx context.Context, movieID string) ([]*MovieFile, error)
+	AddMovieFile(ctx context.Context, mf *MovieFile) error
 
 	// Quality definitions
 	AddQualityDefinition(ctx context.Context, qd *QualityDefinition) error
@@ -50,10 +67,12 @@ type Service interface {
 
 // service implements the Service interface.
 type service struct {
-	repo  Repository
-	cache sync.Map // map[string]*Movie with expiry
-	ttl   time.Duration
-	mu    sync.RWMutex
+	repo     Repository
+	metadata MetadataSearcher
+	credits  CreditsProvider
+	cache    sync.Map // map[string]*Movie with expiry
+	ttl      time.Duration
+	mu       sync.RWMutex
 }
 
 // cacheEntry holds a cached movie with expiry time.
@@ -63,10 +82,31 @@ type cacheEntry struct {
 }
 
 // NewService creates a new Service instance with in-memory caching.
-func NewService(repo Repository) Service {
-	return &service{
+func NewService(repo Repository, opts ...ServiceOption) Service {
+	s := &service{
 		repo: repo,
 		ttl:  5 * time.Minute,
+	}
+	for _, opt := range opts {
+		opt(s)
+	}
+	return s
+}
+
+// ServiceOption configures the movies service.
+type ServiceOption func(*service)
+
+// WithMetadata sets the metadata searcher for TMDB lookups.
+func WithMetadata(m MetadataSearcher) ServiceOption {
+	return func(s *service) {
+		s.metadata = m
+	}
+}
+
+// WithCredits sets the credits provider for cast/crew lookups.
+func WithCredits(c CreditsProvider) ServiceOption {
+	return func(s *service) {
+		s.credits = c
 	}
 }
 
@@ -92,6 +132,17 @@ func (s *service) SearchMovies(ctx context.Context, query string) ([]*Movie, err
 	}
 
 	return s.repo.SearchMovies(ctx, query)
+}
+
+// LookupMovies queries external metadata providers (TMDB) for movies matching the term.
+func (s *service) LookupMovies(ctx context.Context, term string) ([]*metadata.MovieMetadata, error) {
+	if term == "" {
+		return nil, fmt.Errorf("movies: lookup term required")
+	}
+	if s.metadata == nil {
+		return nil, fmt.Errorf("movies: metadata provider not configured")
+	}
+	return s.metadata.FindMovieByQuery(ctx, term, 0)
 }
 
 // GetMovie retrieves a movie by ID with caching.
@@ -124,6 +175,31 @@ func (s *service) GetMovie(ctx context.Context, id string) (*Movie, error) {
 	return movie, nil
 }
 
+// GetMovieCredits fetches credits (cast & crew) for a movie from TMDB.
+func (s *service) GetMovieCredits(ctx context.Context, movieID string) (*metadata.Credits, error) {
+	if s.credits == nil {
+		return nil, fmt.Errorf("movies: credits provider not configured")
+	}
+
+	movie, err := s.GetMovie(ctx, movieID)
+	if err != nil {
+		return nil, err
+	}
+	if movie == nil {
+		return nil, fmt.Errorf("movies: movie not found: %s", movieID)
+	}
+	if movie.TMDBID == nil || *movie.TMDBID == "" {
+		return nil, fmt.Errorf("movies: movie has no TMDB ID")
+	}
+
+	tmdbID, err := strconv.Atoi(*movie.TMDBID)
+	if err != nil {
+		return nil, fmt.Errorf("movies: invalid TMDB ID %q: %w", movie.TMDBID, err)
+	}
+
+	return s.credits.GetMovieCredits(ctx, tmdbID)
+}
+
 // AddMovie adds a new movie to the library.
 func (s *service) AddMovie(ctx context.Context, movie *Movie) error {
 	if movie == nil {
@@ -131,6 +207,14 @@ func (s *service) AddMovie(ctx context.Context, movie *Movie) error {
 	}
 	if movie.Title == "" {
 		return fmt.Errorf("movies: movie title required")
+	}
+
+	now := time.Now()
+	if movie.CreatedAt.IsZero() {
+		movie.CreatedAt = now
+	}
+	if movie.UpdatedAt.IsZero() {
+		movie.UpdatedAt = now
 	}
 
 	if err := s.repo.AddMovie(ctx, movie); err != nil {
@@ -151,6 +235,8 @@ func (s *service) UpdateMovie(ctx context.Context, movie *Movie) error {
 	if movie.ID == "" {
 		return fmt.Errorf("movies: movie ID required")
 	}
+
+	movie.UpdatedAt = time.Now()
 
 	if err := s.repo.UpdateMovie(ctx, movie); err != nil {
 		return fmt.Errorf("movies: update movie: %w", err)
@@ -219,6 +305,56 @@ func (s *service) SetMonitoringStatus(ctx context.Context, movieID string, statu
 	return nil
 }
 
+// RefreshMovie re-fetches metadata for a movie from TMDB and updates the record.
+func (s *service) RefreshMovie(ctx context.Context, id string) error {
+	if id == "" {
+		return fmt.Errorf("movies: movie ID required")
+	}
+	if s.metadata == nil {
+		return fmt.Errorf("movies: metadata provider not configured")
+	}
+
+	movie, err := s.repo.GetMovie(ctx, id)
+	if err != nil {
+		return fmt.Errorf("movies: get movie: %w", err)
+	}
+	if movie == nil {
+		return fmt.Errorf("movies: movie not found: %s", id)
+	}
+	if movie.TMDBID == nil || *movie.TMDBID == "" {
+		return fmt.Errorf("movies: movie has no TMDB ID")
+	}
+
+	meta, err := s.metadata.FindMovieByTMDBID(ctx, *movie.TMDBID)
+	if err != nil {
+		return fmt.Errorf("movies: tmdb refresh: %w", err)
+	}
+	if meta == nil {
+		return fmt.Errorf("movies: tmdb returned no data for ID %s", *movie.TMDBID)
+	}
+
+	movie.Title = meta.Title
+	movie.Overview = meta.Overview
+	movie.Rating = meta.Rating
+	movie.PosterPath = meta.PosterPath
+	movie.Runtime = meta.Runtime
+	movie.ReleaseDate = meta.ReleaseDate
+	if meta.Genres != nil {
+		movie.Genres = meta.Genres
+	}
+	if meta.Year > 0 {
+		movie.Year = meta.Year
+	}
+	movie.UpdatedAt = time.Now()
+
+	if err := s.repo.UpdateMovie(ctx, movie); err != nil {
+		return fmt.Errorf("movies: update movie: %w", err)
+	}
+
+	s.cache.Delete(id)
+	return nil
+}
+
 // GetRootFolder retrieves a root folder by ID.
 func (s *service) GetRootFolder(ctx context.Context, id string) (*RootFolder, error) {
 	if id == "" {
@@ -281,6 +417,17 @@ func (s *service) ListMovieFiles(ctx context.Context, movieID string) ([]*MovieF
 	}
 
 	return s.repo.ListMovieFilesByMovie(ctx, movieID)
+}
+
+// AddMovieFile adds a new file record for a movie.
+func (s *service) AddMovieFile(ctx context.Context, mf *MovieFile) error {
+	if mf.MovieID == "" {
+		return fmt.Errorf("movies: movie_id required")
+	}
+	if mf.FilePath == "" {
+		return fmt.Errorf("movies: file_path required")
+	}
+	return s.repo.AddMovieFile(ctx, mf)
 }
 
 // AddQualityDefinition adds a new quality definition.

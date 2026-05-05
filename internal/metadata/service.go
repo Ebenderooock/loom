@@ -302,6 +302,11 @@ func (s *Service) FindMovieByQuery(ctx context.Context, query string, year int) 
 	return results, nil
 }
 
+// FindMovieByTMDBID looks up a single movie by its TMDB ID.
+func (s *Service) FindMovieByTMDBID(ctx context.Context, tmdbID string) (*MovieMetadata, error) {
+	return s.FindMovie(ctx, SearchMovieParams{TMDBID: tmdbID})
+}
+
 // FindSeriesByQuery searches for series matching a query and returns multiple results.
 // Used for UI search results, returns first 10 results.
 func (s *Service) FindSeriesByQuery(ctx context.Context, query string) ([]*SeriesMetadata, error) {

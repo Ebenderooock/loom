@@ -16,7 +16,12 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/pprof"
+	"os"
+	"path/filepath"
+	"runtime"
 	"runtime/debug"
+	"sort"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -28,13 +33,19 @@ import (
 	"github.com/loomctl/loom/internal/auth"
 	"github.com/loomctl/loom/internal/buildinfo"
 	"github.com/loomctl/loom/internal/downloads"
+	"github.com/loomctl/loom/internal/imports"
 	"github.com/loomctl/loom/internal/indexers"
 	"github.com/loomctl/loom/internal/indexers/newznabserver"
 	"github.com/loomctl/loom/internal/kernel/config"
 	"github.com/loomctl/loom/internal/kernel/eventbus"
 	"github.com/loomctl/loom/internal/kernel/telemetry"
 	"github.com/loomctl/loom/internal/movies"
+	"github.com/loomctl/loom/internal/notifications"
+	"github.com/loomctl/loom/internal/organizer"
 	"github.com/loomctl/loom/internal/rss"
+	"github.com/loomctl/loom/internal/safety"
+	"github.com/loomctl/loom/internal/scanner"
+	"github.com/loomctl/loom/internal/series"
 	"github.com/loomctl/loom/internal/storage"
 )
 
@@ -50,8 +61,16 @@ type Server struct {
 	authSvc    *auth.Service
 	indexerSvc *indexers.Service
 	downloadSvc *downloads.Service
+	blocklistStore *downloads.BlocklistStore
 	moviesSvc  movies.Service
 	rssSvc     *rss.SourcesService
+	scannerSvc *scanner.Scanner
+	seriesScannerSvc *scanner.SeriesScanner
+	organizerSvc *organizer.Organizer
+	seriesSvc  series.Service
+	notifSvc   notifications.Service
+	reviewStore *safety.ReviewStore
+	importPipeline *imports.ImportPipeline
 	aggSvc     *newznabserver.Server
 	ready      atomic.Bool
 }
@@ -77,16 +96,17 @@ func New(cfg *config.Config, appCfg *appconfig.Config, logger *slog.Logger, tel 
 	}
 
 	s := &Server{
-		cfg:        cfg,
-		appCfg:     appCfg,
-		logger:     logger,
-		tel:        tel,
-		db:         db,
-		bus:        eventbus.NewInProc(),
-		authSvc:    authSvc,
-		indexerSvc: indexerSvc,
-		moviesSvc:  moviesSvc,
-		aggSvc:     aggSvc,
+		cfg:         cfg,
+		appCfg:      appCfg,
+		logger:      logger,
+		tel:         tel,
+		db:          db,
+		bus:         eventbus.NewInProc(),
+		authSvc:     authSvc,
+		indexerSvc:  indexerSvc,
+		moviesSvc:   moviesSvc,
+		reviewStore: safety.NewReviewStore(db.DB()),
+		aggSvc:      aggSvc,
 	}
 
 	mux := s.newMux()
@@ -111,10 +131,43 @@ func (s *Server) SetDownloads(svc *downloads.Service) {
 	}
 }
 
+// SetBlocklistStore installs the blocklist store. Must be called before
+// Start so the blocklist API routes are mounted.
+func (s *Server) SetBlocklistStore(store *downloads.BlocklistStore) {
+	s.blocklistStore = store
+	if s.httpSrv != nil {
+		s.httpSrv.Handler = s.newMux()
+	}
+}
+
 // SetMovies installs the movies service and rebuilds the HTTP handler
 // so the new routes are reachable. Must be called before Start.
 func (s *Server) SetMovies(svc movies.Service) {
 	s.moviesSvc = svc
+	if s.httpSrv != nil {
+		s.httpSrv.Handler = s.newMux()
+	}
+}
+
+// SetScanner installs the scanner and rebuilds the HTTP handler.
+func (s *Server) SetScanner(sc *scanner.Scanner) {
+	s.scannerSvc = sc
+	if s.httpSrv != nil {
+		s.httpSrv.Handler = s.newMux()
+	}
+}
+
+// SetSeriesScanner installs the series scanner and rebuilds the HTTP handler.
+func (s *Server) SetSeriesScanner(ss *scanner.SeriesScanner) {
+	s.seriesScannerSvc = ss
+	if s.httpSrv != nil {
+		s.httpSrv.Handler = s.newMux()
+	}
+}
+
+// SetOrganizer installs the file organizer and rebuilds the HTTP handler.
+func (s *Server) SetOrganizer(org *organizer.Organizer) {
+	s.organizerSvc = org
 	if s.httpSrv != nil {
 		s.httpSrv.Handler = s.newMux()
 	}
@@ -127,6 +180,35 @@ func (s *Server) SetRSS(svc *rss.SourcesService) {
 	if s.httpSrv != nil {
 		s.httpSrv.Handler = s.newMux()
 	}
+}
+
+// SetSeries installs the TV series service and rebuilds the HTTP handler.
+func (s *Server) SetSeries(svc series.Service) {
+	s.seriesSvc = svc
+	if s.httpSrv != nil {
+		s.httpSrv.Handler = s.newMux()
+	}
+}
+
+// SetNotifications installs the notification service and rebuilds the HTTP handler.
+func (s *Server) SetNotifications(svc notifications.Service) {
+	s.notifSvc = svc
+	if s.httpSrv != nil {
+		s.httpSrv.Handler = s.newMux()
+	}
+}
+
+// SetImportPipeline installs the import pipeline and rebuilds the HTTP handler.
+func (s *Server) SetImportPipeline(p *imports.ImportPipeline) {
+	s.importPipeline = p
+	if s.httpSrv != nil {
+		s.httpSrv.Handler = s.newMux()
+	}
+}
+
+// Bus returns the server's event bus for wiring pipelines.
+func (s *Server) Bus() eventbus.Bus {
+	return s.bus
 }
 
 func (s *Server) newMux() http.Handler {
@@ -173,67 +255,91 @@ func (s *Server) newMux() http.Handler {
 		s.authSvc.Mount(r)
 	}
 
-	// Indexer routes go behind the project's auth.RequireAuth — when
-	// auth is disabled (mode=disabled) RequireAuth is a no-op, so
-	// dev/test deployments still work.
-	if s.indexerSvc != nil {
-		r.Group(func(r chi.Router) {
-			if s.authSvc != nil {
-				r.Use(s.authSvc.RequireAuth)
-			}
+	// All application routes require auth (except the auth endpoints mounted above).
+	// Public health/metrics routes are exceptions.
+	r.Group(func(r chi.Router) {
+		// Apply auth to all routes in this group (RequireAuth is a no-op when auth is disabled)
+		if s.authSvc != nil {
+			r.Use(s.authSvc.RequireAuth)
+		}
+
+		// Indexer routes
+		if s.indexerSvc != nil {
 			s.indexerSvc.Mount(r)
-		})
-	}
+		}
 
-	// Download-client routes — Phase 3a.
-	if s.downloadSvc != nil {
-		r.Group(func(r chi.Router) {
-			if s.authSvc != nil {
-				r.Use(s.authSvc.RequireAuth)
-			}
+		// Download-client routes
+		if s.downloadSvc != nil {
 			s.downloadSvc.Mount(r)
-		})
-	}
+		}
 
-	// RSS sources routes — Phase 5e-c.
-	if s.rssSvc != nil {
-		r.Group(func(r chi.Router) {
-			if s.authSvc != nil {
-				r.Use(s.authSvc.RequireAuth)
-			}
+		// Blocklist routes
+		if s.blocklistStore != nil {
+			downloads.MountBlocklist(r, s.blocklistStore)
+		}
+
+		// RSS sources routes
+		if s.rssSvc != nil {
 			s.rssSvc.Mount(r)
-		})
-	}
+		}
 
-	// Movies routes — Phase 5 (Radarr equivalent).
-	if s.moviesSvc != nil {
-		r.Group(func(r chi.Router) {
-			if s.authSvc != nil {
-				r.Use(s.authSvc.RequireAuth)
+		// Movies routes
+		if s.moviesSvc != nil {
+			moviesRouter := movies.RouterWithSearch(s.moviesSvc, s.indexerSvc)
+			if s.scannerSvc != nil {
+				scanner.RegisterRoutes(moviesRouter, s.scannerSvc, s.moviesSvc)
 			}
-			r.Mount("/api/v1/movies", movies.Router(s.moviesSvc))
-		})
-	}
+			if s.organizerSvc != nil {
+				organizer.RegisterRoutes(moviesRouter, s.organizerSvc)
+			}
+			r.Mount("/api/v1/movies", moviesRouter)
+		}
 
-	// Newznab/Torznab aggregator. Mounted OUTSIDE the JSON
-	// auth.RequireAuth group because clients (Sonarr, Radarr,
-	// Prowlarr) supply credentials via the ?apikey= query param and
+		// Series (TV Shows) routes
+		if s.seriesSvc != nil {
+			seriesRouter := series.RouterWithSearch(s.seriesSvc, s.indexerSvc)
+			if s.seriesScannerSvc != nil {
+				scanner.RegisterSeriesRoutes(seriesRouter, s.seriesScannerSvc)
+			}
+			r.Mount("/api/v1/series", seriesRouter)
+		}
+
+		// Notifications routes
+		if s.notifSvc != nil {
+			r.Mount("/api/v1/notifications", notifications.Router(s.notifSvc))
+		}
+
+		// Manual review routes (download safety)
+		r.Mount("/api/v1/reviews", safety.Router(s.reviewStore))
+
+		// Import pipeline routes
+		if s.importPipeline != nil {
+			r.Mount("/api/v1/imports", imports.Router(s.importPipeline))
+		}
+
+		// System status (authenticated)
+		r.Group(func(r chi.Router) {
+			r.Use(etagMiddleware)
+			r.Get("/api/v1/system/status", func(w http.ResponseWriter, _ *http.Request) {
+				writeJSON(w, http.StatusOK, map[string]any{
+					"version":   buildinfo.Version,
+					"commit":    buildinfo.Commit,
+					"buildDate": buildinfo.Date,
+					"engine":    string(s.db.Engine()),
+				})
+			})
+		})
+
+		// Filesystem browsing (authenticated)
+		r.Get("/api/v1/filesystem", handleFilesystemBrowse())
+	})
+
+	// Newznab/Torznab aggregator. Mounted OUTSIDE the auth group because clients 
+	// (Sonarr, Radarr, Prowlarr) supply credentials via the ?apikey= query param and
 	// expect Newznab XML errors, not JSON.
 	if s.aggSvc != nil {
 		s.aggSvc.Mount(r)
 	}
-
-	r.Group(func(r chi.Router) {
-		r.Use(etagMiddleware)
-		r.Get("/api/v1/system/status", func(w http.ResponseWriter, _ *http.Request) {
-			writeJSON(w, http.StatusOK, map[string]any{
-				"version":   buildinfo.Version,
-				"commit":    buildinfo.Commit,
-				"buildDate": buildinfo.Date,
-				"engine":    string(s.db.Engine()),
-			})
-		})
-	})
 
 	if s.cfg.Debug.Pprof {
 		s.mountPprof(r)
@@ -374,4 +480,91 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(v)
+}
+
+// handleFilesystemBrowse returns directories at a given path for the
+// folder-picker dialog. Query params: ?path=/some/dir
+// Returns { parent, directories[] } where each directory has name + path.
+func handleFilesystemBrowse() http.HandlerFunc {
+	type dirEntry struct {
+		Name string `json:"name"`
+		Path string `json:"path"`
+	}
+
+	return func(w http.ResponseWriter, r *http.Request) {
+		reqPath := r.URL.Query().Get("path")
+
+		// Default to filesystem roots when no path given
+		if reqPath == "" {
+			if runtime.GOOS == "windows" {
+				// List common drive letters
+				var drives []dirEntry
+				for _, letter := range "ABCDEFGHIJKLMNOPQRSTUVWXYZ" {
+					drive := string(letter) + `:\`
+					if _, err := os.Stat(drive); err == nil {
+						drives = append(drives, dirEntry{Name: drive, Path: drive})
+					}
+				}
+				writeJSON(w, http.StatusOK, map[string]any{
+					"parent":      "",
+					"current":     "",
+					"directories": drives,
+				})
+				return
+			}
+			reqPath = "/"
+		}
+
+		// Clean and resolve
+		reqPath = filepath.Clean(reqPath)
+
+		info, err := os.Stat(reqPath)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{
+				"error": "path does not exist: " + reqPath,
+			})
+			return
+		}
+		if !info.IsDir() {
+			reqPath = filepath.Dir(reqPath)
+		}
+
+		entries, err := os.ReadDir(reqPath)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{
+				"error": "cannot read directory: " + err.Error(),
+			})
+			return
+		}
+
+		var dirs []dirEntry
+		for _, e := range entries {
+			if !e.IsDir() {
+				continue
+			}
+			name := e.Name()
+			// Skip hidden directories
+			if strings.HasPrefix(name, ".") {
+				continue
+			}
+			dirs = append(dirs, dirEntry{
+				Name: name,
+				Path: filepath.Join(reqPath, name),
+			})
+		}
+		sort.Slice(dirs, func(i, j int) bool {
+			return strings.ToLower(dirs[i].Name) < strings.ToLower(dirs[j].Name)
+		})
+
+		parent := filepath.Dir(reqPath)
+		if parent == reqPath {
+			parent = "" // at root
+		}
+
+		writeJSON(w, http.StatusOK, map[string]any{
+			"parent":      parent,
+			"current":     reqPath,
+			"directories": dirs,
+		})
+	}
 }

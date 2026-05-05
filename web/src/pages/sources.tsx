@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useSetPageHeader } from "@/hooks/use-page-header";
 import {
   useSources,
   useCreateSource,
@@ -15,6 +16,7 @@ import { SourceForm } from "@/components/sources/SourceForm";
 import { SourceTestPreview } from "@/components/sources/SourceTestPreview";
 
 export function SourcesPage() {
+  useSetPageHeader("Sources");
   const { toast } = useToast();
   const [formOpen, setFormOpen] = useState(false);
   const [editingSource, setEditingSource] = useState<UserSource | undefined>();
@@ -127,12 +129,6 @@ export function SourcesPage() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">RSS & Scraper Sources</h1>
-          <p className="text-muted-foreground">
-            Add RSS feeds and web scrapers to monitor for new releases
-          </p>
-        </div>
         <Button onClick={handleOpenAdd} className="gap-2">
           <Plus className="h-4 w-4" />
           Add Source

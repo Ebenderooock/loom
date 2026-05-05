@@ -1,8 +1,10 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useSetPageHeader } from "@/hooks/use-page-header";
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 export function CalendarPage() {
+  useSetPageHeader("Calendar");
   const today = new Date();
   const monthLabel = today.toLocaleString(undefined, {
     month: "long",
@@ -11,12 +13,6 @@ export function CalendarPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Calendar</h1>
-        <p className="text-sm text-muted-foreground">
-          Upcoming releases and air dates.
-        </p>
-      </div>
       <Card>
         <CardHeader>
           <CardTitle>{monthLabel}</CardTitle>

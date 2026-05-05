@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"log/slog"
 	"strings"
 	"time"
@@ -128,4 +129,76 @@ func StoreFromDB(db storage.DB) (Store, error) {
 	default:
 		return nil, errors.New("auth: unknown storage engine")
 	}
+}
+
+// schemaMetaAdminUserID tracks the DB row ID of the config-managed admin user.
+const schemaMetaAdminUserID = "auth.admin_user_id"
+
+// ReconcileAdmin ensures the database admin user matches the config credentials.
+// It uses an admin user ID stored in schema_meta to track the config-managed row,
+// so username changes in config are correctly applied to the same DB row.
+// Returns the reconciled user. This is safe to call from both startup and handlers.
+func (s *Service) ReconcileAdmin(ctx context.Context) (User, error) {
+	if s.appConfig.Admin.Username == "" || s.appConfig.Admin.PasswordHash == "" {
+		return User{}, errors.New("auth: admin credentials not configured")
+	}
+
+	// Check if we have a tracked admin user ID
+	adminIDStr, err := s.store.GetMeta(ctx, schemaMetaAdminUserID)
+	if err != nil {
+		return User{}, err
+	}
+
+	if adminIDStr != "" {
+		// We have a tracked admin — update username + password to match config
+		var adminID int64
+		if _, err := fmt.Sscanf(adminIDStr, "%d", &adminID); err != nil {
+			return User{}, fmt.Errorf("auth: invalid admin user id in schema_meta: %w", err)
+		}
+		if err := s.store.UpdateUserAdmin(ctx, adminID, s.appConfig.Admin.Username, s.appConfig.Admin.PasswordHash); err != nil {
+			return User{}, fmt.Errorf("auth: update admin user: %w", err)
+		}
+		u, err := s.store.GetUserByID(ctx, adminID)
+		if err != nil {
+			return User{}, fmt.Errorf("auth: get admin user after update: %w", err)
+		}
+		s.logger.Info("admin user reconciled from config", "username", u.Username, "id", u.ID)
+		return u, nil
+	}
+
+	// No tracked admin — try to find by username first
+	u, err := s.store.GetUserByUsername(ctx, s.appConfig.Admin.Username)
+	if err == nil {
+		// Found existing user, update password and track
+		if u.PasswordHash != s.appConfig.Admin.PasswordHash {
+			if err := s.store.UpdateUserPassword(ctx, u.ID, s.appConfig.Admin.PasswordHash); err != nil {
+				return User{}, fmt.Errorf("auth: update admin password: %w", err)
+			}
+			u.PasswordHash = s.appConfig.Admin.PasswordHash
+		}
+		if err := s.store.SetMeta(ctx, schemaMetaAdminUserID, fmt.Sprintf("%d", u.ID)); err != nil {
+			return User{}, fmt.Errorf("auth: save admin user id: %w", err)
+		}
+		s.logger.Info("admin user tracked from existing user", "username", u.Username, "id", u.ID)
+		return u, nil
+	}
+	if !errors.Is(err, ErrNoRows) {
+		return User{}, fmt.Errorf("auth: lookup admin user: %w", err)
+	}
+
+	// No existing user — create new admin from config
+	u, err = s.store.CreateUser(ctx, CreateUserParams{
+		Username:     s.appConfig.Admin.Username,
+		PasswordHash: s.appConfig.Admin.PasswordHash,
+		Email:        "",
+		Role:         "admin",
+	})
+	if err != nil {
+		return User{}, fmt.Errorf("auth: create admin user: %w", err)
+	}
+	if err := s.store.SetMeta(ctx, schemaMetaAdminUserID, fmt.Sprintf("%d", u.ID)); err != nil {
+		return User{}, fmt.Errorf("auth: save admin user id: %w", err)
+	}
+	s.logger.Info("admin user created from config", "username", u.Username, "id", u.ID)
+	return u, nil
 }
