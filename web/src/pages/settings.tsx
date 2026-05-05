@@ -48,6 +48,7 @@ import {
   LayoutGrid,
   List,
   GripVertical,
+  Search,
 } from "lucide-react";
 import { useSetPageHeader } from "@/hooks/use-page-header";
 
@@ -58,6 +59,7 @@ const CATEGORIES = [
   { id: "indexers", label: "Indexers" },
   { id: "download-clients", label: "Download Clients" },
   { id: "download-safety", label: "Download Safety" },
+  { id: "rolling-search", label: "Rolling Search" },
   { id: "notifications", label: "Notifications" },
   { id: "connect", label: "Connect" },
   { id: "ui", label: "UI" },
@@ -1733,6 +1735,248 @@ function UIPanel() {
   );
 }
 
+// ─── Rolling Search Panel ────────────────────────────────────────────────
+
+interface RollingSearchConfig {
+  enabled: boolean;
+  intervalHours: number;
+  batchSize: number;
+  minResearchDays: number;
+  maxSearchesPerDay: number;
+}
+
+interface RollingSearchStatus {
+  running: boolean;
+  lastRunAt: string | null;
+  nextRunAt: string | null;
+  itemsSearched: number;
+  itemsInQueue: number;
+  quotaUsage: Record<string, number>;
+}
+
+function RollingSearchPanel() {
+  const [config, setConfig] = React.useState<RollingSearchConfig | null>(null);
+  const [status, setStatus] = React.useState<RollingSearchStatus | null>(null);
+  const [loading, setLoading] = React.useState(true);
+  const [saving, setSaving] = React.useState(false);
+
+  const fetchData = React.useCallback(async () => {
+    try {
+      const [cfgRes, statusRes] = await Promise.all([
+        fetch("/api/v1/rolling-search/config"),
+        fetch("/api/v1/rolling-search/status"),
+      ]);
+      if (cfgRes.ok) setConfig(await cfgRes.json());
+      if (statusRes.ok) setStatus(await statusRes.json());
+    } catch {
+      toast.error("Failed to load rolling search settings");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  const handleSave = async () => {
+    if (!config) return;
+    setSaving(true);
+    try {
+      const res = await fetch("/api/v1/rolling-search/config", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(config),
+      });
+      if (!res.ok) throw new Error("save failed");
+      const updated = await res.json();
+      setConfig(updated);
+      toast.success("Rolling search settings saved");
+      fetchData();
+    } catch {
+      toast.error("Failed to save rolling search settings");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleTrigger = async () => {
+    try {
+      const res = await fetch("/api/v1/rolling-search/trigger", { method: "POST" });
+      if (!res.ok) throw new Error("trigger failed");
+      toast.success("Rolling search triggered");
+      setTimeout(fetchData, 2000);
+    } catch {
+      toast.error("Failed to trigger rolling search");
+    }
+  };
+
+  if (loading || !config) {
+    return (
+      <div className="flex items-center gap-2 py-8 text-muted-foreground">
+        <Loader2 className="h-4 w-4 animate-spin" /> Loading…
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Status */}
+      {status && (
+        <Card className="border-zinc-800 bg-zinc-900/50">
+          <CardContent className="pt-4 space-y-2 text-sm">
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground">Status</span>
+              <Badge variant={status.running ? "default" : "secondary"}>
+                {status.running ? "Running" : "Stopped"}
+              </Badge>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground">Items in queue</span>
+              <span>{status.itemsInQueue}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground">Items searched (session)</span>
+              <span>{status.itemsSearched}</span>
+            </div>
+            {status.lastRunAt && (
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Last run</span>
+                <span>{new Date(status.lastRunAt).toLocaleString()}</span>
+              </div>
+            )}
+            {status.nextRunAt && (
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Next run</span>
+                <span>{new Date(status.nextRunAt).toLocaleString()}</span>
+              </div>
+            )}
+            {Object.keys(status.quotaUsage).length > 0 && (
+              <div className="pt-2">
+                <span className="text-muted-foreground text-xs">Quota usage (24 h)</span>
+                <div className="flex flex-wrap gap-2 mt-1">
+                  {Object.entries(status.quotaUsage).map(([id, count]) => (
+                    <Badge key={id} variant="outline" className="text-xs">
+                      {id}: {count}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Enable toggle */}
+      <div className="flex items-center justify-between">
+        <div>
+          <Label className="text-sm font-medium">Enable Rolling Search</Label>
+          <p className="text-xs text-muted-foreground">
+            Continuously search for missing movies and episodes on a schedule
+          </p>
+        </div>
+        <Checkbox
+          checked={config.enabled}
+          onCheckedChange={(v) =>
+            setConfig((c) => (c ? { ...c, enabled: !!v } : c))
+          }
+        />
+      </div>
+
+      {/* Interval */}
+      <div className="grid gap-1.5">
+        <Label htmlFor="rs-interval">Interval (hours)</Label>
+        <Input
+          id="rs-interval"
+          type="number"
+          min={1}
+          max={168}
+          value={config.intervalHours}
+          onChange={(e) =>
+            setConfig((c) =>
+              c ? { ...c, intervalHours: Number(e.target.value) || 12 } : c
+            )
+          }
+        />
+        <p className="text-xs text-muted-foreground">
+          How often the scheduler runs a search batch
+        </p>
+      </div>
+
+      {/* Batch size */}
+      <div className="grid gap-1.5">
+        <Label htmlFor="rs-batch">Batch Size</Label>
+        <Input
+          id="rs-batch"
+          type="number"
+          min={1}
+          max={100}
+          value={config.batchSize}
+          onChange={(e) =>
+            setConfig((c) =>
+              c ? { ...c, batchSize: Number(e.target.value) || 5 } : c
+            )
+          }
+        />
+        <p className="text-xs text-muted-foreground">
+          Number of items to search per run
+        </p>
+      </div>
+
+      {/* Min re-search days */}
+      <div className="grid gap-1.5">
+        <Label htmlFor="rs-redays">Minimum re-search interval (days)</Label>
+        <Input
+          id="rs-redays"
+          type="number"
+          min={1}
+          max={90}
+          value={config.minResearchDays}
+          onChange={(e) =>
+            setConfig((c) =>
+              c ? { ...c, minResearchDays: Number(e.target.value) || 7 } : c
+            )
+          }
+        />
+        <p className="text-xs text-muted-foreground">
+          Don't re-search an item within this many days
+        </p>
+      </div>
+
+      {/* Max searches per day */}
+      <div className="grid gap-1.5">
+        <Label htmlFor="rs-maxday">Max searches per indexer per day</Label>
+        <Input
+          id="rs-maxday"
+          type="number"
+          min={1}
+          max={10000}
+          value={config.maxSearchesPerDay}
+          onChange={(e) =>
+            setConfig((c) =>
+              c ? { ...c, maxSearchesPerDay: Number(e.target.value) || 100 } : c
+            )
+          }
+        />
+        <p className="text-xs text-muted-foreground">
+          Per-indexer daily quota to avoid rate-limiting
+        </p>
+      </div>
+
+      {/* Actions */}
+      <div className="flex gap-2 pt-2">
+        <Button onClick={handleSave} disabled={saving} size="sm">
+          {saving ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : null}
+          Save
+        </Button>
+        <Button variant="outline" size="sm" onClick={handleTrigger}>
+          <Search className="h-4 w-4 mr-1.5" /> Run Now
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 // ─── Settings Panels ────────────────────────────────────────────────────
 
 function SettingsContent({ category }: { category: Category }) {
@@ -1749,6 +1993,8 @@ function SettingsContent({ category }: { category: Category }) {
       return <DownloadClientsPanel />;
     case "download-safety":
       return <DownloadSafetyPanel />;
+    case "rolling-search":
+      return <RollingSearchPanel />;
     case "notifications":
       return <NotificationsPanel />;
     case "connect":

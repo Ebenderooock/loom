@@ -10,15 +10,19 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/loomctl/loom/internal/anime"
 	"github.com/loomctl/loom/internal/appconfig"
+	"github.com/loomctl/loom/internal/customformats"
 	"github.com/loomctl/loom/internal/downloads"
 	"github.com/loomctl/loom/internal/imports"
 	"github.com/loomctl/loom/internal/indexers/newznabserver"
+	"github.com/loomctl/loom/internal/languages"
 	"github.com/loomctl/loom/internal/kernel/config"
 	"github.com/loomctl/loom/internal/kernel/logging"
 	"github.com/loomctl/loom/internal/kernel/telemetry"
 	"github.com/loomctl/loom/internal/rss"
 	"github.com/loomctl/loom/internal/safety"
+	"github.com/loomctl/loom/internal/scheduler"
 	"github.com/loomctl/loom/internal/server"
 	"github.com/loomctl/loom/internal/storage"
 )
@@ -167,6 +171,7 @@ func cmdServe(ctx context.Context, args []string) error {
 	srv.SetBlocklistStore(downloads.NewBlocklistStore(db.DB()))
 	srv.SetRSS(rssSvc)
 	srv.SetMovies(moviesSvc)
+	srv.SetCustomFormats(customformats.NewStore(db.DB()))
 
 	// Build and wire the library scanner
 	scannerSvc := buildScanner(moviesSvc, cfg, logger)
@@ -191,6 +196,16 @@ func cmdServe(ctx context.Context, args []string) error {
 	notifSvc := buildNotificationsService(db)
 	srv.SetNotifications(notifSvc)
 
+	// Build and wire the language-profile store
+	langStore := languages.NewStore(db.DB())
+	if err := langStore.EnsureDefault(ctx); err != nil {
+		return fmt.Errorf("init language profiles: %w", err)
+	}
+	srv.SetLanguages(langStore)
+
+	// Build and wire the anime store
+	srv.SetAnime(anime.NewStore(db.DB(), logger))
+
 	// Build and wire the import pipeline
 	importMode := imports.ImportMode(cfg.MediaManagement.ImportMode)
 	if importMode == "" {
@@ -214,6 +229,14 @@ func cmdServe(ctx context.Context, args []string) error {
 	importPipeline.Start()
 	defer importPipeline.Stop()
 	srv.SetImportPipeline(importPipeline)
+
+	// Build and wire the rolling-search scheduler
+	rsCfg := scheduler.DefaultRollingSearchConfig()
+	rsStore := scheduler.NewStore(db.DB())
+	rollingSearcher := scheduler.NewRollingSearcher(rsStore, indexerSvc, logger, rsCfg)
+	srv.SetRollingSearch(rollingSearcher)
+	rollingSearcher.Start(ctx)
+	defer rollingSearcher.Stop()
 
 	errCh := make(chan error, 1)
 	go func() { errCh <- srv.Start() }()

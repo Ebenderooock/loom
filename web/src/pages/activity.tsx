@@ -4,7 +4,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useSetPageHeader } from "@/hooks/use-page-header";
-import { CheckCircle2, XCircle, AlertTriangle, Loader2, Download, ArrowDown, ArrowUp, Clock, Pause, RefreshCw, Trash2, Ban } from "lucide-react";
+import { CheckCircle2, XCircle, AlertTriangle, Loader2, Download, ArrowDown, ArrowUp, Clock, Pause, RefreshCw, Trash2, Ban, Import } from "lucide-react";
+import { ImportManager } from "@/components/imports/import-manager";
 
 // ─── Types ──────────────────────────────────────────────────────────────
 
@@ -499,6 +500,10 @@ export function ActivityPage() {
               </Badge>
             )}
           </TabsTrigger>
+          <TabsTrigger value="imports" className="flex items-center gap-1.5">
+            <Import className="mr-1 h-3.5 w-3.5" />
+            Imports
+          </TabsTrigger>
         </TabsList>
         <TabsContent value="queue">
           <DownloadQueue />
@@ -511,6 +516,9 @@ export function ActivityPage() {
         </TabsContent>
         <TabsContent value="reviews">
           <ReviewQueue />
+        </TabsContent>
+        <TabsContent value="imports">
+          <ImportManager />
         </TabsContent>
       </Tabs>
     </div>
