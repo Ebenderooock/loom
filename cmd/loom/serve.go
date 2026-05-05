@@ -10,16 +10,21 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/loomctl/loom/internal/alttitles"
 	"github.com/loomctl/loom/internal/anime"
 	"github.com/loomctl/loom/internal/appconfig"
 	"github.com/loomctl/loom/internal/customformats"
 	"github.com/loomctl/loom/internal/downloads"
+	"github.com/loomctl/loom/internal/importlists"
 	"github.com/loomctl/loom/internal/imports"
 	"github.com/loomctl/loom/internal/indexers/newznabserver"
 	"github.com/loomctl/loom/internal/languages"
+	"github.com/loomctl/loom/internal/libraries"
+	"github.com/loomctl/loom/internal/mediainfo"
 	"github.com/loomctl/loom/internal/kernel/config"
 	"github.com/loomctl/loom/internal/kernel/logging"
 	"github.com/loomctl/loom/internal/kernel/telemetry"
+	"github.com/loomctl/loom/internal/notifications"
 	"github.com/loomctl/loom/internal/rss"
 	"github.com/loomctl/loom/internal/safety"
 	"github.com/loomctl/loom/internal/scheduler"
@@ -196,6 +201,12 @@ func cmdServe(ctx context.Context, args []string) error {
 	notifSvc := buildNotificationsService(db)
 	srv.SetNotifications(notifSvc)
 
+	// Start the notification dispatcher — subscribes to domain events on the
+	// bus and fans out to all matching notification connections.
+	notifDispatcher := notifications.NewDispatcher(srv.Bus(), notifSvc, logger)
+	notifDispatcher.Start(ctx)
+	defer notifDispatcher.Stop()
+
 	// Build and wire the language-profile store
 	langStore := languages.NewStore(db.DB())
 	if err := langStore.EnsureDefault(ctx); err != nil {
@@ -205,6 +216,24 @@ func cmdServe(ctx context.Context, args []string) error {
 
 	// Build and wire the anime store
 	srv.SetAnime(anime.NewStore(db.DB(), logger))
+
+	// Build and wire the import lists
+	importListStore := importlists.NewStore(db.DB())
+	importListSyncMgr := importlists.NewSyncManager(importListStore, logger)
+	srv.SetImportLists(importListStore, importListSyncMgr)
+	importListSyncMgr.Start(ctx)
+	defer importListSyncMgr.Stop()
+
+	// Build and wire the libraries store and scanner
+	libStore := libraries.NewStore(db.DB())
+	libScanner := libraries.NewScanner(libStore, logger)
+	srv.SetLibraries(libStore, libScanner)
+
+	// Build and wire the media-info store
+	srv.SetMediaInfo(mediainfo.NewStore(db.DB(), logger))
+
+	// Build and wire the alt-title store
+	srv.SetAltTitles(alttitles.NewStore(db.DB()))
 
 	// Build and wire the import pipeline
 	importMode := imports.ImportMode(cfg.MediaManagement.ImportMode)

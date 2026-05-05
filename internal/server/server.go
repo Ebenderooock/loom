@@ -29,17 +29,23 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
 
+	"github.com/loomctl/loom/internal/alttitles"
 	"github.com/loomctl/loom/internal/anime"
+	"github.com/loomctl/loom/internal/apikeys"
 	"github.com/loomctl/loom/internal/appconfig"
+	"github.com/loomctl/loom/internal/commands"
 	"github.com/loomctl/loom/internal/episodeorder"
 	"github.com/loomctl/loom/internal/auth"
+	"github.com/loomctl/loom/internal/libraries"
 	"github.com/loomctl/loom/internal/buildinfo"
 	"github.com/loomctl/loom/internal/customformats"
 	"github.com/loomctl/loom/internal/downloads"
+	"github.com/loomctl/loom/internal/importlists"
 	"github.com/loomctl/loom/internal/imports"
 	"github.com/loomctl/loom/internal/indexers"
 	"github.com/loomctl/loom/internal/indexers/newznabserver"
 	"github.com/loomctl/loom/internal/languages"
+	"github.com/loomctl/loom/internal/mediainfo"
 	"github.com/loomctl/loom/internal/kernel/config"
 	"github.com/loomctl/loom/internal/kernel/eventbus"
 	"github.com/loomctl/loom/internal/kernel/telemetry"
@@ -47,6 +53,7 @@ import (
 	"github.com/loomctl/loom/internal/notifications"
 	"github.com/loomctl/loom/internal/organizer"
 	"github.com/loomctl/loom/internal/packs"
+	"github.com/loomctl/loom/internal/qualityprofiles"
 	"github.com/loomctl/loom/internal/rss"
 	"github.com/loomctl/loom/internal/safety"
 	"github.com/loomctl/loom/internal/scanner"
@@ -81,9 +88,18 @@ type Server struct {
 	customFormatStore *customformats.Store
 	rollingSearch  *scheduler.RollingSearcher
 	aggSvc     *newznabserver.Server
+	altTitleStore *alttitles.Store
 	animeStore *anime.Store
+	importListStore  *importlists.Store
+	importListSync   *importlists.SyncManager
+	mediaInfoStore *mediainfo.Store
 	packsStore *packs.Store
 	episodeOrderStore *episodeorder.Store
+	libStore   *libraries.Store
+	libScanner *libraries.Scanner
+	apiKeyStore *apikeys.Store
+	cmdQueue    *commands.Queue
+	qpStore     *qualityprofiles.Store
 	ready      atomic.Bool
 }
 
@@ -242,9 +258,35 @@ func (s *Server) SetCustomFormats(store *customformats.Store) {
 	}
 }
 
+// SetAltTitles installs the alt-title store and rebuilds the HTTP handler.
+func (s *Server) SetAltTitles(store *alttitles.Store) {
+	s.altTitleStore = store
+	if s.httpSrv != nil {
+		s.httpSrv.Handler = s.newMux()
+	}
+}
+
 // SetAnime installs the anime store and rebuilds the HTTP handler.
 func (s *Server) SetAnime(store *anime.Store) {
 	s.animeStore = store
+	if s.httpSrv != nil {
+		s.httpSrv.Handler = s.newMux()
+	}
+}
+
+// SetImportLists installs the import list store and sync manager and
+// rebuilds the HTTP handler. Must be called before Start.
+func (s *Server) SetImportLists(store *importlists.Store, syncMgr *importlists.SyncManager) {
+	s.importListStore = store
+	s.importListSync = syncMgr
+	if s.httpSrv != nil {
+		s.httpSrv.Handler = s.newMux()
+	}
+}
+
+// SetMediaInfo installs the media-info store and rebuilds the HTTP handler.
+func (s *Server) SetMediaInfo(store *mediainfo.Store) {
+	s.mediaInfoStore = store
 	if s.httpSrv != nil {
 		s.httpSrv.Handler = s.newMux()
 	}
@@ -261,6 +303,39 @@ func (s *Server) SetPacks(store *packs.Store) {
 // SetEpisodeOrder installs the episode-order store and rebuilds the HTTP handler.
 func (s *Server) SetEpisodeOrder(store *episodeorder.Store) {
 	s.episodeOrderStore = store
+	if s.httpSrv != nil {
+		s.httpSrv.Handler = s.newMux()
+	}
+}
+
+// SetLibraries installs the libraries store and scanner, then rebuilds the HTTP handler.
+func (s *Server) SetLibraries(store *libraries.Store, scanner *libraries.Scanner) {
+	s.libStore = store
+	s.libScanner = scanner
+	if s.httpSrv != nil {
+		s.httpSrv.Handler = s.newMux()
+	}
+}
+
+// SetAPIKeys installs the API key store and rebuilds the HTTP handler.
+func (s *Server) SetAPIKeys(store *apikeys.Store) {
+	s.apiKeyStore = store
+	if s.httpSrv != nil {
+		s.httpSrv.Handler = s.newMux()
+	}
+}
+
+// SetCommands installs the command queue and rebuilds the HTTP handler.
+func (s *Server) SetCommands(q *commands.Queue) {
+	s.cmdQueue = q
+	if s.httpSrv != nil {
+		s.httpSrv.Handler = s.newMux()
+	}
+}
+
+// SetQualityProfiles installs the quality profiles store and rebuilds the HTTP handler.
+func (s *Server) SetQualityProfiles(store *qualityprofiles.Store) {
+	s.qpStore = store
 	if s.httpSrv != nil {
 		s.httpSrv.Handler = s.newMux()
 	}
@@ -392,9 +467,24 @@ func (s *Server) newMux() http.Handler {
 			languages.Mount(r, s.langStore)
 		}
 
+		// Alt-title routes
+		if s.altTitleStore != nil {
+			r.Mount("/api/v1/alt-titles", alttitles.Router(s.altTitleStore))
+		}
+
 		// Anime routes
 		if s.animeStore != nil {
 			r.Mount("/api/v1/anime", anime.Router(s.animeStore))
+		}
+
+		// Import lists routes
+		if s.importListStore != nil && s.importListSync != nil {
+			r.Mount("/api/v1/import-lists", importlists.Router(s.importListStore, s.importListSync, s.logger))
+		}
+
+		// Media info / preferences routes
+		if s.mediaInfoStore != nil {
+			r.Mount("/api/v1/media-info", mediainfo.Router(s.mediaInfoStore, s.logger))
 		}
 
 		// Packs routes
@@ -405,6 +495,11 @@ func (s *Server) newMux() http.Handler {
 		// Episode ordering routes
 		if s.episodeOrderStore != nil {
 			r.Mount("/api/v1/episode-order", episodeorder.Router(s.episodeOrderStore))
+		}
+
+		// Library routes
+		if s.libStore != nil {
+			r.Mount("/api/v1/libraries", libraries.Router(s.libStore, s.libScanner, s.logger))
 		}
 
 		// System status (authenticated)
