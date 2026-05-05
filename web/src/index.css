@@ -111,14 +111,15 @@
   }
 }
 
-/* Thin, subtle scrollbars */
+/* Thin, subtle scrollbars — always visible */
 .scrollbar-thin {
   scrollbar-width: thin;
-  scrollbar-color: hsl(var(--border)) transparent;
-  overflow-y: auto;
+  scrollbar-color: hsl(var(--muted-foreground) / 0.25) transparent;
+  overflow-y: scroll;
 }
 .scrollbar-thin::-webkit-scrollbar {
   width: 6px;
+  -webkit-appearance: none;
 }
 .scrollbar-thin::-webkit-scrollbar-track {
   background: transparent;
@@ -126,6 +127,7 @@
 .scrollbar-thin::-webkit-scrollbar-thumb {
   background: hsl(var(--muted-foreground) / 0.25);
   border-radius: 9999px;
+  min-height: 40px;
 }
 .scrollbar-thin::-webkit-scrollbar-thumb:hover {
   background: hsl(var(--muted-foreground) / 0.45);
