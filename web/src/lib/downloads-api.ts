@@ -207,6 +207,16 @@ export async function testDownload(id: string): Promise<TestResult> {
   );
 }
 
+export async function testDownloadConfig(
+  payload: Record<string, unknown>,
+): Promise<TestResult> {
+  return request<TestResult>(
+    "POST",
+    "/api/v1/download-clients/test",
+    payload,
+  );
+}
+
 // ---------- Grab (send release to download client) ----------
 
 export interface GrabRequest {
@@ -308,6 +318,10 @@ export function useTestDownload() {
     mutationFn: testDownload,
     onSuccess: () => qc.invalidateQueries({ queryKey: downloadKeys.all }),
   });
+}
+
+export function useTestDownloadConfig() {
+  return useMutation({ mutationFn: testDownloadConfig });
 }
 
 /**

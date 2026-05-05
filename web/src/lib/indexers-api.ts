@@ -299,6 +299,19 @@ export async function testIndexer(id: string): Promise<TestResult> {
   );
 }
 
+export interface TestConfigPayload {
+  kind: string;
+  name: string;
+  config: Record<string, unknown>;
+  proxy_id?: string;
+}
+
+export async function testIndexerConfig(
+  payload: TestConfigPayload,
+): Promise<TestResult> {
+  return request<TestResult>("POST", "/api/v1/indexers/test", payload);
+}
+
 export interface SearchParams {
   q: string;
   indexer_ids?: string[];
@@ -407,6 +420,10 @@ export function useTestIndexer() {
     mutationFn: testIndexer,
     onSuccess: () => qc.invalidateQueries({ queryKey: indexerKeys.all }),
   });
+}
+
+export function useTestIndexerConfig() {
+  return useMutation({ mutationFn: testIndexerConfig });
 }
 
 export function useCreateProxy() {

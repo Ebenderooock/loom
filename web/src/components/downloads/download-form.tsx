@@ -6,7 +6,9 @@ import * as React from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { CheckCircle2, XCircle, Loader2 } from "lucide-react";
 import type { Download, DownloadKind, DownloadProtocol } from "@/lib/downloads-api";
+import { useTestDownloadConfig, useTestDownload } from "@/lib/downloads-api";
 
 const DOWNLOAD_KINDS: {
   value: DownloadKind;
@@ -139,6 +141,46 @@ export function DownloadForm({
   });
 
   const [errors, setErrors] = React.useState<DownloadFormErrors>({});
+  const [testResult, setTestResult] = React.useState<{
+    ok: boolean;
+    error?: string;
+  } | null>(null);
+
+  const testConfig = useTestDownloadConfig();
+  const testSaved = useTestDownload();
+
+  async function handleTest() {
+    setTestResult(null);
+    const errs = validateDownloadForm(values);
+    setErrors(errs);
+    if (Object.keys(errs).length > 0) return;
+
+    try {
+      let res;
+      if (isEdit && values.id) {
+        res = await testSaved.mutateAsync(values.id);
+      } else {
+        res = await testConfig.mutateAsync({
+          kind: values.kind,
+          name: values.name || "test",
+          protocol: values.protocol,
+          host: values.host,
+          port: values.port,
+          tls: values.tls,
+          username: values.username,
+          password: values.password,
+        });
+      }
+      setTestResult(res);
+    } catch (err) {
+      setTestResult({
+        ok: false,
+        error: err instanceof Error ? err.message : "Test failed",
+      });
+    }
+  }
+
+  const testing = testConfig.isPending || testSaved.isPending;
 
   function update<K extends keyof DownloadFormValues>(
     key: K,
@@ -391,12 +433,48 @@ export function DownloadForm({
         </Label>
       </div>
 
+      {testResult && (
+        <div
+          className={`flex items-center gap-2 rounded-md border p-3 text-sm ${
+            testResult.ok
+              ? "border-green-500/40 bg-green-500/10 text-green-700 dark:text-green-300"
+              : "border-red-500/40 bg-red-500/10 text-red-700 dark:text-red-300"
+          }`}
+        >
+          {testResult.ok ? (
+            <CheckCircle2 className="w-4 h-4 shrink-0" />
+          ) : (
+            <XCircle className="w-4 h-4 shrink-0" />
+          )}
+          <span>
+            {testResult.ok
+              ? "Connection successful"
+              : testResult.error || "Connection failed"}
+          </span>
+        </div>
+      )}
+
       <div className="mt-2 flex justify-end gap-2">
         {onCancel ? (
           <Button type="button" variant="ghost" onClick={onCancel}>
             Cancel
           </Button>
         ) : null}
+        <Button
+          type="button"
+          variant="outline"
+          onClick={handleTest}
+          disabled={testing || submitting}
+        >
+          {testing ? (
+            <>
+              <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
+              Testing…
+            </>
+          ) : (
+            "Test"
+          )}
+        </Button>
         <Button type="submit" disabled={submitting}>
           {submitting
             ? "Saving…"
