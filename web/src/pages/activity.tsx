@@ -4,9 +4,25 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useSetPageHeader } from "@/hooks/use-page-header";
-import { CheckCircle2, XCircle, AlertTriangle, Loader2, Clock, Ban, RefreshCw, Trash2 } from "lucide-react";
+import { CheckCircle2, XCircle, AlertTriangle, Loader2, Clock, Ban, RefreshCw, Trash2, Download, ArrowDown, ArrowUp, Pause } from "lucide-react";
 
 // ─── Types ──────────────────────────────────────────────────────────────
+
+interface DownloadItem {
+  id: string;
+  client_id?: string;
+  title: string;
+  category?: string;
+  status: string;
+  progress: number;
+  size_bytes?: number;
+  downloaded_bytes?: number;
+  eta_seconds?: number;
+  download_rate?: number;
+  upload_rate?: number;
+  ratio?: number;
+  message?: string;
+}
 
 interface ReviewItem {
   id: string;
@@ -29,6 +45,153 @@ interface HistoryEntry {
   status: string;
   grabbed_at?: string;
   completed_at: string;
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes === 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  const i = Math.floor(Math.log(bytes) / Math.log(1024));
+  return `${(bytes / Math.pow(1024, i)).toFixed(1)} ${units[i]}`;
+}
+
+function formatRate(bytesPerSec: number): string {
+  return `${formatBytes(bytesPerSec)}/s`;
+}
+
+function formatEta(seconds: number): string {
+  if (seconds <= 0) return "—";
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = seconds % 60;
+  if (h > 0) return `${h}h ${m}m`;
+  if (m > 0) return `${m}m ${s}s`;
+  return `${s}s`;
+}
+
+function statusColor(status: string): string {
+  switch (status) {
+    case "downloading": return "text-blue-500";
+    case "completed": return "text-green-500";
+    case "paused": return "text-yellow-500";
+    case "stalled": return "text-orange-500";
+    case "error": case "failed": return "text-red-500";
+    case "seeding": return "text-emerald-500";
+    default: return "text-muted-foreground";
+  }
+}
+
+function DownloadQueue() {
+  const [items, setItems] = React.useState<DownloadItem[]>([]);
+  const [loading, setLoading] = React.useState(true);
+
+  const fetchQueue = React.useCallback(async () => {
+    try {
+      const res = await fetch("/api/v1/activity", { credentials: "include" });
+      if (res.ok) {
+        const body = await res.json();
+        setItems(body.items ?? []);
+      }
+    } catch {
+      // silently fail
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    fetchQueue();
+    const interval = setInterval(fetchQueue, 5000);
+    return () => clearInterval(interval);
+  }, [fetchQueue]);
+
+  if (loading) {
+    return (
+      <Card>
+        <CardContent className="py-8 text-center text-muted-foreground">
+          <Loader2 className="h-5 w-5 animate-spin mx-auto mb-2" />
+          Loading queue…
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (items.length === 0) {
+    return (
+      <Card>
+        <CardContent className="py-8 text-center text-muted-foreground">
+          <Download className="h-5 w-5 mx-auto mb-2 opacity-50" />
+          No active downloads.
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between pb-3">
+        <CardTitle className="text-base">Download Queue</CardTitle>
+        <Button variant="ghost" size="icon" onClick={fetchQueue} className="h-8 w-8">
+          <RefreshCw className="h-4 w-4" />
+        </Button>
+      </CardHeader>
+      <CardContent className="p-0">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-border text-left text-muted-foreground text-xs">
+              <th className="py-2 px-4 font-medium">Title</th>
+              <th className="py-2 px-4 font-medium w-24">Status</th>
+              <th className="py-2 px-4 font-medium w-28">Progress</th>
+              <th className="py-2 px-4 font-medium w-24">Size</th>
+              <th className="py-2 px-4 font-medium w-24">Speed</th>
+              <th className="py-2 px-4 font-medium w-20">ETA</th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((item) => (
+              <tr key={`${item.client_id}-${item.id}`} className="border-b border-border/50 last:border-0">
+                <td className="py-3 px-4">
+                  <div className="font-medium truncate max-w-md">{item.title}</div>
+                  {item.category && (
+                    <div className="text-xs text-muted-foreground">{item.category}</div>
+                  )}
+                </td>
+                <td className="py-3 px-4">
+                  <span className={`text-xs font-medium ${statusColor(item.status)}`}>
+                    {item.status === "downloading" && <ArrowDown className="inline h-3 w-3 mr-0.5" />}
+                    {item.status === "seeding" && <ArrowUp className="inline h-3 w-3 mr-0.5" />}
+                    {item.status === "paused" && <Pause className="inline h-3 w-3 mr-0.5" />}
+                    {item.status}
+                  </span>
+                </td>
+                <td className="py-3 px-4">
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-accent rounded-full transition-all"
+                        style={{ width: `${Math.round(item.progress * 100)}%` }}
+                      />
+                    </div>
+                    <span className="text-xs tabular-nums text-muted-foreground w-8">
+                      {Math.round(item.progress * 100)}%
+                    </span>
+                  </div>
+                </td>
+                <td className="py-3 px-4 text-xs text-muted-foreground tabular-nums">
+                  {item.size_bytes ? formatBytes(item.size_bytes) : "—"}
+                </td>
+                <td className="py-3 px-4 text-xs text-muted-foreground tabular-nums">
+                  {item.download_rate ? formatRate(item.download_rate) : "—"}
+                </td>
+                <td className="py-3 px-4 text-xs text-muted-foreground tabular-nums">
+                  {item.eta_seconds ? formatEta(item.eta_seconds) : "—"}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </CardContent>
+    </Card>
+  );
 }
 
 function relativeTime(iso: string): string {
@@ -379,8 +542,9 @@ export function ActivityPage() {
 
   return (
     <div className="space-y-6">
-      <Tabs defaultValue="history">
+      <Tabs defaultValue="queue">
         <TabsList>
+          <TabsTrigger value="queue">Queue</TabsTrigger>
           <TabsTrigger value="history">History</TabsTrigger>
           <TabsTrigger value="blocklist">Blocklist</TabsTrigger>
           <TabsTrigger value="reviews" className="flex items-center gap-1.5">
@@ -395,6 +559,9 @@ export function ActivityPage() {
             )}
           </TabsTrigger>
         </TabsList>
+        <TabsContent value="queue">
+          <DownloadQueue />
+        </TabsContent>
         <TabsContent value="history">
           <DownloadHistory />
         </TabsContent>

@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/loomctl/loom/internal/grabs"
 	"github.com/loomctl/loom/internal/kernel/eventbus"
 )
 
@@ -30,6 +31,7 @@ type Monitor struct {
 	clock        Clock
 	stallHandler *StallHandler
 	historyStore *HistoryStore
+	grabStore    *grabs.Store
 
 	// Configurable check interval. Defaults to 30 seconds; can be
 	// overridden via env variable or test injection.
@@ -60,6 +62,7 @@ type MonitorOptions struct {
 	CheckForStalled bool
 	StallHandler    *StallHandler
 	HistoryStore    *HistoryStore
+	GrabStore       *grabs.Store
 }
 
 // NewMonitor returns a Monitor wired to the Service and event bus.
@@ -92,6 +95,7 @@ func NewMonitor(opts MonitorOptions) (*Monitor, error) {
 		clock:           opts.Clock,
 		stallHandler:    opts.StallHandler,
 		historyStore:    opts.HistoryStore,
+		grabStore:       opts.GrabStore,
 		checkInterval:   opts.CheckInterval,
 		stallTimeout:    opts.StallTimeout,
 		checkForStalled: opts.CheckForStalled,
@@ -267,6 +271,10 @@ func (m *Monitor) RunLoop(ctx context.Context) {
 	ticker := time.NewTicker(m.checkInterval)
 	defer ticker.Stop()
 
+	// Prune stale grabs every ~10 minutes (every 20 ticks at 30s interval).
+	const pruneEvery = 20
+	var tickCount int
+
 	m.logger.Info("monitor: starting polling loop", "interval", m.checkInterval)
 	for {
 		select {
@@ -276,6 +284,15 @@ func (m *Monitor) RunLoop(ctx context.Context) {
 		case <-ticker.C:
 			if err := m.Run(ctx); err != nil {
 				m.logger.Error("monitor: sweep error", "error", err)
+			}
+			tickCount++
+			if tickCount%pruneEvery == 0 && m.grabStore != nil {
+				const maxAge = 48 * time.Hour
+				if n, err := m.grabStore.PruneStale(ctx, maxAge); err != nil {
+					m.logger.Error("monitor: grab prune failed", "error", err)
+				} else if n > 0 {
+					m.logger.Info("monitor: pruned stale grabs", "count", n)
+				}
 			}
 		}
 	}
