@@ -127,7 +127,7 @@ export function SeriesPage() {
     try {
       const [seriesRes, profilesRes] = await Promise.all([
         fetch("/api/v1/series", { credentials: "include" }),
-        fetch("/api/v1/movies/quality-profiles", { credentials: "include" }),
+        fetch("/api/v1/quality-profiles", { credentials: "include" }),
       ]);
       if (seriesRes.ok) {
         const data = await seriesRes.json();
@@ -135,7 +135,8 @@ export function SeriesPage() {
       }
       if (profilesRes.ok) {
         const data = await profilesRes.json();
-        setQualityProfiles(Array.isArray(data) ? data : []);
+        const profiles = data?.data ?? (Array.isArray(data) ? data : []);
+        setQualityProfiles(profiles);
       }
     } catch { /* ignore */ } finally { setIsLoading(false); }
   }, [isAuthenticated]);

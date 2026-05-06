@@ -261,6 +261,7 @@ func cmdServe(ctx context.Context, args []string) error {
 	// Build and wire the quality profiles store
 	qpStore := qualityprofiles.NewStore(db.DB())
 	srv.SetQualityProfiles(qpStore)
+	qualityprofiles.SeedDefaults(ctx, qpStore, moviesSvc)
 
 	// Build and wire the autosearch decision engine
 	cfStore := customformats.NewStore(db.DB())

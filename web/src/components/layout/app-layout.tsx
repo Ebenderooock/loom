@@ -82,7 +82,7 @@ const NAV_SECTIONS: NavSection[] = [
     id: "activity",
     label: "Activity",
     items: [
-      { to: "/downloads", label: "Queue", Icon: Download },
+      { to: "/downloads", label: "Downloads", Icon: Download },
       { to: "/activity", label: "History", Icon: ListTodo, badge: "review" },
     ],
   },

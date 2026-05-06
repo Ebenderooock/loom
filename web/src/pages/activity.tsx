@@ -4,8 +4,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useSetPageHeader } from "@/hooks/use-page-header";
-import { CheckCircle2, XCircle, AlertTriangle, Loader2, Download, ArrowDown, ArrowUp, Clock, Pause, RefreshCw, Trash2, Ban, Import } from "lucide-react";
-import { ImportManager } from "@/components/imports/import-manager";
+import { CheckCircle2, XCircle, AlertTriangle, Loader2, Clock, Ban, RefreshCw, Trash2 } from "lucide-react";
 
 // ─── Types ──────────────────────────────────────────────────────────────
 
@@ -17,21 +16,6 @@ interface ReviewItem {
   reason: string;
   status: string;
   created_at: string;
-}
-
-interface DownloadItem {
-  id: string;
-  title: string;
-  category: string;
-  status: string;
-  progress: number;
-  size_bytes: number;
-  downloaded_bytes: number;
-  eta: number;
-  download_rate: number;
-  upload_rate: number;
-  ratio: number;
-  message: string;
 }
 
 // ─── Types: Download History ─────────────────────────────────────────────
@@ -138,171 +122,6 @@ function DownloadHistory() {
                 </td>
                 <td className="py-3 px-4 text-xs text-muted-foreground">
                   {relativeTime(entry.completed_at)}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </CardContent>
-    </Card>
-  );
-}
-
-// ─── Helpers ────────────────────────────────────────────────────────────
-
-function formatBytes(bytes: number): string {
-  if (bytes <= 0) return "—";
-  const units = ["B", "KB", "MB", "GB", "TB"];
-  const i = Math.floor(Math.log(bytes) / Math.log(1024));
-  return `${(bytes / Math.pow(1024, i)).toFixed(1)} ${units[i]}`;
-}
-
-function formatSpeed(bytesPerSec: number): string {
-  if (bytesPerSec <= 0) return "—";
-  return `${formatBytes(bytesPerSec)}/s`;
-}
-
-function formatEta(seconds: number): string {
-  if (seconds <= 0) return "—";
-  if (seconds > 86400) return `${Math.floor(seconds / 86400)}d ${Math.floor((seconds % 86400) / 3600)}h`;
-  if (seconds > 3600) return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`;
-  if (seconds > 60) return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
-  return `${seconds}s`;
-}
-
-function statusBadge(status: string) {
-  const variants: Record<string, { variant: "default" | "secondary" | "destructive" | "outline"; icon: React.ReactNode }> = {
-    downloading: { variant: "default", icon: <ArrowDown className="w-3 h-3" /> },
-    seeding: { variant: "secondary", icon: <ArrowUp className="w-3 h-3" /> },
-    queued: { variant: "outline", icon: <Clock className="w-3 h-3" /> },
-    paused: { variant: "outline", icon: <Pause className="w-3 h-3" /> },
-    completed: { variant: "secondary", icon: <CheckCircle2 className="w-3 h-3 text-green-500" /> },
-    failed: { variant: "destructive", icon: <XCircle className="w-3 h-3" /> },
-  };
-  const v = variants[status] ?? { variant: "outline" as const, icon: null };
-  return (
-    <Badge variant={v.variant} className="flex items-center gap-1 text-xs capitalize">
-      {v.icon}
-      {status}
-    </Badge>
-  );
-}
-
-// ─── Download Queue ─────────────────────────────────────────────────────
-
-function DownloadQueue() {
-  const [items, setItems] = React.useState<DownloadItem[]>([]);
-  const [loading, setLoading] = React.useState(true);
-
-  const fetchActivity = React.useCallback(async () => {
-    try {
-      const res = await fetch("/api/v1/activity", { credentials: "include" });
-      if (res.ok) {
-        const body = await res.json();
-        setItems(body.items ?? []);
-      }
-    } catch {
-      // silently fail
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  React.useEffect(() => {
-    fetchActivity();
-    const interval = setInterval(fetchActivity, 5000);
-    return () => clearInterval(interval);
-  }, [fetchActivity]);
-
-  if (loading) {
-    return (
-      <Card>
-        <CardContent className="py-8 text-center text-muted-foreground">
-          <Loader2 className="h-5 w-5 animate-spin mx-auto mb-2" />
-          Loading downloads…
-        </CardContent>
-      </Card>
-    );
-  }
-
-  if (items.length === 0) {
-    return (
-      <Card>
-        <CardContent className="py-8 text-center text-muted-foreground">
-          <Download className="h-5 w-5 mx-auto mb-2 opacity-50" />
-          No active downloads.
-        </CardContent>
-      </Card>
-    );
-  }
-
-  return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between pb-3">
-        <CardTitle className="text-base">Active Downloads</CardTitle>
-        <Button variant="ghost" size="icon" onClick={fetchActivity} className="h-8 w-8">
-          <RefreshCw className="h-4 w-4" />
-        </Button>
-      </CardHeader>
-      <CardContent className="p-0">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-border text-left text-muted-foreground text-xs">
-              <th className="py-2 px-4 font-medium">Title</th>
-              <th className="py-2 px-4 font-medium">Status</th>
-              <th className="py-2 px-4 font-medium">Progress</th>
-              <th className="py-2 px-4 font-medium">Size</th>
-              <th className="py-2 px-4 font-medium">Speed</th>
-              <th className="py-2 px-4 font-medium">ETA</th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.map((item) => (
-              <tr key={item.id} className="border-b border-border/50 last:border-0">
-                <td className="py-3 px-4">
-                  <div className="font-medium truncate max-w-xs">{item.title}</div>
-                  {item.message && <div className="text-xs text-muted-foreground truncate">{item.message}</div>}
-                </td>
-                <td className="py-3 px-4">{statusBadge(item.status)}</td>
-                <td className="py-3 px-4">
-                  <div className="flex items-center gap-2">
-                    <div className="w-24 h-1.5 bg-muted rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-accent rounded-full transition-all duration-500"
-                        style={{ width: `${Math.min(100, (item.progress ?? 0) * 100)}%` }}
-                      />
-                    </div>
-                    <span className="text-xs text-muted-foreground w-10 text-right">
-                      {((item.progress ?? 0) * 100).toFixed(0)}%
-                    </span>
-                  </div>
-                </td>
-                <td className="py-3 px-4 text-xs text-muted-foreground">
-                  {item.downloaded_bytes > 0 && item.size_bytes > 0
-                    ? `${formatBytes(item.downloaded_bytes)} / ${formatBytes(item.size_bytes)}`
-                    : item.size_bytes > 0
-                    ? formatBytes(item.size_bytes)
-                    : "—"}
-                </td>
-                <td className="py-3 px-4 text-xs text-muted-foreground">
-                  <div className="flex items-center gap-1">
-                    {item.download_rate > 0 && (
-                      <span className="flex items-center gap-0.5">
-                        <ArrowDown className="w-3 h-3 text-green-500" />
-                        {formatSpeed(item.download_rate)}
-                      </span>
-                    )}
-                    {item.upload_rate > 0 && (
-                      <span className="flex items-center gap-0.5 ml-2">
-                        <ArrowUp className="w-3 h-3 text-blue-500" />
-                        {formatSpeed(item.upload_rate)}
-                      </span>
-                    )}
-                    {item.download_rate <= 0 && item.upload_rate <= 0 && "—"}
-                  </div>
-                </td>
-                <td className="py-3 px-4 text-xs text-muted-foreground">
-                  {formatEta(item.eta)}
                 </td>
               </tr>
             ))}
@@ -560,9 +379,8 @@ export function ActivityPage() {
 
   return (
     <div className="space-y-6">
-      <Tabs defaultValue="queue">
+      <Tabs defaultValue="history">
         <TabsList>
-          <TabsTrigger value="queue">Queue</TabsTrigger>
           <TabsTrigger value="history">History</TabsTrigger>
           <TabsTrigger value="blocklist">Blocklist</TabsTrigger>
           <TabsTrigger value="reviews" className="flex items-center gap-1.5">
@@ -576,14 +394,7 @@ export function ActivityPage() {
               </Badge>
             )}
           </TabsTrigger>
-          <TabsTrigger value="imports" className="flex items-center gap-1.5">
-            <Import className="mr-1 h-3.5 w-3.5" />
-            Imports
-          </TabsTrigger>
         </TabsList>
-        <TabsContent value="queue">
-          <DownloadQueue />
-        </TabsContent>
         <TabsContent value="history">
           <DownloadHistory />
         </TabsContent>
@@ -592,9 +403,6 @@ export function ActivityPage() {
         </TabsContent>
         <TabsContent value="reviews">
           <ReviewQueue />
-        </TabsContent>
-        <TabsContent value="imports">
-          <ImportManager />
         </TabsContent>
       </Tabs>
     </div>

@@ -133,7 +133,7 @@ export function MoviesPage() {
     try {
       const [moviesRes, profilesRes] = await Promise.all([
         fetch("/api/v1/movies?limit=200", { credentials: "include" }),
-        fetch("/api/v1/movies/quality-profiles", { credentials: "include" }),
+        fetch("/api/v1/quality-profiles", { credentials: "include" }),
       ]);
       if (moviesRes.ok) {
         const data = await moviesRes.json();
@@ -141,7 +141,8 @@ export function MoviesPage() {
       }
       if (profilesRes.ok) {
         const data = await profilesRes.json();
-        setQualityProfiles(Array.isArray(data) ? data : []);
+        const profiles = data?.data ?? (Array.isArray(data) ? data : []);
+        setQualityProfiles(profiles);
       }
     } catch { /* ignore */ } finally { setIsLoading(false); }
   }, [isAuthenticated]);

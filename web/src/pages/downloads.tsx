@@ -1,364 +1,323 @@
-// DownloadsPage is the operator's main view onto configured download clients.
-// It lists every download client with a health badge, exposes Test/Edit/Delete
-// row actions, and hosts the add/edit dialogs.
+// DownloadsPage shows active downloads (from all configured download clients)
+// and the import/file-handling queue. This is the real-time operational view;
+// completed/failed history lives on the Activity (History) page.
 
 import * as React from "react";
-import { MoreHorizontal, Plus } from "lucide-react";
-import { toast } from "sonner";
+import {
+  Download,
+  ArrowDown,
+  ArrowUp,
+  Loader2,
+  RefreshCw,
+  Import,
+} from "lucide-react";
 import { useSetPageHeader } from "@/hooks/use-page-header";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Skeleton } from "@/components/ui/skeleton";
-import { DownloadHealthBadge } from "@/components/downloads/health-badge";
-import {
-  DownloadForm,
-  type DownloadFormValues,
-} from "@/components/downloads/download-form";
-import {
-  ApiError,
-  useCreateDownload,
-  useDeleteDownload,
-  useDownloads,
-  usePatchDownload,
-  useTestDownload,
-  type Download,
-  type DownloadPatch,
-} from "@/lib/downloads-api";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Progress } from "@/components/ui/progress";
+import { ImportManager } from "@/components/imports/import-manager";
 
-type DialogState =
-  | { kind: "closed" }
-  | { kind: "create" }
-  | { kind: "edit"; client: Download }
-  | { kind: "delete"; client: Download };
+// ─── Types ──────────────────────────────────────────────────────────────
 
-function errMessage(err: unknown, fallback: string): string {
-  if (err instanceof ApiError)
-    return `${fallback} (HTTP ${err.status}): ${err.message}`;
-  if (err instanceof Error) return `${fallback}: ${err.message}`;
-  return fallback;
+interface QueueItem {
+  id: string;
+  title: string;
+  category: string;
+  status: string;
+  progress: number;
+  size_bytes: number;
+  downloaded_bytes: number;
+  eta_seconds: number;
+  download_rate: number;
+  upload_rate: number;
+  ratio: number;
+  message: string;
+  save_path: string;
 }
 
-function toPatchPayload(
-  values: DownloadFormValues,
-  original: Download,
-): DownloadPatch {
-  const patch: DownloadPatch = {};
-  if (values.name !== original.name) patch.name = values.name;
-  if (values.enabled !== original.enabled) patch.enabled = values.enabled;
-  if (values.priority !== original.priority) patch.priority = values.priority;
-  if (values.host !== (original.host ?? "")) patch.host = values.host;
-  if (values.port !== (original.port ?? 0)) patch.port = values.port;
-  if (values.tls !== (original.tls ?? false)) patch.tls = values.tls;
-  if (values.username !== (original.username ?? "")) patch.username = values.username;
-  if (values.password !== (original.password ?? "")) patch.password = values.password;
-  if (values.category_default !== (original.category_default ?? ""))
-    patch.category_default = values.category_default;
-  if (values.save_path_default !== (original.save_path_default ?? ""))
-    patch.save_path_default = values.save_path_default;
-  if (values.remove_completed !== (original.remove_completed ?? false))
-    patch.remove_completed = values.remove_completed;
-  if (values.remove_failed !== (original.remove_failed ?? false))
-    patch.remove_failed = values.remove_failed;
-  return patch;
+// ─── Helpers ────────────────────────────────────────────────────────────
+
+function formatBytes(bytes: number): string {
+  if (bytes <= 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  const i = Math.floor(Math.log(bytes) / Math.log(1024));
+  return `${(bytes / Math.pow(1024, i)).toFixed(i > 1 ? 1 : 0)} ${units[i]}`;
 }
 
-/**
- * DownloadsPage component for managing download clients.
- */
-export function DownloadsPage() {
-  useSetPageHeader("Downloads");
-  const downloadsQ = useDownloads();
-  const create = useCreateDownload();
-  const patch = usePatchDownload();
-  const del = useDeleteDownload();
-  const test = useTestDownload();
+function formatSpeed(bytesPerSec: number): string {
+  if (bytesPerSec <= 0) return "0 B/s";
+  return `${formatBytes(bytesPerSec)}/s`;
+}
 
-  const [dialog, setDialog] = React.useState<DialogState>({ kind: "closed" });
-  const [topError, setTopError] = React.useState<string | undefined>();
+function formatEta(seconds: number): string {
+  if (!seconds || seconds <= 0) return "∞";
+  if (seconds < 60) return `${seconds}s`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  return m > 0 ? `${h}h ${m}m` : `${h}h`;
+}
 
-  function close() {
-    setDialog({ kind: "closed" });
-    setTopError(undefined);
+function statusConfig(status: string) {
+  switch (status) {
+    case "downloading":
+      return { label: "Downloading", color: "bg-blue-500/10 text-blue-400 border-blue-500/30" };
+    case "seeding":
+      return { label: "Seeding", color: "bg-green-500/10 text-green-400 border-green-500/30" };
+    case "queued":
+      return { label: "Queued", color: "bg-yellow-500/10 text-yellow-400 border-yellow-500/30" };
+    case "paused":
+      return { label: "Paused", color: "bg-zinc-500/10 text-zinc-400 border-zinc-500/30" };
+    case "completed":
+      return { label: "Completed", color: "bg-teal-500/10 text-teal-400 border-teal-500/30" };
+    case "failed":
+      return { label: "Failed", color: "bg-red-500/10 text-red-400 border-red-500/30" };
+    default:
+      return { label: status || "Unknown", color: "bg-zinc-500/10 text-zinc-400 border-zinc-500/30" };
   }
+}
 
-  async function handleCreate(values: DownloadFormValues) {
-    setTopError(undefined);
-    try {
-      await create.mutateAsync({
-        id: values.id,
-        kind: values.kind,
-        name: values.name,
-        protocol: values.protocol,
-        enabled: values.enabled,
-        priority: values.priority,
-        host: values.host,
-        port: values.port,
-        tls: values.tls,
-        username: values.username || undefined,
-        password: values.password || undefined,
-        category_default: values.category_default || undefined,
-        save_path_default: values.save_path_default || undefined,
-        remove_completed: values.remove_completed,
-        remove_failed: values.remove_failed,
-      });
-      toast.success(`Download client "${values.name}" added.`);
-      close();
-    } catch (err) {
-      setTopError(errMessage(err, "Could not create download client"));
-    }
-  }
+// ─── Queue Stats Bar ────────────────────────────────────────────────────
 
-  async function handlePatch(values: DownloadFormValues, original: Download) {
-    setTopError(undefined);
-    try {
-      const body = toPatchPayload(values, original);
-      if (Object.keys(body).length === 0) {
-        toast.message("No changes to save.");
-        close();
-        return;
-      }
-      await patch.mutateAsync({ id: original.id, patch: body });
-      toast.success(`Download client "${values.name}" updated.`);
-      close();
-    } catch (err) {
-      setTopError(errMessage(err, "Could not update download client"));
-    }
-  }
+function QueueStats({ items }: { items: QueueItem[] }) {
+  const downloading = items.filter((i) => i.status === "downloading");
+  const seeding = items.filter((i) => i.status === "seeding");
+  const queued = items.filter((i) => i.status === "queued");
+  const paused = items.filter((i) => i.status === "paused");
 
-  async function handleDelete(client: Download) {
-    try {
-      await del.mutateAsync(client.id);
-      toast.success(`Download client "${client.name}" deleted.`);
-      close();
-    } catch (err) {
-      toast.error(errMessage(err, "Could not delete download client"));
-    }
-  }
+  const totalDown = downloading.reduce((s, i) => s + (i.download_rate || 0), 0);
+  const totalUp = [...downloading, ...seeding].reduce((s, i) => s + (i.upload_rate || 0), 0);
 
-  async function handleTest(client: Download) {
+  return (
+    <div className="flex flex-wrap items-center gap-4 text-xs text-zinc-400">
+      {downloading.length > 0 && (
+        <span className="flex items-center gap-1.5">
+          <ArrowDown className="h-3.5 w-3.5 text-blue-400" />
+          <span className="font-medium text-zinc-200">{formatSpeed(totalDown)}</span>
+          <span className="text-zinc-600">({downloading.length} active)</span>
+        </span>
+      )}
+      {totalUp > 0 && (
+        <span className="flex items-center gap-1.5">
+          <ArrowUp className="h-3.5 w-3.5 text-green-400" />
+          <span className="font-medium text-zinc-200">{formatSpeed(totalUp)}</span>
+        </span>
+      )}
+      {seeding.length > 0 && (
+        <span className="text-green-400">{seeding.length} seeding</span>
+      )}
+      {queued.length > 0 && (
+        <span className="text-yellow-400">{queued.length} queued</span>
+      )}
+      {paused.length > 0 && (
+        <span className="text-zinc-500">{paused.length} paused</span>
+      )}
+      {items.length === 0 && <span>No active downloads</span>}
+    </div>
+  );
+}
+
+// ─── Queue Item Row ─────────────────────────────────────────────────────
+
+function QueueItemRow({ item }: { item: QueueItem }) {
+  const sc = statusConfig(item.status);
+  const pct = Math.min(100, (item.progress ?? 0) * 100);
+  const isActive = item.status === "downloading";
+
+  return (
+    <div className="group flex items-center gap-4 px-4 py-3 border-b border-zinc-800/50 last:border-0 hover:bg-zinc-800/30 transition-colors">
+      {/* Title + message */}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-medium text-zinc-200 truncate">{item.title}</span>
+          {item.category && (
+            <Badge variant="outline" className="text-[10px] border-zinc-700 text-zinc-500 shrink-0">
+              {item.category}
+            </Badge>
+          )}
+        </div>
+        {item.message && (
+          <p className="text-xs text-zinc-500 truncate mt-0.5">{item.message}</p>
+        )}
+
+        {/* Progress bar (only for downloading/queued/paused) */}
+        {item.status !== "seeding" && item.status !== "completed" && (
+          <div className="flex items-center gap-2 mt-1.5">
+            <Progress value={pct} className="h-1.5 flex-1 bg-zinc-800" />
+            <span className="text-[11px] text-zinc-500 tabular-nums w-10 text-right">
+              {pct.toFixed(0)}%
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* Status badge */}
+      <Badge variant="outline" className={`text-[10px] shrink-0 ${sc.color}`}>
+        {sc.label}
+      </Badge>
+
+      {/* Size */}
+      <div className="hidden sm:block w-28 text-right text-xs text-zinc-500 tabular-nums">
+        {item.downloaded_bytes > 0 && item.size_bytes > 0
+          ? `${formatBytes(item.downloaded_bytes)} / ${formatBytes(item.size_bytes)}`
+          : item.size_bytes > 0
+          ? formatBytes(item.size_bytes)
+          : "—"}
+      </div>
+
+      {/* Speeds */}
+      <div className="hidden md:flex flex-col items-end gap-0.5 w-24">
+        {item.download_rate > 0 && (
+          <span className="flex items-center gap-1 text-xs text-zinc-400">
+            <ArrowDown className="h-3 w-3 text-blue-400" />
+            {formatSpeed(item.download_rate)}
+          </span>
+        )}
+        {item.upload_rate > 0 && (
+          <span className="flex items-center gap-1 text-xs text-zinc-400">
+            <ArrowUp className="h-3 w-3 text-green-400" />
+            {formatSpeed(item.upload_rate)}
+          </span>
+        )}
+        {item.download_rate <= 0 && item.upload_rate <= 0 && (
+          <span className="text-xs text-zinc-600">—</span>
+        )}
+      </div>
+
+      {/* ETA */}
+      <div className="hidden lg:block w-16 text-right text-xs text-zinc-500 tabular-nums">
+        {isActive ? formatEta(item.eta_seconds) : "—"}
+      </div>
+
+      {/* Ratio (for seeding) */}
+      {item.status === "seeding" && item.ratio > 0 && (
+        <div className="hidden lg:block w-14 text-right text-xs text-zinc-500 tabular-nums">
+          {item.ratio.toFixed(2)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Active Downloads Tab ───────────────────────────────────────────────
+
+function ActiveDownloads() {
+  const [items, setItems] = React.useState<QueueItem[]>([]);
+  const [loading, setLoading] = React.useState(true);
+  const [refreshing, setRefreshing] = React.useState(false);
+
+  const fetchActivity = React.useCallback(async (manual = false) => {
+    if (manual) setRefreshing(true);
     try {
-      const res = await test.mutateAsync(client.id);
+      const res = await fetch("/api/v1/activity", { credentials: "include" });
       if (res.ok) {
-        toast.success(`"${client.name}" healthy.`);
-      } else {
-        toast.error(
-          `"${client.name}" test failed: ${res.error ?? "unknown error"}.`,
-        );
+        const body = await res.json();
+        setItems(body.items ?? []);
       }
-    } catch (err) {
-      toast.error(errMessage(err, "Test failed"));
+    } catch {
+      // silently fail on polling
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
     }
+  }, []);
+
+  React.useEffect(() => {
+    fetchActivity();
+    const interval = setInterval(() => fetchActivity(), 5000);
+    return () => clearInterval(interval);
+  }, [fetchActivity]);
+
+  // Sort: downloading first, then queued, seeding, paused, completed, failed
+  const statusOrder: Record<string, number> = {
+    downloading: 0,
+    queued: 1,
+    paused: 2,
+    seeding: 3,
+    completed: 4,
+    failed: 5,
+  };
+  const sorted = [...items].sort(
+    (a, b) => (statusOrder[a.status] ?? 9) - (statusOrder[b.status] ?? 9)
+  );
+
+  if (loading) {
+    return (
+      <Card className="bg-zinc-900/50 border-zinc-800">
+        <CardContent className="py-12 text-center text-zinc-500">
+          <Loader2 className="h-5 w-5 animate-spin mx-auto mb-2" />
+          Connecting to download clients…
+        </CardContent>
+      </Card>
+    );
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-end justify-between gap-4">
-        <Button onClick={() => setDialog({ kind: "create" })} className="gap-2">
-          <Plus className="h-4 w-4" />
-          Add client
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <QueueStats items={items} />
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => fetchActivity(true)}
+          disabled={refreshing}
+          className="text-zinc-400 hover:text-zinc-200 h-8"
+        >
+          <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${refreshing ? "animate-spin" : ""}`} />
+          Refresh
         </Button>
       </div>
 
-      {downloadsQ.isError ? (
-        <div
-          role="alert"
-          className="rounded-md border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-700 dark:text-red-300"
-        >
-          {errMessage(downloadsQ.error, "Could not load download clients")}
-        </div>
-      ) : null}
-
-      <div className="overflow-x-auto rounded-md border border-border">
-        <table className="w-full text-sm">
-          <caption className="sr-only">Configured download clients</caption>
-          <thead className="bg-muted/50 text-left">
-            <tr>
-              <th scope="col" className="px-3 py-2">
-                Name
-              </th>
-              <th scope="col" className="px-3 py-2">
-                Kind
-              </th>
-              <th scope="col" className="px-3 py-2">
-                Host
-              </th>
-              <th scope="col" className="px-3 py-2">
-                Enabled
-              </th>
-              <th scope="col" className="px-3 py-2">
-                Health
-              </th>
-              <th scope="col" className="px-3 py-2 text-right">
-                Actions
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {downloadsQ.isLoading ? (
-              <>
-                {Array.from({ length: 3 }).map((_, i) => (
-                  <tr key={i} className="border-t border-border">
-                    {Array.from({ length: 6 }).map((__, j) => (
-                      <td key={j} className="px-3 py-3">
-                        <Skeleton className="h-4 w-24" />
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-              </>
-            ) : null}
-            {!downloadsQ.isLoading && (downloadsQ.data?.length ?? 0) === 0 ? (
-              <tr>
-                <td
-                  colSpan={6}
-                  className="px-3 py-6 text-center text-muted-foreground"
-                >
-                  No download clients configured. Click "Add client" to set one up.
-                </td>
-              </tr>
-            ) : null}
-            {(downloadsQ.data ?? []).map((client) => (
-              <tr key={client.id} className="border-t border-border">
-                <td className="px-3 py-2">
-                  <div className="font-medium">{client.name}</div>
-                  <div className="text-xs text-muted-foreground">{client.id}</div>
-                </td>
-                <td className="px-3 py-2 text-muted-foreground">{client.kind}</td>
-                <td className="px-3 py-2 text-muted-foreground">
-                  {client.host}:{client.port}
-                </td>
-                <td className="px-3 py-2">{client.enabled ? "Yes" : "No"}</td>
-                <td className="px-3 py-2">
-                  <DownloadHealthBadge health={client.health} />
-                  {client.health?.last_error ? (
-                    <div className="mt-1 max-w-[24ch] truncate text-xs text-muted-foreground">
-                      {client.health.last_error}
-                    </div>
-                  ) : null}
-                </td>
-                <td className="px-3 py-2 text-right">
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        aria-label={`Actions for ${client.name}`}
-                      >
-                        <MoreHorizontal className="h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem
-                        onSelect={() =>
-                          setDialog({ kind: "edit", client })
-                        }
-                      >
-                        Edit
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onSelect={() => handleTest(client)}>
-                        Test
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem
-                        onSelect={() =>
-                          setDialog({ kind: "delete", client })
-                        }
-                        className="text-red-600 focus:text-red-600"
-                      >
-                        Delete
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </td>
-              </tr>
+      {items.length === 0 ? (
+        <Card className="bg-zinc-900/50 border-zinc-800 border-dashed">
+          <CardContent className="py-12 text-center">
+            <Download className="h-10 w-10 mx-auto text-zinc-700 mb-3" />
+            <p className="text-sm text-zinc-500">No active downloads</p>
+            <p className="text-xs text-zinc-600 mt-1">
+              Downloads will appear here when you search and grab releases
+            </p>
+          </CardContent>
+        </Card>
+      ) : (
+        <Card className="bg-zinc-900/50 border-zinc-800 overflow-hidden">
+          <div className="divide-y divide-zinc-800/50">
+            {sorted.map((item) => (
+              <QueueItemRow key={item.id} item={item} />
             ))}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Create / edit dialog */}
-      <Dialog
-        open={dialog.kind === "create" || dialog.kind === "edit"}
-        onOpenChange={(open) => {
-          if (!open) close();
-        }}
-      >
-        <DialogContent className="max-w-xl">
-          <DialogHeader>
-            <DialogTitle>
-              {dialog.kind === "edit"
-                ? "Edit download client"
-                : "Add download client"}
-            </DialogTitle>
-            <DialogDescription>
-              Configure how Loom talks to your torrent or Usenet download client.
-            </DialogDescription>
-          </DialogHeader>
-          {dialog.kind === "create" ? (
-            <DownloadForm
-              onSubmit={(v) => handleCreate(v)}
-              onCancel={close}
-              submitting={create.isPending}
-              topError={topError}
-            />
-          ) : null}
-          {dialog.kind === "edit" ? (
-            <DownloadForm
-              initial={dialog.client}
-              onSubmit={(v) => handlePatch(v, dialog.client)}
-              onCancel={close}
-              submitting={patch.isPending}
-              topError={topError}
-            />
-          ) : null}
-        </DialogContent>
-      </Dialog>
-
-      {/* Delete confirmation */}
-      <Dialog
-        open={dialog.kind === "delete"}
-        onOpenChange={(open) => {
-          if (!open) close();
-        }}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Delete download client?</DialogTitle>
-            <DialogDescription>
-              {dialog.kind === "delete"
-                ? `Permanently remove "${dialog.client.name}". This cannot be undone.`
-                : null}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex justify-end gap-2">
-            <Button variant="ghost" onClick={close}>
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={() =>
-                dialog.kind === "delete" ? handleDelete(dialog.client) : null
-              }
-              disabled={del.isPending}
-            >
-              {del.isPending ? "Deleting…" : "Delete"}
-            </Button>
           </div>
-        </DialogContent>
-      </Dialog>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+// ─── Downloads Page ─────────────────────────────────────────────────────
+
+export function DownloadsPage() {
+  useSetPageHeader("Downloads");
+
+  return (
+    <div className="space-y-6">
+      <Tabs defaultValue="active">
+        <TabsList>
+          <TabsTrigger value="active" className="flex items-center gap-1.5">
+            <Download className="h-3.5 w-3.5" />
+            Active
+          </TabsTrigger>
+          <TabsTrigger value="imports" className="flex items-center gap-1.5">
+            <Import className="h-3.5 w-3.5" />
+            Imports
+          </TabsTrigger>
+        </TabsList>
+        <TabsContent value="active">
+          <ActiveDownloads />
+        </TabsContent>
+        <TabsContent value="imports">
+          <ImportManager />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
