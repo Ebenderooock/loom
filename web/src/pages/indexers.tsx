@@ -31,6 +31,7 @@ import {
   toPatchPayload,
 } from "@/components/indexers/indexer-form-adapter";
 import { IndexerCatalogue } from "@/components/indexers/indexer-catalogue";
+import { CardigannEditForm } from "@/components/indexers/cardigann-edit-form";
 import { SearchPanel } from "@/components/indexers/search-panel";
 import {
   ApiError,
@@ -40,6 +41,7 @@ import {
   useProxies,
   useTestIndexer,
   type Indexer,
+  type IndexerPatch,
 } from "@/lib/indexers-api";
 
 type DialogState =
@@ -90,6 +92,22 @@ export function IndexersPage() {
       }
       await patch.mutateAsync({ id: original.id, patch: body });
       toast.success(`Indexer “${values.name}” updated.`);
+      close();
+    } catch (err) {
+      setTopError(errMessage(err, "Could not update indexer"));
+    }
+  }
+
+  async function handleCardigannPatch(body: IndexerPatch, original: Indexer) {
+    setTopError(undefined);
+    try {
+      if (Object.keys(body).length === 0) {
+        toast.message("No changes to save.");
+        close();
+        return;
+      }
+      await patch.mutateAsync({ id: original.id, patch: body });
+      toast.success(`Indexer "${original.name}" updated.`);
       close();
     } catch (err) {
       setTopError(errMessage(err, "Could not update indexer"));
@@ -293,19 +311,31 @@ export function IndexersPage() {
           <DialogHeader>
             <DialogTitle>Edit indexer</DialogTitle>
             <DialogDescription>
-              Configure how Loom talks to this Newznab- or Torznab-compatible
-              feed.
+              {dialog.kind === "edit" && dialog.indexer.kind === "cardigann"
+                ? `Configure ${dialog.indexer.name} settings, URL, and credentials.`
+                : "Configure how Loom talks to this Newznab- or Torznab-compatible feed."}
             </DialogDescription>
           </DialogHeader>
           {dialog.kind === "edit" ? (
-            <IndexerForm
-              initial={dialog.indexer}
-              proxies={proxies}
-              onSubmit={(v) => handlePatch(v, dialog.indexer)}
-              onCancel={close}
-              submitting={patch.isPending}
-              topError={topError}
-            />
+            dialog.indexer.kind === "cardigann" ? (
+              <CardigannEditForm
+                indexer={dialog.indexer}
+                proxies={proxies}
+                topError={topError}
+                submitting={patch.isPending}
+                onSubmit={(p) => handleCardigannPatch(p, dialog.indexer)}
+                onCancel={close}
+              />
+            ) : (
+              <IndexerForm
+                initial={dialog.indexer}
+                proxies={proxies}
+                onSubmit={(v) => handlePatch(v, dialog.indexer)}
+                onCancel={close}
+                submitting={patch.isPending}
+                topError={topError}
+              />
+            )
           ) : null}
         </DialogContent>
       </Dialog>
