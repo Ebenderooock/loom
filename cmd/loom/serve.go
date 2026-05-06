@@ -267,6 +267,7 @@ func cmdServe(ctx context.Context, args []string) error {
 
 	// Build grab store for tracking active downloads
 	grabStore := grabs.NewStore(db.DB())
+	downloadSvc.SetGrabStore(grabStore)
 
 	// Build and wire the autosearch decision engine
 	cfStore := customformats.NewStore(db.DB())

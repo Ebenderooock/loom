@@ -456,6 +456,10 @@ func (s *Service) handleAdd(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadGateway, "add_failed", err.Error())
 		return
 	}
+
+	// Record grab linkage when media context is provided (interactive search).
+	s.recordManualGrab(r.Context(), res, req)
+
 	writeJSON(w, http.StatusAccepted, res)
 }
 
@@ -591,4 +595,32 @@ func (s *Service) handleHistory(w http.ResponseWriter, r *http.Request) {
 		entries = []HistoryEntry{}
 	}
 	writeJSON(w, http.StatusOK, entries)
+}
+
+// recordManualGrab records grab linkage for interactive search grabs.
+// If no media context is present or no grab store is configured, this is a no-op.
+func (s *Service) recordManualGrab(ctx context.Context, res AddResult, req AddRequest) {
+	if s.grabStore == nil || req.MediaType == "" {
+		return
+	}
+	var err error
+	switch req.MediaType {
+	case "episode":
+		if len(req.EpisodeIDs) > 0 {
+			err = s.grabStore.RecordEpisodeGrab(ctx, res.ClientID, res.ItemID, req.Title, req.EpisodeIDs)
+		}
+	case "movie":
+		if req.MovieID != "" {
+			err = s.grabStore.RecordMovieGrab(ctx, res.ClientID, res.ItemID, req.Title, req.MovieID)
+		}
+	}
+	if err != nil {
+		s.logger.Warn("failed to record manual grab",
+			"client_id", res.ClientID, "item_id", res.ItemID,
+			"media_type", req.MediaType, "err", err)
+	} else {
+		s.logger.Info("recorded manual grab",
+			"client_id", res.ClientID, "item_id", res.ItemID,
+			"media_type", req.MediaType)
+	}
 }

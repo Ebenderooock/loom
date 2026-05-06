@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/loomctl/loom/internal/grabs"
 )
 
 // Clock is the small time abstraction the package uses so tests can
@@ -39,6 +40,7 @@ type ServiceOptions struct {
 	HealthTimeout    time.Duration
 	RouteExtensions  []RouteMounter
 	HistoryStore     *HistoryStore
+	GrabStore        *grabs.Store
 }
 
 // Service is the orchestrator that the HTTP layer depends on. It owns
@@ -54,6 +56,7 @@ type Service struct {
 	healthTimeout    time.Duration
 	routeExtensions  []RouteMounter
 	historyStore     *HistoryStore
+	grabStore        *grabs.Store
 
 	mu sync.Mutex
 }
@@ -91,6 +94,7 @@ func NewService(opts ServiceOptions) (*Service, error) {
 		healthTimeout:    opts.HealthTimeout,
 		routeExtensions:  opts.RouteExtensions,
 		historyStore:     opts.HistoryStore,
+		grabStore:        opts.GrabStore,
 	}, nil
 }
 
@@ -99,6 +103,9 @@ func (s *Service) Repository() Repository { return s.repo }
 
 // Registry returns the underlying live-instance registry.
 func (s *Service) Registry() *Registry { return s.registry }
+
+// SetGrabStore sets the active-grabs store for recording manual grab linkage.
+func (s *Service) SetGrabStore(gs *grabs.Store) { s.grabStore = gs }
 
 // AddRouteExtension appends a route mounter to the service's extensions.
 // Must be called before the HTTP server is started.

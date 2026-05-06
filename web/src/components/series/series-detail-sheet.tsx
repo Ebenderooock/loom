@@ -174,6 +174,8 @@ function SeasonAccordion({
     season?: number;
     episode?: number;
     mediaType: "movie" | "episode" | "season" | "series";
+    seriesId?: string;
+    episodeIds?: string[];
   }) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -320,6 +322,7 @@ function SeasonAccordion({
               query: `${seriesTitle} S${season.seasonNumber.toString().padStart(2, "0")}`,
               season: season.seasonNumber,
               mediaType: "season",
+              seriesId,
             })}
           >
             <FolderSearch className="w-3.5 h-3.5" />
@@ -408,6 +411,8 @@ function SeasonAccordion({
                             season: season.seasonNumber,
                             episode: ep.episodeNumber,
                             mediaType: "episode",
+                            seriesId,
+                            episodeIds: [ep.id],
                           })}
                         >
                           <FolderSearch className="w-3.5 h-3.5" />
@@ -463,6 +468,9 @@ export function SeriesDetailSheet({
     season?: number;
     episode?: number;
     mediaType: "movie" | "episode" | "season" | "series";
+    seriesId?: string;
+    episodeIds?: string[];
+    movieId?: string;
   } | null>(null);
   const [archiving, setArchiving] = useState(false);
   const [autoSearching, setAutoSearching] = useState(false);
@@ -901,6 +909,8 @@ export function SeriesDetailSheet({
           season={searchContext.season}
           episode={searchContext.episode}
           mediaType={searchContext.mediaType}
+          seriesId={searchContext.seriesId}
+          episodeIds={searchContext.episodeIds}
           autoSearch
         />
       )}

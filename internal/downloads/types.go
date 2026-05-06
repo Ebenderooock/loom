@@ -100,6 +100,14 @@ type AddRequest struct {
 
 	// Tags are passed through to kinds that support tagging.
 	Tags []string `json:"tags,omitempty"`
+
+	// Media context — optional fields used to record grab linkage so the
+	// import pipeline can deterministically match completed downloads to
+	// the correct media item. Set by the interactive search dialog.
+	MediaType  string   `json:"media_type,omitempty"`  // "movie" or "episode"
+	SeriesID   string   `json:"series_id,omitempty"`
+	EpisodeIDs []string `json:"episode_ids,omitempty"`
+	MovieID    string   `json:"movie_id,omitempty"`
 }
 
 // AddResult is the outcome of a successful DownloadClient.Add. The
