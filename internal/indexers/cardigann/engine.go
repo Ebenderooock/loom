@@ -402,8 +402,15 @@ func (e *Engine) buildSearchRequest(q indexers.Query) (method, target string, pa
 		return "", "", nil, nil, err
 	}
 
+	// Apply keyword filters (e.g. replace spaces with hyphens for
+	// URL-slug sites like EZTV) before template expansion.
+	keywords := q.Term
+	if len(e.def.Search.KeywordsFilters) > 0 {
+		keywords = applyFilters(keywords, e.def.Search.KeywordsFilters)
+	}
+
 	tctx := templateContext{
-		Keywords:   q.Term,
+		Keywords:   keywords,
 		Query:      q.Term,
 		Categories: e.mapNewznabToSite(q.Categories),
 		IMDBID:     strings.TrimPrefix(q.IMDBID, "tt"),
