@@ -21,16 +21,17 @@ import (
 // a different Newznab id without editing the YAML — useful when the
 // upstream definition mismaps a category for the local content.
 type Config struct {
-	DefinitionID     string            `json:"definition_id,omitempty"`
-	Definition       string            `json:"definition,omitempty"` // alias accepted for friendliness
-	UserAgent        string            `json:"user_agent,omitempty"`
-	Timeout          durationString    `json:"timeout,omitempty"`
-	Username         string            `json:"username,omitempty"`
-	Password         string            `json:"password,omitempty"`
-	Passkey          string            `json:"passkey,omitempty"`
-	Cookie           string            `json:"cookie,omitempty"`
-	Credentials      map[string]string `json:"credentials,omitempty"`
-	CategoryOverrides map[string]int   `json:"category_overrides,omitempty"`
+	DefinitionID      string            `json:"definition_id,omitempty"`
+	Definition        string            `json:"definition,omitempty"` // alias accepted for friendliness
+	URL               string            `json:"url,omitempty"`        // overrides definition Links[0]
+	UserAgent         string            `json:"user_agent,omitempty"`
+	Timeout           durationString    `json:"timeout,omitempty"`
+	Username          string            `json:"username,omitempty"`
+	Password          string            `json:"password,omitempty"`
+	Passkey           string            `json:"passkey,omitempty"`
+	Cookie            string            `json:"cookie,omitempty"`
+	Credentials       map[string]string `json:"credentials,omitempty"`
+	CategoryOverrides map[string]int    `json:"category_overrides,omitempty"`
 }
 
 // durationString matches the newznab package's helper so the JSON

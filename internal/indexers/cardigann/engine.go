@@ -23,7 +23,7 @@ import (
 )
 
 const (
-	defaultUserAgent = "Loom/0.1 (+https://loom.dev)"
+	defaultUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
 	defaultTimeout   = 30 * time.Second
 )
 
@@ -157,9 +157,13 @@ func (e *Engine) Test(ctx context.Context) error {
 	return nil
 }
 
-// baseURL returns the first link with any trailing slash trimmed.
-// The engine treats Links[0] as authoritative; failover is deferred.
+// baseURL returns the active base URL with any trailing slash trimmed.
+// If the operator configured a URL override it takes precedence;
+// otherwise Links[0] from the YAML definition is used.
 func (e *Engine) baseURL() (string, error) {
+	if u := strings.TrimSpace(e.cfg.URL); u != "" {
+		return strings.TrimRight(u, "/"), nil
+	}
 	if len(e.def.Links) == 0 {
 		return "", errors.New("cardigann: definition has no links")
 	}
