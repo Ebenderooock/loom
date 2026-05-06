@@ -316,6 +316,11 @@ type Search struct {
 	// a list (Prowlarr format); the FlexStringSlice type handles both.
 	Headers map[string]FlexStringSlice `yaml:"headers,omitempty"`
 
+	// KeywordsFilters transform the search term before it is
+	// substituted into path templates and inputs (e.g. replacing
+	// spaces with hyphens for URL-slug sites like EZTV).
+	KeywordsFilters []Filter `yaml:"keywordsfilters,omitempty"`
+
 	// Rows is the selector that yields one node per release.
 	Rows RowsBlock `yaml:"rows"`
 
