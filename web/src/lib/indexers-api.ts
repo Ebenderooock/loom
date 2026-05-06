@@ -80,7 +80,7 @@ export interface ProxySOCKS5Config {
 }
 export interface ProxyFlareSolverrConfig {
   url: string;
-  max_timeout_ms?: number;
+  max_timeout_sec?: number;
   session_mode?: "" | "none" | "shared";
 }
 export type ProxyConfig =

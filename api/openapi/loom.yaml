@@ -1708,9 +1708,9 @@ components:
           type: string
           format: uri
           description: Base URL of the FlareSolverr instance (no trailing slash).
-        max_timeout_ms:
+        max_timeout_sec:
           type: integer
-          description: Per-request maxTimeout sent to FlareSolverr. Defaults to the kernel `flaresolverr_default_timeout`.
+          description: Per-request maxTimeout in seconds sent to FlareSolverr. Defaults to the kernel `flaresolverr_default_timeout`.
         session_mode:
           type: string
           enum: ["", none, shared]
