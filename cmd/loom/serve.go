@@ -189,7 +189,8 @@ func cmdServe(ctx context.Context, args []string) error {
 		return fmt.Errorf("init server: %w", err)
 	}
 	srv.SetDownloads(downloadSvc)
-	srv.SetBlocklistStore(downloads.NewBlocklistStore(db.DB()))
+	blocklistStore := downloads.NewBlocklistStore(db.DB())
+	srv.SetBlocklistStore(blocklistStore)
 	srv.SetRSS(rssSvc)
 	srv.SetMovies(moviesSvc)
 	srv.SetCustomFormats(customformats.NewStore(db.DB()))
@@ -315,9 +316,10 @@ func cmdServe(ctx context.Context, args []string) error {
 	// Build and wire the download monitor — polls clients for completion
 	downloadHistoryStore := downloads.NewHistoryStore(db.DB())
 	stallHandler := downloads.NewStallHandler(downloads.StallHandlerOptions{
-		Registry: downloadSvc.Registry(),
-		Bus:      srv.Bus(),
-		Logger:   logger,
+		Registry:  downloadSvc.Registry(),
+		Blocklist: blocklistStore,
+		Bus:       srv.Bus(),
+		Logger:    logger,
 	})
 	downloadMonitor, err := downloads.NewMonitor(downloads.MonitorOptions{
 		Service:         downloadSvc,
