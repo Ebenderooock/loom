@@ -591,7 +591,7 @@ export function ReleaseSearchDialog({
       const res = await searchIndexers({
         q,
         categories: CATEGORY_MAP[mediaType],
-        timeout_ms: 30000,
+        timeout_ms: 120000,
       });
       setResults(res.results ?? []);
       setErrors(res.errors ?? {});
