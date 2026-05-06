@@ -59,6 +59,11 @@ function toPatchPayload(
   if (values.name !== original.name) patch.name = values.name;
   if (values.enabled !== original.enabled) patch.enabled = values.enabled;
   if (values.priority !== original.priority) patch.priority = values.priority;
+  if (values.host !== (original.host ?? "")) patch.host = values.host;
+  if (values.port !== (original.port ?? 0)) patch.port = values.port;
+  if (values.tls !== (original.tls ?? false)) patch.tls = values.tls;
+  if (values.username !== (original.username ?? "")) patch.username = values.username;
+  if (values.password !== (original.password ?? "")) patch.password = values.password;
   if (values.category_default !== (original.category_default ?? ""))
     patch.category_default = values.category_default;
   if (values.save_path_default !== (original.save_path_default ?? ""))

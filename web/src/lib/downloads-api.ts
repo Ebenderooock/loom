@@ -74,6 +74,12 @@ export interface DownloadPatch {
   name?: string;
   enabled?: boolean;
   priority?: number;
+  host?: string;
+  port?: number;
+  tls?: boolean;
+  username?: string;
+  password?: string;
+  config?: Record<string, unknown>;
   category_default?: string;
   save_path_default?: string;
   remove_completed?: boolean;

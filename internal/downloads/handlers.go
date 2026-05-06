@@ -246,13 +246,19 @@ func (s *Service) handleReplace(w http.ResponseWriter, r *http.Request) {
 // --- patch ----------------------------------------------------------
 
 type patchRequest struct {
-	Name            *string `json:"name,omitempty"`
-	Enabled         *bool   `json:"enabled,omitempty"`
-	Priority        *int    `json:"priority,omitempty"`
-	CategoryDefault *string `json:"category_default,omitempty"`
-	SavePathDefault *string `json:"save_path_default,omitempty"`
-	RemoveCompleted *bool   `json:"remove_completed,omitempty"`
-	RemoveFailed    *bool   `json:"remove_failed,omitempty"`
+	Name            *string         `json:"name,omitempty"`
+	Enabled         *bool           `json:"enabled,omitempty"`
+	Priority        *int            `json:"priority,omitempty"`
+	Host            *string         `json:"host,omitempty"`
+	Port            *int            `json:"port,omitempty"`
+	TLS             *bool           `json:"tls,omitempty"`
+	Username        *string         `json:"username,omitempty"`
+	Password        *string         `json:"password,omitempty"`
+	Config          json.RawMessage `json:"config,omitempty"`
+	CategoryDefault *string         `json:"category_default,omitempty"`
+	SavePathDefault *string         `json:"save_path_default,omitempty"`
+	RemoveCompleted *bool           `json:"remove_completed,omitempty"`
+	RemoveFailed    *bool           `json:"remove_failed,omitempty"`
 }
 
 func (s *Service) handlePatch(w http.ResponseWriter, r *http.Request) {
@@ -267,6 +273,12 @@ func (s *Service) handlePatch(w http.ResponseWriter, r *http.Request) {
 		Name:            req.Name,
 		Enabled:         req.Enabled,
 		Priority:        req.Priority,
+		Host:            req.Host,
+		Port:            req.Port,
+		TLS:             req.TLS,
+		Username:        req.Username,
+		Password:        req.Password,
+		Config:          req.Config,
 		CategoryDefault: req.CategoryDefault,
 		SavePathDefault: req.SavePathDefault,
 		RemoveCompleted: req.RemoveCompleted,

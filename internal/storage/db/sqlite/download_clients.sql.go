@@ -287,12 +287,18 @@ UPDATE download_clients
 SET name              = COALESCE(?1, name),
     enabled           = COALESCE(?2, enabled),
     priority          = COALESCE(?3, priority),
-    category_default  = COALESCE(?4, category_default),
-    save_path_default = COALESCE(?5, save_path_default),
-    remove_completed  = COALESCE(?6, remove_completed),
-    remove_failed     = COALESCE(?7, remove_failed),
+    host              = COALESCE(?4, host),
+    port              = COALESCE(?5, port),
+    tls               = COALESCE(?6, tls),
+    username          = COALESCE(?7, username),
+    password          = COALESCE(?8, password),
+    config_json       = COALESCE(?9, config_json),
+    category_default  = COALESCE(?10, category_default),
+    save_path_default = COALESCE(?11, save_path_default),
+    remove_completed  = COALESCE(?12, remove_completed),
+    remove_failed     = COALESCE(?13, remove_failed),
     updated_at        = CURRENT_TIMESTAMP
-WHERE id = ?8
+WHERE id = ?14
 RETURNING id, name, kind, protocol, enabled, priority, host, port, tls, username, password, config_json, category_default, save_path_default, remove_completed, remove_failed, created_at, updated_at
 `
 
@@ -300,6 +306,12 @@ type PatchDownloadClientParams struct {
 	Name            sql.NullString `json:"name"`
 	Enabled         sql.NullInt64  `json:"enabled"`
 	Priority        sql.NullInt64  `json:"priority"`
+	Host            sql.NullString `json:"host"`
+	Port            sql.NullInt64  `json:"port"`
+	Tls             sql.NullInt64  `json:"tls"`
+	Username        sql.NullString `json:"username"`
+	Password        sql.NullString `json:"password"`
+	ConfigJson      sql.NullString `json:"config_json"`
 	CategoryDefault sql.NullString `json:"category_default"`
 	SavePathDefault sql.NullString `json:"save_path_default"`
 	RemoveCompleted sql.NullInt64  `json:"remove_completed"`
@@ -312,6 +324,12 @@ func (q *Queries) PatchDownloadClient(ctx context.Context, arg PatchDownloadClie
 		arg.Name,
 		arg.Enabled,
 		arg.Priority,
+		arg.Host,
+		arg.Port,
+		arg.Tls,
+		arg.Username,
+		arg.Password,
+		arg.ConfigJson,
 		arg.CategoryDefault,
 		arg.SavePathDefault,
 		arg.RemoveCompleted,
