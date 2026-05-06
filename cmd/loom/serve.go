@@ -13,6 +13,7 @@ import (
 	"github.com/loomctl/loom/internal/alttitles"
 	"github.com/loomctl/loom/internal/anime"
 	"github.com/loomctl/loom/internal/appconfig"
+	"github.com/loomctl/loom/internal/connect"
 	"github.com/loomctl/loom/internal/customformats"
 	"github.com/loomctl/loom/internal/downloads"
 	"github.com/loomctl/loom/internal/importlists"
@@ -204,6 +205,10 @@ func cmdServe(ctx context.Context, args []string) error {
 	// Build and wire the notifications service
 	notifSvc := buildNotificationsService(db)
 	srv.SetNotifications(notifSvc)
+
+	// Build and wire the connect (media server integrations) service
+	connectSvc := connect.NewService(db.DB())
+	srv.SetConnect(connectSvc)
 
 	// Start the notification dispatcher — subscribes to domain events on the
 	// bus and fans out to all matching notification connections.

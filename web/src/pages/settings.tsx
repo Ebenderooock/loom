@@ -19,7 +19,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { Link } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { NamingSettings } from "@/components/movies/naming-settings";
 import {
@@ -44,7 +44,6 @@ import {
   Check,
   Key,
   Shield,
-  Info,
   Bell,
   Plug,
   ExternalLink,
@@ -55,6 +54,7 @@ import {
   List,
   GripVertical,
   Search,
+  MoreHorizontal,
 } from "lucide-react";
 import { useSetPageHeader } from "@/hooks/use-page-header";
 import {
@@ -62,6 +62,25 @@ import {
   useUpdateMediaPreferences,
   useParseReleaseName,
 } from "@/lib/media-info-api";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Switch } from "@/components/ui/switch";
+import {
+  useConnections as useConnectConnections,
+  useCreateConnection as useCreateConnect,
+  useUpdateConnection as useUpdateConnect,
+  useDeleteConnection as useDeleteConnect,
+  useTestConnection as useTestConnect,
+  useTestConnectionConfig as useTestConnectConfig,
+  PROVIDER_TYPES,
+  type ConnectConnection,
+  type ProviderType as ConnectProviderType,
+  type CreateConnectRequest,
+} from "@/lib/connect-api";
 
 const CATEGORIES = [
   { id: "general", label: "General" },
@@ -1342,6 +1361,7 @@ function DownloadClientsPanel() {
 // ─── Notifications Panel ────────────────────────────────────────────────
 
 function NotificationsPanel() {
+  const navigate = useNavigate();
   return (
     <div className="space-y-6">
       <div>
@@ -1357,26 +1377,17 @@ function NotificationsPanel() {
             <div className="rounded-full bg-teal-600/10 p-3 shrink-0">
               <Bell className="h-6 w-6 text-teal-400" />
             </div>
-            <div>
-              <h4 className="text-sm font-medium text-zinc-200 mb-1">Coming Soon</h4>
+            <div className="space-y-3">
               <p className="text-sm text-zinc-400">
-                Notification connections can be configured here once the backend is ready.
-                Planned notification types include:
+                Manage your notification connections — set up Discord, Slack, Telegram,
+                email, webhooks, and more. Choose which events trigger each channel.
               </p>
-              <ul className="mt-3 space-y-1.5 text-sm text-zinc-500">
-                <li className="flex items-center gap-2">
-                  <Info className="h-3.5 w-3.5 text-zinc-600" /> Email notifications
-                </li>
-                <li className="flex items-center gap-2">
-                  <Info className="h-3.5 w-3.5 text-zinc-600" /> Discord webhooks
-                </li>
-                <li className="flex items-center gap-2">
-                  <Info className="h-3.5 w-3.5 text-zinc-600" /> Telegram bot messages
-                </li>
-                <li className="flex items-center gap-2">
-                  <Info className="h-3.5 w-3.5 text-zinc-600" /> Custom webhooks
-                </li>
-              </ul>
+              <Button
+                variant="secondary"
+                onClick={() => navigate({ to: "/notifications" })}
+              >
+                Manage Notifications
+              </Button>
             </div>
           </div>
         </CardContent>
@@ -1387,55 +1398,309 @@ function NotificationsPanel() {
 
 // ─── Connect Panel ──────────────────────────────────────────────────────
 
-const PLANNED_INTEGRATIONS = [
-  { name: "Trakt", description: "Sync watch history and ratings" },
-  { name: "Plex", description: "Media server integration for library syncing" },
-  { name: "Jellyfin", description: "Open-source media server integration" },
-  { name: "Emby", description: "Media server notification and sync" },
-];
-
 function ConnectPanel() {
+  const { data: connections = [], isLoading } = useConnectConnections();
+  const createMut = useCreateConnect();
+  const updateMut = useUpdateConnect();
+  const deleteMut = useDeleteConnect();
+  const testMut = useTestConnect();
+  const testConfigMut = useTestConnectConfig();
+
+  const [dialogOpen, setDialogOpen] = React.useState(false);
+  const [editing, setEditing] = React.useState<ConnectConnection | null>(null);
+
+  // Form state
+  const [formProvider, setFormProvider] = React.useState<ConnectProviderType>("plex");
+  const [formName, setFormName] = React.useState("");
+  const [formHost, setFormHost] = React.useState("");
+  const [formApiKey, setFormApiKey] = React.useState("");
+  const [formNotifyOnImport, setFormNotifyOnImport] = React.useState(true);
+  const [formEnabled, setFormEnabled] = React.useState(true);
+  const [testResult, setTestResult] = React.useState<{ ok: boolean; message: string } | null>(null);
+
+  const openCreate = () => {
+    setEditing(null);
+    setFormProvider("plex");
+    setFormName("");
+    setFormHost("");
+    setFormApiKey("");
+    setFormNotifyOnImport(true);
+    setFormEnabled(true);
+    setTestResult(null);
+    setDialogOpen(true);
+  };
+
+  const openEdit = (c: ConnectConnection) => {
+    setEditing(c);
+    setFormProvider(c.provider);
+    setFormName(c.name);
+    setFormHost(c.settings.host ?? "");
+    setFormApiKey(c.settings.api_key ?? "");
+    setFormNotifyOnImport(c.notify_on_import);
+    setFormEnabled(c.enabled);
+    setTestResult(null);
+    setDialogOpen(true);
+  };
+
+  const buildBody = (): CreateConnectRequest => ({
+    name: formName,
+    provider: formProvider,
+    enabled: formEnabled,
+    settings: { host: formHost, api_key: formApiKey },
+    notify_on_import: formNotifyOnImport,
+  });
+
+  const handleSave = () => {
+    if (editing) {
+      updateMut.mutate(
+        {
+          id: editing.id,
+          body: {
+            name: formName,
+            provider: formProvider,
+            enabled: formEnabled,
+            settings: { host: formHost, api_key: formApiKey },
+            notify_on_import: formNotifyOnImport,
+          },
+        },
+        {
+          onSuccess: () => {
+            setDialogOpen(false);
+            toast.success("Connection updated");
+          },
+          onError: (err) => toast.error(err.message),
+        },
+      );
+    } else {
+      createMut.mutate(buildBody(), {
+        onSuccess: () => {
+          setDialogOpen(false);
+          toast.success("Connection created");
+        },
+        onError: (err) => toast.error(err.message),
+      });
+    }
+  };
+
+  const handleTest = () => {
+    setTestResult(null);
+    if (editing) {
+      testMut.mutate(editing.id, {
+        onSuccess: (res) => setTestResult({ ok: true, message: res.message }),
+        onError: (err) => setTestResult({ ok: false, message: err.message }),
+      });
+    } else {
+      testConfigMut.mutate(buildBody(), {
+        onSuccess: (res) => setTestResult({ ok: true, message: res.message }),
+        onError: (err) => setTestResult({ ok: false, message: err.message }),
+      });
+    }
+  };
+
+  const handleDelete = (id: string) => {
+    deleteMut.mutate(id, {
+      onSuccess: () => toast.success("Connection deleted"),
+      onError: (err) => toast.error(err.message),
+    });
+  };
+
+  const providerLabel = (p: ConnectProviderType) =>
+    PROVIDER_TYPES.find((t) => t.value === p)?.label ?? p;
+
+  const isSaving = createMut.isPending || updateMut.isPending;
+  const isTesting = testMut.isPending || testConfigMut.isPending;
+
   return (
     <div className="space-y-6">
-      <div>
-        <h3 className="text-sm font-medium text-zinc-100 mb-1">Connections</h3>
-        <p className="text-xs text-zinc-500">
-          Third-party integrations for syncing and notifications.
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-sm font-medium text-zinc-100 mb-1">Connections</h3>
+          <p className="text-xs text-zinc-500">
+            Connect Loom to media servers for library refresh on import.
+          </p>
+        </div>
+        <Button size="sm" onClick={openCreate}>
+          <Plus className="h-4 w-4 mr-1" /> Add Connection
+        </Button>
       </div>
 
       <Card className="bg-zinc-900/50 border-zinc-800">
-        <CardContent className="p-6">
-          <div className="flex items-start gap-4 mb-6">
-            <div className="rounded-full bg-teal-600/10 p-3 shrink-0">
-              <Plug className="h-6 w-6 text-teal-400" />
+        <CardContent className="p-0">
+          {isLoading ? (
+            <div className="flex justify-center py-8">
+              <Loader2 className="h-5 w-5 animate-spin text-zinc-500" />
             </div>
-            <div>
-              <h4 className="text-sm font-medium text-zinc-200 mb-1">Integrations</h4>
-              <p className="text-sm text-zinc-400">
-                Connect Loom to external services for an enhanced experience.
-              </p>
+          ) : connections.length === 0 ? (
+            <div className="text-center py-8 text-sm text-zinc-500">
+              No connections configured. Click "Add Connection" to get started.
             </div>
-          </div>
-
-          <div className="space-y-3">
-            {PLANNED_INTEGRATIONS.map((integration) => (
-              <div
-                key={integration.name}
-                className="flex items-center justify-between rounded-lg border border-zinc-800 px-4 py-3"
-              >
-                <div>
-                  <h5 className="text-sm font-medium text-zinc-300">{integration.name}</h5>
-                  <p className="text-xs text-zinc-500 mt-0.5">{integration.description}</p>
-                </div>
-                <Badge variant="outline" className="border-zinc-700 text-zinc-500 text-xs shrink-0">
-                  Coming Soon
-                </Badge>
-              </div>
-            ))}
-          </div>
+          ) : (
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-zinc-800 text-zinc-400 text-xs">
+                  <th className="text-left px-4 py-2 font-medium">Name</th>
+                  <th className="text-left px-4 py-2 font-medium">Provider</th>
+                  <th className="text-left px-4 py-2 font-medium">Enabled</th>
+                  <th className="text-left px-4 py-2 font-medium">Notify on Import</th>
+                  <th className="text-right px-4 py-2 font-medium">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {connections.map((conn) => (
+                  <tr key={conn.id} className="border-b border-zinc-800/50 last:border-0">
+                    <td className="px-4 py-3 text-zinc-200">{conn.name}</td>
+                    <td className="px-4 py-3">
+                      <Badge variant="outline" className="border-zinc-700 text-zinc-300 text-xs">
+                        {providerLabel(conn.provider)}
+                      </Badge>
+                    </td>
+                    <td className="px-4 py-3">
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          "text-xs",
+                          conn.enabled
+                            ? "border-emerald-700 text-emerald-400"
+                            : "border-zinc-700 text-zinc-500",
+                        )}
+                      >
+                        {conn.enabled ? "Yes" : "No"}
+                      </Badge>
+                    </td>
+                    <td className="px-4 py-3 text-zinc-400">
+                      {conn.notify_on_import ? "Yes" : "No"}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => openEdit(conn)}>
+                            <Pencil className="h-4 w-4 mr-2" /> Edit
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            className="text-red-400"
+                            onClick={() => handleDelete(conn.id)}
+                          >
+                            <Trash2 className="h-4 w-4 mr-2" /> Delete
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </CardContent>
       </Card>
+
+      {/* Add / Edit Dialog */}
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{editing ? "Edit Connection" : "Add Connection"}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            <div className="space-y-1.5">
+              <Label>Provider</Label>
+              <Select value={formProvider} onValueChange={(v) => setFormProvider(v as ConnectProviderType)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {PROVIDER_TYPES.map((p) => (
+                    <SelectItem key={p.value} value={p.value}>
+                      {p.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-zinc-500">
+                {PROVIDER_TYPES.find((p) => p.value === formProvider)?.description}
+              </p>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>Name</Label>
+              <Input
+                value={formName}
+                onChange={(e) => setFormName(e.target.value)}
+                placeholder="My Plex Server"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>Host</Label>
+              <Input
+                value={formHost}
+                onChange={(e) => setFormHost(e.target.value)}
+                placeholder="http://192.168.1.10:32400"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>API Key / Token</Label>
+              <Input
+                type="password"
+                value={formApiKey}
+                onChange={(e) => setFormApiKey(e.target.value)}
+                placeholder="Plex token or Emby/Jellyfin API key"
+              />
+            </div>
+
+            <div className="flex items-center justify-between">
+              <Label>Notify on Import</Label>
+              <Switch checked={formNotifyOnImport} onCheckedChange={setFormNotifyOnImport} />
+            </div>
+
+            <div className="flex items-center justify-between">
+              <Label>Enabled</Label>
+              <Switch checked={formEnabled} onCheckedChange={setFormEnabled} />
+            </div>
+
+            {testResult && (
+              <div
+                className={cn(
+                  "rounded-md px-3 py-2 text-sm",
+                  testResult.ok
+                    ? "bg-emerald-950/50 text-emerald-400 border border-emerald-800"
+                    : "bg-red-950/50 text-red-400 border border-red-800",
+                )}
+              >
+                {testResult.message}
+              </div>
+            )}
+
+            <div className="flex justify-between pt-2">
+              <Button
+                variant="outline"
+                onClick={handleTest}
+                disabled={isTesting || !formHost}
+              >
+                {isTesting ? (
+                  <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                ) : (
+                  <Plug className="h-4 w-4 mr-1" />
+                )}
+                Test
+              </Button>
+              <div className="flex gap-2">
+                <Button variant="ghost" onClick={() => setDialogOpen(false)}>
+                  Cancel
+                </Button>
+                <Button onClick={handleSave} disabled={isSaving || !formName || !formHost}>
+                  {isSaving && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}
+                  {editing ? "Update" : "Save"}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

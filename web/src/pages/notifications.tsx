@@ -1,5 +1,5 @@
 import * as React from "react";
-import { MoreHorizontal, Plus, Send } from "lucide-react";
+import { MoreHorizontal, Plus, Send, CheckCircle2, XCircle, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { useSetPageHeader } from "@/hooks/use-page-header";
 import { Button } from "@/components/ui/button";
@@ -29,12 +29,15 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   useNotifications,
   useCreateNotification,
   useUpdateNotification,
   useDeleteNotification,
   useTestNotification,
+  useTestNotificationConfig,
+  useNotificationHistory,
   CONNECTION_TYPES,
   EVENT_TYPES,
   TEMPLATE_VARIABLES,
@@ -123,18 +126,25 @@ function ConnectionForm({
   initial,
   onSubmit,
   onCancel,
+  onTest,
   submitting,
   topError,
 }: {
   initial?: NotificationConnection;
   onSubmit: (form: FormState) => void;
   onCancel: () => void;
+  onTest?: (form: FormState) => Promise<{ ok: boolean; message?: string; error?: string }>;
   submitting: boolean;
   topError?: string;
 }) {
   const [form, setForm] = React.useState<FormState>(
     initial ? formFromConnection(initial) : defaultForm(),
   );
+  const [testResult, setTestResult] = React.useState<{
+    ok: boolean;
+    message?: string;
+  } | null>(null);
+  const [testing, setTesting] = React.useState(false);
 
   const typeMeta = CONNECTION_TYPES.find((t) => t.value === form.type);
   const fields = typeMeta?.fields ?? [];
@@ -144,6 +154,26 @@ function ConnectionForm({
       ...f,
       settings: { ...f.settings, [key]: value },
     }));
+  }
+
+  async function handleTest() {
+    if (!onTest) return;
+    setTestResult(null);
+    setTesting(true);
+    try {
+      const result = await onTest(form);
+      setTestResult({
+        ok: result.ok,
+        message: result.ok ? (result.message ?? "Test notification sent successfully") : (result.error ?? "Test failed"),
+      });
+    } catch (err) {
+      setTestResult({
+        ok: false,
+        message: err instanceof Error ? err.message : "Test failed",
+      });
+    } finally {
+      setTesting(false);
+    }
   }
 
   return (
@@ -405,10 +435,47 @@ function ConnectionForm({
         </p>
       </fieldset>
 
+      {testResult && (
+        <div
+          className={`flex items-center gap-2 rounded-md border p-3 text-sm ${
+            testResult.ok
+              ? "border-green-500/40 bg-green-500/10 text-green-700 dark:text-green-300"
+              : "border-red-500/40 bg-red-500/10 text-red-700 dark:text-red-300"
+          }`}
+        >
+          {testResult.ok ? (
+            <CheckCircle2 className="w-4 h-4 shrink-0" />
+          ) : (
+            <XCircle className="w-4 h-4 shrink-0" />
+          )}
+          <span>{testResult.message}</span>
+        </div>
+      )}
+
       <div className="flex justify-end gap-2 pt-2">
         <Button type="button" variant="ghost" onClick={onCancel}>
           Cancel
         </Button>
+        {onTest && (
+          <Button
+            type="button"
+            variant="outline"
+            onClick={handleTest}
+            disabled={testing || submitting}
+          >
+            {testing ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Testing…
+              </>
+            ) : (
+              <>
+                <Send className="mr-2 h-4 w-4" />
+                Test
+              </>
+            )}
+          </Button>
+        )}
         <Button type="submit" disabled={submitting}>
           {submitting ? "Saving…" : initial ? "Update" : "Create"}
         </Button>
@@ -422,10 +489,12 @@ function ConnectionForm({
 export function NotificationsPage() {
   useSetPageHeader("Notifications");
   const connectionsQ = useNotifications();
+  const historyQ = useNotificationHistory(50);
   const create = useCreateNotification();
   const update = useUpdateNotification();
   const del = useDeleteNotification();
   const test = useTestNotification();
+  const testConfig = useTestNotificationConfig();
 
   const [dialog, setDialog] = React.useState<DialogState>({ kind: "closed" });
   const [topError, setTopError] = React.useState<string | undefined>();
@@ -435,23 +504,39 @@ export function NotificationsPage() {
     setTopError(undefined);
   }
 
+  function formToCreateBody(form: FormState): CreateConnectionRequest {
+    return {
+      name: form.name,
+      type: form.type,
+      enabled: form.enabled,
+      settings: form.settings,
+      on_grab: form.on_grab,
+      on_download: form.on_download,
+      on_upgrade: form.on_upgrade,
+      on_rename: form.on_rename,
+      on_delete: form.on_delete,
+      on_health_issue: form.on_health_issue,
+      on_application_update: form.on_application_update,
+    };
+  }
+
+  async function handleTestUnsaved(form: FormState) {
+    return testConfig.mutateAsync(formToCreateBody(form));
+  }
+
+  async function handleTestSaved(_form: FormState, id: string) {
+    try {
+      await test.mutateAsync(id);
+      return { ok: true, message: "Test notification sent successfully" };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : "Test failed" };
+    }
+  }
+
   async function handleCreate(form: FormState) {
     setTopError(undefined);
     try {
-      const body: CreateConnectionRequest = {
-        name: form.name,
-        type: form.type,
-        enabled: form.enabled,
-        settings: form.settings,
-        on_grab: form.on_grab,
-        on_download: form.on_download,
-        on_upgrade: form.on_upgrade,
-        on_rename: form.on_rename,
-        on_delete: form.on_delete,
-        on_health_issue: form.on_health_issue,
-        on_application_update: form.on_application_update,
-      };
-      await create.mutateAsync(body);
+      await create.mutateAsync(formToCreateBody(form));
       toast.success(`Notification "${form.name}" added.`);
       close();
     } catch (err) {
@@ -502,123 +587,222 @@ export function NotificationsPage() {
     }
   }
 
+  // Build a lookup of connection names by ID for the history tab.
+  const connMap = React.useMemo(() => {
+    const m = new Map<string, string>();
+    for (const c of connectionsQ.data ?? []) m.set(c.id, c.name);
+    return m;
+  }, [connectionsQ.data]);
+
   return (
     <div className="space-y-6">
-      <div className="flex items-end justify-between gap-4">
-        <Button onClick={() => setDialog({ kind: "create" })} className="gap-2">
-          <Plus className="h-4 w-4" />
-          Add notification
-        </Button>
-      </div>
-
-      {connectionsQ.isError && (
-        <div
-          role="alert"
-          className="rounded-md border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-700 dark:text-red-300"
-        >
-          {errMessage(connectionsQ.error, "Could not load notifications")}
+      <Tabs defaultValue="connections">
+        <div className="flex items-center justify-between gap-4">
+          <TabsList>
+            <TabsTrigger value="connections">Connections</TabsTrigger>
+            <TabsTrigger value="history">History</TabsTrigger>
+          </TabsList>
+          <Button onClick={() => setDialog({ kind: "create" })} className="gap-2">
+            <Plus className="h-4 w-4" />
+            Add notification
+          </Button>
         </div>
-      )}
 
-      <div className="overflow-x-auto rounded-md border border-border">
-        <table className="w-full text-sm">
-          <caption className="sr-only">Notification connections</caption>
-          <thead className="bg-muted/50 text-left">
-            <tr>
-              <th scope="col" className="px-3 py-2">Name</th>
-              <th scope="col" className="px-3 py-2">Type</th>
-              <th scope="col" className="px-3 py-2">Enabled</th>
-              <th scope="col" className="px-3 py-2">Events</th>
-              <th scope="col" className="px-3 py-2 text-right">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {connectionsQ.isLoading && (
-              <>
-                {Array.from({ length: 2 }).map((_, i) => (
-                  <tr key={i} className="border-t border-border">
-                    {Array.from({ length: 5 }).map((__, j) => (
-                      <td key={j} className="px-3 py-3">
-                        <Skeleton className="h-4 w-24" />
-                      </td>
+        {/* ── Connections Tab ── */}
+        <TabsContent value="connections" className="space-y-4">
+          {connectionsQ.isError && (
+            <div
+              role="alert"
+              className="rounded-md border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-700 dark:text-red-300"
+            >
+              {errMessage(connectionsQ.error, "Could not load notifications")}
+            </div>
+          )}
+
+          <div className="overflow-x-auto rounded-md border border-border">
+            <table className="w-full text-sm">
+              <caption className="sr-only">Notification connections</caption>
+              <thead className="bg-muted/50 text-left">
+                <tr>
+                  <th scope="col" className="px-3 py-2">Name</th>
+                  <th scope="col" className="px-3 py-2">Type</th>
+                  <th scope="col" className="px-3 py-2">Enabled</th>
+                  <th scope="col" className="px-3 py-2">Events</th>
+                  <th scope="col" className="px-3 py-2 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {connectionsQ.isLoading && (
+                  <>
+                    {Array.from({ length: 2 }).map((_, i) => (
+                      <tr key={i} className="border-t border-border">
+                        {Array.from({ length: 5 }).map((__, j) => (
+                          <td key={j} className="px-3 py-3">
+                            <Skeleton className="h-4 w-24" />
+                          </td>
+                        ))}
+                      </tr>
                     ))}
+                  </>
+                )}
+                {!connectionsQ.isLoading &&
+                  (connectionsQ.data?.length ?? 0) === 0 && (
+                    <tr>
+                      <td
+                        colSpan={5}
+                        className="px-3 py-6 text-center text-muted-foreground"
+                      >
+                        No notification channels configured.
+                      </td>
+                    </tr>
+                  )}
+                {(connectionsQ.data ?? []).map((c) => (
+                  <tr key={c.id} className="border-t border-border">
+                    <td className="px-3 py-2">
+                      <div className="font-medium">{c.name}</div>
+                      <div className="text-xs text-muted-foreground">{c.id}</div>
+                    </td>
+                    <td className="px-3 py-2">
+                      <Badge variant="secondary">{getTypeLabel(c.type)}</Badge>
+                    </td>
+                    <td className="px-3 py-2">{c.enabled ? "Yes" : "No"}</td>
+                    <td className="px-3 py-2">
+                      <div className="flex flex-wrap gap-1">
+                        {subscribedEvents(c).map((ev) => (
+                          <Badge key={ev} variant="outline" className="text-xs">
+                            {ev}
+                          </Badge>
+                        ))}
+                        {subscribedEvents(c).length === 0 && (
+                          <span className="text-muted-foreground">None</span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-3 py-2 text-right">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            aria-label={`Actions for ${c.name}`}
+                          >
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem
+                            onSelect={() =>
+                              setDialog({ kind: "edit", connection: c })
+                            }
+                          >
+                            Edit
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onSelect={() => handleTest(c)}>
+                            <Send className="mr-2 h-3 w-3" />
+                            Test
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            onSelect={() =>
+                              setDialog({ kind: "delete", connection: c })
+                            }
+                            className="text-red-600 focus:text-red-600"
+                          >
+                            Delete
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </td>
                   </tr>
                 ))}
-              </>
-            )}
-            {!connectionsQ.isLoading &&
-              (connectionsQ.data?.length ?? 0) === 0 && (
+              </tbody>
+            </table>
+          </div>
+        </TabsContent>
+
+        {/* ── History Tab ── */}
+        <TabsContent value="history" className="space-y-4">
+          {historyQ.isError && (
+            <div
+              role="alert"
+              className="rounded-md border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-700 dark:text-red-300"
+            >
+              {errMessage(historyQ.error, "Could not load notification history")}
+            </div>
+          )}
+
+          <div className="overflow-x-auto rounded-md border border-border">
+            <table className="w-full text-sm">
+              <caption className="sr-only">Notification history</caption>
+              <thead className="bg-muted/50 text-left">
                 <tr>
-                  <td
-                    colSpan={5}
-                    className="px-3 py-6 text-center text-muted-foreground"
-                  >
-                    No notification channels configured.
-                  </td>
+                  <th scope="col" className="px-3 py-2">Time</th>
+                  <th scope="col" className="px-3 py-2">Connection</th>
+                  <th scope="col" className="px-3 py-2">Event</th>
+                  <th scope="col" className="px-3 py-2">Title</th>
+                  <th scope="col" className="px-3 py-2">Status</th>
+                  <th scope="col" className="px-3 py-2">Error</th>
                 </tr>
-              )}
-            {(connectionsQ.data ?? []).map((c) => (
-              <tr key={c.id} className="border-t border-border">
-                <td className="px-3 py-2">
-                  <div className="font-medium">{c.name}</div>
-                  <div className="text-xs text-muted-foreground">{c.id}</div>
-                </td>
-                <td className="px-3 py-2">
-                  <Badge variant="secondary">{getTypeLabel(c.type)}</Badge>
-                </td>
-                <td className="px-3 py-2">{c.enabled ? "Yes" : "No"}</td>
-                <td className="px-3 py-2">
-                  <div className="flex flex-wrap gap-1">
-                    {subscribedEvents(c).map((ev) => (
-                      <Badge key={ev} variant="outline" className="text-xs">
-                        {ev}
-                      </Badge>
+              </thead>
+              <tbody>
+                {historyQ.isLoading && (
+                  <>
+                    {Array.from({ length: 3 }).map((_, i) => (
+                      <tr key={i} className="border-t border-border">
+                        {Array.from({ length: 6 }).map((__, j) => (
+                          <td key={j} className="px-3 py-3">
+                            <Skeleton className="h-4 w-20" />
+                          </td>
+                        ))}
+                      </tr>
                     ))}
-                    {subscribedEvents(c).length === 0 && (
-                      <span className="text-muted-foreground">None</span>
-                    )}
-                  </div>
-                </td>
-                <td className="px-3 py-2 text-right">
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        aria-label={`Actions for ${c.name}`}
+                  </>
+                )}
+                {!historyQ.isLoading &&
+                  (historyQ.data?.length ?? 0) === 0 && (
+                    <tr>
+                      <td
+                        colSpan={6}
+                        className="px-3 py-6 text-center text-muted-foreground"
                       >
-                        <MoreHorizontal className="h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem
-                        onSelect={() =>
-                          setDialog({ kind: "edit", connection: c })
-                        }
+                        No notification history yet.
+                      </td>
+                    </tr>
+                  )}
+                {(historyQ.data ?? []).map((h) => (
+                  <tr key={h.id} className="border-t border-border">
+                    <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">
+                      {new Date(h.sent_at).toLocaleString()}
+                    </td>
+                    <td className="px-3 py-2">
+                      {h.connection_id
+                        ? connMap.get(h.connection_id) ?? h.connection_id
+                        : "—"}
+                    </td>
+                    <td className="px-3 py-2">
+                      <Badge variant="outline" className="text-xs">
+                        {h.event_type}
+                      </Badge>
+                    </td>
+                    <td className="px-3 py-2">{h.title}</td>
+                    <td className="px-3 py-2">
+                      <Badge
+                        variant={h.success ? "default" : "destructive"}
+                        className="text-xs"
                       >
-                        Edit
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onSelect={() => handleTest(c)}>
-                        <Send className="mr-2 h-3 w-3" />
-                        Test
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem
-                        onSelect={() =>
-                          setDialog({ kind: "delete", connection: c })
-                        }
-                        className="text-red-600 focus:text-red-600"
-                      >
-                        Delete
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+                        {h.success ? "Success" : "Failed"}
+                      </Badge>
+                    </td>
+                    <td className="px-3 py-2 text-muted-foreground">
+                      {h.error_message || "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </TabsContent>
+      </Tabs>
 
       {/* Create / Edit dialog */}
       <Dialog
@@ -643,6 +827,7 @@ export function NotificationsPage() {
             <ConnectionForm
               onSubmit={handleCreate}
               onCancel={close}
+              onTest={handleTestUnsaved}
               submitting={create.isPending}
               topError={topError}
             />
@@ -652,6 +837,7 @@ export function NotificationsPage() {
               initial={dialog.connection}
               onSubmit={(form) => handleUpdate(form, dialog.connection)}
               onCancel={close}
+              onTest={(form) => handleTestSaved(form, dialog.connection.id)}
               submitting={update.isPending}
               topError={topError}
             />
