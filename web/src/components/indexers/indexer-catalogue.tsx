@@ -390,6 +390,9 @@ function CardigannConfigForm({
   const [enabled, setEnabled] = React.useState(true);
   const [priority, setPriority] = React.useState(25);
   const [proxyId, setProxyId] = React.useState("");
+  const [selectedUrl, setSelectedUrl] = React.useState(
+    definition.links?.[0] ?? "",
+  );
   const [fields, setFields] = React.useState<Record<string, string>>(() => {
     const init: Record<string, string> = {};
     for (const s of definition.settings ?? []) {
@@ -407,7 +410,10 @@ function CardigannConfigForm({
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!name.trim()) return;
-    onSubmit(definition, fields, name, enabled, priority, proxyId);
+    // Inject the selected URL into the fields so it's included in config
+    const formData = { ...fields };
+    if (selectedUrl) formData["url"] = selectedUrl;
+    onSubmit(definition, formData, name, enabled, priority, proxyId);
   }
 
   async function handleTest() {
@@ -415,6 +421,7 @@ function CardigannConfigForm({
     if (!name.trim()) return;
     try {
       const config: Record<string, unknown> = { definition_id: definition.id };
+      if (selectedUrl) config.url = selectedUrl;
       for (const [k, v] of Object.entries(fields)) {
         if (v) config[k] = v;
       }
@@ -460,6 +467,28 @@ function CardigannConfigForm({
           <a href={siteUrl} target="_blank" rel="noopener noreferrer" className="underline">
             {siteUrl}
           </a>
+        </div>
+      ) : null}
+
+      {/* Base URL selector — shown when definition has multiple links */}
+      {(definition.links?.length ?? 0) > 1 ? (
+        <div className="grid gap-2">
+          <Label htmlFor="cardi-url">Base URL</Label>
+          <select
+            id="cardi-url"
+            value={selectedUrl}
+            onChange={(e) => setSelectedUrl(e.target.value)}
+            className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          >
+            {(definition.links ?? []).map((link) => (
+              <option key={link} value={link}>
+                {link}
+              </option>
+            ))}
+          </select>
+          <p className="text-xs text-muted-foreground">
+            Select the site mirror that works in your region.
+          </p>
         </div>
       ) : null}
 
