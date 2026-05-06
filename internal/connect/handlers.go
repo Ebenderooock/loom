@@ -1,29 +1,25 @@
-package notifications
+package connect
 
 import (
 	"encoding/json"
 	"net/http"
-	"strconv"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
 )
 
-// Router returns a chi.Router with all notification endpoints mounted.
+// Router returns a chi.Router with all connect endpoints mounted.
 func Router(service Service) chi.Router {
 	r := chi.NewRouter()
 
 	r.Get("/", listConnections(service))
 	r.Post("/", createConnection(service))
-
-	// Literal routes before /{id} wildcard
-	r.Get("/history", listHistory(service))
-	r.Post("/test", testConfig(service))
+	r.Post("/test", testConnectionConfig(service))
 
 	r.Get("/{id}", getConnection(service))
 	r.Put("/{id}", updateConnection(service))
 	r.Delete("/{id}", deleteConnection(service))
-	r.Post("/{id}/test", testConnection(service))
+	r.Post("/{id}/test", testConnectionByID(service))
 
 	return r
 }
@@ -61,7 +57,7 @@ func listConnections(svc Service) http.HandlerFunc {
 
 func createConnection(svc Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		var req CreateConnectionRequest
+		var req CreateRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			writeError(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
 			return
@@ -71,8 +67,8 @@ func createConnection(svc Service) http.HandlerFunc {
 			writeError(w, http.StatusBadRequest, "name is required")
 			return
 		}
-		if req.Type == "" {
-			writeError(w, http.StatusBadRequest, "type is required")
+		if req.Provider == "" {
+			writeError(w, http.StatusBadRequest, "provider is required")
 			return
 		}
 
@@ -80,20 +76,17 @@ func createConnection(svc Service) http.HandlerFunc {
 		if req.Enabled != nil {
 			enabled = *req.Enabled
 		}
+		notifyOnImport := true
+		if req.NotifyOnImport != nil {
+			notifyOnImport = *req.NotifyOnImport
+		}
 
 		c := &Connection{
-			Name:                req.Name,
-			Type:                req.Type,
-			Enabled:             enabled,
-			Settings:            req.Settings,
-			OnGrab:              req.OnGrab,
-			OnDownload:          req.OnDownload,
-			OnUpgrade:           req.OnUpgrade,
-			OnRename:            req.OnRename,
-			OnDelete:            req.OnDelete,
-			OnHealthIssue:       req.OnHealthIssue,
-			OnApplicationUpdate: req.OnApplicationUpdate,
-			Tags:                req.Tags,
+			Name:           req.Name,
+			Provider:       req.Provider,
+			Enabled:        enabled,
+			Settings:       req.Settings,
+			NotifyOnImport: notifyOnImport,
 		}
 
 		if err := svc.CreateConnection(r.Context(), c); err != nil {
@@ -134,7 +127,7 @@ func updateConnection(svc Service) http.HandlerFunc {
 			return
 		}
 
-		var req UpdateConnectionRequest
+		var req UpdateRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			writeError(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
 			return
@@ -143,8 +136,8 @@ func updateConnection(svc Service) http.HandlerFunc {
 		if req.Name != nil {
 			existing.Name = *req.Name
 		}
-		if req.Type != nil {
-			existing.Type = *req.Type
+		if req.Provider != nil {
+			existing.Provider = *req.Provider
 		}
 		if req.Enabled != nil {
 			existing.Enabled = *req.Enabled
@@ -152,29 +145,8 @@ func updateConnection(svc Service) http.HandlerFunc {
 		if req.Settings != nil {
 			existing.Settings = *req.Settings
 		}
-		if req.OnGrab != nil {
-			existing.OnGrab = *req.OnGrab
-		}
-		if req.OnDownload != nil {
-			existing.OnDownload = *req.OnDownload
-		}
-		if req.OnUpgrade != nil {
-			existing.OnUpgrade = *req.OnUpgrade
-		}
-		if req.OnRename != nil {
-			existing.OnRename = *req.OnRename
-		}
-		if req.OnDelete != nil {
-			existing.OnDelete = *req.OnDelete
-		}
-		if req.OnHealthIssue != nil {
-			existing.OnHealthIssue = *req.OnHealthIssue
-		}
-		if req.OnApplicationUpdate != nil {
-			existing.OnApplicationUpdate = *req.OnApplicationUpdate
-		}
-		if req.Tags != nil {
-			existing.Tags = req.Tags
+		if req.NotifyOnImport != nil {
+			existing.NotifyOnImport = *req.NotifyOnImport
 		}
 
 		if err := svc.UpdateConnection(r.Context(), existing); err != nil {
@@ -200,67 +172,33 @@ func deleteConnection(svc Service) http.HandlerFunc {
 	}
 }
 
-func testConnection(svc Service) http.HandlerFunc {
+func testConnectionByID(svc Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id := chi.URLParam(r, "id")
 		if err := svc.TestConnection(r.Context(), id); err != nil {
 			writeError(w, http.StatusUnprocessableEntity, err.Error())
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"message": "test notification sent successfully"})
+		writeJSON(w, http.StatusOK, map[string]any{"message": "connection test successful"})
 	}
 }
 
-func testConfig(svc Service) http.HandlerFunc {
+func testConnectionConfig(svc Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		var req CreateConnectionRequest
+		var req CreateRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			writeError(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
 			return
 		}
-		if req.Type == "" {
-			writeError(w, http.StatusBadRequest, "type is required")
+		if req.Provider == "" {
+			writeError(w, http.StatusBadRequest, "provider is required")
 			return
 		}
 
-		conn := &Connection{
-			Name:     req.Name,
-			Type:     req.Type,
-			Settings: req.Settings,
-		}
-
-		sender := senderFor(conn.Type)
-		testNotification := Notification{
-			EventType: EventOnTest,
-			Title:     "Test Notification",
-			Message:   "This is a test notification from an unsaved connection.",
-		}
-
-		if err := sender.Send(r.Context(), testNotification, conn.Settings); err != nil {
-			writeJSON(w, http.StatusOK, map[string]any{"ok": false, "error": err.Error()})
+		if err := svc.TestConnectionConfig(r.Context(), req.Provider, req.Settings); err != nil {
+			writeError(w, http.StatusUnprocessableEntity, err.Error())
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "message": "Test notification sent successfully"})
-	}
-}
-
-func listHistory(svc Service) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		limit := 50
-		if l := r.URL.Query().Get("limit"); l != "" {
-			if parsed, err := strconv.Atoi(l); err == nil && parsed > 0 {
-				limit = parsed
-			}
-		}
-
-		entries, err := svc.ListHistory(r.Context(), limit)
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, err.Error())
-			return
-		}
-		if entries == nil {
-			entries = []*HistoryEntry{}
-		}
-		writeJSON(w, http.StatusOK, entries)
+		writeJSON(w, http.StatusOK, map[string]any{"message": "connection test successful"})
 	}
 }

@@ -193,12 +193,51 @@ export async function testConnection(
   );
 }
 
+export async function testConnectionConfig(
+  body: CreateConnectionRequest,
+): Promise<{ ok: boolean; message?: string; error?: string }> {
+  return request<{ ok: boolean; message?: string; error?: string }>(
+    "POST",
+    "/api/v1/notifications/test",
+    body,
+  );
+}
+
+// ---------- History types ----------
+
+export interface HistoryEntry {
+  id: number;
+  connection_id?: string;
+  event_type: string;
+  title: string;
+  message: string;
+  success: boolean;
+  error_message?: string;
+  sent_at: string;
+}
+
+export async function listHistory(
+  limit?: number,
+  signal?: AbortSignal,
+): Promise<HistoryEntry[]> {
+  const params = limit ? `?limit=${limit}` : "";
+  const data = await request<HistoryEntry[]>(
+    "GET",
+    `/api/v1/notifications/history${params}`,
+    undefined,
+    signal,
+  );
+  return data ?? [];
+}
+
 // ---------- Query keys ----------
 
 export const notificationKeys = {
   all: ["notifications"] as const,
   list: () => [...notificationKeys.all, "list"] as const,
   detail: (id: string) => [...notificationKeys.all, "detail", id] as const,
+  history: (limit?: number) =>
+    [...notificationKeys.all, "history", limit] as const,
 };
 
 // ---------- React Query hooks ----------
@@ -242,6 +281,17 @@ export function useDeleteNotification() {
 
 export function useTestNotification() {
   return useMutation({ mutationFn: testConnection });
+}
+
+export function useTestNotificationConfig() {
+  return useMutation({ mutationFn: testConnectionConfig });
+}
+
+export function useNotificationHistory(limit?: number) {
+  return useQuery<HistoryEntry[], Error>({
+    queryKey: notificationKeys.history(limit),
+    queryFn: ({ signal }) => listHistory(limit, signal),
+  });
 }
 
 // ---------- Connection type metadata ----------

@@ -34,6 +34,7 @@ import (
 	"github.com/loomctl/loom/internal/apikeys"
 	"github.com/loomctl/loom/internal/appconfig"
 	"github.com/loomctl/loom/internal/commands"
+	"github.com/loomctl/loom/internal/connect"
 	"github.com/loomctl/loom/internal/episodeorder"
 	"github.com/loomctl/loom/internal/auth"
 	"github.com/loomctl/loom/internal/libraries"
@@ -83,6 +84,7 @@ type Server struct {
 	organizerSvc *organizer.Organizer
 	seriesSvc  series.Service
 	notifSvc   notifications.Service
+	connectSvc connect.Service
 	reviewStore *safety.ReviewStore
 	importPipeline *imports.ImportPipeline
 	langStore   *languages.Store
@@ -226,6 +228,14 @@ func (s *Server) SetSeries(svc series.Service) {
 // SetNotifications installs the notification service and rebuilds the HTTP handler.
 func (s *Server) SetNotifications(svc notifications.Service) {
 	s.notifSvc = svc
+	if s.httpSrv != nil {
+		s.httpSrv.Handler = s.newMux()
+	}
+}
+
+// SetConnect installs the connect service and rebuilds the HTTP handler.
+func (s *Server) SetConnect(svc connect.Service) {
+	s.connectSvc = svc
 	if s.httpSrv != nil {
 		s.httpSrv.Handler = s.newMux()
 	}
@@ -466,6 +476,11 @@ func (s *Server) newMux() http.Handler {
 		// Notifications routes
 		if s.notifSvc != nil {
 			r.Mount("/api/v1/notifications", notifications.Router(s.notifSvc))
+		}
+
+		// Connect (media server integrations) routes
+		if s.connectSvc != nil {
+			r.Mount("/api/v1/connect", connect.Router(s.connectSvc))
 		}
 
 		// Manual review routes (download safety)
