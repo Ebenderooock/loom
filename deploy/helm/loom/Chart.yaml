@@ -1,0 +1,19 @@
+apiVersion: v2
+name: loom
+description: Unified media automation — Radarr/Sonarr/Prowlarr replacement
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+home: https://github.com/loomctl/loom
+sources:
+  - https://github.com/loomctl/loom
+keywords:
+  - media
+  - automation
+  - radarr
+  - sonarr
+  - prowlarr
+  - pvr
+maintainers:
+  - name: loomctl
+    url: https://github.com/loomctl

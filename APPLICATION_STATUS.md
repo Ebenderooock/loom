@@ -20,7 +20,7 @@ Loom is a unified media automation app replacing Radarr, Sonarr, and Prowlarr.
 
 ---
 
-## What Works Today (✅ Done — 71 items)
+## What Works Today (✅ Done — 72 items)
 
 ### Platform Kernel
 - [x] Layered config (defaults → file → env → flags) with hot-reload via Viper
@@ -97,6 +97,7 @@ Loom is a unified media automation app replacing Radarr, Sonarr, and Prowlarr.
 - [x] RSS sync — SyncManager with feed parsing, deduplication, scraper support, periodic refresh
 - [x] Remote path mappings settings panel — full CRUD UI with download client selector
 - [x] Documentation site — docs/ directory with 30+ markdown files, architecture decisions, deployment guide
+- [x] Helm chart — production-ready Kubernetes deployment with PVC, ingress, probes, security context
 
 ### Movies (Radarr Replacement)
 - [x] Movies service & CRUD API
@@ -135,14 +136,13 @@ Loom is a unified media automation app replacing Radarr, Sonarr, and Prowlarr.
 
 ## In Progress (🚧 — 0 items)
 
-All core features are complete. Only a Helm chart remains for Kubernetes deployment.
+All planned features are complete.
 
 ---
 
-## Remaining Work (⏳ — 1 item)
+## Remaining Work (⏳ — 0 items)
 
-### Final Polish
-- [ ] Helm chart (Kubernetes deployment template — no chart exists yet)
+All planned features are complete. 🎉
 
 ---
 
