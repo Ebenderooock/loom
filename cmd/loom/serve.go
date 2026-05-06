@@ -13,6 +13,7 @@ import (
 	"github.com/loomctl/loom/internal/alttitles"
 	"github.com/loomctl/loom/internal/anime"
 	"github.com/loomctl/loom/internal/appconfig"
+	"github.com/loomctl/loom/internal/calendar"
 	"github.com/loomctl/loom/internal/connect"
 	"github.com/loomctl/loom/internal/customformats"
 	"github.com/loomctl/loom/internal/downloads"
@@ -138,6 +139,8 @@ func cmdServe(ctx context.Context, args []string) error {
 	if err != nil {
 		return fmt.Errorf("init downloads: %w", err)
 	}
+	remotePathStore := downloads.NewRemotePathStore(db.DB())
+	downloadSvc.AddRouteExtension(downloads.MountRemotePathRoutes(remotePathStore))
 	if err := registerDownloadHealthJob(ctx, sched, cfg, downloadSvc); err != nil {
 		return fmt.Errorf("register download health job: %w", err)
 	}
@@ -210,6 +213,9 @@ func cmdServe(ctx context.Context, args []string) error {
 	connectSvc := connect.NewService(db.DB())
 	srv.SetConnect(connectSvc)
 
+	// Build and wire the calendar handler
+	srv.SetCalendar(calendar.Router(db.DB()))
+
 	// Start the notification dispatcher — subscribes to domain events on the
 	// bus and fans out to all matching notification connections.
 	notifDispatcher := notifications.NewDispatcher(srv.Bus(), notifSvc, logger)
@@ -252,17 +258,18 @@ func cmdServe(ctx context.Context, args []string) error {
 		importMode = imports.ImportModeMove
 	}
 	importPipeline, err := imports.NewPipeline(imports.PipelineOptions{
-		DB:          db.DB(),
-		Bus:         srv.Bus(),
-		DownloadSvc: downloadSvc,
-		MoviesSvc:   moviesSvc,
-		SeriesSvc:   seriesSvc,
-		LibStore:    libStore,
-		NotifSvc:    notifSvc,
-		PostVal:     safety.NewPostValidator(safety.DefaultConfig()),
-		ReviewStore: safety.NewReviewStore(db.DB()),
-		Logger:      logger,
-		ImportMode:  importMode,
+		DB:              db.DB(),
+		Bus:             srv.Bus(),
+		DownloadSvc:     downloadSvc,
+		RemotePathStore: remotePathStore,
+		MoviesSvc:       moviesSvc,
+		SeriesSvc:       seriesSvc,
+		LibStore:        libStore,
+		NotifSvc:        notifSvc,
+		PostVal:         safety.NewPostValidator(safety.DefaultConfig()),
+		ReviewStore:     safety.NewReviewStore(db.DB()),
+		Logger:          logger,
+		ImportMode:      importMode,
 	})
 	if err != nil {
 		return fmt.Errorf("init import pipeline: %w", err)

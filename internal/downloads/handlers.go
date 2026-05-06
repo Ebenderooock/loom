@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
@@ -36,6 +37,8 @@ func (s *Service) Mount(r chi.Router) {
 	})
 	// Aggregate activity endpoint across all download clients
 	r.Get("/api/v1/activity", s.handleActivity)
+	// Download history endpoint
+	r.Get("/api/v1/downloads/history", s.handleHistory)
 	for _, ext := range s.routeExtensions {
 		if ext != nil {
 			ext(r)
@@ -543,4 +546,37 @@ func (s *Service) handleActivity(w http.ResponseWriter, r *http.Request) {
 		"items":  status.Items,
 		"errors": status.Errors,
 	})
+}
+
+// handleHistory returns paginated download history.
+func (s *Service) handleHistory(w http.ResponseWriter, r *http.Request) {
+	if s.historyStore == nil {
+		writeJSON(w, http.StatusOK, []HistoryEntry{})
+		return
+	}
+
+	limit := 50
+	offset := 0
+	if v := r.URL.Query().Get("limit"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			limit = n
+		}
+	}
+	if v := r.URL.Query().Get("offset"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n >= 0 {
+			offset = n
+		}
+	}
+
+	entries, err := s.historyStore.List(r.Context(), limit, offset)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, errorBody{
+			Error: errorPayload{Message: "failed to list download history", Code: "internal_error"},
+		})
+		return
+	}
+	if entries == nil {
+		entries = []HistoryEntry{}
+	}
+	writeJSON(w, http.StatusOK, entries)
 }

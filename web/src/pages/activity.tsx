@@ -34,37 +34,113 @@ interface DownloadItem {
   message: string;
 }
 
-function PlaceholderTable({ caption }: { caption: string }) {
+// ─── Types: Download History ─────────────────────────────────────────────
+
+interface HistoryEntry {
+  id: string;
+  download_id: string;
+  client_id: string;
+  title: string;
+  category: string;
+  status: string;
+  grabbed_at?: string;
+  completed_at: string;
+}
+
+function relativeTime(iso: string): string {
+  const now = Date.now();
+  const then = new Date(iso).getTime();
+  const diffSec = Math.floor((now - then) / 1000);
+  if (diffSec < 60) return "just now";
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr < 24) return `${diffHr}h ago`;
+  const diffDay = Math.floor(diffHr / 24);
+  return `${diffDay}d ago`;
+}
+
+function DownloadHistory() {
+  const [entries, setEntries] = React.useState<HistoryEntry[]>([]);
+  const [loading, setLoading] = React.useState(true);
+
+  React.useEffect(() => {
+    async function load() {
+      try {
+        const res = await fetch("/api/v1/downloads/history?limit=50", { credentials: "include" });
+        if (res.ok) {
+          const body = await res.json();
+          setEntries(body ?? []);
+        }
+      } catch {
+        // silently fail
+      } finally {
+        setLoading(false);
+      }
+    }
+    load();
+  }, []);
+
+  if (loading) {
+    return (
+      <Card>
+        <CardContent className="py-8 text-center text-muted-foreground">
+          <Loader2 className="h-5 w-5 animate-spin mx-auto mb-2" />
+          Loading history…
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (entries.length === 0) {
+    return (
+      <Card>
+        <CardContent className="py-8 text-center text-muted-foreground">
+          <Clock className="h-5 w-5 mx-auto mb-2 opacity-50" />
+          No download history yet.
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>{caption}</CardTitle>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base">Download History</CardTitle>
       </CardHeader>
-      <CardContent>
+      <CardContent className="p-0">
         <table className="w-full text-sm">
-          <caption className="sr-only">{caption}</caption>
           <thead>
-            <tr className="border-b border-border text-left text-muted-foreground">
-              <th scope="col" className="py-2">
-                Title
-              </th>
-              <th scope="col" className="py-2">
-                Status
-              </th>
-              <th scope="col" className="py-2">
-                Updated
-              </th>
+            <tr className="border-b border-border text-left text-muted-foreground text-xs">
+              <th className="py-2 px-4 font-medium">Title</th>
+              <th className="py-2 px-4 font-medium">Category</th>
+              <th className="py-2 px-4 font-medium">Status</th>
+              <th className="py-2 px-4 font-medium">Completed</th>
             </tr>
           </thead>
           <tbody>
-            <tr>
-              <td
-                colSpan={3}
-                className="py-6 text-center text-muted-foreground"
-              >
-                Nothing to show yet.
-              </td>
-            </tr>
+            {entries.map((entry) => (
+              <tr key={entry.id} className="border-b border-border/50 last:border-0">
+                <td className="py-3 px-4">
+                  <div className="font-medium truncate max-w-xs">{entry.title}</div>
+                </td>
+                <td className="py-3 px-4 text-xs text-muted-foreground">
+                  {entry.category || "—"}
+                </td>
+                <td className="py-3 px-4">
+                  {entry.status === "completed" ? (
+                    <Badge variant="default" className="bg-green-600 text-xs">completed</Badge>
+                  ) : entry.status === "failed" ? (
+                    <Badge variant="destructive" className="text-xs">failed</Badge>
+                  ) : (
+                    <Badge variant="secondary" className="text-xs">{entry.status}</Badge>
+                  )}
+                </td>
+                <td className="py-3 px-4 text-xs text-muted-foreground">
+                  {relativeTime(entry.completed_at)}
+                </td>
+              </tr>
+            ))}
           </tbody>
         </table>
       </CardContent>
@@ -509,7 +585,7 @@ export function ActivityPage() {
           <DownloadQueue />
         </TabsContent>
         <TabsContent value="history">
-          <PlaceholderTable caption="Recent history" />
+          <DownloadHistory />
         </TabsContent>
         <TabsContent value="blocklist">
           <BlocklistViewer />
