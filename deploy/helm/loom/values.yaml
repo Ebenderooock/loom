@@ -1,0 +1,103 @@
+# Default values for loom.
+
+replicaCount: 1
+
+image:
+  repository: ghcr.io/loomctl/loom
+  pullPolicy: IfNotPresent
+  # Overrides the image tag whose default is the chart appVersion.
+  tag: ""
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  automount: true
+  annotations: {}
+  name: ""
+
+podAnnotations: {}
+podLabels: {}
+
+podSecurityContext:
+  fsGroup: 65534
+
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 65534
+  runAsGroup: 65534
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  seccompProfile:
+    type: RuntimeDefault
+  capabilities:
+    drop:
+      - ALL
+
+service:
+  type: ClusterIP
+  port: 8989
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: loom.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+resources: {}
+  # limits:
+  #   cpu: 500m
+  #   memory: 512Mi
+  # requests:
+  #   cpu: 100m
+  #   memory: 128Mi
+
+persistence:
+  config:
+    enabled: true
+    storageClass: ""
+    accessMode: ReadWriteOnce
+    size: 1Gi
+    existingClaim: ""
+
+  media:
+    enabled: false
+    storageClass: ""
+    accessMode: ReadWriteOnce
+    size: 100Gi
+    existingClaim: ""
+
+# Extra volumes and mounts for media libraries, NFS, etc.
+extraVolumes: []
+extraVolumeMounts: []
+
+# Extra environment variables
+extraEnv: []
+  # - name: LOOM_LOG_LEVEL
+  #   value: debug
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# Liveness/readiness probes hit the built-in healthcheck endpoint.
+probes:
+  liveness:
+    enabled: true
+    path: /api/v1/health
+    initialDelaySeconds: 10
+    periodSeconds: 30
+    timeoutSeconds: 5
+  readiness:
+    enabled: true
+    path: /api/v1/health
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    timeoutSeconds: 5
