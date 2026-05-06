@@ -13,6 +13,7 @@ const (
 	ProviderPlex     ProviderType = "plex"
 	ProviderEmby     ProviderType = "emby"
 	ProviderJellyfin ProviderType = "jellyfin"
+	ProviderTrakt    ProviderType = "trakt"
 )
 
 // Connection maps to the connections table.
@@ -31,6 +32,12 @@ type Connection struct {
 type ProviderSettings struct {
 	Host   string `json:"host,omitempty"`
 	APIKey string `json:"api_key,omitempty"`
+	// Trakt OAuth2 fields
+	ClientID     string `json:"client_id,omitempty"`
+	ClientSecret string `json:"client_secret,omitempty"`
+	AccessToken  string `json:"access_token,omitempty"`
+	RefreshToken string `json:"refresh_token,omitempty"`
+	TokenExpiry  string `json:"token_expiry,omitempty"`
 }
 
 // Value implements driver.Valuer for database storage as JSON.

@@ -76,6 +76,13 @@ import {
   useDeleteConnection as useDeleteConnect,
   useTestConnection as useTestConnect,
   useTestConnectionConfig as useTestConnectConfig,
+  useTraktAuthorize,
+  useTraktCallback,
+  useTraktRefreshToken,
+  useTraktSyncWatched,
+  useTraktSyncCollection,
+  useTraktSyncWatchlist,
+  traktGetAuthorizeUrl,
   PROVIDER_TYPES,
   type ConnectConnection,
   type ProviderType as ConnectProviderType,
@@ -1604,6 +1611,12 @@ function ConnectPanel() {
   const deleteMut = useDeleteConnect();
   const testMut = useTestConnect();
   const testConfigMut = useTestConnectConfig();
+  const traktAuthorizeMut = useTraktAuthorize();
+  const traktCallbackMut = useTraktCallback();
+  const traktRefreshMut = useTraktRefreshToken();
+  const traktSyncWatchedMut = useTraktSyncWatched();
+  const traktSyncCollectionMut = useTraktSyncCollection();
+  const traktSyncWatchlistMut = useTraktSyncWatchlist();
 
   const [dialogOpen, setDialogOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<ConnectConnection | null>(null);
@@ -1617,15 +1630,27 @@ function ConnectPanel() {
   const [formEnabled, setFormEnabled] = React.useState(true);
   const [testResult, setTestResult] = React.useState<{ ok: boolean; message: string } | null>(null);
 
+  // Trakt-specific state
+  const [formClientId, setFormClientId] = React.useState("");
+  const [formClientSecret, setFormClientSecret] = React.useState("");
+  const [traktOAuthCode, setTraktOAuthCode] = React.useState("");
+  const [traktAuthStep, setTraktAuthStep] = React.useState<"config" | "authorize" | "code" | "connected">("config");
+
+  const isTrakt = formProvider === "trakt";
+
   const openCreate = () => {
     setEditing(null);
     setFormProvider("plex");
     setFormName("");
     setFormHost("");
     setFormApiKey("");
+    setFormClientId("");
+    setFormClientSecret("");
     setFormNotifyOnImport(true);
     setFormEnabled(true);
     setTestResult(null);
+    setTraktOAuthCode("");
+    setTraktAuthStep("config");
     setDialogOpen(true);
   };
 
@@ -1635,9 +1660,15 @@ function ConnectPanel() {
     setFormName(c.name);
     setFormHost(c.settings.host ?? "");
     setFormApiKey(c.settings.api_key ?? "");
+    setFormClientId(c.settings.client_id ?? "");
+    setFormClientSecret(c.settings.client_secret ?? "");
     setFormNotifyOnImport(c.notify_on_import);
     setFormEnabled(c.enabled);
     setTestResult(null);
+    setTraktOAuthCode("");
+    setTraktAuthStep(
+      c.provider === "trakt" && c.settings.access_token ? "connected" : "config",
+    );
     setDialogOpen(true);
   };
 
@@ -1645,7 +1676,9 @@ function ConnectPanel() {
     name: formName,
     provider: formProvider,
     enabled: formEnabled,
-    settings: { host: formHost, api_key: formApiKey },
+    settings: isTrakt
+      ? { client_id: formClientId, client_secret: formClientSecret }
+      : { host: formHost, api_key: formApiKey },
     notify_on_import: formNotifyOnImport,
   });
 
@@ -1658,7 +1691,9 @@ function ConnectPanel() {
             name: formName,
             provider: formProvider,
             enabled: formEnabled,
-            settings: { host: formHost, api_key: formApiKey },
+            settings: isTrakt
+              ? { client_id: formClientId, client_secret: formClientSecret }
+              : { host: formHost, api_key: formApiKey },
             notify_on_import: formNotifyOnImport,
           },
         },
@@ -1679,6 +1714,62 @@ function ConnectPanel() {
         onError: (err) => toast.error(err.message),
       });
     }
+  };
+
+  const handleSaveAndAuthorize = () => {
+    const body = buildBody();
+    const onCreated = (conn: ConnectConnection) => {
+      setEditing(conn);
+      setTraktAuthStep("authorize");
+      traktAuthorizeMut.mutate(
+        {
+          client_id: formClientId,
+          redirect_uri: `${window.location.origin}/settings/trakt/callback`,
+        },
+        {
+          onSuccess: (res) => {
+            window.open(res.authorize_url, "_blank", "noopener");
+            setTraktAuthStep("code");
+          },
+          onError: (err) => toast.error(err.message),
+        },
+      );
+    };
+
+    if (editing) {
+      updateMut.mutate(
+        { id: editing.id, body },
+        {
+          onSuccess: (conn) => onCreated(conn),
+          onError: (err) => toast.error(err.message),
+        },
+      );
+    } else {
+      createMut.mutate(body, {
+        onSuccess: (conn) => onCreated(conn),
+        onError: (err) => toast.error(err.message),
+      });
+    }
+  };
+
+  const handleTraktCodeSubmit = () => {
+    if (!editing) return;
+    traktCallbackMut.mutate(
+      {
+        code: traktOAuthCode,
+        client_id: formClientId,
+        client_secret: formClientSecret,
+        redirect_uri: `${window.location.origin}/settings/trakt/callback`,
+        connection_id: editing.id,
+      },
+      {
+        onSuccess: () => {
+          setTraktAuthStep("connected");
+          toast.success("Trakt authorized successfully");
+        },
+        onError: (err) => toast.error(err.message),
+      },
+    );
   };
 
   const handleTest = () => {
@@ -1703,11 +1794,34 @@ function ConnectPanel() {
     });
   };
 
+  const handleTraktSync = (
+    type: "watched" | "collection" | "watchlist",
+    connectionId: string,
+  ) => {
+    const mut =
+      type === "watched"
+        ? traktSyncWatchedMut
+        : type === "collection"
+          ? traktSyncCollectionMut
+          : traktSyncWatchlistMut;
+    mut.mutate(connectionId, {
+      onSuccess: (res) =>
+        toast.success(`Synced ${type}: ${res.movies} movies, ${res.shows} shows`),
+      onError: (err) => toast.error(err.message),
+    });
+  };
+
   const providerLabel = (p: ConnectProviderType) =>
     PROVIDER_TYPES.find((t) => t.value === p)?.label ?? p;
 
   const isSaving = createMut.isPending || updateMut.isPending;
   const isTesting = testMut.isPending || testConfigMut.isPending;
+  const isTraktAuthorizing =
+    traktAuthorizeMut.isPending || traktCallbackMut.isPending || isSaving;
+  const isTraktSyncing =
+    traktSyncWatchedMut.isPending ||
+    traktSyncCollectionMut.isPending ||
+    traktSyncWatchlistMut.isPending;
 
   return (
     <div className="space-y-6">
@@ -1752,6 +1866,11 @@ function ConnectPanel() {
                       <Badge variant="outline" className="border-zinc-700 text-zinc-300 text-xs">
                         {providerLabel(conn.provider)}
                       </Badge>
+                      {conn.provider === "trakt" && conn.settings.access_token && (
+                        <Badge variant="outline" className="ml-1 border-emerald-700 text-emerald-400 text-xs">
+                          Connected
+                        </Badge>
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       <Badge
@@ -1780,6 +1899,39 @@ function ConnectPanel() {
                           <DropdownMenuItem onClick={() => openEdit(conn)}>
                             <Pencil className="h-4 w-4 mr-2" /> Edit
                           </DropdownMenuItem>
+                          {conn.provider === "trakt" && conn.settings.access_token && (
+                            <>
+                              <DropdownMenuItem
+                                disabled={isTraktSyncing}
+                                onClick={() => handleTraktSync("watched", conn.id)}
+                              >
+                                <Download className="h-4 w-4 mr-2" /> Sync Watched
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                disabled={isTraktSyncing}
+                                onClick={() => handleTraktSync("collection", conn.id)}
+                              >
+                                <Download className="h-4 w-4 mr-2" /> Sync Collection
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                disabled={isTraktSyncing}
+                                onClick={() => handleTraktSync("watchlist", conn.id)}
+                              >
+                                <Download className="h-4 w-4 mr-2" /> Sync Watchlist
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                disabled={traktRefreshMut.isPending}
+                                onClick={() =>
+                                  traktRefreshMut.mutate(conn.id, {
+                                    onSuccess: () => toast.success("Token refreshed"),
+                                    onError: (err) => toast.error(err.message),
+                                  })
+                                }
+                              >
+                                <Key className="h-4 w-4 mr-2" /> Refresh Token
+                              </DropdownMenuItem>
+                            </>
+                          )}
                           <DropdownMenuItem
                             className="text-red-400"
                             onClick={() => handleDelete(conn.id)}
@@ -1828,28 +1980,82 @@ function ConnectPanel() {
               <Input
                 value={formName}
                 onChange={(e) => setFormName(e.target.value)}
-                placeholder="My Plex Server"
+                placeholder={isTrakt ? "My Trakt Account" : "My Plex Server"}
               />
             </div>
 
-            <div className="space-y-1.5">
-              <Label>Host</Label>
-              <Input
-                value={formHost}
-                onChange={(e) => setFormHost(e.target.value)}
-                placeholder="http://192.168.1.10:32400"
-              />
-            </div>
+            {isTrakt ? (
+              <>
+                <div className="space-y-1.5">
+                  <Label>Client ID</Label>
+                  <Input
+                    value={formClientId}
+                    onChange={(e) => setFormClientId(e.target.value)}
+                    placeholder="Your Trakt API application Client ID"
+                  />
+                </div>
 
-            <div className="space-y-1.5">
-              <Label>API Key / Token</Label>
-              <Input
-                type="password"
-                value={formApiKey}
-                onChange={(e) => setFormApiKey(e.target.value)}
-                placeholder="Plex token or Emby/Jellyfin API key"
-              />
-            </div>
+                <div className="space-y-1.5">
+                  <Label>Client Secret</Label>
+                  <Input
+                    type="password"
+                    value={formClientSecret}
+                    onChange={(e) => setFormClientSecret(e.target.value)}
+                    placeholder="Your Trakt API application Client Secret"
+                  />
+                </div>
+
+                {traktAuthStep === "code" && (
+                  <div className="space-y-2 rounded-md border border-zinc-700 bg-zinc-900 p-3">
+                    <p className="text-xs text-zinc-400">
+                      A new tab was opened to Trakt. Authorize the app, then paste the code below.
+                    </p>
+                    <Input
+                      value={traktOAuthCode}
+                      onChange={(e) => setTraktOAuthCode(e.target.value)}
+                      placeholder="Paste authorization code here"
+                    />
+                    <Button
+                      size="sm"
+                      onClick={handleTraktCodeSubmit}
+                      disabled={!traktOAuthCode || traktCallbackMut.isPending}
+                    >
+                      {traktCallbackMut.isPending && (
+                        <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                      )}
+                      Complete Authorization
+                    </Button>
+                  </div>
+                )}
+
+                {traktAuthStep === "connected" && (
+                  <div className="rounded-md border border-emerald-800 bg-emerald-950/50 px-3 py-2 text-sm text-emerald-400">
+                    Trakt is authorized and connected.
+                  </div>
+                )}
+              </>
+            ) : (
+              <>
+                <div className="space-y-1.5">
+                  <Label>Host</Label>
+                  <Input
+                    value={formHost}
+                    onChange={(e) => setFormHost(e.target.value)}
+                    placeholder="http://192.168.1.10:32400"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label>API Key / Token</Label>
+                  <Input
+                    type="password"
+                    value={formApiKey}
+                    onChange={(e) => setFormApiKey(e.target.value)}
+                    placeholder="Plex token or Emby/Jellyfin API key"
+                  />
+                </div>
+              </>
+            )}
 
             <div className="flex items-center justify-between">
               <Label>Notify on Import</Label>
@@ -1875,27 +2081,57 @@ function ConnectPanel() {
             )}
 
             <div className="flex justify-between pt-2">
-              <Button
-                variant="outline"
-                onClick={handleTest}
-                disabled={isTesting || !formHost}
-              >
-                {isTesting ? (
-                  <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                ) : (
-                  <Plug className="h-4 w-4 mr-1" />
-                )}
-                Test
-              </Button>
-              <div className="flex gap-2">
-                <Button variant="ghost" onClick={() => setDialogOpen(false)}>
-                  Cancel
-                </Button>
-                <Button onClick={handleSave} disabled={isSaving || !formName || !formHost}>
-                  {isSaving && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}
-                  {editing ? "Update" : "Save"}
-                </Button>
-              </div>
+              {isTrakt ? (
+                <>
+                  <div />
+                  <div className="flex gap-2">
+                    <Button variant="ghost" onClick={() => setDialogOpen(false)}>
+                      Cancel
+                    </Button>
+                    {traktAuthStep === "connected" ? (
+                      <Button onClick={handleSave} disabled={isSaving || !formName}>
+                        {isSaving && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}
+                        {editing ? "Update" : "Save"}
+                      </Button>
+                    ) : traktAuthStep === "config" ? (
+                      <Button
+                        onClick={handleSaveAndAuthorize}
+                        disabled={isTraktAuthorizing || !formName || !formClientId || !formClientSecret}
+                      >
+                        {isTraktAuthorizing && (
+                          <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                        )}
+                        <ExternalLink className="h-4 w-4 mr-1" />
+                        Connect to Trakt
+                      </Button>
+                    ) : null}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <Button
+                    variant="outline"
+                    onClick={handleTest}
+                    disabled={isTesting || !formHost}
+                  >
+                    {isTesting ? (
+                      <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                    ) : (
+                      <Plug className="h-4 w-4 mr-1" />
+                    )}
+                    Test
+                  </Button>
+                  <div className="flex gap-2">
+                    <Button variant="ghost" onClick={() => setDialogOpen(false)}>
+                      Cancel
+                    </Button>
+                    <Button onClick={handleSave} disabled={isSaving || !formName || !formHost}>
+                      {isSaving && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}
+                      {editing ? "Update" : "Save"}
+                    </Button>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </DialogContent>

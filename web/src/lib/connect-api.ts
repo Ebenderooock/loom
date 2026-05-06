@@ -4,11 +4,17 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 // ---------- Types ----------
 
-export type ProviderType = "plex" | "emby" | "jellyfin";
+export type ProviderType = "plex" | "emby" | "jellyfin" | "trakt";
 
 export interface ProviderSettings {
   host?: string;
   api_key?: string;
+  // Trakt OAuth2
+  client_id?: string;
+  client_secret?: string;
+  access_token?: string;
+  refresh_token?: string;
+  token_expiry?: string;
 }
 
 export interface ConnectConnection {
@@ -234,4 +240,79 @@ export const PROVIDER_TYPES: {
     description: "Jellyfin Media Server — library refresh on import",
     fields: ["host", "api_key"],
   },
+  {
+    value: "trakt",
+    label: "Trakt",
+    description: "Trakt.tv — sync watched, collections, and watchlists",
+    fields: ["client_id", "client_secret"],
+  },
 ];
+
+// ---------- Trakt OAuth & Sync API ----------
+
+export async function traktGetAuthorizeUrl(body: {
+  client_id: string;
+  redirect_uri: string;
+}): Promise<{ authorize_url: string }> {
+  return request("POST", "/api/v1/connect/trakt/oauth/authorize", body);
+}
+
+export async function traktCallback(body: {
+  code: string;
+  client_id: string;
+  client_secret: string;
+  redirect_uri: string;
+  connection_id: string;
+}): Promise<ConnectConnection> {
+  return request("POST", "/api/v1/connect/trakt/oauth/callback", body);
+}
+
+export async function traktRefreshToken(connectionId: string): Promise<ConnectConnection> {
+  return request("POST", `/api/v1/connect/trakt/oauth/refresh/${encodeURIComponent(connectionId)}`);
+}
+
+export async function traktSyncWatched(connectionId: string): Promise<{ movies: number; shows: number }> {
+  return request("POST", `/api/v1/connect/trakt/sync/watched/${encodeURIComponent(connectionId)}`);
+}
+
+export async function traktSyncCollection(connectionId: string): Promise<{ movies: number; shows: number }> {
+  return request("POST", `/api/v1/connect/trakt/sync/collection/${encodeURIComponent(connectionId)}`);
+}
+
+export async function traktSyncWatchlist(connectionId: string): Promise<{ movies: number; shows: number }> {
+  return request("POST", `/api/v1/connect/trakt/sync/watchlist/${encodeURIComponent(connectionId)}`);
+}
+
+// ---------- Trakt React Query hooks ----------
+
+export function useTraktAuthorize() {
+  return useMutation({ mutationFn: traktGetAuthorizeUrl });
+}
+
+export function useTraktCallback() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: traktCallback,
+    onSuccess: () => qc.invalidateQueries({ queryKey: connectKeys.all }),
+  });
+}
+
+export function useTraktRefreshToken() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: traktRefreshToken,
+    onSuccess: () => qc.invalidateQueries({ queryKey: connectKeys.all }),
+  });
+}
+
+export function useTraktSyncWatched() {
+  return useMutation({ mutationFn: traktSyncWatched });
+}
+
+export function useTraktSyncCollection() {
+  return useMutation({ mutationFn: traktSyncCollection });
+}
+
+export function useTraktSyncWatchlist() {
+  return useMutation({ mutationFn: traktSyncWatchlist });
+}

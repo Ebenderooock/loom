@@ -16,6 +16,9 @@ func Router(service Service) chi.Router {
 	r.Post("/", createConnection(service))
 	r.Post("/test", testConnectionConfig(service))
 
+	r.Mount("/trakt/oauth", TraktOAuthRouter(service))
+	r.Mount("/trakt/sync", TraktSyncRouter(service))
+
 	r.Get("/{id}", getConnection(service))
 	r.Put("/{id}", updateConnection(service))
 	r.Delete("/{id}", deleteConnection(service))
