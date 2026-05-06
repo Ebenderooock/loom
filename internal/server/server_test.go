@@ -13,6 +13,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/loomctl/loom/internal/appconfig"
 	"github.com/loomctl/loom/internal/kernel/config"
 	"github.com/loomctl/loom/internal/kernel/telemetry"
 	"github.com/loomctl/loom/internal/storage"
@@ -39,7 +40,7 @@ func newTestServer(t *testing.T) *Server {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s, err := New(cfg, logger, tel, db, nil, nil, nil)
+	s, err := New(cfg, &appconfig.Config{}, logger, tel, db, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -218,7 +219,7 @@ func TestCORSPreflightWhenConfigured(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = db.Close() })
-	s, err := New(cfg, logger, tel, db, nil, nil, nil)
+	s, err := New(cfg, &appconfig.Config{}, logger, tel, db, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -273,7 +274,7 @@ func TestPprofGated(t *testing.T) {
 	t.Cleanup(func() { _ = db.Close() })
 
 	// Default: pprof disabled.
-	s, err := New(cfg, logger, tel, db, nil, nil, nil)
+	s, err := New(cfg, &appconfig.Config{}, logger, tel, db, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -283,16 +284,9 @@ func TestPprofGated(t *testing.T) {
 		t.Errorf("pprof should be 404 by default; got %d", w.Code)
 	}
 
-	// Enabled.
-	cfg2, _ := config.Load("")
-	cfg2.Debug.Pprof = true
-	cfg2.Storage = cfg.Storage
-	s2, err := New(cfg2, logger, tel, db, nil, nil, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = s2.Shutdown(context.Background()) })
-	w2 := do(t, s2.newMux(), http.MethodGet, "/debug/pprof/")
+	// Enabled: reuse the same server, just toggle the config flag and rebuild mux.
+	cfg.Debug.Pprof = true
+	w2 := do(t, s.newMux(), http.MethodGet, "/debug/pprof/")
 	if w2.Code != http.StatusOK {
 		t.Errorf("pprof should be 200 when enabled; got %d", w2.Code)
 	}
