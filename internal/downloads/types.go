@@ -114,19 +114,20 @@ type AddResult struct {
 // by a client. Field semantics map cleanly onto qBittorrent / SABnzbd
 // status; kinds with less detail leave the unsupported fields zero.
 type Item struct {
-	ID            string     `json:"id"`
-	Title         string     `json:"title"`
-	Category      string     `json:"category,omitempty"`
-	Status        ItemStatus `json:"status"`
-	Progress      float64    `json:"progress"` // 0.0 - 1.0
-	SizeBytes     int64      `json:"size_bytes,omitempty"`
-	DownloadedBytes int64    `json:"downloaded_bytes,omitempty"`
-	ETA           int64      `json:"eta_seconds,omitempty"`
-	DownloadRate  int64      `json:"download_rate,omitempty"`
-	UploadRate    int64      `json:"upload_rate,omitempty"`
-	Ratio         float64    `json:"ratio,omitempty"`
-	Message       string     `json:"message,omitempty"`
-	SavePath      string     `json:"save_path,omitempty"`
+	ID              string     `json:"id"`
+	ClientID        string     `json:"client_id,omitempty"`
+	Title           string     `json:"title"`
+	Category        string     `json:"category,omitempty"`
+	Status          ItemStatus `json:"status"`
+	Progress        float64    `json:"progress"` // 0.0 - 1.0
+	SizeBytes       int64      `json:"size_bytes,omitempty"`
+	DownloadedBytes int64      `json:"downloaded_bytes,omitempty"`
+	ETA             int64      `json:"eta_seconds,omitempty"`
+	DownloadRate    int64      `json:"download_rate,omitempty"`
+	UploadRate      int64      `json:"upload_rate,omitempty"`
+	Ratio           float64    `json:"ratio,omitempty"`
+	Message         string     `json:"message,omitempty"`
+	SavePath        string     `json:"save_path,omitempty"`
 }
 
 // DownloadClient is the abstraction every download kind implements.

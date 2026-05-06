@@ -24,6 +24,7 @@ type Service interface {
 
 	ListSeasons(ctx context.Context, seriesID string) ([]*Season, error)
 	ListEpisodes(ctx context.Context, seriesID string, seasonNum *int) ([]*Episode, error)
+	GetEpisode(ctx context.Context, id string) (*Episode, error)
 	UpdateEpisode(ctx context.Context, e *Episode) error
 	CreateEpisodeFile(ctx context.Context, f *EpisodeFile) error
 
@@ -367,6 +368,10 @@ func (s *service) ListSeasons(ctx context.Context, seriesID string) ([]*Season, 
 
 func (s *service) ListEpisodes(ctx context.Context, seriesID string, seasonNum *int) ([]*Episode, error) {
 	return s.repo.ListEpisodes(ctx, seriesID, seasonNum)
+}
+
+func (s *service) GetEpisode(ctx context.Context, id string) (*Episode, error) {
+	return s.repo.GetEpisode(ctx, id)
 }
 
 func (s *service) UpdateEpisode(ctx context.Context, e *Episode) error {

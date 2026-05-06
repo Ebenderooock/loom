@@ -160,7 +160,14 @@ func (m *Matcher) matchSeries(ctx context.Context, p parsedRelease) (*MatchResul
 		return &MatchResult{Matched: false}, nil
 	}
 
+	// Look up the library to get the root path (same pattern as matchMovie)
+	lib, err := m.libStore.Get(ctx, best.LibraryID)
+	if err != nil {
+		return nil, fmt.Errorf("get library: %w", err)
+	}
+
 	destDir := filepath.Join(
+		lib.Path,
 		sanitizeDirName(best.Title),
 		fmt.Sprintf("Season %02d", p.Season),
 	)

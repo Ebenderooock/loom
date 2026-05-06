@@ -144,6 +144,11 @@ func (r *Registry) Status(ctx context.Context, ids []string, opts FanOutOptions)
 			out.Errors[p.id] = p.err.Error()
 			continue
 		}
+		// Stamp the client ID on each item so downstream consumers
+		// (e.g. the download monitor) know which client owns it.
+		for i := range p.items {
+			p.items[i].ClientID = p.id
+		}
 		out.Items = append(out.Items, p.items...)
 	}
 	return out

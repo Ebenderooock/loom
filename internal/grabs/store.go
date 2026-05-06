@@ -235,3 +235,60 @@ func (s *Store) RemoveByMovie(ctx context.Context, movieID string) error {
 	)
 	return err
 }
+
+// GrabMedia describes the media linked to a grab record.
+type GrabMedia struct {
+	EpisodeIDs []string
+	MovieIDs   []string
+}
+
+// LookupByDownload returns the media linkage for a grab identified by
+// clientID + downloadID. Returns nil if no grab exists.
+func (s *Store) LookupByDownload(ctx context.Context, clientID, downloadID string) (*GrabMedia, error) {
+	var grabID string
+	err := s.db.QueryRowContext(ctx,
+		`SELECT id FROM active_grabs WHERE client_id = ? AND download_id = ?`,
+		clientID, downloadID,
+	).Scan(&grabID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	gm := &GrabMedia{}
+
+	epRows, err := s.db.QueryContext(ctx,
+		`SELECT episode_id FROM active_grab_episodes WHERE grab_id = ?`, grabID)
+	if err != nil {
+		return nil, err
+	}
+	defer epRows.Close()
+	for epRows.Next() {
+		var id string
+		if err := epRows.Scan(&id); err != nil {
+			return nil, err
+		}
+		gm.EpisodeIDs = append(gm.EpisodeIDs, id)
+	}
+	if err := epRows.Err(); err != nil {
+		return nil, err
+	}
+
+	mvRows, err := s.db.QueryContext(ctx,
+		`SELECT movie_id FROM active_grab_movies WHERE grab_id = ?`, grabID)
+	if err != nil {
+		return nil, err
+	}
+	defer mvRows.Close()
+	for mvRows.Next() {
+		var id string
+		if err := mvRows.Scan(&id); err != nil {
+			return nil, err
+		}
+		gm.MovieIDs = append(gm.MovieIDs, id)
+	}
+
+	return gm, mvRows.Err()
+}
