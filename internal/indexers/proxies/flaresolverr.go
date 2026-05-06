@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"strings"
 	"sync"
@@ -68,10 +69,11 @@ func (c *FlareSolverrClient) Ping(ctx context.Context, cfg FlareSolverrConfig) e
 
 // flareReq is the shape FlareSolverr accepts on POST /v1.
 type flareReq struct {
-	Cmd        string `json:"cmd"`
-	URL        string `json:"url,omitempty"`
-	MaxTimeout int64  `json:"maxTimeout,omitempty"`
-	Session    string `json:"session,omitempty"`
+	Cmd        string         `json:"cmd"`
+	URL        string         `json:"url,omitempty"`
+	MaxTimeout int64          `json:"maxTimeout,omitempty"`
+	Session    string         `json:"session,omitempty"`
+	Cookies    []flareCookie  `json:"cookies,omitempty"`
 }
 
 // flareEnvelope is the wrapper returned by every command.
@@ -116,7 +118,14 @@ func (c *FlareSolverrClient) do(ctx context.Context, cfg FlareSolverrConfig, bod
 		return flareEnvelope{}, fmt.Errorf("flaresolverr: build request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
+	if dl, ok := ctx.Deadline(); ok {
+		slog.Debug("flaresolverr: sending request", "cmd", body.Cmd, "endpoint", endpoint, "deadline_in", time.Until(dl).String(), "httpc_timeout", c.httpc.Timeout.String(), "maxTimeout_ms", body.MaxTimeout)
+	} else {
+		slog.Debug("flaresolverr: sending request", "cmd", body.Cmd, "endpoint", endpoint, "deadline", "none", "httpc_timeout", c.httpc.Timeout.String(), "maxTimeout_ms", body.MaxTimeout)
+	}
+	start := time.Now()
 	resp, err := c.httpc.Do(req)
+	slog.Debug("flaresolverr: response received", "cmd", body.Cmd, "elapsed", time.Since(start).String(), "err", err)
 	if err != nil {
 		return flareEnvelope{}, fmt.Errorf("flaresolverr: do request: %w", err)
 	}
@@ -163,6 +172,15 @@ func (rt *flareRoundTripper) RoundTrip(req *http.Request) (*http.Response, error
 		return nil, fmt.Errorf("flaresolverr: unsupported method %s", req.Method)
 	}
 	body := flareReq{Cmd: "request.get", URL: req.URL.String()}
+	// Forward cookies from the original request (e.g. definition-level
+	// cookies like EZTV's layout=def_wlinks) so FlareSolverr's browser
+	// session includes them.
+	if cookies := req.Cookies(); len(cookies) > 0 {
+		body.Cookies = make([]flareCookie, len(cookies))
+		for i, c := range cookies {
+			body.Cookies[i] = flareCookie{Name: c.Name, Value: c.Value}
+		}
+	}
 	if rt.cfg.SessionMode == "shared" {
 		sid, err := rt.c.sessionFor(req.Context(), rt.proxyID, rt.cfg)
 		if err != nil {

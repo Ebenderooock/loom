@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"sort"
 	"strings"
@@ -438,6 +439,7 @@ func (s *Service) handleSearch(w http.ResponseWriter, r *http.Request) {
 		Limit:      req.Limit,
 	}
 	timeout := time.Duration(req.TimeoutMS) * time.Millisecond
+	slog.Debug("handleSearch: received", "timeout_ms", req.TimeoutMS, "resolved_timeout", timeout.String(), "default", s.searchTimeout.String())
 	out := s.Search(r.Context(), q, req.IndexerIDs, timeout)
 	ScoreResults(out.Results)
 	writeJSON(w, http.StatusOK, out)

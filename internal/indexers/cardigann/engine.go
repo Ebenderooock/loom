@@ -369,6 +369,11 @@ func (e *Engine) Search(ctx context.Context, q indexers.Query) (*indexers.Result
 	if err != nil {
 		return nil, err
 	}
+	if dl, ok := ctx.Deadline(); ok {
+		slog.Debug("cardigann: search context", "indexer", e.id, "deadline_in", time.Until(dl).String(), "http_timeout", e.http.Timeout.String())
+	} else {
+		slog.Debug("cardigann: search context", "indexer", e.id, "deadline", "none", "http_timeout", e.http.Timeout.String())
+	}
 	slog.Debug("cardigann: search request", "indexer", e.id, "method", method, "target", target, "params", params.Encode())
 	body, err := e.fetch(ctx, method, target, params, headers)
 	if err != nil {
@@ -557,7 +562,13 @@ func (e *Engine) extractRows(body []byte) ([]indexers.Result, error) {
 	}
 	rowSelector := e.def.Search.Rows.Selector
 	rows := selectNodes(doc.Selection, rowSelector)
-	slog.Debug("cardigann: extractRows", "indexer", e.id, "rowSelector", rowSelector, "matchedRows", len(rows))
+	// Debug: check what elements exist in the page
+	tables := doc.Find("table").Length()
+	forumTables := doc.Find("table.forum_header_border").Length()
+	trHover := doc.Find("tr[name='hover']").Length()
+	magnets := doc.Find("a.magnet").Length()
+	slog.Debug("cardigann: extractRows", "indexer", e.id, "rowSelector", rowSelector, "matchedRows", len(rows),
+		"tables", tables, "forum_tables", forumTables, "tr_hover", trHover, "magnets", magnets)
 	// Cardigann's `after:` strips a header row; we honour positive
 	// values only because negatives have no upstream semantics.
 	if e.def.Search.Rows.After > 0 && len(rows) > e.def.Search.Rows.After {

@@ -103,11 +103,12 @@ function PersonCard({ person }: { person: CreditPerson }) {
 
 // ─── Episode Status (Sonarr-style) ────────────────────────────────────
 
-type EpisodeStatus = "downloaded" | "missing" | "unaired" | "unmonitored";
+type EpisodeStatus = "downloaded" | "grabbed" | "missing" | "unaired" | "unmonitored";
 
 function getEpisodeStatus(ep: Episode): EpisodeStatus {
   if (!ep.monitored) return "unmonitored";
   if (ep.hasFile) return "downloaded";
+  if (ep.grabbed) return "grabbed";
   const today = new Date().toISOString().slice(0, 10);
   if (!ep.airDate || ep.airDate > today) return "unaired";
   return "missing";
@@ -115,6 +116,7 @@ function getEpisodeStatus(ep: Episode): EpisodeStatus {
 
 const EPISODE_STATUS_STYLE: Record<EpisodeStatus, { bg: string; label: string; text: string }> = {
   downloaded:  { bg: "bg-green-600",   label: "Downloaded", text: "text-white" },
+  grabbed:     { bg: "bg-amber-600",   label: "Grabbed",    text: "text-white" },
   missing:     { bg: "bg-red-600",     label: "Missing",    text: "text-white" },
   unaired:     { bg: "bg-blue-600",    label: "Unaired",    text: "text-white" },
   unmonitored: { bg: "bg-zinc-600",    label: "Unmonitored", text: "text-zinc-300" },
@@ -139,17 +141,18 @@ function formatAirDate(dateStr: string): string {
 }
 
 function getSeasonStats(episodes: Episode[]) {
-  let downloaded = 0, missing = 0, unaired = 0, unmonitored = 0;
+  let downloaded = 0, grabbed = 0, missing = 0, unaired = 0, unmonitored = 0;
   const today = new Date().toISOString().slice(0, 10);
   for (const ep of episodes) {
     if (!ep.monitored) { unmonitored++; continue; }
     if (ep.hasFile) { downloaded++; continue; }
+    if (ep.grabbed) { grabbed++; continue; }
     if (!ep.airDate || ep.airDate > today) { unaired++; continue; }
     missing++;
   }
-  const aired = downloaded + missing;
+  const aired = downloaded + grabbed + missing;
   const percent = aired > 0 ? Math.round((downloaded / aired) * 100) : (episodes.length > 0 ? 100 : 0);
-  return { downloaded, missing, unaired, unmonitored, aired, total: episodes.length, percent };
+  return { downloaded, grabbed, missing, unaired, unmonitored, aired, total: episodes.length, percent };
 }
 
 // ─── Season/Episode Accordion ─────────────────────────────────────────

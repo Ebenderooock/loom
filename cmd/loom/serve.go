@@ -20,6 +20,7 @@ import (
 	"github.com/loomctl/loom/internal/autosearch"
 	"github.com/loomctl/loom/internal/customformats"
 	"github.com/loomctl/loom/internal/downloads"
+	"github.com/loomctl/loom/internal/grabs"
 	"github.com/loomctl/loom/internal/healthmonitor"
 	"github.com/loomctl/loom/internal/importlists"
 	"github.com/loomctl/loom/internal/imports"
@@ -264,15 +265,19 @@ func cmdServe(ctx context.Context, args []string) error {
 	srv.SetQualityProfiles(qpStore)
 	qualityprofiles.SeedDefaults(ctx, qpStore, moviesSvc)
 
+	// Build grab store for tracking active downloads
+	grabStore := grabs.NewStore(db.DB())
+
 	// Build and wire the autosearch decision engine
 	cfStore := customformats.NewStore(db.DB())
 	cfFormats, _ := cfStore.List(ctx) // best-effort; empty is OK at boot
 	cfEngine := customformats.NewEngine(cfFormats)
 	autoSearchEngine := autosearch.NewEngine(
 		indexerSvc, qpStore, cfEngine, cfStore,
-		downloadSvc.Registry(), moviesSvc, logger,
+		downloadSvc.Registry(), moviesSvc, seriesSvc, grabStore, logger,
 	)
 	srv.SetAutoSearchEngine(autoSearchEngine)
+	srv.SetGrabStore(grabStore)
 
 	// Wire *arr API compatibility shims
 	srv.SetCompatRadarr(radarrv3.NewHandler(moviesSvc, libStore, qpStore, logger))
