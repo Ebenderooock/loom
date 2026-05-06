@@ -19,7 +19,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { Link, useNavigate } from "@tanstack/react-router";
+import { useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { NamingSettings } from "@/components/movies/naming-settings";
 import {
@@ -92,6 +92,14 @@ import {
   useDeleteRemotePathMapping,
   type RemotePathMapping,
 } from "@/lib/remote-paths-api";
+import {
+  useDownloads,
+  useCreateDownload,
+  usePatchDownload,
+  useDeleteDownload,
+  type Download as DownloadClient,
+} from "@/lib/downloads-api";
+import { DownloadForm } from "@/components/downloads/download-form";
 
 const CATEGORIES = [
   { id: "general", label: "General" },
@@ -782,27 +790,15 @@ function GeneralPanel() {
 
 // ─── Download Clients Panel ─────────────────────────────────────────────
 
-interface DownloadClientSummary {
-  id: number;
-  name: string;
-  implementation: string;
-  enable: boolean;
-  priority: number;
-}
-
 function DownloadClientsPanel() {
-  const [clients, setClients] = React.useState<DownloadClientSummary[]>([]);
-  const [loading, setLoading] = React.useState(true);
+  const { data: clients = [], isLoading } = useDownloads();
+  const createClient = useCreateDownload();
+  const patchClient = usePatchDownload();
+  const deleteClient = useDeleteDownload();
+  const [showAdd, setShowAdd] = React.useState(false);
+  const [editClient, setEditClient] = React.useState<DownloadClient | null>(null);
 
-  React.useEffect(() => {
-    fetch("/api/v1/download-clients", { credentials: "include" })
-      .then((r) => (r.ok ? r.json() : []))
-      .then((data) => setClients(Array.isArray(data) ? data : []))
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, []);
-
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="flex items-center gap-2 text-muted-foreground py-8 justify-center">
         <Loader2 className="h-4 w-4 animate-spin" /> Loading download clients…
@@ -816,14 +812,17 @@ function DownloadClientsPanel() {
         <div>
           <h3 className="text-sm font-medium text-zinc-100 mb-1">Download Clients</h3>
           <p className="text-xs text-zinc-500">
-            Overview of configured download clients. Use the Downloads page for full management.
+            Configure torrent and usenet clients for automated downloading.
           </p>
         </div>
-        <Link to="/downloads">
-          <Button variant="outline" size="sm" className="border-zinc-700 text-zinc-300">
-            Manage Download Clients <ExternalLink className="h-3.5 w-3.5 ml-1.5" />
-          </Button>
-        </Link>
+        <Button
+          variant="outline"
+          size="sm"
+          className="border-zinc-700 text-zinc-300"
+          onClick={() => setShowAdd(true)}
+        >
+          <Plus className="h-3.5 w-3.5 mr-1.5" /> Add Client
+        </Button>
       </div>
 
       {clients.length === 0 ? (
@@ -832,9 +831,12 @@ function DownloadClientsPanel() {
             <Download className="h-10 w-10 mx-auto text-zinc-700 mb-3" />
             <p className="text-sm text-zinc-500">No download clients configured</p>
             <p className="text-xs text-zinc-600 mt-1">
-              <Link to="/downloads" className="text-teal-500 hover:text-teal-400">
+              <button
+                onClick={() => setShowAdd(true)}
+                className="text-teal-500 hover:text-teal-400"
+              >
                 Add a download client →
-              </Link>{" "}
+              </button>{" "}
               to enable automated downloading
             </p>
           </CardContent>
@@ -846,29 +848,92 @@ function DownloadClientsPanel() {
               <CardContent className="p-4">
                 <div className="flex items-center justify-between mb-2">
                   <h4 className="text-sm font-medium text-zinc-200 truncate">{client.name}</h4>
-                  <Badge
-                    variant="outline"
-                    className={cn(
-                      "text-xs",
-                      client.enable
-                        ? "border-teal-700 text-teal-400"
-                        : "border-zinc-700 text-zinc-500"
-                    )}
-                  >
-                    {client.enable ? "Enabled" : "Disabled"}
-                  </Badge>
+                  <div className="flex items-center gap-2">
+                    <Badge
+                      variant="outline"
+                      className={cn(
+                        "text-xs",
+                        client.enabled
+                          ? "border-teal-700 text-teal-400"
+                          : "border-zinc-700 text-zinc-500"
+                      )}
+                    >
+                      {client.enabled ? "Enabled" : "Disabled"}
+                    </Badge>
+                  </div>
                 </div>
-                <div className="flex items-center gap-3 text-xs text-zinc-500">
+                <div className="flex items-center gap-3 text-xs text-zinc-500 mb-3">
                   <span className="flex items-center gap-1">
-                    <Download className="h-3 w-3" /> {client.implementation || "Unknown"}
+                    <Download className="h-3 w-3" /> {client.kind || "Unknown"}
                   </span>
                   <span>Priority: {client.priority}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 text-xs text-zinc-400 hover:text-zinc-200"
+                    onClick={() => setEditClient(client)}
+                  >
+                    Edit
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 text-xs text-red-400 hover:text-red-300"
+                    onClick={() => {
+                      if (confirm(`Delete "${client.name}"?`)) {
+                        deleteClient.mutate(client.id);
+                      }
+                    }}
+                  >
+                    Delete
+                  </Button>
                 </div>
               </CardContent>
             </Card>
           ))}
         </div>
       )}
+
+      {/* Add Dialog */}
+      <Dialog open={showAdd} onOpenChange={setShowAdd}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Add Download Client</DialogTitle>
+          </DialogHeader>
+          <DownloadForm
+            onSubmit={(values) => {
+              createClient.mutate(values, {
+                onSuccess: () => setShowAdd(false),
+              });
+            }}
+            onCancel={() => setShowAdd(false)}
+          />
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Dialog */}
+      <Dialog open={!!editClient} onOpenChange={(open) => !open && setEditClient(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Edit Download Client</DialogTitle>
+          </DialogHeader>
+          {editClient && (
+            <DownloadForm
+              initial={editClient}
+              submitLabel="Save"
+              onSubmit={(values) => {
+                patchClient.mutate(
+                  { id: editClient.id, patch: values },
+                  { onSuccess: () => setEditClient(null) }
+                );
+              }}
+              onCancel={() => setEditClient(null)}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Stall Detection Settings */}
       <div className="pt-4 border-t border-zinc-800">
