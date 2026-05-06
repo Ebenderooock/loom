@@ -38,6 +38,7 @@ type ServiceOptions struct {
 	MaxParallel      int
 	HealthTimeout    time.Duration
 	RouteExtensions  []RouteMounter
+	HistoryStore     *HistoryStore
 }
 
 // Service is the orchestrator that the HTTP layer depends on. It owns
@@ -52,6 +53,7 @@ type Service struct {
 	maxParallel      int
 	healthTimeout    time.Duration
 	routeExtensions  []RouteMounter
+	historyStore     *HistoryStore
 
 	mu sync.Mutex
 }
@@ -88,6 +90,7 @@ func NewService(opts ServiceOptions) (*Service, error) {
 		maxParallel:      opts.MaxParallel,
 		healthTimeout:    opts.HealthTimeout,
 		routeExtensions:  opts.RouteExtensions,
+		historyStore:     opts.HistoryStore,
 	}, nil
 }
 
@@ -96,6 +99,12 @@ func (s *Service) Repository() Repository { return s.repo }
 
 // Registry returns the underlying live-instance registry.
 func (s *Service) Registry() *Registry { return s.registry }
+
+// AddRouteExtension appends a route mounter to the service's extensions.
+// Must be called before the HTTP server is started.
+func (s *Service) AddRouteExtension(m RouteMounter) {
+	s.routeExtensions = append(s.routeExtensions, m)
+}
 
 // HydrateAll reads every persisted client and registers a live
 // instance for each enabled row. Failures are logged and skipped so a

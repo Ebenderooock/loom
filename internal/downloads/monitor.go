@@ -29,6 +29,7 @@ type Monitor struct {
 	logger       *slog.Logger
 	clock        Clock
 	stallHandler *StallHandler
+	historyStore *HistoryStore
 
 	// Configurable check interval. Defaults to 30 seconds; can be
 	// overridden via env variable or test injection.
@@ -58,6 +59,7 @@ type MonitorOptions struct {
 	StallTimeout    time.Duration
 	CheckForStalled bool
 	StallHandler    *StallHandler
+	HistoryStore    *HistoryStore
 }
 
 // NewMonitor returns a Monitor wired to the Service and event bus.
@@ -89,6 +91,7 @@ func NewMonitor(opts MonitorOptions) (*Monitor, error) {
 		logger:          opts.Logger.With("module", "downloads/monitor"),
 		clock:           opts.Clock,
 		stallHandler:    opts.StallHandler,
+		historyStore:    opts.HistoryStore,
 		checkInterval:   opts.CheckInterval,
 		stallTimeout:    opts.StallTimeout,
 		checkForStalled: opts.CheckForStalled,
@@ -147,13 +150,23 @@ func (m *Monitor) emitCompletions(ctx context.Context, items []Item) {
 		if item.Status == StatusItemCompleted {
 			// Emit if we haven't seen this item before.
 			if !m.lastCompleted[item.ID] {
-				_ = m.bus.Publish(ctx, &DownloadCompletedEvent{
+				event := &DownloadCompletedEvent{
 					DownloadID:  item.ID,
 					ClientID:    "", // Inferred from context; TODO: add to Item.
 					Title:       item.Title,
 					Category:    item.Category,
 					CompletedAt: m.clock.Now(),
-				})
+				}
+				_ = m.bus.Publish(ctx, event)
+
+				// Persist to history store if available.
+				if m.historyStore != nil {
+					if err := m.historyStore.RecordCompletion(ctx, event); err != nil {
+						m.logger.Warn("monitor: failed to record history",
+							"item_id", item.ID, "error", err)
+					}
+				}
+
 				m.logger.Info("monitor: emitted DownloadCompleted",
 					"item_id", item.ID, "title", item.Title)
 			}

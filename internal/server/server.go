@@ -105,6 +105,7 @@ type Server struct {
 	apiKeyStore *apikeys.Store
 	cmdQueue    *commands.Queue
 	qpStore     *qualityprofiles.Store
+	calendarHandler http.Handler
 	httpMetrics *telemetry.HTTPMetrics
 	ready      atomic.Bool
 }
@@ -236,6 +237,14 @@ func (s *Server) SetNotifications(svc notifications.Service) {
 // SetConnect installs the connect service and rebuilds the HTTP handler.
 func (s *Server) SetConnect(svc connect.Service) {
 	s.connectSvc = svc
+	if s.httpSrv != nil {
+		s.httpSrv.Handler = s.newMux()
+	}
+}
+
+// SetCalendar installs the calendar handler and rebuilds the HTTP handler.
+func (s *Server) SetCalendar(h http.Handler) {
+	s.calendarHandler = h
 	if s.httpSrv != nil {
 		s.httpSrv.Handler = s.newMux()
 	}
@@ -481,6 +490,11 @@ func (s *Server) newMux() http.Handler {
 		// Connect (media server integrations) routes
 		if s.connectSvc != nil {
 			r.Mount("/api/v1/connect", connect.Router(s.connectSvc))
+		}
+
+		// Calendar routes
+		if s.calendarHandler != nil {
+			r.Mount("/api/v1/calendar", s.calendarHandler)
 		}
 
 		// Manual review routes (download safety)

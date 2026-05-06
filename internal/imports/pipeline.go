@@ -23,33 +23,35 @@ import (
 
 // PipelineOptions configures the ImportPipeline.
 type PipelineOptions struct {
-	DB          *sql.DB
-	Bus         eventbus.Bus
-	DownloadSvc *downloads.Service
-	MoviesSvc   movies.Service
-	SeriesSvc   series.Service
-	LibStore    *libraries.Store
-	NotifSvc    notifications.Service
-	PostVal     *safety.PostValidator
-	ReviewStore *safety.ReviewStore
-	Logger      *slog.Logger
-	ImportMode  ImportMode
+	DB               *sql.DB
+	Bus              eventbus.Bus
+	DownloadSvc      *downloads.Service
+	RemotePathStore  *downloads.RemotePathStore
+	MoviesSvc        movies.Service
+	SeriesSvc        series.Service
+	LibStore         *libraries.Store
+	NotifSvc         notifications.Service
+	PostVal          *safety.PostValidator
+	ReviewStore      *safety.ReviewStore
+	Logger           *slog.Logger
+	ImportMode       ImportMode
 }
 
 // ImportPipeline subscribes to download completion events, scans files,
 // matches them to library items, and imports them.
 type ImportPipeline struct {
-	db          *sql.DB
-	bus         eventbus.Bus
-	downloadSvc *downloads.Service
-	matcher     *Matcher
-	notifSvc    notifications.Service
-	postVal     *safety.PostValidator
-	reviewStore *safety.ReviewStore
-	logger      *slog.Logger
-	importMode  ImportMode
-	decisionLog *DecisionLogger
-	unsub       func()
+	db              *sql.DB
+	bus             eventbus.Bus
+	downloadSvc     *downloads.Service
+	remotePathStore *downloads.RemotePathStore
+	matcher         *Matcher
+	notifSvc        notifications.Service
+	postVal         *safety.PostValidator
+	reviewStore     *safety.ReviewStore
+	logger          *slog.Logger
+	importMode      ImportMode
+	decisionLog     *DecisionLogger
+	unsub           func()
 }
 
 // NewPipeline creates and wires an ImportPipeline. Call Start to
@@ -79,16 +81,17 @@ func NewPipeline(opts PipelineOptions) (*ImportPipeline, error) {
 
 	logger := opts.Logger.With("module", "imports")
 	return &ImportPipeline{
-		db:          opts.DB,
-		bus:         opts.Bus,
-		downloadSvc: opts.DownloadSvc,
-		matcher:     NewMatcher(opts.MoviesSvc, opts.SeriesSvc, opts.LibStore),
-		notifSvc:    opts.NotifSvc,
-		postVal:     opts.PostVal,
-		reviewStore: opts.ReviewStore,
-		logger:      logger,
-		importMode:  opts.ImportMode,
-		decisionLog: NewDecisionLogger(opts.DB, logger),
+		db:              opts.DB,
+		bus:             opts.Bus,
+		downloadSvc:     opts.DownloadSvc,
+		remotePathStore: opts.RemotePathStore,
+		matcher:         NewMatcher(opts.MoviesSvc, opts.SeriesSvc, opts.LibStore),
+		notifSvc:        opts.NotifSvc,
+		postVal:         opts.PostVal,
+		reviewStore:     opts.ReviewStore,
+		logger:          logger,
+		importMode:      opts.ImportMode,
+		decisionLog:     NewDecisionLogger(opts.DB, logger),
 	}, nil
 }
 
@@ -151,7 +154,7 @@ func (p *ImportPipeline) resolveDownloadPath(ctx context.Context, ev *downloads.
 	for _, item := range items {
 		if item.ID == ev.DownloadID && item.SavePath != "" {
 			path := filepath.Join(item.SavePath, item.Title)
-			return path, nil
+			return p.applyRemotePathMapping(ctx, ev.ClientID, path), nil
 		}
 	}
 
@@ -161,10 +164,21 @@ func (p *ImportPipeline) resolveDownloadPath(ctx context.Context, ev *downloads.
 		return "", fmt.Errorf("get client definition: %w", err)
 	}
 	if def.SavePathDefault != "" {
-		return filepath.Join(def.SavePathDefault, ev.Title), nil
+		path := filepath.Join(def.SavePathDefault, ev.Title)
+		return p.applyRemotePathMapping(ctx, ev.ClientID, path), nil
 	}
 
 	return "", fmt.Errorf("could not determine download path for %q", ev.Title)
+}
+
+// applyRemotePathMapping translates a remote path reported by the download
+// client into a local path using configured mappings. Returns the path
+// unchanged if no mapping applies.
+func (p *ImportPipeline) applyRemotePathMapping(ctx context.Context, clientID, path string) string {
+	if p.remotePathStore == nil {
+		return path
+	}
+	return p.remotePathStore.MapPath(ctx, clientID, path)
 }
 
 // processImport runs the full import pipeline for a single download.

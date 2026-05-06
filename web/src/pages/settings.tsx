@@ -81,6 +81,12 @@ import {
   type ProviderType as ConnectProviderType,
   type CreateConnectRequest,
 } from "@/lib/connect-api";
+import {
+  useRemotePathMappings,
+  useCreateRemotePathMapping,
+  useDeleteRemotePathMapping,
+  type RemotePathMapping,
+} from "@/lib/remote-paths-api";
 
 const CATEGORIES = [
   { id: "general", label: "General" },
@@ -1354,6 +1360,199 @@ function DownloadClientsPanel() {
           </Card>
         </div>
       </div>
+
+      {/* Remote Path Mappings */}
+      <RemotePathMappingsSection />
+    </div>
+  );
+}
+
+// ─── Remote Path Mappings Section ───────────────────────────────────────
+
+function RemotePathMappingsSection() {
+  const { data: mappings = [], isLoading } = useRemotePathMappings();
+  const createMapping = useCreateRemotePathMapping();
+  const deleteMapping = useDeleteRemotePathMapping();
+  const [clients, setClients] = React.useState<{ id: string; name: string }[]>([]);
+  const [showForm, setShowForm] = React.useState(false);
+  const [formClientId, setFormClientId] = React.useState("");
+  const [formRemotePath, setFormRemotePath] = React.useState("");
+  const [formLocalPath, setFormLocalPath] = React.useState("");
+
+  React.useEffect(() => {
+    fetch("/api/v1/download-clients", { credentials: "include" })
+      .then((r) => (r.ok ? r.json() : []))
+      .then((data) => {
+        const list = Array.isArray(data) ? data : [];
+        setClients(list.map((c: any) => ({ id: c.id, name: c.name })));
+      })
+      .catch(() => {});
+  }, []);
+
+  const clientNameMap = React.useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const c of clients) map[c.id] = c.name;
+    return map;
+  }, [clients]);
+
+  const handleCreate = () => {
+    if (!formClientId || !formRemotePath || !formLocalPath) return;
+    createMapping.mutate(
+      { client_id: formClientId, remote_path: formRemotePath, local_path: formLocalPath },
+      {
+        onSuccess: () => {
+          setShowForm(false);
+          setFormClientId("");
+          setFormRemotePath("");
+          setFormLocalPath("");
+          toast.success("Remote path mapping created");
+        },
+        onError: (err: any) => toast.error(err.message || "Failed to create mapping"),
+      }
+    );
+  };
+
+  return (
+    <div className="pt-4 border-t border-zinc-800">
+      <div className="flex items-start justify-between mb-4">
+        <div>
+          <h3 className="text-sm font-medium text-zinc-100 mb-1">Remote Path Mappings</h3>
+          <p className="text-xs text-zinc-500">
+            Map download client paths to local paths for Docker or remote setups.
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          className="border-zinc-700 text-zinc-300"
+          onClick={() => setShowForm(true)}
+        >
+          <Plus className="h-3.5 w-3.5 mr-1.5" /> Add Mapping
+        </Button>
+      </div>
+
+      {isLoading ? (
+        <div className="flex items-center gap-2 text-muted-foreground py-4 justify-center">
+          <Loader2 className="h-4 w-4 animate-spin" /> Loading…
+        </div>
+      ) : mappings.length === 0 && !showForm ? (
+        <Card className="bg-zinc-900/50 border-zinc-800 border-dashed">
+          <CardContent className="py-6 text-center">
+            <p className="text-sm text-zinc-500">No remote path mappings configured</p>
+            <p className="text-xs text-zinc-600 mt-1">
+              Add mappings if your download client reports paths different from what Loom sees locally.
+            </p>
+          </CardContent>
+        </Card>
+      ) : (
+        <Card className="bg-zinc-900/50 border-zinc-800">
+          <CardContent className="p-0">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-zinc-800 text-zinc-400 text-xs">
+                  <th className="text-left p-3 font-medium">Client</th>
+                  <th className="text-left p-3 font-medium">Remote Path</th>
+                  <th className="text-left p-3 font-medium">Local Path</th>
+                  <th className="w-10 p-3"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {mappings.map((m: RemotePathMapping) => (
+                  <tr key={m.id} className="border-b border-zinc-800/50 last:border-0">
+                    <td className="p-3 text-zinc-200">{clientNameMap[m.client_id] || m.client_id}</td>
+                    <td className="p-3 text-zinc-400 font-mono text-xs">{m.remote_path}</td>
+                    <td className="p-3 text-zinc-400 font-mono text-xs">{m.local_path}</td>
+                    <td className="p-3">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 w-7 p-0 text-zinc-500 hover:text-red-400"
+                        onClick={() =>
+                          deleteMapping.mutate(m.id, {
+                            onSuccess: () => toast.success("Mapping deleted"),
+                            onError: () => toast.error("Failed to delete mapping"),
+                          })
+                        }
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Add Mapping Form Dialog */}
+      <Dialog open={showForm} onOpenChange={setShowForm}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Add Remote Path Mapping</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div>
+              <Label htmlFor="rpm-client" className="text-xs text-zinc-400">
+                Download Client
+              </Label>
+              <Select value={formClientId} onValueChange={setFormClientId}>
+                <SelectTrigger id="rpm-client" className="mt-1 bg-zinc-900 border-zinc-700">
+                  <SelectValue placeholder="Select a client" />
+                </SelectTrigger>
+                <SelectContent>
+                  {clients.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label htmlFor="rpm-remote" className="text-xs text-zinc-400">
+                Remote Path
+              </Label>
+              <Input
+                id="rpm-remote"
+                value={formRemotePath}
+                onChange={(e) => setFormRemotePath(e.target.value)}
+                placeholder="/downloads/movies/"
+                className="mt-1 bg-zinc-900 border-zinc-700 font-mono text-sm"
+              />
+              <p className="text-xs text-zinc-600 mt-1">
+                The path as reported by the download client
+              </p>
+            </div>
+            <div>
+              <Label htmlFor="rpm-local" className="text-xs text-zinc-400">
+                Local Path
+              </Label>
+              <Input
+                id="rpm-local"
+                value={formLocalPath}
+                onChange={(e) => setFormLocalPath(e.target.value)}
+                placeholder="/media/downloads/movies/"
+                className="mt-1 bg-zinc-900 border-zinc-700 font-mono text-sm"
+              />
+              <p className="text-xs text-zinc-600 mt-1">
+                The path as seen by Loom on its filesystem
+              </p>
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="ghost" onClick={() => setShowForm(false)}>
+                Cancel
+              </Button>
+              <Button
+                onClick={handleCreate}
+                disabled={!formClientId || !formRemotePath || !formLocalPath || createMapping.isPending}
+              >
+                {createMapping.isPending ? "Saving…" : "Save Mapping"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -1906,12 +2105,9 @@ function UIPanel() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="dark">Dark</SelectItem>
-                <SelectItem value="light" disabled>
-                  Light (coming soon)
-                </SelectItem>
-                <SelectItem value="system" disabled>
-                  System (coming soon)
-                </SelectItem>
+                <SelectItem value="light">Light</SelectItem>
+                <SelectItem value="amoled">AMOLED</SelectItem>
+                <SelectItem value="system">System</SelectItem>
               </SelectContent>
             </Select>
           </div>
