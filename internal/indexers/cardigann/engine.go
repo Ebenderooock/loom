@@ -145,6 +145,8 @@ func (e *Engine) Test(ctx context.Context) error {
 		return fmt.Errorf("cardigann: build test request: %w", err)
 	}
 	req.Header.Set("User-Agent", e.cfg.UserAgent)
+	req.Header.Set("Accept", "text/html, application/xhtml+xml, */*")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
 	resp, err := e.http.Do(req)
 	if err != nil {
 		return fmt.Errorf("cardigann: test request: %w", err)
@@ -479,6 +481,11 @@ func (e *Engine) fetch(ctx context.Context, method, target string, params url.Va
 	}
 	req.Header.Set("User-Agent", e.cfg.UserAgent)
 	req.Header.Set("Accept", "text/html, application/xhtml+xml, */*")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+	// Referer helps bypass Cloudflare bot checks on search pages.
+	if base, berr := e.baseURL(); berr == nil {
+		req.Header.Set("Referer", base+"/")
+	}
 	for k, vs := range headers {
 		for _, v := range vs {
 			req.Header.Add(k, v)
