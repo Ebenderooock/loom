@@ -20,7 +20,7 @@ Loom is a unified media automation app replacing Radarr, Sonarr, and Prowlarr.
 
 ---
 
-## What Works Today (✅ Done — 66 items)
+## What Works Today (✅ Done — 71 items)
 
 ### Platform Kernel
 - [x] Layered config (defaults → file → env → flags) with hot-reload via Viper
@@ -91,6 +91,13 @@ Loom is a unified media automation app replacing Radarr, Sonarr, and Prowlarr.
 - [x] `loom backup --action create` — tar.gz of SQLite DB + config with timestamps
 - [x] `loom backup --action restore` — extract backup with .bak safety rename
 
+### Infrastructure & Scheduled Tasks
+- [x] Distroless multi-arch Dockerfile (node→go→gcr.io/distroless, nonroot user)
+- [x] Rolling missing search — quota-aware RollingSearcher with configurable batch size and daily limits
+- [x] RSS sync — SyncManager with feed parsing, deduplication, scraper support, periodic refresh
+- [x] Remote path mappings settings panel — full CRUD UI with download client selector
+- [x] Documentation site — docs/ directory with 30+ markdown files, architecture decisions, deployment guide
+
 ### Movies (Radarr Replacement)
 - [x] Movies service & CRUD API
 - [x] Root folder management
@@ -128,18 +135,14 @@ Loom is a unified media automation app replacing Radarr, Sonarr, and Prowlarr.
 
 ## In Progress (🚧 — 0 items)
 
-All core streams are complete. Remaining items are infrastructure polish.
+All core features are complete. Only a Helm chart remains for Kubernetes deployment.
 
 ---
 
-## Remaining Work (⏳ — 5 items)
+## Remaining Work (⏳ — 1 item)
 
-### Infrastructure & Polish
-- [ ] Distroless multi-arch Docker images, Helm chart
-- [ ] Public documentation site
-- [ ] Rolling missing search (scheduled, quota-aware)
-- [ ] RSS sync (scheduled feed polling)
-- [ ] Remote path mappings settings panel (backend API exists, no frontend UI)
+### Final Polish
+- [ ] Helm chart (Kubernetes deployment template — no chart exists yet)
 
 ---
 
