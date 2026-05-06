@@ -746,6 +746,7 @@ export function MovieDetailSheet({
         tmdbId={movie.tmdbId ? Number(movie.tmdbId) : undefined}
         imdbId={movie.imdbId}
         mediaType="movie"
+        movieId={movie.id}
         autoSearch
       />
     </>

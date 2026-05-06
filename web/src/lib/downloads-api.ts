@@ -233,6 +233,11 @@ export interface GrabRequest {
   category?: string;
   save_path?: string;
   tags?: string[];
+  // Media context for grab tracking (import pipeline matching)
+  media_type?: "movie" | "episode";
+  series_id?: string;
+  episode_ids?: string[];
+  movie_id?: string;
 }
 
 export interface GrabResult {

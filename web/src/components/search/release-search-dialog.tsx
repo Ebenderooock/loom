@@ -176,16 +176,29 @@ export interface ReleaseSearchProps {
   mediaType: "movie" | "episode" | "season" | "series";
   /** When true, automatically run the search when the dialog opens. */
   autoSearch?: boolean;
+  /** Media context for grab tracking (import pipeline matching). */
+  seriesId?: string;
+  episodeIds?: string[];
+  movieId?: string;
 }
 
 // ─── Grab Button ──────────────────────────────────────────────────────
 
+interface MediaContext {
+  media_type?: "movie" | "episode";
+  series_id?: string;
+  episode_ids?: string[];
+  movie_id?: string;
+}
+
 function GrabButton({
   result,
   clients,
+  mediaContext,
 }: {
   result: SearchResult;
   clients: DownloadClient[];
+  mediaContext?: MediaContext;
 }) {
   const grab = useGrabRelease();
   const [grabbing, setGrabbing] = useState(false);
@@ -200,6 +213,7 @@ function GrabButton({
           magnet: result.magnet_uri,
           nzb_url: result.nzb_url,
           title: result.title,
+          ...mediaContext,
         });
         toast.success(`Grabbed: ${result.title}`);
       } catch (err) {
@@ -210,7 +224,7 @@ function GrabButton({
         setGrabbing(false);
       }
     },
-    [grab, result],
+    [grab, result, mediaContext],
   );
 
   if (clients.length === 0) {
@@ -546,6 +560,9 @@ export function ReleaseSearchDialog({
   episode: _episode,
   mediaType,
   autoSearch = false,
+  seriesId,
+  episodeIds,
+  movieId,
 }: ReleaseSearchProps) {
   const [query, setQuery] = useState(initialQuery ?? title);
   const [results, setResults] = useState<SearchResult[]>([]);
@@ -559,6 +576,20 @@ export function ReleaseSearchDialog({
 
   const { data: clients = [] } = useDownloads({ enabled: open });
   const enabledClients = clients.filter((c) => c.enabled);
+
+  const mediaContext = useMemo((): MediaContext | undefined => {
+    if (mediaType === "movie" && movieId) {
+      return { media_type: "movie", movie_id: movieId };
+    }
+    if ((mediaType === "episode" || mediaType === "season") && seriesId) {
+      return {
+        media_type: "episode",
+        series_id: seriesId,
+        ...(episodeIds?.length ? { episode_ids: episodeIds } : {}),
+      };
+    }
+    return undefined;
+  }, [mediaType, movieId, seriesId, episodeIds]);
 
   const filteredResults = useMemo(
     () => applyFilters(results, filters),
@@ -821,6 +852,7 @@ export function ReleaseSearchDialog({
                       <GrabButton
                         result={r}
                         clients={enabledClients}
+                        mediaContext={mediaContext}
                       />
                       {r.info_url && (
                         <a
