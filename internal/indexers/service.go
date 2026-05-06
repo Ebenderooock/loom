@@ -94,7 +94,7 @@ func NewService(opts ServiceOptions) (*Service, error) {
 		opts.MaxParallel = 8
 	}
 	if opts.HealthCheckTimeout <= 0 {
-		opts.HealthCheckTimeout = 10 * time.Second
+		opts.HealthCheckTimeout = 60 * time.Second
 	}
 	sht := opts.SearchHealthTracker
 	if sht == nil {
