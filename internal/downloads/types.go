@@ -199,6 +199,12 @@ type Patch struct {
 	Name            *string
 	Enabled         *bool
 	Priority        *int
+	Host            *string
+	Port            *int
+	TLS             *bool
+	Username        *string
+	Password        *string
+	Config          json.RawMessage
 	CategoryDefault *string
 	SavePathDefault *string
 	RemoveCompleted *bool

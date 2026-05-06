@@ -288,10 +288,16 @@ UPDATE download_clients
 SET name              = COALESCE($2, name),
     enabled           = COALESCE($3, enabled),
     priority          = COALESCE($4, priority),
-    category_default  = COALESCE($5, category_default),
-    save_path_default = COALESCE($6, save_path_default),
-    remove_completed  = COALESCE($7, remove_completed),
-    remove_failed     = COALESCE($8, remove_failed),
+    host              = COALESCE($5, host),
+    port              = COALESCE($6, port),
+    tls               = COALESCE($7, tls),
+    username          = COALESCE($8, username),
+    password          = COALESCE($9, password),
+    config_json       = COALESCE($10, config_json),
+    category_default  = COALESCE($11, category_default),
+    save_path_default = COALESCE($12, save_path_default),
+    remove_completed  = COALESCE($13, remove_completed),
+    remove_failed     = COALESCE($14, remove_failed),
     updated_at        = NOW()
 WHERE id = $1
 RETURNING id, name, kind, protocol, enabled, priority, host, port, tls, username, password, config_json, category_default, save_path_default, remove_completed, remove_failed, created_at, updated_at
@@ -302,6 +308,12 @@ type PatchDownloadClientParams struct {
 	Name            sql.NullString `json:"name"`
 	Enabled         sql.NullBool   `json:"enabled"`
 	Priority        sql.NullInt32  `json:"priority"`
+	Host            sql.NullString `json:"host"`
+	Port            sql.NullInt32  `json:"port"`
+	Tls             sql.NullBool   `json:"tls"`
+	Username        sql.NullString `json:"username"`
+	Password        sql.NullString `json:"password"`
+	ConfigJson      sql.NullString `json:"config_json"`
 	CategoryDefault sql.NullString `json:"category_default"`
 	SavePathDefault sql.NullString `json:"save_path_default"`
 	RemoveCompleted sql.NullBool   `json:"remove_completed"`
@@ -314,6 +326,12 @@ func (q *Queries) PatchDownloadClient(ctx context.Context, arg PatchDownloadClie
 		arg.Name,
 		arg.Enabled,
 		arg.Priority,
+		arg.Host,
+		arg.Port,
+		arg.Tls,
+		arg.Username,
+		arg.Password,
+		arg.ConfigJson,
 		arg.CategoryDefault,
 		arg.SavePathDefault,
 		arg.RemoveCompleted,

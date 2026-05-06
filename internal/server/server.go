@@ -34,6 +34,9 @@ import (
 	"github.com/loomctl/loom/internal/apikeys"
 	"github.com/loomctl/loom/internal/appconfig"
 	"github.com/loomctl/loom/internal/commands"
+	"github.com/loomctl/loom/internal/compat/prowlarrv1"
+	"github.com/loomctl/loom/internal/compat/radarrv3"
+	"github.com/loomctl/loom/internal/compat/sonarrv3"
 	"github.com/loomctl/loom/internal/connect"
 	"github.com/loomctl/loom/internal/episodeorder"
 	"github.com/loomctl/loom/internal/auth"
@@ -106,6 +109,9 @@ type Server struct {
 	cmdQueue    *commands.Queue
 	qpStore     *qualityprofiles.Store
 	calendarHandler http.Handler
+	compatRadarr    *radarrv3.Handler
+	compatSonarr    *sonarrv3.Handler
+	compatProwlarr  *prowlarrv1.Handler
 	httpMetrics *telemetry.HTTPMetrics
 	ready      atomic.Bool
 }
@@ -381,6 +387,30 @@ func (s *Server) SetQualityProfiles(store *qualityprofiles.Store) {
 	}
 }
 
+// SetCompatRadarr installs the Radarr v3 API compatibility shim.
+func (s *Server) SetCompatRadarr(h *radarrv3.Handler) {
+	s.compatRadarr = h
+	if s.httpSrv != nil {
+		s.httpSrv.Handler = s.newMux()
+	}
+}
+
+// SetCompatSonarr installs the Sonarr v3 API compatibility shim.
+func (s *Server) SetCompatSonarr(h *sonarrv3.Handler) {
+	s.compatSonarr = h
+	if s.httpSrv != nil {
+		s.httpSrv.Handler = s.newMux()
+	}
+}
+
+// SetCompatProwlarr installs the Prowlarr v1 API compatibility shim.
+func (s *Server) SetCompatProwlarr(h *prowlarrv1.Handler) {
+	s.compatProwlarr = h
+	if s.httpSrv != nil {
+		s.httpSrv.Handler = s.newMux()
+	}
+}
+
 // Bus returns the server's event bus for wiring pipelines.
 func (s *Server) Bus() eventbus.Bus {
 	return s.bus
@@ -602,6 +632,17 @@ func (s *Server) newMux() http.Handler {
 	// expect Newznab XML errors, not JSON.
 	if s.aggSvc != nil {
 		s.aggSvc.Mount(r)
+	}
+
+	// *arr compatibility shims — lets Overseerr, Ombi, etc. talk to Loom.
+	if s.compatRadarr != nil {
+		r.Mount("/compat/radarr/api/v3", radarrv3.Router(s.compatRadarr))
+	}
+	if s.compatSonarr != nil {
+		r.Mount("/compat/sonarr/api/v3", sonarrv3.Router(s.compatSonarr))
+	}
+	if s.compatProwlarr != nil {
+		r.Mount("/compat/prowlarr/api/v1", prowlarrv1.Router(s.compatProwlarr))
 	}
 
 	if s.cfg.Debug.Pprof {

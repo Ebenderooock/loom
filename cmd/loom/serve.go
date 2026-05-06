@@ -23,6 +23,10 @@ import (
 	"github.com/loomctl/loom/internal/languages"
 	"github.com/loomctl/loom/internal/libraries"
 	"github.com/loomctl/loom/internal/mediainfo"
+	"github.com/loomctl/loom/internal/migrate"
+	"github.com/loomctl/loom/internal/compat/prowlarrv1"
+	"github.com/loomctl/loom/internal/compat/radarrv3"
+	"github.com/loomctl/loom/internal/compat/sonarrv3"
 	"github.com/loomctl/loom/internal/kernel/config"
 	"github.com/loomctl/loom/internal/kernel/logging"
 	"github.com/loomctl/loom/internal/kernel/telemetry"
@@ -250,7 +254,13 @@ func cmdServe(ctx context.Context, args []string) error {
 	srv.SetAltTitles(alttitles.NewStore(db.DB()))
 
 	// Build and wire the quality profiles store
-	srv.SetQualityProfiles(qualityprofiles.NewStore(db.DB()))
+	qpStore := qualityprofiles.NewStore(db.DB())
+	srv.SetQualityProfiles(qpStore)
+
+	// Wire *arr API compatibility shims
+	srv.SetCompatRadarr(radarrv3.NewHandler(moviesSvc, libStore, qpStore, logger))
+	srv.SetCompatSonarr(sonarrv3.NewHandler(seriesSvc, libStore, qpStore, logger))
+	srv.SetCompatProwlarr(prowlarrv1.NewHandler(indexerSvc, logger))
 
 	// Build and wire the import pipeline
 	importMode := imports.ImportMode(cfg.MediaManagement.ImportMode)
@@ -339,13 +349,10 @@ func defaultHealthURL() string {
 func cmdMigrate(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("migrate", flag.ContinueOnError)
 	configPath := fs.String("config", "", "path to loom.yaml (overrides $LOOM_CONFIG_DIR/loom.yaml)")
-	importMode := fs.Bool("import", false, "import data from radarr/sonarr/prowlarr (Phase 8 — not implemented)")
+	from := fs.String("from", "", "source app to import from: radarr, sonarr, or prowlarr")
+	sourceDB := fs.String("db", "", "path to the source app's SQLite database file")
 	if err := fs.Parse(args); err != nil {
 		return err
-	}
-
-	if *importMode {
-		return errors.New("migrate --import: not implemented yet (Phase 8)")
 	}
 
 	cfg, err := config.Load(*configPath)
@@ -363,9 +370,38 @@ func cmdMigrate(ctx context.Context, args []string) error {
 	}
 	defer db.Close()
 
+	// Always run schema migrations first.
 	if err := db.Migrate(ctx); err != nil {
 		return fmt.Errorf("migrate: %w", err)
 	}
-	logger.Info("migrate complete", "engine", string(db.Engine()))
+
+	// If no --from flag, just do schema migration (existing behavior).
+	if *from == "" {
+		logger.Info("migrate complete", "engine", string(db.Engine()))
+		return nil
+	}
+
+	if *sourceDB == "" {
+		return errors.New("--db flag is required when using --from")
+	}
+
+	imp := migrate.NewImporter(db.DB(), logger)
+
+	var res *migrate.ImportResult
+	switch *from {
+	case "radarr":
+		res, err = imp.ImportRadarr(ctx, *sourceDB)
+	case "sonarr":
+		res, err = imp.ImportSonarr(ctx, *sourceDB)
+	case "prowlarr":
+		res, err = imp.ImportProwlarr(ctx, *sourceDB)
+	default:
+		return fmt.Errorf("unknown --from source %q (expected radarr, sonarr, or prowlarr)", *from)
+	}
+	if err != nil {
+		return fmt.Errorf("import from %s: %w", *from, err)
+	}
+
+	fmt.Print(res.Summary())
 	return nil
 }

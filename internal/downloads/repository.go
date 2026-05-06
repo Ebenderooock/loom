@@ -146,6 +146,24 @@ func (s *sqliteRepo) Patch(ctx context.Context, p Patch) (Definition, error) {
 	if p.Priority != nil {
 		params.Priority = sql.NullInt64{Int64: int64(*p.Priority), Valid: true}
 	}
+	if p.Host != nil {
+		params.Host = sql.NullString{String: *p.Host, Valid: true}
+	}
+	if p.Port != nil {
+		params.Port = sql.NullInt64{Int64: int64(*p.Port), Valid: true}
+	}
+	if p.TLS != nil {
+		params.Tls = sql.NullInt64{Int64: boolToInt(*p.TLS), Valid: true}
+	}
+	if p.Username != nil {
+		params.Username = sql.NullString{String: *p.Username, Valid: true}
+	}
+	if p.Password != nil {
+		params.Password = sql.NullString{String: *p.Password, Valid: true}
+	}
+	if len(p.Config) > 0 {
+		params.ConfigJson = sql.NullString{String: string(p.Config), Valid: true}
+	}
 	if p.CategoryDefault != nil {
 		params.CategoryDefault = sql.NullString{String: *p.CategoryDefault, Valid: true}
 	}
@@ -402,6 +420,24 @@ func (p *pgRepo) Patch(ctx context.Context, pp Patch) (Definition, error) {
 	}
 	if pp.Priority != nil {
 		params.Priority = sql.NullInt32{Int32: int32(*pp.Priority), Valid: true}
+	}
+	if pp.Host != nil {
+		params.Host = sql.NullString{String: *pp.Host, Valid: true}
+	}
+	if pp.Port != nil {
+		params.Port = sql.NullInt32{Int32: int32(*pp.Port), Valid: true}
+	}
+	if pp.TLS != nil {
+		params.Tls = sql.NullBool{Bool: *pp.TLS, Valid: true}
+	}
+	if pp.Username != nil {
+		params.Username = sql.NullString{String: *pp.Username, Valid: true}
+	}
+	if pp.Password != nil {
+		params.Password = sql.NullString{String: *pp.Password, Valid: true}
+	}
+	if len(pp.Config) > 0 {
+		params.ConfigJson = sql.NullString{String: string(pp.Config), Valid: true}
 	}
 	if pp.CategoryDefault != nil {
 		params.CategoryDefault = sql.NullString{String: *pp.CategoryDefault, Valid: true}
