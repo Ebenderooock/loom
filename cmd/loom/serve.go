@@ -328,6 +328,7 @@ func cmdServe(ctx context.Context, args []string) error {
 		CheckForStalled: true,
 		StallHandler:    stallHandler,
 		HistoryStore:    downloadHistoryStore,
+		GrabStore:       grabStore,
 	})
 	if err != nil {
 		return fmt.Errorf("init download monitor: %w", err)

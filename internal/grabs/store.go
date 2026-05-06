@@ -242,6 +242,18 @@ type GrabMedia struct {
 	MovieIDs   []string
 }
 
+// PruneStale removes grabs older than maxAge. This prevents stale grabs
+// from accumulating if downloads are removed externally.
+func (s *Store) PruneStale(ctx context.Context, maxAge time.Duration) (int64, error) {
+	cutoff := time.Now().Add(-maxAge)
+	res, err := s.db.ExecContext(ctx,
+		`DELETE FROM active_grabs WHERE grabbed_at < ?`, cutoff)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
+}
+
 // LookupByDownload returns the media linkage for a grab identified by
 // clientID + downloadID. Returns nil if no grab exists.
 func (s *Store) LookupByDownload(ctx context.Context, clientID, downloadID string) (*GrabMedia, error) {
