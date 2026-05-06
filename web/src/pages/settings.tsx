@@ -162,7 +162,7 @@ function FolderBrowserDialog({
       }
       const data: BrowseResult = await res.json();
       setCurrentPath(data.current);
-      setDirs(data.directories);
+      setDirs(data.directories ?? []);
       setParent(data.parent);
       setManualPath(data.current);
     } catch (e: unknown) {

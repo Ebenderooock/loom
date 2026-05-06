@@ -61,6 +61,7 @@ export interface Episode {
   stillPath?: string;
   monitored: boolean;
   hasFile: boolean;
+  grabbed?: boolean;
 }
 
 export interface TMDBSeriesResult {

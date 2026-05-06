@@ -12,16 +12,17 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/loomctl/loom/internal/grabs"
 	"github.com/loomctl/loom/internal/indexers"
 )
 
 // Router mounts series endpoints on a chi router.
 func Router(svc Service) chi.Router {
-	return RouterWithSearch(svc, nil)
+	return RouterWithSearch(svc, nil, nil)
 }
 
 // RouterWithSearch mounts series endpoints with optional search-on-add support.
-func RouterWithSearch(svc Service, indexerSvc *indexers.Service) chi.Router {
+func RouterWithSearch(svc Service, indexerSvc *indexers.Service, grabStore *grabs.Store) chi.Router {
 	r := chi.NewRouter()
 
 	// Literal routes first (before /{id} wildcard)
@@ -43,7 +44,7 @@ func RouterWithSearch(svc Service, indexerSvc *indexers.Service) chi.Router {
 	r.Post("/{id}/unarchive", unarchiveSeries(svc))
 	r.Get("/{id}/credits", getCredits(svc))
 	r.Get("/{id}/seasons", listSeasons(svc))
-	r.Get("/{id}/seasons/{seasonNum}/episodes", listEpisodes(svc))
+	r.Get("/{id}/seasons/{seasonNum}/episodes", listEpisodesHandler(svc, grabStore))
 
 	return r
 }
@@ -578,7 +579,7 @@ func listSeasons(svc Service) http.HandlerFunc {
 	}
 }
 
-func listEpisodes(svc Service) http.HandlerFunc {
+func listEpisodesHandler(svc Service, grabStore *grabs.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id := chi.URLParam(r, "id")
 		if id == "" {
@@ -603,9 +604,23 @@ func listEpisodes(svc Service) http.HandlerFunc {
 			return
 		}
 
+		// Look up which episodes have active grabs
+		var grabbedSet map[string]bool
+		if grabStore != nil && len(episodes) > 0 {
+			epIDs := make([]string, len(episodes))
+			for i, ep := range episodes {
+				epIDs[i] = ep.ID
+			}
+			grabbedSet, _ = grabStore.GrabbedEpisodeIDs(r.Context(), epIDs)
+		}
+
 		response := make([]interface{}, 0, len(episodes))
 		for _, ep := range episodes {
-			response = append(response, episodeToResponse(ep))
+			m := episodeToResponse(ep)
+			if grabbedSet[ep.ID] {
+				m["grabbed"] = true
+			}
+			response = append(response, m)
 		}
 
 		w.Header().Set("Content-Type", "application/json")

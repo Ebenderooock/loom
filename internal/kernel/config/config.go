@@ -426,10 +426,10 @@ func applyDefaults(v *viper.Viper) {
 	v.SetDefault("scheduler.timezone", "Local")
 	v.SetDefault("scheduler.shutdown_grace", 30)
 
-	v.SetDefault("indexers.search_timeout", 15)
+	v.SetDefault("indexers.search_timeout", 120)
 	v.SetDefault("indexers.max_parallel", 8)
 	v.SetDefault("indexers.health_check_schedule", "*/10 * * * *")
-	v.SetDefault("indexers.health_check_timeout", 10)
+	v.SetDefault("indexers.health_check_timeout", 60)
 	v.SetDefault("indexers.proxies.flaresolverr_default_timeout", 60)
 	v.SetDefault("indexers.proxies.test_probe_url", "https://www.google.com/generate_204")
 	v.SetDefault("indexers.cardigann.definitions_dir", "")

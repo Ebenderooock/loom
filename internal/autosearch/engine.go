@@ -16,10 +16,12 @@ import (
 
 	"github.com/loomctl/loom/internal/customformats"
 	"github.com/loomctl/loom/internal/downloads"
+	"github.com/loomctl/loom/internal/grabs"
 	"github.com/loomctl/loom/internal/indexers"
 	"github.com/loomctl/loom/internal/movies"
 	"github.com/loomctl/loom/internal/parser"
 	"github.com/loomctl/loom/internal/qualityprofiles"
+	"github.com/loomctl/loom/internal/series"
 )
 
 // profileItem mirrors the shape of items stored in quality_profiles_v2.items JSON.
@@ -38,6 +40,8 @@ type Engine struct {
 	cfStore      *customformats.Store
 	dlRegistry   *downloads.Registry
 	movieSvc     movies.Service
+	seriesSvc    series.Service
+	grabStore    *grabs.Store
 	logger       *slog.Logger
 }
 
@@ -49,6 +53,8 @@ func NewEngine(
 	cfStore *customformats.Store,
 	dlRegistry *downloads.Registry,
 	movieSvc movies.Service,
+	seriesSvc series.Service,
+	grabStore *grabs.Store,
 	logger *slog.Logger,
 ) *Engine {
 	if logger == nil {
@@ -61,6 +67,8 @@ func NewEngine(
 		cfStore:      cfStore,
 		dlRegistry:   dlRegistry,
 		movieSvc:     movieSvc,
+		seriesSvc:    seriesSvc,
+		grabStore:    grabStore,
 		logger:       logger.With("module", "autosearch"),
 	}
 }
@@ -182,6 +190,10 @@ func (e *Engine) SearchAndGrab(ctx context.Context, req SearchRequest) (*SearchR
 	}
 
 	result.Grabbed = grabbed
+
+	// Record the grab linkage for UI status tracking.
+	e.recordGrab(ctx, req, grabbed)
+
 	return result, nil
 }
 
@@ -493,4 +505,57 @@ func (e *Engine) buildQuery(req SearchRequest) indexers.Query {
 	}
 
 	return q
+}
+
+// recordGrab persists the grab linkage so the UI can show "grabbed" status.
+func (e *Engine) recordGrab(ctx context.Context, req SearchRequest, grabbed *GrabbedRelease) {
+	if e.grabStore == nil || grabbed == nil {
+		return
+	}
+
+	switch req.MediaType {
+	case "movie":
+		if req.MediaID != "" {
+			if err := e.grabStore.RecordMovieGrab(ctx, grabbed.ClientID, grabbed.DownloadID, grabbed.Title, req.MediaID); err != nil {
+				e.logger.Warn("failed to record movie grab", "error", err)
+			}
+		}
+
+	case "series", "episode":
+		if req.MediaID == "" || e.seriesSvc == nil {
+			return
+		}
+
+		// If we have a season number, use it to filter the episode query
+		var seasonFilter *int
+		if req.Season > 0 {
+			s := req.Season
+			seasonFilter = &s
+		}
+
+		episodes, err := e.seriesSvc.ListEpisodes(ctx, req.MediaID, seasonFilter)
+		if err != nil {
+			e.logger.Warn("failed to list episodes for grab tracking", "error", err)
+			return
+		}
+
+		var episodeIDs []string
+		for _, ep := range episodes {
+			if req.Episode > 0 {
+				// Specific episode requested — match by episode number
+				if ep.EpisodeNumber == req.Episode {
+					episodeIDs = append(episodeIDs, ep.ID)
+				}
+			} else {
+				// Season pack — all episodes in the season
+				episodeIDs = append(episodeIDs, ep.ID)
+			}
+		}
+
+		if len(episodeIDs) > 0 {
+			if err := e.grabStore.RecordEpisodeGrab(ctx, grabbed.ClientID, grabbed.DownloadID, grabbed.Title, episodeIDs); err != nil {
+				e.logger.Warn("failed to record episode grab", "error", err)
+			}
+		}
+	}
 }

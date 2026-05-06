@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"sort"
 	"sync"
 	"time"
@@ -223,6 +224,9 @@ func runOne(ctx context.Context, ix Indexer, q Query, timeout time.Duration) (*R
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, timeout)
 		defer cancel()
+	}
+	if dl, ok := ctx.Deadline(); ok {
+		slog.Debug("runOne: context for indexer", "indexer", ix.Name(), "per_timeout", timeout.String(), "deadline_in", time.Until(dl).String())
 	}
 	return ix.Search(ctx, q)
 }

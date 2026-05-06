@@ -45,6 +45,7 @@ import (
 	"github.com/loomctl/loom/internal/buildinfo"
 	"github.com/loomctl/loom/internal/customformats"
 	"github.com/loomctl/loom/internal/downloads"
+	"github.com/loomctl/loom/internal/grabs"
 	"github.com/loomctl/loom/internal/healthmonitor"
 	"github.com/loomctl/loom/internal/importlists"
 	"github.com/loomctl/loom/internal/imports"
@@ -116,6 +117,7 @@ type Server struct {
 	compatProwlarr  *prowlarrv1.Handler
 	healthMonitor   *healthmonitor.Monitor
 	autoSearchEngine *autosearch.Engine
+	grabStore        *grabs.Store
 	httpMetrics *telemetry.HTTPMetrics
 	ready      atomic.Bool
 }
@@ -433,6 +435,11 @@ func (s *Server) SetAutoSearchEngine(e *autosearch.Engine) {
 	}
 }
 
+// SetGrabStore sets the active-grabs store for tracking download→media linkage.
+func (s *Server) SetGrabStore(gs *grabs.Store) {
+	s.grabStore = gs
+}
+
 // Bus returns the server's event bus for wiring pipelines.
 func (s *Server) Bus() eventbus.Bus {
 	return s.bus
@@ -527,7 +534,7 @@ func (s *Server) newMux() http.Handler {
 
 		// Series (TV Shows) routes
 		if s.seriesSvc != nil {
-			seriesRouter := series.RouterWithSearch(s.seriesSvc, s.indexerSvc)
+			seriesRouter := series.RouterWithSearch(s.seriesSvc, s.indexerSvc, s.grabStore)
 			if s.seriesScannerSvc != nil {
 				scanner.RegisterSeriesRoutes(seriesRouter, s.seriesScannerSvc)
 			}
@@ -881,7 +888,7 @@ func handleFilesystemBrowse() http.HandlerFunc {
 			return
 		}
 
-		var dirs []dirEntry
+		dirs := make([]dirEntry, 0)
 		for _, e := range entries {
 			if !e.IsDir() {
 				continue
