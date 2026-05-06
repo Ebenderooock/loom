@@ -356,7 +356,7 @@ export function MovieDetailSheet({
           {/* ── Action Buttons toolbar ── */}
           <div className="px-6 pb-2">
             <div className="flex items-center gap-2 flex-wrap">
-              <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setSearchOpen(true)}>
+              <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setSearchOpen(true)} title="Automated search (uses quality profile to pick the best result)">
                 <Search className="w-3.5 h-3.5" />Search
               </Button>
               <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setSearchOpen(true)}>
@@ -581,7 +581,7 @@ export function MovieDetailSheet({
                   Files will appear here once the movie is downloaded
                 </p>
                 <div className="flex gap-2 mt-4">
-                  <Button size="sm" variant="outline" className="gap-1.5 text-xs" onClick={() => setSearchOpen(true)}>
+                  <Button size="sm" variant="outline" className="gap-1.5 text-xs" onClick={() => setSearchOpen(true)} title="Automated search">
                     <Search className="w-3.5 h-3.5" />Search
                   </Button>
                   <Button size="sm" variant="outline" className="gap-1.5 text-xs" onClick={() => setSearchOpen(true)}>
@@ -710,6 +710,7 @@ export function MovieDetailSheet({
         tmdbId={movie.tmdbId ? Number(movie.tmdbId) : undefined}
         imdbId={movie.imdbId}
         mediaType="movie"
+        autoSearch
       />
     </>
   );
