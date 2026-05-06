@@ -68,6 +68,7 @@ func cmdServe(ctx context.Context, args []string) error {
 	if err != nil {
 		return fmt.Errorf("init logger: %w", err)
 	}
+	slog.SetDefault(logger)
 	logger.Info("starting loom",
 		"addr", cfg.HTTP.Addr,
 		"config_dir", cfg.ConfigDir,
