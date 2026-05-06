@@ -49,7 +49,7 @@ export interface ProxyFormValues {
   username: string;
   password: string;
   // FlareSolverr
-  max_timeout_ms?: number;
+  max_timeout_sec?: number;
   session_mode?: "" | "none" | "shared";
 }
 
@@ -97,8 +97,8 @@ export function valuesToConfig(values: ProxyFormValues): ProxyConfig {
     }
     case "flaresolverr": {
       const cfg: Record<string, unknown> = { url: values.url.trim() };
-      if (typeof values.max_timeout_ms === "number") {
-        cfg.max_timeout_ms = values.max_timeout_ms;
+      if (typeof values.max_timeout_sec === "number") {
+        cfg.max_timeout_sec = values.max_timeout_sec;
       }
       if (values.session_mode) {
         cfg.session_mode = values.session_mode;
@@ -164,9 +164,9 @@ export function ProxyForm({
       typeof initialCfg.username === "string" ? initialCfg.username : "",
     password:
       typeof initialCfg.password === "string" ? initialCfg.password : "",
-    max_timeout_ms:
-      typeof initialCfg.max_timeout_ms === "number"
-        ? initialCfg.max_timeout_ms
+    max_timeout_sec:
+      typeof initialCfg.max_timeout_sec === "number"
+        ? initialCfg.max_timeout_sec
         : undefined,
     session_mode:
       initialCfg.session_mode === "shared" ||
@@ -316,15 +316,15 @@ export function ProxyForm({
       {values.kind === "flaresolverr" ? (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="grid gap-2">
-            <Label htmlFor="proxy-max-timeout">Max timeout (ms)</Label>
+            <Label htmlFor="proxy-max-timeout">Max timeout (seconds)</Label>
             <Input
               id="proxy-max-timeout"
               type="number"
               min={0}
-              value={values.max_timeout_ms ?? ""}
+              value={values.max_timeout_sec ?? ""}
               onChange={(e) =>
                 update(
-                  "max_timeout_ms",
+                  "max_timeout_sec",
                   e.target.value === "" ? undefined : Number(e.target.value),
                 )
               }
