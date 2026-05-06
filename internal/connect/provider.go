@@ -27,6 +27,8 @@ func ProviderFor(t ProviderType) (Provider, error) {
 		return &embyProvider{}, nil
 	case ProviderJellyfin:
 		return &jellyfinProvider{}, nil
+	case ProviderTrakt:
+		return &traktProvider{}, nil
 	default:
 		return nil, fmt.Errorf("unknown provider type: %s", t)
 	}

@@ -244,8 +244,11 @@ func (c *Client) login(ctx context.Context) error {
 		// qBittorrent returns 403 when the IP has been
 		// temporarily banned for too many failed logins.
 		return fmt.Errorf("%w: %s", ErrAuthFailed, strings.TrimSpace(string(body)))
+	case resp.StatusCode == http.StatusNotFound:
+		// 404 means the URL is wrong — probably wrong host, port, or base path.
+		return fmt.Errorf("qbittorrent: endpoint not found (HTTP 404) — tried %s — check the host, port, and base path", endpoint)
 	default:
-		return fmt.Errorf("%w: HTTP %d %s", ErrAuthFailed, resp.StatusCode, strings.TrimSpace(string(body)))
+		return fmt.Errorf("%w: HTTP %d %s (URL: %s)", ErrAuthFailed, resp.StatusCode, strings.TrimSpace(string(body)), endpoint)
 	}
 }
 

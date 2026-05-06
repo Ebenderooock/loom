@@ -40,6 +40,8 @@ func run(ctx context.Context, args []string) error {
 		return cmdAPIKey(ctx, args[1:])
 	case "user":
 		return cmdUser(ctx, args[1:])
+	case "backup":
+		return cmdBackup(ctx, args[1:])
 	case "help", "--help", "-h":
 		return usage(os.Stdout)
 	default:
@@ -57,6 +59,7 @@ Usage:
 Commands:
   serve         Run the loom server
   migrate       Migrate from radarr/sonarr/prowlarr databases
+  backup        Backup or restore database and config (create|restore)
   api-key       Manage API keys (create|list|revoke)
   user          Manage users (create|passwd)
   healthcheck   Probe the local server (used by Docker HEALTHCHECK)
