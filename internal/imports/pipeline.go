@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/loomctl/loom/internal/downloads"
+	"github.com/loomctl/loom/internal/grabs"
 	"github.com/loomctl/loom/internal/kernel/eventbus"
 	"github.com/loomctl/loom/internal/libraries"
 	"github.com/loomctl/loom/internal/movies"
@@ -30,6 +31,7 @@ type PipelineOptions struct {
 	MoviesSvc        movies.Service
 	SeriesSvc        series.Service
 	LibStore         *libraries.Store
+	GrabStore        *grabs.Store
 	NotifSvc         notifications.Service
 	PostVal          *safety.PostValidator
 	ReviewStore      *safety.ReviewStore
@@ -45,6 +47,7 @@ type ImportPipeline struct {
 	downloadSvc     *downloads.Service
 	remotePathStore *downloads.RemotePathStore
 	matcher         *Matcher
+	grabStore       *grabs.Store
 	notifSvc        notifications.Service
 	postVal         *safety.PostValidator
 	reviewStore     *safety.ReviewStore
@@ -86,6 +89,7 @@ func NewPipeline(opts PipelineOptions) (*ImportPipeline, error) {
 		downloadSvc:     opts.DownloadSvc,
 		remotePathStore: opts.RemotePathStore,
 		matcher:         NewMatcher(opts.MoviesSvc, opts.SeriesSvc, opts.LibStore),
+		grabStore:       opts.GrabStore,
 		notifSvc:        opts.NotifSvc,
 		postVal:         opts.PostVal,
 		reviewStore:     opts.ReviewStore,
@@ -258,10 +262,18 @@ func (p *ImportPipeline) processImport(ctx context.Context, ev *downloads.Downlo
 
 // importSingleFile matches and imports a single media file.
 func (p *ImportPipeline) importSingleFile(ctx context.Context, ev *downloads.DownloadCompletedEvent, mediaFile string) error {
-	// Match file to library item
-	match, err := p.matcher.Match(ctx, ev.Title)
+	// Try exact grab-based matching first (most reliable for Loom-originated downloads)
+	match, err := p.matchByGrab(ctx, ev)
 	if err != nil {
-		return p.recordFailure(ctx, "", "", ev.Title, mediaFile, fmt.Errorf("match: %w", err))
+		p.logger.Warn("grab-based match failed, falling back to fuzzy", "error", err)
+	}
+
+	// Fall back to fuzzy matching by title
+	if match == nil || !match.Matched {
+		match, err = p.matcher.Match(ctx, ev.Title)
+		if err != nil {
+			return p.recordFailure(ctx, "", "", ev.Title, mediaFile, fmt.Errorf("match: %w", err))
+		}
 	}
 	if !match.Matched {
 		// Try matching by filename
@@ -307,7 +319,130 @@ func (p *ImportPipeline) importSingleFile(ctx context.Context, ev *downloads.Dow
 		DestPath:  destFile,
 	})
 
+	// Clean up grab tracking now that import succeeded
+	p.cleanupGrab(ctx, ev, match)
+
 	return nil
+}
+
+// matchByGrab attempts to match using exact grab linkage data recorded
+// when the download was initiated. This is the most reliable path for
+// Loom-originated downloads since it avoids fuzzy title matching.
+func (p *ImportPipeline) matchByGrab(ctx context.Context, ev *downloads.DownloadCompletedEvent) (*MatchResult, error) {
+	if p.grabStore == nil || ev.ClientID == "" || ev.DownloadID == "" {
+		return nil, nil
+	}
+
+	gm, err := p.grabStore.LookupByDownload(ctx, ev.ClientID, ev.DownloadID)
+	if err != nil {
+		return nil, err
+	}
+	if gm == nil {
+		return nil, nil
+	}
+
+	// Episode-based match
+	if len(gm.EpisodeIDs) > 0 {
+		ep, err := p.matcher.seriesSvc.GetEpisode(ctx, gm.EpisodeIDs[0])
+		if err != nil {
+			return nil, fmt.Errorf("get episode from grab: %w", err)
+		}
+		s, err := p.matcher.seriesSvc.GetSeries(ctx, ep.SeriesID)
+		if err != nil {
+			return nil, fmt.Errorf("get series from grab: %w", err)
+		}
+		lib, err := p.matcher.libStore.Get(ctx, s.LibraryID)
+		if err != nil {
+			return nil, fmt.Errorf("get library from grab: %w", err)
+		}
+		// Look up the season to get the season number
+		seasons, err := p.matcher.seriesSvc.ListSeasons(ctx, ep.SeriesID)
+		if err != nil {
+			return nil, fmt.Errorf("list seasons from grab: %w", err)
+		}
+		seasonNum := 1
+		for _, sn := range seasons {
+			if sn.ID == ep.SeasonID {
+				seasonNum = sn.SeasonNumber
+				break
+			}
+		}
+		destDir := filepath.Join(
+			lib.Path,
+			sanitizeDirName(s.Title),
+			fmt.Sprintf("Season %02d", seasonNum),
+		)
+		p.logger.Info("matched via grab linkage",
+			"media_type", "episode", "series", s.Title,
+			"season", seasonNum, "episode", ep.EpisodeNumber)
+		return &MatchResult{
+			Matched:   true,
+			MediaType: MediaTypeEpisode,
+			MediaID:   ep.ID,
+			Title:     s.Title,
+			Year:      s.Year,
+			Season:    seasonNum,
+			Episode:   ep.EpisodeNumber,
+			DestPath:  destDir,
+		}, nil
+	}
+
+	// Movie-based match
+	if len(gm.MovieIDs) > 0 {
+		mv, err := p.matcher.moviesSvc.GetMovie(ctx, gm.MovieIDs[0])
+		if err != nil {
+			return nil, fmt.Errorf("get movie from grab: %w", err)
+		}
+		lib, err := p.matcher.libStore.Get(ctx, mv.LibraryID)
+		if err != nil {
+			return nil, fmt.Errorf("get library from grab: %w", err)
+		}
+		destDir := filepath.Join(lib.Path, sanitizeDirName(fmt.Sprintf("%s (%d)", mv.Title, mv.Year)))
+		p.logger.Info("matched via grab linkage",
+			"media_type", "movie", "title", mv.Title)
+		return &MatchResult{
+			Matched:   true,
+			MediaType: MediaTypeMovie,
+			MediaID:   mv.ID,
+			Title:     mv.Title,
+			Year:      mv.Year,
+			DestPath:  destDir,
+		}, nil
+	}
+
+	return nil, nil
+}
+
+// cleanupGrab removes the grab tracking entry after a successful import.
+// Uses download-level removal (clientID + downloadID) when available,
+// falling back to per-media removal.
+func (p *ImportPipeline) cleanupGrab(ctx context.Context, ev *downloads.DownloadCompletedEvent, match *MatchResult) {
+	if p.grabStore == nil {
+		return
+	}
+
+	// Try download-level cleanup first (most precise)
+	if ev.ClientID != "" && ev.DownloadID != "" {
+		if err := p.grabStore.RemoveByDownload(ctx, ev.ClientID, ev.DownloadID); err != nil {
+			p.logger.Warn("grab cleanup by download failed", "error", err)
+		} else {
+			p.logger.Debug("grab cleaned up by download",
+				"client_id", ev.ClientID, "download_id", ev.DownloadID)
+			return
+		}
+	}
+
+	// Fallback: per-media cleanup
+	switch match.MediaType {
+	case MediaTypeEpisode:
+		if err := p.grabStore.RemoveByEpisode(ctx, match.MediaID); err != nil {
+			p.logger.Warn("grab cleanup by episode failed", "error", err)
+		}
+	case MediaTypeMovie:
+		if err := p.grabStore.RemoveByMovie(ctx, match.MediaID); err != nil {
+			p.logger.Warn("grab cleanup by movie failed", "error", err)
+		}
+	}
 }
 
 // updateLibrary adds a file record to the appropriate service.

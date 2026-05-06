@@ -144,15 +144,16 @@ func (m *Monitor) emitCompletions(ctx context.Context, items []Item) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	// Build a map of completed items in this sweep.
-	thisRun := make(map[string]bool) // itemID -> seen
+	// Build a map of completed items in this sweep, keyed by clientID:itemID.
+	thisRun := make(map[string]bool)
 	for _, item := range items {
+		key := item.ClientID + ":" + item.ID
 		if item.Status == StatusItemCompleted {
 			// Emit if we haven't seen this item before.
-			if !m.lastCompleted[item.ID] {
+			if !m.lastCompleted[key] {
 				event := &DownloadCompletedEvent{
 					DownloadID:  item.ID,
-					ClientID:    "", // Inferred from context; TODO: add to Item.
+					ClientID:    item.ClientID,
 					Title:       item.Title,
 					Category:    item.Category,
 					CompletedAt: m.clock.Now(),
@@ -168,9 +169,9 @@ func (m *Monitor) emitCompletions(ctx context.Context, items []Item) {
 				}
 
 				m.logger.Info("monitor: emitted DownloadCompleted",
-					"item_id", item.ID, "title", item.Title)
+					"item_id", item.ID, "client_id", item.ClientID, "title", item.Title)
 			}
-			thisRun[item.ID] = true
+			thisRun[key] = true
 		}
 	}
 
@@ -187,12 +188,13 @@ func (m *Monitor) detectStalled(ctx context.Context, items []Item) {
 	activeIDs := make(map[string]bool, len(items))
 
 	for _, item := range items {
-		activeIDs[item.ID] = true
+		key := item.ClientID + ":" + item.ID
+		activeIDs[key] = true
 
 		// Handle failed items immediately.
 		if item.Status == StatusItemFailed {
-			if !m.stalledEmitted[item.ID] {
-				m.stalledEmitted[item.ID] = true
+			if !m.stalledEmitted[key] {
+				m.stalledEmitted[key] = true
 				if m.stallHandler != nil {
 					m.stallHandler.Handle(ctx, item, "download failed: "+item.Message)
 				}
@@ -205,10 +207,10 @@ func (m *Monitor) detectStalled(ctx context.Context, items []Item) {
 			continue
 		}
 
-		prev, tracked := m.lastProgress[item.ID]
+		prev, tracked := m.lastProgress[key]
 		if !tracked {
 			// First time seeing this item — start tracking.
-			m.lastProgress[item.ID] = stalledState{
+			m.lastProgress[key] = stalledState{
 				progress:        item.Progress,
 				downloadedBytes: item.DownloadedBytes,
 				firstSeenAt:     now,
@@ -220,23 +222,24 @@ func (m *Monitor) detectStalled(ctx context.Context, items []Item) {
 		// Check if progress changed.
 		if item.Progress != prev.progress || item.DownloadedBytes != prev.downloadedBytes {
 			// Progress made — update tracking.
-			m.lastProgress[item.ID] = stalledState{
+			m.lastProgress[key] = stalledState{
 				progress:        item.Progress,
 				downloadedBytes: item.DownloadedBytes,
 				firstSeenAt:     prev.firstSeenAt,
 				lastProgressAt:  now,
 			}
 			// Clear stalled flag if it was set.
-			delete(m.stalledEmitted, item.ID)
+			delete(m.stalledEmitted, key)
 			continue
 		}
 
 		// No progress — check if stall timeout exceeded.
 		stalledDuration := now.Sub(prev.lastProgressAt)
-		if stalledDuration >= m.stallTimeout && !m.stalledEmitted[item.ID] {
-			m.stalledEmitted[item.ID] = true
+		if stalledDuration >= m.stallTimeout && !m.stalledEmitted[key] {
+			m.stalledEmitted[key] = true
 			m.logger.Warn("monitor: download stalled",
 				"item_id", item.ID,
+				"client_id", item.ClientID,
 				"title", item.Title,
 				"stalled_for", stalledDuration.String(),
 				"progress", item.Progress,
@@ -249,10 +252,31 @@ func (m *Monitor) detectStalled(ctx context.Context, items []Item) {
 	}
 
 	// Prune tracking maps for items no longer active.
-	for id := range m.lastProgress {
-		if !activeIDs[id] {
-			delete(m.lastProgress, id)
-			delete(m.stalledEmitted, id)
+	for key := range m.lastProgress {
+		if !activeIDs[key] {
+			delete(m.lastProgress, key)
+			delete(m.stalledEmitted, key)
+		}
+	}
+}
+
+// RunLoop starts a polling loop that calls Run() at the configured interval.
+// It blocks until ctx is cancelled. Use this instead of the scheduler for
+// sub-minute polling intervals.
+func (m *Monitor) RunLoop(ctx context.Context) {
+	ticker := time.NewTicker(m.checkInterval)
+	defer ticker.Stop()
+
+	m.logger.Info("monitor: starting polling loop", "interval", m.checkInterval)
+	for {
+		select {
+		case <-ctx.Done():
+			m.logger.Info("monitor: polling loop stopped")
+			return
+		case <-ticker.C:
+			if err := m.Run(ctx); err != nil {
+				m.logger.Error("monitor: sweep error", "error", err)
+			}
 		}
 	}
 }

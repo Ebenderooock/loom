@@ -297,6 +297,7 @@ func cmdServe(ctx context.Context, args []string) error {
 		MoviesSvc:       moviesSvc,
 		SeriesSvc:       seriesSvc,
 		LibStore:        libStore,
+		GrabStore:       grabStore,
 		NotifSvc:        notifSvc,
 		PostVal:         safety.NewPostValidator(safety.DefaultConfig()),
 		ReviewStore:     safety.NewReviewStore(db.DB()),
@@ -309,6 +310,30 @@ func cmdServe(ctx context.Context, args []string) error {
 	importPipeline.Start()
 	defer importPipeline.Stop()
 	srv.SetImportPipeline(importPipeline)
+
+	// Build and wire the download monitor — polls clients for completion
+	downloadHistoryStore := downloads.NewHistoryStore(db.DB())
+	stallHandler := downloads.NewStallHandler(downloads.StallHandlerOptions{
+		Registry: downloadSvc.Registry(),
+		Bus:      srv.Bus(),
+		Logger:   logger,
+	})
+	downloadMonitor, err := downloads.NewMonitor(downloads.MonitorOptions{
+		Service:         downloadSvc,
+		Bus:             srv.Bus(),
+		Logger:          logger,
+		CheckInterval:   30 * time.Second,
+		StallTimeout:    30 * time.Minute,
+		CheckForStalled: true,
+		StallHandler:    stallHandler,
+		HistoryStore:    downloadHistoryStore,
+	})
+	if err != nil {
+		return fmt.Errorf("init download monitor: %w", err)
+	}
+	monCtx, monCancel := context.WithCancel(ctx)
+	defer monCancel()
+	go downloadMonitor.RunLoop(monCtx)
 
 	// Build and wire the rolling-search scheduler
 	rsCfg := scheduler.DefaultRollingSearchConfig()
