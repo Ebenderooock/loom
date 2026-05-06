@@ -20,7 +20,7 @@ Loom is a unified media automation app replacing Radarr, Sonarr, and Prowlarr.
 
 ---
 
-## What Works Today (✅ Done — 55 items)
+## What Works Today (✅ Done — 66 items)
 
 ### Platform Kernel
 - [x] Layered config (defaults → file → env → flags) with hot-reload via Viper
@@ -77,6 +77,20 @@ Loom is a unified media automation app replacing Radarr, Sonarr, and Prowlarr.
 - [x] Frontend Connect panel with provider selector and OAuth flow UI
 - [x] Frontend Trakt sync buttons (watched, collection, watchlist) with refresh token
 
+### Migration Tooling (Stream C)
+- [x] `loom migrate --from radarr --db /path` — movies, quality profiles, root folders
+- [x] `loom migrate --from sonarr --db /path` — series, episodes, seasons, quality profiles, root folders
+- [x] `loom migrate --from prowlarr --db /path` — indexer configs with settings
+- [x] Duplicate detection (skip existing TMDB/TVDB IDs)
+- [x] Import result summary with counts and error reporting
+
+### Operational Hardening (Stream D)
+- [x] Indexer search health tracker (success rate, avg response time, error tracking)
+- [x] Indexer health dashboard page (frontend with progress bars, status badges)
+- [x] Health monitor — disk space, indexer down, download client unreachable → notifications
+- [x] `loom backup --action create` — tar.gz of SQLite DB + config with timestamps
+- [x] `loom backup --action restore` — extract backup with .bak safety rename
+
 ### Movies (Radarr Replacement)
 - [x] Movies service & CRUD API
 - [x] Root folder management
@@ -114,21 +128,11 @@ Loom is a unified media automation app replacing Radarr, Sonarr, and Prowlarr.
 
 ## In Progress (🚧 — 0 items)
 
-All core streams (Pipeline, Compat, Trakt Connect) are complete.
+All core streams are complete. Remaining items are infrastructure polish.
 
 ---
 
-## Remaining Work (⏳ — 11 items)
-
-### Migration Tooling (Stream C — HIGH Priority)
-- [ ] `loom migrate import --from radarr` (movies, quality profiles, root folders)
-- [ ] `loom migrate import --from sonarr` (series, episodes, quality profiles)
-- [ ] `loom migrate import --from prowlarr` (indexer configs)
-
-### Operational Hardening (Stream D — Medium)
-- [ ] Indexer health dashboard (uptime, response times, error rates)
-- [ ] Backup/restore CLI commands
-- [ ] Proactive health alerts (disk space, indexer down, client unreachable)
+## Remaining Work (⏳ — 5 items)
 
 ### Infrastructure & Polish
 - [ ] Distroless multi-arch Docker images, Helm chart
