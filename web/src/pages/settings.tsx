@@ -785,25 +785,77 @@ function GeneralPanel() {
 // ─── Profiles Panel ─────────────────────────────────────────────────────
 
 interface QualityProfile {
-  id: number;
+  id: string;
   name: string;
-  cutoff: number;
+  cutoff: string;
+  upgrade_allowed: boolean;
   items: QualityProfileItem[];
 }
 
 interface QualityProfileItem {
-  quality_definition_id: number;
+  id: string;
+  name: string;
+  preferred: boolean;
   allowed: boolean;
 }
 
 interface QualityDefinition {
-  id: number;
+  id: string;
   title: string;
+  name: string;
   source: string;
-  resolution: number;
-  min_size: number;
-  max_size: number;
-  preferred_size: number;
+  resolution: string;
+  modifier?: string;
+  min_file_size: number;
+  max_file_size: number;
+  preferred_at: number;
+}
+
+// Source group ordering for the editor
+const SOURCE_GROUP_ORDER = ["TV", "Web", "WebRip", "BluRay", "DVD", "Unknown"] as const;
+const SOURCE_GROUP_LABELS: Record<string, string> = {
+  TV: "HDTV",
+  Web: "WEB-DL",
+  WebRip: "WEBRip",
+  BluRay: "Blu-ray",
+  DVD: "DVD",
+  Unknown: "Other",
+};
+
+function groupDefinitionsBySource(definitions: QualityDefinition[]) {
+  const groups: { source: string; label: string; defs: QualityDefinition[] }[] = [];
+  const bySource = new Map<string, QualityDefinition[]>();
+
+  for (const def of definitions) {
+    const src = def.source || "Unknown";
+    if (!bySource.has(src)) bySource.set(src, []);
+    bySource.get(src)!.push(def);
+  }
+
+  for (const source of SOURCE_GROUP_ORDER) {
+    const defs = bySource.get(source);
+    if (defs && defs.length > 0) {
+      groups.push({
+        source,
+        label: SOURCE_GROUP_LABELS[source] || source,
+        defs: defs.sort((a, b) => a.preferred_at - b.preferred_at),
+      });
+      bySource.delete(source);
+    }
+  }
+
+  // Any remaining sources not in the predefined order
+  for (const [source, defs] of bySource) {
+    if (defs.length > 0) {
+      groups.push({
+        source,
+        label: source,
+        defs: defs.sort((a, b) => a.preferred_at - b.preferred_at),
+      });
+    }
+  }
+
+  return groups;
 }
 
 function ProfileEditorDialog({
@@ -821,28 +873,53 @@ function ProfileEditorDialog({
 }) {
   const isNew = !profile;
   const [name, setName] = React.useState("");
-  const [items, setItems] = React.useState<Record<number, boolean>>({});
+  const [items, setItems] = React.useState<Record<string, boolean>>({});
   const [saving, setSaving] = React.useState(false);
+  const [cutoff, setCutoff] = React.useState<string>("");
+
+  const groups = React.useMemo(() => groupDefinitionsBySource(definitions), [definitions]);
 
   React.useEffect(() => {
     if (open) {
       if (profile) {
         setName(profile.name);
-        const map: Record<number, boolean> = {};
+        setCutoff(profile.cutoff || "");
+        const map: Record<string, boolean> = {};
         for (const item of profile.items) {
-          map[item.quality_definition_id] = item.allowed;
+          map[item.id] = item.allowed;
         }
         setItems(map);
       } else {
         setName("");
+        setCutoff("");
         setItems({});
       }
     }
   }, [open, profile]);
 
-  const toggleItem = (defId: number) => {
+  const toggleItem = (defId: string) => {
     setItems((prev) => ({ ...prev, [defId]: !prev[defId] }));
   };
+
+  const toggleGroup = (defs: QualityDefinition[]) => {
+    const allChecked = defs.every((d) => items[d.id]);
+    setItems((prev) => {
+      const next = { ...prev };
+      for (const d of defs) next[d.id] = !allChecked;
+      return next;
+    });
+  };
+
+  const toggleAll = () => {
+    const allChecked = definitions.every((d) => items[d.id]);
+    setItems((prev) => {
+      const next = { ...prev };
+      for (const d of definitions) next[d.id] = !allChecked;
+      return next;
+    });
+  };
+
+  const selectedCount = definitions.filter((d) => items[d.id]).length;
 
   const handleSave = async () => {
     if (!name.trim()) {
@@ -854,9 +931,12 @@ function ProfileEditorDialog({
     try {
       const body = {
         name: name.trim(),
-        cutoff: 0,
+        cutoff: cutoff || undefined,
+        upgrade_allowed: profile?.upgrade_allowed ?? false,
         items: definitions.map((d) => ({
-          quality_definition_id: d.id,
+          id: d.id,
+          name: d.name,
+          preferred: false,
           allowed: items[d.id] ?? false,
         })),
       };
@@ -887,7 +967,7 @@ function ProfileEditorDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md max-h-[80vh] flex flex-col">
+      <DialogContent className="sm:max-w-lg max-h-[85vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>{isNew ? "New Quality Profile" : "Edit Quality Profile"}</DialogTitle>
         </DialogHeader>
@@ -905,25 +985,73 @@ function ProfileEditorDialog({
           </div>
 
           <div className="space-y-2">
-            <Label className="text-sm text-zinc-400">Qualities</Label>
-            <div className="overflow-y-auto max-h-[40vh] rounded-md border border-zinc-800 divide-y divide-zinc-800">
-              {definitions.map((def) => (
-                <label
-                  key={def.id}
-                  className="flex items-center gap-3 px-3 py-2.5 hover:bg-zinc-800/50 cursor-pointer"
-                >
-                  <Checkbox
-                    checked={items[def.id] ?? false}
-                    onCheckedChange={() => toggleItem(def.id)}
-                  />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm text-zinc-200">{def.title}</p>
-                    <p className="text-xs text-zinc-500">
-                      {def.source} · {def.resolution}p
-                    </p>
+            <div className="flex items-center justify-between">
+              <Label className="text-sm text-zinc-400">
+                Qualities{" "}
+                <span className="text-zinc-600">
+                  ({selectedCount}/{definitions.length})
+                </span>
+              </Label>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-xs text-teal-500 hover:text-teal-400 h-6 px-2"
+                onClick={toggleAll}
+              >
+                {definitions.every((d) => items[d.id]) ? "Deselect All" : "Select All"}
+              </Button>
+            </div>
+
+            <div className="overflow-y-auto max-h-[45vh] rounded-md border border-zinc-800">
+              {groups.map((group) => {
+                const groupAllChecked = group.defs.every((d) => items[d.id]);
+                const groupSomeChecked = group.defs.some((d) => items[d.id]) && !groupAllChecked;
+
+                return (
+                  <div key={group.source}>
+                    {/* Group header */}
+                    <label
+                      className="flex items-center gap-3 px-3 py-2 bg-zinc-800/70 cursor-pointer sticky top-0 z-10 border-b border-zinc-700/50"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        toggleGroup(group.defs);
+                      }}
+                    >
+                      <Checkbox
+                        checked={groupAllChecked}
+                        className={groupSomeChecked ? "data-[state=unchecked]:bg-teal-900/40 data-[state=unchecked]:border-teal-600" : ""}
+                        onCheckedChange={() => toggleGroup(group.defs)}
+                      />
+                      <span className="text-sm font-medium text-zinc-200">{group.label}</span>
+                      <span className="text-xs text-zinc-500 ml-auto">
+                        {group.defs.filter((d) => items[d.id]).length}/{group.defs.length}
+                      </span>
+                    </label>
+
+                    {/* Quality items */}
+                    {group.defs.map((def) => (
+                      <label
+                        key={def.id}
+                        className="flex items-center gap-3 px-3 py-2 pl-8 hover:bg-zinc-800/50 cursor-pointer border-b border-zinc-800/50 last:border-0"
+                      >
+                        <Checkbox
+                          checked={items[def.id] ?? false}
+                          onCheckedChange={() => toggleItem(def.id)}
+                        />
+                        <div className="flex-1 min-w-0 flex items-center gap-2">
+                          <span className="text-sm text-zinc-200">{def.title || def.name}</span>
+                          {def.modifier && (
+                            <Badge variant="outline" className="text-[10px] border-amber-700/50 text-amber-500 px-1 py-0">
+                              {def.modifier}
+                            </Badge>
+                          )}
+                        </div>
+                        <span className="text-xs text-zinc-500 tabular-nums">{def.resolution}</span>
+                      </label>
+                    ))}
                   </div>
-                </label>
-              ))}
+                );
+              })}
               {definitions.length === 0 && (
                 <div className="px-3 py-6 text-center text-sm text-zinc-500">
                   No quality definitions available
@@ -931,6 +1059,30 @@ function ProfileEditorDialog({
               )}
             </div>
           </div>
+
+          {/* Cutoff selector */}
+          {selectedCount > 0 && (
+            <div className="space-y-2">
+              <Label className="text-sm text-zinc-400">Cutoff</Label>
+              <p className="text-xs text-zinc-600 -mt-1">
+                Once this quality is reached, no further upgrades will be downloaded.
+              </p>
+              <select
+                value={cutoff}
+                onChange={(e) => setCutoff(e.target.value)}
+                className="w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-200"
+              >
+                <option value="">None (always upgrade)</option>
+                {definitions
+                  .filter((d) => items[d.id])
+                  .map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.title || d.name}
+                    </option>
+                  ))}
+              </select>
+            </div>
+          )}
         </div>
 
         <div className="flex justify-end gap-2 pt-2 border-t border-zinc-800">
@@ -953,7 +1105,7 @@ function ProfilesPanel() {
   const [loading, setLoading] = React.useState(true);
   const [editorOpen, setEditorOpen] = React.useState(false);
   const [editingProfile, setEditingProfile] = React.useState<QualityProfile | null>(null);
-  const [deletingId, setDeletingId] = React.useState<number | null>(null);
+  const [deletingId, setDeletingId] = React.useState<string | null>(null);
 
   const fetchData = React.useCallback(async () => {
     try {
@@ -979,7 +1131,7 @@ function ProfilesPanel() {
 
   React.useEffect(() => { fetchData(); }, [fetchData]);
 
-  const deleteProfile = async (id: number) => {
+  const deleteProfile = async (id: string) => {
     setDeletingId(id);
     try {
       const res = await fetch(`/api/v1/movies/quality-profiles/${id}`, {
@@ -1051,14 +1203,14 @@ function ProfilesPanel() {
                           .filter((i) => i.allowed)
                           .slice(0, 5)
                           .map((item) => {
-                            const def = definitions.find((d) => d.id === item.quality_definition_id);
+                            const def = definitions.find((d) => d.id === item.id);
                             return (
                               <Badge
-                                key={item.quality_definition_id}
+                                key={item.id}
                                 variant="outline"
                                 className="text-xs border-zinc-700 text-zinc-400"
                               >
-                                {def?.title ?? `Quality #${item.quality_definition_id}`}
+                                {def?.title || item.name || `Quality #${item.id}`}
                               </Badge>
                             );
                           })}
