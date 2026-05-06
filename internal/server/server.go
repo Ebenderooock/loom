@@ -44,6 +44,7 @@ import (
 	"github.com/loomctl/loom/internal/buildinfo"
 	"github.com/loomctl/loom/internal/customformats"
 	"github.com/loomctl/loom/internal/downloads"
+	"github.com/loomctl/loom/internal/healthmonitor"
 	"github.com/loomctl/loom/internal/importlists"
 	"github.com/loomctl/loom/internal/imports"
 	"github.com/loomctl/loom/internal/indexers"
@@ -112,6 +113,7 @@ type Server struct {
 	compatRadarr    *radarrv3.Handler
 	compatSonarr    *sonarrv3.Handler
 	compatProwlarr  *prowlarrv1.Handler
+	healthMonitor   *healthmonitor.Monitor
 	httpMetrics *telemetry.HTTPMetrics
 	ready      atomic.Bool
 }
@@ -411,6 +413,15 @@ func (s *Server) SetCompatProwlarr(h *prowlarrv1.Handler) {
 	}
 }
 
+// SetHealthMonitor installs the health monitor and rebuilds the HTTP
+// handler so the /api/v1/system/health routes are reachable.
+func (s *Server) SetHealthMonitor(m *healthmonitor.Monitor) {
+	s.healthMonitor = m
+	if s.httpSrv != nil {
+		s.httpSrv.Handler = s.newMux()
+	}
+}
+
 // Bus returns the server's event bus for wiring pipelines.
 func (s *Server) Bus() eventbus.Bus {
 	return s.bus
@@ -622,6 +633,11 @@ func (s *Server) newMux() http.Handler {
 				})
 			})
 		})
+
+		// System health monitoring (authenticated)
+		if s.healthMonitor != nil {
+			r.Mount("/api/v1/system/health", healthmonitor.Router(s.healthMonitor))
+		}
 
 		// Filesystem browsing (authenticated)
 		r.Get("/api/v1/filesystem", handleFilesystemBrowse())
