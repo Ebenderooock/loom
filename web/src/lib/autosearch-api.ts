@@ -1,5 +1,3 @@
-import { apiUrl } from "./api";
-
 export interface AutoSearchRequest {
   media_type: "movie" | "series";
   media_id: string;
@@ -34,7 +32,7 @@ export interface AutoSearchResult {
 export async function autoSearch(
   req: AutoSearchRequest
 ): Promise<AutoSearchResult> {
-  const res = await fetch(`${apiUrl}/api/v1/autosearch`, {
+  const res = await fetch("/api/v1/autosearch", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
