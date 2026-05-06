@@ -174,6 +174,8 @@ export interface ReleaseSearchProps {
   season?: number;
   episode?: number;
   mediaType: "movie" | "episode" | "season" | "series";
+  /** When true, automatically run the search when the dialog opens. */
+  autoSearch?: boolean;
 }
 
 // ─── Grab Button ──────────────────────────────────────────────────────
@@ -543,6 +545,7 @@ export function ReleaseSearchDialog({
   season: _season,
   episode: _episode,
   mediaType,
+  autoSearch = false,
 }: ReleaseSearchProps) {
   const [query, setQuery] = useState(initialQuery ?? title);
   const [results, setResults] = useState<SearchResult[]>([]);
@@ -552,6 +555,7 @@ export function ReleaseSearchDialog({
   const [searched, setSearched] = useState(false);
   const [errorsExpanded, setErrorsExpanded] = useState(false);
   const [filters, setFilters] = useState<SearchFilters>({ ...EMPTY_FILTERS });
+  const [didAutoSearch, setDidAutoSearch] = useState(false);
 
   const { data: clients = [] } = useDownloads({ enabled: open });
   const enabledClients = clients.filter((c) => c.enabled);
@@ -571,6 +575,7 @@ export function ReleaseSearchDialog({
       setSearched(false);
       setErrorsExpanded(false);
       setFilters({ ...EMPTY_FILTERS });
+      setDidAutoSearch(false);
     }
   }, [open, title, initialQuery]);
 
@@ -606,6 +611,14 @@ export function ReleaseSearchDialog({
       setLoading(false);
     }
   };
+
+  // Auto-run search when dialog opens with autoSearch enabled
+  useEffect(() => {
+    if (open && autoSearch && !didAutoSearch && query.trim()) {
+      setDidAutoSearch(true);
+      runSearch();
+    }
+  }, [open, autoSearch, didAutoSearch, query]);
 
   const errorEntries = Object.entries(errors);
 

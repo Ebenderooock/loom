@@ -814,6 +814,7 @@ export function SeriesDetailSheet({
           season={searchContext.season}
           episode={searchContext.episode}
           mediaType={searchContext.mediaType}
+          autoSearch
         />
       )}
     </>
