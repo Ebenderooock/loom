@@ -34,6 +34,7 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { StatusBadge } from "./status-badge";
 import { ReleaseSearchDialog } from "@/components/search/release-search-dialog";
+import { autoSearch } from "@/lib/autosearch-api";
 import { AltTitlesSection } from "@/components/alt-titles";
 import type { Library } from "../../lib/libraries-api";
 import type { Movie, QualityProfile, Credits, CreditPerson } from "./types";
@@ -157,6 +158,41 @@ export function MovieDetailSheet({
   const [creditsLoading, setCreditsLoading] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [archiving, setArchiving] = useState(false);
+  const [autoSearching, setAutoSearching] = useState(false);
+
+  const handleAutoSearch = async () => {
+    if (!movie) return;
+    setAutoSearching(true);
+    const toastId = toast.loading(`Searching for ${movie.title}...`);
+    try {
+      const result = await autoSearch({
+        media_type: "movie",
+        media_id: movie.id,
+        title: movie.title,
+        quality_profile_id: movie.qualityProfileId,
+        imdb_id: movie.imdbId || undefined,
+        tmdb_id: movie.tmdbId || undefined,
+      });
+      if (result.grabbed) {
+        toast.success(`Grabbed: ${result.grabbed.title}`, {
+          id: toastId,
+          description: `Quality tier ${result.grabbed.quality_tier} · Format score ${result.grabbed.format_score} · ${result.considered} considered, ${result.rejected} rejected`,
+        });
+      } else {
+        toast.warning(`No suitable release found`, {
+          id: toastId,
+          description: result.reason || `${result.considered} considered, ${result.rejected} rejected`,
+        });
+      }
+    } catch (err: any) {
+      toast.error("Auto search failed", {
+        id: toastId,
+        description: err.message,
+      });
+    } finally {
+      setAutoSearching(false);
+    }
+  };
 
   useEffect(() => {
     if (movie && open) {
@@ -356,8 +392,8 @@ export function MovieDetailSheet({
           {/* ── Action Buttons toolbar ── */}
           <div className="px-6 pb-2">
             <div className="flex items-center gap-2 flex-wrap">
-              <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setSearchOpen(true)} title="Automated search (uses quality profile to pick the best result)">
-                <Search className="w-3.5 h-3.5" />Search
+              <Button size="sm" variant="outline" className="gap-1.5" onClick={handleAutoSearch} disabled={autoSearching} title="Automated search (uses quality profile to pick the best result)">
+                <Search className={cn("w-3.5 h-3.5", autoSearching && "animate-spin")} />{autoSearching ? "Searching..." : "Search"}
               </Button>
               <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setSearchOpen(true)}>
                 <Download className="w-3.5 h-3.5" />Interactive Search
@@ -581,8 +617,8 @@ export function MovieDetailSheet({
                   Files will appear here once the movie is downloaded
                 </p>
                 <div className="flex gap-2 mt-4">
-                  <Button size="sm" variant="outline" className="gap-1.5 text-xs" onClick={() => setSearchOpen(true)} title="Automated search">
-                    <Search className="w-3.5 h-3.5" />Search
+                  <Button size="sm" variant="outline" className="gap-1.5 text-xs" onClick={handleAutoSearch} disabled={autoSearching} title="Automated search">
+                    <Search className={cn("w-3.5 h-3.5", autoSearching && "animate-spin")} />{autoSearching ? "Searching..." : "Search"}
                   </Button>
                   <Button size="sm" variant="outline" className="gap-1.5 text-xs" onClick={() => setSearchOpen(true)}>
                     <Download className="w-3.5 h-3.5" />Interactive Search

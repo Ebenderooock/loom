@@ -33,6 +33,7 @@ import (
 	"github.com/loomctl/loom/internal/anime"
 	"github.com/loomctl/loom/internal/apikeys"
 	"github.com/loomctl/loom/internal/appconfig"
+	"github.com/loomctl/loom/internal/autosearch"
 	"github.com/loomctl/loom/internal/commands"
 	"github.com/loomctl/loom/internal/compat/prowlarrv1"
 	"github.com/loomctl/loom/internal/compat/radarrv3"
@@ -114,6 +115,7 @@ type Server struct {
 	compatSonarr    *sonarrv3.Handler
 	compatProwlarr  *prowlarrv1.Handler
 	healthMonitor   *healthmonitor.Monitor
+	autoSearchEngine *autosearch.Engine
 	httpMetrics *telemetry.HTTPMetrics
 	ready      atomic.Bool
 }
@@ -422,6 +424,15 @@ func (s *Server) SetHealthMonitor(m *healthmonitor.Monitor) {
 	}
 }
 
+// SetAutoSearchEngine installs the autosearch engine and rebuilds the HTTP
+// handler so the /api/v1/autosearch route is reachable.
+func (s *Server) SetAutoSearchEngine(e *autosearch.Engine) {
+	s.autoSearchEngine = e
+	if s.httpSrv != nil {
+		s.httpSrv.Handler = s.newMux()
+	}
+}
+
 // Bus returns the server's event bus for wiring pipelines.
 func (s *Server) Bus() eventbus.Bus {
 	return s.bus
@@ -637,6 +648,12 @@ func (s *Server) newMux() http.Handler {
 		// System health monitoring (authenticated)
 		if s.healthMonitor != nil {
 			r.Mount("/api/v1/system/health", healthmonitor.Router(s.healthMonitor))
+		}
+
+		// Automated search + grab (authenticated)
+		if s.autoSearchEngine != nil {
+			asHandler := autosearch.NewHandler(s.autoSearchEngine, s.logger)
+			r.Post("/api/v1/autosearch", asHandler.HandleAutoSearch)
 		}
 
 		// Filesystem browsing (authenticated)
