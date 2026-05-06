@@ -1,198 +1,200 @@
 # Loom - Project State
 
-**Status:** Pre-alpha | **Last Updated:** 2026-05-05
+**Status:** Pre-alpha | **Last Updated:** 2026-05-07
 
 ## Architecture Overview
 
 Loom is a unified replacement for Radarr, Sonarr, and Prowlarr.
 
 ### Tech Stack
-- **Backend:** Go + Chi router + SQLite (Postgres-ready)
-- **Frontend:** React 19 + TypeScript + TanStack Router + Vite
-- **Database:** SQLite by default, embedded migrations with sqlc-typed queries
-- **Auth:** Server-authoritative session-based with bcrypt password hashing
+- **Backend:** Go + Chi router + SQLite (43 migrations, sqlc-typed queries)
+- **Frontend:** React 19 + TypeScript + TanStack Router/Query + Vite + shadcn/ui + Tailwind
+- **Database:** SQLite via modernc.org/sqlite, MaxOpenConns=1
+- **Auth:** Server-authoritative session-based with argon2id password hashing
+- **Indexers:** Cardigann YAML engine (542 definitions) + Newznab/Torznab
+- **Search proxy:** FlareSolverr with cookie forwarding and shared sessions
 
 ### Configuration Strategy
 - **Config file (`config/loom.json`):** Portable, shareable configuration
   - Setup state, admin credentials (hashed), persistence options
-  - Library folder paths (movies, TV shows, etc.)
+  - Library definitions with folder paths
   - Overrideable defaults for development/production
-- **Database (SQLite):** Instance-specific operational data
+- **Database (SQLite `config/data/loom.db`):** Instance-specific operational data
   - Media metadata and discovery state
-  - Release history, downloads, indexer state
+  - Indexer configurations, download clients
+  - Active grabs, download history, release tracking
   - User activity logs
-- **Media storage:** Reference-based (no file copying)
-  - Configured library paths are scanned for media
-  - DB stores relative paths and file hashes for deduplication
+- **Viper defaults (`internal/kernel/config/config.go`):** Timeout and behavior defaults
+  - `search_timeout: 120` (seconds), `health_check_timeout: 60`
+  - Override with env vars or config file
 
 ## Feature Status
 
-### Phase 1: Core Infrastructure ✅
+### Phase 0: Repo & Foundations ✅
+- [x] Go module, AGPL-3.0 license, CI/CD pipeline
+- [x] GoReleaser, ADR directory, contributor docs
+
+### Phase 1: Platform Kernel ✅
 - [x] HTTP server with chi router, structured logging, CORS, panic recovery
-- [x] Storage layer (SQLite + migrations)
+- [x] Storage layer (SQLite + 43 goose migrations)
 - [x] Health probes (`/healthz`, `/livez`, `/readyz`)
-- [x] Prometheus metrics + OpenTelemetry tracing (skeleton)
-- [x] Authentication with session cookies + API keys
-
-### Phase 2: Auth & Configuration ✅
-- [x] Server-authoritative auth with bcrypt hashing
-- [x] `/api/v1/auth/initialize` endpoint (one-time setup)
-- [x] `/api/v1/auth/login` endpoint (username/password)
-- [x] `/api/v1/auth/status` endpoint
-- [x] CORS policy fixed - allows localhost dev ports (5173-5175, 3000)
-- [x] Config file loading and defaults
-- [x] Session secret auto-generation
-
-### Phase 3: Movies Service 🟡 (80% complete)
-- [x] Database schema for movies, quality profiles, custom formats
-- [x] All backend handlers implemented:
-  - Root folders CRUD (`/api/v1/movies/root-folders`)
-  - Movies CRUD (`/api/v1/movies/`)
-  - Quality definitions CRUD
-  - Quality profiles CRUD
-  - Custom formats CRUD + testing
-- [x] Frontend movies page (`web/src/pages/movies.tsx`)
-  - Library folder add/delete UI
-  - Movie list display
-  - Error handling and loading states
-- [x] Router integration - movies route wired in
-- [ ] **TODO:** Library scanning endpoint (discover media files on disk)
-- [ ] **TODO:** Movie search and metadata enrichment (TMDB integration)
-
-### Phase 4: Series Service (TV Shows) ⏳
-- [ ] Database schema for series, episodes, seasons
-- [ ] Backend handlers (CRUD for series, episodes)
-- [ ] Frontend series management page
-- [ ] Library scanning for TV show folders
-
-### Phase 5: Indexers & Download Clients 🚧
-- [x] Backend structure ready (handlers, repository)
-- [ ] Newznab indexer support
-- [ ] Torrent indexer support
-- [ ] Download client integration (NZBGet, Transmission, etc.)
-- [ ] Release tracking and matching
-
-### Phase 6: RSS & Monitoring ⏳
-- [x] RSS source registration framework
+- [x] Prometheus metrics + OpenTelemetry tracing
+- [x] Authentication with session cookies (argon2id)
+- [x] Layered config (defaults → file → env → flags) with hot-reload
+- [x] Event bus with async fan-out
 - [x] Scheduler with cron patterns
-- [ ] Actual RSS feed parsing and monitoring
-- [ ] Release discovery pipeline
+
+### Phase 2: Indexer Subsystem (Prowlarr Replacement) ✅
+- [x] Cardigann YAML engine — 542 bundled definitions
+- [x] Newznab/Torznab protocol support
+- [x] Search aggregation across configured indexers
+- [x] FlareSolverr proxy with cookie forwarding
+- [x] Search result scoring (0-100) and filtering
+- [x] Per-indexer diagnostics, freeleech/tracker intelligence
+- [x] Indexer catalogue UI with type/category filters
+- [x] Cardigann template expansion in search paths
+
+### Phase 3: Download Pipeline 🟡 (75% complete)
+- [x] Download grab flow (magnet URI + NZB)
+- [x] Automated search decision engine (search → score → filter → grab best)
+- [x] Auto-search at episode, season, and series level
+- [x] Download activity tracking (live queue, progress, speed, ETA)
+- [x] Active grab tracking with grabbed status on episodes
+- [x] Hardlink-only import mode
+- [x] Download client CRUD (settings UI with add/edit/delete/test)
+- [x] Search timeout chain: 120s through all layers
+- [ ] **TODO:** Full import/post-processing pipeline
+- [ ] **TODO:** Grab cleanup on import completion
+- [ ] **TODO:** Remote-path mappings, blocklist, redownload-on-failure
+
+### Phase 4: Movies Module (Radarr Replacement) ✅
+- [x] Movies service & CRUD API
+- [x] Root folder management
+- [x] Quality profiles & custom formats with scoring
+- [x] Frontend movies page (poster grid, detail modal, search)
+
+### Phase 5: Series Module (Sonarr Replacement) ✅
+- [x] Series/season/episode data model & API
+- [x] TMDB metadata integration
+- [x] Frontend series page (season accordion, episode table)
+- [x] Episode status (downloaded, missing, unaired, unmonitored, grabbed)
+- [x] Auto-search buttons per episode/season (direct API)
+- [x] Interactive search dialog for manual release selection
+- [x] Series library scanning with season-folder support
+
+### Phase 6: Notifications ✅
+- [x] Discord, Webhook, Gotify, Ntfy channels
+- [x] Rich templates with Go text/template
+- [x] Event bus integration, frontend CRUD page
+
+### Phase 7: Download Safety ✅
+- [x] Bad release detection, post-download validation
+- [x] Manual review queue, frontend safety settings
+
+### Phases 8-11: Planned ⏳
+- [ ] Advanced custom format engine (AND/OR logic)
+- [ ] Language profiles & international support
+- [ ] Rolling missing search, RSS sync
+- [ ] Anime handling, multi-season packs
+- [ ] Wire-compatibility with Radarr/Sonarr/Prowlarr APIs
+- [ ] Migration tooling, Helm chart, 1.0 release
 
 ## How to Start the App
 
 ### Prerequisites
-- Go 1.21+
+- Go 1.23+
 - Node.js 18+
-- npm or yarn
+- npm
 
-### Backend
+### Full Build (embedded frontend)
 ```bash
 cd /Users/eben/Personal/Code/tmp2
 
-# Build
-make build
+# Build frontend + backend
+cd web && npm install && npm run build && cd ..
+go build -tags embed -o dist/loom ./cmd/loom
 
-# Run (creates ./run directory with config/data)
-mkdir -p run
-LOOM_CONFIG_DIR=./run \
-LOOM_DATA_DIR=./run \
-LOOM_STORAGE_SQLITE_PATH=./run/loom.db \
-  ./dist/loom serve
+# Run
+./dist/loom serve --log-level debug
 ```
 
-The backend listens on `http://localhost:8989`
+The app listens on `http://localhost:8989` (frontend + API)
 
-### Frontend
+### Development Mode (hot reload)
 ```bash
-cd /Users/eben/Personal/Code/tmp2/web
+# Terminal 1: Backend
+go build -tags embed -o dist/loom ./cmd/loom && ./dist/loom serve
 
-# Install dependencies (if not done yet)
-npm install
-
-# Start dev server
-npm run dev
+# Terminal 2: Frontend dev server
+cd web && npm run dev
 ```
 
-The frontend listens on `http://localhost:5173`
+Frontend dev server on `http://localhost:5173` proxies API to `:8989`
 
 ### First Run Flow
-1. Navigate to `http://localhost:5173`
-2. Setup page appears (since no config exists yet)
+1. Navigate to `http://localhost:8989`
+2. Setup page appears (no config exists yet)
 3. Enter admin username and password
-4. Click initialize - creates `./run/loom.json` and sets up auth
+4. Click initialize — creates config and sets up auth
 5. Redirected to login page
-6. Login with credentials just set
-7. Navigate to Movies page to manage libraries
+6. Login and start configuring indexers, download clients, libraries
 
-## Current Issues & Blockers
+## Recent Changes (Latest Session - 2026-05-07)
 
-### Recently Fixed ✅
-- CORS policy was blocking frontend-to-backend communication
-  - Solution: Updated `applyDefaults()` in `config.go` to include localhost dev ports
-- Frontend auth endpoint was wrong (`/setup` → `/initialize`)
-  - Solution: Corrected `setup.tsx` to use `/api/v1/auth/initialize`
-- Movies page not routed in frontend
-  - Solution: Added movies route to router and navigation links
+### Bugs Fixed
+- **Download client CRUD:** Settings page now has full add/edit/delete with test connection
+- **Search URL templates:** Cardigann Go templates now expand before URL resolution
+- **FlareSolverr timeouts:** Search timeout increased 15s → 120s (was hidden in Viper defaults)
+- **FlareSolverr cookies:** Cookie forwarding from HTTP requests to FlareSolverr API
+- **Filesystem browse null:** Go nil slice → JSON null crash fixed (`make([]T, 0)`)
+- **Auto-search buttons:** Episode/season search buttons now call autosearch API directly
 
-### Known Limitations
-- [ ] Library scanning not yet implemented - users can add root folders but no media discovery
-- [ ] No metadata enrichment (TMDB) for movies
-- [ ] No file hash calculation for deduplication yet
-- [ ] Cannot actually add movies to the database
-- [ ] Series service not started
+### Features Added
+- **Grabbed episode tracking:** New `active_grabs` tables track which episodes have been sent to download clients; TV detail page shows amber "Grabbed" badge
+- **Automated search engine:** Full search → score → filter → grab pipeline
+- **Per-episode/season auto-search:** One-click search + grab for individual episodes or full seasons
+
+## Known Issues & Next Steps
+
+### High Priority
+- [ ] Import pipeline not yet wired (downloaded files aren't auto-imported to library)
+- [ ] Manual grabs (via interactive search) don't record grab linkage
+- [ ] Grab records not cleaned up when downloads complete
+
+### Medium Priority
+- [ ] No distinction between "grabbed" and "downloading" (needs live queue check)
+- [ ] Grab staleness cleanup (periodic job to prune old grabs)
+- [ ] RSS sync not implemented
+
+### Lower Priority
+- [ ] Anime handling (AniDB/AniList)
+- [ ] Language profiles
+- [ ] Wire-compatibility with arr APIs
+- [ ] Migration tooling from existing arr stacks
 
 ## File Reference
 
 ### Key Backend Files
-- `cmd/loom/main.go` - Application entry point
-- `internal/kernel/config/config.go` - Configuration loading (CORS defaults at line 363-371)
-- `internal/auth/handlers.go` - Authentication endpoints
-- `internal/movies/handlers.go` - Movies CRUD handlers (line 39-78: Router function)
-- `internal/movies/repository.go` - Movies data access
+- `cmd/loom/serve.go` — App wiring (creates stores, passes to engine/server)
+- `internal/kernel/config/config.go` — Viper config defaults (timeouts live here!)
+- `internal/server/server.go` — HTTP server, routing, middleware
+- `internal/autosearch/engine.go` — Automated search decision engine
+- `internal/grabs/store.go` — Active grab tracking (grabbed status)
+- `internal/series/handlers.go` — Series/episode API handlers
+- `internal/indexers/cardigann/engine.go` — Cardigann YAML engine
+- `internal/indexers/proxies/flaresolverr.go` — FlareSolverr client
+- `internal/downloads/` — Download client adapters
 
 ### Key Frontend Files
-- `web/src/pages/setup.tsx` - Initial setup page (endpoint fixed at line 31)
-- `web/src/pages/movies.tsx` - Movies management page
-- `web/src/routes/router.tsx` - Application routing
-- `web/src/components/layout/app-layout.tsx` - Navigation and layout
-- `web/src/hooks/use-auth.tsx` - Authentication context
+- `web/src/pages/settings.tsx` — Settings page (libraries, download clients, etc.)
+- `web/src/pages/series.tsx` — Series listing page
+- `web/src/components/series/series-detail-sheet.tsx` — TV detail with episodes
+- `web/src/components/series/types.ts` — Episode interface (includes `grabbed`)
+- `web/src/lib/autosearch-api.ts` — Auto-search API client
 
 ### Config Files
-- `web/components.json` - shadcn/ui configuration
-- `web/tsconfig.json` - TypeScript configuration
-- `go.mod` - Go dependencies
-
-## Next Steps
-
-1. **Implement library scanning** (`/api/v1/movies/{rootFolderId}/scan`)
-   - Walk directory tree for video files
-   - Parse metadata (filename, file hash, size)
-   - Insert into database
-   
-2. **Add movie search/discovery** to UI
-   - Search against discovered files or TMDB
-   - Ability to mark media as "monitored"
-
-3. **Implement Series service** (follow movies pattern)
-   - Database schema for series/episodes/seasons
-   - CRUD handlers
-   - Frontend UI
-
-4. **Wire up indexers and download clients**
-   - Newznab indexer parsing
-   - Download client communication
-
-5. **Update documentation** in LOOM_STATE.md as features complete
-
-## Testing Checklist
-
-- [x] Backend builds without errors
-- [x] Frontend builds without errors
-- [x] CORS headers present on /api/v1/auth/status
-- [x] Initialize endpoint creates session
-- [x] Login endpoint works
-- [x] Movies page loads and displays
-- [ ] Add root folder works end-to-end
-- [ ] Movies list displays (once scanning implemented)
-- [ ] Test with actual media folders
+- `config/loom.json` — Runtime configuration
+- `config/data/loom.db` — SQLite database
+- `sqlc.yaml` — sqlc query generation config
+- `web/components.json` — shadcn/ui configuration
 

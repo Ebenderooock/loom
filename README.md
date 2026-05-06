@@ -42,15 +42,15 @@ Emby keep working unchanged.
 | Surface | Today (Phase 1) | Coming |
 |---|---|---|
 | HTTP server | chi router, request-ID, structured access logs, panic recovery, gzip, ETag, CORS | WebSocket events (Phase 1c) |
-| Storage | SQLite (default) + Postgres, embedded goose migrations, sqlc-typed queries | Backup / restore CLI (Phase 11) |
+| Storage | SQLite (default) + Postgres, embedded goose migrations (43), sqlc-typed queries | Backup / restore CLI (Phase 11) |
 | Health probes | `/healthz`, `/livez`, `/readyz` | — |
 | Metrics | Prometheus `/metrics` (Go runtime + process collectors) | Loom-curated Grafana dashboards (Phase 11) |
 | Tracing | OpenTelemetry SDK + OTLP/HTTP exporter | Spans on every module call as modules land |
 | Profiling | `/debug/pprof/*`, gated by config | — |
 | Logging | `slog` JSON, PII-redacted | Per-module loggers (rolling) |
 | Config | Layered Viper (defaults → file → env → flags), hot-reload for safe keys | Live config UI (Phase 9) |
-| Auth | _In progress (Phase 1c)_ | Forms + API keys + OIDC + reverse-proxy header trust |
-| Frontend | React 18 + TS + Vite + TanStack Router/Query + shadcn/ui + Tailwind scaffold; **Indexers & Proxies management pages** ([docs](docs/web/indexers-ui.md)) | Library, Discover, Activity, Calendar (Phases 5–9) |
+| Auth | Server-authoritative session cookies (argon2id) + API keys | OIDC + reverse-proxy header trust |
+| Frontend | React 19 + TS + Vite + TanStack Router/Query + shadcn/ui + Tailwind; **Movies, Series, Indexers, Search, Downloads, Settings, Notifications pages** | Calendar, Import Lists (Phases 8–11) |
 
 ## Wire-compatibility (Phase 7)
 
@@ -139,8 +139,9 @@ The [`docs/`](docs/) directory is the source of truth.
 
 ## Roadmap
 
-The 11-phase delivery plan lives in [ROADMAP.md](ROADMAP.md). Phase 0
-is complete; Phase 1 is in progress.
+The 11-phase delivery plan lives in [ROADMAP.md](ROADMAP.md). Phases 0–2
+are complete; Phases 3–7 are substantially done; Phase 3 (import pipeline)
+is the current focus.
 
 ## Contributing
 

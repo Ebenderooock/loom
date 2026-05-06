@@ -23,7 +23,7 @@ Legend: ✅ done · 🚧 in progress · ⏳ planned
 - ✅ Config: layered (defaults → file → env → flags) with hot-reload
 - ✅ Logging: `slog` JSON with PII redaction
 - ✅ Telemetry: OpenTelemetry SDK, OTLP, Prometheus `/metrics`, pprof
-- ✅ Storage: SQLite with goose migrations (21 migrations), sqlc queries
+- ✅ Storage: SQLite with goose migrations (43 migrations), sqlc queries
 - ✅ Scheduler: in-memory cron + jittered intervals + one-shot tasks
 - ✅ Event bus: in-process channels with async fan-out
 - ✅ HTTP server: chi router, request-ID, structured access logs, gzip, ETag
@@ -36,43 +36,51 @@ Legend: ✅ done · 🚧 in progress · ⏳ planned
 - ✅ Cardigann YAML engine — 542 bundled indexer definitions
 - ✅ Newznab/Torznab protocol support
 - ✅ Search aggregation across multiple indexers
-- ✅ Proxy + FlareSolverr support
+- ✅ Proxy + FlareSolverr support (with cookie forwarding)
 - ✅ Manual search UI with release dialog
 - ✅ Indexer catalogue — searchable table with type/category filters
 - ✅ Search result scoring (quality + seeders + age + size, 0–100)
 - ✅ Search result filtering (indexer, quality, size, seeders, freeleech)
 - ✅ Per-indexer search diagnostics (timing, status, result counts)
 - ✅ Freeleech / tracker intelligence (FL/Internal/Scene detection)
+- ✅ Cardigann template expansion (Go text/template in search URL paths)
 
 ## 🚧 Phase 3 — Download pipeline
 
 - ✅ Download grab flow (magnet URI + NZB)
-- ✅ Auto-search on add (background search when adding media)
+- ✅ Automated search decision engine (search → score → filter → grab)
+- ✅ Auto-search at episode, season, and series level
 - ✅ Download activity tracking (live queue, progress, speed, ETA)
+- ✅ Active grab tracking (grabbed status on episodes/movies)
 - ✅ Hardlink-only import mode (move / hardlink / hardlink_only)
-- ⏳ qBittorrent, Transmission, Deluge, rTorrent, SABnzbd, NZBGet adapters
+- ✅ Download client CRUD in settings (add/edit/delete with test connection)
+- ✅ Search timeout chain (120s default, frontend → handler → registry → HTTP → FlareSolverr)
+- ⏳ Full import/post-processing pipeline (detect complete → rename → move/hardlink)
+- ⏳ Grab cleanup on import completion
 - ⏳ Remote-path mappings, blocklist, redownload-on-failure
-- ⏳ Full import/post-processing pipeline
 - ⏳ Deterministic import behavior
 - ⏳ Smarter re-import logic
+- ⏳ Smart stalled/failed download handling
 
-## 🚧 Phase 4 — Movies module (Radarr-equivalent)
+## ✅ Phase 4 — Movies module (Radarr-equivalent)
 
 - ✅ Movies service & CRUD API
 - ✅ Root folder management
 - ✅ Quality profiles & custom formats with scoring
 - ✅ Frontend movies page (poster grid, detail modal, search)
-- ⏳ Library scanning (filesystem discovery → metadata)
 - ⏳ RSS sync
 - ⏳ Collections & lists
-- ⏳ Calendar
+- ⏳ Calendar integration
 
-## 🚧 Phase 5 — Series module (Sonarr-equivalent)
+## ✅ Phase 5 — Series module (Sonarr-equivalent)
 
 - ✅ Series/season/episode data model & API
 - ✅ TMDB metadata integration
 - ✅ Frontend series page (season accordion, episode table)
+- ✅ Episode status display (downloaded, missing, unaired, unmonitored, grabbed)
 - ✅ Series library scanning with season-folder support
+- ✅ Auto-search buttons per episode/season (direct API call)
+- ✅ Interactive search dialog for manual release selection
 - ⏳ Anime handling (AniDB/AniList mapping, absolute numbering)
 - ⏳ Multi-season pack support
 - ⏳ Specials & mini-series handling
@@ -111,6 +119,7 @@ Legend: ✅ done · 🚧 in progress · ⏳ planned
 - ⏳ Rolling missing search (scheduled, gradual)
 - ⏳ Quota-aware API call tracking
 - ⏳ Old/rare content search strategy
+- ⏳ RSS sync (scheduled feed polling)
 
 ## ⏳ Phase 11 — Deployment, hardening & 1.0
 
