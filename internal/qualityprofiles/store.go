@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"database/sql"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"time"
 )
@@ -51,21 +52,24 @@ func (s *Store) List(ctx context.Context) ([]QualityProfile, error) {
 	return out, nil
 }
 
-// Get returns a single profile by ID.
+// Get returns a single profile by ID. Falls back to v1 quality_profiles table
+// for movies/series that still reference old profile IDs.
 func (s *Store) Get(ctx context.Context, id string) (*QualityProfile, error) {
 	row := s.db.QueryRowContext(ctx,
 		`SELECT id, name, cutoff, min_format_score, cutoff_format_score, upgrade_allowed, items, created_at, updated_at
 		 FROM quality_profiles_v2 WHERE id = ?`, id)
 	qp, err := scanProfileRow(row)
-	if err != nil {
-		return nil, err
+	if err == nil {
+		items, err2 := s.listFormatItems(ctx, qp.ID)
+		if err2 != nil {
+			return nil, err2
+		}
+		qp.FormatItems = items
+		return qp, nil
 	}
-	items, err := s.listFormatItems(ctx, qp.ID)
-	if err != nil {
-		return nil, err
-	}
-	qp.FormatItems = items
-	return qp, nil
+
+	// Fallback: try v1 quality_profiles table (movies/series may still reference these)
+	return s.getFromV1(ctx, id)
 }
 
 // Create inserts a new quality profile.
@@ -212,4 +216,58 @@ func generateID() string {
 	b := make([]byte, 16)
 	_, _ = rand.Read(b)
 	return hex.EncodeToString(b)
+}
+
+// getFromV1 loads a quality profile from the legacy v1 quality_profiles table
+// and converts it to the v2 shape so the autosearch engine can use it.
+func (s *Store) getFromV1(ctx context.Context, id string) (*QualityProfile, error) {
+	var name, cutoff string
+	var upgradeAllowed bool
+	var createdAt, updatedAt time.Time
+	err := s.db.QueryRowContext(ctx,
+		`SELECT name, cutoff, upgrade_allowed, created_at, updated_at
+		 FROM quality_profiles WHERE id = ? AND deleted_at IS NULL`, id,
+	).Scan(&name, &cutoff, &upgradeAllowed, &createdAt, &updatedAt)
+	if err != nil {
+		return nil, fmt.Errorf("quality profile %s not found in v1 or v2: %w", id, err)
+	}
+
+	// Load v1 profile items from quality_profile_items
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT quality_definition_id, preferred, allowed FROM quality_profile_items WHERE profile_id = ?`, id)
+	if err != nil {
+		return nil, fmt.Errorf("load v1 profile items: %w", err)
+	}
+	defer rows.Close()
+
+	type v1Item struct {
+		ID        string `json:"id"`
+		Name      string `json:"name"`
+		Preferred bool   `json:"preferred"`
+		Allowed   bool   `json:"allowed"`
+	}
+	var items []v1Item
+	for rows.Next() {
+		var it v1Item
+		if err := rows.Scan(&it.ID, &it.Preferred, &it.Allowed); err != nil {
+			return nil, err
+		}
+		it.Name = it.ID // use ID as name fallback
+		items = append(items, it)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	itemsJSON, _ := json.Marshal(items)
+
+	return &QualityProfile{
+		ID:             id,
+		Name:           name,
+		Cutoff:         cutoff,
+		UpgradeAllowed: upgradeAllowed,
+		Items:          string(itemsJSON),
+		CreatedAt:      createdAt,
+		UpdatedAt:      updatedAt,
+	}, nil
 }
