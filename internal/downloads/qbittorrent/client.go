@@ -162,7 +162,11 @@ func parseConfig(def downloads.Definition) (resolved, error) {
 		scheme = "https"
 	}
 	hostport := host
-	if port != 0 {
+	defaultPort := 80
+	if tls {
+		defaultPort = 443
+	}
+	if port != 0 && port != defaultPort {
 		hostport = fmt.Sprintf("%s:%d", host, port)
 	}
 	basePath := cfg.BasePath
