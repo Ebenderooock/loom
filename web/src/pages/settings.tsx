@@ -82,7 +82,6 @@ import {
   useTraktSyncWatched,
   useTraktSyncCollection,
   useTraktSyncWatchlist,
-  traktGetAuthorizeUrl,
   PROVIDER_TYPES,
   type ConnectConnection,
   type ProviderType as ConnectProviderType,
