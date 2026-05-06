@@ -161,15 +161,13 @@ function SeasonAccordion({
   seriesId,
   season,
   seriesTitle,
-  tmdbId: _tmdbId,
-  imdbId: _imdbId,
+  seriesData,
   onSearchOpen,
 }: {
   seriesId: string;
   season: Season;
   seriesTitle: string;
-  tmdbId?: string;
-  imdbId?: string;
+  seriesData: { qualityProfileId: string; imdbId?: string; tmdbId?: string };
   onSearchOpen: (ctx: {
     title: string;
     query: string;
@@ -182,22 +180,81 @@ function SeasonAccordion({
   const [episodes, setEpisodes] = useState<Episode[]>([]);
   const [loading, setLoading] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [autoSearchingEp, setAutoSearchingEp] = useState<number | null>(null);
+  const [autoSearchingSeason, setAutoSearchingSeason] = useState(false);
+
+  const fetchEpisodes = async () => {
+    try {
+      const res = await fetch(`/api/v1/series/${seriesId}/seasons/${season.seasonNumber}/episodes`, { credentials: "include" });
+      if (res.ok) {
+        const data = await res.json();
+        setEpisodes(Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : []);
+      }
+    } catch { /* ignore */ }
+  };
 
   const handleToggle = async () => {
     if (!open && !loaded) {
       setLoading(true);
-      try {
-        const res = await fetch(`/api/v1/series/${seriesId}/seasons/${season.seasonNumber}/episodes`, { credentials: "include" });
-        if (res.ok) {
-          const data = await res.json();
-          setEpisodes(Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : []);
-        }
-      } catch { /* ignore */ } finally {
-        setLoading(false);
-        setLoaded(true);
-      }
+      await fetchEpisodes();
+      setLoading(false);
+      setLoaded(true);
     }
     setOpen(v => !v);
+  };
+
+  const handleAutoSearchEpisode = async (ep: Episode) => {
+    setAutoSearchingEp(ep.episodeNumber);
+    const toastId = toast.loading(`Searching for ${seriesTitle} S${String(season.seasonNumber).padStart(2, "0")}E${String(ep.episodeNumber).padStart(2, "0")}...`);
+    try {
+      const result = await autoSearch({
+        media_type: "series",
+        media_id: seriesId,
+        title: seriesTitle,
+        quality_profile_id: seriesData.qualityProfileId,
+        imdb_id: seriesData.imdbId || undefined,
+        tmdb_id: seriesData.tmdbId || undefined,
+        season: season.seasonNumber,
+        episode: ep.episodeNumber,
+      });
+      if (result.grabbed) {
+        toast.success(`Grabbed: ${result.grabbed.title}`, { id: toastId });
+        await fetchEpisodes();
+      } else {
+        toast.warning(`No suitable release found`, { id: toastId, description: result.reason || `${result.considered} considered, ${result.rejected} rejected` });
+      }
+    } catch (err: any) {
+      toast.error("Auto search failed", { id: toastId, description: err.message });
+    } finally {
+      setAutoSearchingEp(null);
+    }
+  };
+
+  const handleAutoSearchSeason = async () => {
+    setAutoSearchingSeason(true);
+    const label = season.seasonNumber === 0 ? "Specials" : `Season ${season.seasonNumber}`;
+    const toastId = toast.loading(`Searching for ${seriesTitle} ${label}...`);
+    try {
+      const result = await autoSearch({
+        media_type: "series",
+        media_id: seriesId,
+        title: seriesTitle,
+        quality_profile_id: seriesData.qualityProfileId,
+        imdb_id: seriesData.imdbId || undefined,
+        tmdb_id: seriesData.tmdbId || undefined,
+        season: season.seasonNumber,
+      });
+      if (result.grabbed) {
+        toast.success(`Grabbed: ${result.grabbed.title}`, { id: toastId });
+        if (loaded) await fetchEpisodes();
+      } else {
+        toast.warning(`No suitable release found`, { id: toastId, description: result.reason || `${result.considered} considered, ${result.rejected} rejected` });
+      }
+    } catch (err: any) {
+      toast.error("Auto search failed", { id: toastId, description: err.message });
+    } finally {
+      setAutoSearchingSeason(false);
+    }
   };
 
   // Use backend stats initially, switch to computed stats once episodes are loaded
@@ -250,14 +307,10 @@ function SeasonAccordion({
           <button
             className="p-1 rounded hover:bg-accent/10 text-muted-foreground hover:text-accent transition-colors"
             title="Automatic search for season"
-            onClick={() => onSearchOpen({
-              title: `${seriesTitle} ${season.seasonNumber === 0 ? "Specials" : `S${season.seasonNumber.toString().padStart(2, "0")}`}`,
-              query: `${seriesTitle} S${season.seasonNumber.toString().padStart(2, "0")}`,
-              season: season.seasonNumber,
-              mediaType: "season",
-            })}
+            disabled={autoSearchingSeason}
+            onClick={handleAutoSearchSeason}
           >
-            <Search className="w-3.5 h-3.5" />
+            <Search className={cn("w-3.5 h-3.5", autoSearchingSeason && "animate-spin")} />
           </button>
           <button
             className="p-1 rounded hover:bg-accent/10 text-muted-foreground hover:text-accent transition-colors"
@@ -341,15 +394,10 @@ function SeasonAccordion({
                         <button
                           className="p-1 rounded hover:bg-accent/10 text-muted-foreground hover:text-accent transition-colors"
                           title="Automatic search"
-                          onClick={() => onSearchOpen({
-                            title: `${seriesTitle} S${season.seasonNumber.toString().padStart(2, "0")}E${ep.episodeNumber.toString().padStart(2, "0")}`,
-                            query: `${seriesTitle} S${season.seasonNumber.toString().padStart(2, "0")}E${ep.episodeNumber.toString().padStart(2, "0")}`,
-                            season: season.seasonNumber,
-                            episode: ep.episodeNumber,
-                            mediaType: "episode",
-                          })}
+                          disabled={autoSearchingEp === ep.episodeNumber}
+                          onClick={() => handleAutoSearchEpisode(ep)}
                         >
-                          <Search className="w-3.5 h-3.5" />
+                          <Search className={cn("w-3.5 h-3.5", autoSearchingEp === ep.episodeNumber && "animate-spin")} />
                         </button>
                         <button
                           className="p-1 rounded hover:bg-accent/10 text-muted-foreground hover:text-accent transition-colors"
@@ -784,7 +832,7 @@ export function SeriesDetailSheet({
                   {seasons
                     .sort((a, b) => a.seasonNumber - b.seasonNumber)
                     .map(season => (
-                      <SeasonAccordion key={season.id} seriesId={series.id} season={season} seriesTitle={series.title} tmdbId={series.tmdbId} imdbId={series.imdbId} onSearchOpen={openSearch} />
+                      <SeasonAccordion key={season.id} seriesId={series.id} season={season} seriesTitle={series.title} seriesData={{ qualityProfileId: series.qualityProfileId, imdbId: series.imdbId, tmdbId: series.tmdbId }} onSearchOpen={openSearch} />
                     ))}
                 </div>
               )}
