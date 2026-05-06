@@ -18,6 +18,7 @@ type Release struct {
 	Source     string // BluRay, HDTV, WebDL, DVDRip, etc.
 	Season     int    // TV season number (-1 if not found)
 	Episode    int    // TV episode number (-1 if not found)
+	Group      string // Release group name (e.g., "SPARKS", "FGT")
 }
 
 // patternCache holds compiled regex patterns to avoid recompilation.
@@ -84,6 +85,9 @@ func Parse(releaseName string) *Release {
 
 	// Extract title (everything before year or quality markers)
 	r.Title = extractTitle(releaseName, r.Year)
+
+	// Extract release group (last segment after a dash)
+	r.Group = extractGroup(releaseName)
 
 	return r
 }
@@ -271,4 +275,40 @@ func extractTitle(name string, year int) string {
 	clean = strings.TrimSpace(spaceRe.ReplaceAllString(clean, " "))
 
 	return clean
+}
+
+// extractGroup returns the release group from a release name.
+// Patterns: "Title-GROUP", "Title-GROUP.mkv", "[GROUP] Title", "Title [GROUP]".
+func extractGroup(name string) string {
+	// Strip file extension first
+	clean := name
+	if idx := strings.LastIndex(clean, "."); idx > 0 {
+		ext := strings.ToLower(clean[idx:])
+		switch ext {
+		case ".mkv", ".mp4", ".avi", ".m4v", ".wmv", ".ts", ".flv", ".mov", ".nzb", ".torrent":
+			clean = clean[:idx]
+		}
+	}
+
+	// Pattern 1: trailing "-GROUP" (most common, e.g. "Movie.2024.1080p.BluRay-SPARKS")
+	re := getPattern("group_trailing", `\-([A-Za-z0-9]+)$`)
+	if m := re.FindStringSubmatch(clean); m != nil {
+		g := m[1]
+		// Reject false positives that are common quality/codec markers
+		lower := strings.ToLower(g)
+		switch lower {
+		case "dl", "rip", "mux", "remux", "264", "265", "hevc", "avc", "internal":
+			// not a group
+		default:
+			return g
+		}
+	}
+
+	// Pattern 2: leading "[GROUP]" (common in anime)
+	re2 := getPattern("group_leading", `^\[([^\]]+)\]`)
+	if m := re2.FindStringSubmatch(clean); m != nil {
+		return m[1]
+	}
+
+	return ""
 }

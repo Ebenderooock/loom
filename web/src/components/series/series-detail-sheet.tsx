@@ -33,6 +33,7 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { SeriesStatusBadge } from "./series-status-badge";
 import { ReleaseSearchDialog } from "@/components/search/release-search-dialog";
+import { autoSearch } from "@/lib/autosearch-api";
 import { AltTitlesSection } from "@/components/alt-titles";
 import type { Library } from "../../lib/libraries-api";
 import type { Series, Season, Episode, QualityProfile, Credits, CreditPerson } from "./types";
@@ -413,6 +414,41 @@ export function SeriesDetailSheet({
     mediaType: "movie" | "episode" | "season" | "series";
   } | null>(null);
   const [archiving, setArchiving] = useState(false);
+  const [autoSearching, setAutoSearching] = useState(false);
+
+  const handleAutoSearch = async () => {
+    if (!series) return;
+    setAutoSearching(true);
+    const toastId = toast.loading(`Searching for ${series.title}...`);
+    try {
+      const result = await autoSearch({
+        media_type: "series",
+        media_id: series.id,
+        title: series.title,
+        quality_profile_id: series.qualityProfileId,
+        imdb_id: series.imdbId || undefined,
+        tmdb_id: series.tmdbId || undefined,
+      });
+      if (result.grabbed) {
+        toast.success(`Grabbed: ${result.grabbed.title}`, {
+          id: toastId,
+          description: `Quality tier ${result.grabbed.quality_tier} · Format score ${result.grabbed.format_score} · ${result.considered} considered, ${result.rejected} rejected`,
+        });
+      } else {
+        toast.warning(`No suitable release found`, {
+          id: toastId,
+          description: result.reason || `${result.considered} considered, ${result.rejected} rejected`,
+        });
+      }
+    } catch (err: any) {
+      toast.error("Auto search failed", {
+        id: toastId,
+        description: err.message,
+      });
+    } finally {
+      setAutoSearching(false);
+    }
+  };
 
   const openSearch = (ctx: typeof searchContext) => {
     setSearchContext(ctx);
@@ -635,8 +671,8 @@ export function SeriesDetailSheet({
               <Button size="sm" variant="outline" className="gap-1.5" onClick={handleRefresh} disabled={refreshing}>
                 <RefreshCw className={cn("w-3.5 h-3.5", refreshing && "animate-spin")} />Refresh
               </Button>
-              <Button size="sm" variant="outline" className="gap-1.5" title="Automatic search for all episodes" onClick={() => openSearch({ title: series.title, query: series.title, mediaType: "series" })}>
-                <Search className="w-3.5 h-3.5" />Search
+              <Button size="sm" variant="outline" className="gap-1.5" title="Automatic search for all episodes" onClick={handleAutoSearch} disabled={autoSearching}>
+                <Search className={cn("w-3.5 h-3.5", autoSearching && "animate-spin")} />{autoSearching ? "Searching..." : "Search"}
               </Button>
               <Button size="sm" variant="outline" className="gap-1.5" title="Interactive search" onClick={() => openSearch({ title: series.title, query: series.title, mediaType: "series" })}>
                 <FolderSearch className="w-3.5 h-3.5" />Interactive

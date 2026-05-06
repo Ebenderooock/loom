@@ -17,6 +17,7 @@ import (
 	"github.com/loomctl/loom/internal/appconfig"
 	"github.com/loomctl/loom/internal/calendar"
 	"github.com/loomctl/loom/internal/connect"
+	"github.com/loomctl/loom/internal/autosearch"
 	"github.com/loomctl/loom/internal/customformats"
 	"github.com/loomctl/loom/internal/downloads"
 	"github.com/loomctl/loom/internal/healthmonitor"
@@ -260,6 +261,16 @@ func cmdServe(ctx context.Context, args []string) error {
 	// Build and wire the quality profiles store
 	qpStore := qualityprofiles.NewStore(db.DB())
 	srv.SetQualityProfiles(qpStore)
+
+	// Build and wire the autosearch decision engine
+	cfStore := customformats.NewStore(db.DB())
+	cfFormats, _ := cfStore.List(ctx) // best-effort; empty is OK at boot
+	cfEngine := customformats.NewEngine(cfFormats)
+	autoSearchEngine := autosearch.NewEngine(
+		indexerSvc, qpStore, cfEngine, cfStore,
+		downloadSvc.Registry(), moviesSvc, logger,
+	)
+	srv.SetAutoSearchEngine(autoSearchEngine)
 
 	// Wire *arr API compatibility shims
 	srv.SetCompatRadarr(radarrv3.NewHandler(moviesSvc, libStore, qpStore, logger))
