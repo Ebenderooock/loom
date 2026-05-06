@@ -2,7 +2,7 @@
 
 **Last Updated**: 2026-05-07  
 **Build**: Go backend compiles clean, TypeScript frontend compiles clean  
-**Overall**: Core media automation pipeline functional end-to-end; search → grab → track working; advanced features (import pipeline, anime, languages) planned
+**Overall**: Core media automation pipeline functional end-to-end; search → grab → download → import working; advanced features (compat APIs, migration) next
 
 ---
 
@@ -20,7 +20,7 @@ Loom is a unified media automation app replacing Radarr, Sonarr, and Prowlarr.
 
 ---
 
-## What Works Today (✅ Done — 34 items)
+## What Works Today (✅ Done — 42 items)
 
 ### Platform Kernel
 - [x] Layered config (defaults → file → env → flags) with hot-reload via Viper
@@ -43,14 +43,24 @@ Loom is a unified media automation app replacing Radarr, Sonarr, and Prowlarr.
 - [x] Freeleech / tracker intelligence (FL, Internal, Scene badges, +15 score bonus)
 - [x] Cardigann template expansion (Go text/template in search paths)
 
-### Media Pipeline
+### Media Pipeline (Phase 3 — COMPLETE)
 - [x] Download grab flow (magnet URI + NZB)
 - [x] Automated search decision engine (search → score → filter → grab best)
 - [x] Auto-search at episode, season, and series level
-- [x] Download activity tracking (live queue with progress bars, speed, ETA)
-- [x] Grabbed episode/movie status tracking (active_grabs tables)
+- [x] Download monitor — polls all clients every 30s, emits completion events
+- [x] Import pipeline — download completion → file rename → move/hardlink to library
+- [x] Grab-based matching — exact media→download linkage before fuzzy fallback
+- [x] Manual grab tracking — interactive search grabs record media context
+- [x] Auto-search grab tracking — automated grabs record episode/movie linkage
+- [x] Grab staleness cleanup — prunes grabs older than 48h every ~10 minutes
+- [x] Stall detection — identifies downloads with no progress for 30 minutes
+- [x] Blocklist management — stall handler can blocklist failed releases
+- [x] Remote path mappings — API for Docker/remote client path translation
+- [x] Activity page with Queue, History, Blocklist, and Reviews tabs
+- [x] Live download queue with progress bars, speed, ETA (auto-refresh 5s)
+- [x] Grabbed episode/movie status tracking (active_grabs tables + amber badges)
 - [x] Series library scanning (season-folder + flat directory layouts)
-- [x] Hardlink-only import mode (move / hardlink / hardlink_only)
+- [x] Hardlink-only import mode (move / copy / hardlink / hardlink_only)
 - [x] Download client CRUD in settings UI (add/edit/delete with test)
 
 ### Movies (Radarr Replacement)
@@ -88,68 +98,49 @@ Loom is a unified media automation app replacing Radarr, Sonarr, and Prowlarr.
 
 ---
 
-## In Progress (🚧 — 3 items)
+## In Progress (🚧 — 0 items)
 
-- [ ] Import pipeline — post-download file processing (move/hardlink to library)
-- [ ] Grab cleanup — remove active_grabs when downloads complete and import
-- [ ] Manual grab tracking — interactive search grabs don't record media linkage yet
+Phase 3 (Download Pipeline) is complete. Next up: Stream B (*arr API Compatibility).
 
 ---
 
-## Remaining Work (⏳ — 30 items)
+## Remaining Work (⏳ — 22 items)
 
-### Import Pipeline (High Priority)
-- [ ] Full import/post-processing pipeline (detect complete → rename → move/hardlink)
-- [ ] Wire grab cleanup to import (call `grabStore.Remove*()` on successful import)
-- [ ] Deterministic import behavior (fail-safe modes)
-- [ ] Smarter re-import (avoid unnecessary work)
+### *arr API Compatibility (Stream B — HIGH Priority)
+- [ ] Radarr v3 API shim (/api/v3/movie, /api/v3/rootfolder, /api/v3/qualityprofile, /api/v3/command)
+- [ ] Sonarr v3 API shim (/api/v3/series, /api/v3/episode, /api/v3/rootfolder)
+- [ ] Prowlarr v1 API shim (/api/v1/indexer, /api/v1/search)
+- [ ] Mount compat routes behind /compat/radarr/*, /compat/sonarr/*, /compat/prowlarr/*
 
-### Download Enhancements
-- [ ] Live download queue cross-reference (distinguish "grabbed" from "downloading")
-- [ ] Grab staleness cleanup (periodic job to prune old grabs)
-- [ ] Remote-path mappings
-- [ ] Blocklist management
-- [ ] Redownload-on-failure logic
-- [ ] Smart stalled/failed download handling
+### Migration Tooling (Stream C — HIGH Priority)
+- [ ] `loom migrate import --from radarr` (movies, quality profiles, root folders)
+- [ ] `loom migrate import --from sonarr` (series, episodes, quality profiles)
+- [ ] `loom migrate import --from prowlarr` (indexer configs)
 
-### Custom Format Engine
-- [ ] AND/OR logic, nested conditions, reusable building blocks
-- [ ] Metadata-aware post-download matching
+### Operational Hardening (Stream D — Medium)
+- [ ] Indexer health dashboard (uptime, response times, error rates)
+- [ ] Backup/restore CLI commands
+- [ ] Proactive health alerts (disk space, indexer down, client unreachable)
 
-### Language & International Support
-- [ ] Language profiles (priority-based, per-library)
-- [ ] Subtitle/audio track awareness
-- [ ] International release handling (MULTi, dual-audio)
-
-### Long-Tail Search
-- [ ] Rolling missing search (scheduled, quota-aware)
-- [ ] Quota-aware API call tracking
-- [ ] Old/rare content search strategy
-- [ ] RSS sync (scheduled feed polling)
+### Trakt Connect (Stream A — Medium)
+- [ ] Trakt OAuth2 flow (authorize URL, callback, token refresh)
+- [ ] Trakt Connect provider (sync watched, push collections, pull watchlist)
+- [ ] Frontend OAuth flow ("Connect Trakt" button)
 
 ### Complex TV Handling
 - [ ] Anime handling (AniDB/AniList mapping, absolute numbering)
 - [ ] Multi-season pack support
 - [ ] Specials & mini-series handling
-- [ ] Alternate episode ordering (DVD, absolute, etc.)
 
-### Indexer Intelligence
-- [ ] Indexer health dashboard (uptime, response times, error rates)
-- [ ] Per-media indexer rules
-- [ ] Jackett definition import compatibility
+### Language & International Support
+- [ ] Language profiles (priority-based, per-library)
+- [ ] Subtitle/audio track awareness
 
 ### Infrastructure & Polish
-- [ ] Proactive health alerts and notifications
-- [ ] Wire-compatibility with Radarr/Sonarr/Prowlarr APIs
-- [ ] Migration tooling (`loom migrate import --from {radarr,sonarr,prowlarr}`)
 - [ ] Distroless multi-arch Docker images, Helm chart
 - [ ] Public documentation site
-
-### Community Feature Requests
-- [ ] Alternate/original title handling
-- [ ] Better import list behavior
-- [ ] Archive/lifecycle management
-- [ ] Subtitle/media metadata rules
+- [ ] Rolling missing search (scheduled, quota-aware)
+- [ ] RSS sync (scheduled feed polling)
 
 ---
 
