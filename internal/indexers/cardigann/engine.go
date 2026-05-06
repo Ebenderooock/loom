@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
@@ -360,6 +361,7 @@ func matchErrorSelectors(body []byte, blocks []ErrorBlock) string {
 
 // Search implements indexers.Indexer.
 func (e *Engine) Search(ctx context.Context, q indexers.Query) (*indexers.Results, error) {
+	slog.Debug("cardigann: search start", "indexer", e.id, "term", q.Term, "imdb", q.IMDBID)
 	if err := e.ensureLoggedIn(ctx); err != nil {
 		return nil, err
 	}
@@ -367,14 +369,17 @@ func (e *Engine) Search(ctx context.Context, q indexers.Query) (*indexers.Result
 	if err != nil {
 		return nil, err
 	}
+	slog.Debug("cardigann: search request", "indexer", e.id, "method", method, "target", target, "params", params.Encode())
 	body, err := e.fetch(ctx, method, target, params, headers)
 	if err != nil {
 		return nil, err
 	}
+	slog.Debug("cardigann: search response", "indexer", e.id, "bodyLen", len(body), "bodyPreview", string(body[:min(500, len(body))]))
 	rows, err := e.extractRows(body)
 	if err != nil {
 		return nil, err
 	}
+	slog.Debug("cardigann: search results", "indexer", e.id, "rowCount", len(rows))
 	return &indexers.Results{
 		IndexerID: e.id,
 		Items:     rows,
@@ -407,6 +412,7 @@ func (e *Engine) buildSearchRequest(q indexers.Query) (method, target string, pa
 	keywords := q.Term
 	if len(e.def.Search.KeywordsFilters) > 0 {
 		keywords = applyFilters(keywords, e.def.Search.KeywordsFilters)
+		slog.Debug("cardigann: keywords filtered", "indexer", e.id, "raw", q.Term, "filtered", keywords, "filterCount", len(e.def.Search.KeywordsFilters))
 	}
 
 	tctx := templateContext{
@@ -503,6 +509,7 @@ func (e *Engine) fetch(ctx context.Context, method, target string, params url.Va
 		return nil, fmt.Errorf("cardigann: %s %s: %w", method, target, derr)
 	}
 	defer resp.Body.Close()
+	slog.Debug("cardigann: fetch response", "url", full, "status", resp.StatusCode, "contentType", resp.Header.Get("Content-Type"))
 	body, rerr := io.ReadAll(resp.Body)
 	if rerr != nil {
 		return nil, fmt.Errorf("cardigann: read body: %w", rerr)
@@ -540,6 +547,7 @@ func (e *Engine) extractRows(body []byte) ([]indexers.Result, error) {
 	}
 	rowSelector := e.def.Search.Rows.Selector
 	rows := selectNodes(doc.Selection, rowSelector)
+	slog.Debug("cardigann: extractRows", "indexer", e.id, "rowSelector", rowSelector, "matchedRows", len(rows))
 	// Cardigann's `after:` strips a header row; we honour positive
 	// values only because negatives have no upstream semantics.
 	if e.def.Search.Rows.After > 0 && len(rows) > e.def.Search.Rows.After {
