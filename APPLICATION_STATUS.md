@@ -20,7 +20,7 @@ Loom is a unified media automation app replacing Radarr, Sonarr, and Prowlarr.
 
 ---
 
-## What Works Today (✅ Done — 42 items)
+## What Works Today (✅ Done — 55 items)
 
 ### Platform Kernel
 - [x] Layered config (defaults → file → env → flags) with hot-reload via Viper
@@ -63,6 +63,20 @@ Loom is a unified media automation app replacing Radarr, Sonarr, and Prowlarr.
 - [x] Hardlink-only import mode (move / copy / hardlink / hardlink_only)
 - [x] Download client CRUD in settings UI (add/edit/delete with test)
 
+### *arr API Compatibility (Overseerr/Ombi Drop-in)
+- [x] Radarr v3 API shim — movie CRUD, lookup, root folders, quality profiles, commands, system status
+- [x] Sonarr v3 API shim — series/episode CRUD, lookup, root folders, quality/language profiles, commands
+- [x] Prowlarr v1 API shim — indexer list/get, search with category/ID filters, stats, health
+- [x] Compat routes mounted at /compat/radarr/*, /compat/sonarr/*, /compat/prowlarr/*
+- [x] Integer ID ↔ string ID mappers for *arr-compatible numeric IDs
+
+### Connect & Trakt Integration
+- [x] Connect service — Plex, Emby, Jellyfin, Trakt provider CRUD
+- [x] Trakt OAuth2 flow — authorize URL, callback (token exchange), token refresh
+- [x] Trakt sync endpoints — watched status, collections, watchlists
+- [x] Frontend Connect panel with provider selector and OAuth flow UI
+- [x] Frontend Trakt sync buttons (watched, collection, watchlist) with refresh token
+
 ### Movies (Radarr Replacement)
 - [x] Movies service & CRUD API
 - [x] Root folder management
@@ -100,17 +114,11 @@ Loom is a unified media automation app replacing Radarr, Sonarr, and Prowlarr.
 
 ## In Progress (🚧 — 0 items)
 
-Phase 3 (Download Pipeline) is complete. Next up: Stream B (*arr API Compatibility).
+All core streams (Pipeline, Compat, Trakt Connect) are complete.
 
 ---
 
-## Remaining Work (⏳ — 22 items)
-
-### *arr API Compatibility (Stream B — HIGH Priority)
-- [ ] Radarr v3 API shim (/api/v3/movie, /api/v3/rootfolder, /api/v3/qualityprofile, /api/v3/command)
-- [ ] Sonarr v3 API shim (/api/v3/series, /api/v3/episode, /api/v3/rootfolder)
-- [ ] Prowlarr v1 API shim (/api/v1/indexer, /api/v1/search)
-- [ ] Mount compat routes behind /compat/radarr/*, /compat/sonarr/*, /compat/prowlarr/*
+## Remaining Work (⏳ — 11 items)
 
 ### Migration Tooling (Stream C — HIGH Priority)
 - [ ] `loom migrate import --from radarr` (movies, quality profiles, root folders)
@@ -122,25 +130,12 @@ Phase 3 (Download Pipeline) is complete. Next up: Stream B (*arr API Compatibili
 - [ ] Backup/restore CLI commands
 - [ ] Proactive health alerts (disk space, indexer down, client unreachable)
 
-### Trakt Connect (Stream A — Medium)
-- [ ] Trakt OAuth2 flow (authorize URL, callback, token refresh)
-- [ ] Trakt Connect provider (sync watched, push collections, pull watchlist)
-- [ ] Frontend OAuth flow ("Connect Trakt" button)
-
-### Complex TV Handling
-- [ ] Anime handling (AniDB/AniList mapping, absolute numbering)
-- [ ] Multi-season pack support
-- [ ] Specials & mini-series handling
-
-### Language & International Support
-- [ ] Language profiles (priority-based, per-library)
-- [ ] Subtitle/audio track awareness
-
 ### Infrastructure & Polish
 - [ ] Distroless multi-arch Docker images, Helm chart
 - [ ] Public documentation site
 - [ ] Rolling missing search (scheduled, quota-aware)
 - [ ] RSS sync (scheduled feed polling)
+- [ ] Remote path mappings settings panel (backend API exists, no frontend UI)
 
 ---
 
