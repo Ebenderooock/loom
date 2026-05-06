@@ -88,7 +88,7 @@ func NewService(opts ServiceOptions) (*Service, error) {
 		opts.Clock = SystemClock{}
 	}
 	if opts.SearchTimeout <= 0 {
-		opts.SearchTimeout = 15 * time.Second
+		opts.SearchTimeout = 60 * time.Second
 	}
 	if opts.MaxParallel <= 0 {
 		opts.MaxParallel = 8

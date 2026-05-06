@@ -402,10 +402,6 @@ func (e *Engine) buildSearchRequest(q indexers.Query) (method, target string, pa
 			method = strings.ToUpper(m)
 		}
 	}
-	target, err = e.resolveURL(path)
-	if err != nil {
-		return "", "", nil, nil, err
-	}
 
 	// Apply keyword filters (e.g. replace spaces with hyphens for
 	// URL-slug sites like EZTV) before template expansion.
@@ -425,6 +421,20 @@ func (e *Engine) buildSearchRequest(q indexers.Query) (method, target string, pa
 		Season:     q.Season,
 		Episode:    q.Episode,
 		Config:     e.cfg.fields(),
+	}
+
+	// Expand Go templates in the path (e.g. "search/{{ .Keywords }}")
+	// before resolving against the base URL.
+	if strings.Contains(path, "{{") {
+		path, err = e.expandTemplate(path, tctx)
+		if err != nil {
+			return "", "", nil, nil, fmt.Errorf("cardigann: search path template: %w", err)
+		}
+	}
+
+	target, err = e.resolveURL(path)
+	if err != nil {
+		return "", "", nil, nil, err
 	}
 
 	params = url.Values{}
