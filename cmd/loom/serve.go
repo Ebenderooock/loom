@@ -5,20 +5,24 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
 	"time"
 
 	"github.com/loomctl/loom/internal/alttitles"
+	"github.com/loomctl/loom/internal/backup"
 	"github.com/loomctl/loom/internal/anime"
 	"github.com/loomctl/loom/internal/appconfig"
 	"github.com/loomctl/loom/internal/calendar"
 	"github.com/loomctl/loom/internal/connect"
 	"github.com/loomctl/loom/internal/customformats"
 	"github.com/loomctl/loom/internal/downloads"
+	"github.com/loomctl/loom/internal/healthmonitor"
 	"github.com/loomctl/loom/internal/importlists"
 	"github.com/loomctl/loom/internal/imports"
+	"github.com/loomctl/loom/internal/indexers"
 	"github.com/loomctl/loom/internal/indexers/newznabserver"
 	"github.com/loomctl/loom/internal/languages"
 	"github.com/loomctl/loom/internal/libraries"
@@ -296,6 +300,12 @@ func cmdServe(ctx context.Context, args []string) error {
 	rollingSearcher.Start(ctx)
 	defer rollingSearcher.Stop()
 
+	// Build and wire the health monitor
+	healthMon := buildHealthMonitor(ctx, indexerSvc, downloadSvc, notifSvc, libStore, logger)
+	srv.SetHealthMonitor(healthMon)
+	healthMon.Start(ctx)
+	defer healthMon.Stop()
+
 	errCh := make(chan error, 1)
 	go func() { errCh <- srv.Start() }()
 
@@ -404,4 +414,147 @@ func cmdMigrate(ctx context.Context, args []string) error {
 
 	fmt.Print(res.Summary())
 	return nil
+}
+
+func cmdBackup(ctx context.Context, args []string) error {
+	fs := flag.NewFlagSet("backup", flag.ContinueOnError)
+	action := fs.String("action", "", "create or restore")
+	outputPath := fs.String("output", "", "output path for backup tarball (create only)")
+	inputPath := fs.String("input", "", "path to backup tarball (restore only)")
+	configDir := fs.String("config-dir", "", "config directory (default: auto-detect)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	dir := *configDir
+	if dir == "" {
+		cfg, err := config.Load("")
+		if err != nil {
+			return fmt.Errorf("load config: %w", err)
+		}
+		dir = cfg.ConfigDir
+	}
+
+	switch *action {
+	case "create":
+		path, err := backup.CreateBackup(dir, *outputPath)
+		if err != nil {
+			return fmt.Errorf("create backup: %w", err)
+		}
+		fmt.Printf("backup created: %s\n", path)
+		return nil
+
+	case "restore":
+		if *inputPath == "" {
+			return errors.New("--input is required for restore")
+		}
+		if _, err := os.Stat(*inputPath); err != nil {
+			return fmt.Errorf("backup file not found: %w", err)
+		}
+		if err := backup.RestoreBackup(dir, *inputPath); err != nil {
+			return fmt.Errorf("restore backup: %w", err)
+		}
+		fmt.Println("backup restored successfully")
+		return nil
+
+	case "":
+		return errors.New("--action is required (create or restore)")
+	default:
+		return fmt.Errorf("unknown action %q (expected create or restore)", *action)
+	}
+}
+
+// --- Health monitor wiring ---
+
+// indexerHealthAdapter wraps *indexers.Service to satisfy healthmonitor.IndexerChecker.
+type indexerHealthAdapter struct {
+	svc *indexers.Service
+}
+
+func (a *indexerHealthAdapter) List(ctx context.Context) ([]healthmonitor.IndexerInfo, error) {
+	defs, err := a.svc.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]healthmonitor.IndexerInfo, len(defs))
+	for i, d := range defs {
+		status := "unknown"
+		if d.Health != nil {
+			status = string(d.Health.Status)
+		}
+		out[i] = healthmonitor.IndexerInfo{
+			ID: d.ID, Name: d.Name, Enabled: d.Enabled, Status: status,
+		}
+	}
+	return out, nil
+}
+
+// downloadHealthAdapter wraps *downloads.Service to satisfy healthmonitor.DownloadChecker.
+type downloadHealthAdapter struct {
+	svc *downloads.Service
+}
+
+func (a *downloadHealthAdapter) ListClients(ctx context.Context) ([]healthmonitor.ClientInfo, error) {
+	defs, err := a.svc.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]healthmonitor.ClientInfo, len(defs))
+	for i, d := range defs {
+		status := "unknown"
+		if d.Health != nil {
+			status = string(d.Health.Status)
+		}
+		out[i] = healthmonitor.ClientInfo{
+			ID: d.ID, Name: d.Name, Enabled: d.Enabled, Status: status,
+		}
+	}
+	return out, nil
+}
+
+func buildHealthMonitor(
+	ctx context.Context,
+	indexerSvc *indexers.Service,
+	downloadSvc *downloads.Service,
+	notifSvc notifications.Service,
+	libStore *libraries.Store,
+	logger *slog.Logger,
+) *healthmonitor.Monitor {
+	// Collect library paths for disk-space checks.
+	var libPaths []string
+	if libStore != nil {
+		libs, err := libStore.List(ctx)
+		if err == nil {
+			for _, l := range libs {
+				if l.Path != "" {
+					libPaths = append(libPaths, l.Path)
+				}
+			}
+		}
+	}
+
+	// Build notification sender closure.
+	var notifier healthmonitor.NotificationSender
+	if notifSvc != nil {
+		notifier = func(ctx context.Context, title, body string) error {
+			return notifSvc.Send(ctx, notifications.EventOnHealthIssue, title, body, nil)
+		}
+	}
+
+	var idxChecker healthmonitor.IndexerChecker
+	if indexerSvc != nil {
+		idxChecker = &indexerHealthAdapter{svc: indexerSvc}
+	}
+	var dlChecker healthmonitor.DownloadChecker
+	if downloadSvc != nil {
+		dlChecker = &downloadHealthAdapter{svc: downloadSvc}
+	}
+
+	return healthmonitor.New(healthmonitor.Options{
+		Indexers:  idxChecker,
+		Downloads: dlChecker,
+		Notifier:  notifier,
+		LibPaths:  libPaths,
+		Logger:    logger.With("component", "health-monitor"),
+	})
 }
