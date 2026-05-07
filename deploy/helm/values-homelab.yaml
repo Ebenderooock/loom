@@ -5,7 +5,7 @@
 #     -n media --create-namespace
 
 image:
-  repository: ghcr.io/loomctl/loom
+  repository: ghcr.io/ebenderooock/loom
   pullPolicy: IfNotPresent
   tag: "0.1.0"
 
@@ -28,7 +28,7 @@ securityContext:
 # ---------- Service ----------
 service:
   type: ClusterIP
-  port: 8989
+  port: 9999
 
 # ---------- Ingress (Traefik) ----------
 ingress:
@@ -39,23 +39,29 @@ ingress:
     # Uncomment for automatic TLS via cert-manager:
     # cert-manager.io/cluster-issuer: letsencrypt-prod
   hosts:
-    - host: loom.homelab.local  # <-- change to your domain
+    - host: loom.media.deroock.co.za  # <-- change to your domain
       paths:
         - path: /
           pathType: Prefix
-  tls: []
-    # - secretName: loom-tls
-    #   hosts:
-    #     - loom.homelab.local
+  tls:
+    - secretName: loom-tls
+      hosts:
+        - loom.media.deroock.co.za
 
 # ---------- Persistence ----------
 # Config volume — on your Synology k8s persistence volume
 persistence:
   config:
     enabled: true
-    storageClass: ""  # uses cluster default — set if needed
+    storageClass: "synology-nfs"  # uses cluster default — set if needed
     accessMode: ReadWriteOnce
     size: 1Gi
+    nfs:
+      server: 192.168.3.20
+      path: /volume1/k8s-volumes/loom
+    claimRef:
+      namespace: media
+      name: loom-pvc
   media:
     enabled: false  # handled by existing PVCs below
 
@@ -79,6 +85,9 @@ extraVolumeMounts:
   - name: downloads
     mountPath: /media/downloads
 
+# ---------- Extra environment ----------
+
+
 # ---------- Resources ----------
 resources:
   requests:
@@ -93,12 +102,14 @@ probes:
   liveness:
     enabled: true
     path: /api/v1/health
+    port: 9999
     initialDelaySeconds: 10
     periodSeconds: 30
     timeoutSeconds: 5
   readiness:
     enabled: true
     path: /api/v1/health
+    port: 9999
     initialDelaySeconds: 5
     periodSeconds: 10
     timeoutSeconds: 5
