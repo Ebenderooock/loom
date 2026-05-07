@@ -79,11 +79,6 @@ extraVolumeMounts:
   - name: downloads
     mountPath: /media/downloads
 
-# ---------- Extra environment ----------
-extraEnv:
-  - name: LOOM_HTTP_ADDR
-    value: ":9999"
-
 # ---------- Resources ----------
 resources:
   requests:
