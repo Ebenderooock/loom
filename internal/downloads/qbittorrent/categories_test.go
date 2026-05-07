@@ -23,7 +23,7 @@ func TestCategories(t *testing.T) {
 	}))
 
 	c := newTestClient(t, f.srv, downloads.Definition{})
-	if err := c.login(context.Background()); err != nil {
+	if err := c.login(context.Background(), true); err != nil {
 		t.Fatalf("login: %v", err)
 	}
 	cats, err := c.Categories(context.Background())
@@ -56,7 +56,7 @@ func TestCategoriesEmpty(t *testing.T) {
 	}))
 
 	c := newTestClient(t, f.srv, downloads.Definition{})
-	if err := c.login(context.Background()); err != nil {
+	if err := c.login(context.Background(), true); err != nil {
 		t.Fatalf("login: %v", err)
 	}
 	cats, err := c.Categories(context.Background())

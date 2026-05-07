@@ -20,7 +20,7 @@ func TestPauseAllAndSpecific(t *testing.T) {
 	}))
 
 	c := newTestClient(t, f.srv, downloads.Definition{})
-	if err := c.login(context.Background()); err != nil {
+	if err := c.login(context.Background(), true); err != nil {
 		t.Fatalf("login: %v", err)
 	}
 
@@ -53,7 +53,7 @@ func TestResume(t *testing.T) {
 	}))
 
 	c := newTestClient(t, f.srv, downloads.Definition{})
-	if err := c.login(context.Background()); err != nil {
+	if err := c.login(context.Background(), true); err != nil {
 		t.Fatalf("login: %v", err)
 	}
 	if err := c.Resume(context.Background(), "abc"); err != nil {
@@ -88,7 +88,7 @@ func checkRemove(t *testing.T, deleteFiles bool) {
 	}))
 
 	c := newTestClient(t, f.srv, downloads.Definition{})
-	if err := c.login(context.Background()); err != nil {
+	if err := c.login(context.Background(), true); err != nil {
 		t.Fatalf("login: %v", err)
 	}
 	if err := c.Remove(context.Background(), []string{"x", "y"}, deleteFiles); err != nil {

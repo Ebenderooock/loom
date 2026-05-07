@@ -195,7 +195,7 @@ func TestReLoginOn403(t *testing.T) {
 
 	c := newTestClient(t, f.srv, downloads.Definition{})
 	// Pre-seed by calling login once so the jar has a cookie.
-	if err := c.login(context.Background()); err != nil {
+	if err := c.login(context.Background(), true); err != nil {
 		t.Fatalf("seed login: %v", err)
 	}
 	preLogin := f.loginCalls.Load()

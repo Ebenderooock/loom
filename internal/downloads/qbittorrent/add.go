@@ -82,7 +82,7 @@ func (c *Client) ensureLoggedIn(ctx context.Context) error {
 			return nil
 		}
 	}
-	return c.login(ctx)
+	return c.login(ctx, false)
 }
 
 // addLooksOK applies qBittorrent's flexible success contract: a

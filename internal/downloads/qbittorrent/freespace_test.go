@@ -19,7 +19,7 @@ func TestFreeSpace(t *testing.T) {
 	}))
 
 	c := newTestClient(t, f.srv, downloads.Definition{})
-	if err := c.login(context.Background()); err != nil {
+	if err := c.login(context.Background(), true); err != nil {
 		t.Fatalf("login: %v", err)
 	}
 	got, err := c.FreeSpace(context.Background())
@@ -43,7 +43,7 @@ func TestFreeSpaceMissingFieldReturnsMinusOne(t *testing.T) {
 	}))
 
 	c := newTestClient(t, f.srv, downloads.Definition{})
-	if err := c.login(context.Background()); err != nil {
+	if err := c.login(context.Background(), true); err != nil {
 		t.Fatalf("login: %v", err)
 	}
 	got, err := c.FreeSpace(context.Background())

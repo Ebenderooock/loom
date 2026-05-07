@@ -50,6 +50,16 @@ type resolved struct {
 	password string
 }
 
+// loginGracePeriod is how long after a successful login we consider
+// the session still valid. Concurrent 403 handlers that arrive within
+// this window skip the redundant login and go straight to retry.
+const loginGracePeriod = 5 * time.Second
+
+// loginBackoff is the minimum interval between consecutive login
+// attempts (successful or failed). This prevents a tight retry loop
+// from flooding the qBittorrent login endpoint and triggering an IP ban.
+const loginBackoff = 3 * time.Second
+
 // Client is a live qBittorrent v2 Web API client. One Client per
 // persisted download_clients row. Methods are safe for concurrent
 // use; the cookie jar is shared with the underlying http.Client.
@@ -65,6 +75,12 @@ type Client struct {
 	// loginMu serialises authentication so a flood of concurrent
 	// 403s does not fan out into N parallel re-logins.
 	loginMu sync.Mutex
+	// lastLoginAt records when the last successful login completed.
+	// Protected by loginMu.
+	lastLoginAt time.Time
+	// lastLoginAttempt records when the last login attempt (success or
+	// fail) was made so we can enforce a backoff. Protected by loginMu.
+	lastLoginAttempt time.Time
 }
 
 // New is the production constructor. It composes the Loom transport
@@ -215,9 +231,45 @@ func (c *Client) endpoint(apiPath string) string {
 // qBittorrent enforces a Referer matching the host header on the
 // login form, so we set it to the configured base URL. Some
 // reverse-proxied installs also require Origin; we set both.
-func (c *Client) login(ctx context.Context) error {
+//
+// The force parameter controls whether to skip the grace-period
+// check. Normal re-login from do() passes false; explicit Test()
+// calls pass true because Test() exists specifically to verify
+// credentials against the server.
+func (c *Client) login(ctx context.Context, force bool) error {
 	c.loginMu.Lock()
 	defer c.loginMu.Unlock()
+
+	now := time.Now()
+
+	// If a recent login already succeeded and this isn't a forced
+	// re-check, skip the round-trip. This collapses N concurrent
+	// 403 retries into a single login.
+	if !force && !c.lastLoginAt.IsZero() && now.Sub(c.lastLoginAt) < loginGracePeriod {
+		return nil
+	}
+
+	// Enforce backoff between login attempts to avoid triggering
+	// qBittorrent's IP ban on rapid-fire requests.
+	if !c.lastLoginAttempt.IsZero() {
+		wait := loginBackoff - now.Sub(c.lastLoginAttempt)
+		if wait > 0 {
+			c.loginMu.Unlock()
+			select {
+			case <-time.After(wait):
+			case <-ctx.Done():
+				c.loginMu.Lock()
+				return ctx.Err()
+			}
+			c.loginMu.Lock()
+			// Re-check: another goroutine may have logged in while we waited.
+			if !force && !c.lastLoginAt.IsZero() && time.Since(c.lastLoginAt) < loginGracePeriod {
+				return nil
+			}
+		}
+	}
+
+	c.lastLoginAttempt = time.Now()
 
 	form := url.Values{}
 	form.Set("username", c.cfg.username)
@@ -243,6 +295,7 @@ func (c *Client) login(ctx context.Context) error {
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<10))
 	switch {
 	case resp.StatusCode == http.StatusOK && strings.TrimSpace(string(body)) == "Ok.":
+		c.lastLoginAt = time.Now()
 		return nil
 	case resp.StatusCode == http.StatusForbidden:
 		// qBittorrent returns 403 when the IP has been
@@ -265,8 +318,13 @@ func (c *Client) do(ctx context.Context, req *http.Request) ([]byte, error) {
 		return nil, err
 	}
 	if status == http.StatusForbidden {
-		// Session expired — log in once and retry exactly once.
-		if loginErr := c.login(ctx); loginErr != nil {
+		// Session expired. Record the moment we saw the 403 so the
+		// grace-period logic in login() can tell whether the session
+		// was invalidated after the last successful login.
+		c.invalidateSession()
+
+		// Re-login and retry exactly once.
+		if loginErr := c.login(ctx, false); loginErr != nil {
 			return nil, loginErr
 		}
 		retry, err := cloneRequest(req)
@@ -283,6 +341,14 @@ func (c *Client) do(ctx context.Context, req *http.Request) ([]byte, error) {
 			ErrServer, req.URL.Path, status, truncate(string(body), 200))
 	}
 	return body, nil
+}
+
+// invalidateSession clears the last-login timestamp so the next
+// login() call won't be short-circuited by the grace period.
+func (c *Client) invalidateSession() {
+	c.loginMu.Lock()
+	c.lastLoginAt = time.Time{}
+	c.loginMu.Unlock()
 }
 
 // roundTrip executes a single attempt of the request. The body is
