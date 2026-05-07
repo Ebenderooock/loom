@@ -1,6 +1,11 @@
 package transmission
 
-import "context"
+import (
+	"context"
+	"fmt"
+
+	"github.com/loomctl/loom/internal/downloads"
+)
 
 // idsArg shapes the `ids` argument shared by torrent-start /
 // torrent-stop / torrent-remove. An empty slice is encoded as
@@ -43,4 +48,29 @@ func (c *Client) Remove(ctx context.Context, ids []string, deleteFiles bool) err
 		args["ids"] = v
 	}
 	return c.call(ctx, "torrent-remove", args, nil)
+}
+
+// SetPriority is not supported for Transmission.
+func (c *Client) SetPriority(_ context.Context, _ downloads.Priority, _ ...string) error {
+	return fmt.Errorf("SetPriority not supported for transmission")
+}
+
+// SetSpeedLimit is not supported for Transmission.
+func (c *Client) SetSpeedLimit(_ context.Context, _ int64, _ ...string) error {
+	return fmt.Errorf("SetSpeedLimit not supported for transmission")
+}
+
+// ForceStart is not supported for Transmission.
+func (c *Client) ForceStart(_ context.Context, _ ...string) error {
+	return fmt.Errorf("ForceStart not supported for transmission")
+}
+
+// Recheck is not supported for Transmission.
+func (c *Client) Recheck(_ context.Context, _ ...string) error {
+	return fmt.Errorf("Recheck not supported for transmission")
+}
+
+// Reannounce is not supported for Transmission.
+func (c *Client) Reannounce(_ context.Context, _ ...string) error {
+	return fmt.Errorf("Reannounce not supported for transmission")
 }

@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+
+	"github.com/loomctl/loom/internal/downloads"
 )
 
 // Pause asks SABnzbd to pause one or more queued items. Empty ids
@@ -141,4 +143,29 @@ func (c *Client) forEachID(ids []string, fn func(string) error) error {
 		}
 	}
 	return nil
+}
+
+// SetPriority is not supported for SABnzbd.
+func (c *Client) SetPriority(_ context.Context, _ downloads.Priority, _ ...string) error {
+	return fmt.Errorf("SetPriority not supported for sabnzbd")
+}
+
+// SetSpeedLimit is not supported for SABnzbd.
+func (c *Client) SetSpeedLimit(_ context.Context, _ int64, _ ...string) error {
+	return fmt.Errorf("SetSpeedLimit not supported for sabnzbd")
+}
+
+// ForceStart is not supported for SABnzbd.
+func (c *Client) ForceStart(_ context.Context, _ ...string) error {
+	return fmt.Errorf("ForceStart not supported for sabnzbd")
+}
+
+// Recheck is not supported for SABnzbd.
+func (c *Client) Recheck(_ context.Context, _ ...string) error {
+	return fmt.Errorf("Recheck not supported for sabnzbd")
+}
+
+// Reannounce is not supported for SABnzbd.
+func (c *Client) Reannounce(_ context.Context, _ ...string) error {
+	return fmt.Errorf("Reannounce not supported for sabnzbd")
 }

@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	"github.com/loomctl/loom/internal/downloads"
 )
 
 // Pause asks NZBGet to pause the listed groups via
@@ -91,4 +93,29 @@ func parseIDs(ids []string) ([]int64, error) {
 		out = append(out, n)
 	}
 	return out, nil
+}
+
+// SetPriority is not supported for NZBGet.
+func (c *Client) SetPriority(_ context.Context, _ downloads.Priority, _ ...string) error {
+	return fmt.Errorf("SetPriority not supported for nzbget")
+}
+
+// SetSpeedLimit is not supported for NZBGet.
+func (c *Client) SetSpeedLimit(_ context.Context, _ int64, _ ...string) error {
+	return fmt.Errorf("SetSpeedLimit not supported for nzbget")
+}
+
+// ForceStart is not supported for NZBGet.
+func (c *Client) ForceStart(_ context.Context, _ ...string) error {
+	return fmt.Errorf("ForceStart not supported for nzbget")
+}
+
+// Recheck is not supported for NZBGet.
+func (c *Client) Recheck(_ context.Context, _ ...string) error {
+	return fmt.Errorf("Recheck not supported for nzbget")
+}
+
+// Reannounce is not supported for NZBGet.
+func (c *Client) Reannounce(_ context.Context, _ ...string) error {
+	return fmt.Errorf("Reannounce not supported for nzbget")
 }
