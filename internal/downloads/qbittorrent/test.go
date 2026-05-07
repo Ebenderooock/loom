@@ -12,7 +12,7 @@ import (
 // app/version call proves the SID cookie is being honoured by the
 // authenticated endpoints. Returns nil on success.
 func (c *Client) Test(ctx context.Context) error {
-	if err := c.login(ctx); err != nil {
+	if err := c.login(ctx, true); err != nil {
 		return err
 	}
 	body, err := c.get(ctx, "app/version", nil)

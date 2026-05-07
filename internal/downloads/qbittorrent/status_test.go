@@ -113,7 +113,7 @@ func TestStatusGoldenFixture(t *testing.T) {
 	}))
 
 	c := newTestClient(t, f.srv, downloads.Definition{})
-	if err := c.login(context.Background()); err != nil {
+	if err := c.login(context.Background(), true); err != nil {
 		t.Fatalf("login: %v", err)
 	}
 	items, err := c.Status(context.Background())
@@ -170,7 +170,7 @@ func TestStatusFiltersByHash(t *testing.T) {
 	}))
 
 	c := newTestClient(t, f.srv, downloads.Definition{})
-	if err := c.login(context.Background()); err != nil {
+	if err := c.login(context.Background(), true); err != nil {
 		t.Fatalf("login: %v", err)
 	}
 	if _, err := c.Status(context.Background(), "abc", "def"); err != nil {
@@ -191,7 +191,7 @@ func TestStatusUnknownHashErrors(t *testing.T) {
 	}))
 
 	c := newTestClient(t, f.srv, downloads.Definition{})
-	if err := c.login(context.Background()); err != nil {
+	if err := c.login(context.Background(), true); err != nil {
 		t.Fatalf("login: %v", err)
 	}
 	_, err := c.Status(context.Background(), "deadbeef")
