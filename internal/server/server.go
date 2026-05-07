@@ -28,6 +28,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
+	"github.com/go-chi/httprate"
 
 	"github.com/loomctl/loom/internal/alttitles"
 	"github.com/loomctl/loom/internal/anime"
@@ -509,6 +510,15 @@ func (s *Server) newMux() http.Handler {
 		// Apply auth to all routes in this group (RequireAuth is a no-op when auth is disabled)
 		if s.authSvc != nil {
 			r.Use(s.authSvc.RequireAuth)
+		}
+
+		// Per-IP rate limiting for the authenticated API surface.
+		if s.cfg.RateLimit.Enabled {
+			rpm := s.cfg.RateLimit.RequestsPerMinute
+			if rpm <= 0 {
+				rpm = 300
+			}
+			r.Use(httprate.LimitByIP(rpm, time.Minute))
 		}
 
 		// Indexer routes

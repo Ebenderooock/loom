@@ -39,6 +39,7 @@ type Config struct {
 	Downloads       DownloadsConfig       `mapstructure:"downloads"`
 	Safety          SafetyConfig          `mapstructure:"safety"`
 	MediaManagement MediaManagementConfig `mapstructure:"media_management"`
+	RateLimit       RateLimitConfig       `mapstructure:"rate_limit"`
 }
 
 // IndexersConfig governs the indexer core (search fan-out + periodic
@@ -126,6 +127,12 @@ type CardigannConfig struct {
 type ProxiesConfig struct {
 	FlareSolverrDefaultTimeoutSec int    `mapstructure:"flaresolverr_default_timeout"`
 	TestProbeURL                  string `mapstructure:"test_probe_url"`
+}
+
+// RateLimitConfig controls per-IP API rate limiting.
+type RateLimitConfig struct {
+	Enabled           bool `mapstructure:"enabled"`
+	RequestsPerMinute int  `mapstructure:"requests_per_minute"`
 }
 
 type HTTPConfig struct {
@@ -416,6 +423,9 @@ func applyDefaults(v *viper.Viper) {
 	v.SetDefault("otel.metrics_enabled", false)
 	v.SetDefault("otel.metrics_interval", "15s")
 	v.SetDefault("otel.service_name", "loom")
+
+	v.SetDefault("rate_limit.enabled", true)
+	v.SetDefault("rate_limit.requests_per_minute", 300)
 
 	v.SetDefault("storage.engine", "sqlite")
 	// Don't set a default sqlite path here; it's handled in Load() after file reading
