@@ -28,7 +28,7 @@ securityContext:
 # ---------- Service ----------
 service:
   type: ClusterIP
-  port: 8989
+  port: 9999
 
 # ---------- Ingress (Traefik) ----------
 ingress:
@@ -79,6 +79,11 @@ extraVolumeMounts:
   - name: downloads
     mountPath: /media/downloads
 
+# ---------- Extra environment ----------
+extraEnv:
+  - name: LOOM_HTTP_ADDR
+    value: ":9999"
+
 # ---------- Resources ----------
 resources:
   requests:
@@ -93,12 +98,14 @@ probes:
   liveness:
     enabled: true
     path: /api/v1/health
+    port: 9999
     initialDelaySeconds: 10
     periodSeconds: 30
     timeoutSeconds: 5
   readiness:
     enabled: true
     path: /api/v1/health
+    port: 9999
     initialDelaySeconds: 5
     periodSeconds: 10
     timeoutSeconds: 5
