@@ -1,6 +1,6 @@
 module github.com/loomctl/loom
 
-go 1.25.7
+go 1.26
 
 require (
 	github.com/PuerkitoBio/goquery v1.12.0
@@ -9,6 +9,7 @@ require (
 	github.com/fsnotify/fsnotify v1.10.0
 	github.com/go-chi/chi/v5 v5.2.5
 	github.com/go-chi/cors v1.2.2
+	github.com/go-chi/httprate v0.15.0
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.9.2
 	github.com/mattn/go-sqlite3 v1.14.44
@@ -42,7 +43,6 @@ require (
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
-	github.com/go-chi/httprate v0.15.0 // indirect
 	github.com/go-jose/go-jose/v4 v4.1.4 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
