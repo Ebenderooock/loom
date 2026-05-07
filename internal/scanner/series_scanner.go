@@ -37,6 +37,28 @@ func NewSeriesScanner(seriesSvc series.Service, logger *slog.Logger) *SeriesScan
 	}
 }
 
+// evictOldScans removes the oldest completed scans when history exceeds maxScanHistory.
+// Must be called with s.mu held.
+func (s *SeriesScanner) evictOldScans() {
+	if len(s.scans) <= maxScanHistory {
+		return
+	}
+	var oldest string
+	var oldestTime time.Time
+	for id, scan := range s.scans {
+		if scan.Status != ScanStatusRunning && (oldest == "" || scan.StartedAt.Before(oldestTime)) {
+			oldest = id
+			oldestTime = scan.StartedAt
+		}
+	}
+	if oldest != "" {
+		delete(s.scans, oldest)
+		delete(s.unmatched, oldest)
+	}
+}
+
+const maxScanHistory = 20
+
 var seasonDirRe = regexp.MustCompile(`(?i)(?:season|s)\s*(\d+)`)
 
 // showFolderNameRe extracts a title and optional year from a folder name like "Breaking Bad (2008)".
@@ -64,6 +86,7 @@ func (s *SeriesScanner) StartSeriesScan(ctx context.Context, libraryID, rootFold
 	s.mu.Lock()
 	s.scans[scanID] = result
 	s.unmatched[scanID] = nil
+	s.evictOldScans()
 	s.mu.Unlock()
 
 	go s.runSeriesScan(context.Background(), scanID, libraryID, rootFolder)
@@ -173,25 +196,50 @@ func (s *SeriesScanner) runSeriesScan(ctx context.Context, scanID, libraryID, ro
 		s.logger.Info("added series from TMDB", "title", title, "tmdbId", tmdbID)
 	}
 
-	// Phase 2: Walk for episode files and match against DB series
-	scanned, err := walkSeriesFolder(rootFolder)
+	// Phase 2: Walk each show folder, match files using folder-based series identity
+	// (Sonarr approach: the show folder determines the series, not the filename)
+	existingSeries, err = s.seriesSvc.ListSeries(ctx)
 	if err != nil {
-		s.failSeriesScan(scanID, fmt.Sprintf("walk error: %v", err))
+		s.failSeriesScan(scanID, fmt.Sprintf("reload series: %v", err))
 		return
 	}
 
-	s.mu.Lock()
-	result.TotalFiles = len(scanned)
-	s.mu.Unlock()
+	// Build lookup: normalizedTitle → *series.Series
+	seriesByTitle := make(map[string]*series.Series)
+	for _, sr := range existingSeries {
+		seriesByTitle[normalizeTitle(sr.Title)] = sr
+	}
 
-	s.logger.Info("found episode files", "scanId", scanID, "count", len(scanned))
+	for _, sf := range showFolders {
+		title, _ := parseShowFolderName(sf.Name)
+		if title == "" {
+			continue
+		}
 
-	for _, sf := range scanned {
-		if err := s.processEpisodeFile(ctx, scanID, sf.Path, sf.Size); err != nil {
-			s.logger.Warn("failed to process episode file", "path", sf.Path, "err", err)
-			s.mu.Lock()
-			result.Errors = append(result.Errors, fmt.Sprintf("%s: %v", sf.Path, err))
-			s.mu.Unlock()
+		matched := seriesByTitle[normalizeTitle(title)]
+		if matched == nil {
+			s.logger.Debug("no DB series for show folder, skipping episode scan", "folder", sf.Name)
+			continue
+		}
+
+		// Walk this show folder for video files
+		showFiles, walkErr := walkSeriesFolder(sf.Path)
+		if walkErr != nil {
+			s.logger.Warn("error walking show folder", "path", sf.Path, "err", walkErr)
+			continue
+		}
+
+		s.mu.Lock()
+		result.TotalFiles += len(showFiles)
+		s.mu.Unlock()
+
+		for _, ef := range showFiles {
+			if err := s.processEpisodeFileForSeries(ctx, scanID, matched, ef.Path, ef.Size); err != nil {
+				s.logger.Warn("failed to process episode file", "path", ef.Path, "err", err)
+				s.mu.Lock()
+				result.Errors = append(result.Errors, fmt.Sprintf("%s: %v", ef.Path, err))
+				s.mu.Unlock()
+			}
 		}
 	}
 
@@ -199,14 +247,15 @@ func (s *SeriesScanner) runSeriesScan(ctx context.Context, scanID, libraryID, ro
 	s.mu.Lock()
 	result.Status = ScanStatusCompleted
 	result.CompletedAt = &now
+	total, matched, unmatched, imported := result.TotalFiles, result.Matched, result.Unmatched, result.Imported
 	s.mu.Unlock()
 
 	s.logger.Info("series scan completed",
 		"scanId", scanID,
-		"total", result.TotalFiles,
-		"matched", result.Matched,
-		"unmatched", result.Unmatched,
-		"imported", result.Imported,
+		"total", total,
+		"matched", matched,
+		"unmatched", unmatched,
+		"imported", imported,
 	)
 }
 
@@ -326,7 +375,9 @@ func extractYearFromResult(r map[string]interface{}) int {
 	return 0
 }
 
-func (s *SeriesScanner) processEpisodeFile(ctx context.Context, scanID, path string, size int64) error {
+// processEpisodeFileForSeries matches a file to a known series using folder context.
+// The series identity is already known from the show folder; we only extract season+episode.
+func (s *SeriesScanner) processEpisodeFileForSeries(ctx context.Context, scanID string, matched *series.Series, path string, size int64) error {
 	result := s.GetSeriesScanStatus(scanID)
 
 	fileName := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
@@ -335,33 +386,31 @@ func (s *SeriesScanner) processEpisodeFile(ctx context.Context, scanID, path str
 	season := parsed.Season
 	episode := parsed.Episode
 
-	// Try extracting season from parent directory if filename didn't have it
+	// Try climbing parent directories for season (handles nested structures)
 	if season < 0 {
-		season = extractSeasonFromDir(filepath.Dir(path))
-	}
-
-	title := parsed.Title
-	if title == "" {
-		s.addSeriesUnmatched(scanID, result, path, size, parsed, "")
-		return nil
+		dir := filepath.Dir(path)
+		for i := 0; i < 3; i++ {
+			season = extractSeasonFromDir(dir)
+			if season >= 0 {
+				break
+			}
+			parent := filepath.Dir(dir)
+			if parent == dir {
+				break
+			}
+			dir = parent
+		}
 	}
 
 	if season < 0 || episode < 0 {
-		s.addSeriesUnmatched(scanID, result, path, size, parsed, title)
-		return nil
-	}
-
-	// Search for matching series in DB
-	matched, err := s.findSeriesByTitle(ctx, title)
-	if err != nil || matched == nil {
-		s.addSeriesUnmatched(scanID, result, path, size, parsed, title)
+		s.addSeriesUnmatched(scanID, result, path, size, parsed, matched.Title)
 		return nil
 	}
 
 	// Find episode by season + episode number
 	ep, err := s.findEpisode(ctx, matched.ID, season, episode)
 	if err != nil || ep == nil {
-		s.addSeriesUnmatched(scanID, result, path, size, parsed, title)
+		s.addSeriesUnmatched(scanID, result, path, size, parsed, matched.Title)
 		return nil
 	}
 
@@ -522,7 +571,7 @@ func walkSeriesFolder(root string) ([]seriesScannedFile, error) {
 		if shouldIgnore(strings.ToLower(info.Name())) {
 			return nil
 		}
-		if info.Size() < 50*1024*1024 {
+		if info.Size() < 10*1024*1024 {
 			return nil
 		}
 
@@ -534,4 +583,72 @@ func walkSeriesFolder(root string) ([]seriesScannedFile, error) {
 	})
 
 	return files, err
+}
+
+// RescanSeries rescans a single series folder for new/changed episode files.
+func (s *SeriesScanner) RescanSeries(ctx context.Context, seriesID, libraryPath string) (*ScanResult, error) {
+	sr, err := s.seriesSvc.GetSeries(ctx, seriesID)
+	if err != nil {
+		return nil, fmt.Errorf("get series: %w", err)
+	}
+
+	// Find the series folder within the library by matching the title to top-level dirs
+	showFolders, err := discoverShowFolders(libraryPath)
+	if err != nil {
+		return nil, fmt.Errorf("discover show folders: %w", err)
+	}
+
+	var showPath string
+	normTarget := normalizeTitle(sr.Title)
+	for _, sf := range showFolders {
+		title, _ := parseShowFolderName(sf.Name)
+		if normalizeTitle(title) == normTarget {
+			showPath = sf.Path
+			break
+		}
+	}
+
+	if showPath == "" {
+		return nil, fmt.Errorf("no folder found for series %q in %s", sr.Title, libraryPath)
+	}
+
+	scanID := uuid.New().String()[:8]
+	result := &ScanResult{
+		ID:             scanID,
+		LibraryID:      sr.LibraryID,
+		RootFolderPath: showPath,
+		Status:         ScanStatusRunning,
+		StartedAt:      time.Now(),
+	}
+
+	s.mu.Lock()
+	s.scans[scanID] = result
+	s.unmatched[scanID] = nil
+	s.evictOldScans()
+	s.mu.Unlock()
+
+	files, walkErr := walkSeriesFolder(showPath)
+	if walkErr != nil {
+		s.failSeriesScan(scanID, walkErr.Error())
+		return result, walkErr
+	}
+
+	s.mu.Lock()
+	result.TotalFiles = len(files)
+	s.mu.Unlock()
+
+	for _, ef := range files {
+		if err := s.processEpisodeFileForSeries(ctx, scanID, sr, ef.Path, ef.Size); err != nil {
+			s.logger.Warn("rescan: failed to process episode file", "path", ef.Path, "err", err)
+		}
+	}
+
+	now := time.Now()
+	s.mu.Lock()
+	result.Status = ScanStatusCompleted
+	result.CompletedAt = &now
+	s.mu.Unlock()
+
+	s.logger.Info("series rescan completed", "series", sr.Title, "matched", result.Matched, "imported", result.Imported)
+	return result, nil
 }

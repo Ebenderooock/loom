@@ -222,6 +222,21 @@ func TestParseSeasonEpisode(t *testing.T) {
 
 		// Real-world example
 		{"real example", "Breaking.Bad.S05E16.mkv", 5, 16},
+
+		// ##x## format
+		{"7x01 format", "show.7x01.mkv", 7, 1},
+		{"1x05 format", "show.1x05.720p.mkv", 1, 5},
+
+		// Episode word format
+		{"Episode 01", "show.Episode.01.mkv", -1, 1},
+		{"Ep 05", "show.ep.05.mkv", -1, 5},
+
+		// Standalone E## format
+		{"E01 standalone", "E01.720p.mkv", -1, 1},
+		{"e05 standalone", "show.e05.mkv", -1, 5},
+
+		// 3-digit episode
+		{"S01E100", "show.S01E100.mkv", 1, 100},
 	}
 
 	for _, tt := range tests {
@@ -357,8 +372,11 @@ func TestExtractTitle(t *testing.T) {
 	}{
 		{"movie with year", "The.Matrix.1999.1080p.BluRay.x264-GROUP", "The Matrix"},
 		{"movie no year", "Inception.1080p.BluRay.x264", "Inception"},
-		{"tv show", "Breaking.Bad.S01E05.720p.BluRay", "Breaking Bad S01E05"},
-		{"underscored", "The_Dark_Knight_2008_BluRay", "The Dark Knight 2008 BluRay"},
+		{"tv show", "Breaking.Bad.S01E05.720p.BluRay", "Breaking Bad"},
+		{"tv show 1x format", "The.Rookie.7x01.720p.HDTV", "The Rookie"},
+		{"tv show no title", "S07E01.720p.HDTV.x264", ""},
+		{"tv show dash title", "The Rookie - S07E01 - The Good the Bad", "The Rookie"},
+		{"underscored", "The_Dark_Knight_2008_BluRay", "The Dark Knight"},
 		{"with group bracket", "[SubGroup] Show Name - 01 [1080p]", "Show Name 01 [1080p]"},
 		{"with parens year", "Dune (2021) 1080p BluRay", "Dune"},
 	}

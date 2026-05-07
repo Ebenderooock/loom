@@ -217,13 +217,43 @@ func extractSeasonEpisode(lower string) (int, int) {
 	season := -1
 	episode := -1
 
-	// S##E## pattern (e.g., S01E05, s1e5)
-	p := getPattern("sxe", `s(\d{1,2})e(\d{1,2})`)
+	// S##E## pattern (e.g., S01E05, s1e5, S01E05E06 → first episode)
+	p := getPattern("sxe", `s(\d{1,2})e(\d{1,3})`)
 	if matches := p.FindStringSubmatch(lower); len(matches) > 2 {
 		if s, err := strconv.Atoi(matches[1]); err == nil {
 			season = s
 		}
 		if e, err := strconv.Atoi(matches[2]); err == nil {
+			episode = e
+		}
+		return season, episode
+	}
+
+	// ##x## pattern (e.g., 1x05, 7x01)
+	p = getPattern("nxn", `(?:^|[\s._-])(\d{1,2})x(\d{1,3})(?:$|[\s._-])`)
+	if matches := p.FindStringSubmatch(lower); len(matches) > 2 {
+		if s, err := strconv.Atoi(matches[1]); err == nil {
+			season = s
+		}
+		if e, err := strconv.Atoi(matches[2]); err == nil {
+			episode = e
+		}
+		return season, episode
+	}
+
+	// "Episode ##" or "Ep ##" pattern
+	p = getPattern("episode_word", `(?:episode|ep)[\s._-]*(\d{1,3})`)
+	if matches := p.FindStringSubmatch(lower); len(matches) > 1 {
+		if e, err := strconv.Atoi(matches[1]); err == nil {
+			episode = e
+		}
+		return season, episode
+	}
+
+	// Standalone E## pattern (e.g., E01, e05) with boundaries
+	p = getPattern("standalone_e", `(?:^|[\s._-])e(\d{1,3})(?:$|[\s._-])`)
+	if matches := p.FindStringSubmatch(lower); len(matches) > 1 {
+		if e, err := strconv.Atoi(matches[1]); err == nil {
 			episode = e
 		}
 	}
@@ -249,13 +279,15 @@ func extractTitle(name string, year int) string {
 	p := getPattern("title_leading_bracket", `^\[.*?\]\s*`)
 	clean = p.ReplaceAllString(clean, "")
 
-	// Find the cutoff point: year in parentheses, year standalone, or first quality marker
+	// Find the cutoff point: year in parentheses, year standalone, or first quality/episode marker
 	cutPatterns := []string{
-		`\s*[\(\[]?\d{4}[\)\]]?[\s\.\-]`,        // year with optional parens/brackets
-		`(?i)\s*[\.\-\s](?:720p?|1080p?|2160p?|4k|uhd)`, // resolution
-		`(?i)\s*[\.\-\s](?:bluray|brrip|webrip|webdl|web[\-\s]dl|hdtv|dvdrip|remux)`, // source
-		`(?i)\s*[\.\-\s](?:h\.?264|h\.?265|hevc|x\.?264|x\.?265|avc)`,               // codec
-		`(?i)\s*[\.\-\s](?:proper|repack|rerip|internal|limited|directors|extended)`,  // tags
+		`(?i)(?:^|[\s._-])s\d{1,2}e\d{1,3}`,             // S##E## season+episode
+		`(?i)(?:^|[\s._-])\d{1,2}x\d{1,3}`,              // ##x## season+episode
+		`\s*[\(\[]?\d{4}[\)\]]?[\s\.\-_]`,                 // year with optional parens/brackets
+		`(?i)\s*[\.\-\s_](?:720p?|1080p?|2160p?|4k|uhd)`, // resolution
+		`(?i)\s*[\.\-\s_](?:bluray|brrip|webrip|webdl|web[\-\s]dl|hdtv|dvdrip|remux)`, // source
+		`(?i)\s*[\.\-\s_](?:h\.?264|h\.?265|hevc|x\.?264|x\.?265|avc)`,               // codec
+		`(?i)\s*[\.\-\s_](?:proper|repack|rerip|internal|limited|directors|extended)`,  // tags
 	}
 
 	cutIdx := len(clean)

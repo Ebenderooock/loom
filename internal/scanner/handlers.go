@@ -8,6 +8,12 @@ import (
 	"github.com/ebenderooock/loom/internal/libraries"
 )
 
+func writeJSONError(w http.ResponseWriter, msg string, code int) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(code)
+	json.NewEncoder(w).Encode(map[string]string{"error": msg})
+}
+
 // RegisterRoutes registers scanner endpoints on the given router.
 // These should be mounted under /api/v1/movies/scan
 func RegisterRoutes(r chi.Router, scanner *Scanner, libStore *libraries.Store) {
@@ -94,6 +100,7 @@ func RegisterSeriesRoutes(r chi.Router, ss *SeriesScanner, libStore *libraries.S
 		r.Get("/unmatched", getSeriesUnmatched(ss))
 		r.Get("/{scanId}", getSeriesScanStatus(ss))
 	})
+	r.Post("/{id}/rescan", rescanSeries(ss, libStore))
 }
 
 type startSeriesScanRequest struct {
@@ -121,7 +128,7 @@ func startSeriesScan(ss *SeriesScanner, libStore *libraries.Store) http.HandlerF
 
 		scanID, err := ss.StartSeriesScan(r.Context(), lib.ID, lib.Path)
 		if err != nil {
-			http.Error(w, `{"error":"`+err.Error()+`"}`, http.StatusInternalServerError)
+			writeJSONError(w, "scan failed", http.StatusInternalServerError)
 			return
 		}
 
@@ -169,11 +176,47 @@ func matchFile(s *Scanner) http.HandlerFunc {
 		}
 
 		if err := s.MatchFile(r.Context(), req.UnmatchedID, req.TmdbID, req.LibraryID, req.QualityProfileID); err != nil {
-			http.Error(w, `{"error":"`+err.Error()+`"}`, http.StatusInternalServerError)
+			writeJSONError(w, "match failed", http.StatusInternalServerError)
 			return
 		}
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]string{"status": "matched"})
+	}
+}
+
+func rescanSeries(ss *SeriesScanner, libStore *libraries.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		seriesID := chi.URLParam(r, "id")
+		if seriesID == "" {
+			http.Error(w, `{"error":"series id required"}`, http.StatusBadRequest)
+			return
+		}
+
+		// Determine which library this series belongs to
+		var req struct {
+			LibraryID string `json:"libraryId"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&req) // body may be empty
+
+		if req.LibraryID == "" {
+			http.Error(w, `{"error":"libraryId is required"}`, http.StatusBadRequest)
+			return
+		}
+
+		lib, err := libStore.Get(r.Context(), req.LibraryID)
+		if err != nil {
+			http.Error(w, `{"error":"library not found"}`, http.StatusNotFound)
+			return
+		}
+
+		result, err := ss.RescanSeries(r.Context(), seriesID, lib.Path)
+		if err != nil {
+			writeJSONError(w, "rescan failed", http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(result)
 	}
 }
