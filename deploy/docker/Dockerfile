@@ -43,8 +43,7 @@ COPY --from=build /out/loom /usr/local/bin/loom
 EXPOSE 8989
 VOLUME ["/config", "/media"]
 
-ENV LOOM_HTTP_ADDR=:8989 \
-    LOOM_CONFIG_DIR=/config \
+ENV LOOM_CONFIG_DIR=/config \
     LOOM_DATA_DIR=/config
 
 ENTRYPOINT ["/usr/local/bin/loom"]
