@@ -13,8 +13,6 @@ import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
-  CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
 import {
   Select,
@@ -86,19 +84,6 @@ function usePruneSearchLog() {
 }
 
 // ---------- Helpers ----------
-
-function statusColor(status: string) {
-  switch (status) {
-    case "completed":
-      return "text-green-500";
-    case "failed":
-      return "text-red-500";
-    case "running":
-      return "text-yellow-500";
-    default:
-      return "text-gray-500";
-  }
-}
 
 function statusBadgeVariant(status: string) {
   switch (status) {
