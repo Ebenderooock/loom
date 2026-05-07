@@ -39,23 +39,29 @@ ingress:
     # Uncomment for automatic TLS via cert-manager:
     # cert-manager.io/cluster-issuer: letsencrypt-prod
   hosts:
-    - host: loom.homelab.local  # <-- change to your domain
+    - host: loom.media.deroock.co.za  # <-- change to your domain
       paths:
         - path: /
           pathType: Prefix
-  tls: []
-    # - secretName: loom-tls
-    #   hosts:
-    #     - loom.homelab.local
+  tls:
+    - secretName: loom-tls
+      hosts:
+        - loom.media.deroock.co.za
 
 # ---------- Persistence ----------
 # Config volume — on your Synology k8s persistence volume
 persistence:
   config:
     enabled: true
-    storageClass: ""  # uses cluster default — set if needed
+    storageClass: "synology-nfs"  # uses cluster default — set if needed
     accessMode: ReadWriteOnce
     size: 1Gi
+    nfs:
+      server: 192.168.3.20
+      path: /volume1/k8s-volumes/loom
+    claimRef:
+      namespace: media
+      name: loom-pvc
   media:
     enabled: false  # handled by existing PVCs below
 
