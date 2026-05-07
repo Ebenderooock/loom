@@ -1,30 +1,22 @@
+import { Suspense, lazy } from "react";
 import {
   createRootRoute,
   createRoute,
   createRouter,
+  lazyRouteComponent,
 } from "@tanstack/react-router";
 import { AppLayout } from "@/components/layout/app-layout";
-import { DashboardPage } from "@/pages/dashboard";
-import { LibraryPage } from "@/pages/library";
-import { MoviesPage } from "@/pages/movies";
-import { ActivityPage } from "@/pages/activity";
-import { CalendarPage } from "@/pages/calendar";
-import { SettingsPage } from "@/pages/settings";
-import { IndexersPage } from "@/pages/indexers";
-import { ProxiesPage } from "@/pages/proxies";
-import { DownloadsPage } from "@/pages/downloads";
-import { SourcesPage } from "@/pages/sources";
-import { SeriesPage } from "@/pages/series";
-import { SetupPage } from "@/pages/setup";
-import { NotificationsPage } from "@/pages/notifications";
-import { LanguageProfilesPage } from "@/pages/language-profiles";
-import { IndexerHealthPage } from "@/pages/indexer-health";
-import { CustomFormatsPage } from "@/pages/custom-formats";
-import { QualityProfilesPage } from "@/pages/quality-profiles";
-import { ImportListsPage } from "@/pages/import-lists";
 import { NotFoundPage } from "@/pages/not-found";
-import { AuthPage } from "@/pages/auth";
 import { useAuth } from "@/hooks/use-auth";
+import { PageLoader } from "@/components/ui/page-loader";
+
+// Lazy-loaded page components (route-level code splitting)
+const SetupPage = lazy(() =>
+  import("@/pages/setup").then((m) => ({ default: m.SetupPage })),
+);
+const AuthPage = lazy(() =>
+  import("@/pages/auth").then((m) => ({ default: m.AuthPage })),
+);
 
 function RootComponent() {
   const { isSetupComplete, isAuthenticated, isLoading } = useAuth();
@@ -33,14 +25,20 @@ function RootComponent() {
     return <div className="w-screen h-screen bg-neutral-dark" />;
   }
 
-  // If setup not complete, show setup flow
   if (!isSetupComplete) {
-    return <SetupPage />;
+    return (
+      <Suspense fallback={<PageLoader />}>
+        <SetupPage />
+      </Suspense>
+    );
   }
 
-  // If setup complete but not authenticated, show login
   if (!isAuthenticated) {
-    return <AuthPage />;
+    return (
+      <Suspense fallback={<PageLoader />}>
+        <AuthPage />
+      </Suspense>
+    );
   }
 
   return <AppLayout />;
@@ -54,109 +52,172 @@ const rootRoute = createRootRoute({
 const setupRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/setup",
-  component: SetupPage,
+  component: lazyRouteComponent(() => import("@/pages/setup"), "SetupPage"),
+  pendingComponent: PageLoader,
 });
 
 const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/",
-  component: DashboardPage,
+  component: lazyRouteComponent(
+    () => import("@/pages/dashboard"),
+    "DashboardPage",
+  ),
+  pendingComponent: PageLoader,
 });
 
 const libraryRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/library",
-  component: LibraryPage,
+  component: lazyRouteComponent(
+    () => import("@/pages/library"),
+    "LibraryPage",
+  ),
+  pendingComponent: PageLoader,
 });
 
 const moviesRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/movies",
-  component: MoviesPage,
+  component: lazyRouteComponent(() => import("@/pages/movies"), "MoviesPage"),
+  pendingComponent: PageLoader,
 });
 
 const activityRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/activity",
-  component: ActivityPage,
+  component: lazyRouteComponent(
+    () => import("@/pages/activity"),
+    "ActivityPage",
+  ),
+  pendingComponent: PageLoader,
 });
 
 const calendarRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/calendar",
-  component: CalendarPage,
+  component: lazyRouteComponent(
+    () => import("@/pages/calendar"),
+    "CalendarPage",
+  ),
+  pendingComponent: PageLoader,
 });
 
 const settingsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/settings",
-  component: SettingsPage,
+  component: lazyRouteComponent(
+    () => import("@/pages/settings"),
+    "SettingsPage",
+  ),
+  pendingComponent: PageLoader,
 });
 
 const indexersRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/indexers",
-  component: IndexersPage,
+  component: lazyRouteComponent(
+    () => import("@/pages/indexers"),
+    "IndexersPage",
+  ),
+  pendingComponent: PageLoader,
 });
 
 const proxiesRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/proxies",
-  component: ProxiesPage,
+  component: lazyRouteComponent(
+    () => import("@/pages/proxies"),
+    "ProxiesPage",
+  ),
+  pendingComponent: PageLoader,
 });
 
 const downloadsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/downloads",
-  component: DownloadsPage,
+  component: lazyRouteComponent(
+    () => import("@/pages/downloads"),
+    "DownloadsPage",
+  ),
+  pendingComponent: PageLoader,
 });
 
 const sourcesRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/sources",
-  component: SourcesPage,
+  component: lazyRouteComponent(
+    () => import("@/pages/sources"),
+    "SourcesPage",
+  ),
+  pendingComponent: PageLoader,
 });
 
 const seriesRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/series",
-  component: SeriesPage,
+  component: lazyRouteComponent(() => import("@/pages/series"), "SeriesPage"),
+  pendingComponent: PageLoader,
 });
 
 const notificationsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/notifications",
-  component: NotificationsPage,
+  component: lazyRouteComponent(
+    () => import("@/pages/notifications"),
+    "NotificationsPage",
+  ),
+  pendingComponent: PageLoader,
 });
 
 const languageProfilesRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/language-profiles",
-  component: LanguageProfilesPage,
+  component: lazyRouteComponent(
+    () => import("@/pages/language-profiles"),
+    "LanguageProfilesPage",
+  ),
+  pendingComponent: PageLoader,
 });
 
 const indexerHealthRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/indexers/health",
-  component: IndexerHealthPage,
+  component: lazyRouteComponent(
+    () => import("@/pages/indexer-health"),
+    "IndexerHealthPage",
+  ),
+  pendingComponent: PageLoader,
 });
 
 const customFormatsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/custom-formats",
-  component: CustomFormatsPage,
+  component: lazyRouteComponent(
+    () => import("@/pages/custom-formats"),
+    "CustomFormatsPage",
+  ),
+  pendingComponent: PageLoader,
 });
 
 const qualityProfilesRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/quality-profiles",
-  component: QualityProfilesPage,
+  component: lazyRouteComponent(
+    () => import("@/pages/quality-profiles"),
+    "QualityProfilesPage",
+  ),
+  pendingComponent: PageLoader,
 });
 
 const importListsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/import-lists",
-  component: ImportListsPage,
+  component: lazyRouteComponent(
+    () => import("@/pages/import-lists"),
+    "ImportListsPage",
+  ),
+  pendingComponent: PageLoader,
 });
 
 const routeTree = rootRoute.addChildren([
