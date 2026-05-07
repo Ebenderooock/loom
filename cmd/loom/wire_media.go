@@ -1,0 +1,111 @@
+package main
+
+import (
+	"context"
+	"fmt"
+	"log/slog"
+
+	"github.com/loomctl/loom/internal/alttitles"
+	"github.com/loomctl/loom/internal/anime"
+	"github.com/loomctl/loom/internal/calendar"
+	"github.com/loomctl/loom/internal/importlists"
+	"github.com/loomctl/loom/internal/languages"
+	"github.com/loomctl/loom/internal/libraries"
+	"github.com/loomctl/loom/internal/mediainfo"
+	"github.com/loomctl/loom/internal/movies"
+	"github.com/loomctl/loom/internal/notifications"
+	"github.com/loomctl/loom/internal/qualityprofiles"
+	"github.com/loomctl/loom/internal/series"
+	"github.com/loomctl/loom/internal/kernel/config"
+	"github.com/loomctl/loom/internal/server"
+	"github.com/loomctl/loom/internal/storage"
+)
+
+// mediaWiring holds services produced by wireMedia that downstream
+// wire functions need.
+type mediaWiring struct {
+	libStore          *libraries.Store
+	seriesSvc         series.Service
+	qpStore           *qualityprofiles.Store
+	notifSvc          notifications.Service
+	importListSyncMgr *importlists.SyncManager
+}
+
+// wireMedia constructs all media-related services (scanner, organizer,
+// series, libraries, languages, quality profiles, etc.) and mounts
+// them on srv. It returns shared references that other wire functions
+// depend on.
+func wireMedia(
+	ctx context.Context,
+	cfg *config.Config,
+	db storage.DB,
+	srv *server.Server,
+	moviesSvc movies.Service,
+	logger *slog.Logger,
+) (*mediaWiring, error) {
+	// Libraries store — needed by scanner, organizer, imports, health monitor.
+	libStore := libraries.NewStore(db.DB())
+
+	// Library scanner
+	scannerSvc := buildScanner(moviesSvc, cfg, logger)
+	srv.SetScanner(scannerSvc)
+
+	// File organizer
+	organizerSvc := buildOrganizer(moviesSvc, libStore, db, logger)
+	if mode := cfg.MediaManagement.ImportMode; mode != "" {
+		organizerSvc.SetImportMode(mode)
+	}
+	srv.SetOrganizer(organizerSvc)
+
+	// TV series
+	seriesSvc := buildSeriesService(db)
+	srv.SetSeries(seriesSvc)
+
+	seriesScannerSvc := buildSeriesScanner(seriesSvc, logger)
+	srv.SetSeriesScanner(seriesScannerSvc)
+
+	// Notifications
+	notifSvc := buildNotificationsService(db)
+	srv.SetNotifications(notifSvc)
+
+	// Calendar
+	srv.SetCalendar(calendar.Router(db.DB()))
+
+	// Language profiles
+	langStore := languages.NewStore(db.DB())
+	if err := langStore.EnsureDefault(ctx); err != nil {
+		return nil, fmt.Errorf("init language profiles: %w", err)
+	}
+	srv.SetLanguages(langStore)
+
+	// Anime
+	srv.SetAnime(anime.NewStore(db.DB(), logger))
+
+	// Import lists
+	importListStore := importlists.NewStore(db.DB())
+	importListSyncMgr := importlists.NewSyncManager(importListStore, logger)
+	srv.SetImportLists(importListStore, importListSyncMgr)
+
+	// Libraries scanner
+	libScanner := libraries.NewScanner(libStore, logger)
+	srv.SetLibraries(libStore, libScanner)
+
+	// Media info
+	srv.SetMediaInfo(mediainfo.NewStore(db.DB(), logger))
+
+	// Alt titles
+	srv.SetAltTitles(alttitles.NewStore(db.DB()))
+
+	// Quality profiles
+	qpStore := qualityprofiles.NewStore(db.DB())
+	srv.SetQualityProfiles(qpStore)
+	qualityprofiles.SeedDefaults(ctx, qpStore, moviesSvc)
+
+	return &mediaWiring{
+		libStore:          libStore,
+		seriesSvc:         seriesSvc,
+		qpStore:           qpStore,
+		notifSvc:          notifSvc,
+		importListSyncMgr: importListSyncMgr,
+	}, nil
+}
