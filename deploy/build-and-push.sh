@@ -18,18 +18,17 @@ PLATFORM="${2:-linux/amd64}"  # use "linux/amd64,linux/arm64" for multi-arch
 
 echo "==> Building Loom ${VERSION} (commit: ${COMMIT}, platform: ${PLATFORM})"
 
-docker build \
+# Use buildx to cross-compile for amd64 from Apple Silicon and push in one step
+docker buildx build \
+  --platform "${PLATFORM}" \
   -f deploy/docker/Dockerfile \
   --build-arg VERSION="${VERSION}" \
   --build-arg COMMIT="${COMMIT}" \
   --build-arg DATE="${DATE}" \
   -t "${REPO}:${VERSION}" \
   -t "${REPO}:latest" \
+  --push \
   .
-
-echo "==> Pushing ${REPO}:${VERSION}"
-docker push "${REPO}:${VERSION}"
-docker push "${REPO}:latest"
 
 echo "==> Pushed ${REPO}:${VERSION} and ${REPO}:latest"
 echo ""
