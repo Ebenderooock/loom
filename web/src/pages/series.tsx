@@ -16,7 +16,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Plus, Search, Tv } from "lucide-react";
+import { Plus, Search, Tv, FolderSearch } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
 import { useSetPageHeader } from "@/hooks/use-page-header";
@@ -29,6 +29,7 @@ import {
   SeriesDetailSheet,
   sortSeries,
 } from "@/components/series";
+import { SeriesLibraryImportDialog } from "@/components/series/series-library-import-dialog";
 import { useLibraries } from "@/lib/libraries-api";
 import type { Series, QualityProfile, SeriesSortKey, ViewMode } from "@/components/series";
 
@@ -105,6 +106,7 @@ export function SeriesPage() {
   const [qualityProfiles, setQualityProfiles] = useState<QualityProfile[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [addDialogOpen, setAddDialogOpen] = useState(false);
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
 
   // Filters & sort
   const [filterText, setFilterText] = useState("");
@@ -265,6 +267,7 @@ export function SeriesPage() {
           onBulkUnmonitor={() => handleBulkMonitoring("unmonitored")}
           onBulkDelete={() => setBulkDeleteOpen(true)}
           onAddSeries={() => setAddDialogOpen(true)}
+          onImportLibrary={() => setImportDialogOpen(true)}
         />
       ) : null}
 
@@ -283,9 +286,14 @@ export function SeriesPage() {
           {libraries.length === 0 ? (
             <p className="text-sm text-amber-500">⚠️ Add a library in Settings before adding series</p>
           ) : (
-            <Button onClick={() => setAddDialogOpen(true)} size="lg">
-              <Plus className="w-4 h-4 mr-1.5" /> Add Series
-            </Button>
+            <div className="flex gap-3">
+              <Button variant="outline" size="lg" onClick={() => setImportDialogOpen(true)}>
+                <FolderSearch className="w-4 h-4 mr-1.5" /> Import Existing
+              </Button>
+              <Button onClick={() => setAddDialogOpen(true)} size="lg">
+                <Plus className="w-4 h-4 mr-1.5" /> Add Series
+              </Button>
+            </div>
           )}
         </div>
       ) : viewMode === "grid" ? (
@@ -370,6 +378,13 @@ export function SeriesPage() {
         onOpenChange={setBulkDeleteOpen}
         count={selectedIds.size}
         onConfirm={handleBulkDelete}
+      />
+
+      <SeriesLibraryImportDialog
+        open={importDialogOpen}
+        onOpenChange={setImportDialogOpen}
+        libraries={libraries}
+        onImportComplete={fetchAll}
       />
     </div>
   );

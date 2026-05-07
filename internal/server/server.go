@@ -556,7 +556,7 @@ func (s *Server) newMux() http.Handler {
 		if s.seriesSvc != nil {
 			seriesRouter := series.RouterWithSearch(s.seriesSvc, s.indexerSvc, s.grabStore, series.WithUnmonitorChecker(s.libStore))
 			if s.seriesScannerSvc != nil {
-				scanner.RegisterSeriesRoutes(seriesRouter, s.seriesScannerSvc)
+				scanner.RegisterSeriesRoutes(seriesRouter, s.seriesScannerSvc, s.libStore)
 			}
 			r.Mount("/api/v1/series", seriesRouter)
 		}

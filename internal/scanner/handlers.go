@@ -88,19 +88,19 @@ type matchFileRequest struct {
 
 // RegisterSeriesRoutes registers series scanner endpoints on the given router.
 // These should be mounted under /api/v1/series/scan
-func RegisterSeriesRoutes(r chi.Router, ss *SeriesScanner) {
+func RegisterSeriesRoutes(r chi.Router, ss *SeriesScanner, libStore *libraries.Store) {
 	r.Route("/scan", func(r chi.Router) {
-		r.Post("/", startSeriesScan(ss))
+		r.Post("/", startSeriesScan(ss, libStore))
 		r.Get("/unmatched", getSeriesUnmatched(ss))
 		r.Get("/{scanId}", getSeriesScanStatus(ss))
 	})
 }
 
 type startSeriesScanRequest struct {
-	Path string `json:"path"`
+	LibraryID string `json:"libraryId"`
 }
 
-func startSeriesScan(ss *SeriesScanner) http.HandlerFunc {
+func startSeriesScan(ss *SeriesScanner, libStore *libraries.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req startSeriesScanRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -108,12 +108,18 @@ func startSeriesScan(ss *SeriesScanner) http.HandlerFunc {
 			return
 		}
 
-		if req.Path == "" {
-			http.Error(w, `{"error":"path is required"}`, http.StatusBadRequest)
+		if req.LibraryID == "" {
+			http.Error(w, `{"error":"libraryId is required"}`, http.StatusBadRequest)
 			return
 		}
 
-		scanID, err := ss.StartSeriesScan(r.Context(), req.Path)
+		lib, err := libStore.Get(r.Context(), req.LibraryID)
+		if err != nil {
+			http.Error(w, `{"error":"library not found"}`, http.StatusNotFound)
+			return
+		}
+
+		scanID, err := ss.StartSeriesScan(r.Context(), lib.ID, lib.Path)
 		if err != nil {
 			http.Error(w, `{"error":"`+err.Error()+`"}`, http.StatusInternalServerError)
 			return
