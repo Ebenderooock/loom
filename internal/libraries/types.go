@@ -4,14 +4,17 @@ import "time"
 
 // Library represents a root-folder library that Loom monitors.
 type Library struct {
-	ID               string    `json:"id"`
-	Name             string    `json:"name"`
-	Path             string    `json:"path"`
-	MediaType        string    `json:"media_type"`
-	MonitorOnAdd     bool      `json:"monitor_on_add"`
-	QualityProfileID string    `json:"quality_profile_id"`
-	CreatedAt        time.Time `json:"created_at"`
-	UpdatedAt        time.Time `json:"updated_at"`
+	ID                       string    `json:"id"`
+	Name                     string    `json:"name"`
+	Path                     string    `json:"path"`
+	MediaType                string    `json:"media_type"`
+	MonitorOnAdd             bool      `json:"monitor_on_add"`
+	QualityProfileID         string    `json:"quality_profile_id"`
+	UnmonitorOnDelete        bool      `json:"unmonitor_on_delete"`
+	AutoArchiveWatched       bool      `json:"auto_archive_watched"`
+	AutoArchiveDaysAfterWatch int      `json:"auto_archive_days_after_watch"`
+	CreatedAt                time.Time `json:"created_at"`
+	UpdatedAt                time.Time `json:"updated_at"`
 
 	// Computed fields (not stored, populated by handlers).
 	Accessible   bool      `json:"accessible"`
@@ -46,18 +49,24 @@ type UnmappedFolder struct {
 
 // CreateLibraryRequest is the API payload for adding a library.
 type CreateLibraryRequest struct {
-	Name             string `json:"name"`
-	Path             string `json:"path"`
-	MediaType        string `json:"media_type"`
-	MonitorOnAdd     *bool  `json:"monitor_on_add,omitempty"`
-	QualityProfileID string `json:"quality_profile_id,omitempty"`
+	Name                      string `json:"name"`
+	Path                      string `json:"path"`
+	MediaType                 string `json:"media_type"`
+	MonitorOnAdd              *bool  `json:"monitor_on_add,omitempty"`
+	QualityProfileID          string `json:"quality_profile_id,omitempty"`
+	UnmonitorOnDelete         *bool  `json:"unmonitor_on_delete,omitempty"`
+	AutoArchiveWatched        *bool  `json:"auto_archive_watched,omitempty"`
+	AutoArchiveDaysAfterWatch *int   `json:"auto_archive_days_after_watch,omitempty"`
 }
 
 // UpdateLibraryRequest is the API payload for updating a library.
 type UpdateLibraryRequest struct {
-	Name             *string `json:"name,omitempty"`
-	Path             *string `json:"path,omitempty"`
-	MediaType        *string `json:"media_type,omitempty"`
-	MonitorOnAdd     *bool   `json:"monitor_on_add,omitempty"`
-	QualityProfileID *string `json:"quality_profile_id,omitempty"`
+	Name                      *string `json:"name,omitempty"`
+	Path                      *string `json:"path,omitempty"`
+	MediaType                 *string `json:"media_type,omitempty"`
+	MonitorOnAdd              *bool   `json:"monitor_on_add,omitempty"`
+	QualityProfileID          *string `json:"quality_profile_id,omitempty"`
+	UnmonitorOnDelete         *bool   `json:"unmonitor_on_delete,omitempty"`
+	AutoArchiveWatched        *bool   `json:"auto_archive_watched,omitempty"`
+	AutoArchiveDaysAfterWatch *int    `json:"auto_archive_days_after_watch,omitempty"`
 }

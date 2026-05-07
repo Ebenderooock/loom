@@ -39,13 +39,36 @@ func derefFloat64(f *float64, def float64) float64 {
 	return *f
 }
 
+// UnmonitorOnDeleteChecker checks if a library has unmonitor-on-delete enabled.
+type UnmonitorOnDeleteChecker interface {
+	ShouldUnmonitorOnDelete(ctx context.Context, libraryID string) bool
+}
+
+// routerConfig holds optional dependencies for the movies router.
+type routerConfig struct {
+	unmonitorChecker UnmonitorOnDeleteChecker
+}
+
+// RouterOption configures the movies router.
+type RouterOption func(*routerConfig)
+
+// WithUnmonitorChecker provides an unmonitor-on-delete checker.
+func WithUnmonitorChecker(c UnmonitorOnDeleteChecker) RouterOption {
+	return func(cfg *routerConfig) { cfg.unmonitorChecker = c }
+}
+
 // Router mounts movies endpoints on the given chi router.
 func Router(service Service) chi.Router {
 	return RouterWithSearch(service, nil)
 }
 
 // RouterWithSearch mounts movies endpoints with optional search-on-add support.
-func RouterWithSearch(service Service, indexerSvc *indexers.Service) chi.Router {
+func RouterWithSearch(service Service, indexerSvc *indexers.Service, opts ...RouterOption) chi.Router {
+	var cfg routerConfig
+	for _, o := range opts {
+		o(&cfg)
+	}
+
 	r := chi.NewRouter()
 
 	r.Get("/", listMovies(service))
@@ -83,13 +106,15 @@ func RouterWithSearch(service Service, indexerSvc *indexers.Service) chi.Router 
 
 	// Bulk operations (must be before /{id} wildcard)
 	r.Post("/bulk", bulkUpdateMovies(service))
+	r.Post("/bulk-archive", bulkArchiveMovies(service))
+	r.Post("/bulk-unarchive", bulkUnarchiveMovies(service))
 
 	r.Get("/files/{movieID}", listMovieFiles(service))
 
 	// Wildcard movie routes (must be last)
 	r.Get("/{id}", getMovie(service))
 	r.Put("/{id}", updateMovie(service))
-	r.Delete("/{id}", deleteMovie(service))
+	r.Delete("/{id}", deleteMovie(service, cfg.unmonitorChecker))
 	r.Put("/{id}/monitoring", setMonitoringStatus(service))
 	r.Post("/{id}/refresh", refreshMovie(service))
 	r.Post("/{id}/archive", archiveMovie(service))
@@ -457,12 +482,21 @@ func updateMovie(svc Service) http.HandlerFunc {
 	}
 }
 
-func deleteMovie(svc Service) http.HandlerFunc {
+func deleteMovie(svc Service, checker UnmonitorOnDeleteChecker) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id := chi.URLParam(r, "id")
 		if id == "" {
 			http.Error(w, "movie ID required", http.StatusBadRequest)
 			return
+		}
+
+		// If unmonitor-on-delete is enabled for this movie's library, set to unmonitored first.
+		if checker != nil {
+			if movie, err := svc.GetMovie(r.Context(), id); err == nil && movie != nil && movie.LibraryID != "" {
+				if checker.ShouldUnmonitorOnDelete(r.Context(), movie.LibraryID) {
+					_ = svc.SetMonitoringStatus(r.Context(), id, MonitoringStatusUnmonitored)
+				}
+			}
 		}
 
 		if err := svc.DeleteMovie(r.Context(), id); err != nil {
@@ -1074,7 +1108,7 @@ func archiveMovie(svc Service) http.HandlerFunc {
 			http.Error(w, "movie ID required", http.StatusBadRequest)
 			return
 		}
-		if err := svc.SetMonitoringStatus(r.Context(), id, MonitoringStatusUnmonitored); err != nil {
+		if err := svc.SetMonitoringStatus(r.Context(), id, MonitoringStatusArchived); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}

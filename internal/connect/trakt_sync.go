@@ -1,6 +1,7 @@
 package connect
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -10,10 +11,21 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
+// MediaArchiver auto-archives watched movies/series based on library settings.
+// Implemented by the server layer to bridge connect ↔ movies/series modules.
+type MediaArchiver interface {
+	ArchiveWatchedMovies(ctx context.Context, traktMovies json.RawMessage) (archived int, err error)
+	ArchiveWatchedShows(ctx context.Context, traktShows json.RawMessage) (archived int, err error)
+}
+
 // TraktSyncRouter returns routes for Trakt sync operations.
-func TraktSyncRouter(svc Service) chi.Router {
+func TraktSyncRouter(svc Service, archiver ...MediaArchiver) chi.Router {
+	var ma MediaArchiver
+	if len(archiver) > 0 {
+		ma = archiver[0]
+	}
 	r := chi.NewRouter()
-	r.Post("/watched/{id}", handleSyncWatched(svc))
+	r.Post("/watched/{id}", handleSyncWatched(svc, ma))
 	r.Post("/collection/{id}", handleSyncCollection(svc))
 	r.Post("/watchlist/{id}", handleSyncWatchlist(svc))
 	return r
@@ -70,7 +82,7 @@ func traktAPIGet(r *http.Request, s ProviderSettings, path string) (json.RawMess
 	return json.RawMessage(body), nil
 }
 
-func handleSyncWatched(svc Service) http.HandlerFunc {
+func handleSyncWatched(svc Service, archiver MediaArchiver) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		conn, status, msg := getTraktConnection(svc, r)
 		if conn == nil {
@@ -93,12 +105,24 @@ func handleSyncWatched(svc Service) http.HandlerFunc {
 		_ = json.Unmarshal(movies, &movieList)
 		_ = json.Unmarshal(shows, &showList)
 
-		writeJSON(w, http.StatusOK, map[string]any{
-			"synced":         "watched",
-			"movies_count":   len(movieList),
-			"shows_count":    len(showList),
-			"connection_id":  conn.ID,
-		})
+		resp := map[string]any{
+			"synced":        "watched",
+			"movies_count":  len(movieList),
+			"shows_count":   len(showList),
+			"connection_id": conn.ID,
+		}
+
+		// Auto-archive watched items if an archiver is available.
+		if archiver != nil {
+			if n, err := archiver.ArchiveWatchedMovies(r.Context(), movies); err == nil {
+				resp["movies_archived"] = n
+			}
+			if n, err := archiver.ArchiveWatchedShows(r.Context(), shows); err == nil {
+				resp["shows_archived"] = n
+			}
+		}
+
+		writeJSON(w, http.StatusOK, resp)
 	}
 }
 

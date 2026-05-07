@@ -38,6 +38,7 @@ import (
 	"github.com/loomctl/loom/internal/compat/prowlarrv1"
 	"github.com/loomctl/loom/internal/compat/radarrv3"
 	"github.com/loomctl/loom/internal/compat/sonarrv3"
+	"github.com/loomctl/loom/internal/compat/syncprofiles"
 	"github.com/loomctl/loom/internal/connect"
 	"github.com/loomctl/loom/internal/episodeorder"
 	"github.com/loomctl/loom/internal/auth"
@@ -118,6 +119,7 @@ type Server struct {
 	healthMonitor   *healthmonitor.Monitor
 	autoSearchEngine *autosearch.Engine
 	grabStore        *grabs.Store
+	syncProfileStore *syncprofiles.Store
 	httpMetrics *telemetry.HTTPMetrics
 	ready      atomic.Bool
 }
@@ -440,6 +442,15 @@ func (s *Server) SetGrabStore(gs *grabs.Store) {
 	s.grabStore = gs
 }
 
+// SetSyncProfileStore installs the sync profile store and rebuilds the
+// HTTP handler so the /api/v1/sync-profiles routes are reachable.
+func (s *Server) SetSyncProfileStore(st *syncprofiles.Store) {
+	s.syncProfileStore = st
+	if s.httpSrv != nil {
+		s.httpSrv.Handler = s.newMux()
+	}
+}
+
 // Bus returns the server's event bus for wiring pipelines.
 func (s *Server) Bus() eventbus.Bus {
 	return s.bus
@@ -522,7 +533,7 @@ func (s *Server) newMux() http.Handler {
 
 		// Movies routes
 		if s.moviesSvc != nil {
-			moviesRouter := movies.RouterWithSearch(s.moviesSvc, s.indexerSvc)
+			moviesRouter := movies.RouterWithSearch(s.moviesSvc, s.indexerSvc, movies.WithUnmonitorChecker(s.libStore))
 			if s.scannerSvc != nil {
 				scanner.RegisterRoutes(moviesRouter, s.scannerSvc, s.libStore)
 			}
@@ -534,7 +545,7 @@ func (s *Server) newMux() http.Handler {
 
 		// Series (TV Shows) routes
 		if s.seriesSvc != nil {
-			seriesRouter := series.RouterWithSearch(s.seriesSvc, s.indexerSvc, s.grabStore)
+			seriesRouter := series.RouterWithSearch(s.seriesSvc, s.indexerSvc, s.grabStore, series.WithUnmonitorChecker(s.libStore))
 			if s.seriesScannerSvc != nil {
 				scanner.RegisterSeriesRoutes(seriesRouter, s.seriesScannerSvc)
 			}
@@ -548,7 +559,15 @@ func (s *Server) newMux() http.Handler {
 
 		// Connect (media server integrations) routes
 		if s.connectSvc != nil {
-			r.Mount("/api/v1/connect", connect.Router(s.connectSvc))
+			var archiver connect.MediaArchiver
+			if s.moviesSvc != nil && s.seriesSvc != nil && s.libStore != nil {
+				archiver = &mediaArchiver{
+					moviesSvc: s.moviesSvc,
+					seriesSvc: s.seriesSvc,
+					libStore:  s.libStore,
+				}
+			}
+			r.Mount("/api/v1/connect", connect.Router(s.connectSvc, archiver))
 		}
 
 		// Calendar routes
@@ -637,6 +656,11 @@ func (s *Server) newMux() http.Handler {
 		// Quality profile routes
 		if s.qpStore != nil {
 			r.Mount("/api/v1/quality-profiles", qualityprofiles.Router(s.qpStore, s.logger))
+		}
+
+		// Sync profile routes
+		if s.syncProfileStore != nil {
+			r.Mount("/api/v1/sync-profiles", syncprofiles.Router(s.syncProfileStore))
 		}
 
 		// System status (authenticated)

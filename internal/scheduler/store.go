@@ -43,7 +43,7 @@ func (s *Store) GetCandidates(ctx context.Context, mediaType string, limit int, 
 			LEFT JOIN search_state ss ON ss.media_type = 'episode' AND ss.media_id = e.id
 			WHERE e.has_file = 0
 			  AND e.monitored = 1
-			  AND s.monitoring_status NOT IN ('none', 'unmonitored')
+			  AND s.monitoring_status NOT IN ('none', 'unmonitored', 'archived')
 			  AND (e.air_date != '' AND e.air_date <= date('now'))
 			  AND (ss.last_searched_at IS NULL OR ss.last_searched_at < ?)
 			ORDER BY e.air_date DESC, e.created_at DESC
@@ -108,7 +108,7 @@ func (s *Store) QueueSize(ctx context.Context, minResearchDays int) (int, error)
 		LEFT JOIN search_state ss ON ss.media_type = 'episode' AND ss.media_id = e.id
 		WHERE e.has_file = 0
 		  AND e.monitored = 1
-		  AND s.monitoring_status NOT IN ('none', 'unmonitored')
+		  AND s.monitoring_status NOT IN ('none', 'unmonitored', 'archived')
 		  AND (e.air_date != '' AND e.air_date <= date('now'))
 		  AND (ss.last_searched_at IS NULL OR ss.last_searched_at < ?)`, cutoff)
 	if err := row.Scan(&epCount); err != nil {

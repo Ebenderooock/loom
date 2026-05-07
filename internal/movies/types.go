@@ -14,6 +14,7 @@ const (
 	MonitoringStatusMonitored   MonitoringStatus = "monitored"
 	MonitoringStatusUnmonitored MonitoringStatus = "unmonitored"
 	MonitoringStatusDeleted     MonitoringStatus = "deleted"
+	MonitoringStatusArchived    MonitoringStatus = "archived"
 )
 
 // MovieStatus represents the current state of a movie in the library.

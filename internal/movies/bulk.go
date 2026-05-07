@@ -5,6 +5,47 @@ import (
 	"net/http"
 )
 
+// bulkIDsRequest is the payload for bulk archive/unarchive operations.
+type bulkIDsRequest struct {
+	IDs []string `json:"ids"`
+}
+
+func bulkArchiveMovies(svc Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req bulkIDsRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "invalid request body", http.StatusBadRequest)
+			return
+		}
+		if len(req.IDs) == 0 {
+			http.Error(w, "ids required", http.StatusBadRequest)
+			return
+		}
+		for _, id := range req.IDs {
+			_ = svc.SetMonitoringStatus(r.Context(), id, MonitoringStatusArchived)
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+func bulkUnarchiveMovies(svc Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req bulkIDsRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "invalid request body", http.StatusBadRequest)
+			return
+		}
+		if len(req.IDs) == 0 {
+			http.Error(w, "ids required", http.StatusBadRequest)
+			return
+		}
+		for _, id := range req.IDs {
+			_ = svc.SetMonitoringStatus(r.Context(), id, MonitoringStatusMonitored)
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
 // bulkUpdateRequest is the payload for POST /api/v1/movies/bulk.
 type bulkUpdateRequest struct {
 	IDs              []string          `json:"ids"`

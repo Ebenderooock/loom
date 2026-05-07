@@ -39,6 +39,7 @@ const (
 	MonitoringNone         MonitoringStatus = "none"
 	MonitoringMonitored    MonitoringStatus = "monitored"
 	MonitoringUnmonitored  MonitoringStatus = "unmonitored"
+	MonitoringArchived     MonitoringStatus = "archived"
 )
 
 // Series represents a TV series in the library.

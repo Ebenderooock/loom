@@ -9,7 +9,7 @@ import (
 )
 
 // Router returns a chi.Router with all connect endpoints mounted.
-func Router(service Service) chi.Router {
+func Router(service Service, archiver ...MediaArchiver) chi.Router {
 	r := chi.NewRouter()
 
 	r.Get("/", listConnections(service))
@@ -17,7 +17,7 @@ func Router(service Service) chi.Router {
 	r.Post("/test", testConnectionConfig(service))
 
 	r.Mount("/trakt/oauth", TraktOAuthRouter(service))
-	r.Mount("/trakt/sync", TraktSyncRouter(service))
+	r.Mount("/trakt/sync", TraktSyncRouter(service, archiver...))
 
 	r.Get("/{id}", getConnection(service))
 	r.Put("/{id}", updateConnection(service))
