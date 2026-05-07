@@ -105,7 +105,7 @@ export function QualityProfilesPage() {
     fetch("/api/v1/movies/quality-definitions", { credentials: "include" })
       .then((r) => r.ok ? r.json() : [])
       .then((data) => setDefinitions(Array.isArray(data) ? data : []))
-      .catch(() => {});
+      .catch((err) => console.error("fetch failed:", err));
   }, []);
 
   const defById = React.useMemo(() => {

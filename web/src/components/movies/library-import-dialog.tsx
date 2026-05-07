@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   Dialog,
   DialogContent,
@@ -67,6 +67,17 @@ export function LibraryImportDialog({
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<TmdbResult[]>([]);
   const [searching, setSearching] = useState(false);
+  const pollTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
+  const mountedRef = useRef(true);
+
+  // Clean up polling on unmount
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      clearTimeout(pollTimeoutRef.current);
+    };
+  }, []);
 
   // Reset state when dialog opens
   useEffect(() => {
@@ -99,26 +110,36 @@ export function LibraryImportDialog({
 
       // Poll for completion
       const poll = async () => {
-        const statusRes = await fetch(`/api/v1/movies/scan/${scanId}`, {
-          credentials: "include",
-        });
-        const result: ScanResult = await statusRes.json();
-        setScanResult(result);
-
-        if (result.status === "running") {
-          setTimeout(poll, 1500);
-        } else {
-          setScanning(false);
-          // Fetch unmatched files
-          const unmatchedRes = await fetch("/api/v1/movies/scan/unmatched", {
+        if (!mountedRef.current) return;
+        try {
+          const statusRes = await fetch(`/api/v1/movies/scan/${scanId}`, {
             credentials: "include",
           });
-          const files: UnmatchedFile[] = await unmatchedRes.json();
-          setUnmatchedFiles(files);
-          onImportComplete();
+          const result: ScanResult = await statusRes.json();
+          if (!mountedRef.current) return;
+          setScanResult(result);
+
+          if (result.status === "running") {
+            pollTimeoutRef.current = setTimeout(poll, 1500);
+          } else {
+            setScanning(false);
+            const unmatchedRes = await fetch("/api/v1/movies/scan/unmatched", {
+              credentials: "include",
+            });
+            const files: UnmatchedFile[] = await unmatchedRes.json();
+            if (mountedRef.current) {
+              setUnmatchedFiles(files);
+              onImportComplete();
+            }
+          }
+        } catch (err) {
+          if (mountedRef.current) {
+            setScanning(false);
+            console.error("Poll failed:", err);
+          }
         }
       };
-      setTimeout(poll, 1000);
+      pollTimeoutRef.current = setTimeout(poll, 1000);
     } catch (err) {
       setScanning(false);
       console.error("Scan failed:", err);

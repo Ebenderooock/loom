@@ -15,6 +15,7 @@ import (
 // Service defines business logic for the series module.
 type Service interface {
 	ListSeries(ctx context.Context) ([]*Series, error)
+	SearchSeries(ctx context.Context, query string) ([]*Series, error)
 	GetSeries(ctx context.Context, id string) (*Series, error)
 	AddSeries(ctx context.Context, req *AddSeriesRequest) (*Series, error)
 	UpdateSeries(ctx context.Context, s *Series) error
@@ -54,6 +55,13 @@ func NewService(repo Repository, tmdbAPIKey string) Service {
 
 func (s *service) ListSeries(ctx context.Context) ([]*Series, error) {
 	return s.repo.ListSeries(ctx)
+}
+
+func (s *service) SearchSeries(ctx context.Context, query string) ([]*Series, error) {
+	if query == "" {
+		return s.repo.ListSeries(ctx)
+	}
+	return s.repo.SearchSeries(ctx, query)
 }
 
 func (s *service) GetSeries(ctx context.Context, id string) (*Series, error) {

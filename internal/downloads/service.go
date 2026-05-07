@@ -58,7 +58,7 @@ type Service struct {
 	historyStore     *HistoryStore
 	grabStore        *grabs.Store
 
-	mu sync.Mutex
+	mu sync.RWMutex
 }
 
 // NewService validates opts and returns a wired Service.
@@ -105,7 +105,11 @@ func (s *Service) Repository() Repository { return s.repo }
 func (s *Service) Registry() *Registry { return s.registry }
 
 // SetGrabStore sets the active-grabs store for recording manual grab linkage.
-func (s *Service) SetGrabStore(gs *grabs.Store) { s.grabStore = gs }
+func (s *Service) SetGrabStore(gs *grabs.Store) {
+	s.mu.Lock()
+	s.grabStore = gs
+	s.mu.Unlock()
+}
 
 // AddRouteExtension appends a route mounter to the service's extensions.
 // Must be called before the HTTP server is started.

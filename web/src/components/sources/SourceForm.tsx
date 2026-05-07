@@ -25,7 +25,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { useForm } from "react-hook-form";
+import { useForm, type FieldPath } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import type { UserSource, UserSourceCreate, SourceType } from "@/lib/sources-api";
@@ -93,7 +93,7 @@ export function SourceForm({ open, source, onClose, onSave, isLoading }: SourceF
         name: source.name,
         type: source.type,
         enabled: source.enabled,
-        config: source.config as any,
+        config: source.config as FormValues["config"],
       });
     } else {
       form.reset({
@@ -263,9 +263,9 @@ export function SourceForm({ open, source, onClose, onSave, isLoading }: SourceF
                     <FormItem>
                       <FormLabel>Selector Type</FormLabel>
                       <Select
-                        value={(form.getValues().config as any)?.selector_type ?? "css"}
+                        value={(form.getValues().config as Record<string, unknown>)?.selector_type as string ?? "css"}
                         onValueChange={(val) =>
-                          form.setValue("config.selector_type" as any, val)
+                          form.setValue("config.selector_type" as FieldPath<FormValues>, val)
                         }
                       >
                         <FormControl>
@@ -289,8 +289,8 @@ export function SourceForm({ open, source, onClose, onSave, isLoading }: SourceF
                     <FormItem>
                       <FormLabel>Auth Type</FormLabel>
                       <Select
-                        value={(form.getValues().config as any)?.auth_type ?? "none"}
-                        onValueChange={(val) => form.setValue("config.auth_type" as any, val)}
+                        value={(form.getValues().config as Record<string, unknown>)?.auth_type as string ?? "none"}
+                        onValueChange={(val) => form.setValue("config.auth_type" as FieldPath<FormValues>, val)}
                       >
                         <FormControl>
                           <SelectTrigger>
@@ -322,7 +322,7 @@ export function SourceForm({ open, source, onClose, onSave, isLoading }: SourceF
                     </FormControl>
                     <FormDescription>CSS or XPath to each item container</FormDescription>
                     <FormMessage>
-                      {(form.formState.errors.config as any)?.item_selector?.message}
+                      {(form.formState.errors.config as Record<string, { message?: string }> | undefined)?.item_selector?.message}
                     </FormMessage>
                   </FormItem>
                 )}
@@ -339,7 +339,7 @@ export function SourceForm({ open, source, onClose, onSave, isLoading }: SourceF
                     </FormControl>
                     <FormDescription>CSS or XPath to the title within each item</FormDescription>
                     <FormMessage>
-                      {(form.formState.errors.config as any)?.title_selector?.message}
+                      {(form.formState.errors.config as Record<string, { message?: string }> | undefined)?.title_selector?.message}
                     </FormMessage>
                   </FormItem>
                 )}

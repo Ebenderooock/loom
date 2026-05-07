@@ -40,6 +40,7 @@ type Config struct {
 	Safety          SafetyConfig          `mapstructure:"safety"`
 	MediaManagement MediaManagementConfig `mapstructure:"media_management"`
 	RateLimit       RateLimitConfig       `mapstructure:"rate_limit"`
+	Filesystem      FilesystemConfig      `mapstructure:"filesystem"`
 }
 
 // IndexersConfig governs the indexer core (search fan-out + periodic
@@ -211,6 +212,15 @@ type ProxyConfig struct {
 
 type DebugConfig struct {
 	Pprof bool `mapstructure:"pprof"`
+}
+
+// FilesystemConfig controls the filesystem browser endpoint.
+//
+//   - AllowedBrowseRoots restricts which directory trees the
+//     /api/v1/filesystem endpoint may enumerate. When empty the
+//     endpoint returns an error instead of exposing the whole host.
+type FilesystemConfig struct {
+	AllowedBrowseRoots []string `mapstructure:"allowed_browse_roots"`
 }
 
 type CORSConfig struct {

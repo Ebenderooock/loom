@@ -123,7 +123,7 @@ function useReviewCount() {
       fetch("/api/v1/reviews/count")
         .then((r) => r.json())
         .then((b) => setCount(b.count ?? 0))
-        .catch(() => {});
+        .catch((err) => console.error("fetch failed:", err));
     load();
     const interval = setInterval(load, 30_000);
     return () => clearInterval(interval);

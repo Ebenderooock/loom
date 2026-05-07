@@ -326,3 +326,38 @@ func TestWithMaxWorkers(t *testing.T) {
 	wg.Wait()
 	b.Close(time.Second)
 }
+
+func TestConcurrentPublishAndUnsubscribeOrdered(t *testing.T) {
+	// Verify that unsubscribing an ordered subscription while Publish
+	// is in-flight does not panic (send on closed channel).
+	b := NewInProc()
+
+	for iter := 0; iter < 20; iter++ {
+		unsub := b.SubscribeOrdered("race", func(ctx context.Context, ev Event) error {
+			return nil
+		})
+
+		ctx, cancel := context.WithCancel(context.Background())
+		var wg sync.WaitGroup
+
+		// Publisher goroutine
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for {
+				if ctx.Err() != nil {
+					return
+				}
+				_ = b.Publish(ctx, fakeEvent{"race"})
+			}
+		}()
+
+		// Let the publisher run briefly, then unsubscribe concurrently.
+		time.Sleep(time.Millisecond)
+		unsub()
+		cancel()
+		wg.Wait()
+	}
+
+	b.Close(time.Second)
+}

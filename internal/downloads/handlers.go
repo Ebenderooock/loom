@@ -541,6 +541,10 @@ func (s *Service) handleRemove(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	if len(req.IDs) == 0 {
+		writeError(w, http.StatusBadRequest, "invalid_request", "at least one id is required")
+		return
+	}
 	if err := c.Remove(r.Context(), req.IDs, req.DeleteFiles); err != nil {
 		writeError(w, http.StatusBadGateway, "operation_failed", err.Error())
 		return

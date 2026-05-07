@@ -80,13 +80,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setIsAuthenticated(false);
       setUser(null);
-      // Refresh status from server
-      const response = await fetch("/api/v1/auth/status", {
-        credentials: "include",
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setIsSetupComplete(!data.setup_required);
+      try {
+        const response = await fetch("/api/v1/auth/status", {
+          credentials: "include",
+        });
+        if (response.ok) {
+          const data = await response.json();
+          setIsSetupComplete(!data.setup_required);
+        }
+      } catch {
+        // Offline or network error — already logged out locally
       }
     }
   };

@@ -7,6 +7,7 @@ import {
 } from "@tanstack/react-router";
 import { AppLayout } from "@/components/layout/app-layout";
 import { NotFoundPage } from "@/pages/not-found";
+import { ErrorFallback } from "@/components/ui/error-fallback";
 import { useAuth } from "@/hooks/use-auth";
 import { PageLoader } from "@/components/ui/page-loader";
 
@@ -46,6 +47,7 @@ function RootComponent() {
 
 const rootRoute = createRootRoute({
   component: RootComponent,
+  errorComponent: ErrorFallback,
   notFoundComponent: NotFoundPage,
 });
 
@@ -54,6 +56,7 @@ const setupRoute = createRoute({
   path: "/setup",
   component: lazyRouteComponent(() => import("@/pages/setup"), "SetupPage"),
   pendingComponent: PageLoader,
+  errorComponent: ErrorFallback,
 });
 
 const indexRoute = createRoute({
@@ -64,6 +67,7 @@ const indexRoute = createRoute({
     "DashboardPage",
   ),
   pendingComponent: PageLoader,
+  errorComponent: ErrorFallback,
 });
 
 const libraryRoute = createRoute({
@@ -74,6 +78,7 @@ const libraryRoute = createRoute({
     "LibraryPage",
   ),
   pendingComponent: PageLoader,
+  errorComponent: ErrorFallback,
 });
 
 const moviesRoute = createRoute({
@@ -81,6 +86,7 @@ const moviesRoute = createRoute({
   path: "/movies",
   component: lazyRouteComponent(() => import("@/pages/movies"), "MoviesPage"),
   pendingComponent: PageLoader,
+  errorComponent: ErrorFallback,
 });
 
 const activityRoute = createRoute({
@@ -91,6 +97,7 @@ const activityRoute = createRoute({
     "ActivityPage",
   ),
   pendingComponent: PageLoader,
+  errorComponent: ErrorFallback,
 });
 
 const calendarRoute = createRoute({
@@ -101,6 +108,7 @@ const calendarRoute = createRoute({
     "CalendarPage",
   ),
   pendingComponent: PageLoader,
+  errorComponent: ErrorFallback,
 });
 
 const settingsRoute = createRoute({
@@ -111,6 +119,7 @@ const settingsRoute = createRoute({
     "SettingsPage",
   ),
   pendingComponent: PageLoader,
+  errorComponent: ErrorFallback,
 });
 
 const indexersRoute = createRoute({
@@ -121,6 +130,7 @@ const indexersRoute = createRoute({
     "IndexersPage",
   ),
   pendingComponent: PageLoader,
+  errorComponent: ErrorFallback,
 });
 
 const proxiesRoute = createRoute({
@@ -131,6 +141,7 @@ const proxiesRoute = createRoute({
     "ProxiesPage",
   ),
   pendingComponent: PageLoader,
+  errorComponent: ErrorFallback,
 });
 
 const downloadsRoute = createRoute({
@@ -141,6 +152,7 @@ const downloadsRoute = createRoute({
     "DownloadsPage",
   ),
   pendingComponent: PageLoader,
+  errorComponent: ErrorFallback,
 });
 
 const sourcesRoute = createRoute({
@@ -151,6 +163,7 @@ const sourcesRoute = createRoute({
     "SourcesPage",
   ),
   pendingComponent: PageLoader,
+  errorComponent: ErrorFallback,
 });
 
 const seriesRoute = createRoute({
@@ -158,6 +171,7 @@ const seriesRoute = createRoute({
   path: "/series",
   component: lazyRouteComponent(() => import("@/pages/series"), "SeriesPage"),
   pendingComponent: PageLoader,
+  errorComponent: ErrorFallback,
 });
 
 const notificationsRoute = createRoute({
@@ -168,6 +182,7 @@ const notificationsRoute = createRoute({
     "NotificationsPage",
   ),
   pendingComponent: PageLoader,
+  errorComponent: ErrorFallback,
 });
 
 const languageProfilesRoute = createRoute({
@@ -178,6 +193,7 @@ const languageProfilesRoute = createRoute({
     "LanguageProfilesPage",
   ),
   pendingComponent: PageLoader,
+  errorComponent: ErrorFallback,
 });
 
 const indexerHealthRoute = createRoute({
@@ -188,6 +204,7 @@ const indexerHealthRoute = createRoute({
     "IndexerHealthPage",
   ),
   pendingComponent: PageLoader,
+  errorComponent: ErrorFallback,
 });
 
 const customFormatsRoute = createRoute({
@@ -198,6 +215,7 @@ const customFormatsRoute = createRoute({
     "CustomFormatsPage",
   ),
   pendingComponent: PageLoader,
+  errorComponent: ErrorFallback,
 });
 
 const qualityProfilesRoute = createRoute({
@@ -208,6 +226,7 @@ const qualityProfilesRoute = createRoute({
     "QualityProfilesPage",
   ),
   pendingComponent: PageLoader,
+  errorComponent: ErrorFallback,
 });
 
 const importListsRoute = createRoute({
@@ -218,6 +237,7 @@ const importListsRoute = createRoute({
     "ImportListsPage",
   ),
   pendingComponent: PageLoader,
+  errorComponent: ErrorFallback,
 });
 
 const routeTree = rootRoute.addChildren([

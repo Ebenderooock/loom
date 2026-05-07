@@ -527,7 +527,7 @@ export function SeriesDetailSheet({
       fetch(`/api/v1/series/${series.id}/credits`, { credentials: "include" })
         .then(r => r.ok ? r.json() : null)
         .then(data => setCredits(data))
-        .catch(() => {})
+        .catch((err) => console.error("fetch failed:", err))
         .finally(() => setCreditsLoading(false));
 
       // Fetch seasons
@@ -536,7 +536,7 @@ export function SeriesDetailSheet({
       fetch(`/api/v1/series/${series.id}/seasons`, { credentials: "include" })
         .then(r => r.ok ? r.json() : [])
         .then(data => setSeasons(Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : []))
-        .catch(() => {})
+        .catch((err) => console.error("fetch failed:", err))
         .finally(() => setSeasonsLoading(false));
     }
   }, [series, open]);
