@@ -4,9 +4,9 @@ description: Unified media automation — Radarr/Sonarr/Prowlarr replacement
 type: application
 version: 0.1.0
 appVersion: "0.1.0"
-home: https://github.com/loomctl/loom
+home: https://github.com/ebenderooock/loom
 sources:
-  - https://github.com/loomctl/loom
+  - https://github.com/ebenderooock/loom
 keywords:
   - media
   - automation
@@ -15,5 +15,5 @@ keywords:
   - prowlarr
   - pvr
 maintainers:
-  - name: loomctl
-    url: https://github.com/loomctl
+  - name: ebenderooock
+    url: https://github.com/ebenderooock

@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/loomctl/loom/internal/rss"
+	"github.com/ebenderooock/loom/internal/rss"
 )
 
 // Match represents a potential media match from an RSS item against a library want.

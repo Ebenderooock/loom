@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/loomctl/loom/internal/grabs"
-	"github.com/loomctl/loom/internal/kernel/eventbus"
+	"github.com/ebenderooock/loom/internal/grabs"
+	"github.com/ebenderooock/loom/internal/kernel/eventbus"
 )
 
 // stalledState tracks the last known progress of a download item

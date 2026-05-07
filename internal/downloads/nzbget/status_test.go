@@ -6,7 +6,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/loomctl/loom/internal/downloads"
+	"github.com/ebenderooock/loom/internal/downloads"
 )
 
 // queueGolden + historyGolden together cover the eight status

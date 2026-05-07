@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/loomctl/loom/internal/indexers"
+	"github.com/ebenderooock/loom/internal/indexers"
 )
 
 // fakeIndexer is a minimal indexers.Indexer used by caps and search

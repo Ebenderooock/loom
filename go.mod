@@ -1,4 +1,4 @@
-module github.com/loomctl/loom
+module github.com/ebenderooock/loom
 
 go 1.26
 

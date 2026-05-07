@@ -1,6 +1,6 @@
 package auth
 
-import "github.com/loomctl/loom/internal/kernel/config"
+import "github.com/ebenderooock/loom/internal/kernel/config"
 
 // FromConfig converts the application config block to the auth-local
 // OIDC and Proxy types so the auth package doesn't need a hard import

@@ -13,7 +13,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/loomctl/loom/internal/indexers"
+	"github.com/ebenderooock/loom/internal/indexers"
 )
 
 // APIKeyVerifier is the small contract the aggregator needs from the

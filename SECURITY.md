@@ -7,7 +7,7 @@ plus the previous minor will receive security fixes.
 
 ## Reporting a vulnerability
 
-Email **security@loomctl.dev** (placeholder — update once domain is
+Email **security@ebenderooock.dev** (placeholder — update once domain is
 provisioned). Please include:
 
 - Affected version / commit

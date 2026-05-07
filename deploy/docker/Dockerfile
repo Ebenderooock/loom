@@ -24,14 +24,14 @@ RUN CGO_ENABLED=0 go build \
     -trimpath \
     -tags embed \
     -ldflags "-s -w \
-      -X github.com/loomctl/loom/internal/buildinfo.Version=${VERSION} \
-      -X github.com/loomctl/loom/internal/buildinfo.Commit=${COMMIT} \
-      -X github.com/loomctl/loom/internal/buildinfo.Date=${DATE}" \
+      -X github.com/ebenderooock/loom/internal/buildinfo.Version=${VERSION} \
+      -X github.com/ebenderooock/loom/internal/buildinfo.Commit=${COMMIT} \
+      -X github.com/ebenderooock/loom/internal/buildinfo.Date=${DATE}" \
     -o /out/loom ./cmd/loom
 
 # ---------- runtime ----------
 FROM gcr.io/distroless/static-debian12:nonroot
-LABEL org.opencontainers.image.source="https://github.com/loomctl/loom"
+LABEL org.opencontainers.image.source="https://github.com/ebenderooock/loom"
 LABEL org.opencontainers.image.licenses="AGPL-3.0-only"
 LABEL org.opencontainers.image.title="Loom"
 LABEL org.opencontainers.image.description="Unified media automation — Radarr/Sonarr/Prowlarr replacement"

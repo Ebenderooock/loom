@@ -14,14 +14,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/loomctl/loom/internal/customformats"
-	"github.com/loomctl/loom/internal/downloads"
-	"github.com/loomctl/loom/internal/grabs"
-	"github.com/loomctl/loom/internal/indexers"
-	"github.com/loomctl/loom/internal/movies"
-	"github.com/loomctl/loom/internal/parser"
-	"github.com/loomctl/loom/internal/qualityprofiles"
-	"github.com/loomctl/loom/internal/series"
+	"github.com/ebenderooock/loom/internal/customformats"
+	"github.com/ebenderooock/loom/internal/downloads"
+	"github.com/ebenderooock/loom/internal/grabs"
+	"github.com/ebenderooock/loom/internal/indexers"
+	"github.com/ebenderooock/loom/internal/movies"
+	"github.com/ebenderooock/loom/internal/parser"
+	"github.com/ebenderooock/loom/internal/qualityprofiles"
+	"github.com/ebenderooock/loom/internal/series"
 )
 
 // profileItem mirrors the shape of items stored in quality_profiles_v2.items JSON.

@@ -6,9 +6,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/loomctl/loom/internal/libraries"
-	"github.com/loomctl/loom/internal/qualityprofiles"
-	"github.com/loomctl/loom/internal/series"
+	"github.com/ebenderooock/loom/internal/libraries"
+	"github.com/ebenderooock/loom/internal/qualityprofiles"
+	"github.com/ebenderooock/loom/internal/series"
 )
 
 // seriesToSonarr converts a Loom Series into a Sonarr v3 series

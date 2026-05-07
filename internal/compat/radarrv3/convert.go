@@ -5,10 +5,10 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/loomctl/loom/internal/libraries"
-	"github.com/loomctl/loom/internal/metadata"
-	"github.com/loomctl/loom/internal/movies"
-	"github.com/loomctl/loom/internal/qualityprofiles"
+	"github.com/ebenderooock/loom/internal/libraries"
+	"github.com/ebenderooock/loom/internal/metadata"
+	"github.com/ebenderooock/loom/internal/movies"
+	"github.com/ebenderooock/loom/internal/qualityprofiles"
 )
 
 // movieToRadarr converts a Loom Movie into a Radarr v3 movie response.

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/loomctl/loom/internal/downloads"
+	"github.com/ebenderooock/loom/internal/downloads"
 )
 
 // Kind returns the registered downloads.Kind.

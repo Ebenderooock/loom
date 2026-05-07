@@ -12,8 +12,8 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/loomctl/loom/internal/grabs"
-	"github.com/loomctl/loom/internal/indexers"
+	"github.com/ebenderooock/loom/internal/grabs"
+	"github.com/ebenderooock/loom/internal/indexers"
 )
 
 // UnmonitorOnDeleteChecker checks if a library has unmonitor-on-delete enabled.

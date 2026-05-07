@@ -12,7 +12,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/loomctl/loom/internal/indexers"
+	"github.com/ebenderooock/loom/internal/indexers"
 )
 
 // stubSearcher implements Searcher for end-to-end handler tests

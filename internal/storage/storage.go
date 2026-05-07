@@ -15,7 +15,7 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/loomctl/loom/internal/kernel/config"
+	"github.com/ebenderooock/loom/internal/kernel/config"
 )
 
 // Engine identifies a concrete storage backend.

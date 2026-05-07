@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/loomctl/loom/internal/downloads"
+	"github.com/ebenderooock/loom/internal/downloads"
 )
 
 func TestCategories(t *testing.T) {

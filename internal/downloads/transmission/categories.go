@@ -4,7 +4,7 @@ import (
 	"context"
 	"sort"
 
-	"github.com/loomctl/loom/internal/downloads"
+	"github.com/ebenderooock/loom/internal/downloads"
 )
 
 // Categories implements downloads.DownloadClient.

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/loomctl/loom/internal/indexers"
+	"github.com/ebenderooock/loom/internal/indexers"
 )
 
 // engineFixtureYAML drives the test server below: form login at

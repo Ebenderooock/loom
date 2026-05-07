@@ -6,9 +6,9 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/loomctl/loom/internal/libraries"
-	"github.com/loomctl/loom/internal/movies"
-	"github.com/loomctl/loom/internal/series"
+	"github.com/ebenderooock/loom/internal/libraries"
+	"github.com/ebenderooock/loom/internal/movies"
+	"github.com/ebenderooock/loom/internal/series"
 )
 
 // mediaArchiver implements connect.MediaArchiver by bridging the connect,

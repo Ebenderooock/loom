@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/loomctl/loom/internal/downloads"
+	"github.com/ebenderooock/loom/internal/downloads"
 )
 
 // Pause asks NZBGet to pause the listed groups via

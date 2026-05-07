@@ -49,7 +49,7 @@ formatters:
   settings:
     goimports:
       local-prefixes:
-        - github.com/loomctl/loom
+        - github.com/ebenderooock/loom
 
 issues:
   max-same-issues: 0

@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/loomctl/loom/internal/downloads"
+	"github.com/ebenderooock/loom/internal/downloads"
 )
 
 // readMultipartFields drains an /api/v2/torrents/add request body and

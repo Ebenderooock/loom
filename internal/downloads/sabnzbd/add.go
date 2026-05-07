@@ -8,7 +8,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/loomctl/loom/internal/downloads"
+	"github.com/ebenderooock/loom/internal/downloads"
 )
 
 // Add submits a job to SABnzbd. NZB-by-URL takes the addurl path;

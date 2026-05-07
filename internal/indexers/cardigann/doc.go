@@ -20,7 +20,7 @@
 // Importing this package for its side effects registers the
 // `cardigann` kind with the central factory:
 //
-//	import _ "github.com/loomctl/loom/internal/indexers/cardigann"
+//	import _ "github.com/ebenderooock/loom/internal/indexers/cardigann"
 //
 // During package init the factory installs itself; cmd/loom blank
 // imports it so a server build picks it up automatically.

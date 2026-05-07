@@ -4,7 +4,7 @@ import (
 	"context"
 	"log"
 
-	"github.com/loomctl/loom/internal/kernel/eventbus"
+	"github.com/ebenderooock/loom/internal/kernel/eventbus"
 )
 
 // NotificationEvent is an event bus event that triggers notifications.

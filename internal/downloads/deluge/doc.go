@@ -7,7 +7,7 @@
 // Importing the package for its side-effect registers the kind with
 // the downloads core:
 //
-//	import _ "github.com/loomctl/loom/internal/downloads/deluge"
+//	import _ "github.com/ebenderooock/loom/internal/downloads/deluge"
 //
 // The Client type satisfies downloads.DownloadClient and is normally
 // constructed by the package factory rather than directly. Outbound

@@ -5,7 +5,7 @@ This page covers the supported deployment shapes.
 
 ## Docker
 
-The published image lives at `ghcr.io/loomctl/loom:latest` (and
+The published image lives at `ghcr.io/ebenderooock/loom:latest` (and
 `:v<semver>` once tagged releases begin). It is built `FROM
 gcr.io/distroless/static-debian12:nonroot`, runs as the unprivileged
 `nonroot` user, and exposes port 8989.
@@ -16,7 +16,7 @@ gcr.io/distroless/static-debian12:nonroot`, runs as the unprivileged
 docker run --rm -p 8989:8989 \
   -v /opt/loom/config:/config \
   -v /mnt/media:/media \
-  ghcr.io/loomctl/loom:latest
+  ghcr.io/ebenderooock/loom:latest
 ```
 
 Volumes:
@@ -96,7 +96,7 @@ Loom listens on plain HTTP. Terminate TLS at the edge.
 ```yaml
 services:
   loom:
-    image: ghcr.io/loomctl/loom:latest
+    image: ghcr.io/ebenderooock/loom:latest
     labels:
       - traefik.enable=true
       - traefik.http.routers.loom.rule=Host(`loom.example.com`)

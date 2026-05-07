@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/loomctl/loom/internal/indexers"
+	"github.com/ebenderooock/loom/internal/indexers"
 )
 
 // Event topics for the downloads service. These are published to the

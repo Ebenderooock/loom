@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"strings"
 
-	webui "github.com/loomctl/loom/web"
+	webui "github.com/ebenderooock/loom/web"
 )
 
 // spaHandler serves the embedded React SPA. Static assets (JS, CSS, images)

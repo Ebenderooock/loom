@@ -5,16 +5,16 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/loomctl/loom/internal/kernel/config"
-	"github.com/loomctl/loom/internal/libraries"
-	"github.com/loomctl/loom/internal/metadata"
-	"github.com/loomctl/loom/internal/metadata/tmdb"
-	"github.com/loomctl/loom/internal/movies"
-	"github.com/loomctl/loom/internal/notifications"
-	"github.com/loomctl/loom/internal/organizer"
-	"github.com/loomctl/loom/internal/scanner"
-	"github.com/loomctl/loom/internal/series"
-	"github.com/loomctl/loom/internal/storage"
+	"github.com/ebenderooock/loom/internal/kernel/config"
+	"github.com/ebenderooock/loom/internal/libraries"
+	"github.com/ebenderooock/loom/internal/metadata"
+	"github.com/ebenderooock/loom/internal/metadata/tmdb"
+	"github.com/ebenderooock/loom/internal/movies"
+	"github.com/ebenderooock/loom/internal/notifications"
+	"github.com/ebenderooock/loom/internal/organizer"
+	"github.com/ebenderooock/loom/internal/scanner"
+	"github.com/ebenderooock/loom/internal/series"
+	"github.com/ebenderooock/loom/internal/storage"
 )
 
 // defaultTMDBKey is a bundled application-level TMDB API key.

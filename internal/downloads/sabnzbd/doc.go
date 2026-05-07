@@ -10,7 +10,7 @@
 // Importing the package for its side effect registers the factory
 // under downloads.KindSABnzbd:
 //
-//	import _ "github.com/loomctl/loom/internal/downloads/sabnzbd"
+//	import _ "github.com/ebenderooock/loom/internal/downloads/sabnzbd"
 //
 // The factory parses the kind-specific config blob (Host, Port, TLS,
 // BasePath, APIKey) from Definition.Config, builds an HTTP client

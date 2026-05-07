@@ -7,7 +7,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/loomctl/loom/internal/downloads"
+	"github.com/ebenderooock/loom/internal/downloads"
 )
 
 // torrentInfo mirrors the subset of /api/v2/torrents/info we consume.

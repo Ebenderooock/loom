@@ -7,7 +7,7 @@ the database, and registration is idempotent so each module re-declares
 its jobs at startup without fear of duplication.
 
 This page is the operator and developer reference. The package godoc
-(`go doc github.com/loomctl/loom/internal/kernel/scheduler`) is the
+(`go doc github.com/ebenderooock/loom/internal/kernel/scheduler`) is the
 source of truth for API details.
 
 ## TL;DR
@@ -62,7 +62,7 @@ import (
     "log/slog"
     "time"
 
-    "github.com/loomctl/loom/internal/kernel/scheduler"
+    "github.com/ebenderooock/loom/internal/kernel/scheduler"
 )
 
 func registerRSSSync(ctx context.Context, sched *scheduler.Scheduler, logger *slog.Logger) error {

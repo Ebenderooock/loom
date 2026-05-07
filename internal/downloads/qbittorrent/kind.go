@@ -3,7 +3,7 @@ package qbittorrent
 import (
 	"context"
 
-	"github.com/loomctl/loom/internal/downloads"
+	"github.com/ebenderooock/loom/internal/downloads"
 )
 
 // factory is the downloads.Factory the package registers under Kind.

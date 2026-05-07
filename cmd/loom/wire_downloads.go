@@ -6,17 +6,17 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/loomctl/loom/internal/autosearch"
-	"github.com/loomctl/loom/internal/customformats"
-	"github.com/loomctl/loom/internal/downloads"
-	"github.com/loomctl/loom/internal/grabs"
-	"github.com/loomctl/loom/internal/imports"
-	"github.com/loomctl/loom/internal/indexers"
-	"github.com/loomctl/loom/internal/kernel/config"
-	"github.com/loomctl/loom/internal/movies"
-	"github.com/loomctl/loom/internal/safety"
-	"github.com/loomctl/loom/internal/server"
-	"github.com/loomctl/loom/internal/storage"
+	"github.com/ebenderooock/loom/internal/autosearch"
+	"github.com/ebenderooock/loom/internal/customformats"
+	"github.com/ebenderooock/loom/internal/downloads"
+	"github.com/ebenderooock/loom/internal/grabs"
+	"github.com/ebenderooock/loom/internal/imports"
+	"github.com/ebenderooock/loom/internal/indexers"
+	"github.com/ebenderooock/loom/internal/kernel/config"
+	"github.com/ebenderooock/loom/internal/movies"
+	"github.com/ebenderooock/loom/internal/safety"
+	"github.com/ebenderooock/loom/internal/server"
+	"github.com/ebenderooock/loom/internal/storage"
 )
 
 // downloadWiring holds lifecycle objects produced by wireDownloads

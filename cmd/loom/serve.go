@@ -11,16 +11,16 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/loomctl/loom/internal/appconfig"
-	"github.com/loomctl/loom/internal/backup"
-	"github.com/loomctl/loom/internal/customformats"
-	"github.com/loomctl/loom/internal/migrate"
-	"github.com/loomctl/loom/internal/rss"
-	"github.com/loomctl/loom/internal/kernel/config"
-	"github.com/loomctl/loom/internal/kernel/logging"
-	"github.com/loomctl/loom/internal/kernel/telemetry"
-	"github.com/loomctl/loom/internal/server"
-	"github.com/loomctl/loom/internal/storage"
+	"github.com/ebenderooock/loom/internal/appconfig"
+	"github.com/ebenderooock/loom/internal/backup"
+	"github.com/ebenderooock/loom/internal/customformats"
+	"github.com/ebenderooock/loom/internal/migrate"
+	"github.com/ebenderooock/loom/internal/rss"
+	"github.com/ebenderooock/loom/internal/kernel/config"
+	"github.com/ebenderooock/loom/internal/kernel/logging"
+	"github.com/ebenderooock/loom/internal/kernel/telemetry"
+	"github.com/ebenderooock/loom/internal/server"
+	"github.com/ebenderooock/loom/internal/storage"
 )
 
 func cmdServe(ctx context.Context, args []string) error {

@@ -5,10 +5,10 @@
 package autosearch
 
 import (
-	"github.com/loomctl/loom/internal/customformats"
-	"github.com/loomctl/loom/internal/indexers"
-	"github.com/loomctl/loom/internal/movies"
-	"github.com/loomctl/loom/internal/parser"
+	"github.com/ebenderooock/loom/internal/customformats"
+	"github.com/ebenderooock/loom/internal/indexers"
+	"github.com/ebenderooock/loom/internal/movies"
+	"github.com/ebenderooock/loom/internal/parser"
 )
 
 // SearchRequest describes what to search for and which quality

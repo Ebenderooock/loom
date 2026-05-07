@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/loomctl/loom/internal/kernel/eventbus"
+	"github.com/ebenderooock/loom/internal/kernel/eventbus"
 )
 
 // Topic constants duplicated here to avoid import cycles with downloads/

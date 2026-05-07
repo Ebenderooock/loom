@@ -59,7 +59,7 @@ Verify: `node --version` (≥ 20) and `npm --version` (≥ 9).
 
 ```bash
 # 1. Clone the repo
-git clone https://github.com/loomctl/loom.git
+git clone https://github.com/ebenderooock/loom.git
 cd loom
 
 # 2. Install frontend dependencies
@@ -170,7 +170,7 @@ See `config/loom.yaml` for the full configuration reference.
 
 ## Reporting security issues
 
-Please do **not** open a public issue. Email security@loomctl.dev (placeholder
+Please do **not** open a public issue. Email security@ebenderooock.dev (placeholder
 — update once domain is provisioned) with details and we will respond within
 72 hours.
 

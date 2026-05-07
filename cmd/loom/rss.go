@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/loomctl/loom/internal/kernel/scheduler"
-	"github.com/loomctl/loom/internal/rss"
-	"github.com/loomctl/loom/internal/storage"
-	dbpg "github.com/loomctl/loom/internal/storage/db/postgres"
-	dbsqlite "github.com/loomctl/loom/internal/storage/db/sqlite"
+	"github.com/ebenderooock/loom/internal/kernel/scheduler"
+	"github.com/ebenderooock/loom/internal/rss"
+	"github.com/ebenderooock/loom/internal/storage"
+	dbpg "github.com/ebenderooock/loom/internal/storage/db/postgres"
+	dbsqlite "github.com/ebenderooock/loom/internal/storage/db/sqlite"
 )
 
 // buildRSSManager initializes the RSS sync manager, loads enabled user sources,

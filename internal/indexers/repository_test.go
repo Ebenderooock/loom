@@ -9,10 +9,10 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/loomctl/loom/internal/indexers"
-	"github.com/loomctl/loom/internal/indexers/throttle"
-	"github.com/loomctl/loom/internal/kernel/config"
-	"github.com/loomctl/loom/internal/storage"
+	"github.com/ebenderooock/loom/internal/indexers"
+	"github.com/ebenderooock/loom/internal/indexers/throttle"
+	"github.com/ebenderooock/loom/internal/kernel/config"
+	"github.com/ebenderooock/loom/internal/storage"
 )
 
 func quietLogger() *slog.Logger {

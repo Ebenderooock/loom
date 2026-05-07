@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/loomctl/loom/internal/downloads"
+	"github.com/ebenderooock/loom/internal/downloads"
 )
 
 // idsArg shapes the `ids` argument shared by torrent-start /

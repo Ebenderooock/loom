@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/loomctl/loom/internal/importlists/providers"
+	"github.com/ebenderooock/loom/internal/importlists/providers"
 )
 
 // SyncManager periodically syncs all enabled import lists.

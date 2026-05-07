@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/loomctl/loom/internal/indexers"
+	"github.com/ebenderooock/loom/internal/indexers"
 )
 
 // derefString returns the value of a pointer or a default value if nil.

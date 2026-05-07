@@ -9,7 +9,7 @@ documentation-update policy.
 ### Go
 
 - **Formatter:** `gofmt` + `goimports` (with `local-prefixes:
-  github.com/loomctl/loom`). Configured in `.golangci.yml`'s `formatters`
+  github.com/ebenderooock/loom`). Configured in `.golangci.yml`'s `formatters`
   section.
 - **Lint set:** `errcheck`, `govet`, `ineffassign`, `staticcheck`,
   `unused`, `gocritic`, `gosec`, `misspell`, `unconvert`, `unparam`,

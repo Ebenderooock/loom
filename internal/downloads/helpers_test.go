@@ -8,8 +8,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/loomctl/loom/internal/kernel/config"
-	"github.com/loomctl/loom/internal/storage"
+	"github.com/ebenderooock/loom/internal/kernel/config"
+	"github.com/ebenderooock/loom/internal/storage"
 )
 
 func quietLogger() *slog.Logger {

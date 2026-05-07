@@ -13,10 +13,10 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/loomctl/loom/internal/appconfig"
-	"github.com/loomctl/loom/internal/kernel/config"
-	"github.com/loomctl/loom/internal/kernel/telemetry"
-	"github.com/loomctl/loom/internal/storage"
+	"github.com/ebenderooock/loom/internal/appconfig"
+	"github.com/ebenderooock/loom/internal/kernel/config"
+	"github.com/ebenderooock/loom/internal/kernel/telemetry"
+	"github.com/ebenderooock/loom/internal/storage"
 )
 
 func newTestServer(t *testing.T) *Server {

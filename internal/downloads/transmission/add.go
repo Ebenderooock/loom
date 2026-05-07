@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/loomctl/loom/internal/downloads"
+	"github.com/ebenderooock/loom/internal/downloads"
 )
 
 // torrentAddArgs is the `arguments` body for torrent-add. We only set

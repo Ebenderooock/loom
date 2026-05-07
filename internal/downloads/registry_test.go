@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/loomctl/loom/internal/downloads"
+	"github.com/ebenderooock/loom/internal/downloads"
 )
 
 // fakeClient is a controllable downloads.DownloadClient for tests.

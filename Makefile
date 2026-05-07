@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 GO    ?= go
-PKG   := github.com/loomctl/loom
+PKG   := github.com/ebenderooock/loom
 BIN   := loom
 DIST  := dist
 

@@ -34,9 +34,9 @@ builds:
       - -trimpath
     ldflags:
       - -s -w
-      - -X github.com/loomctl/loom/internal/buildinfo.Version={{.Version}}
-      - -X github.com/loomctl/loom/internal/buildinfo.Commit={{.Commit}}
-      - -X github.com/loomctl/loom/internal/buildinfo.Date={{.Date}}
+      - -X github.com/ebenderooock/loom/internal/buildinfo.Version={{.Version}}
+      - -X github.com/ebenderooock/loom/internal/buildinfo.Commit={{.Commit}}
+      - -X github.com/ebenderooock/loom/internal/buildinfo.Date={{.Date}}
 
 archives:
   - id: default
@@ -69,34 +69,34 @@ changelog:
 
 dockers:
   - image_templates:
-      - "ghcr.io/loomctl/loom:{{ .Version }}-amd64"
+      - "ghcr.io/ebenderooock/loom:{{ .Version }}-amd64"
     use: buildx
     dockerfile: deploy/docker/Dockerfile.goreleaser
     build_flag_templates:
       - "--platform=linux/amd64"
-      - "--label=org.opencontainers.image.source=https://github.com/loomctl/loom"
+      - "--label=org.opencontainers.image.source=https://github.com/ebenderooock/loom"
       - "--label=org.opencontainers.image.version={{ .Version }}"
       - "--label=org.opencontainers.image.licenses=AGPL-3.0-only"
   - image_templates:
-      - "ghcr.io/loomctl/loom:{{ .Version }}-arm64"
+      - "ghcr.io/ebenderooock/loom:{{ .Version }}-arm64"
     use: buildx
     goarch: arm64
     dockerfile: deploy/docker/Dockerfile.goreleaser
     build_flag_templates:
       - "--platform=linux/arm64"
-      - "--label=org.opencontainers.image.source=https://github.com/loomctl/loom"
+      - "--label=org.opencontainers.image.source=https://github.com/ebenderooock/loom"
       - "--label=org.opencontainers.image.version={{ .Version }}"
       - "--label=org.opencontainers.image.licenses=AGPL-3.0-only"
 
 docker_manifests:
-  - name_template: "ghcr.io/loomctl/loom:{{ .Version }}"
+  - name_template: "ghcr.io/ebenderooock/loom:{{ .Version }}"
     image_templates:
-      - "ghcr.io/loomctl/loom:{{ .Version }}-amd64"
-      - "ghcr.io/loomctl/loom:{{ .Version }}-arm64"
-  - name_template: "ghcr.io/loomctl/loom:latest"
+      - "ghcr.io/ebenderooock/loom:{{ .Version }}-amd64"
+      - "ghcr.io/ebenderooock/loom:{{ .Version }}-arm64"
+  - name_template: "ghcr.io/ebenderooock/loom:latest"
     image_templates:
-      - "ghcr.io/loomctl/loom:{{ .Version }}-amd64"
-      - "ghcr.io/loomctl/loom:{{ .Version }}-arm64"
+      - "ghcr.io/ebenderooock/loom:{{ .Version }}-amd64"
+      - "ghcr.io/ebenderooock/loom:{{ .Version }}-arm64"
 
 sboms:
   - artifacts: archive
@@ -105,5 +105,5 @@ release:
   prerelease: auto
   draft: false
   github:
-    owner: loomctl
+    owner: ebenderooock
     name: loom

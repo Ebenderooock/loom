@@ -5,7 +5,7 @@
 // Importing the package for its side-effect registers the kind with
 // the downloads core:
 //
-//	import _ "github.com/loomctl/loom/internal/downloads/qbittorrent"
+//	import _ "github.com/ebenderooock/loom/internal/downloads/qbittorrent"
 //
 // The Client type satisfies downloads.DownloadClient and is normally
 // constructed by the package factory rather than directly. Outbound

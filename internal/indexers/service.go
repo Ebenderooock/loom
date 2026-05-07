@@ -10,7 +10,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/loomctl/loom/internal/indexers/throttle"
+	"github.com/ebenderooock/loom/internal/indexers/throttle"
 )
 
 // Clock is the small time abstraction the package uses so tests can

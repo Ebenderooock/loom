@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/loomctl/loom/internal/downloads"
+	"github.com/ebenderooock/loom/internal/downloads"
 )
 
 // freeSpaceArgs/Reply describe the free-space RPC. We probe the

@@ -1,6 +1,6 @@
 services:
   loom:
-    image: ghcr.io/loomctl/loom:latest
+    image: ghcr.io/ebenderooock/loom:latest
     container_name: loom
     restart: unless-stopped
     ports:

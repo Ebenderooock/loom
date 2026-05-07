@@ -13,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/loomctl/loom/internal/indexers"
+	"github.com/ebenderooock/loom/internal/indexers"
 )
 
 const (

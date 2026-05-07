@@ -375,4 +375,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - *(none yet)*
 
-[Unreleased]: https://github.com/loomctl/loom/compare/HEAD
+[Unreleased]: https://github.com/ebenderooock/loom/compare/HEAD

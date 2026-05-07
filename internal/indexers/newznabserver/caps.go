@@ -5,7 +5,7 @@ import (
 	"sort"
 	"strconv"
 
-	"github.com/loomctl/loom/internal/indexers"
+	"github.com/ebenderooock/loom/internal/indexers"
 )
 
 // capsXML is the wire shape returned by `t=caps`. It's a strict

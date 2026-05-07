@@ -50,7 +50,7 @@ The default Prometheus collectors are mounted out of the box, so a fresh
 $ curl -s http://localhost:8989/metrics | head -20
 # HELP go_build_info Build information about the main Go module.
 # TYPE go_build_info gauge
-go_build_info{checksum="",path="github.com/loomctl/loom",version="..."} 1
+go_build_info{checksum="",path="github.com/ebenderooock/loom",version="..."} 1
 # HELP go_gc_duration_seconds A summary of the wall-time pause (stop-the-world) duration in garbage collection cycles.
 # TYPE go_gc_duration_seconds summary
 go_gc_duration_seconds{quantile="0"} 3.1e-05

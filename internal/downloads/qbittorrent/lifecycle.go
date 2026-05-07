@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/loomctl/loom/internal/downloads"
+	"github.com/ebenderooock/loom/internal/downloads"
 )
 
 // Pause implements downloads.DownloadClient. With no ids the call

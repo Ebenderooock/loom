@@ -23,7 +23,7 @@
 // Importing this package for its side effects registers two kinds in
 // the central catalogue:
 //
-//	import _ "github.com/loomctl/loom/internal/indexers/newznab"
+//	import _ "github.com/ebenderooock/loom/internal/indexers/newznab"
 //
 // During package init the factories install themselves under
 // "newznab" and "torznab"; cmd/loom blank-imports here so a server
