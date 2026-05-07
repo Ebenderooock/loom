@@ -52,6 +52,9 @@ const (
 	CategoryOther   Category = 8000
 )
 
+// Family returns the top-level Newznab category family (e.g. 2040 → 2000).
+func (c Category) Family() Category { return Category((int(c) / 1000) * 1000) }
+
 // CategoryFamilies returns the well-known Newznab category families in
 // numeric order. Useful for UI dropdowns and OpenAPI enums.
 func CategoryFamilies() []Category {

@@ -165,6 +165,12 @@ func TestBuildQuery_RoutesToMovieAndTV(t *testing.T) {
 		{"tmdb routes to movie", indexers.Query{TMDBID: "550"}, "movie"},
 		{"tvdb routes to tvsearch", indexers.Query{TVDBID: "12345"}, "tvsearch"},
 		{"season routes to tvsearch", indexers.Query{Season: 2}, "tvsearch"},
+		{"movie categories route to movie", indexers.Query{Term: "Avengers", Categories: []indexers.Category{2000}}, "movie"},
+		{"movie subcategories route to movie", indexers.Query{Term: "test", Categories: []indexers.Category{2000, 2040, 2050}}, "movie"},
+		{"tv categories route to tvsearch", indexers.Query{Term: "Breaking Bad", Categories: []indexers.Category{5000}}, "tvsearch"},
+		{"tv subcategories route to tvsearch", indexers.Query{Term: "test", Categories: []indexers.Category{5000, 5030, 5040}}, "tvsearch"},
+		{"mixed categories stay generic", indexers.Query{Term: "test", Categories: []indexers.Category{2000, 5000}}, "search"},
+		{"imdb overrides categories", indexers.Query{IMDBID: "tt123", Categories: []indexers.Category{5000}}, "movie"},
 		{"empty routes to search", indexers.Query{Term: "x"}, "search"},
 	}
 	for _, tc := range cases {

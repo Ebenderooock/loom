@@ -209,6 +209,15 @@ func (r *Registry) Search(ctx context.Context, q Query, opts SearchOptions) Aggr
 	}
 
 	sort.Slice(diags, func(i, j int) bool { return diags[i].Name < diags[j].Name })
+
+	// Post-filter: reject results whose categories don't match the
+	// requested family. Indexers (especially Cardigann scrapers) may
+	// return cross-category results even when cat= is sent. This is
+	// the same safety net Radarr/Sonarr apply client-side.
+	if len(q.Categories) > 0 {
+		agg.Results = filterByCategory(agg.Results, q.Categories)
+	}
+
 	agg.Diagnostics = &SearchDiagnostics{
 		Indexers:         diags,
 		TotalResults:     len(agg.Results),
@@ -248,4 +257,28 @@ func (r *Registry) selectTargets(ids []string) []Indexer {
 		}
 	}
 	return out
+}
+
+// filterByCategory keeps only results that share at least one
+// top-level category family with the requested categories. Results
+// with no categories at all are kept (we can't prove they're wrong).
+func filterByCategory(results []Result, wanted []Category) []Result {
+	families := make(map[Category]bool, len(wanted))
+	for _, c := range wanted {
+		families[c.Family()] = true
+	}
+	filtered := make([]Result, 0, len(results))
+	for _, r := range results {
+		if len(r.Category) == 0 {
+			filtered = append(filtered, r)
+			continue
+		}
+		for _, rc := range r.Category {
+			if families[rc.Family()] {
+				filtered = append(filtered, r)
+				break
+			}
+		}
+	}
+	return filtered
 }

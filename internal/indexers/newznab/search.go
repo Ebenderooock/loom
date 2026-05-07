@@ -65,18 +65,41 @@ func buildQuery(q indexers.Query, cfg Config) (mode string, params url.Values) {
 }
 
 // chooseMode reads the Query and routes to the most specific mode the
-// upstream supports. Some indexers reject `tvsearch` without tvdbid;
-// to avoid surprising operators we only switch away from plain
-// `search` when an explicit ID/season is present.
+// upstream supports. When external IDs or season/episode are present
+// we use the ID-specific mode. Otherwise we fall back to category
+// analysis: if every requested category belongs to the Movie or TV
+// family we pick the corresponding mode so indexers that distinguish
+// between `movie`/`tvsearch` and generic `search` return focused
+// results. This matches Radarr/Sonarr behaviour.
 func chooseMode(q indexers.Query) string {
 	switch {
 	case q.IMDBID != "" || q.TMDBID != "":
 		return "movie"
 	case q.TVDBID != "" || q.Season > 0 || q.Episode > 0:
 		return "tvsearch"
-	default:
-		return "search"
 	}
+
+	// Infer mode from categories when no IDs are present.
+	if len(q.Categories) > 0 {
+		allMovie, allTV := true, true
+		for _, c := range q.Categories {
+			family := (int(c) / 1000) * 1000
+			if family != int(indexers.CategoryMovies) {
+				allMovie = false
+			}
+			if family != int(indexers.CategoryTV) {
+				allTV = false
+			}
+		}
+		if allMovie {
+			return "movie"
+		}
+		if allTV {
+			return "tvsearch"
+		}
+	}
+
+	return "search"
 }
 
 // pickCategories blends Query.Categories with cfg.CategoryMap. The map
