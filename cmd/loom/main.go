@@ -8,7 +8,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/loomctl/loom/internal/buildinfo"
+	"github.com/ebenderooock/loom/internal/buildinfo"
 )
 
 func main() {

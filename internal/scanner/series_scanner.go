@@ -13,8 +13,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/loomctl/loom/internal/parser"
-	"github.com/loomctl/loom/internal/series"
+	"github.com/ebenderooock/loom/internal/parser"
+	"github.com/ebenderooock/loom/internal/series"
 )
 
 // SeriesScanner orchestrates TV episode file scanning and import.

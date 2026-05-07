@@ -15,7 +15,7 @@
 // Importing the package for its side effect registers the factory
 // under downloads.KindNZBGet:
 //
-//	import _ "github.com/loomctl/loom/internal/downloads/nzbget"
+//	import _ "github.com/ebenderooock/loom/internal/downloads/nzbget"
 //
 // The factory parses the kind-specific config blob (Host, Port, TLS,
 // BasePath, Username, Password) from Definition.Config, builds an

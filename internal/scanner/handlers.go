@@ -5,7 +5,7 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/loomctl/loom/internal/libraries"
+	"github.com/ebenderooock/loom/internal/libraries"
 )
 
 // RegisterRoutes registers scanner endpoints on the given router.

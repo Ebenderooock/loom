@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/loomctl/loom/internal/kernel/config"
+	"github.com/ebenderooock/loom/internal/kernel/config"
 )
 
 func TestRedactsSensitiveKeys(t *testing.T) {

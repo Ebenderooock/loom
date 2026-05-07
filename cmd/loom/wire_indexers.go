@@ -3,9 +3,9 @@ package main
 import (
 	"log/slog"
 
-	"github.com/loomctl/loom/internal/auth"
-	"github.com/loomctl/loom/internal/indexers"
-	"github.com/loomctl/loom/internal/indexers/newznabserver"
+	"github.com/ebenderooock/loom/internal/auth"
+	"github.com/ebenderooock/loom/internal/indexers"
+	"github.com/ebenderooock/loom/internal/indexers/newznabserver"
 )
 
 // wireAggregator constructs the Newznab/Torznab aggregator server

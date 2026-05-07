@@ -4,7 +4,7 @@ import (
 	"context"
 	"strconv"
 
-	"github.com/loomctl/loom/internal/metadata"
+	"github.com/ebenderooock/loom/internal/metadata"
 )
 
 // Provider implements the metadata.MetadataProvider interface for TMDb.

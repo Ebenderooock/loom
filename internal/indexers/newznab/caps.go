@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/loomctl/loom/internal/indexers"
+	"github.com/ebenderooock/loom/internal/indexers"
 )
 
 // capsXML is the subset of the `t=caps` document we read. The full

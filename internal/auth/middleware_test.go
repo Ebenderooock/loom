@@ -12,9 +12,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/loomctl/loom/internal/auth"
-	"github.com/loomctl/loom/internal/kernel/config"
-	"github.com/loomctl/loom/internal/storage"
+	"github.com/ebenderooock/loom/internal/auth"
+	"github.com/ebenderooock/loom/internal/kernel/config"
+	"github.com/ebenderooock/loom/internal/storage"
 )
 
 func quietLogger() *slog.Logger {

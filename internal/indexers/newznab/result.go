@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/loomctl/loom/internal/indexers"
+	"github.com/ebenderooock/loom/internal/indexers"
 )
 
 // rssEnvelope is the Newznab/Torznab response shell. Items live under

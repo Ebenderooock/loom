@@ -15,7 +15,7 @@ info:
     identifier: AGPL-3.0-only
   contact:
     name: Loom maintainers
-    url: https://github.com/loomctl/loom
+    url: https://github.com/ebenderooock/loom
 servers:
   - url: http://localhost:8989
     description: Local dev server.

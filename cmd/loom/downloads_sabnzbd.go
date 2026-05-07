@@ -6,5 +6,5 @@ package main
 // (qbittorrent, transmission, ...) can each own their own file
 // without colliding on a shared import block.
 import (
-	_ "github.com/loomctl/loom/internal/downloads/sabnzbd"
+	_ "github.com/ebenderooock/loom/internal/downloads/sabnzbd"
 )

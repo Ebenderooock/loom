@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/loomctl/loom/internal/storage"
-	dbpg "github.com/loomctl/loom/internal/storage/db/postgres"
-	dbsqlite "github.com/loomctl/loom/internal/storage/db/sqlite"
+	"github.com/ebenderooock/loom/internal/storage"
+	dbpg "github.com/ebenderooock/loom/internal/storage/db/postgres"
+	dbsqlite "github.com/ebenderooock/loom/internal/storage/db/sqlite"
 )
 
 // SourceType identifies the kind of RSS source: RSS feed or web scraper.

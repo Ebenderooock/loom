@@ -6,8 +6,8 @@ import (
 	"errors"
 	"time"
 
-	dbpg "github.com/loomctl/loom/internal/storage/db/postgres"
-	dbsqlite "github.com/loomctl/loom/internal/storage/db/sqlite"
+	dbpg "github.com/ebenderooock/loom/internal/storage/db/postgres"
+	dbsqlite "github.com/ebenderooock/loom/internal/storage/db/sqlite"
 )
 
 // User is the engine-agnostic user row used by auth flows.

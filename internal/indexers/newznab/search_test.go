@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/loomctl/loom/internal/indexers"
+	"github.com/ebenderooock/loom/internal/indexers"
 )
 
 func TestParseSearchResponse_NewznabAttrs(t *testing.T) {

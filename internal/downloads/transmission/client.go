@@ -13,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/loomctl/loom/internal/downloads"
+	"github.com/ebenderooock/loom/internal/downloads"
 )
 
 // Kind is the registry key under which this implementation registers

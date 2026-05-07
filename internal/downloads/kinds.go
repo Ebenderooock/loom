@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"sync"
 
-	"github.com/loomctl/loom/internal/indexers/throttle"
+	"github.com/ebenderooock/loom/internal/indexers/throttle"
 )
 
 // Factory builds a live DownloadClient from a persisted Definition.

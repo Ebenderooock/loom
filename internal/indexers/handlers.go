@@ -12,7 +12,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/loomctl/loom/internal/indexers/throttle"
+	"github.com/ebenderooock/loom/internal/indexers/throttle"
 )
 
 // Mount attaches every /api/v1/indexers/* route to r. It does not

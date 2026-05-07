@@ -11,7 +11,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/loomctl/loom/internal/indexers"
+	"github.com/ebenderooock/loom/internal/indexers"
 )
 
 //go:embed definitions/*.yml

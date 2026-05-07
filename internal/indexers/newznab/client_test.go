@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/loomctl/loom/internal/indexers"
+	"github.com/ebenderooock/loom/internal/indexers"
 )
 
 // fixtureServer wires a httptest server that routes by `t=` and

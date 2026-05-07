@@ -7,10 +7,10 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/loomctl/loom/internal/downloads"
-	"github.com/loomctl/loom/internal/kernel/config"
-	"github.com/loomctl/loom/internal/kernel/scheduler"
-	"github.com/loomctl/loom/internal/storage"
+	"github.com/ebenderooock/loom/internal/downloads"
+	"github.com/ebenderooock/loom/internal/kernel/config"
+	"github.com/ebenderooock/loom/internal/kernel/scheduler"
+	"github.com/ebenderooock/loom/internal/storage"
 )
 
 // buildDownloadService constructs the downloads.Service backed by the

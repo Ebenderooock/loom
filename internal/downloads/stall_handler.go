@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/loomctl/loom/internal/kernel/eventbus"
+	"github.com/ebenderooock/loom/internal/kernel/eventbus"
 )
 
 // StallAction defines what to do when a download stalls.

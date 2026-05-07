@@ -11,9 +11,9 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/loomctl/loom/internal/libraries"
-	"github.com/loomctl/loom/internal/qualityprofiles"
-	"github.com/loomctl/loom/internal/series"
+	"github.com/ebenderooock/loom/internal/libraries"
+	"github.com/ebenderooock/loom/internal/qualityprofiles"
+	"github.com/ebenderooock/loom/internal/series"
 )
 
 // Handler serves the Sonarr v3 compatibility API.

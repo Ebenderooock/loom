@@ -16,9 +16,9 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/loomctl/loom/internal/libraries"
-	"github.com/loomctl/loom/internal/movies"
-	"github.com/loomctl/loom/internal/qualityprofiles"
+	"github.com/ebenderooock/loom/internal/libraries"
+	"github.com/ebenderooock/loom/internal/movies"
+	"github.com/ebenderooock/loom/internal/qualityprofiles"
 )
 
 // Handler exposes Radarr v3–compatible HTTP endpoints backed by Loom services.

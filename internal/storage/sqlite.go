@@ -12,7 +12,7 @@ import (
 
 	_ "modernc.org/sqlite"
 
-	"github.com/loomctl/loom/internal/kernel/config"
+	"github.com/ebenderooock/loom/internal/kernel/config"
 )
 
 // sqliteDriverName is the database/sql driver name registered by the

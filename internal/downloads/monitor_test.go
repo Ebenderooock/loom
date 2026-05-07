@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/loomctl/loom/internal/kernel/eventbus"
+	"github.com/ebenderooock/loom/internal/kernel/eventbus"
 )
 
 type capturingBusForMonitor struct {

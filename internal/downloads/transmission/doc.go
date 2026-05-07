@@ -6,7 +6,7 @@
 // Importing the package for its side effect registers the factory
 // under downloads.KindTransmission:
 //
-//	import _ "github.com/loomctl/loom/internal/downloads/transmission"
+//	import _ "github.com/ebenderooock/loom/internal/downloads/transmission"
 //
 // Transmission's RPC layer enforces a CSRF mitigation: every request
 // must carry a recently-issued X-Transmission-Session-Id header.

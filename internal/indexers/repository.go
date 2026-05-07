@@ -8,9 +8,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/loomctl/loom/internal/indexers/throttle"
-	dbpg "github.com/loomctl/loom/internal/storage/db/postgres"
-	dbsqlite "github.com/loomctl/loom/internal/storage/db/sqlite"
+	"github.com/ebenderooock/loom/internal/indexers/throttle"
+	dbpg "github.com/ebenderooock/loom/internal/storage/db/postgres"
+	dbsqlite "github.com/ebenderooock/loom/internal/storage/db/sqlite"
 	"github.com/sqlc-dev/pqtype"
 )
 

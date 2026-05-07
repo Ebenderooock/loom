@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/loomctl/loom/internal/downloads"
+	"github.com/ebenderooock/loom/internal/downloads"
 )
 
 // Pause implements downloads.DownloadClient. With one id Deluge has

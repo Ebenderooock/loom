@@ -9,8 +9,8 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/loomctl/loom/internal/indexers"
-	"github.com/loomctl/loom/internal/indexers/proxies"
+	"github.com/ebenderooock/loom/internal/indexers"
+	"github.com/ebenderooock/loom/internal/indexers/proxies"
 )
 
 func newProxiesRouter(t *testing.T) (*chi.Mux, *proxies.Service) {

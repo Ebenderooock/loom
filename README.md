@@ -77,7 +77,7 @@ working:
 docker run --rm -p 8989:8989 \
   -v /opt/loom/config:/config \
   -v /mnt/media:/media \
-  ghcr.io/loomctl/loom:latest
+  ghcr.io/ebenderooock/loom:latest
 ```
 
 Open <http://localhost:8989/healthz>. The image lands publicly with
@@ -90,7 +90,7 @@ Requires Go 1.23+ and Make. This path produces a working binary
 against the current `master`.
 
 ```bash
-git clone https://github.com/loomctl/loom.git
+git clone https://github.com/ebenderooock/loom.git
 cd loom
 make build
 mkdir -p ./run
@@ -106,7 +106,7 @@ curl -s http://localhost:8989/api/v1/system/status
 ### Docker Compose (with Prometheus + Grafana + qBittorrent)
 
 ```bash
-git clone https://github.com/loomctl/loom.git
+git clone https://github.com/ebenderooock/loom.git
 cd loom
 docker compose up -d
 # Loom        http://localhost:8989

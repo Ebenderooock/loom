@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/loomctl/loom/internal/metadata"
+	"github.com/ebenderooock/loom/internal/metadata"
 )
 
 // ── Mock Repository ──────────────────────────────────────────────────

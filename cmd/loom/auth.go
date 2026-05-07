@@ -5,10 +5,10 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/loomctl/loom/internal/appconfig"
-	"github.com/loomctl/loom/internal/auth"
-	"github.com/loomctl/loom/internal/kernel/config"
-	"github.com/loomctl/loom/internal/storage"
+	"github.com/ebenderooock/loom/internal/appconfig"
+	"github.com/ebenderooock/loom/internal/auth"
+	"github.com/ebenderooock/loom/internal/kernel/config"
+	"github.com/ebenderooock/loom/internal/storage"
 )
 
 // buildAuthStore creates an auth Store from a storage.DB.

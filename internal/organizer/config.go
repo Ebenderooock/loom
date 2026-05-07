@@ -7,8 +7,8 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/loomctl/loom/internal/movies"
-	"github.com/loomctl/loom/internal/parser"
+	"github.com/ebenderooock/loom/internal/movies"
+	"github.com/ebenderooock/loom/internal/parser"
 )
 
 // NamingConfig controls how movie files and folders are named.

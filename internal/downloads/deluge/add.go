@@ -7,7 +7,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/loomctl/loom/internal/downloads"
+	"github.com/ebenderooock/loom/internal/downloads"
 )
 
 // Add submits a magnet, .torrent URL, or raw .torrent payload to

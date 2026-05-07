@@ -283,7 +283,7 @@ func (ws *WebScraper) fetchWithRetry(ctx context.Context, url string) (io.ReadCl
 		ws.addAuthHeaders(req)
 
 		// Add User-Agent
-		req.Header.Set("User-Agent", "Loom/1.0 (+https://github.com/loomctl/loom)")
+		req.Header.Set("User-Agent", "Loom/1.0 (+https://github.com/ebenderooock/loom)")
 
 		resp, err := ws.httpClient.Do(req)
 		if err != nil {

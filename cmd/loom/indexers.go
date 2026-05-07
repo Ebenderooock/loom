@@ -8,13 +8,13 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/loomctl/loom/internal/indexers"
-	"github.com/loomctl/loom/internal/indexers/cardigann"
-	"github.com/loomctl/loom/internal/indexers/newznab"
-	"github.com/loomctl/loom/internal/indexers/proxies"
-	"github.com/loomctl/loom/internal/kernel/config"
-	"github.com/loomctl/loom/internal/kernel/scheduler"
-	"github.com/loomctl/loom/internal/storage"
+	"github.com/ebenderooock/loom/internal/indexers"
+	"github.com/ebenderooock/loom/internal/indexers/cardigann"
+	"github.com/ebenderooock/loom/internal/indexers/newznab"
+	"github.com/ebenderooock/loom/internal/indexers/proxies"
+	"github.com/ebenderooock/loom/internal/kernel/config"
+	"github.com/ebenderooock/loom/internal/kernel/scheduler"
+	"github.com/ebenderooock/loom/internal/storage"
 )
 
 // buildIndexerService constructs the indexer Service backed by the

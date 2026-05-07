@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/loomctl/loom/internal/indexers"
+	"github.com/ebenderooock/loom/internal/indexers"
 )
 
 // Newznab and Torznab XML namespaces. We always declare both on the

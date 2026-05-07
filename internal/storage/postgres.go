@@ -11,7 +11,7 @@ import (
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 
-	"github.com/loomctl/loom/internal/kernel/config"
+	"github.com/ebenderooock/loom/internal/kernel/config"
 )
 
 const pgDriverName = "pgx"

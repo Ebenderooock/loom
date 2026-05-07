@@ -10,7 +10,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/loomctl/loom/internal/downloads"
+	"github.com/ebenderooock/loom/internal/downloads"
 )
 
 // fakeServer is a tiny httptest harness that emulates the JSON-RPC

@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/loomctl/loom/internal/indexers"
+	"github.com/ebenderooock/loom/internal/indexers"
 )
 
 // RollingSearcher periodically searches indexers for missing library

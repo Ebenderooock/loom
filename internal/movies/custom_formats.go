@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/loomctl/loom/internal/parser"
+	"github.com/ebenderooock/loom/internal/parser"
 )
 
 // CustomFormatRepository defines database operations for custom formats.

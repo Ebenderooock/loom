@@ -7,8 +7,8 @@ import (
 	"errors"
 	"fmt"
 
-	dbpg "github.com/loomctl/loom/internal/storage/db/postgres"
-	dbsqlite "github.com/loomctl/loom/internal/storage/db/sqlite"
+	dbpg "github.com/ebenderooock/loom/internal/storage/db/postgres"
+	dbsqlite "github.com/ebenderooock/loom/internal/storage/db/sqlite"
 	"github.com/sqlc-dev/pqtype"
 )
 

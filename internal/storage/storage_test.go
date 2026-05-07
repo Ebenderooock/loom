@@ -10,10 +10,10 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/loomctl/loom/internal/kernel/config"
-	"github.com/loomctl/loom/internal/storage"
-	dbpg "github.com/loomctl/loom/internal/storage/db/postgres"
-	dbsqlite "github.com/loomctl/loom/internal/storage/db/sqlite"
+	"github.com/ebenderooock/loom/internal/kernel/config"
+	"github.com/ebenderooock/loom/internal/storage"
+	dbpg "github.com/ebenderooock/loom/internal/storage/db/postgres"
+	dbsqlite "github.com/ebenderooock/loom/internal/storage/db/sqlite"
 )
 
 func quietLogger() *slog.Logger {

@@ -8,4 +8,4 @@ package main
 //
 // See internal/downloads/transmission/doc.go for behaviour details.
 
-import _ "github.com/loomctl/loom/internal/downloads/transmission"
+import _ "github.com/ebenderooock/loom/internal/downloads/transmission"

@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/loomctl/loom/internal/indexers"
+	"github.com/ebenderooock/loom/internal/indexers"
 )
 
 // fixedClock returns a stable Now() for deterministic latency math.

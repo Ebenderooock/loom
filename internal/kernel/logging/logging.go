@@ -9,7 +9,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/loomctl/loom/internal/kernel/config"
+	"github.com/ebenderooock/loom/internal/kernel/config"
 )
 
 // Sensitive keys whose values are redacted before emission.

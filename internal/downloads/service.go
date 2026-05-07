@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/loomctl/loom/internal/grabs"
+	"github.com/ebenderooock/loom/internal/grabs"
 )
 
 // Clock is the small time abstraction the package uses so tests can

@@ -5,7 +5,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 
-	"github.com/loomctl/loom/internal/kernel/telemetry"
+	"github.com/ebenderooock/loom/internal/kernel/telemetry"
 )
 
 // Metric names. Kept under the `loom_indexer_` namespace so dashboards

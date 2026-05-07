@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"sync"
 
-	"github.com/loomctl/loom/internal/indexers"
+	"github.com/ebenderooock/loom/internal/indexers"
 )
 
 // Kind strings registered by this package. Definitions in the

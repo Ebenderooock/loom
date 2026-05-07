@@ -6,7 +6,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/loomctl/loom/internal/downloads"
+	"github.com/ebenderooock/loom/internal/downloads"
 )
 
 // Pause asks SABnzbd to pause one or more queued items. Empty ids

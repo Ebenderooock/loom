@@ -7,4 +7,4 @@ package main
 //
 // See internal/downloads/qbittorrent/doc.go for behaviour details.
 
-import _ "github.com/loomctl/loom/internal/downloads/qbittorrent"
+import _ "github.com/ebenderooock/loom/internal/downloads/qbittorrent"

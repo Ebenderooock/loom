@@ -14,7 +14,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/loomctl/loom/internal/metadata"
+	"github.com/ebenderooock/loom/internal/metadata"
 )
 
 // Config holds TVDB API configuration.

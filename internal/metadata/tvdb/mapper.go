@@ -4,7 +4,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/loomctl/loom/internal/metadata"
+	"github.com/ebenderooock/loom/internal/metadata"
 )
 
 // MapSeriesToMetadata converts TVDB SeriesData to metadata.SeriesMetadata.

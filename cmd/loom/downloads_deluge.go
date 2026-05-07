@@ -8,4 +8,4 @@ package main
 //
 // See internal/downloads/deluge/doc.go for behaviour details.
 
-import _ "github.com/loomctl/loom/internal/downloads/deluge"
+import _ "github.com/ebenderooock/loom/internal/downloads/deluge"

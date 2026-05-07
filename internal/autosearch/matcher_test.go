@@ -3,7 +3,7 @@ package autosearch
 import (
 	"testing"
 
-	"github.com/loomctl/loom/internal/rss"
+	"github.com/ebenderooock/loom/internal/rss"
 )
 
 func TestExactTitleMatch(t *testing.T) {

@@ -6,9 +6,9 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/loomctl/loom/internal/indexers"
-	"github.com/loomctl/loom/internal/kernel/eventbus"
-	"github.com/loomctl/loom/internal/metadata"
+	"github.com/ebenderooock/loom/internal/indexers"
+	"github.com/ebenderooock/loom/internal/kernel/eventbus"
+	"github.com/ebenderooock/loom/internal/metadata"
 )
 
 // Router is a service that listens for indexer search results and routes

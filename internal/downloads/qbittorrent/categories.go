@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/loomctl/loom/internal/downloads"
+	"github.com/ebenderooock/loom/internal/downloads"
 )
 
 // categoryEntry is qBittorrent's per-category record on

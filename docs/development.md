@@ -14,7 +14,7 @@
 ## First clone
 
 ```bash
-git clone https://github.com/loomctl/loom.git
+git clone https://github.com/ebenderooock/loom.git
 cd loom
 make build           # produces dist/loom
 ./dist/loom version

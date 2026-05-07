@@ -3,8 +3,8 @@ package imports
 import (
 	"testing"
 
-	"github.com/loomctl/loom/internal/movies"
-	"github.com/loomctl/loom/internal/series"
+	"github.com/ebenderooock/loom/internal/movies"
+	"github.com/ebenderooock/loom/internal/series"
 )
 
 // ── parseReleaseName ─────────────────────────────────────────────────

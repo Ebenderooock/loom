@@ -12,14 +12,14 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/loomctl/loom/internal/downloads"
-	"github.com/loomctl/loom/internal/grabs"
-	"github.com/loomctl/loom/internal/kernel/eventbus"
-	"github.com/loomctl/loom/internal/libraries"
-	"github.com/loomctl/loom/internal/movies"
-	"github.com/loomctl/loom/internal/notifications"
-	"github.com/loomctl/loom/internal/safety"
-	"github.com/loomctl/loom/internal/series"
+	"github.com/ebenderooock/loom/internal/downloads"
+	"github.com/ebenderooock/loom/internal/grabs"
+	"github.com/ebenderooock/loom/internal/kernel/eventbus"
+	"github.com/ebenderooock/loom/internal/libraries"
+	"github.com/ebenderooock/loom/internal/movies"
+	"github.com/ebenderooock/loom/internal/notifications"
+	"github.com/ebenderooock/loom/internal/safety"
+	"github.com/ebenderooock/loom/internal/series"
 )
 
 // PipelineOptions configures the ImportPipeline.

@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/loomctl/loom/internal/metadata"
+	"github.com/ebenderooock/loom/internal/metadata"
 )
 
 func TestGetMovieSuccess(t *testing.T) {

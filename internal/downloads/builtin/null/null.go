@@ -7,14 +7,14 @@
 // (internal/downloads/qbittorrent, .../sabnzbd, etc.) that will follow
 // the "import for side effect" idiom.
 //
-//	import _ "github.com/loomctl/loom/internal/downloads/builtin/null"
+//	import _ "github.com/ebenderooock/loom/internal/downloads/builtin/null"
 //
 // is equivalent to the implicit registration that ships with the core
 // downloads package and is therefore harmless to add.
 package null
 
 import (
-	"github.com/loomctl/loom/internal/downloads"
+	"github.com/ebenderooock/loom/internal/downloads"
 )
 
 // Kind is the kind string this package registers under.

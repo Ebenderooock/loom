@@ -10,8 +10,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/loomctl/loom/internal/compat/syncprofiles"
-	"github.com/loomctl/loom/internal/indexers"
+	"github.com/ebenderooock/loom/internal/compat/syncprofiles"
+	"github.com/ebenderooock/loom/internal/indexers"
 )
 
 // Handler serves the Prowlarr v1 compatibility API.

@@ -1,6 +1,6 @@
 # Used by GoReleaser, which provides the prebuilt binary.
 FROM gcr.io/distroless/static-debian12:nonroot
-LABEL org.opencontainers.image.source="https://github.com/loomctl/loom"
+LABEL org.opencontainers.image.source="https://github.com/ebenderooock/loom"
 LABEL org.opencontainers.image.licenses="AGPL-3.0-only"
 LABEL org.opencontainers.image.title="Loom"
 

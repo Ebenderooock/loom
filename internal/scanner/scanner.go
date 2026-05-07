@@ -11,9 +11,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/loomctl/loom/internal/metadata"
-	"github.com/loomctl/loom/internal/movies"
-	"github.com/loomctl/loom/internal/parser"
+	"github.com/ebenderooock/loom/internal/metadata"
+	"github.com/ebenderooock/loom/internal/movies"
+	"github.com/ebenderooock/loom/internal/parser"
 )
 
 // videoExtensions lists recognized video file extensions.

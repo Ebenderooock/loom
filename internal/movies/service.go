@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/loomctl/loom/internal/metadata"
+	"github.com/ebenderooock/loom/internal/metadata"
 )
 
 // MetadataSearcher provides movie lookup from external providers (TMDB etc).

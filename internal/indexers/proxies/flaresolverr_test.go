@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/loomctl/loom/internal/indexers/proxies"
+	"github.com/ebenderooock/loom/internal/indexers/proxies"
 )
 
 func TestFlareSolverrRoundTripper(t *testing.T) {

@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/loomctl/loom/internal/indexers"
+	"github.com/ebenderooock/loom/internal/indexers"
 )
 
 // Search implements indexers.Indexer. The mode (`search`, `tvsearch`,

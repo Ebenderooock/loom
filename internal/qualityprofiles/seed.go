@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"log"
 
-	"github.com/loomctl/loom/internal/movies"
+	"github.com/ebenderooock/loom/internal/movies"
 )
 
 // SeedDefaults seeds default quality profiles into the v2 table if none exist.

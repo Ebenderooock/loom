@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/loomctl/loom/internal/downloads"
+	"github.com/ebenderooock/loom/internal/downloads"
 )
 
 // defaultPriority is the NZBGet integer priority assigned when the

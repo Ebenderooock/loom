@@ -12,7 +12,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/loomctl/loom/internal/downloads"
+	"github.com/ebenderooock/loom/internal/downloads"
 )
 
 // fakeServer is a tiny httptest.Server harness shared by the SABnzbd

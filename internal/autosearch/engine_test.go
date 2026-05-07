@@ -3,11 +3,11 @@ package autosearch
 import (
 	"testing"
 
-	"github.com/loomctl/loom/internal/customformats"
-	"github.com/loomctl/loom/internal/indexers"
-	"github.com/loomctl/loom/internal/movies"
-	"github.com/loomctl/loom/internal/parser"
-	"github.com/loomctl/loom/internal/qualityprofiles"
+	"github.com/ebenderooock/loom/internal/customformats"
+	"github.com/ebenderooock/loom/internal/indexers"
+	"github.com/ebenderooock/loom/internal/movies"
+	"github.com/ebenderooock/loom/internal/parser"
+	"github.com/ebenderooock/loom/internal/qualityprofiles"
 )
 
 func intPtr(v int) *int { return &v }

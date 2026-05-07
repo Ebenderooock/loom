@@ -12,10 +12,10 @@ import (
 
 	"golang.org/x/term"
 
-	"github.com/loomctl/loom/internal/auth"
-	"github.com/loomctl/loom/internal/kernel/config"
-	"github.com/loomctl/loom/internal/kernel/logging"
-	"github.com/loomctl/loom/internal/storage"
+	"github.com/ebenderooock/loom/internal/auth"
+	"github.com/ebenderooock/loom/internal/kernel/config"
+	"github.com/ebenderooock/loom/internal/kernel/logging"
+	"github.com/ebenderooock/loom/internal/storage"
 )
 
 func cmdAPIKey(ctx context.Context, args []string) error {

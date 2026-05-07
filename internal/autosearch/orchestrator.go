@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/loomctl/loom/internal/rss"
+	"github.com/ebenderooock/loom/internal/rss"
 )
 
 // SearchEvent represents a triggered search for a matched item.

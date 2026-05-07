@@ -7,9 +7,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/loomctl/loom/internal/kernel/scheduler"
-	dbpg "github.com/loomctl/loom/internal/storage/db/postgres"
-	dbsqlite "github.com/loomctl/loom/internal/storage/db/sqlite"
+	"github.com/ebenderooock/loom/internal/kernel/scheduler"
+	dbpg "github.com/ebenderooock/loom/internal/storage/db/postgres"
+	dbsqlite "github.com/ebenderooock/loom/internal/storage/db/sqlite"
 )
 
 // NewSchedulerStore returns a scheduler.Store backed by db. It

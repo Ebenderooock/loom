@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/loomctl/loom/internal/indexers"
+	"github.com/ebenderooock/loom/internal/indexers"
 )
 
 // Config is the per-indexer JSON blob persisted in the indexers table.

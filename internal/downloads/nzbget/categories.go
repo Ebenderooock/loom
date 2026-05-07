@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/loomctl/loom/internal/downloads"
+	"github.com/ebenderooock/loom/internal/downloads"
 )
 
 // categoryCacheTTL bounds how long a successful Categories result

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/loomctl/loom/internal/downloads"
+	"github.com/ebenderooock/loom/internal/downloads"
 )
 
 // TestAddMagnet verifies the magnet path: the magnet URI flows

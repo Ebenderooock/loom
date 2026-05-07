@@ -34,8 +34,8 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	tnoop "go.opentelemetry.io/otel/trace/noop"
 
-	"github.com/loomctl/loom/internal/buildinfo"
-	"github.com/loomctl/loom/internal/kernel/config"
+	"github.com/ebenderooock/loom/internal/buildinfo"
+	"github.com/ebenderooock/loom/internal/kernel/config"
 )
 
 // Telemetry holds the lifecycle handles for trace exporters, metric
@@ -83,8 +83,8 @@ func New(ctx context.Context, cfg *config.Config) (*Telemetry, error) {
 	)
 
 	// Default to no-op providers so callers can always grab a tracer.
-	t.tracer = tnoop.NewTracerProvider().Tracer("github.com/loomctl/loom")
-	t.meter = mnoop.NewMeterProvider().Meter("github.com/loomctl/loom")
+	t.tracer = tnoop.NewTracerProvider().Tracer("github.com/ebenderooock/loom")
+	t.meter = mnoop.NewMeterProvider().Meter("github.com/ebenderooock/loom")
 
 	if cfg != nil && cfg.OTel.Enabled {
 		if err := t.startOTel(ctx, cfg); err != nil {
@@ -134,7 +134,7 @@ func (t *Telemetry) startOTel(ctx context.Context, cfg *config.Config) error {
 		propagation.Baggage{},
 	))
 	t.tp = tp
-	t.tracer = tp.Tracer("github.com/loomctl/loom")
+	t.tracer = tp.Tracer("github.com/ebenderooock/loom")
 	t.otelOn = true
 
 	// --- Metrics (OTLP push) ---
@@ -163,7 +163,7 @@ func (t *Telemetry) startOTel(ctx context.Context, cfg *config.Config) error {
 		)
 		otel.SetMeterProvider(mp)
 		t.mp = mp
-		t.meter = mp.Meter("github.com/loomctl/loom")
+		t.meter = mp.Meter("github.com/ebenderooock/loom")
 	}
 
 	return nil
@@ -213,7 +213,7 @@ func Tracer() trace.Tracer {
 	defaultMu.RLock()
 	defer defaultMu.RUnlock()
 	if def == nil {
-		return tnoop.NewTracerProvider().Tracer("github.com/loomctl/loom")
+		return tnoop.NewTracerProvider().Tracer("github.com/ebenderooock/loom")
 	}
 	return def.tracer
 }
@@ -224,7 +224,7 @@ func Meter() metric.Meter {
 	defaultMu.RLock()
 	defer defaultMu.RUnlock()
 	if def == nil {
-		return mnoop.NewMeterProvider().Meter("github.com/loomctl/loom")
+		return mnoop.NewMeterProvider().Meter("github.com/ebenderooock/loom")
 	}
 	return def.meter
 }

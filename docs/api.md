@@ -71,7 +71,7 @@ $ curl -s http://localhost:8989/api/v1/system/status
 $ curl -s http://localhost:8989/metrics | head -3
 # HELP go_build_info Build information about the main Go module.
 # TYPE go_build_info gauge
-go_build_info{checksum="",path="github.com/loomctl/loom",version="..."} 1
+go_build_info{checksum="",path="github.com/ebenderooock/loom",version="..."} 1
 
 # pprof is gated by debug.pprof: true
 $ curl -s http://localhost:8989/debug/pprof/goroutine?debug=1 | head -1

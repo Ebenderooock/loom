@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	"github.com/loomctl/loom/internal/downloads"
+	"github.com/ebenderooock/loom/internal/downloads"
 )
 
 // torrentStatus is the subset of fields we request from
