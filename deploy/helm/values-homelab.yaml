@@ -5,7 +5,7 @@
 #     -n media --create-namespace
 
 image:
-  repository: ghcr.io/loomctl/loom
+  repository: ghcr.io/ebenderooock/loom
   pullPolicy: IfNotPresent
   tag: "0.1.0"
 
