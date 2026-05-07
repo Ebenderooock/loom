@@ -188,7 +188,7 @@ func (s *service) GetMovieCredits(ctx context.Context, movieID string) (*metadat
 
 	tmdbID, err := strconv.Atoi(*movie.TMDBID)
 	if err != nil {
-		return nil, fmt.Errorf("movies: invalid TMDB ID %q: %w", movie.TMDBID, err)
+		return nil, fmt.Errorf("movies: invalid TMDB ID %q: %w", *movie.TMDBID, err)
 	}
 
 	return s.credits.GetMovieCredits(ctx, tmdbID)
