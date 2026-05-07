@@ -42,11 +42,11 @@ spec:
           {{- end }}
           ports:
             - name: http
-              containerPort: 8989
+              containerPort: {{ .Values.service.port }}
               protocol: TCP
           env:
             - name: LOOM_HTTP_ADDR
-              value: ":8989"
+              value: ":{{ .Values.service.port }}"
             - name: LOOM_CONFIG_DIR
               value: /config
             - name: LOOM_DATA_DIR
