@@ -11,37 +11,14 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/loomctl/loom/internal/alttitles"
-	"github.com/loomctl/loom/internal/backup"
-	"github.com/loomctl/loom/internal/anime"
 	"github.com/loomctl/loom/internal/appconfig"
-	"github.com/loomctl/loom/internal/calendar"
-	"github.com/loomctl/loom/internal/connect"
-	"github.com/loomctl/loom/internal/autosearch"
+	"github.com/loomctl/loom/internal/backup"
 	"github.com/loomctl/loom/internal/customformats"
-	"github.com/loomctl/loom/internal/downloads"
-	"github.com/loomctl/loom/internal/grabs"
-	"github.com/loomctl/loom/internal/healthmonitor"
-	"github.com/loomctl/loom/internal/importlists"
-	"github.com/loomctl/loom/internal/imports"
-	"github.com/loomctl/loom/internal/indexers"
-	"github.com/loomctl/loom/internal/indexers/newznabserver"
-	"github.com/loomctl/loom/internal/languages"
-	"github.com/loomctl/loom/internal/libraries"
-	"github.com/loomctl/loom/internal/mediainfo"
 	"github.com/loomctl/loom/internal/migrate"
-	"github.com/loomctl/loom/internal/compat/prowlarrv1"
-	"github.com/loomctl/loom/internal/compat/radarrv3"
-	"github.com/loomctl/loom/internal/compat/sonarrv3"
-	"github.com/loomctl/loom/internal/compat/syncprofiles"
+	"github.com/loomctl/loom/internal/rss"
 	"github.com/loomctl/loom/internal/kernel/config"
 	"github.com/loomctl/loom/internal/kernel/logging"
 	"github.com/loomctl/loom/internal/kernel/telemetry"
-	"github.com/loomctl/loom/internal/notifications"
-	"github.com/loomctl/loom/internal/qualityprofiles"
-	"github.com/loomctl/loom/internal/rss"
-	"github.com/loomctl/loom/internal/safety"
-	"github.com/loomctl/loom/internal/scheduler"
 	"github.com/loomctl/loom/internal/server"
 	"github.com/loomctl/loom/internal/storage"
 )
@@ -151,8 +128,6 @@ func cmdServe(ctx context.Context, args []string) error {
 	if err != nil {
 		return fmt.Errorf("init downloads: %w", err)
 	}
-	remotePathStore := downloads.NewRemotePathStore(db.DB())
-	downloadSvc.AddRouteExtension(downloads.MountRemotePathRoutes(remotePathStore))
 	if err := registerDownloadHealthJob(ctx, sched, cfg, downloadSvc); err != nil {
 		return fmt.Errorf("register download health job: %w", err)
 	}
@@ -174,13 +149,8 @@ func cmdServe(ctx context.Context, args []string) error {
 	sched.Start(ctx)
 	defer sched.Stop()
 
-	aggSvc, err := newznabserver.NewServer(newznabserver.Options{
-		Search:    indexerSvc,
-		Auth:      authSvc,
-		Logger:    logger,
-		Title:     "Loom",
-		Strapline: "Loom Newznab/Torznab aggregator",
-	})
+	// Build Newznab/Torznab aggregator server
+	aggSvc, err := wireAggregator(indexerSvc, authSvc, logger)
 	if err != nil {
 		return fmt.Errorf("init aggregator: %w", err)
 	}
@@ -190,171 +160,37 @@ func cmdServe(ctx context.Context, args []string) error {
 		return fmt.Errorf("init server: %w", err)
 	}
 	srv.SetDownloads(downloadSvc)
-	blocklistStore := downloads.NewBlocklistStore(db.DB())
-	srv.SetBlocklistStore(blocklistStore)
 	srv.SetRSS(rssSvc)
 	srv.SetMovies(moviesSvc)
 	srv.SetCustomFormats(customformats.NewStore(db.DB()))
 
-	// Build and wire the libraries store (needed by scanner, organizer, imports)
-	libStore := libraries.NewStore(db.DB())
-
-	// Build and wire the library scanner
-	scannerSvc := buildScanner(moviesSvc, cfg, logger)
-	srv.SetScanner(scannerSvc)
-
-	// Build and wire the file organizer
-	organizerSvc := buildOrganizer(moviesSvc, libStore, db, logger)
-	if mode := cfg.MediaManagement.ImportMode; mode != "" {
-		organizerSvc.SetImportMode(mode)
-	}
-	srv.SetOrganizer(organizerSvc)
-
-	// Build and wire the TV series service
-	seriesSvc := buildSeriesService(db)
-	srv.SetSeries(seriesSvc)
-
-	// Build and wire the series scanner
-	seriesScannerSvc := buildSeriesScanner(seriesSvc, logger)
-	srv.SetSeriesScanner(seriesScannerSvc)
-
-	// Build and wire the notifications service
-	notifSvc := buildNotificationsService(db)
-	srv.SetNotifications(notifSvc)
-
-	// Build and wire the connect (media server integrations) service
-	connectSvc := connect.NewService(db.DB())
-	srv.SetConnect(connectSvc)
-
-	// Build and wire the calendar handler
-	srv.SetCalendar(calendar.Router(db.DB()))
-
-	// Start the notification dispatcher — subscribes to domain events on the
-	// bus and fans out to all matching notification connections.
-	notifDispatcher := notifications.NewDispatcher(srv.Bus(), notifSvc, logger)
-	notifDispatcher.Start(ctx)
-	defer notifDispatcher.Stop()
-
-	// Build and wire the language-profile store
-	langStore := languages.NewStore(db.DB())
-	if err := langStore.EnsureDefault(ctx); err != nil {
-		return fmt.Errorf("init language profiles: %w", err)
-	}
-	srv.SetLanguages(langStore)
-
-	// Build and wire the anime store
-	srv.SetAnime(anime.NewStore(db.DB(), logger))
-
-	// Build and wire the import lists
-	importListStore := importlists.NewStore(db.DB())
-	importListSyncMgr := importlists.NewSyncManager(importListStore, logger)
-	srv.SetImportLists(importListStore, importListSyncMgr)
-	importListSyncMgr.Start(ctx)
-	defer importListSyncMgr.Stop()
-
-	// Wire the libraries scanner
-	libScanner := libraries.NewScanner(libStore, logger)
-	srv.SetLibraries(libStore, libScanner)
-
-	// Build and wire the media-info store
-	srv.SetMediaInfo(mediainfo.NewStore(db.DB(), logger))
-
-	// Build and wire the alt-title store
-	srv.SetAltTitles(alttitles.NewStore(db.DB()))
-
-	// Build and wire the quality profiles store
-	qpStore := qualityprofiles.NewStore(db.DB())
-	srv.SetQualityProfiles(qpStore)
-	qualityprofiles.SeedDefaults(ctx, qpStore, moviesSvc)
-
-	// Build grab store for tracking active downloads
-	grabStore := grabs.NewStore(db.DB())
-	downloadSvc.SetGrabStore(grabStore)
-
-	// Build and wire the autosearch decision engine
-	cfStore := customformats.NewStore(db.DB())
-	cfFormats, _ := cfStore.List(ctx) // best-effort; empty is OK at boot
-	cfEngine := customformats.NewEngine(cfFormats)
-	autoSearchEngine := autosearch.NewEngine(
-		indexerSvc, qpStore, cfEngine, cfStore,
-		downloadSvc.Registry(), moviesSvc, seriesSvc, grabStore, logger,
-	)
-	srv.SetAutoSearchEngine(autoSearchEngine)
-	srv.SetGrabStore(grabStore)
-
-	// Wire *arr API compatibility shims
-	syncStore := syncprofiles.NewStore(db.DB())
-	srv.SetSyncProfileStore(syncStore)
-	srv.SetCompatRadarr(radarrv3.NewHandler(moviesSvc, libStore, qpStore, logger))
-	srv.SetCompatSonarr(sonarrv3.NewHandler(seriesSvc, libStore, qpStore, logger))
-	srv.SetCompatProwlarr(prowlarrv1.NewHandler(indexerSvc, syncStore, logger))
-
-	// Build and wire the import pipeline
-	importMode := imports.ImportMode(cfg.MediaManagement.ImportMode)
-	if importMode == "" {
-		importMode = imports.ImportModeMove
-	}
-	importPipeline, err := imports.NewPipeline(imports.PipelineOptions{
-		DB:              db.DB(),
-		Bus:             srv.Bus(),
-		DownloadSvc:     downloadSvc,
-		RemotePathStore: remotePathStore,
-		MoviesSvc:       moviesSvc,
-		SeriesSvc:       seriesSvc,
-		LibStore:        libStore,
-		GrabStore:       grabStore,
-		NotifSvc:        notifSvc,
-		PostVal:         safety.NewPostValidator(safety.DefaultConfig()),
-		ReviewStore:     safety.NewReviewStore(db.DB()),
-		Logger:          logger,
-		ImportMode:      importMode,
-	})
+	// Wire media services (scanner, organizer, series, libraries, etc.)
+	media, err := wireMedia(ctx, cfg, db, srv, moviesSvc, logger)
 	if err != nil {
-		return fmt.Errorf("init import pipeline: %w", err)
+		return fmt.Errorf("wire media: %w", err)
 	}
-	importPipeline.Start()
-	defer importPipeline.Stop()
-	srv.SetImportPipeline(importPipeline)
+	media.importListSyncMgr.Start(ctx)
+	defer media.importListSyncMgr.Stop()
 
-	// Build and wire the download monitor — polls clients for completion
-	downloadHistoryStore := downloads.NewHistoryStore(db.DB())
-	stallHandler := downloads.NewStallHandler(downloads.StallHandlerOptions{
-		Registry:  downloadSvc.Registry(),
-		Blocklist: blocklistStore,
-		Bus:       srv.Bus(),
-		Logger:    logger,
-	})
-	downloadMonitor, err := downloads.NewMonitor(downloads.MonitorOptions{
-		Service:         downloadSvc,
-		Bus:             srv.Bus(),
-		Logger:          logger,
-		CheckInterval:   30 * time.Second,
-		StallTimeout:    30 * time.Minute,
-		CheckForStalled: true,
-		StallHandler:    stallHandler,
-		HistoryStore:    downloadHistoryStore,
-		GrabStore:       grabStore,
-	})
+	// Wire download services (grabs, autosearch, import pipeline, monitor)
+	dlWiring, err := wireDownloads(ctx, cfg, db, srv, downloadSvc, moviesSvc, indexerSvc, media, logger)
 	if err != nil {
-		return fmt.Errorf("init download monitor: %w", err)
+		return fmt.Errorf("wire downloads: %w", err)
 	}
-	monCtx, monCancel := context.WithCancel(ctx)
-	defer monCancel()
-	go downloadMonitor.RunLoop(monCtx)
+	defer dlWiring.importPipeline.Stop()
+	defer dlWiring.monitorCancel()
 
-	// Build and wire the rolling-search scheduler
-	rsCfg := scheduler.DefaultRollingSearchConfig()
-	rsStore := scheduler.NewStore(db.DB())
-	rollingSearcher := scheduler.NewRollingSearcher(rsStore, indexerSvc, logger, rsCfg)
-	srv.SetRollingSearch(rollingSearcher)
-	rollingSearcher.Start(ctx)
-	defer rollingSearcher.Stop()
-
-	// Build and wire the health monitor
-	healthMon := buildHealthMonitor(ctx, indexerSvc, downloadSvc, notifSvc, libStore, logger)
-	srv.SetHealthMonitor(healthMon)
-	healthMon.Start(ctx)
-	defer healthMon.Stop()
+	// Wire infrastructure services (connect, compat, notifications, rolling search, health)
+	infra, err := wireInfra(ctx, db, srv, indexerSvc, downloadSvc, moviesSvc, media, logger)
+	if err != nil {
+		return fmt.Errorf("wire infra: %w", err)
+	}
+	infra.notifDispatcher.Start(ctx)
+	defer infra.notifDispatcher.Stop()
+	infra.rollingSearcher.Start(ctx)
+	defer infra.rollingSearcher.Stop()
+	infra.healthMon.Start(ctx)
+	defer infra.healthMon.Stop()
 
 	errCh := make(chan error, 1)
 	go func() { errCh <- srv.Start() }()
@@ -512,99 +348,4 @@ func cmdBackup(ctx context.Context, args []string) error {
 	default:
 		return fmt.Errorf("unknown action %q (expected create or restore)", *action)
 	}
-}
-
-// --- Health monitor wiring ---
-
-// indexerHealthAdapter wraps *indexers.Service to satisfy healthmonitor.IndexerChecker.
-type indexerHealthAdapter struct {
-	svc *indexers.Service
-}
-
-func (a *indexerHealthAdapter) List(ctx context.Context) ([]healthmonitor.IndexerInfo, error) {
-	defs, err := a.svc.List(ctx)
-	if err != nil {
-		return nil, err
-	}
-	out := make([]healthmonitor.IndexerInfo, len(defs))
-	for i, d := range defs {
-		status := "unknown"
-		if d.Health != nil {
-			status = string(d.Health.Status)
-		}
-		out[i] = healthmonitor.IndexerInfo{
-			ID: d.ID, Name: d.Name, Enabled: d.Enabled, Status: status,
-		}
-	}
-	return out, nil
-}
-
-// downloadHealthAdapter wraps *downloads.Service to satisfy healthmonitor.DownloadChecker.
-type downloadHealthAdapter struct {
-	svc *downloads.Service
-}
-
-func (a *downloadHealthAdapter) ListClients(ctx context.Context) ([]healthmonitor.ClientInfo, error) {
-	defs, err := a.svc.List(ctx)
-	if err != nil {
-		return nil, err
-	}
-	out := make([]healthmonitor.ClientInfo, len(defs))
-	for i, d := range defs {
-		status := "unknown"
-		if d.Health != nil {
-			status = string(d.Health.Status)
-		}
-		out[i] = healthmonitor.ClientInfo{
-			ID: d.ID, Name: d.Name, Enabled: d.Enabled, Status: status,
-		}
-	}
-	return out, nil
-}
-
-func buildHealthMonitor(
-	ctx context.Context,
-	indexerSvc *indexers.Service,
-	downloadSvc *downloads.Service,
-	notifSvc notifications.Service,
-	libStore *libraries.Store,
-	logger *slog.Logger,
-) *healthmonitor.Monitor {
-	// Collect library paths for disk-space checks.
-	var libPaths []string
-	if libStore != nil {
-		libs, err := libStore.List(ctx)
-		if err == nil {
-			for _, l := range libs {
-				if l.Path != "" {
-					libPaths = append(libPaths, l.Path)
-				}
-			}
-		}
-	}
-
-	// Build notification sender closure.
-	var notifier healthmonitor.NotificationSender
-	if notifSvc != nil {
-		notifier = func(ctx context.Context, title, body string) error {
-			return notifSvc.Send(ctx, notifications.EventOnHealthIssue, title, body, nil)
-		}
-	}
-
-	var idxChecker healthmonitor.IndexerChecker
-	if indexerSvc != nil {
-		idxChecker = &indexerHealthAdapter{svc: indexerSvc}
-	}
-	var dlChecker healthmonitor.DownloadChecker
-	if downloadSvc != nil {
-		dlChecker = &downloadHealthAdapter{svc: downloadSvc}
-	}
-
-	return healthmonitor.New(healthmonitor.Options{
-		Indexers:  idxChecker,
-		Downloads: dlChecker,
-		Notifier:  notifier,
-		LibPaths:  libPaths,
-		Logger:    logger.With("component", "health-monitor"),
-	})
 }
