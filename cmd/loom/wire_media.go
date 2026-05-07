@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/ebenderooock/loom/internal/alttitles"
 	"github.com/ebenderooock/loom/internal/anime"
@@ -15,6 +16,7 @@ import (
 	"github.com/ebenderooock/loom/internal/movies"
 	"github.com/ebenderooock/loom/internal/notifications"
 	"github.com/ebenderooock/loom/internal/qualityprofiles"
+	"github.com/ebenderooock/loom/internal/scheduler"
 	"github.com/ebenderooock/loom/internal/series"
 	"github.com/ebenderooock/loom/internal/kernel/config"
 	"github.com/ebenderooock/loom/internal/server"
@@ -64,6 +66,16 @@ func wireMedia(
 	seriesScannerSvc := buildSeriesScanner(seriesSvc, logger)
 	srv.SetSeriesScanner(seriesScannerSvc)
 
+	// Periodic library scan (every 6 hours)
+	periodicScanner := scheduler.NewPeriodicScanner(
+		seriesScannerSvc,
+		&libStoreProvider{store: libStore},
+		6*time.Hour,
+		logger,
+	)
+	srv.SetPeriodicScanner(periodicScanner)
+	periodicScanner.Start(ctx)
+
 	// Notifications
 	notifSvc := buildNotificationsService(db)
 	srv.SetNotifications(notifSvc)
@@ -108,4 +120,25 @@ func wireMedia(
 		notifSvc:          notifSvc,
 		importListSyncMgr: importListSyncMgr,
 	}, nil
+}
+
+// libStoreProvider adapts libraries.Store to scheduler.LibraryProvider.
+type libStoreProvider struct {
+	store *libraries.Store
+}
+
+func (p *libStoreProvider) ListAll(ctx context.Context) ([]scheduler.LibraryInfo, error) {
+	libs, err := p.store.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]scheduler.LibraryInfo, len(libs))
+	for i, l := range libs {
+		out[i] = scheduler.LibraryInfo{
+			ID:        l.ID,
+			Path:      l.Path,
+			MediaType: l.MediaType,
+		}
+	}
+	return out, nil
 }

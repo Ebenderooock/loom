@@ -119,6 +119,7 @@ type Server struct {
 	healthMonitor   *healthmonitor.Monitor
 	autoSearchEngine *autosearch.Engine
 	grabStore        *grabs.Store
+	periodicScanner  *scheduler.PeriodicScanner
 	syncProfileStore *syncprofiles.Store
 	httpMetrics *telemetry.HTTPMetrics
 	ready      atomic.Bool
@@ -270,6 +271,11 @@ func (s *Server) SetRollingSearch(rs *scheduler.RollingSearcher) {
 	if s.httpSrv != nil {
 		s.httpSrv.Handler = s.newMux()
 	}
+}
+
+// SetPeriodicScanner installs the periodic library scanner.
+func (s *Server) SetPeriodicScanner(ps *scheduler.PeriodicScanner) {
+	s.periodicScanner = ps
 }
 
 // SetImportPipeline installs the import pipeline and rebuilds the HTTP handler.
