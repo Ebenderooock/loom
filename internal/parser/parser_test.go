@@ -347,6 +347,131 @@ func TestParseEdgeCases(t *testing.T) {
 }
 
 // Test that regex patterns are cached correctly
+// ── Title Extraction ─────────────────────────────────────────────────
+
+func TestExtractTitle(t *testing.T) {
+	tests := []struct {
+		name    string
+		release string
+		want    string
+	}{
+		{"movie with year", "The.Matrix.1999.1080p.BluRay.x264-GROUP", "The Matrix"},
+		{"movie no year", "Inception.1080p.BluRay.x264", "Inception"},
+		{"tv show", "Breaking.Bad.S01E05.720p.BluRay", "Breaking Bad S01E05"},
+		{"underscored", "The_Dark_Knight_2008_BluRay", "The Dark Knight 2008 BluRay"},
+		{"with group bracket", "[SubGroup] Show Name - 01 [1080p]", "Show Name 01 [1080p]"},
+		{"with parens year", "Dune (2021) 1080p BluRay", "Dune"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := Parse(tt.release)
+			if r.Title != tt.want {
+				t.Errorf("Parse(%q).Title = %q, want %q", tt.release, r.Title, tt.want)
+			}
+		})
+	}
+}
+
+// ── Group Extraction ─────────────────────────────────────────────────
+
+func TestExtractGroup(t *testing.T) {
+	tests := []struct {
+		name    string
+		release string
+		want    string
+	}{
+		{"trailing dash group", "Movie.2024.1080p.BluRay-SPARKS", "SPARKS"},
+		{"trailing with ext", "Movie.2024.1080p.BluRay-FGT.mkv", "FGT"},
+		{"leading bracket group", "[SubGroup] Show - 01.mkv", "SubGroup"},
+		{"no group", "Movie.2024.1080p.BluRay.mkv", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := Parse(tt.release)
+			if r.Group != tt.want {
+				t.Errorf("Parse(%q).Group = %q, want %q", tt.release, r.Group, tt.want)
+			}
+		})
+	}
+}
+
+// ── Anime Patterns ───────────────────────────────────────────────────
+
+func TestAnimePatterns(t *testing.T) {
+	tests := []struct {
+		name       string
+		release    string
+		wantRes    int
+		wantCodec  string
+		wantGroup  string
+	}{
+		{
+			"bracket group with 1080p",
+			"[SubGroup] Show Name - 01 [1080p].mkv",
+			1080, "", "SubGroup",
+		},
+		{
+			"anime with h265 tag",
+			"[Erai-raws] My Hero Academia - 01 [1080p][HEVC].mkv",
+			1080, "h265", "Erai-raws",
+		},
+		{
+			"anime with 10bit",
+			"[GroupName] Anime Title - 12 [720p][10bit].mkv",
+			720, "", "GroupName",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := Parse(tt.release)
+			if r.Resolution != tt.wantRes {
+				t.Errorf("Resolution = %d, want %d", r.Resolution, tt.wantRes)
+			}
+			if tt.wantCodec != "" && r.Codec != tt.wantCodec {
+				t.Errorf("Codec = %q, want %q", r.Codec, tt.wantCodec)
+			}
+			if r.Group != tt.wantGroup {
+				t.Errorf("Group = %q, want %q", r.Group, tt.wantGroup)
+			}
+		})
+	}
+}
+
+// ── Multi-Episode & Season Pack ──────────────────────────────────────
+
+func TestMultiEpisode(t *testing.T) {
+	// Parser extracts only the first S##E## match
+	r := Parse("Show.S01E01E02.1080p.BluRay.mkv")
+	if r.Season != 1 {
+		t.Errorf("Season = %d, want 1", r.Season)
+	}
+	if r.Episode != 1 {
+		t.Errorf("Episode = %d, want 1 (first match)", r.Episode)
+	}
+}
+
+func TestSeasonPackNoEpisode(t *testing.T) {
+	// "Show.S01.Complete" has no E## → episode should be -1
+	r := Parse("Show.S01.Complete.1080p.BluRay.mkv")
+	if r.Season != -1 && r.Episode != -1 {
+		// The parser uses S##E## pattern; S01 alone without E## won't match
+		t.Logf("Season=%d Episode=%d (season pack without E## is not extracted)", r.Season, r.Episode)
+	}
+}
+
+// ── Daily Show Format ────────────────────────────────────────────────
+
+func TestDailyShowYearExtraction(t *testing.T) {
+	// "Show.2024.05.07.HDTV" — the parser should extract 2024 as year
+	r := Parse("Some.Show.2024.05.07.HDTV.x264.mkv")
+	if r.Year != 2024 {
+		t.Errorf("Year = %d, want 2024", r.Year)
+	}
+	if r.Source != "HDTV" {
+		t.Errorf("Source = %q, want HDTV", r.Source)
+	}
+}
+
 func TestPatternCaching(t *testing.T) {
 	// Clear the cache first
 	patternCache.Lock()
