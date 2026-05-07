@@ -1,0 +1,104 @@
+# Loom — Homelab Talos deployment values
+# Usage:
+#   helm install loom ./deploy/helm/loom \
+#     -f /tmp/loom-deploy/values-homelab.yaml \
+#     -n media --create-namespace
+
+image:
+  repository: ghcr.io/loomctl/loom
+  pullPolicy: IfNotPresent
+  tag: "0.1.0"
+
+# ---------- Security context (match existing containers) ----------
+podSecurityContext:
+  fsGroup: 1001
+
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 999
+  runAsGroup: 1001
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  seccompProfile:
+    type: RuntimeDefault
+  capabilities:
+    drop:
+      - ALL
+
+# ---------- Service ----------
+service:
+  type: ClusterIP
+  port: 8989
+
+# ---------- Ingress (Traefik) ----------
+ingress:
+  enabled: true
+  className: traefik
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    # Uncomment for automatic TLS via cert-manager:
+    # cert-manager.io/cluster-issuer: letsencrypt-prod
+  hosts:
+    - host: loom.homelab.local  # <-- change to your domain
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+    # - secretName: loom-tls
+    #   hosts:
+    #     - loom.homelab.local
+
+# ---------- Persistence ----------
+# Config volume — on your Synology k8s persistence volume
+persistence:
+  config:
+    enabled: true
+    storageClass: ""  # uses cluster default — set if needed
+    accessMode: ReadWriteOnce
+    size: 1Gi
+  media:
+    enabled: false  # handled by existing PVCs below
+
+# Mount existing Synology media PVCs
+extraVolumes:
+  - name: movies
+    persistentVolumeClaim:
+      claimName: movies-pvc
+  - name: tv
+    persistentVolumeClaim:
+      claimName: tv-pvc
+  - name: downloads
+    persistentVolumeClaim:
+      claimName: downloads-pvc
+
+extraVolumeMounts:
+  - name: movies
+    mountPath: /media/movies
+  - name: tv
+    mountPath: /media/tv
+  - name: downloads
+    mountPath: /media/downloads
+
+# ---------- Resources ----------
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+# ---------- Probes ----------
+probes:
+  liveness:
+    enabled: true
+    path: /api/v1/health
+    initialDelaySeconds: 10
+    periodSeconds: 30
+    timeoutSeconds: 5
+  readiness:
+    enabled: true
+    path: /api/v1/health
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    timeoutSeconds: 5
