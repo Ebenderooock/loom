@@ -28,7 +28,7 @@ import {
   Bookmark, BookmarkCheck, RefreshCw, ChevronRight,
   FolderOpen, HardDrive, Info, History, FileVideo,
   Download, Search, Users, Clapperboard,
-  Archive, ArchiveRestore,
+  Archive, ArchiveRestore, HardDriveDownload,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -159,6 +159,7 @@ export function MovieDetailSheet({
   const [searchOpen, setSearchOpen] = useState(false);
   const [archiving, setArchiving] = useState(false);
   const [autoSearching, setAutoSearching] = useState(false);
+  const [rescanning, setRescanning] = useState(false);
 
   const handleAutoSearch = async () => {
     if (!movie) return;
@@ -331,6 +332,34 @@ export function MovieDetailSheet({
     }
   };
 
+  const handleRescan = async () => {
+    if (!movie.libraryId) {
+      toast.error("Movie has no library assigned");
+      return;
+    }
+    setRescanning(true);
+    try {
+      const res = await fetch(`/api/v1/movies/${movie.id}/rescan`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ libraryId: movie.libraryId }),
+      });
+      if (res.ok) {
+        const result = await res.json();
+        toast.success(`Rescan complete: ${result.matched} matched, ${result.imported} imported`);
+        const updated = await fetch(`/api/v1/movies/${movie.id}`, { credentials: "include" });
+        if (updated.ok) onUpdated(await updated.json());
+      } else {
+        toast.error("Rescan failed");
+      }
+    } catch {
+      toast.error("Network error");
+    } finally {
+      setRescanning(false);
+    }
+  };
+
   const overviewIsLong = (movie.overview?.length ?? 0) > 280;
 
   return (
@@ -403,6 +432,9 @@ export function MovieDetailSheet({
               </Button>
               <Button size="sm" variant="outline" className="gap-1.5" onClick={handleRefresh} disabled={refreshing}>
                 <RefreshCw className={cn("w-3.5 h-3.5", refreshing && "animate-spin")} />Refresh
+              </Button>
+              <Button size="sm" variant="outline" className="gap-1.5" onClick={handleRescan} disabled={rescanning} title="Rescan library folder for new files">
+                <HardDriveDownload className={cn("w-3.5 h-3.5", rescanning && "animate-spin")} />{rescanning ? "Scanning..." : "Rescan"}
               </Button>
               <Button size="sm" variant="outline" className="gap-1.5" onClick={handleArchiveToggle} disabled={archiving}>
                 {movie.monitoringStatus === "unmonitored" ? (

@@ -23,6 +23,7 @@ func RegisterRoutes(r chi.Router, scanner *Scanner, libStore *libraries.Store) {
 		r.Post("/match", matchFile(scanner))
 		r.Get("/{scanId}", getScanStatus(scanner))
 	})
+	r.Post("/{id}/rescan", rescanMovie(scanner, libStore))
 }
 
 type startScanRequest struct {
@@ -211,6 +212,40 @@ func rescanSeries(ss *SeriesScanner, libStore *libraries.Store) http.HandlerFunc
 		}
 
 		result, err := ss.RescanSeries(r.Context(), seriesID, lib.Path)
+		if err != nil {
+			writeJSONError(w, "rescan failed", http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(result)
+	}
+}
+
+func rescanMovie(s *Scanner, libStore *libraries.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		movieID := chi.URLParam(r, "id")
+
+		var req struct {
+			LibraryID string `json:"libraryId"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSONError(w, "invalid request body", http.StatusBadRequest)
+			return
+		}
+
+		if req.LibraryID == "" {
+			writeJSONError(w, "libraryId is required", http.StatusBadRequest)
+			return
+		}
+
+		lib, err := libStore.Get(r.Context(), req.LibraryID)
+		if err != nil {
+			writeJSONError(w, "library not found", http.StatusNotFound)
+			return
+		}
+
+		result, err := s.RescanMovie(r.Context(), movieID, lib.Path)
 		if err != nil {
 			writeJSONError(w, "rescan failed", http.StatusInternalServerError)
 			return
