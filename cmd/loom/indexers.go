@@ -89,6 +89,7 @@ func buildIndexerService(ctx context.Context, cfg *config.Config, db storage.DB,
 		HealthCheckTimeout: time.Duration(cfg.Indexers.HealthCheckTimeoutSec) * time.Second,
 		RouteExtensions:    []indexers.RouteMounter{proxiesSvc.Mount},
 		DefinitionLister:   &cardigann.LoaderDefinitionLister{Loader: cardLoader},
+		QueryLog:           indexers.NewQueryLog(db.DB()),
 	})
 	if err != nil {
 		return nil, err

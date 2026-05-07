@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useSetPageHeader } from "@/hooks/use-page-header";
 import { CheckCircle2, XCircle, AlertTriangle, Loader2, Clock, Ban, RefreshCw, Trash2, Download, ArrowDown, ArrowUp, Pause } from "lucide-react";
+import { SearchDiagnostics } from "@/components/search/search-diagnostics";
 
 // ─── Types ──────────────────────────────────────────────────────────────
 
@@ -558,6 +559,7 @@ export function ActivityPage() {
               </Badge>
             )}
           </TabsTrigger>
+          <TabsTrigger value="search-log">Search Log</TabsTrigger>
         </TabsList>
         <TabsContent value="queue">
           <DownloadQueue />
@@ -570,6 +572,9 @@ export function ActivityPage() {
         </TabsContent>
         <TabsContent value="reviews">
           <ReviewQueue />
+        </TabsContent>
+        <TabsContent value="search-log">
+          <SearchDiagnostics />
         </TabsContent>
       </Tabs>
     </div>
