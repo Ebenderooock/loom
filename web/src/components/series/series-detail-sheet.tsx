@@ -27,7 +27,7 @@ import {
   Trash2, Pencil,
   Bookmark, BookmarkCheck, RefreshCw, ChevronRight, ChevronDown,
   Users, FileVideo, Search, FolderSearch,
-  Archive, ArchiveRestore,
+  Archive, ArchiveRestore, HardDriveDownload,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -345,7 +345,19 @@ function SeasonAccordion({
               <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
             </div>
           ) : episodes.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-4">No episodes found</p>
+            <div className="text-center py-8 space-y-2">
+              {season.episodeCount === 0 ? (
+                <>
+                  <div className="flex items-center justify-center gap-2 text-indigo-400">
+                    <Tv className="w-5 h-5" />
+                    <span className="text-sm font-medium">Coming Soon</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">No episodes have been announced yet</p>
+                </>
+              ) : (
+                <p className="text-sm text-muted-foreground">No episodes found</p>
+              )}
+            </div>
           ) : (
             <div>
               {/* Table header */}
@@ -474,6 +486,7 @@ export function SeriesDetailSheet({
   } | null>(null);
   const [archiving, setArchiving] = useState(false);
   const [autoSearching, setAutoSearching] = useState(false);
+  const [rescanning, setRescanning] = useState(false);
 
   const handleAutoSearch = async () => {
     if (!series) return;
@@ -660,6 +673,35 @@ export function SeriesDetailSheet({
     }
   };
 
+  const handleRescan = async () => {
+    if (!series.libraryId) {
+      toast.error("Series has no library assigned");
+      return;
+    }
+    setRescanning(true);
+    try {
+      const res = await fetch(`/api/v1/series/${series.id}/rescan`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ libraryId: series.libraryId }),
+      });
+      if (res.ok) {
+        const result = await res.json();
+        toast.success(`Rescan complete: ${result.matched} matched, ${result.imported} imported`);
+        // Refresh series data to reflect any new files
+        const updated = await fetch(`/api/v1/series/${series.id}`, { credentials: "include" });
+        if (updated.ok) onUpdated(await updated.json());
+      } else {
+        toast.error("Rescan failed");
+      }
+    } catch {
+      toast.error("Network error");
+    } finally {
+      setRescanning(false);
+    }
+  };
+
   const overviewIsLong = (series.overview?.length ?? 0) > 280;
 
   return (
@@ -729,6 +771,9 @@ export function SeriesDetailSheet({
               </Button>
               <Button size="sm" variant="outline" className="gap-1.5" onClick={handleRefresh} disabled={refreshing}>
                 <RefreshCw className={cn("w-3.5 h-3.5", refreshing && "animate-spin")} />Refresh
+              </Button>
+              <Button size="sm" variant="outline" className="gap-1.5" onClick={handleRescan} disabled={rescanning} title="Rescan library folder for new files">
+                <HardDriveDownload className={cn("w-3.5 h-3.5", rescanning && "animate-spin")} />{rescanning ? "Scanning..." : "Rescan"}
               </Button>
               <Button size="sm" variant="outline" className="gap-1.5" title="Automatic search for all episodes" onClick={handleAutoSearch} disabled={autoSearching}>
                 <Search className={cn("w-3.5 h-3.5", autoSearching && "animate-spin")} />{autoSearching ? "Searching..." : "Search"}

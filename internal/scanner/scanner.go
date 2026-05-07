@@ -554,3 +554,74 @@ func slugify(s string) string {
 	result := b.String()
 	return strings.TrimRight(result, "-")
 }
+
+// RescanMovie rescans a single movie's folder for updated files.
+func (s *Scanner) RescanMovie(ctx context.Context, movieID, libraryPath string) (*ScanResult, error) {
+	movie, err := s.movieSvc.GetMovie(ctx, movieID)
+	if err != nil {
+		return nil, fmt.Errorf("get movie: %w", err)
+	}
+
+	scanID := uuid.New().String()[:8]
+	result := &ScanResult{
+		ID:             scanID,
+		LibraryID:      movie.LibraryID,
+		RootFolderPath: libraryPath,
+		Status:         ScanStatusRunning,
+		StartedAt:      time.Now(),
+	}
+
+	s.mu.Lock()
+	s.scans[scanID] = result
+	s.unmatched[scanID] = nil
+	s.mu.Unlock()
+
+	// Walk the library path looking for files matching this movie
+	scanned, walkErr := walkFolder(libraryPath)
+	if walkErr != nil {
+		s.failScan(scanID, walkErr.Error())
+		return result, walkErr
+	}
+
+	s.mu.Lock()
+	result.TotalFiles = len(scanned)
+	s.mu.Unlock()
+
+	normMovieTitle := normalizeTitle(movie.Title)
+
+	for _, sf := range scanned {
+		normParsed := normalizeTitle(sf.Rel.Title)
+		if normParsed != normMovieTitle {
+			continue
+		}
+		// Year check (allow ±1)
+		if movie.Year > 0 && sf.Rel.Year > 0 && abs(movie.Year-sf.Rel.Year) > 1 {
+			continue
+		}
+
+		quality := qualityFromResolution(sf.Rel.Resolution)
+		if err := s.importFile(ctx, sf.Path, sf.Size, quality, sf.Rel.Source, &metadata.MovieMetadata{
+			Title: movie.Title,
+			Year:  movie.Year,
+			TMDBID: movie.TMDBID,
+			IMDBID: movie.IMDBID,
+		}, movie.LibraryID, movie.QualityProfileID); err != nil {
+			s.logger.Warn("rescan: failed to import", "movie", movie.Title, "path", sf.Path, "err", err)
+			continue
+		}
+
+		s.mu.Lock()
+		result.Matched++
+		result.Imported++
+		s.mu.Unlock()
+	}
+
+	now := time.Now()
+	s.mu.Lock()
+	result.Status = ScanStatusCompleted
+	result.CompletedAt = &now
+	s.mu.Unlock()
+
+	s.logger.Info("movie rescan completed", "movie", movie.Title, "matched", result.Matched)
+	return result, nil
+}
