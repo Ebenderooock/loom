@@ -93,14 +93,12 @@ probes:
   liveness:
     enabled: true
     path: /api/v1/health
-    port: 9999
     initialDelaySeconds: 10
     periodSeconds: 30
     timeoutSeconds: 5
   readiness:
     enabled: true
     path: /api/v1/health
-    port: 9999
     initialDelaySeconds: 5
     periodSeconds: 10
     timeoutSeconds: 5
