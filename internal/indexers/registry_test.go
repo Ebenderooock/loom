@@ -150,3 +150,56 @@ func TestRegistryReplaceAndRemove(t *testing.T) {
 		t.Fatal("Remove did not delete")
 	}
 }
+
+func TestRegistrySearchFiltersByCategory(t *testing.T) {
+	t.Parallel()
+	r := indexers.NewRegistry()
+
+	seeders := func(n int) *int { return &n }
+	_ = r.Register(&fakeIndexer{
+		id:   "mixed",
+		name: "mixed-indexer",
+		results: []indexers.Result{
+			{Title: "Avengers 2012 1080p", Category: []indexers.Category{2040}, Seeders: seeders(50)},
+			{Title: "Avengers S01E01", Category: []indexers.Category{5030}, Seeders: seeders(30)},
+			{Title: "Avengers OST", Category: []indexers.Category{3000}, Seeders: seeders(10)},
+			{Title: "Avengers Unknown", Category: nil, Seeders: seeders(5)}, // no category → kept
+		},
+	})
+
+	// Movie search: should drop TV and Audio results, keep movie + unknown
+	out := r.Search(context.Background(), indexers.Query{
+		Term:       "Avengers",
+		Categories: []indexers.Category{2000},
+	}, indexers.SearchOptions{})
+	if len(out.Results) != 2 {
+		t.Fatalf("movie filter: got %d results, want 2", len(out.Results))
+	}
+	for _, res := range out.Results {
+		if res.Title == "Avengers S01E01" || res.Title == "Avengers OST" {
+			t.Errorf("movie filter: unexpected result %q", res.Title)
+		}
+	}
+
+	// TV search: should drop Movie and Audio results, keep TV + unknown
+	out = r.Search(context.Background(), indexers.Query{
+		Term:       "Avengers",
+		Categories: []indexers.Category{5000, 5030},
+	}, indexers.SearchOptions{})
+	if len(out.Results) != 2 {
+		t.Fatalf("tv filter: got %d results, want 2", len(out.Results))
+	}
+	for _, res := range out.Results {
+		if res.Title == "Avengers 2012 1080p" || res.Title == "Avengers OST" {
+			t.Errorf("tv filter: unexpected result %q", res.Title)
+		}
+	}
+
+	// No category filter: should keep all 4
+	out = r.Search(context.Background(), indexers.Query{
+		Term: "Avengers",
+	}, indexers.SearchOptions{})
+	if len(out.Results) != 4 {
+		t.Fatalf("no filter: got %d results, want 4", len(out.Results))
+	}
+}
