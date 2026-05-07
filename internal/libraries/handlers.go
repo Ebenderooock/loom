@@ -124,6 +124,15 @@ func createLibrary(store *Store, logger *slog.Logger) http.HandlerFunc {
 			MonitorOnAdd:     monitorOnAdd,
 			QualityProfileID: qpID,
 		}
+		if req.UnmonitorOnDelete != nil {
+			lib.UnmonitorOnDelete = *req.UnmonitorOnDelete
+		}
+		if req.AutoArchiveWatched != nil {
+			lib.AutoArchiveWatched = *req.AutoArchiveWatched
+		}
+		if req.AutoArchiveDaysAfterWatch != nil {
+			lib.AutoArchiveDaysAfterWatch = *req.AutoArchiveDaysAfterWatch
+		}
 
 		if err := store.Create(r.Context(), lib); err != nil {
 			if strings.Contains(err.Error(), "UNIQUE constraint") {

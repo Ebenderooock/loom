@@ -19,6 +19,9 @@ export interface Library {
   media_type: MediaType;
   monitor_on_add: boolean;
   quality_profile_id: string;
+  unmonitor_on_delete: boolean;
+  auto_archive_watched: boolean;
+  auto_archive_days_after_watch: number;
   created_at: string;
   updated_at: string;
   accessible: boolean;
@@ -48,6 +51,9 @@ export interface CreateLibraryRequest {
   media_type: MediaType;
   monitor_on_add?: boolean;
   quality_profile_id?: string;
+  unmonitor_on_delete?: boolean;
+  auto_archive_watched?: boolean;
+  auto_archive_days_after_watch?: number;
 }
 
 export interface UpdateLibraryRequest {
@@ -56,6 +62,9 @@ export interface UpdateLibraryRequest {
   media_type?: MediaType;
   monitor_on_add?: boolean;
   quality_profile_id?: string;
+  unmonitor_on_delete?: boolean;
+  auto_archive_watched?: boolean;
+  auto_archive_days_after_watch?: number;
 }
 
 export interface DirectoryEntry {

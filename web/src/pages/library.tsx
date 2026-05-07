@@ -40,6 +40,7 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 import {
   useLibraries,
   useCreateLibrary,
@@ -362,6 +363,15 @@ function LibraryFormDialog({
   const [mediaType, setMediaType] = React.useState<MediaType>(
     (library?.media_type as MediaType) ?? "movie"
   );
+  const [unmonitorOnDelete, setUnmonitorOnDelete] = React.useState(
+    library?.unmonitor_on_delete ?? false
+  );
+  const [autoArchiveWatched, setAutoArchiveWatched] = React.useState(
+    library?.auto_archive_watched ?? false
+  );
+  const [autoArchiveDays, setAutoArchiveDays] = React.useState(
+    library?.auto_archive_days_after_watch ?? 0
+  );
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -372,6 +382,12 @@ function LibraryFormDialog({
       if (name !== library.name) body.name = name;
       if (path !== library.path) body.path = path;
       if (mediaType !== library.media_type) body.media_type = mediaType;
+      if (unmonitorOnDelete !== library.unmonitor_on_delete)
+        body.unmonitor_on_delete = unmonitorOnDelete;
+      if (autoArchiveWatched !== library.auto_archive_watched)
+        body.auto_archive_watched = autoArchiveWatched;
+      if (autoArchiveDays !== library.auto_archive_days_after_watch)
+        body.auto_archive_days_after_watch = autoArchiveDays;
       updateMut.mutate(
         { id: library.id, body },
         {
@@ -383,7 +399,14 @@ function LibraryFormDialog({
         }
       );
     } else {
-      const body: CreateLibraryRequest = { name, path, media_type: mediaType };
+      const body: CreateLibraryRequest = {
+        name,
+        path,
+        media_type: mediaType,
+        unmonitor_on_delete: unmonitorOnDelete,
+        auto_archive_watched: autoArchiveWatched,
+        auto_archive_days_after_watch: autoArchiveDays,
+      };
       createMut.mutate(body, {
         onSuccess: () => {
           toast.success(`Library "${name}" added`);
@@ -438,6 +461,47 @@ function LibraryFormDialog({
                 ))}
               </SelectContent>
             </Select>
+          </div>
+
+          <div className="space-y-3 border-t pt-3">
+            <p className="text-sm font-medium text-muted-foreground">Lifecycle Settings</p>
+
+            <div className="flex items-center justify-between">
+              <Label htmlFor="lib-unmonitor-delete" className="text-sm">
+                Unmonitor on delete
+              </Label>
+              <Switch
+                id="lib-unmonitor-delete"
+                checked={unmonitorOnDelete}
+                onCheckedChange={setUnmonitorOnDelete}
+              />
+            </div>
+
+            <div className="flex items-center justify-between">
+              <Label htmlFor="lib-auto-archive" className="text-sm">
+                Auto-archive watched (Trakt)
+              </Label>
+              <Switch
+                id="lib-auto-archive"
+                checked={autoArchiveWatched}
+                onCheckedChange={setAutoArchiveWatched}
+              />
+            </div>
+
+            {autoArchiveWatched && (
+              <div className="space-y-2 pl-1">
+                <Label htmlFor="lib-archive-days" className="text-sm">
+                  Days after watch before archiving (0 = immediate)
+                </Label>
+                <Input
+                  id="lib-archive-days"
+                  type="number"
+                  min={0}
+                  value={autoArchiveDays}
+                  onChange={(e) => setAutoArchiveDays(Number(e.target.value))}
+                />
+              </div>
+            )}
           </div>
 
           <div className="flex justify-end gap-2">

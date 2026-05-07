@@ -23,6 +23,7 @@ func NewStore(db *sql.DB) *Store {
 func (s *Store) List(ctx context.Context) ([]Library, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, name, path, media_type, monitor_on_add, quality_profile_id,
+		       unmonitor_on_delete, auto_archive_watched, auto_archive_days_after_watch,
 		       created_at, updated_at
 		FROM libraries
 		ORDER BY name`)
@@ -34,12 +35,15 @@ func (s *Store) List(ctx context.Context) ([]Library, error) {
 	var libs []Library
 	for rows.Next() {
 		var l Library
-		var mon int
+		var mon, uod, aaw int
 		if err := rows.Scan(&l.ID, &l.Name, &l.Path, &l.MediaType, &mon,
-			&l.QualityProfileID, &l.CreatedAt, &l.UpdatedAt); err != nil {
+			&l.QualityProfileID, &uod, &aaw, &l.AutoArchiveDaysAfterWatch,
+			&l.CreatedAt, &l.UpdatedAt); err != nil {
 			return nil, err
 		}
 		l.MonitorOnAdd = mon != 0
+		l.UnmonitorOnDelete = uod != 0
+		l.AutoArchiveWatched = aaw != 0
 		libs = append(libs, l)
 	}
 	return libs, rows.Err()
@@ -48,13 +52,15 @@ func (s *Store) List(ctx context.Context) ([]Library, error) {
 // Get returns a library by ID.
 func (s *Store) Get(ctx context.Context, id string) (*Library, error) {
 	var l Library
-	var mon int
+	var mon, uod, aaw int
 	err := s.db.QueryRowContext(ctx, `
 		SELECT id, name, path, media_type, monitor_on_add, quality_profile_id,
+		       unmonitor_on_delete, auto_archive_watched, auto_archive_days_after_watch,
 		       created_at, updated_at
 		FROM libraries WHERE id = ?`, id).Scan(
 		&l.ID, &l.Name, &l.Path, &l.MediaType, &mon,
-		&l.QualityProfileID, &l.CreatedAt, &l.UpdatedAt)
+		&l.QualityProfileID, &uod, &aaw, &l.AutoArchiveDaysAfterWatch,
+		&l.CreatedAt, &l.UpdatedAt)
 	if err == sql.ErrNoRows {
 		return nil, fmt.Errorf("library %q not found", id)
 	}
@@ -62,6 +68,8 @@ func (s *Store) Get(ctx context.Context, id string) (*Library, error) {
 		return nil, err
 	}
 	l.MonitorOnAdd = mon != 0
+	l.UnmonitorOnDelete = uod != 0
+	l.AutoArchiveWatched = aaw != 0
 	return &l, nil
 }
 
@@ -77,10 +85,21 @@ func (s *Store) Create(ctx context.Context, l *Library) error {
 	if l.MonitorOnAdd {
 		mon = 1
 	}
+	uod := 0
+	if l.UnmonitorOnDelete {
+		uod = 1
+	}
+	aaw := 0
+	if l.AutoArchiveWatched {
+		aaw = 1
+	}
 	_, err := s.db.ExecContext(ctx, `
-		INSERT INTO libraries (id, name, path, media_type, monitor_on_add, quality_profile_id, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-		l.ID, l.Name, l.Path, l.MediaType, mon, l.QualityProfileID, l.CreatedAt, l.UpdatedAt)
+		INSERT INTO libraries (id, name, path, media_type, monitor_on_add, quality_profile_id,
+		       unmonitor_on_delete, auto_archive_watched, auto_archive_days_after_watch,
+		       created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		l.ID, l.Name, l.Path, l.MediaType, mon, l.QualityProfileID,
+		uod, aaw, l.AutoArchiveDaysAfterWatch, l.CreatedAt, l.UpdatedAt)
 	return err
 }
 
@@ -91,11 +110,21 @@ func (s *Store) Update(ctx context.Context, l *Library) error {
 	if l.MonitorOnAdd {
 		mon = 1
 	}
+	uod := 0
+	if l.UnmonitorOnDelete {
+		uod = 1
+	}
+	aaw := 0
+	if l.AutoArchiveWatched {
+		aaw = 1
+	}
 	res, err := s.db.ExecContext(ctx, `
 		UPDATE libraries SET name = ?, path = ?, media_type = ?, monitor_on_add = ?,
-		       quality_profile_id = ?, updated_at = ?
+		       quality_profile_id = ?, unmonitor_on_delete = ?, auto_archive_watched = ?,
+		       auto_archive_days_after_watch = ?, updated_at = ?
 		WHERE id = ?`,
-		l.Name, l.Path, l.MediaType, mon, l.QualityProfileID, l.UpdatedAt, l.ID)
+		l.Name, l.Path, l.MediaType, mon, l.QualityProfileID,
+		uod, aaw, l.AutoArchiveDaysAfterWatch, l.UpdatedAt, l.ID)
 	if err != nil {
 		return err
 	}
@@ -189,4 +218,12 @@ func (s *Store) DeleteStaleFiles(ctx context.Context, libraryID string, since ti
 		return 0, err
 	}
 	return res.RowsAffected()
+}
+
+// ShouldUnmonitorOnDelete returns true if the library has unmonitor-on-delete enabled.
+func (s *Store) ShouldUnmonitorOnDelete(ctx context.Context, libraryID string) bool {
+	var val int
+	err := s.db.QueryRowContext(ctx,
+		`SELECT unmonitor_on_delete FROM libraries WHERE id = ?`, libraryID).Scan(&val)
+	return err == nil && val == 1
 }

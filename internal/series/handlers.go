@@ -16,13 +16,36 @@ import (
 	"github.com/loomctl/loom/internal/indexers"
 )
 
+// UnmonitorOnDeleteChecker checks if a library has unmonitor-on-delete enabled.
+type UnmonitorOnDeleteChecker interface {
+	ShouldUnmonitorOnDelete(ctx context.Context, libraryID string) bool
+}
+
+// seriesRouterConfig holds optional dependencies for the series router.
+type seriesRouterConfig struct {
+	unmonitorChecker UnmonitorOnDeleteChecker
+}
+
+// SeriesRouterOption configures the series router.
+type SeriesRouterOption func(*seriesRouterConfig)
+
+// WithUnmonitorChecker provides an unmonitor-on-delete checker.
+func WithUnmonitorChecker(c UnmonitorOnDeleteChecker) SeriesRouterOption {
+	return func(cfg *seriesRouterConfig) { cfg.unmonitorChecker = c }
+}
+
 // Router mounts series endpoints on a chi router.
 func Router(svc Service) chi.Router {
 	return RouterWithSearch(svc, nil, nil)
 }
 
 // RouterWithSearch mounts series endpoints with optional search-on-add support.
-func RouterWithSearch(svc Service, indexerSvc *indexers.Service, grabStore *grabs.Store) chi.Router {
+func RouterWithSearch(svc Service, indexerSvc *indexers.Service, grabStore *grabs.Store, opts ...SeriesRouterOption) chi.Router {
+	var cfg seriesRouterConfig
+	for _, o := range opts {
+		o(&cfg)
+	}
+
 	r := chi.NewRouter()
 
 	// Literal routes first (before /{id} wildcard)
@@ -33,11 +56,13 @@ func RouterWithSearch(svc Service, indexerSvc *indexers.Service, grabStore *grab
 
 	// Bulk operations (must be before /{id} wildcard)
 	r.Post("/bulk", bulkUpdateSeries(svc))
+	r.Post("/bulk-archive", bulkArchiveSeries(svc))
+	r.Post("/bulk-unarchive", bulkUnarchiveSeries(svc))
 
 	// Wildcard routes
 	r.Get("/{id}", getSeries(svc))
 	r.Put("/{id}", updateSeries(svc))
-	r.Delete("/{id}", deleteSeries(svc))
+	r.Delete("/{id}", deleteSeries(svc, cfg.unmonitorChecker))
 	r.Put("/{id}/monitoring", setMonitoringStatus(svc))
 	r.Post("/{id}/refresh", refreshSeries(svc))
 	r.Post("/{id}/archive", archiveSeries(svc))
@@ -442,12 +467,20 @@ func updateSeries(svc Service) http.HandlerFunc {
 	}
 }
 
-func deleteSeries(svc Service) http.HandlerFunc {
+func deleteSeries(svc Service, checker UnmonitorOnDeleteChecker) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id := chi.URLParam(r, "id")
 		if id == "" {
 			http.Error(w, "series ID required", http.StatusBadRequest)
 			return
+		}
+
+		if checker != nil {
+			if sr, err := svc.GetSeries(r.Context(), id); err == nil && sr != nil && sr.LibraryID != "" {
+				if checker.ShouldUnmonitorOnDelete(r.Context(), sr.LibraryID) {
+					_ = svc.SetMonitoringStatus(r.Context(), id, MonitoringUnmonitored)
+				}
+			}
 		}
 
 		if err := svc.DeleteSeries(r.Context(), id); err != nil {
@@ -637,7 +670,7 @@ func archiveSeries(svc Service) http.HandlerFunc {
 			http.Error(w, "series ID required", http.StatusBadRequest)
 			return
 		}
-		if err := svc.SetMonitoringStatus(r.Context(), id, MonitoringUnmonitored); err != nil {
+		if err := svc.SetMonitoringStatus(r.Context(), id, MonitoringArchived); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
