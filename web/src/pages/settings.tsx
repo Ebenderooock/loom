@@ -100,6 +100,7 @@ import {
   type Download as DownloadClient,
 } from "@/lib/downloads-api";
 import { DownloadForm } from "@/components/downloads/download-form";
+import { SyncProfilesPanel } from "@/components/settings/sync-profiles-panel";
 
 const CATEGORIES = [
   { id: "general", label: "General" },
@@ -111,6 +112,7 @@ const CATEGORIES = [
   { id: "rolling-search", label: "Rolling Search" },
   { id: "notifications", label: "Notifications" },
   { id: "connect", label: "Connect" },
+  { id: "sync-profiles", label: "Sync Profiles" },
   { id: "ui", label: "UI" },
 ] as const;
 
@@ -2587,6 +2589,8 @@ function SettingsContent({ category }: { category: Category }) {
       return <NotificationsPanel />;
     case "connect":
       return <ConnectPanel />;
+    case "sync-profiles":
+      return <SyncProfilesPanel />;
     case "ui":
       return <UIPanel />;
   }
