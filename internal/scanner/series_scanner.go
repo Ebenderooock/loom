@@ -17,7 +17,7 @@ import (
 	"github.com/ebenderooock/loom/internal/series"
 )
 
-// SeriesScanner orchestrates TV episode file scanning and import.
+// SeriesScanner orchestrates TV show discovery and episode file scanning.
 type SeriesScanner struct {
 	seriesSvc series.Service
 	logger    *slog.Logger
@@ -39,8 +39,11 @@ func NewSeriesScanner(seriesSvc series.Service, logger *slog.Logger) *SeriesScan
 
 var seasonDirRe = regexp.MustCompile(`(?i)(?:season|s)\s*(\d+)`)
 
+// showFolderNameRe extracts a title and optional year from a folder name like "Breaking Bad (2008)".
+var showFolderNameRe = regexp.MustCompile(`^(.+?)\s*(?:\((\d{4})\))?\s*$`)
+
 // StartSeriesScan begins an async scan of the given root folder path.
-func (s *SeriesScanner) StartSeriesScan(ctx context.Context, rootFolder string) (string, error) {
+func (s *SeriesScanner) StartSeriesScan(ctx context.Context, libraryID, rootFolder string) (string, error) {
 	info, err := os.Stat(rootFolder)
 	if err != nil {
 		return "", fmt.Errorf("series scan: stat root folder: %w", err)
@@ -52,7 +55,8 @@ func (s *SeriesScanner) StartSeriesScan(ctx context.Context, rootFolder string) 
 	scanID := uuid.New().String()[:8]
 	result := &ScanResult{
 		ID:             scanID,
-		RootFolderPath: rootFolder,  // kept as "rootFolderPath" in JSON for backward compat
+		LibraryID:      libraryID,
+		RootFolderPath: rootFolder,
 		Status:         ScanStatusRunning,
 		StartedAt:      time.Now(),
 	}
@@ -62,7 +66,7 @@ func (s *SeriesScanner) StartSeriesScan(ctx context.Context, rootFolder string) 
 	s.unmatched[scanID] = nil
 	s.mu.Unlock()
 
-	go s.runSeriesScan(context.Background(), scanID, rootFolder)
+	go s.runSeriesScan(context.Background(), scanID, libraryID, rootFolder)
 
 	return scanID, nil
 }
@@ -85,16 +89,97 @@ func (s *SeriesScanner) GetSeriesUnmatched() []*UnmatchedFile {
 	return all
 }
 
-func (s *SeriesScanner) runSeriesScan(ctx context.Context, scanID, rootFolder string) {
-	s.logger.Info("starting series scan", "scanId", scanID, "path", rootFolder)
+func (s *SeriesScanner) runSeriesScan(ctx context.Context, scanID, libraryID, rootFolder string) {
+	s.logger.Info("starting series scan", "scanId", scanID, "libraryId", libraryID, "path", rootFolder)
 
+	// Phase 1: Discover show folders and add new series via TMDB
+	showFolders, err := discoverShowFolders(rootFolder)
+	if err != nil {
+		s.failSeriesScan(scanID, fmt.Sprintf("discover show folders: %v", err))
+		return
+	}
+
+	s.logger.Info("discovered show folders", "scanId", scanID, "count", len(showFolders))
+
+	existingSeries, err := s.seriesSvc.ListSeries(ctx)
+	if err != nil {
+		s.failSeriesScan(scanID, fmt.Sprintf("list existing series: %v", err))
+		return
+	}
+
+	// Build lookup sets for existing series
+	existingByTMDB := make(map[string]bool)
+	existingByTitle := make(map[string]bool)
+	for _, sr := range existingSeries {
+		if sr.TMDBID != nil && *sr.TMDBID != "" {
+			existingByTMDB[*sr.TMDBID] = true
+		}
+		existingByTitle[normalizeTitle(sr.Title)] = true
+	}
+
+	result := s.GetSeriesScanStatus(scanID)
+	for _, sf := range showFolders {
+		title, year := parseShowFolderName(sf.Name)
+		if title == "" {
+			continue
+		}
+
+		normTitle := normalizeTitle(title)
+		if existingByTitle[normTitle] {
+			s.logger.Debug("series already exists by title, skipping TMDB add", "title", title)
+			continue
+		}
+
+		tmdbResults, err := s.seriesSvc.SearchTMDB(ctx, title)
+		if err != nil {
+			s.logger.Warn("TMDB search failed for show folder", "title", title, "err", err)
+			continue
+		}
+
+		tmdbMatch := autoMatchSeries(title, year, tmdbResults)
+		if tmdbMatch == nil {
+			s.logger.Debug("no TMDB match for show folder", "title", title, "year", year)
+			continue
+		}
+
+		tmdbID := tmdbMatch.tmdbID
+		if existingByTMDB[tmdbID] {
+			s.logger.Debug("series already exists by TMDB ID, skipping", "tmdbId", tmdbID)
+			continue
+		}
+
+		addReq := &series.AddSeriesRequest{
+			TMDBID:           tmdbID,
+			LibraryID:        libraryID,
+			MonitoringStatus: "all",
+		}
+		added, err := s.seriesSvc.AddSeries(ctx, addReq)
+		if err != nil {
+			if strings.Contains(err.Error(), "UNIQUE") || strings.Contains(err.Error(), "unique") || strings.Contains(err.Error(), "already exists") {
+				s.logger.Debug("series already exists, skipping", "tmdbId", tmdbID)
+			} else {
+				s.logger.Warn("failed to add series from TMDB", "tmdbId", tmdbID, "title", title, "err", err)
+				s.mu.Lock()
+				result.Errors = append(result.Errors, fmt.Sprintf("add series %q: %v", title, err))
+				s.mu.Unlock()
+			}
+			continue
+		}
+
+		existingByTMDB[tmdbID] = true
+		if added != nil {
+			existingByTitle[normalizeTitle(added.Title)] = true
+		}
+		s.logger.Info("added series from TMDB", "title", title, "tmdbId", tmdbID)
+	}
+
+	// Phase 2: Walk for episode files and match against DB series
 	scanned, err := walkSeriesFolder(rootFolder)
 	if err != nil {
 		s.failSeriesScan(scanID, fmt.Sprintf("walk error: %v", err))
 		return
 	}
 
-	result := s.GetSeriesScanStatus(scanID)
 	s.mu.Lock()
 	result.TotalFiles = len(scanned)
 	s.mu.Unlock()
@@ -123,6 +208,122 @@ func (s *SeriesScanner) runSeriesScan(ctx context.Context, scanID, rootFolder st
 		"unmatched", result.Unmatched,
 		"imported", result.Imported,
 	)
+}
+
+// showFolder represents a top-level directory in the library root.
+type showFolder struct {
+	Name string
+	Path string
+}
+
+// discoverShowFolders enumerates top-level subdirectories in the library root.
+func discoverShowFolders(root string) ([]showFolder, error) {
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		return nil, fmt.Errorf("read dir %s: %w", root, err)
+	}
+
+	var folders []showFolder
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		if shouldIgnore(e.Name()) {
+			continue
+		}
+		folders = append(folders, showFolder{
+			Name: e.Name(),
+			Path: filepath.Join(root, e.Name()),
+		})
+	}
+	return folders, nil
+}
+
+// parseShowFolderName extracts a title and optional year from a folder name.
+// E.g. "Breaking Bad (2008)" → ("Breaking Bad", 2008)
+// E.g. "The Office" → ("The Office", 0)
+func parseShowFolderName(name string) (string, int) {
+	m := showFolderNameRe.FindStringSubmatch(strings.TrimSpace(name))
+	if len(m) < 2 {
+		return name, 0
+	}
+	title := strings.TrimSpace(m[1])
+	year := 0
+	if len(m) >= 3 && m[2] != "" {
+		year, _ = strconv.Atoi(m[2])
+	}
+	return title, year
+}
+
+// tmdbSeriesMatch holds a parsed TMDB search result for matching.
+type tmdbSeriesMatch struct {
+	tmdbID string
+	name   string
+	year   int
+}
+
+// autoMatchSeries picks the best TMDB result by normalized title and optional year.
+func autoMatchSeries(title string, year int, results []map[string]interface{}) *tmdbSeriesMatch {
+	normTitle := normalizeTitle(title)
+
+	for _, r := range results {
+		name, _ := r["name"].(string)
+		if name == "" {
+			// Some results use "original_name"
+			name, _ = r["original_name"].(string)
+		}
+		if normalizeTitle(name) != normTitle {
+			continue
+		}
+
+		tmdbID := tmdbIDFromResult(r)
+		if tmdbID == "" {
+			continue
+		}
+
+		resultYear := extractYearFromResult(r)
+		if year == 0 || resultYear == 0 || abs(year-resultYear) <= 1 {
+			return &tmdbSeriesMatch{tmdbID: tmdbID, name: name, year: resultYear}
+		}
+	}
+
+	// If no exact+year match, take the first title match
+	for _, r := range results {
+		name, _ := r["name"].(string)
+		if name == "" {
+			name, _ = r["original_name"].(string)
+		}
+		if normalizeTitle(name) != normTitle {
+			continue
+		}
+		tmdbID := tmdbIDFromResult(r)
+		if tmdbID == "" {
+			continue
+		}
+		return &tmdbSeriesMatch{tmdbID: tmdbID, name: name, year: extractYearFromResult(r)}
+	}
+	return nil
+}
+
+func tmdbIDFromResult(r map[string]interface{}) string {
+	switch v := r["id"].(type) {
+	case float64:
+		return strconv.Itoa(int(v))
+	case int:
+		return strconv.Itoa(v)
+	case string:
+		return v
+	default:
+		return ""
+	}
+}
+
+func extractYearFromResult(r map[string]interface{}) int {
+	if dateStr, ok := r["first_air_date"].(string); ok && len(dateStr) >= 4 {
+		y, _ := strconv.Atoi(dateStr[:4])
+		return y
+	}
+	return 0
 }
 
 func (s *SeriesScanner) processEpisodeFile(ctx context.Context, scanID, path string, size int64) error {

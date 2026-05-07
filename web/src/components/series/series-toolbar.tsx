@@ -9,7 +9,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  Plus, Search, Grid3X3, List, SortAsc, Eye, EyeOff, Trash2, X,
+  Plus, Search, Grid3X3, List, SortAsc, Eye, EyeOff, Trash2, X, FolderSearch,
 } from "lucide-react";
 import type { QualityProfile, SeriesSortKey, ViewMode } from "./types";
 import { SERIES_STATUS_OPTIONS, SERIES_STATUS_CONFIG, SERIES_SORT_OPTIONS } from "./types";
@@ -35,6 +35,7 @@ export function SeriesToolbar({
   onBulkUnmonitor,
   onBulkDelete,
   onAddSeries,
+  onImportLibrary,
 }: {
   filterText: string;
   onFilterTextChange: (v: string) => void;
@@ -56,6 +57,7 @@ export function SeriesToolbar({
   onBulkUnmonitor: () => void;
   onBulkDelete: () => void;
   onAddSeries: () => void;
+  onImportLibrary?: () => void;
 }) {
   return (
     <div className="mb-6 space-y-3">
@@ -130,8 +132,13 @@ export function SeriesToolbar({
           </Button>
         </div>
 
-        {/* Add button */}
+        {/* Add / Import buttons */}
         <div className="flex items-center gap-2 ml-auto">
+          {onImportLibrary && (
+            <Button variant="outline" size="sm" className="h-9 gap-1.5" onClick={onImportLibrary}>
+              <FolderSearch className="w-4 h-4" /> Import
+            </Button>
+          )}
           <Button size="sm" className="h-9 gap-1.5" onClick={onAddSeries}>
             <Plus className="w-4 h-4" /> Add Series
           </Button>
