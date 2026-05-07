@@ -323,6 +323,11 @@ func (c *fakeClient) Resume(ctx context.Context, ids ...string) error { return n
 func (c *fakeClient) Remove(ctx context.Context, ids []string, deleteFiles bool) error {
 	return nil
 }
+func (c *fakeClient) SetPriority(_ context.Context, _ Priority, _ ...string) error   { return nil }
+func (c *fakeClient) SetSpeedLimit(_ context.Context, _ int64, _ ...string) error    { return nil }
+func (c *fakeClient) ForceStart(_ context.Context, _ ...string) error                { return nil }
+func (c *fakeClient) Recheck(_ context.Context, _ ...string) error                   { return nil }
+func (c *fakeClient) Reannounce(_ context.Context, _ ...string) error                { return nil }
 func (c *fakeClient) Categories(ctx context.Context) ([]Category, error) { return nil, nil }
 func (c *fakeClient) FreeSpace(ctx context.Context) (int64, error)       { return 0, nil }
 func (c *fakeClient) Test(ctx context.Context) error                    { return nil }

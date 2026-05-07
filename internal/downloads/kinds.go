@@ -185,6 +185,15 @@ func (n *nullClient) Resume(_ context.Context, _ ...string) error { return nil }
 func (n *nullClient) Remove(_ context.Context, _ []string, _ bool) error {
 	return nil
 }
+func (n *nullClient) SetPriority(_ context.Context, _ Priority, _ ...string) error {
+	return nil
+}
+func (n *nullClient) SetSpeedLimit(_ context.Context, _ int64, _ ...string) error {
+	return nil
+}
+func (n *nullClient) ForceStart(_ context.Context, _ ...string) error   { return nil }
+func (n *nullClient) Recheck(_ context.Context, _ ...string) error      { return nil }
+func (n *nullClient) Reannounce(_ context.Context, _ ...string) error   { return nil }
 func (n *nullClient) Categories(_ context.Context) ([]Category, error) {
 	return []Category{}, nil
 }

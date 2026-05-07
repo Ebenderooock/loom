@@ -138,6 +138,16 @@ type Item struct {
 	SavePath        string     `json:"save_path,omitempty"`
 }
 
+// Priority describes a queue-position change direction.
+type Priority string
+
+const (
+	PriorityTop    Priority = "top"
+	PriorityBottom Priority = "bottom"
+	PriorityUp     Priority = "up"
+	PriorityDown   Priority = "down"
+)
+
 // DownloadClient is the abstraction every download kind implements.
 // Methods must be safe to call concurrently. Empty ids slice on
 // Status/Pause/Resume means "all items".
@@ -152,6 +162,22 @@ type DownloadClient interface {
 	Pause(ctx context.Context, ids ...string) error
 	Resume(ctx context.Context, ids ...string) error
 	Remove(ctx context.Context, ids []string, deleteFiles bool) error
+
+	// SetPriority changes the queue priority. Use PriorityTop,
+	// PriorityBottom, PriorityUp, PriorityDown.
+	SetPriority(ctx context.Context, priority Priority, ids ...string) error
+
+	// SetSpeedLimit sets download speed limit in bytes/sec. 0 = unlimited.
+	SetSpeedLimit(ctx context.Context, limitBytesPerSec int64, ids ...string) error
+
+	// ForceStart overrides queue limits and begins downloading immediately.
+	ForceStart(ctx context.Context, ids ...string) error
+
+	// Recheck verifies torrent data integrity.
+	Recheck(ctx context.Context, ids ...string) error
+
+	// Reannounce forces tracker re-announce to refresh peer lists.
+	Reannounce(ctx context.Context, ids ...string) error
 
 	Categories(ctx context.Context) ([]Category, error)
 

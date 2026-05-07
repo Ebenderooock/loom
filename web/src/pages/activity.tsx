@@ -4,7 +4,25 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useSetPageHeader } from "@/hooks/use-page-header";
-import { CheckCircle2, XCircle, AlertTriangle, Loader2, Clock, Ban, RefreshCw, Trash2, Download, ArrowDown, ArrowUp, Pause } from "lucide-react";
+import { CheckCircle2, XCircle, AlertTriangle, Loader2, Clock, Ban, RefreshCw, Trash2, Download, ArrowDown, ArrowUp, Pause, Play, ChevronsUp, ChevronsDown, ChevronUp, ChevronDown, Zap, ShieldCheck, Radio, MoreHorizontal, Gauge } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { SearchDiagnostics } from "@/components/search/search-diagnostics";
 
 // ─── Types ──────────────────────────────────────────────────────────────
@@ -81,9 +99,36 @@ function statusColor(status: string): string {
   }
 }
 
+// ─── Queue action helpers ────────────────────────────────────────────────
+
+async function queueAction(
+  clientId: string,
+  action: string,
+  body: Record<string, unknown> = {},
+): Promise<boolean> {
+  try {
+    const res = await fetch(
+      `/api/v1/download-clients/${encodeURIComponent(clientId)}/${action}`,
+      {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      },
+    );
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 function DownloadQueue() {
   const [items, setItems] = React.useState<DownloadItem[]>([]);
   const [loading, setLoading] = React.useState(true);
+  const [removeTarget, setRemoveTarget] = React.useState<DownloadItem | null>(null);
+  const [deleteFiles, setDeleteFiles] = React.useState(false);
+  const [speedTarget, setSpeedTarget] = React.useState<DownloadItem | null>(null);
+  const [speedLimit, setSpeedLimit] = React.useState("");
 
   const fetchQueue = React.useCallback(async () => {
     try {
@@ -104,6 +149,38 @@ function DownloadQueue() {
     const interval = setInterval(fetchQueue, 5000);
     return () => clearInterval(interval);
   }, [fetchQueue]);
+
+  const doAction = React.useCallback(
+    async (item: DownloadItem, action: string, body: Record<string, unknown> = {}) => {
+      if (!item.client_id) return;
+      await queueAction(item.client_id, action, body);
+      fetchQueue();
+    },
+    [fetchQueue],
+  );
+
+  const confirmRemove = React.useCallback(async () => {
+    if (!removeTarget?.client_id) return;
+    await queueAction(removeTarget.client_id, "remove", {
+      ids: [removeTarget.id],
+      delete_files: deleteFiles,
+    });
+    setRemoveTarget(null);
+    setDeleteFiles(false);
+    fetchQueue();
+  }, [removeTarget, deleteFiles, fetchQueue]);
+
+  const confirmSpeedLimit = React.useCallback(async () => {
+    if (!speedTarget?.client_id) return;
+    const limitBytes = Math.max(0, Math.floor(parseFloat(speedLimit || "0") * 1024));
+    await queueAction(speedTarget.client_id, "set-speed-limit", {
+      ids: [speedTarget.id],
+      limit_bytes_per_sec: limitBytes,
+    });
+    setSpeedTarget(null);
+    setSpeedLimit("");
+    fetchQueue();
+  }, [speedTarget, speedLimit, fetchQueue]);
 
   if (loading) {
     return (
@@ -128,70 +205,192 @@ function DownloadQueue() {
   }
 
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between pb-3">
-        <CardTitle className="text-base">Download Queue</CardTitle>
-        <Button variant="ghost" size="icon" onClick={fetchQueue} className="h-8 w-8">
-          <RefreshCw className="h-4 w-4" />
-        </Button>
-      </CardHeader>
-      <CardContent className="p-0">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-border text-left text-muted-foreground text-xs">
-              <th className="py-2 px-4 font-medium">Title</th>
-              <th className="py-2 px-4 font-medium w-24">Status</th>
-              <th className="py-2 px-4 font-medium w-28">Progress</th>
-              <th className="py-2 px-4 font-medium w-24">Size</th>
-              <th className="py-2 px-4 font-medium w-24">Speed</th>
-              <th className="py-2 px-4 font-medium w-20">ETA</th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.map((item) => (
-              <tr key={`${item.client_id}-${item.id}`} className="border-b border-border/50 last:border-0">
-                <td className="py-3 px-4">
-                  <div className="font-medium truncate max-w-md">{item.title}</div>
-                  {item.category && (
-                    <div className="text-xs text-muted-foreground">{item.category}</div>
-                  )}
-                </td>
-                <td className="py-3 px-4">
-                  <span className={`text-xs font-medium ${statusColor(item.status)}`}>
-                    {item.status === "downloading" && <ArrowDown className="inline h-3 w-3 mr-0.5" />}
-                    {item.status === "seeding" && <ArrowUp className="inline h-3 w-3 mr-0.5" />}
-                    {item.status === "paused" && <Pause className="inline h-3 w-3 mr-0.5" />}
-                    {item.status}
-                  </span>
-                </td>
-                <td className="py-3 px-4">
-                  <div className="flex items-center gap-2">
-                    <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-accent rounded-full transition-all"
-                        style={{ width: `${Math.round(item.progress * 100)}%` }}
-                      />
-                    </div>
-                    <span className="text-xs tabular-nums text-muted-foreground w-8">
-                      {Math.round(item.progress * 100)}%
-                    </span>
-                  </div>
-                </td>
-                <td className="py-3 px-4 text-xs text-muted-foreground tabular-nums">
-                  {item.size_bytes ? formatBytes(item.size_bytes) : "—"}
-                </td>
-                <td className="py-3 px-4 text-xs text-muted-foreground tabular-nums">
-                  {item.download_rate ? formatRate(item.download_rate) : "—"}
-                </td>
-                <td className="py-3 px-4 text-xs text-muted-foreground tabular-nums">
-                  {item.eta_seconds ? formatEta(item.eta_seconds) : "—"}
-                </td>
+    <>
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between pb-3">
+          <CardTitle className="text-base">Download Queue</CardTitle>
+          <Button variant="ghost" size="icon" onClick={fetchQueue} className="h-8 w-8">
+            <RefreshCw className="h-4 w-4" />
+          </Button>
+        </CardHeader>
+        <CardContent className="p-0">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border text-left text-muted-foreground text-xs">
+                <th className="py-2 px-4 font-medium">Title</th>
+                <th className="py-2 px-4 font-medium w-24">Status</th>
+                <th className="py-2 px-4 font-medium w-28">Progress</th>
+                <th className="py-2 px-4 font-medium w-24">Size</th>
+                <th className="py-2 px-4 font-medium w-24">Speed</th>
+                <th className="py-2 px-4 font-medium w-20">ETA</th>
+                <th className="py-2 px-4 font-medium w-10"></th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </CardContent>
-    </Card>
+            </thead>
+            <tbody>
+              {items.map((item) => (
+                <tr key={`${item.client_id}-${item.id}`} className="border-b border-border/50 last:border-0">
+                  <td className="py-3 px-4">
+                    <div className="font-medium truncate max-w-md">{item.title}</div>
+                    {item.category && (
+                      <div className="text-xs text-muted-foreground">{item.category}</div>
+                    )}
+                  </td>
+                  <td className="py-3 px-4">
+                    <span className={`text-xs font-medium ${statusColor(item.status)}`}>
+                      {item.status === "downloading" && <ArrowDown className="inline h-3 w-3 mr-0.5" />}
+                      {item.status === "seeding" && <ArrowUp className="inline h-3 w-3 mr-0.5" />}
+                      {item.status === "paused" && <Pause className="inline h-3 w-3 mr-0.5" />}
+                      {item.status}
+                    </span>
+                  </td>
+                  <td className="py-3 px-4">
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-accent rounded-full transition-all"
+                          style={{ width: `${Math.round(item.progress * 100)}%` }}
+                        />
+                      </div>
+                      <span className="text-xs tabular-nums text-muted-foreground w-8">
+                        {Math.round(item.progress * 100)}%
+                      </span>
+                    </div>
+                  </td>
+                  <td className="py-3 px-4 text-xs text-muted-foreground tabular-nums">
+                    {item.size_bytes ? formatBytes(item.size_bytes) : "—"}
+                  </td>
+                  <td className="py-3 px-4 text-xs text-muted-foreground tabular-nums">
+                    {item.download_rate ? formatRate(item.download_rate) : "—"}
+                  </td>
+                  <td className="py-3 px-4 text-xs text-muted-foreground tabular-nums">
+                    {item.eta_seconds ? formatEta(item.eta_seconds) : "—"}
+                  </td>
+                  <td className="py-3 px-4">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-7 w-7">
+                          <MoreHorizontal className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        {item.status === "paused" ? (
+                          <DropdownMenuItem onClick={() => doAction(item, "resume", { ids: [item.id] })}>
+                            <Play className="h-3.5 w-3.5 mr-2" /> Resume
+                          </DropdownMenuItem>
+                        ) : (
+                          <DropdownMenuItem onClick={() => doAction(item, "pause", { ids: [item.id] })}>
+                            <Pause className="h-3.5 w-3.5 mr-2" /> Pause
+                          </DropdownMenuItem>
+                        )}
+                        <DropdownMenuItem onClick={() => doAction(item, "force-start", { ids: [item.id] })}>
+                          <Zap className="h-3.5 w-3.5 mr-2" /> Force Start
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuSub>
+                          <DropdownMenuSubTrigger>
+                            <ChevronsUp className="h-3.5 w-3.5 mr-2" /> Priority
+                          </DropdownMenuSubTrigger>
+                          <DropdownMenuSubContent>
+                            <DropdownMenuItem onClick={() => doAction(item, "set-priority", { ids: [item.id], priority: "top" })}>
+                              <ChevronsUp className="h-3.5 w-3.5 mr-2" /> Move to Top
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => doAction(item, "set-priority", { ids: [item.id], priority: "up" })}>
+                              <ChevronUp className="h-3.5 w-3.5 mr-2" /> Move Up
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => doAction(item, "set-priority", { ids: [item.id], priority: "down" })}>
+                              <ChevronDown className="h-3.5 w-3.5 mr-2" /> Move Down
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => doAction(item, "set-priority", { ids: [item.id], priority: "bottom" })}>
+                              <ChevronsDown className="h-3.5 w-3.5 mr-2" /> Move to Bottom
+                            </DropdownMenuItem>
+                          </DropdownMenuSubContent>
+                        </DropdownMenuSub>
+                        <DropdownMenuItem onClick={() => setSpeedTarget(item)}>
+                          <Gauge className="h-3.5 w-3.5 mr-2" /> Speed Limit…
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem onClick={() => doAction(item, "recheck", { ids: [item.id] })}>
+                          <ShieldCheck className="h-3.5 w-3.5 mr-2" /> Recheck
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => doAction(item, "reannounce", { ids: [item.id] })}>
+                          <Radio className="h-3.5 w-3.5 mr-2" /> Reannounce
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          className="text-red-500 focus:text-red-500"
+                          onClick={() => setRemoveTarget(item)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5 mr-2" /> Remove…
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </CardContent>
+      </Card>
+
+      {/* Remove confirmation dialog */}
+      <Dialog open={!!removeTarget} onOpenChange={(open) => { if (!open) { setRemoveTarget(null); setDeleteFiles(false); } }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Remove Download</DialogTitle>
+            <DialogDescription>
+              Remove <span className="font-medium">{removeTarget?.title}</span> from the queue?
+            </DialogDescription>
+          </DialogHeader>
+          <label className="flex items-center gap-2 text-sm cursor-pointer">
+            <input
+              type="checkbox"
+              checked={deleteFiles}
+              onChange={(e) => setDeleteFiles(e.target.checked)}
+              className="rounded border-border"
+            />
+            Also delete downloaded files
+          </label>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setRemoveTarget(null); setDeleteFiles(false); }}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={confirmRemove}>
+              Remove
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Speed limit dialog */}
+      <Dialog open={!!speedTarget} onOpenChange={(open) => { if (!open) { setSpeedTarget(null); setSpeedLimit(""); } }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Set Speed Limit</DialogTitle>
+            <DialogDescription>
+              Limit download speed for <span className="font-medium">{speedTarget?.title}</span>. Enter 0 for unlimited.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex items-center gap-2">
+            <input
+              type="number"
+              min="0"
+              step="any"
+              value={speedLimit}
+              onChange={(e) => setSpeedLimit(e.target.value)}
+              placeholder="0"
+              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            />
+            <span className="text-sm text-muted-foreground whitespace-nowrap">KB/s</span>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setSpeedTarget(null); setSpeedLimit(""); }}>
+              Cancel
+            </Button>
+            <Button onClick={confirmSpeedLimit}>Apply</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 

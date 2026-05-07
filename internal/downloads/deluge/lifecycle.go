@@ -2,7 +2,10 @@ package deluge
 
 import (
 	"context"
+	"fmt"
 	"strings"
+
+	"github.com/loomctl/loom/internal/downloads"
 )
 
 // Pause implements downloads.DownloadClient. With one id Deluge has
@@ -80,4 +83,29 @@ func (c *Client) expandIDs(ctx context.Context, ids []string) ([]string, error) 
 		session[i] = strings.ToLower(h)
 	}
 	return session, nil
+}
+
+// SetPriority is not supported for Deluge.
+func (c *Client) SetPriority(_ context.Context, _ downloads.Priority, _ ...string) error {
+	return fmt.Errorf("SetPriority not supported for deluge")
+}
+
+// SetSpeedLimit is not supported for Deluge.
+func (c *Client) SetSpeedLimit(_ context.Context, _ int64, _ ...string) error {
+	return fmt.Errorf("SetSpeedLimit not supported for deluge")
+}
+
+// ForceStart is not supported for Deluge.
+func (c *Client) ForceStart(_ context.Context, _ ...string) error {
+	return fmt.Errorf("ForceStart not supported for deluge")
+}
+
+// Recheck is not supported for Deluge.
+func (c *Client) Recheck(_ context.Context, _ ...string) error {
+	return fmt.Errorf("Recheck not supported for deluge")
+}
+
+// Reannounce is not supported for Deluge.
+func (c *Client) Reannounce(_ context.Context, _ ...string) error {
+	return fmt.Errorf("Reannounce not supported for deluge")
 }

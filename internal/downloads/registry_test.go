@@ -44,6 +44,11 @@ func (f *fakeClient) Resume(_ context.Context, _ ...string) error { return nil }
 func (f *fakeClient) Remove(_ context.Context, _ []string, _ bool) error {
 	return nil
 }
+func (f *fakeClient) SetPriority(_ context.Context, _ downloads.Priority, _ ...string) error   { return nil }
+func (f *fakeClient) SetSpeedLimit(_ context.Context, _ int64, _ ...string) error              { return nil }
+func (f *fakeClient) ForceStart(_ context.Context, _ ...string) error                          { return nil }
+func (f *fakeClient) Recheck(_ context.Context, _ ...string) error                             { return nil }
+func (f *fakeClient) Reannounce(_ context.Context, _ ...string) error                          { return nil }
 func (f *fakeClient) Categories(_ context.Context) ([]downloads.Category, error) {
 	return f.cats, nil
 }

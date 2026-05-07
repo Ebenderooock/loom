@@ -33,6 +33,12 @@ func (s *Service) Mount(r chi.Router) {
 			r.Post("/items", s.handleAdd)
 			r.Post("/pause", s.handlePause)
 			r.Post("/resume", s.handleResume)
+			r.Post("/remove", s.handleRemove)
+			r.Post("/set-priority", s.handleSetPriority)
+			r.Post("/set-speed-limit", s.handleSetSpeedLimit)
+			r.Post("/force-start", s.handleForceStart)
+			r.Post("/recheck", s.handleRecheck)
+			r.Post("/reannounce", s.handleReannounce)
 		})
 	})
 	// Aggregate activity endpoint across all download clients
@@ -502,6 +508,127 @@ func (s *Service) handlePauseResume(w http.ResponseWriter, r *http.Request, paus
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+// --- remove / priority / speed-limit / force-start / recheck / reannounce ---
+
+type removeRequest struct {
+	IDs         []string `json:"ids,omitempty"`
+	DeleteFiles bool     `json:"delete_files"`
+}
+
+type setPriorityRequest struct {
+	IDs      []string `json:"ids,omitempty"`
+	Priority Priority `json:"priority"`
+}
+
+type setSpeedLimitRequest struct {
+	IDs              []string `json:"ids,omitempty"`
+	LimitBytesPerSec int64    `json:"limit_bytes_per_sec"`
+}
+
+func (s *Service) handleRemove(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	c, ok := s.registry.Get(id)
+	if !ok {
+		writeError(w, http.StatusNotFound, "not_found", "download client not found")
+		return
+	}
+	var req removeRequest
+	if r.ContentLength > 0 {
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid_body", err.Error())
+			return
+		}
+	}
+	if err := c.Remove(r.Context(), req.IDs, req.DeleteFiles); err != nil {
+		writeError(w, http.StatusBadGateway, "operation_failed", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+func (s *Service) handleSetPriority(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	c, ok := s.registry.Get(id)
+	if !ok {
+		writeError(w, http.StatusNotFound, "not_found", "download client not found")
+		return
+	}
+	var req setPriorityRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_body", err.Error())
+		return
+	}
+	if err := c.SetPriority(r.Context(), req.Priority, req.IDs...); err != nil {
+		writeError(w, http.StatusBadGateway, "operation_failed", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+func (s *Service) handleSetSpeedLimit(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	c, ok := s.registry.Get(id)
+	if !ok {
+		writeError(w, http.StatusNotFound, "not_found", "download client not found")
+		return
+	}
+	var req setSpeedLimitRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_body", err.Error())
+		return
+	}
+	if err := c.SetSpeedLimit(r.Context(), req.LimitBytesPerSec, req.IDs...); err != nil {
+		writeError(w, http.StatusBadGateway, "operation_failed", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+func (s *Service) handleIDsAction(w http.ResponseWriter, r *http.Request, action func(context.Context, ...string) error) {
+	var req idsRequest
+	if r.ContentLength > 0 {
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid_body", err.Error())
+			return
+		}
+	}
+	if err := action(r.Context(), req.IDs...); err != nil {
+		writeError(w, http.StatusBadGateway, "operation_failed", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+func (s *Service) handleForceStart(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	c, ok := s.registry.Get(id)
+	if !ok {
+		writeError(w, http.StatusNotFound, "not_found", "download client not found")
+		return
+	}
+	s.handleIDsAction(w, r, c.ForceStart)
+}
+
+func (s *Service) handleRecheck(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	c, ok := s.registry.Get(id)
+	if !ok {
+		writeError(w, http.StatusNotFound, "not_found", "download client not found")
+		return
+	}
+	s.handleIDsAction(w, r, c.Recheck)
+}
+
+func (s *Service) handleReannounce(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	c, ok := s.registry.Get(id)
+	if !ok {
+		writeError(w, http.StatusNotFound, "not_found", "download client not found")
+		return
+	}
+	s.handleIDsAction(w, r, c.Reannounce)
 }
 
 // --- helpers --------------------------------------------------------
