@@ -47,6 +47,9 @@ type ServiceOptions struct {
 	// SearchHealthTracker, when non-nil, is used for search metrics.
 	// If nil, NewService creates one automatically.
 	SearchHealthTracker *SearchHealthTracker
+
+	// QueryLog, when non-nil, enables persistent per-query logging.
+	QueryLog *QueryLog
 }
 
 // RouteMounter mounts additional routes onto the Service router. The
@@ -69,6 +72,7 @@ type Service struct {
 	routeExtensions      []RouteMounter
 	definitionLister     DefinitionLister
 	searchHealthTracker  *SearchHealthTracker
+	queryLog             *QueryLog
 
 	mu sync.Mutex // serialises CRUD against the registry
 }
@@ -111,6 +115,7 @@ func NewService(opts ServiceOptions) (*Service, error) {
 		routeExtensions:     opts.RouteExtensions,
 		definitionLister:    opts.DefinitionLister,
 		searchHealthTracker: sht,
+		queryLog:            opts.QueryLog,
 	}, nil
 }
 
@@ -432,13 +437,24 @@ func (s *Service) Search(ctx context.Context, q Query, ids []string, perTimeout 
 	if perTimeout <= 0 {
 		perTimeout = s.searchTimeout
 	}
+
+	// Log query start.
+	var queryLogID string
+	if s.queryLog != nil {
+		queryLogID = NewQueryID()
+		if err := s.queryLog.StartQuery(ctx, queryLogID, q.Term, "search", "", ""); err != nil {
+			s.logger.Warn("query log: start failed", "err", err)
+		}
+	}
+
 	agg := s.registry.Search(ctx, q, SearchOptions{
 		IndexerIDs:        ids,
 		PerIndexerTimeout: perTimeout,
 		MaxParallel:       s.maxParallel,
 	})
-	// Record search metrics for each indexer.
-	if s.searchHealthTracker != nil && agg.Diagnostics != nil {
+
+	// Record search metrics and query log entries for each indexer.
+	if agg.Diagnostics != nil {
 		for _, d := range agg.Diagnostics.Indexers {
 			var indexerID string
 			for _, ix := range s.registry.List() {
@@ -455,14 +471,38 @@ func (s *Service) Search(ctx context.Context, q Query, ids []string, perTimeout 
 			if d.Status == "error" || d.Status == "timeout" {
 				searchErr = errors.New(d.ErrorMessage)
 			}
-			s.searchHealthTracker.RecordSearch(indexerID, dur, d.ResultCount, searchErr)
+			if s.searchHealthTracker != nil {
+				s.searchHealthTracker.RecordSearch(indexerID, dur, d.ResultCount, searchErr)
+			}
+
+			// Per-indexer query log entry.
+			if s.queryLog != nil && queryLogID != "" {
+				iqID := NewQueryID()
+				if err := s.queryLog.StartIndexerQuery(ctx, iqID, queryLogID, indexerID, d.Name); err != nil {
+					s.logger.Warn("query log: start indexer failed", "err", err)
+				}
+				if err := s.queryLog.FinishIndexerQuery(ctx, iqID, d.ResultCount, searchErr); err != nil {
+					s.logger.Warn("query log: finish indexer failed", "err", err)
+				}
+			}
 		}
 	}
+
+	// Finish query log.
+	if s.queryLog != nil && queryLogID != "" {
+		if err := s.queryLog.FinishQuery(ctx, queryLogID, len(agg.Results), nil); err != nil {
+			s.logger.Warn("query log: finish failed", "err", err)
+		}
+	}
+
 	return agg
 }
 
 // SearchHealthTracker returns the search health tracker.
 func (s *Service) SearchHealthTracker() *SearchHealthTracker { return s.searchHealthTracker }
+
+// QueryLog returns the query log store (may be nil).
+func (s *Service) QueryLog() *QueryLog { return s.queryLog }
 
 // CapsFor returns the live capability snapshot for id.
 func (s *Service) CapsFor(id string) (Caps, bool) {
