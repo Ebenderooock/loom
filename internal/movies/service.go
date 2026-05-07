@@ -66,7 +66,7 @@ type service struct {
 	credits  CreditsProvider
 	cache    sync.Map // map[string]*Movie with expiry
 	ttl      time.Duration
-	mu       sync.RWMutex
+	cfSvc    CustomFormatService
 }
 
 // cacheEntry holds a cached movie with expiry time.
@@ -84,7 +84,23 @@ func NewService(repo Repository, opts ...ServiceOption) Service {
 	for _, opt := range opts {
 		opt(s)
 	}
+	s.cfSvc = NewCustomFormatService(repo)
+	go s.evictExpiredCache()
 	return s
+}
+
+// evictExpiredCache periodically removes expired entries from the cache.
+func (s *service) evictExpiredCache() {
+	ticker := time.NewTicker(10 * time.Minute)
+	for range ticker.C {
+		now := time.Now()
+		s.cache.Range(func(key, value interface{}) bool {
+			if e, ok := value.(cacheEntry); ok && now.After(e.expiry) {
+				s.cache.Delete(key)
+			}
+			return true
+		})
+	}
 }
 
 // ServiceOption configures the movies service.
@@ -515,30 +531,25 @@ func (s *service) validateQualityProfile(qp *QualityProfile) error {
 
 // AddCustomFormat adds a new custom format using the custom format service.
 func (s *service) AddCustomFormat(ctx context.Context, cf *CustomFormat) error {
-cfService := NewCustomFormatService(s.repo)
-return cfService.AddCustomFormat(ctx, cf)
+return s.cfSvc.AddCustomFormat(ctx, cf)
 }
 
 // GetCustomFormat retrieves a custom format using the custom format service.
 func (s *service) GetCustomFormat(ctx context.Context, id string) (*CustomFormat, error) {
-cfService := NewCustomFormatService(s.repo)
-return cfService.GetCustomFormat(ctx, id)
+return s.cfSvc.GetCustomFormat(ctx, id)
 }
 
 // UpdateCustomFormat updates a custom format using the custom format service.
 func (s *service) UpdateCustomFormat(ctx context.Context, cf *CustomFormat) error {
-cfService := NewCustomFormatService(s.repo)
-return cfService.UpdateCustomFormat(ctx, cf)
+return s.cfSvc.UpdateCustomFormat(ctx, cf)
 }
 
 // DeleteCustomFormat deletes a custom format using the custom format service.
 func (s *service) DeleteCustomFormat(ctx context.Context, id string) error {
-cfService := NewCustomFormatService(s.repo)
-return cfService.DeleteCustomFormat(ctx, id)
+return s.cfSvc.DeleteCustomFormat(ctx, id)
 }
 
 // ListCustomFormats lists all custom formats using the custom format service.
 func (s *service) ListCustomFormats(ctx context.Context) ([]*CustomFormat, error) {
-cfService := NewCustomFormatService(s.repo)
-return cfService.ListCustomFormats(ctx)
+return s.cfSvc.ListCustomFormats(ctx)
 }

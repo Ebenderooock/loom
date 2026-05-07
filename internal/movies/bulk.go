@@ -2,6 +2,7 @@ package movies
 
 import (
 	"encoding/json"
+	"log/slog"
 	"net/http"
 )
 
@@ -21,10 +22,27 @@ func bulkArchiveMovies(svc Service) http.HandlerFunc {
 			http.Error(w, "ids required", http.StatusBadRequest)
 			return
 		}
-		for _, id := range req.IDs {
-			_ = svc.SetMonitoringStatus(r.Context(), id, MonitoringStatusArchived)
+		var succeeded []string
+		type bulkError struct {
+			ID    string `json:"id"`
+			Error string `json:"error"`
 		}
-		w.WriteHeader(http.StatusNoContent)
+		var failed []bulkError
+		for _, id := range req.IDs {
+			if err := svc.SetMonitoringStatus(r.Context(), id, MonitoringStatusArchived); err != nil {
+				slog.Error("bulk archive failed", "id", id, "error", err)
+				failed = append(failed, bulkError{ID: id, Error: err.Error()})
+			} else {
+				succeeded = append(succeeded, id)
+			}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		status := http.StatusOK
+		if len(succeeded) == 0 && len(failed) > 0 {
+			status = http.StatusUnprocessableEntity
+		}
+		w.WriteHeader(status)
+		_ = json.NewEncoder(w).Encode(map[string]any{"succeeded": succeeded, "failed": failed})
 	}
 }
 
@@ -39,10 +57,27 @@ func bulkUnarchiveMovies(svc Service) http.HandlerFunc {
 			http.Error(w, "ids required", http.StatusBadRequest)
 			return
 		}
-		for _, id := range req.IDs {
-			_ = svc.SetMonitoringStatus(r.Context(), id, MonitoringStatusMonitored)
+		var succeeded []string
+		type bulkError struct {
+			ID    string `json:"id"`
+			Error string `json:"error"`
 		}
-		w.WriteHeader(http.StatusNoContent)
+		var failed []bulkError
+		for _, id := range req.IDs {
+			if err := svc.SetMonitoringStatus(r.Context(), id, MonitoringStatusMonitored); err != nil {
+				slog.Error("bulk unarchive failed", "id", id, "error", err)
+				failed = append(failed, bulkError{ID: id, Error: err.Error()})
+			} else {
+				succeeded = append(succeeded, id)
+			}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		status := http.StatusOK
+		if len(succeeded) == 0 && len(failed) > 0 {
+			status = http.StatusUnprocessableEntity
+		}
+		w.WriteHeader(status)
+		_ = json.NewEncoder(w).Encode(map[string]any{"succeeded": succeeded, "failed": failed})
 	}
 }
 
@@ -91,7 +126,9 @@ func bulkUpdateMovies(svc Service) http.HandlerFunc {
 				changed = true
 			}
 			if changed {
-				_ = svc.UpdateMovie(r.Context(), movie)
+				if err := svc.UpdateMovie(r.Context(), movie); err != nil {
+					slog.Error("bulk update movie failed", "id", id, "error", err)
+				}
 			}
 			updated = append(updated, movie)
 		}

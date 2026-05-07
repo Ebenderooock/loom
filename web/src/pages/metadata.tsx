@@ -143,7 +143,7 @@ function ResultsGrid({
 
         return (
           <div
-            key={idx}
+            key={result.tmdb_id ?? result.imdb_id ?? result.tvdb_id ?? `result-${idx}`}
             className="rounded-md border border-border overflow-hidden hover:shadow-md transition-shadow"
           >
             {poster && (

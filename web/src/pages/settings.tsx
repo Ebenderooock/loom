@@ -675,13 +675,26 @@ function ImportModePanel() {
 
 function GeneralPanel() {
   const [logLevel, setLogLevel] = React.useState("info");
-  const [apiKey] = React.useState(() => {
-    // Generate a deterministic placeholder key for display
-    return "loom_api_" + Math.random().toString(36).substring(2, 18);
-  });
+  const [apiKey, setApiKey] = React.useState<string | null>(null);
   const [copied, setCopied] = React.useState(false);
 
+  React.useEffect(() => {
+    let cancelled = false;
+    fetch("/api/v1/auth/api-key", { credentials: "include" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: { apiKey?: string } | null) => {
+        if (!cancelled && data?.apiKey) {
+          setApiKey(data.apiKey);
+        }
+      })
+      .catch(() => {
+        // endpoint may not exist — leave apiKey null
+      });
+    return () => { cancelled = true; };
+  }, []);
+
   const copyApiKey = async () => {
+    if (!apiKey) return;
     try {
       await navigator.clipboard.writeText(apiKey);
       setCopied(true);
@@ -768,13 +781,15 @@ function GeneralPanel() {
           <div className="flex items-center gap-2">
             <Input
               readOnly
-              value={apiKey}
+              value={apiKey ?? ""}
+              placeholder="API key will be shown here once configured"
               className="bg-zinc-900 border-zinc-700 font-mono text-sm text-zinc-400 flex-1"
             />
             <Button
               variant="outline"
               size="sm"
               onClick={copyApiKey}
+              disabled={!apiKey}
               className="border-zinc-700 text-zinc-400 shrink-0"
             >
               {copied ? (
@@ -2082,6 +2097,11 @@ function RollingSearchPanel() {
   const [status, setStatus] = React.useState<RollingSearchStatus | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [saving, setSaving] = React.useState(false);
+  const triggerTimeoutRef = React.useRef<ReturnType<typeof setTimeout>>();
+
+  React.useEffect(() => {
+    return () => clearTimeout(triggerTimeoutRef.current);
+  }, []);
 
   const fetchData = React.useCallback(async () => {
     try {
@@ -2128,7 +2148,7 @@ function RollingSearchPanel() {
       const res = await fetch("/api/v1/rolling-search/trigger", { method: "POST" });
       if (!res.ok) throw new Error("trigger failed");
       toast.success("Rolling search triggered");
-      setTimeout(fetchData, 2000);
+      triggerTimeoutRef.current = setTimeout(fetchData, 2000);
     } catch {
       toast.error("Failed to trigger rolling search");
     }

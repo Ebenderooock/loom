@@ -10,6 +10,7 @@ import (
 // Repository defines data access operations for series, seasons, episodes, and credits.
 type Repository interface {
 	ListSeries(ctx context.Context) ([]*Series, error)
+	SearchSeries(ctx context.Context, query string) ([]*Series, error)
 	GetSeries(ctx context.Context, id string) (*Series, error)
 	CreateSeries(ctx context.Context, s *Series) error
 	UpdateSeries(ctx context.Context, s *Series) error
@@ -75,6 +76,26 @@ func scanSeries(scanner interface{ Scan(dest ...interface{}) error }) (*Series, 
 func (r *sqlRepo) ListSeries(ctx context.Context) ([]*Series, error) {
 	rows, err := r.db.QueryContext(ctx,
 		`SELECT `+seriesColumns+` FROM series ORDER BY updated_at DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var list []*Series
+	for rows.Next() {
+		s, err := scanSeries(rows)
+		if err != nil {
+			return nil, err
+		}
+		list = append(list, s)
+	}
+	return list, rows.Err()
+}
+
+func (r *sqlRepo) SearchSeries(ctx context.Context, query string) ([]*Series, error) {
+	like := "%" + query + "%"
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT `+seriesColumns+` FROM series WHERE title LIKE ? ORDER BY updated_at DESC`, like)
 	if err != nil {
 		return nil, err
 	}

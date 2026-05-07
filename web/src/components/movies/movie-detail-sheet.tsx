@@ -206,7 +206,7 @@ export function MovieDetailSheet({
       fetch(`/api/v1/movies/${movie.id}/credits`, { credentials: "include" })
         .then(r => r.ok ? r.json() : null)
         .then(data => setCredits(data))
-        .catch(() => {})
+        .catch((err) => console.error("fetch failed:", err))
         .finally(() => setCreditsLoading(false));
     }
   }, [movie, open]);

@@ -18,7 +18,6 @@ import (
 	"net/http/pprof"
 	"os"
 	"path/filepath"
-	"runtime"
 	"runtime/debug"
 	"sort"
 	"strings"
@@ -698,7 +697,12 @@ func (s *Server) newMux() http.Handler {
 		}
 
 		// Filesystem browsing (authenticated)
-		r.Get("/api/v1/filesystem", handleFilesystemBrowse())
+		r.Get("/api/v1/filesystem", handleFilesystemBrowse(s.cfg))
+
+		// pprof debug endpoints (authenticated to prevent info leak / DoS)
+		if s.cfg.Debug.Pprof {
+			s.mountPprof(r)
+		}
 	})
 
 	// Newznab/Torznab aggregator. Mounted OUTSIDE the auth group because clients 
@@ -709,18 +713,22 @@ func (s *Server) newMux() http.Handler {
 	}
 
 	// *arr compatibility shims — lets Overseerr, Ombi, etc. talk to Loom.
-	if s.compatRadarr != nil {
-		r.Mount("/compat/radarr/api/v3", radarrv3.Router(s.compatRadarr))
-	}
-	if s.compatSonarr != nil {
-		r.Mount("/compat/sonarr/api/v3", sonarrv3.Router(s.compatSonarr))
-	}
-	if s.compatProwlarr != nil {
-		r.Mount("/compat/prowlarr/api/v1", prowlarrv1.Router(s.compatProwlarr))
-	}
-
-	if s.cfg.Debug.Pprof {
-		s.mountPprof(r)
+	// Wrapped in API-key auth: *arr apps send X-Api-Key / ?apikey=.
+	if s.compatRadarr != nil || s.compatSonarr != nil || s.compatProwlarr != nil {
+		r.Group(func(r chi.Router) {
+			if s.apiKeyStore != nil {
+				r.Use(requireAPIKey(s.apiKeyStore))
+			}
+			if s.compatRadarr != nil {
+				r.Mount("/compat/radarr/api/v3", radarrv3.Router(s.compatRadarr))
+			}
+			if s.compatSonarr != nil {
+				r.Mount("/compat/sonarr/api/v3", sonarrv3.Router(s.compatSonarr))
+			}
+			if s.compatProwlarr != nil {
+				r.Mount("/compat/prowlarr/api/v1", prowlarrv1.Router(s.compatProwlarr))
+			}
+		})
 	}
 
 	// Embedded SPA catch-all — serves the React frontend when built with
@@ -867,54 +875,158 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	_ = json.NewEncoder(w).Encode(v)
 }
 
+// requireAPIKey returns middleware that enforces a valid API key via
+// X-Api-Key header or ?apikey= query param. Unlike apikeys.Middleware
+// (which passes through when no key is present), this rejects keyless
+// requests with 401, matching *arr client expectations.
+func requireAPIKey(store *apikeys.Store) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			key := strings.TrimSpace(r.Header.Get("X-Api-Key"))
+			if key == "" {
+				key = strings.TrimSpace(r.URL.Query().Get("apikey"))
+			}
+			if key == "" {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusUnauthorized)
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"error": map[string]string{"message": "api key required"},
+				})
+				return
+			}
+			ak, err := store.ValidateKey(r.Context(), key)
+			if err != nil {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusUnauthorized)
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"error": map[string]string{"message": "invalid or expired api key"},
+				})
+				return
+			}
+			ctx := context.WithValue(r.Context(), apiKeyContextKey{}, ak)
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
+}
+
+// apiKeyContextKey is used by requireAPIKey to stash the validated key.
+type apiKeyContextKey struct{}
+
+// sensitiveRoots are directories that must never be browsable regardless
+// of the configured allowed roots.
+var sensitiveRoots = []string{"/etc", "/proc", "/sys", "/dev"}
+
 // handleFilesystemBrowse returns directories at a given path for the
 // folder-picker dialog. Query params: ?path=/some/dir
 // Returns { parent, directories[] } where each directory has name + path.
-func handleFilesystemBrowse() http.HandlerFunc {
+//
+// Browsing is restricted to the paths listed in
+// cfg.Filesystem.AllowedBrowseRoots. If none are configured the endpoint
+// returns an error.
+func handleFilesystemBrowse(cfg *config.Config) http.HandlerFunc {
 	type dirEntry struct {
 		Name string `json:"name"`
 		Path string `json:"path"`
 	}
 
-	return func(w http.ResponseWriter, r *http.Request) {
-		reqPath := r.URL.Query().Get("path")
+	// Pre-resolve allowed roots at handler construction time.
+	allowed := cfg.Filesystem.AllowedBrowseRoots
+	roots := make([]string, 0, len(allowed))
+	for _, r := range allowed {
+		if abs, err := filepath.Abs(r); err == nil {
+			roots = append(roots, abs)
+		}
+	}
 
-		// Default to filesystem roots when no path given
-		if reqPath == "" {
-			if runtime.GOOS == "windows" {
-				// List common drive letters
-				var drives []dirEntry
-				for _, letter := range "ABCDEFGHIJKLMNOPQRSTUVWXYZ" {
-					drive := string(letter) + `:\`
-					if _, err := os.Stat(drive); err == nil {
-						drives = append(drives, dirEntry{Name: drive, Path: drive})
-					}
-				}
-				writeJSON(w, http.StatusOK, map[string]any{
-					"parent":      "",
-					"current":     "",
-					"directories": drives,
-				})
-				return
+	// isUnderRoots checks that absPath is equal to or a child of one of
+	// the allowed roots.
+	isUnderRoots := func(absPath string) bool {
+		for _, root := range roots {
+			if absPath == root || strings.HasPrefix(absPath, root+string(filepath.Separator)) {
+				return true
 			}
-			reqPath = "/"
+		}
+		return false
+	}
+
+	// isSensitive returns true for OS-internal directories that should
+	// never be exposed.
+	isSensitive := func(absPath string) bool {
+		for _, s := range sensitiveRoots {
+			if absPath == s || strings.HasPrefix(absPath, s+string(filepath.Separator)) {
+				return true
+			}
+		}
+		return false
+	}
+
+	return func(w http.ResponseWriter, r *http.Request) {
+		// When no roots are configured, refuse to browse entirely.
+		if len(roots) == 0 {
+			writeJSON(w, http.StatusForbidden, map[string]string{
+				"error": "filesystem browsing is disabled — no allowed_browse_roots configured",
+			})
+			return
 		}
 
-		// Clean and resolve
-		reqPath = filepath.Clean(reqPath)
+		reqPath := r.URL.Query().Get("path")
 
-		info, err := os.Stat(reqPath)
+		// When no path is requested, list the allowed roots themselves.
+		if reqPath == "" {
+			rootEntries := make([]dirEntry, 0, len(roots))
+			for _, rp := range roots {
+				rootEntries = append(rootEntries, dirEntry{Name: rp, Path: rp})
+			}
+			writeJSON(w, http.StatusOK, map[string]any{
+				"parent":      "",
+				"current":     "",
+				"directories": rootEntries,
+			})
+			return
+		}
+
+		// Resolve to absolute, follow symlinks, and validate containment.
+		reqPath = filepath.Clean(reqPath)
+		absPath, err := filepath.Abs(reqPath)
 		if err != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{
-				"error": "path does not exist: " + reqPath,
+				"error": "invalid path",
+			})
+			return
+		}
+
+		// Resolve symlinks to prevent escaping via symlink chains.
+		resolved, err := filepath.EvalSymlinks(absPath)
+		if err == nil {
+			absPath = resolved
+		}
+
+		if isSensitive(absPath) {
+			writeJSON(w, http.StatusForbidden, map[string]string{
+				"error": "access denied",
+			})
+			return
+		}
+
+		if !isUnderRoots(absPath) {
+			writeJSON(w, http.StatusForbidden, map[string]string{
+				"error": "path is outside allowed browse roots",
+			})
+			return
+		}
+
+		info, err := os.Stat(absPath)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{
+				"error": "path does not exist: " + absPath,
 			})
 			return
 		}
 		if !info.IsDir() {
-			reqPath = filepath.Dir(reqPath)
+			absPath = filepath.Dir(absPath)
 		}
 
-		entries, err := os.ReadDir(reqPath)
+		entries, err := os.ReadDir(absPath)
 		if err != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{
 				"error": "cannot read directory: " + err.Error(),
@@ -934,21 +1046,21 @@ func handleFilesystemBrowse() http.HandlerFunc {
 			}
 			dirs = append(dirs, dirEntry{
 				Name: name,
-				Path: filepath.Join(reqPath, name),
+				Path: filepath.Join(absPath, name),
 			})
 		}
 		sort.Slice(dirs, func(i, j int) bool {
 			return strings.ToLower(dirs[i].Name) < strings.ToLower(dirs[j].Name)
 		})
 
-		parent := filepath.Dir(reqPath)
-		if parent == reqPath {
-			parent = "" // at root
+		parent := filepath.Dir(absPath)
+		if parent == absPath || !isUnderRoots(parent) {
+			parent = "" // at root or would escape allowed roots
 		}
 
 		writeJSON(w, http.StatusOK, map[string]any{
 			"parent":      parent,
-			"current":     reqPath,
+			"current":     absPath,
 			"directories": dirs,
 		})
 	}

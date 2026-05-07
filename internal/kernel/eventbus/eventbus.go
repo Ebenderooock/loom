@@ -56,6 +56,7 @@ type subscription struct {
 	h         Handler
 	ordered   bool
 	queue     chan dispatchItem // non-nil for ordered subscriptions
+	closed    atomic.Bool      // set on unsubscribe; Publish checks before send
 	closeOnce sync.Once        // ensures queue is closed exactly once
 }
 
@@ -95,9 +96,19 @@ func (b *inproc) Publish(ctx context.Context, ev Event) error {
 
 	for _, s := range subs {
 		if s.ordered {
-			select {
-			case s.queue <- dispatchItem{ctx: ctx, ev: ev}:
-			case <-ctx.Done():
+			if s.closed.Load() {
+				continue
+			}
+			// recover protects against a channel close that slips
+			// past the atomic check (safety net).
+			func() {
+				defer func() { recover() }()
+				select {
+				case s.queue <- dispatchItem{ctx: ctx, ev: ev}:
+				case <-ctx.Done():
+				}
+			}()
+			if ctx.Err() != nil {
 				return ctx.Err()
 			}
 			continue
@@ -158,11 +169,7 @@ func (b *inproc) unsubFunc(topic string, target *subscription) func() {
 		for i, s := range list {
 			if s.id == target.id {
 				b.subs[topic] = append(list[:i], list[i+1:]...)
-				target.closeOnce.Do(func() {
-					if target.queue != nil {
-						close(target.queue)
-					}
-				})
+				target.closed.Store(true)
 				return
 			}
 		}

@@ -3,6 +3,7 @@ package series
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 )
@@ -39,6 +40,16 @@ func (r *mockRepo) ListSeries(_ context.Context) ([]*Series, error) {
 	var out []*Series
 	for _, s := range r.series {
 		out = append(out, s)
+	}
+	return out, nil
+}
+func (r *mockRepo) SearchSeries(_ context.Context, query string) ([]*Series, error) {
+	query = strings.ToLower(query)
+	var out []*Series
+	for _, s := range r.series {
+		if strings.Contains(strings.ToLower(s.Title), query) {
+			out = append(out, s)
+		}
 	}
 	return out, nil
 }

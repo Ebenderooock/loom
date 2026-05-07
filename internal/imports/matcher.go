@@ -133,12 +133,12 @@ func (m *Matcher) matchMovie(ctx context.Context, p parsedRelease) (*MatchResult
 
 // matchSeries searches for a series + episode matching the parsed release.
 func (m *Matcher) matchSeries(ctx context.Context, p parsedRelease) (*MatchResult, error) {
-	allSeries, err := m.seriesSvc.ListSeries(ctx)
+	candidates, err := m.seriesSvc.SearchSeries(ctx, p.Title)
 	if err != nil {
-		return nil, fmt.Errorf("list series: %w", err)
+		return nil, fmt.Errorf("search series: %w", err)
 	}
 
-	best := fuzzyMatchSeries(allSeries, p)
+	best := fuzzyMatchSeries(candidates, p)
 	if best == nil {
 		return &MatchResult{Matched: false}, nil
 	}
