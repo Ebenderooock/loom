@@ -33,6 +33,7 @@ import (
 	"github.com/loomctl/loom/internal/compat/prowlarrv1"
 	"github.com/loomctl/loom/internal/compat/radarrv3"
 	"github.com/loomctl/loom/internal/compat/sonarrv3"
+	"github.com/loomctl/loom/internal/compat/syncprofiles"
 	"github.com/loomctl/loom/internal/kernel/config"
 	"github.com/loomctl/loom/internal/kernel/logging"
 	"github.com/loomctl/loom/internal/kernel/telemetry"
@@ -282,9 +283,11 @@ func cmdServe(ctx context.Context, args []string) error {
 	srv.SetGrabStore(grabStore)
 
 	// Wire *arr API compatibility shims
+	syncStore := syncprofiles.NewStore(db.DB())
+	srv.SetSyncProfileStore(syncStore)
 	srv.SetCompatRadarr(radarrv3.NewHandler(moviesSvc, libStore, qpStore, logger))
 	srv.SetCompatSonarr(sonarrv3.NewHandler(seriesSvc, libStore, qpStore, logger))
-	srv.SetCompatProwlarr(prowlarrv1.NewHandler(indexerSvc, logger))
+	srv.SetCompatProwlarr(prowlarrv1.NewHandler(indexerSvc, syncStore, logger))
 
 	// Build and wire the import pipeline
 	importMode := imports.ImportMode(cfg.MediaManagement.ImportMode)

@@ -10,23 +10,28 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/loomctl/loom/internal/compat/syncprofiles"
 	"github.com/loomctl/loom/internal/indexers"
 )
 
 // Handler serves the Prowlarr v1 compatibility API.
 type Handler struct {
-	svc    *indexers.Service
-	logger *slog.Logger
+	svc       *indexers.Service
+	syncStore *syncprofiles.Store
+	logger    *slog.Logger
 }
 
 // NewHandler creates a Handler wired to the given indexer service.
-func NewHandler(svc *indexers.Service, logger *slog.Logger) *Handler {
+// syncStore may be nil; when present the handler honours ?syncProfileId=
+// on /indexer and /search to filter by sync-profile membership.
+func NewHandler(svc *indexers.Service, syncStore *syncprofiles.Store, logger *slog.Logger) *Handler {
 	if logger == nil {
 		logger = slog.Default()
 	}
 	return &Handler{
-		svc:    svc,
-		logger: logger.With("compat", "prowlarr/v1"),
+		svc:       svc,
+		syncStore: syncStore,
+		logger:    logger.With("compat", "prowlarr/v1"),
 	}
 }
 
@@ -66,8 +71,17 @@ func (h *Handler) listIndexers(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
+
+	// Filter by sync profile if requested.
+	allowed := h.allowedIndexerIDs(r)
+
 	out := make([]prowlarrIndexer, 0, len(defs))
 	for _, dh := range defs {
+		if allowed != nil {
+			if _, ok := allowed[dh.Definition.ID]; !ok {
+				continue
+			}
+		}
 		out = append(out, defToIndexer(dh.Definition))
 	}
 	writeJSON(w, http.StatusOK, out)
@@ -90,6 +104,13 @@ func (h *Handler) getIndexer(w http.ResponseWriter, r *http.Request) {
 
 	for _, dh := range defs {
 		if intID(dh.Definition.ID) == numID {
+			// Check sync-profile membership.
+			if allowed := h.allowedIndexerIDs(r); allowed != nil {
+				if _, ok := allowed[dh.Definition.ID]; !ok {
+					writeError(w, http.StatusNotFound, "indexer not found")
+					return
+				}
+			}
 			writeJSON(w, http.StatusOK, defToIndexer(dh.Definition))
 			return
 		}
@@ -148,6 +169,24 @@ func (h *Handler) search(w http.ResponseWriter, r *http.Request) {
 				if uuid, ok := findIDByInt(pairs, n); ok {
 					indexerIDs = append(indexerIDs, uuid)
 				}
+			}
+		}
+	}
+
+	// Apply sync-profile filter on top of any explicit indexer ID list.
+	if allowed := h.allowedIndexerIDs(r); allowed != nil {
+		if len(indexerIDs) > 0 {
+			filtered := indexerIDs[:0]
+			for _, id := range indexerIDs {
+				if _, ok := allowed[id]; ok {
+					filtered = append(filtered, id)
+				}
+			}
+			indexerIDs = filtered
+		} else {
+			indexerIDs = make([]string, 0, len(allowed))
+			for id := range allowed {
+				indexerIDs = append(indexerIDs, id)
 			}
 		}
 	}
@@ -215,4 +254,27 @@ func (h *Handler) listTags(w http.ResponseWriter, _ *http.Request) {
 
 func (h *Handler) health(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, []prowlarrHealth{})
+}
+
+// allowedIndexerIDs returns a set of indexer IDs allowed by the sync
+// profile specified via ?syncProfileId=. Returns nil when no filter
+// is requested (all indexers visible).
+func (h *Handler) allowedIndexerIDs(r *http.Request) map[string]struct{} {
+	if h.syncStore == nil {
+		return nil
+	}
+	profileID := r.URL.Query().Get("syncProfileId")
+	if profileID == "" {
+		return nil
+	}
+	ids, err := h.syncStore.FilteredIndexerIDs(r.Context(), profileID)
+	if err != nil {
+		h.logger.Warn("sync profile filter failed, allowing all", "profileId", profileID, "err", err)
+		return nil
+	}
+	m := make(map[string]struct{}, len(ids))
+	for _, id := range ids {
+		m[id] = struct{}{}
+	}
+	return m
 }
