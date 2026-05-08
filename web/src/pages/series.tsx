@@ -216,6 +216,22 @@ export function SeriesPage() {
     toast.success(`${ids.length} series deleted`);
   };
 
+  const handleBulkQualityProfile = async (profileId: string) => {
+    const ids = Array.from(selectedIds);
+    await Promise.all(ids.map(id =>
+      fetch(`/api/v1/series/${id}`, {
+        method: "PUT",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ qualityProfileId: profileId }),
+      })
+    ));
+    setSeriesList(prev => prev.map(s => selectedIds.has(s.id) ? { ...s, qualityProfileId: profileId } : s));
+    clearSelection();
+    const profile = qualityProfiles.find(p => p.id === profileId);
+    toast.success(`${ids.length} series set to ${profile?.name ?? "profile"}`);
+  };
+
   // Series update/delete from detail sheet
   const handleSeriesUpdated = (updated: Series) => {
     setSeriesList(prev => prev.map(s => s.id === updated.id ? updated : s));
@@ -266,6 +282,7 @@ export function SeriesPage() {
           onBulkMonitor={() => handleBulkMonitoring("monitored")}
           onBulkUnmonitor={() => handleBulkMonitoring("unmonitored")}
           onBulkDelete={() => setBulkDeleteOpen(true)}
+          onBulkQualityProfile={handleBulkQualityProfile}
           onAddSeries={() => setAddDialogOpen(true)}
           onImportLibrary={() => setImportDialogOpen(true)}
         />
@@ -312,8 +329,8 @@ export function SeriesPage() {
           ))}
         </div>
       ) : (
-        <div className="border border-border rounded-lg overflow-hidden">
-          <Table>
+        <div className="border border-border rounded-lg overflow-hidden overflow-x-auto">
+          <Table className="min-w-[700px]">
             <TableHeader>
               <TableRow>
                 <TableHead className="w-10">

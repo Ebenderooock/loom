@@ -9,8 +9,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  Plus, Search, Grid3X3, List, SortAsc, Eye, EyeOff, Trash2, X, FolderSearch,
+  Plus, Search, Grid3X3, List, SortAsc, Eye, EyeOff, Trash2, X, FolderSearch, Settings2,
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import type { QualityProfile, SeriesSortKey, ViewMode } from "./types";
 import { SERIES_STATUS_OPTIONS, SERIES_STATUS_CONFIG, SERIES_SORT_OPTIONS } from "./types";
 
@@ -34,6 +40,7 @@ export function SeriesToolbar({
   onBulkMonitor,
   onBulkUnmonitor,
   onBulkDelete,
+  onBulkQualityProfile,
   onAddSeries,
   onImportLibrary,
 }: {
@@ -56,6 +63,7 @@ export function SeriesToolbar({
   onBulkMonitor: () => void;
   onBulkUnmonitor: () => void;
   onBulkDelete: () => void;
+  onBulkQualityProfile: (profileId: string) => void;
   onAddSeries: () => void;
   onImportLibrary?: () => void;
 }) {
@@ -161,6 +169,20 @@ export function SeriesToolbar({
             <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={onBulkUnmonitor}>
               <EyeOff className="w-3.5 h-3.5" /> Unmonitor
             </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button size="sm" variant="outline" className="h-7 text-xs gap-1">
+                  <Settings2 className="w-3.5 h-3.5" /> Quality Profile
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                {profiles.map((p) => (
+                  <DropdownMenuItem key={p.id} onClick={() => onBulkQualityProfile(p.id)}>
+                    {p.name}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
             <Button size="sm" variant="destructive" className="h-7 text-xs gap-1" onClick={onBulkDelete}>
               <Trash2 className="w-3.5 h-3.5" /> Delete
             </Button>

@@ -84,11 +84,27 @@ export function LibraryPage() {
   const [dialog, setDialog] = React.useState<DialogState>({ kind: "closed" });
   const scanMut = useScanLibrary();
 
+  const [rescanningAll, setRescanningAll] = React.useState(false);
+
   const handleScan = (lib: Library) => {
     scanMut.mutate(lib.id, {
       onSuccess: () => toast.success(`Scan started for "${lib.name}"`),
       onError: (err) => toast.error(errMessage(err, "Scan failed")),
     });
+  };
+
+  const handleRescanAll = async () => {
+    if (!libraries || libraries.length === 0) return;
+    setRescanningAll(true);
+    let started = 0;
+    for (const lib of libraries) {
+      try {
+        await fetch(`/api/v1/libraries/${lib.id}/scan`, { method: "POST", credentials: "include" });
+        started++;
+      } catch { /* continue */ }
+    }
+    setRescanningAll(false);
+    toast.success(`Scan started for ${started} ${started === 1 ? "library" : "libraries"}`);
   };
 
   if (isLoading) {
@@ -125,7 +141,13 @@ export function LibraryPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-end">
+      <div className="flex justify-end gap-2">
+        {libraries && libraries.length > 0 && (
+          <Button variant="outline" onClick={handleRescanAll} disabled={rescanningAll}>
+            <RefreshCw className={`mr-2 h-4 w-4 ${rescanningAll ? "animate-spin" : ""}`} />
+            {rescanningAll ? "Scanning..." : "Rescan All"}
+          </Button>
+        )}
         <Button onClick={() => setDialog({ kind: "create" })}>
           <Plus className="mr-2 h-4 w-4" />
           Add Library
