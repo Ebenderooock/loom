@@ -425,13 +425,8 @@ type searchRequest struct {
 	TimeoutMS  int        `json:"timeout_ms,omitempty"`
 }
 
-func (s *Service) handleSearch(w http.ResponseWriter, r *http.Request) {
-	var req searchRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_body", err.Error())
-		return
-	}
-	q := Query{
+func (req searchRequest) toQuery() Query {
+	return Query{
 		Term:       req.Query,
 		Categories: req.Categories,
 		IMDBID:     req.IMDBID,
@@ -441,6 +436,15 @@ func (s *Service) handleSearch(w http.ResponseWriter, r *http.Request) {
 		Episode:    req.Episode,
 		Limit:      req.Limit,
 	}
+}
+
+func (s *Service) handleSearch(w http.ResponseWriter, r *http.Request) {
+	var req searchRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_body", err.Error())
+		return
+	}
+	q := req.toQuery()
 	timeout := time.Duration(req.TimeoutMS) * time.Millisecond
 	slog.Debug("handleSearch: received", "timeout_ms", req.TimeoutMS, "resolved_timeout", timeout.String(), "default", s.searchTimeout.String())
 	out := s.Search(r.Context(), q, req.IndexerIDs, timeout)
@@ -461,16 +465,7 @@ func (s *Service) handleSearchStream(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	q := Query{
-		Term:       req.Query,
-		Categories: req.Categories,
-		IMDBID:     req.IMDBID,
-		TVDBID:     req.TVDBID,
-		TMDBID:     req.TMDBID,
-		Season:     req.Season,
-		Episode:    req.Episode,
-		Limit:      req.Limit,
-	}
+	q := req.toQuery()
 	timeout := time.Duration(req.TimeoutMS) * time.Millisecond
 
 	w.Header().Set("Content-Type", "text/event-stream")
@@ -491,6 +486,10 @@ func (s *Service) handleSearchStream(w http.ResponseWriter, r *http.Request) {
 		case evt, ok := <-events:
 			if !ok {
 				return
+			}
+			// Score results inline so streamed results match batch endpoint
+			if evt.Type == EventIndexerResult && len(evt.Results) > 0 {
+				ScoreResults(evt.Results)
 			}
 			data, err := json.Marshal(evt)
 			if err != nil {

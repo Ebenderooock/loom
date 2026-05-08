@@ -523,16 +523,7 @@ func (s *Service) SearchStream(ctx context.Context, q Query, ids []string, perTi
 	var totalResults int
 	for evt := range internal {
 		if evt.Type == EventIndexerResult || evt.Type == EventIndexerError {
-			var indexerID string
-			for _, ix := range s.registry.List() {
-				if ix.Name() == evt.IndexerName {
-					indexerID = ix.ID()
-					break
-				}
-			}
-			if indexerID == "" {
-				indexerID = evt.IndexerID
-			}
+			indexerID := evt.IndexerID
 			dur := time.Duration(evt.ElapsedMS) * time.Millisecond
 			var searchErr error
 			if evt.Type == EventIndexerError {

@@ -316,6 +316,11 @@ export interface SearchParams {
   q: string;
   indexer_ids?: string[];
   categories?: number[];
+  imdb_id?: string;
+  tvdb_id?: string;
+  tmdb_id?: string;
+  season?: number;
+  episode?: number;
   timeout_ms?: number;
 }
 
@@ -326,6 +331,11 @@ export async function searchIndexers(
     query: params.q,
     indexer_ids: params.indexer_ids,
     categories: params.categories,
+    imdb_id: params.imdb_id,
+    tvdb_id: params.tvdb_id,
+    tmdb_id: params.tmdb_id,
+    season: params.season,
+    episode: params.episode,
     timeout_ms: params.timeout_ms,
   });
 }
@@ -386,6 +396,11 @@ export function streamSearch(
           query: params.q,
           indexer_ids: params.indexer_ids,
           categories: params.categories,
+          imdb_id: params.imdb_id,
+          tvdb_id: params.tvdb_id,
+          tmdb_id: params.tmdb_id,
+          season: params.season,
+          episode: params.episode,
           timeout_ms: params.timeout_ms,
         }),
         signal: controller.signal,
@@ -411,9 +426,21 @@ export function streamSearch(
       const decoder = new TextDecoder();
       let buffer = "";
 
+      // Inactivity timeout — abort if no event received for 45s
+      let inactivityTimer: ReturnType<typeof setTimeout> | null = null;
+      const resetInactivityTimer = () => {
+        if (inactivityTimer) clearTimeout(inactivityTimer);
+        inactivityTimer = setTimeout(() => {
+          controller.abort();
+          callbacks.onError?.(new Error("Search timed out — no response from server"));
+        }, 45_000);
+      };
+      resetInactivityTimer();
+
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
+        resetInactivityTimer();
 
         buffer += decoder.decode(value, { stream: true });
 
@@ -473,6 +500,7 @@ export function streamSearch(
               );
               break;
             case "done":
+              if (inactivityTimer) clearTimeout(inactivityTimer);
               callbacks.onDone?.(
                 evt.total_results ?? 0,
                 evt.total_errors ?? 0,
