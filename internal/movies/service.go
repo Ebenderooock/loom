@@ -36,6 +36,7 @@ type Service interface {
 
 	ListMovieFiles(ctx context.Context, movieID string) ([]*MovieFile, error)
 	AddMovieFile(ctx context.Context, mf *MovieFile) error
+	GetMovieFileByPath(ctx context.Context, path string) (*MovieFile, error)
 
 	// Quality definitions
 	AddQualityDefinition(ctx context.Context, qd *QualityDefinition) error
@@ -383,6 +384,10 @@ func (s *service) AddMovieFile(ctx context.Context, mf *MovieFile) error {
 		return fmt.Errorf("movies: file_path required")
 	}
 	return s.repo.AddMovieFile(ctx, mf)
+}
+
+func (s *service) GetMovieFileByPath(ctx context.Context, path string) (*MovieFile, error) {
+	return s.repo.GetMovieFileByPath(ctx, path)
 }
 
 // AddQualityDefinition adds a new quality definition.

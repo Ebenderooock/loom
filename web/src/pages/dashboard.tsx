@@ -24,8 +24,11 @@ import {
   Clock,
   Rocket,
   Settings,
+  HardDrive,
+  FolderOpen,
   type LucideIcon,
 } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
 
 // ---------------------------------------------------------------------------
 // Inline data-fetching hooks
@@ -73,6 +76,38 @@ function useIndexers() {
       });
       if (!res.ok) throw new Error("Failed to fetch indexers");
       return (await res.json()) as { data: unknown[] };
+    },
+    staleTime: 60_000,
+    retry: 1,
+  });
+}
+
+function useDownloadClients() {
+  return useQuery({
+    queryKey: ["dashboard", "download-clients"],
+    queryFn: async ({ signal }) => {
+      const res = await fetch("/api/v1/download-clients", {
+        signal,
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to fetch download clients");
+      return (await res.json()) as { data: unknown[] };
+    },
+    staleTime: 60_000,
+    retry: 1,
+  });
+}
+
+function useLibraries() {
+  return useQuery({
+    queryKey: ["dashboard", "libraries"],
+    queryFn: async ({ signal }) => {
+      const res = await fetch("/api/v1/libraries", {
+        signal,
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to fetch libraries");
+      return (await res.json()) as { data: { id: string; name: string; path: string; mediaType: string; disk_space: { total_bytes: number; free_bytes: number; used_bytes: number } }[] };
     },
     staleTime: 60_000,
     retry: 1,
@@ -331,6 +366,84 @@ function SystemHealthCard() {
 }
 
 // ---------------------------------------------------------------------------
+// Storage Overview
+// ---------------------------------------------------------------------------
+
+function formatBytes(bytes: number): string {
+  if (bytes === 0) return "0 B";
+  const k = 1024;
+  const sizes = ["B", "KB", "MB", "GB", "TB"];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return `${(bytes / Math.pow(k, i)).toFixed(1)} ${sizes[i]}`;
+}
+
+function StorageCard() {
+  const { data, isLoading } = useLibraries();
+  const libs = data?.data ?? [];
+  const withSpace = libs.filter((l) => l.disk_space && l.disk_space.total_bytes > 0);
+
+  if (isLoading) {
+    return (
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Storage</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <Skeleton className="h-4 w-full" />
+          <Skeleton className="h-4 w-3/4" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (withSpace.length === 0) {
+    return (
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Storage</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <FolderOpen className="h-4 w-4" />
+            {libs.length === 0 ? "No libraries configured" : "Storage info unavailable"}
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base">Storage</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {withSpace.map((lib) => {
+          const used = lib.disk_space.used_bytes;
+          const total = lib.disk_space.total_bytes;
+          const free = lib.disk_space.free_bytes;
+          const pct = total ? Math.round((used / total) * 100) : 0;
+          return (
+            <div key={lib.id} className="space-y-1.5">
+              <div className="flex items-center justify-between text-sm">
+                <span className="font-medium truncate">{lib.name}</span>
+                <span className="text-xs text-muted-foreground shrink-0 ml-2">
+                  {formatBytes(free)} free
+                </span>
+              </div>
+              <Progress value={pct} className="h-2" />
+              <p className="text-xs text-muted-foreground">
+                {formatBytes(used)} / {formatBytes(total)} ({pct}%)
+              </p>
+            </div>
+          );
+        })}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Recent Activity (placeholder)
 // ---------------------------------------------------------------------------
 
@@ -365,11 +478,13 @@ export function DashboardPage() {
   const movies = useMovies();
   const series = useSeries();
   const indexers = useIndexers();
+  const dlClients = useDownloadClients();
   useSetPageHeader("Dashboard");
 
   const movieCount = movies.data?.total ?? 0;
   const seriesCount = series.data?.total ?? 0;
   const indexerCount = indexers.data?.data?.length ?? 0;
+  const dlClientCount = dlClients.data?.data?.length ?? 0;
 
   const isLoading = movies.isLoading || series.isLoading || indexers.isLoading;
   const isFreshInstall =
@@ -408,10 +523,11 @@ export function DashboardPage() {
         />
         <StatCard
           icon={Download}
-          label="Downloads"
-          value="Queue Empty"
+          label="Download Clients"
+          value={dlClientCount}
           accent="bg-amber-500/15"
           iconColor="text-amber-400"
+          loading={dlClients.isLoading}
         />
       </div>
 
@@ -421,8 +537,11 @@ export function DashboardPage() {
         <SystemHealthCard />
       </div>
 
-      {/* Row 3: Recent Activity */}
-      <RecentActivityCard />
+      {/* Row 3: Storage + Recent Activity */}
+      <div className="grid gap-4 md:grid-cols-2">
+        <StorageCard />
+        <RecentActivityCard />
+      </div>
     </div>
   );
 }

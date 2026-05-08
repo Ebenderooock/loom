@@ -223,6 +223,22 @@ export function MoviesPage() {
     toast.success(`${ids.length} movie${ids.length !== 1 ? "s" : ""} deleted`);
   };
 
+  const handleBulkQualityProfile = async (profileId: string) => {
+    const ids = Array.from(selectedIds);
+    await Promise.all(ids.map(id =>
+      fetch(`/api/v1/movies/${id}`, {
+        method: "PUT",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ qualityProfileId: profileId }),
+      })
+    ));
+    setMovies(prev => prev.map(m => selectedIds.has(m.id) ? { ...m, qualityProfileId: profileId } : m));
+    clearSelection();
+    const profile = qualityProfiles.find(p => p.id === profileId);
+    toast.success(`${ids.length} movie${ids.length !== 1 ? "s" : ""} set to ${profile?.name ?? "profile"}`);
+  };
+
   // Movie update/delete from detail sheet
   const handleMovieUpdated = (updated: Movie) => {
     setMovies(prev => prev.map(m => m.id === updated.id ? updated : m));
@@ -275,6 +291,7 @@ export function MoviesPage() {
           onBulkMonitor={() => handleBulkMonitoring("monitored")}
           onBulkUnmonitor={() => handleBulkMonitoring("unmonitored")}
           onBulkDelete={() => setBulkDeleteOpen(true)}
+          onBulkQualityProfile={handleBulkQualityProfile}
           onAddMovie={() => setAddDialogOpen(true)}
           onImportLibrary={() => setImportDialogOpen(true)}
           onOrganize={() => setOrganizeDialogOpen(true)}
@@ -322,8 +339,8 @@ export function MoviesPage() {
           ))}
         </div>
       ) : (
-        <div className="border border-border rounded-lg overflow-hidden">
-          <Table>
+        <div className="border border-border rounded-lg overflow-hidden overflow-x-auto">
+          <Table className="min-w-[700px]">
             <TableHeader>
               <TableRow>
                 <TableHead className="w-10">

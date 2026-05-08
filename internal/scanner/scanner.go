@@ -369,10 +369,11 @@ func (s *Scanner) addUnmatched(scanID string, result *ScanResult, sf scannedFile
 }
 
 func (s *Scanner) findExistingFileByPath(ctx context.Context, path string) (bool, error) {
-	// Check all movies for this file path — use the repository's GetMovieFileByPath
-	// Since we don't have direct repo access, we'll check via service if available
-	// For now, this is a best-effort check
-	return false, fmt.Errorf("not implemented")
+	mf, err := s.movieSvc.GetMovieFileByPath(ctx, path)
+	if err != nil {
+		return false, err
+	}
+	return mf != nil, nil
 }
 
 func (s *Scanner) importFile(ctx context.Context, filePath string, size int64, quality, source string, meta *metadata.MovieMetadata, libraryID, qualityProfileID string) error {
