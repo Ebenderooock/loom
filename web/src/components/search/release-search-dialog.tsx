@@ -542,11 +542,11 @@ export function ReleaseSearchDialog({
   onOpenChange,
   title,
   query: initialQuery,
-  tmdbId: _tmdbId,
-  tvdbId: _tvdbId,
-  imdbId: _imdbId,
-  season: _season,
-  episode: _episode,
+  tmdbId,
+  tvdbId,
+  imdbId,
+  season,
+  episode,
   mediaType,
   autoSearch = false,
   seriesId,
@@ -623,7 +623,12 @@ export function ReleaseSearchDialog({
       {
         q,
         categories: CATEGORY_MAP[mediaType],
-        timeout_ms: 120000,
+        imdb_id: imdbId,
+        tvdb_id: tvdbId,
+        tmdb_id: tmdbId,
+        season,
+        episode,
+        timeout_ms: 120_000,
       },
       {
         onSearchStart: (indexers) => {
@@ -703,7 +708,7 @@ export function ReleaseSearchDialog({
       setDidAutoSearch(true);
       runSearch();
     }
-  }, [open, autoSearch, didAutoSearch, query]);
+  }, [open, autoSearch, didAutoSearch, query, runSearch]);
 
   const errorEntries = Object.entries(errors);
 
