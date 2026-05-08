@@ -337,3 +337,122 @@ func TestConfigFieldsWithDefaults(t *testing.T) {
 		t.Errorf("operator value should win, got %q", fields["apikey"])
 	}
 }
+
+func TestExpandTemplate_MissingKeyZero(t *testing.T) {
+	// missingkey=zero should render missing map keys as "" not "<no value>".
+	eng := &Engine{}
+	ctx := templateContext{
+		Config: map[string]string{"present": "yes"},
+		True:   "true",
+		False:  "false",
+	}
+	out, err := eng.expandTemplate(`https://{{ .Config.present }}/{{ .Config.missing }}/end`, ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(out, "<no value>") {
+		t.Errorf("missingkey=zero should suppress <no value>, got %q", out)
+	}
+	if out != "https://yes//end" {
+		t.Errorf("unexpected output: %q", out)
+	}
+}
+
+func TestExpandTemplate_ReReplace_BadPattern(t *testing.T) {
+	eng := &Engine{}
+	ctx := templateContext{Keywords: "hello", True: "true", False: "false"}
+	out, err := eng.expandTemplate(`{{ re_replace .Keywords "[invalid" "x" }}`, ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Bad pattern should return input unchanged.
+	if out != "hello" {
+		t.Errorf("bad pattern should return input unchanged, got %q", out)
+	}
+}
+
+func TestSearch_MultiPath(t *testing.T) {
+	// Two search paths that each return different results.
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.Contains(r.URL.Path, "/movies"):
+			fmt.Fprint(w, `<html><body><table><tr><td class="title"><a href="/dl/1">Movie.Result</a></td><td>1GB</td></tr></table></body></html>`)
+		case strings.Contains(r.URL.Path, "/tv"):
+			fmt.Fprint(w, `<html><body><table><tr><td class="title"><a href="/dl/2">TV.Result</a></td><td>500MB</td></tr></table></body></html>`)
+		default:
+			w.WriteHeader(404)
+		}
+	}))
+	defer ts.Close()
+
+	def := &Definition{
+		Site:  "multitest",
+		Name:  "MultiTest",
+		Links: []string{ts.URL},
+		Search: Search{
+			Paths: []SearchPath{
+				{Path: "/movies"},
+				{Path: "/tv"},
+			},
+			Rows: RowsBlock{Selector: "table tr"},
+			Fields: map[string]Field{
+				"title":    {Selector: ".title a"},
+				"download": {Selector: ".title a", Attribute: "href"},
+			},
+		},
+	}
+
+	eng, err := NewEngine("multitest", "MultiTest", def, Config{}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := eng.Search(context.Background(), indexers.Query{Term: "test"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Items) != 2 {
+		t.Fatalf("expected 2 results from 2 paths, got %d", len(res.Items))
+	}
+}
+
+func TestSearch_MultiPath_DedupURL(t *testing.T) {
+	// Two paths that resolve to the same URL should only fetch once.
+	calls := 0
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		fmt.Fprint(w, `<html><body><table><tr><td class="t"><a href="/dl/1">Res</a></td><td>1GB</td></tr></table></body></html>`)
+	}))
+	defer ts.Close()
+
+	def := &Definition{
+		Site:  "deduptest",
+		Name:  "DedupTest",
+		Links: []string{ts.URL},
+		Search: Search{
+			Paths: []SearchPath{
+				{Path: "/search"},
+				{Path: "/search"}, // duplicate
+			},
+			Rows: RowsBlock{Selector: "table tr"},
+			Fields: map[string]Field{
+				"title":    {Selector: ".t a"},
+				"download": {Selector: ".t a", Attribute: "href"},
+			},
+		},
+	}
+
+	eng, err := NewEngine("deduptest", "DedupTest", def, Config{}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := eng.Search(context.Background(), indexers.Query{Term: "test"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if calls != 1 {
+		t.Errorf("duplicate URL should be fetched once, got %d calls", calls)
+	}
+	if len(res.Items) != 1 {
+		t.Errorf("expected 1 result, got %d", len(res.Items))
+	}
+}

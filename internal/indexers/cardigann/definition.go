@@ -298,8 +298,8 @@ type LoginTest struct {
 
 // Search describes the search request and row extraction.
 type Search struct {
-	// Paths lists candidate search endpoints. The engine uses
-	// Paths[0] today; failover is deferred.
+	// Paths lists candidate search endpoints.  The engine iterates
+	// all paths, merging results and deduplicating by resolved URL.
 	Paths []SearchPath `yaml:"paths,omitempty"`
 
 	// Path is a Cardigann-compatible single-path shorthand.
