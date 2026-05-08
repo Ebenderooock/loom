@@ -35,7 +35,6 @@ import { toast } from "sonner";
 import {
   streamSearch,
   type SearchResult,
-  type SearchDiagnostics,
   type IndexerStreamState,
   type IndexerStatus,
 } from "@/lib/indexers-api";
@@ -624,8 +623,8 @@ export function ReleaseSearchDialog({
         q,
         categories: CATEGORY_MAP[mediaType],
         imdb_id: imdbId,
-        tvdb_id: tvdbId,
-        tmdb_id: tmdbId,
+        tvdb_id: tvdbId != null ? String(tvdbId) : undefined,
+        tmdb_id: tmdbId != null ? String(tmdbId) : undefined,
         season,
         episode,
         timeout_ms: 120_000,
