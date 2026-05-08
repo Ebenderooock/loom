@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import {
   Dialog,
   DialogContent,
@@ -26,14 +26,18 @@ import {
   Filter,
   X,
   Activity,
+  CheckCircle2,
+  XCircle,
+  Clock,
 } from "lucide-react";
 import { cn, formatBytes } from "@/lib/utils";
 import { toast } from "sonner";
 import {
-  searchIndexers,
+  streamSearch,
   type SearchResult,
   type SearchDiagnostics,
-  ApiError as IndexerApiError,
+  type IndexerStreamState,
+  type IndexerStatus,
 } from "@/lib/indexers-api";
 import {
   useDownloads,
@@ -280,66 +284,61 @@ function GrabButton({
 
 // ─── Search Diagnostics ───────────────────────────────────────────────
 
-function DiagnosticsPanel({ diagnostics }: { diagnostics: SearchDiagnostics }) {
-  const [expanded, setExpanded] = useState(false);
-  const okCount = diagnostics.indexers.filter((d) => d.status === "ok").length;
-  const errCount = diagnostics.indexers.filter((d) => d.status !== "ok").length;
+function IndexerStatusGrid({ indexers }: { indexers: Map<string, IndexerStreamState> }) {
+  if (indexers.size === 0) return null;
+
+  const entries = Array.from(indexers.values());
+  const searching = entries.filter((i) => i.status === "searching" || i.status === "pending").length;
+  const done = entries.filter((i) => i.status === "done").length;
+  const failed = entries.filter((i) => i.status === "error" || i.status === "timeout").length;
+  const totalResults = entries.reduce((sum, i) => sum + i.resultCount, 0);
 
   return (
     <div className="rounded-md border border-border bg-muted/30 text-sm">
-      <button
-        onClick={() => setExpanded((v) => !v)}
-        className="flex items-center gap-2 w-full px-3 py-1.5 text-muted-foreground hover:text-foreground transition-colors"
-      >
+      <div className="flex items-center gap-3 px-3 py-1.5 text-xs text-muted-foreground">
         <Activity className="w-3.5 h-3.5 shrink-0" />
-        <span className="text-xs">
-          {diagnostics.total_results} results from {okCount} indexer{okCount !== 1 ? "s" : ""}
-          {errCount > 0 && (
-            <span className="text-amber-600 dark:text-amber-400"> ({errCount} failed)</span>
+        <span>
+          {searching > 0 ? (
+            <>
+              <Loader2 className="w-3 h-3 animate-spin inline mr-1" />
+              Searching {searching} indexer{searching !== 1 ? "s" : ""}…
+            </>
+          ) : (
+            `${totalResults} result${totalResults !== 1 ? "s" : ""}`
           )}
-          {" · "}
-          {diagnostics.search_duration_ms}ms
+          {done > 0 && <span className="text-green-600 dark:text-green-400"> · {done} done</span>}
+          {failed > 0 && <span className="text-red-600 dark:text-red-400"> · {failed} failed</span>}
         </span>
-        <ChevronDown
-          className={cn(
-            "w-3.5 h-3.5 ml-auto transition-transform",
-            expanded && "rotate-180",
-          )}
-        />
-      </button>
-      {expanded && (
-        <div className="px-3 pb-2">
-          <div className="grid grid-cols-[1fr_auto_auto_auto] gap-x-4 gap-y-0.5 text-xs">
-            <span className="font-medium text-muted-foreground">Indexer</span>
-            <span className="font-medium text-muted-foreground">Status</span>
-            <span className="font-medium text-muted-foreground text-right">Time</span>
-            <span className="font-medium text-muted-foreground text-right">Results</span>
-            {diagnostics.indexers.map((d) => (
-              <div key={d.name} className="contents">
-                <span className="truncate">{d.name}</span>
-                <span>
-                  <span
-                    className={cn(
-                      "inline-block rounded px-1.5 py-0.5 text-[10px] font-semibold",
-                      d.status === "ok" && "bg-green-500/15 text-green-700 dark:text-green-300",
-                      d.status === "error" && "bg-red-500/15 text-red-700 dark:text-red-300",
-                      d.status === "timeout" && "bg-yellow-500/15 text-yellow-700 dark:text-yellow-300",
-                    )}
-                  >
-                    {d.status}
-                  </span>
-                </span>
-                <span className="text-right tabular-nums text-muted-foreground">
-                  {d.response_time_ms}ms
-                </span>
-                <span className="text-right tabular-nums text-muted-foreground">
-                  {d.result_count}
-                </span>
-              </div>
-            ))}
+      </div>
+      <div className="px-3 pb-2 flex flex-wrap gap-1.5">
+        {entries.map((ix) => (
+          <div
+            key={ix.id}
+            className={cn(
+              "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium transition-all",
+              ix.status === "pending" && "bg-muted text-muted-foreground",
+              ix.status === "searching" && "bg-blue-500/15 text-blue-700 dark:text-blue-300",
+              ix.status === "done" && "bg-green-500/10 text-green-700 dark:text-green-300",
+              ix.status === "error" && "bg-red-500/10 text-red-700 dark:text-red-300",
+              ix.status === "timeout" && "bg-yellow-500/10 text-yellow-700 dark:text-yellow-300",
+            )}
+            title={ix.error ? `${ix.name}: ${ix.error}` : ix.name}
+          >
+            {ix.status === "pending" && <Clock className="w-3 h-3" />}
+            {ix.status === "searching" && <Loader2 className="w-3 h-3 animate-spin" />}
+            {ix.status === "done" && <CheckCircle2 className="w-3 h-3" />}
+            {ix.status === "error" && <XCircle className="w-3 h-3" />}
+            {ix.status === "timeout" && <AlertTriangle className="w-3 h-3" />}
+            <span className="truncate max-w-[8rem]">{ix.name}</span>
+            {ix.status === "done" && ix.resultCount > 0 && (
+              <span className="tabular-nums opacity-70">{ix.resultCount}</span>
+            )}
+            {(ix.status === "done" || ix.status === "error" || ix.status === "timeout") && ix.elapsedMs > 0 && (
+              <span className="tabular-nums opacity-50">{ix.elapsedMs < 1000 ? `${ix.elapsedMs}ms` : `${(ix.elapsedMs / 1000).toFixed(1)}s`}</span>
+            )}
           </div>
-        </div>
-      )}
+        ))}
+      </div>
     </div>
   );
 }
@@ -557,12 +556,13 @@ export function ReleaseSearchDialog({
   const [query, setQuery] = useState(initialQuery ?? title);
   const [results, setResults] = useState<SearchResult[]>([]);
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [diagnostics, setDiagnostics] = useState<SearchDiagnostics | null>(null);
+  const [indexerStates, setIndexerStates] = useState<Map<string, IndexerStreamState>>(new Map());
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
   const [errorsExpanded, setErrorsExpanded] = useState(false);
   const [filters, setFilters] = useState<SearchFilters>({ ...EMPTY_FILTERS });
   const [didAutoSearch, setDidAutoSearch] = useState(false);
+  const abortRef = useRef<AbortController | null>(null);
 
   const { data: clients = [] } = useDownloads({ enabled: open });
   const enabledClients = clients.filter((c) => c.enabled);
@@ -592,46 +592,110 @@ export function ReleaseSearchDialog({
       setQuery(initialQuery ?? title);
       setResults([]);
       setErrors({});
-      setDiagnostics(null);
+      setIndexerStates(new Map());
       setSearched(false);
       setErrorsExpanded(false);
       setFilters({ ...EMPTY_FILTERS });
       setDidAutoSearch(false);
+    } else {
+      // Cancel any in-flight search when dialog closes
+      abortRef.current?.abort();
+      abortRef.current = null;
     }
   }, [open, title, initialQuery]);
 
-  const runSearch = async (e?: React.FormEvent) => {
+  const runSearch = useCallback((e?: React.FormEvent) => {
     e?.preventDefault();
     const q = query.trim();
     if (!q) return;
 
+    // Abort any previous search
+    abortRef.current?.abort();
+
     setLoading(true);
     setSearched(true);
+    setResults([]);
+    setErrors({});
+    setIndexerStates(new Map());
     setFilters({ ...EMPTY_FILTERS });
-    try {
-      const res = await searchIndexers({
+
+    const controller = streamSearch(
+      {
         q,
         categories: CATEGORY_MAP[mediaType],
         timeout_ms: 120000,
-      });
-      setResults(res.results ?? []);
-      setErrors(res.errors ?? {});
-      setDiagnostics(res.diagnostics ?? null);
-    } catch (err) {
-      const msg =
-        err instanceof IndexerApiError
-          ? `Search failed (HTTP ${err.status}): ${err.message}`
-          : err instanceof Error
-            ? err.message
-            : "Search failed";
-      toast.error(msg);
-      setResults([]);
-      setErrors({});
-      setDiagnostics(null);
-    } finally {
-      setLoading(false);
-    }
-  };
+      },
+      {
+        onSearchStart: (indexers) => {
+          setIndexerStates((prev) => {
+            const next = new Map(prev);
+            for (const ix of indexers) {
+              next.set(ix.id, {
+                id: ix.id,
+                name: ix.name,
+                status: "pending",
+                resultCount: 0,
+                elapsedMs: 0,
+              });
+            }
+            return next;
+          });
+        },
+        onIndexerStart: (id, name) => {
+          setIndexerStates((prev) => {
+            const next = new Map(prev);
+            const existing = next.get(id);
+            next.set(id, {
+              id,
+              name: existing?.name ?? name,
+              status: "searching",
+              resultCount: 0,
+              elapsedMs: 0,
+            });
+            return next;
+          });
+        },
+        onIndexerResult: (id, name, newResults, count, elapsedMs) => {
+          setResults((prev) => [...prev, ...newResults]);
+          setIndexerStates((prev) => {
+            const next = new Map(prev);
+            next.set(id, {
+              id,
+              name: next.get(id)?.name ?? name,
+              status: "done",
+              resultCount: count,
+              elapsedMs,
+            });
+            return next;
+          });
+        },
+        onIndexerError: (id, name, error, status, elapsedMs) => {
+          setErrors((prev) => ({ ...prev, [name]: error }));
+          setIndexerStates((prev) => {
+            const next = new Map(prev);
+            next.set(id, {
+              id,
+              name: next.get(id)?.name ?? name,
+              status: (status === "timeout" ? "timeout" : "error") as IndexerStatus,
+              resultCount: 0,
+              elapsedMs,
+              error,
+            });
+            return next;
+          });
+        },
+        onDone: () => {
+          setLoading(false);
+        },
+        onError: (err) => {
+          toast.error(err.message);
+          setLoading(false);
+        },
+      },
+    );
+
+    abortRef.current = controller;
+  }, [query, mediaType]);
 
   // Auto-run search when dialog opens with autoSearch enabled
   useEffect(() => {
@@ -678,8 +742,8 @@ export function ReleaseSearchDialog({
           </Button>
         </form>
 
-        {/* Search diagnostics */}
-        {diagnostics && !loading && <DiagnosticsPanel diagnostics={diagnostics} />}
+        {/* Live indexer status */}
+        {searched && indexerStates.size > 0 && <IndexerStatusGrid indexers={indexerStates} />}
 
         {/* Indexer errors */}
         {errorEntries.length > 0 && (
@@ -712,7 +776,7 @@ export function ReleaseSearchDialog({
         )}
 
         {/* Filters */}
-        {searched && !loading && results.length > 0 && (
+        {searched && results.length > 0 && (
           <FilterBar results={results} filters={filters} onChange={setFilters} />
         )}
 
@@ -759,19 +823,27 @@ export function ReleaseSearchDialog({
                   </td>
                 </tr>
               )}
-              {searched && !loading && filteredResults.length === 0 && (
+              {searched && !loading && filteredResults.length === 0 && results.length === 0 && (
                 <tr>
                   <td
                     colSpan={8}
                     className="px-3 py-10 text-center text-muted-foreground"
                   >
-                    {results.length === 0
-                      ? "No results found."
-                      : "No results match the current filters."}
+                    No results found.
                   </td>
                 </tr>
               )}
-              {loading && (
+              {searched && !loading && filteredResults.length === 0 && results.length > 0 && (
+                <tr>
+                  <td
+                    colSpan={8}
+                    className="px-3 py-10 text-center text-muted-foreground"
+                  >
+                    No results match the current filters.
+                  </td>
+                </tr>
+              )}
+              {loading && results.length === 0 && (
                 <tr>
                   <td
                     colSpan={8}

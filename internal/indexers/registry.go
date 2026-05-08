@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"sort"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -139,6 +140,40 @@ type AggregatedResults struct {
 	Diagnostics *SearchDiagnostics `json:"diagnostics,omitempty"`
 }
 
+// StreamEventType identifies the kind of SSE event emitted during a
+// streaming search.
+type StreamEventType string
+
+const (
+	EventSearchStart  StreamEventType = "search-start"
+	EventIndexerStart StreamEventType = "indexer-start"
+	EventIndexerResult StreamEventType = "indexer-result"
+	EventIndexerError  StreamEventType = "indexer-error"
+	EventDone          StreamEventType = "done"
+)
+
+// StreamEvent is a single SSE event emitted during a streaming search.
+type StreamEvent struct {
+	Type         StreamEventType `json:"type"`
+	IndexerID    string          `json:"indexer_id,omitempty"`
+	IndexerName  string          `json:"indexer_name,omitempty"`
+	Results      []Result        `json:"results,omitempty"`
+	ResultCount  int             `json:"result_count,omitempty"`
+	ElapsedMS    int64           `json:"elapsed_ms,omitempty"`
+	Error        string          `json:"error,omitempty"`
+	Status       string          `json:"status,omitempty"`
+	Indexers     []IndexerInfo   `json:"indexers,omitempty"`
+	TotalResults int             `json:"total_results,omitempty"`
+	TotalErrors  int             `json:"total_errors,omitempty"`
+	SearchDurationMS int64       `json:"search_duration_ms,omitempty"`
+}
+
+// IndexerInfo is a lightweight summary of an indexer for the search-start event.
+type IndexerInfo struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
 // Search fans q out across the indexers selected by opts. It returns
 // partial results: an indexer that errors or times out contributes an
 // entry in Errors but does not abort the whole call.
@@ -224,6 +259,108 @@ func (r *Registry) Search(ctx context.Context, q Query, opts SearchOptions) Aggr
 		SearchDurationMS: time.Since(searchStart).Milliseconds(),
 	}
 	return agg
+}
+
+// SearchStream fans q out like Search but emits incremental StreamEvent
+// values on the events channel instead of collecting everything up-front.
+// The channel is closed when the search completes or ctx is cancelled.
+func (r *Registry) SearchStream(ctx context.Context, q Query, opts SearchOptions, events chan<- StreamEvent) {
+	defer close(events)
+
+	targets := r.selectTargets(opts.IndexerIDs)
+	if len(targets) == 0 {
+		select {
+		case events <- StreamEvent{Type: EventDone}:
+		case <-ctx.Done():
+		}
+		return
+	}
+
+	infos := make([]IndexerInfo, len(targets))
+	for i, ix := range targets {
+		infos[i] = IndexerInfo{ID: ix.ID(), Name: ix.Name()}
+	}
+	select {
+	case events <- StreamEvent{Type: EventSearchStart, Indexers: infos}:
+	case <-ctx.Done():
+		return
+	}
+
+	limit := opts.MaxParallel
+	if limit <= 0 || limit > len(targets) {
+		limit = len(targets)
+	}
+	sem := make(chan struct{}, limit)
+	searchStart := time.Now()
+
+	var wg sync.WaitGroup
+	var totalResults, totalErrors int32
+
+	for _, ix := range targets {
+		wg.Add(1)
+		go func(ix Indexer) {
+			defer wg.Done()
+
+			select {
+			case sem <- struct{}{}:
+			case <-ctx.Done():
+				return
+			}
+			defer func() { <-sem }()
+
+			select {
+			case events <- StreamEvent{Type: EventIndexerStart, IndexerID: ix.ID(), IndexerName: ix.Name()}:
+			case <-ctx.Done():
+				return
+			}
+
+			start := time.Now()
+			res, err := runOne(ctx, ix, q, opts.PerIndexerTimeout)
+			elapsed := time.Since(start).Milliseconds()
+
+			if err != nil {
+				atomic.AddInt32(&totalErrors, 1)
+				status := "error"
+				if errors.Is(err, context.DeadlineExceeded) {
+					status = "timeout"
+				}
+				select {
+				case events <- StreamEvent{
+					Type: EventIndexerError, IndexerID: ix.ID(), IndexerName: ix.Name(),
+					Error: err.Error(), Status: status, ElapsedMS: elapsed,
+				}:
+				case <-ctx.Done():
+				}
+				return
+			}
+
+			items := res.Items
+			if len(q.Categories) > 0 {
+				items = filterByCategory(items, q.Categories)
+			}
+
+			atomic.AddInt32(&totalResults, int32(len(items)))
+			select {
+			case events <- StreamEvent{
+				Type: EventIndexerResult, IndexerID: ix.ID(), IndexerName: ix.Name(),
+				Results: items, ResultCount: len(items), ElapsedMS: elapsed, Status: "ok",
+			}:
+			case <-ctx.Done():
+			}
+		}(ix)
+	}
+
+	wg.Wait()
+
+	select {
+	case events <- StreamEvent{
+		Type:             EventDone,
+		TotalResults:     int(atomic.LoadInt32(&totalResults)),
+		TotalErrors:      int(atomic.LoadInt32(&totalErrors)),
+		SearchDurationMS: time.Since(searchStart).Milliseconds(),
+	}:
+	case <-ctx.Done():
+	}
 }
 
 // runOne wraps Search with a per-indexer deadline so a slow source

@@ -498,6 +498,82 @@ func (s *Service) Search(ctx context.Context, q Query, ids []string, perTimeout 
 	return agg
 }
 
+// SearchStream fans a streaming search out across the registered
+// indexers, forwarding incremental events to the caller's channel.
+func (s *Service) SearchStream(ctx context.Context, q Query, ids []string, perTimeout time.Duration, events chan<- StreamEvent) {
+	if perTimeout <= 0 {
+		perTimeout = s.searchTimeout
+	}
+
+	var queryLogID string
+	if s.queryLog != nil {
+		queryLogID = NewQueryID()
+		if err := s.queryLog.StartQuery(ctx, queryLogID, q.Term, "search-stream", "", ""); err != nil {
+			s.logger.Warn("query log: start failed", "err", err)
+		}
+	}
+
+	internal := make(chan StreamEvent, len(ids)+16)
+	go s.registry.SearchStream(ctx, q, SearchOptions{
+		IndexerIDs:        ids,
+		PerIndexerTimeout: perTimeout,
+		MaxParallel:       s.maxParallel,
+	}, internal)
+
+	var totalResults int
+	for evt := range internal {
+		if evt.Type == EventIndexerResult || evt.Type == EventIndexerError {
+			var indexerID string
+			for _, ix := range s.registry.List() {
+				if ix.Name() == evt.IndexerName {
+					indexerID = ix.ID()
+					break
+				}
+			}
+			if indexerID == "" {
+				indexerID = evt.IndexerID
+			}
+			dur := time.Duration(evt.ElapsedMS) * time.Millisecond
+			var searchErr error
+			if evt.Type == EventIndexerError {
+				searchErr = errors.New(evt.Error)
+			}
+			if s.searchHealthTracker != nil {
+				s.searchHealthTracker.RecordSearch(indexerID, dur, evt.ResultCount, searchErr)
+			}
+			if s.queryLog != nil && queryLogID != "" {
+				iqID := NewQueryID()
+				if err := s.queryLog.StartIndexerQuery(ctx, iqID, queryLogID, indexerID, evt.IndexerName); err != nil {
+					s.logger.Warn("query log: start indexer failed", "err", err)
+				}
+				if err := s.queryLog.FinishIndexerQuery(ctx, iqID, evt.ResultCount, searchErr); err != nil {
+					s.logger.Warn("query log: finish indexer failed", "err", err)
+				}
+			}
+			if evt.Type == EventIndexerResult {
+				totalResults += evt.ResultCount
+			}
+		}
+
+		select {
+		case events <- evt:
+		case <-ctx.Done():
+			for range internal {
+			}
+			if s.queryLog != nil && queryLogID != "" {
+				_ = s.queryLog.FinishQuery(ctx, queryLogID, totalResults, ctx.Err())
+			}
+			return
+		}
+	}
+
+	if s.queryLog != nil && queryLogID != "" {
+		if err := s.queryLog.FinishQuery(ctx, queryLogID, totalResults, nil); err != nil {
+			s.logger.Warn("query log: finish failed", "err", err)
+		}
+	}
+}
+
 // SearchHealthTracker returns the search health tracker.
 func (s *Service) SearchHealthTracker() *SearchHealthTracker { return s.searchHealthTracker }
 
