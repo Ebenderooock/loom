@@ -401,7 +401,8 @@ func (e *Engine) Search(ctx context.Context, q indexers.Query) (*indexers.Result
 	tctx := newTemplateContext(q, keywords, categories, configFields)
 
 	var allRows []indexers.Result
-	seen := map[string]struct{}{} // dedup by resolved URL
+	seen := map[string]struct{}{} // dedup by method + resolved URL
+	pathsOK := 0
 
 	for i, sp := range paths {
 		method, target, params, headers, err := e.buildSearchRequestForPath(sp, tctx)
@@ -410,16 +411,16 @@ func (e *Engine) Search(ctx context.Context, q indexers.Query) (*indexers.Result
 			continue
 		}
 
-		// Deduplicate: skip if this resolved URL was already fetched.
-		fullURL := target
-		if method == http.MethodGet && len(params) > 0 {
-			fullURL = target + "?" + params.Encode()
+		// Deduplicate: skip if this resolved request was already fetched.
+		dedupKey := method + " " + target
+		if len(params) > 0 {
+			dedupKey += "?" + params.Encode()
 		}
-		if _, dup := seen[fullURL]; dup {
-			slog.Debug("cardigann: skipping duplicate URL", "indexer", e.id, "url", fullURL)
+		if _, dup := seen[dedupKey]; dup {
+			slog.Debug("cardigann: skipping duplicate URL", "indexer", e.id, "url", dedupKey)
 			continue
 		}
-		seen[fullURL] = struct{}{}
+		seen[dedupKey] = struct{}{}
 
 		if dl, ok := ctx.Deadline(); ok {
 			slog.Debug("cardigann: search context", "indexer", e.id, "path_idx", i, "deadline_in", time.Until(dl).String())
@@ -440,6 +441,11 @@ func (e *Engine) Search(ctx context.Context, q indexers.Query) (*indexers.Result
 		}
 		slog.Debug("cardigann: search results", "indexer", e.id, "path_idx", i, "rowCount", len(rows))
 		allRows = append(allRows, rows...)
+		pathsOK++
+	}
+
+	if pathsOK == 0 && len(paths) > 0 {
+		slog.Warn("cardigann: all search paths failed", "indexer", e.id, "paths_total", len(paths))
 	}
 
 	return &indexers.Results{
@@ -454,7 +460,7 @@ func (e *Engine) Search(ctx context.Context, q indexers.Query) (*indexers.Result
 // wrapped in a one-element slice for uniform handling.
 func (e *Engine) searchPaths() []SearchPath {
 	if len(e.def.Search.Paths) > 0 {
-		return e.def.Search.Paths
+		return append([]SearchPath(nil), e.def.Search.Paths...)
 	}
 	return []SearchPath{{
 		Path:   e.def.Search.Path,
@@ -609,13 +615,14 @@ func (e *Engine) extractRows(body []byte) ([]indexers.Result, error) {
 	}
 	rowSelector := e.def.Search.Rows.Selector
 	rows := selectNodes(doc.Selection, rowSelector)
-	// Debug: check what elements exist in the page
-	tables := doc.Find("table").Length()
-	forumTables := doc.Find("table.forum_header_border").Length()
-	trHover := doc.Find("tr[name='hover']").Length()
-	magnets := doc.Find("a.magnet").Length()
-	slog.Debug("cardigann: extractRows", "indexer", e.id, "rowSelector", rowSelector, "matchedRows", len(rows),
-		"tables", tables, "forum_tables", forumTables, "tr_hover", trHover, "magnets", magnets)
+	if slog.Default().Enabled(context.Background(), slog.LevelDebug) {
+		tables := doc.Find("table").Length()
+		forumTables := doc.Find("table.forum_header_border").Length()
+		trHover := doc.Find("tr[name='hover']").Length()
+		magnets := doc.Find("a.magnet").Length()
+		slog.Debug("cardigann: extractRows", "indexer", e.id, "rowSelector", rowSelector, "matchedRows", len(rows),
+			"tables", tables, "forum_tables", forumTables, "tr_hover", trHover, "magnets", magnets)
+	}
 	// Cardigann's `after:` strips a header row; we honour positive
 	// values only because negatives have no upstream semantics.
 	if e.def.Search.Rows.After > 0 && len(rows) > e.def.Search.Rows.After {
@@ -882,6 +889,11 @@ func newTemplateContext(q indexers.Query, keywords string, categories []string, 
 	}
 }
 
+// reCache caches compiled regular expressions used by re_replace.
+// Patterns come from static YAML definitions and are reused across
+// searches, so compiling once avoids redundant work.
+var reCache sync.Map // string → *regexp.Regexp
+
 // cardigannFuncs is the static FuncMap shared by all template
 // expansions.  Hoisted to package level so it is allocated once.
 var cardigannFuncs = template.FuncMap{
@@ -890,16 +902,24 @@ var cardigannFuncs = template.FuncMap{
 		return strings.ReplaceAll(s, old, newStr)
 	},
 	"re_replace": func(s, pattern, replacement string) string {
-		re, err := regexp.Compile(pattern)
-		if err != nil {
-			slog.Warn("cardigann: re_replace: bad pattern",
-				"pattern", pattern, "err", err)
-			return s
+		cached, ok := reCache.Load(pattern)
+		if !ok {
+			compiled, err := regexp.Compile(pattern)
+			if err != nil {
+				slog.Warn("cardigann: re_replace: bad pattern",
+					"pattern", pattern, "err", err)
+				return s
+			}
+			cached, _ = reCache.LoadOrStore(pattern, compiled)
 		}
-		return re.ReplaceAllString(s, replacement)
+		return cached.(*regexp.Regexp).ReplaceAllString(s, replacement)
 	},
 	"urlencode": url.QueryEscape,
 }
+
+// bufPool recycles bytes.Buffers used by expandTemplate to reduce
+// allocation pressure during row-heavy searches.
+var bufPool = sync.Pool{New: func() any { return new(bytes.Buffer) }}
 
 // expandTemplate renders tmpl with ctx using text/template. The
 // "missingkey=zero" option ensures that missing map/struct fields
@@ -921,8 +941,10 @@ func (e *Engine) expandTemplate(tmpl string, ctx templateContext) (string, error
 		}
 		cached, _ = e.tmplCache.LoadOrStore(tmpl, parsed)
 	}
-	var buf bytes.Buffer
-	if err := cached.(*template.Template).Execute(&buf, ctx); err != nil {
+	buf := bufPool.Get().(*bytes.Buffer)
+	buf.Reset()
+	defer bufPool.Put(buf)
+	if err := cached.(*template.Template).Execute(buf, ctx); err != nil {
 		return "", fmt.Errorf("execute template: %w", err)
 	}
 	return buf.String(), nil
