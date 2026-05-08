@@ -160,6 +160,22 @@ func (e *Engine) Test(ctx context.Context) error {
 	return nil
 }
 
+// configFieldsWithDefaults merges operator-supplied config fields with
+// default values from the YAML definition's settings block. Operator
+// values always win; defaults fill gaps so templates like
+// `{{ .Config.apiurl }}` resolve even without explicit user config.
+func (e *Engine) configFieldsWithDefaults() map[string]string {
+	out := e.cfg.fields()
+	for _, s := range e.def.Settings {
+		if s.Default != "" {
+			if _, ok := out[s.Name]; !ok {
+				out[s.Name] = s.Default
+			}
+		}
+	}
+	return out
+}
+
 // baseURL returns the active base URL with any trailing slash trimmed.
 // If the operator configured a URL override it takes precedence;
 // otherwise Links[0] from the YAML definition is used.
@@ -271,7 +287,7 @@ func (e *Engine) formLogin(ctx context.Context) error {
 	}
 	form := url.Values{}
 	for k, tmpl := range e.def.Login.Inputs {
-		v, terr := e.expandTemplate(tmpl, templateContext{Config: e.cfg.fields()})
+		v, terr := e.expandTemplate(tmpl, templateContext{Config: e.configFieldsWithDefaults(), True: "true", False: "false"})
 		if terr != nil {
 			return fmt.Errorf("cardigann: login input %q: %w", k, terr)
 		}
@@ -416,16 +432,30 @@ func (e *Engine) buildSearchRequest(q indexers.Query) (method, target string, pa
 		slog.Debug("cardigann: keywords filtered", "indexer", e.id, "raw", q.Term, "filtered", keywords, "filterCount", len(e.def.Search.KeywordsFilters))
 	}
 
+	imdbShort := strings.TrimPrefix(q.IMDBID, "tt")
+	configFields := e.configFieldsWithDefaults()
+
 	tctx := templateContext{
 		Keywords:   keywords,
-		Query:      q.Term,
+		Query: templateQuery{
+			Keywords:    keywords,
+			IMDBID:      q.IMDBID,
+			IMDBIDShort: imdbShort,
+			TVDBID:      q.TVDBID,
+			TMDBID:      q.TMDBID,
+			Season:      q.Season,
+			Ep:          q.Episode,
+			Episode:     q.Episode,
+		},
 		Categories: e.mapNewznabToSite(q.Categories),
-		IMDBID:     strings.TrimPrefix(q.IMDBID, "tt"),
+		IMDBID:     imdbShort,
 		TVDBID:     q.TVDBID,
 		TMDBID:     q.TMDBID,
 		Season:     q.Season,
 		Episode:    q.Episode,
-		Config:     e.cfg.fields(),
+		Config:     configFields,
+		True:       "true",
+		False:      "false",
 	}
 
 	// Expand Go templates in the path (e.g. "search/{{ .Keywords }}")
@@ -760,11 +790,33 @@ func wrapHTMLNode(n *html.Node) *goquery.Selection {
 	return doc.Selection
 }
 
+// templateQuery mirrors the Prowlarr/Jackett `.Query` sub-object that
+// many Cardigann definitions reference (e.g. `{{ .Query.IMDBID }}`).
+type templateQuery struct {
+	Keywords    string
+	IMDBID      string
+	IMDBIDShort string // numeric part without "tt" prefix
+	TVDBID      string
+	TMDBID      string
+	TVMazeID    string
+	DoubanID    string
+	Season      int
+	Ep          int // alias used by most definitions
+	Episode     int
+	Year        string
+	Genre       string
+	Artist      string
+	Album       string
+	Author      string
+	Title       string
+	Type        string
+}
+
 // templateContext is the set of variables Cardigann input templates
 // can reference via {{ .Keywords }}, {{ .Config.username }}, etc.
 type templateContext struct {
 	Keywords   string
-	Query      string
+	Query      templateQuery
 	Categories []string
 	IMDBID     string
 	TVDBID     string
@@ -772,6 +824,12 @@ type templateContext struct {
 	Season     int
 	Episode    int
 	Config     map[string]string
+
+	// True / False are boolean constants that many Cardigann
+	// definitions use in conditional expressions like
+	// `{{ if eq .Config.disablesort .False }}`.
+	True  string
+	False string
 }
 
 // expandTemplate renders tmpl with ctx using text/template. Loom does
@@ -785,6 +843,17 @@ func (e *Engine) expandTemplate(tmpl string, ctx templateContext) (string, error
 	}
 	t, err := template.New("cardigann").Funcs(template.FuncMap{
 		"join": strings.Join,
+		"replace": func(s, old, new string) string {
+			return strings.ReplaceAll(s, old, new)
+		},
+		"re_replace": func(s, pattern, replacement string) string {
+			re, err := regexp.Compile(pattern)
+			if err != nil {
+				return s
+			}
+			return re.ReplaceAllString(s, replacement)
+		},
+		"urlencode": url.QueryEscape,
 	}).Parse(tmpl)
 	if err != nil {
 		return "", fmt.Errorf("parse template: %w", err)

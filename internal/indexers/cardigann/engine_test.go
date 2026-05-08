@@ -243,3 +243,97 @@ func TestApplyFilters(t *testing.T) {
 		t.Errorf("regexp filter failed: %q", got)
 	}
 }
+
+func TestExpandTemplate_BoolLiterals(t *testing.T) {
+	eng := &Engine{}
+	ctx := templateContext{
+		Config: map[string]string{"disablesort": "false"},
+		True:   "true",
+		False:  "false",
+	}
+	out, err := eng.expandTemplate(`{{ if eq .Config.disablesort .False }}enabled{{ else }}disabled{{ end }}`, ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out != "enabled" {
+		t.Errorf("expected 'enabled', got %q", out)
+	}
+}
+
+func TestExpandTemplate_QuerySubFields(t *testing.T) {
+	eng := &Engine{}
+	ctx := templateContext{
+		Keywords: "test show",
+		Query: templateQuery{
+			Keywords: "test show",
+			IMDBID:   "tt1234567",
+			Season:   2,
+			Ep:       5,
+		},
+		True:  "true",
+		False: "false",
+	}
+	out, err := eng.expandTemplate(`{{ if .Query.IMDBID }}{{ .Query.IMDBID }}{{ else }}{{ .Keywords }}{{ end }}`, ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out != "tt1234567" {
+		t.Errorf("expected 'tt1234567', got %q", out)
+	}
+	out, err = eng.expandTemplate(`S{{ .Query.Season }}E{{ .Query.Ep }}`, ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out != "S2E5" {
+		t.Errorf("expected 'S2E5', got %q", out)
+	}
+}
+
+func TestExpandTemplate_ReReplace(t *testing.T) {
+	eng := &Engine{}
+	ctx := templateContext{Keywords: "hello world", True: "true", False: "false"}
+	out, err := eng.expandTemplate(`{{ re_replace .Keywords "[\\s]+" "%" }}`, ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out != "hello%world" {
+		t.Errorf("re_replace failed: %q", out)
+	}
+}
+
+func TestExpandTemplate_Replace(t *testing.T) {
+	eng := &Engine{}
+	ctx := templateContext{Keywords: "foo bar baz", True: "true", False: "false"}
+	out, err := eng.expandTemplate(`{{ replace .Keywords " " "+" }}`, ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out != "foo+bar+baz" {
+		t.Errorf("replace failed: %q", out)
+	}
+}
+
+func TestConfigFieldsWithDefaults(t *testing.T) {
+	eng := &Engine{
+		cfg: Config{
+			Credentials: map[string]string{"apikey": "mykey"},
+		},
+		def: &Definition{
+			Settings: []Setting{
+				{Name: "apiurl", Default: "apibay.org"},
+				{Name: "sort", Default: "created"},
+				{Name: "apikey"}, // no default — should not override
+			},
+		},
+	}
+	fields := eng.configFieldsWithDefaults()
+	if fields["apiurl"] != "apibay.org" {
+		t.Errorf("expected default apiurl, got %q", fields["apiurl"])
+	}
+	if fields["sort"] != "created" {
+		t.Errorf("expected default sort, got %q", fields["sort"])
+	}
+	if fields["apikey"] != "mykey" {
+		t.Errorf("operator value should win, got %q", fields["apikey"])
+	}
+}
