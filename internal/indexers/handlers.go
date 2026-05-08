@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"sort"
@@ -28,6 +29,7 @@ func (s *Service) Mount(r chi.Router) {
 		r.Get("/", s.handleList)
 		r.Post("/", s.handleCreate)
 		r.Post("/search", s.handleSearch)
+		r.Post("/search/stream", s.handleSearchStream)
 		r.Post("/test", s.handleTestConfig)
 		r.Get("/definitions", s.handleListDefinitions)
 		r.Route("/{id}", func(r chi.Router) {
@@ -444,6 +446,69 @@ func (s *Service) handleSearch(w http.ResponseWriter, r *http.Request) {
 	out := s.Search(r.Context(), q, req.IndexerIDs, timeout)
 	ScoreResults(out.Results)
 	writeJSON(w, http.StatusOK, out)
+}
+
+func (s *Service) handleSearchStream(w http.ResponseWriter, r *http.Request) {
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		writeError(w, http.StatusInternalServerError, "streaming_unsupported", "streaming not supported")
+		return
+	}
+
+	var req searchRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_body", err.Error())
+		return
+	}
+
+	q := Query{
+		Term:       req.Query,
+		Categories: req.Categories,
+		IMDBID:     req.IMDBID,
+		TVDBID:     req.TVDBID,
+		TMDBID:     req.TMDBID,
+		Season:     req.Season,
+		Episode:    req.Episode,
+		Limit:      req.Limit,
+	}
+	timeout := time.Duration(req.TimeoutMS) * time.Millisecond
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no")
+	w.WriteHeader(http.StatusOK)
+	flusher.Flush()
+
+	events := make(chan StreamEvent, 32)
+	go s.SearchStream(r.Context(), q, req.IndexerIDs, timeout, events)
+
+	heartbeat := time.NewTicker(15 * time.Second)
+	defer heartbeat.Stop()
+
+	for {
+		select {
+		case evt, ok := <-events:
+			if !ok {
+				return
+			}
+			data, err := json.Marshal(evt)
+			if err != nil {
+				slog.Warn("sse: marshal error", "err", err)
+				continue
+			}
+			fmt.Fprintf(w, "event: %s\ndata: %s\n\n", evt.Type, data)
+			flusher.Flush()
+			if evt.Type == EventDone {
+				return
+			}
+		case <-heartbeat.C:
+			fmt.Fprintf(w, ": heartbeat\n\n")
+			flusher.Flush()
+		case <-r.Context().Done():
+			return
+		}
+	}
 }
 
 // --- definitions ----------------------------------------------------

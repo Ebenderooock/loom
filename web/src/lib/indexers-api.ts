@@ -330,6 +330,167 @@ export async function searchIndexers(
   });
 }
 
+// ---------- Streaming search (SSE) ----------
+
+export type IndexerStatus = "pending" | "searching" | "done" | "error" | "timeout";
+
+export interface IndexerStreamState {
+  id: string;
+  name: string;
+  status: IndexerStatus;
+  resultCount: number;
+  elapsedMs: number;
+  error?: string;
+}
+
+export interface StreamSearchEvent {
+  type: "search-start" | "indexer-start" | "indexer-result" | "indexer-error" | "done";
+  indexer_id?: string;
+  indexer_name?: string;
+  results?: SearchResult[];
+  result_count?: number;
+  elapsed_ms?: number;
+  error?: string;
+  status?: string;
+  indexers?: { id: string; name: string }[];
+  total_results?: number;
+  total_errors?: number;
+  search_duration_ms?: number;
+}
+
+export interface StreamSearchCallbacks {
+  onSearchStart?: (indexers: { id: string; name: string }[]) => void;
+  onIndexerStart?: (id: string, name: string) => void;
+  onIndexerResult?: (id: string, name: string, results: SearchResult[], count: number, elapsedMs: number) => void;
+  onIndexerError?: (id: string, name: string, error: string, status: string, elapsedMs: number) => void;
+  onDone?: (totalResults: number, totalErrors: number, durationMs: number) => void;
+  onError?: (error: Error) => void;
+}
+
+/**
+ * Stream search results via SSE. Results arrive incrementally as each
+ * indexer completes. Returns an AbortController to cancel the search.
+ */
+export function streamSearch(
+  params: SearchParams,
+  callbacks: StreamSearchCallbacks,
+): AbortController {
+  const controller = new AbortController();
+
+  (async () => {
+    try {
+      const res = await fetch("/api/v1/indexers/search/stream", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          query: params.q,
+          indexer_ids: params.indexer_ids,
+          categories: params.categories,
+          timeout_ms: params.timeout_ms,
+        }),
+        signal: controller.signal,
+      });
+
+      if (!res.ok) {
+        const text = await res.text();
+        let msg = `Search stream failed: ${res.status}`;
+        try {
+          const env = JSON.parse(text);
+          if (env?.error?.message) msg = env.error.message;
+        } catch { /* ignore */ }
+        callbacks.onError?.(new Error(msg));
+        return;
+      }
+
+      const reader = res.body?.getReader();
+      if (!reader) {
+        callbacks.onError?.(new Error("Streaming not supported by browser"));
+        return;
+      }
+
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+
+        // Parse SSE events separated by double newline
+        const parts = buffer.split("\n\n");
+        buffer = parts.pop() ?? "";
+
+        for (const part of parts) {
+          if (!part.trim()) continue;
+
+          // Skip heartbeat comments
+          const lines = part.split("\n");
+          let eventType = "";
+          let dataStr = "";
+
+          for (const line of lines) {
+            if (line.startsWith(":")) continue; // comment/heartbeat
+            if (line.startsWith("event: ")) {
+              eventType = line.slice(7).trim();
+            } else if (line.startsWith("data: ")) {
+              dataStr += (dataStr ? "\n" : "") + line.slice(6);
+            }
+          }
+
+          if (!eventType || !dataStr) continue;
+
+          let evt: StreamSearchEvent;
+          try {
+            evt = JSON.parse(dataStr);
+          } catch {
+            continue;
+          }
+
+          switch (eventType) {
+            case "search-start":
+              callbacks.onSearchStart?.(evt.indexers ?? []);
+              break;
+            case "indexer-start":
+              callbacks.onIndexerStart?.(evt.indexer_id ?? "", evt.indexer_name ?? "");
+              break;
+            case "indexer-result":
+              callbacks.onIndexerResult?.(
+                evt.indexer_id ?? "",
+                evt.indexer_name ?? "",
+                evt.results ?? [],
+                evt.result_count ?? 0,
+                evt.elapsed_ms ?? 0,
+              );
+              break;
+            case "indexer-error":
+              callbacks.onIndexerError?.(
+                evt.indexer_id ?? "",
+                evt.indexer_name ?? "",
+                evt.error ?? "Unknown error",
+                evt.status ?? "error",
+                evt.elapsed_ms ?? 0,
+              );
+              break;
+            case "done":
+              callbacks.onDone?.(
+                evt.total_results ?? 0,
+                evt.total_errors ?? 0,
+                evt.search_duration_ms ?? 0,
+              );
+              return; // stream complete
+          }
+        }
+      }
+    } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") return;
+      callbacks.onError?.(err instanceof Error ? err : new Error(String(err)));
+    }
+  })();
+
+  return controller;
+}
+
 // ---------- Proxy endpoints ----------
 
 export const proxyKeys = {
