@@ -54,6 +54,9 @@ type Engine struct {
 	cats       []indexers.Category
 	siteToNzb  map[string][]indexers.Category // tracker id → newznab category ids
 	nzbToSite  map[indexers.Category][]string // newznab id → tracker ids
+
+	// tmplCache caches parsed Go templates keyed by their raw string.
+	tmplCache sync.Map // string → *template.Template
 }
 
 // NewEngine builds a runnable Engine. httpClient may be nil; the
@@ -375,87 +378,101 @@ func matchErrorSelectors(body []byte, blocks []ErrorBlock) string {
 	return ""
 }
 
-// Search implements indexers.Indexer.
+// Search implements indexers.Indexer.  When the definition declares
+// multiple search paths (common for sites with separate movie/TV/music
+// endpoints) the engine issues one HTTP request per path and merges
+// the results, matching Prowlarr's behaviour.
 func (e *Engine) Search(ctx context.Context, q indexers.Query) (*indexers.Results, error) {
 	slog.Debug("cardigann: search start", "indexer", e.id, "term", q.Term, "imdb", q.IMDBID)
 	if err := e.ensureLoggedIn(ctx); err != nil {
 		return nil, err
 	}
-	method, target, params, headers, err := e.buildSearchRequest(q)
-	if err != nil {
-		return nil, err
-	}
-	if dl, ok := ctx.Deadline(); ok {
-		slog.Debug("cardigann: search context", "indexer", e.id, "deadline_in", time.Until(dl).String(), "http_timeout", e.http.Timeout.String())
-	} else {
-		slog.Debug("cardigann: search context", "indexer", e.id, "deadline", "none", "http_timeout", e.http.Timeout.String())
-	}
-	slog.Debug("cardigann: search request", "indexer", e.id, "method", method, "target", target, "params", params.Encode())
-	body, err := e.fetch(ctx, method, target, params, headers)
-	if err != nil {
-		return nil, err
-	}
-	slog.Debug("cardigann: search response", "indexer", e.id, "bodyLen", len(body), "bodyPreview", string(body[:min(500, len(body))]))
-	rows, err := e.extractRows(body)
-	if err != nil {
-		return nil, err
-	}
-	slog.Debug("cardigann: search results", "indexer", e.id, "rowCount", len(rows))
-	return &indexers.Results{
-		IndexerID: e.id,
-		Items:     rows,
-		Total:     len(rows),
-	}, nil
-}
 
-// buildSearchRequest assembles the URL, method, query parameters and
-// headers from the search block and the user query. Result is the
-// data needed to drive fetch().
-func (e *Engine) buildSearchRequest(q indexers.Query) (method, target string, params url.Values, headers http.Header, err error) {
-	path := e.def.Search.Path
-	method = strings.ToUpper(e.def.Search.Method)
-	if method == "" {
-		method = http.MethodGet
-	}
-	if path == "" && len(e.def.Search.Paths) > 0 {
-		path = e.def.Search.Paths[0].Path
-		if m := e.def.Search.Paths[0].Method; m != "" {
-			method = strings.ToUpper(m)
-		}
-	}
+	paths := e.searchPaths()
 
-	// Apply keyword filters (e.g. replace spaces with hyphens for
-	// URL-slug sites like EZTV) before template expansion.
+	// Pre-compute shared values once for all paths.
 	keywords := q.Term
 	if len(e.def.Search.KeywordsFilters) > 0 {
 		keywords = applyFilters(keywords, e.def.Search.KeywordsFilters)
 		slog.Debug("cardigann: keywords filtered", "indexer", e.id, "raw", q.Term, "filtered", keywords, "filterCount", len(e.def.Search.KeywordsFilters))
 	}
-
-	imdbShort := strings.TrimPrefix(q.IMDBID, "tt")
 	configFields := e.configFieldsWithDefaults()
+	categories := e.mapNewznabToSite(q.Categories)
+	tctx := newTemplateContext(q, keywords, categories, configFields)
 
-	tctx := templateContext{
-		Keywords:   keywords,
-		Query: templateQuery{
-			Keywords:    keywords,
-			IMDBID:      q.IMDBID,
-			IMDBIDShort: imdbShort,
-			TVDBID:      q.TVDBID,
-			TMDBID:      q.TMDBID,
-			Season:      q.Season,
-			Ep:          q.Episode,
-			Episode:     q.Episode,
-		},
-		Categories: e.mapNewznabToSite(q.Categories),
-		IMDBID:     imdbShort,
-		TVDBID:     q.TVDBID,
-		TMDBID:     q.TMDBID,
-		Season:     q.Season,
-		Episode:    q.Episode,
-		Config:     configFields,
-		True:       "true",
-		False:      "false",
+	var allRows []indexers.Result
+	seen := map[string]struct{}{} // dedup by resolved URL
+
+	for i, sp := range paths {
+		method, target, params, headers, err := e.buildSearchRequestForPath(sp, tctx)
+		if err != nil {
+			slog.Warn("cardigann: search path error", "indexer", e.id, "path_idx", i, "err", err)
+			continue
+		}
+
+		// Deduplicate: skip if this resolved URL was already fetched.
+		fullURL := target
+		if method == http.MethodGet && len(params) > 0 {
+			fullURL = target + "?" + params.Encode()
+		}
+		if _, dup := seen[fullURL]; dup {
+			slog.Debug("cardigann: skipping duplicate URL", "indexer", e.id, "url", fullURL)
+			continue
+		}
+		seen[fullURL] = struct{}{}
+
+		if dl, ok := ctx.Deadline(); ok {
+			slog.Debug("cardigann: search context", "indexer", e.id, "path_idx", i, "deadline_in", time.Until(dl).String())
+		}
+		slog.Debug("cardigann: search request", "indexer", e.id, "path_idx", i, "method", method, "target", target, "params", params.Encode())
+
+		body, err := e.fetch(ctx, method, target, params, headers)
+		if err != nil {
+			slog.Warn("cardigann: search fetch error", "indexer", e.id, "path_idx", i, "err", err)
+			continue
+		}
+		slog.Debug("cardigann: search response", "indexer", e.id, "path_idx", i, "bodyLen", len(body))
+
+		rows, err := e.extractRows(body)
+		if err != nil {
+			slog.Warn("cardigann: search extract error", "indexer", e.id, "path_idx", i, "err", err)
+			continue
+		}
+		slog.Debug("cardigann: search results", "indexer", e.id, "path_idx", i, "rowCount", len(rows))
+		allRows = append(allRows, rows...)
+	}
+
+	return &indexers.Results{
+		IndexerID: e.id,
+		Items:     allRows,
+		Total:     len(allRows),
+	}, nil
+}
+
+// searchPaths returns the ordered list of search endpoints. If the
+// definition uses the single-path shorthand (`search.path`) it is
+// wrapped in a one-element slice for uniform handling.
+func (e *Engine) searchPaths() []SearchPath {
+	if len(e.def.Search.Paths) > 0 {
+		return e.def.Search.Paths
+	}
+	return []SearchPath{{
+		Path:   e.def.Search.Path,
+		Method: e.def.Search.Method,
+	}}
+}
+
+// buildSearchRequestForPath assembles the URL, method, query parameters
+// and headers for a single search path using the pre-built template
+// context.
+func (e *Engine) buildSearchRequestForPath(sp SearchPath, tctx templateContext) (method, target string, params url.Values, headers http.Header, err error) {
+	path := sp.Path
+	method = strings.ToUpper(sp.Method)
+	if method == "" {
+		method = strings.ToUpper(e.def.Search.Method)
+	}
+	if method == "" {
+		method = http.MethodGet
 	}
 
 	// Expand Go templates in the path (e.g. "search/{{ .Keywords }}")
@@ -812,8 +829,11 @@ type templateQuery struct {
 	Type        string
 }
 
-// templateContext is the set of variables Cardigann input templates
-// can reference via {{ .Keywords }}, {{ .Config.username }}, etc.
+// templateContext is the set of variables Cardigann templates can
+// reference.  Top-level fields (IMDBID, Season, etc.) exist for
+// backward compatibility with `{{ .IMDBID }}`; the Query sub-struct
+// provides the same data under `{{ .Query.IMDBID }}`.  Both must be
+// populated identically.
 type templateContext struct {
 	Keywords   string
 	Query      templateQuery
@@ -832,34 +852,77 @@ type templateContext struct {
 	False string
 }
 
-// expandTemplate renders tmpl with ctx using text/template. Loom does
-// not support the full Cardigann template surface (no `if join` etc);
-// we ship the variable-substitution subset and rely on Go template
-// `range` for category fan-out, which covers the public-tracker
-// definitions we have tested.
+// newTemplateContext builds a populated templateContext from an
+// indexers.Query plus pre-computed keywords, categories, and config.
+// Centralising construction avoids the fragile 20-field struct literal
+// in every call site.
+func newTemplateContext(q indexers.Query, keywords string, categories []string, config map[string]string) templateContext {
+	imdbShort := strings.TrimPrefix(q.IMDBID, "tt")
+	return templateContext{
+		Keywords: keywords,
+		Query: templateQuery{
+			Keywords:    keywords,
+			IMDBID:      q.IMDBID,
+			IMDBIDShort: imdbShort,
+			TVDBID:      q.TVDBID,
+			TMDBID:      q.TMDBID,
+			Season:      q.Season,
+			Ep:          q.Episode,
+			Episode:     q.Episode,
+		},
+		Categories: categories,
+		IMDBID:     imdbShort,
+		TVDBID:     q.TVDBID,
+		TMDBID:     q.TMDBID,
+		Season:     q.Season,
+		Episode:    q.Episode,
+		Config:     config,
+		True:       "true",
+		False:      "false",
+	}
+}
+
+// cardigannFuncs is the static FuncMap shared by all template
+// expansions.  Hoisted to package level so it is allocated once.
+var cardigannFuncs = template.FuncMap{
+	"join": strings.Join,
+	"replace": func(s, old, newStr string) string {
+		return strings.ReplaceAll(s, old, newStr)
+	},
+	"re_replace": func(s, pattern, replacement string) string {
+		re, err := regexp.Compile(pattern)
+		if err != nil {
+			slog.Warn("cardigann: re_replace: bad pattern",
+				"pattern", pattern, "err", err)
+			return s
+		}
+		return re.ReplaceAllString(s, replacement)
+	},
+	"urlencode": url.QueryEscape,
+}
+
+// expandTemplate renders tmpl with ctx using text/template. The
+// "missingkey=zero" option ensures that missing map/struct fields
+// render as empty strings rather than Go's default "<no value>",
+// matching Prowlarr/Jackett behaviour.
 func (e *Engine) expandTemplate(tmpl string, ctx templateContext) (string, error) {
 	if tmpl == "" {
 		return "", nil
 	}
-	t, err := template.New("cardigann").Funcs(template.FuncMap{
-		"join": strings.Join,
-		"replace": func(s, old, new string) string {
-			return strings.ReplaceAll(s, old, new)
-		},
-		"re_replace": func(s, pattern, replacement string) string {
-			re, err := regexp.Compile(pattern)
-			if err != nil {
-				return s
-			}
-			return re.ReplaceAllString(s, replacement)
-		},
-		"urlencode": url.QueryEscape,
-	}).Parse(tmpl)
-	if err != nil {
-		return "", fmt.Errorf("parse template: %w", err)
+	// Check the per-engine template cache first.
+	cached, ok := e.tmplCache.Load(tmpl)
+	if !ok {
+		parsed, err := template.New("cardigann").
+			Option("missingkey=zero").
+			Funcs(cardigannFuncs).
+			Parse(tmpl)
+		if err != nil {
+			return "", fmt.Errorf("parse template: %w", err)
+		}
+		cached, _ = e.tmplCache.LoadOrStore(tmpl, parsed)
 	}
 	var buf bytes.Buffer
-	if err := t.Execute(&buf, ctx); err != nil {
+	if err := cached.(*template.Template).Execute(&buf, ctx); err != nil {
 		return "", fmt.Errorf("execute template: %w", err)
 	}
 	return buf.String(), nil
