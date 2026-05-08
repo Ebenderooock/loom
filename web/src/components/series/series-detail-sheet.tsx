@@ -745,11 +745,11 @@ export function SeriesDetailSheet({
               </p>
             </div>
 
-            {/* Monitoring toggle */}
+            {/* Monitoring toggle — offset left to avoid sheet close button */}
             <button
               onClick={handleToggleMonitoring}
               className={cn(
-                "absolute top-4 right-4 z-20 p-2 rounded-full transition-all duration-200 shadow-lg",
+                "absolute top-4 right-14 z-20 p-2 rounded-full transition-all duration-200 shadow-lg",
                 isMonitored
                   ? "bg-accent text-accent-foreground hover:bg-accent/90"
                   : "bg-black/50 text-white/70 hover:bg-black/70 hover:text-white",
@@ -765,31 +765,35 @@ export function SeriesDetailSheet({
 
           {/* Action buttons */}
           <div className="px-6 pb-2">
-            <div className="flex items-center gap-2 flex-wrap">
-              <Button size="sm" variant="outline" className="gap-1.5" onClick={() => { setEditing(true); setEditProfile(series.qualityProfileId); setEditMonitoring(series.monitoringStatus); }}>
-                <Pencil className="w-3.5 h-3.5" />Edit
-              </Button>
-              <Button size="sm" variant="outline" className="gap-1.5" onClick={handleRefresh} disabled={refreshing}>
-                <RefreshCw className={cn("w-3.5 h-3.5", refreshing && "animate-spin")} />Refresh
-              </Button>
-              <Button size="sm" variant="outline" className="gap-1.5" onClick={handleRescan} disabled={rescanning} title="Rescan library folder for new files">
-                <HardDriveDownload className={cn("w-3.5 h-3.5", rescanning && "animate-spin")} />{rescanning ? "Scanning..." : "Rescan"}
-              </Button>
-              <Button size="sm" variant="outline" className="gap-1.5" title="Automatic search for all episodes" onClick={handleAutoSearch} disabled={autoSearching}>
+            <div className="flex items-center gap-1.5">
+              {/* Primary actions with labels */}
+              <Button size="sm" variant="outline" className="gap-1.5 h-8 text-xs" title="Automatic search for all episodes" onClick={handleAutoSearch} disabled={autoSearching}>
                 <Search className={cn("w-3.5 h-3.5", autoSearching && "animate-spin")} />{autoSearching ? "Searching..." : "Search"}
               </Button>
-              <Button size="sm" variant="outline" className="gap-1.5" title="Interactive search" onClick={() => openSearch({ title: series.title, query: series.title, mediaType: "series" })}>
-                <FolderSearch className="w-3.5 h-3.5" />Interactive
+              <Button size="sm" variant="outline" className="gap-1.5 h-8 text-xs" title="Interactive search — browse releases manually" onClick={() => openSearch({ title: series.title, query: series.title, mediaType: "series" })}>
+                <FolderSearch className="w-3.5 h-3.5" />Browse
               </Button>
-              <Button size="sm" variant="outline" className="gap-1.5" onClick={handleArchiveToggle} disabled={archiving}>
-                {series.monitoringStatus === "unmonitored" ? (
-                  <><ArchiveRestore className="w-3.5 h-3.5" />Unarchive</>
-                ) : (
-                  <><Archive className="w-3.5 h-3.5" />Archive</>
-                )}
+              <Button size="sm" variant="outline" className="gap-1.5 h-8 text-xs" onClick={() => { setEditing(true); setEditProfile(series.qualityProfileId); setEditMonitoring(series.monitoringStatus); }} title="Edit series settings">
+                <Pencil className="w-3.5 h-3.5" />Edit
               </Button>
-              <Button size="sm" variant="destructive" className="gap-1.5 ml-auto" onClick={() => setDeleteOpen(true)}>
-                <Trash2 className="w-3.5 h-3.5" />Delete
+
+              {/* Separator */}
+              <div className="w-px h-5 bg-border mx-0.5" />
+
+              {/* Secondary actions — icon only */}
+              <Button size="icon" variant="ghost" className="h-8 w-8" onClick={handleRefresh} disabled={refreshing} title="Refresh metadata from TMDB">
+                <RefreshCw className={cn("w-3.5 h-3.5", refreshing && "animate-spin")} />
+              </Button>
+              <Button size="icon" variant="ghost" className="h-8 w-8" onClick={handleRescan} disabled={rescanning} title="Rescan library folder for new files">
+                <HardDriveDownload className={cn("w-3.5 h-3.5", rescanning && "animate-spin")} />
+              </Button>
+              <Button size="icon" variant="ghost" className="h-8 w-8" onClick={handleArchiveToggle} disabled={archiving} title={series.monitoringStatus === "unmonitored" ? "Unarchive" : "Archive"}>
+                {series.monitoringStatus === "unmonitored" ? <ArchiveRestore className="w-3.5 h-3.5" /> : <Archive className="w-3.5 h-3.5" />}
+              </Button>
+
+              {/* Delete — pushed right */}
+              <Button size="icon" variant="ghost" className="h-8 w-8 ml-auto text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => setDeleteOpen(true)} title="Delete series">
+                <Trash2 className="w-3.5 h-3.5" />
               </Button>
             </div>
           </div>

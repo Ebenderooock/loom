@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/ebenderooock/loom/internal/kernel/telemetry"
 	"github.com/ebenderooock/loom/internal/parser"
 	"github.com/ebenderooock/loom/internal/series"
 )
@@ -113,6 +114,7 @@ func (s *SeriesScanner) GetSeriesUnmatched() []*UnmatchedFile {
 }
 
 func (s *SeriesScanner) runSeriesScan(ctx context.Context, scanID, libraryID, rootFolder string) {
+	scanStart := time.Now()
 	s.logger.Info("starting series scan", "scanId", scanID, "libraryId", libraryID, "path", rootFolder)
 
 	// Phase 1: Discover show folders and add new series via TMDB
@@ -257,6 +259,14 @@ func (s *SeriesScanner) runSeriesScan(ctx context.Context, scanID, libraryID, ro
 		"unmatched", unmatched,
 		"imported", imported,
 	)
+
+	if m := telemetry.App(); m != nil {
+		m.ScanTotal.WithLabelValues("series", "success").Inc()
+		m.ScanDuration.WithLabelValues("series").Observe(time.Since(scanStart).Seconds())
+		m.ScanFilesProcessed.WithLabelValues("series", "matched").Add(float64(matched))
+		m.ScanFilesProcessed.WithLabelValues("series", "unmatched").Add(float64(unmatched))
+		m.ScanFilesProcessed.WithLabelValues("series", "error").Add(float64(len(result.Errors)))
+	}
 }
 
 // showFolder represents a top-level directory in the library root.
@@ -519,13 +529,21 @@ func (s *SeriesScanner) addSeriesUnmatched(scanID string, result *ScanResult, pa
 func (s *SeriesScanner) failSeriesScan(scanID string, errMsg string) {
 	now := time.Now()
 	s.mu.Lock()
+	var startedAt time.Time
 	if result, ok := s.scans[scanID]; ok {
 		result.Status = ScanStatusFailed
 		result.Errors = append(result.Errors, errMsg)
 		result.CompletedAt = &now
+		startedAt = result.StartedAt
 	}
 	s.mu.Unlock()
 	s.logger.Error("series scan failed", "scanId", scanID, "error", errMsg)
+	if m := telemetry.App(); m != nil {
+		m.ScanTotal.WithLabelValues("series", "failed").Inc()
+		if !startedAt.IsZero() {
+			m.ScanDuration.WithLabelValues("series").Observe(time.Since(startedAt).Seconds())
+		}
+	}
 }
 
 // extractSeasonFromDir extracts a season number from a directory name

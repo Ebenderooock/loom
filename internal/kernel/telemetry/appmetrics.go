@@ -1,6 +1,10 @@
 package telemetry
 
-import "github.com/prometheus/client_golang/prometheus"
+import (
+	"sync"
+
+	"github.com/prometheus/client_golang/prometheus"
+)
 
 // AppMetrics holds domain-specific gauges and counters for Loom
 // application telemetry. Create one via NewAppMetrics and update the
@@ -10,11 +14,25 @@ import "github.com/prometheus/client_golang/prometheus"
 type AppMetrics struct {
 	MoviesTotal   prometheus.Gauge
 	SeriesTotal   prometheus.Gauge
+	EpisodesTotal prometheus.Gauge
+
+	LibrariesTotal   prometheus.Gauge
+	LibrarySizeBytes *prometheus.GaugeVec
 
 	IndexersConfigured prometheus.Gauge
 	IndexersHealthy    prometheus.Gauge
 
-	DownloadsActive prometheus.Gauge
+	ScanTotal          *prometheus.CounterVec
+	ScanDuration       *prometheus.HistogramVec
+	ScanFilesProcessed *prometheus.CounterVec
+
+	DownloadsActive        prometheus.Gauge
+	DownloadClientsTotal   prometheus.Gauge
+	DownloadClientsHealthy prometheus.Gauge
+	DownloadQueueSize      prometheus.Gauge
+	DownloadSpeedBytes     prometheus.Gauge
+
+	QualityProfilesTotal prometheus.Gauge
 
 	SearchRequests *prometheus.CounterVec
 	ImportTotal    *prometheus.CounterVec
@@ -34,6 +52,18 @@ func NewAppMetrics(reg *prometheus.Registry) *AppMetrics {
 			Name: "loom_series_total",
 			Help: "Current number of series in the library.",
 		}),
+		EpisodesTotal: prometheus.NewGauge(prometheus.GaugeOpts{
+			Name: "loom_episodes_total",
+			Help: "Current total episodes tracked.",
+		}),
+		LibrariesTotal: prometheus.NewGauge(prometheus.GaugeOpts{
+			Name: "loom_libraries_total",
+			Help: "Number of configured libraries.",
+		}),
+		LibrarySizeBytes: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Name: "loom_library_size_bytes",
+			Help: "Size of each library in bytes.",
+		}, []string{"library_name"}),
 		IndexersConfigured: prometheus.NewGauge(prometheus.GaugeOpts{
 			Name: "loom_indexers_configured",
 			Help: "Number of configured indexers.",
@@ -42,9 +72,42 @@ func NewAppMetrics(reg *prometheus.Registry) *AppMetrics {
 			Name: "loom_indexers_healthy",
 			Help: "Number of indexers currently reporting healthy.",
 		}),
+		ScanTotal: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "loom_scan_total",
+			Help: "Total scan operations.",
+		}, []string{"type", "status"}),
+		ScanDuration: prometheus.NewHistogramVec(prometheus.HistogramOpts{
+			Name:    "loom_scan_duration_seconds",
+			Help:    "Scan duration in seconds.",
+			Buckets: prometheus.ExponentialBuckets(1, 2, 12),
+		}, []string{"type"}),
+		ScanFilesProcessed: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "loom_scan_files_processed_total",
+			Help: "Files processed during scans.",
+		}, []string{"type", "result"}),
 		DownloadsActive: prometheus.NewGauge(prometheus.GaugeOpts{
 			Name: "loom_downloads_active",
 			Help: "Number of currently active downloads.",
+		}),
+		DownloadClientsTotal: prometheus.NewGauge(prometheus.GaugeOpts{
+			Name: "loom_download_clients_total",
+			Help: "Configured download clients.",
+		}),
+		DownloadClientsHealthy: prometheus.NewGauge(prometheus.GaugeOpts{
+			Name: "loom_download_clients_healthy",
+			Help: "Healthy download clients.",
+		}),
+		DownloadQueueSize: prometheus.NewGauge(prometheus.GaugeOpts{
+			Name: "loom_download_queue_size",
+			Help: "Items in download queue.",
+		}),
+		DownloadSpeedBytes: prometheus.NewGauge(prometheus.GaugeOpts{
+			Name: "loom_download_speed_bytes",
+			Help: "Current download speed in bytes/sec.",
+		}),
+		QualityProfilesTotal: prometheus.NewGauge(prometheus.GaugeOpts{
+			Name: "loom_quality_profiles_total",
+			Help: "Number of quality profiles.",
 		}),
 		SearchRequests: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "loom_search_requests_total",
@@ -62,9 +125,20 @@ func NewAppMetrics(reg *prometheus.Registry) *AppMetrics {
 	reg.MustRegister(
 		m.MoviesTotal,
 		m.SeriesTotal,
+		m.EpisodesTotal,
+		m.LibrariesTotal,
+		m.LibrarySizeBytes,
 		m.IndexersConfigured,
 		m.IndexersHealthy,
+		m.ScanTotal,
+		m.ScanDuration,
+		m.ScanFilesProcessed,
 		m.DownloadsActive,
+		m.DownloadClientsTotal,
+		m.DownloadClientsHealthy,
+		m.DownloadQueueSize,
+		m.DownloadSpeedBytes,
+		m.QualityProfilesTotal,
 		m.SearchRequests,
 		m.ImportTotal,
 		m.NotifSent,
@@ -73,14 +147,17 @@ func NewAppMetrics(reg *prometheus.Registry) *AppMetrics {
 }
 
 var (
-	appMetrics    *AppMetrics
+	appMetrics     *AppMetrics
+	appMetricsOnce sync.Once
 )
 
 // InitAppMetrics creates and stores the package-level AppMetrics
-// singleton. Typically called once from server startup after the
-// Telemetry instance has been initialised.
+// singleton. Safe to call multiple times — only the first call has
+// effect (protected by sync.Once).
 func InitAppMetrics(reg *prometheus.Registry) *AppMetrics {
-	appMetrics = NewAppMetrics(reg)
+	appMetricsOnce.Do(func() {
+		appMetrics = NewAppMetrics(reg)
+	})
 	return appMetrics
 }
 

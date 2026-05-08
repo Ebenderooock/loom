@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/ebenderooock/loom/internal/kernel/telemetry"
 	"github.com/ebenderooock/loom/internal/metadata"
 	"github.com/ebenderooock/loom/internal/movies"
 	"github.com/ebenderooock/loom/internal/parser"
@@ -189,16 +190,25 @@ func (s *Scanner) MatchFile(ctx context.Context, unmatchedID string, tmdbID stri
 func (s *Scanner) failScan(scanID string, errMsg string) {
 	now := time.Now()
 	s.mu.Lock()
+	var startedAt time.Time
 	if result, ok := s.scans[scanID]; ok {
 		result.Status = ScanStatusFailed
 		result.Errors = append(result.Errors, errMsg)
 		result.CompletedAt = &now
+		startedAt = result.StartedAt
 	}
 	s.mu.Unlock()
 	s.logger.Error("scan failed", "scanId", scanID, "error", errMsg)
+	if m := telemetry.App(); m != nil {
+		m.ScanTotal.WithLabelValues("movie", "failed").Inc()
+		if !startedAt.IsZero() {
+			m.ScanDuration.WithLabelValues("movie").Observe(time.Since(startedAt).Seconds())
+		}
+	}
 }
 
 func (s *Scanner) runScan(ctx context.Context, scanID string, libraryPath string) {
+	scanStart := time.Now()
 	s.logger.Info("starting library scan", "scanId", scanID, "path", libraryPath)
 
 	// Walk the root folder and find video files
@@ -237,6 +247,14 @@ func (s *Scanner) runScan(ctx context.Context, scanID string, libraryPath string
 		"unmatched", result.Unmatched,
 		"imported", result.Imported,
 	)
+
+	if m := telemetry.App(); m != nil {
+		m.ScanTotal.WithLabelValues("movie", "success").Inc()
+		m.ScanDuration.WithLabelValues("movie").Observe(time.Since(scanStart).Seconds())
+		m.ScanFilesProcessed.WithLabelValues("movie", "matched").Add(float64(result.Matched))
+		m.ScanFilesProcessed.WithLabelValues("movie", "unmatched").Add(float64(result.Unmatched))
+		m.ScanFilesProcessed.WithLabelValues("movie", "error").Add(float64(len(result.Errors)))
+	}
 }
 
 type scannedFile struct {

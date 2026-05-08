@@ -400,11 +400,11 @@ export function MovieDetailSheet({
               <p className="text-sm text-white/70 mt-0.5 drop-shadow">{movie.year > 0 && movie.year}</p>
             </div>
 
-            {/* Monitoring toggle — bookmark style */}
+            {/* Monitoring toggle — offset left to avoid sheet close button */}
             <button
               onClick={handleToggleMonitoring}
               className={cn(
-                "absolute top-4 right-4 z-20 p-2 rounded-full transition-all duration-200 shadow-lg",
+                "absolute top-4 right-14 z-20 p-2 rounded-full transition-all duration-200 shadow-lg",
                 isMonitored
                   ? "bg-accent text-accent-foreground hover:bg-accent/90"
                   : "bg-black/50 text-white/70 hover:bg-black/70 hover:text-white",
@@ -420,31 +420,35 @@ export function MovieDetailSheet({
 
           {/* ── Action Buttons toolbar ── */}
           <div className="px-6 pb-2">
-            <div className="flex items-center gap-2 flex-wrap">
-              <Button size="sm" variant="outline" className="gap-1.5" onClick={handleAutoSearch} disabled={autoSearching} title="Automated search (uses quality profile to pick the best result)">
+            <div className="flex items-center gap-1.5">
+              {/* Primary actions with labels */}
+              <Button size="sm" variant="outline" className="gap-1.5 h-8 text-xs" onClick={handleAutoSearch} disabled={autoSearching} title="Automated search (uses quality profile to pick the best result)">
                 <Search className={cn("w-3.5 h-3.5", autoSearching && "animate-spin")} />{autoSearching ? "Searching..." : "Search"}
               </Button>
-              <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setSearchOpen(true)}>
-                <Download className="w-3.5 h-3.5" />Interactive Search
+              <Button size="sm" variant="outline" className="gap-1.5 h-8 text-xs" onClick={() => setSearchOpen(true)} title="Interactive search — browse releases manually">
+                <Download className="w-3.5 h-3.5" />Browse
               </Button>
-              <Button size="sm" variant="outline" className="gap-1.5" onClick={() => { setEditing(true); setEditProfile(movie.qualityProfileId); setEditMonitoring(movie.monitoringStatus); }}>
+              <Button size="sm" variant="outline" className="gap-1.5 h-8 text-xs" onClick={() => { setEditing(true); setEditProfile(movie.qualityProfileId); setEditMonitoring(movie.monitoringStatus); }} title="Edit movie settings">
                 <Pencil className="w-3.5 h-3.5" />Edit
               </Button>
-              <Button size="sm" variant="outline" className="gap-1.5" onClick={handleRefresh} disabled={refreshing}>
-                <RefreshCw className={cn("w-3.5 h-3.5", refreshing && "animate-spin")} />Refresh
+
+              {/* Separator */}
+              <div className="w-px h-5 bg-border mx-0.5" />
+
+              {/* Secondary actions — icon only */}
+              <Button size="icon" variant="ghost" className="h-8 w-8" onClick={handleRefresh} disabled={refreshing} title="Refresh metadata from TMDB">
+                <RefreshCw className={cn("w-3.5 h-3.5", refreshing && "animate-spin")} />
               </Button>
-              <Button size="sm" variant="outline" className="gap-1.5" onClick={handleRescan} disabled={rescanning} title="Rescan library folder for new files">
-                <HardDriveDownload className={cn("w-3.5 h-3.5", rescanning && "animate-spin")} />{rescanning ? "Scanning..." : "Rescan"}
+              <Button size="icon" variant="ghost" className="h-8 w-8" onClick={handleRescan} disabled={rescanning} title="Rescan library folder for new files">
+                <HardDriveDownload className={cn("w-3.5 h-3.5", rescanning && "animate-spin")} />
               </Button>
-              <Button size="sm" variant="outline" className="gap-1.5" onClick={handleArchiveToggle} disabled={archiving}>
-                {movie.monitoringStatus === "unmonitored" ? (
-                  <><ArchiveRestore className="w-3.5 h-3.5" />Unarchive</>
-                ) : (
-                  <><Archive className="w-3.5 h-3.5" />Archive</>
-                )}
+              <Button size="icon" variant="ghost" className="h-8 w-8" onClick={handleArchiveToggle} disabled={archiving} title={movie.monitoringStatus === "unmonitored" ? "Unarchive" : "Archive"}>
+                {movie.monitoringStatus === "unmonitored" ? <ArchiveRestore className="w-3.5 h-3.5" /> : <Archive className="w-3.5 h-3.5" />}
               </Button>
-              <Button size="sm" variant="destructive" className="gap-1.5 ml-auto" onClick={() => setDeleteOpen(true)}>
-                <Trash2 className="w-3.5 h-3.5" />Delete
+
+              {/* Delete — pushed right */}
+              <Button size="icon" variant="ghost" className="h-8 w-8 ml-auto text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => setDeleteOpen(true)} title="Delete movie">
+                <Trash2 className="w-3.5 h-3.5" />
               </Button>
             </div>
           </div>
