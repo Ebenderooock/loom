@@ -27,7 +27,7 @@ import {
   X,
   Activity,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, formatBytes } from "@/lib/utils";
 import { toast } from "sonner";
 import {
   searchIndexers,
@@ -43,17 +43,7 @@ import {
 
 // ─── Helpers ──────────────────────────────────────────────────────────
 
-function formatBytes(n?: number): string {
-  if (typeof n !== "number" || !Number.isFinite(n) || n < 0) return "—";
-  const units = ["B", "KB", "MB", "GB", "TB"];
-  let v = n;
-  let i = 0;
-  while (v >= 1024 && i < units.length - 1) {
-    v /= 1024;
-    i++;
-  }
-  return `${v.toFixed(v >= 10 || i === 0 ? 0 : 1)} ${units[i]}`;
-}
+
 
 function formatAge(iso?: string): string {
   if (!iso) return "—";

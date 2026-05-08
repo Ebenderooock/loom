@@ -294,13 +294,8 @@ export const MEDIA_TYPES: { value: MediaType; label: string }[] = [
   { value: "music", label: "Music" },
 ];
 
-export function formatBytes(bytes: number): string {
-  if (bytes === 0) return "0 B";
-  const units = ["B", "KB", "MB", "GB", "TB"];
-  const i = Math.floor(Math.log(bytes) / Math.log(1024));
-  const val = bytes / Math.pow(1024, i);
-  return `${val.toFixed(i > 0 ? 1 : 0)} ${units[i]}`;
-}
+// Re-export formatBytes from the centralized utils module for backwards compat
+export { formatBytes } from "@/lib/utils";
 
 export function getMediaTypeLabel(type: MediaType): string {
   return MEDIA_TYPES.find((t) => t.value === type)?.label ?? type;

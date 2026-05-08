@@ -225,18 +225,27 @@ export function MoviesPage() {
 
   const handleBulkQualityProfile = async (profileId: string) => {
     const ids = Array.from(selectedIds);
-    await Promise.all(ids.map(id =>
+    const results = await Promise.allSettled(ids.map(id =>
       fetch(`/api/v1/movies/${id}`, {
         method: "PUT",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ qualityProfileId: profileId }),
-      })
+      }).then(r => { if (!r.ok) throw new Error(`${r.status}`); return id; })
     ));
-    setMovies(prev => prev.map(m => selectedIds.has(m.id) ? { ...m, qualityProfileId: profileId } : m));
+    const succeeded = results.filter(r => r.status === "fulfilled").map(r => (r as PromiseFulfilledResult<string>).value);
+    const failed = results.filter(r => r.status === "rejected").length;
+    if (succeeded.length > 0) {
+      const succSet = new Set(succeeded);
+      setMovies(prev => prev.map(m => succSet.has(m.id) ? { ...m, qualityProfileId: profileId } : m));
+    }
     clearSelection();
     const profile = qualityProfiles.find(p => p.id === profileId);
-    toast.success(`${ids.length} movie${ids.length !== 1 ? "s" : ""} set to ${profile?.name ?? "profile"}`);
+    if (failed > 0) {
+      toast.error(`${failed} movie${failed !== 1 ? "s" : ""} failed to update`);
+    } else {
+      toast.success(`${ids.length} movie${ids.length !== 1 ? "s" : ""} set to ${profile?.name ?? "profile"}`);
+    }
   };
 
   // Movie update/delete from detail sheet

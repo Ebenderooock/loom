@@ -34,18 +34,18 @@ func startScan(s *Scanner, libStore *libraries.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req startScanRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, `{"error":"invalid request body"}`, http.StatusBadRequest)
+			writeJSONError(w, "invalid request body", http.StatusBadRequest)
 			return
 		}
 
 		if req.LibraryID == "" {
-			http.Error(w, `{"error":"libraryId is required"}`, http.StatusBadRequest)
+			writeJSONError(w, "libraryId is required", http.StatusBadRequest)
 			return
 		}
 
 		lib, err := libStore.Get(r.Context(), req.LibraryID)
 		if err != nil {
-			http.Error(w, `{"error":"library not found"}`, http.StatusNotFound)
+			writeJSONError(w, "library not found", http.StatusNotFound)
 			return
 		}
 
@@ -65,7 +65,7 @@ func getScanStatus(s *Scanner) http.HandlerFunc {
 		scanID := chi.URLParam(r, "scanId")
 		result := s.GetScan(scanID)
 		if result == nil {
-			http.Error(w, `{"error":"scan not found"}`, http.StatusNotFound)
+			writeJSONError(w, "scan not found", http.StatusNotFound)
 			return
 		}
 
@@ -112,18 +112,18 @@ func startSeriesScan(ss *SeriesScanner, libStore *libraries.Store) http.HandlerF
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req startSeriesScanRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, `{"error":"invalid request body"}`, http.StatusBadRequest)
+			writeJSONError(w, "invalid request body", http.StatusBadRequest)
 			return
 		}
 
 		if req.LibraryID == "" {
-			http.Error(w, `{"error":"libraryId is required"}`, http.StatusBadRequest)
+			writeJSONError(w, "libraryId is required", http.StatusBadRequest)
 			return
 		}
 
 		lib, err := libStore.Get(r.Context(), req.LibraryID)
 		if err != nil {
-			http.Error(w, `{"error":"library not found"}`, http.StatusNotFound)
+			writeJSONError(w, "library not found", http.StatusNotFound)
 			return
 		}
 
@@ -147,7 +147,7 @@ func getSeriesScanStatus(ss *SeriesScanner) http.HandlerFunc {
 		scanID := chi.URLParam(r, "scanId")
 		result := ss.GetSeriesScanStatus(scanID)
 		if result == nil {
-			http.Error(w, `{"error":"scan not found"}`, http.StatusNotFound)
+			writeJSONError(w, "scan not found", http.StatusNotFound)
 			return
 		}
 
@@ -172,7 +172,7 @@ func matchFile(s *Scanner) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req matchFileRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, `{"error":"invalid request body"}`, http.StatusBadRequest)
+			writeJSONError(w, "invalid request body", http.StatusBadRequest)
 			return
 		}
 
@@ -190,7 +190,7 @@ func rescanSeries(ss *SeriesScanner, libStore *libraries.Store) http.HandlerFunc
 	return func(w http.ResponseWriter, r *http.Request) {
 		seriesID := chi.URLParam(r, "id")
 		if seriesID == "" {
-			http.Error(w, `{"error":"series id required"}`, http.StatusBadRequest)
+			writeJSONError(w, "series id required", http.StatusBadRequest)
 			return
 		}
 

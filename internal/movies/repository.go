@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"time"
 )
 
@@ -253,6 +254,9 @@ func (r *sqlRepo) GetMovieFileByPath(ctx context.Context, path string) (*MovieFi
 		 FROM movie_files WHERE file_path = ? AND deleted_at IS NULL`,
 		path,
 	).Scan(&mf.ID, &mf.MovieID, &mf.FilePath, &mf.Size, &mf.Quality, &mf.Format, &mediaInfoBytes, &mf.FileDate, &mf.DateAdded, &mf.CreatedAt, &mf.UpdatedAt, &mf.DeletedAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
 	if err != nil {
 		return nil, err
 	}

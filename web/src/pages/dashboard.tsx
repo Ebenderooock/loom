@@ -7,10 +7,11 @@ import {
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useSystemStatus } from "@/lib/api";
+import { useLibraries } from "@/lib/libraries-api";
 import { useSetPageHeader } from "@/hooks/use-page-header";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { cn } from "@/lib/utils";
+import { cn, formatBytes } from "@/lib/utils";
 import {
   Film,
   Tv,
@@ -24,7 +25,6 @@ import {
   Clock,
   Rocket,
   Settings,
-  HardDrive,
   FolderOpen,
   type LucideIcon,
 } from "lucide-react";
@@ -92,22 +92,6 @@ function useDownloadClients() {
       });
       if (!res.ok) throw new Error("Failed to fetch download clients");
       return (await res.json()) as { data: unknown[] };
-    },
-    staleTime: 60_000,
-    retry: 1,
-  });
-}
-
-function useLibraries() {
-  return useQuery({
-    queryKey: ["dashboard", "libraries"],
-    queryFn: async ({ signal }) => {
-      const res = await fetch("/api/v1/libraries", {
-        signal,
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error("Failed to fetch libraries");
-      return (await res.json()) as { data: { id: string; name: string; path: string; mediaType: string; disk_space: { total_bytes: number; free_bytes: number; used_bytes: number } }[] };
     },
     staleTime: 60_000,
     retry: 1,
@@ -369,17 +353,9 @@ function SystemHealthCard() {
 // Storage Overview
 // ---------------------------------------------------------------------------
 
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return "0 B";
-  const k = 1024;
-  const sizes = ["B", "KB", "MB", "GB", "TB"];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return `${(bytes / Math.pow(k, i)).toFixed(1)} ${sizes[i]}`;
-}
-
 function StorageCard() {
   const { data, isLoading } = useLibraries();
-  const libs = data?.data ?? [];
+  const libs = data ?? [];
   const withSpace = libs.filter((l) => l.disk_space && l.disk_space.total_bytes > 0);
 
   if (isLoading) {
