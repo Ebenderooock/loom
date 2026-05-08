@@ -1,13 +1,14 @@
 # syntax=docker/dockerfile:1.7
 
 # ---------- frontend build ----------
-FROM node:20-alpine AS web
+FROM node:22-alpine AS web
+RUN corepack enable && corepack prepare pnpm@9 --activate
 WORKDIR /web
-COPY web/package.json web/package-lock.json* ./
-RUN --mount=type=cache,target=/root/.npm \
-    npm ci --no-audit --no-fund || npm install --no-audit --no-fund
+COPY web/package.json web/pnpm-lock.yaml ./
+RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
+    pnpm install --frozen-lockfile
 COPY web/ ./
-RUN npm run build
+RUN pnpm run build
 
 # ---------- backend build ----------
 FROM golang:1.26-alpine AS build

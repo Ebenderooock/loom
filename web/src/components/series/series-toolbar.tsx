@@ -176,7 +176,7 @@ export function SeriesToolbar({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                {profiles.map((p) => (
+                {_profiles.map((p: QualityProfile) => (
                   <DropdownMenuItem key={p.id} onClick={() => onBulkQualityProfile(p.id)}>
                     {p.name}
                   </DropdownMenuItem>
