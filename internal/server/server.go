@@ -160,6 +160,8 @@ func New(cfg *config.Config, appCfg *appconfig.Config, logger *slog.Logger, tel 
 		httpMetrics: telemetry.NewHTTPMetrics(tel.Registry()),
 	}
 
+	telemetry.InitAppMetrics(tel.Registry())
+
 	mux := s.newMux()
 
 	s.httpSrv = &http.Server{
