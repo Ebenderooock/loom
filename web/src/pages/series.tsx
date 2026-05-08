@@ -218,18 +218,27 @@ export function SeriesPage() {
 
   const handleBulkQualityProfile = async (profileId: string) => {
     const ids = Array.from(selectedIds);
-    await Promise.all(ids.map(id =>
+    const results = await Promise.allSettled(ids.map(id =>
       fetch(`/api/v1/series/${id}`, {
         method: "PUT",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ qualityProfileId: profileId }),
-      })
+      }).then(r => { if (!r.ok) throw new Error(`${r.status}`); return id; })
     ));
-    setSeriesList(prev => prev.map(s => selectedIds.has(s.id) ? { ...s, qualityProfileId: profileId } : s));
+    const succeeded = results.filter(r => r.status === "fulfilled").map(r => (r as PromiseFulfilledResult<string>).value);
+    const failed = results.filter(r => r.status === "rejected").length;
+    if (succeeded.length > 0) {
+      const succSet = new Set(succeeded);
+      setSeriesList(prev => prev.map(s => succSet.has(s.id) ? { ...s, qualityProfileId: profileId } : s));
+    }
     clearSelection();
     const profile = qualityProfiles.find(p => p.id === profileId);
-    toast.success(`${ids.length} series set to ${profile?.name ?? "profile"}`);
+    if (failed > 0) {
+      toast.error(`${failed} series failed to update`);
+    } else {
+      toast.success(`${ids.length} series set to ${profile?.name ?? "profile"}`);
+    }
   };
 
   // Series update/delete from detail sheet

@@ -96,15 +96,21 @@ export function LibraryPage() {
   const handleRescanAll = async () => {
     if (!libraries || libraries.length === 0) return;
     setRescanningAll(true);
-    let started = 0;
-    for (const lib of libraries) {
-      try {
-        await fetch(`/api/v1/libraries/${lib.id}/scan`, { method: "POST", credentials: "include" });
-        started++;
-      } catch { /* continue */ }
-    }
+    const results = await Promise.allSettled(
+      libraries.map(lib =>
+        fetch(`/api/v1/libraries/${lib.id}/scan`, { method: "POST", credentials: "include" })
+          .then(r => { if (!r.ok) throw new Error(`${r.status}`); })
+      )
+    );
     setRescanningAll(false);
-    toast.success(`Scan started for ${started} ${started === 1 ? "library" : "libraries"}`);
+    const failed = results.filter(r => r.status === "rejected").length;
+    const started = results.length - failed;
+    if (failed > 0) {
+      toast.error(`${failed} ${failed === 1 ? "library" : "libraries"} failed to scan`);
+    }
+    if (started > 0) {
+      toast.success(`Scan started for ${started} ${started === 1 ? "library" : "libraries"}`);
+    }
   };
 
   if (isLoading) {
