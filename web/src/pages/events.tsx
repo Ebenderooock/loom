@@ -22,7 +22,8 @@ import { levelVariant } from "@/lib/status-utils";
 import { EmptyState } from "@/components/ui/empty-state";
 import { LoadingState } from "@/components/ui/loading-state";
 import { ChevronLeft, ChevronRight, ChevronDown, ChevronUp, RefreshCw } from "lucide-react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useQuery } from "@tanstack/react-query";
+import { apiFetch } from "@/lib/fetch";
 
 const PAGE_SIZE = 50;
 
@@ -61,9 +62,86 @@ function tryParseJSON(s?: string): Record<string, unknown> | null {
   }
 }
 
+// ─── Search diagnostics inline (fetches per-indexer breakdown) ───────
+
+interface IndexerQueryEntry {
+  id: string;
+  indexer_id: string;
+  indexer_name: string;
+  latency_ms: number;
+  result_count: number;
+  error?: string;
+  status: string;
+}
+
+interface QueryLogDetail {
+  id: string;
+  query: string;
+  query_type: string;
+  total_results: number;
+  status: string;
+  indexers?: IndexerQueryEntry[];
+}
+
+function useSearchLogDetail(id: string | null) {
+  return useQuery({
+    queryKey: ["search-log", id],
+    queryFn: async () => {
+      const res = await apiFetch(`/api/v1/search/log/${id}`);
+      if (!res.ok) throw new Error(`search log: ${res.status}`);
+      return (await res.json()) as QueryLogDetail;
+    },
+    enabled: !!id,
+  });
+}
+
+function SearchBreakdown({ queryLogId }: { queryLogId: string }) {
+  const { data, isLoading } = useSearchLogDetail(queryLogId);
+
+  if (isLoading) {
+    return <p className="text-xs text-muted-foreground animate-pulse">Loading search diagnostics…</p>;
+  }
+
+  const indexers = data?.indexers ?? [];
+  if (indexers.length === 0) {
+    return <p className="text-xs text-muted-foreground">No per-indexer data recorded.</p>;
+  }
+
+  const maxLatency = Math.max(...indexers.map((i) => i.latency_ms), 1);
+
+  return (
+    <div className="mt-2 space-y-1.5">
+      <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Per-Indexer Breakdown</p>
+      {indexers.map((ix) => (
+        <div key={ix.id} className="flex items-center gap-2 text-xs">
+          <span className="w-28 truncate font-medium">{ix.indexer_name}</span>
+          <div className="flex-1 h-1.5 rounded-full bg-muted">
+            <div
+              className={`h-1.5 rounded-full ${ix.status === "completed" ? "bg-blue-500" : "bg-red-500"}`}
+              style={{ width: `${Math.min((ix.latency_ms / maxLatency) * 100, 100)}%` }}
+            />
+          </div>
+          <span className="text-muted-foreground w-14 text-right tabular-nums">{ix.latency_ms}ms</span>
+          <span className="text-muted-foreground w-16 text-right tabular-nums">{ix.result_count} results</span>
+          <Badge variant="outline" className={`text-[9px] px-1 ${
+            ix.status === "completed" ? "bg-green-500/10 text-green-500 border-0" :
+            ix.status === "failed" ? "bg-red-500/10 text-red-500 border-0" :
+            "bg-gray-500/10 text-gray-500 border-0"
+          }`}>
+            {ix.status}
+          </Badge>
+          {ix.error && <span className="text-red-400 truncate max-w-[12rem]">{ix.error}</span>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function DetailPanel({ entry }: { entry: AuditLogEntry }) {
   const detail = tryParseJSON(entry.detail);
   if (!detail) return null;
+
+  const queryLogId = typeof detail.query_log_id === "string" ? detail.query_log_id : null;
 
   return (
     <div className="bg-muted/50 rounded p-3 text-xs space-y-1 max-w-2xl">
@@ -87,6 +165,7 @@ function DetailPanel({ entry }: { entry: AuditLogEntry }) {
           <span className="text-foreground">{entry.source}</span>
         </div>
       )}
+      {queryLogId && <SearchBreakdown queryLogId={queryLogId} />}
     </div>
   );
 }
