@@ -8,8 +8,14 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useSystemStatus } from "@/lib/api";
 import { useLibraries } from "@/lib/libraries-api";
+import {
+  useDashboardMovies,
+  useDashboardSeries,
+  useDashboardIndexers,
+  useDashboardDownloadClients,
+  useDashboardIndexerHealth,
+} from "@/lib/dashboard-api";
 import { useSetPageHeader } from "@/hooks/use-page-header";
-import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { cn, formatBytes } from "@/lib/utils";
 import {
@@ -29,109 +35,6 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
-
-// ---------------------------------------------------------------------------
-// Inline data-fetching hooks
-// ---------------------------------------------------------------------------
-
-function useMovies() {
-  return useQuery({
-    queryKey: ["dashboard", "movies"],
-    queryFn: async ({ signal }) => {
-      const res = await fetch("/api/v1/movies?limit=1", {
-        signal,
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error("Failed to fetch movies");
-      return (await res.json()) as { data: unknown[]; total: number };
-    },
-    staleTime: 60_000,
-    retry: 1,
-  });
-}
-
-function useSeries() {
-  return useQuery({
-    queryKey: ["dashboard", "series"],
-    queryFn: async ({ signal }) => {
-      const res = await fetch("/api/v1/series?limit=1", {
-        signal,
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error("Failed to fetch series");
-      return (await res.json()) as { data: unknown[]; total: number };
-    },
-    staleTime: 60_000,
-    retry: 1,
-  });
-}
-
-function useIndexers() {
-  return useQuery({
-    queryKey: ["dashboard", "indexers"],
-    queryFn: async ({ signal }) => {
-      const res = await fetch("/api/v1/indexers", {
-        signal,
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error("Failed to fetch indexers");
-      return (await res.json()) as { data: unknown[] };
-    },
-    staleTime: 60_000,
-    retry: 1,
-  });
-}
-
-function useDownloadClients() {
-  return useQuery({
-    queryKey: ["dashboard", "download-clients"],
-    queryFn: async ({ signal }) => {
-      const res = await fetch("/api/v1/download-clients", {
-        signal,
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error("Failed to fetch download clients");
-      return (await res.json()) as { data: unknown[] };
-    },
-    staleTime: 60_000,
-    retry: 1,
-  });
-}
-
-function useIndexerHealth() {
-  return useQuery({
-    queryKey: ["dashboard", "indexer-health"],
-    queryFn: async ({ signal }) => {
-      const res = await fetch("/api/v1/indexers/health", {
-        signal,
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error("Failed to fetch indexer health");
-      const json = await res.json() as {
-        data: {
-          indexer_id: string;
-          indexer_name: string;
-          status: string;
-          last_error: string;
-          success_rate: number;
-          fail_count: number;
-        }[];
-      };
-      // Filter to only unhealthy indexers and map to display format
-      const issues = (json.data ?? [])
-        .filter((h) => h.status === "error" || h.status === "degraded")
-        .map((h) => ({
-          id: h.indexer_id,
-          name: h.indexer_name || h.indexer_id,
-          message: h.last_error || `${h.status} — ${h.fail_count} failed searches`,
-          severity: h.status as "error" | "degraded",
-        }));
-      return { data: issues };
-    },
-    staleTime: 60_000,
-    retry: 1,
-  });
-}
 
 // ---------------------------------------------------------------------------
 // Stat Card Component
@@ -293,7 +196,7 @@ function QuickActionsCard() {
 // ---------------------------------------------------------------------------
 
 function SystemHealthCard() {
-  const health = useIndexerHealth();
+  const health = useDashboardIndexerHealth();
   const status = useSystemStatus();
 
   const issues = health.data?.data ?? [];
@@ -476,10 +379,10 @@ function RecentActivityCard() {
 // ---------------------------------------------------------------------------
 
 export function DashboardPage() {
-  const movies = useMovies();
-  const series = useSeries();
-  const indexers = useIndexers();
-  const dlClients = useDownloadClients();
+  const movies = useDashboardMovies();
+  const series = useDashboardSeries();
+  const indexers = useDashboardIndexers();
+  const dlClients = useDashboardDownloadClients();
   useSetPageHeader("Dashboard");
 
   const movieCount = movies.data?.total ?? 0;

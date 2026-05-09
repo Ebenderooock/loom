@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
+import { apiFetch } from "@/lib/fetch";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -132,8 +133,8 @@ export function MoviesPage() {
     setIsLoading(true);
     try {
       const [moviesRes, profilesRes] = await Promise.all([
-        fetch("/api/v1/movies?limit=200", { credentials: "include" }),
-        fetch("/api/v1/quality-profiles", { credentials: "include" }),
+        apiFetch("/api/v1/movies?limit=200"),
+        apiFetch("/api/v1/quality-profiles"),
       ]);
       if (moviesRes.ok) {
         const data = await moviesRes.json();
@@ -203,10 +204,9 @@ export function MoviesPage() {
   const handleBulkMonitoring = async (status: "monitored" | "unmonitored") => {
     const ids = Array.from(selectedIds);
     await Promise.all(ids.map(id =>
-      fetch(`/api/v1/movies/${id}/monitoring`, {
+      apiFetch(`/api/v1/movies/${id}/monitoring`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        credentials: "include",
         body: JSON.stringify({ status }),
       }),
     ));
@@ -217,7 +217,7 @@ export function MoviesPage() {
 
   const handleBulkDelete = async () => {
     const ids = Array.from(selectedIds);
-    await Promise.all(ids.map(id => fetch(`/api/v1/movies/${id}`, { method: "DELETE", credentials: "include" })));
+    await Promise.all(ids.map(id => apiFetch(`/api/v1/movies/${id}`, { method: "DELETE" })));
     setMovies(prev => prev.filter(m => !selectedIds.has(m.id)));
     clearSelection();
     toast.success(`${ids.length} movie${ids.length !== 1 ? "s" : ""} deleted`);
@@ -226,9 +226,8 @@ export function MoviesPage() {
   const handleBulkQualityProfile = async (profileId: string) => {
     const ids = Array.from(selectedIds);
     const results = await Promise.allSettled(ids.map(id =>
-      fetch(`/api/v1/movies/${id}`, {
+      apiFetch(`/api/v1/movies/${id}`, {
         method: "PUT",
-        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ qualityProfileId: profileId }),
       }).then(r => { if (!r.ok) throw new Error(`${r.status}`); return id; })

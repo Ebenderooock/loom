@@ -57,6 +57,10 @@ type Engine struct {
 
 	// tmplCache caches parsed Go templates keyed by their raw string.
 	tmplCache sync.Map // string → *template.Template
+
+	// Cached result of configFieldsWithDefaults, computed once per engine.
+	cachedConfigFields map[string]string
+	cachedConfigOnce   sync.Once
 }
 
 // NewEngine builds a runnable Engine. httpClient may be nil; the
@@ -171,15 +175,18 @@ func (e *Engine) Test(ctx context.Context) error {
 // values always win; defaults fill gaps so templates like
 // `{{ .Config.apiurl }}` resolve even without explicit user config.
 func (e *Engine) configFieldsWithDefaults() map[string]string {
-	out := e.cfg.fields()
-	for _, s := range e.def.Settings {
-		if s.Default != "" {
-			if _, ok := out[s.Name]; !ok {
-				out[s.Name] = s.Default
+	e.cachedConfigOnce.Do(func() {
+		merged := e.cfg.fields()
+		for _, s := range e.def.Settings {
+			if s.Default != "" {
+				if _, ok := merged[s.Name]; !ok {
+					merged[s.Name] = s.Default
+				}
 			}
 		}
-	}
-	return out
+		e.cachedConfigFields = merged
+	})
+	return e.cachedConfigFields
 }
 
 // baseURL returns the active base URL with any trailing slash trimmed.
@@ -740,6 +747,34 @@ func (e *Engine) extractOne(node *goquery.Selection, tctx templateContext) (inde
 		}
 	}
 
+	// Warn if fixed-point iteration exhausted all passes without converging.
+	{
+		countUnresolved := 0
+		for name, field := range e.def.Search.Fields {
+			if field.Selector != "" || field.Text == "" {
+				continue
+			}
+			expanded := field.Text
+			if strings.Contains(expanded, "{{") {
+				var terr error
+				expanded, terr = e.expandTemplate(expanded, fieldCtx)
+				if terr != nil {
+					continue
+				}
+			}
+			next := applyFilters(expanded, field.Filters)
+			if values[name] != next {
+				countUnresolved++
+			}
+		}
+		if countUnresolved > 0 {
+			slog.Warn("cardigann: fixed-point iteration did not converge — possible cycle in computed fields",
+				"indexer", e.id,
+				"passes", maxPasses,
+				"remaining_unresolved", countUnresolved)
+		}
+	}
+
 	// Phase 3 — apply `default` fallbacks for selector fields that
 	// matched nothing (empty string).
 	for name, field := range e.def.Search.Fields {
@@ -983,6 +1018,8 @@ type templateContext struct {
 // Centralising construction avoids the fragile 20-field struct literal
 // in every call site.
 func newTemplateContext(q indexers.Query, keywords string, categories []string, config map[string]string) templateContext {
+	// Top-level IMDBID is the short numeric form (no "tt" prefix) for
+	// legacy Cardigann templates; Query.IMDBID retains the full "ttXXX" form.
 	imdbShort := strings.TrimPrefix(q.IMDBID, "tt")
 	return templateContext{
 		Keywords: keywords,

@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
+import { apiFetch } from "@/lib/fetch";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -128,8 +129,8 @@ export function SeriesPage() {
     setIsLoading(true);
     try {
       const [seriesRes, profilesRes] = await Promise.all([
-        fetch("/api/v1/series", { credentials: "include" }),
-        fetch("/api/v1/quality-profiles", { credentials: "include" }),
+        apiFetch("/api/v1/series"),
+        apiFetch("/api/v1/quality-profiles"),
       ]);
       if (seriesRes.ok) {
         const data = await seriesRes.json();
@@ -196,10 +197,9 @@ export function SeriesPage() {
   const handleBulkMonitoring = async (status: "monitored" | "unmonitored") => {
     const ids = Array.from(selectedIds);
     await Promise.all(ids.map(id =>
-      fetch(`/api/v1/series/${id}/monitoring`, {
+      apiFetch(`/api/v1/series/${id}/monitoring`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        credentials: "include",
         body: JSON.stringify({ status }),
       }),
     ));
@@ -210,7 +210,7 @@ export function SeriesPage() {
 
   const handleBulkDelete = async () => {
     const ids = Array.from(selectedIds);
-    await Promise.all(ids.map(id => fetch(`/api/v1/series/${id}`, { method: "DELETE", credentials: "include" })));
+    await Promise.all(ids.map(id => apiFetch(`/api/v1/series/${id}`, { method: "DELETE" })));
     setSeriesList(prev => prev.filter(s => !selectedIds.has(s.id)));
     clearSelection();
     toast.success(`${ids.length} series deleted`);
@@ -219,9 +219,8 @@ export function SeriesPage() {
   const handleBulkQualityProfile = async (profileId: string) => {
     const ids = Array.from(selectedIds);
     const results = await Promise.allSettled(ids.map(id =>
-      fetch(`/api/v1/series/${id}`, {
+      apiFetch(`/api/v1/series/${id}`, {
         method: "PUT",
-        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ qualityProfileId: profileId }),
       }).then(r => { if (!r.ok) throw new Error(`${r.status}`); return id; })

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useAuth } from "@/hooks/use-auth";
+import { apiFetch } from "@/lib/fetch";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -243,9 +244,8 @@ function IndexersStep({
     setAdding(true);
     setError(null);
     try {
-      const res = await fetch("/api/v1/indexers", {
+      const res = await apiFetch("/api/v1/indexers", {
         method: "POST",
-        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: name.trim(),
@@ -377,9 +377,8 @@ function DownloadClientsStep({
     setAdding(true);
     setError(null);
     try {
-      const res = await fetch("/api/v1/download-clients", {
+      const res = await apiFetch("/api/v1/download-clients", {
         method: "POST",
-        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: name.trim(),
@@ -545,9 +544,8 @@ export function SetupPage() {
     setError(null);
 
     try {
-      const response = await fetch("/api/v1/auth/initialize", {
+      const response = await apiFetch("/api/v1/auth/initialize", {
         method: "POST",
-        credentials: "include",
         headers: {
           "Content-Type": "application/json",
         },

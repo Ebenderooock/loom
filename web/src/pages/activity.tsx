@@ -1,4 +1,5 @@
 import * as React from "react";
+import { apiFetch } from "@/lib/fetch";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -84,11 +85,10 @@ async function queueAction(
   body: Record<string, unknown> = {},
 ): Promise<boolean> {
   try {
-    const res = await fetch(
+    const res = await apiFetch(
       `/api/v1/download-clients/${encodeURIComponent(clientId)}/${action}`,
       {
         method: "POST",
-        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       },
@@ -109,7 +109,7 @@ function DownloadQueue() {
 
   const fetchQueue = React.useCallback(async () => {
     try {
-      const res = await fetch("/api/v1/activity", { credentials: "include" });
+      const res = await apiFetch("/api/v1/activity");
       if (res.ok) {
         const body = await res.json();
         setItems(body.items ?? []);
@@ -373,7 +373,7 @@ function DownloadHistory() {
   React.useEffect(() => {
     async function load() {
       try {
-        const res = await fetch("/api/v1/downloads/history?limit=50", { credentials: "include" });
+        const res = await apiFetch("/api/v1/downloads/history?limit=50");
         if (res.ok) {
           const body = await res.json();
           setEntries(body ?? []);
@@ -466,7 +466,7 @@ function BlocklistViewer() {
 
   const fetchBlocklist = React.useCallback(async () => {
     try {
-      const res = await fetch("/api/v1/blocklist", { credentials: "include" });
+      const res = await apiFetch("/api/v1/blocklist");
       if (res.ok) {
         const body = await res.json();
         setEntries(body.data ?? []);
@@ -484,7 +484,7 @@ function BlocklistViewer() {
 
   const handleRemove = async (id: string) => {
     try {
-      await fetch(`/api/v1/blocklist/${id}`, { method: "DELETE", credentials: "include" });
+      await apiFetch(`/api/v1/blocklist/${id}`, { method: "DELETE" });
       setEntries((prev) => prev.filter((e) => e.id !== id));
     } catch {
       // silently fail
@@ -493,7 +493,7 @@ function BlocklistViewer() {
 
   const handleClearAll = async () => {
     try {
-      await fetch("/api/v1/blocklist", { method: "DELETE", credentials: "include" });
+      await apiFetch("/api/v1/blocklist", { method: "DELETE" });
       setEntries([]);
     } catch {
       // silently fail
@@ -583,7 +583,7 @@ function ReviewQueue() {
 
   const fetchReviews = React.useCallback(async () => {
     try {
-      const res = await fetch("/api/v1/reviews");
+      const res = await apiFetch("/api/v1/reviews");
       if (res.ok) {
         const body = await res.json();
         setReviews(body.data ?? []);
@@ -602,7 +602,7 @@ function ReviewQueue() {
   const handleAction = async (id: string, action: "approve" | "reject") => {
     setActing(id);
     try {
-      await fetch(`/api/v1/reviews/${id}/${action}`, { method: "POST" });
+      await apiFetch(`/api/v1/reviews/${id}/${action}`, { method: "POST" });
       setReviews((prev) => prev.filter((r) => r.id !== id));
     } catch {
       // silently fail
@@ -684,7 +684,7 @@ export function ActivityPage() {
   const [reviewCount, setReviewCount] = React.useState(0);
 
   React.useEffect(() => {
-    fetch("/api/v1/reviews/count")
+    apiFetch("/api/v1/reviews/count")
       .then((r) => r.json())
       .then((b) => setReviewCount(b.count ?? 0))
       .catch((err) => console.error("fetch failed:", err));

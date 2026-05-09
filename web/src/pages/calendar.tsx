@@ -164,42 +164,40 @@ function EventPill({ event }: { event: CalendarEvent }) {
   const isMovie = event.type === "movie";
   const isMissing = event.status === "missing";
 
-  // Movies: "Title (Year)", Episodes: "Series — S01E02"
   const label = isMovie
     ? event.title
     : `${event.seriesTitle ?? "Unknown"} — S${String(event.season).padStart(2, "0")}E${String(event.episode).padStart(2, "0")}`;
 
-  // Full tooltip with episode title when available
   const tooltip = isMovie
-    ? `${event.title}${event.year ? ` (${event.year})` : ""}`
-    : event.title;
+    ? `${event.title}${event.year ? ` (${event.year})` : ""}${event.releaseType && event.releaseType !== "release" ? ` [${event.releaseType}]` : ""}`
+    : `${event.seriesTitle ?? "Unknown"} — S${String(event.season).padStart(2, "0")}E${String(event.episode).padStart(2, "0")} — ${event.episodeTitle ?? event.title}`;
 
-  if (isMissing) {
-    return (
-      <Badge
-        variant="outline"
-        className={`block w-full truncate text-[10px] px-1 py-0 font-normal border ${
-          isMovie
-            ? "border-blue-500/50 text-blue-400"
-            : "border-purple-500/50 text-purple-400"
-        }`}
-        title={tooltip}
-      >
-        {label}
-      </Badge>
-    );
-  }
+  // Color scheme: movies=blue, episodes=purple, theatrical=amber, digital=teal
+  const colorMap = {
+    movie: isMissing
+      ? "border-blue-500/50 text-blue-400"
+      : "bg-blue-600 hover:bg-blue-700 text-white",
+    theatrical: isMissing
+      ? "border-amber-500/50 text-amber-400"
+      : "bg-amber-600 hover:bg-amber-700 text-white",
+    digital: isMissing
+      ? "border-teal-500/50 text-teal-400"
+      : "bg-teal-600 hover:bg-teal-700 text-white",
+    episode: isMissing
+      ? "border-purple-500/50 text-purple-400"
+      : "bg-purple-600 hover:bg-purple-700 text-white",
+  };
+
+  const colorKey = isMovie ? (event.releaseType === "theatrical" ? "theatrical" : event.releaseType === "digital" ? "digital" : "movie") : "episode";
+  const releaseLabel = event.releaseType === "theatrical" ? "🎬 " : event.releaseType === "digital" ? "💿 " : "";
 
   return (
     <Badge
-      className={`block w-full truncate text-[10px] px-1 py-0 font-normal ${
-        isMovie
-          ? "bg-blue-600 hover:bg-blue-600 text-white"
-          : "bg-purple-600 hover:bg-purple-600 text-white"
-      }`}
+      variant={isMissing ? "outline" : "default"}
+      className={`block w-full truncate text-[10px] px-1 py-0 font-normal ${isMissing ? "border " : ""}${colorMap[colorKey]}`}
       title={tooltip}
     >
-      {label}
+      {releaseLabel}{label}
     </Badge>
   );
 }

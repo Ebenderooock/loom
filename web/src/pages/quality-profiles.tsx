@@ -1,4 +1,5 @@
 import * as React from "react";
+import { apiFetch } from "@/lib/fetch";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -102,7 +103,7 @@ export function QualityProfilesPage() {
   // Fetch quality definitions for the editor and for display
   const [definitions, setDefinitions] = React.useState<QualityDefinition[]>([]);
   React.useEffect(() => {
-    fetch("/api/v1/movies/quality-definitions", { credentials: "include" })
+    apiFetch("/api/v1/movies/quality-definitions")
       .then((r) => r.ok ? r.json() : [])
       .then((data) => setDefinitions(Array.isArray(data) ? data : []))
       .catch((err) => console.error("fetch failed:", err));

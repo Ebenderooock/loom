@@ -11,6 +11,8 @@ const (
 )
 
 // mapMovieResponse converts a TMDb MovieResponse to our MovieMetadata.
+// Note: TheatricalDate and DigitalDate are populated separately via
+// Client.GetReleaseDates — they are not in the basic /movie/{id} response.
 func mapMovieResponse(resp *MovieResponse) *metadata.MovieMetadata {
 	m := &metadata.MovieMetadata{
 		Title:       resp.Title,
