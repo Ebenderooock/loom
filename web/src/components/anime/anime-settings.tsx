@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
+import { apiFetch } from "@/lib/fetch";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -40,13 +41,13 @@ export interface ReleaseGroup {
 // ─── API helpers ──────────────────────────────────────────────────────
 
 async function fetchPrefs(seriesId: string): Promise<AnimePreferences> {
-  const res = await fetch(`/api/v1/anime/preferences/${seriesId}`);
+  const res = await apiFetch(`/api/v1/anime/preferences/${seriesId}`);
   if (!res.ok) throw new Error("Failed to load anime preferences");
   return res.json();
 }
 
 async function savePrefs(prefs: AnimePreferences): Promise<void> {
-  const res = await fetch(`/api/v1/anime/preferences/${prefs.seriesId}`, {
+  const res = await apiFetch(`/api/v1/anime/preferences/${prefs.seriesId}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(prefs),
@@ -57,13 +58,13 @@ async function savePrefs(prefs: AnimePreferences): Promise<void> {
 async function fetchMappings(
   seriesId: string
 ): Promise<{ seriesId: string; mappings: EpisodeMapping[] }> {
-  const res = await fetch(`/api/v1/anime/mappings/${seriesId}`);
+  const res = await apiFetch(`/api/v1/anime/mappings/${seriesId}`);
   if (!res.ok) throw new Error("Failed to load episode mappings");
   return res.json();
 }
 
 async function fetchKnownGroups(): Promise<ReleaseGroup[]> {
-  const res = await fetch("/api/v1/anime/groups");
+  const res = await apiFetch("/api/v1/anime/groups");
   if (!res.ok) return [];
   const data = await res.json();
   return data.groups ?? [];

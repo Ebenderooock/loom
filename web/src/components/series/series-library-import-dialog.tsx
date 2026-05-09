@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import { apiFetch } from "@/lib/fetch";
 import {
   Dialog,
   DialogContent,
@@ -83,10 +84,9 @@ export function SeriesLibraryImportDialog({
     setUnmatchedFiles([]);
 
     try {
-      const res = await fetch("/api/v1/series/scan", {
+      const res = await apiFetch("/api/v1/series/scan", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        credentials: "include",
         body: JSON.stringify({ libraryId: selectedLibrary }),
       });
       const data = await res.json();
@@ -95,9 +95,7 @@ export function SeriesLibraryImportDialog({
       const poll = async () => {
         if (!mountedRef.current) return;
         try {
-          const statusRes = await fetch(`/api/v1/series/scan/${scanId}`, {
-            credentials: "include",
-          });
+          const statusRes = await apiFetch(`/api/v1/series/scan/${scanId}`);
           const result: ScanResult = await statusRes.json();
           if (!mountedRef.current) return;
           setScanResult(result);
@@ -106,9 +104,7 @@ export function SeriesLibraryImportDialog({
             pollTimeoutRef.current = setTimeout(poll, 1500);
           } else {
             setScanning(false);
-            const unmatchedRes = await fetch("/api/v1/series/scan/unmatched", {
-              credentials: "include",
-            });
+            const unmatchedRes = await apiFetch("/api/v1/series/scan/unmatched");
             const files: UnmatchedFile[] = await unmatchedRes.json();
             if (mountedRef.current) {
               setUnmatchedFiles(files);

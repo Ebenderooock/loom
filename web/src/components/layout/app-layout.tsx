@@ -1,5 +1,6 @@
 import * as React from "react";
 import { Link, Outlet, useRouterState } from "@tanstack/react-router";
+import { apiFetch } from "@/lib/fetch";
 import {
   Bell,
   Calendar,
@@ -122,7 +123,7 @@ function useReviewCount() {
   const [count, setCount] = React.useState(0);
   React.useEffect(() => {
     const load = () =>
-      fetch("/api/v1/reviews/count")
+      apiFetch("/api/v1/reviews/count")
         .then((r) => r.json())
         .then((b) => setCount(b.count ?? 0))
         .catch((err) => console.error("fetch failed:", err));

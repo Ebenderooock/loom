@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { apiFetch } from "@/lib/fetch";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -187,7 +188,7 @@ function SeasonAccordion({
 
   const fetchEpisodes = async () => {
     try {
-      const res = await fetch(`/api/v1/series/${seriesId}/seasons/${season.seasonNumber}/episodes`, { credentials: "include" });
+      const res = await apiFetch(`/api/v1/series/${seriesId}/seasons/${season.seasonNumber}/episodes`);
       if (res.ok) {
         const data = await res.json();
         setEpisodes(Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : []);
@@ -537,7 +538,7 @@ export function SeriesDetailSheet({
       // Fetch credits
       setCredits(null);
       setCreditsLoading(true);
-      fetch(`/api/v1/series/${series.id}/credits`, { credentials: "include" })
+      apiFetch(`/api/v1/series/${series.id}/credits`)
         .then(r => r.ok ? r.json() : null)
         .then(data => setCredits(data))
         .catch((err) => console.error("fetch failed:", err))
@@ -546,7 +547,7 @@ export function SeriesDetailSheet({
       // Fetch seasons
       setSeasons([]);
       setSeasonsLoading(true);
-      fetch(`/api/v1/series/${series.id}/seasons`, { credentials: "include" })
+      apiFetch(`/api/v1/series/${series.id}/seasons`)
         .then(r => r.ok ? r.json() : [])
         .then(data => setSeasons(Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : []))
         .catch((err) => console.error("fetch failed:", err))
@@ -563,10 +564,9 @@ export function SeriesDetailSheet({
   const handleSave = async () => {
     setSaving(true);
     try {
-      const res = await fetch(`/api/v1/series/${series.id}`, {
+      const res = await apiFetch(`/api/v1/series/${series.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        credentials: "include",
         body: JSON.stringify({
           qualityProfileId: editProfile,
           monitoringStatus: editMonitoring,
@@ -590,10 +590,9 @@ export function SeriesDetailSheet({
   const handleToggleMonitoring = async () => {
     const newStatus = isMonitored ? "unmonitored" : "monitored";
     try {
-      const res = await fetch(`/api/v1/series/${series.id}/monitoring`, {
+      const res = await apiFetch(`/api/v1/series/${series.id}/monitoring`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        credentials: "include",
         body: JSON.stringify({ status: newStatus }),
       });
       if (res.ok) {
@@ -608,9 +607,8 @@ export function SeriesDetailSheet({
   const handleDelete = async () => {
     setDeleting(true);
     try {
-      const res = await fetch(`/api/v1/series/${series.id}`, {
+      const res = await apiFetch(`/api/v1/series/${series.id}`, {
         method: "DELETE",
-        credentials: "include",
       });
       if (res.ok || res.status === 204) {
         onDeleted(series.id);
@@ -635,7 +633,7 @@ export function SeriesDetailSheet({
       ? `/api/v1/series/${series.id}/unarchive`
       : `/api/v1/series/${series.id}/archive`;
     try {
-      const res = await fetch(endpoint, { method: "POST", credentials: "include" });
+      const res = await apiFetch(endpoint, { method: "POST" });
       if (res.ok) {
         const newStatus = isArchived ? "monitored" : "unmonitored";
         onUpdated({ ...series, monitoringStatus: newStatus });
@@ -653,12 +651,12 @@ export function SeriesDetailSheet({
   const handleRefresh = async () => {
     setRefreshing(true);
     try {
-      const refreshRes = await fetch(`/api/v1/series/${series.id}/refresh`, { method: "POST", credentials: "include" });
+      const refreshRes = await apiFetch(`/api/v1/series/${series.id}/refresh`, { method: "POST" });
       if (!refreshRes.ok) {
         toast.error("Failed to refresh");
         return;
       }
-      const res = await fetch(`/api/v1/series/${series.id}`, { credentials: "include" });
+      const res = await apiFetch(`/api/v1/series/${series.id}`);
       if (res.ok) {
         const updated = await res.json();
         onUpdated(updated);
@@ -680,9 +678,8 @@ export function SeriesDetailSheet({
     }
     setRescanning(true);
     try {
-      const res = await fetch(`/api/v1/series/${series.id}/rescan`, {
+      const res = await apiFetch(`/api/v1/series/${series.id}/rescan`, {
         method: "POST",
-        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ libraryId: series.libraryId }),
       });
@@ -690,7 +687,7 @@ export function SeriesDetailSheet({
         const result = await res.json();
         toast.success(`Rescan complete: ${result.matched} matched, ${result.imported} imported`);
         // Refresh series data to reflect any new files
-        const updated = await fetch(`/api/v1/series/${series.id}`, { credentials: "include" });
+        const updated = await apiFetch(`/api/v1/series/${series.id}`);
         if (updated.ok) onUpdated(await updated.json());
       } else {
         toast.error("Rescan failed");

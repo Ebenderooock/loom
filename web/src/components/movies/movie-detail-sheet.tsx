@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { apiFetch } from "@/lib/fetch";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -204,7 +205,7 @@ export function MovieDetailSheet({
       // Fetch credits
       setCredits(null);
       setCreditsLoading(true);
-      fetch(`/api/v1/movies/${movie.id}/credits`, { credentials: "include" })
+      apiFetch(`/api/v1/movies/${movie.id}/credits`)
         .then(r => r.ok ? r.json() : null)
         .then(data => setCredits(data))
         .catch((err) => console.error("fetch failed:", err))
@@ -222,10 +223,9 @@ export function MovieDetailSheet({
   const handleSave = async () => {
     setSaving(true);
     try {
-      const res = await fetch(`/api/v1/movies/${movie.id}`, {
+      const res = await apiFetch(`/api/v1/movies/${movie.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        credentials: "include",
         body: JSON.stringify({
           quality_profile_id: editProfile,
           monitoring_status: editMonitoring,
@@ -249,10 +249,9 @@ export function MovieDetailSheet({
   const handleToggleMonitoring = async () => {
     const newStatus = isMonitored ? "unmonitored" : "monitored";
     try {
-      const res = await fetch(`/api/v1/movies/${movie.id}/monitoring`, {
+      const res = await apiFetch(`/api/v1/movies/${movie.id}/monitoring`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        credentials: "include",
         body: JSON.stringify({ status: newStatus }),
       });
       if (res.ok) {
@@ -267,9 +266,8 @@ export function MovieDetailSheet({
   const handleDelete = async () => {
     setDeleting(true);
     try {
-      const res = await fetch(`/api/v1/movies/${movie.id}`, {
+      const res = await apiFetch(`/api/v1/movies/${movie.id}`, {
         method: "DELETE",
-        credentials: "include",
       });
       if (res.ok || res.status === 204) {
         onDeleted(movie.id);
@@ -294,7 +292,7 @@ export function MovieDetailSheet({
       ? `/api/v1/movies/${movie.id}/unarchive`
       : `/api/v1/movies/${movie.id}/archive`;
     try {
-      const res = await fetch(endpoint, { method: "POST", credentials: "include" });
+      const res = await apiFetch(endpoint, { method: "POST" });
       if (res.ok) {
         const newStatus = isArchived ? "monitored" : "unmonitored";
         onUpdated({ ...movie, monitoringStatus: newStatus });
@@ -312,12 +310,12 @@ export function MovieDetailSheet({
   const handleRefresh = async () => {
     setRefreshing(true);
     try {
-      const refreshRes = await fetch(`/api/v1/movies/${movie.id}/refresh`, { method: "POST", credentials: "include" });
+      const refreshRes = await apiFetch(`/api/v1/movies/${movie.id}/refresh`, { method: "POST" });
       if (!refreshRes.ok) {
         toast.error("Failed to refresh");
         return;
       }
-      const res = await fetch(`/api/v1/movies/${movie.id}`, { credentials: "include" });
+      const res = await apiFetch(`/api/v1/movies/${movie.id}`);
       if (res.ok) {
         const updated = await res.json();
         onUpdated(updated);
@@ -339,16 +337,15 @@ export function MovieDetailSheet({
     }
     setRescanning(true);
     try {
-      const res = await fetch(`/api/v1/movies/${movie.id}/rescan`, {
+      const res = await apiFetch(`/api/v1/movies/${movie.id}/rescan`, {
         method: "POST",
-        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ libraryId: movie.libraryId }),
       });
       if (res.ok) {
         const result = await res.json();
         toast.success(`Rescan complete: ${result.matched} matched, ${result.imported} imported`);
-        const updated = await fetch(`/api/v1/movies/${movie.id}`, { credentials: "include" });
+        const updated = await apiFetch(`/api/v1/movies/${movie.id}`);
         if (updated.ok) onUpdated(await updated.json());
       } else {
         toast.error("Rescan failed");

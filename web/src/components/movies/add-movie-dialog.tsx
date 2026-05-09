@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from "react";
+import { apiFetch } from "@/lib/fetch";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -79,7 +80,7 @@ export function AddMovieDialog({
     if (term.length < 2) { setResults([]); return; }
     setSearching(true);
     try {
-      const res = await fetch(`/api/v1/movies/lookup?term=${encodeURIComponent(term)}`, { credentials: "include" });
+      const res = await apiFetch(`/api/v1/movies/lookup?term=${encodeURIComponent(term)}`);
       if (res.ok) { const data = await res.json(); setResults(data ?? []); }
     } catch { /* ignore */ } finally { setSearching(false); }
   }, []);
@@ -96,10 +97,9 @@ export function AddMovieDialog({
     setAdding(true);
     setAddError("");
     try {
-      const res = await fetch("/api/v1/movies", {
+      const res = await apiFetch("/api/v1/movies", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        credentials: "include",
         body: JSON.stringify({
           title: selectedMovie.title,
           year: selectedMovie.year,

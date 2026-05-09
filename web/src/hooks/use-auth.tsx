@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useState } from "react";
+import { apiFetch } from "@/lib/fetch";
 
 interface AuthContextType {
   isSetupComplete: boolean;
@@ -29,9 +30,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const checkStatus = async () => {
       try {
-        const response = await fetch("/api/v1/auth/status", {
-          credentials: "include",
-        });
+        const response = await apiFetch("/api/v1/auth/status");
 
         if (response.ok && mounted) {
           const data = await response.json();
@@ -71,9 +70,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = async () => {
     try {
-      await fetch("/api/v1/auth/logout", {
+      await apiFetch("/api/v1/auth/logout", {
         method: "POST",
-        credentials: "include",
       });
     } catch (err) {
       console.error("Logout failed:", err);
@@ -81,9 +79,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setIsAuthenticated(false);
       setUser(null);
       try {
-        const response = await fetch("/api/v1/auth/status", {
-          credentials: "include",
-        });
+        const response = await apiFetch("/api/v1/auth/status");
         if (response.ok) {
           const data = await response.json();
           setIsSetupComplete(!data.setup_required);
@@ -96,9 +92,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const refreshAuth = async () => {
     try {
-      const response = await fetch("/api/v1/auth/status", {
-        credentials: "include",
-      });
+      const response = await apiFetch("/api/v1/auth/status");
 
       if (response.ok) {
         const data = await response.json();

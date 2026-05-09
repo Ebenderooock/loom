@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import { apiFetch } from "@/lib/fetch";
 import {
   Dialog,
   DialogContent,
@@ -99,10 +100,9 @@ export function LibraryImportDialog({
     setUnmatchedFiles([]);
 
     try {
-      const res = await fetch("/api/v1/movies/scan", {
+      const res = await apiFetch("/api/v1/movies/scan", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        credentials: "include",
         body: JSON.stringify({ libraryId: selectedFolder }),
       });
       const data = await res.json();
@@ -112,9 +112,7 @@ export function LibraryImportDialog({
       const poll = async () => {
         if (!mountedRef.current) return;
         try {
-          const statusRes = await fetch(`/api/v1/movies/scan/${scanId}`, {
-            credentials: "include",
-          });
+          const statusRes = await apiFetch(`/api/v1/movies/scan/${scanId}`);
           const result: ScanResult = await statusRes.json();
           if (!mountedRef.current) return;
           setScanResult(result);
@@ -123,9 +121,7 @@ export function LibraryImportDialog({
             pollTimeoutRef.current = setTimeout(poll, 1500);
           } else {
             setScanning(false);
-            const unmatchedRes = await fetch("/api/v1/movies/scan/unmatched", {
-              credentials: "include",
-            });
+            const unmatchedRes = await apiFetch("/api/v1/movies/scan/unmatched");
             const files: UnmatchedFile[] = await unmatchedRes.json();
             if (mountedRef.current) {
               setUnmatchedFiles(files);
@@ -150,9 +146,8 @@ export function LibraryImportDialog({
     if (!query.trim()) return;
     setSearching(true);
     try {
-      const res = await fetch(
-        `/api/v1/movies/lookup?term=${encodeURIComponent(query)}`,
-        { credentials: "include" }
+      const res = await apiFetch(
+        `/api/v1/movies/lookup?term=${encodeURIComponent(query)}`
       );
       const data = await res.json();
       setSearchResults(Array.isArray(data) ? data : []);
@@ -165,10 +160,9 @@ export function LibraryImportDialog({
 
   const matchFile = useCallback(async (unmatchedId: string, tmdbId: string) => {
     try {
-      await fetch("/api/v1/movies/scan/match", {
+      await apiFetch("/api/v1/movies/scan/match", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        credentials: "include",
         body: JSON.stringify({
           unmatchedId,
           tmdbId,

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { apiFetch } from "@/lib/fetch";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -66,7 +67,7 @@ export function NamingSettings() {
 
   // Load current config
   useEffect(() => {
-    fetch("/api/v1/movies/organize/naming")
+    apiFetch("/api/v1/movies/organize/naming")
       .then((r) => r.json())
       .then((data: NamingConfig) => {
         setConfig(data);
@@ -80,7 +81,7 @@ export function NamingSettings() {
 
   const fetchPreview = useCallback(async (cfg: NamingConfig) => {
     try {
-      const res = await fetch("/api/v1/movies/organize/naming/preview", {
+      const res = await apiFetch("/api/v1/movies/organize/naming/preview", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(cfg),
@@ -107,7 +108,7 @@ export function NamingSettings() {
   const handleSave = async () => {
     setSaving(true);
     try {
-      const res = await fetch("/api/v1/movies/organize/naming", {
+      const res = await apiFetch("/api/v1/movies/organize/naming", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(config),
