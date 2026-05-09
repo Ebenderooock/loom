@@ -79,9 +79,10 @@ func (h *HealthChecker) Run(ctx context.Context) error {
 }
 
 func (h *HealthChecker) checkOne(ctx context.Context, id string) {
-	// TestOne already persists and reports; we only need to swallow
-	// the per-indexer error here.
-	if _, err := h.svc.TestOne(ctx, id); err != nil {
-		h.svc.logger.Debug("health check failed", "id", id, "err", err)
+	health, err := h.svc.TestOne(ctx, id)
+	if err != nil {
+		h.svc.logger.Warn("health check completed", "id", id, "status", health.Status, "latency_ms", health.LatencyMS, "err", err)
+	} else {
+		h.svc.logger.Debug("health check completed", "id", id, "status", health.Status, "latency_ms", health.LatencyMS)
 	}
 }

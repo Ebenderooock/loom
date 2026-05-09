@@ -248,6 +248,44 @@ var ErrNotFound = errors.New("indexer not found")
 // has not been registered.
 var ErrUnknownKind = errors.New("unknown indexer kind")
 
+// Package-level sentinel errors that all indexer implementations
+// (newznab, cardigann, etc.) should wrap so the service layer can
+// classify failures uniformly without importing child packages.
+var (
+	// ErrIndexerTimeout indicates the request exceeded its deadline.
+	// Implementations should wrap this (or context.DeadlineExceeded)
+	// so the service marks the indexer as degraded, not failed.
+	ErrIndexerTimeout = errors.New("indexer: timeout")
+
+	// ErrIndexerRateLimited indicates an HTTP 429 or equivalent
+	// throttle response. The service marks the indexer as degraded.
+	ErrIndexerRateLimited = errors.New("indexer: rate limited")
+)
+
+// IsTimeoutErr returns true if err represents a timeout — either the
+// package-level sentinel, context.DeadlineExceeded, or a net.Error
+// with Timeout() == true.
+func IsTimeoutErr(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, ErrIndexerTimeout) || errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
+	// net.Error covers http.Client.Timeout and dial timeouts.
+	type netErr interface{ Timeout() bool }
+	var ne netErr
+	if errors.As(err, &ne) && ne.Timeout() {
+		return true
+	}
+	return false
+}
+
+// IsRateLimitErr returns true if err represents rate limiting.
+func IsRateLimitErr(err error) bool {
+	return err != nil && errors.Is(err, ErrIndexerRateLimited)
+}
+
 // CardigannDefSummary is a lightweight projection of a Cardigann YAML
 // definition used by the "list available definitions" API endpoint.
 type CardigannDefSummary struct {
