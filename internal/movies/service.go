@@ -23,6 +23,7 @@ type CreditsProvider interface {
 
 // Service defines the business logic interface for the movies module.
 type Service interface {
+	CountMovies(ctx context.Context) (int, error)
 	ListMovies(ctx context.Context, limit, offset int) ([]*Movie, error)
 	SearchMovies(ctx context.Context, query string) ([]*Movie, error)
 	LookupMovies(ctx context.Context, term string) ([]*metadata.MovieMetadata, error)
@@ -119,6 +120,11 @@ func WithCredits(c CreditsProvider) ServiceOption {
 	return func(s *service) {
 		s.credits = c
 	}
+}
+
+// CountMovies returns the total number of non-deleted movies.
+func (s *service) CountMovies(ctx context.Context) (int, error) {
+	return s.repo.CountMovies(ctx)
 }
 
 // ListMovies retrieves all movies with pagination.

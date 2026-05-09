@@ -244,6 +244,9 @@ func listMovies(svc Service) http.HandlerFunc {
 			})
 		}
 
+		// Get the total count from the database (independent of limit/offset/filters)
+		totalCount, _ := svc.CountMovies(r.Context())
+
 		response := make([]interface{}, 0, len(movies))
 		for _, m := range movies {
 			response = append(response, movieToResponse(m))
@@ -252,7 +255,7 @@ func listMovies(svc Service) http.HandlerFunc {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"data":   response,
-			"total":  len(movies),
+			"total":  totalCount,
 			"limit":  limit,
 			"offset": offset,
 		})

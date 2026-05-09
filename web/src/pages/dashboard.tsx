@@ -387,8 +387,8 @@ export function DashboardPage() {
 
   const movieCount = movies.data?.total ?? 0;
   const seriesCount = series.data?.total ?? 0;
-  const indexerCount = indexers.data?.data?.length ?? 0;
-  const dlClientCount = dlClients.data?.data?.length ?? 0;
+  const indexerCount = indexers.data?.indexers?.length ?? 0;
+  const dlClientCount = dlClients.data?.download_clients?.length ?? 0;
 
   const isLoading = movies.isLoading || series.isLoading || indexers.isLoading;
   const isFreshInstall =

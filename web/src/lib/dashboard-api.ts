@@ -33,14 +33,14 @@ export function useDashboardSeries() {
 }
 
 export function useDashboardIndexers() {
-  return useDashboardQuery<{ data: unknown[] }>(
+  return useDashboardQuery<{ indexers: unknown[] }>(
     "indexers",
     "/api/v1/indexers",
   );
 }
 
 export function useDashboardDownloadClients() {
-  return useDashboardQuery<{ data: unknown[] }>(
+  return useDashboardQuery<{ download_clients: unknown[] }>(
     "download-clients",
     "/api/v1/download-clients",
   );
