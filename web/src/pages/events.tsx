@@ -18,21 +18,13 @@ import {
 } from "@/components/ui/select";
 import { useSetPageHeader } from "@/hooks/use-page-header";
 import { useAuditLog, type AuditLogParams } from "@/lib/audit-log-api";
+import { levelVariant } from "@/lib/status-utils";
+import { EmptyState } from "@/components/ui/empty-state";
+import { LoadingState } from "@/components/ui/loading-state";
 import { ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 
 const PAGE_SIZE = 50;
-
-function levelVariant(level: string) {
-  switch (level) {
-    case "error":
-      return "destructive" as const;
-    case "warn":
-      return "secondary" as const;
-    default:
-      return "outline" as const;
-  }
-}
 
 function formatTimestamp(ts: string) {
   try {
@@ -135,8 +127,8 @@ export function EventsPage() {
           <TableBody>
             {isLoading && (
               <TableRow>
-                <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
-                  Loading…
+                <TableCell colSpan={5}>
+                  <LoadingState label="Loading events…" />
                 </TableCell>
               </TableRow>
             )}
@@ -149,8 +141,8 @@ export function EventsPage() {
             )}
             {!isLoading && !isError && entries.length === 0 && (
               <TableRow>
-                <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
-                  No events found.
+                <TableCell colSpan={5}>
+                  <EmptyState title="No events found" description="Events will appear here as the system operates." />
                 </TableCell>
               </TableRow>
             )}

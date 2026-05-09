@@ -123,7 +123,7 @@ export function QualityProfilesPage() {
             Define quality tiers and per-profile custom format scores.
           </p>
         </div>
-        <Button onClick={() => setCreating(true)} className="bg-teal-600 hover:bg-teal-700">
+        <Button onClick={() => setCreating(true)}>
           <Plus className="mr-2 h-4 w-4" /> Add Profile
         </Button>
       </div>
@@ -471,7 +471,6 @@ function ProfileDialog({
           <Button
             onClick={handleSave}
             disabled={!name || createMut.isPending || updateMut.isPending}
-            className="bg-teal-600 hover:bg-teal-700"
           >
             {(createMut.isPending || updateMut.isPending) && <Loader2 className="h-4 w-4 animate-spin mr-1" />}
             {isEdit ? "Save" : "Create"}

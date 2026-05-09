@@ -3,8 +3,16 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import {
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+} from "@/components/ui/table";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { EmptyState } from "@/components/ui/empty-state";
+import { LoadingState } from "@/components/ui/loading-state";
 import { useSetPageHeader } from "@/hooks/use-page-header";
-import { CheckCircle2, XCircle, AlertTriangle, Loader2, Clock, Ban, RefreshCw, Trash2, Download, ArrowDown, ArrowUp, Pause, Play, ChevronsUp, ChevronsDown, ChevronUp, ChevronDown, Zap, ShieldCheck, Radio, MoreHorizontal, Gauge } from "lucide-react";
+import { CheckCircle2, XCircle, AlertTriangle, Clock, Ban, RefreshCw, Trash2, Download, ArrowDown, ArrowUp, Pause, Play, ChevronsUp, ChevronsDown, ChevronUp, ChevronDown, Zap, ShieldCheck, Radio, MoreHorizontal, Gauge } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -24,6 +32,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { SearchDiagnostics } from "@/components/search/search-diagnostics";
+import { formatBytes, formatEta, formatSpeed, relativeTime } from "@/lib/utils";
+import { downloadStatusConfig } from "@/lib/status-utils";
 
 // ─── Types ──────────────────────────────────────────────────────────────
 
@@ -64,34 +74,6 @@ interface HistoryEntry {
   status: string;
   grabbed_at?: string;
   completed_at: string;
-}
-
-import { formatBytes } from "@/lib/utils";
-
-function formatRate(bytesPerSec: number): string {
-  return `${formatBytes(bytesPerSec)}/s`;
-}
-
-function formatEta(seconds: number): string {
-  if (seconds <= 0) return "—";
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  const s = seconds % 60;
-  if (h > 0) return `${h}h ${m}m`;
-  if (m > 0) return `${m}m ${s}s`;
-  return `${s}s`;
-}
-
-function statusColor(status: string): string {
-  switch (status) {
-    case "downloading": return "text-blue-500";
-    case "completed": return "text-green-500";
-    case "paused": return "text-yellow-500";
-    case "stalled": return "text-orange-500";
-    case "error": case "failed": return "text-red-500";
-    case "seeding": return "text-emerald-500";
-    default: return "text-muted-foreground";
-  }
 }
 
 // ─── Queue action helpers ────────────────────────────────────────────────
@@ -181,8 +163,7 @@ function DownloadQueue() {
     return (
       <Card>
         <CardContent className="py-8 text-center text-muted-foreground">
-          <Loader2 className="h-5 w-5 animate-spin mx-auto mb-2" />
-          Loading queue…
+          <LoadingState label="Loading queue…" />
         </CardContent>
       </Card>
     );
@@ -191,9 +172,8 @@ function DownloadQueue() {
   if (items.length === 0) {
     return (
       <Card>
-        <CardContent className="py-8 text-center text-muted-foreground">
-          <Download className="h-5 w-5 mx-auto mb-2 opacity-50" />
-          No active downloads.
+        <CardContent className="py-8">
+          <EmptyState icon={<Download className="h-8 w-8" />} title="No active downloads" description="The download queue is empty." />
         </CardContent>
       </Card>
     );
@@ -209,121 +189,124 @@ function DownloadQueue() {
           </Button>
         </CardHeader>
         <CardContent className="p-0">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border text-left text-muted-foreground text-xs">
-                <th className="py-2 px-4 font-medium">Title</th>
-                <th className="py-2 px-4 font-medium w-24">Status</th>
-                <th className="py-2 px-4 font-medium w-28">Progress</th>
-                <th className="py-2 px-4 font-medium w-24">Size</th>
-                <th className="py-2 px-4 font-medium w-24">Speed</th>
-                <th className="py-2 px-4 font-medium w-20">ETA</th>
-                <th className="py-2 px-4 font-medium w-10"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {items.map((item) => (
-                <tr key={`${item.client_id}-${item.id}`} className="border-b border-border/50 last:border-0">
-                  <td className="py-3 px-4">
-                    <div className="font-medium truncate max-w-md">{item.title}</div>
-                    {item.category && (
-                      <div className="text-xs text-muted-foreground">{item.category}</div>
-                    )}
-                  </td>
-                  <td className="py-3 px-4">
-                    <span className={`text-xs font-medium ${statusColor(item.status)}`}>
-                      {item.status === "downloading" && <ArrowDown className="inline h-3 w-3 mr-0.5" />}
-                      {item.status === "seeding" && <ArrowUp className="inline h-3 w-3 mr-0.5" />}
-                      {item.status === "paused" && <Pause className="inline h-3 w-3 mr-0.5" />}
-                      {item.status}
-                    </span>
-                  </td>
-                  <td className="py-3 px-4">
-                    <div className="flex items-center gap-2">
-                      <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-accent rounded-full transition-all"
-                          style={{ width: `${Math.round(item.progress * 100)}%` }}
-                        />
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Title</TableHead>
+                <TableHead className="w-24">Status</TableHead>
+                <TableHead className="w-28">Progress</TableHead>
+                <TableHead className="w-24">Size</TableHead>
+                <TableHead className="w-24">Speed</TableHead>
+                <TableHead className="w-20">ETA</TableHead>
+                <TableHead className="w-10"></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {items.map((item) => {
+                const sc = downloadStatusConfig(item.status);
+                return (
+                  <TableRow key={`${item.client_id}-${item.id}`}>
+                    <TableCell>
+                      <div className="font-medium truncate max-w-md">{item.title}</div>
+                      {item.category && (
+                        <div className="text-xs text-muted-foreground">{item.category}</div>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={sc.variant} className={`text-xs ${sc.className ?? ""}`}>
+                        {item.status === "downloading" && <ArrowDown className="inline h-3 w-3 mr-0.5" />}
+                        {item.status === "seeding" && <ArrowUp className="inline h-3 w-3 mr-0.5" />}
+                        {item.status === "paused" && <Pause className="inline h-3 w-3 mr-0.5" />}
+                        {sc.label}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-accent rounded-full transition-all"
+                            style={{ width: `${Math.round(item.progress * 100)}%` }}
+                          />
+                        </div>
+                        <span className="text-xs tabular-nums text-muted-foreground w-8">
+                          {Math.round(item.progress * 100)}%
+                        </span>
                       </div>
-                      <span className="text-xs tabular-nums text-muted-foreground w-8">
-                        {Math.round(item.progress * 100)}%
-                      </span>
-                    </div>
-                  </td>
-                  <td className="py-3 px-4 text-xs text-muted-foreground tabular-nums">
-                    {item.size_bytes ? formatBytes(item.size_bytes) : "—"}
-                  </td>
-                  <td className="py-3 px-4 text-xs text-muted-foreground tabular-nums">
-                    {item.download_rate ? formatRate(item.download_rate) : "—"}
-                  </td>
-                  <td className="py-3 px-4 text-xs text-muted-foreground tabular-nums">
-                    {item.eta_seconds ? formatEta(item.eta_seconds) : "—"}
-                  </td>
-                  <td className="py-3 px-4">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-7 w-7">
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        {item.status === "paused" ? (
-                          <DropdownMenuItem onClick={() => doAction(item, "resume", { ids: [item.id] })}>
-                            <Play className="h-3.5 w-3.5 mr-2" /> Resume
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground tabular-nums">
+                      {item.size_bytes ? formatBytes(item.size_bytes) : "—"}
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground tabular-nums">
+                      {item.download_rate ? formatSpeed(item.download_rate) : "—"}
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground tabular-nums">
+                      {item.eta_seconds ? formatEta(item.eta_seconds) : "—"}
+                    </TableCell>
+                    <TableCell>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-7 w-7">
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          {item.status === "paused" ? (
+                            <DropdownMenuItem onClick={() => doAction(item, "resume", { ids: [item.id] })}>
+                              <Play className="h-3.5 w-3.5 mr-2" /> Resume
+                            </DropdownMenuItem>
+                          ) : (
+                            <DropdownMenuItem onClick={() => doAction(item, "pause", { ids: [item.id] })}>
+                              <Pause className="h-3.5 w-3.5 mr-2" /> Pause
+                            </DropdownMenuItem>
+                          )}
+                          <DropdownMenuItem onClick={() => doAction(item, "force-start", { ids: [item.id] })}>
+                            <Zap className="h-3.5 w-3.5 mr-2" /> Force Start
                           </DropdownMenuItem>
-                        ) : (
-                          <DropdownMenuItem onClick={() => doAction(item, "pause", { ids: [item.id] })}>
-                            <Pause className="h-3.5 w-3.5 mr-2" /> Pause
+                          <DropdownMenuSeparator />
+                          <DropdownMenuSub>
+                            <DropdownMenuSubTrigger>
+                              <ChevronsUp className="h-3.5 w-3.5 mr-2" /> Priority
+                            </DropdownMenuSubTrigger>
+                            <DropdownMenuSubContent>
+                              <DropdownMenuItem onClick={() => doAction(item, "set-priority", { ids: [item.id], priority: "top" })}>
+                                <ChevronsUp className="h-3.5 w-3.5 mr-2" /> Move to Top
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => doAction(item, "set-priority", { ids: [item.id], priority: "up" })}>
+                                <ChevronUp className="h-3.5 w-3.5 mr-2" /> Move Up
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => doAction(item, "set-priority", { ids: [item.id], priority: "down" })}>
+                                <ChevronDown className="h-3.5 w-3.5 mr-2" /> Move Down
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => doAction(item, "set-priority", { ids: [item.id], priority: "bottom" })}>
+                                <ChevronsDown className="h-3.5 w-3.5 mr-2" /> Move to Bottom
+                              </DropdownMenuItem>
+                            </DropdownMenuSubContent>
+                          </DropdownMenuSub>
+                          <DropdownMenuItem onClick={() => setSpeedTarget(item)}>
+                            <Gauge className="h-3.5 w-3.5 mr-2" /> Speed Limit…
                           </DropdownMenuItem>
-                        )}
-                        <DropdownMenuItem onClick={() => doAction(item, "force-start", { ids: [item.id] })}>
-                          <Zap className="h-3.5 w-3.5 mr-2" /> Force Start
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuSub>
-                          <DropdownMenuSubTrigger>
-                            <ChevronsUp className="h-3.5 w-3.5 mr-2" /> Priority
-                          </DropdownMenuSubTrigger>
-                          <DropdownMenuSubContent>
-                            <DropdownMenuItem onClick={() => doAction(item, "set-priority", { ids: [item.id], priority: "top" })}>
-                              <ChevronsUp className="h-3.5 w-3.5 mr-2" /> Move to Top
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => doAction(item, "set-priority", { ids: [item.id], priority: "up" })}>
-                              <ChevronUp className="h-3.5 w-3.5 mr-2" /> Move Up
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => doAction(item, "set-priority", { ids: [item.id], priority: "down" })}>
-                              <ChevronDown className="h-3.5 w-3.5 mr-2" /> Move Down
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => doAction(item, "set-priority", { ids: [item.id], priority: "bottom" })}>
-                              <ChevronsDown className="h-3.5 w-3.5 mr-2" /> Move to Bottom
-                            </DropdownMenuItem>
-                          </DropdownMenuSubContent>
-                        </DropdownMenuSub>
-                        <DropdownMenuItem onClick={() => setSpeedTarget(item)}>
-                          <Gauge className="h-3.5 w-3.5 mr-2" /> Speed Limit…
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem onClick={() => doAction(item, "recheck", { ids: [item.id] })}>
-                          <ShieldCheck className="h-3.5 w-3.5 mr-2" /> Recheck
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => doAction(item, "reannounce", { ids: [item.id] })}>
-                          <Radio className="h-3.5 w-3.5 mr-2" /> Reannounce
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                          className="text-red-500 focus:text-red-500"
-                          onClick={() => setRemoveTarget(item)}
-                        >
-                          <Trash2 className="h-3.5 w-3.5 mr-2" /> Remove…
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem onClick={() => doAction(item, "recheck", { ids: [item.id] })}>
+                            <ShieldCheck className="h-3.5 w-3.5 mr-2" /> Recheck
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => doAction(item, "reannounce", { ids: [item.id] })}>
+                            <Radio className="h-3.5 w-3.5 mr-2" /> Reannounce
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            className="text-red-500 focus:text-red-500"
+                            onClick={() => setRemoveTarget(item)}
+                          >
+                            <Trash2 className="h-3.5 w-3.5 mr-2" /> Remove…
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
         </CardContent>
       </Card>
 
@@ -336,15 +319,10 @@ function DownloadQueue() {
               Remove <span className="font-medium">{removeTarget?.title}</span> from the queue?
             </DialogDescription>
           </DialogHeader>
-          <label className="flex items-center gap-2 text-sm cursor-pointer">
-            <input
-              type="checkbox"
-              checked={deleteFiles}
-              onChange={(e) => setDeleteFiles(e.target.checked)}
-              className="rounded border-border"
-            />
-            Also delete downloaded files
-          </label>
+          <div className="flex items-center gap-2">
+            <Checkbox id="delete-files" checked={deleteFiles} onCheckedChange={(v) => setDeleteFiles(!!v)} />
+            <Label htmlFor="delete-files" className="cursor-pointer">Also delete downloaded files</Label>
+          </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => { setRemoveTarget(null); setDeleteFiles(false); }}>
               Cancel
@@ -366,14 +344,13 @@ function DownloadQueue() {
             </DialogDescription>
           </DialogHeader>
           <div className="flex items-center gap-2">
-            <input
+            <Input
               type="number"
-              min="0"
+              min={0}
               step="any"
               value={speedLimit}
               onChange={(e) => setSpeedLimit(e.target.value)}
               placeholder="0"
-              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
             />
             <span className="text-sm text-muted-foreground whitespace-nowrap">KB/s</span>
           </div>
@@ -387,19 +364,6 @@ function DownloadQueue() {
       </Dialog>
     </>
   );
-}
-
-function relativeTime(iso: string): string {
-  const now = Date.now();
-  const then = new Date(iso).getTime();
-  const diffSec = Math.floor((now - then) / 1000);
-  if (diffSec < 60) return "just now";
-  const diffMin = Math.floor(diffSec / 60);
-  if (diffMin < 60) return `${diffMin}m ago`;
-  const diffHr = Math.floor(diffMin / 60);
-  if (diffHr < 24) return `${diffHr}h ago`;
-  const diffDay = Math.floor(diffHr / 24);
-  return `${diffDay}d ago`;
 }
 
 function DownloadHistory() {
@@ -427,8 +391,7 @@ function DownloadHistory() {
     return (
       <Card>
         <CardContent className="py-8 text-center text-muted-foreground">
-          <Loader2 className="h-5 w-5 animate-spin mx-auto mb-2" />
-          Loading history…
+          <LoadingState label="Loading history…" />
         </CardContent>
       </Card>
     );
@@ -437,9 +400,8 @@ function DownloadHistory() {
   if (entries.length === 0) {
     return (
       <Card>
-        <CardContent className="py-8 text-center text-muted-foreground">
-          <Clock className="h-5 w-5 mx-auto mb-2 opacity-50" />
-          No download history yet.
+        <CardContent className="py-8">
+          <EmptyState icon={<Clock className="h-8 w-8" />} title="No download history" description="No download history yet." />
         </CardContent>
       </Card>
     );
@@ -451,40 +413,37 @@ function DownloadHistory() {
         <CardTitle className="text-base">Download History</CardTitle>
       </CardHeader>
       <CardContent className="p-0">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-border text-left text-muted-foreground text-xs">
-              <th className="py-2 px-4 font-medium">Title</th>
-              <th className="py-2 px-4 font-medium">Category</th>
-              <th className="py-2 px-4 font-medium">Status</th>
-              <th className="py-2 px-4 font-medium">Completed</th>
-            </tr>
-          </thead>
-          <tbody>
-            {entries.map((entry) => (
-              <tr key={entry.id} className="border-b border-border/50 last:border-0">
-                <td className="py-3 px-4">
-                  <div className="font-medium truncate max-w-xs">{entry.title}</div>
-                </td>
-                <td className="py-3 px-4 text-xs text-muted-foreground">
-                  {entry.category || "—"}
-                </td>
-                <td className="py-3 px-4">
-                  {entry.status === "completed" ? (
-                    <Badge variant="default" className="bg-green-600 text-xs">completed</Badge>
-                  ) : entry.status === "failed" ? (
-                    <Badge variant="destructive" className="text-xs">failed</Badge>
-                  ) : (
-                    <Badge variant="secondary" className="text-xs">{entry.status}</Badge>
-                  )}
-                </td>
-                <td className="py-3 px-4 text-xs text-muted-foreground">
-                  {relativeTime(entry.completed_at)}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Title</TableHead>
+              <TableHead>Category</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead>Completed</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {entries.map((entry) => {
+              const sc = downloadStatusConfig(entry.status);
+              return (
+                <TableRow key={entry.id}>
+                  <TableCell>
+                    <div className="font-medium truncate max-w-xs">{entry.title}</div>
+                  </TableCell>
+                  <TableCell className="text-xs text-muted-foreground">
+                    {entry.category || "—"}
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant={sc.variant} className={`text-xs ${sc.className ?? ""}`}>{sc.label}</Badge>
+                  </TableCell>
+                  <TableCell className="text-xs text-muted-foreground">
+                    {relativeTime(entry.completed_at)}
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
       </CardContent>
     </Card>
   );
@@ -545,8 +504,7 @@ function BlocklistViewer() {
     return (
       <Card>
         <CardContent className="py-8 text-center text-muted-foreground">
-          <Loader2 className="h-5 w-5 animate-spin mx-auto mb-2" />
-          Loading blocklist…
+          <LoadingState label="Loading blocklist…" />
         </CardContent>
       </Card>
     );
@@ -555,9 +513,8 @@ function BlocklistViewer() {
   if (entries.length === 0) {
     return (
       <Card>
-        <CardContent className="py-8 text-center text-muted-foreground">
-          <Ban className="h-5 w-5 mx-auto mb-2 opacity-50" />
-          Blocklist is empty.
+        <CardContent className="py-8">
+          <EmptyState icon={<Ban className="h-8 w-8" />} title="Blocklist is empty" description="No releases have been blocklisted." />
         </CardContent>
       </Card>
     );
@@ -577,28 +534,28 @@ function BlocklistViewer() {
         </div>
       </CardHeader>
       <CardContent className="p-0">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-border text-left text-muted-foreground text-xs">
-              <th className="py-2 px-4 font-medium">Title</th>
-              <th className="py-2 px-4 font-medium">Reason</th>
-              <th className="py-2 px-4 font-medium">Date</th>
-              <th className="py-2 px-4 font-medium w-20"></th>
-            </tr>
-          </thead>
-          <tbody>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Title</TableHead>
+              <TableHead>Reason</TableHead>
+              <TableHead>Date</TableHead>
+              <TableHead className="w-20"></TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {entries.map((entry) => (
-              <tr key={entry.id} className="border-b border-border/50 last:border-0">
-                <td className="py-3 px-4">
+              <TableRow key={entry.id}>
+                <TableCell>
                   <div className="font-medium truncate max-w-xs">{entry.title}</div>
-                </td>
-                <td className="py-3 px-4 text-xs text-muted-foreground">
+                </TableCell>
+                <TableCell className="text-xs text-muted-foreground">
                   {entry.reason || "—"}
-                </td>
-                <td className="py-3 px-4 text-xs text-muted-foreground">
+                </TableCell>
+                <TableCell className="text-xs text-muted-foreground">
                   {new Date(entry.created_at).toLocaleString()}
-                </td>
-                <td className="py-3 px-4">
+                </TableCell>
+                <TableCell>
                   <Button
                     variant="ghost"
                     size="icon"
@@ -607,11 +564,11 @@ function BlocklistViewer() {
                   >
                     <Trash2 className="h-3.5 w-3.5 text-red-500" />
                   </Button>
-                </td>
-              </tr>
+                </TableCell>
+              </TableRow>
             ))}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       </CardContent>
     </Card>
   );
@@ -658,8 +615,7 @@ function ReviewQueue() {
     return (
       <Card>
         <CardContent className="py-8 text-center text-muted-foreground">
-          <Loader2 className="h-5 w-5 animate-spin mx-auto mb-2" />
-          Loading reviews…
+          <LoadingState label="Loading reviews…" />
         </CardContent>
       </Card>
     );
@@ -668,9 +624,8 @@ function ReviewQueue() {
   if (reviews.length === 0) {
     return (
       <Card>
-        <CardContent className="py-8 text-center text-muted-foreground">
-          <CheckCircle2 className="h-5 w-5 mx-auto mb-2 text-green-500" />
-          No items pending review.
+        <CardContent className="py-8">
+          <EmptyState icon={<CheckCircle2 className="h-8 w-8 text-green-500" />} title="No items pending review" description="All reviews have been processed." />
         </CardContent>
       </Card>
     );

@@ -22,6 +22,10 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+} from "@/components/ui/table";
+import { EmptyState } from "@/components/ui/empty-state";
 import { HealthBadge } from "@/components/indexers/health-badge";
 import {
   IndexerForm,
@@ -158,76 +162,63 @@ export function IndexersPage() {
       ) : null}
 
       <div className="overflow-x-auto rounded-md border border-border">
-        <table className="w-full text-sm">
-          <caption className="sr-only">Configured indexers</caption>
-          <thead className="bg-muted/50 text-left">
-            <tr>
-              <th scope="col" className="px-3 py-2">
-                Name
-              </th>
-              <th scope="col" className="px-3 py-2">
-                Kind
-              </th>
-              <th scope="col" className="px-3 py-2">
-                Enabled
-              </th>
-              <th scope="col" className="px-3 py-2">
-                Health
-              </th>
-              <th scope="col" className="px-3 py-2">
-                Proxy
-              </th>
-              <th scope="col" className="px-3 py-2 text-right">
-                Actions
-              </th>
-            </tr>
-          </thead>
-          <tbody>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Name</TableHead>
+              <TableHead>Kind</TableHead>
+              <TableHead>Enabled</TableHead>
+              <TableHead>Health</TableHead>
+              <TableHead>Proxy</TableHead>
+              <TableHead className="text-right">Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {indexersQ.isLoading ? (
               <>
                 {Array.from({ length: 3 }).map((_, i) => (
-                  <tr key={i} className="border-t border-border">
+                  <TableRow key={i}>
                     {Array.from({ length: 6 }).map((__, j) => (
-                      <td key={j} className="px-3 py-3">
+                      <TableCell key={j}>
                         <Skeleton className="h-4 w-24" />
-                      </td>
+                      </TableCell>
                     ))}
-                  </tr>
+                  </TableRow>
                 ))}
               </>
             ) : null}
             {!indexersQ.isLoading && (indexersQ.data?.length ?? 0) === 0 ? (
-              <tr>
-                <td
-                  colSpan={6}
-                  className="px-3 py-6 text-center text-muted-foreground"
-                >
-                  No indexers configured. Click “Add indexer” to set one up.
-                </td>
-              </tr>
+              <TableRow>
+                <TableCell colSpan={6}>
+                  <EmptyState
+                    title="No indexers configured"
+                    description='Click "Add indexer" to set one up.'
+                  />
+                </TableCell>
+              </TableRow>
             ) : null}
             {(indexersQ.data ?? []).map((idx) => (
-              <tr key={idx.id} className="border-t border-border">
-                <td className="px-3 py-2">
+              <TableRow key={idx.id}>
+                <TableCell>
                   <div className="font-medium">{idx.name}</div>
                   <div className="text-xs text-muted-foreground">{idx.id}</div>
-                </td>
-                <td className="px-3 py-2 text-muted-foreground">{idx.kind}</td>
-                <td className="px-3 py-2">{idx.enabled ? "Yes" : "No"}</td>
-                <td className="px-3 py-2">
+                </TableCell>
+                <TableCell className="text-muted-foreground">{idx.kind}</TableCell>
+                <TableCell>{idx.enabled ? "Yes" : "No"}</TableCell>
+                <TableCell>
                   <HealthBadge health={idx.health} />
                   {idx.health?.last_error ? (
                     <div className="mt-1 max-w-[24ch] truncate text-xs text-muted-foreground">
                       {idx.health.last_error}
                     </div>
                   ) : null}
-                </td>
-                <td className="px-3 py-2 text-muted-foreground">
+                </TableCell>
+                <TableCell className="text-muted-foreground">
                   {idx.proxy_id
                     ? (proxyById.get(idx.proxy_id) ?? idx.proxy_id)
                     : "—"}
-                </td>
-                <td className="px-3 py-2 text-right">
+                </TableCell>
+                <TableCell className="text-right">
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button
@@ -267,11 +258,11 @@ export function IndexersPage() {
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
-                </td>
-              </tr>
+                </TableCell>
+              </TableRow>
             ))}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       </div>
 
       {/* Create dialog (catalogue) */}
