@@ -7,7 +7,6 @@ import {
   Download,
   ArrowDown,
   ArrowUp,
-  Loader2,
   RefreshCw,
   Import,
 } from "lucide-react";
@@ -39,40 +38,10 @@ interface QueueItem {
 
 // ─── Helpers ────────────────────────────────────────────────────────────
 
-import { formatBytes } from "@/lib/utils";
-
-function formatSpeed(bytesPerSec: number): string {
-  if (bytesPerSec <= 0) return "0 B/s";
-  return `${formatBytes(bytesPerSec)}/s`;
-}
-
-function formatEta(seconds: number): string {
-  if (!seconds || seconds <= 0) return "∞";
-  if (seconds < 60) return `${seconds}s`;
-  if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  return m > 0 ? `${h}h ${m}m` : `${h}h`;
-}
-
-function statusConfig(status: string) {
-  switch (status) {
-    case "downloading":
-      return { label: "Downloading", color: "bg-blue-500/10 text-blue-400 border-blue-500/30" };
-    case "seeding":
-      return { label: "Seeding", color: "bg-green-500/10 text-green-400 border-green-500/30" };
-    case "queued":
-      return { label: "Queued", color: "bg-yellow-500/10 text-yellow-400 border-yellow-500/30" };
-    case "paused":
-      return { label: "Paused", color: "bg-zinc-500/10 text-zinc-400 border-zinc-500/30" };
-    case "completed":
-      return { label: "Completed", color: "bg-teal-500/10 text-teal-400 border-teal-500/30" };
-    case "failed":
-      return { label: "Failed", color: "bg-red-500/10 text-red-400 border-red-500/30" };
-    default:
-      return { label: status || "Unknown", color: "bg-zinc-500/10 text-zinc-400 border-zinc-500/30" };
-  }
-}
+import { formatBytes, formatSpeed, formatEta } from "@/lib/utils";
+import { downloadStatusConfig } from "@/lib/status-utils";
+import { EmptyState } from "@/components/ui/empty-state";
+import { LoadingState } from "@/components/ui/loading-state";
 
 // ─── Queue Stats Bar ────────────────────────────────────────────────────
 
@@ -117,7 +86,7 @@ function QueueStats({ items }: { items: QueueItem[] }) {
 // ─── Queue Item Row ─────────────────────────────────────────────────────
 
 function QueueItemRow({ item }: { item: QueueItem }) {
-  const sc = statusConfig(item.status);
+  const sc = downloadStatusConfig(item.status);
   const pct = Math.min(100, (item.progress ?? 0) * 100);
   const isActive = item.status === "downloading";
 
@@ -149,7 +118,7 @@ function QueueItemRow({ item }: { item: QueueItem }) {
       </div>
 
       {/* Status badge */}
-      <Badge variant="outline" className={`text-[10px] shrink-0 ${sc.color}`}>
+      <Badge variant={sc.variant} className={`text-[10px] shrink-0 ${sc.className ?? ""}`}>
         {sc.label}
       </Badge>
 
@@ -241,9 +210,8 @@ function ActiveDownloads() {
   if (loading) {
     return (
       <Card className="bg-zinc-900/50 border-zinc-800">
-        <CardContent className="py-12 text-center text-zinc-500">
-          <Loader2 className="h-5 w-5 animate-spin mx-auto mb-2" />
-          Connecting to download clients…
+        <CardContent>
+          <LoadingState label="Connecting to download clients…" />
         </CardContent>
       </Card>
     );
@@ -267,12 +235,12 @@ function ActiveDownloads() {
 
       {items.length === 0 ? (
         <Card className="bg-zinc-900/50 border-zinc-800 border-dashed">
-          <CardContent className="py-12 text-center">
-            <Download className="h-10 w-10 mx-auto text-zinc-700 mb-3" />
-            <p className="text-sm text-zinc-500">No active downloads</p>
-            <p className="text-xs text-zinc-600 mt-1">
-              Downloads will appear here when you search and grab releases
-            </p>
+          <CardContent>
+            <EmptyState
+              icon={<Download className="h-10 w-10" />}
+              title="No active downloads"
+              description="Downloads will appear here when you search and grab releases"
+            />
           </CardContent>
         </Card>
       ) : (
