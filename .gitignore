@@ -42,3 +42,4 @@ web/storybook-static
 web/playwright-report/
 web/test-results/
 web/*.tsbuildinfo
+run/data/

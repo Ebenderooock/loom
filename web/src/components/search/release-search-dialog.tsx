@@ -562,6 +562,7 @@ export function ReleaseSearchDialog({
   const [filters, setFilters] = useState<SearchFilters>({ ...EMPTY_FILTERS });
   const [didAutoSearch, setDidAutoSearch] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
+  const resultCountRef = useRef(0);
 
   const { data: clients = [] } = useDownloads({ enabled: open });
   const enabledClients = clients.filter((c) => c.enabled);
@@ -617,6 +618,7 @@ export function ReleaseSearchDialog({
     setErrors({});
     setIndexerStates(new Map());
     setFilters({ ...EMPTY_FILTERS });
+    resultCountRef.current = 0;
 
     const controller = streamSearch(
       {
@@ -661,6 +663,7 @@ export function ReleaseSearchDialog({
         },
         onIndexerResult: (id, name, newResults, count, elapsedMs) => {
           setResults((prev) => [...prev, ...newResults]);
+          resultCountRef.current += newResults.length;
           setIndexerStates((prev) => {
             const next = new Map(prev);
             next.set(id, {
@@ -690,6 +693,14 @@ export function ReleaseSearchDialog({
         },
         onDone: () => {
           setLoading(false);
+          const total = resultCountRef.current;
+          if (total > 0) {
+            toast.success(
+              `Search complete: ${total} result${total !== 1 ? "s" : ""} found. Click the download icon to grab a release.`,
+            );
+          } else {
+            toast.warning("Search complete: no results found across any indexer.");
+          }
         },
         onError: (err) => {
           toast.error(err.message);

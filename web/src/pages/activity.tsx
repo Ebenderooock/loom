@@ -32,7 +32,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { SearchDiagnostics } from "@/components/search/search-diagnostics";
 import { formatBytes, formatEta, formatSpeed, relativeTime } from "@/lib/utils";
 import { downloadStatusConfig } from "@/lib/status-utils";
 
@@ -708,7 +707,6 @@ export function ActivityPage() {
               </Badge>
             )}
           </TabsTrigger>
-          <TabsTrigger value="search-log">Search Log</TabsTrigger>
         </TabsList>
         <TabsContent value="queue">
           <DownloadQueue />
@@ -721,9 +719,6 @@ export function ActivityPage() {
         </TabsContent>
         <TabsContent value="reviews">
           <ReviewQueue />
-        </TabsContent>
-        <TabsContent value="search-log">
-          <SearchDiagnostics />
         </TabsContent>
       </Tabs>
     </div>
