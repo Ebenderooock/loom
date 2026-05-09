@@ -10,6 +10,7 @@ import {
   RefreshCw,
   Import,
 } from "lucide-react";
+import { apiFetch } from "@/lib/fetch";
 import { useSetPageHeader } from "@/hooks/use-page-header";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -175,7 +176,7 @@ function ActiveDownloads() {
   const fetchActivity = React.useCallback(async (manual = false) => {
     if (manual) setRefreshing(true);
     try {
-      const res = await fetch("/api/v1/activity", { credentials: "include" });
+      const res = await apiFetch("/api/v1/activity");
       if (res.ok) {
         const body = await res.json();
         setItems(body.items ?? []);

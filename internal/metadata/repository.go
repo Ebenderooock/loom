@@ -73,12 +73,14 @@ func (s *sqliteRepo) PutMovie(ctx context.Context, id string, movie *MovieMetada
 	_, err = s.db.ExecContext(ctx, `
 		REPLACE INTO metadata_movies (
 			id, tmdb_id, imdb_id, tvdb_id, title, year, overview,
-			poster_path, release_date, runtime, rating, cached_json,
+			poster_path, release_date, theatrical_date, digital_date,
+			runtime, rating, cached_json,
 			cached_at, expires_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now', '+7 days'))
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now', '+7 days'))
 	`, id, movie.TMDBID, movie.IMDBID, movie.TVDBID, movie.Title, movie.Year,
-		movie.Overview, movie.PosterPath, movie.ReleaseDate, movie.Runtime,
-		movie.Rating, string(jsonData))
+		movie.Overview, movie.PosterPath, movie.ReleaseDate,
+		movie.TheatricalDate, movie.DigitalDate,
+		movie.Runtime, movie.Rating, string(jsonData))
 	if err != nil {
 		return fmt.Errorf("metadata: put movie %q: %w", id, err)
 	}
@@ -280,16 +282,20 @@ func (p *pgRepo) PutMovie(ctx context.Context, id string, movie *MovieMetadata) 
 	_, err = p.db.ExecContext(ctx, `
 		INSERT INTO metadata_movies (
 			id, tmdb_id, imdb_id, tvdb_id, title, year, overview,
-			poster_path, release_date, runtime, rating, cached_json,
+			poster_path, release_date, theatrical_date, digital_date,
+			runtime, rating, cached_json,
 			cached_at, expires_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW(), NOW() + INTERVAL '7 days')
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW(), NOW() + INTERVAL '7 days')
 		ON CONFLICT (id) DO UPDATE SET
 			tmdb_id = $2, imdb_id = $3, tvdb_id = $4, title = $5, year = $6,
-			overview = $7, poster_path = $8, release_date = $9, runtime = $10,
-			rating = $11, cached_json = $12, cached_at = NOW(), expires_at = NOW() + INTERVAL '7 days'
+			overview = $7, poster_path = $8, release_date = $9,
+			theatrical_date = $10, digital_date = $11,
+			runtime = $12, rating = $13, cached_json = $14,
+			cached_at = NOW(), expires_at = NOW() + INTERVAL '7 days'
 	`, id, movie.TMDBID, movie.IMDBID, movie.TVDBID, movie.Title, movie.Year,
-		movie.Overview, movie.PosterPath, movie.ReleaseDate, movie.Runtime,
-		movie.Rating, jsonData)
+		movie.Overview, movie.PosterPath, movie.ReleaseDate,
+		movie.TheatricalDate, movie.DigitalDate,
+		movie.Runtime, movie.Rating, jsonData)
 	if err != nil {
 		return fmt.Errorf("metadata: put movie %q: %w", id, err)
 	}

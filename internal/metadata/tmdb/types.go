@@ -107,3 +107,23 @@ type CrewEntry struct {
 	Department  string `json:"department"`
 	ProfilePath string `json:"profile_path"`
 }
+
+// ReleaseDatesResponse wraps the /movie/{id}/release_dates endpoint.
+type ReleaseDatesResponse struct {
+	ID      int                     `json:"id"`
+	Results []ReleaseDatesByCountry `json:"results"`
+}
+
+// ReleaseDatesByCountry groups release dates by ISO 3166-1 country code.
+type ReleaseDatesByCountry struct {
+	ISO31661     string        `json:"iso_3166_1"`
+	ReleaseDates []ReleaseDate `json:"release_dates"`
+}
+
+// ReleaseDate is a single release entry from TMDB.
+// Type values: 1=Premiere, 2=Theatrical (limited), 3=Theatrical, 4=Digital, 5=Physical, 6=TV
+type ReleaseDate struct {
+	Type          int    `json:"type"`
+	ReleaseDate   string `json:"release_date"` // ISO 8601 with time
+	Certification string `json:"certification"`
+}

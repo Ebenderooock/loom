@@ -15,6 +15,8 @@ type MovieMetadata struct {
 	Overview    string    `json:"overview,omitempty"`
 	PosterPath  string    `json:"poster_path,omitempty"`
 	ReleaseDate string    `json:"release_date,omitempty"` // ISO 8601
+	TheatricalDate string `json:"theatrical_date,omitempty"` // ISO 8601
+	DigitalDate    string `json:"digital_date,omitempty"`    // ISO 8601
 	Runtime     int       `json:"runtime,omitempty"`
 	Genres      []string  `json:"genres,omitempty"`
 	Rating      float64   `json:"rating,omitempty"`

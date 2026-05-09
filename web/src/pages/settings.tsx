@@ -1,4 +1,5 @@
 import * as React from "react";
+import { apiFetch } from "@/lib/fetch";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -157,7 +158,7 @@ function FolderBrowserDialog({
     setError("");
     try {
       const params = path ? `?path=${encodeURIComponent(path)}` : "";
-      const res = await fetch(`/api/v1/filesystem${params}`, { credentials: "include" });
+      const res = await apiFetch(`/api/v1/filesystem${params}`);
       if (!res.ok) {
         const data = await res.json().catch(() => ({ error: "Failed to browse" }));
         throw new Error(data.error || "Failed to browse directory");
@@ -623,7 +624,7 @@ function ImportModePanel() {
   const [saving, setSaving] = React.useState(false);
 
   React.useEffect(() => {
-    fetch("/api/v1/movies/organize/import-mode", { credentials: "include" })
+    apiFetch("/api/v1/movies/organize/import-mode")
       .then((r) => r.json())
       .then((data) => setImportMode(data.import_mode ?? "move"))
       .catch(() => {});
@@ -633,10 +634,9 @@ function ImportModePanel() {
     setImportMode(value);
     setSaving(true);
     try {
-      await fetch("/api/v1/movies/organize/import-mode", {
+      await apiFetch("/api/v1/movies/organize/import-mode", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        credentials: "include",
         body: JSON.stringify({ import_mode: value }),
       });
       toast.success("Import mode updated");
@@ -680,7 +680,7 @@ function GeneralPanel() {
 
   React.useEffect(() => {
     let cancelled = false;
-    fetch("/api/v1/auth/api-key", { credentials: "include" })
+    apiFetch("/api/v1/auth/api-key")
       .then((res) => (res.ok ? res.json() : null))
       .then((data: { apiKey?: string } | null) => {
         if (!cancelled && data?.apiKey) {
@@ -1044,7 +1044,7 @@ function RemotePathMappingsSection() {
   const [formLocalPath, setFormLocalPath] = React.useState("");
 
   React.useEffect(() => {
-    fetch("/api/v1/download-clients", { credentials: "include" })
+    apiFetch("/api/v1/download-clients")
       .then((r) => (r.ok ? r.json() : []))
       .then((data) => {
         const list = Array.isArray(data) ? data : [];
@@ -2106,8 +2106,8 @@ function RollingSearchPanel() {
   const fetchData = React.useCallback(async () => {
     try {
       const [cfgRes, statusRes] = await Promise.all([
-        fetch("/api/v1/rolling-search/config"),
-        fetch("/api/v1/rolling-search/status"),
+        apiFetch("/api/v1/rolling-search/config"),
+        apiFetch("/api/v1/rolling-search/status"),
       ]);
       if (cfgRes.ok) setConfig(await cfgRes.json());
       if (statusRes.ok) setStatus(await statusRes.json());
@@ -2126,7 +2126,7 @@ function RollingSearchPanel() {
     if (!config) return;
     setSaving(true);
     try {
-      const res = await fetch("/api/v1/rolling-search/config", {
+      const res = await apiFetch("/api/v1/rolling-search/config", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(config),
@@ -2145,7 +2145,7 @@ function RollingSearchPanel() {
 
   const handleTrigger = async () => {
     try {
-      const res = await fetch("/api/v1/rolling-search/trigger", { method: "POST" });
+      const res = await apiFetch("/api/v1/rolling-search/trigger", { method: "POST" });
       if (!res.ok) throw new Error("trigger failed");
       toast.success("Rolling search triggered");
       triggerTimeoutRef.current = setTimeout(fetchData, 2000);

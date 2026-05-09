@@ -2,9 +2,12 @@ package indexers
 
 import (
 	"context"
+	"log/slog"
 	"sync"
 	"time"
 )
+
+const maxBackoffInterval = 1 * time.Hour
 
 // HealthCheckJobName is the scheduler key under which the periodic
 // indexer.Test sweep is registered. Exported so tests and admin
@@ -18,6 +21,11 @@ type HealthChecker struct {
 	svc         *Service
 	maxParallel int
 	timeout     time.Duration
+
+	// Circuit breaker state: exponential backoff for consistently-failing indexers.
+	mu                  sync.Mutex
+	consecutiveFailures map[string]int
+	nextCheckAt         map[string]time.Time
 }
 
 // NewHealthChecker returns a checker bound to svc.
@@ -34,7 +42,13 @@ func NewHealthChecker(svc *Service, maxParallel int, timeout time.Duration) *Hea
 	if timeout <= 0 {
 		timeout = svc.healthCheckTimeout
 	}
-	return &HealthChecker{svc: svc, maxParallel: maxParallel, timeout: timeout}
+	return &HealthChecker{
+		svc:                 svc,
+		maxParallel:         maxParallel,
+		timeout:             timeout,
+		consecutiveFailures: make(map[string]int),
+		nextCheckAt:         make(map[string]time.Time),
+	}
 }
 
 // Run is the scheduler.HandlerFunc entry point. It runs Test against
@@ -66,6 +80,15 @@ func (h *HealthChecker) Run(ctx context.Context) error {
 			return ctx.Err()
 		default:
 		}
+
+		// Skip indexers whose backoff window has not elapsed yet.
+		h.mu.Lock()
+		if next, ok := h.nextCheckAt[ix.ID()]; ok && time.Now().Before(next) {
+			h.mu.Unlock()
+			continue
+		}
+		h.mu.Unlock()
+
 		wg.Add(1)
 		sem <- struct{}{}
 		go func() {
@@ -82,7 +105,30 @@ func (h *HealthChecker) checkOne(ctx context.Context, id string) {
 	health, err := h.svc.TestOne(ctx, id)
 	if err != nil {
 		h.svc.logger.Warn("health check completed", "id", id, "status", health.Status, "latency_ms", health.LatencyMS, "err", err)
+
+		h.mu.Lock()
+		h.consecutiveFailures[id]++
+		count := h.consecutiveFailures[id]
+		backoff := h.timeout // use check timeout as base interval
+		if backoff <= 0 {
+			backoff = 30 * time.Second
+		}
+		delay := backoff * (1 << count)
+		if delay > maxBackoffInterval {
+			delay = maxBackoffInterval
+		}
+		next := time.Now().Add(delay)
+		h.nextCheckAt[id] = next
+		h.mu.Unlock()
+
+		slog.Warn("indexer health check backing off",
+			"indexer", id, "failures", count, "next_check", next)
 	} else {
 		h.svc.logger.Debug("health check completed", "id", id, "status", health.Status, "latency_ms", health.LatencyMS)
+
+		h.mu.Lock()
+		delete(h.consecutiveFailures, id)
+		delete(h.nextCheckAt, id)
+		h.mu.Unlock()
 	}
 }

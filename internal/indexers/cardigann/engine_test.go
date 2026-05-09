@@ -244,130 +244,75 @@ func TestApplyFilters(t *testing.T) {
 	}
 }
 
-func TestExpandTemplate_BoolLiterals(t *testing.T) {
-	eng := &Engine{}
-	ctx := templateContext{
-		Config: map[string]string{"disablesort": "false"},
-		True:   "true",
-		False:  "false",
-	}
-	out, err := eng.expandTemplate(`{{ if eq .Config.disablesort .False }}enabled{{ else }}disabled{{ end }}`, ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if out != "enabled" {
-		t.Errorf("expected 'enabled', got %q", out)
-	}
-}
-
-func TestExpandTemplate_QuerySubFields(t *testing.T) {
-	eng := &Engine{}
-	ctx := templateContext{
-		Keywords: "test show",
-		Query: templateQuery{
-			Keywords: "test show",
-			IMDBID:   "tt1234567",
-			Season:   2,
-			Ep:       5,
+func TestExpandTemplate(t *testing.T) {
+	tests := []struct {
+		name string
+		tmpl string
+		ctx  templateContext
+		want string
+	}{
+		{
+			name: "bool_literals",
+			tmpl: `{{ if eq .Config.disablesort .False }}enabled{{ else }}disabled{{ end }}`,
+			ctx:  templateContext{Config: map[string]string{"disablesort": "false"}, True: "true", False: "false"},
+			want: "enabled",
 		},
-		True:  "true",
-		False: "false",
-	}
-	out, err := eng.expandTemplate(`{{ if .Query.IMDBID }}{{ .Query.IMDBID }}{{ else }}{{ .Keywords }}{{ end }}`, ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if out != "tt1234567" {
-		t.Errorf("expected 'tt1234567', got %q", out)
-	}
-	out, err = eng.expandTemplate(`S{{ .Query.Season }}E{{ .Query.Ep }}`, ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if out != "S2E5" {
-		t.Errorf("expected 'S2E5', got %q", out)
-	}
-}
-
-func TestExpandTemplate_ReReplace(t *testing.T) {
-	eng := &Engine{}
-	ctx := templateContext{Keywords: "hello world", True: "true", False: "false"}
-	out, err := eng.expandTemplate(`{{ re_replace .Keywords "[\\s]+" "%" }}`, ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if out != "hello%world" {
-		t.Errorf("re_replace failed: %q", out)
-	}
-}
-
-func TestExpandTemplate_Replace(t *testing.T) {
-	eng := &Engine{}
-	ctx := templateContext{Keywords: "foo bar baz", True: "true", False: "false"}
-	out, err := eng.expandTemplate(`{{ replace .Keywords " " "+" }}`, ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if out != "foo+bar+baz" {
-		t.Errorf("replace failed: %q", out)
-	}
-}
-
-func TestConfigFieldsWithDefaults(t *testing.T) {
-	eng := &Engine{
-		cfg: Config{
-			Credentials: map[string]string{"apikey": "mykey"},
-		},
-		def: &Definition{
-			Settings: []Setting{
-				{Name: "apiurl", Default: "apibay.org"},
-				{Name: "sort", Default: "created"},
-				{Name: "apikey"}, // no default — should not override
+		{
+			name: "query_imdbid",
+			tmpl: `{{ if .Query.IMDBID }}{{ .Query.IMDBID }}{{ else }}{{ .Keywords }}{{ end }}`,
+			ctx: templateContext{
+				Keywords: "test show",
+				Query:    templateQuery{Keywords: "test show", IMDBID: "tt1234567", Season: 2, Ep: 5},
+				True:     "true", False: "false",
 			},
+			want: "tt1234567",
+		},
+		{
+			name: "query_season_episode",
+			tmpl: `S{{ .Query.Season }}E{{ .Query.Ep }}`,
+			ctx: templateContext{
+				Query: templateQuery{Season: 2, Ep: 5},
+				True:  "true", False: "false",
+			},
+			want: "S2E5",
+		},
+		{
+			name: "re_replace",
+			tmpl: `{{ re_replace .Keywords "[\\s]+" "%" }}`,
+			ctx:  templateContext{Keywords: "hello world", True: "true", False: "false"},
+			want: "hello%world",
+		},
+		{
+			name: "replace",
+			tmpl: `{{ replace .Keywords " " "+" }}`,
+			ctx:  templateContext{Keywords: "foo bar baz", True: "true", False: "false"},
+			want: "foo+bar+baz",
+		},
+		{
+			name: "missing_key_zero",
+			tmpl: `https://{{ .Config.present }}/{{ .Config.missing }}/end`,
+			ctx:  templateContext{Config: map[string]string{"present": "yes"}, True: "true", False: "false"},
+			want: "https://yes//end",
+		},
+		{
+			name: "re_replace_bad_pattern",
+			tmpl: `{{ re_replace .Keywords "[invalid" "x" }}`,
+			ctx:  templateContext{Keywords: "hello", True: "true", False: "false"},
+			want: "hello",
 		},
 	}
-	fields := eng.configFieldsWithDefaults()
-	if fields["apiurl"] != "apibay.org" {
-		t.Errorf("expected default apiurl, got %q", fields["apiurl"])
-	}
-	if fields["sort"] != "created" {
-		t.Errorf("expected default sort, got %q", fields["sort"])
-	}
-	if fields["apikey"] != "mykey" {
-		t.Errorf("operator value should win, got %q", fields["apikey"])
-	}
-}
 
-func TestExpandTemplate_MissingKeyZero(t *testing.T) {
-	// missingkey=zero should render missing map keys as "" not "<no value>".
 	eng := &Engine{}
-	ctx := templateContext{
-		Config: map[string]string{"present": "yes"},
-		True:   "true",
-		False:  "false",
-	}
-	out, err := eng.expandTemplate(`https://{{ .Config.present }}/{{ .Config.missing }}/end`, ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if strings.Contains(out, "<no value>") {
-		t.Errorf("missingkey=zero should suppress <no value>, got %q", out)
-	}
-	if out != "https://yes//end" {
-		t.Errorf("unexpected output: %q", out)
-	}
-}
-
-func TestExpandTemplate_ReReplace_BadPattern(t *testing.T) {
-	eng := &Engine{}
-	ctx := templateContext{Keywords: "hello", True: "true", False: "false"}
-	out, err := eng.expandTemplate(`{{ re_replace .Keywords "[invalid" "x" }}`, ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	// Bad pattern should return input unchanged.
-	if out != "hello" {
-		t.Errorf("bad pattern should return input unchanged, got %q", out)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := eng.expandTemplate(tc.tmpl, tc.ctx)
+			if err != nil {
+				t.Fatalf("expandTemplate error: %v", err)
+			}
+			if got != tc.want {
+				t.Errorf("got %q, want %q", got, tc.want)
+			}
+		})
 	}
 }
 

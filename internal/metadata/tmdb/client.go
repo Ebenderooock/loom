@@ -225,6 +225,72 @@ func (c *Client) GetEpisode(ctx context.Context, tvID, season, episode int) (*me
 	return mapEpisodeResponse(&resp), nil
 }
 
+// GetReleaseDates fetches release dates for a movie from TMDB.
+// It returns the best theatrical and digital dates, preferring US releases.
+func (c *Client) GetReleaseDates(ctx context.Context, tmdbID int) (theatrical, digital string, err error) {
+	url := fmt.Sprintf("%s/movie/%d/release_dates", c.config.BaseURL, tmdbID)
+	body, err := c.doRequest(ctx, url)
+	if err != nil {
+		return "", "", err
+	}
+
+	var resp ReleaseDatesResponse
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return "", "", fmt.Errorf("tmdb: failed to unmarshal release_dates response: %w", err)
+	}
+
+	// Priority: US > GB > first available
+	preferredCountries := []string{"US", "GB"}
+
+	var bestTheatrical, bestDigital string
+
+	for _, country := range preferredCountries {
+		for _, r := range resp.Results {
+			if r.ISO31661 != country {
+				continue
+			}
+			for _, rd := range r.ReleaseDates {
+				date := rd.ReleaseDate
+				if len(date) >= 10 {
+					date = date[:10] // trim to YYYY-MM-DD
+				}
+				if (rd.Type == 2 || rd.Type == 3) && bestTheatrical == "" {
+					bestTheatrical = date
+				}
+				if rd.Type == 4 && bestDigital == "" {
+					bestDigital = date
+				}
+			}
+		}
+		if bestTheatrical != "" || bestDigital != "" {
+			break
+		}
+	}
+
+	// Fallback: scan all countries if preferred ones had nothing
+	if bestTheatrical == "" && bestDigital == "" {
+		for _, r := range resp.Results {
+			for _, rd := range r.ReleaseDates {
+				date := rd.ReleaseDate
+				if len(date) >= 10 {
+					date = date[:10]
+				}
+				if (rd.Type == 2 || rd.Type == 3) && bestTheatrical == "" {
+					bestTheatrical = date
+				}
+				if rd.Type == 4 && bestDigital == "" {
+					bestDigital = date
+				}
+			}
+			if bestTheatrical != "" && bestDigital != "" {
+				break
+			}
+		}
+	}
+
+	return bestTheatrical, bestDigital, nil
+}
+
 // doRequest is a helper that adds API key and calls doHTTPRequest.
 func (c *Client) doRequest(ctx context.Context, url string) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)

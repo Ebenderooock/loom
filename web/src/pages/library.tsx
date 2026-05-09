@@ -11,6 +11,7 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { toast } from "sonner";
+import { apiFetch } from "@/lib/fetch";
 import { useSetPageHeader } from "@/hooks/use-page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -98,7 +99,7 @@ export function LibraryPage() {
     setRescanningAll(true);
     const results = await Promise.allSettled(
       libraries.map(lib =>
-        fetch(`/api/v1/libraries/${lib.id}/scan`, { method: "POST", credentials: "include" })
+        apiFetch(`/api/v1/libraries/${lib.id}/scan`, { method: "POST" })
           .then(r => { if (!r.ok) throw new Error(`${r.status}`); })
       )
     );

@@ -15,6 +15,7 @@ type Event struct {
 	ID           string `json:"id"`
 	Title        string `json:"title"`
 	Type         string `json:"type"`
+	ReleaseType  string `json:"releaseType,omitempty"`
 	Date         string `json:"date"`
 	Status       string `json:"status"`
 	Year         int    `json:"year,omitempty"`
@@ -66,11 +67,15 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 
 	events := make([]Event, 0)
 
-	// Query movies with release_date in range
+	// Query movies with release_date, theatrical_date, or digital_date in range
 	movieRows, err := h.db.QueryContext(r.Context(),
-		`SELECT id, title, year, release_date, status FROM movies
-		 WHERE release_date >= ? AND release_date <= ? AND deleted_at IS NULL`,
-		startStr, endStr)
+		`SELECT id, title, year, release_date, status, theatrical_date, digital_date FROM movies
+		 WHERE deleted_at IS NULL AND (
+		   (release_date >= ? AND release_date <= ?) OR
+		   (theatrical_date != '' AND theatrical_date >= ? AND theatrical_date <= ?) OR
+		   (digital_date != '' AND digital_date >= ? AND digital_date <= ?)
+		 )`,
+		startStr, endStr, startStr, endStr, startStr, endStr)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, fmt.Sprintf("query movies: %v", err))
 		return
@@ -78,9 +83,9 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 	defer movieRows.Close()
 
 	for movieRows.Next() {
-		var id, title, releaseDate, status string
+		var id, title, releaseDate, status, theatricalDate, digitalDate string
 		var year int
-		if err := movieRows.Scan(&id, &title, &year, &releaseDate, &status); err != nil {
+		if err := movieRows.Scan(&id, &title, &year, &releaseDate, &status, &theatricalDate, &digitalDate); err != nil {
 			writeError(w, http.StatusInternalServerError, fmt.Sprintf("scan movie: %v", err))
 			return
 		}
@@ -88,14 +93,39 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 		if status != "missing" && status != "unreleased" {
 			calStatus = "downloaded"
 		}
-		events = append(events, Event{
-			ID:     id,
-			Title:  title,
-			Type:   "movie",
-			Date:   releaseDate,
-			Status: calStatus,
-			Year:   year,
-		})
+		if releaseDate != "" {
+			events = append(events, Event{
+				ID:          id,
+				Title:       title,
+				Type:        "movie",
+				ReleaseType: "release",
+				Date:        releaseDate,
+				Status:      calStatus,
+				Year:        year,
+			})
+		}
+		if theatricalDate != "" {
+			events = append(events, Event{
+				ID:          id,
+				Title:       title,
+				Type:        "movie",
+				ReleaseType: "theatrical",
+				Date:        theatricalDate,
+				Status:      calStatus,
+				Year:        year,
+			})
+		}
+		if digitalDate != "" {
+			events = append(events, Event{
+				ID:          id,
+				Title:       title,
+				Type:        "movie",
+				ReleaseType: "digital",
+				Date:        digitalDate,
+				Status:      calStatus,
+				Year:        year,
+			})
+		}
 	}
 	if err := movieRows.Err(); err != nil {
 		writeError(w, http.StatusInternalServerError, fmt.Sprintf("iterate movies: %v", err))
