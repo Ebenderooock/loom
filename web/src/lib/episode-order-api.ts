@@ -1,6 +1,7 @@
 // Typed fetch wrappers for the Loom episode-ordering & packs REST endpoints.
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { apiFetch } from "@/lib/fetch";
 
 // ─── Episode Ordering Types ────────────────────────────────────────────
 
@@ -70,7 +71,7 @@ export async function fetchEpisodeMappings(
   const params = new URLSearchParams();
   if (orderingType) params.set("type", orderingType);
   const url = `/api/v1/episode-order/series/${seriesId}/mappings${params.toString() ? `?${params}` : ""}`;
-  const res = await fetch(url, { signal });
+  const res = await apiFetch(url, { signal });
   if (!res.ok) throw new Error(`episode mappings: ${res.status}`);
   const json = await res.json();
   return json.data as EpisodeMapping[];
@@ -80,7 +81,7 @@ export async function createEpisodeMapping(
   seriesId: string,
   mapping: CreateMappingRequest,
 ): Promise<EpisodeMapping> {
-  const res = await fetch(`/api/v1/episode-order/series/${seriesId}/mappings`, {
+  const res = await apiFetch(`/api/v1/episode-order/series/${seriesId}/mappings`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(mapping),
@@ -90,7 +91,7 @@ export async function createEpisodeMapping(
 }
 
 export async function deleteEpisodeMapping(id: string): Promise<void> {
-  const res = await fetch(`/api/v1/episode-order/mappings/${id}`, {
+  const res = await apiFetch(`/api/v1/episode-order/mappings/${id}`, {
     method: "DELETE",
   });
   if (!res.ok) throw new Error(`delete mapping: ${res.status}`);
@@ -100,7 +101,7 @@ export async function setOrderingType(
   seriesId: string,
   orderingType: OrderingType,
 ): Promise<void> {
-  const res = await fetch(
+  const res = await apiFetch(
     `/api/v1/episode-order/series/${seriesId}/ordering-type`,
     {
       method: "PUT",
@@ -120,14 +121,14 @@ export async function fetchPackHistory(
   const params = new URLSearchParams();
   if (seriesId) params.set("seriesId", seriesId);
   const url = `/api/v1/packs/history${params.toString() ? `?${params}` : ""}`;
-  const res = await fetch(url, { signal });
+  const res = await apiFetch(url, { signal });
   if (!res.ok) throw new Error(`pack history: ${res.status}`);
   const json = await res.json();
   return json.data as PackHistory[];
 }
 
 export async function detectPack(title: string): Promise<DetectedPack> {
-  const res = await fetch("/api/v1/packs/detect", {
+  const res = await apiFetch("/api/v1/packs/detect", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ title }),

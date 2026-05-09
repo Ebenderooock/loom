@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { apiFetch } from "@/lib/fetch";
 
 // ─── Types ──────────────────────────────────────────────────────────────
 
@@ -46,7 +47,7 @@ export async function fetchAuditLog(
   if (params.until) qs.set("until", params.until);
 
   const url = `/api/v1/system/audit-log${qs.toString() ? `?${qs}` : ""}`;
-  const res = await fetch(url, { signal });
+  const res = await apiFetch(url, { signal });
   if (!res.ok) {
     throw new Error(`audit log: ${res.status} ${res.statusText}`);
   }

@@ -1,6 +1,7 @@
 // Typed fetch wrappers for the Loom calendar REST endpoint.
 
 import { useQuery } from "@tanstack/react-query";
+import { apiFetch } from "@/lib/fetch";
 
 // ---------- Types ----------
 
@@ -15,12 +16,13 @@ export interface CalendarEvent {
   season?: number;
   episode?: number;
   episodeTitle?: string;
+  releaseType?: "release" | "theatrical" | "digital";
 }
 
 // ---------- HTTP helpers ----------
 
 async function request<T>(path: string, signal?: AbortSignal): Promise<T> {
-  const res = await fetch(path, { method: "GET", signal, credentials: "include" });
+  const res = await apiFetch(path, { method: "GET", signal });
   if (!res.ok) {
     throw new Error(`GET ${path} failed: ${res.status} ${res.statusText}`);
   }

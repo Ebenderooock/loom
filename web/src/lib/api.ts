@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { apiFetch } from "@/lib/fetch";
 
 export interface SystemStatus {
   version: string;
@@ -10,7 +11,7 @@ export interface SystemStatus {
 export async function fetchSystemStatus(
   signal?: AbortSignal,
 ): Promise<SystemStatus> {
-  const res = await fetch("/api/v1/system/status", { signal });
+  const res = await apiFetch("/api/v1/system/status", { signal });
   if (!res.ok) {
     throw new Error(`system status: ${res.status} ${res.statusText}`);
   }

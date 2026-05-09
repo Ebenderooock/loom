@@ -1,6 +1,7 @@
 // Typed fetch wrappers for remote path mappings REST endpoints.
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { apiFetch } from "@/lib/fetch";
 
 // ---------- Types ----------
 
@@ -23,7 +24,7 @@ export interface CreateRemotePathMappingRequest {
 const BASE = "/api/v1/download-clients/remote-path-mappings";
 
 export async function listRemotePathMappings(): Promise<RemotePathMapping[]> {
-  const res = await fetch(BASE, { credentials: "include" });
+  const res = await apiFetch(BASE);
   if (!res.ok) throw new Error("Failed to fetch remote path mappings");
   return res.json();
 }
@@ -31,9 +32,8 @@ export async function listRemotePathMappings(): Promise<RemotePathMapping[]> {
 export async function createRemotePathMapping(
   req: CreateRemotePathMappingRequest
 ): Promise<RemotePathMapping> {
-  const res = await fetch(BASE, {
+  const res = await apiFetch(BASE, {
     method: "POST",
-    credentials: "include",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(req),
   });
@@ -45,9 +45,8 @@ export async function createRemotePathMapping(
 }
 
 export async function deleteRemotePathMapping(id: string): Promise<void> {
-  const res = await fetch(`${BASE}/${id}`, {
+  const res = await apiFetch(`${BASE}/${id}`, {
     method: "DELETE",
-    credentials: "include",
   });
   if (!res.ok) throw new Error("Failed to delete mapping");
 }

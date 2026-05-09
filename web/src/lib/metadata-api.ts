@@ -2,6 +2,7 @@
 // Implements TanStack Query patterns for search, import, stats, and provider tests.
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { apiFetch } from "@/lib/fetch";
 
 // ---------- Types ----------
 
@@ -74,7 +75,7 @@ export class ApiError extends Error {
 }
 
 async function httpGet<T>(path: string): Promise<T> {
-  const resp = await fetch(path, { method: "GET" });
+  const resp = await apiFetch(path, { method: "GET" });
   if (!resp.ok) {
     const text = await resp.text();
     throw new ApiError(resp.status, text);
@@ -83,7 +84,7 @@ async function httpGet<T>(path: string): Promise<T> {
 }
 
 async function httpPost<T>(path: string, body: unknown): Promise<T> {
-  const resp = await fetch(path, {
+  const resp = await apiFetch(path, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
