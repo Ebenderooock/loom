@@ -43,6 +43,10 @@ func (s *Service) Mount(r chi.Router) {
 	})
 	// Aggregate activity endpoint across all download clients
 	r.Get("/api/v1/activity", s.handleActivity)
+	// Aggregate actions (frontend sends client_id + item_id in body)
+	r.Post("/api/v1/activity/pause", s.handleActivityPause)
+	r.Post("/api/v1/activity/resume", s.handleActivityResume)
+	r.Post("/api/v1/activity/remove", s.handleActivityRemove)
 	// Download history endpoint
 	r.Get("/api/v1/downloads/history", s.handleHistory)
 	for _, ext := range s.routeExtensions {
@@ -754,4 +758,68 @@ func (s *Service) recordManualGrab(ctx context.Context, res AddResult, req AddRe
 			"client_id", res.ClientID, "item_id", res.ItemID,
 			"media_type", req.MediaType)
 	}
+}
+
+// --- Aggregate activity actions (work across all clients) ---
+
+type activityActionRequest struct {
+	ClientID    string   `json:"client_id"`
+	IDs         []string `json:"ids"`
+	DeleteFiles bool     `json:"delete_files"`
+}
+
+func (s *Service) handleActivityPause(w http.ResponseWriter, r *http.Request) {
+	s.handleActivityAction(w, r, func(c DownloadClient, ctx context.Context, ids []string) error {
+		return c.Pause(ctx, ids...)
+	})
+}
+
+func (s *Service) handleActivityResume(w http.ResponseWriter, r *http.Request) {
+	s.handleActivityAction(w, r, func(c DownloadClient, ctx context.Context, ids []string) error {
+		return c.Resume(ctx, ids...)
+	})
+}
+
+func (s *Service) handleActivityRemove(w http.ResponseWriter, r *http.Request) {
+	var req activityActionRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_body", err.Error())
+		return
+	}
+	if req.ClientID == "" || len(req.IDs) == 0 {
+		writeError(w, http.StatusBadRequest, "invalid_request", "client_id and ids are required")
+		return
+	}
+	c, ok := s.registry.Get(req.ClientID)
+	if !ok {
+		writeError(w, http.StatusNotFound, "not_found", "download client not found")
+		return
+	}
+	if err := c.Remove(r.Context(), req.IDs, req.DeleteFiles); err != nil {
+		writeError(w, http.StatusBadGateway, "operation_failed", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+func (s *Service) handleActivityAction(w http.ResponseWriter, r *http.Request, fn func(DownloadClient, context.Context, []string) error) {
+	var req activityActionRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_body", err.Error())
+		return
+	}
+	if req.ClientID == "" || len(req.IDs) == 0 {
+		writeError(w, http.StatusBadRequest, "invalid_request", "client_id and ids are required")
+		return
+	}
+	c, ok := s.registry.Get(req.ClientID)
+	if !ok {
+		writeError(w, http.StatusNotFound, "not_found", "download client not found")
+		return
+	}
+	if err := fn(c, r.Context(), req.IDs); err != nil {
+		writeError(w, http.StatusBadGateway, "operation_failed", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }

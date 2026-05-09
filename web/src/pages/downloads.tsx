@@ -9,6 +9,10 @@ import {
   ArrowUp,
   RefreshCw,
   Import,
+  Square,
+  Pause,
+  Play,
+  FolderInput,
 } from "lucide-react";
 import { apiFetch } from "@/lib/fetch";
 import { useSetPageHeader } from "@/hooks/use-page-header";
@@ -18,11 +22,13 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import { ImportManager } from "@/components/imports/import-manager";
+import { toast } from "sonner";
 
 // ─── Types ──────────────────────────────────────────────────────────────
 
 interface QueueItem {
   id: string;
+  client_id: string;
   title: string;
   category: string;
   status: string;
@@ -43,6 +49,37 @@ import { formatBytes, formatSpeed, formatEta } from "@/lib/utils";
 import { downloadStatusConfig } from "@/lib/status-utils";
 import { EmptyState } from "@/components/ui/empty-state";
 import { LoadingState } from "@/components/ui/loading-state";
+
+// ─── Actions ────────────────────────────────────────────────────────────
+
+async function activityAction(
+  endpoint: string,
+  clientId: string,
+  ids: string[],
+  extra?: Record<string, unknown>,
+) {
+  const res = await apiFetch(`/api/v1/activity/${endpoint}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ client_id: clientId, ids, ...extra }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.message ?? `Action failed (${res.status})`);
+  }
+}
+
+async function forceImport(path: string) {
+  const res = await apiFetch("/api/v1/imports/manual", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ path }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.message ?? `Import failed (${res.status})`);
+  }
+}
 
 // ─── Queue Stats Bar ────────────────────────────────────────────────────
 
@@ -86,10 +123,27 @@ function QueueStats({ items }: { items: QueueItem[] }) {
 
 // ─── Queue Item Row ─────────────────────────────────────────────────────
 
-function QueueItemRow({ item }: { item: QueueItem }) {
+function QueueItemRow({ item, onRefresh }: { item: QueueItem; onRefresh: () => void }) {
   const sc = downloadStatusConfig(item.status);
   const pct = Math.min(100, (item.progress ?? 0) * 100);
   const isActive = item.status === "downloading";
+  const isPaused = item.status === "paused";
+  const isCompleted = item.status === "completed";
+  const canPauseResume = isActive || isPaused || item.status === "queued";
+  const [busy, setBusy] = React.useState(false);
+
+  const runAction = async (label: string, fn: () => Promise<void>) => {
+    setBusy(true);
+    try {
+      await fn();
+      toast.success(`${label}: ${item.title}`);
+      onRefresh();
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : `${label} failed`);
+    } finally {
+      setBusy(false);
+    }
+  };
 
   return (
     <div className="group flex items-center gap-4 px-4 py-3 border-b border-zinc-800/50 last:border-0 hover:bg-zinc-800/30 transition-colors">
@@ -108,7 +162,7 @@ function QueueItemRow({ item }: { item: QueueItem }) {
         )}
 
         {/* Progress bar (only for downloading/queued/paused) */}
-        {item.status !== "seeding" && item.status !== "completed" && (
+        {item.status !== "seeding" && !isCompleted && (
           <div className="flex items-center gap-2 mt-1.5">
             <Progress value={pct} className="h-1.5 flex-1 bg-zinc-800" />
             <span className="text-[11px] text-zinc-500 tabular-nums w-10 text-right">
@@ -162,6 +216,58 @@ function QueueItemRow({ item }: { item: QueueItem }) {
           {item.ratio.toFixed(2)}
         </div>
       )}
+
+      {/* Actions */}
+      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+        {/* Pause / Resume */}
+        {canPauseResume && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 text-zinc-400 hover:text-zinc-200"
+            disabled={busy}
+            title={isPaused ? "Resume" : "Pause"}
+            onClick={() =>
+              runAction(
+                isPaused ? "Resumed" : "Paused",
+                () => activityAction(isPaused ? "resume" : "pause", item.client_id, [item.id]),
+              )
+            }
+          >
+            {isPaused ? <Play className="h-3.5 w-3.5" /> : <Pause className="h-3.5 w-3.5" />}
+          </Button>
+        )}
+
+        {/* Force Import (completed items only) */}
+        {isCompleted && item.save_path && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 text-zinc-400 hover:text-emerald-400"
+            disabled={busy}
+            title="Force Import"
+            onClick={() => runAction("Import started", () => forceImport(item.save_path))}
+          >
+            <FolderInput className="h-3.5 w-3.5" />
+          </Button>
+        )}
+
+        {/* Stop / Remove */}
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7 text-zinc-400 hover:text-red-400"
+          disabled={busy}
+          title="Stop &amp; remove (delete files)"
+          onClick={() =>
+            runAction("Stopped", () =>
+              activityAction("remove", item.client_id, [item.id], { delete_files: true }),
+            )
+          }
+        >
+          <Square className="h-3.5 w-3.5" />
+        </Button>
+      </div>
     </div>
   );
 }
@@ -248,7 +354,7 @@ function ActiveDownloads() {
         <Card className="bg-zinc-900/50 border-zinc-800 overflow-hidden">
           <div className="divide-y divide-zinc-800/50">
             {sorted.map((item) => (
-              <QueueItemRow key={item.id} item={item} />
+              <QueueItemRow key={item.id} item={item} onRefresh={() => fetchActivity()} />
             ))}
           </div>
         </Card>
