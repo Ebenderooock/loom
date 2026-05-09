@@ -1,6 +1,7 @@
 // Typed fetch wrappers for the Loom connect (media server integrations) REST endpoints.
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { apiFetch } from "@/lib/fetch";
 
 // ---------- Types ----------
 
@@ -66,12 +67,12 @@ async function request<T>(
   body?: unknown,
   signal?: AbortSignal,
 ): Promise<T> {
-  const init: RequestInit = { method, signal, credentials: "include" };
+  const init: RequestInit = { method, signal };
   if (body !== undefined) {
     init.headers = { "Content-Type": "application/json" };
     init.body = JSON.stringify(body);
   }
-  const res = await fetch(path, init);
+  const res = await apiFetch(path, init);
   if (res.status === 204) {
     return undefined as T;
   }

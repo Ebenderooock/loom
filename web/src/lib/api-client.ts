@@ -1,4 +1,5 @@
 import { useAuth } from "@/hooks/use-auth";
+import { apiFetch } from "@/lib/fetch";
 
 const API_BASE_URL = "/api/v1";
 
@@ -32,8 +33,7 @@ export function useApiClient() {
     };
 
     try {
-      const response = await fetch(url, {
-        credentials: "include",
+      const response = await apiFetch(url, {
         ...options,
         headers,
       });

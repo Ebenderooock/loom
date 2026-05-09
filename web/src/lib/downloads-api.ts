@@ -4,6 +4,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { UseQueryOptions } from "@tanstack/react-query";
+import { apiFetch } from "@/lib/fetch";
 
 // ---------- Types ----------
 
@@ -116,7 +117,7 @@ async function request<T>(
     init.headers = { "Content-Type": "application/json" };
     init.body = JSON.stringify(body);
   }
-  const res = await fetch(path, init);
+  const res = await apiFetch(path, init);
   if (res.status === 204) {
     return undefined as T;
   }

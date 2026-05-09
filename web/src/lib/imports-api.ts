@@ -2,6 +2,7 @@
 // Mirrors internal/imports/ types; keep in sync if the contract changes.
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { apiFetch } from "@/lib/fetch";
 
 // ---------- Types ----------
 
@@ -50,8 +51,7 @@ export interface ImportDecision {
 // ---------- API calls ----------
 
 async function fetchJSON<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, {
-    credentials: "include",
+  const res = await apiFetch(url, {
     headers: { "Content-Type": "application/json" },
     ...init,
   });
