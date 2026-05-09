@@ -363,16 +363,38 @@ func (fr *FlexResponse) UnmarshalYAML(value *yaml.Node) error {
 
 // RowsBlock is the selector that returns the per-release nodes.
 type RowsBlock struct {
-	// Selector is the CSS selector or XPath expression. XPath is
-	// detected by a leading "/" or "(" character.
+	// Selector is the CSS selector (HTML) or dot-path (JSON) that
+	// locates the array of result items.
 	Selector string `yaml:"selector"`
 
 	// After is a Cardigann attribute that drops the first N rows of
 	// each result page (used to skip a header row).
 	After int `yaml:"after,omitempty"`
 
+	// Attribute names a nested array inside each row that should be
+	// expanded into individual results (e.g. "torrents" in YTS where
+	// each movie has multiple quality variants). JSON mode only.
+	Attribute string `yaml:"attribute,omitempty"`
+
+	// Multiple, when true combined with Attribute, produces one
+	// result per attribute entry × parent row. JSON mode only.
+	Multiple bool `yaml:"multiple,omitempty"`
+
+	// MissingAttributeEqualsNoResults makes a missing Attribute
+	// yield zero results instead of an error. JSON mode only.
+	MissingAttributeEqualsNoResults bool `yaml:"missingAttributeEqualsNoResults,omitempty"`
+
+	// Count optionally holds a selector whose value indicates the
+	// total number of results. JSON mode only.
+	Count *RowsCount `yaml:"count,omitempty"`
+
 	// Filters apply to the node-set as a whole. Currently ignored.
 	Filters []Filter `yaml:"filters,omitempty"`
+}
+
+// RowsCount locates a scalar count value in the response.
+type RowsCount struct {
+	Selector string `yaml:"selector"`
 }
 
 // Field is one extraction recipe inside `fields:`.
