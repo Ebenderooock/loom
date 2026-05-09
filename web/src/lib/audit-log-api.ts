@@ -6,10 +6,12 @@ import { apiFetch } from "@/lib/fetch";
 export interface AuditLogEntry {
   id: string;
   timestamp: string;
+  occurred_at?: string;
   category: string;
   event_type: string;
   message: string;
   detail?: string;
+  entity_type?: string;
   entity_id?: string;
   entity_name?: string;
   level: string;
@@ -25,6 +27,7 @@ export interface AuditLogResult {
 
 export interface AuditLogParams {
   category?: string;
+  event_type?: string;
   level?: string;
   limit?: number;
   offset?: number;
@@ -40,9 +43,10 @@ export async function fetchAuditLog(
 ): Promise<AuditLogResult> {
   const qs = new URLSearchParams();
   if (params.category) qs.set("category", params.category);
+  if (params.event_type) qs.set("event_type", params.event_type);
   if (params.level) qs.set("level", params.level);
-  if (params.limit) qs.set("limit", String(params.limit));
-  if (params.offset) qs.set("offset", String(params.offset));
+  if (params.limit != null) qs.set("limit", String(params.limit));
+  if (params.offset != null) qs.set("offset", String(params.offset));
   if (params.since) qs.set("since", params.since);
   if (params.until) qs.set("until", params.until);
 

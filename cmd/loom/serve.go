@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/ebenderooock/loom/internal/appconfig"
+	"github.com/ebenderooock/loom/internal/auditlog"
 	"github.com/ebenderooock/loom/internal/backup"
 	"github.com/ebenderooock/loom/internal/customformats"
 	"github.com/ebenderooock/loom/internal/migrate"
@@ -111,7 +112,9 @@ func cmdServe(ctx context.Context, args []string) error {
 		}
 	}
 
-	sched, err := buildScheduler(ctx, cfg, db, logger)
+	auditLogger := auditlog.New(db.DB(), logger)
+
+	sched, err := buildScheduler(ctx, cfg, db, auditLogger, logger)
 	if err != nil {
 		return fmt.Errorf("init scheduler: %w", err)
 	}
@@ -181,7 +184,7 @@ func cmdServe(ctx context.Context, args []string) error {
 	defer dlWiring.monitorCancel()
 
 	// Wire infrastructure services (connect, compat, notifications, rolling search, health)
-	infra, err := wireInfra(ctx, db, srv, indexerSvc, downloadSvc, moviesSvc, media, logger)
+	infra, err := wireInfra(ctx, db, srv, indexerSvc, downloadSvc, moviesSvc, media, auditLogger, logger)
 	if err != nil {
 		return fmt.Errorf("wire infra: %w", err)
 	}
@@ -191,6 +194,7 @@ func cmdServe(ctx context.Context, args []string) error {
 	defer infra.rollingSearcher.Stop()
 	infra.healthMon.Start(ctx)
 	defer infra.healthMon.Stop()
+	defer infra.auditSink.Close()
 
 	errCh := make(chan error, 1)
 	go func() { errCh <- srv.Start() }()

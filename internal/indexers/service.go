@@ -194,17 +194,16 @@ func (s *Service) Create(ctx context.Context, def Definition) (Definition, error
 		LastCheckedAt: s.clock.Now(),
 	})
 
-	if s.auditLog != nil {
-		s.auditLog.Log(ctx, auditlog.Entry{
-			Category:   "indexer",
-			EventType:  "indexer.created",
-			Message:    fmt.Sprintf("Indexer %q created", saved.Name),
-			EntityID:   auditlog.StrPtr(saved.ID),
-			EntityName: auditlog.StrPtr(saved.Name),
-			Level:      "info",
-			Source:     auditlog.StrPtr("user"),
-		})
-	}
+	s.auditLog.Log(ctx, auditlog.Entry{
+		Category:   "indexer",
+		EventType:  "indexer.created",
+		Message:    fmt.Sprintf("Indexer %q created", saved.Name),
+		EntityType: auditlog.StrPtr("indexer"),
+		EntityID:   auditlog.StrPtr(saved.ID),
+		EntityName: auditlog.StrPtr(saved.Name),
+		Level:      "info",
+		Source:     auditlog.StrPtr("user"),
+	})
 
 	return saved, nil
 }
@@ -383,17 +382,16 @@ func (s *Service) Replace(ctx context.Context, def Definition) (Definition, erro
 		s.registry.Remove(saved.ID)
 	}
 
-	if s.auditLog != nil {
-		s.auditLog.Log(ctx, auditlog.Entry{
-			Category:   "indexer",
-			EventType:  "indexer.updated",
-			Message:    fmt.Sprintf("Indexer %q updated (replace)", saved.Name),
-			EntityID:   auditlog.StrPtr(saved.ID),
-			EntityName: auditlog.StrPtr(saved.Name),
-			Level:      "info",
-			Source:     auditlog.StrPtr("user"),
-		})
-	}
+	s.auditLog.Log(ctx, auditlog.Entry{
+		Category:   "indexer",
+		EventType:  "indexer.updated",
+		Message:    fmt.Sprintf("Indexer %q updated (replace)", saved.Name),
+		EntityType: auditlog.StrPtr("indexer"),
+		EntityID:   auditlog.StrPtr(saved.ID),
+		EntityName: auditlog.StrPtr(saved.Name),
+		Level:      "info",
+		Source:     auditlog.StrPtr("user"),
+	})
 
 	return saved, nil
 }
@@ -415,17 +413,16 @@ func (s *Service) Patch(ctx context.Context, p Patch) (Definition, error) {
 		s.registry.Remove(saved.ID)
 	}
 
-	if s.auditLog != nil {
-		s.auditLog.Log(ctx, auditlog.Entry{
-			Category:   "indexer",
-			EventType:  "indexer.updated",
-			Message:    fmt.Sprintf("Indexer %q updated (patch)", saved.Name),
-			EntityID:   auditlog.StrPtr(saved.ID),
-			EntityName: auditlog.StrPtr(saved.Name),
-			Level:      "info",
-			Source:     auditlog.StrPtr("user"),
-		})
-	}
+	s.auditLog.Log(ctx, auditlog.Entry{
+		Category:   "indexer",
+		EventType:  "indexer.updated",
+		Message:    fmt.Sprintf("Indexer %q updated (patch)", saved.Name),
+		EntityType: auditlog.StrPtr("indexer"),
+		EntityID:   auditlog.StrPtr(saved.ID),
+		EntityName: auditlog.StrPtr(saved.Name),
+		Level:      "info",
+		Source:     auditlog.StrPtr("user"),
+	})
 
 	return saved, nil
 }
@@ -445,17 +442,16 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 		return err
 	}
 
-	if s.auditLog != nil {
-		s.auditLog.Log(ctx, auditlog.Entry{
-			Category:   "indexer",
-			EventType:  "indexer.deleted",
-			Message:    fmt.Sprintf("Indexer %q deleted", name),
-			EntityID:   auditlog.StrPtr(id),
-			EntityName: auditlog.StrPtr(name),
-			Level:      "info",
-			Source:     auditlog.StrPtr("user"),
-		})
-	}
+	s.auditLog.Log(ctx, auditlog.Entry{
+		Category:   "indexer",
+		EventType:  "indexer.deleted",
+		Message:    fmt.Sprintf("Indexer %q deleted", name),
+		EntityType: auditlog.StrPtr("indexer"),
+		EntityID:   auditlog.StrPtr(id),
+		EntityName: auditlog.StrPtr(name),
+		Level:      "info",
+		Source:     auditlog.StrPtr("user"),
+	})
 	return nil
 }
 
@@ -504,28 +500,27 @@ func (s *Service) TestOne(ctx context.Context, id string) (Health, error) {
 		s.logger.Warn("persist health failed", "id", id, "err", perr)
 	}
 
-	if s.auditLog != nil {
-		status := "passed"
-		level := "info"
-		if err != nil {
-			if h.Status == StatusDegraded {
-				status = "degraded"
-			} else {
-				status = "failed"
-			}
-			level = "warn"
+	status := "passed"
+	level := "info"
+	if err != nil {
+		if h.Status == StatusDegraded {
+			status = "degraded"
+		} else {
+			status = "failed"
 		}
-		s.auditLog.Log(ctx, auditlog.Entry{
-			Category:   "indexer",
-			EventType:  "indexer.test",
-			Message:    fmt.Sprintf("Indexer test %s: %s", status, ix.Name()),
-			Detail:     auditlog.StrPtr(h.LastError),
-			EntityID:   auditlog.StrPtr(id),
-			EntityName: auditlog.StrPtr(ix.Name()),
-			Level:      level,
-			Source:     auditlog.StrPtr("user"),
-		})
+		level = "warn"
 	}
+	s.auditLog.Log(ctx, auditlog.Entry{
+		Category:   "indexer",
+		EventType:  "indexer.test",
+		Message:    fmt.Sprintf("Indexer test %s: %s", status, ix.Name()),
+		Detail:     auditlog.StrPtr(h.LastError),
+		EntityType: auditlog.StrPtr("indexer"),
+		EntityID:   auditlog.StrPtr(id),
+		EntityName: auditlog.StrPtr(ix.Name()),
+		Level:      level,
+		Source:     auditlog.StrPtr("user"),
+	})
 
 	return h, err
 }
@@ -594,19 +589,26 @@ func (s *Service) Search(ctx context.Context, q Query, ids []string, perTimeout 
 		}
 	}
 
-	if s.auditLog != nil {
-		indexerCount := 0
-		if agg.Diagnostics != nil {
-			indexerCount = len(agg.Diagnostics.Indexers)
+	indexerCount := 0
+	failedCount := 0
+	if agg.Diagnostics != nil {
+		indexerCount = len(agg.Diagnostics.Indexers)
+		for _, d := range agg.Diagnostics.Indexers {
+			if d.Status == "error" || d.Status == "timeout" {
+				failedCount++
+			}
 		}
-		s.auditLog.Log(ctx, auditlog.Entry{
-			Category:  "indexer",
-			EventType: "indexer.search.completed",
-			Message:   fmt.Sprintf("Search completed: %q — %d results from %d indexers", q.Term, len(agg.Results), indexerCount),
-			Level:     "info",
-			Source:    auditlog.StrPtr("system"),
-		})
 	}
+	s.auditLog.Log(ctx, auditlog.Entry{
+		Category:   "search",
+		EventType:  "search.completed",
+		Message:    fmt.Sprintf("Search %q returned %d results from %d indexers", q.Term, len(agg.Results), indexerCount),
+		Detail:     auditlog.DetailJSON(map[string]any{"query_log_id": queryLogID, "query": q.Term, "query_type": "search", "total_results": len(agg.Results), "indexer_count": indexerCount, "failed_indexer_count": failedCount}),
+		EntityType: auditlog.StrPtr("search"),
+		EntityID:   auditlog.StrPtr(queryLogID),
+		Level:      "info",
+		Source:     auditlog.StrPtr("system"),
+	})
 
 	return agg
 }
@@ -677,15 +679,16 @@ func (s *Service) SearchStream(ctx context.Context, q Query, ids []string, perTi
 		}
 	}
 
-	if s.auditLog != nil {
-		s.auditLog.Log(ctx, auditlog.Entry{
-			Category:  "indexer",
-			EventType: "indexer.search.completed",
-			Message:   fmt.Sprintf("Search completed (stream): %q — %d results", q.Term, totalResults),
-			Level:     "info",
-			Source:    auditlog.StrPtr("system"),
-		})
-	}
+	s.auditLog.Log(ctx, auditlog.Entry{
+		Category:   "search",
+		EventType:  "search.completed",
+		Message:    fmt.Sprintf("Search (stream) %q returned %d results", q.Term, totalResults),
+		Detail:     auditlog.DetailJSON(map[string]any{"query_log_id": queryLogID, "query": q.Term, "query_type": "search-stream", "total_results": totalResults}),
+		EntityType: auditlog.StrPtr("search"),
+		EntityID:   auditlog.StrPtr(queryLogID),
+		Level:      "info",
+		Source:     auditlog.StrPtr("system"),
+	})
 }
 
 // SearchHealthTracker returns the search health tracker.

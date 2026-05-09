@@ -85,3 +85,12 @@ type ImportFailedEvent struct {
 
 // Topic implements eventbus.Event.
 func (e *ImportFailedEvent) Topic() string { return TopicImportFailed }
+
+// ── Getter methods for audit sink interfaces ──────────────────────────
+
+func (e *ImportCompletedEvent) GetMediaType() string { return string(e.MediaType) }
+func (e *ImportCompletedEvent) GetMediaID() string   { return e.MediaID }
+func (e *ImportCompletedEvent) GetDestPath() string  { return e.DestPath }
+
+func (e *ImportFailedEvent) GetSourcePath() string { return e.SourcePath }
+func (e *ImportFailedEvent) GetError() string      { return e.Error }

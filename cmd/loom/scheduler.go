@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/ebenderooock/loom/internal/auditlog"
 	"github.com/ebenderooock/loom/internal/kernel/config"
 	"github.com/ebenderooock/loom/internal/kernel/scheduler"
 	"github.com/ebenderooock/loom/internal/storage"
@@ -14,7 +15,7 @@ import (
 // buildScheduler constructs the persistent scheduler, registers
 // built-in jobs (currently just system.housekeeping), and returns the
 // fully wired *scheduler.Scheduler ready for Start.
-func buildScheduler(ctx context.Context, cfg *config.Config, db storage.DB, logger *slog.Logger) (*scheduler.Scheduler, error) {
+func buildScheduler(ctx context.Context, cfg *config.Config, db storage.DB, auditLogger *auditlog.Logger, logger *slog.Logger) (*scheduler.Scheduler, error) {
 	loc, err := loadSchedulerTimezone(cfg.Scheduler.Timezone)
 	if err != nil {
 		return nil, err
@@ -33,6 +34,9 @@ func buildScheduler(ctx context.Context, cfg *config.Config, db storage.DB, logg
 
 	if err := scheduler.RegisterHousekeeping(ctx, s, db.DB(), string(db.Engine())); err != nil {
 		return nil, fmt.Errorf("register housekeeping: %w", err)
+	}
+	if err := scheduler.RegisterAuditPrune(ctx, s, auditLogger, logger); err != nil {
+		return nil, fmt.Errorf("register audit prune: %w", err)
 	}
 	logger.Info("scheduler ready",
 		"timezone", loc.String(),

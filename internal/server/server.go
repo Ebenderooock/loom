@@ -475,6 +475,11 @@ func (s *Server) Bus() eventbus.Bus {
 	return s.bus
 }
 
+// ReviewStore returns the safety review store.
+func (s *Server) ReviewStore() *safety.ReviewStore {
+	return s.reviewStore
+}
+
 func (s *Server) newMux() http.Handler {
 	r := chi.NewRouter()
 
