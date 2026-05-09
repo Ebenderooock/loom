@@ -150,3 +150,30 @@ func (e *DownloadRetryEvent) String() string {
 	return fmt.Sprintf("DownloadRetryEvent{Title=%s, Attempt=%d, RetriedAt=%s}",
 		e.Title, e.Attempt, e.RetriedAt.Format(time.RFC3339))
 }
+
+// ── Getter methods for audit sink interfaces ──────────────────────────
+
+func (e *DownloadQueuedEvent) GetDownloadID() string      { return e.DownloadID }
+func (e *DownloadQueuedEvent) GetClientID() string         { return e.ClientID }
+func (e *DownloadQueuedEvent) GetOriginResultID() string   { return e.OriginResultID }
+func (e *DownloadQueuedEvent) GetQueuedAt() time.Time      { return e.QueuedAt }
+
+func (e *DownloadFailureEvent) GetClientID() string        { return e.ClientID }
+func (e *DownloadFailureEvent) GetOriginResultID() string  { return e.OriginResultID }
+func (e *DownloadFailureEvent) GetError() string           { return e.Error }
+func (e *DownloadFailureEvent) GetFailedAt() time.Time     { return e.FailedAt }
+
+func (e *DownloadCompletedEvent) GetDownloadID() string    { return e.DownloadID }
+func (e *DownloadCompletedEvent) GetClientID() string      { return e.ClientID }
+func (e *DownloadCompletedEvent) GetCategory() string      { return e.Category }
+func (e *DownloadCompletedEvent) GetCompletedAt() time.Time { return e.CompletedAt }
+
+func (e *DownloadStalledEvent) GetDownloadID() string      { return e.DownloadID }
+func (e *DownloadStalledEvent) GetReason() string          { return e.Reason }
+func (e *DownloadStalledEvent) GetAction() string          { return e.Action }
+func (e *DownloadStalledEvent) GetStalledAt() time.Time    { return e.StalledAt }
+
+func (e *DownloadRetryEvent) GetCategory() string          { return e.Category }
+func (e *DownloadRetryEvent) GetReason() string            { return e.Reason }
+func (e *DownloadRetryEvent) GetAttempt() int              { return e.Attempt }
+func (e *DownloadRetryEvent) GetRetriedAt() time.Time      { return e.RetriedAt }

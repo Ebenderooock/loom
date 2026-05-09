@@ -17,14 +17,25 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useSetPageHeader } from "@/hooks/use-page-header";
-import { useAuditLog, type AuditLogParams } from "@/lib/audit-log-api";
+import { useAuditLog, type AuditLogParams, type AuditLogEntry } from "@/lib/audit-log-api";
 import { levelVariant } from "@/lib/status-utils";
 import { EmptyState } from "@/components/ui/empty-state";
 import { LoadingState } from "@/components/ui/loading-state";
-import { ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
+import { ChevronLeft, ChevronRight, ChevronDown, ChevronUp, RefreshCw } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 
 const PAGE_SIZE = 50;
+
+const CATEGORIES = [
+  { value: "all", label: "All Categories" },
+  { value: "indexer", label: "Indexer" },
+  { value: "search", label: "Search" },
+  { value: "download", label: "Download" },
+  { value: "import", label: "Import" },
+  { value: "safety", label: "Safety Review" },
+  { value: "system", label: "System" },
+  { value: "auth", label: "Auth" },
+];
 
 function formatTimestamp(ts: string) {
   try {
@@ -41,12 +52,93 @@ function formatTimestamp(ts: string) {
   }
 }
 
+function tryParseJSON(s?: string): Record<string, unknown> | null {
+  if (!s) return null;
+  try {
+    return JSON.parse(s);
+  } catch {
+    return null;
+  }
+}
+
+function DetailPanel({ entry }: { entry: AuditLogEntry }) {
+  const detail = tryParseJSON(entry.detail);
+  if (!detail) return null;
+
+  return (
+    <div className="bg-muted/50 rounded p-3 text-xs space-y-1 max-w-2xl">
+      {Object.entries(detail).map(([k, v]) => (
+        <div key={k} className="flex gap-2">
+          <span className="text-muted-foreground font-medium min-w-[120px]">{k}:</span>
+          <span className="text-foreground break-all">
+            {typeof v === "object" ? JSON.stringify(v) : String(v ?? "—")}
+          </span>
+        </div>
+      ))}
+      {entry.entity_type && (
+        <div className="flex gap-2">
+          <span className="text-muted-foreground font-medium min-w-[120px]">entity_type:</span>
+          <span className="text-foreground">{entry.entity_type}</span>
+        </div>
+      )}
+      {entry.source && (
+        <div className="flex gap-2">
+          <span className="text-muted-foreground font-medium min-w-[120px]">source:</span>
+          <span className="text-foreground">{entry.source}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function EventRow({ entry, expanded, onToggle }: { entry: AuditLogEntry; expanded: boolean; onToggle: () => void }) {
+  const hasDetail = !!entry.detail;
+  const Chevron = expanded ? ChevronUp : ChevronDown;
+
+  return (
+    <>
+      <TableRow
+        className={hasDetail ? "cursor-pointer hover:bg-muted/40" : undefined}
+        onClick={hasDetail ? onToggle : undefined}
+      >
+        <TableCell className="text-xs tabular-nums text-muted-foreground">
+          {formatTimestamp(entry.occurred_at || entry.timestamp)}
+        </TableCell>
+        <TableCell>
+          <Badge variant={levelVariant(entry.level)} className="capitalize text-[10px]">
+            {entry.level}
+          </Badge>
+        </TableCell>
+        <TableCell className="text-xs capitalize">{entry.category}</TableCell>
+        <TableCell className="text-xs text-muted-foreground">{entry.event_type}</TableCell>
+        <TableCell className="text-sm">
+          <span className="flex items-center gap-1">
+            {entry.message}
+            {hasDetail && <Chevron className="h-3 w-3 text-muted-foreground shrink-0" />}
+          </span>
+        </TableCell>
+        <TableCell className="text-xs text-muted-foreground truncate max-w-[140px]">
+          {entry.entity_name ?? "—"}
+        </TableCell>
+      </TableRow>
+      {expanded && (
+        <TableRow className="bg-muted/20 hover:bg-muted/20">
+          <TableCell colSpan={6} className="p-2 pl-6">
+            <DetailPanel entry={entry} />
+          </TableCell>
+        </TableRow>
+      )}
+    </>
+  );
+}
+
 export function EventsPage() {
-  useSetPageHeader("Events", "System audit log");
+  useSetPageHeader("Events", "Centralized audit log — all system activity in one place");
 
   const [category, setCategory] = React.useState<string>("all");
   const [level, setLevel] = React.useState<string>("all");
   const [offset, setOffset] = React.useState(0);
+  const [expandedId, setExpandedId] = React.useState<string | null>(null);
   const qc = useQueryClient();
 
   const params: AuditLogParams = {
@@ -58,7 +150,6 @@ export function EventsPage() {
 
   const { data, isLoading, isError } = useAuditLog(params);
 
-  // Reset offset when filters change
   React.useEffect(() => setOffset(0), [category, level]);
 
   const entries = data?.entries ?? [];
@@ -75,12 +166,9 @@ export function EventsPage() {
             <SelectValue placeholder="Category" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All Categories</SelectItem>
-            <SelectItem value="indexer">Indexer</SelectItem>
-            <SelectItem value="download">Download</SelectItem>
-            <SelectItem value="import">Import</SelectItem>
-            <SelectItem value="system">System</SelectItem>
-            <SelectItem value="auth">Auth</SelectItem>
+            {CATEGORIES.map((c) => (
+              <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
+            ))}
           </SelectContent>
         </Select>
 
@@ -118,8 +206,9 @@ export function EventsPage() {
           <TableHeader>
             <TableRow>
               <TableHead className="w-[160px]">Time</TableHead>
-              <TableHead className="w-[80px]">Level</TableHead>
+              <TableHead className="w-[70px]">Level</TableHead>
               <TableHead className="w-[100px]">Category</TableHead>
+              <TableHead className="w-[140px]">Event Type</TableHead>
               <TableHead>Message</TableHead>
               <TableHead className="w-[140px]">Entity</TableHead>
             </TableRow>
@@ -127,41 +216,32 @@ export function EventsPage() {
           <TableBody>
             {isLoading && (
               <TableRow>
-                <TableCell colSpan={5}>
+                <TableCell colSpan={6}>
                   <LoadingState label="Loading events…" />
                 </TableCell>
               </TableRow>
             )}
             {isError && (
               <TableRow>
-                <TableCell colSpan={5} className="text-center text-destructive py-8">
+                <TableCell colSpan={6} className="text-center text-destructive py-8">
                   Failed to load audit log.
                 </TableCell>
               </TableRow>
             )}
             {!isLoading && !isError && entries.length === 0 && (
               <TableRow>
-                <TableCell colSpan={5}>
+                <TableCell colSpan={6}>
                   <EmptyState title="No events found" description="Events will appear here as the system operates." />
                 </TableCell>
               </TableRow>
             )}
             {entries.map((e) => (
-              <TableRow key={e.id}>
-                <TableCell className="text-xs tabular-nums text-muted-foreground">
-                  {formatTimestamp(e.timestamp)}
-                </TableCell>
-                <TableCell>
-                  <Badge variant={levelVariant(e.level)} className="capitalize text-[10px]">
-                    {e.level}
-                  </Badge>
-                </TableCell>
-                <TableCell className="text-xs capitalize">{e.category}</TableCell>
-                <TableCell className="text-sm">{e.message}</TableCell>
-                <TableCell className="text-xs text-muted-foreground truncate max-w-[140px]">
-                  {e.entity_name ?? "—"}
-                </TableCell>
-              </TableRow>
+              <EventRow
+                key={e.id}
+                entry={e}
+                expanded={expandedId === e.id}
+                onToggle={() => setExpandedId(expandedId === e.id ? null : e.id)}
+              />
             ))}
           </TableBody>
         </Table>

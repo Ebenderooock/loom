@@ -27,6 +27,7 @@ type infraWiring struct {
 	notifDispatcher *notifications.Dispatcher
 	rollingSearcher *scheduler.RollingSearcher
 	healthMon       *healthmonitor.Monitor
+	auditSink       *auditlog.Sink
 }
 
 // wireInfra constructs infrastructure services (connect, compat shims,
@@ -40,6 +41,7 @@ func wireInfra(
 	downloadSvc *downloads.Service,
 	moviesSvc movies.Service,
 	media *mediaWiring,
+	auditLogger *auditlog.Logger,
 	logger *slog.Logger,
 ) (*infraWiring, error) {
 	// Connect (media server integrations)
@@ -68,13 +70,22 @@ func wireInfra(
 	srv.SetHealthMonitor(healthMon)
 
 	// Audit log
-	auditLogger := auditlog.New(db.DB(), logger)
 	srv.SetAuditLog(auditLogger)
+
+	// Wire audit log to the review store for safety-review events.
+	if rs := srv.ReviewStore(); rs != nil {
+		rs.SetAuditLog(auditLogger)
+	}
+
+	// Audit event sink — subscribes to domain events on the bus and
+	// projects them into the centralised audit_log table.
+	auditSink := auditlog.NewSink(srv.Bus(), auditLogger, logger)
 
 	return &infraWiring{
 		notifDispatcher: notifDispatcher,
 		rollingSearcher: rollingSearcher,
 		healthMon:       healthMon,
+		auditSink:       auditSink,
 	}, nil
 }
 

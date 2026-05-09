@@ -10,6 +10,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+
+	"github.com/ebenderooock/loom/internal/auditlog"
 )
 
 // ReviewStatus represents the state of a manual review entry.
@@ -36,13 +38,17 @@ type Review struct {
 
 // ReviewStore provides persistence for manual-review entries.
 type ReviewStore struct {
-	db *sql.DB
+	db       *sql.DB
+	auditLog *auditlog.Logger
 }
 
 // NewReviewStore wraps a *sql.DB for review CRUD.
 func NewReviewStore(db *sql.DB) *ReviewStore {
 	return &ReviewStore{db: db}
 }
+
+// SetAuditLog enables audit logging on state transitions.
+func (s *ReviewStore) SetAuditLog(l *auditlog.Logger) { s.auditLog = l }
 
 // Create inserts a new pending review.
 func (s *ReviewStore) Create(ctx context.Context, mediaType, mediaID, downloadPath, reason string) (*Review, error) {
@@ -62,6 +68,16 @@ func (s *ReviewStore) Create(ctx context.Context, mediaType, mediaID, downloadPa
 	if err != nil {
 		return nil, fmt.Errorf("create review: %w", err)
 	}
+	s.auditLog.Log(ctx, auditlog.Entry{
+		Category:   "safety",
+		EventType:  "review.created",
+		Message:    fmt.Sprintf("Manual review created: %s %s — %s", mediaType, mediaID, reason),
+		Detail:     auditlog.DetailJSON(map[string]any{"review_id": r.ID, "media_type": mediaType, "media_id": mediaID, "download_path": downloadPath, "reason": reason}),
+		EntityType: auditlog.StrPtr("review"),
+		EntityID:   auditlog.StrPtr(r.ID),
+		Level:      "warn",
+		Source:     auditlog.StrPtr("system"),
+	})
 	return r, nil
 }
 
@@ -107,6 +123,16 @@ func (s *ReviewStore) resolve(ctx context.Context, id string, status ReviewStatu
 	if n == 0 {
 		return fmt.Errorf("review %q not found or already resolved", id)
 	}
+	s.auditLog.Log(ctx, auditlog.Entry{
+		Category:   "safety",
+		EventType:  "review." + string(status),
+		Message:    fmt.Sprintf("Review %s: %s", status, id),
+		Detail:     auditlog.DetailJSON(map[string]any{"review_id": id, "status": string(status), "resolved_at": now}),
+		EntityType: auditlog.StrPtr("review"),
+		EntityID:   auditlog.StrPtr(id),
+		Level:      "info",
+		Source:     auditlog.StrPtr("user"),
+	})
 	return nil
 }
 
