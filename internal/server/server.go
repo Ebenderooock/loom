@@ -33,6 +33,7 @@ import (
 	"github.com/ebenderooock/loom/internal/anime"
 	"github.com/ebenderooock/loom/internal/apikeys"
 	"github.com/ebenderooock/loom/internal/appconfig"
+	"github.com/ebenderooock/loom/internal/auditlog"
 	"github.com/ebenderooock/loom/internal/autosearch"
 	"github.com/ebenderooock/loom/internal/commands"
 	"github.com/ebenderooock/loom/internal/compat/prowlarrv1"
@@ -117,6 +118,7 @@ type Server struct {
 	compatSonarr    *sonarrv3.Handler
 	compatProwlarr  *prowlarrv1.Handler
 	healthMonitor   *healthmonitor.Monitor
+	auditLog        *auditlog.Logger
 	autoSearchEngine *autosearch.Engine
 	grabStore        *grabs.Store
 	periodicScanner  *scheduler.PeriodicScanner
@@ -436,6 +438,15 @@ func (s *Server) SetHealthMonitor(m *healthmonitor.Monitor) {
 	}
 }
 
+// SetAuditLog installs the audit log and rebuilds the HTTP handler so
+// the /api/v1/system/audit-log route is reachable.
+func (s *Server) SetAuditLog(al *auditlog.Logger) {
+	s.auditLog = al
+	if s.httpSrv != nil {
+		s.httpSrv.Handler = s.newMux()
+	}
+}
+
 // SetAutoSearchEngine installs the autosearch engine and rebuilds the HTTP
 // handler so the /api/v1/autosearch route is reachable.
 func (s *Server) SetAutoSearchEngine(e *autosearch.Engine) {
@@ -696,6 +707,11 @@ func (s *Server) newMux() http.Handler {
 		// System health monitoring (authenticated)
 		if s.healthMonitor != nil {
 			r.Mount("/api/v1/system/health", healthmonitor.Router(s.healthMonitor))
+		}
+
+		// Audit log (authenticated)
+		if s.auditLog != nil {
+			s.auditLog.Mount(r)
 		}
 
 		// Automated search + grab (authenticated)

@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/ebenderooock/loom/internal/auditlog"
 	"github.com/ebenderooock/loom/internal/indexers"
 	"github.com/ebenderooock/loom/internal/indexers/cardigann"
 	"github.com/ebenderooock/loom/internal/indexers/newznab"
@@ -90,6 +91,7 @@ func buildIndexerService(ctx context.Context, cfg *config.Config, db storage.DB,
 		RouteExtensions:    []indexers.RouteMounter{proxiesSvc.Mount},
 		DefinitionLister:   &cardigann.LoaderDefinitionLister{Loader: cardLoader},
 		QueryLog:           indexers.NewQueryLog(db.DB()),
+		AuditLog:           auditlog.New(db.DB(), logger),
 	})
 	if err != nil {
 		return nil, err

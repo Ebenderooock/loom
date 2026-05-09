@@ -15,6 +15,7 @@ import {
   Network,
   HeartPulse,
   Radio,
+  ScrollText,
   Search,
   Settings,
   Shield,
@@ -109,6 +110,7 @@ const NAV_SECTIONS: NavSection[] = [
     label: "System",
     items: [
       { to: "/indexers/health", label: "Health", Icon: HeartPulse },
+      { to: "/events", label: "Events", Icon: ScrollText },
       { to: "/notifications", label: "Notifications", Icon: Bell },
       { to: "/proxies", label: "Proxies", Icon: Network },
       { to: "/settings", label: "Settings", Icon: Settings },

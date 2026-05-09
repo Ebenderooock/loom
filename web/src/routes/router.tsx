@@ -240,6 +240,17 @@ const importListsRoute = createRoute({
   errorComponent: ErrorFallback,
 });
 
+const eventsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/events",
+  component: lazyRouteComponent(
+    () => import("@/pages/events"),
+    "EventsPage",
+  ),
+  pendingComponent: PageLoader,
+  errorComponent: ErrorFallback,
+});
+
 const routeTree = rootRoute.addChildren([
   setupRoute,
   indexRoute,
@@ -258,6 +269,7 @@ const routeTree = rootRoute.addChildren([
   customFormatsRoute,
   qualityProfilesRoute,
   importListsRoute,
+  eventsRoute,
   settingsRoute,
 ]);
 
