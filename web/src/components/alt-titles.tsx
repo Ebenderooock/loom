@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { apiFetch } from "@/lib/fetch";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -32,9 +33,8 @@ export function AltTitlesSection({ mediaId, mediaType }: AltTitlesSectionProps) 
   const fetchTitles = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(
+      const res = await apiFetch(
         `/api/v1/alt-titles?media_id=${encodeURIComponent(mediaId)}&media_type=${encodeURIComponent(mediaType)}`,
-        { credentials: "include" },
       );
       if (res.ok) {
         const data = await res.json();
@@ -55,9 +55,8 @@ export function AltTitlesSection({ mediaId, mediaType }: AltTitlesSectionProps) 
     if (!newTitle.trim()) return;
     setAdding(true);
     try {
-      const res = await fetch("/api/v1/alt-titles", {
+      const res = await apiFetch("/api/v1/alt-titles", {
         method: "POST",
-        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           media_id: mediaId,
@@ -80,9 +79,8 @@ export function AltTitlesSection({ mediaId, mediaType }: AltTitlesSectionProps) 
 
   const handleDelete = async (id: string) => {
     try {
-      const res = await fetch(`/api/v1/alt-titles/${id}`, {
+      const res = await apiFetch(`/api/v1/alt-titles/${id}`, {
         method: "DELETE",
-        credentials: "include",
       });
       if (!res.ok) throw new Error("Failed to remove alt title");
       setTitles((prev) => prev.filter((t) => t.id !== id));

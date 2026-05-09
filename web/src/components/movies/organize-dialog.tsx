@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { apiFetch } from "@/lib/fetch";
 import {
   Dialog,
   DialogContent,
@@ -63,7 +64,7 @@ export function OrganizeDialog({
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/v1/movies/organize/preview", {
+      const res = await apiFetch("/api/v1/movies/organize/preview", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ movie_ids: movieIds }),
@@ -90,7 +91,7 @@ export function OrganizeDialog({
     setStep("executing");
     setError(null);
     try {
-      const res = await fetch("/api/v1/movies/organize/rename", {
+      const res = await apiFetch("/api/v1/movies/organize/rename", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ movie_ids: movieIds }),

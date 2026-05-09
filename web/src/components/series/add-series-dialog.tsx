@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from "react";
+import { apiFetch } from "@/lib/fetch";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -82,7 +83,7 @@ export function AddSeriesDialog({
     if (term.length < 2) { setResults([]); return; }
     setSearching(true);
     try {
-      const res = await fetch(`/api/v1/series/search?q=${encodeURIComponent(term)}`, { credentials: "include" });
+      const res = await apiFetch(`/api/v1/series/search?q=${encodeURIComponent(term)}`);
       if (res.ok) { const data = await res.json(); setResults(Array.isArray(data) ? data : data.data ?? []); }
     } catch { /* ignore */ } finally { setSearching(false); }
   }, []);
@@ -99,10 +100,9 @@ export function AddSeriesDialog({
     setAdding(true);
     setAddError("");
     try {
-      const res = await fetch("/api/v1/series", {
+      const res = await apiFetch("/api/v1/series", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        credentials: "include",
         body: JSON.stringify({
           tmdbId: selectedSeries.tmdbId ?? "",
           qualityProfileId: selectedProfile,
