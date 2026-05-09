@@ -56,6 +56,9 @@ func (r *mockRepo) DeleteMovie(_ context.Context, id string) error {
 	delete(r.movies, id)
 	return nil
 }
+func (r *mockRepo) CountMovies(_ context.Context) (int, error) {
+	return len(r.movies), nil
+}
 func (r *mockRepo) ListMovies(_ context.Context, limit, offset int) ([]*Movie, error) {
 	var out []*Movie
 	i := 0

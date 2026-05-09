@@ -14,6 +14,7 @@ type Repository interface {
 	GetMovie(ctx context.Context, id string) (*Movie, error)
 	UpdateMovie(ctx context.Context, movie *Movie) error
 	DeleteMovie(ctx context.Context, id string) error
+	CountMovies(ctx context.Context) (int, error)
 	ListMovies(ctx context.Context, limit int, offset int) ([]*Movie, error)
 	SearchMovies(ctx context.Context, query string) ([]*Movie, error)
 	GetMovieByTMDBID(ctx context.Context, tmdbID string) (*Movie, error)
@@ -119,6 +120,12 @@ func (r *sqlRepo) DeleteMovie(ctx context.Context, id string) error {
 		id,
 	)
 	return err
+}
+
+func (r *sqlRepo) CountMovies(ctx context.Context) (int, error) {
+	var count int
+	err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM movies WHERE deleted_at IS NULL`).Scan(&count)
+	return count, err
 }
 
 func (r *sqlRepo) ListMovies(ctx context.Context, limit int, offset int) ([]*Movie, error) {
