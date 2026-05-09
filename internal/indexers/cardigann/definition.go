@@ -387,6 +387,7 @@ type Field struct {
 	Selector  string            `yaml:"selector,omitempty"`
 	Attribute string            `yaml:"attribute,omitempty"`
 	Text      string            `yaml:"text,omitempty"`
+	Default   string            `yaml:"default,omitempty"`
 	Remove    string            `yaml:"remove,omitempty"`
 	Filters   []Filter          `yaml:"filters,omitempty"`
 	Case      map[string]string `yaml:"case,omitempty"`

@@ -438,10 +438,25 @@ func (req searchRequest) toQuery() Query {
 	}
 }
 
+// hasAnyCriterion returns true when the request carries at least one
+// meaningful search input. This prevents completely empty fan-outs
+// while still allowing ID-only or category-browse searches.
+func (req searchRequest) hasAnyCriterion() bool {
+	return strings.TrimSpace(req.Query) != "" ||
+		req.IMDBID != "" || req.TVDBID != "" || req.TMDBID != "" ||
+		req.Season > 0 || req.Episode > 0 ||
+		len(req.Categories) > 0
+}
+
 func (s *Service) handleSearch(w http.ResponseWriter, r *http.Request) {
 	var req searchRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_body", err.Error())
+		return
+	}
+	// Reject if no search criterion at all.
+	if !req.hasAnyCriterion() {
+		writeError(w, http.StatusBadRequest, "empty_search", "provide at least a query term, external ID, or category filter")
 		return
 	}
 	q := req.toQuery()
@@ -462,6 +477,10 @@ func (s *Service) handleSearchStream(w http.ResponseWriter, r *http.Request) {
 	var req searchRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_body", err.Error())
+		return
+	}
+	if !req.hasAnyCriterion() {
+		writeError(w, http.StatusBadRequest, "empty_search", "provide at least a query term, external ID, or category filter")
 		return
 	}
 

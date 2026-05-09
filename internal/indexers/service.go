@@ -103,7 +103,7 @@ func NewService(opts ServiceOptions) (*Service, error) {
 		opts.MaxParallel = 8
 	}
 	if opts.HealthCheckTimeout <= 0 {
-		opts.HealthCheckTimeout = 60 * time.Second
+		opts.HealthCheckTimeout = 120 * time.Second
 	}
 	sht := opts.SearchHealthTracker
 	if sht == nil {
@@ -484,8 +484,17 @@ func (s *Service) TestOne(ctx context.Context, id string) (Health, error) {
 	}
 	h.LatencyMS = h.Latency.Milliseconds()
 	if err != nil {
-		h.Status = StatusFailed
-		h.LastError = fmt.Sprintf("indexer %q test failed: %s", id, err.Error())
+		switch {
+		case IsTimeoutErr(err):
+			h.Status = StatusDegraded
+			h.LastError = fmt.Sprintf("indexer %q test timed out: %s", id, err.Error())
+		case IsRateLimitErr(err):
+			h.Status = StatusDegraded
+			h.LastError = fmt.Sprintf("indexer %q test rate limited: %s", id, err.Error())
+		default:
+			h.Status = StatusFailed
+			h.LastError = fmt.Sprintf("indexer %q test failed: %s", id, err.Error())
+		}
 	} else {
 		h.Status = StatusOK
 		t := finished
@@ -499,7 +508,11 @@ func (s *Service) TestOne(ctx context.Context, id string) (Health, error) {
 		status := "passed"
 		level := "info"
 		if err != nil {
-			status = "failed"
+			if h.Status == StatusDegraded {
+				status = "degraded"
+			} else {
+				status = "failed"
+			}
 			level = "warn"
 		}
 		s.auditLog.Log(ctx, auditlog.Entry{

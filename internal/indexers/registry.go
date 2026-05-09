@@ -239,6 +239,7 @@ func (r *Registry) Search(ctx context.Context, q Query, opts SearchOptions) Aggr
 			agg.Results = append(agg.Results, p.out.Items...)
 		} else {
 			d.Status = "ok"
+			slog.Warn("indexer returned nil results without error", "indexer", p.id, "name", p.name)
 		}
 		diags = append(diags, d)
 	}
@@ -250,7 +251,22 @@ func (r *Registry) Search(ctx context.Context, q Query, opts SearchOptions) Aggr
 	// return cross-category results even when cat= is sent. This is
 	// the same safety net Radarr/Sonarr apply client-side.
 	if len(q.Categories) > 0 {
+		preCount := len(agg.Results)
 		agg.Results = filterByCategory(agg.Results, q.Categories)
+		postCount := len(agg.Results)
+		if preCount > 0 && postCount == 0 {
+			slog.Warn("category filter removed all results",
+				"query", q.Term,
+				"requested_categories", q.Categories,
+				"pre_filter_count", preCount,
+			)
+		} else if preCount != postCount {
+			slog.Debug("category filter applied",
+				"pre_filter_count", preCount,
+				"post_filter_count", postCount,
+				"requested_categories", q.Categories,
+			)
+		}
 	}
 
 	agg.Diagnostics = &SearchDiagnostics{

@@ -433,7 +433,7 @@ export function streamSearch(
         inactivityTimer = setTimeout(() => {
           controller.abort();
           callbacks.onError?.(new Error("Search timed out — no response from server"));
-        }, 45_000);
+        }, 150_000); // 150s — gives headroom above the 120s backend timeout
       };
       resetInactivityTimer();
 

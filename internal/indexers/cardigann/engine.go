@@ -153,6 +153,9 @@ func (e *Engine) Test(ctx context.Context) error {
 	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
 	resp, err := e.http.Do(req)
 	if err != nil {
+		if indexers.IsTimeoutErr(err) {
+			return fmt.Errorf("cardigann: test request: %w (%v)", indexers.ErrIndexerTimeout, err)
+		}
 		return fmt.Errorf("cardigann: test request: %w", err)
 	}
 	defer resp.Body.Close()
@@ -434,7 +437,7 @@ func (e *Engine) Search(ctx context.Context, q indexers.Query) (*indexers.Result
 		}
 		slog.Debug("cardigann: search response", "indexer", e.id, "path_idx", i, "bodyLen", len(body))
 
-		rows, err := e.extractRows(body)
+		rows, err := e.extractRows(body, tctx)
 		if err != nil {
 			slog.Warn("cardigann: search extract error", "indexer", e.id, "path_idx", i, "err", err)
 			continue
@@ -574,6 +577,11 @@ func (e *Engine) fetch(ctx context.Context, method, target string, params url.Va
 	}
 	resp, derr := e.http.Do(req)
 	if derr != nil {
+		// Wrap timeout errors with the package-level sentinel so the
+		// service layer can classify uniformly.
+		if indexers.IsTimeoutErr(derr) {
+			return nil, fmt.Errorf("cardigann: %s %s: %w (%v)", method, target, indexers.ErrIndexerTimeout, derr)
+		}
 		return nil, fmt.Errorf("cardigann: %s %s: %w", method, target, derr)
 	}
 	defer resp.Body.Close()
@@ -584,6 +592,9 @@ func (e *Engine) fetch(ctx context.Context, method, target string, params url.Va
 	}
 	if resp.StatusCode >= 500 {
 		return nil, fmt.Errorf("cardigann: upstream status %d", resp.StatusCode)
+	}
+	if resp.StatusCode == http.StatusTooManyRequests {
+		return nil, fmt.Errorf("cardigann: rate limited (status 429): %w", indexers.ErrIndexerRateLimited)
 	}
 	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
 		// Drop the logged-in flag so a subsequent search retries the
@@ -608,12 +619,24 @@ func (e *Engine) fetch(ctx context.Context, method, target string, params url.Va
 // in its commentary: tracing a missing field through a stack of
 // CSS/XPath selectors is the most common debugging task operators
 // face, and the comments here map straight to that workflow.
-func (e *Engine) extractRows(body []byte) ([]indexers.Result, error) {
+func (e *Engine) extractRows(body []byte, tctx templateContext) ([]indexers.Result, error) {
 	doc, err := goquery.NewDocumentFromReader(bytes.NewReader(body))
 	if err != nil {
 		return nil, fmt.Errorf("cardigann: parse search html: %w", err)
 	}
 	rowSelector := e.def.Search.Rows.Selector
+
+	// Many definitions embed Go templates inside the row selector
+	// (e.g. 1337x uses `{{ if .Config.uploader }}...{{ end }}`).
+	// Expand them before passing to the CSS engine.
+	if strings.Contains(rowSelector, "{{") {
+		expanded, terr := e.expandTemplate(rowSelector, tctx)
+		if terr != nil {
+			return nil, fmt.Errorf("cardigann: row selector template: %w", terr)
+		}
+		rowSelector = expanded
+	}
+
 	rows := selectNodes(doc.Selection, rowSelector)
 	if slog.Default().Enabled(context.Background(), slog.LevelDebug) {
 		tables := doc.Find("table").Length()
@@ -631,7 +654,7 @@ func (e *Engine) extractRows(body []byte) ([]indexers.Result, error) {
 
 	out := make([]indexers.Result, 0, len(rows))
 	for _, node := range rows {
-		r, ok := e.extractOne(node)
+		r, ok := e.extractOne(node, tctx)
 		if !ok {
 			continue
 		}
@@ -644,12 +667,96 @@ func (e *Engine) extractRows(body []byte) ([]indexers.Result, error) {
 // extractOne walks every field selector against a single row node.
 // A row is dropped when it has neither title nor download link — both
 // are required for the result to be useful downstream.
-func (e *Engine) extractOne(node *goquery.Selection) (indexers.Result, bool) {
+//
+// Processing uses a fixed-point loop to support computed fields that
+// can depend on other computed fields (chained `.Result.*` references):
+//
+//  1. Extract all fields that have a CSS/XPath `selector` (after
+//     expanding any templates in the selector itself).
+//  2. Repeatedly expand `text`-only fields until values stabilise,
+//     handling chained dependencies like title → title_phase2 → title.
+//  3. Apply `default` fallbacks for selector fields that matched nothing.
+func (e *Engine) extractOne(node *goquery.Selection, tctx templateContext) (indexers.Result, bool) {
 	r := indexers.Result{}
 	values := map[string]string{}
+
+	fieldCtx := tctx
+	fieldCtx.Result = values
+
+	// Phase 1 — selector-based extraction (raw HTML scraping).
+	// Expand any templates in the selector itself first.
 	for name, field := range e.def.Search.Fields {
-		v := e.applyField(node, field)
+		if field.Selector == "" {
+			continue
+		}
+		sel := field.Selector
+		if strings.Contains(sel, "{{") {
+			var err error
+			sel, err = e.expandTemplate(sel, fieldCtx)
+			if err != nil {
+				slog.Warn("cardigann: field selector template error",
+					"indexer", e.id, "field", name, "err", err)
+				continue
+			}
+		}
+		v := e.applyFieldWithSelector(node, field, sel)
 		values[name] = v
+	}
+
+	// Phase 2 — text-template fields via fixed-point iteration.
+	// Chained fields (e.g. title depends on title_phase2 which depends
+	// on title_phase1) resolve across iterations.  We cap iterations
+	// at the number of text fields to prevent infinite loops from cycles.
+	maxPasses := 0
+	for _, field := range e.def.Search.Fields {
+		if field.Selector == "" && field.Text != "" {
+			maxPasses++
+		}
+	}
+	for pass := 0; pass <= maxPasses; pass++ {
+		changed := false
+		for name, field := range e.def.Search.Fields {
+			if field.Selector != "" || field.Text == "" {
+				continue
+			}
+			expanded := field.Text
+			if strings.Contains(expanded, "{{") {
+				var terr error
+				expanded, terr = e.expandTemplate(expanded, fieldCtx)
+				if terr != nil {
+					slog.Warn("cardigann: field text template error",
+						"indexer", e.id, "field", name, "err", terr)
+					continue
+				}
+			}
+			next := applyFilters(expanded, field.Filters)
+			if values[name] != next {
+				values[name] = next
+				changed = true
+			}
+		}
+		if !changed {
+			break
+		}
+	}
+
+	// Phase 3 — apply `default` fallbacks for selector fields that
+	// matched nothing (empty string).
+	for name, field := range e.def.Search.Fields {
+		if field.Default == "" || values[name] != "" {
+			continue
+		}
+		fallback := field.Default
+		if strings.Contains(fallback, "{{") {
+			var terr error
+			fallback, terr = e.expandTemplate(fallback, fieldCtx)
+			if terr != nil {
+				slog.Warn("cardigann: field default template error",
+					"indexer", e.id, "field", name, "err", terr)
+				continue
+			}
+		}
+		values[name] = applyFilters(fallback, field.Filters)
 	}
 	r.Title = strings.TrimSpace(values["title"])
 	r.GUID = strings.TrimSpace(values["guid"])
@@ -712,13 +819,19 @@ func (e *Engine) extractOne(node *goquery.Selection) (indexers.Result, bool) {
 // row node. Returns "" when the selector misses (and the field is
 // optional) or when the chain produces an empty string.
 func (e *Engine) applyField(row *goquery.Selection, f Field) string {
-	if f.Text != "" && f.Selector == "" {
+	return e.applyFieldWithSelector(row, f, f.Selector)
+}
+
+// applyFieldWithSelector is like applyField but uses a pre-expanded
+// selector (templates already resolved).
+func (e *Engine) applyFieldWithSelector(row *goquery.Selection, f Field, sel string) string {
+	if f.Text != "" && sel == "" {
 		return applyFilters(f.Text, f.Filters)
 	}
-	if f.Selector == "" {
+	if sel == "" {
 		return ""
 	}
-	nodes := selectNodes(row, f.Selector)
+	nodes := selectNodes(row, sel)
 	if len(nodes) == 0 {
 		return ""
 	}
@@ -857,6 +970,12 @@ type templateContext struct {
 	// `{{ if eq .Config.disablesort .False }}`.
 	True  string
 	False string
+
+	// Result holds field values extracted in the first pass of row
+	// processing.  Text-template fields like
+	//   `{{ if .Result.title_optional }}{{ .Result.title_optional }}{{ else }}{{ .Result.title_default }}{{ end }}`
+	// reference these to compose computed values from other fields.
+	Result map[string]string
 }
 
 // newTemplateContext builds a populated templateContext from an
