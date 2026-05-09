@@ -164,9 +164,15 @@ function EventPill({ event }: { event: CalendarEvent }) {
   const isMovie = event.type === "movie";
   const isMissing = event.status === "missing";
 
+  // Movies: "Title (Year)", Episodes: "Series — S01E02"
   const label = isMovie
     ? event.title
-    : `S${String(event.season).padStart(2, "0")}E${String(event.episode).padStart(2, "0")}`;
+    : `${event.seriesTitle ?? "Unknown"} — S${String(event.season).padStart(2, "0")}E${String(event.episode).padStart(2, "0")}`;
+
+  // Full tooltip with episode title when available
+  const tooltip = isMovie
+    ? `${event.title}${event.year ? ` (${event.year})` : ""}`
+    : event.title;
 
   if (isMissing) {
     return (
@@ -177,7 +183,7 @@ function EventPill({ event }: { event: CalendarEvent }) {
             ? "border-blue-500/50 text-blue-400"
             : "border-purple-500/50 text-purple-400"
         }`}
-        title={event.title}
+        title={tooltip}
       >
         {label}
       </Badge>
@@ -191,7 +197,7 @@ function EventPill({ event }: { event: CalendarEvent }) {
           ? "bg-blue-600 hover:bg-blue-600 text-white"
           : "bg-purple-600 hover:bg-purple-600 text-white"
       }`}
-      title={event.title}
+      title={tooltip}
     >
       {label}
     </Badge>
