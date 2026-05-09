@@ -245,7 +245,11 @@ func listMovies(svc Service) http.HandlerFunc {
 		}
 
 		// Get the total count from the database (independent of limit/offset/filters)
-		totalCount, _ := svc.CountMovies(r.Context())
+		totalCount, err := svc.CountMovies(r.Context())
+		if err != nil {
+			slog.Warn("failed to count movies", "err", err)
+			totalCount = len(movies)
+		}
 
 		response := make([]interface{}, 0, len(movies))
 		for _, m := range movies {

@@ -188,7 +188,10 @@ function EventPill({ event }: { event: CalendarEvent }) {
       : "bg-purple-600 hover:bg-purple-700 text-white",
   };
 
-  const colorKey = isMovie ? (event.releaseType === "theatrical" ? "theatrical" : event.releaseType === "digital" ? "digital" : "movie") : "episode";
+  const movieColorKeys: Record<string, keyof typeof colorMap> = { theatrical: "theatrical", digital: "digital" };
+  const colorKey = isMovie
+    ? movieColorKeys[event.releaseType ?? ""] ?? "movie"
+    : "episode";
   const releaseLabel = event.releaseType === "theatrical" ? "🎬 " : event.releaseType === "digital" ? "💿 " : "";
 
   return (

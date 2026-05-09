@@ -93,39 +93,18 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 		if status != "missing" && status != "unreleased" {
 			calStatus = "downloaded"
 		}
-		if releaseDate != "" {
-			events = append(events, Event{
-				ID:          id,
-				Title:       title,
-				Type:        "movie",
-				ReleaseType: "release",
-				Date:        releaseDate,
-				Status:      calStatus,
-				Year:        year,
-			})
+		appendMovieEvent := func(date, releaseType string) {
+			if date != "" {
+				events = append(events, Event{
+					ID: id, Title: title, Type: "movie",
+					ReleaseType: releaseType, Date: date,
+					Status: calStatus, Year: year,
+				})
+			}
 		}
-		if theatricalDate != "" {
-			events = append(events, Event{
-				ID:          id,
-				Title:       title,
-				Type:        "movie",
-				ReleaseType: "theatrical",
-				Date:        theatricalDate,
-				Status:      calStatus,
-				Year:        year,
-			})
-		}
-		if digitalDate != "" {
-			events = append(events, Event{
-				ID:          id,
-				Title:       title,
-				Type:        "movie",
-				ReleaseType: "digital",
-				Date:        digitalDate,
-				Status:      calStatus,
-				Year:        year,
-			})
-		}
+		appendMovieEvent(releaseDate, "release")
+		appendMovieEvent(theatricalDate, "theatrical")
+		appendMovieEvent(digitalDate, "digital")
 	}
 	if err := movieRows.Err(); err != nil {
 		writeError(w, http.StatusInternalServerError, fmt.Sprintf("iterate movies: %v", err))

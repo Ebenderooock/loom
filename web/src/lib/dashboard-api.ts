@@ -5,6 +5,10 @@ import { apiFetch } from "@/lib/fetch";
 // Dashboard data-fetching hooks (extracted for DRY + testability)
 // ---------------------------------------------------------------------------
 
+// Minimal types for dashboard counts — full types live in domain-specific modules.
+interface IndexerSummary { id: string; name: string; enabled: boolean; }
+interface DownloadClientSummary { id: string; name: string; enabled: boolean; }
+
 function useDashboardQuery<T>(key: string, path: string) {
   return useQuery({
     queryKey: ["dashboard", key],
@@ -33,14 +37,14 @@ export function useDashboardSeries() {
 }
 
 export function useDashboardIndexers() {
-  return useDashboardQuery<{ indexers: unknown[] }>(
+  return useDashboardQuery<{ indexers: IndexerSummary[] }>(
     "indexers",
     "/api/v1/indexers",
   );
 }
 
 export function useDashboardDownloadClients() {
-  return useDashboardQuery<{ download_clients: unknown[] }>(
+  return useDashboardQuery<{ download_clients: DownloadClientSummary[] }>(
     "download-clients",
     "/api/v1/download-clients",
   );
