@@ -447,7 +447,12 @@ func (e *Engine) Search(ctx context.Context, q indexers.Query) (*indexers.Result
 		}
 		slog.Debug("cardigann: search response", "indexer", e.id, "path_idx", i, "bodyLen", len(body))
 
-		rows, err := e.extractRows(body, tctx)
+		var rows []indexers.Result
+		if strings.EqualFold(sp.Response.Type, "json") {
+			rows, err = e.extractRowsJSON(body, tctx)
+		} else {
+			rows, err = e.extractRows(body, tctx)
+		}
 		if err != nil {
 			slog.Warn("cardigann: search extract error", "indexer", e.id, "path_idx", i, "err", err)
 			continue
