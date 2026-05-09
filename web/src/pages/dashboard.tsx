@@ -107,9 +107,26 @@ function useIndexerHealth() {
         credentials: "include",
       });
       if (!res.ok) throw new Error("Failed to fetch indexer health");
-      return (await res.json()) as {
-        data: { id: number; name: string; message: string }[];
+      const json = await res.json() as {
+        data: {
+          indexer_id: string;
+          indexer_name: string;
+          status: string;
+          last_error: string;
+          success_rate: number;
+          fail_count: number;
+        }[];
       };
+      // Filter to only unhealthy indexers and map to display format
+      const issues = (json.data ?? [])
+        .filter((h) => h.status === "error" || h.status === "degraded")
+        .map((h) => ({
+          id: h.indexer_id,
+          name: h.indexer_name || h.indexer_id,
+          message: h.last_error || `${h.status} — ${h.fail_count} failed searches`,
+          severity: h.status as "error" | "degraded",
+        }));
+      return { data: issues };
     },
     staleTime: 60_000,
     retry: 1,
@@ -298,12 +315,20 @@ function SystemHealthCard() {
             {issues.slice(0, 3).map((issue, i) => (
               <div
                 key={issue.id ?? i}
-                className="flex items-start gap-2 rounded-md bg-destructive/10 px-3 py-2 text-sm"
+                className={`flex items-start gap-2 rounded-md px-3 py-2 text-sm ${
+                  issue.severity === "error"
+                    ? "bg-destructive/10"
+                    : "bg-yellow-500/10"
+                }`}
               >
-                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+                <AlertTriangle className={`mt-0.5 h-4 w-4 shrink-0 ${
+                  issue.severity === "error"
+                    ? "text-destructive"
+                    : "text-yellow-500"
+                }`} />
                 <span>
-                  <span className="font-medium">{issue.name}:</span>{" "}
-                  {issue.message}
+                  <span className="font-medium">{issue.name}</span>{" "}
+                  <span className="text-muted-foreground">{issue.message}</span>
                 </span>
               </div>
             ))}
