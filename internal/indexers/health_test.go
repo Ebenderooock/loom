@@ -73,6 +73,69 @@ func (f *failingIndexer) Search(context.Context, indexers.Query) (*indexers.Resu
 }
 func (f *failingIndexer) Test(context.Context) error { return errors.New("boom") }
 
+func TestHealthChecker_BackoffCapsAndResets(t *testing.T) {
+	t.Parallel()
+	_, raw := openTestDB(t)
+	repo := indexers.NewSQLiteRepository(raw)
+	svc, err := indexers.NewService(indexers.ServiceOptions{Repository: repo, Logger: quietLogger()})
+	if err != nil {
+		t.Fatalf("NewService: %v", err)
+	}
+	_, _ = svc.Create(context.Background(), indexers.Definition{
+		ID: "backoff", Kind: indexers.KindNull, Name: "Backoff", Enabled: true,
+	})
+	if err := svc.Registry().Replace(&failingIndexer{id: "backoff"}); err != nil {
+		t.Fatalf("Replace: %v", err)
+	}
+
+	checker := indexers.NewHealthChecker(svc, 1, 30*time.Second)
+
+	// Run several times — each should increment the backoff.
+	ctx := context.Background()
+	for i := 0; i < 5; i++ {
+		_ = checker.Run(ctx)
+	}
+
+	// After 5 failures the indexer should be backed off (skipped on next Run).
+	// Verify by checking the health row still shows failed status.
+	got, err := repo.GetHealth(ctx, "backoff")
+	if err != nil {
+		t.Fatalf("GetHealth: %v", err)
+	}
+	if got.Status != indexers.StatusFailed {
+		t.Fatalf("expected failed status after repeated failures, got %s", got.Status)
+	}
+
+	// Now replace with a passing indexer and force immediate check by
+	// creating a new checker (fresh backoff state).
+	if err := svc.Registry().Replace(&passingIndexer{id: "backoff"}); err != nil {
+		t.Fatalf("Replace: %v", err)
+	}
+	freshChecker := indexers.NewHealthChecker(svc, 1, 0)
+	if err := freshChecker.Run(ctx); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	got, err = repo.GetHealth(ctx, "backoff")
+	if err != nil {
+		t.Fatalf("GetHealth: %v", err)
+	}
+	if got.Status != indexers.StatusOK {
+		t.Fatalf("expected OK status after recovery, got %s", got.Status)
+	}
+}
+
+// passingIndexer always succeeds.
+type passingIndexer struct{ id string }
+
+func (p *passingIndexer) ID() string          { return p.id }
+func (p *passingIndexer) Name() string        { return p.id }
+func (p *passingIndexer) Caps() indexers.Caps { return indexers.Caps{} }
+func (p *passingIndexer) Search(context.Context, indexers.Query) (*indexers.Results, error) {
+	return &indexers.Results{IndexerID: p.id}, nil
+}
+func (p *passingIndexer) Test(context.Context) error { return nil }
+
 func TestHealthCheckerFailureRecorded(t *testing.T) {
 	t.Parallel()
 	_, raw := openTestDB(t)

@@ -2,7 +2,6 @@ package indexers
 
 import (
 	"context"
-	"log/slog"
 	"sync"
 	"time"
 )
@@ -113,18 +112,22 @@ func (h *HealthChecker) checkOne(ctx context.Context, id string) {
 		if backoff <= 0 {
 			backoff = 30 * time.Second
 		}
-		delay := backoff * (1 << count)
-		if delay > maxBackoffInterval {
+		shift := count
+		if shift > 20 {
+			shift = 20 // prevent integer overflow on 1<<shift
+		}
+		delay := backoff * time.Duration(1<<shift)
+		if delay > maxBackoffInterval || delay <= 0 {
 			delay = maxBackoffInterval
 		}
 		next := time.Now().Add(delay)
 		h.nextCheckAt[id] = next
 		h.mu.Unlock()
 
-		slog.Warn("indexer health check backing off",
+		h.svc.logger.Warn("indexer health check backing off",
 			"indexer", id, "failures", count, "next_check", next)
 	} else {
-		h.svc.logger.Debug("health check completed", "id", id, "status", health.Status, "latency_ms", health.LatencyMS)
+		h.svc.logger.Info("health check passed", "id", id, "status", health.Status, "latency_ms", health.LatencyMS)
 
 		h.mu.Lock()
 		delete(h.consecutiveFailures, id)

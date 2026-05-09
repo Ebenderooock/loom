@@ -174,6 +174,9 @@ func (e *Engine) Test(ctx context.Context) error {
 // default values from the YAML definition's settings block. Operator
 // values always win; defaults fill gaps so templates like
 // `{{ .Config.apiurl }}` resolve even without explicit user config.
+//
+// The result is cached for the lifetime of this Engine instance;
+// callers that need updated config must construct a new Engine.
 func (e *Engine) configFieldsWithDefaults() map[string]string {
 	e.cachedConfigOnce.Do(func() {
 		merged := e.cfg.fields()
