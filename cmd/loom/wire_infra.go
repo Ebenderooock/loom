@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 
+	"github.com/ebenderooock/loom/internal/auditlog"
 	"github.com/ebenderooock/loom/internal/compat/prowlarrv1"
 	"github.com/ebenderooock/loom/internal/compat/radarrv3"
 	"github.com/ebenderooock/loom/internal/compat/sonarrv3"
@@ -65,6 +66,10 @@ func wireInfra(
 	// Health monitor
 	healthMon := buildHealthMonitor(ctx, indexerSvc, downloadSvc, media.notifSvc, media.libStore, logger)
 	srv.SetHealthMonitor(healthMon)
+
+	// Audit log
+	auditLogger := auditlog.New(db.DB(), logger)
+	srv.SetAuditLog(auditLogger)
 
 	return &infraWiring{
 		notifDispatcher: notifDispatcher,

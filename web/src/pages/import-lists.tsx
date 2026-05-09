@@ -20,6 +20,18 @@ import {
 import { usePageHeader } from "@/hooks/use-page-header";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   ListPlus,
   RefreshCw,
@@ -35,26 +47,21 @@ export function ImportListsPage() {
   const { setHeader } = usePageHeader();
   React.useEffect(() => setHeader({ title: "Import Lists" }), [setHeader]);
 
-  const [tab, setTab] = React.useState<"lists" | "exclusions">("lists");
-
   return (
     <div className="space-y-6 p-6">
-      <div className="flex items-center gap-4 border-b border-border pb-3">
-        <button
-          onClick={() => setTab("lists")}
-          className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${tab === "lists" ? "bg-accent text-accent-foreground" : "text-muted-foreground hover:text-foreground"}`}
-        >
-          Lists
-        </button>
-        <button
-          onClick={() => setTab("exclusions")}
-          className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${tab === "exclusions" ? "bg-accent text-accent-foreground" : "text-muted-foreground hover:text-foreground"}`}
-        >
-          Exclusions
-        </button>
-      </div>
+      <Tabs defaultValue="lists">
+        <TabsList>
+          <TabsTrigger value="lists">Lists</TabsTrigger>
+          <TabsTrigger value="exclusions">Exclusions</TabsTrigger>
+        </TabsList>
 
-      {tab === "lists" ? <ListsTab /> : <ExclusionsTab />}
+        <TabsContent value="lists" className="mt-4">
+          <ListsTab />
+        </TabsContent>
+        <TabsContent value="exclusions" className="mt-4">
+          <ExclusionsTab />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
@@ -283,159 +290,191 @@ function AddListForm({ onDone }: { onDone: () => void }) {
   };
 
   return (
-    <form
-      onSubmit={handleSubmit}
-      className="space-y-4 rounded-md border border-border p-4"
-    >
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <Field label="Name">
-          <input
-            className="input"
-            required
-            value={form.name}
-            onChange={(e) => setForm({ ...form, name: e.target.value })}
-          />
-        </Field>
+    <Card>
+      <CardHeader>
+        <CardTitle>Add Import List</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="add-list-name">Name</Label>
+              <Input
+                id="add-list-name"
+                required
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+              />
+            </div>
 
-        <Field label="List Type">
-          <select
-            className="input"
-            value={form.list_type}
-            onChange={(e) =>
-              setForm({
-                ...form,
-                list_type: e.target.value as ListType,
-                media_type:
-                  LIST_TYPES.find((t) => t.value === e.target.value)
-                    ?.mediaType ?? "movie",
-              })
-            }
-          >
-            {LIST_TYPES.map((t) => (
-              <option key={t.value} value={t.value}>
-                {t.label}
-              </option>
-            ))}
-          </select>
-        </Field>
+            <div className="space-y-2">
+              <Label htmlFor="add-list-type">List Type</Label>
+              <Select
+                value={form.list_type}
+                onValueChange={(val) =>
+                  setForm({
+                    ...form,
+                    list_type: val as ListType,
+                    media_type:
+                      LIST_TYPES.find((t) => t.value === val)?.mediaType ??
+                      "movie",
+                  })
+                }
+              >
+                <SelectTrigger id="add-list-type">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {LIST_TYPES.map((t) => (
+                    <SelectItem key={t.value} value={t.value}>
+                      {t.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
 
-        <Field label="Media Type">
-          <select
-            className="input"
-            value={form.media_type}
-            onChange={(e) =>
-              setForm({
-                ...form,
-                media_type: e.target.value as "movie" | "series",
-              })
-            }
-          >
-            <option value="movie">Movie</option>
-            <option value="series">Series</option>
-          </select>
-        </Field>
+            <div className="space-y-2">
+              <Label htmlFor="add-media-type">Media Type</Label>
+              <Select
+                value={form.media_type}
+                onValueChange={(val) =>
+                  setForm({
+                    ...form,
+                    media_type: val as "movie" | "series",
+                  })
+                }
+              >
+                <SelectTrigger id="add-media-type">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="movie">Movie</SelectItem>
+                  <SelectItem value="series">Series</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
 
-        <Field label="Monitor">
-          <select
-            className="input"
-            value={form.monitor_type}
-            onChange={(e) =>
-              setForm({
-                ...form,
-                monitor_type: e.target.value as "all" | "future" | "missing" | "none",
-              })
-            }
-          >
-            {MONITOR_TYPES.map((m) => (
-              <option key={m.value} value={m.value}>
-                {m.label}
-              </option>
-            ))}
-          </select>
-        </Field>
+            <div className="space-y-2">
+              <Label htmlFor="add-monitor">Monitor</Label>
+              <Select
+                value={form.monitor_type}
+                onValueChange={(val) =>
+                  setForm({
+                    ...form,
+                    monitor_type: val as
+                      | "all"
+                      | "future"
+                      | "missing"
+                      | "none",
+                  })
+                }
+              >
+                <SelectTrigger id="add-monitor">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {MONITOR_TYPES.map((m) => (
+                    <SelectItem key={m.value} value={m.value}>
+                      {m.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
 
-        <Field label="Sync Interval">
-          <select
-            className="input"
-            value={form.sync_interval_minutes}
-            onChange={(e) =>
-              setForm({
-                ...form,
-                sync_interval_minutes: Number(e.target.value),
-              })
-            }
-          >
-            {SYNC_INTERVALS.map((s) => (
-              <option key={s.value} value={s.value}>
-                {s.label}
-              </option>
-            ))}
-          </select>
-        </Field>
+            <div className="space-y-2">
+              <Label htmlFor="add-sync-interval">Sync Interval</Label>
+              <Select
+                value={String(form.sync_interval_minutes)}
+                onValueChange={(val) =>
+                  setForm({
+                    ...form,
+                    sync_interval_minutes: Number(val),
+                  })
+                }
+              >
+                <SelectTrigger id="add-sync-interval">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {SYNC_INTERVALS.map((s) => (
+                    <SelectItem key={s.value} value={String(s.value)}>
+                      {s.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
 
-        {fields.includes("url") && (
-          <Field label="URL">
-            <input
-              className="input"
-              value={form.url ?? ""}
-              onChange={(e) => setForm({ ...form, url: e.target.value })}
-              placeholder="https://..."
-            />
-          </Field>
-        )}
+            {fields.includes("url") && (
+              <div className="space-y-2">
+                <Label htmlFor="add-url">URL</Label>
+                <Input
+                  id="add-url"
+                  value={form.url ?? ""}
+                  onChange={(e) => setForm({ ...form, url: e.target.value })}
+                  placeholder="https://..."
+                />
+              </div>
+            )}
 
-        {fields.includes("api_key") && (
-          <Field label="API Key">
-            <input
-              className="input"
-              value={form.api_key ?? ""}
-              onChange={(e) => setForm({ ...form, api_key: e.target.value })}
-            />
-          </Field>
-        )}
+            {fields.includes("api_key") && (
+              <div className="space-y-2">
+                <Label htmlFor="add-api-key">API Key</Label>
+                <Input
+                  id="add-api-key"
+                  value={form.api_key ?? ""}
+                  onChange={(e) =>
+                    setForm({ ...form, api_key: e.target.value })
+                  }
+                />
+              </div>
+            )}
 
-        {fields.includes("access_token") && (
-          <Field label="Access Token">
-            <input
-              className="input"
-              value={form.access_token ?? ""}
-              onChange={(e) =>
-                setForm({ ...form, access_token: e.target.value })
+            {fields.includes("access_token") && (
+              <div className="space-y-2">
+                <Label htmlFor="add-access-token">Access Token</Label>
+                <Input
+                  id="add-access-token"
+                  value={form.access_token ?? ""}
+                  onChange={(e) =>
+                    setForm({ ...form, access_token: e.target.value })
+                  }
+                />
+              </div>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Switch
+              id="add-search-on-add"
+              checked={form.search_on_add}
+              onCheckedChange={(checked) =>
+                setForm({ ...form, search_on_add: checked })
               }
             />
-          </Field>
-        )}
-      </div>
+            <Label htmlFor="add-search-on-add">Search on add</Label>
+          </div>
 
-      <div className="flex items-center gap-2">
-        <label className="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            checked={form.search_on_add}
-            onChange={(e) =>
-              setForm({ ...form, search_on_add: e.target.checked })
-            }
-          />
-          Search on add
-        </label>
-      </div>
+          <div className="flex gap-2">
+            <Button type="submit" size="sm" disabled={createMut.isPending}>
+              <Plus className="mr-1 h-4 w-4" />
+              {createMut.isPending ? "Adding…" : "Add List"}
+            </Button>
+            <Button type="button" size="sm" variant="ghost" onClick={onDone}>
+              Cancel
+            </Button>
+          </div>
 
-      <div className="flex gap-2">
-        <Button type="submit" size="sm" disabled={createMut.isPending}>
-          <Plus className="mr-1 h-4 w-4" />
-          {createMut.isPending ? "Adding…" : "Add List"}
-        </Button>
-        <Button type="button" size="sm" variant="ghost" onClick={onDone}>
-          Cancel
-        </Button>
-      </div>
-
-      {createMut.isError && (
-        <p className="text-sm text-destructive">
-          {(createMut.error as Error).message}
-        </p>
-      )}
-    </form>
+          {createMut.isError && (
+            <p className="text-sm text-destructive">
+              {(createMut.error as Error).message}
+            </p>
+          )}
+        </form>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -465,23 +504,25 @@ function ExclusionsTab() {
   return (
     <div className="space-y-4">
       <form onSubmit={handleAdd} className="flex items-end gap-3">
-        <Field label="Title">
-          <input
-            className="input"
+        <div className="space-y-2">
+          <Label htmlFor="excl-title">Title</Label>
+          <Input
+            id="excl-title"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             placeholder="Movie or series title"
             required
           />
-        </Field>
-        <Field label="IMDb ID (optional)">
-          <input
-            className="input"
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="excl-imdb">IMDb ID (optional)</Label>
+          <Input
+            id="excl-imdb"
             value={imdbId}
             onChange={(e) => setImdbId(e.target.value)}
             placeholder="tt1234567"
           />
-        </Field>
+        </div>
         <Button type="submit" size="sm" disabled={createMut.isPending}>
           <Ban className="mr-1 h-4 w-4" />
           Add Exclusion
@@ -523,19 +564,4 @@ function ExclusionsTab() {
   );
 }
 
-// ---- Shared ----
 
-function Field({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <label className="block text-sm">
-      <span className="mb-1 block font-medium text-foreground">{label}</span>
-      {children}
-    </label>
-  );
-}

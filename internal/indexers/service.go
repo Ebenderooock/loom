@@ -10,6 +10,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/ebenderooock/loom/internal/auditlog"
 	"github.com/ebenderooock/loom/internal/indexers/throttle"
 )
 
@@ -50,6 +51,9 @@ type ServiceOptions struct {
 
 	// QueryLog, when non-nil, enables persistent per-query logging.
 	QueryLog *QueryLog
+
+	// AuditLog, when non-nil, records notable indexer events.
+	AuditLog *auditlog.Logger
 }
 
 // RouteMounter mounts additional routes onto the Service router. The
@@ -73,6 +77,7 @@ type Service struct {
 	definitionLister     DefinitionLister
 	searchHealthTracker  *SearchHealthTracker
 	queryLog             *QueryLog
+	auditLog             *auditlog.Logger
 
 	mu sync.Mutex // serialises CRUD against the registry
 }
@@ -116,6 +121,7 @@ func NewService(opts ServiceOptions) (*Service, error) {
 		definitionLister:    opts.DefinitionLister,
 		searchHealthTracker: sht,
 		queryLog:            opts.QueryLog,
+		auditLog:            opts.AuditLog,
 	}, nil
 }
 
@@ -187,6 +193,19 @@ func (s *Service) Create(ctx context.Context, def Definition) (Definition, error
 		Status:        StatusUnknown,
 		LastCheckedAt: s.clock.Now(),
 	})
+
+	if s.auditLog != nil {
+		s.auditLog.Log(ctx, auditlog.Entry{
+			Category:   "indexer",
+			EventType:  "indexer.created",
+			Message:    fmt.Sprintf("Indexer %q created", saved.Name),
+			EntityID:   auditlog.StrPtr(saved.ID),
+			EntityName: auditlog.StrPtr(saved.Name),
+			Level:      "info",
+			Source:     auditlog.StrPtr("user"),
+		})
+	}
+
 	return saved, nil
 }
 
@@ -363,6 +382,19 @@ func (s *Service) Replace(ctx context.Context, def Definition) (Definition, erro
 	} else {
 		s.registry.Remove(saved.ID)
 	}
+
+	if s.auditLog != nil {
+		s.auditLog.Log(ctx, auditlog.Entry{
+			Category:   "indexer",
+			EventType:  "indexer.updated",
+			Message:    fmt.Sprintf("Indexer %q updated (replace)", saved.Name),
+			EntityID:   auditlog.StrPtr(saved.ID),
+			EntityName: auditlog.StrPtr(saved.Name),
+			Level:      "info",
+			Source:     auditlog.StrPtr("user"),
+		})
+	}
+
 	return saved, nil
 }
 
@@ -382,15 +414,49 @@ func (s *Service) Patch(ctx context.Context, p Patch) (Definition, error) {
 	} else {
 		s.registry.Remove(saved.ID)
 	}
+
+	if s.auditLog != nil {
+		s.auditLog.Log(ctx, auditlog.Entry{
+			Category:   "indexer",
+			EventType:  "indexer.updated",
+			Message:    fmt.Sprintf("Indexer %q updated (patch)", saved.Name),
+			EntityID:   auditlog.StrPtr(saved.ID),
+			EntityName: auditlog.StrPtr(saved.Name),
+			Level:      "info",
+			Source:     auditlog.StrPtr("user"),
+		})
+	}
+
 	return saved, nil
 }
 
 // Delete removes both the live instance and the persisted row.
 func (s *Service) Delete(ctx context.Context, id string) error {
+	// Capture name before removal for the audit log.
+	var name string
+	if def, err := s.repo.Get(ctx, id); err == nil {
+		name = def.Name
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.registry.Remove(id)
-	return s.repo.Delete(ctx, id)
+	if err := s.repo.Delete(ctx, id); err != nil {
+		return err
+	}
+
+	if s.auditLog != nil {
+		s.auditLog.Log(ctx, auditlog.Entry{
+			Category:   "indexer",
+			EventType:  "indexer.deleted",
+			Message:    fmt.Sprintf("Indexer %q deleted", name),
+			EntityID:   auditlog.StrPtr(id),
+			EntityName: auditlog.StrPtr(name),
+			Level:      "info",
+			Source:     auditlog.StrPtr("user"),
+		})
+	}
+	return nil
 }
 
 // TestOne runs a single connectivity check, persists the outcome, and
@@ -428,6 +494,26 @@ func (s *Service) TestOne(ctx context.Context, id string) (Health, error) {
 	if perr := s.repo.UpsertHealth(ctx, h); perr != nil {
 		s.logger.Warn("persist health failed", "id", id, "err", perr)
 	}
+
+	if s.auditLog != nil {
+		status := "passed"
+		level := "info"
+		if err != nil {
+			status = "failed"
+			level = "warn"
+		}
+		s.auditLog.Log(ctx, auditlog.Entry{
+			Category:   "indexer",
+			EventType:  "indexer.test",
+			Message:    fmt.Sprintf("Indexer test %s: %s", status, ix.Name()),
+			Detail:     auditlog.StrPtr(h.LastError),
+			EntityID:   auditlog.StrPtr(id),
+			EntityName: auditlog.StrPtr(ix.Name()),
+			Level:      level,
+			Source:     auditlog.StrPtr("user"),
+		})
+	}
+
 	return h, err
 }
 
@@ -493,6 +579,20 @@ func (s *Service) Search(ctx context.Context, q Query, ids []string, perTimeout 
 		if err := s.queryLog.FinishQuery(ctx, queryLogID, len(agg.Results), nil); err != nil {
 			s.logger.Warn("query log: finish failed", "err", err)
 		}
+	}
+
+	if s.auditLog != nil {
+		indexerCount := 0
+		if agg.Diagnostics != nil {
+			indexerCount = len(agg.Diagnostics.Indexers)
+		}
+		s.auditLog.Log(ctx, auditlog.Entry{
+			Category:  "indexer",
+			EventType: "indexer.search.completed",
+			Message:   fmt.Sprintf("Search completed: %q — %d results from %d indexers", q.Term, len(agg.Results), indexerCount),
+			Level:     "info",
+			Source:    auditlog.StrPtr("system"),
+		})
 	}
 
 	return agg
@@ -562,6 +662,16 @@ func (s *Service) SearchStream(ctx context.Context, q Query, ids []string, perTi
 		if err := s.queryLog.FinishQuery(ctx, queryLogID, totalResults, nil); err != nil {
 			s.logger.Warn("query log: finish failed", "err", err)
 		}
+	}
+
+	if s.auditLog != nil {
+		s.auditLog.Log(ctx, auditlog.Entry{
+			Category:  "indexer",
+			EventType: "indexer.search.completed",
+			Message:   fmt.Sprintf("Search completed (stream): %q — %d results", q.Term, totalResults),
+			Level:     "info",
+			Source:    auditlog.StrPtr("system"),
+		})
 	}
 }
 
