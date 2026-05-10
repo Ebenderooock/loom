@@ -19,15 +19,12 @@ import (
 // instances so newznab/torznab clients can issue their searches as
 // regular http.Client.Do calls.
 //
-// The package keeps the API narrow on purpose: only "request.get" is
-// supported (search URLs are GETs), and only "request.headers" /
-// "request.body" / "response.cookies" are translated.
+// The client is fully stateless per request — no FlareSolverr sessions
+// are created or reused, matching Prowlarr's approach. Only
+// "request.get" is supported (search URLs are GETs).
 type FlareSolverrClient struct {
 	httpc          *http.Client
 	defaultTimeout time.Duration
-
-	mu       sync.Mutex
-	sessions map[string]string // proxyID -> sessionID for KindFlareSolverr/SessionMode=shared
 
 	// Per-domain UA cache: after a successful FlareSolverr solve, the
 	// returned UserAgent is cached so subsequent requests to the same
@@ -50,7 +47,6 @@ func NewFlareSolverrClient(httpc *http.Client, defaultTimeout time.Duration) *Fl
 	return &FlareSolverrClient{
 		httpc:          httpc,
 		defaultTimeout: defaultTimeout,
-		sessions:       make(map[string]string),
 		uaCache:        make(map[string]cachedUA),
 	}
 }
@@ -87,10 +83,10 @@ func (c *FlareSolverrClient) cacheUserAgent(host, ua string) {
 	slog.Debug("flaresolverr: cached UA for domain", "host", host, "ua", ua[:min(40, len(ua))]+"...")
 }
 
-// RoundTripperFor returns an http.RoundTripper bound to (proxyID,
-// cfg). Returned tripper is safe for concurrent use.
-func (c *FlareSolverrClient) RoundTripperFor(proxyID string, cfg FlareSolverrConfig) http.RoundTripper {
-	return &flareRoundTripper{c: c, proxyID: proxyID, cfg: cfg}
+// RoundTripperFor returns an http.RoundTripper bound to cfg.
+// Returned tripper is safe for concurrent use.
+func (c *FlareSolverrClient) RoundTripperFor(_ string, cfg FlareSolverrConfig) http.RoundTripper {
+	return &flareRoundTripper{c: c, cfg: cfg}
 }
 
 // Ping verifies the FlareSolverr endpoint is reachable. It calls the
@@ -109,11 +105,10 @@ func (c *FlareSolverrClient) Ping(ctx context.Context, cfg FlareSolverrConfig) e
 
 // flareReq is the shape FlareSolverr accepts on POST /v1.
 type flareReq struct {
-	Cmd        string         `json:"cmd"`
-	URL        string         `json:"url,omitempty"`
-	MaxTimeout int64          `json:"maxTimeout,omitempty"`
-	Session    string         `json:"session,omitempty"`
-	Cookies    []flareCookie  `json:"cookies,omitempty"`
+	Cmd        string        `json:"cmd"`
+	URL        string        `json:"url,omitempty"`
+	MaxTimeout int64         `json:"maxTimeout,omitempty"`
+	Cookies    []flareCookie `json:"cookies,omitempty"`
 }
 
 // flareEnvelope is the wrapper returned by every command.
@@ -121,7 +116,6 @@ type flareEnvelope struct {
 	Status   string         `json:"status"`
 	Message  string         `json:"message"`
 	Solution *flareSolution `json:"solution,omitempty"`
-	Session  string         `json:"session,omitempty"`
 }
 
 // flareSolution carries the synthesised response when cmd ==
@@ -181,30 +175,12 @@ func (c *FlareSolverrClient) do(ctx context.Context, cfg FlareSolverrConfig, bod
 	return env, nil
 }
 
-func (c *FlareSolverrClient) sessionFor(ctx context.Context, proxyID string, cfg FlareSolverrConfig) (string, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if sid, ok := c.sessions[proxyID]; ok && sid != "" {
-		return sid, nil
-	}
-	env, err := c.do(ctx, cfg, flareReq{Cmd: "sessions.create"})
-	if err != nil {
-		return "", err
-	}
-	if !strings.EqualFold(env.Status, "ok") || env.Session == "" {
-		return "", fmt.Errorf("flaresolverr sessions.create: %s", env.Message)
-	}
-	c.sessions[proxyID] = env.Session
-	return env.Session, nil
-}
-
 // flareRoundTripper turns a FlareSolverr "request.get" response into
 // an http.Response. Only GET is supported — newznab/torznab issue
 // pure GETs anyway, and POST/PUT/etc. are out of scope for Phase 2e.
 type flareRoundTripper struct {
-	c       *FlareSolverrClient
-	proxyID string
-	cfg     FlareSolverrConfig
+	c   *FlareSolverrClient
+	cfg FlareSolverrConfig
 }
 
 func (rt *flareRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
@@ -228,13 +204,6 @@ func (rt *flareRoundTripper) RoundTrip(req *http.Request) (*http.Response, error
 		for i, c := range cookies {
 			body.Cookies[i] = flareCookie{Name: c.Name, Value: c.Value}
 		}
-	}
-	if rt.cfg.SessionMode == "shared" {
-		sid, err := rt.c.sessionFor(req.Context(), rt.proxyID, rt.cfg)
-		if err != nil {
-			return nil, err
-		}
-		body.Session = sid
 	}
 	env, err := rt.c.do(req.Context(), rt.cfg, body)
 	if err != nil {

@@ -53,14 +53,11 @@ type SOCKS5Config struct {
 //
 // MaxTimeoutSec, when zero, falls back to the package default (set
 // from kernel/config indexers.proxies.flaresolverr_default_timeout).
-// SessionMode controls whether the package opens / reuses / drops a
-// FlareSolverr session per request: "" (== "none") issues a stateless
-// `request.get`; "shared" creates one session per Proxy row and
-// reuses it across requests.
+// All requests are stateless — no FlareSolverr sessions are used,
+// matching Prowlarr's approach.
 type FlareSolverrConfig struct {
 	URL           string `json:"url"`
 	MaxTimeoutSec int    `json:"max_timeout_sec,omitempty"`
-	SessionMode   string `json:"session_mode,omitempty"`
 }
 
 // ParseHTTPConfig validates and decodes an http/https config blob.
@@ -108,11 +105,6 @@ func ParseFlareSolverrConfig(raw json.RawMessage) (FlareSolverrConfig, error) {
 	}
 	if _, err := url.Parse(c.URL); err != nil {
 		return FlareSolverrConfig{}, fmt.Errorf("flaresolverr proxy: invalid url: %w", err)
-	}
-	switch c.SessionMode {
-	case "", "none", "shared":
-	default:
-		return FlareSolverrConfig{}, fmt.Errorf("flaresolverr proxy: unknown session_mode %q", c.SessionMode)
 	}
 	return c, nil
 }
