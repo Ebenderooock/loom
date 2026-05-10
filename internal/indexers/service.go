@@ -49,6 +49,10 @@ type ServiceOptions struct {
 	// If nil, NewService creates one automatically.
 	SearchHealthTracker *SearchHealthTracker
 
+	// IndexerAvailability, when non-nil, tracks per-indexer circuit
+	// breaker state. If nil, NewService creates one automatically.
+	IndexerAvailability *IndexerAvailability
+
 	// QueryLog, when non-nil, enables persistent per-query logging.
 	QueryLog *QueryLog
 
@@ -76,6 +80,7 @@ type Service struct {
 	routeExtensions      []RouteMounter
 	definitionLister     DefinitionLister
 	searchHealthTracker  *SearchHealthTracker
+	indexerAvailability  *IndexerAvailability
 	queryLog             *QueryLog
 	auditLog             *auditlog.Logger
 
@@ -109,6 +114,10 @@ func NewService(opts ServiceOptions) (*Service, error) {
 	if sht == nil {
 		sht = NewSearchHealthTracker(opts.Registry)
 	}
+	avail := opts.IndexerAvailability
+	if avail == nil {
+		avail = NewIndexerAvailability(opts.Clock)
+	}
 	return &Service{
 		repo:                opts.Repository,
 		registry:            opts.Registry,
@@ -120,6 +129,7 @@ func NewService(opts ServiceOptions) (*Service, error) {
 		routeExtensions:     opts.RouteExtensions,
 		definitionLister:    opts.DefinitionLister,
 		searchHealthTracker: sht,
+		indexerAvailability: avail,
 		queryLog:            opts.QueryLog,
 		auditLog:            opts.AuditLog,
 	}, nil
@@ -130,6 +140,21 @@ func (s *Service) Repository() Repository { return s.repo }
 
 // Registry returns the underlying live-instance registry.
 func (s *Service) Registry() *Registry { return s.registry }
+
+// Availability returns the circuit-breaker tracker so callers can
+// inspect per-indexer cooldown state.
+func (s *Service) Availability() *IndexerAvailability { return s.indexerAvailability }
+
+// resolveIndexerID maps a human-readable indexer name back to its
+// registry ID by scanning the live instances.
+func (s *Service) resolveIndexerID(name string) string {
+	for _, ix := range s.registry.List() {
+		if ix.Name() == name {
+			return ix.ID()
+		}
+	}
+	return ""
+}
 
 // HydrateAll reads every persisted indexer and registers a live
 // instance for each enabled row. Called once at startup. Indexers
@@ -541,22 +566,53 @@ func (s *Service) Search(ctx context.Context, q Query, ids []string, perTimeout 
 		}
 	}
 
+	// Filter out indexers that are in a circuit-breaker cooldown.
+	availableIDs, skippedIDs := s.indexerAvailability.FilterAvailable(ids)
+	if len(skippedIDs) > 0 {
+		s.logger.Info("search: skipping indexers in cooldown",
+			"skipped", skippedIDs, "available", len(availableIDs))
+	}
+
 	agg := s.registry.Search(ctx, q, SearchOptions{
-		IndexerIDs:        ids,
+		IndexerIDs:        availableIDs,
 		PerIndexerTimeout: perTimeout,
 		MaxParallel:       s.maxParallel,
 	})
 
+	// Record availability: clear on success, record failure on error.
+	if agg.Diagnostics != nil {
+		for _, d := range agg.Diagnostics.Indexers {
+			indexerID := s.resolveIndexerID(d.Name)
+			if indexerID == "" {
+				continue
+			}
+			if d.Status == "error" || d.Status == "timeout" {
+				s.indexerAvailability.RecordFailure(indexerID)
+			} else {
+				s.indexerAvailability.RecordSuccess(indexerID)
+			}
+		}
+	}
+
+	// Add skipped indexers to diagnostics so callers see them.
+	if len(skippedIDs) > 0 && agg.Diagnostics != nil {
+		for _, id := range skippedIDs {
+			name := id
+			if ix, ok := s.registry.Get(id); ok {
+				name = ix.Name()
+			}
+			agg.Diagnostics.Indexers = append(agg.Diagnostics.Indexers, IndexerDiagnostic{
+				Name:         name,
+				Status:       "skipped",
+				ErrorMessage: "circuit breaker cooldown",
+			})
+		}
+	}
+
 	// Record search metrics and query log entries for each indexer.
 	if agg.Diagnostics != nil {
 		for _, d := range agg.Diagnostics.Indexers {
-			var indexerID string
-			for _, ix := range s.registry.List() {
-				if ix.Name() == d.Name {
-					indexerID = ix.ID()
-					break
-				}
-			}
+			indexerID := s.resolveIndexerID(d.Name)
 			if indexerID == "" {
 				continue
 			}
@@ -628,9 +684,16 @@ func (s *Service) SearchStream(ctx context.Context, q Query, ids []string, perTi
 		}
 	}
 
-	internal := make(chan StreamEvent, len(ids)+16)
+	// Filter out indexers in circuit-breaker cooldown.
+	availableIDs, skippedIDs := s.indexerAvailability.FilterAvailable(ids)
+	if len(skippedIDs) > 0 {
+		s.logger.Info("search-stream: skipping indexers in cooldown",
+			"skipped", skippedIDs, "available", len(availableIDs))
+	}
+
+	internal := make(chan StreamEvent, len(availableIDs)+16)
 	go s.registry.SearchStream(ctx, q, SearchOptions{
-		IndexerIDs:        ids,
+		IndexerIDs:        availableIDs,
 		PerIndexerTimeout: perTimeout,
 		MaxParallel:       s.maxParallel,
 	}, internal)
@@ -643,6 +706,9 @@ func (s *Service) SearchStream(ctx context.Context, q Query, ids []string, perTi
 			var searchErr error
 			if evt.Type == EventIndexerError {
 				searchErr = errors.New(evt.Error)
+				s.indexerAvailability.RecordFailure(indexerID)
+			} else {
+				s.indexerAvailability.RecordSuccess(indexerID)
 			}
 			if s.searchHealthTracker != nil {
 				s.searchHealthTracker.RecordSearch(indexerID, dur, evt.ResultCount, searchErr)
