@@ -426,11 +426,22 @@ func filterByCategory(results []Result, wanted []Category) []Result {
 			filtered = append(filtered, r)
 			continue
 		}
+		matched := false
 		for _, rc := range r.Category {
 			if families[rc.Family()] {
-				filtered = append(filtered, r)
+				matched = true
 				break
 			}
+		}
+		if matched {
+			filtered = append(filtered, r)
+		} else {
+			slog.Debug("category filter: dropping result",
+				"indexer", r.IndexerID,
+				"title", r.Title,
+				"result_categories", r.Category,
+				"wanted_families", wanted,
+			)
 		}
 	}
 	return filtered

@@ -11,6 +11,7 @@ import (
 	"net/http/cookiejar"
 	"net/url"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -335,10 +336,14 @@ func (e *Engine) formLogin(ctx context.Context) error {
 }
 
 // verifyLogin fetches the test path and asserts the success selector
-// matches. When the definition omits the test block we trust the
-// formLogin status check.
+// matches. When the definition omits the test block entirely we log a
+// warning and trust the formLogin status check. When the test path is
+// set but the selector is empty, we still fetch and check for HTTP
+// errors and login error selectors.
 func (e *Engine) verifyLogin(ctx context.Context) error {
-	if e.def.Login.Test.Path == "" || e.def.Login.Test.Selector == "" {
+	if e.def.Login.Test.Path == "" {
+		slog.Warn("cardigann: login verification skipped — no test path defined",
+			"indexer", e.id)
 		return nil
 	}
 	testURL, err := e.resolveURL(e.def.Login.Test.Path)
@@ -349,13 +354,23 @@ func (e *Engine) verifyLogin(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("cardigann: verify login: %w", err)
 	}
-	doc, err := goquery.NewDocumentFromReader(bytes.NewReader(body))
-	if err != nil {
-		return fmt.Errorf("cardigann: verify login parse: %w", err)
+	// If a success selector is defined, require it to match.
+	if e.def.Login.Test.Selector != "" {
+		doc, parseErr := goquery.NewDocumentFromReader(bytes.NewReader(body))
+		if parseErr != nil {
+			return fmt.Errorf("cardigann: verify login parse: %w", parseErr)
+		}
+		if doc.Find(e.def.Login.Test.Selector).Length() == 0 {
+			return errors.New("cardigann: login test selector did not match — credentials are probably wrong")
+		}
+		return nil
 	}
-	if doc.Find(e.def.Login.Test.Selector).Length() == 0 {
-		return errors.New("cardigann: login test selector did not match — credentials are probably wrong")
+	// No selector defined — check for login error markers as a fallback.
+	if msg := matchErrorSelectors(body, e.def.Login.Error); msg != "" {
+		return fmt.Errorf("cardigann: login verification failed (error selector matched): %s", msg)
 	}
+	slog.Warn("cardigann: login test path set but no selector — verification is weak",
+		"indexer", e.id)
 	return nil
 }
 
@@ -414,6 +429,7 @@ func (e *Engine) Search(ctx context.Context, q indexers.Query) (*indexers.Result
 	tctx := newTemplateContext(q, keywords, categories, configFields)
 
 	var allRows []indexers.Result
+	var pathErrors []error
 	seen := map[string]struct{}{} // dedup by method + resolved URL
 	pathsOK := 0
 
@@ -421,6 +437,7 @@ func (e *Engine) Search(ctx context.Context, q indexers.Query) (*indexers.Result
 		method, target, params, headers, err := e.buildSearchRequestForPath(sp, tctx)
 		if err != nil {
 			slog.Warn("cardigann: search path error", "indexer", e.id, "path_idx", i, "err", err)
+			pathErrors = append(pathErrors, fmt.Errorf("path %d build: %w", i, err))
 			continue
 		}
 
@@ -443,6 +460,7 @@ func (e *Engine) Search(ctx context.Context, q indexers.Query) (*indexers.Result
 		body, err := e.fetch(ctx, method, target, params, headers)
 		if err != nil {
 			slog.Warn("cardigann: search fetch error", "indexer", e.id, "path_idx", i, "err", err)
+			pathErrors = append(pathErrors, fmt.Errorf("path %d fetch: %w", i, err))
 			continue
 		}
 		slog.Debug("cardigann: search response", "indexer", e.id, "path_idx", i, "bodyLen", len(body))
@@ -455,6 +473,7 @@ func (e *Engine) Search(ctx context.Context, q indexers.Query) (*indexers.Result
 		}
 		if err != nil {
 			slog.Warn("cardigann: search extract error", "indexer", e.id, "path_idx", i, "err", err)
+			pathErrors = append(pathErrors, fmt.Errorf("path %d extract: %w", i, err))
 			continue
 		}
 		slog.Debug("cardigann: search results", "indexer", e.id, "path_idx", i, "rowCount", len(rows))
@@ -462,8 +481,11 @@ func (e *Engine) Search(ctx context.Context, q indexers.Query) (*indexers.Result
 		pathsOK++
 	}
 
-	if pathsOK == 0 && len(paths) > 0 {
-		slog.Warn("cardigann: all search paths failed", "indexer", e.id, "paths_total", len(paths))
+	// When every path failed, surface the errors so the registry marks
+	// this indexer as "error" instead of silently reporting 0 results.
+	if pathsOK == 0 && len(pathErrors) > 0 {
+		return nil, fmt.Errorf("cardigann[%s]: all %d search paths failed: %w",
+			e.id, len(paths), errors.Join(pathErrors...))
 	}
 
 	return &indexers.Results{
@@ -698,9 +720,13 @@ func (e *Engine) extractOne(node *goquery.Selection, tctx templateContext) (inde
 	fieldCtx := tctx
 	fieldCtx.Result = values
 
+	// Sort field names once for deterministic iteration across all phases.
+	fieldNames := sortedFieldNames(e.def.Search.Fields)
+
 	// Phase 1 — selector-based extraction (raw HTML scraping).
 	// Expand any templates in the selector itself first.
-	for name, field := range e.def.Search.Fields {
+	for _, name := range fieldNames {
+		field := e.def.Search.Fields[name]
 		if field.Selector == "" {
 			continue
 		}
@@ -723,14 +749,16 @@ func (e *Engine) extractOne(node *goquery.Selection, tctx templateContext) (inde
 	// on title_phase1) resolve across iterations.  We cap iterations
 	// at the number of text fields to prevent infinite loops from cycles.
 	maxPasses := 0
-	for _, field := range e.def.Search.Fields {
+	for _, name := range fieldNames {
+		field := e.def.Search.Fields[name]
 		if field.Selector == "" && field.Text != "" {
 			maxPasses++
 		}
 	}
 	for pass := 0; pass <= maxPasses; pass++ {
 		changed := false
-		for name, field := range e.def.Search.Fields {
+		for _, name := range fieldNames {
+			field := e.def.Search.Fields[name]
 			if field.Selector != "" || field.Text == "" {
 				continue
 			}
@@ -758,7 +786,8 @@ func (e *Engine) extractOne(node *goquery.Selection, tctx templateContext) (inde
 	// Warn if fixed-point iteration exhausted all passes without converging.
 	{
 		countUnresolved := 0
-		for name, field := range e.def.Search.Fields {
+		for _, name := range fieldNames {
+			field := e.def.Search.Fields[name]
 			if field.Selector != "" || field.Text == "" {
 				continue
 			}
@@ -785,7 +814,8 @@ func (e *Engine) extractOne(node *goquery.Selection, tctx templateContext) (inde
 
 	// Phase 3 — apply `default` fallbacks for selector fields that
 	// matched nothing (empty string).
-	for name, field := range e.def.Search.Fields {
+	for _, name := range fieldNames {
+		field := e.def.Search.Fields[name]
 		if field.Default == "" || values[name] != "" {
 			continue
 		}
@@ -1240,6 +1270,17 @@ func collectSupportedIDs(modes map[string][]string) []string {
 		}
 	}
 	return out
+}
+
+// sortedFieldNames returns the keys of a field map in sorted order
+// so that extraction phases iterate deterministically.
+func sortedFieldNames(fields map[string]Field) []string {
+	names := make([]string, 0, len(fields))
+	for n := range fields {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	return names
 }
 
 // parseInt is the small helper used by the engine; matches the

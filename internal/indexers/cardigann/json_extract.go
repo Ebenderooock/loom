@@ -131,8 +131,12 @@ func (e *Engine) extractOneJSON(obj, parentObj map[string]any, tctx templateCont
 	fieldCtx := tctx
 	fieldCtx.Result = values
 
+	// Sort field names once for deterministic iteration across all phases.
+	fieldNames := sortedFieldNames(e.def.Search.Fields)
+
 	// Phase 1 — selector-based extraction from JSON keys.
-	for name, field := range e.def.Search.Fields {
+	for _, name := range fieldNames {
+		field := e.def.Search.Fields[name]
 		if field.Selector == "" {
 			continue
 		}
@@ -160,14 +164,16 @@ func (e *Engine) extractOneJSON(obj, parentObj map[string]any, tctx templateCont
 
 	// Phase 2 — text-template fields (identical to HTML mode).
 	maxPasses := 0
-	for _, field := range e.def.Search.Fields {
+	for _, name := range fieldNames {
+		field := e.def.Search.Fields[name]
 		if field.Selector == "" && field.Text != "" {
 			maxPasses++
 		}
 	}
 	for pass := 0; pass <= maxPasses; pass++ {
 		changed := false
-		for name, field := range e.def.Search.Fields {
+		for _, name := range fieldNames {
+			field := e.def.Search.Fields[name]
 			if field.Selector != "" || field.Text == "" {
 				continue
 			}
@@ -190,8 +196,38 @@ func (e *Engine) extractOneJSON(obj, parentObj map[string]any, tctx templateCont
 		}
 	}
 
+	// Warn if fixed-point iteration did not converge.
+	{
+		countUnresolved := 0
+		for _, name := range fieldNames {
+			field := e.def.Search.Fields[name]
+			if field.Selector != "" || field.Text == "" {
+				continue
+			}
+			expanded := field.Text
+			if strings.Contains(expanded, "{{") {
+				var terr error
+				expanded, terr = e.expandTemplate(expanded, fieldCtx)
+				if terr != nil {
+					continue
+				}
+			}
+			next := applyFilters(expanded, field.Filters)
+			if values[name] != next {
+				countUnresolved++
+			}
+		}
+		if countUnresolved > 0 {
+			slog.Warn("cardigann: json fixed-point iteration did not converge",
+				"indexer", e.id,
+				"passes", maxPasses,
+				"remaining_unresolved", countUnresolved)
+		}
+	}
+
 	// Phase 3 — default fallbacks.
-	for name, field := range e.def.Search.Fields {
+	for _, name := range fieldNames {
+		field := e.def.Search.Fields[name]
 		if field.Default == "" || values[name] != "" {
 			continue
 		}
