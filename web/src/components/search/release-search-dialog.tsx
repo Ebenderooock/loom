@@ -696,7 +696,7 @@ export function ReleaseSearchDialog({
           const total = resultCountRef.current;
           if (total > 0) {
             toast.success(
-              `Search complete: ${total} result${total !== 1 ? "s" : ""} found. Click the download icon to grab a release.`,
+              `Search complete: ${total} result${total !== 1 ? "s" : ""} found`,
             );
           } else {
             toast.warning("Search complete: no results found across any indexer.");
