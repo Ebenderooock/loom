@@ -24,6 +24,9 @@ var AuditableTopics = []string{
 	"downloads.retry",
 	"imports.completed",
 	"imports.failed",
+	"search.completed",
+	"search.failed",
+	"scan.imported",
 }
 
 // Sink listens on the event bus and projects every auditable event
@@ -155,6 +158,42 @@ func eventToEntry(ev eventbus.Event) *Entry {
 			Level:      "error",
 			Source:     StrPtr("system"),
 		}
+	case searchCompleted:
+		return &Entry{
+			Category:   "search",
+			EventType:  "search.completed",
+			Message:    fmt.Sprintf("Search completed: %s (%d results)", e.GetTitle(), e.GetResultCount()),
+			Detail:     DetailJSON(map[string]any{"media_type": e.GetMediaType(), "media_id": e.GetMediaID(), "title": e.GetTitle(), "result_count": e.GetResultCount()}),
+			EntityType: StrPtr(e.GetMediaType()),
+			EntityID:   StrPtr(e.GetMediaID()),
+			EntityName: StrPtr(e.GetTitle()),
+			Level:      "info",
+			Source:     StrPtr("system"),
+		}
+	case searchFailed:
+		return &Entry{
+			Category:   "search",
+			EventType:  "search.failed",
+			Message:    fmt.Sprintf("Search failed: %s — %s", e.GetTitle(), truncate(e.GetError(), 200)),
+			Detail:     DetailJSON(map[string]any{"media_type": e.GetMediaType(), "media_id": e.GetMediaID(), "title": e.GetTitle(), "error": e.GetError()}),
+			EntityType: StrPtr(e.GetMediaType()),
+			EntityID:   StrPtr(e.GetMediaID()),
+			EntityName: StrPtr(e.GetTitle()),
+			Level:      "error",
+			Source:     StrPtr("system"),
+		}
+	case scanImported:
+		return &Entry{
+			Category:   "scan",
+			EventType:  "scan.imported",
+			Message:    fmt.Sprintf("File imported: %s (%s)", e.GetTitle(), e.GetQuality()),
+			Detail:     DetailJSON(map[string]any{"media_type": e.GetMediaType(), "media_id": e.GetMediaID(), "title": e.GetTitle(), "quality": e.GetQuality(), "file_path": e.GetFilePath()}),
+			EntityType: StrPtr(e.GetMediaType()),
+			EntityID:   StrPtr(e.GetMediaID()),
+			EntityName: StrPtr(e.GetTitle()),
+			Level:      "info",
+			Source:     StrPtr("system"),
+		}
 	default:
 		return nil
 	}
@@ -227,4 +266,29 @@ type importFailed interface {
 	GetTitle() string
 	GetSourcePath() string
 	GetError() string
+}
+
+type searchCompleted interface {
+	eventbus.Event
+	GetMediaType() string
+	GetMediaID() string
+	GetTitle() string
+	GetResultCount() int
+}
+
+type searchFailed interface {
+	eventbus.Event
+	GetMediaType() string
+	GetMediaID() string
+	GetTitle() string
+	GetError() string
+}
+
+type scanImported interface {
+	eventbus.Event
+	GetMediaType() string
+	GetMediaID() string
+	GetTitle() string
+	GetQuality() string
+	GetFilePath() string
 }

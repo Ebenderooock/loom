@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/ebenderooock/loom/internal/auditlog"
 	"github.com/ebenderooock/loom/internal/kernel/telemetry"
 	"github.com/ebenderooock/loom/internal/mediafiles"
 	"github.com/ebenderooock/loom/internal/metadata"
@@ -71,6 +72,7 @@ type Scanner struct {
 	movieSvc movies.Service
 	metadata MetadataSearcher
 	logger   *slog.Logger
+	audit    *auditlog.Logger
 
 	mu    sync.RWMutex
 	scans map[string]*ScanResult
@@ -78,14 +80,26 @@ type Scanner struct {
 }
 
 // New creates a new Scanner.
-func New(movieSvc movies.Service, meta MetadataSearcher, logger *slog.Logger) *Scanner {
-	return &Scanner{
+func New(movieSvc movies.Service, meta MetadataSearcher, logger *slog.Logger, opts ...Option) *Scanner {
+	s := &Scanner{
 		movieSvc:  movieSvc,
 		metadata:  meta,
 		logger:    logger,
 		scans:     make(map[string]*ScanResult),
 		unmatched: make(map[string][]*UnmatchedFile),
 	}
+	for _, o := range opts {
+		o(s)
+	}
+	return s
+}
+
+// Option configures a Scanner.
+type Option func(*Scanner)
+
+// WithAuditLogger sets the audit logger for scan events.
+func WithAuditLogger(a *auditlog.Logger) Option {
+	return func(s *Scanner) { s.audit = a }
 }
 
 // StartScan begins an async scan of the given root folder.
@@ -328,7 +342,7 @@ func (s *Scanner) processFile(ctx context.Context, scanID string, sf scannedFile
 
 	title := sf.Rel.Title
 	year := sf.Rel.Year
-	quality := qualityFromResolution(sf.Rel.Resolution)
+	quality := qualityFromParsedInfo(sf.Rel.Resolution, sf.Rel.Source, sf.Rel.IsRemux)
 
 	if title == "" {
 		s.addUnmatched(scanID, result, sf, "")
@@ -372,7 +386,7 @@ func (s *Scanner) addUnmatched(scanID string, result *ScanResult, sf scannedFile
 		Size:        sf.Size,
 		ParsedTitle: parsedTitle,
 		ParsedYear:  sf.Rel.Year,
-		Quality:     qualityFromResolution(sf.Rel.Resolution),
+		Quality:     qualityFromParsedInfo(sf.Rel.Resolution, sf.Rel.Source, sf.Rel.IsRemux),
 		Source:      sf.Rel.Source,
 	}
 	s.mu.Lock()
@@ -470,21 +484,30 @@ func (s *Scanner) importFile(ctx context.Context, filePath string, size int64, q
 		UpdatedAt: now,
 	}
 
-	// Update movie status based on file quality vs profile
+	// Try to add the file first — only update status if it persists
+	if err := s.movieSvc.AddMovieFile(ctx, mf); err != nil {
+		if strings.Contains(err.Error(), "UNIQUE") || strings.Contains(err.Error(), "unique") {
+			// A soft-deleted row may be blocking — try to revive it
+			existing, _ := s.movieSvc.GetMovieFileByPathIncludingDeleted(ctx, filePath)
+			if existing != nil && existing.DeletedAt != nil {
+				if reviveErr := s.movieSvc.ReviveMovieFile(ctx, existing.ID, mf); reviveErr != nil {
+					return fmt.Errorf("revive movie file: %w", reviveErr)
+				}
+				s.logger.Info("revived soft-deleted movie file", "path", filePath)
+			} else {
+				s.logger.Debug("file already imported", "path", filePath)
+				return nil
+			}
+		} else {
+			return fmt.Errorf("add movie file: %w", err)
+		}
+	}
+
+	// File persisted — now update movie status
 	movie.Status = movies.MovieStatusAvailableRightQuality
 	movie.UpdatedAt = now
 	if err := s.movieSvc.UpdateMovie(ctx, movie); err != nil {
 		s.logger.Warn("failed to update movie status", "movieId", movie.ID, "err", err)
-	}
-
-	// We need to add the file via service layer
-	if err := s.movieSvc.AddMovieFile(ctx, mf); err != nil {
-		// Skip if duplicate
-		if strings.Contains(err.Error(), "UNIQUE") || strings.Contains(err.Error(), "unique") {
-			s.logger.Debug("file already imported", "path", filePath)
-			return nil
-		}
-		return fmt.Errorf("add movie file: %w", err)
 	}
 
 	s.logger.Info("imported movie file",
@@ -492,6 +515,21 @@ func (s *Scanner) importFile(ctx context.Context, filePath string, size int64, q
 		"file", filePath,
 		"quality", quality,
 	)
+
+	// Write audit entry
+	if s.audit != nil {
+		s.audit.LogBackground(auditlog.Entry{
+			Category:   "scan",
+			EventType:  "scan.imported",
+			Message:    fmt.Sprintf("File imported: %s (%s)", movie.Title, quality),
+			Detail:     auditlog.DetailJSON(map[string]any{"quality": quality, "source": source, "file_path": filePath, "size": size}),
+			EntityType: auditlog.StrPtr("movie"),
+			EntityID:   auditlog.StrPtr(movie.ID),
+			EntityName: auditlog.StrPtr(movie.Title),
+			Level:      "info",
+			Source:     auditlog.StrPtr("scanner"),
+		})
+	}
 
 	return nil
 }
@@ -527,18 +565,64 @@ func normalizeTitle(title string) string {
 	return b.String()
 }
 
-func qualityFromResolution(res int) string {
+// qualityFromParsedInfo maps parsed release info to a canonical quality
+// definition name matching the seeded QualityDefinition.Name values.
+func qualityFromParsedInfo(resolution int, source string, isRemux bool) string {
+	res := ""
 	switch {
-	case res >= 2160:
-		return "2160p"
-	case res >= 1080:
-		return "1080p"
-	case res >= 720:
-		return "720p"
-	case res >= 480:
-		return "480p"
+	case resolution >= 2160:
+		res = "2160p"
+	case resolution >= 1080:
+		res = "1080p"
+	case resolution >= 720:
+		res = "720p"
+	case resolution >= 480:
+		res = "480p"
 	default:
 		return "unknown"
+	}
+
+	// Remux takes priority over source
+	if isRemux {
+		switch res {
+		case "2160p":
+			return "bluray-2160p-remux"
+		case "1080p":
+			return "bluray-1080p-remux"
+		default:
+			return "bluray-" + res
+		}
+	}
+
+	src := strings.ToLower(source)
+	switch {
+	case strings.Contains(src, "bluray") || strings.Contains(src, "blu-ray"):
+		return "bluray-" + res
+	case strings.Contains(src, "webdl") || strings.Contains(src, "web-dl"):
+		return "webdl-" + res
+	case strings.Contains(src, "webrip") || strings.Contains(src, "web"):
+		return "webrip-" + res
+	case strings.Contains(src, "hdtv"):
+		return "hdtv-" + res
+	case strings.Contains(src, "dvd"):
+		if res == "480p" {
+			return "dvd"
+		}
+		return "sdtv"
+	default:
+		// Bare resolution fallback — pick the most common source for the resolution
+		switch res {
+		case "2160p":
+			return "webdl-2160p"
+		case "1080p":
+			return "webdl-1080p"
+		case "720p":
+			return "webdl-720p"
+		case "480p":
+			return "sdtv"
+		default:
+			return "unknown"
+		}
 	}
 }
 
@@ -613,7 +697,7 @@ func (s *Scanner) RescanMovie(ctx context.Context, movieID, libraryPath string) 
 			continue
 		}
 
-		quality := qualityFromResolution(sf.Rel.Resolution)
+		quality := qualityFromParsedInfo(sf.Rel.Resolution, sf.Rel.Source, sf.Rel.IsRemux)
 		if err := s.importFile(ctx, sf.Path, sf.Size, quality, sf.Rel.Source, &metadata.MovieMetadata{
 			Title: movie.Title,
 			Year:  movie.Year,

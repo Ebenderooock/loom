@@ -38,8 +38,11 @@ type Service interface {
 	ListMovieFiles(ctx context.Context, movieID string) ([]*MovieFile, error)
 	AddMovieFile(ctx context.Context, mf *MovieFile) error
 	GetMovieFileByPath(ctx context.Context, path string) (*MovieFile, error)
+	GetMovieFileByPathIncludingDeleted(ctx context.Context, path string) (*MovieFile, error)
+	ReviveMovieFile(ctx context.Context, id string, mf *MovieFile) error
 
-	// Quality definitions
+	// History
+	ListMovieHistory(ctx context.Context, movieID string) ([]*HistoryEntry, error)
 	AddQualityDefinition(ctx context.Context, qd *QualityDefinition) error
 	GetQualityDefinition(ctx context.Context, id string) (*QualityDefinition, error)
 	UpdateQualityDefinition(ctx context.Context, qd *QualityDefinition) error
@@ -394,6 +397,18 @@ func (s *service) AddMovieFile(ctx context.Context, mf *MovieFile) error {
 
 func (s *service) GetMovieFileByPath(ctx context.Context, path string) (*MovieFile, error) {
 	return s.repo.GetMovieFileByPath(ctx, path)
+}
+
+func (s *service) GetMovieFileByPathIncludingDeleted(ctx context.Context, path string) (*MovieFile, error) {
+	return s.repo.GetMovieFileByPathIncludingDeleted(ctx, path)
+}
+
+func (s *service) ReviveMovieFile(ctx context.Context, id string, mf *MovieFile) error {
+	return s.repo.ReviveMovieFile(ctx, id, mf)
+}
+
+func (s *service) ListMovieHistory(ctx context.Context, movieID string) ([]*HistoryEntry, error) {
+	return s.repo.ListMovieHistory(ctx, movieID)
 }
 
 // AddQualityDefinition adds a new quality definition.

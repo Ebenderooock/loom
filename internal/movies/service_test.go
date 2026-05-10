@@ -102,6 +102,15 @@ func (r *mockRepo) ListMovieFilesByMovie(_ context.Context, movieID string) ([]*
 func (r *mockRepo) GetMovieFileByPath(_ context.Context, _ string) (*MovieFile, error) {
 	return nil, nil
 }
+func (r *mockRepo) GetMovieFileByPathIncludingDeleted(_ context.Context, _ string) (*MovieFile, error) {
+	return nil, nil
+}
+func (r *mockRepo) ReviveMovieFile(_ context.Context, _ string, _ *MovieFile) error {
+	return nil
+}
+func (r *mockRepo) ListMovieHistory(_ context.Context, _ string) ([]*HistoryEntry, error) {
+	return nil, nil
+}
 func (r *mockRepo) AddQualityDefinition(_ context.Context, qd *QualityDefinition) error {
 	r.qualityDefs[qd.ID] = qd
 	return nil

@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"os"
 
+	"github.com/ebenderooock/loom/internal/auditlog"
 	"github.com/ebenderooock/loom/internal/kernel/config"
 	"github.com/ebenderooock/loom/internal/libraries"
 	"github.com/ebenderooock/loom/internal/metadata"
@@ -49,7 +50,7 @@ func buildMoviesService(ctx context.Context, cfg *config.Config, db storage.DB, 
 }
 
 // buildScanner constructs the library scanner backed by the movies service.
-func buildScanner(moviesSvc movies.Service, cfg *config.Config, logger *slog.Logger) *scanner.Scanner {
+func buildScanner(moviesSvc movies.Service, cfg *config.Config, auditLogger *auditlog.Logger, logger *slog.Logger) *scanner.Scanner {
 	apiKey := os.Getenv("LOOM_TMDB_API_KEY")
 	if apiKey == "" {
 		apiKey = defaultTMDBKey
@@ -60,7 +61,7 @@ func buildScanner(moviesSvc movies.Service, cfg *config.Config, logger *slog.Log
 
 	metaSearcher := &metadataSearcherAdapter{provider: tmdbProvider}
 
-	return scanner.New(moviesSvc, metaSearcher, logger)
+	return scanner.New(moviesSvc, metaSearcher, logger, scanner.WithAuditLogger(auditLogger))
 }
 
 // metadataSearcherAdapter wraps a metadata.MetadataProvider to implement scanner.MetadataSearcher.

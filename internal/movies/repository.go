@@ -50,6 +50,13 @@ type Repository interface {
 	DeleteCustomFormat(ctx context.Context, id string) error
 	ListCustomFormats(ctx context.Context) ([]*CustomFormat, error)
 	GetCustomFormatByName(ctx context.Context, name string) (*CustomFormat, error)
+
+	// History
+	ListMovieHistory(ctx context.Context, movieID string) ([]*HistoryEntry, error)
+
+	// Movie file recovery
+	GetMovieFileByPathIncludingDeleted(ctx context.Context, path string) (*MovieFile, error)
+	ReviveMovieFile(ctx context.Context, id string, mf *MovieFile) error
 }
 
 // NewRepository creates a new repository for the given database.
@@ -771,4 +778,68 @@ return nil, err
 }
 
 return r.GetCustomFormat(ctx, id)
+}
+
+// ListMovieHistory returns combined import and search history for a movie.
+func (r *sqlRepo) ListMovieHistory(ctx context.Context, movieID string) ([]*HistoryEntry, error) {
+	query := `
+		SELECT id, 'import' AS type, status, '' AS title, COALESCE(error,'') AS error,
+		       COALESCE(source_path,'') AS source_path, COALESCE(dest_path,'') AS dest_path,
+		       imported_at AS date
+		FROM import_history
+		WHERE media_type = 'movie' AND media_id = ?
+		UNION ALL
+		SELECT id, 'search' AS type, status, title, COALESCE(error_msg,'') AS error,
+		       '' AS source_path, '' AS dest_path,
+		       created_at AS date
+		FROM search_history
+		WHERE movie_id = ?
+		ORDER BY date DESC
+	`
+	rows, err := r.db.QueryContext(ctx, query, movieID, movieID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var entries []*HistoryEntry
+	for rows.Next() {
+		e := &HistoryEntry{}
+		if err := rows.Scan(&e.ID, &e.Type, &e.Status, &e.Title, &e.Error, &e.SourcePath, &e.DestPath, &e.Date); err != nil {
+			return nil, err
+		}
+		entries = append(entries, e)
+	}
+	return entries, rows.Err()
+}
+
+// GetMovieFileByPathIncludingDeleted returns a movie file by path, including soft-deleted rows.
+func (r *sqlRepo) GetMovieFileByPathIncludingDeleted(ctx context.Context, path string) (*MovieFile, error) {
+	mf := &MovieFile{}
+	var mediaInfoBytes []byte
+	err := r.db.QueryRowContext(ctx,
+		`SELECT id, movie_id, file_path, size, quality, format, media_info, file_date, date_added, created_at, updated_at, deleted_at
+		 FROM movie_files WHERE file_path = ?`,
+		path,
+	).Scan(&mf.ID, &mf.MovieID, &mf.FilePath, &mf.Size, &mf.Quality, &mf.Format, &mediaInfoBytes, &mf.FileDate, &mf.DateAdded, &mf.CreatedAt, &mf.UpdatedAt, &mf.DeletedAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if len(mediaInfoBytes) > 0 {
+		_ = json.Unmarshal(mediaInfoBytes, &mf.MediaInfo)
+	}
+	return mf, nil
+}
+
+// ReviveMovieFile clears deleted_at and updates fields on a soft-deleted movie file.
+func (r *sqlRepo) ReviveMovieFile(ctx context.Context, id string, mf *MovieFile) error {
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE movie_files SET deleted_at = NULL, size = ?, format = ?, quality = ?,
+		 updated_at = CURRENT_TIMESTAMP
+		 WHERE id = ?`,
+		mf.Size, mf.Format, mf.Quality, id)
+	return err
 }
