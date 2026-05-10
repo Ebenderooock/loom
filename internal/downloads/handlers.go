@@ -755,6 +755,12 @@ func (s *Service) recordManualGrab(ctx context.Context, res AddResult, req AddRe
 	case "movie":
 		if req.MovieID != "" {
 			err = s.grabStore.RecordMovieGrab(ctx, res.ClientID, res.ItemID, req.Title, req.MovieID)
+			if err == nil && s.movieStatusUpdater != nil {
+				if serr := s.movieStatusUpdater.SetMovieStatus(ctx, req.MovieID, "downloading"); serr != nil {
+					s.logger.Warn("failed to update movie status to downloading",
+						"movie_id", req.MovieID, "err", serr)
+				}
+			}
 		}
 	}
 	if err != nil {

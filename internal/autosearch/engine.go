@@ -954,6 +954,9 @@ func (e *Engine) recordGrab(ctx context.Context, req SearchRequest, grabbed *Gra
 			if err := e.grabStore.RecordMovieGrab(ctx, grabbed.ClientID, grabbed.DownloadID, grabbed.Title, req.MediaID); err != nil {
 				e.logger.Warn("failed to record movie grab", "error", err)
 			}
+			if err := e.movieSvc.SetMovieStatus(ctx, req.MediaID, movies.MovieStatusDownloading); err != nil {
+				e.logger.Warn("failed to update movie status to downloading", "error", err)
+			}
 		}
 
 	case "series", "episode":
