@@ -441,6 +441,14 @@ func (e *Engine) Search(ctx context.Context, q indexers.Query) (*indexers.Result
 			continue
 		}
 
+		// For JSON endpoints, prefer application/json Accept header
+		// so the server is more likely to return JSON instead of HTML.
+		if strings.EqualFold(sp.Response.Type, "json") {
+			if headers.Get("Accept") == "" {
+				headers.Set("Accept", "application/json")
+			}
+		}
+
 		// Deduplicate: skip if this resolved request was already fetched.
 		dedupKey := method + " " + target
 		if len(params) > 0 {
@@ -467,6 +475,14 @@ func (e *Engine) Search(ctx context.Context, q indexers.Query) (*indexers.Result
 
 		var rows []indexers.Result
 		if strings.EqualFold(sp.Response.Type, "json") {
+			// Guard: if the body looks like HTML/XML instead of JSON,
+			// the site returned an error page or Cloudflare challenge.
+			if looksLikeMarkup(body) {
+				errMsg := fmt.Errorf("path %d: expected JSON but got HTML/XML response (possible Cloudflare challenge or error page)", i)
+				slog.Warn("cardigann: response type mismatch", "indexer", e.id, "path_idx", i, "bodyPrefix", string(body[:min(200, len(body))]))
+				pathErrors = append(pathErrors, errMsg)
+				continue
+			}
 			rows, err = e.extractRowsJSON(body, tctx)
 		} else {
 			rows, err = e.extractRows(body, tctx)
@@ -601,7 +617,6 @@ func (e *Engine) fetch(ctx context.Context, method, target string, params url.Va
 		return nil, fmt.Errorf("cardigann: build request %s %s: %w", method, target, err)
 	}
 	req.Header.Set("User-Agent", e.cfg.UserAgent)
-	req.Header.Set("Accept", "text/html, application/xhtml+xml, */*")
 	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
 	// Referer helps bypass Cloudflare bot checks on search pages.
 	if base, berr := e.baseURL(); berr == nil {
@@ -611,6 +626,10 @@ func (e *Engine) fetch(ctx context.Context, method, target string, params url.Va
 		for _, v := range vs {
 			req.Header.Add(k, v)
 		}
+	}
+	// Set default Accept only if caller didn't provide one.
+	if req.Header.Get("Accept") == "" {
+		req.Header.Set("Accept", "text/html, application/xhtml+xml, */*")
 	}
 	resp, derr := e.http.Do(req)
 	if derr != nil {
@@ -646,6 +665,25 @@ func (e *Engine) fetch(ctx context.Context, method, target string, params url.Va
 		return nil, fmt.Errorf("cardigann: status %d", resp.StatusCode)
 	}
 	return body, nil
+}
+
+// looksLikeMarkup returns true if the body appears to be HTML/XML
+// rather than JSON. Used to detect Cloudflare challenge pages, error
+// pages, or other non-JSON responses from indexers that should return JSON.
+func looksLikeMarkup(body []byte) bool {
+	if len(body) == 0 {
+		return false
+	}
+	// Skip leading whitespace/BOM.
+	trimmed := bytes.TrimLeft(body, " \t\r\n\xef\xbb\xbf")
+	if len(trimmed) == 0 {
+		return false
+	}
+	// JSON always starts with '{', '[', or '"'. Anything starting with '<' is markup.
+	if trimmed[0] == '<' {
+		return true
+	}
+	return false
 }
 
 // extractRows parses the response HTML, runs the rows selector, and

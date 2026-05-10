@@ -71,7 +71,7 @@ func (q *QueryLog) StartIndexerQuery(ctx context.Context, id, queryID, indexerID
 }
 
 // FinishIndexerQuery marks an indexer query as completed or failed.
-func (q *QueryLog) FinishIndexerQuery(ctx context.Context, id string, resultCount int, searchErr error) error {
+func (q *QueryLog) FinishIndexerQuery(ctx context.Context, id string, resultCount int, elapsedMS int64, searchErr error) error {
 	now := time.Now().UTC()
 	status := "completed"
 	errMsg := ""
@@ -81,10 +81,10 @@ func (q *QueryLog) FinishIndexerQuery(ctx context.Context, id string, resultCoun
 	}
 	_, err := q.db.ExecContext(ctx,
 		`UPDATE search_query_indexer_log
-		 SET finished_at = ?, latency_ms = CAST((julianday(?) - julianday(started_at)) * 86400000 AS INTEGER),
+		 SET finished_at = ?, latency_ms = ?,
 		     result_count = ?, error = ?, status = ?
 		 WHERE id = ?`,
-		now, now, resultCount, errMsg, status, id,
+		now, elapsedMS, resultCount, errMsg, status, id,
 	)
 	return err
 }
