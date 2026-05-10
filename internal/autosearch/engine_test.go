@@ -13,11 +13,19 @@ import (
 func intPtr(v int) *int { return &v }
 
 func TestMatchQualityDef(t *testing.T) {
+	// Use the same Source/Resolution/Modifier/Name values as seed.go
+	// to verify the matching works with real data.
 	defs := []*movies.QualityDefinition{
-		{ID: "bluray-1080", Name: "Bluray-1080p", Source: "bluray", Resolution: "1080p"},
-		{ID: "webdl-1080", Name: "WEBDL-1080p", Source: "webdl", Resolution: "1080p"},
-		{ID: "hdtv-720", Name: "HDTV-720p", Source: "hdtv", Resolution: "720p"},
-		{ID: "bluray-2160", Name: "Bluray-2160p", Source: "bluray", Resolution: "2160p"},
+		{ID: "hdtv-1080", Name: "hdtv-1080p", Source: "TV", Resolution: "1080p"},
+		{ID: "webdl-1080", Name: "webdl-1080p", Source: "Web", Resolution: "1080p"},
+		{ID: "webrip-1080", Name: "webrip-1080p", Source: "WebRip", Resolution: "1080p"},
+		{ID: "bluray-1080", Name: "bluray-1080p", Source: "BluRay", Resolution: "1080p"},
+		{ID: "bluray-1080-remux", Name: "bluray-1080p-remux", Source: "BluRay", Resolution: "1080p", Modifier: "REMUX"},
+		{ID: "hdtv-720", Name: "hdtv-720p", Source: "TV", Resolution: "720p"},
+		{ID: "webdl-720", Name: "webdl-720p", Source: "Web", Resolution: "720p"},
+		{ID: "bluray-2160", Name: "bluray-2160p", Source: "BluRay", Resolution: "2160p"},
+		{ID: "bluray-2160-remux", Name: "bluray-2160p-remux", Source: "BluRay", Resolution: "2160p", Modifier: "REMUX"},
+		{ID: "webdl-2160", Name: "webdl-2160p", Source: "Web", Resolution: "2160p"},
 	}
 
 	tests := []struct {
@@ -27,22 +35,57 @@ func TestMatchQualityDef(t *testing.T) {
 		wantNil    bool
 	}{
 		{
-			name:    "exact source+resolution match",
+			name:    "bluray 1080p",
 			release: &parser.Release{Source: "BluRay", Resolution: 1080},
 			wantID:  "bluray-1080",
 		},
 		{
-			name:    "webdl variant source match",
+			name:    "webdl 1080p (parser returns WEB-DL)",
 			release: &parser.Release{Source: "WEB-DL", Resolution: 1080},
 			wantID:  "webdl-1080",
 		},
 		{
-			name:    "resolution-only fallback",
+			name:    "webdl 1080p (parser returns WebDL)",
+			release: &parser.Release{Source: "WebDL", Resolution: 1080},
+			wantID:  "webdl-1080",
+		},
+		{
+			name:    "hdtv 1080p",
+			release: &parser.Release{Source: "HDTV", Resolution: 1080},
+			wantID:  "hdtv-1080",
+		},
+		{
+			name:    "webrip 1080p",
+			release: &parser.Release{Source: "WEBRip", Resolution: 1080},
+			wantID:  "webrip-1080",
+		},
+		{
+			name:    "bluray 1080p remux",
+			release: &parser.Release{Source: "BluRay", Resolution: 1080, IsRemux: true},
+			wantID:  "bluray-1080-remux",
+		},
+		{
+			name:    "bluray 2160p remux",
+			release: &parser.Release{Source: "BluRay", Resolution: 2160, IsRemux: true},
+			wantID:  "bluray-2160-remux",
+		},
+		{
+			name:    "bluray 2160p non-remux",
+			release: &parser.Release{Source: "BluRay", Resolution: 2160},
+			wantID:  "bluray-2160",
+		},
+		{
+			name:    "webdl 2160p",
+			release: &parser.Release{Source: "WEB-DL", Resolution: 2160},
+			wantID:  "webdl-2160",
+		},
+		{
+			name:    "resolution-only fallback (unknown source, 720p)",
 			release: &parser.Release{Source: "", Resolution: 720},
 			wantID:  "hdtv-720",
 		},
 		{
-			name:    "no match",
+			name:    "no match (480p not in definitions)",
 			release: &parser.Release{Source: "DVDRip", Resolution: 480},
 			wantNil: true,
 		},
@@ -94,6 +137,27 @@ func TestNormalizeSource(t *testing.T) {
 			got := normalizeSource(tt.input)
 			if got != tt.want {
 				t.Errorf("normalizeSource(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestNormalizeDefSource(t *testing.T) {
+	tests := []struct {
+		input, want string
+	}{
+		{"Web", "webdl"},
+		{"TV", "hdtv"},
+		{"BluRay", "bluray"},
+		{"WebRip", "webrip"},
+		{"DVD", "dvd"},
+		{"Unknown", "unknown"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got := normalizeDefSource(tt.input)
+			if got != tt.want {
+				t.Errorf("normalizeDefSource(%q) = %q, want %q", tt.input, got, tt.want)
 			}
 		})
 	}
