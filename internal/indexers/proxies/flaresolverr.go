@@ -28,6 +28,13 @@ type FlareSolverrClient struct {
 
 	mu       sync.Mutex
 	sessions map[string]string // proxyID -> sessionID for KindFlareSolverr/SessionMode=shared
+
+	// Per-domain UA cache: after a successful FlareSolverr solve, the
+	// returned UserAgent is cached so subsequent requests to the same
+	// domain can inject it without re-solving. Matches Prowlarr's
+	// IIndexerProxy PreRequest UA injection pattern.
+	uaMu    sync.RWMutex
+	uaCache map[string]cachedUA // host → UA + expiry
 }
 
 // NewFlareSolverrClient builds a client. defaultTimeout is used when
@@ -44,7 +51,40 @@ func NewFlareSolverrClient(httpc *http.Client, defaultTimeout time.Duration) *Fl
 		httpc:          httpc,
 		defaultTimeout: defaultTimeout,
 		sessions:       make(map[string]string),
+		uaCache:        make(map[string]cachedUA),
 	}
+}
+
+const uaCacheTTL = 24 * time.Hour
+
+type cachedUA struct {
+	userAgent string
+	expiresAt time.Time
+}
+
+// CachedUserAgent returns the cached UserAgent for a domain, if fresh.
+func (c *FlareSolverrClient) CachedUserAgent(host string) (string, bool) {
+	c.uaMu.RLock()
+	defer c.uaMu.RUnlock()
+	entry, ok := c.uaCache[host]
+	if !ok || time.Now().After(entry.expiresAt) {
+		return "", false
+	}
+	return entry.userAgent, true
+}
+
+// cacheUserAgent stores a solved UserAgent for the domain.
+func (c *FlareSolverrClient) cacheUserAgent(host, ua string) {
+	if ua == "" || host == "" {
+		return
+	}
+	c.uaMu.Lock()
+	defer c.uaMu.Unlock()
+	c.uaCache[host] = cachedUA{
+		userAgent: ua,
+		expiresAt: time.Now().Add(uaCacheTTL),
+	}
+	slog.Debug("flaresolverr: cached UA for domain", "host", host, "ua", ua[:min(40, len(ua))]+"...")
 }
 
 // RoundTripperFor returns an http.RoundTripper bound to (proxyID,
@@ -171,6 +211,14 @@ func (rt *flareRoundTripper) RoundTrip(req *http.Request) (*http.Response, error
 	if req.Method != http.MethodGet {
 		return nil, fmt.Errorf("flaresolverr: unsupported method %s", req.Method)
 	}
+
+	// Inject cached UA for this domain if available — matches
+	// Prowlarr's IIndexerProxy.PreRequest UA injection.
+	host := req.URL.Hostname()
+	if ua, ok := rt.c.CachedUserAgent(host); ok {
+		req.Header.Set("User-Agent", ua)
+	}
+
 	body := flareReq{Cmd: "request.get", URL: req.URL.String()}
 	// Forward cookies from the original request (e.g. definition-level
 	// cookies like EZTV's layout=def_wlinks) so FlareSolverr's browser
@@ -196,6 +244,12 @@ func (rt *flareRoundTripper) RoundTrip(req *http.Request) (*http.Response, error
 		return nil, fmt.Errorf("flaresolverr: %s", env.Message)
 	}
 	sol := env.Solution
+
+	// Cache the solved UserAgent for this domain.
+	if sol.UserAgent != "" {
+		rt.c.cacheUserAgent(host, sol.UserAgent)
+	}
+
 	hdr := make(http.Header, len(sol.Headers))
 	for k, v := range sol.Headers {
 		hdr.Set(k, v)

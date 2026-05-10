@@ -121,6 +121,21 @@ func TransportForDefinition(def Definition) (http.RoundTripper, error) {
 			cfg = throttle.Resolve(c)
 		}
 	}
+	// Honour per-definition RequestDelay (milliseconds between
+	// requests). When set, cap PerMinute so the bucket never issues
+	// tokens faster than the definition demands.
+	if def.RequestDelay > 0 {
+		maxRPM := 60000 / def.RequestDelay // e.g. 2000ms → 30 rpm
+		if maxRPM < 1 {
+			maxRPM = 1
+		}
+		if cfg.PerMinute > maxRPM || cfg.PerMinute <= 0 {
+			cfg.PerMinute = maxRPM
+		}
+		if cfg.Burst > maxRPM {
+			cfg.Burst = maxRPM
+		}
+	}
 	return throttle.Wrap(base, def.ID, string(def.Kind), cfg, throttle.Options{}), nil
 }
 

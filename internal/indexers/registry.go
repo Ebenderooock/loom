@@ -251,6 +251,12 @@ func (r *Registry) Search(ctx context.Context, q Query, opts SearchOptions) Aggr
 	// download path). Applied before category filter.
 	agg.Results = validateResults(agg.Results)
 
+	// Deduplicate: when the same release (same GUID) appears from
+	// multiple indexers, keep only the first occurrence. Results
+	// are already ordered by indexer completion time, which naturally
+	// favours faster/higher-priority indexers.
+	agg.Results = deduplicateResults(agg.Results)
+
 	// Post-filter: reject results whose categories don't match the
 	// requested family. Indexers (especially Cardigann scrapers) may
 	// return cross-category results even when cat= is sent. This is
@@ -473,4 +479,32 @@ func filterByCategory(results []Result, wanted []Category) []Result {
 		}
 	}
 	return filtered
+}
+
+// deduplicateResults removes duplicate releases across indexers.
+// Duplicates are identified by GUID; the first occurrence wins (which
+// naturally favours faster or higher-priority indexers since results
+// are appended in completion order). Results without a GUID are always
+// kept — they can't be matched.
+func deduplicateResults(results []Result) []Result {
+	seen := make(map[string]bool, len(results))
+	out := make([]Result, 0, len(results))
+	dupes := 0
+	for _, r := range results {
+		guid := strings.TrimSpace(r.GUID)
+		if guid == "" {
+			out = append(out, r)
+			continue
+		}
+		if seen[guid] {
+			dupes++
+			continue
+		}
+		seen[guid] = true
+		out = append(out, r)
+	}
+	if dupes > 0 {
+		slog.Debug("dedup: removed duplicate results", "removed", dupes, "remaining", len(out))
+	}
+	return out
 }

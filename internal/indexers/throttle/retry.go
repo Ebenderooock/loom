@@ -29,6 +29,7 @@ type Reason string
 const (
 	ReasonRateLimited Reason = "rate_limited"  // HTTP 429
 	ReasonUnavailable Reason = "unavailable"   // HTTP 503
+	ReasonServerError Reason = "server_error"  // HTTP 500/502/504
 	ReasonNetwork     Reason = "network_error" // transient transport error
 )
 
@@ -76,6 +77,10 @@ func shouldRetry(resp *http.Response, err error) (Reason, bool) {
 		return ReasonRateLimited, true
 	case http.StatusServiceUnavailable:
 		return ReasonUnavailable, true
+	case http.StatusInternalServerError,
+		http.StatusBadGateway,
+		http.StatusGatewayTimeout:
+		return ReasonServerError, true
 	}
 	return "", false
 }
