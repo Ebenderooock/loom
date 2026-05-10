@@ -703,9 +703,48 @@ func (e *Engine) fetch(ctx context.Context, method, target string, params url.Va
 		return nil, fmt.Errorf("cardigann: read body: %w", rerr)
 	}
 	// CloudFlare challenge detection (3-layer). When CF is blocking,
-	// surface a specific error so the service layer can log an
-	// actionable message (configure FlareSolverr proxy for this indexer).
+	// automatically retry through FlareSolverr if one is configured
+	// as a global fallback — no per-indexer proxy setup needed.
 	if cloudflare.IsChallenge(resp, body) {
+		slog.Warn("cardigann: cloudflare challenge detected, attempting flaresolverr fallback", "indexer", e.id, "url", full)
+		if fb := indexers.CurrentCloudFlareFallback(); fb != nil {
+			rt, fbErr := fb.FlareSolverrRoundTripper()
+			if fbErr == nil {
+				fbClient := &http.Client{Transport: rt, Timeout: e.http.Timeout}
+				fbReq, reqErr := http.NewRequestWithContext(ctx, method, full, nil)
+				if reqErr == nil {
+					fbReq.Header.Set("User-Agent", e.cfg.UserAgent)
+					fbReq.Header.Set("Accept-Language", "en-US,en;q=0.9")
+					if base, berr := e.baseURL(); berr == nil {
+						fbReq.Header.Set("Referer", base+"/")
+					}
+					for k, vs := range headers {
+						for _, v := range vs {
+							fbReq.Header.Add(k, v)
+						}
+					}
+					if fbReq.Header.Get("Accept") == "" {
+						fbReq.Header.Set("Accept", "text/html, application/xhtml+xml, */*")
+					}
+					fbResp, fbDoErr := fbClient.Do(fbReq)
+					if fbDoErr == nil {
+						defer fbResp.Body.Close()
+						fbBody, fbReadErr := io.ReadAll(fbResp.Body)
+						if fbReadErr == nil && !cloudflare.IsChallenge(fbResp, fbBody) {
+							slog.Info("cardigann: flaresolverr bypass succeeded", "indexer", e.id, "url", full, "status", fbResp.StatusCode)
+							return fbBody, nil
+						}
+						if fbReadErr != nil {
+							slog.Warn("cardigann: flaresolverr read body failed", "indexer", e.id, "err", fbReadErr)
+						}
+					} else {
+						slog.Warn("cardigann: flaresolverr request failed", "indexer", e.id, "err", fbDoErr)
+					}
+				}
+			} else {
+				slog.Debug("cardigann: no flaresolverr available for CF fallback", "err", fbErr)
+			}
+		}
 		return nil, fmt.Errorf("cardigann: %s %s: %w", method, target, indexers.ErrCloudFlareChallenge)
 	}
 	if resp.StatusCode >= 500 {

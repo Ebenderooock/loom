@@ -57,6 +57,7 @@ func buildIndexerService(ctx context.Context, cfg *config.Config, db storage.DB,
 		return nil, fmt.Errorf("proxies: %w", err)
 	}
 	indexers.SetTransportProvider(proxiesSvc)
+	indexers.SetCloudFlareFallback(proxiesSvc)
 
 	// Boot the Cardigann definition loader. A missing or empty
 	// directory is non-fatal: the kind simply has no definitions to
