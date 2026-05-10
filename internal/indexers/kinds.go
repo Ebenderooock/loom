@@ -41,6 +41,9 @@ var (
 
 	rateLimitMu       sync.RWMutex
 	rateLimitProvider RateLimitProvider
+
+	cfFallbackMu       sync.RWMutex
+	cfFallbackProvider CloudFlareFallback
 )
 
 // RateLimitProvider returns the per-indexer Config that should govern
@@ -67,6 +70,29 @@ func CurrentRateLimitProvider() RateLimitProvider {
 	rateLimitMu.RLock()
 	defer rateLimitMu.RUnlock()
 	return rateLimitProvider
+}
+
+// CloudFlareFallback provides an http.RoundTripper that routes
+// requests through FlareSolverr. When a normal request hits a
+// Cloudflare challenge, the cardigann engine retries through this
+// fallback automatically — no per-indexer proxy configuration needed.
+type CloudFlareFallback interface {
+	FlareSolverrRoundTripper() (http.RoundTripper, error)
+}
+
+// SetCloudFlareFallback installs the global fallback. The proxies
+// Service implements CloudFlareFallback.
+func SetCloudFlareFallback(f CloudFlareFallback) {
+	cfFallbackMu.Lock()
+	cfFallbackProvider = f
+	cfFallbackMu.Unlock()
+}
+
+// CurrentCloudFlareFallback returns the installed fallback, or nil.
+func CurrentCloudFlareFallback() CloudFlareFallback {
+	cfFallbackMu.RLock()
+	defer cfFallbackMu.RUnlock()
+	return cfFallbackProvider
 }
 
 // SetTransportProvider installs the package-global TransportProvider.
