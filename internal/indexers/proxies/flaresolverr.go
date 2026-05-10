@@ -83,10 +83,16 @@ func (c *FlareSolverrClient) cacheUserAgent(host, ua string) {
 	slog.Debug("flaresolverr: cached UA for domain", "host", host, "ua", ua[:min(40, len(ua))]+"...")
 }
 
-// RoundTripperFor returns an http.RoundTripper bound to cfg.
-// Returned tripper is safe for concurrent use.
+// RoundTripperFor returns an http.RoundTripper that follows Prowlarr's
+// PreRequest/PostResponse pattern: requests go direct first, FlareSolverr
+// is called only when Cloudflare is detected, and solutions are cached.
 func (c *FlareSolverrClient) RoundTripperFor(_ string, cfg FlareSolverrConfig) http.RoundTripper {
-	return &flareRoundTripper{c: c, cfg: cfg}
+	return &flareRoundTripper{
+		c:           c,
+		cfg:         cfg,
+		base:        http.DefaultTransport,
+		cookieCache: make(map[string][]flareCookie),
+	}
 }
 
 // Ping verifies the FlareSolverr endpoint is reachable. It calls the
@@ -175,12 +181,34 @@ func (c *FlareSolverrClient) do(ctx context.Context, cfg FlareSolverrConfig, bod
 	return env, nil
 }
 
-// flareRoundTripper turns a FlareSolverr "request.get" response into
-// an http.Response. Only GET is supported — newznab/torznab issue
-// pure GETs anyway, and POST/PUT/etc. are out of scope for Phase 2e.
+// flareRoundTripper implements Prowlarr's PreRequest/PostResponse
+// pattern: requests go DIRECT to the indexer first. Only when the
+// response is a Cloudflare challenge does it call FlareSolverr to
+// solve, cache the UA + cookies, and retry. Subsequent requests
+// inject the cached UA to avoid re-solving.
 type flareRoundTripper struct {
-	c   *FlareSolverrClient
-	cfg FlareSolverrConfig
+	c    *FlareSolverrClient
+	cfg  FlareSolverrConfig
+	base http.RoundTripper // direct transport (no proxy)
+
+	// Per-domain cookie cache (cf_clearance etc.).
+	cookieMu    sync.RWMutex
+	cookieCache map[string][]flareCookie // host → cookies
+}
+
+func (rt *flareRoundTripper) cachedCookies(host string) []flareCookie {
+	rt.cookieMu.RLock()
+	defer rt.cookieMu.RUnlock()
+	return rt.cookieCache[host]
+}
+
+func (rt *flareRoundTripper) storeCookies(host string, cookies []flareCookie) {
+	if len(cookies) == 0 || host == "" {
+		return
+	}
+	rt.cookieMu.Lock()
+	defer rt.cookieMu.Unlock()
+	rt.cookieCache[host] = cookies
 }
 
 func (rt *flareRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
@@ -188,56 +216,128 @@ func (rt *flareRoundTripper) RoundTrip(req *http.Request) (*http.Response, error
 		return nil, fmt.Errorf("flaresolverr: unsupported method %s", req.Method)
 	}
 
-	// Inject cached UA for this domain if available — matches
-	// Prowlarr's IIndexerProxy.PreRequest UA injection.
 	host := req.URL.Hostname()
-	if ua, ok := rt.c.CachedUserAgent(host); ok {
+
+	// PreRequest: inject cached UA + cookies from prior FlareSolverr
+	// solve — matches Prowlarr's PreRequest pattern.
+	if ua, ok := rt.c.CachedUserAgent(host); ok && req.Header.Get("User-Agent") == "" {
 		req.Header.Set("User-Agent", ua)
 	}
-
-	body := flareReq{Cmd: "request.get", URL: req.URL.String()}
-	// Forward cookies from the original request (e.g. definition-level
-	// cookies like EZTV's layout=def_wlinks) so FlareSolverr's browser
-	// session includes them.
-	if cookies := req.Cookies(); len(cookies) > 0 {
-		body.Cookies = make([]flareCookie, len(cookies))
-		for i, c := range cookies {
-			body.Cookies[i] = flareCookie{Name: c.Name, Value: c.Value}
+	if cached := rt.cachedCookies(host); len(cached) > 0 {
+		for _, ck := range cached {
+			req.AddCookie(&http.Cookie{Name: ck.Name, Value: ck.Value})
 		}
 	}
-	env, err := rt.c.do(req.Context(), rt.cfg, body)
+
+	// Step 1: try direct.
+	base := rt.base
+	if base == nil {
+		base = http.DefaultTransport
+	}
+	resp, err := base.RoundTrip(req)
 	if err != nil {
 		return nil, err
 	}
+
+	// PostResponse: check if CF-protected. Read body for deep inspection.
+	var body []byte
+	if resp.Body != nil {
+		body, err = io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			return nil, err
+		}
+		resp.Body = io.NopCloser(bytes.NewReader(body))
+	}
+	if !isCloudflareResponse(resp, body) {
+		return resp, nil // not CF, return as-is
+	}
+
+	slog.Info("flaresolverr: cloudflare detected, solving via FlareSolverr",
+		"host", host, "status", resp.StatusCode)
+
+	// Step 2: call FlareSolverr to solve the challenge.
+	fsBody := flareReq{Cmd: "request.get", URL: req.URL.String()}
+	if cookies := req.Cookies(); len(cookies) > 0 {
+		fsBody.Cookies = make([]flareCookie, len(cookies))
+		for i, c := range cookies {
+			fsBody.Cookies[i] = flareCookie{Name: c.Name, Value: c.Value}
+		}
+	}
+	env, err := rt.c.do(req.Context(), rt.cfg, fsBody)
+	if err != nil {
+		return nil, fmt.Errorf("flaresolverr: solve failed: %w", err)
+	}
 	if !strings.EqualFold(env.Status, "ok") || env.Solution == nil {
-		return nil, fmt.Errorf("flaresolverr: %s", env.Message)
+		return nil, fmt.Errorf("flaresolverr: solve rejected: %s", env.Message)
 	}
 	sol := env.Solution
 
-	// Cache the solved UserAgent for this domain.
+	// Cache the solved UA + cookies for this domain.
 	if sol.UserAgent != "" {
 		rt.c.cacheUserAgent(host, sol.UserAgent)
 	}
+	rt.storeCookies(host, sol.Cookies)
 
-	hdr := make(http.Header, len(sol.Headers))
-	for k, v := range sol.Headers {
-		hdr.Set(k, v)
+	slog.Info("flaresolverr: challenge solved, retrying request",
+		"host", host, "ua", sol.UserAgent[:min(40, len(sol.UserAgent))])
+
+	// Step 3: retry the original request with solved cookies + UA.
+	retry, err := http.NewRequestWithContext(req.Context(), req.Method, req.URL.String(), nil)
+	if err != nil {
+		return nil, fmt.Errorf("flaresolverr: build retry request: %w", err)
 	}
+	// Copy original headers.
+	for k, vs := range req.Header {
+		for _, v := range vs {
+			retry.Header.Add(k, v)
+		}
+	}
+	// Override UA with solved value.
+	if sol.UserAgent != "" {
+		retry.Header.Set("User-Agent", sol.UserAgent)
+	}
+	// Inject solved cookies.
 	for _, ck := range sol.Cookies {
-		hdr.Add("Set-Cookie", fmt.Sprintf("%s=%s", ck.Name, ck.Value))
+		retry.AddCookie(&http.Cookie{Name: ck.Name, Value: ck.Value})
 	}
-	if sol.UserAgent != "" && hdr.Get("User-Agent") == "" {
-		hdr.Set("User-Agent", sol.UserAgent)
+
+	return base.RoundTrip(retry)
+}
+
+// isCloudflareResponse checks if a response is a Cloudflare challenge.
+// Matches Prowlarr's CloudFlareDetectionService.
+func isCloudflareResponse(resp *http.Response, body []byte) bool {
+	if resp == nil {
+		return false
 	}
-	return &http.Response{
-		Status:        fmt.Sprintf("%d %s", sol.Status, http.StatusText(sol.Status)),
-		StatusCode:    sol.Status,
-		Proto:         "HTTP/1.1",
-		ProtoMajor:    1,
-		ProtoMinor:    1,
-		Header:        hdr,
-		Body:          io.NopCloser(strings.NewReader(sol.Response)),
-		ContentLength: int64(len(sol.Response)),
-		Request:       req,
-	}, nil
+	server := strings.ToLower(resp.Header.Get("Server"))
+	isCF := strings.Contains(server, "cloudflare") ||
+		strings.Contains(server, "cloudflare-nginx") ||
+		strings.Contains(server, "ddos-guard")
+	if isCF && (resp.StatusCode == 403 || resp.StatusCode == 503) {
+		return true
+	}
+	if resp.Header.Get("CF-RAY") != "" && resp.StatusCode >= 400 {
+		return true
+	}
+	// Body-based detection (matching Prowlarr's HTML pattern checks).
+	if len(body) > 0 && (resp.StatusCode == 403 || resp.StatusCode == 503) {
+		lower := strings.ToLower(string(body[:min(8192, len(body))]))
+		for _, sig := range cfSignatures {
+			if strings.Contains(lower, sig) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+var cfSignatures = []string{
+	"just a moment",
+	"cf-browser-verification",
+	"cdn-cgi/challenge-platform",
+	"challenges.cloudflare.com",
+	"attention required! | cloudflare",
+	"<title>ddos-guard</title>",
 }

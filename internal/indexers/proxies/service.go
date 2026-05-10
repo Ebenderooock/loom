@@ -260,27 +260,3 @@ func generateID(kind Kind, name string) string {
 	}
 	return prefix + "-" + out
 }
-
-// FlareSolverrRoundTripper implements indexers.CloudFlareFallback.
-// It scans the proxy rows for the first flaresolverr-kind proxy and
-// returns a RoundTripper backed by it, enabling automatic cloudflare
-// bypass without per-indexer proxy configuration.
-func (s *Service) FlareSolverrRoundTripper() (http.RoundTripper, error) {
-	rows, err := s.repo.List(context.Background())
-	if err != nil {
-		return nil, fmt.Errorf("proxies: list for CF fallback: %w", err)
-	}
-	for _, row := range rows {
-		if row.Kind != KindFlareSolverr || !row.Enabled {
-			continue
-		}
-		rt, err := BuildTransport(row, s.fs)
-		if err != nil {
-			slog.Warn("proxies: CF fallback build failed, trying next", "proxy", row.ID, "err", err)
-			continue
-		}
-		slog.Info("proxies: using flaresolverr proxy as CF fallback", "proxy", row.ID, "name", row.Name)
-		return rt, nil
-	}
-	return nil, errors.New("no enabled flaresolverr proxy configured")
-}
