@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"time"
 )
 
@@ -82,6 +83,10 @@ type AddRequest struct {
 	// NZBURL is a fetchable .nzb file URL. Usenet-only.
 	NZBURL string `json:"nzb_url,omitempty"`
 
+	// Infohash is a BitTorrent v1 infohash (40 hex chars). When
+	// Magnet is empty, Normalize() constructs a magnet from it.
+	Infohash string `json:"infohash,omitempty"`
+
 	// RawBytes is the literal payload (.torrent or .nzb body) when
 	// the caller has the file in hand. Takes precedence over the
 	// URL form when set.
@@ -108,6 +113,15 @@ type AddRequest struct {
 	SeriesID   string   `json:"series_id,omitempty"`
 	EpisodeIDs []string `json:"episode_ids,omitempty"`
 	MovieID    string   `json:"movie_id,omitempty"`
+}
+
+// Normalize fills in derived fields: if Magnet is empty but Infohash
+// is present, a magnet URI is constructed. Call before passing the
+// request to a download client.
+func (r *AddRequest) Normalize() {
+	if r.Magnet == "" && r.Infohash != "" {
+		r.Magnet = fmt.Sprintf("magnet:?xt=urn:btih:%s", r.Infohash)
+	}
 }
 
 // AddResult is the outcome of a successful DownloadClient.Add. The

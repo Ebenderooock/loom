@@ -205,6 +205,7 @@ function GrabButton({
           torrent_url: result.link,
           magnet: result.magnet_uri,
           nzb_url: result.nzb_url,
+          infohash: result.infohash,
           title: result.title,
           ...mediaContext,
         });

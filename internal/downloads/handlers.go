@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -460,6 +461,13 @@ func (s *Service) handleAdd(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_body", err.Error())
 		return
+	}
+	req.Normalize()
+	if req.Magnet == "" && req.TorrentURL == "" && req.NZBURL == "" && len(req.RawBytes) == 0 {
+		slog.Warn("handleAdd: empty download request after normalize",
+			"client_id", id, "title", req.Title,
+			"magnet", req.Magnet, "torrent_url", req.TorrentURL,
+			"infohash", req.Infohash)
 	}
 	res, err := c.Add(r.Context(), req)
 	if err != nil {

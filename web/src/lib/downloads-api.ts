@@ -230,6 +230,7 @@ export interface GrabRequest {
   magnet?: string;
   torrent_url?: string;
   nzb_url?: string;
+  infohash?: string;
   title?: string;
   category?: string;
   save_path?: string;
