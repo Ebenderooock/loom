@@ -68,6 +68,12 @@ func SeedDefaults(ctx context.Context, store *Store, movieSvc movies.Service) {
 			items:   []string{"hdtv-2160p", "webdl-2160p", "webrip-2160p", "bluray-2160p", "bluray-2160p-remux"},
 		},
 		{
+			name:    "Ultra-HD Remux",
+			cutoff:  "bluray-2160p-remux",
+			upgrade: true,
+			items:   []string{"hdtv-2160p", "webdl-2160p", "webrip-2160p", "bluray-2160p", "bluray-2160p-remux"},
+		},
+		{
 			name:    "HD-720p",
 			cutoff:  "bluray-720p",
 			upgrade: true,

@@ -330,12 +330,13 @@ func (e *Engine) evaluateResult(
 	}
 
 	// Size check against quality definition limits.
-	if qd.MinFileSize > 0 && res.Size > 0 && res.Size < qd.MinFileSize {
+	minBytes, maxBytes := qd.EffectiveSizeLimits(req.Runtime)
+	if minBytes > 0 && res.Size > 0 && res.Size < minBytes {
 		sr.Rejected = true
 		sr.RejectReason = "below_min_size"
 		return sr
 	}
-	if qd.MaxFileSize > 0 && res.Size > 0 && res.Size > qd.MaxFileSize {
+	if maxBytes > 0 && res.Size > 0 && res.Size > maxBytes {
 		sr.Rejected = true
 		sr.RejectReason = "above_max_size"
 		return sr

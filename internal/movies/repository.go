@@ -278,9 +278,9 @@ func (r *sqlRepo) GetMovieFileByPath(ctx context.Context, path string) (*MovieFi
 // AddQualityDefinition adds a new quality definition to the database.
 func (r *sqlRepo) AddQualityDefinition(ctx context.Context, qd *QualityDefinition) error {
 	_, err := r.db.ExecContext(ctx,
-		`INSERT INTO quality_definitions (id, name, title, source, resolution, modifier, min_file_size, max_file_size, preferred_at, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		qd.ID, qd.Name, qd.Title, qd.Source, qd.Resolution, qd.Modifier, qd.MinFileSize, qd.MaxFileSize, qd.PreferredAt, qd.CreatedAt, qd.UpdatedAt,
+		`INSERT INTO quality_definitions (id, name, title, source, resolution, modifier, size_mode, min_file_size, max_file_size, preferred_at, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		qd.ID, qd.Name, qd.Title, qd.Source, qd.Resolution, qd.Modifier, qd.SizeMode, qd.MinFileSize, qd.MaxFileSize, qd.PreferredAt, qd.CreatedAt, qd.UpdatedAt,
 	)
 	return err
 }
@@ -289,10 +289,10 @@ func (r *sqlRepo) AddQualityDefinition(ctx context.Context, qd *QualityDefinitio
 func (r *sqlRepo) GetQualityDefinition(ctx context.Context, id string) (*QualityDefinition, error) {
 	qd := &QualityDefinition{}
 	err := r.db.QueryRowContext(ctx,
-		`SELECT id, name, title, source, resolution, modifier, min_file_size, max_file_size, preferred_at, created_at, updated_at, deleted_at
+		`SELECT id, name, title, source, resolution, modifier, size_mode, min_file_size, max_file_size, preferred_at, created_at, updated_at, deleted_at
 		 FROM quality_definitions WHERE id = ? AND deleted_at IS NULL`,
 		id,
-	).Scan(&qd.ID, &qd.Name, &qd.Title, &qd.Source, &qd.Resolution, &qd.Modifier, &qd.MinFileSize, &qd.MaxFileSize, &qd.PreferredAt, &qd.CreatedAt, &qd.UpdatedAt, &qd.DeletedAt)
+	).Scan(&qd.ID, &qd.Name, &qd.Title, &qd.Source, &qd.Resolution, &qd.Modifier, &qd.SizeMode, &qd.MinFileSize, &qd.MaxFileSize, &qd.PreferredAt, &qd.CreatedAt, &qd.UpdatedAt, &qd.DeletedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -303,9 +303,9 @@ func (r *sqlRepo) GetQualityDefinition(ctx context.Context, id string) (*Quality
 func (r *sqlRepo) UpdateQualityDefinition(ctx context.Context, qd *QualityDefinition) error {
 	_, err := r.db.ExecContext(ctx,
 		`UPDATE quality_definitions
-		 SET name = ?, title = ?, source = ?, resolution = ?, modifier = ?, min_file_size = ?, max_file_size = ?, preferred_at = ?, updated_at = ?
+		 SET name = ?, title = ?, source = ?, resolution = ?, modifier = ?, size_mode = ?, min_file_size = ?, max_file_size = ?, preferred_at = ?, updated_at = ?
 		 WHERE id = ?`,
-		qd.Name, qd.Title, qd.Source, qd.Resolution, qd.Modifier, qd.MinFileSize, qd.MaxFileSize, qd.PreferredAt, qd.UpdatedAt, qd.ID,
+		qd.Name, qd.Title, qd.Source, qd.Resolution, qd.Modifier, qd.SizeMode, qd.MinFileSize, qd.MaxFileSize, qd.PreferredAt, qd.UpdatedAt, qd.ID,
 	)
 	return err
 }
@@ -322,7 +322,7 @@ func (r *sqlRepo) DeleteQualityDefinition(ctx context.Context, id string) error 
 // ListQualityDefinitions retrieves all non-deleted quality definitions.
 func (r *sqlRepo) ListQualityDefinitions(ctx context.Context) ([]*QualityDefinition, error) {
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT id, name, title, source, resolution, modifier, min_file_size, max_file_size, preferred_at, created_at, updated_at, deleted_at
+		`SELECT id, name, title, source, resolution, modifier, size_mode, min_file_size, max_file_size, preferred_at, created_at, updated_at, deleted_at
 		 FROM quality_definitions WHERE deleted_at IS NULL ORDER BY title ASC`,
 	)
 	if err != nil {
@@ -333,7 +333,7 @@ func (r *sqlRepo) ListQualityDefinitions(ctx context.Context) ([]*QualityDefinit
 	var defs []*QualityDefinition
 	for rows.Next() {
 		qd := &QualityDefinition{}
-		err := rows.Scan(&qd.ID, &qd.Name, &qd.Title, &qd.Source, &qd.Resolution, &qd.Modifier, &qd.MinFileSize, &qd.MaxFileSize, &qd.PreferredAt, &qd.CreatedAt, &qd.UpdatedAt, &qd.DeletedAt)
+		err := rows.Scan(&qd.ID, &qd.Name, &qd.Title, &qd.Source, &qd.Resolution, &qd.Modifier, &qd.SizeMode, &qd.MinFileSize, &qd.MaxFileSize, &qd.PreferredAt, &qd.CreatedAt, &qd.UpdatedAt, &qd.DeletedAt)
 		if err != nil {
 			return nil, err
 		}
@@ -346,10 +346,10 @@ func (r *sqlRepo) ListQualityDefinitions(ctx context.Context) ([]*QualityDefinit
 func (r *sqlRepo) GetQualityDefinitionByName(ctx context.Context, name string) (*QualityDefinition, error) {
 	qd := &QualityDefinition{}
 	err := r.db.QueryRowContext(ctx,
-		`SELECT id, name, title, source, resolution, modifier, min_file_size, max_file_size, preferred_at, created_at, updated_at, deleted_at
+		`SELECT id, name, title, source, resolution, modifier, size_mode, min_file_size, max_file_size, preferred_at, created_at, updated_at, deleted_at
 		 FROM quality_definitions WHERE name = ? AND deleted_at IS NULL`,
 		name,
-	).Scan(&qd.ID, &qd.Name, &qd.Title, &qd.Source, &qd.Resolution, &qd.Modifier, &qd.MinFileSize, &qd.MaxFileSize, &qd.PreferredAt, &qd.CreatedAt, &qd.UpdatedAt, &qd.DeletedAt)
+	).Scan(&qd.ID, &qd.Name, &qd.Title, &qd.Source, &qd.Resolution, &qd.Modifier, &qd.SizeMode, &qd.MinFileSize, &qd.MaxFileSize, &qd.PreferredAt, &qd.CreatedAt, &qd.UpdatedAt, &qd.DeletedAt)
 	if err != nil {
 		return nil, err
 	}

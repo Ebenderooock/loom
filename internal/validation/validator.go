@@ -5,46 +5,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/ebenderooock/loom/internal/mediafiles"
 )
-
-// allowedExtensions are valid media file extensions.
-var allowedExtensions = map[string]bool{
-	".mkv":  true,
-	".mp4":  true,
-	".avi":  true,
-	".wmv":  true,
-	".flv":  true,
-	".mov":  true,
-	".m4v":  true,
-	".ts":   true,
-	".webm": true,
-	".mpg":  true,
-	".mpeg": true,
-	".ogm":  true,
-}
-
-// dangerousExtensions are files that should never be imported.
-var dangerousExtensions = map[string]bool{
-	".exe": true,
-	".bat": true,
-	".cmd": true,
-	".msi": true,
-	".scr": true,
-	".com": true,
-	".vbs": true,
-	".js":  true,
-	".ps1": true,
-	".sh":  true,
-}
-
-// archiveExtensions that might contain password-protected content.
-var archiveExtensions = map[string]bool{
-	".rar": true,
-	".zip": true,
-	".7z":  true,
-	".tar": true,
-	".gz":  true,
-}
 
 // Validator performs post-download file validation.
 type Validator struct {
@@ -160,7 +123,7 @@ func (v *Validator) checkFileSize(rule ValidationRule, path string) ValidationCh
 func (v *Validator) checkExtension(path string) ValidationCheck {
 	ext := strings.ToLower(filepath.Ext(path))
 
-	if dangerousExtensions[ext] {
+	if mediafiles.IsDangerous(ext) {
 		return ValidationCheck{
 			Rule:    "extension",
 			Passed:  false,
@@ -168,7 +131,7 @@ func (v *Validator) checkExtension(path string) ValidationCheck {
 		}
 	}
 
-	if !allowedExtensions[ext] {
+	if !mediafiles.IsVideo(ext) {
 		// Not in allowed list but also not dangerous — warn
 		if ext == ".nfo" || ext == ".txt" || ext == ".srt" || ext == ".sub" || ext == ".idx" {
 			return ValidationCheck{
@@ -190,7 +153,7 @@ func (v *Validator) checkExtension(path string) ValidationCheck {
 func (v *Validator) checkArchive(path string) ValidationCheck {
 	ext := strings.ToLower(filepath.Ext(path))
 
-	if archiveExtensions[ext] {
+	if mediafiles.IsArchive(ext) {
 		return ValidationCheck{
 			Rule:    "archive_detection",
 			Passed:  false,

@@ -12,16 +12,11 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/ebenderooock/loom/internal/kernel/telemetry"
+	"github.com/ebenderooock/loom/internal/mediafiles"
 	"github.com/ebenderooock/loom/internal/metadata"
 	"github.com/ebenderooock/loom/internal/movies"
 	"github.com/ebenderooock/loom/internal/parser"
 )
-
-// videoExtensions lists recognized video file extensions.
-var videoExtensions = map[string]bool{
-	".mkv": true, ".mp4": true, ".avi": true, ".m4v": true,
-	".wmv": true, ".flv": true, ".mov": true,
-}
 
 // ignoredNames lists folder/file name fragments that should be skipped.
 var ignoredNames = []string{
@@ -278,7 +273,7 @@ func walkFolder(root string) ([]scannedFile, error) {
 		}
 
 		ext := strings.ToLower(filepath.Ext(path))
-		if !videoExtensions[ext] {
+		if !mediafiles.IsVideo(ext) {
 			return nil
 		}
 		if shouldIgnore(strings.ToLower(info.Name())) {

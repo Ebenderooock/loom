@@ -661,6 +661,11 @@ func addQualityDefinition(svc Service) http.HandlerFunc {
 			title = req.Name
 		}
 
+		sizeMode := req.SizeMode
+		if sizeMode == "" {
+			sizeMode = SizeModePerMinute
+		}
+
 		qd := &QualityDefinition{
 			ID:          strings.ToLower(strings.ReplaceAll(req.Name, " ", "-")),
 			Name:        req.Name,
@@ -668,6 +673,7 @@ func addQualityDefinition(svc Service) http.HandlerFunc {
 			Source:      req.Source,
 			Resolution:  req.Resolution,
 			Modifier:    req.Modifier,
+			SizeMode:    sizeMode,
 			MinFileSize: req.MinFileSize,
 			MaxFileSize: req.MaxFileSize,
 			PreferredAt: req.PreferredAt,
@@ -739,6 +745,9 @@ func updateQualityDefinition(svc Service) http.HandlerFunc {
 		}
 		if req.Modifier != nil {
 			qd.Modifier = *req.Modifier
+		}
+		if req.SizeMode != nil {
+			qd.SizeMode = *req.SizeMode
 		}
 		if req.MinFileSize != nil {
 			qd.MinFileSize = *req.MinFileSize

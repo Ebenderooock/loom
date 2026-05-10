@@ -23,6 +23,7 @@ type SearchRequest struct {
 	TVDBID           string `json:"tvdb_id,omitempty"`
 	Season           int    `json:"season,omitempty"`
 	Episode          int    `json:"episode,omitempty"`
+	Runtime          int    `json:"runtime,omitempty"` // minutes; used for per-minute size limits
 }
 
 // SearchResult is returned by Engine.SearchAndGrab.
