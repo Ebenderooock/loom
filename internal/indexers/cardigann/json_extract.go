@@ -158,7 +158,7 @@ func (e *Engine) extractOneJSON(obj, parentObj map[string]any, tctx templateCont
 			v = applyCaseMap(v, field.Case)
 		}
 
-		v = applyFilters(v, field.Filters)
+		v = applyFilters(v, e.expandFilterArgs(field.Filters, fieldCtx))
 		values[name] = v
 	}
 
@@ -185,7 +185,7 @@ func (e *Engine) extractOneJSON(obj, parentObj map[string]any, tctx templateCont
 					continue
 				}
 			}
-			next := applyFilters(expanded, field.Filters)
+			next := applyFilters(expanded, e.expandFilterArgs(field.Filters, fieldCtx))
 			if values[name] != next {
 				values[name] = next
 				changed = true
@@ -212,7 +212,7 @@ func (e *Engine) extractOneJSON(obj, parentObj map[string]any, tctx templateCont
 					continue
 				}
 			}
-			next := applyFilters(expanded, field.Filters)
+			next := applyFilters(expanded, e.expandFilterArgs(field.Filters, fieldCtx))
 			if values[name] != next {
 				countUnresolved++
 			}
@@ -239,7 +239,7 @@ func (e *Engine) extractOneJSON(obj, parentObj map[string]any, tctx templateCont
 				continue
 			}
 		}
-		values[name] = applyFilters(fallback, field.Filters)
+		values[name] = applyFilters(fallback, e.expandFilterArgs(field.Filters, fieldCtx))
 	}
 
 	// Map field values to Result struct (same as HTML mode).
