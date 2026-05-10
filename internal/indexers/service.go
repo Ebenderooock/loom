@@ -631,7 +631,7 @@ func (s *Service) Search(ctx context.Context, q Query, ids []string, perTimeout 
 				if err := s.queryLog.StartIndexerQuery(ctx, iqID, queryLogID, indexerID, d.Name); err != nil {
 					s.logger.Warn("query log: start indexer failed", "err", err)
 				}
-				if err := s.queryLog.FinishIndexerQuery(ctx, iqID, d.ResultCount, searchErr); err != nil {
+				if err := s.queryLog.FinishIndexerQuery(ctx, iqID, d.ResultCount, d.ResponseTimeMS, searchErr); err != nil {
 					s.logger.Warn("query log: finish indexer failed", "err", err)
 				}
 			}
@@ -718,7 +718,7 @@ func (s *Service) SearchStream(ctx context.Context, q Query, ids []string, perTi
 				if err := s.queryLog.StartIndexerQuery(ctx, iqID, queryLogID, indexerID, evt.IndexerName); err != nil {
 					s.logger.Warn("query log: start indexer failed", "err", err)
 				}
-				if err := s.queryLog.FinishIndexerQuery(ctx, iqID, evt.ResultCount, searchErr); err != nil {
+				if err := s.queryLog.FinishIndexerQuery(ctx, iqID, evt.ResultCount, evt.ElapsedMS, searchErr); err != nil {
 					s.logger.Warn("query log: finish indexer failed", "err", err)
 				}
 			}
