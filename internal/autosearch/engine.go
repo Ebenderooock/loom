@@ -197,6 +197,22 @@ func (e *Engine) SearchAndGrab(ctx context.Context, req SearchRequest) (*SearchR
 		sr := e.evaluateResult(req, res, qualDefs, allowedMap, allowedDefs, formatScores, profile, existing, cutoffTier)
 		if sr.Rejected {
 			rejectCounts[sr.RejectReason]++
+			e.logger.Debug("autosearch: result rejected",
+				"title", res.Title,
+				"reason", sr.RejectReason,
+				"parsed_source", func() string {
+					if sr.Parsed != nil {
+						return sr.Parsed.Source
+					}
+					return ""
+				}(),
+				"parsed_resolution", func() int {
+					if sr.Parsed != nil {
+						return sr.Parsed.Resolution
+					}
+					return 0
+				}(),
+			)
 			continue
 		}
 		scored = append(scored, sr)
@@ -214,6 +230,11 @@ func (e *Engine) SearchAndGrab(ctx context.Context, req SearchRequest) (*SearchR
 
 	if len(scored) == 0 {
 		result.Reason = "all results rejected"
+		e.logger.Warn("autosearch: all results rejected",
+			"title", req.Title,
+			"considered", result.Considered,
+			"top_rejects", result.TopRejects,
+		)
 		e.logSearchCompleted(ctx, req, result)
 		return result, nil
 	}
@@ -491,25 +512,65 @@ func matchQualityDef(rel *parser.Release, defs []*movies.QualityDefinition) *mov
 	parsedRes := fmt.Sprintf("%dp", rel.Resolution)
 	parsedSource := normalizeSource(rel.Source)
 
-	// Try exact source + resolution match first.
-	for _, d := range defs {
-		defRes := strings.ToLower(d.Resolution)
-		defSrc := strings.ToLower(d.Source)
+	// Build the canonical slug the parser would produce (e.g., "webdl-1080p",
+	// "bluray-2160p-remux"). Match against the quality definition's Name field
+	// which uses the same convention.
+	slug := parsedSource + "-" + strings.ToLower(parsedRes)
+	if rel.IsRemux {
+		slug += "-remux"
+	}
 
-		if defRes == strings.ToLower(parsedRes) && defSrc == parsedSource {
+	// Priority 1: exact slug match against definition Name.
+	for _, d := range defs {
+		if strings.ToLower(d.Name) == slug {
 			return d
 		}
 	}
 
-	// Fallback: resolution-only match (e.g., if source is unknown).
+	// Priority 2: normalised source + resolution + modifier match.
+	// Quality definitions may use display names for Source (e.g. "Web"
+	// for webdl, "TV" for hdtv), so normalise both sides.
 	for _, d := range defs {
 		defRes := strings.ToLower(d.Resolution)
-		if defRes == strings.ToLower(parsedRes) {
+		defSrc := normalizeDefSource(d.Source)
+		defRemux := strings.EqualFold(d.Modifier, "REMUX")
+
+		if defRes == strings.ToLower(parsedRes) && defSrc == parsedSource && defRemux == rel.IsRemux {
+			return d
+		}
+	}
+
+	// Priority 3: resolution + modifier only (unknown source).
+	for _, d := range defs {
+		defRes := strings.ToLower(d.Resolution)
+		defRemux := strings.EqualFold(d.Modifier, "REMUX")
+		if defRes == strings.ToLower(parsedRes) && defRemux == rel.IsRemux {
+			return d
+		}
+	}
+
+	// Priority 4: resolution only (unknown source and modifier).
+	for _, d := range defs {
+		defRes := strings.ToLower(d.Resolution)
+		if defRes == strings.ToLower(parsedRes) && d.Modifier == "" {
 			return d
 		}
 	}
 
 	return nil
+}
+
+// normalizeDefSource maps quality definition Source display names to the
+// same canonical form that normalizeSource produces from parser output.
+func normalizeDefSource(source string) string {
+	switch strings.ToLower(source) {
+	case "web":
+		return "webdl"
+	case "tv":
+		return "hdtv"
+	default:
+		return normalizeSource(source)
+	}
 }
 
 // normalizeSource maps parser source strings to quality definition source names.
@@ -636,6 +697,16 @@ func (e *Engine) grabRelease(ctx context.Context, sr *ScoredRelease) (*GrabbedRe
 
 	// Build the download request.
 	req := buildDownloadRequest(&sr.Result)
+
+	if req.Magnet == "" && req.TorrentURL == "" && len(req.RawBytes) == 0 {
+		e.logger.Error("autosearch: download request has no magnet/URL/bytes",
+			"title", sr.Result.Title,
+			"link", sr.Result.Link,
+			"magnet_uri", sr.Result.MagnetURI,
+			"infohash", sr.Result.Infohash,
+			"indexer", sr.Result.IndexerID,
+		)
+	}
 
 	addResult, err := target.Add(ctx, req)
 	if err != nil {

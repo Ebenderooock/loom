@@ -122,6 +122,15 @@ func (r *Router) handleIndexerResult(ctx context.Context, ev eventbus.Event) err
 	var addErr error
 	for _, client := range clients {
 		req := buildAddRequest(result)
+		if req.Magnet == "" && req.TorrentURL == "" && len(req.RawBytes) == 0 {
+			r.logger.Error("router: download request has no magnet/URL/bytes",
+				"title", result.Title,
+				"link", result.Link,
+				"magnet_uri", result.MagnetURI,
+				"infohash", result.Infohash,
+				"indexer", result.IndexerID,
+			)
+		}
 		res, err := client.Add(ctx, req)
 		if err == nil {
 			// Success: emit DownloadQueued and return.
