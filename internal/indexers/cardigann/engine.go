@@ -852,7 +852,7 @@ func (e *Engine) extractOne(node *goquery.Selection, tctx templateContext) (inde
 				continue
 			}
 		}
-		v := e.applyFieldWithSelector(node, field, sel)
+		v := e.applyFieldWithSelector(node, field, sel, fieldCtx)
 		values[name] = v
 	}
 
@@ -884,7 +884,7 @@ func (e *Engine) extractOne(node *goquery.Selection, tctx templateContext) (inde
 					continue
 				}
 			}
-			next := applyFilters(expanded, field.Filters)
+			next := applyFilters(expanded, e.expandFilterArgs(field.Filters, fieldCtx))
 			if values[name] != next {
 				values[name] = next
 				changed = true
@@ -911,7 +911,7 @@ func (e *Engine) extractOne(node *goquery.Selection, tctx templateContext) (inde
 					continue
 				}
 			}
-			next := applyFilters(expanded, field.Filters)
+			next := applyFilters(expanded, e.expandFilterArgs(field.Filters, fieldCtx))
 			if values[name] != next {
 				countUnresolved++
 			}
@@ -941,7 +941,7 @@ func (e *Engine) extractOne(node *goquery.Selection, tctx templateContext) (inde
 				continue
 			}
 		}
-		values[name] = applyFilters(fallback, field.Filters)
+		values[name] = applyFilters(fallback, e.expandFilterArgs(field.Filters, fieldCtx))
 	}
 	r.Title = strings.TrimSpace(values["title"])
 	r.GUID = strings.TrimSpace(values["guid"])
@@ -1000,18 +1000,12 @@ func (e *Engine) extractOne(node *goquery.Selection, tctx templateContext) (inde
 	return r, true
 }
 
-// applyField runs one field's selector + filter pipeline against the
-// row node. Returns "" when the selector misses (and the field is
-// optional) or when the chain produces an empty string.
-func (e *Engine) applyField(row *goquery.Selection, f Field) string {
-	return e.applyFieldWithSelector(row, f, f.Selector)
-}
-
-// applyFieldWithSelector is like applyField but uses a pre-expanded
+// applyFieldWithSelector runs one field's selector + filter pipeline
 // selector (templates already resolved).
-func (e *Engine) applyFieldWithSelector(row *goquery.Selection, f Field, sel string) string {
+func (e *Engine) applyFieldWithSelector(row *goquery.Selection, f Field, sel string, ctx templateContext) string {
+	filters := e.expandFilterArgs(f.Filters, ctx)
 	if f.Text != "" && sel == "" {
-		return applyFilters(f.Text, f.Filters)
+		return applyFilters(f.Text, filters)
 	}
 	if sel == "" {
 		return ""
@@ -1030,7 +1024,7 @@ func (e *Engine) applyFieldWithSelector(row *goquery.Selection, f Field, sel str
 	if f.Remove != "" {
 		raw = strings.ReplaceAll(raw, f.Remove, "")
 	}
-	return applyFilters(raw, f.Filters)
+	return applyFilters(raw, filters)
 }
 
 // absoluteURL resolves rel against the definition's base URL. A
@@ -1254,6 +1248,54 @@ func (e *Engine) expandTemplate(tmpl string, ctx templateContext) (string, error
 		return "", fmt.Errorf("execute template: %w", err)
 	}
 	return buf.String(), nil
+}
+
+// expandFilterArgs returns a copy of filters with any Go template
+// syntax in the Args expanded against ctx.  This is needed because
+// Cardigann definitions can embed `.Result.*` references inside
+// filter arguments (e.g. YTS uses `append` with
+// `{{ .Result._quality }}`).  Without expansion the raw template
+// string ends up in the output.
+func (e *Engine) expandFilterArgs(filters []Filter, ctx templateContext) []Filter {
+	if len(filters) == 0 {
+		return filters
+	}
+	out := make([]Filter, len(filters))
+	for i, f := range filters {
+		out[i] = f
+		out[i].Args = e.expandFilterArg(f.Args, ctx)
+	}
+	return out
+}
+
+func (e *Engine) expandFilterArg(arg any, ctx templateContext) any {
+	switch v := arg.(type) {
+	case string:
+		if !strings.Contains(v, "{{") {
+			return v
+		}
+		expanded, err := e.expandTemplate(v, ctx)
+		if err != nil {
+			slog.Warn("cardigann: filter arg template error",
+				"indexer", e.id, "err", err)
+			return v
+		}
+		return expanded
+	case []any:
+		cp := make([]any, len(v))
+		for i, elem := range v {
+			cp[i] = e.expandFilterArg(elem, ctx)
+		}
+		return cp
+	case []string:
+		cp := make([]any, len(v))
+		for i, elem := range v {
+			cp[i] = e.expandFilterArg(elem, ctx)
+		}
+		return cp
+	default:
+		return arg
+	}
 }
 
 // ensureCategories lazily resolves the category mapping into both
