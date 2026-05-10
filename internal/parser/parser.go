@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"fmt"
 	"regexp"
 	"strconv"
 	"strings"
@@ -9,16 +10,25 @@ import (
 
 // Release represents parsed metadata extracted from a release name.
 type Release struct {
-	Name       string // Original release name
-	Title      string // Extracted clean title
-	Codec      string // h264, h265, av1, vp9, etc.
-	Bitdepth   int    // 8, 10, 12
-	Year       int    // Release year (YYYY format)
-	Resolution int    // 480, 720, 1080, 2160, etc.
-	Source     string // BluRay, HDTV, WebDL, DVDRip, etc.
-	Season     int    // TV season number (-1 if not found)
-	Episode    int    // TV episode number (-1 if not found)
-	Group      string // Release group name (e.g., "SPARKS", "FGT")
+	Name            string // Original release name
+	Title           string // Extracted clean title
+	Codec           string // h264, h265, av1, vp9, etc.
+	Bitdepth        int    // 8, 10, 12
+	Year            int    // Release year (YYYY format)
+	Resolution      int    // 480, 720, 1080, 2160, etc.
+	Source          string // BluRay, HDTV, WebDL, DVDRip, etc.
+	Season          int    // TV season number (-1 if not found)
+	Episode         int    // TV episode number, first if multi (-1 if not found)
+	Episodes        []int  // All episodes for multi-episode releases (e.g., [1,2,3])
+	IsSeasonPack    bool   // True when season detected without episode (S01, Season 1 Complete)
+	IsProper        bool   // PROPER tag detected
+	IsRepack        bool   // REPACK or RERIP tag detected
+	IsReal          bool   // REAL tag detected (fixes fake/nuked releases)
+	DailyDate       string // "2024-01-30" for daily shows (empty if not daily)
+	AbsoluteEpisode int    // Anime absolute episode number (-1 if not found)
+	Audio           string // DTS-HD MA, TrueHD, Atmos, AAC, FLAC, AC3, EAC3, etc.
+	Edition         string // Movie edition: Director's Cut, Extended, IMAX, Theatrical, etc.
+	Group           string // Release group name (e.g., "SPARKS", "FGT")
 }
 
 // patternCache holds compiled regex patterns to avoid recompilation.
@@ -50,14 +60,15 @@ func getPattern(key string, pattern string) *regexp.Regexp {
 // Parse parses a release name and extracts metadata.
 func Parse(releaseName string) *Release {
 	r := &Release{
-		Name:       releaseName,
-		Codec:      "",
-		Bitdepth:   0,
-		Year:       0,
-		Resolution: 0,
-		Source:     "",
-		Season:     -1,
-		Episode:    -1,
+		Name:            releaseName,
+		Codec:           "",
+		Bitdepth:        0,
+		Year:            0,
+		Resolution:      0,
+		Source:          "",
+		Season:          -1,
+		Episode:         -1,
+		AbsoluteEpisode: -1,
 	}
 
 	// Lowercase for pattern matching
@@ -69,8 +80,19 @@ func Parse(releaseName string) *Release {
 	// Extract bitdepth
 	r.Bitdepth = extractBitdepth(lower)
 
-	// Extract year
+	// Extract daily date BEFORE year (daily shows like "Show.2024.05.07")
+	r.DailyDate = extractDailyDate(lower)
+
+	// Extract year (skips daily date digits if already detected)
 	r.Year = extractYear(lower)
+	// If daily date found but year wasn't extracted separately, use the date's year
+	if r.DailyDate != "" && r.Year == 0 {
+		if len(r.DailyDate) >= 4 {
+			if y, err := strconv.Atoi(r.DailyDate[:4]); err == nil {
+				r.Year = y
+			}
+		}
+	}
 
 	// Extract resolution
 	r.Resolution = extractResolution(lower)
@@ -79,9 +101,27 @@ func Parse(releaseName string) *Release {
 	r.Source = extractSource(lower)
 
 	// Extract season and episode (for TV shows)
-	season, episode := extractSeasonEpisode(lower)
+	season, episode, episodes, isSeasonPack := extractSeasonEpisodeV2(lower)
 	r.Season = season
 	r.Episode = episode
+	r.Episodes = episodes
+	r.IsSeasonPack = isSeasonPack
+
+	// Extract anime absolute episode (only if no S##E## was found)
+	if r.Season == -1 && r.Episode == -1 {
+		r.AbsoluteEpisode = extractAbsoluteEpisode(lower, releaseName)
+	}
+
+	// Extract proper/repack/real flags
+	r.IsProper = extractFlag(lower, `(?:^|[\s.\-_])(proper)(?:$|[\s.\-_\d])`)
+	r.IsRepack = extractFlag(lower, `(?:^|[\s.\-_])(repack|rerip)(?:$|[\s.\-_\d])`)
+	r.IsReal = extractFlag(lower, `(?:^|[\s.\-_])(real)(?:$|[\s.\-_])`)
+
+	// Extract audio codec
+	r.Audio = extractAudio(lower)
+
+	// Extract movie edition (Director's Cut, Extended, IMAX, etc.)
+	r.Edition = extractEdition(lower)
 
 	// Extract title (everything before year or quality markers)
 	r.Title = extractTitle(releaseName, r.Year)
@@ -211,22 +251,79 @@ func extractSource(lower string) string {
 	return ""
 }
 
-// extractSeasonEpisode extracts season and episode numbers from release name.
-// Returns (season, episode) where -1 means not found.
-func extractSeasonEpisode(lower string) (int, int) {
+// extractDailyDate detects daily show date patterns like "2024.05.07", "2024-05-07".
+// Returns "YYYY-MM-DD" format or empty string.
+func extractDailyDate(lower string) string {
+	p := getPattern("daily_date", `(?:^|[\s.\-_])(\d{4})[\.\-\s](\d{2})[\.\-\s](\d{2})(?:$|[\s.\-_])`)
+	if matches := p.FindStringSubmatch(lower); len(matches) > 3 {
+		year, _ := strconv.Atoi(matches[1])
+		month, _ := strconv.Atoi(matches[2])
+		day, _ := strconv.Atoi(matches[3])
+		// Validate it's a plausible date
+		if year >= 1900 && year <= 2100 && month >= 1 && month <= 12 && day >= 1 && day <= 31 {
+			return fmt.Sprintf("%04d-%02d-%02d", year, month, day)
+		}
+	}
+	return ""
+}
+
+// extractSeasonEpisodeV2 extracts season, episode(s), and season pack info.
+// Returns (season, firstEpisode, allEpisodes, isSeasonPack).
+func extractSeasonEpisodeV2(lower string) (int, int, []int, bool) {
 	season := -1
 	episode := -1
+	var episodes []int
 
-	// S##E## pattern (e.g., S01E05, s1e5, S01E05E06 → first episode)
-	p := getPattern("sxe", `s(\d{1,2})e(\d{1,3})`)
+	// S##E## pattern with multi-episode support:
+	// S01E01E02E03, S01E01-E03, S01E01-03, S01E01.E02, S01E01+E02
+	p := getPattern("sxe_multi", `s(\d{1,2})e(\d{1,3})`)
 	if matches := p.FindStringSubmatch(lower); len(matches) > 2 {
 		if s, err := strconv.Atoi(matches[1]); err == nil {
 			season = s
 		}
 		if e, err := strconv.Atoi(matches[2]); err == nil {
 			episode = e
+			episodes = append(episodes, e)
 		}
-		return season, episode
+
+		// Find the position after S##E## to scan for more episodes
+		loc := p.FindStringIndex(lower)
+		if loc != nil {
+			rest := lower[loc[1]:]
+			// Scan for continuation patterns: E##, -E##, .E##, +E##, -##
+			contP := getPattern("episode_cont", `^(?:[.\-+]?e(\d{1,3})|[\-](\d{1,3}))`)
+			for {
+				m := contP.FindStringSubmatch(rest)
+				if m == nil {
+					break
+				}
+				var nextEp int
+				isRange := false
+				if m[1] != "" {
+					nextEp, _ = strconv.Atoi(m[1])
+				} else if m[2] != "" {
+					nextEp, _ = strconv.Atoi(m[2])
+					isRange = true
+				}
+				if nextEp > 0 {
+					lastEp := episodes[len(episodes)-1]
+					// Range: S01E01-03 or S01E01-E03 means episodes 1,2,3
+					if nextEp > lastEp && nextEp-lastEp <= 24 && (isRange || strings.HasPrefix(rest, "-e") || strings.HasPrefix(rest, "-E")) {
+						for ep := lastEp + 1; ep <= nextEp; ep++ {
+							episodes = append(episodes, ep)
+						}
+					} else {
+						episodes = append(episodes, nextEp)
+					}
+				}
+				rest = rest[len(m[0]):]
+			}
+		}
+
+		// Filter out version suffixes (e.g., E01v2 should not add episode 2)
+		// handled by the pattern requiring E prefix or dash for continuation
+
+		return season, episode, episodes, false
 	}
 
 	// ##x## pattern (e.g., 1x05, 7x01)
@@ -237,8 +334,36 @@ func extractSeasonEpisode(lower string) (int, int) {
 		}
 		if e, err := strconv.Atoi(matches[2]); err == nil {
 			episode = e
+			episodes = append(episodes, e)
 		}
-		return season, episode
+		return season, episode, episodes, false
+	}
+
+	// Season pack detection: S## without E## following
+	// Patterns: "S01", "S01.Complete", "Season 1", "Season.01"
+	spP := getPattern("season_pack", `(?:^|[\s._-])s(\d{1,2})(?:$|[\s._-])(?:complete|full|pack)?`)
+	if matches := spP.FindStringSubmatch(lower); len(matches) > 1 {
+		if s, err := strconv.Atoi(matches[1]); err == nil {
+			// Verify no E## follows within a reasonable distance
+			loc := spP.FindStringIndex(lower)
+			if loc != nil {
+				after := lower[loc[1]:]
+				hasEpisode := regexp.MustCompile(`^\.?e\d`).MatchString(after)
+				if !hasEpisode {
+					season = s
+					return season, -1, nil, true
+				}
+			}
+		}
+	}
+
+	// "Season ##" word pattern
+	swP := getPattern("season_word", `(?:^|[\s._-])season[\s._-]*(\d{1,2})(?:$|[\s._-])`)
+	if matches := swP.FindStringSubmatch(lower); len(matches) > 1 {
+		if s, err := strconv.Atoi(matches[1]); err == nil {
+			season = s
+			return season, -1, nil, true
+		}
 	}
 
 	// "Episode ##" or "Ep ##" pattern
@@ -246,8 +371,9 @@ func extractSeasonEpisode(lower string) (int, int) {
 	if matches := p.FindStringSubmatch(lower); len(matches) > 1 {
 		if e, err := strconv.Atoi(matches[1]); err == nil {
 			episode = e
+			episodes = append(episodes, e)
 		}
-		return season, episode
+		return season, episode, episodes, false
 	}
 
 	// Standalone E## pattern (e.g., E01, e05) with boundaries
@@ -255,10 +381,115 @@ func extractSeasonEpisode(lower string) (int, int) {
 	if matches := p.FindStringSubmatch(lower); len(matches) > 1 {
 		if e, err := strconv.Atoi(matches[1]); err == nil {
 			episode = e
+			episodes = append(episodes, e)
 		}
 	}
 
-	return season, episode
+	return season, episode, episodes, false
+}
+
+// extractAbsoluteEpisode extracts anime-style absolute episode numbers.
+// Only called when no S##E## pattern was found.
+// Patterns: "- 05", "- 142", "[Group] Title - 05 [1080p]"
+func extractAbsoluteEpisode(lower string, original string) int {
+	// Require anime-style formatting: leading [Group] bracket suggests anime
+	hasAnimeGroup := regexp.MustCompile(`^\[`).MatchString(strings.TrimSpace(original))
+
+	if hasAnimeGroup {
+		// Match "- ##" pattern (common anime: "[Group] Title - 05 [1080p]")
+		p := getPattern("absolute_ep", `\s-\s(\d{1,4})(?:\s|$|\[)`)
+		if matches := p.FindStringSubmatch(lower); len(matches) > 1 {
+			if ep, err := strconv.Atoi(matches[1]); err == nil {
+				// Sanity: episode numbers above 2000 are likely years
+				if ep > 0 && ep < 2000 {
+					return ep
+				}
+			}
+		}
+	}
+
+	return -1
+}
+
+// extractFlag checks if a flag pattern exists in the release name.
+func extractFlag(lower string, pattern string) bool {
+	p := getPattern("flag_"+pattern, pattern)
+	return p.MatchString(lower)
+}
+
+// extractAudio extracts audio codec information from release name.
+// Matches longest/most specific patterns first to avoid partial matches.
+func extractAudio(lower string) string {
+	audioPatterns := []struct {
+		pattern string
+		name    string
+	}{
+		{`(?:dts[\s.\-]?hd[\s.\-]?ma)`, "DTS-HD MA"},
+		{`(?:truehd[\s.\-]?atmos|atmos[\s.\-]?truehd)`, "TrueHD Atmos"},
+		{`(?:dd[\+p][\s.\-]?atmos|eac3[\s.\-]?atmos)`, "EAC3 Atmos"},
+		{`(?:dts[\s.\-]?x)`, "DTS-X"},
+		{`(?:dts[\s.\-]?hd)`, "DTS-HD"},
+		{`(?:truehd)`, "TrueHD"},
+		{`(?:\batmos\b)`, "Atmos"},
+		{`(?:dd[\+p]|eac3|e[\s.\-]?ac[\s.\-]?3)`, "EAC3"},
+		{`(?:\bdts\b)`, "DTS"},
+		{`(?:dd5[\.\s]?1|ac[\s.\-]?3|ac3)`, "AC3"},
+		{`(?:\bflac\b)`, "FLAC"},
+		{`(?:\baac\b)`, "AAC"},
+		{`(?:\bopus\b)`, "Opus"},
+		{`(?:\bpcm\b)`, "PCM"},
+		{`(?:\bmp3\b)`, "MP3"},
+	}
+
+	for _, ap := range audioPatterns {
+		if matched, _ := regexp.MatchString(ap.pattern, lower); matched {
+			return ap.name
+		}
+	}
+
+	return ""
+}
+
+// extractSeasonEpisode is kept for backward compatibility but delegates to V2.
+// Deprecated: use extractSeasonEpisodeV2 instead.
+func extractSeasonEpisode(lower string) (int, int) {
+	s, e, _, _ := extractSeasonEpisodeV2(lower)
+	return s, e
+}
+
+// extractEdition extracts movie edition information from release names.
+// Based on Radarr's EditionRegex patterns.
+func extractEdition(lower string) string {
+	editionPatterns := []struct {
+		pattern string
+		name    string
+	}{
+		{`(?:directors?[\s.\-]?cut)`, "Directors Cut"},
+		{`(?:collector'?s?[\s.\-]?(?:cut|edition))`, "Collectors Edition"},
+		{`(?:theatrical[\s.\-]?(?:cut|edition)?)`, "Theatrical"},
+		{`(?:ultimate[\s.\-]?(?:cut|edition))`, "Ultimate Cut"},
+		{`(?:extended[\s.\-]?(?:cut|edition)?)`, "Extended"},
+		{`(?:despecialized)`, "Despecialized"},
+		{`(?:uncensored)`, "Uncensored"},
+		{`(?:remastered)`, "Remastered"},
+		{`(?:unrated[\s.\-]?(?:cut|edition)?)`, "Unrated"},
+		{`(?:uncut)`, "Uncut"},
+		{`(?:\bimax\b)`, "IMAX"},
+		{`(?:fan[\s.\-]?edit)`, "Fan Edit"},
+		{`(?:restored)`, "Restored"},
+		{`(?:anniversary[\s.\-]?(?:edition)?)`, "Anniversary Edition"},
+		{`(?:criterion[\s.\-]?(?:collection|edition)?)`, "Criterion"},
+		{`(?:special[\s.\-]?edition)`, "Special Edition"},
+		{`(?:limited[\s.\-]?edition)`, "Limited Edition"},
+	}
+
+	for _, ep := range editionPatterns {
+		if matched, _ := regexp.MatchString(ep.pattern, lower); matched {
+			return ep.name
+		}
+	}
+
+	return ""
 }
 
 // extractTitle extracts a clean movie/show title from a release name.

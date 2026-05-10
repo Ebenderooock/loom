@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -246,6 +247,10 @@ func (r *Registry) Search(ctx context.Context, q Query, opts SearchOptions) Aggr
 
 	sort.Slice(diags, func(i, j int) bool { return diags[i].Name < diags[j].Name })
 
+	// Validate: reject structurally invalid results (empty title, no
+	// download path). Applied before category filter.
+	agg.Results = validateResults(agg.Results)
+
 	// Post-filter: reject results whose categories don't match the
 	// requested family. Indexers (especially Cardigann scrapers) may
 	// return cross-category results even when cat= is sent. This is
@@ -351,6 +356,7 @@ func (r *Registry) SearchStream(ctx context.Context, q Query, opts SearchOptions
 			}
 
 			items := res.Items
+			items = validateResults(items)
 			if len(q.Categories) > 0 {
 				items = filterByCategory(items, q.Categories)
 			}
@@ -408,6 +414,28 @@ func (r *Registry) selectTargets(ids []string) []Indexer {
 		if ix, ok := r.items[id]; ok {
 			out = append(out, ix)
 		}
+	}
+	return out
+}
+
+// validateResults removes results that are structurally invalid —
+// specifically those with an empty Title or no download path (neither
+// Link nor MagnetURI). This mirrors Sonarr's IsValidRelease() check
+// and catches upstream garbage before it enters scoring/streaming.
+func validateResults(results []Result) []Result {
+	out := make([]Result, 0, len(results))
+	for _, r := range results {
+		if strings.TrimSpace(r.Title) == "" {
+			slog.Debug("validate: dropping result with empty title",
+				"indexer", r.IndexerID, "guid", r.GUID)
+			continue
+		}
+		if strings.TrimSpace(r.Link) == "" && strings.TrimSpace(r.MagnetURI) == "" && strings.TrimSpace(r.Infohash) == "" {
+			slog.Debug("validate: dropping result with no download path",
+				"indexer", r.IndexerID, "title", r.Title, "guid", r.GUID)
+			continue
+		}
+		out = append(out, r)
 	}
 	return out
 }

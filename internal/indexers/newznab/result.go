@@ -122,7 +122,8 @@ func pickLink(it rssItem) string {
 }
 
 // mapNewznabAttrs surfaces the Newznab-only fields we care about
-// today: size (when not in enclosure), grabs, files, group.
+// today: size (when not in enclosure), grabs, files, group, and
+// usenetdate (preferred over RSS pubDate when present, per Sonarr).
 func mapNewznabAttrs(attrs []rssAttr, r *indexers.Result) {
 	for _, a := range attrs {
 		switch strings.ToLower(a.Name) {
@@ -144,6 +145,12 @@ func mapNewznabAttrs(attrs []rssAttr, r *indexers.Result) {
 			}
 		case "quality":
 			r.Quality = a.Value
+		case "usenetdate":
+			// Sonarr prefers usenetdate over RSS pubDate for more
+			// accurate release timing. Only override if parseable.
+			if t := parseRFC1123Z(a.Value); !t.IsZero() {
+				r.PubDate = t
+			}
 		}
 	}
 }

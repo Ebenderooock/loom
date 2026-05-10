@@ -120,6 +120,22 @@ func (e *Engine) SearchAndGrab(ctx context.Context, req SearchRequest) (*SearchR
 	// Build the indexer search query.
 	q := e.buildQuery(req)
 
+	// Check if this media is already grabbed (avoid duplicate downloads).
+	if e.grabStore != nil && req.MediaID != "" {
+		alreadyGrabbed := false
+		switch req.MediaType {
+		case "movie":
+			if grabbed, err := e.grabStore.GrabbedMovieIDs(ctx, []string{req.MediaID}); err == nil {
+				alreadyGrabbed = grabbed[req.MediaID]
+			}
+		}
+		if alreadyGrabbed {
+			return &SearchResult{
+				Reason: "already_grabbed",
+			}, nil
+		}
+	}
+
 	// Search all indexers.
 	agg := e.indexerSvc.Search(ctx, q, nil, 30*time.Second)
 
@@ -137,7 +153,7 @@ func (e *Engine) SearchAndGrab(ctx context.Context, req SearchRequest) (*SearchR
 	var scored []ScoredRelease
 
 	for _, res := range agg.Results {
-		sr := e.evaluateResult(res, qualDefs, allowedMap, allowedDefs, formatScores, profile)
+		sr := e.evaluateResult(req, res, qualDefs, allowedMap, allowedDefs, formatScores, profile)
 		if sr.Rejected {
 			rejectCounts[sr.RejectReason]++
 			continue
@@ -198,7 +214,10 @@ func (e *Engine) SearchAndGrab(ctx context.Context, req SearchRequest) (*SearchR
 }
 
 // evaluateResult parses, quality-matches, filters, and scores a single result.
+// The req parameter provides identity context for verifying the result matches
+// the requested media (title, season, episode).
 func (e *Engine) evaluateResult(
+	req SearchRequest,
 	res indexers.Result,
 	qualDefs []*movies.QualityDefinition,
 	allowedMap map[string]int,
@@ -211,6 +230,13 @@ func (e *Engine) evaluateResult(
 	// Parse the release name.
 	parsed := parser.Parse(res.Title)
 	sr.Parsed = parsed
+
+	// Identity verification: ensure the result matches the requested media.
+	if reason := e.verifyIdentity(req, parsed); reason != "" {
+		sr.Rejected = true
+		sr.RejectReason = reason
+		return sr
+	}
 
 	// Match to a quality definition.
 	qd := matchQualityDef(parsed, qualDefs)
@@ -273,6 +299,59 @@ func (e *Engine) evaluateResult(
 	sr.TiebreakerScore = computeTiebreaker(res)
 
 	return sr
+}
+
+// verifyIdentity checks that a parsed result matches the requested media.
+// Returns empty string if the result is valid, or a rejection reason.
+func (e *Engine) verifyIdentity(req SearchRequest, parsed *parser.Release) string {
+	if parsed == nil || req.Title == "" {
+		return ""
+	}
+
+	// Title matching: verify the parsed title is close to the requested title.
+	parsedTitle := normalizeTitle(parsed.Title)
+	wantTitle := normalizeTitle(req.Title)
+
+	if parsedTitle != "" && wantTitle != "" {
+		distance := levenshteinDistance(strings.ToLower(parsedTitle), strings.ToLower(wantTitle))
+		maxLen := max(len(parsedTitle), len(wantTitle))
+		if maxLen > 0 {
+			similarity := 1.0 - float64(distance)/float64(maxLen)
+			if similarity < 0.6 {
+				return "title_mismatch"
+			}
+		}
+	}
+
+	// Series-specific checks.
+	if req.MediaType == "series" || req.MediaType == "episode" {
+		// Season pack rejection for single-episode searches.
+		if req.Episode > 0 && parsed.IsSeasonPack {
+			return "season_pack_for_episode_search"
+		}
+
+		// Season verification.
+		if req.Season > 0 && parsed.Season > 0 && parsed.Season != req.Season {
+			return "wrong_season"
+		}
+
+		// Episode verification (only for single-episode searches).
+		if req.Episode > 0 && parsed.Episode > 0 && parsed.Episode != req.Episode {
+			// Check multi-episode — accept if any episode matches.
+			found := false
+			for _, ep := range parsed.Episodes {
+				if ep == req.Episode {
+					found = true
+					break
+				}
+			}
+			if !found {
+				return "wrong_episode"
+			}
+		}
+	}
+
+	return ""
 }
 
 // matchQualityDef maps a parsed release to a quality definition by

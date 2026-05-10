@@ -15,7 +15,8 @@ import (
 // to `movie`, presence of tvdb/season to `tvsearch`, otherwise plain
 // `search`.
 func (c *Client) Search(ctx context.Context, q indexers.Query) (*indexers.Results, error) {
-	mode, params := buildQuery(q, c.cfg)
+	caps := c.Caps()
+	mode, params := buildQuery(q, c.cfg, caps)
 	body, err := c.get(ctx, c.buildURL(mode, params))
 	if err != nil {
 		return nil, err
@@ -28,24 +29,34 @@ func (c *Client) Search(ctx context.Context, q indexers.Query) (*indexers.Result
 }
 
 // buildQuery picks the search mode and packs Query into URL values.
-// Pure function so search_test.go can assert the wire shape.
-func buildQuery(q indexers.Query, cfg Config) (mode string, params url.Values) {
+// When caps are known (non-empty), the mode and ID params are
+// restricted to what the indexer actually supports. Empty caps are
+// treated as "unknown — allow everything" to avoid regressing when
+// caps fetch failed.
+func buildQuery(q indexers.Query, cfg Config, caps indexers.Caps) (mode string, params url.Values) {
 	params = url.Values{}
-	mode = chooseMode(q)
+	mode = chooseMode(q, caps)
 	if t := strings.TrimSpace(q.Term); t != "" {
 		params.Set("q", t)
 	}
 	if cats := pickCategories(q, cfg); len(cats) > 0 {
 		params.Set("cat", strings.Join(cats, ","))
 	}
+	// Only include ID params the indexer supports (or all if caps unknown).
 	if id := strings.TrimPrefix(strings.TrimSpace(q.IMDBID), "tt"); id != "" {
-		params.Set("imdbid", id)
+		if capsSupportsID(caps, "imdb") {
+			params.Set("imdbid", id)
+		}
 	}
 	if id := strings.TrimSpace(q.TVDBID); id != "" {
-		params.Set("tvdbid", id)
+		if capsSupportsID(caps, "tvdb") {
+			params.Set("tvdbid", id)
+		}
 	}
 	if id := strings.TrimSpace(q.TMDBID); id != "" {
-		params.Set("tmdbid", id)
+		if capsSupportsID(caps, "tmdb") {
+			params.Set("tmdbid", id)
+		}
 	}
 	if q.Season > 0 {
 		params.Set("season", strconv.Itoa(q.Season))
@@ -55,23 +66,25 @@ func buildQuery(q indexers.Query, cfg Config) (mode string, params url.Values) {
 	}
 	if q.Limit > 0 {
 		params.Set("limit", strconv.Itoa(q.Limit))
-		// Pagination semantics: Newznab uses offset+limit. We don't
-		// expose offset on Query yet (Phase 2c does single-page
-		// fan-out), but the param shape is wired so a later phase
-		// only needs to add the field.
 		params.Set("offset", "0")
 	}
 	return mode, params
 }
 
 // chooseMode reads the Query and routes to the most specific mode the
-// upstream supports. When external IDs or season/episode are present
-// we use the ID-specific mode. Otherwise we fall back to category
-// analysis: if every requested category belongs to the Movie or TV
-// family we pick the corresponding mode so indexers that distinguish
-// between `movie`/`tvsearch` and generic `search` return focused
-// results. This matches Radarr/Sonarr behaviour.
-func chooseMode(q indexers.Query) string {
+// upstream supports. When caps are known, we verify the chosen mode
+// is actually supported; if not, we fall back to "search".
+func chooseMode(q indexers.Query, caps indexers.Caps) string {
+	preferred := inferPreferredMode(q)
+	if capsSupportsMode(caps, preferred) {
+		return preferred
+	}
+	return "search"
+}
+
+// inferPreferredMode picks the ideal mode based on Query fields,
+// ignoring caps.
+func inferPreferredMode(q indexers.Query) string {
 	switch {
 	case q.IMDBID != "" || q.TMDBID != "":
 		return "movie"
@@ -98,8 +111,50 @@ func chooseMode(q indexers.Query) string {
 			return "tvsearch"
 		}
 	}
-
 	return "search"
+}
+
+// capsSupportsMode checks if the indexer caps allow the given mode.
+// Empty caps (unknown) means "allow everything".
+func capsSupportsMode(caps indexers.Caps, mode string) bool {
+	if len(caps.SearchTypes) == 0 {
+		return true // Unknown caps — allow all modes.
+	}
+	// Normalise names: Newznab caps XML uses "tv-search" / "movie-search"
+	// but the API param is "tvsearch" / "movie".
+	aliases := map[string][]string{
+		"tvsearch": {"tvsearch", "tv-search"},
+		"movie":    {"movie", "movie-search", "moviesearch"},
+		"search":   {"search"},
+	}
+	names, ok := aliases[mode]
+	if !ok {
+		names = []string{mode}
+	}
+	for _, st := range caps.SearchTypes {
+		lower := strings.ToLower(st)
+		for _, n := range names {
+			if lower == n {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// capsSupportsID checks if the indexer caps include a given ID scheme.
+// Empty SupportedIDs (unknown) means "allow all".
+func capsSupportsID(caps indexers.Caps, idType string) bool {
+	if len(caps.SupportedIDs) == 0 {
+		return true // Unknown — allow all.
+	}
+	lower := strings.ToLower(idType)
+	for _, s := range caps.SupportedIDs {
+		if strings.ToLower(s) == lower {
+			return true
+		}
+	}
+	return false
 }
 
 // pickCategories blends Query.Categories with cfg.CategoryMap. The map

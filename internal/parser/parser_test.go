@@ -458,35 +458,214 @@ func TestAnimePatterns(t *testing.T) {
 // ── Multi-Episode & Season Pack ──────────────────────────────────────
 
 func TestMultiEpisode(t *testing.T) {
-	// Parser extracts only the first S##E## match
-	r := Parse("Show.S01E01E02.1080p.BluRay.mkv")
-	if r.Season != 1 {
-		t.Errorf("Season = %d, want 1", r.Season)
+	tests := []struct {
+		name     string
+		input    string
+		season   int
+		episode  int
+		episodes []int
+	}{
+		{"S01E01E02", "Show.S01E01E02.1080p.BluRay.mkv", 1, 1, []int{1, 2}},
+		{"S01E01E02E03", "Show.S01E01E02E03.720p.mkv", 1, 1, []int{1, 2, 3}},
+		{"S01E01-E03", "Show.S01E01-E03.1080p.mkv", 1, 1, []int{1, 2, 3}},
+		{"S01E01-03 range", "Show.S01E01-03.HDTV.mkv", 1, 1, []int{1, 2, 3}},
+		{"S01E05.E06", "Show.S01E05.E06.WEB.mkv", 1, 5, []int{5, 6}},
+		{"single episode", "Show.S01E01.1080p.mkv", 1, 1, []int{1}},
 	}
-	if r.Episode != 1 {
-		t.Errorf("Episode = %d, want 1 (first match)", r.Episode)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			r := Parse(tc.input)
+			if r.Season != tc.season {
+				t.Errorf("Season = %d, want %d", r.Season, tc.season)
+			}
+			if r.Episode != tc.episode {
+				t.Errorf("Episode = %d, want %d", r.Episode, tc.episode)
+			}
+			if len(r.Episodes) != len(tc.episodes) {
+				t.Fatalf("Episodes = %v, want %v", r.Episodes, tc.episodes)
+			}
+			for i, ep := range tc.episodes {
+				if r.Episodes[i] != ep {
+					t.Errorf("Episodes[%d] = %d, want %d", i, r.Episodes[i], ep)
+				}
+			}
+		})
 	}
 }
 
 func TestSeasonPackNoEpisode(t *testing.T) {
-	// "Show.S01.Complete" has no E## → episode should be -1
-	r := Parse("Show.S01.Complete.1080p.BluRay.mkv")
-	if r.Season != -1 && r.Episode != -1 {
-		// The parser uses S##E## pattern; S01 alone without E## won't match
-		t.Logf("Season=%d Episode=%d (season pack without E## is not extracted)", r.Season, r.Episode)
+	tests := []struct {
+		name         string
+		input        string
+		season       int
+		isSeasonPack bool
+	}{
+		{"S01.Complete", "Show.S01.Complete.1080p.BluRay.mkv", 1, true},
+		{"S02 standalone", "Show.S02.720p.WEB-DL.mkv", 2, true},
+		{"Season 1", "Show Season 1 1080p BluRay", 1, true},
+		{"season.03", "show.season.03.720p.hdtv", 3, true},
+		// Ensure S01E01 is NOT detected as season pack
+		{"S01E01 not pack", "Show.S01E01.1080p.mkv", 1, false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			r := Parse(tc.input)
+			if r.Season != tc.season {
+				t.Errorf("Season = %d, want %d", r.Season, tc.season)
+			}
+			if r.IsSeasonPack != tc.isSeasonPack {
+				t.Errorf("IsSeasonPack = %v, want %v", r.IsSeasonPack, tc.isSeasonPack)
+			}
+		})
 	}
 }
 
 // ── Daily Show Format ────────────────────────────────────────────────
 
 func TestDailyShowYearExtraction(t *testing.T) {
-	// "Show.2024.05.07.HDTV" — the parser should extract 2024 as year
+	// "Show.2024.05.07.HDTV" — the parser should extract daily date AND year
 	r := Parse("Some.Show.2024.05.07.HDTV.x264.mkv")
 	if r.Year != 2024 {
 		t.Errorf("Year = %d, want 2024", r.Year)
 	}
 	if r.Source != "HDTV" {
 		t.Errorf("Source = %q, want HDTV", r.Source)
+	}
+	if r.DailyDate != "2024-05-07" {
+		t.Errorf("DailyDate = %q, want 2024-05-07", r.DailyDate)
+	}
+}
+
+func TestDailyDateFormats(t *testing.T) {
+	tests := []struct {
+		name string
+		input string
+		date  string
+	}{
+		{"dot separated", "The.Daily.Show.2024.03.15.720p.WEB.mkv", "2024-03-15"},
+		{"dash separated", "Late.Night-2023-11-22-HDTV.mkv", "2023-11-22"},
+		{"no daily date", "Movie.2024.1080p.BluRay.mkv", ""},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			r := Parse(tc.input)
+			if r.DailyDate != tc.date {
+				t.Errorf("DailyDate = %q, want %q", r.DailyDate, tc.date)
+			}
+		})
+	}
+}
+
+// ── Proper/Repack/Real Flags ────────────────────────────────────────
+
+func TestProperRepackFlags(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		proper   bool
+		repack   bool
+		real     bool
+	}{
+		{"proper", "Show.S01E01.PROPER.720p.HDTV.mkv", true, false, false},
+		{"repack", "Show.S01E01.REPACK.1080p.BluRay.mkv", false, true, false},
+		{"real", "Show.S01E01.REAL.720p.HDTV.mkv", false, false, true},
+		{"proper+repack", "Show.S01E01.PROPER.REPACK.720p.mkv", true, true, false},
+		{"none", "Show.S01E01.1080p.BluRay.mkv", false, false, false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			r := Parse(tc.input)
+			if r.IsProper != tc.proper {
+				t.Errorf("IsProper = %v, want %v", r.IsProper, tc.proper)
+			}
+			if r.IsRepack != tc.repack {
+				t.Errorf("IsRepack = %v, want %v", r.IsRepack, tc.repack)
+			}
+			if r.IsReal != tc.real {
+				t.Errorf("IsReal = %v, want %v", r.IsReal, tc.real)
+			}
+		})
+	}
+}
+
+// ── Audio Codec Extraction ──────────────────────────────────────────
+
+func TestAudioExtraction(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		audio string
+	}{
+		{"DTS-HD MA", "Movie.2024.1080p.BluRay.DTS-HD.MA.mkv", "DTS-HD MA"},
+		{"TrueHD Atmos", "Movie.2024.2160p.Remux.TrueHD.Atmos.mkv", "TrueHD Atmos"},
+		{"EAC3 Atmos", "Movie.2024.1080p.WEB-DL.DD+.Atmos.mkv", "EAC3 Atmos"},
+		{"DTS-X", "Movie.2024.2160p.UHD.DTS-X.mkv", "DTS-X"},
+		{"DTS-HD", "Movie.2024.1080p.BluRay.DTS-HD.mkv", "DTS-HD"},
+		{"TrueHD", "Movie.2024.1080p.BluRay.TrueHD.mkv", "TrueHD"},
+		{"EAC3/DD+", "Show.S01E01.1080p.WEB-DL.DD+5.1.mkv", "EAC3"},
+		{"DTS", "Movie.2024.1080p.BluRay.DTS.mkv", "DTS"},
+		{"AC3", "Show.S01E01.720p.HDTV.AC3.mkv", "AC3"},
+		{"FLAC", "Movie.2024.1080p.BluRay.FLAC.mkv", "FLAC"},
+		{"AAC", "Show.S01E01.720p.WEB.AAC.mkv", "AAC"},
+		{"no audio", "Movie.2024.1080p.BluRay.mkv", ""},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			r := Parse(tc.input)
+			if r.Audio != tc.audio {
+				t.Errorf("Audio = %q, want %q", r.Audio, tc.audio)
+			}
+		})
+	}
+}
+
+// ── Anime Absolute Episode ──────────────────────────────────────────
+
+func TestAbsoluteEpisode(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   string
+		absEp   int
+	}{
+		{"anime style", "[SubGroup] Naruto Shippuuden - 142 [1080p].mkv", 142},
+		{"anime single digit", "[Fansub] One Piece - 5 [720p].mkv", 5},
+		{"not anime (no bracket)", "Show.S01E01.1080p.mkv", -1},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			r := Parse(tc.input)
+			if r.AbsoluteEpisode != tc.absEp {
+				t.Errorf("AbsoluteEpisode = %d, want %d", r.AbsoluteEpisode, tc.absEp)
+			}
+		})
+	}
+}
+
+// ── Edition Extraction ──────────────────────────────────────────────
+
+func TestEditionExtraction(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   string
+		edition string
+	}{
+		{"directors cut", "Movie.2024.Directors.Cut.1080p.BluRay.mkv", "Directors Cut"},
+		{"extended", "Movie.2024.Extended.1080p.BluRay.mkv", "Extended"},
+		{"extended edition", "Movie.2024.Extended.Edition.1080p.mkv", "Extended"},
+		{"imax", "Movie.2024.IMAX.2160p.WEB-DL.mkv", "IMAX"},
+		{"remastered", "Movie.2024.Remastered.1080p.BluRay.mkv", "Remastered"},
+		{"theatrical", "Movie.2024.Theatrical.Cut.720p.mkv", "Theatrical"},
+		{"unrated", "Movie.2024.Unrated.1080p.BluRay.mkv", "Unrated"},
+		{"criterion", "Movie.2024.Criterion.Collection.1080p.mkv", "Criterion"},
+		{"none", "Movie.2024.1080p.BluRay.mkv", ""},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			r := Parse(tc.input)
+			if r.Edition != tc.edition {
+				t.Errorf("Edition = %q, want %q", r.Edition, tc.edition)
+			}
+		})
 	}
 }
 

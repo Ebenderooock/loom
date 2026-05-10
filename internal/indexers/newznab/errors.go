@@ -40,4 +40,9 @@ var (
 	// XML at all (e.g. an HTML error page returned where XML was
 	// expected).
 	ErrMalformedXML = errors.New("newznab: malformed xml")
+
+	// ErrCloudFlare is returned when the response body looks like a
+	// Cloudflare challenge page (JS challenge or CAPTCHA). The
+	// upstream is reachable but a bot-detection layer is blocking.
+	ErrCloudFlare = errors.New("newznab: cloudflare challenge")
 )

@@ -185,6 +185,11 @@ func (c *Client) get(ctx context.Context, fullURL string) ([]byte, error) {
 	if rerr != nil {
 		return nil, fmt.Errorf("%w: read body: %s", ErrUpstream, rerr.Error())
 	}
+	// Detect Cloudflare challenge pages before HTTP status classification,
+	// so a 403 from Cloudflare is not misclassified as ErrAuthFailed.
+	if looksLikeCloudFlare(resp, body) {
+		return nil, fmt.Errorf("%w: status %d", ErrCloudFlare, resp.StatusCode)
+	}
 	if err := classifyHTTP(resp, body); err != nil {
 		return nil, err
 	}
@@ -210,6 +215,22 @@ func classifyHTTP(resp *http.Response, body []byte) error {
 			resp.StatusCode, snippet(body))
 	}
 	return nil
+}
+
+// looksLikeCloudFlare detects Cloudflare JS challenge / CAPTCHA pages
+// that some indexers sit behind. We check the Server header and body
+// markers rather than status code alone, because CF can return 403, 503,
+// or other codes.
+func looksLikeCloudFlare(resp *http.Response, body []byte) bool {
+	server := strings.ToLower(resp.Header.Get("Server"))
+	if !strings.Contains(server, "cloudflare") {
+		return false
+	}
+	b := strings.ToLower(string(body))
+	return strings.Contains(b, "cf-browser-verification") ||
+		strings.Contains(b, "cf_chl_opt") ||
+		strings.Contains(b, "jschl-answer") ||
+		strings.Contains(b, "challenge-platform")
 }
 
 // snippet trims to a manageable size for log/error messages.
@@ -247,14 +268,26 @@ func decodeUpstreamError(body []byte) error {
 	if err := xml.Unmarshal(body, &ue); err != nil {
 		return nil
 	}
-	switch ue.Code {
-	case "100", "101", "102":
+	code := parseInt(ue.Code)
+	desc := strings.ToLower(strings.TrimSpace(ue.Description))
+
+	// Detect rate limiting by description text (Sonarr matches these).
+	if strings.Contains(desc, "request limit reached") ||
+		strings.Contains(desc, "api limit") ||
+		strings.Contains(desc, "rate limit") ||
+		strings.Contains(desc, "too many requests") {
+		return fmt.Errorf("%w: code=%s description=%q",
+			ErrRateLimited, ue.Code, ue.Description)
+	}
+
+	// Newznab spec: codes 100-199 are all authentication/authorisation errors.
+	if code >= 100 && code <= 199 {
 		return fmt.Errorf("%w: code=%s description=%q",
 			ErrAuthFailed, ue.Code, ue.Description)
-	default:
-		return fmt.Errorf("%w: code=%s description=%q",
-			ErrUpstream, ue.Code, ue.Description)
 	}
+
+	return fmt.Errorf("%w: code=%s description=%q",
+		ErrUpstream, ue.Code, ue.Description)
 }
 
 // parseInt is a tiny shared helper so search/result code can keep
