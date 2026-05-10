@@ -750,18 +750,18 @@ func inferProtocol(res *indexers.Result) downloads.Protocol {
 // buildDownloadRequest converts an indexer result to a download add request.
 func buildDownloadRequest(res *indexers.Result) downloads.AddRequest {
 	req := downloads.AddRequest{
-		Title: res.Title,
+		Title:    res.Title,
+		Infohash: res.Infohash,
 	}
 	if res.MagnetURI != "" {
 		req.Magnet = res.MagnetURI
 	} else if res.Infohash != "" {
 		req.Magnet = fmt.Sprintf("magnet:?xt=urn:btih:%s", res.Infohash)
-	} else {
+	}
+	if res.Link != "" {
 		req.TorrentURL = res.Link
 	}
-	if req.Magnet == "" && req.TorrentURL == "" {
-		req.TorrentURL = res.Link
-	}
+	req.Normalize()
 	return req
 }
 

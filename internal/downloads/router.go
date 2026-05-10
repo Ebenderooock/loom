@@ -202,19 +202,12 @@ func buildAddRequest(result *indexers.Result) AddRequest {
 	if result.MagnetURI != "" {
 		req.Magnet = result.MagnetURI
 	} else if result.Infohash != "" {
-		// Construct a magnet link from the infohash.
 		req.Magnet = fmt.Sprintf("magnet:?xt=urn:btih:%s", result.Infohash)
-	} else {
-		// Fall back to the link as a torrent URL.
+	}
+	if result.Link != "" {
 		req.TorrentURL = result.Link
 	}
-
-	// If no magnet/infohash/link could be built, use the link anyway
-	// and let the client fail with a meaningful error.
-	if req.Magnet == "" && req.TorrentURL == "" {
-		req.TorrentURL = result.Link
-	}
-
+	req.Normalize()
 	return req
 }
 
