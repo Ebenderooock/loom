@@ -15,7 +15,9 @@ import (
 
 func TestFlareSolverrRoundTripper(t *testing.T) {
 	t.Parallel()
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+
+	// Mock FlareSolverr API server — returns a solved response.
+	fsSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v1" || r.Method != http.MethodPost {
 			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
 		}
@@ -30,15 +32,33 @@ func TestFlareSolverrRoundTripper(t *testing.T) {
 			"solution":{"url":"http://target/","status":200,
 				"headers":{"X-Hello":"world"},
 				"response":"<rss/>",
-				"cookies":[{"name":"a","value":"b"}],
+				"cookies":[{"name":"cf_clearance","value":"solved123"}],
 				"userAgent":"FS-UA"}
 		}`))
 	}))
-	defer srv.Close()
+	defer fsSrv.Close()
+
+	// Mock indexer site — returns CF challenge on first request,
+	// then OK with solved cookies on retry.
+	indexerSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Check if the request has a cf_clearance cookie (retry after solve).
+		for _, c := range r.Cookies() {
+			if c.Name == "cf_clearance" && c.Value == "solved123" {
+				w.Header().Set("Content-Type", "text/html")
+				_, _ = w.Write([]byte("<rss/>"))
+				return
+			}
+		}
+		// No clearance cookie — return CF challenge.
+		w.Header().Set("Server", "cloudflare")
+		w.WriteHeader(403)
+		_, _ = w.Write([]byte("<title>Just a moment...</title>"))
+	}))
+	defer indexerSrv.Close()
 
 	cli := proxies.NewFlareSolverrClient(nil, 30*time.Second)
-	rt := cli.RoundTripperFor("p", proxies.FlareSolverrConfig{URL: srv.URL})
-	req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, "http://target/", nil)
+	rt := cli.RoundTripperFor("p", proxies.FlareSolverrConfig{URL: fsSrv.URL})
+	req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, indexerSrv.URL+"/search", nil)
 	resp, err := rt.RoundTrip(req)
 	if err != nil {
 		t.Fatalf("RoundTrip: %v", err)
@@ -47,14 +67,40 @@ func TestFlareSolverrRoundTripper(t *testing.T) {
 	if resp.StatusCode != 200 {
 		t.Fatalf("status %d", resp.StatusCode)
 	}
-	if got := resp.Header.Get("X-Hello"); got != "world" {
-		t.Errorf("header: %q", got)
-	}
-	if got := resp.Header.Get("User-Agent"); got != "FS-UA" {
-		t.Errorf("UA header: %q", got)
-	}
 	body, _ := io.ReadAll(resp.Body)
 	if !strings.Contains(string(body), "<rss/>") {
+		t.Errorf("body: %q", string(body))
+	}
+
+	// Verify UA was cached — second request should inject it.
+	if ua, ok := cli.CachedUserAgent(req.URL.Hostname()); !ok || ua != "FS-UA" {
+		t.Errorf("expected cached UA 'FS-UA', got %q (ok=%v)", ua, ok)
+	}
+}
+
+func TestFlareSolverrRoundTripperNoCF(t *testing.T) {
+	t.Parallel()
+
+	// Mock indexer site — returns 200 directly (no CF).
+	indexerSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte("<html>results</html>"))
+	}))
+	defer indexerSrv.Close()
+
+	cli := proxies.NewFlareSolverrClient(nil, 30*time.Second)
+	rt := cli.RoundTripperFor("p", proxies.FlareSolverrConfig{URL: "http://unused"})
+	req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, indexerSrv.URL+"/search", nil)
+	resp, err := rt.RoundTrip(req)
+	if err != nil {
+		t.Fatalf("RoundTrip: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		t.Fatalf("status %d", resp.StatusCode)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	if !strings.Contains(string(body), "results") {
 		t.Errorf("body: %q", string(body))
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"log/slog"
 	"net/http"
 	"sort"
 	"strings"
@@ -119,7 +120,13 @@ func (l *LoaderDefinitionLister) ListDefinitions() []indexers.CardigannDefSummar
 var httpClientFactory = func(cfg Config, def indexers.Definition) *http.Client {
 	rt, err := indexers.TransportForDefinition(def)
 	if err != nil || rt == nil {
+		if def.ProxyID != "" {
+			slog.Warn("cardigann: proxy lookup failed, falling back to direct",
+				"indexer", def.ID, "proxyID", def.ProxyID, "err", err)
+		}
 		rt = http.DefaultTransport
+	} else if def.ProxyID != "" {
+		slog.Info("cardigann: proxy transport attached", "indexer", def.ID, "proxyID", def.ProxyID)
 	}
 	return &http.Client{Timeout: cfg.Timeout.duration(), Transport: rt}
 }
