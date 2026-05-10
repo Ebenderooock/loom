@@ -24,6 +24,13 @@ import (
 	"github.com/ebenderooock/loom/internal/series"
 )
 
+// existingQuality represents the quality state of an existing file on disk.
+type existingQuality struct {
+	HasFile      bool // true if a file exists for this media item
+	HasKnownTier bool // true if we could determine the quality tier
+	Tier         int  // position in profile items (lower = better quality)
+}
+
 // profileItem mirrors the shape of items stored in quality_profiles_v2.items JSON.
 type profileItem struct {
 	ID        string `json:"id"`
@@ -74,10 +81,10 @@ func NewEngine(
 }
 
 // SearchAndGrab executes the full automated search pipeline:
-//  1. Search indexers
+//  1. Search indexers (with request-chain fallback)
 //  2. Parse each result
 //  3. Match to a quality definition
-//  4. Filter: only allowed qualities, reject zero-seeder torrents
+//  4. Filter: allowed qualities, zero seeders, upgrade check
 //  5. Score: quality tier + custom format score + tiebreakers
 //  6. Reject results below MinFormatScore
 //  7. Grab the highest-scoring result
@@ -117,9 +124,6 @@ func (e *Engine) SearchAndGrab(ctx context.Context, req SearchRequest) (*SearchR
 		formatScores[fi.FormatID] = fi.Score
 	}
 
-	// Build the indexer search query.
-	q := e.buildQuery(req)
-
 	// Check if this media is already grabbed (avoid duplicate downloads).
 	if e.grabStore != nil && req.MediaID != "" {
 		alreadyGrabbed := false
@@ -136,14 +140,34 @@ func (e *Engine) SearchAndGrab(ctx context.Context, req SearchRequest) (*SearchR
 		}
 	}
 
-	// Search all indexers.
-	agg := e.indexerSvc.Search(ctx, q, nil, 30*time.Second)
+	// Compute existing quality once (not per-result) for upgrade logic.
+	existing := e.getExistingQuality(ctx, req, qualDefs, allowedMap)
 
-	result := &SearchResult{
-		Considered: len(agg.Results),
+	// Resolve cutoff tier from profile.
+	cutoffTier := -1 // -1 means no cutoff configured
+	if profile.Cutoff != "" {
+		if ct, ok := allowedMap[profile.Cutoff]; ok {
+			cutoffTier = ct
+		}
 	}
 
-	if len(agg.Results) == 0 {
+	// Request-chain fallback: try ID-based search first, then text fallback.
+	queries := e.buildQueryChain(req)
+	var allResults []indexers.Result
+
+	for _, q := range queries {
+		agg := e.indexerSvc.Search(ctx, q, nil, 30*time.Second)
+		allResults = append(allResults, agg.Results...)
+		if len(allResults) > 0 {
+			break // Got results, stop trying weaker queries.
+		}
+	}
+
+	result := &SearchResult{
+		Considered: len(allResults),
+	}
+
+	if len(allResults) == 0 {
 		result.Reason = "no results from indexers"
 		return result, nil
 	}
@@ -152,8 +176,8 @@ func (e *Engine) SearchAndGrab(ctx context.Context, req SearchRequest) (*SearchR
 	rejectCounts := make(map[string]int)
 	var scored []ScoredRelease
 
-	for _, res := range agg.Results {
-		sr := e.evaluateResult(req, res, qualDefs, allowedMap, allowedDefs, formatScores, profile)
+	for _, res := range allResults {
+		sr := e.evaluateResult(req, res, qualDefs, allowedMap, allowedDefs, formatScores, profile, existing, cutoffTier)
 		if sr.Rejected {
 			rejectCounts[sr.RejectReason]++
 			continue
@@ -214,8 +238,8 @@ func (e *Engine) SearchAndGrab(ctx context.Context, req SearchRequest) (*SearchR
 }
 
 // evaluateResult parses, quality-matches, filters, and scores a single result.
-// The req parameter provides identity context for verifying the result matches
-// the requested media (title, season, episode).
+// The req parameter provides identity context, existing provides upgrade
+// comparison state, and cutoffTier is the profile's cutoff position (-1 = none).
 func (e *Engine) evaluateResult(
 	req SearchRequest,
 	res indexers.Result,
@@ -224,6 +248,8 @@ func (e *Engine) evaluateResult(
 	allowedDefs map[string]bool,
 	formatScores map[string]int,
 	profile *qualityprofiles.QualityProfile,
+	existing existingQuality,
+	cutoffTier int,
 ) ScoredRelease {
 	sr := ScoredRelease{Result: res}
 
@@ -255,6 +281,46 @@ func (e *Engine) evaluateResult(
 		return sr
 	}
 	sr.QualityTier = tier
+
+	// Upgrade logic: compare candidate against existing file quality.
+	if existing.HasFile {
+		if existing.HasKnownTier {
+			// Check cutoff first: if existing quality is at or above cutoff,
+			// stop upgrading (lower tier = better quality).
+			if cutoffTier >= 0 && existing.Tier <= cutoffTier {
+				sr.Rejected = true
+				sr.RejectReason = "quality_cutoff_met"
+				return sr
+			}
+
+			if !profile.UpgradeAllowed {
+				sr.Rejected = true
+				sr.RejectReason = "upgrade_not_allowed"
+				return sr
+			}
+
+			// Candidate must be a strict upgrade (better tier), unless it's
+			// a Proper/Repack at the same tier.
+			if tier > existing.Tier {
+				sr.Rejected = true
+				sr.RejectReason = "not_an_upgrade"
+				return sr
+			}
+			if tier == existing.Tier && !(parsed.IsProper || parsed.IsRepack) {
+				sr.Rejected = true
+				sr.RejectReason = "not_an_upgrade"
+				return sr
+			}
+		} else {
+			// Existing file with unknown quality — reject conservatively
+			// unless upgrades are allowed (user explicitly wants to replace).
+			if !profile.UpgradeAllowed {
+				sr.Rejected = true
+				sr.RejectReason = "existing_quality_unknown"
+				return sr
+			}
+		}
+	}
 
 	// Reject zero-seeder torrents (usenet results have nil seeders).
 	if res.Seeders != nil && *res.Seeders == 0 {
@@ -417,9 +483,11 @@ func buildReleaseInfo(rel *parser.Release, res *indexers.Result) customformats.R
 		Source:     rel.Source,
 		Resolution: fmt.Sprintf("%dp", rel.Resolution),
 		Codec:      rel.Codec,
+		Audio:      rel.Audio,
 		Size:       res.Size,
 		Indexer:    res.IndexerID,
 		Group:      rel.Group,
+		Languages:  rel.Languages,
 	}
 	if res.Freeleech {
 		ri.IndexerFlags = append(ri.IndexerFlags, "freeleech")
@@ -565,25 +633,181 @@ func buildDownloadRequest(res *indexers.Result) downloads.AddRequest {
 	return req
 }
 
-// buildQuery builds an indexer query from a search request.
-func (e *Engine) buildQuery(req SearchRequest) indexers.Query {
-	q := indexers.Query{
-		Term:   req.Title,
-		IMDBID: req.IMDBID,
-		TMDBID: req.TMDBID,
-		TVDBID: req.TVDBID,
-		Season: req.Season,
+// buildQueryChain builds a prioritized list of indexer queries for
+// request-chain fallback. Tries strongest ID first, then weaker IDs,
+// then text-only search. The caller stops at the first query that
+// returns results.
+func (e *Engine) buildQueryChain(req SearchRequest) []indexers.Query {
+	base := indexers.Query{
+		Season:  req.Season,
 		Episode: req.Episode,
 	}
 
 	switch req.MediaType {
 	case "movie":
-		q.Categories = []indexers.Category{2000, 2010, 2020, 2030, 2040, 2045, 2050, 2060}
+		base.Categories = []indexers.Category{2000, 2010, 2020, 2030, 2040, 2045, 2050, 2060}
 	case "series", "episode":
-		q.Categories = []indexers.Category{5000, 5010, 5020, 5030, 5040, 5045, 5050, 5060, 5070, 5080}
+		base.Categories = []indexers.Category{5000, 5010, 5020, 5030, 5040, 5045, 5050, 5060, 5070, 5080}
 	}
 
-	return q
+	var chain []indexers.Query
+
+	// Priority 1: IMDB ID (most universal and precise).
+	if req.IMDBID != "" {
+		q := base
+		q.IMDBID = req.IMDBID
+		chain = append(chain, q)
+	}
+
+	// Priority 2: TVDB ID (strong for series).
+	if req.TVDBID != "" {
+		q := base
+		q.TVDBID = req.TVDBID
+		chain = append(chain, q)
+	}
+
+	// Priority 3: TMDB ID.
+	if req.TMDBID != "" {
+		q := base
+		q.TMDBID = req.TMDBID
+		chain = append(chain, q)
+	}
+
+	// Priority 4: Text search fallback.
+	if req.Title != "" {
+		q := base
+		q.Term = req.Title
+		chain = append(chain, q)
+	}
+
+	// If no IDs and no title, use an empty query (shouldn't happen).
+	if len(chain) == 0 {
+		chain = append(chain, base)
+	}
+
+	return chain
+}
+
+// getExistingQuality determines the quality state of existing files for
+// the requested media item. Called once before the scoring loop.
+func (e *Engine) getExistingQuality(
+	ctx context.Context,
+	req SearchRequest,
+	qualDefs []*movies.QualityDefinition,
+	allowedMap map[string]int,
+) existingQuality {
+	switch req.MediaType {
+	case "movie":
+		return e.getExistingMovieQuality(ctx, req.MediaID, qualDefs, allowedMap)
+	case "series", "episode":
+		return e.getExistingEpisodeQuality(ctx, req)
+	}
+	return existingQuality{}
+}
+
+// getExistingMovieQuality checks for existing movie files and determines
+// the best quality tier among them.
+func (e *Engine) getExistingMovieQuality(
+	ctx context.Context,
+	movieID string,
+	qualDefs []*movies.QualityDefinition,
+	allowedMap map[string]int,
+) existingQuality {
+	if movieID == "" || e.movieSvc == nil {
+		return existingQuality{}
+	}
+
+	files, err := e.movieSvc.ListMovieFiles(ctx, movieID)
+	if err != nil || len(files) == 0 {
+		return existingQuality{}
+	}
+
+	// Find the best quality tier among existing files.
+	bestTier := -1
+	foundKnown := false
+	for _, f := range files {
+		if f.Quality == "" {
+			continue
+		}
+		// Try to match the stored quality string to a quality def.
+		tier, ok := matchStoredQualityToTier(f.Quality, qualDefs, allowedMap)
+		if ok {
+			foundKnown = true
+			if bestTier < 0 || tier < bestTier {
+				bestTier = tier
+			}
+		}
+	}
+
+	return existingQuality{
+		HasFile:      true,
+		HasKnownTier: foundKnown,
+		Tier:         bestTier,
+	}
+}
+
+// getExistingEpisodeQuality checks if the target episode already has a file.
+// Series.EpisodeFile has Source/Resolution/Codec but there's no
+// ListEpisodeFiles method yet, so we use the Episode.HasFile flag
+// as a conservative indicator.
+func (e *Engine) getExistingEpisodeQuality(ctx context.Context, req SearchRequest) existingQuality {
+	if req.MediaID == "" || e.seriesSvc == nil || req.Episode <= 0 {
+		return existingQuality{}
+	}
+
+	seasonFilter := &req.Season
+	if req.Season <= 0 {
+		seasonFilter = nil
+	}
+	episodes, err := e.seriesSvc.ListEpisodes(ctx, req.MediaID, seasonFilter)
+	if err != nil {
+		return existingQuality{}
+	}
+
+	for _, ep := range episodes {
+		if ep.EpisodeNumber == req.Episode && ep.HasFile {
+			// HasFile is true but we don't have structured quality info
+			// to determine tier (no ListEpisodeFiles method yet).
+			return existingQuality{HasFile: true, HasKnownTier: false}
+		}
+	}
+
+	return existingQuality{}
+}
+
+// matchStoredQualityToTier parses a stored quality string (e.g. "Bluray-1080p",
+// "WEBDL-720p") and finds its tier in the profile.
+func matchStoredQualityToTier(
+	quality string,
+	qualDefs []*movies.QualityDefinition,
+	allowedMap map[string]int,
+) (int, bool) {
+	lower := strings.ToLower(quality)
+
+	// Try matching against quality definition names first (exact match).
+	for _, qd := range qualDefs {
+		if strings.ToLower(qd.Name) == lower || strings.ToLower(qd.Title) == lower {
+			if tier, ok := allowedMap[qd.ID]; ok {
+				return tier, true
+			}
+		}
+	}
+
+	// Try matching source-resolution pattern (e.g., "bluray-1080p").
+	parts := strings.SplitN(lower, "-", 2)
+	if len(parts) == 2 {
+		src := normalizeSource(parts[0])
+		res := parts[1]
+		for _, qd := range qualDefs {
+			if strings.ToLower(qd.Source) == src && strings.ToLower(qd.Resolution) == res {
+				if tier, ok := allowedMap[qd.ID]; ok {
+					return tier, true
+				}
+			}
+		}
+	}
+
+	return 0, false
 }
 
 // recordGrab persists the grab linkage so the UI can show "grabbed" status.

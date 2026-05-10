@@ -119,5 +119,20 @@ func collectSupportedIDs(s capsSearching) []string {
 // gets ErrMalformedXML rather than a confusing parse error.
 func looksLikeXML(body []byte) bool {
 	t := strings.TrimSpace(string(body))
+	if t == "" {
+		return false
+	}
+	// Reject common HTML responses masquerading as XML.
+	lower := strings.ToLower(t[:min(len(t), 256)])
+	if strings.HasPrefix(lower, "<!doctype html") || strings.HasPrefix(lower, "<html") {
+		return false
+	}
 	return strings.HasPrefix(t, "<?xml") || strings.HasPrefix(t, "<")
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
