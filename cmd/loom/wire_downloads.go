@@ -53,6 +53,7 @@ func wireDownloads(
 	// Grab store for tracking active downloads
 	grabStore := grabs.NewStore(db.DB())
 	downloadSvc.SetGrabStore(grabStore)
+	downloadSvc.SetMovieStatusUpdater(movieStatusAdapter{moviesSvc})
 	srv.SetGrabStore(grabStore)
 
 	// Autosearch decision engine
@@ -121,4 +122,13 @@ func wireDownloads(
 		importPipeline: importPipeline,
 		monitorCancel:  monCancel,
 	}, nil
+}
+
+// movieStatusAdapter adapts movies.Service to downloads.MovieStatusUpdater.
+type movieStatusAdapter struct {
+	svc movies.Service
+}
+
+func (a movieStatusAdapter) SetMovieStatus(ctx context.Context, movieID string, status string) error {
+	return a.svc.SetMovieStatus(ctx, movieID, movies.MovieStatus(status))
 }

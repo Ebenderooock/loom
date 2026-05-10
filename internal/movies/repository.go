@@ -13,6 +13,7 @@ type Repository interface {
 	AddMovie(ctx context.Context, movie *Movie) error
 	GetMovie(ctx context.Context, id string) (*Movie, error)
 	UpdateMovie(ctx context.Context, movie *Movie) error
+	UpdateMovieStatus(ctx context.Context, id string, status MovieStatus) error
 	DeleteMovie(ctx context.Context, id string) error
 	CountMovies(ctx context.Context) (int, error)
 	ListMovies(ctx context.Context, limit int, offset int) ([]*Movie, error)
@@ -117,6 +118,14 @@ func (r *sqlRepo) UpdateMovie(ctx context.Context, movie *Movie) error {
 		 WHERE id = ? AND deleted_at IS NULL`,
 		movie.Title, movie.Year, movie.Overview, string(genreBytes), movie.Runtime, movie.Rating, movie.BackdropPath, movie.PosterPath,
 		movie.QualityProfileID, movie.LibraryID, movie.Status, movie.ReleaseDate, movie.MonitoringStatus, movie.UpdatedAt, movie.ID,
+	)
+	return err
+}
+
+func (r *sqlRepo) UpdateMovieStatus(ctx context.Context, id string, status MovieStatus) error {
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE movies SET status = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL`,
+		status, time.Now(), id,
 	)
 	return err
 }

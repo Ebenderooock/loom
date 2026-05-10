@@ -33,6 +33,7 @@ type Service interface {
 	UpdateMovie(ctx context.Context, movie *Movie) error
 	DeleteMovie(ctx context.Context, id string) error
 	SetMonitoringStatus(ctx context.Context, movieID string, status MonitoringStatus) error
+	SetMovieStatus(ctx context.Context, movieID string, status MovieStatus) error
 	RefreshMovie(ctx context.Context, id string) error
 
 	ListMovieFiles(ctx context.Context, movieID string) ([]*MovieFile, error)
@@ -322,6 +323,18 @@ func (s *service) SetMonitoringStatus(ctx context.Context, movieID string, statu
 	// Emit event (deferred until eventbus is available)
 	_ = oldStatus // quiet unused warning; event would be emitted here
 
+	return nil
+}
+
+// SetMovieStatus updates the status of a movie (e.g. missing → downloading → available).
+func (s *service) SetMovieStatus(ctx context.Context, movieID string, status MovieStatus) error {
+	if movieID == "" {
+		return fmt.Errorf("movies: movie ID required")
+	}
+	if err := s.repo.UpdateMovieStatus(ctx, movieID, status); err != nil {
+		return fmt.Errorf("movies: set status: %w", err)
+	}
+	s.cache.Delete(movieID)
 	return nil
 }
 

@@ -29,34 +29,42 @@ func (SystemClock) Now() time.Time { return time.Now() }
 // (e.g. a per-client log viewer) can attach without editing server.go.
 type RouteMounter func(chi.Router)
 
+// MovieStatusUpdater allows the downloads package to update movie status
+// without importing the movies package directly.
+type MovieStatusUpdater interface {
+	SetMovieStatus(ctx context.Context, movieID string, status string) error
+}
+
 // ServiceOptions wires Service dependencies.
 type ServiceOptions struct {
-	Repository       Repository
-	Registry         *Registry
-	Logger           *slog.Logger
-	Clock            Clock
-	OperationTimeout time.Duration
-	MaxParallel      int
-	HealthTimeout    time.Duration
-	RouteExtensions  []RouteMounter
-	HistoryStore     *HistoryStore
-	GrabStore        *grabs.Store
+	Repository         Repository
+	Registry           *Registry
+	Logger             *slog.Logger
+	Clock              Clock
+	OperationTimeout   time.Duration
+	MaxParallel        int
+	HealthTimeout      time.Duration
+	RouteExtensions    []RouteMounter
+	HistoryStore       *HistoryStore
+	GrabStore          *grabs.Store
+	MovieStatusUpdater MovieStatusUpdater
 }
 
 // Service is the orchestrator that the HTTP layer depends on. It owns
 // the lifecycle that links a persisted Definition to a live
 // DownloadClient in the Registry.
 type Service struct {
-	repo             Repository
-	registry         *Registry
-	logger           *slog.Logger
-	clock            Clock
-	operationTimeout time.Duration
-	maxParallel      int
-	healthTimeout    time.Duration
-	routeExtensions  []RouteMounter
-	historyStore     *HistoryStore
-	grabStore        *grabs.Store
+	repo               Repository
+	registry           *Registry
+	logger             *slog.Logger
+	clock              Clock
+	operationTimeout   time.Duration
+	maxParallel        int
+	healthTimeout      time.Duration
+	routeExtensions    []RouteMounter
+	historyStore       *HistoryStore
+	grabStore          *grabs.Store
+	movieStatusUpdater MovieStatusUpdater
 
 	mu sync.RWMutex
 }
@@ -85,16 +93,17 @@ func NewService(opts ServiceOptions) (*Service, error) {
 		opts.HealthTimeout = 10 * time.Second
 	}
 	return &Service{
-		repo:             opts.Repository,
-		registry:         opts.Registry,
-		logger:           opts.Logger.With("module", "downloads"),
-		clock:            opts.Clock,
-		operationTimeout: opts.OperationTimeout,
-		maxParallel:      opts.MaxParallel,
-		healthTimeout:    opts.HealthTimeout,
-		routeExtensions:  opts.RouteExtensions,
-		historyStore:     opts.HistoryStore,
-		grabStore:        opts.GrabStore,
+		repo:               opts.Repository,
+		registry:           opts.Registry,
+		logger:             opts.Logger.With("module", "downloads"),
+		clock:              opts.Clock,
+		operationTimeout:   opts.OperationTimeout,
+		maxParallel:        opts.MaxParallel,
+		healthTimeout:      opts.HealthTimeout,
+		routeExtensions:    opts.RouteExtensions,
+		historyStore:       opts.HistoryStore,
+		grabStore:          opts.GrabStore,
+		movieStatusUpdater: opts.MovieStatusUpdater,
 	}, nil
 }
 
@@ -108,6 +117,13 @@ func (s *Service) Registry() *Registry { return s.registry }
 func (s *Service) SetGrabStore(gs *grabs.Store) {
 	s.mu.Lock()
 	s.grabStore = gs
+	s.mu.Unlock()
+}
+
+// SetMovieStatusUpdater sets the movie status updater for the service.
+func (s *Service) SetMovieStatusUpdater(u MovieStatusUpdater) {
+	s.mu.Lock()
+	s.movieStatusUpdater = u
 	s.mu.Unlock()
 }
 

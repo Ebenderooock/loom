@@ -48,6 +48,7 @@ type ImportPipeline struct {
 	remotePathStore *downloads.RemotePathStore
 	matcher         *Matcher
 	grabStore       *grabs.Store
+	moviesSvc       movies.Service
 	notifSvc        notifications.Service
 	postVal         *safety.PostValidator
 	reviewStore     *safety.ReviewStore
@@ -90,6 +91,7 @@ func NewPipeline(opts PipelineOptions) (*ImportPipeline, error) {
 		remotePathStore: opts.RemotePathStore,
 		matcher:         NewMatcher(opts.MoviesSvc, opts.SeriesSvc, opts.LibStore),
 		grabStore:       opts.GrabStore,
+		moviesSvc:       opts.MoviesSvc,
 		notifSvc:        opts.NotifSvc,
 		postVal:         opts.PostVal,
 		reviewStore:     opts.ReviewStore,
@@ -306,6 +308,13 @@ func (p *ImportPipeline) importSingleFile(ctx context.Context, ev *downloads.Dow
 	// Record success
 	if err := p.recordStatus(ctx, string(match.MediaType), match.MediaID, mediaFile, destFile, StatusImported, ""); err != nil {
 		p.logger.Error("failed to record import history", "error", err)
+	}
+
+	// Update movie status to available
+	if match.MediaType == "movie" && match.MediaID != "" {
+		if err := p.moviesSvc.SetMovieStatus(ctx, match.MediaID, movies.MovieStatusAvailableRightQuality); err != nil {
+			p.logger.Error("failed to update movie status after import", "movie_id", match.MediaID, "error", err)
+		}
 	}
 
 	// Publish notification
