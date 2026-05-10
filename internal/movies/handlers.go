@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/ebenderooock/loom/internal/grabs"
 	"github.com/ebenderooock/loom/internal/indexers"
 )
 
@@ -59,11 +60,11 @@ func WithUnmonitorChecker(c UnmonitorOnDeleteChecker) RouterOption {
 
 // Router mounts movies endpoints on the given chi router.
 func Router(service Service) chi.Router {
-	return RouterWithSearch(service, nil)
+	return RouterWithSearch(service, nil, nil)
 }
 
 // RouterWithSearch mounts movies endpoints with optional search-on-add support.
-func RouterWithSearch(service Service, indexerSvc *indexers.Service, opts ...RouterOption) chi.Router {
+func RouterWithSearch(service Service, indexerSvc *indexers.Service, grabStore *grabs.Store, opts ...RouterOption) chi.Router {
 	var cfg routerConfig
 	for _, o := range opts {
 		o(&cfg)
@@ -71,7 +72,7 @@ func RouterWithSearch(service Service, indexerSvc *indexers.Service, opts ...Rou
 
 	r := chi.NewRouter()
 
-	r.Get("/", listMovies(service))
+	r.Get("/", listMovies(service, grabStore))
 	r.Post("/", addMovie(service, indexerSvc))
 	r.Get("/search", searchMovies(service))
 	r.Get("/lookup", lookupMovies(service))
@@ -112,7 +113,7 @@ func RouterWithSearch(service Service, indexerSvc *indexers.Service, opts ...Rou
 	r.Get("/files/{movieID}", listMovieFiles(service))
 
 	// Wildcard movie routes (must be last)
-	r.Get("/{id}", getMovie(service))
+	r.Get("/{id}", getMovie(service, grabStore))
 	r.Put("/{id}", updateMovie(service))
 	r.Delete("/{id}", deleteMovie(service, cfg.unmonitorChecker))
 	r.Put("/{id}/monitoring", setMonitoringStatus(service))
@@ -151,7 +152,7 @@ func movieToResponse(m *Movie) map[string]interface{} {
 
 // Handlers
 
-func listMovies(svc Service) http.HandlerFunc {
+func listMovies(svc Service, grabStore *grabs.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		limit := 25
 		offset := 0
@@ -251,9 +252,23 @@ func listMovies(svc Service) http.HandlerFunc {
 			totalCount = len(movies)
 		}
 
+		// Look up grabbed status for all movies in the response.
+		var grabbedSet map[string]bool
+		if grabStore != nil && len(movies) > 0 {
+			movieIDs := make([]string, len(movies))
+			for i, m := range movies {
+				movieIDs[i] = m.ID
+			}
+			grabbedSet, _ = grabStore.GrabbedMovieIDs(r.Context(), movieIDs)
+		}
+
 		response := make([]interface{}, 0, len(movies))
 		for _, m := range movies {
-			response = append(response, movieToResponse(m))
+			resp := movieToResponse(m)
+			if grabbedSet[m.ID] {
+				resp["grabbed"] = true
+			}
+			response = append(response, resp)
 		}
 
 		w.Header().Set("Content-Type", "application/json")
@@ -311,7 +326,7 @@ func lookupMovies(svc Service) http.HandlerFunc {
 	}
 }
 
-func getMovie(svc Service) http.HandlerFunc {
+func getMovie(svc Service, grabStore *grabs.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id := chi.URLParam(r, "id")
 		if id == "" {
@@ -329,8 +344,16 @@ func getMovie(svc Service) http.HandlerFunc {
 			return
 		}
 
+		resp := movieToResponse(movie)
+		if grabStore != nil {
+			grabbed, _ := grabStore.GrabbedMovieIDs(r.Context(), []string{movie.ID})
+			if grabbed[movie.ID] {
+				resp["grabbed"] = true
+			}
+		}
+
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(movieToResponse(movie))
+		json.NewEncoder(w).Encode(resp)
 	}
 }
 
