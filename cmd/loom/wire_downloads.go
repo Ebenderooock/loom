@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/ebenderooock/loom/internal/auditlog"
 	"github.com/ebenderooock/loom/internal/autosearch"
 	"github.com/ebenderooock/loom/internal/customformats"
 	"github.com/ebenderooock/loom/internal/downloads"
@@ -38,6 +39,7 @@ func wireDownloads(
 	moviesSvc movies.Service,
 	indexerSvc *indexers.Service,
 	media *mediaWiring,
+	auditLogger *auditlog.Logger,
 	logger *slog.Logger,
 ) (*downloadWiring, error) {
 	// Remote path mappings
@@ -60,6 +62,7 @@ func wireDownloads(
 	autoSearchEngine := autosearch.NewEngine(
 		indexerSvc, media.qpStore, cfEngine, cfStore,
 		downloadSvc.Registry(), moviesSvc, media.seriesSvc, grabStore, logger,
+		autosearch.WithAuditLogger(auditLogger),
 	)
 	srv.SetAutoSearchEngine(autoSearchEngine)
 

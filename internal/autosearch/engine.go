@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ebenderooock/loom/internal/auditlog"
 	"github.com/ebenderooock/loom/internal/customformats"
 	"github.com/ebenderooock/loom/internal/downloads"
 	"github.com/ebenderooock/loom/internal/grabs"
@@ -50,6 +51,7 @@ type Engine struct {
 	seriesSvc    series.Service
 	grabStore    *grabs.Store
 	logger       *slog.Logger
+	audit        *auditlog.Logger
 }
 
 // NewEngine creates an autosearch Engine.
@@ -63,11 +65,12 @@ func NewEngine(
 	seriesSvc series.Service,
 	grabStore *grabs.Store,
 	logger *slog.Logger,
+	opts ...EngineOption,
 ) *Engine {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &Engine{
+	e := &Engine{
 		indexerSvc:   indexerSvc,
 		profileStore: profileStore,
 		cfEngine:     cfEngine,
@@ -78,6 +81,18 @@ func NewEngine(
 		grabStore:    grabStore,
 		logger:       logger.With("module", "autosearch"),
 	}
+	for _, o := range opts {
+		o(e)
+	}
+	return e
+}
+
+// EngineOption configures optional Engine dependencies.
+type EngineOption func(*Engine)
+
+// WithAuditLogger attaches an audit logger to the engine for search event tracking.
+func WithAuditLogger(al *auditlog.Logger) EngineOption {
+	return func(e *Engine) { e.audit = al }
 }
 
 // SearchAndGrab executes the full automated search pipeline:
@@ -92,6 +107,7 @@ func (e *Engine) SearchAndGrab(ctx context.Context, req SearchRequest) (*SearchR
 	// Load the quality profile.
 	profile, err := e.profileStore.Get(ctx, req.QualityProfileID)
 	if err != nil {
+		e.logSearchFailed(ctx, req, fmt.Sprintf("load quality profile: %v", err))
 		return nil, fmt.Errorf("load quality profile %s: %w", req.QualityProfileID, err)
 	}
 
@@ -169,6 +185,7 @@ func (e *Engine) SearchAndGrab(ctx context.Context, req SearchRequest) (*SearchR
 
 	if len(allResults) == 0 {
 		result.Reason = "no results from indexers"
+		e.logSearchCompleted(ctx, req, result)
 		return result, nil
 	}
 
@@ -197,6 +214,7 @@ func (e *Engine) SearchAndGrab(ctx context.Context, req SearchRequest) (*SearchR
 
 	if len(scored) == 0 {
 		result.Reason = "all results rejected"
+		e.logSearchCompleted(ctx, req, result)
 		return result, nil
 	}
 
@@ -225,6 +243,7 @@ func (e *Engine) SearchAndGrab(ctx context.Context, req SearchRequest) (*SearchR
 		}
 		if err != nil {
 			result.Reason = fmt.Sprintf("grab failed for all %d candidates: %v", len(scored), err)
+			e.logSearchFailed(ctx, req, result.Reason)
 			return result, nil
 		}
 	}
@@ -234,7 +253,48 @@ func (e *Engine) SearchAndGrab(ctx context.Context, req SearchRequest) (*SearchR
 	// Record the grab linkage for UI status tracking.
 	e.recordGrab(ctx, req, grabbed)
 
+	e.logSearchCompleted(ctx, req, result)
 	return result, nil
+}
+
+// logSearchCompleted writes a search.completed audit entry.
+func (e *Engine) logSearchCompleted(ctx context.Context, req SearchRequest, res *SearchResult) {
+	if e.audit == nil {
+		return
+	}
+	grabbedTitle := ""
+	if res.Grabbed != nil {
+		grabbedTitle = res.Grabbed.Title
+	}
+	e.audit.Log(ctx, auditlog.Entry{
+		Category:   "search",
+		EventType:  "search.completed",
+		Message:    fmt.Sprintf("Search completed: %s (%d considered, %d rejected)", req.Title, res.Considered, res.Rejected),
+		Detail:     auditlog.DetailJSON(map[string]any{"media_type": req.MediaType, "media_id": req.MediaID, "title": req.Title, "considered": res.Considered, "rejected": res.Rejected, "grabbed": grabbedTitle, "reason": res.Reason}),
+		EntityType: auditlog.StrPtr(req.MediaType),
+		EntityID:   auditlog.StrPtr(req.MediaID),
+		EntityName: auditlog.StrPtr(req.Title),
+		Level:      "info",
+		Source:     auditlog.StrPtr("system"),
+	})
+}
+
+// logSearchFailed writes a search.failed audit entry.
+func (e *Engine) logSearchFailed(ctx context.Context, req SearchRequest, errMsg string) {
+	if e.audit == nil {
+		return
+	}
+	e.audit.Log(ctx, auditlog.Entry{
+		Category:   "search",
+		EventType:  "search.failed",
+		Message:    fmt.Sprintf("Search failed: %s — %s", req.Title, errMsg),
+		Detail:     auditlog.DetailJSON(map[string]any{"media_type": req.MediaType, "media_id": req.MediaID, "title": req.Title, "error": errMsg}),
+		EntityType: auditlog.StrPtr(req.MediaType),
+		EntityID:   auditlog.StrPtr(req.MediaID),
+		EntityName: auditlog.StrPtr(req.Title),
+		Level:      "error",
+		Source:     auditlog.StrPtr("system"),
+	})
 }
 
 // evaluateResult parses, quality-matches, filters, and scores a single result.
