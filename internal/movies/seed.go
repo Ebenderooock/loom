@@ -30,27 +30,32 @@ func SeedDefaults(ctx context.Context, svc Service) {
 		resolution string
 		modifier   string
 		order      int
+		minSize    int64 // MB per minute of runtime (Radarr convention)
+		maxSize    int64 // MB per minute of runtime; 0 = unlimited
 	}
 
+	// Defaults modelled after Radarr's DefaultQualityDefinitions.
+	// Values are in MB per minute of runtime (default 120 min).
+	// Example: maxSize 8 MB/min × 120 min = 960 MB ≈ ~1 GB for a full movie.
 	defaults := []qdef{
-		{"unknown", "Unknown", "Unknown", "Unknown", "", 1},
-		{"sdtv", "SDTV", "TV", "480p", "", 2},
-		{"webdl-480p", "WEB-DL 480p", "Web", "480p", "", 3},
-		{"dvd", "DVD", "DVD", "480p", "", 4},
-		{"hdtv-720p", "HDTV 720p", "TV", "720p", "", 5},
-		{"webdl-720p", "WEB-DL 720p", "Web", "720p", "", 6},
-		{"webrip-720p", "WEBRip 720p", "WebRip", "720p", "", 7},
-		{"bluray-720p", "Bluray 720p", "BluRay", "720p", "", 8},
-		{"hdtv-1080p", "HDTV 1080p", "TV", "1080p", "", 9},
-		{"webdl-1080p", "WEB-DL 1080p", "Web", "1080p", "", 10},
-		{"webrip-1080p", "WEBRip 1080p", "WebRip", "1080p", "", 11},
-		{"bluray-1080p", "Bluray 1080p", "BluRay", "1080p", "", 12},
-		{"bluray-1080p-remux", "Bluray 1080p Remux", "BluRay", "1080p", "REMUX", 13},
-		{"hdtv-2160p", "HDTV 2160p", "TV", "2160p", "", 14},
-		{"webdl-2160p", "WEB-DL 2160p", "Web", "2160p", "", 15},
-		{"webrip-2160p", "WEBRip 2160p", "WebRip", "2160p", "", 16},
-		{"bluray-2160p", "Bluray 2160p", "BluRay", "2160p", "", 17},
-		{"bluray-2160p-remux", "Bluray 2160p Remux", "BluRay", "2160p", "REMUX", 18},
+		{"unknown", "Unknown", "Unknown", "Unknown", "", 1, 0, 0},
+		{"sdtv", "SDTV", "TV", "480p", "", 2, 2, 100},
+		{"webdl-480p", "WEB-DL 480p", "Web", "480p", "", 3, 2, 100},
+		{"dvd", "DVD", "DVD", "480p", "", 4, 2, 100},
+		{"hdtv-720p", "HDTV 720p", "TV", "720p", "", 5, 3, 125},
+		{"webdl-720p", "WEB-DL 720p", "Web", "720p", "", 6, 3, 130},
+		{"webrip-720p", "WEBRip 720p", "WebRip", "720p", "", 7, 3, 130},
+		{"bluray-720p", "Bluray 720p", "BluRay", "720p", "", 8, 4, 130},
+		{"hdtv-1080p", "HDTV 1080p", "TV", "1080p", "", 9, 4, 130},
+		{"webdl-1080p", "WEB-DL 1080p", "Web", "1080p", "", 10, 4, 130},
+		{"webrip-1080p", "WEBRip 1080p", "WebRip", "1080p", "", 11, 4, 130},
+		{"bluray-1080p", "Bluray 1080p", "BluRay", "1080p", "", 12, 4, 155},
+		{"bluray-1080p-remux", "Bluray 1080p Remux", "BluRay", "1080p", "REMUX", 13, 0, 0},
+		{"hdtv-2160p", "HDTV 2160p", "TV", "2160p", "", 14, 25, 0},
+		{"webdl-2160p", "WEB-DL 2160p", "Web", "2160p", "", 15, 25, 0},
+		{"webrip-2160p", "WEBRip 2160p", "WebRip", "2160p", "", 16, 25, 0},
+		{"bluray-2160p", "Bluray 2160p", "BluRay", "2160p", "", 17, 25, 0},
+		{"bluray-2160p-remux", "Bluray 2160p Remux", "BluRay", "2160p", "REMUX", 18, 0, 0},
 	}
 
 	defIDs := make(map[string]string) // name → id
@@ -64,6 +69,9 @@ func SeedDefaults(ctx context.Context, svc Service) {
 			Source:      d.source,
 			Resolution:  d.resolution,
 			Modifier:    d.modifier,
+			SizeMode:    SizeModePerMinute,
+			MinFileSize: d.minSize,
+			MaxFileSize: d.maxSize,
 			PreferredAt: d.order,
 			CreatedAt:   time.Now(),
 			UpdatedAt:   time.Now(),
@@ -104,6 +112,12 @@ func SeedDefaults(ctx context.Context, svc Service) {
 		{
 			name:    "Ultra-HD",
 			cutoff:  "bluray-2160p",
+			upgrade: true,
+			items:   []string{"hdtv-2160p", "webdl-2160p", "webrip-2160p", "bluray-2160p", "bluray-2160p-remux"},
+		},
+		{
+			name:    "Ultra-HD Remux",
+			cutoff:  "bluray-2160p-remux",
 			upgrade: true,
 			items:   []string{"hdtv-2160p", "webdl-2160p", "webrip-2160p", "bluray-2160p", "bluray-2160p-remux"},
 		},

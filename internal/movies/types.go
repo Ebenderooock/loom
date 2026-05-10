@@ -219,6 +219,19 @@ type MonitoringChangedEvent struct {
 // Topic returns the event topic.
 func (e *MonitoringChangedEvent) Topic() string { return TopicMonitoringChanged }
 
+// Size-limit mode constants for QualityDefinition.
+const (
+	// SizeModeAbsolute means MinFileSize/MaxFileSize are raw byte counts.
+	SizeModeAbsolute = "absolute"
+	// SizeModePerMinute means MinFileSize/MaxFileSize are megabytes per
+	// minute of runtime (matching Radarr/Sonarr behaviour).
+	SizeModePerMinute = "per_minute"
+)
+
+// DefaultRuntimeMinutes is used when a movie/episode has no runtime info
+// and the quality definition uses per-minute sizing.
+const DefaultRuntimeMinutes = 120
+
 // QualityDefinition represents a single quality tier (resolution, source, codec).
 type QualityDefinition struct {
 	ID           string    `json:"id"`
@@ -227,12 +240,32 @@ type QualityDefinition struct {
 	Source       string    `json:"source"`        // e.g., "BluRay", "HDTV", "WebRip"
 	Resolution   string    `json:"resolution"`    // e.g., "1080p", "720p", "2160p"
 	Modifier     string    `json:"modifier,omitempty"` // e.g., "REMUX", "PROPER"
-	MinFileSize  int64     `json:"min_file_size,omitempty"` // bytes
-	MaxFileSize  int64     `json:"max_file_size,omitempty"` // bytes
+	SizeMode     string    `json:"size_mode"`     // "absolute" or "per_minute"
+	MinFileSize  int64     `json:"min_file_size,omitempty"` // bytes (absolute) or MB/min (per_minute)
+	MaxFileSize  int64     `json:"max_file_size,omitempty"` // bytes (absolute) or MB/min (per_minute); 0 = unlimited
 	PreferredAt  int       `json:"preferred_at"`  // order preference (lower = better)
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
 	DeletedAt    *time.Time `json:"deleted_at,omitempty"`
+}
+
+// EffectiveSizeLimits returns the min/max size in bytes for a given
+// media runtime (in minutes). When SizeMode is "absolute" the runtime
+// is ignored and raw byte values are returned as-is.
+func (qd *QualityDefinition) EffectiveSizeLimits(runtimeMinutes int) (minBytes, maxBytes int64) {
+	if qd.SizeMode != SizeModePerMinute {
+		return qd.MinFileSize, qd.MaxFileSize
+	}
+	if runtimeMinutes <= 0 {
+		runtimeMinutes = DefaultRuntimeMinutes
+	}
+	const mb = int64(1024 * 1024)
+	minBytes = qd.MinFileSize * mb * int64(runtimeMinutes)
+	maxBytes = qd.MaxFileSize * mb * int64(runtimeMinutes)
+	if qd.MaxFileSize == 0 {
+		maxBytes = 0 // preserve 0 = unlimited
+	}
+	return minBytes, maxBytes
 }
 
 // QualityProfileItem represents a quality within a quality profile.
@@ -266,6 +299,7 @@ type CreateQualityDefinitionRequest struct {
 	Source       string `json:"source"`
 	Resolution   string `json:"resolution"`
 	Modifier     string `json:"modifier,omitempty"`
+	SizeMode     string `json:"size_mode,omitempty"`    // "absolute" (default) or "per_minute"
 	MinFileSize  int64  `json:"min_file_size,omitempty"`
 	MaxFileSize  int64  `json:"max_file_size,omitempty"`
 	PreferredAt  int    `json:"preferred_at,omitempty"`
@@ -278,6 +312,7 @@ type UpdateQualityDefinitionRequest struct {
 	Source      *string `json:"source,omitempty"`
 	Resolution  *string `json:"resolution,omitempty"`
 	Modifier    *string `json:"modifier,omitempty"`
+	SizeMode    *string `json:"size_mode,omitempty"`
 	MinFileSize *int64  `json:"min_file_size,omitempty"`
 	MaxFileSize *int64  `json:"max_file_size,omitempty"`
 	PreferredAt *int    `json:"preferred_at,omitempty"`
