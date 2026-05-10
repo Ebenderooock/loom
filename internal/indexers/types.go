@@ -225,9 +225,13 @@ type Definition struct {
 	// table and routes this indexer's outbound HTTP through that
 	// proxy. Empty means "use the default transport" (Phase 2c
 	// behaviour).
-	ProxyID   string    `json:"proxy_id,omitempty"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ProxyID string `json:"proxy_id,omitempty"`
+	// RequestDelay, when > 0, is the minimum milliseconds between
+	// requests for this indexer (from the Cardigann YAML definition).
+	// TransportForDefinition uses it to cap the throttle bucket rate.
+	RequestDelay int       `json:"request_delay,omitempty"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
 }
 
 // Health is the persisted shape of an indexer_health row.
@@ -260,6 +264,11 @@ var (
 	// ErrIndexerRateLimited indicates an HTTP 429 or equivalent
 	// throttle response. The service marks the indexer as degraded.
 	ErrIndexerRateLimited = errors.New("indexer: rate limited")
+
+	// ErrCloudFlareChallenge indicates the response is a Cloudflare
+	// challenge page. The operator should configure a FlareSolverr
+	// proxy for this indexer.
+	ErrCloudFlareChallenge = errors.New("indexer: cloudflare challenge detected")
 )
 
 // IsTimeoutErr returns true if err represents a timeout — either the

@@ -66,7 +66,7 @@ func TestShouldRetry_Matrix(t *testing.T) {
 		{"503", &http.Response{StatusCode: 503}, nil, true, ReasonUnavailable},
 		{"200", &http.Response{StatusCode: 200}, nil, false, ""},
 		{"404", &http.Response{StatusCode: 404}, nil, false, ""},
-		{"500", &http.Response{StatusCode: 500}, nil, false, ""},
+		{"500", &http.Response{StatusCode: 500}, nil, true, ReasonServerError},
 		{"ctx canceled", nil, context.Canceled, false, ""},
 		{"ctx deadline", nil, context.DeadlineExceeded, false, ""},
 		{"wrapped ctx canceled", nil, &url.Error{Op: "Get", Err: context.Canceled}, false, ""},

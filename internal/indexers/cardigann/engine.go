@@ -21,6 +21,7 @@ import (
 	"github.com/PuerkitoBio/goquery"
 	"github.com/antchfx/htmlquery"
 	"github.com/ebenderooock/loom/internal/indexers"
+	"github.com/ebenderooock/loom/internal/indexers/cloudflare"
 	"golang.org/x/net/html"
 )
 
@@ -283,7 +284,9 @@ func (e *Engine) ensureLoggedIn(ctx context.Context) error {
 			return errors.New("cardigann: login.method=cookie requires `cookie` in indexer config")
 		}
 	case "get":
-		return errors.New("cardigann: login.method=get is not supported in this build")
+		if err := e.getLogin(ctx); err != nil {
+			return err
+		}
 	default:
 		return fmt.Errorf("cardigann: unsupported login method %q", e.def.Login.Method)
 	}
@@ -331,6 +334,59 @@ func (e *Engine) formLogin(ctx context.Context) error {
 	}
 	if msg := matchErrorSelectors(body, e.def.Login.Error); msg != "" {
 		return fmt.Errorf("cardigann: login rejected: %s", msg)
+	}
+	return nil
+}
+
+// getLogin performs a GET-based login. The login URL is templated with
+// the operator's config (e.g. passkey, apikey) so the server sets
+// session cookies on success. This is used by older definitions where
+// the login is a single URL with query parameters.
+func (e *Engine) getLogin(ctx context.Context) error {
+	loginPath := e.def.Login.Path
+	// Expand template variables in the path (e.g. {{ .Config.passkey }}).
+	tctx := templateContext{Config: e.configFieldsWithDefaults(), True: "true", False: "false"}
+	expandedPath, terr := e.expandTemplate(loginPath, tctx)
+	if terr != nil {
+		return fmt.Errorf("cardigann: get login path template: %w", terr)
+	}
+	loginURL, err := e.resolveURL(expandedPath)
+	if err != nil {
+		return err
+	}
+	// Build URL with any login inputs as query parameters.
+	if len(e.def.Login.Inputs) > 0 {
+		u, perr := url.Parse(loginURL)
+		if perr != nil {
+			return fmt.Errorf("cardigann: parse login url: %w", perr)
+		}
+		q := u.Query()
+		for k, tmpl := range e.def.Login.Inputs {
+			v, terr2 := e.expandTemplate(tmpl, tctx)
+			if terr2 != nil {
+				return fmt.Errorf("cardigann: get login input %q: %w", k, terr2)
+			}
+			q.Set(k, v)
+		}
+		u.RawQuery = q.Encode()
+		loginURL = u.String()
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, loginURL, nil)
+	if err != nil {
+		return fmt.Errorf("cardigann: build get login request: %w", err)
+	}
+	req.Header.Set("User-Agent", e.cfg.UserAgent)
+	resp, err := e.http.Do(req)
+	if err != nil {
+		return fmt.Errorf("cardigann: get login request: %w", err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode >= 400 {
+		return fmt.Errorf("cardigann: get login got status %d", resp.StatusCode)
+	}
+	if msg := matchErrorSelectors(body, e.def.Login.Error); msg != "" {
+		return fmt.Errorf("cardigann: get login rejected: %s", msg)
 	}
 	return nil
 }
@@ -646,6 +702,12 @@ func (e *Engine) fetch(ctx context.Context, method, target string, params url.Va
 	if rerr != nil {
 		return nil, fmt.Errorf("cardigann: read body: %w", rerr)
 	}
+	// CloudFlare challenge detection (3-layer). When CF is blocking,
+	// surface a specific error so the service layer can log an
+	// actionable message (configure FlareSolverr proxy for this indexer).
+	if cloudflare.IsChallenge(resp, body) {
+		return nil, fmt.Errorf("cardigann: %s %s: %w", method, target, indexers.ErrCloudFlareChallenge)
+	}
 	if resp.StatusCode >= 500 {
 		return nil, fmt.Errorf("cardigann: upstream status %d", resp.StatusCode)
 	}
@@ -721,6 +783,18 @@ func (e *Engine) extractRows(body []byte, tctx templateContext) ([]indexers.Resu
 		slog.Debug("cardigann: extractRows", "indexer", e.id, "rowSelector", rowSelector, "matchedRows", len(rows),
 			"tables", tables, "forum_tables", forumTables, "tr_hover", trHover, "magnets", magnets)
 	}
+
+	// NoResultsMessage: when the definition declares a "no results"
+	// string and the page contains it, return an empty result set
+	// instead of trying to parse rows (which would yield 0 results
+	// or spurious errors).
+	if msg := e.def.Search.Rows.NoResultsMessage; msg != "" && len(rows) == 0 {
+		if strings.Contains(string(body), msg) {
+			slog.Debug("cardigann: noResultsMessage matched", "indexer", e.id, "message", msg)
+			return nil, nil
+		}
+	}
+
 	// Cardigann's `after:` strips a header row; we honour positive
 	// values only because negatives have no upstream semantics.
 	if e.def.Search.Rows.After > 0 && len(rows) > e.def.Search.Rows.After {

@@ -371,6 +371,12 @@ type RowsBlock struct {
 	// each result page (used to skip a header row).
 	After int `yaml:"after,omitempty"`
 
+	// NoResultsMessage, when set, is checked against the response
+	// body; if found, the engine returns 0 results instead of an
+	// error. Prowlarr uses this for sites that show "no results"
+	// in the HTML/JSON instead of an empty result set.
+	NoResultsMessage string `yaml:"noResultsMessage,omitempty"`
+
 	// Attribute names a nested array inside each row that should be
 	// expanded into individual results (e.g. "torrents" in YTS where
 	// each movie has multiple quality variants). JSON mode only.

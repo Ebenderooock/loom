@@ -166,7 +166,7 @@ func (t *transport) RoundTrip(req *http.Request) (*http.Response, error) {
 // avoid a misbehaving server stalling us forever); otherwise we
 // schedule an exponential backoff with jitter.
 func (t *transport) computeWait(nextAttempt int, reason Reason, _ error, resp *http.Response) time.Duration {
-	if resp != nil && (reason == ReasonRateLimited || reason == ReasonUnavailable) {
+	if resp != nil && (reason == ReasonRateLimited || reason == ReasonUnavailable || reason == ReasonServerError) {
 		if v := resp.Header.Get("Retry-After"); v != "" {
 			if d := parseRetryAfter(v, t.now()); d > 0 {
 				if d > MaxBackoff {

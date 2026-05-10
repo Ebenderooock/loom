@@ -146,6 +146,11 @@ func factory(_ context.Context, def indexers.Definition) (indexers.Indexer, erro
 	if !ok {
 		return nil, fmt.Errorf("cardigann: definition %q not found under %q", id, loader.Root())
 	}
+	// Propagate per-definition RequestDelay from the YAML into the
+	// DB Definition so TransportForDefinition can honour it.
+	if defYAML.RequestDelay > 0 && def.RequestDelay == 0 {
+		def.RequestDelay = defYAML.RequestDelay
+	}
 	return NewEngine(def.ID, def.Name, defYAML, cfg, httpClientFactory(cfg, def))
 }
 
