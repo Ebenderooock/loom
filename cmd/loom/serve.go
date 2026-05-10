@@ -176,7 +176,7 @@ func cmdServe(ctx context.Context, args []string) error {
 	defer media.importListSyncMgr.Stop()
 
 	// Wire download services (grabs, autosearch, import pipeline, monitor)
-	dlWiring, err := wireDownloads(ctx, cfg, db, srv, downloadSvc, moviesSvc, indexerSvc, media, logger)
+	dlWiring, err := wireDownloads(ctx, cfg, db, srv, downloadSvc, moviesSvc, indexerSvc, media, auditLogger, logger)
 	if err != nil {
 		return fmt.Errorf("wire downloads: %w", err)
 	}
