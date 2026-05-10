@@ -3,7 +3,9 @@ package newznab
 import (
 	"encoding/xml"
 	"fmt"
+	"math"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -101,7 +103,7 @@ func mapItem(it rssItem, indexerID string, flavour attrFlavour) indexers.Result 
 		Link:      pickLink(it),
 		InfoURL:   strings.TrimSpace(it.Comments),
 		PubDate:   parseRFC1123Z(it.PubDate),
-		Size:      parseInt64(it.Enclosure.Length),
+		Size:      parseSizeFlexible(it.Enclosure.Length),
 		Category:  mapCategoryStrings(it.Categories),
 	}
 	if flavour == flavourTorznab {
@@ -129,7 +131,7 @@ func mapNewznabAttrs(attrs []rssAttr, r *indexers.Result) {
 		switch strings.ToLower(a.Name) {
 		case "size":
 			if r.Size == 0 {
-				r.Size = parseInt64(a.Value)
+				r.Size = parseSizeFlexible(a.Value)
 			}
 		case "category":
 			if id := parseInt(a.Value); id != 0 {
@@ -231,12 +233,26 @@ func appendUnique(in []indexers.Category, c indexers.Category) []indexers.Catego
 
 // parseRFC1123Z accepts both RFC1123Z (RFC2822 with numeric zone, the
 // Newznab spec) and RFC1123 (textual zone, used by some indexers).
+// Also handles ISO 8601, common European formats, and custom patterns
+// seen in the wild from various indexers.
 func parseRFC1123Z(s string) time.Time {
 	s = strings.TrimSpace(s)
 	if s == "" {
 		return time.Time{}
 	}
-	for _, layout := range []string{time.RFC1123Z, time.RFC1123, time.RFC822Z, time.RFC822} {
+	for _, layout := range []string{
+		time.RFC1123Z,
+		time.RFC1123,
+		time.RFC822Z,
+		time.RFC822,
+		time.RFC3339,
+		time.RFC3339Nano,
+		"2006-01-02 15:04:05",
+		"2006-01-02T15:04:05",
+		"Mon, 02 Jan 2006 15:04:05 -07:00",
+		"02 Jan 2006 15:04:05 -0700",
+		"Jan 02, 2006 15:04:05",
+	} {
 		if t, err := time.Parse(layout, s); err == nil {
 			return t.UTC()
 		}
@@ -250,4 +266,52 @@ func sortByPubDateDesc(rows []indexers.Result) {
 	sort.SliceStable(rows, func(i, j int) bool {
 		return rows[i].PubDate.After(rows[j].PubDate)
 	})
+}
+
+// parseSizeFlexible handles both numeric byte strings ("1073741824") and
+// human-readable formats ("1.5 GB", "700 MB", "4.2 GiB") commonly seen
+// from various indexers in the wild.
+func parseSizeFlexible(s string) int64 {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return 0
+	}
+
+	// Try plain numeric first (most common, bytes).
+	if n, err := strconv.ParseInt(s, 10, 64); err == nil {
+		return n
+	}
+
+	// Try float (some indexers send "1073741824.0").
+	if n, err := strconv.ParseFloat(s, 64); err == nil && !strings.ContainsAny(s, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ") {
+		return int64(n)
+	}
+
+	// Parse human-readable size (e.g., "1.5 GB", "700 MB", "4.2 GiB").
+	lower := strings.ToLower(strings.TrimSpace(s))
+	multipliers := []struct {
+		suffix string
+		mult   float64
+	}{
+		{"tib", 1024 * 1024 * 1024 * 1024},
+		{"tb", 1000 * 1000 * 1000 * 1000},
+		{"gib", 1024 * 1024 * 1024},
+		{"gb", 1000 * 1000 * 1000},
+		{"mib", 1024 * 1024},
+		{"mb", 1000 * 1000},
+		{"kib", 1024},
+		{"kb", 1000},
+		{"b", 1},
+	}
+
+	for _, m := range multipliers {
+		if strings.HasSuffix(lower, m.suffix) {
+			numStr := strings.TrimSpace(lower[:len(lower)-len(m.suffix)])
+			if val, err := strconv.ParseFloat(numStr, 64); err == nil {
+				return int64(math.Round(val * m.mult))
+			}
+		}
+	}
+
+	return 0
 }

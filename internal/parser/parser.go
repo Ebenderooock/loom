@@ -6,29 +6,34 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+
+	"github.com/ebenderooock/loom/internal/languages"
 )
 
 // Release represents parsed metadata extracted from a release name.
 type Release struct {
-	Name            string // Original release name
-	Title           string // Extracted clean title
-	Codec           string // h264, h265, av1, vp9, etc.
-	Bitdepth        int    // 8, 10, 12
-	Year            int    // Release year (YYYY format)
-	Resolution      int    // 480, 720, 1080, 2160, etc.
-	Source          string // BluRay, HDTV, WebDL, DVDRip, etc.
-	Season          int    // TV season number (-1 if not found)
-	Episode         int    // TV episode number, first if multi (-1 if not found)
-	Episodes        []int  // All episodes for multi-episode releases (e.g., [1,2,3])
-	IsSeasonPack    bool   // True when season detected without episode (S01, Season 1 Complete)
-	IsProper        bool   // PROPER tag detected
-	IsRepack        bool   // REPACK or RERIP tag detected
-	IsReal          bool   // REAL tag detected (fixes fake/nuked releases)
-	DailyDate       string // "2024-01-30" for daily shows (empty if not daily)
-	AbsoluteEpisode int    // Anime absolute episode number (-1 if not found)
-	Audio           string // DTS-HD MA, TrueHD, Atmos, AAC, FLAC, AC3, EAC3, etc.
-	Edition         string // Movie edition: Director's Cut, Extended, IMAX, Theatrical, etc.
-	Group           string // Release group name (e.g., "SPARKS", "FGT")
+	Name            string   // Original release name
+	Title           string   // Extracted clean title
+	Codec           string   // h264, h265, av1, vp9, etc.
+	Bitdepth        int      // 8, 10, 12
+	Year            int      // Release year (YYYY format)
+	Resolution      int      // 480, 720, 1080, 2160, etc.
+	Source          string   // BluRay, HDTV, WebDL, DVDRip, etc.
+	Season          int      // TV season number (-1 if not found)
+	Episode         int      // TV episode number, first if multi (-1 if not found)
+	Episodes        []int    // All episodes for multi-episode releases (e.g., [1,2,3])
+	IsSeasonPack    bool     // True when season detected without episode (S01, Season 1 Complete)
+	IsProper        bool     // PROPER tag detected
+	IsRepack        bool     // REPACK or RERIP tag detected
+	IsReal          bool     // REAL tag detected (fixes fake/nuked releases)
+	DailyDate       string   // "2024-01-30" for daily shows (empty if not daily)
+	AbsoluteEpisode int      // Anime absolute episode number (-1 if not found)
+	Audio           string   // DTS-HD MA, TrueHD, Atmos, AAC, FLAC, AC3, EAC3, etc.
+	Edition         string   // Movie edition: Director's Cut, Extended, IMAX, Theatrical, etc.
+	Group           string   // Release group name (e.g., "SPARKS", "FGT")
+	Languages       []string // Detected languages (e.g., ["English", "French"])
+	IsMulti         bool     // MULTI tag detected (multiple audio tracks)
+	IsDualAudio     bool     // Dual-audio release
 }
 
 // patternCache holds compiled regex patterns to avoid recompilation.
@@ -128,6 +133,14 @@ func Parse(releaseName string) *Release {
 
 	// Extract release group (last segment after a dash)
 	r.Group = extractGroup(releaseName)
+
+	// Extract languages via the dedicated language parser.
+	langResult := languages.ParseTitle(releaseName)
+	for _, lang := range langResult.Languages {
+		r.Languages = append(r.Languages, lang.Name)
+	}
+	r.IsMulti = langResult.IsMulti
+	r.IsDualAudio = langResult.IsDualAudio
 
 	return r
 }
