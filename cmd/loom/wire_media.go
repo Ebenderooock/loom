@@ -8,6 +8,7 @@ import (
 
 	"github.com/ebenderooock/loom/internal/alttitles"
 	"github.com/ebenderooock/loom/internal/anime"
+	"github.com/ebenderooock/loom/internal/auditlog"
 	"github.com/ebenderooock/loom/internal/calendar"
 	"github.com/ebenderooock/loom/internal/importlists"
 	"github.com/ebenderooock/loom/internal/languages"
@@ -43,13 +44,14 @@ func wireMedia(
 	db storage.DB,
 	srv *server.Server,
 	moviesSvc movies.Service,
+	auditLogger *auditlog.Logger,
 	logger *slog.Logger,
 ) (*mediaWiring, error) {
 	// Libraries store — needed by scanner, organizer, imports, health monitor.
 	libStore := libraries.NewStore(db.DB())
 
 	// Library scanner
-	scannerSvc := buildScanner(moviesSvc, cfg, logger)
+	scannerSvc := buildScanner(moviesSvc, cfg, auditLogger, logger)
 	srv.SetScanner(scannerSvc)
 
 	// File organizer

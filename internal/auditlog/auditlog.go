@@ -46,13 +46,15 @@ type Entry struct {
 
 // ListFilter controls paginated retrieval.
 type ListFilter struct {
-	Category  string
-	EventType string
-	Level     string
-	Limit     int
-	Offset    int
-	Since     string // ISO-8601 timestamp
-	Until     string // ISO-8601 timestamp
+	Category   string
+	EventType  string
+	Level      string
+	EntityType string
+	EntityID   string
+	Limit      int
+	Offset     int
+	Since      string // ISO-8601 timestamp
+	Until      string // ISO-8601 timestamp
 }
 
 // ListResult is the paginated response envelope.
@@ -137,6 +139,14 @@ func (l *Logger) List(ctx context.Context, f ListFilter) (ListResult, error) {
 		where = append(where, "level = ?")
 		args = append(args, f.Level)
 	}
+	if f.EntityType != "" {
+		where = append(where, "entity_type = ?")
+		args = append(args, f.EntityType)
+	}
+	if f.EntityID != "" {
+		where = append(where, "entity_id = ?")
+		args = append(args, f.EntityID)
+	}
 	if f.Since != "" {
 		where = append(where, "timestamp >= ?")
 		args = append(args, f.Since)
@@ -214,13 +224,15 @@ func (l *Logger) handleList(w http.ResponseWriter, r *http.Request) {
 	offset, _ := strconv.Atoi(q.Get("offset"))
 
 	result, err := l.List(r.Context(), ListFilter{
-		Category:  q.Get("category"),
-		EventType: q.Get("event_type"),
-		Level:     q.Get("level"),
-		Limit:     limit,
-		Offset:    offset,
-		Since:     q.Get("since"),
-		Until:     q.Get("until"),
+		Category:   q.Get("category"),
+		EventType:  q.Get("event_type"),
+		Level:      q.Get("level"),
+		EntityType: q.Get("entity_type"),
+		EntityID:   q.Get("entity_id"),
+		Limit:      limit,
+		Offset:     offset,
+		Since:      q.Get("since"),
+		Until:      q.Get("until"),
 	})
 	if err != nil {
 		l.logger.Error("audit log list failed", "err", err)

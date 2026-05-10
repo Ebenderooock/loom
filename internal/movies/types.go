@@ -412,3 +412,15 @@ type UpdateCustomFormatRequest struct {
 	Tags        []string                 `json:"tags,omitempty"`
 	Filters     []CreateCustomFormatFilterRequest `json:"filters,omitempty"`
 }
+
+// HistoryEntry represents a combined import or search history record.
+type HistoryEntry struct {
+	ID        string    `json:"id"`
+	Type      string    `json:"type"` // "import" or "search"
+	Status    string    `json:"status"`
+	Title     string    `json:"title,omitempty"`
+	Error     string    `json:"error,omitempty"`
+	SourcePath string   `json:"sourcePath,omitempty"`
+	DestPath   string   `json:"destPath,omitempty"`
+	Date      time.Time `json:"date"`
+}

@@ -121,6 +121,7 @@ func RouterWithSearch(service Service, indexerSvc *indexers.Service, grabStore *
 	r.Post("/{id}/archive", archiveMovie(service))
 	r.Post("/{id}/unarchive", unarchiveMovie(service))
 	r.Get("/{id}/credits", getMovieCredits(service))
+	r.Get("/{id}/history", getMovieHistory(service))
 
 	return r
 }
@@ -597,6 +598,28 @@ func getMovieCredits(svc Service) http.HandlerFunc {
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(credits)
+	}
+}
+
+func getMovieHistory(svc Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := chi.URLParam(r, "id")
+		if id == "" {
+			http.Error(w, "movie ID required", http.StatusBadRequest)
+			return
+		}
+
+		entries, err := svc.ListMovieHistory(r.Context(), id)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if entries == nil {
+			entries = []*HistoryEntry{}
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(entries)
 	}
 }
 

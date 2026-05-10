@@ -34,6 +34,7 @@ type Release struct {
 	Languages       []string // Detected languages (e.g., ["English", "French"])
 	IsMulti         bool     // MULTI tag detected (multiple audio tracks)
 	IsDualAudio     bool     // Dual-audio release
+	IsRemux         bool     // REMUX tag detected (lossless rip from disc)
 }
 
 // patternCache holds compiled regex patterns to avoid recompilation.
@@ -117,10 +118,11 @@ func Parse(releaseName string) *Release {
 		r.AbsoluteEpisode = extractAbsoluteEpisode(lower, releaseName)
 	}
 
-	// Extract proper/repack/real flags
+	// Extract proper/repack/real/remux flags
 	r.IsProper = extractFlag(lower, `(?:^|[\s.\-_])(proper)(?:$|[\s.\-_\d])`)
 	r.IsRepack = extractFlag(lower, `(?:^|[\s.\-_])(repack|rerip)(?:$|[\s.\-_\d])`)
 	r.IsReal = extractFlag(lower, `(?:^|[\s.\-_])(real)(?:$|[\s.\-_])`)
+	r.IsRemux = extractFlag(lower, `(?:^|[\s.\-_])(remux|bdremux)(?:$|[\s.\-_])`)
 
 	// Extract audio codec
 	r.Audio = extractAudio(lower)

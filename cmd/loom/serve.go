@@ -168,7 +168,7 @@ func cmdServe(ctx context.Context, args []string) error {
 	srv.SetCustomFormats(customformats.NewStore(db.DB()))
 
 	// Wire media services (scanner, organizer, series, libraries, etc.)
-	media, err := wireMedia(ctx, cfg, db, srv, moviesSvc, logger)
+	media, err := wireMedia(ctx, cfg, db, srv, moviesSvc, auditLogger, logger)
 	if err != nil {
 		return fmt.Errorf("wire media: %w", err)
 	}

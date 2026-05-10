@@ -448,7 +448,7 @@ func (s *SeriesScanner) importEpisodeFile(ctx context.Context, ep *series.Episod
 		SeriesID:   ep.SeriesID,
 		FilePath:   path,
 		FileSize:   size,
-		Quality:    qualityFromResolution(parsed.Resolution),
+		Quality:    qualityFromParsedInfo(parsed.Resolution, parsed.Source, parsed.IsRemux),
 		Source:     parsed.Source,
 		Resolution: resolutionString(parsed.Resolution),
 		Codec:      parsed.Codec,
@@ -518,7 +518,7 @@ func (s *SeriesScanner) addSeriesUnmatched(scanID string, result *ScanResult, pa
 		Size:        size,
 		ParsedTitle: title,
 		ParsedYear:  parsed.Year,
-		Quality:     qualityFromResolution(parsed.Resolution),
+		Quality:     qualityFromParsedInfo(parsed.Resolution, parsed.Source, parsed.IsRemux),
 		Source:      parsed.Source,
 	}
 	s.mu.Lock()
