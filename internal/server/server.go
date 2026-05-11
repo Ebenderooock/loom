@@ -123,6 +123,7 @@ type Server struct {
 	grabStore        *grabs.Store
 	periodicScanner  *scheduler.PeriodicScanner
 	syncProfileStore *syncprofiles.Store
+	discoverRouter   http.Handler
 	httpMetrics *telemetry.HTTPMetrics
 	ready      atomic.Bool
 }
@@ -475,6 +476,15 @@ func (s *Server) SetSyncProfileStore(st *syncprofiles.Store) {
 	}
 }
 
+// SetDiscoverRouter attaches the person-discovery router and rebuilds the
+// HTTP handler so the /api/v1/discover routes are reachable.
+func (s *Server) SetDiscoverRouter(h http.Handler) {
+	s.discoverRouter = h
+	if s.httpSrv != nil {
+		s.httpSrv.Handler = s.newMux()
+	}
+}
+
 // Bus returns the server's event bus for wiring pipelines.
 func (s *Server) Bus() eventbus.Bus {
 	return s.bus
@@ -679,6 +689,11 @@ func (s *Server) newMux() http.Handler {
 		// Library routes
 		if s.libStore != nil {
 			r.Mount("/api/v1/libraries", libraries.Router(s.libStore, s.libScanner, s.logger))
+		}
+
+		// Person discovery routes
+		if s.discoverRouter != nil {
+			r.Mount("/api/v1/discover", s.discoverRouter)
 		}
 
 		// API key management routes

@@ -10,6 +10,7 @@ import (
 	"github.com/ebenderooock/loom/internal/anime"
 	"github.com/ebenderooock/loom/internal/auditlog"
 	"github.com/ebenderooock/loom/internal/calendar"
+	"github.com/ebenderooock/loom/internal/discover"
 	"github.com/ebenderooock/loom/internal/importlists"
 	"github.com/ebenderooock/loom/internal/languages"
 	"github.com/ebenderooock/loom/internal/libraries"
@@ -114,6 +115,10 @@ func wireMedia(
 	qpStore := qualityprofiles.NewStore(db.DB())
 	srv.SetQualityProfiles(qpStore)
 	qualityprofiles.SeedDefaults(ctx, qpStore, moviesSvc)
+
+	// Person discovery (TMDB-backed)
+	discoverTMDB := buildTMDBClient()
+	srv.SetDiscoverRouter(discover.Router(discoverTMDB))
 
 	return &mediaWiring{
 		libStore:          libStore,

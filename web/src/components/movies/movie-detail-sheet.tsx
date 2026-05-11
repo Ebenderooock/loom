@@ -37,6 +37,7 @@ import { StatusBadge } from "./status-badge";
 import { ReleaseSearchDialog } from "@/components/search/release-search-dialog";
 import { autoSearch } from "@/lib/autosearch-api";
 import { AltTitlesSection } from "@/components/alt-titles";
+import { PersonDiscoverDialog } from "@/components/person-discover-dialog";
 import type { Library } from "../../lib/libraries-api";
 import type { Movie, QualityProfile, Credits, CreditPerson } from "./types";
 import { TMDB_IMG } from "./types";
@@ -83,9 +84,15 @@ function DetailRow({ label, children }: { label: string; children: React.ReactNo
 
 const PROFILE_IMG = "https://image.tmdb.org/t/p/w185";
 
-function PersonCard({ person }: { person: CreditPerson }) {
+function PersonCard({ person, onClick }: { person: CreditPerson; onClick?: () => void }) {
   return (
-    <div className="flex-shrink-0 w-[100px] group">
+    <div
+      className={cn("flex-shrink-0 w-[100px] group", onClick && "cursor-pointer")}
+      onClick={onClick}
+      role={onClick ? "button" : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onKeyDown={onClick ? (e) => { if (e.key === "Enter" || e.key === " ") onClick(); } : undefined}
+    >
       <div className="relative w-[100px] h-[150px] rounded-lg overflow-hidden bg-muted/30 mb-1.5">
         {person.profile_path ? (
           <img
@@ -108,9 +115,15 @@ function PersonCard({ person }: { person: CreditPerson }) {
   );
 }
 
-function PersonChip({ person }: { person: CreditPerson }) {
+function PersonChip({ person, onClick }: { person: CreditPerson; onClick?: () => void }) {
   return (
-    <div className="flex items-center gap-2 bg-muted/30 rounded-full pr-3 overflow-hidden">
+    <div
+      className={cn("flex items-center gap-2 bg-muted/30 rounded-full pr-3 overflow-hidden", onClick && "cursor-pointer hover:bg-muted/50 transition-colors")}
+      onClick={onClick}
+      role={onClick ? "button" : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onKeyDown={onClick ? (e) => { if (e.key === "Enter" || e.key === " ") onClick(); } : undefined}
+    >
       {person.profile_path ? (
         <img
           src={`${PROFILE_IMG}${person.profile_path}`}
@@ -138,6 +151,8 @@ export function MovieDetailSheet({
   libraries,
   onUpdated,
   onDeleted,
+  existingMovieIds = new Set(),
+  existingSeriesIds = new Set(),
 }: {
   movie: Movie | null;
   open: boolean;
@@ -146,6 +161,8 @@ export function MovieDetailSheet({
   libraries: Library[];
   onUpdated: (updated: Movie) => void;
   onDeleted: (id: string) => void;
+  existingMovieIds?: Set<number>;
+  existingSeriesIds?: Set<number>;
 }) {
   const [editing, setEditing] = useState(false);
   const [editProfile, setEditProfile] = useState("");
@@ -161,6 +178,7 @@ export function MovieDetailSheet({
   const [archiving, setArchiving] = useState(false);
   const [autoSearching, setAutoSearching] = useState(false);
   const [rescanning, setRescanning] = useState(false);
+  const [discoverPerson, setDiscoverPerson] = useState<{ id: number; name: string } | null>(null);
 
   const handleAutoSearch = async () => {
     if (!movie) return;
@@ -690,7 +708,7 @@ export function MovieDetailSheet({
                         </h4>
                         <div className="flex gap-3 flex-wrap">
                           {directors.map(d => (
-                            <PersonChip key={d.id} person={d} />
+                            <PersonChip key={d.id} person={d} onClick={() => setDiscoverPerson({ id: d.id, name: d.name })} />
                           ))}
                         </div>
                       </div>
@@ -705,7 +723,7 @@ export function MovieDetailSheet({
                       </h4>
                       <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1 scrollbar-thin">
                         {credits.cast.slice(0, 20).map(c => (
-                          <PersonCard key={c.id} person={c} />
+                          <PersonCard key={c.id} person={c} onClick={() => setDiscoverPerson({ id: c.id, name: c.name })} />
                         ))}
                       </div>
                     </div>
@@ -782,6 +800,21 @@ export function MovieDetailSheet({
         movieId={movie.id}
         autoSearch
       />
+
+      {/* Person discover dialog */}
+      {discoverPerson && (
+        <PersonDiscoverDialog
+          open={!!discoverPerson}
+          onOpenChange={(o) => { if (!o) setDiscoverPerson(null); }}
+          personId={discoverPerson.id}
+          personName={discoverPerson.name}
+          libraries={libraries}
+          qualityProfiles={profiles}
+          existingMovieIds={existingMovieIds}
+          existingSeriesIds={existingSeriesIds}
+          onAdded={onUpdated as unknown as () => void}
+        />
+      )}
     </>
   );
 }

@@ -36,6 +36,7 @@ import { SeriesStatusBadge } from "./series-status-badge";
 import { ReleaseSearchDialog } from "@/components/search/release-search-dialog";
 import { autoSearch } from "@/lib/autosearch-api";
 import { AltTitlesSection } from "@/components/alt-titles";
+import { PersonDiscoverDialog } from "@/components/person-discover-dialog";
 import type { Library } from "../../lib/libraries-api";
 import type { Series, Season, Episode, QualityProfile, Credits, CreditPerson } from "./types";
 import { TMDB_IMG } from "./types";
@@ -80,9 +81,15 @@ function DetailRow({ label, children }: { label: string; children: React.ReactNo
 
 const PROFILE_IMG = "https://image.tmdb.org/t/p/w185";
 
-function PersonCard({ person }: { person: CreditPerson }) {
+function PersonCard({ person, onClick }: { person: CreditPerson; onClick?: () => void }) {
   return (
-    <div className="flex-shrink-0 w-[100px] group">
+    <div
+      className={cn("flex-shrink-0 w-[100px] group", onClick && "cursor-pointer")}
+      onClick={onClick}
+      role={onClick ? "button" : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onKeyDown={onClick ? (e) => { if (e.key === "Enter" || e.key === " ") onClick(); } : undefined}
+    >
       <div className="relative w-[100px] h-[150px] rounded-lg overflow-hidden bg-muted/30 mb-1.5">
         {person.profile_path ? (
           <img src={`${PROFILE_IMG}${person.profile_path}`} alt={person.name} className="w-full h-full object-cover" loading="lazy" />
@@ -453,6 +460,8 @@ export function SeriesDetailSheet({
   libraries,
   onUpdated,
   onDeleted,
+  existingMovieIds = new Set(),
+  existingSeriesIds = new Set(),
 }: {
   series: Series | null;
   open: boolean;
@@ -461,6 +470,8 @@ export function SeriesDetailSheet({
   libraries: Library[];
   onUpdated: (updated: Series) => void;
   onDeleted: (id: string) => void;
+  existingMovieIds?: Set<number>;
+  existingSeriesIds?: Set<number>;
 }) {
   const [editing, setEditing] = useState(false);
   const [editProfile, setEditProfile] = useState("");
@@ -488,6 +499,7 @@ export function SeriesDetailSheet({
   const [archiving, setArchiving] = useState(false);
   const [autoSearching, setAutoSearching] = useState(false);
   const [rescanning, setRescanning] = useState(false);
+  const [discoverPerson, setDiscoverPerson] = useState<{ id: number; name: string } | null>(null);
 
   const handleAutoSearch = async () => {
     if (!series) return;
@@ -906,7 +918,7 @@ export function SeriesDetailSheet({
                     <div>
                       <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Cast</h4>
                       <div className="flex gap-3 overflow-x-auto pb-2">
-                        {credits.cast.slice(0, 20).map(p => <PersonCard key={p.id} person={p} />)}
+                        {credits.cast.slice(0, 20).map(p => <PersonCard key={p.id} person={p} onClick={() => setDiscoverPerson({ id: p.id, name: p.name })} />)}
                       </div>
                     </div>
                   )}
@@ -914,7 +926,7 @@ export function SeriesDetailSheet({
                     <div>
                       <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Crew</h4>
                       <div className="flex gap-3 overflow-x-auto pb-2">
-                        {credits.crew.slice(0, 10).map(p => <PersonCard key={`${p.id}-${p.department}`} person={p} />)}
+                        {credits.crew.slice(0, 10).map(p => <PersonCard key={`${p.id}-${p.department}`} person={p} onClick={() => setDiscoverPerson({ id: p.id, name: p.name })} />)}
                       </div>
                     </div>
                   )}
@@ -958,6 +970,21 @@ export function SeriesDetailSheet({
           seriesId={searchContext.seriesId}
           episodeIds={searchContext.episodeIds}
           autoSearch
+        />
+      )}
+
+      {/* Person discover dialog */}
+      {discoverPerson && (
+        <PersonDiscoverDialog
+          open={!!discoverPerson}
+          onOpenChange={(o) => { if (!o) setDiscoverPerson(null); }}
+          personId={discoverPerson.id}
+          personName={discoverPerson.name}
+          libraries={libraries}
+          qualityProfiles={profiles}
+          existingMovieIds={existingMovieIds}
+          existingSeriesIds={existingSeriesIds}
+          onAdded={onUpdated as unknown as () => void}
         />
       )}
     </>

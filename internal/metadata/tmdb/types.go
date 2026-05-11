@@ -127,3 +127,39 @@ type ReleaseDate struct {
 	ReleaseDate   string `json:"release_date"` // ISO 8601 with time
 	Certification string `json:"certification"`
 }
+
+// PersonResponse is the JSON response from TMDb /person/{id} endpoint.
+type PersonResponse struct {
+	ID          int    `json:"id"`
+	Name        string `json:"name"`
+	Biography   string `json:"biography"`
+	ProfilePath string `json:"profile_path"`
+	Birthday    string `json:"birthday"`
+	Deathday    string `json:"deathday"`
+	KnownFor    string `json:"known_for_department"`
+	PlaceOfBirth string `json:"place_of_birth"`
+}
+
+// CombinedCreditsResponse is the JSON response from TMDb /person/{id}/combined_credits.
+type CombinedCreditsResponse struct {
+	ID   int                    `json:"id"`
+	Cast []CombinedCreditEntry  `json:"cast"`
+	Crew []CombinedCreditEntry  `json:"crew"`
+}
+
+// CombinedCreditEntry is a single entry in a combined credits response.
+type CombinedCreditEntry struct {
+	ID           int     `json:"id"`
+	MediaType    string  `json:"media_type"` // "movie" or "tv"
+	Title        string  `json:"title,omitempty"`
+	Name         string  `json:"name,omitempty"`
+	Overview     string  `json:"overview"`
+	PosterPath   string  `json:"poster_path"`
+	ReleaseDate  string  `json:"release_date,omitempty"`
+	FirstAirDate string  `json:"first_air_date,omitempty"`
+	VoteAverage  float64 `json:"vote_average"`
+	Popularity   float64 `json:"popularity"`
+	Character    string  `json:"character,omitempty"`
+	Job          string  `json:"job,omitempty"`
+	Department   string  `json:"department,omitempty"`
+}
