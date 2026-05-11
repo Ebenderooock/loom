@@ -131,11 +131,15 @@ func (p *ImportPipeline) handleCompleted(ctx context.Context, ev eventbus.Event)
 	if err != nil {
 		p.logger.Error("failed to resolve download path", "error", err, "title", completed.Title)
 		p.recordFailure(ctx, "", "", completed.Title, "", err)
+		// Self-heal: clean up the grab so the user can re-search.
+		p.cleanupGrabOnFailure(ctx, completed)
 		return nil // don't block the event bus
 	}
 
 	if err := p.processImport(ctx, completed, downloadPath); err != nil {
 		p.logger.Error("import failed", "error", err, "title", completed.Title, "path", downloadPath)
+		// Self-heal: clean up the grab so the user can re-search.
+		p.cleanupGrabOnFailure(ctx, completed)
 		return nil
 	}
 	return nil
@@ -420,6 +424,44 @@ func (p *ImportPipeline) matchByGrab(ctx context.Context, ev *downloads.Download
 	}
 
 	return nil, nil
+}
+
+// cleanupGrabOnFailure removes the grab tracking and resets movie status
+// when an import fails. This "self-heals" the system so the user can
+// re-search instead of being stuck with "already grabbed" forever.
+func (p *ImportPipeline) cleanupGrabOnFailure(ctx context.Context, ev *downloads.DownloadCompletedEvent) {
+	if p.grabStore == nil {
+		return
+	}
+
+	// Look up which media this grab was linked to so we can reset status.
+	gm, err := p.grabStore.LookupByDownload(ctx, ev.ClientID, ev.DownloadID)
+	if err != nil {
+		p.logger.Warn("grab lookup failed during failure cleanup", "error", err)
+	}
+
+	// Remove the grab record.
+	if ev.ClientID != "" && ev.DownloadID != "" {
+		if err := p.grabStore.RemoveByDownload(ctx, ev.ClientID, ev.DownloadID); err != nil {
+			p.logger.Warn("grab cleanup on failure failed", "error", err)
+		} else {
+			p.logger.Info("grab cleaned up after import failure",
+				"client_id", ev.ClientID, "download_id", ev.DownloadID)
+		}
+	}
+
+	// Reset movie status back to "missing" so auto-search can retry.
+	if gm != nil {
+		for _, movieID := range gm.MovieIDs {
+			if err := p.moviesSvc.SetMovieStatus(ctx, movieID, movies.MovieStatusMissing); err != nil {
+				p.logger.Error("failed to reset movie status after import failure",
+					"movie_id", movieID, "error", err)
+			} else {
+				p.logger.Info("reset movie status to missing after import failure",
+					"movie_id", movieID)
+			}
+		}
+	}
 }
 
 // cleanupGrab removes the grab tracking entry after a successful import.
