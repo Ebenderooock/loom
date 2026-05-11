@@ -11,6 +11,7 @@ test.describe("Live: Navigation & Page Rendering", () => {
     { path: "/movies", name: "Movies" },
     { path: "/series", name: "Series" },
     { path: "/downloads", name: "Downloads" },
+    { path: "/workflows", name: "Workflows" },
     { path: "/indexers", name: "Indexers" },
     { path: "/events", name: "Events" },
     { path: "/settings", name: "Settings" },

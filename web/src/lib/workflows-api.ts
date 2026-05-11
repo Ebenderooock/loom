@@ -62,7 +62,7 @@ async function request<T>(
   if (!res.ok) {
     throw new Error(text || `${method} ${path}: ${res.status}`);
   }
-  return text ? JSON.parse(text) : undefined;
+  return text ? JSON.parse(text) : (undefined as T);
 }
 
 // ---------- Endpoints ----------
