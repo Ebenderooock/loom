@@ -1,0 +1,502 @@
+package workflows
+
+import (
+	"context"
+	"database/sql"
+	"encoding/json"
+	"fmt"
+	"time"
+
+	"github.com/google/uuid"
+)
+
+// Store provides persistence for workflows.
+type Store struct {
+	db *sql.DB
+}
+
+// NewStore creates the workflow store and ensures tables exist.
+func NewStore(db *sql.DB) (*Store, error) {
+	s := &Store{db: db}
+	if err := s.migrate(); err != nil {
+		return nil, fmt.Errorf("workflows: migrate: %w", err)
+	}
+	return s, nil
+}
+
+func (s *Store) migrate() error {
+	_, err := s.db.Exec(`
+		CREATE TABLE IF NOT EXISTS workflows (
+			id TEXT PRIMARY KEY,
+			type TEXT NOT NULL,
+			state TEXT NOT NULL,
+			media_type TEXT NOT NULL,
+			grab_title TEXT,
+			download_client_id TEXT,
+			download_id TEXT,
+			quality_profile_id TEXT,
+			retry_count INTEGER DEFAULT 0,
+			max_retries INTEGER DEFAULT 3,
+			last_error TEXT,
+			metadata TEXT,
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			completed_at TIMESTAMP
+		);
+
+		CREATE TABLE IF NOT EXISTS workflow_items (
+			workflow_id TEXT NOT NULL REFERENCES workflows(id) ON DELETE CASCADE,
+			media_type TEXT NOT NULL,
+			media_id TEXT NOT NULL,
+			PRIMARY KEY (workflow_id, media_id)
+		);
+
+		CREATE TABLE IF NOT EXISTS workflow_history (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			workflow_id TEXT NOT NULL REFERENCES workflows(id) ON DELETE CASCADE,
+			from_state TEXT NOT NULL,
+			to_state TEXT NOT NULL,
+			message TEXT,
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+		);
+
+		CREATE INDEX IF NOT EXISTS idx_workflows_state ON workflows(state);
+		CREATE INDEX IF NOT EXISTS idx_workflow_items_media ON workflow_items(media_type, media_id);
+	`)
+	if err != nil {
+		return err
+	}
+
+	// Partial unique index for active download constraints — SQLite supports this
+	_, _ = s.db.Exec(`
+		CREATE UNIQUE INDEX IF NOT EXISTS idx_workflows_active_download
+		ON workflows(download_client_id, download_id)
+		WHERE download_client_id IS NOT NULL AND download_id IS NOT NULL
+		AND state NOT IN ('completed', 'failed', 'cancelled');
+	`)
+	return nil
+}
+
+// Create persists a new workflow with its items.
+func (s *Store) Create(ctx context.Context, w *Workflow) error {
+	if w.ID == "" {
+		w.ID = uuid.NewString()
+	}
+	now := time.Now()
+	w.CreatedAt = now
+	w.UpdatedAt = now
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	_, err = tx.ExecContext(ctx, `
+		INSERT INTO workflows (id, type, state, media_type, grab_title,
+			download_client_id, download_id, quality_profile_id,
+			retry_count, max_retries, last_error, metadata, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		w.ID, w.Type, w.State, w.MediaType, w.GrabTitle,
+		nullStr(w.DownloadClientID), nullStr(w.DownloadID), nullStr(w.QualityProfileID),
+		w.RetryCount, w.MaxRetries, nullStr(w.LastError), nullStr(w.Metadata),
+		w.CreatedAt, w.UpdatedAt,
+	)
+	if err != nil {
+		return fmt.Errorf("insert workflow: %w", err)
+	}
+
+	for _, item := range w.Items {
+		_, err = tx.ExecContext(ctx, `
+			INSERT INTO workflow_items (workflow_id, media_type, media_id)
+			VALUES (?, ?, ?)`,
+			w.ID, item.MediaType, item.MediaID,
+		)
+		if err != nil {
+			return fmt.Errorf("insert workflow item: %w", err)
+		}
+	}
+
+	// Record initial history event
+	_, err = tx.ExecContext(ctx, `
+		INSERT INTO workflow_history (workflow_id, from_state, to_state, message, created_at)
+		VALUES (?, '', ?, 'Workflow created', ?)`,
+		w.ID, w.State, now,
+	)
+	if err != nil {
+		return fmt.Errorf("insert history: %w", err)
+	}
+
+	return tx.Commit()
+}
+
+// Transition atomically moves a workflow to a new state (idempotent guard).
+// Returns false if the workflow was not in the expected current state.
+func (s *Store) Transition(ctx context.Context, id, fromState, toState, message string) (bool, error) {
+	now := time.Now()
+	var completedAt *time.Time
+	if toState == StateCompleted || toState == StateFailed || toState == StateCancelled {
+		completedAt = &now
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback()
+
+	res, err := tx.ExecContext(ctx, `
+		UPDATE workflows SET state = ?, updated_at = ?, completed_at = ?
+		WHERE id = ? AND state = ?`,
+		toState, now, completedAt, id, fromState,
+	)
+	if err != nil {
+		return false, err
+	}
+	rows, _ := res.RowsAffected()
+	if rows == 0 {
+		return false, nil // already transitioned by another worker
+	}
+
+	_, err = tx.ExecContext(ctx, `
+		INSERT INTO workflow_history (workflow_id, from_state, to_state, message, created_at)
+		VALUES (?, ?, ?, ?, ?)`,
+		id, fromState, toState, message, now,
+	)
+	if err != nil {
+		return false, err
+	}
+
+	return true, tx.Commit()
+}
+
+// SetError records an error on the workflow.
+func (s *Store) SetError(ctx context.Context, id, errMsg string) error {
+	_, err := s.db.ExecContext(ctx, `
+		UPDATE workflows SET last_error = ?, updated_at = ? WHERE id = ?`,
+		errMsg, time.Now(), id,
+	)
+	return err
+}
+
+// IncrementRetry bumps retry count and records the error.
+func (s *Store) IncrementRetry(ctx context.Context, id, errMsg string) (int, error) {
+	now := time.Now()
+	_, err := s.db.ExecContext(ctx, `
+		UPDATE workflows SET retry_count = retry_count + 1, last_error = ?, updated_at = ?
+		WHERE id = ?`, errMsg, now, id,
+	)
+	if err != nil {
+		return 0, err
+	}
+	var count int
+	err = s.db.QueryRowContext(ctx, `SELECT retry_count FROM workflows WHERE id = ?`, id).Scan(&count)
+	return count, err
+}
+
+// SetDownload sets download client info on a workflow.
+func (s *Store) SetDownload(ctx context.Context, id, clientID, downloadID, title string) error {
+	_, err := s.db.ExecContext(ctx, `
+		UPDATE workflows SET download_client_id = ?, download_id = ?, grab_title = ?, updated_at = ?
+		WHERE id = ?`, clientID, downloadID, title, time.Now(), id,
+	)
+	return err
+}
+
+// Get retrieves a workflow by ID with items and history.
+func (s *Store) Get(ctx context.Context, id string) (*Workflow, error) {
+	w := &Workflow{}
+	var completedAt sql.NullTime
+	var grabTitle, dlClient, dlID, qpID, lastErr, metadata sql.NullString
+
+	err := s.db.QueryRowContext(ctx, `
+		SELECT id, type, state, media_type, grab_title,
+			download_client_id, download_id, quality_profile_id,
+			retry_count, max_retries, last_error, metadata,
+			created_at, updated_at, completed_at
+		FROM workflows WHERE id = ?`, id,
+	).Scan(&w.ID, &w.Type, &w.State, &w.MediaType, &grabTitle,
+		&dlClient, &dlID, &qpID,
+		&w.RetryCount, &w.MaxRetries, &lastErr, &metadata,
+		&w.CreatedAt, &w.UpdatedAt, &completedAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+	w.GrabTitle = grabTitle.String
+	w.DownloadClientID = dlClient.String
+	w.DownloadID = dlID.String
+	w.QualityProfileID = qpID.String
+	w.LastError = lastErr.String
+	w.Metadata = metadata.String
+	if completedAt.Valid {
+		w.CompletedAt = &completedAt.Time
+	}
+
+	// Load items
+	w.Items, err = s.getItems(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	// Load history
+	w.History, err = s.getHistory(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	return w, nil
+}
+
+// ListActive returns all non-terminal workflows.
+func (s *Store) ListActive(ctx context.Context) ([]*Workflow, error) {
+	return s.list(ctx, `
+		SELECT id, type, state, media_type, grab_title,
+			download_client_id, download_id, quality_profile_id,
+			retry_count, max_retries, last_error, metadata,
+			created_at, updated_at, completed_at
+		FROM workflows
+		WHERE state NOT IN ('completed', 'failed', 'cancelled')
+		ORDER BY created_at DESC`)
+}
+
+// ListRecent returns recent workflows (active + recently completed).
+func (s *Store) ListRecent(ctx context.Context, limit int) ([]*Workflow, error) {
+	return s.list(ctx, fmt.Sprintf(`
+		SELECT id, type, state, media_type, grab_title,
+			download_client_id, download_id, quality_profile_id,
+			retry_count, max_retries, last_error, metadata,
+			created_at, updated_at, completed_at
+		FROM workflows
+		ORDER BY updated_at DESC
+		LIMIT %d`, limit))
+}
+
+// FindByDownload looks up active workflow by download client + download ID.
+func (s *Store) FindByDownload(ctx context.Context, clientID, downloadID string) (*Workflow, error) {
+	rows, err := s.list(ctx, fmt.Sprintf(`
+		SELECT id, type, state, media_type, grab_title,
+			download_client_id, download_id, quality_profile_id,
+			retry_count, max_retries, last_error, metadata,
+			created_at, updated_at, completed_at
+		FROM workflows
+		WHERE download_client_id = '%s' AND download_id = '%s'
+		AND state NOT IN ('completed', 'failed', 'cancelled')
+		LIMIT 1`, clientID, downloadID))
+	if err != nil {
+		return nil, err
+	}
+	if len(rows) == 0 {
+		return nil, nil
+	}
+	// Load items
+	rows[0].Items, _ = s.getItems(ctx, rows[0].ID)
+	return rows[0], nil
+}
+
+// FindActiveForMedia checks if there's an active workflow for a given media item.
+func (s *Store) FindActiveForMedia(ctx context.Context, mediaType, mediaID string) (*Workflow, error) {
+	var wfID string
+	err := s.db.QueryRowContext(ctx, `
+		SELECT wi.workflow_id FROM workflow_items wi
+		JOIN workflows w ON w.id = wi.workflow_id
+		WHERE wi.media_type = ? AND wi.media_id = ?
+		AND w.state NOT IN ('completed', 'failed', 'cancelled')
+		LIMIT 1`, mediaType, mediaID,
+	).Scan(&wfID)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return s.Get(ctx, wfID)
+}
+
+// PruneCompleted removes terminal workflows older than maxAge.
+func (s *Store) PruneCompleted(ctx context.Context, maxAge time.Duration) (int64, error) {
+	cutoff := time.Now().Add(-maxAge)
+	res, err := s.db.ExecContext(ctx, `
+		DELETE FROM workflows
+		WHERE state IN ('completed', 'failed', 'cancelled')
+		AND completed_at < ?`, cutoff,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
+}
+
+// ActiveMediaIDs returns the set of media IDs that have active workflows.
+func (s *Store) ActiveMediaIDs(ctx context.Context, mediaType string, ids []string) (map[string]bool, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	query := `
+		SELECT DISTINCT wi.media_id FROM workflow_items wi
+		JOIN workflows w ON w.id = wi.workflow_id
+		WHERE wi.media_type = ? AND w.state NOT IN ('completed', 'failed', 'cancelled')
+		AND wi.media_id IN (`
+	args := []any{mediaType}
+	for i, id := range ids {
+		if i > 0 {
+			query += ","
+		}
+		query += "?"
+		args = append(args, id)
+	}
+	query += ")"
+
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := make(map[string]bool)
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		result[id] = true
+	}
+	return result, rows.Err()
+}
+
+// StaleWorkflows returns workflows stuck in a state longer than expected.
+func (s *Store) StaleWorkflows(ctx context.Context) ([]*Workflow, error) {
+	now := time.Now()
+	var results []*Workflow
+
+	for state, timeout := range StateTimeouts {
+		cutoff := now.Add(-timeout)
+		wfs, err := s.list(ctx, fmt.Sprintf(`
+			SELECT id, type, state, media_type, grab_title,
+				download_client_id, download_id, quality_profile_id,
+				retry_count, max_retries, last_error, metadata,
+				created_at, updated_at, completed_at
+			FROM workflows
+			WHERE state = '%s' AND updated_at < '%s'`,
+			state, cutoff.Format(time.RFC3339)))
+		if err != nil {
+			return nil, err
+		}
+		results = append(results, wfs...)
+	}
+	return results, nil
+}
+
+// Delete removes a workflow and its items/history (cascade).
+func (s *Store) Delete(ctx context.Context, id string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	tx.ExecContext(ctx, `DELETE FROM workflow_history WHERE workflow_id = ?`, id)
+	tx.ExecContext(ctx, `DELETE FROM workflow_items WHERE workflow_id = ?`, id)
+	_, err = tx.ExecContext(ctx, `DELETE FROM workflows WHERE id = ?`, id)
+	if err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// --- Helpers ---
+
+func (s *Store) list(ctx context.Context, query string) ([]*Workflow, error) {
+	rows, err := s.db.QueryContext(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var results []*Workflow
+	for rows.Next() {
+		w := &Workflow{}
+		var completedAt sql.NullTime
+		var grabTitle, dlClient, dlID, qpID, lastErr, metadata sql.NullString
+		if err := rows.Scan(&w.ID, &w.Type, &w.State, &w.MediaType, &grabTitle,
+			&dlClient, &dlID, &qpID,
+			&w.RetryCount, &w.MaxRetries, &lastErr, &metadata,
+			&w.CreatedAt, &w.UpdatedAt, &completedAt,
+		); err != nil {
+			return nil, err
+		}
+		w.GrabTitle = grabTitle.String
+		w.DownloadClientID = dlClient.String
+		w.DownloadID = dlID.String
+		w.QualityProfileID = qpID.String
+		w.LastError = lastErr.String
+		w.Metadata = metadata.String
+		if completedAt.Valid {
+			w.CompletedAt = &completedAt.Time
+		}
+		results = append(results, w)
+	}
+	return results, rows.Err()
+}
+
+// GetItems returns the media items linked to a workflow.
+func (s *Store) GetItems(ctx context.Context, workflowID string) ([]Item, error) {
+	return s.getItems(ctx, workflowID)
+}
+
+func (s *Store) getItems(ctx context.Context, workflowID string) ([]Item, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT workflow_id, media_type, media_id
+		FROM workflow_items WHERE workflow_id = ?`, workflowID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var items []Item
+	for rows.Next() {
+		var item Item
+		if err := rows.Scan(&item.WorkflowID, &item.MediaType, &item.MediaID); err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+
+func (s *Store) getHistory(ctx context.Context, workflowID string) ([]Event, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT id, workflow_id, from_state, to_state, message, created_at
+		FROM workflow_history WHERE workflow_id = ?
+		ORDER BY created_at ASC`, workflowID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var events []Event
+	for rows.Next() {
+		var ev Event
+		var msg sql.NullString
+		if err := rows.Scan(&ev.ID, &ev.WorkflowID, &ev.FromState, &ev.ToState,
+			&msg, &ev.CreatedAt); err != nil {
+			return nil, err
+		}
+		ev.Message = msg.String
+		events = append(events, ev)
+	}
+	return events, rows.Err()
+}
+
+func nullStr(s string) any {
+	if s == "" {
+		return nil
+	}
+	return s
+}
+
+// MetadataFromMap converts a map to JSON metadata string.
+func MetadataFromMap(m map[string]any) string {
+	b, _ := json.Marshal(m)
+	return string(b)
+}

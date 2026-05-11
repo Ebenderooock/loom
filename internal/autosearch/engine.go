@@ -17,12 +17,12 @@ import (
 	"github.com/ebenderooock/loom/internal/auditlog"
 	"github.com/ebenderooock/loom/internal/customformats"
 	"github.com/ebenderooock/loom/internal/downloads"
-	"github.com/ebenderooock/loom/internal/grabs"
 	"github.com/ebenderooock/loom/internal/indexers"
 	"github.com/ebenderooock/loom/internal/movies"
 	"github.com/ebenderooock/loom/internal/parser"
 	"github.com/ebenderooock/loom/internal/qualityprofiles"
 	"github.com/ebenderooock/loom/internal/series"
+	"github.com/ebenderooock/loom/internal/workflows"
 )
 
 // existingQuality represents the quality state of an existing file on disk.
@@ -49,7 +49,7 @@ type Engine struct {
 	dlRegistry   *downloads.Registry
 	movieSvc     movies.Service
 	seriesSvc    series.Service
-	grabStore    *grabs.Store
+	wfEngine     *workflows.Engine
 	logger       *slog.Logger
 	audit        *auditlog.Logger
 }
@@ -63,7 +63,7 @@ func NewEngine(
 	dlRegistry *downloads.Registry,
 	movieSvc movies.Service,
 	seriesSvc series.Service,
-	grabStore *grabs.Store,
+	wfEngine *workflows.Engine,
 	logger *slog.Logger,
 	opts ...EngineOption,
 ) *Engine {
@@ -78,7 +78,7 @@ func NewEngine(
 		dlRegistry:   dlRegistry,
 		movieSvc:     movieSvc,
 		seriesSvc:    seriesSvc,
-		grabStore:    grabStore,
+		wfEngine:     wfEngine,
 		logger:       logger.With("module", "autosearch"),
 	}
 	for _, o := range opts {
@@ -140,30 +140,14 @@ func (e *Engine) SearchAndGrab(ctx context.Context, req SearchRequest) (*SearchR
 		formatScores[fi.FormatID] = fi.Score
 	}
 
-	// Check if this media is already grabbed (avoid duplicate downloads).
-	// Stale grabs (>4h without import) are auto-cleared to allow retries.
-	if e.grabStore != nil && req.MediaID != "" {
-		alreadyGrabbed := false
-		switch req.MediaType {
-		case "movie":
-			if grabbed, err := e.grabStore.GrabbedMovieIDs(ctx, []string{req.MediaID}); err == nil {
-				alreadyGrabbed = grabbed[req.MediaID]
-			}
-			// Self-heal: if grab is stale, clear it and allow re-search.
-			if alreadyGrabbed {
-				const staleGrabAge = 4 * time.Hour
-				if age, exists, _ := e.grabStore.GrabAge(ctx, req.MediaID); exists && age > staleGrabAge {
-					e.logger.Info("clearing stale grab to allow re-search",
-						"media_id", req.MediaID, "age", age.Round(time.Minute))
-					_ = e.grabStore.RemoveByMovie(ctx, req.MediaID)
-					if e.movieSvc != nil {
-						_ = e.movieSvc.SetMovieStatus(ctx, req.MediaID, movies.MovieStatusMissing)
-					}
-					alreadyGrabbed = false
-				}
-			}
+	// Check if this media already has an active workflow (avoid duplicate downloads).
+	if e.wfEngine != nil && req.MediaID != "" {
+		mediaType := workflows.MediaTypeMovie
+		if req.MediaType == "series" || req.MediaType == "episode" {
+			mediaType = workflows.MediaTypeEpisode
 		}
-		if alreadyGrabbed {
+		existing, err := e.wfEngine.Store().FindActiveForMedia(ctx, mediaType, req.MediaID)
+		if err == nil && existing != nil {
 			return &SearchResult{
 				Reason: "already_grabbed",
 			}, nil
@@ -956,21 +940,29 @@ func matchStoredQualityToTier(
 	return 0, false
 }
 
-// recordGrab persists the grab linkage so the UI can show "grabbed" status.
+// recordGrab creates/updates the workflow with grab info so the pipeline can track it.
 func (e *Engine) recordGrab(ctx context.Context, req SearchRequest, grabbed *GrabbedRelease) {
-	if e.grabStore == nil || grabbed == nil {
+	if e.wfEngine == nil || grabbed == nil {
 		return
 	}
 
 	switch req.MediaType {
 	case "movie":
-		if req.MediaID != "" {
-			if err := e.grabStore.RecordMovieGrab(ctx, grabbed.ClientID, grabbed.DownloadID, grabbed.Title, req.MediaID); err != nil {
-				e.logger.Warn("failed to record movie grab", "error", err)
+		if req.MediaID == "" {
+			return
+		}
+		// Create workflow if one doesn't already exist for this search
+		wf, err := e.wfEngine.Store().FindActiveForMedia(ctx, workflows.MediaTypeMovie, req.MediaID)
+		if err != nil || wf == nil {
+			// Start fresh workflow
+			wf, err = e.wfEngine.StartSearch(ctx, workflows.TypeMovieSearch, workflows.MediaTypeMovie, req.QualityProfileID, []string{req.MediaID})
+			if err != nil {
+				e.logger.Warn("failed to create movie workflow", "error", err)
+				return
 			}
-			if err := e.movieSvc.SetMovieStatus(ctx, req.MediaID, movies.MovieStatusDownloading); err != nil {
-				e.logger.Warn("failed to update movie status to downloading", "error", err)
-			}
+		}
+		if err := e.wfEngine.MarkGrabbed(ctx, wf.ID, grabbed.ClientID, grabbed.DownloadID, grabbed.Title); err != nil {
+			e.logger.Warn("failed to mark workflow grabbed", "error", err)
 		}
 
 	case "series", "episode":
@@ -978,7 +970,6 @@ func (e *Engine) recordGrab(ctx context.Context, req SearchRequest, grabbed *Gra
 			return
 		}
 
-		// If we have a season number, use it to filter the episode query
 		var seasonFilter *int
 		if req.Season > 0 {
 			s := req.Season
@@ -987,26 +978,29 @@ func (e *Engine) recordGrab(ctx context.Context, req SearchRequest, grabbed *Gra
 
 		episodes, err := e.seriesSvc.ListEpisodes(ctx, req.MediaID, seasonFilter)
 		if err != nil {
-			e.logger.Warn("failed to list episodes for grab tracking", "error", err)
+			e.logger.Warn("failed to list episodes for workflow tracking", "error", err)
 			return
 		}
 
 		var episodeIDs []string
 		for _, ep := range episodes {
 			if req.Episode > 0 {
-				// Specific episode requested — match by episode number
 				if ep.EpisodeNumber == req.Episode {
 					episodeIDs = append(episodeIDs, ep.ID)
 				}
 			} else {
-				// Season pack — all episodes in the season
 				episodeIDs = append(episodeIDs, ep.ID)
 			}
 		}
 
 		if len(episodeIDs) > 0 {
-			if err := e.grabStore.RecordEpisodeGrab(ctx, grabbed.ClientID, grabbed.DownloadID, grabbed.Title, episodeIDs); err != nil {
-				e.logger.Warn("failed to record episode grab", "error", err)
+			wf, err := e.wfEngine.StartSearch(ctx, workflows.TypeEpisodeSearch, workflows.MediaTypeEpisode, req.QualityProfileID, episodeIDs)
+			if err != nil {
+				e.logger.Warn("failed to create episode workflow", "error", err)
+				return
+			}
+			if err := e.wfEngine.MarkGrabbed(ctx, wf.ID, grabbed.ClientID, grabbed.DownloadID, grabbed.Title); err != nil {
+				e.logger.Warn("failed to mark episode workflow grabbed", "error", err)
 			}
 		}
 	}

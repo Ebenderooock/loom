@@ -10,7 +10,6 @@ import (
 	"github.com/ebenderooock/loom/internal/autosearch"
 	"github.com/ebenderooock/loom/internal/customformats"
 	"github.com/ebenderooock/loom/internal/downloads"
-	"github.com/ebenderooock/loom/internal/grabs"
 	"github.com/ebenderooock/loom/internal/imports"
 	"github.com/ebenderooock/loom/internal/indexers"
 	"github.com/ebenderooock/loom/internal/kernel/config"
@@ -18,17 +17,19 @@ import (
 	"github.com/ebenderooock/loom/internal/safety"
 	"github.com/ebenderooock/loom/internal/server"
 	"github.com/ebenderooock/loom/internal/storage"
+	"github.com/ebenderooock/loom/internal/workflows"
 )
 
 // downloadWiring holds lifecycle objects produced by wireDownloads
 // so the caller can manage their shutdown.
 type downloadWiring struct {
-	importPipeline *imports.ImportPipeline
-	monitorCancel  context.CancelFunc
+	importPipeline  *imports.ImportPipeline
+	monitorCancel   context.CancelFunc
+	schedulerCancel context.CancelFunc
 }
 
 // wireDownloads constructs download-related services (remote paths,
-// blocklist, grabs, autosearch, import pipeline, download monitor)
+// blocklist, workflows, autosearch, import pipeline, download monitor)
 // and mounts them on srv.
 func wireDownloads(
 	ctx context.Context,
@@ -50,11 +51,17 @@ func wireDownloads(
 	blocklistStore := downloads.NewBlocklistStore(db.DB())
 	srv.SetBlocklistStore(blocklistStore)
 
-	// Grab store for tracking active downloads
-	grabStore := grabs.NewStore(db.DB())
-	downloadSvc.SetGrabStore(grabStore)
+	// Workflow engine for tracking active downloads
+	wfStore, err := workflows.NewStore(db.DB())
+	if err != nil {
+		return nil, fmt.Errorf("init workflow store: %w", err)
+	}
+	wfEngine := workflows.NewEngine(wfStore, workflowMediaAdapter{moviesSvc}, logger)
+	wfScheduler := workflows.NewScheduler(wfEngine, logger)
+
+	downloadSvc.SetWorkflowEngine(wfEngine)
 	downloadSvc.SetMovieStatusUpdater(movieStatusAdapter{moviesSvc})
-	srv.SetGrabStore(grabStore)
+	srv.SetWorkflowEngine(wfEngine)
 
 	// Autosearch decision engine
 	cfStore := customformats.NewStore(db.DB())
@@ -62,7 +69,7 @@ func wireDownloads(
 	cfEngine := customformats.NewEngine(cfFormats)
 	autoSearchEngine := autosearch.NewEngine(
 		indexerSvc, media.qpStore, cfEngine, cfStore,
-		downloadSvc.Registry(), moviesSvc, media.seriesSvc, grabStore, logger,
+		downloadSvc.Registry(), moviesSvc, media.seriesSvc, wfEngine, logger,
 		autosearch.WithAuditLogger(auditLogger),
 	)
 	srv.SetAutoSearchEngine(autoSearchEngine)
@@ -80,7 +87,7 @@ func wireDownloads(
 		MoviesSvc:       moviesSvc,
 		SeriesSvc:       media.seriesSvc,
 		LibStore:        media.libStore,
-		GrabStore:       grabStore,
+		WorkflowEngine:  wfEngine,
 		NotifSvc:        media.notifSvc,
 		PostVal:         safety.NewPostValidator(safety.DefaultConfig()),
 		ReviewStore:     safety.NewReviewStore(db.DB()),
@@ -110,7 +117,6 @@ func wireDownloads(
 		CheckForStalled: true,
 		StallHandler:    stallHandler,
 		HistoryStore:    downloadHistoryStore,
-		GrabStore:       grabStore,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("init download monitor: %w", err)
@@ -118,9 +124,17 @@ func wireDownloads(
 	monCtx, monCancel := context.WithCancel(ctx)
 	go downloadMonitor.RunLoop(monCtx)
 
+	// Workflow scheduler — stale detection + prune
+	schedCtx, schedCancel := context.WithCancel(ctx)
+	go wfScheduler.RunLoop(schedCtx)
+
+	// Register workflow API routes
+	// (handled in server.go newMux via wfEngine field)
+
 	return &downloadWiring{
-		importPipeline: importPipeline,
-		monitorCancel:  monCancel,
+		importPipeline:  importPipeline,
+		monitorCancel:   monCancel,
+		schedulerCancel: schedCancel,
 	}, nil
 }
 
@@ -131,4 +145,17 @@ type movieStatusAdapter struct {
 
 func (a movieStatusAdapter) SetMovieStatus(ctx context.Context, movieID string, status string) error {
 	return a.svc.SetMovieStatus(ctx, movieID, movies.MovieStatus(status))
+}
+
+// workflowMediaAdapter adapts movies.Service to workflows.MediaStatusUpdater.
+type workflowMediaAdapter struct {
+	svc movies.Service
+}
+
+func (a workflowMediaAdapter) SetMovieDownloading(ctx context.Context, movieID string) error {
+	return a.svc.SetMovieStatus(ctx, movieID, movies.MovieStatusDownloading)
+}
+
+func (a workflowMediaAdapter) SetMovieMissing(ctx context.Context, movieID string) error {
+	return a.svc.SetMovieStatus(ctx, movieID, movies.MovieStatusMissing)
 }

@@ -12,9 +12,13 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/ebenderooock/loom/internal/grabs"
 	"github.com/ebenderooock/loom/internal/indexers"
 )
+
+// GrabChecker checks which media IDs have active workflows/grabs.
+type GrabChecker interface {
+	ActiveMediaIDs(ctx context.Context, mediaType string, ids []string) (map[string]bool, error)
+}
 
 // derefString returns the value of a pointer or a default value if nil.
 func derefString(s *string, def string) string {
@@ -64,7 +68,7 @@ func Router(service Service) chi.Router {
 }
 
 // RouterWithSearch mounts movies endpoints with optional search-on-add support.
-func RouterWithSearch(service Service, indexerSvc *indexers.Service, grabStore *grabs.Store, opts ...RouterOption) chi.Router {
+func RouterWithSearch(service Service, indexerSvc *indexers.Service, grabStore GrabChecker, opts ...RouterOption) chi.Router {
 	var cfg routerConfig
 	for _, o := range opts {
 		o(&cfg)
@@ -153,7 +157,7 @@ func movieToResponse(m *Movie) map[string]interface{} {
 
 // Handlers
 
-func listMovies(svc Service, grabStore *grabs.Store) http.HandlerFunc {
+func listMovies(svc Service, grabStore GrabChecker) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		limit := 25
 		offset := 0
@@ -260,7 +264,7 @@ func listMovies(svc Service, grabStore *grabs.Store) http.HandlerFunc {
 			for i, m := range movies {
 				movieIDs[i] = m.ID
 			}
-			grabbedSet, _ = grabStore.GrabbedMovieIDs(r.Context(), movieIDs)
+			grabbedSet, _ = grabStore.ActiveMediaIDs(r.Context(), "movie", movieIDs)
 		}
 
 		response := make([]interface{}, 0, len(movies))
@@ -327,7 +331,7 @@ func lookupMovies(svc Service) http.HandlerFunc {
 	}
 }
 
-func getMovie(svc Service, grabStore *grabs.Store) http.HandlerFunc {
+func getMovie(svc Service, grabStore GrabChecker) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id := chi.URLParam(r, "id")
 		if id == "" {
@@ -347,7 +351,7 @@ func getMovie(svc Service, grabStore *grabs.Store) http.HandlerFunc {
 
 		resp := movieToResponse(movie)
 		if grabStore != nil {
-			grabbed, _ := grabStore.GrabbedMovieIDs(r.Context(), []string{movie.ID})
+			grabbed, _ := grabStore.ActiveMediaIDs(r.Context(), "movie", []string{movie.ID})
 			if grabbed[movie.ID] {
 				resp["grabbed"] = true
 			}
