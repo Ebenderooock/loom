@@ -251,6 +251,17 @@ const eventsRoute = createRoute({
   errorComponent: ErrorFallback,
 });
 
+const workflowsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/workflows",
+  component: lazyRouteComponent(
+    () => import("@/pages/workflows"),
+    "WorkflowsPage",
+  ),
+  pendingComponent: PageLoader,
+  errorComponent: ErrorFallback,
+});
+
 const routeTree = rootRoute.addChildren([
   setupRoute,
   indexRoute,
@@ -270,6 +281,7 @@ const routeTree = rootRoute.addChildren([
   qualityProfilesRoute,
   importListsRoute,
   eventsRoute,
+  workflowsRoute,
   settingsRoute,
 ]);
 

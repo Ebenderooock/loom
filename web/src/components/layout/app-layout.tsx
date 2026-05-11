@@ -23,6 +23,7 @@ import {
   SlidersHorizontal,
   Rss,
   Tv,
+  Workflow,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -86,6 +87,7 @@ const NAV_SECTIONS: NavSection[] = [
     items: [
       { to: "/downloads", label: "Downloads", Icon: Download },
       { to: "/activity", label: "History", Icon: ListTodo, badge: "review" },
+      { to: "/workflows", label: "Workflows", Icon: Workflow },
     ],
   },
   {
