@@ -27,6 +27,7 @@ var AuditableTopics = []string{
 	"search.completed",
 	"search.failed",
 	"scan.imported",
+	"movies.status_changed",
 }
 
 // Sink listens on the event bus and projects every auditable event
@@ -194,6 +195,19 @@ func eventToEntry(ev eventbus.Event) *Entry {
 			Level:      "info",
 			Source:     StrPtr("system"),
 		}
+	case movieStatusChanged:
+		return &Entry{
+			Category:   "movie",
+			EventType:  "movie.status_changed",
+			Message:    fmt.Sprintf("Movie status changed: %s (%s → %s)", e.GetTitle(), e.GetOldStatus(), e.GetNewStatus()),
+			Detail:     DetailJSON(map[string]any{"movie_id": e.GetMovieID(), "title": e.GetTitle(), "old_status": e.GetOldStatus(), "new_status": e.GetNewStatus()}),
+			EntityType: StrPtr("movie"),
+			EntityID:   StrPtr(e.GetMovieID()),
+			EntityName: StrPtr(e.GetTitle()),
+			Level:      "info",
+			Source:     StrPtr("system"),
+			OccurredAt: FormatTime(e.GetChangedAt()),
+		}
 	default:
 		return nil
 	}
@@ -291,4 +305,13 @@ type scanImported interface {
 	GetTitle() string
 	GetQuality() string
 	GetFilePath() string
+}
+
+type movieStatusChanged interface {
+	eventbus.Event
+	GetMovieID() string
+	GetTitle() string
+	GetOldStatus() string
+	GetNewStatus() string
+	GetChangedAt() time.Time
 }

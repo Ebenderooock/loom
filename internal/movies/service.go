@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ebenderooock/loom/internal/kernel/eventbus"
 	"github.com/ebenderooock/loom/internal/metadata"
 )
 
@@ -70,6 +71,7 @@ type service struct {
 	repo     Repository
 	metadata MetadataSearcher
 	credits  CreditsProvider
+	bus      eventbus.Bus
 	cache    sync.Map // map[string]*Movie with expiry
 	ttl      time.Duration
 	cfSvc    CustomFormatService
@@ -123,6 +125,13 @@ func WithMetadata(m MetadataSearcher) ServiceOption {
 func WithCredits(c CreditsProvider) ServiceOption {
 	return func(s *service) {
 		s.credits = c
+	}
+}
+
+// WithEventBus sets the event bus for publishing domain events.
+func WithEventBus(bus eventbus.Bus) ServiceOption {
+	return func(s *service) {
+		s.bus = bus
 	}
 }
 
@@ -331,10 +340,37 @@ func (s *service) SetMovieStatus(ctx context.Context, movieID string, status Mov
 	if movieID == "" {
 		return fmt.Errorf("movies: movie ID required")
 	}
+
+	// Load current movie to detect no-op and capture old status for event.
+	movie, err := s.repo.GetMovie(ctx, movieID)
+	if err != nil {
+		return fmt.Errorf("movies: set status: %w", err)
+	}
+	if movie == nil {
+		return fmt.Errorf("movies: movie not found: %s", movieID)
+	}
+
+	oldStatus := movie.Status
+	if oldStatus == status {
+		return nil // no-op
+	}
+
 	if err := s.repo.UpdateMovieStatus(ctx, movieID, status); err != nil {
 		return fmt.Errorf("movies: set status: %w", err)
 	}
 	s.cache.Delete(movieID)
+
+	// Publish status change event for audit log and UI consumers.
+	if s.bus != nil {
+		_ = s.bus.Publish(ctx, &MovieStatusChangedEvent{
+			MovieID:   movieID,
+			Title:     movie.Title,
+			OldStatus: oldStatus,
+			NewStatus: status,
+			ChangedAt: time.Now(),
+		})
+	}
+
 	return nil
 }
 

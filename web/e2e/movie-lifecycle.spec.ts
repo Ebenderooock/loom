@@ -82,7 +82,7 @@ test.describe("Movie Lifecycle", () => {
     await page.goto("/movies");
     await page.locator("main").getByText("Test Movie").first().click();
     await expect(page.locator("[role='dialog'] h2, [data-state='open'] h2").first()).toBeVisible({ timeout: 10000 });
-    await expect(page.getByText("Missing").first()).toBeVisible({ timeout: 5000 });
+    await expect(page.locator("[role='dialog']").getByText("Missing").first()).toBeVisible({ timeout: 5000 });
   });
 
   test("detail sheet shows Downloading badge for downloading status", async ({ page }) => {
