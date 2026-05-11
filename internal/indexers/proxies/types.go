@@ -58,6 +58,7 @@ type SOCKS5Config struct {
 type FlareSolverrConfig struct {
 	URL           string `json:"url"`
 	MaxTimeoutSec int    `json:"max_timeout_sec,omitempty"`
+	SessionMode   string `json:"session_mode,omitempty"` // "shared" or "per-request"; currently informational
 }
 
 // ParseHTTPConfig validates and decodes an http/https config blob.
