@@ -142,3 +142,35 @@ Legend: ✅ done · 🚧 in progress · ⏳ planned
 - ⏳ Storage management (incomplete → complete directory promotion)
 - ⏳ UI: active torrents panel (speed, peers, progress, seed status)
 - ⏳ Optional — removes need for external torrent client entirely
+
+## ⏳ Phase 13 — Media requests (Requestarr/Ombi/Overseerr-equivalent)
+
+- ⏳ User request portal (web UI for friends/family to request movies & series)
+- ⏳ Discord & Telegram bot integration for request submission
+- ⏳ Approval workflows (auto-approve, manual, quota-based)
+- ⏳ Per-user quotas and request limits
+- ⏳ Auto-search on approval (triggers workflow engine)
+- ⏳ Request status tracking & notifications to requestors
+- ⏳ Multi-user auth (invite links, OAuth, or simple PIN-based access)
+
+## ⏳ Phase 14 — Library maintenance (Cleanarr/Maintainerr-equivalent)
+
+- ⏳ Duplicate detection (same media, multiple files/qualities)
+- ⏳ Unmatched media identification (files not linked to any library entry)
+- ⏳ Orphaned download cleanup (completed downloads never imported)
+- ⏳ Quality upgrade cleanup (remove lower quality when upgrade exists)
+- ⏳ Empty folder pruning
+- ⏳ Disk space analysis & recommendations
+- ⏳ Dry-run mode with approval queue before destructive actions
+- ⏳ Scheduled maintenance runs (configurable frequency)
+
+## ⏳ Phase 15 — Media server analytics (Tautulli-equivalent)
+
+- ⏳ Plex / Jellyfin / Emby integration (play session tracking)
+- ⏳ User activity & concurrent stream monitoring
+- ⏳ Most/least watched content reports
+- ⏳ Watch history per user & per media item
+- ⏳ Smart library decisions (flag unwatched content for removal)
+- ⏳ Bandwidth & transcoding stats
+- ⏳ Dashboard widgets (graphs, top content, active streams)
+- ⏳ Notification triggers on activity (new user, stream started, etc.)
