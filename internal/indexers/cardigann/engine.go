@@ -1440,8 +1440,33 @@ func sortedFieldNames(fields map[string]Field) []string {
 
 // parseInt is the small helper used by the engine; matches the
 // newznab package convention.
+// parseInt parses a human-readable integer string. It strips commas,
+// dots used as thousand separators, and other non-digit noise so
+// values like "1,234" or "1.234" (European thousand separator)
+// parse correctly instead of silently returning 0.
 func parseInt(s string) int {
-	n, _ := strconv.Atoi(strings.TrimSpace(s))
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return 0
+	}
+	// Fast path: pure digits (optionally with a leading minus).
+	if n, err := strconv.Atoi(s); err == nil {
+		return n
+	}
+	// Strip thousand separators (commas and dots that aren't decimal).
+	// Heuristic: if the string contains both '.' and ',' treat the
+	// last one as decimal separator and others as thousand separators.
+	// For integers we strip everything non-digit except a leading '-'.
+	cleaned := strings.Map(func(r rune) rune {
+		if r >= '0' && r <= '9' {
+			return r
+		}
+		if r == '-' {
+			return r
+		}
+		return -1 // drop commas, dots, spaces, etc.
+	}, s)
+	n, _ := strconv.Atoi(cleaned)
 	return n
 }
 

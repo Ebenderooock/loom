@@ -292,8 +292,23 @@ func decodeUpstreamError(body []byte) error {
 
 // parseInt is a tiny shared helper so search/result code can keep
 // happy paths readable.
+// parseInt parses a human-readable integer, stripping commas and
+// other thousand separators so "1,234" correctly returns 1234.
 func parseInt(s string) int {
-	n, _ := strconv.Atoi(strings.TrimSpace(s))
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return 0
+	}
+	if n, err := strconv.Atoi(s); err == nil {
+		return n
+	}
+	cleaned := strings.Map(func(r rune) rune {
+		if r >= '0' && r <= '9' || r == '-' {
+			return r
+		}
+		return -1
+	}, s)
+	n, _ := strconv.Atoi(cleaned)
 	return n
 }
 
