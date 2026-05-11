@@ -23,6 +23,7 @@ test.describe("Smoke Tests", () => {
     // Use CSS locator to verify links are in the DOM.
     await expect(page.locator("aside a").filter({ hasText: "Movies" }).first()).toBeAttached();
     await expect(page.locator("aside a").filter({ hasText: "TV Shows" }).first()).toBeAttached();
+    await expect(page.locator("aside a").filter({ hasText: "Workflows" }).first()).toBeAttached();
     await expect(page.locator("aside a").filter({ hasText: "Settings" }).first()).toBeAttached();
   });
 
@@ -30,6 +31,7 @@ test.describe("Smoke Tests", () => {
     await page.goto("/");
     await page.goto("/movies");
     await page.goto("/series");
+    await page.goto("/workflows");
     await page.goto("/settings");
     // No crash = pass — if any page throws, Playwright catches it
   });

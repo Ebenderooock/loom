@@ -384,6 +384,90 @@ export async function mockSettings(page: Page) {
 }
 
 // ---------------------------------------------------------------------------
+// Workflows mocks
+// ---------------------------------------------------------------------------
+
+export const SAMPLE_WORKFLOW_ACTIVE = {
+  id: "wf-1",
+  type: "movie_search",
+  state: "downloading",
+  mediaType: "movie",
+  grabTitle: "Test.Movie.2024.1080p.BluRay.x264",
+  downloadClientId: "dc-1",
+  downloadId: "dl-abc",
+  qualityProfileId: "qp-1",
+  retryCount: 0,
+  maxRetries: 3,
+  lastError: "",
+  createdAt: "2025-01-01T10:00:00Z",
+  updatedAt: "2025-01-01T10:05:00Z",
+  items: [{ workflowId: "wf-1", mediaType: "movie", mediaId: "mov-1" }],
+  history: [],
+};
+
+export const SAMPLE_WORKFLOW_COMPLETED = {
+  id: "wf-2",
+  type: "movie_search",
+  state: "completed",
+  mediaType: "movie",
+  grabTitle: "Another.Movie.2023.720p.WEB-DL",
+  retryCount: 0,
+  maxRetries: 3,
+  createdAt: "2025-01-01T08:00:00Z",
+  updatedAt: "2025-01-01T09:00:00Z",
+  completedAt: "2025-01-01T09:00:00Z",
+  items: [],
+  history: [],
+};
+
+export const SAMPLE_WORKFLOW_FAILED = {
+  id: "wf-3",
+  type: "episode_search",
+  state: "failed",
+  mediaType: "episode",
+  grabTitle: "Test.Show.S01E05.HDTV",
+  retryCount: 3,
+  maxRetries: 3,
+  lastError: "all retries exhausted: no seeders available",
+  createdAt: "2025-01-01T06:00:00Z",
+  updatedAt: "2025-01-01T07:30:00Z",
+  items: [],
+  history: [],
+};
+
+export async function mockWorkflows(
+  page: Page,
+  workflows = [SAMPLE_WORKFLOW_ACTIVE, SAMPLE_WORKFLOW_COMPLETED, SAMPLE_WORKFLOW_FAILED],
+) {
+  await mockGet(page, "workflows", workflows);
+  for (const wf of workflows) {
+    await mockGet(page, `workflows/${wf.id}`, wf);
+  }
+  // Cancel / retry / delete
+  await page.route("**/api/v1/workflows/*/cancel", async (route) => {
+    if (route.request().method() === "POST") {
+      await route.fulfill({ status: 204 });
+    } else {
+      await route.fallback();
+    }
+  });
+  await page.route("**/api/v1/workflows/*/retry", async (route) => {
+    if (route.request().method() === "POST") {
+      await route.fulfill({ status: 204 });
+    } else {
+      await route.fallback();
+    }
+  });
+  await page.route("**/api/v1/workflows/*", async (route) => {
+    if (route.request().method() === "DELETE") {
+      await route.fulfill({ status: 204 });
+    } else {
+      await route.fallback();
+    }
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Search mocks (SSE streaming)
 // ---------------------------------------------------------------------------
 

@@ -9,6 +9,7 @@ const NAV_ITEMS = [
   { label: "Library", path: "/library" },
   { label: "Indexers", path: "/indexers" },
   { label: "Downloads", path: "/downloads" },
+  { label: "Workflows", path: "/workflows" },
   { label: "Settings", path: "/settings" },
 ] as const;
 

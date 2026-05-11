@@ -107,7 +107,7 @@ function filterWorkflows(workflows: Workflow[], filter: Filter): Workflow[] {
 // ─── Main page ──────────────────────────────────────────────────────────
 
 export function WorkflowsPage() {
-  useSetPageHeader({ title: "Workflows", subtitle: "Track search → download → import pipelines" });
+  useSetPageHeader("Workflows", "Track search → download → import pipelines");
 
   const { data: workflows, isLoading, error } = useWorkflows();
   const cancelMut = useCancelWorkflow();
@@ -120,7 +120,7 @@ export function WorkflowsPage() {
     workflow: Workflow;
   } | null>(null);
 
-  if (isLoading) return <LoadingState message="Loading workflows…" />;
+  if (isLoading) return <LoadingState label="Loading workflows…" />;
   if (error) {
     return (
       <div className="p-6">
