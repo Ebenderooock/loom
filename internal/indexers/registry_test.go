@@ -80,7 +80,7 @@ func TestRegistryConcurrentRegisterGet(t *testing.T) {
 func TestRegistrySearchTimeoutGivesPartial(t *testing.T) {
 	t.Parallel()
 	r := indexers.NewRegistry()
-	fast := &fakeIndexer{id: "fast", results: []indexers.Result{{IndexerID: "fast", Title: "ok"}}}
+	fast := &fakeIndexer{id: "fast", results: []indexers.Result{{IndexerID: "fast", Title: "ok", MagnetURI: "magnet:?xt=urn:btih:abc"}}}
 	slow := &fakeIndexer{id: "slow", delay: 200 * time.Millisecond}
 	if err := r.Register(fast); err != nil {
 		t.Fatal(err)
@@ -103,8 +103,8 @@ func TestRegistrySearchTimeoutGivesPartial(t *testing.T) {
 func TestRegistrySearchSelectsByID(t *testing.T) {
 	t.Parallel()
 	r := indexers.NewRegistry()
-	a := &fakeIndexer{id: "a", results: []indexers.Result{{Title: "A"}}}
-	b := &fakeIndexer{id: "b", results: []indexers.Result{{Title: "B"}}}
+	a := &fakeIndexer{id: "a", results: []indexers.Result{{Title: "A", MagnetURI: "magnet:?xt=urn:btih:aaa"}}}
+	b := &fakeIndexer{id: "b", results: []indexers.Result{{Title: "B", MagnetURI: "magnet:?xt=urn:btih:bbb"}}}
 	_ = r.Register(a)
 	_ = r.Register(b)
 	out := r.Search(context.Background(), indexers.Query{}, indexers.SearchOptions{IndexerIDs: []string{"a"}})
@@ -160,10 +160,10 @@ func TestRegistrySearchFiltersByCategory(t *testing.T) {
 		id:   "mixed",
 		name: "mixed-indexer",
 		results: []indexers.Result{
-			{Title: "Avengers 2012 1080p", Category: []indexers.Category{2040}, Seeders: seeders(50)},
-			{Title: "Avengers S01E01", Category: []indexers.Category{5030}, Seeders: seeders(30)},
-			{Title: "Avengers OST", Category: []indexers.Category{3000}, Seeders: seeders(10)},
-			{Title: "Avengers Unknown", Category: nil, Seeders: seeders(5)}, // no category → kept
+			{Title: "Avengers 2012 1080p", Category: []indexers.Category{2040}, Seeders: seeders(50), MagnetURI: "magnet:?xt=urn:btih:m1"},
+			{Title: "Avengers S01E01", Category: []indexers.Category{5030}, Seeders: seeders(30), MagnetURI: "magnet:?xt=urn:btih:m2"},
+			{Title: "Avengers OST", Category: []indexers.Category{3000}, Seeders: seeders(10), MagnetURI: "magnet:?xt=urn:btih:m3"},
+			{Title: "Avengers Unknown", Category: nil, Seeders: seeders(5), MagnetURI: "magnet:?xt=urn:btih:m4"}, // no category → kept
 		},
 	})
 

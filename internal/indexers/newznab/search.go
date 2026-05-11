@@ -144,13 +144,18 @@ func capsSupportsMode(caps indexers.Caps, mode string) bool {
 
 // capsSupportsID checks if the indexer caps include a given ID scheme.
 // Empty SupportedIDs (unknown) means "allow all".
+// idType is the short form (e.g. "tvdb") and we match against both
+// the short form and the suffixed form (e.g. "tvdbid") since upstream
+// caps XML uses the suffixed form in supportedParams.
 func capsSupportsID(caps indexers.Caps, idType string) bool {
 	if len(caps.SupportedIDs) == 0 {
 		return true // Unknown — allow all.
 	}
 	lower := strings.ToLower(idType)
+	suffixed := lower + "id"
 	for _, s := range caps.SupportedIDs {
-		if strings.ToLower(s) == lower {
+		sl := strings.ToLower(s)
+		if sl == lower || sl == suffixed {
 			return true
 		}
 	}
