@@ -287,7 +287,7 @@ func (m *Monitor) RunLoop(ctx context.Context) {
 			}
 			tickCount++
 			if tickCount%pruneEvery == 0 && m.grabStore != nil {
-				const maxAge = 48 * time.Hour
+				const maxAge = 6 * time.Hour
 				if n, err := m.grabStore.PruneStale(ctx, maxAge); err != nil {
 					m.logger.Error("monitor: grab prune failed", "error", err)
 				} else if n > 0 {

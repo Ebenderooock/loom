@@ -141,12 +141,26 @@ func (e *Engine) SearchAndGrab(ctx context.Context, req SearchRequest) (*SearchR
 	}
 
 	// Check if this media is already grabbed (avoid duplicate downloads).
+	// Stale grabs (>4h without import) are auto-cleared to allow retries.
 	if e.grabStore != nil && req.MediaID != "" {
 		alreadyGrabbed := false
 		switch req.MediaType {
 		case "movie":
 			if grabbed, err := e.grabStore.GrabbedMovieIDs(ctx, []string{req.MediaID}); err == nil {
 				alreadyGrabbed = grabbed[req.MediaID]
+			}
+			// Self-heal: if grab is stale, clear it and allow re-search.
+			if alreadyGrabbed {
+				const staleGrabAge = 4 * time.Hour
+				if age, exists, _ := e.grabStore.GrabAge(ctx, req.MediaID); exists && age > staleGrabAge {
+					e.logger.Info("clearing stale grab to allow re-search",
+						"media_id", req.MediaID, "age", age.Round(time.Minute))
+					_ = e.grabStore.RemoveByMovie(ctx, req.MediaID)
+					if e.movieSvc != nil {
+						_ = e.movieSvc.SetMovieStatus(ctx, req.MediaID, movies.MovieStatusMissing)
+					}
+					alreadyGrabbed = false
+				}
 			}
 		}
 		if alreadyGrabbed {

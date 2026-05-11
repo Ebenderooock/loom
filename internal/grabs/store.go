@@ -254,6 +254,24 @@ func (s *Store) PruneStale(ctx context.Context, maxAge time.Duration) (int64, er
 	return res.RowsAffected()
 }
 
+// GrabAge returns how old the grab is for a given movie. Returns zero
+// duration and false if no grab exists.
+func (s *Store) GrabAge(ctx context.Context, movieID string) (time.Duration, bool, error) {
+	var grabbedAt time.Time
+	err := s.db.QueryRowContext(ctx,
+		`SELECT ag.grabbed_at
+		 FROM active_grabs ag
+		 JOIN active_grab_movies agm ON ag.id = agm.grab_id
+		 WHERE agm.movie_id = ?
+		 ORDER BY ag.grabbed_at DESC LIMIT 1`,
+		movieID,
+	).Scan(&grabbedAt)
+	if err != nil {
+		return 0, false, nil // no grab found
+	}
+	return time.Since(grabbedAt), true, nil
+}
+
 // LookupByDownload returns the media linkage for a grab identified by
 // clientID + downloadID. Returns nil if no grab exists.
 func (s *Store) LookupByDownload(ctx context.Context, clientID, downloadID string) (*GrabMedia, error) {
