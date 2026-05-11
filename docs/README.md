@@ -14,6 +14,7 @@ Radarr + Sonarr + Prowlarr. These pages cover the project as it stands today
 | [Observability](observability.md) | Logs, `/metrics`, OpenTelemetry, pprof. |
 | [Storage](storage.md) | SQLite vs Postgres, migrations, backups. |
 | [Security](security.md) | Threat model, secrets, vuln reporting. |
+| [Workflows](workflows.md) | Stateful download tracking, self-healing, retry logic. |
 | [Migration from Radarr/Sonarr/Prowlarr](migration.md) | _Stub — lands in Phase 8._ |
 
 ## For contributors

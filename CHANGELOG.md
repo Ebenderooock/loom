@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Stateful workflow engine** (`internal/workflows/`). Replaces the old stateless
+  "grabs" package with a full state machine tracking search → grab → download →
+  import → completion. Includes automatic retry with exponential backoff (up to 3
+  attempts), stale-download detection (4h timeout), and self-healing that resets
+  media to "missing" on final failure so auto-search can re-acquire. REST API at
+  `/api/v1/workflows` (list, get, cancel, retry, delete). Background scheduler
+  handles stale detection, retry processing, and completed-workflow pruning.
+  See [docs/workflows.md](docs/workflows.md).
+
 - **Phase 5c — Custom formats with Radarr-compatible scoring.** Extends Phase 5b (quality
   definitions/profiles) with flexible release scoring rules. Implements
   `internal/movies/custom_formats.go` service layer with `ValidateCustomFormat()`,

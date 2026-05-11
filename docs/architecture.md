@@ -71,6 +71,7 @@ loom/
 │   ├── movies/                # Radarr-equivalent module       (Phase 5)
 │   ├── series/                # Sonarr-equivalent module       (Phase 6)
 │   ├── downloads/             # download-client adapters       (Phase 3)
+│   ├── workflows/             # stateful workflow engine       (Phase 3)
 │   ├── metadata/              # TMDB/TVDB/IMDB/Trakt providers (Phase 4)
 │   ├── parser/                # release-name parser            (Phase 5)
 │   ├── notifications/         # Discord/Slack/Apprise/...      (Phase 10)
@@ -146,6 +147,36 @@ synthesises a Go `*http.Response` from the FlareSolverr solution
 envelope. CRUD lives at `/api/v1/proxies/*` (registered as a
 `RouteExtension` of the indexers Service so it shares the same auth
 scope). See [indexers-proxies.md](indexers-proxies.md).
+
+## Workflow Engine
+
+See [workflows.md](workflows.md). The `internal/workflows` package
+provides stateful tracking of the entire search → grab → download →
+import pipeline. Every automatic or manual download creates a workflow
+record that progresses through defined states:
+
+```text
+  searching → grabbed → downloading → importing → completed
+                 ↓            ↓            ↓
+              failed ←────────┴────────────┘
+                 ↓
+         (retry with backoff, up to 3 attempts)
+```
+
+The workflow engine replaces the older stateless "grabs" package. Key
+components:
+
+- **Store** — SQLite/Postgres persistence for workflows and their items.
+- **Engine** — State machine transitions, retry logic, media status sync.
+- **Scheduler** — Background loop handling stale detection, auto-retry
+  with exponential backoff, and completed workflow pruning.
+- **API** — REST endpoints at `/api/v1/workflows` for listing, inspection,
+  cancel, retry, and deletion.
+
+The scheduler self-heals: if a download disappears or stalls beyond a
+configurable timeout, the workflow transitions to `failed` and retries
+automatically (up to `MaxRetries`). On final failure, the linked media
+record is reset to `missing` so it re-enters the auto-search queue.
 
 ## Observability
 
