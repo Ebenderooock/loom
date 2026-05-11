@@ -259,6 +259,71 @@ func (m *Matcher) matchSeries(ctx context.Context, p parsedRelease) (*MatchResul
 	}, nil
 }
 
+// MatchExact resolves a known media item (by type and ID) to a destination
+// path without any fuzzy matching. Used for manual matching where the user
+// explicitly links a file to a media item.
+func (m *Matcher) MatchExact(ctx context.Context, mediaType MediaType, mediaID string) (*MatchResult, error) {
+	switch mediaType {
+	case MediaTypeMovie:
+		movie, err := m.moviesSvc.GetMovie(ctx, mediaID)
+		if err != nil {
+			return nil, fmt.Errorf("get movie: %w", err)
+		}
+		lib, err := m.libStore.Get(ctx, movie.LibraryID)
+		if err != nil {
+			return nil, fmt.Errorf("get library: %w", err)
+		}
+		destDir := filepath.Join(lib.Path, sanitizeDirName(fmt.Sprintf("%s (%d)", movie.Title, movie.Year)))
+		return &MatchResult{
+			Matched:   true,
+			MediaType: MediaTypeMovie,
+			MediaID:   movie.ID,
+			Title:     movie.Title,
+			Year:      movie.Year,
+			DestPath:  destDir,
+		}, nil
+
+	case MediaTypeEpisode:
+		ep, err := m.seriesSvc.GetEpisode(ctx, mediaID)
+		if err != nil {
+			return nil, fmt.Errorf("get episode: %w", err)
+		}
+		show, err := m.seriesSvc.GetSeries(ctx, ep.SeriesID)
+		if err != nil {
+			return nil, fmt.Errorf("get series: %w", err)
+		}
+		lib, err := m.libStore.Get(ctx, show.LibraryID)
+		if err != nil {
+			return nil, fmt.Errorf("get library: %w", err)
+		}
+		// Find season number from the populated series
+		seasonNum := 1
+		for _, s := range show.Seasons {
+			if s.ID == ep.SeasonID {
+				seasonNum = s.SeasonNumber
+				break
+			}
+		}
+		destDir := filepath.Join(
+			lib.Path,
+			sanitizeDirName(show.Title),
+			fmt.Sprintf("Season %02d", seasonNum),
+		)
+		return &MatchResult{
+			Matched:   true,
+			MediaType: MediaTypeEpisode,
+			MediaID:   ep.ID,
+			Title:     show.Title,
+			Season:    seasonNum,
+			Episode:   ep.EpisodeNumber,
+			DestPath:  destDir,
+		}, nil
+
+	default:
+		return nil, fmt.Errorf("unsupported media type: %s", mediaType)
+	}
+}
+
 // fuzzyMatchMovie picks the best movie match by title similarity and year.
 func fuzzyMatchMovie(candidates []*movies.Movie, p parsedRelease) *movies.Movie {
 	if len(candidates) == 0 {
