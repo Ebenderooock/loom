@@ -130,3 +130,15 @@ Legend: ✅ done · 🚧 in progress · ⏳ planned
 - ⏳ Wire-compatibility: Radarr/Sonarr/Prowlarr API shape parity
 - ⏳ Migration tooling: `loom migrate import --from {radarr,sonarr,prowlarr}`
 - ⏳ Performance benchmarks, public documentation site, **1.0 release**
+
+## ⏳ Phase 12 — Native torrent client
+
+- ⏳ Embed [anacrolix/torrent](https://github.com/anacrolix/torrent) as built-in BitTorrent engine
+- ⏳ Magnet resolution, DHT, PEX, piece verification
+- ⏳ Seeding with configurable ratio/time limits
+- ⏳ Per-torrent bandwidth control
+- ⏳ Durable resume across restarts (piece state persisted)
+- ⏳ Workflow engine integration (torrent progress → workflow states)
+- ⏳ Storage management (incomplete → complete directory promotion)
+- ⏳ UI: active torrents panel (speed, peers, progress, seed status)
+- ⏳ Optional — removes need for external torrent client entirely
