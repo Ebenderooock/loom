@@ -401,6 +401,7 @@ export function SeriesPage() {
         libraries={libraries}
         onUpdated={handleSeriesUpdated}
         onDeleted={handleSeriesDeleted}
+        onRefresh={fetchAll}
         existingSeriesIds={existingSeriesNumericIds}
       />
 
