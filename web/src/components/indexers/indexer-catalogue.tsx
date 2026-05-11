@@ -271,7 +271,11 @@ export function IndexerCatalogue({ proxies, onCreated, onCancel }: Props) {
                   >
                     <td className="px-3 py-2">
                       <div className="font-medium">{def.name}</div>
-                      <div className="text-xs text-muted-foreground">{def.id}</div>
+                      {def.description ? (
+                        <div className="text-xs text-muted-foreground line-clamp-1">{def.description}</div>
+                      ) : (
+                        <div className="text-xs text-muted-foreground">{def.id}</div>
+                      )}
                     </td>
                     <td className="px-3 py-2 hidden sm:table-cell">
                       {typeBadge(def.type)}
