@@ -56,7 +56,7 @@ type Definition struct {
 	LegacyLinks []string `yaml:"legacylinks,omitempty"`
 
 	// RequestDelay is a Prowlarr-specific rate-limit hint (ms between
-	// requests). Parsed but not enforced by Loom today.
+	// requests). Enforced via throttle rate-limiting when > 0.
 	RequestDelay int `yaml:"requestDelay,omitempty"`
 
 	// Caps describes search modes and the per-tracker → Newznab

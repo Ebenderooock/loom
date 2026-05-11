@@ -136,7 +136,7 @@ func TestParseSearchResponse_MalformedXML(t *testing.T) {
 func TestBuildQuery_Pagination(t *testing.T) {
 	t.Parallel()
 	q := indexers.Query{Term: "ubuntu", Limit: 25, Categories: []indexers.Category{4000}}
-	mode, params := buildQuery(q, Config{})
+	mode, params := buildQuery(q, Config{}, indexers.Caps{})
 	if mode != "search" {
 		t.Errorf("mode = %q, want search", mode)
 	}
@@ -177,7 +177,7 @@ func TestBuildQuery_RoutesToMovieAndTV(t *testing.T) {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			mode, _ := buildQuery(tc.q, Config{})
+			mode, _ := buildQuery(tc.q, Config{}, indexers.Caps{})
 			if mode != tc.want {
 				t.Errorf("mode = %q, want %q", mode, tc.want)
 			}
@@ -187,7 +187,7 @@ func TestBuildQuery_RoutesToMovieAndTV(t *testing.T) {
 
 func TestBuildQuery_StripsIMDBPrefix(t *testing.T) {
 	t.Parallel()
-	_, params := buildQuery(indexers.Query{IMDBID: "tt0111161"}, Config{})
+	_, params := buildQuery(indexers.Query{IMDBID: "tt0111161"}, Config{}, indexers.Caps{})
 	if got := params.Get("imdbid"); got != "0111161" {
 		t.Errorf("imdbid = %q, want 0111161", got)
 	}
