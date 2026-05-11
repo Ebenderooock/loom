@@ -460,6 +460,7 @@ export function SeriesDetailSheet({
   libraries,
   onUpdated,
   onDeleted,
+  onRefresh,
   existingMovieIds = new Set(),
   existingSeriesIds = new Set(),
 }: {
@@ -470,6 +471,7 @@ export function SeriesDetailSheet({
   libraries: Library[];
   onUpdated: (updated: Series) => void;
   onDeleted: (id: string) => void;
+  onRefresh?: () => void;
   existingMovieIds?: Set<number>;
   existingSeriesIds?: Set<number>;
 }) {
@@ -984,7 +986,7 @@ export function SeriesDetailSheet({
           qualityProfiles={profiles}
           existingMovieIds={existingMovieIds}
           existingSeriesIds={existingSeriesIds}
-          onAdded={onUpdated as unknown as () => void}
+          onAdded={onRefresh}
         />
       )}
     </>

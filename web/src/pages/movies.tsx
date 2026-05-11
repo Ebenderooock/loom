@@ -423,6 +423,7 @@ export function MoviesPage() {
         libraries={libraries}
         onUpdated={handleMovieUpdated}
         onDeleted={handleMovieDeleted}
+        onRefresh={() => fetchAll(true)}
         existingMovieIds={existingMovieNumericIds}
       />
 
