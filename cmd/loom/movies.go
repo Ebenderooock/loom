@@ -7,6 +7,7 @@ import (
 
 	"github.com/ebenderooock/loom/internal/auditlog"
 	"github.com/ebenderooock/loom/internal/kernel/config"
+	"github.com/ebenderooock/loom/internal/kernel/eventbus"
 	"github.com/ebenderooock/loom/internal/libraries"
 	"github.com/ebenderooock/loom/internal/metadata"
 	"github.com/ebenderooock/loom/internal/metadata/tmdb"
@@ -24,7 +25,7 @@ const defaultTMDBKey = "eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiI3NzU0NWI2ODU0ZjIzNGZjYjR
 
 // buildMoviesService constructs the movies.Service backed by the storage
 // engine in cfg and returns the wired service.
-func buildMoviesService(ctx context.Context, cfg *config.Config, db storage.DB, logger *slog.Logger) (movies.Service, error) {
+func buildMoviesService(ctx context.Context, cfg *config.Config, db storage.DB, logger *slog.Logger, bus eventbus.Bus) (movies.Service, error) {
 	repo := movies.NewRepository(db.DB())
 
 	// Build metadata service with TMDB provider
@@ -41,7 +42,7 @@ func buildMoviesService(ctx context.Context, cfg *config.Config, db storage.DB, 
 	metadataRepo := metadata.NewSQLiteRepository(db.DB())
 	metadataSvc := metadata.NewService(metadataRepo, []metadata.MetadataProvider{tmdbProvider})
 
-	svc := movies.NewService(repo, movies.WithMetadata(metadataSvc), movies.WithCredits(tmdbClient))
+	svc := movies.NewService(repo, movies.WithMetadata(metadataSvc), movies.WithCredits(tmdbClient), movies.WithEventBus(bus))
 
 	// Seed default quality definitions and profiles on first run
 	movies.SeedDefaults(ctx, svc)

@@ -339,12 +339,16 @@ export function useTestDownloadConfig() {
 
 /**
  * Mutation hook to grab a release (send to a download client).
+ * Invalidates both download and movie queries so the UI reflects the grab.
  */
 export function useGrabRelease() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ clientId, ...body }: GrabRequest & { clientId: string }) =>
       grabRelease(clientId, body),
-    onSuccess: () => qc.invalidateQueries({ queryKey: downloadKeys.all }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: downloadKeys.all });
+      qc.invalidateQueries({ queryKey: ["movies"] });
+    },
   });
 }

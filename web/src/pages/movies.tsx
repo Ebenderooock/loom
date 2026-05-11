@@ -128,9 +128,9 @@ export function MoviesPage() {
   const [detailMovie, setDetailMovie] = useState<Movie | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
 
-  const fetchAll = useCallback(async () => {
+  const fetchAll = useCallback(async (background = false) => {
     if (!isAuthenticated) return;
-    setIsLoading(true);
+    if (!background) setIsLoading(true);
     try {
       const [moviesRes, profilesRes] = await Promise.all([
         apiFetch("/api/v1/movies?limit=200"),
@@ -138,17 +138,30 @@ export function MoviesPage() {
       ]);
       if (moviesRes.ok) {
         const data = await moviesRes.json();
-        setMovies(Array.isArray(data) ? data : data.data ?? []);
+        const fresh: Movie[] = Array.isArray(data) ? data : data.data ?? [];
+        setMovies(fresh);
+        // Reconcile detail sheet with refreshed data
+        setDetailMovie(prev => {
+          if (!prev) return null;
+          return fresh.find(m => m.id === prev.id) ?? prev;
+        });
       }
       if (profilesRes.ok) {
         const data = await profilesRes.json();
         const profiles = data?.data ?? (Array.isArray(data) ? data : []);
         setQualityProfiles(profiles);
       }
-    } catch { /* ignore */ } finally { setIsLoading(false); }
+    } catch { /* ignore */ } finally { if (!background) setIsLoading(false); }
   }, [isAuthenticated]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
+
+  // Background polling every 30s to pick up status changes (grab → downloading → available)
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    const interval = setInterval(() => fetchAll(true), 30_000);
+    return () => clearInterval(interval);
+  }, [isAuthenticated, fetchAll]);
 
   const existingTmdbIds = useMemo(
     () => new Set(movies.map(m => m.tmdbId).filter(Boolean) as string[]),

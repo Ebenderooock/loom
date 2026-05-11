@@ -136,7 +136,8 @@ type Server struct {
 // the /api/v1/indexers/* surface. moviesSvc may be nil to disable the
 // /api/v1/movies/* surface. aggSvc may be nil to disable the
 // Newznab/Torznab aggregator at /api and /api/v1/aggregate.
-func New(cfg *config.Config, appCfg *appconfig.Config, logger *slog.Logger, tel *telemetry.Telemetry, db storage.DB, authSvc *auth.Service, indexerSvc *indexers.Service, moviesSvc movies.Service, aggSvc *newznabserver.Server) (*Server, error) {
+// bus is the shared event bus; if nil a new in-process bus is created.
+func New(cfg *config.Config, appCfg *appconfig.Config, logger *slog.Logger, tel *telemetry.Telemetry, db storage.DB, authSvc *auth.Service, indexerSvc *indexers.Service, moviesSvc movies.Service, aggSvc *newznabserver.Server, bus eventbus.Bus) (*Server, error) {
 	if tel == nil {
 		return nil, errors.New("server: telemetry must not be nil")
 	}
@@ -147,13 +148,17 @@ func New(cfg *config.Config, appCfg *appconfig.Config, logger *slog.Logger, tel 
 		return nil, errors.New("server: appCfg must not be nil")
 	}
 
+	if bus == nil {
+		bus = eventbus.NewInProc()
+	}
+
 	s := &Server{
 		cfg:         cfg,
 		appCfg:      appCfg,
 		logger:      logger,
 		tel:         tel,
 		db:          db,
-		bus:         eventbus.NewInProc(),
+		bus:         bus,
 		authSvc:     authSvc,
 		indexerSvc:  indexerSvc,
 		moviesSvc:   moviesSvc,

@@ -15,6 +15,7 @@ import (
 	"github.com/ebenderooock/loom/internal/auditlog"
 	"github.com/ebenderooock/loom/internal/backup"
 	"github.com/ebenderooock/loom/internal/customformats"
+	"github.com/ebenderooock/loom/internal/kernel/eventbus"
 	"github.com/ebenderooock/loom/internal/migrate"
 	"github.com/ebenderooock/loom/internal/rss"
 	"github.com/ebenderooock/loom/internal/kernel/config"
@@ -135,7 +136,10 @@ func cmdServe(ctx context.Context, args []string) error {
 		return fmt.Errorf("register download health job: %w", err)
 	}
 
-	moviesSvc, err := buildMoviesService(ctx, cfg, db, logger)
+	// Create the shared event bus before server and services that need it.
+	bus := eventbus.NewInProc()
+
+	moviesSvc, err := buildMoviesService(ctx, cfg, db, logger, bus)
 	if err != nil {
 		return fmt.Errorf("init movies: %w", err)
 	}
@@ -158,7 +162,7 @@ func cmdServe(ctx context.Context, args []string) error {
 		return fmt.Errorf("init aggregator: %w", err)
 	}
 
-	srv, err := server.New(cfg, appCfg, logger, tel, db, authSvc, indexerSvc, moviesSvc, aggSvc)
+	srv, err := server.New(cfg, appCfg, logger, tel, db, authSvc, indexerSvc, moviesSvc, aggSvc, bus)
 	if err != nil {
 		return fmt.Errorf("init server: %w", err)
 	}
