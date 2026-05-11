@@ -92,8 +92,8 @@ func (p *ImportPipeline) scanSingleFile(ctx context.Context, filePath string) Sc
 		return result
 	}
 
-	// Try matching
-	match, err := p.matcher.Match(ctx, filepath.Base(filePath))
+	// Try matching using full path (includes parent directory)
+	match, err := p.matcher.MatchPath(ctx, filePath)
 	if err != nil {
 		p.logger.Warn("scan match error", "file", filePath, "error", err)
 		result.SuggestedAction = "manual_review"

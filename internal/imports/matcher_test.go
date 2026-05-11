@@ -23,9 +23,7 @@ func TestParseReleaseName(t *testing.T) {
 		{
 			name:       "movie with year and quality",
 			input:      "The.Matrix.1999.1080p.BluRay.x264-GROUP.mkv",
-			wantTitle:  "The Matrix  GROUP",
-			// cleanTitle replaces hyphens with spaces, so "-GROUP" becomes " GROUP"
-			// and the year "1999" is stripped by parseReleaseName after cleanTitle
+			wantTitle:  "The Matrix",
 			wantYear:   1999,
 			wantSeries: false,
 		},
@@ -48,7 +46,7 @@ func TestParseReleaseName(t *testing.T) {
 		{
 			name:       "movie with parenthesized year",
 			input:      "Inception (2010) 1080p BluRay.mkv",
-			wantTitle:  "Inception ()",
+			wantTitle:  "Inception",
 			wantYear:   2010,
 			wantSeries: false,
 		},
@@ -59,10 +57,10 @@ func TestParseReleaseName(t *testing.T) {
 			wantSeries: false,
 		},
 		{
-			name:       "movie with underscores (year not matched due to underscore boundaries)",
+			name:       "movie with underscores and year",
 			input:      "The_Dark_Knight_2008_BluRay_1080p.mkv",
-			wantTitle:  "The Dark Knight 2008",
-			wantYear:   0,
+			wantTitle:  "The Dark Knight",
+			wantYear:   2008,
 			wantSeries: false,
 		},
 		{
@@ -72,6 +70,41 @@ func TestParseReleaseName(t *testing.T) {
 			wantSeason:  35,
 			wantEpisode: 12,
 			wantSeries:  true,
+		},
+		{
+			name:       "year as part of title preserved",
+			input:      "2001 A Space Odyssey.mkv",
+			wantTitle:  "2001 A Space Odyssey",
+			wantYear:   2001,
+			wantSeries: false,
+		},
+		{
+			name:       "torrent name with MULTI and DTS",
+			input:      "Deadpool.2016.MULTI.1080p.BluRay.x264.DTS-SPARKS.mkv",
+			wantTitle:  "Deadpool",
+			wantYear:   2016,
+			wantSeries: false,
+		},
+		{
+			name:       "bracket tags",
+			input:      "Deadpool (2016) [1080p] [BluRay].mkv",
+			wantTitle:  "Deadpool",
+			wantYear:   2016,
+			wantSeries: false,
+		},
+		{
+			name:        "web-dl series with atmos",
+			input:       "The.Mandalorian.S02E01.1080p.WEB-DL.DDP5.1.Atmos.x264-GROUP.mkv",
+			wantTitle:   "The Mandalorian",
+			wantSeason:  2,
+			wantEpisode: 1,
+			wantSeries:  true,
+		},
+		{
+			name:       "simple name no year",
+			input:      "Deadpool.mkv",
+			wantTitle:  "Deadpool",
+			wantSeries: false,
 		},
 	}
 
@@ -115,6 +148,10 @@ func TestCleanTitle(t *testing.T) {
 		{"empty string", "", ""},
 		{"only quality tags", "1080p BluRay x264", ""},
 		{"mixed separators", "Game.of_Thrones-S01", "Game of Thrones S01"},
+		{"group suffix stripped", "The.Matrix.1999-GROUP", "The Matrix 1999"},
+		{"multi tag stripped", "Deadpool.2016.MULTI.1080p", "Deadpool 2016"},
+		{"empty parens removed", "Movie () stuff", "Movie stuff"},
+		{"empty brackets removed", "Movie [] thing", "Movie thing"},
 	}
 
 	for _, tt := range tests {

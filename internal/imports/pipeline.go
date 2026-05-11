@@ -270,7 +270,7 @@ func (p *ImportPipeline) importSingleFile(ctx context.Context, ev *downloads.Dow
 		p.logger.Warn("grab-based match failed, falling back to fuzzy", "error", err)
 	}
 
-	// Fall back to fuzzy matching by title
+	// Fall back to fuzzy matching by event title
 	if match == nil || !match.Matched {
 		match, err = p.matcher.Match(ctx, ev.Title)
 		if err != nil {
@@ -278,10 +278,10 @@ func (p *ImportPipeline) importSingleFile(ctx context.Context, ev *downloads.Dow
 		}
 	}
 	if !match.Matched {
-		// Try matching by filename
-		match, err = p.matcher.Match(ctx, filepath.Base(mediaFile))
+		// Try matching by full file path (includes parent directory for context)
+		match, err = p.matcher.MatchPath(ctx, mediaFile)
 		if err != nil {
-			return p.recordFailure(ctx, "", "", ev.Title, mediaFile, fmt.Errorf("match by filename: %w", err))
+			return p.recordFailure(ctx, "", "", ev.Title, mediaFile, fmt.Errorf("match by path: %w", err))
 		}
 	}
 	if !match.Matched {
@@ -683,7 +683,7 @@ func (p *ImportPipeline) previewSingleFile(ctx context.Context, filePath string)
 		Reason:   "no match found",
 	}
 
-	match, err := p.matcher.Match(ctx, filepath.Base(filePath))
+	match, err := p.matcher.MatchPath(ctx, filePath)
 	if err != nil {
 		preview.Action = "error"
 		preview.Reason = err.Error()

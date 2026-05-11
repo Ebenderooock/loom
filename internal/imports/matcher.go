@@ -39,14 +39,27 @@ type parsedRelease struct {
 var (
 	// S01E02, s01e02
 	reSeasonEpisode = regexp.MustCompile(`(?i)[Ss](\d{1,2})[Ee](\d{1,3})`)
-	// Year in title: (2023) or .2023.
-	reYear = regexp.MustCompile(`[\.\s\(]?((?:19|20)\d{2})[\.\s\)\-]`)
+	// Year in title: (2023) or .2023. or _2023_ or -2023-
+	reYear = regexp.MustCompile(`[\.\s\(_\-]?((?:19|20)\d{2})[\.\s\)_\-]?`)
+	// Release group suffix: -GROUP at end of name. Must be 4+ alpha chars
+	// (optionally followed by digits) to avoid stripping season markers like -S01.
+	reGroup = regexp.MustCompile(`(?i)\s*-\s*[a-z]{2,}[a-z0-9]*$`)
 )
 
 // parseReleaseName extracts title, year, season, and episode from a release name.
 func parseReleaseName(name string) parsedRelease {
 	// Remove file extension
 	name = strings.TrimSuffix(name, filepath.Ext(name))
+
+	// Strip bracket-enclosed tags early: [1080p], [BluRay], etc.
+	name = regexp.MustCompile(`\[([^\]]*)\]`).ReplaceAllStringFunc(name, func(m string) string {
+		inner := m[1 : len(m)-1]
+		// Keep bracketed content that looks like a year
+		if regexp.MustCompile(`^(19|20)\d{2}$`).MatchString(inner) {
+			return inner // remove brackets, keep year
+		}
+		return "" // strip tag
+	})
 
 	var p parsedRelease
 
@@ -62,11 +75,24 @@ func parseReleaseName(name string) parsedRelease {
 		p.Title = cleanTitle(name)
 	}
 
-	// Extract year
+	// Extract year — match "(2016)" or ".2016." or " 2016 " etc.
 	if m := reYear.FindStringSubmatch(name); len(m) > 1 {
-		p.Year, _ = strconv.Atoi(m[1])
-		// Remove year from title if present
-		p.Title = strings.TrimSpace(strings.Replace(p.Title, m[1], "", 1))
+		yearStr := m[1]
+		p.Year, _ = strconv.Atoi(yearStr)
+
+		// Remove year from title, including surrounding parens if present.
+		// Handle "(2016)", "( 2016 )", and bare "2016".
+		yearWithParens := regexp.MustCompile(`\(\s*` + yearStr + `\s*\)`)
+		if yearWithParens.MatchString(p.Title) {
+			p.Title = yearWithParens.ReplaceAllString(p.Title, "")
+		} else {
+			// Only strip bare year if it's NOT the first word (avoids eating "2001" from "2001 A Space Odyssey")
+			trimmed := strings.TrimSpace(p.Title)
+			if !strings.HasPrefix(trimmed, yearStr) {
+				p.Title = strings.Replace(p.Title, yearStr, "", 1)
+			}
+		}
+		p.Title = strings.TrimSpace(p.Title)
 		p.Title = strings.TrimRight(p.Title, " -.")
 	}
 
@@ -78,12 +104,18 @@ func parseReleaseName(name string) parsedRelease {
 // tags from the tail so that "The.Matrix.1999.1080p.BluRay" becomes
 // "The Matrix".
 func cleanTitle(raw string) string {
+	// Strip release group suffix (e.g., "-GROUP") before separator replacement
+	s := reGroup.ReplaceAllString(raw, "")
+
 	// Replace dots, underscores, and hyphens with spaces
-	s := strings.NewReplacer(".", " ", "_", " ", "-", " ").Replace(raw)
+	s = strings.NewReplacer(".", " ", "_", " ", "-", " ").Replace(s)
 
 	// Remove common quality/codec tags
-	tags := regexp.MustCompile(`(?i)\b(1080p|720p|2160p|4k|bluray|bdrip|brrip|webrip|web-dl|webdl|hdtv|dvdrip|x264|x265|h264|h265|hevc|aac|dts|remux|proper|repack|extended|unrated|directors\s*cut)\b`)
+	tags := regexp.MustCompile(`(?i)\b(1080p|720p|2160p|4k|bluray|blu ray|bdrip|brrip|webrip|web-dl|webdl|hdtv|dvdrip|x264|x265|h264|h265|hevc|aac|dts|remux|proper|repack|extended|unrated|directors\s*cut|10bit|hdr|uhd|amzn|nf|dsnp|hmax|atmos|multi|dual|complete|season|internal)\b`)
 	s = tags.ReplaceAllString(s, "")
+
+	// Remove empty parentheses/brackets left after stripping
+	s = regexp.MustCompile(`[\(\[\{]\s*[\)\]\}]`).ReplaceAllString(s, "")
 
 	// Collapse whitespace
 	s = regexp.MustCompile(`\s+`).ReplaceAllString(s, " ")
@@ -101,6 +133,50 @@ func (m *Matcher) Match(ctx context.Context, filename string) (*MatchResult, err
 		return m.matchSeries(ctx, parsed)
 	}
 	return m.matchMovie(ctx, parsed)
+}
+
+// MatchPath tries to match a file using both the filename and parent
+// directory name, picking the best result. This handles unorganized
+// libraries where the folder name (e.g., "Deadpool (2016)") carries
+// more information than the filename (e.g., "movie.mkv").
+func (m *Matcher) MatchPath(ctx context.Context, filePath string) (*MatchResult, error) {
+	base := filepath.Base(filePath)
+	dir := filepath.Base(filepath.Dir(filePath))
+
+	// 1. Try the filename first
+	result, err := m.Match(ctx, base)
+	if err != nil {
+		return nil, err
+	}
+	if result.Matched {
+		return result, nil
+	}
+
+	// 2. Try the parent directory name (common for organised/semi-organised libraries)
+	if dir != "." && dir != "/" && dir != "" {
+		dirResult, err := m.Match(ctx, dir)
+		if err != nil {
+			return nil, err
+		}
+		if dirResult.Matched {
+			return dirResult, nil
+		}
+	}
+
+	// 3. Try combining directory + filename for more context
+	// e.g., dir="Deadpool" file="2016.mkv" → combined "Deadpool 2016"
+	if dir != "." && dir != "/" && dir != "" {
+		combined := dir + " " + strings.TrimSuffix(base, filepath.Ext(base))
+		combinedResult, err := m.Match(ctx, combined)
+		if err != nil {
+			return nil, err
+		}
+		if combinedResult.Matched {
+			return combinedResult, nil
+		}
+	}
+
+	return &MatchResult{Matched: false}, nil
 }
 
 // matchMovie searches for a movie matching the parsed release name.
