@@ -145,12 +145,21 @@ func (m *Monitor) emitCompletions(ctx context.Context, items []Item) {
 	defer m.mu.Unlock()
 
 	// Build a map of completed items in this sweep, keyed by clientID:itemID.
+	// Seeding counts as "completed" for import purposes — the download is
+	// finished and files are fully available on disk.
 	thisRun := make(map[string]bool)
 	for _, item := range items {
 		key := item.ClientID + ":" + item.ID
-		if item.Status == StatusItemCompleted {
-			// Emit if we haven't seen this item before.
+		if item.Status == StatusItemCompleted || item.Status == StatusItemSeeding {
 			if !m.lastCompleted[key] {
+				// Check history store for idempotency across restarts.
+				if m.historyStore != nil && m.historyStore.WasCompleted(ctx, item.ClientID, item.ID) {
+					m.logger.Debug("monitor: skipping already-completed item",
+						"item_id", item.ID, "client_id", item.ClientID)
+					thisRun[key] = true
+					continue
+				}
+
 				event := &DownloadCompletedEvent{
 					DownloadID:  item.ID,
 					ClientID:    item.ClientID,
@@ -169,7 +178,8 @@ func (m *Monitor) emitCompletions(ctx context.Context, items []Item) {
 				}
 
 				m.logger.Info("monitor: emitted DownloadCompleted",
-					"item_id", item.ID, "client_id", item.ClientID, "title", item.Title)
+					"item_id", item.ID, "client_id", item.ClientID,
+					"title", item.Title, "status", string(item.Status))
 			}
 			thisRun[key] = true
 		}

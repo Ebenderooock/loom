@@ -43,6 +43,18 @@ func (h *HistoryStore) RecordCompletion(ctx context.Context, event *DownloadComp
 	return err
 }
 
+// WasCompleted checks whether a download was already emitted as completed.
+// Used for idempotency across process restarts — prevents re-importing
+// a download that was already handled in a previous session.
+func (h *HistoryStore) WasCompleted(ctx context.Context, clientID, downloadID string) bool {
+	var count int
+	err := h.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM download_history WHERE client_id = ? AND download_id = ? AND status = 'completed'`,
+		clientID, downloadID,
+	).Scan(&count)
+	return err == nil && count > 0
+}
+
 // List returns history entries ordered by completed_at descending.
 func (h *HistoryStore) List(ctx context.Context, limit, offset int) ([]HistoryEntry, error) {
 	if limit <= 0 {

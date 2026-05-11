@@ -600,6 +600,85 @@ func (p *ImportPipeline) ImportManual(ctx context.Context, path string) error {
 	return lastErr
 }
 
+// ImportManualMatch imports a file or folder and directly links it to a
+// specific media item, bypassing fuzzy matching. The user explicitly
+// provides the media_type and media_id, so no guessing is needed.
+func (p *ImportPipeline) ImportManualMatch(ctx context.Context, path string, mediaType MediaType, mediaID string) (*ImportRecord, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil, fmt.Errorf("path not found: %w", err)
+	}
+
+	var mediaFiles []string
+	if info.IsDir() {
+		mediaFiles, err = scanMediaFiles(path)
+		if err != nil {
+			return nil, fmt.Errorf("scan: %w", err)
+		}
+	} else {
+		ext := filepath.Ext(path)
+		if !mediaExtensions[ext] {
+			return nil, fmt.Errorf("not a media file: %s", path)
+		}
+		mediaFiles = []string{path}
+	}
+	if len(mediaFiles) == 0 {
+		return nil, fmt.Errorf("no media files found in %s", path)
+	}
+
+	// Resolve destination using exact match (no fuzzy matching)
+	match, err := p.matcher.MatchExact(ctx, mediaType, mediaID)
+	if err != nil {
+		return nil, fmt.Errorf("resolve media: %w", err)
+	}
+
+	// Ensure destination directory exists
+	if err := os.MkdirAll(match.DestPath, 0755); err != nil {
+		return nil, fmt.Errorf("create destination directory: %w", err)
+	}
+
+	var lastRecord *ImportRecord
+	for _, mf := range mediaFiles {
+		destFile := filepath.Join(match.DestPath, filepath.Base(mf))
+
+		if err := importFile(mf, destFile, p.importMode); err != nil {
+			_ = p.recordFailure(ctx, string(match.MediaType), match.MediaID, filepath.Base(mf), mf, err)
+			continue
+		}
+
+		if err := p.updateLibrary(ctx, match, destFile, mf); err != nil {
+			p.logger.Error("library update failed after manual match import", "error", err)
+			_ = os.Remove(destFile)
+			_ = p.recordFailure(ctx, string(match.MediaType), match.MediaID, filepath.Base(mf), mf, err)
+			continue
+		}
+
+		_ = p.recordStatus(ctx, string(match.MediaType), match.MediaID, mf, destFile, StatusImported, "")
+		p.publishNotification(ctx, match, destFile)
+
+		// Update movie status
+		if match.MediaType == MediaTypeMovie && match.MediaID != "" {
+			_ = p.moviesSvc.SetMovieStatus(ctx, match.MediaID, movies.MovieStatusAvailableRightQuality)
+		}
+
+		lastRecord = &ImportRecord{
+			ID:         uuid.New().String(),
+			MediaType:  match.MediaType,
+			MediaID:    match.MediaID,
+			SourcePath: mf,
+			DestPath:   destFile,
+			ImportMode: p.importMode,
+			Status:     StatusImported,
+			ImportedAt: time.Now().UTC(),
+		}
+	}
+
+	if lastRecord == nil {
+		return nil, fmt.Errorf("all files failed to import from %s", path)
+	}
+	return lastRecord, nil
+}
+
 // ListHistory returns import history records.
 func (p *ImportPipeline) ListHistory(ctx context.Context, limit, offset int) ([]*ImportRecord, error) {
 	if limit <= 0 {

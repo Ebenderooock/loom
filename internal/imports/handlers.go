@@ -13,6 +13,7 @@ func Router(pipeline *ImportPipeline) chi.Router {
 	r := chi.NewRouter()
 	r.Get("/history", handleListHistory(pipeline))
 	r.Post("/manual", handleManualImport(pipeline))
+	r.Post("/manual-match", handleManualMatch(pipeline))
 	r.Post("/reimport", handleReimport(pipeline))
 	r.Post("/scan", handleScanFolder(pipeline))
 	r.Get("/decisions", handleListDecisions(pipeline))
@@ -60,6 +61,32 @@ func handleManualImport(p *ImportPipeline) http.HandlerFunc {
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	}
+}
+
+func handleManualMatch(p *ImportPipeline) http.HandlerFunc {
+	type request struct {
+		Path      string `json:"path"`
+		MediaType string `json:"media_type"`
+		MediaID   string `json:"media_id"`
+	}
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req request
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+			return
+		}
+		if req.Path == "" || req.MediaType == "" || req.MediaID == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "path, media_type, and media_id are required"})
+			return
+		}
+
+		record, err := p.ImportManualMatch(r.Context(), req.Path, MediaType(req.MediaType), req.MediaID)
+		if err != nil {
+			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"data": record})
 	}
 }
 
