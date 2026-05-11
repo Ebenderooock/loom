@@ -106,3 +106,12 @@ func buildSeriesScanner(seriesSvc series.Service, logger *slog.Logger) *scanner.
 func buildNotificationsService(db storage.DB) notifications.Service {
 	return notifications.NewService(db.DB())
 }
+
+// buildTMDBClient constructs a TMDB API client using the configured key.
+func buildTMDBClient() *tmdb.Client {
+	apiKey := os.Getenv("LOOM_TMDB_API_KEY")
+	if apiKey == "" {
+		apiKey = defaultTMDBKey
+	}
+	return tmdb.NewClient(tmdb.Config{APIKey: apiKey})
+}

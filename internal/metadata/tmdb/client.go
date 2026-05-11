@@ -291,6 +291,38 @@ func (c *Client) GetReleaseDates(ctx context.Context, tmdbID int) (theatrical, d
 	return bestTheatrical, bestDigital, nil
 }
 
+// GetPerson fetches person details by TMDb person ID.
+func (c *Client) GetPerson(ctx context.Context, personID int) (*PersonResponse, error) {
+	url := fmt.Sprintf("%s/person/%d", c.config.BaseURL, personID)
+	body, err := c.doRequest(ctx, url)
+	if err != nil {
+		return nil, err
+	}
+
+	var resp PersonResponse
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return nil, fmt.Errorf("tmdb: failed to unmarshal person response: %w", err)
+	}
+
+	return &resp, nil
+}
+
+// GetPersonCredits fetches the combined movie + TV credits for a person.
+func (c *Client) GetPersonCredits(ctx context.Context, personID int) (*CombinedCreditsResponse, error) {
+	url := fmt.Sprintf("%s/person/%d/combined_credits", c.config.BaseURL, personID)
+	body, err := c.doRequest(ctx, url)
+	if err != nil {
+		return nil, err
+	}
+
+	var resp CombinedCreditsResponse
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return nil, fmt.Errorf("tmdb: failed to unmarshal combined credits response: %w", err)
+	}
+
+	return &resp, nil
+}
+
 // doRequest is a helper that adds API key and calls doHTTPRequest.
 func (c *Client) doRequest(ctx context.Context, url string) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)

@@ -168,6 +168,11 @@ export function MoviesPage() {
     [movies],
   );
 
+  const existingMovieNumericIds = useMemo(
+    () => new Set(movies.map(m => m.tmdbId).filter(Boolean).map(Number).filter(n => !isNaN(n))),
+    [movies],
+  );
+
   // Filter + sort pipeline
   const processed = useMemo(() => {
     let list = movies;
@@ -418,6 +423,7 @@ export function MoviesPage() {
         libraries={libraries}
         onUpdated={handleMovieUpdated}
         onDeleted={handleMovieDeleted}
+        existingMovieIds={existingMovieNumericIds}
       />
 
       <BulkDeleteDialog

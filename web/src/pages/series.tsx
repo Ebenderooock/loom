@@ -151,6 +151,11 @@ export function SeriesPage() {
     [seriesList],
   );
 
+  const existingSeriesNumericIds = useMemo(
+    () => new Set(seriesList.map(s => s.tmdbId).filter(Boolean).map(Number).filter(n => !isNaN(n))),
+    [seriesList],
+  );
+
   // Filter + sort pipeline
   const processed = useMemo(() => {
     let list = seriesList;
@@ -396,6 +401,7 @@ export function SeriesPage() {
         libraries={libraries}
         onUpdated={handleSeriesUpdated}
         onDeleted={handleSeriesDeleted}
+        existingSeriesIds={existingSeriesNumericIds}
       />
 
       <BulkDeleteDialog
