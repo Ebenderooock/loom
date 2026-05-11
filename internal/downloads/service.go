@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/ebenderooock/loom/internal/grabs"
+	"github.com/ebenderooock/loom/internal/workflows"
 )
 
 // Clock is the small time abstraction the package uses so tests can
@@ -46,7 +46,7 @@ type ServiceOptions struct {
 	HealthTimeout      time.Duration
 	RouteExtensions    []RouteMounter
 	HistoryStore       *HistoryStore
-	GrabStore          *grabs.Store
+	WorkflowEngine     *workflows.Engine
 	MovieStatusUpdater MovieStatusUpdater
 }
 
@@ -63,7 +63,7 @@ type Service struct {
 	healthTimeout      time.Duration
 	routeExtensions    []RouteMounter
 	historyStore       *HistoryStore
-	grabStore          *grabs.Store
+	wfEngine           *workflows.Engine
 	movieStatusUpdater MovieStatusUpdater
 
 	mu sync.RWMutex
@@ -102,7 +102,7 @@ func NewService(opts ServiceOptions) (*Service, error) {
 		healthTimeout:      opts.HealthTimeout,
 		routeExtensions:    opts.RouteExtensions,
 		historyStore:       opts.HistoryStore,
-		grabStore:          opts.GrabStore,
+		wfEngine:           opts.WorkflowEngine,
 		movieStatusUpdater: opts.MovieStatusUpdater,
 	}, nil
 }
@@ -113,10 +113,10 @@ func (s *Service) Repository() Repository { return s.repo }
 // Registry returns the underlying live-instance registry.
 func (s *Service) Registry() *Registry { return s.registry }
 
-// SetGrabStore sets the active-grabs store for recording manual grab linkage.
-func (s *Service) SetGrabStore(gs *grabs.Store) {
+// SetWorkflowEngine sets the workflow engine for recording manual grab linkage.
+func (s *Service) SetWorkflowEngine(wf *workflows.Engine) {
 	s.mu.Lock()
-	s.grabStore = gs
+	s.wfEngine = wf
 	s.mu.Unlock()
 }
 

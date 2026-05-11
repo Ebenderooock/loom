@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/ebenderooock/loom/internal/workflows"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -741,34 +742,38 @@ func (s *Service) handleHistory(w http.ResponseWriter, r *http.Request) {
 }
 
 // recordManualGrab records grab linkage for interactive search grabs.
-// If no media context is present or no grab store is configured, this is a no-op.
+// If no media context is present or no workflow engine is configured, this is a no-op.
 func (s *Service) recordManualGrab(ctx context.Context, res AddResult, req AddRequest) {
-	if s.grabStore == nil || req.MediaType == "" {
+	if s.wfEngine == nil || req.MediaType == "" {
 		return
 	}
 	var err error
 	switch req.MediaType {
 	case "episode":
 		if len(req.EpisodeIDs) > 0 {
-			err = s.grabStore.RecordEpisodeGrab(ctx, res.ClientID, res.ItemID, req.Title, req.EpisodeIDs)
+			wf, werr := s.wfEngine.StartSearch(ctx, workflows.TypeEpisodeSearch, workflows.MediaTypeEpisode, "", req.EpisodeIDs)
+			if werr != nil {
+				err = werr
+			} else {
+				err = s.wfEngine.MarkGrabbed(ctx, wf.ID, res.ClientID, res.ItemID, req.Title)
+			}
 		}
 	case "movie":
 		if req.MovieID != "" {
-			err = s.grabStore.RecordMovieGrab(ctx, res.ClientID, res.ItemID, req.Title, req.MovieID)
-			if err == nil && s.movieStatusUpdater != nil {
-				if serr := s.movieStatusUpdater.SetMovieStatus(ctx, req.MovieID, "downloading"); serr != nil {
-					s.logger.Warn("failed to update movie status to downloading",
-						"movie_id", req.MovieID, "err", serr)
-				}
+			wf, werr := s.wfEngine.StartSearch(ctx, workflows.TypeMovieSearch, workflows.MediaTypeMovie, "", []string{req.MovieID})
+			if werr != nil {
+				err = werr
+			} else {
+				err = s.wfEngine.MarkGrabbed(ctx, wf.ID, res.ClientID, res.ItemID, req.Title)
 			}
 		}
 	}
 	if err != nil {
-		s.logger.Warn("failed to record manual grab",
+		s.logger.Warn("failed to record manual grab workflow",
 			"client_id", res.ClientID, "item_id", res.ItemID,
 			"media_type", req.MediaType, "err", err)
 	} else {
-		s.logger.Info("recorded manual grab",
+		s.logger.Info("recorded manual grab workflow",
 			"client_id", res.ClientID, "item_id", res.ItemID,
 			"media_type", req.MediaType)
 	}

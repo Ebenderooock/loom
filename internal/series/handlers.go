@@ -12,9 +12,13 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/ebenderooock/loom/internal/grabs"
 	"github.com/ebenderooock/loom/internal/indexers"
 )
+
+// GrabChecker checks which media IDs have active workflows/grabs.
+type GrabChecker interface {
+	ActiveMediaIDs(ctx context.Context, mediaType string, ids []string) (map[string]bool, error)
+}
 
 // UnmonitorOnDeleteChecker checks if a library has unmonitor-on-delete enabled.
 type UnmonitorOnDeleteChecker interface {
@@ -40,7 +44,7 @@ func Router(svc Service) chi.Router {
 }
 
 // RouterWithSearch mounts series endpoints with optional search-on-add support.
-func RouterWithSearch(svc Service, indexerSvc *indexers.Service, grabStore *grabs.Store, opts ...SeriesRouterOption) chi.Router {
+func RouterWithSearch(svc Service, indexerSvc *indexers.Service, grabStore GrabChecker, opts ...SeriesRouterOption) chi.Router {
 	var cfg seriesRouterConfig
 	for _, o := range opts {
 		o(&cfg)
@@ -612,7 +616,7 @@ func listSeasons(svc Service) http.HandlerFunc {
 	}
 }
 
-func listEpisodesHandler(svc Service, grabStore *grabs.Store) http.HandlerFunc {
+func listEpisodesHandler(svc Service, grabStore GrabChecker) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id := chi.URLParam(r, "id")
 		if id == "" {
@@ -644,7 +648,7 @@ func listEpisodesHandler(svc Service, grabStore *grabs.Store) http.HandlerFunc {
 			for i, ep := range episodes {
 				epIDs[i] = ep.ID
 			}
-			grabbedSet, _ = grabStore.GrabbedEpisodeIDs(r.Context(), epIDs)
+			grabbedSet, _ = grabStore.ActiveMediaIDs(r.Context(), "episode", epIDs)
 		}
 
 		response := make([]interface{}, 0, len(episodes))

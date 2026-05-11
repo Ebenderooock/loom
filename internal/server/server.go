@@ -47,7 +47,7 @@ import (
 	"github.com/ebenderooock/loom/internal/buildinfo"
 	"github.com/ebenderooock/loom/internal/customformats"
 	"github.com/ebenderooock/loom/internal/downloads"
-	"github.com/ebenderooock/loom/internal/grabs"
+	"github.com/ebenderooock/loom/internal/workflows"
 	"github.com/ebenderooock/loom/internal/healthmonitor"
 	"github.com/ebenderooock/loom/internal/importlists"
 	"github.com/ebenderooock/loom/internal/imports"
@@ -120,7 +120,7 @@ type Server struct {
 	healthMonitor   *healthmonitor.Monitor
 	auditLog        *auditlog.Logger
 	autoSearchEngine *autosearch.Engine
-	grabStore        *grabs.Store
+	wfEngine         *workflows.Engine
 	periodicScanner  *scheduler.PeriodicScanner
 	syncProfileStore *syncprofiles.Store
 	discoverRouter   http.Handler
@@ -462,9 +462,9 @@ func (s *Server) SetAutoSearchEngine(e *autosearch.Engine) {
 	}
 }
 
-// SetGrabStore sets the active-grabs store for tracking download→media linkage.
-func (s *Server) SetGrabStore(gs *grabs.Store) {
-	s.grabStore = gs
+// SetWorkflowEngine sets the workflow engine for tracking download→media linkage.
+func (s *Server) SetWorkflowEngine(wf *workflows.Engine) {
+	s.wfEngine = wf
 }
 
 // SetSyncProfileStore installs the sync profile store and rebuilds the
@@ -581,7 +581,11 @@ func (s *Server) newMux() http.Handler {
 
 		// Movies routes
 		if s.moviesSvc != nil {
-			moviesRouter := movies.RouterWithSearch(s.moviesSvc, s.indexerSvc, s.grabStore, movies.WithUnmonitorChecker(s.libStore))
+			var grabChk movies.GrabChecker
+			if s.wfEngine != nil {
+				grabChk = s.wfEngine.Store()
+			}
+			moviesRouter := movies.RouterWithSearch(s.moviesSvc, s.indexerSvc, grabChk, movies.WithUnmonitorChecker(s.libStore))
 			if s.scannerSvc != nil {
 				scanner.RegisterRoutes(moviesRouter, s.scannerSvc, s.libStore)
 			}
@@ -593,7 +597,11 @@ func (s *Server) newMux() http.Handler {
 
 		// Series (TV Shows) routes
 		if s.seriesSvc != nil {
-			seriesRouter := series.RouterWithSearch(s.seriesSvc, s.indexerSvc, s.grabStore, series.WithUnmonitorChecker(s.libStore))
+			var seriesGrabChk series.GrabChecker
+			if s.wfEngine != nil {
+				seriesGrabChk = s.wfEngine.Store()
+			}
+			seriesRouter := series.RouterWithSearch(s.seriesSvc, s.indexerSvc, seriesGrabChk, series.WithUnmonitorChecker(s.libStore))
 			if s.seriesScannerSvc != nil {
 				scanner.RegisterSeriesRoutes(seriesRouter, s.seriesScannerSvc, s.libStore)
 			}
@@ -634,6 +642,11 @@ func (s *Server) newMux() http.Handler {
 		// Import pipeline routes
 		if s.importPipeline != nil {
 			r.Mount("/api/v1/imports", imports.Router(s.importPipeline))
+		}
+
+		// Workflow routes
+		if s.wfEngine != nil {
+			r.Mount("/api/v1/workflows", workflows.Router(s.wfEngine))
 		}
 
 		// Custom formats routes

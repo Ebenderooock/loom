@@ -13,13 +13,13 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/ebenderooock/loom/internal/downloads"
-	"github.com/ebenderooock/loom/internal/grabs"
 	"github.com/ebenderooock/loom/internal/kernel/eventbus"
 	"github.com/ebenderooock/loom/internal/libraries"
 	"github.com/ebenderooock/loom/internal/movies"
 	"github.com/ebenderooock/loom/internal/notifications"
 	"github.com/ebenderooock/loom/internal/safety"
 	"github.com/ebenderooock/loom/internal/series"
+	"github.com/ebenderooock/loom/internal/workflows"
 )
 
 // PipelineOptions configures the ImportPipeline.
@@ -31,7 +31,7 @@ type PipelineOptions struct {
 	MoviesSvc        movies.Service
 	SeriesSvc        series.Service
 	LibStore         *libraries.Store
-	GrabStore        *grabs.Store
+	WorkflowEngine   *workflows.Engine
 	NotifSvc         notifications.Service
 	PostVal          *safety.PostValidator
 	ReviewStore      *safety.ReviewStore
@@ -47,7 +47,7 @@ type ImportPipeline struct {
 	downloadSvc     *downloads.Service
 	remotePathStore *downloads.RemotePathStore
 	matcher         *Matcher
-	grabStore       *grabs.Store
+	wfEngine        *workflows.Engine
 	moviesSvc       movies.Service
 	notifSvc        notifications.Service
 	postVal         *safety.PostValidator
@@ -90,7 +90,7 @@ func NewPipeline(opts PipelineOptions) (*ImportPipeline, error) {
 		downloadSvc:     opts.DownloadSvc,
 		remotePathStore: opts.RemotePathStore,
 		matcher:         NewMatcher(opts.MoviesSvc, opts.SeriesSvc, opts.LibStore),
-		grabStore:       opts.GrabStore,
+		wfEngine:        opts.WorkflowEngine,
 		moviesSvc:       opts.MoviesSvc,
 		notifSvc:        opts.NotifSvc,
 		postVal:         opts.PostVal,
@@ -131,15 +131,13 @@ func (p *ImportPipeline) handleCompleted(ctx context.Context, ev eventbus.Event)
 	if err != nil {
 		p.logger.Error("failed to resolve download path", "error", err, "title", completed.Title)
 		p.recordFailure(ctx, "", "", completed.Title, "", err)
-		// Self-heal: clean up the grab so the user can re-search.
-		p.cleanupGrabOnFailure(ctx, completed)
+		p.markWorkflowFailed(ctx, completed, err)
 		return nil // don't block the event bus
 	}
 
 	if err := p.processImport(ctx, completed, downloadPath); err != nil {
 		p.logger.Error("import failed", "error", err, "title", completed.Title, "path", downloadPath)
-		// Self-heal: clean up the grab so the user can re-search.
-		p.cleanupGrabOnFailure(ctx, completed)
+		p.markWorkflowFailed(ctx, completed, err)
 		return nil
 	}
 	return nil
@@ -332,46 +330,54 @@ func (p *ImportPipeline) importSingleFile(ctx context.Context, ev *downloads.Dow
 		DestPath:  destFile,
 	})
 
-	// Clean up grab tracking now that import succeeded
-	p.cleanupGrab(ctx, ev, match)
+	// Mark workflow completed now that import succeeded
+	p.markWorkflowCompleted(ctx, ev)
 
 	return nil
 }
 
-// matchByGrab attempts to match using exact grab linkage data recorded
+// matchByGrab attempts to match using workflow linkage data recorded
 // when the download was initiated. This is the most reliable path for
 // Loom-originated downloads since it avoids fuzzy title matching.
 func (p *ImportPipeline) matchByGrab(ctx context.Context, ev *downloads.DownloadCompletedEvent) (*MatchResult, error) {
-	if p.grabStore == nil || ev.ClientID == "" || ev.DownloadID == "" {
+	if p.wfEngine == nil || ev.ClientID == "" || ev.DownloadID == "" {
 		return nil, nil
 	}
 
-	gm, err := p.grabStore.LookupByDownload(ctx, ev.ClientID, ev.DownloadID)
+	wf, err := p.wfEngine.Store().FindByDownload(ctx, ev.ClientID, ev.DownloadID)
 	if err != nil {
 		return nil, err
 	}
-	if gm == nil {
+	if wf == nil {
+		return nil, nil
+	}
+
+	// Get linked media items from the workflow
+	items, err := p.wfEngine.Store().GetItems(ctx, wf.ID)
+	if err != nil {
+		return nil, fmt.Errorf("get workflow items: %w", err)
+	}
+	if len(items) == 0 {
 		return nil, nil
 	}
 
 	// Episode-based match
-	if len(gm.EpisodeIDs) > 0 {
-		ep, err := p.matcher.seriesSvc.GetEpisode(ctx, gm.EpisodeIDs[0])
+	if items[0].MediaType == workflows.MediaTypeEpisode {
+		ep, err := p.matcher.seriesSvc.GetEpisode(ctx, items[0].MediaID)
 		if err != nil {
-			return nil, fmt.Errorf("get episode from grab: %w", err)
+			return nil, fmt.Errorf("get episode from workflow: %w", err)
 		}
 		s, err := p.matcher.seriesSvc.GetSeries(ctx, ep.SeriesID)
 		if err != nil {
-			return nil, fmt.Errorf("get series from grab: %w", err)
+			return nil, fmt.Errorf("get series from workflow: %w", err)
 		}
 		lib, err := p.matcher.libStore.Get(ctx, s.LibraryID)
 		if err != nil {
-			return nil, fmt.Errorf("get library from grab: %w", err)
+			return nil, fmt.Errorf("get library from workflow: %w", err)
 		}
-		// Look up the season to get the season number
 		seasons, err := p.matcher.seriesSvc.ListSeasons(ctx, ep.SeriesID)
 		if err != nil {
-			return nil, fmt.Errorf("list seasons from grab: %w", err)
+			return nil, fmt.Errorf("list seasons from workflow: %w", err)
 		}
 		seasonNum := 1
 		for _, sn := range seasons {
@@ -385,7 +391,7 @@ func (p *ImportPipeline) matchByGrab(ctx context.Context, ev *downloads.Download
 			sanitizeDirName(s.Title),
 			fmt.Sprintf("Season %02d", seasonNum),
 		)
-		p.logger.Info("matched via grab linkage",
+		p.logger.Info("matched via workflow linkage",
 			"media_type", "episode", "series", s.Title,
 			"season", seasonNum, "episode", ep.EpisodeNumber)
 		return &MatchResult{
@@ -401,17 +407,17 @@ func (p *ImportPipeline) matchByGrab(ctx context.Context, ev *downloads.Download
 	}
 
 	// Movie-based match
-	if len(gm.MovieIDs) > 0 {
-		mv, err := p.matcher.moviesSvc.GetMovie(ctx, gm.MovieIDs[0])
+	if items[0].MediaType == workflows.MediaTypeMovie {
+		mv, err := p.matcher.moviesSvc.GetMovie(ctx, items[0].MediaID)
 		if err != nil {
-			return nil, fmt.Errorf("get movie from grab: %w", err)
+			return nil, fmt.Errorf("get movie from workflow: %w", err)
 		}
 		lib, err := p.matcher.libStore.Get(ctx, mv.LibraryID)
 		if err != nil {
-			return nil, fmt.Errorf("get library from grab: %w", err)
+			return nil, fmt.Errorf("get library from workflow: %w", err)
 		}
 		destDir := filepath.Join(lib.Path, sanitizeDirName(fmt.Sprintf("%s (%d)", mv.Title, mv.Year)))
-		p.logger.Info("matched via grab linkage",
+		p.logger.Info("matched via workflow linkage",
 			"media_type", "movie", "title", mv.Title)
 		return &MatchResult{
 			Matched:   true,
@@ -426,73 +432,36 @@ func (p *ImportPipeline) matchByGrab(ctx context.Context, ev *downloads.Download
 	return nil, nil
 }
 
-// cleanupGrabOnFailure removes the grab tracking and resets movie status
-// when an import fails. This "self-heals" the system so the user can
-// re-search instead of being stuck with "already grabbed" forever.
-func (p *ImportPipeline) cleanupGrabOnFailure(ctx context.Context, ev *downloads.DownloadCompletedEvent) {
-	if p.grabStore == nil {
+// markWorkflowFailed marks the workflow as failed, which triggers retry logic
+// in the workflow engine. On final failure, the scheduler will reset media status.
+func (p *ImportPipeline) markWorkflowFailed(ctx context.Context, ev *downloads.DownloadCompletedEvent, importErr error) {
+	if p.wfEngine == nil || ev.ClientID == "" || ev.DownloadID == "" {
 		return
 	}
 
-	// Look up which media this grab was linked to so we can reset status.
-	gm, err := p.grabStore.LookupByDownload(ctx, ev.ClientID, ev.DownloadID)
-	if err != nil {
-		p.logger.Warn("grab lookup failed during failure cleanup", "error", err)
+	wf, err := p.wfEngine.Store().FindByDownload(ctx, ev.ClientID, ev.DownloadID)
+	if err != nil || wf == nil {
+		return
 	}
 
-	// Remove the grab record.
-	if ev.ClientID != "" && ev.DownloadID != "" {
-		if err := p.grabStore.RemoveByDownload(ctx, ev.ClientID, ev.DownloadID); err != nil {
-			p.logger.Warn("grab cleanup on failure failed", "error", err)
-		} else {
-			p.logger.Info("grab cleaned up after import failure",
-				"client_id", ev.ClientID, "download_id", ev.DownloadID)
-		}
-	}
-
-	// Reset movie status back to "missing" so auto-search can retry.
-	if gm != nil {
-		for _, movieID := range gm.MovieIDs {
-			if err := p.moviesSvc.SetMovieStatus(ctx, movieID, movies.MovieStatusMissing); err != nil {
-				p.logger.Error("failed to reset movie status after import failure",
-					"movie_id", movieID, "error", err)
-			} else {
-				p.logger.Info("reset movie status to missing after import failure",
-					"movie_id", movieID)
-			}
-		}
+	if err := p.wfEngine.MarkFailed(ctx, wf.ID, importErr.Error()); err != nil {
+		p.logger.Warn("failed to mark workflow as failed", "workflow_id", wf.ID, "error", err)
 	}
 }
 
-// cleanupGrab removes the grab tracking entry after a successful import.
-// Uses download-level removal (clientID + downloadID) when available,
-// falling back to per-media removal.
-func (p *ImportPipeline) cleanupGrab(ctx context.Context, ev *downloads.DownloadCompletedEvent, match *MatchResult) {
-	if p.grabStore == nil {
+// markWorkflowCompleted marks the workflow as completed after a successful import.
+func (p *ImportPipeline) markWorkflowCompleted(ctx context.Context, ev *downloads.DownloadCompletedEvent) {
+	if p.wfEngine == nil || ev.ClientID == "" || ev.DownloadID == "" {
 		return
 	}
 
-	// Try download-level cleanup first (most precise)
-	if ev.ClientID != "" && ev.DownloadID != "" {
-		if err := p.grabStore.RemoveByDownload(ctx, ev.ClientID, ev.DownloadID); err != nil {
-			p.logger.Warn("grab cleanup by download failed", "error", err)
-		} else {
-			p.logger.Debug("grab cleaned up by download",
-				"client_id", ev.ClientID, "download_id", ev.DownloadID)
-			return
-		}
+	wf, err := p.wfEngine.Store().FindByDownload(ctx, ev.ClientID, ev.DownloadID)
+	if err != nil || wf == nil {
+		return
 	}
 
-	// Fallback: per-media cleanup
-	switch match.MediaType {
-	case MediaTypeEpisode:
-		if err := p.grabStore.RemoveByEpisode(ctx, match.MediaID); err != nil {
-			p.logger.Warn("grab cleanup by episode failed", "error", err)
-		}
-	case MediaTypeMovie:
-		if err := p.grabStore.RemoveByMovie(ctx, match.MediaID); err != nil {
-			p.logger.Warn("grab cleanup by movie failed", "error", err)
-		}
+	if err := p.wfEngine.MarkCompleted(ctx, wf.ID, "import successful"); err != nil {
+		p.logger.Warn("failed to mark workflow as completed", "workflow_id", wf.ID, "error", err)
 	}
 }
 
