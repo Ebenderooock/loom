@@ -16,12 +16,13 @@ type Kind string
 // Built-in kinds that ship with the downloads core. Real kinds land
 // in later phases and register themselves during their package init.
 const (
-	KindNull         Kind = "builtin/null"
-	KindQBittorrent  Kind = "qbittorrent"
-	KindTransmission Kind = "transmission"
-	KindDeluge       Kind = "deluge"
-	KindSABnzbd      Kind = "sabnzbd"
-	KindNZBGet       Kind = "nzbget"
+	KindNull            Kind = "builtin/null"
+	KindBuiltinTorrent  Kind = "builtin/torrent"
+	KindQBittorrent     Kind = "qbittorrent"
+	KindTransmission    Kind = "transmission"
+	KindDeluge          Kind = "deluge"
+	KindSABnzbd         Kind = "sabnzbd"
+	KindNZBGet          Kind = "nzbget"
 )
 
 // Protocol is the wire family the kind speaks. We model only torrent
