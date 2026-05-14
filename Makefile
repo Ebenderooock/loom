@@ -13,26 +13,31 @@ LDFLAGS := -s -w \
 	-X $(PKG)/internal/buildinfo.Commit=$(COMMIT) \
 	-X $(PKG)/internal/buildinfo.Date=$(DATE)
 
+# TAGS includes nosqlite to prevent the anacrolix/torrent sqlite piece
+# completion from linking its own embedded C sqlite3, which conflicts
+# with the mattn/go-sqlite3 used by the rest of Loom.
+TAGS ?= nosqlite
+
 .PHONY: all build test lint fmt vet tidy run dev clean docker sync-definitions help
 
 all: lint test build ## Lint, test, and build
 
 build: ## Build the loom binary (API only, no embedded UI)
 	@mkdir -p $(DIST)
-	$(GO) build -trimpath -ldflags '$(LDFLAGS)' -o $(DIST)/$(BIN) ./cmd/loom
+	$(GO) build -trimpath -tags '$(TAGS)' -ldflags '$(LDFLAGS)' -o $(DIST)/$(BIN) ./cmd/loom
 
 build-all: web-build ## Build the loom binary with embedded React UI
 	@mkdir -p $(DIST)
-	$(GO) build -trimpath -tags embed -ldflags '$(LDFLAGS)' -o $(DIST)/$(BIN) ./cmd/loom
+	$(GO) build -trimpath -tags 'embed $(TAGS)' -ldflags '$(LDFLAGS)' -o $(DIST)/$(BIN) ./cmd/loom
 
 web-build: ## Build the React frontend into web/dist
 	cd web && npm ci --no-audit --no-fund && npm run build
 
 test: ## Run unit tests with race detector and coverage
-	$(GO) test -race -count=1 -coverprofile=coverage.out ./...
+	$(GO) test -race -count=1 -tags '$(TAGS)' -coverprofile=coverage.out ./...
 
 test-short: ## Run only short tests
-	$(GO) test -short -count=1 ./...
+	$(GO) test -short -count=1 -tags '$(TAGS)' ./...
 
 lint: ## Run golangci-lint
 	@command -v golangci-lint >/dev/null 2>&1 || { \
@@ -45,7 +50,7 @@ fmt: ## Format Go code
 	$(GO) fmt ./...
 
 vet: ## Run go vet
-	$(GO) vet ./...
+	$(GO) vet -tags '$(TAGS)' ./...
 
 tidy: ## go mod tidy
 	$(GO) mod tidy
@@ -62,12 +67,12 @@ clean: ## Remove build artifacts
 
 cross: web-build ## Cross-compile for common platforms (Linux amd64, ARM64, Windows, macOS)
 	@mkdir -p $(DIST)
-	GOOS=linux   GOARCH=amd64 $(GO) build -trimpath -tags embed -ldflags '$(LDFLAGS)' -o $(DIST)/$(BIN)-linux-amd64   ./cmd/loom
-	GOOS=linux   GOARCH=arm64 $(GO) build -trimpath -tags embed -ldflags '$(LDFLAGS)' -o $(DIST)/$(BIN)-linux-arm64   ./cmd/loom
-	GOOS=linux   GOARCH=arm   GOARM=7 $(GO) build -trimpath -tags embed -ldflags '$(LDFLAGS)' -o $(DIST)/$(BIN)-linux-armv7 ./cmd/loom
-	GOOS=darwin  GOARCH=arm64 $(GO) build -trimpath -tags embed -ldflags '$(LDFLAGS)' -o $(DIST)/$(BIN)-darwin-arm64  ./cmd/loom
-	GOOS=darwin  GOARCH=amd64 $(GO) build -trimpath -tags embed -ldflags '$(LDFLAGS)' -o $(DIST)/$(BIN)-darwin-amd64  ./cmd/loom
-	GOOS=windows GOARCH=amd64 $(GO) build -trimpath -tags embed -ldflags '$(LDFLAGS)' -o $(DIST)/$(BIN)-windows-amd64.exe ./cmd/loom
+	GOOS=linux   GOARCH=amd64 $(GO) build -trimpath -tags 'embed $(TAGS)' -ldflags '$(LDFLAGS)' -o $(DIST)/$(BIN)-linux-amd64   ./cmd/loom
+	GOOS=linux   GOARCH=arm64 $(GO) build -trimpath -tags 'embed $(TAGS)' -ldflags '$(LDFLAGS)' -o $(DIST)/$(BIN)-linux-arm64   ./cmd/loom
+	GOOS=linux   GOARCH=arm   GOARM=7 $(GO) build -trimpath -tags 'embed $(TAGS)' -ldflags '$(LDFLAGS)' -o $(DIST)/$(BIN)-linux-armv7 ./cmd/loom
+	GOOS=darwin  GOARCH=arm64 $(GO) build -trimpath -tags 'embed $(TAGS)' -ldflags '$(LDFLAGS)' -o $(DIST)/$(BIN)-darwin-arm64  ./cmd/loom
+	GOOS=darwin  GOARCH=amd64 $(GO) build -trimpath -tags 'embed $(TAGS)' -ldflags '$(LDFLAGS)' -o $(DIST)/$(BIN)-darwin-amd64  ./cmd/loom
+	GOOS=windows GOARCH=amd64 $(GO) build -trimpath -tags 'embed $(TAGS)' -ldflags '$(LDFLAGS)' -o $(DIST)/$(BIN)-windows-amd64.exe ./cmd/loom
 	@echo "Built binaries:" && ls -lh $(DIST)/$(BIN)-*
 
 docker: ## Build the local Docker image

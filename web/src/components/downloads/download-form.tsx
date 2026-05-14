@@ -17,6 +17,12 @@ const DOWNLOAD_KINDS: {
   helper: string;
 }[] = [
   {
+    value: "builtin/torrent",
+    label: "Built-in (Torrent)",
+    protocol: "torrent",
+    helper: "Loom's native BitTorrent engine — no external client needed.",
+  },
+  {
     value: "qbittorrent",
     label: "qBittorrent",
     protocol: "torrent",
@@ -64,6 +70,7 @@ export interface DownloadFormValues {
   save_path_default: string;
   remove_completed: boolean;
   remove_failed: boolean;
+  config?: Record<string, unknown>;
 }
 
 export interface DownloadFormErrors {
@@ -71,7 +78,10 @@ export interface DownloadFormErrors {
   host?: string;
   port?: string;
   priority?: string;
+  download_dir?: string;
 }
+
+const BUILTIN_KINDS = new Set<string>(["builtin/torrent"]);
 
 export function validateDownloadForm(
   values: DownloadFormValues,
@@ -80,11 +90,19 @@ export function validateDownloadForm(
   if (!values.name.trim()) {
     errors.name = "Give the download client a recognizable name.";
   }
-  if (!values.host.trim()) {
-    errors.host = "Enter the host address (e.g., localhost or 192.168.1.100).";
+  if (!BUILTIN_KINDS.has(values.kind)) {
+    if (!values.host.trim()) {
+      errors.host = "Enter the host address (e.g., localhost or 192.168.1.100).";
+    }
+    if (!Number.isFinite(values.port) || values.port < 1 || values.port > 65535) {
+      errors.port = "Port must be between 1 and 65535.";
+    }
   }
-  if (!Number.isFinite(values.port) || values.port < 1 || values.port > 65535) {
-    errors.port = "Port must be between 1 and 65535.";
+  if (values.kind === "builtin/torrent") {
+    const downloadDir = (values.config?.download_dir as string) ?? "";
+    if (!downloadDir.trim()) {
+      errors.download_dir = "Download directory is required.";
+    }
   }
   if (
     !Number.isFinite(values.priority) ||
@@ -119,8 +137,9 @@ export function DownloadForm({
   const isEdit = Boolean(initial);
 
   const [values, setValues] = React.useState<DownloadFormValues>(() => {
-    const kind = (initial?.kind as DownloadKind) ?? "qbittorrent";
+    const kind = (initial?.kind as DownloadKind) ?? "builtin/torrent";
     const kindDef = DOWNLOAD_KINDS.find((k) => k.value === kind);
+    const isBuiltin = BUILTIN_KINDS.has(kind);
     return {
       id: initial?.id,
       kind,
@@ -128,8 +147,8 @@ export function DownloadForm({
       protocol: initial?.protocol ?? kindDef?.protocol ?? "torrent",
       enabled: initial?.enabled ?? true,
       priority: initial?.priority ?? 25,
-      host: initial?.host ?? "localhost",
-      port: initial?.port ?? 6881,
+      host: initial?.host ?? (isBuiltin ? "" : "localhost"),
+      port: initial?.port ?? (isBuiltin ? 6881 : 8080),
       tls: initial?.tls ?? false,
       username: initial?.username ?? "",
       password: "",
@@ -137,6 +156,21 @@ export function DownloadForm({
       save_path_default: initial?.save_path_default ?? "",
       remove_completed: initial?.remove_completed ?? false,
       remove_failed: initial?.remove_failed ?? false,
+      config: (initial?.config as Record<string, unknown>) ?? (isBuiltin ? {
+        listen_port: 6881,
+        download_dir: "",
+        incomplete_dir: "",
+        seed_ratio_limit: 1.0,
+        seed_time_limit_minutes: 0,
+        max_connections: 200,
+        max_upload_slots: 50,
+        enable_dht: true,
+        enable_pex: true,
+        enable_upnp: false,
+        download_speed_limit: 0,
+        upload_speed_limit: 0,
+        max_active_torrents: 25,
+      } : undefined),
     };
   });
 
@@ -191,11 +225,42 @@ export function DownloadForm({
 
   function handleKindChange(newKind: DownloadKind) {
     const kindDef = DOWNLOAD_KINDS.find((k) => k.value === newKind);
+    const isBuiltin = BUILTIN_KINDS.has(newKind);
     update("kind", newKind);
     if (kindDef) {
       update("protocol", kindDef.protocol);
     }
+    if (isBuiltin) {
+      update("host", "");
+      update("config", {
+        listen_port: 6881,
+        download_dir: "",
+        incomplete_dir: "",
+        seed_ratio_limit: 1.0,
+        seed_time_limit_minutes: 0,
+        max_connections: 200,
+        max_upload_slots: 50,
+        enable_dht: true,
+        enable_pex: true,
+        enable_upnp: false,
+        download_speed_limit: 0,
+        upload_speed_limit: 0,
+        max_active_torrents: 25,
+      });
+    } else {
+      update("host", "localhost");
+      update("config", undefined);
+    }
   }
+
+  function updateConfig(key: string, val: unknown) {
+    setValues((v) => ({
+      ...v,
+      config: { ...v.config, [key]: val },
+    }));
+  }
+
+  const isBuiltinKind = BUILTIN_KINDS.has(values.kind);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -262,89 +327,266 @@ export function DownloadForm({
         ) : null}
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <div className="grid gap-2">
-          <Label htmlFor="download-host">Your host</Label>
-          <Input
-            id="download-host"
-            value={values.host}
-            onChange={(e) => update("host", e.target.value)}
-            placeholder="localhost"
-            aria-invalid={Boolean(errors.host)}
-            aria-describedby={errors.host ? "download-host-error" : undefined}
-          />
-          {errors.host ? (
-            <p id="download-host-error" className="text-xs text-red-600">
-              {errors.host}
+      {isBuiltinKind ? (
+        <>
+          <div className="grid gap-2">
+            <Label htmlFor="download-dir">Download directory</Label>
+            <Input
+              id="download-dir"
+              value={(values.config?.download_dir as string) ?? ""}
+              onChange={(e) => updateConfig("download_dir", e.target.value)}
+              placeholder="/downloads/complete"
+            />
+            {errors.download_dir ? (
+              <p className="text-xs text-red-600">{errors.download_dir}</p>
+            ) : null}
+            <p className="text-xs text-muted-foreground">
+              Where completed downloads are stored.
             </p>
-          ) : null}
-        </div>
+          </div>
 
-        <div className="grid gap-2">
-          <Label htmlFor="download-port">Port</Label>
-          <Input
-            id="download-port"
-            type="number"
-            min={1}
-            max={65535}
-            value={values.port}
-            onChange={(e) => update("port", Number(e.target.value))}
-            aria-invalid={Boolean(errors.port)}
-            aria-describedby={
-              errors.port ? "download-port-error" : undefined
-            }
-          />
-          {errors.port ? (
-            <p id="download-port-error" className="text-xs text-red-600">
-              {errors.port}
+          <div className="grid gap-2">
+            <Label htmlFor="incomplete-dir">Incomplete directory (optional)</Label>
+            <Input
+              id="incomplete-dir"
+              value={(values.config?.incomplete_dir as string) ?? ""}
+              onChange={(e) => updateConfig("incomplete_dir", e.target.value)}
+              placeholder="/downloads/incomplete"
+            />
+            <p className="text-xs text-muted-foreground">
+              Temporary directory for in-progress downloads. If empty, uses download directory.
             </p>
-          ) : null}
-        </div>
-      </div>
+          </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <div className="grid gap-2">
-          <Label htmlFor="download-username">Username</Label>
-          <Input
-            id="download-username"
-            value={values.username}
-            onChange={(e) => update("username", e.target.value)}
-            placeholder="Optional"
-            autoComplete="off"
-          />
-          <p className="text-xs text-muted-foreground">
-            Leave blank if no authentication is required.
-          </p>
-        </div>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="grid gap-2">
+              <Label htmlFor="listen-port">Listen port</Label>
+              <Input
+                id="listen-port"
+                type="number"
+                min={1}
+                max={65535}
+                value={(values.config?.listen_port as number) ?? 6881}
+                onChange={(e) => updateConfig("listen_port", Number(e.target.value))}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="max-active">Max active torrents</Label>
+              <Input
+                id="max-active"
+                type="number"
+                min={1}
+                max={500}
+                value={(values.config?.max_active_torrents as number) ?? 25}
+                onChange={(e) => updateConfig("max_active_torrents", Number(e.target.value))}
+              />
+            </div>
+          </div>
 
-        <div className="grid gap-2">
-          <Label htmlFor="download-password">Password</Label>
-          <Input
-            id="download-password"
-            type="password"
-            value={values.password}
-            onChange={(e) => update("password", e.target.value)}
-            placeholder="Optional"
-            autoComplete="off"
-          />
-          <p className="text-xs text-muted-foreground">
-            Write-only; never sent back to client.
-          </p>
-        </div>
-      </div>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="grid gap-2">
+              <Label htmlFor="seed-ratio">Seed ratio limit</Label>
+              <Input
+                id="seed-ratio"
+                type="number"
+                min={0}
+                step={0.1}
+                value={(values.config?.seed_ratio_limit as number) ?? 1.0}
+                onChange={(e) => updateConfig("seed_ratio_limit", Number(e.target.value))}
+              />
+              <p className="text-xs text-muted-foreground">
+                Stop seeding after reaching this ratio. 0 = seed forever.
+              </p>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="seed-time">Seed time limit (minutes)</Label>
+              <Input
+                id="seed-time"
+                type="number"
+                min={0}
+                value={(values.config?.seed_time_limit_minutes as number) ?? 0}
+                onChange={(e) => updateConfig("seed_time_limit_minutes", Number(e.target.value))}
+              />
+              <p className="text-xs text-muted-foreground">
+                Stop seeding after this many minutes. 0 = no time limit.
+              </p>
+            </div>
+          </div>
 
-      <div className="flex items-center gap-2">
-        <input
-          id="download-tls"
-          type="checkbox"
-          checked={values.tls}
-          onChange={(e) => update("tls", e.target.checked)}
-          className="h-4 w-4 rounded border-input"
-        />
-        <Label htmlFor="download-tls" className="!m-0">
-          Enable TLS
-        </Label>
-      </div>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="grid gap-2">
+              <Label htmlFor="dl-speed">Download speed limit (KB/s)</Label>
+              <Input
+                id="dl-speed"
+                type="number"
+                min={0}
+                value={Math.round(((values.config?.download_speed_limit as number) ?? 0) / 1024)}
+                onChange={(e) => updateConfig("download_speed_limit", Number(e.target.value) * 1024)}
+              />
+              <p className="text-xs text-muted-foreground">0 = unlimited.</p>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="ul-speed">Upload speed limit (KB/s)</Label>
+              <Input
+                id="ul-speed"
+                type="number"
+                min={0}
+                value={Math.round(((values.config?.upload_speed_limit as number) ?? 0) / 1024)}
+                onChange={(e) => updateConfig("upload_speed_limit", Number(e.target.value) * 1024)}
+              />
+              <p className="text-xs text-muted-foreground">0 = unlimited.</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="grid gap-2">
+              <Label htmlFor="max-conns">Max connections</Label>
+              <Input
+                id="max-conns"
+                type="number"
+                min={1}
+                value={(values.config?.max_connections as number) ?? 200}
+                onChange={(e) => updateConfig("max_connections", Number(e.target.value))}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="max-uploads">Max upload slots</Label>
+              <Input
+                id="max-uploads"
+                type="number"
+                min={1}
+                value={(values.config?.max_upload_slots as number) ?? 50}
+                onChange={(e) => updateConfig("max_upload_slots", Number(e.target.value))}
+              />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <input
+                id="enable-dht"
+                type="checkbox"
+                checked={(values.config?.enable_dht as boolean) ?? true}
+                onChange={(e) => updateConfig("enable_dht", e.target.checked)}
+                className="h-4 w-4 rounded border-input"
+              />
+              <Label htmlFor="enable-dht" className="!m-0">
+                Enable DHT
+              </Label>
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                id="enable-pex"
+                type="checkbox"
+                checked={(values.config?.enable_pex as boolean) ?? true}
+                onChange={(e) => updateConfig("enable_pex", e.target.checked)}
+                className="h-4 w-4 rounded border-input"
+              />
+              <Label htmlFor="enable-pex" className="!m-0">
+                Enable PEX (Peer Exchange)
+              </Label>
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                id="enable-upnp"
+                type="checkbox"
+                checked={(values.config?.enable_upnp as boolean) ?? false}
+                onChange={(e) => updateConfig("enable_upnp", e.target.checked)}
+                className="h-4 w-4 rounded border-input"
+              />
+              <Label htmlFor="enable-upnp" className="!m-0">
+                Enable UPnP/NAT-PMP (auto port forwarding)
+              </Label>
+            </div>
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="grid gap-2">
+              <Label htmlFor="download-host">Your host</Label>
+              <Input
+                id="download-host"
+                value={values.host}
+                onChange={(e) => update("host", e.target.value)}
+                placeholder="localhost"
+                aria-invalid={Boolean(errors.host)}
+                aria-describedby={errors.host ? "download-host-error" : undefined}
+              />
+              {errors.host ? (
+                <p id="download-host-error" className="text-xs text-red-600">
+                  {errors.host}
+                </p>
+              ) : null}
+            </div>
+
+            <div className="grid gap-2">
+              <Label htmlFor="download-port">Port</Label>
+              <Input
+                id="download-port"
+                type="number"
+                min={1}
+                max={65535}
+                value={values.port}
+                onChange={(e) => update("port", Number(e.target.value))}
+                aria-invalid={Boolean(errors.port)}
+                aria-describedby={
+                  errors.port ? "download-port-error" : undefined
+                }
+              />
+              {errors.port ? (
+                <p id="download-port-error" className="text-xs text-red-600">
+                  {errors.port}
+                </p>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="grid gap-2">
+              <Label htmlFor="download-username">Username</Label>
+              <Input
+                id="download-username"
+                value={values.username}
+                onChange={(e) => update("username", e.target.value)}
+                placeholder="Optional"
+                autoComplete="off"
+              />
+              <p className="text-xs text-muted-foreground">
+                Leave blank if no authentication is required.
+              </p>
+            </div>
+
+            <div className="grid gap-2">
+              <Label htmlFor="download-password">Password</Label>
+              <Input
+                id="download-password"
+                type="password"
+                value={values.password}
+                onChange={(e) => update("password", e.target.value)}
+                placeholder="Optional"
+                autoComplete="off"
+              />
+              <p className="text-xs text-muted-foreground">
+                Write-only; never sent back to client.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <input
+              id="download-tls"
+              type="checkbox"
+              checked={values.tls}
+              onChange={(e) => update("tls", e.target.checked)}
+              className="h-4 w-4 rounded border-input"
+            />
+            <Label htmlFor="download-tls" className="!m-0">
+              Enable TLS
+            </Label>
+          </div>
+        </>
+      )}
 
       <div className="grid gap-2">
         <Label htmlFor="download-priority">Priority (0–100)</Label>
