@@ -1047,7 +1047,7 @@ function RemotePathMappingsSection() {
     apiFetch("/api/v1/download-clients")
       .then((r) => (r.ok ? r.json() : []))
       .then((data) => {
-        const list = Array.isArray(data) ? data : [];
+        const list = Array.isArray(data?.download_clients) ? data.download_clients : Array.isArray(data) ? data : [];
         setClients(list.map((c: any) => ({ id: c.id, name: c.name })));
       })
       .catch(() => {});
