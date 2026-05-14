@@ -8,7 +8,7 @@ replicaCount: 1
 image:
   repository: ghcr.io/ebenderooock/loom
   pullPolicy: IfNotPresent
-  tag: "0.1.32"
+  tag: "0.1.33"
 
 # ---------- Security context (match existing containers) ----------
 podSecurityContext:
@@ -38,7 +38,7 @@ ingress:
   annotations:
     traefik.ingress.kubernetes.io/router.entrypoints: websecure
     # Uncomment for automatic TLS via cert-manager:
-    # cert-manager.io/cluster-issuer: letsencrypt-prod
+    cert-manager.io/cluster-issuer: letsencrypt-prod
   hosts:
     - host: loom.media.deroock.co.za  # <-- change to your domain
       paths:
