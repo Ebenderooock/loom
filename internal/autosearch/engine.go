@@ -696,6 +696,15 @@ func (e *Engine) grabRelease(ctx context.Context, sr *ScoredRelease) (*GrabbedRe
 	// Build the download request.
 	req := buildDownloadRequest(&sr.Result)
 
+	// Apply per-indexer seed policy overrides if available.
+	if sr.Result.IndexerID != "" {
+		if def, err := e.indexerSvc.Get(ctx, sr.Result.IndexerID); err == nil {
+			sc := indexers.ParseSeedConfig(def)
+			req.SeedRatioLimit = sc.RatioLimit
+			req.SeedTimeLimitMinutes = sc.TimeLimitMinutes
+		}
+	}
+
 	if req.Magnet == "" && req.TorrentURL == "" && len(req.RawBytes) == 0 {
 		e.logger.Error("autosearch: download request has no magnet/URL/bytes",
 			"title", sr.Result.Title,

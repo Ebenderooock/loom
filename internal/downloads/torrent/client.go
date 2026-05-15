@@ -53,6 +53,16 @@ func New(def downloads.Definition, engine *Engine) (*Client, error) {
 	}, nil
 }
 
+// Engine returns the underlying torrent engine for direct access
+// to detailed torrent information.
+func (c *Client) Engine() *Engine { return c.engine }
+
+// Detail implements downloads.DetailProvider. It returns rich torrent
+// detail including peers, files, and trackers.
+func (c *Client) Detail(_ context.Context, id string) (any, error) {
+	return c.engine.Detail(id)
+}
+
 // ID implements downloads.DownloadClient.
 func (c *Client) ID() string { return c.id }
 
@@ -81,14 +91,23 @@ func (c *Client) Add(ctx context.Context, req downloads.AddRequest) (downloads.A
 		savePath = c.defConfig.DownloadDir
 	}
 
+	seedPolicy := SeedPolicy{
+		RatioLimit:       c.defConfig.SeedRatioLimit,
+		TimeLimitMinutes: c.defConfig.SeedTimeLimitMinutes,
+	}
+	// Per-indexer overrides take precedence over client defaults.
+	if req.SeedRatioLimit != nil {
+		seedPolicy.RatioLimit = *req.SeedRatioLimit
+	}
+	if req.SeedTimeLimitMinutes != nil {
+		seedPolicy.TimeLimitMinutes = *req.SeedTimeLimitMinutes
+	}
+
 	meta := torrentMeta{
-		Title:    req.Title,
-		Category: category,
-		SavePath: savePath,
-		SeedPolicy: SeedPolicy{
-			RatioLimit:       c.defConfig.SeedRatioLimit,
-			TimeLimitMinutes: c.defConfig.SeedTimeLimitMinutes,
-		},
+		Title:      req.Title,
+		Category:   category,
+		SavePath:   savePath,
+		SeedPolicy: seedPolicy,
 	}
 
 	var hash string

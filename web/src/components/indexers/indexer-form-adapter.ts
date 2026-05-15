@@ -22,6 +22,12 @@ function buildConfig(values: IndexerFormValues): Record<string, unknown> {
   if (values.timeout && values.timeout.trim()) {
     cfg.timeout = values.timeout.trim();
   }
+  if (values.seed_ratio_limit != null) {
+    cfg.seed_ratio_limit = values.seed_ratio_limit;
+  }
+  if (values.seed_time_limit_minutes != null) {
+    cfg.seed_time_limit_minutes = values.seed_time_limit_minutes;
+  }
   return cfg;
 }
 

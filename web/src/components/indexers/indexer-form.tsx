@@ -48,6 +48,10 @@ export interface IndexerFormValues {
   // "" represents "no proxy"; undefined means "unchanged" (only meaningful
   // for edit submissions where we want to omit the field entirely).
   proxy_id: string;
+  // Per-indexer seed policy overrides (stored in config JSON).
+  // undefined means "use client default".
+  seed_ratio_limit?: number;
+  seed_time_limit_minutes?: number;
 }
 
 export interface IndexerFormErrors {
@@ -157,6 +161,14 @@ export function IndexerForm({
     categories: initial?.categories ?? [],
     tags: initial?.tags ?? [],
     proxy_id: initial?.proxy_id ?? "",
+    seed_ratio_limit:
+      typeof initialConfig.seed_ratio_limit === "number"
+        ? initialConfig.seed_ratio_limit
+        : undefined,
+    seed_time_limit_minutes:
+      typeof initialConfig.seed_time_limit_minutes === "number"
+        ? initialConfig.seed_time_limit_minutes
+        : undefined,
   }));
 
   const [errors, setErrors] = React.useState<IndexerFormErrors>({});
@@ -408,6 +420,54 @@ export function IndexerForm({
           PATCH so the server clears the pin.
         </p>
       </div>
+
+      {/* --- Seeding overrides --- */}
+      <fieldset className="grid gap-4 rounded-md border border-input p-4">
+        <legend className="px-2 text-sm font-medium text-muted-foreground">
+          Seeding
+        </legend>
+        <p className="text-xs text-muted-foreground -mt-2">
+          Override the download client&apos;s default seed policy for grabs from
+          this indexer. Leave empty to use the client default.
+        </p>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div className="grid gap-2">
+            <Label htmlFor="indexer-seed-ratio">Seed Ratio Limit</Label>
+            <Input
+              id="indexer-seed-ratio"
+              type="number"
+              step={0.1}
+              min={0}
+              placeholder="Use client default"
+              value={values.seed_ratio_limit ?? ""}
+              onChange={(e) =>
+                update(
+                  "seed_ratio_limit",
+                  e.target.value === "" ? undefined : Number(e.target.value),
+                )
+              }
+            />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="indexer-seed-time">
+              Seed Time Limit (minutes)
+            </Label>
+            <Input
+              id="indexer-seed-time"
+              type="number"
+              min={0}
+              placeholder="Use client default"
+              value={values.seed_time_limit_minutes ?? ""}
+              onChange={(e) =>
+                update(
+                  "seed_time_limit_minutes",
+                  e.target.value === "" ? undefined : Number(e.target.value),
+                )
+              }
+            />
+          </div>
+        </div>
+      </fieldset>
 
       <div className="flex items-center gap-2">
         <input

@@ -52,7 +52,7 @@ func newTestRouter(t *testing.T, bus eventbus.Bus) (*Router, *testClock) {
 	var metadataRouter *metadata.Router
 
 	clock := &testClock{now: time.Now()}
-	router := NewRouter(svc, metadataRouter, bus, slog.Default(), clock)
+	router := NewRouter(svc, metadataRouter, bus, slog.Default(), clock, nil)
 	return router, clock
 }
 
