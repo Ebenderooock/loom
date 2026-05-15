@@ -57,6 +57,36 @@ export interface HealthIssue {
   severity: "error" | "degraded";
 }
 
+// ---------------------------------------------------------------------------
+// Active Downloads — polled for the dashboard activity widget
+// ---------------------------------------------------------------------------
+
+export interface DashboardQueueItem {
+  id: string;
+  title: string;
+  status: string;
+  progress: number;
+  size_bytes: number;
+  downloaded_bytes: number;
+  download_rate: number;
+  upload_rate: number;
+}
+
+export function useDashboardActivity() {
+  return useQuery({
+    queryKey: ["dashboard", "activity"],
+    queryFn: async ({ signal }) => {
+      const res = await apiFetch("/api/v1/activity", { signal });
+      if (!res.ok) throw new Error("Failed to fetch activity");
+      const json = (await res.json()) as { items: DashboardQueueItem[] };
+      return json.items ?? [];
+    },
+    refetchInterval: 3000,
+    staleTime: 2000,
+    retry: 1,
+  });
+}
+
 interface IndexerHealthResponse {
   data: {
     indexer_id: string;
