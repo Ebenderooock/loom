@@ -406,6 +406,27 @@ func (s *Store) StaleWorkflows(ctx context.Context) ([]*Workflow, error) {
 	return results, nil
 }
 
+// ResetRetry clears retry count and last error for a workflow (used on manual retry).
+func (s *Store) ResetRetry(ctx context.Context, id string) error {
+	_, err := s.db.ExecContext(ctx, `
+		UPDATE workflows SET retry_count = 0, last_error = NULL, updated_at = ?
+		WHERE id = ?`, time.Now(), id,
+	)
+	return err
+}
+
+// ListRecentlyFailed returns workflows in failed state updated since the given time.
+func (s *Store) ListRecentlyFailed(ctx context.Context, since time.Time) ([]*Workflow, error) {
+	return s.list(ctx, fmt.Sprintf(`
+		SELECT id, type, state, media_type, grab_title,
+			download_client_id, download_id, quality_profile_id,
+			retry_count, max_retries, last_error, metadata,
+			created_at, updated_at, completed_at
+		FROM workflows
+		WHERE state = 'failed' AND updated_at >= '%s'
+		ORDER BY updated_at DESC`, since.Format(time.RFC3339)))
+}
+
 // Delete removes a workflow and its items/history (cascade).
 func (s *Store) Delete(ctx context.Context, id string) error {
 	tx, err := s.db.BeginTx(ctx, nil)

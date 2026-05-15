@@ -325,8 +325,37 @@ func (p *ImportPipeline) importSingleFile(ctx context.Context, ev *downloads.Dow
 		return p.recordFailure(ctx, "", "", ev.Title, mediaFile, fmt.Errorf("no match found for %q", ev.Title))
 	}
 
-	// Build destination path
-	destFile := filepath.Join(match.DestPath, filepath.Base(mediaFile))
+	// Build destination path with proper naming
+	destFile := filepath.Join(match.DestPath, buildDestFilename(match, mediaFile))
+
+	// Collision handling: if the destination already exists, check if it's the same file
+	if info, err := os.Stat(destFile); err == nil {
+		srcInfo, srcErr := os.Stat(mediaFile)
+		if srcErr == nil && info.Size() == srcInfo.Size() {
+			// Same size — treat as already imported
+			p.logger.Info("destination file already exists with same size, treating as imported",
+				"dest", destFile, "src", mediaFile)
+			if err := p.updateLibrary(ctx, match, destFile, mediaFile); err != nil {
+				p.logger.Warn("library update for existing file failed", "error", err)
+			}
+			if err := p.recordStatus(ctx, string(match.MediaType), match.MediaID, mediaFile, destFile, StatusImported, "already exists"); err != nil {
+				p.logger.Error("failed to record import history", "error", err)
+			}
+			if match.MediaType == "movie" && match.MediaID != "" {
+				if err := p.moviesSvc.SetMovieStatus(ctx, match.MediaID, movies.MovieStatusAvailableRightQuality); err != nil {
+					p.logger.Error("failed to update movie status after import", "movie_id", match.MediaID, "error", err)
+				}
+			}
+			p.publishNotification(ctx, match, destFile)
+			_ = p.bus.Publish(ctx, &ImportCompletedEvent{
+				MediaType: match.MediaType,
+				MediaID:   match.MediaID,
+				Title:     match.Title,
+				DestPath:  destFile,
+			})
+			return nil
+		}
+	}
 
 	// Import the file
 	if err := importFile(mediaFile, destFile, p.importMode); err != nil {
@@ -462,6 +491,29 @@ func (p *ImportPipeline) matchByGrab(ctx context.Context, ev *downloads.Download
 	}
 
 	return nil, nil
+}
+
+// buildDestFilename generates a clean library filename from the match result.
+// Movies: "Movie Title (2024).ext"
+// Episodes: "Series Title - S01E02.ext"
+func buildDestFilename(match *MatchResult, sourceFile string) string {
+	ext := filepath.Ext(sourceFile)
+
+	switch match.MediaType {
+	case MediaTypeMovie:
+		name := sanitizeDirName(match.Title)
+		if match.Year > 0 {
+			return fmt.Sprintf("%s (%d)%s", name, match.Year, ext)
+		}
+		return name + ext
+
+	case MediaTypeEpisode:
+		name := sanitizeDirName(match.Title)
+		return fmt.Sprintf("%s - S%02dE%02d%s", name, match.Season, match.Episode, ext)
+
+	default:
+		return filepath.Base(sourceFile)
+	}
 }
 
 // updateLibrary adds a file record to the appropriate service.
