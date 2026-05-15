@@ -125,9 +125,6 @@ func NewEngine(cfg Config, logger *slog.Logger) (*Engine, error) {
 	if cfg.MaxConnections > 0 {
 		tcfg.EstablishedConnsPerTorrent = cfg.MaxConnections
 	}
-	if cfg.MaxUploadSlots > 0 {
-		tcfg.UploadRateLimiter = nil // handled at the Loom level if needed
-	}
 
 	tcfg.SetListenAddr(net.JoinHostPort("", fmt.Sprintf("%d", cfg.ListenPort)))
 
