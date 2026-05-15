@@ -95,6 +95,124 @@ func WithAuditLogger(al *auditlog.Logger) EngineOption {
 	return func(e *Engine) { e.audit = al }
 }
 
+// Evaluate scores a set of indexer results against a quality profile
+// without grabbing anything. This is the dry-run counterpart to
+// SearchAndGrab, used by the manual search UI to display quality
+// badges, scores, and rejection reasons.
+func (e *Engine) Evaluate(ctx context.Context, req EvaluateRequest) (*EvaluateResponse, error) {
+	if req.QualityProfileID == "" {
+		return &EvaluateResponse{Results: make([]EvaluatedResult, 0), Total: len(req.Results)}, nil
+	}
+
+	profile, err := e.profileStore.Get(ctx, req.QualityProfileID)
+	if err != nil {
+		return nil, fmt.Errorf("load quality profile %s: %w", req.QualityProfileID, err)
+	}
+
+	var items []profileItem
+	if err := json.Unmarshal([]byte(profile.Items), &items); err != nil {
+		return nil, fmt.Errorf("parse quality items: %w", err)
+	}
+
+	qualDefs, err := e.movieSvc.ListQualityDefinitions(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("load quality definitions: %w", err)
+	}
+
+	allowedMap := make(map[string]int)
+	allowedDefs := make(map[string]bool)
+	for i, item := range items {
+		if item.Allowed {
+			allowedMap[item.ID] = i
+			allowedDefs[item.ID] = true
+		}
+	}
+
+	formatScores := make(map[string]int)
+	for _, fi := range profile.FormatItems {
+		formatScores[fi.FormatID] = fi.Score
+	}
+
+	existing := e.getExistingQuality(ctx, req.SearchRequest, qualDefs, allowedMap)
+
+	cutoffTier := -1
+	if profile.Cutoff != "" {
+		if ct, ok := allowedMap[profile.Cutoff]; ok {
+			cutoffTier = ct
+		}
+	}
+
+	// Determine if this looks like an ID-based search.
+	idBased := req.IMDBID != "" || req.TVDBID != "" || req.TMDBID != ""
+
+	resp := &EvaluateResponse{
+		Total:   len(req.Results),
+		Results: make([]EvaluatedResult, 0, len(req.Results)),
+	}
+
+	for _, res := range req.Results {
+		sr := e.evaluateResult(req.SearchRequest, res, qualDefs, allowedMap, allowedDefs, formatScores, profile, existing, cutoffTier, idBased)
+
+		er := EvaluatedResult{
+			IndexerID:   res.IndexerID,
+			Title:       res.Title,
+			Link:        res.Link,
+			SizeBytes:   res.Size,
+			PublishDate: res.PubDate.Format("2006-01-02T15:04:05Z"),
+			MagnetURI:   res.MagnetURI,
+			Infohash:    res.Infohash,
+			InfoURL:     res.InfoURL,
+			Freeleech:   res.Freeleech,
+
+			Rejected:       sr.Rejected,
+			RejectReason:   sr.RejectReason,
+			QualityTier:    sr.QualityTier,
+			FormatScore:    sr.FormatScore,
+			FormatMatches:  sr.FormatMatches,
+			CompositeScore: sr.CompositeScore(),
+		}
+
+		if res.Seeders != nil {
+			er.Seeders = *res.Seeders
+		}
+		if res.Peers != nil && res.Seeders != nil {
+			er.Leechers = *res.Peers - *res.Seeders
+			if er.Leechers < 0 {
+				er.Leechers = 0
+			}
+		}
+		for _, c := range res.Category {
+			er.Categories = append(er.Categories, int(c))
+		}
+
+		if sr.QualityDef != nil {
+			er.QualityName = sr.QualityDef.Title
+		}
+		if sr.Parsed != nil {
+			er.ParsedTitle = sr.Parsed.Title
+			er.ParsedYear = sr.Parsed.Year
+			er.ParsedSource = sr.Parsed.Source
+			er.ParsedRes = sr.Parsed.Resolution
+		}
+
+		if !sr.Rejected {
+			resp.Passed++
+		}
+
+		resp.Results = append(resp.Results, er)
+	}
+
+	// Sort by composite score descending (accepted first, then rejected).
+	sort.SliceStable(resp.Results, func(i, j int) bool {
+		if resp.Results[i].Rejected != resp.Results[j].Rejected {
+			return !resp.Results[i].Rejected
+		}
+		return resp.Results[i].CompositeScore > resp.Results[j].CompositeScore
+	})
+
+	return resp, nil
+}
+
 // SearchAndGrab executes the full automated search pipeline:
 //  1. Search indexers (with request-chain fallback)
 //  2. Parse each result

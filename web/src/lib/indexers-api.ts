@@ -341,6 +341,90 @@ export async function searchIndexers(
   });
 }
 
+// ---------- Autosearch evaluate (dry-run quality scoring) ----------
+
+export interface EvaluateParams {
+  media_type?: string;
+  media_id?: string;
+  title?: string;
+  year?: number;
+  quality_profile_id: string;
+  imdb_id?: string;
+  tmdb_id?: string;
+  tvdb_id?: string;
+  season?: number;
+  episode?: number;
+  results: SearchResult[];
+}
+
+export interface EvaluatedResult {
+  indexer_id: string;
+  title: string;
+  link: string;
+  size_bytes: number;
+  seeders: number;
+  leechers: number;
+  publish_date?: string;
+  categories?: number[];
+  magnet_uri?: string;
+  infohash?: string;
+  info_url?: string;
+  freeleech?: boolean;
+  rejected: boolean;
+  reject_reason?: string;
+  quality_name?: string;
+  quality_tier: number;
+  format_score: number;
+  format_matches?: { format_id: string; name: string; score: number }[];
+  composite_score: number;
+  parsed_title?: string;
+  parsed_year?: number;
+  parsed_source?: string;
+  parsed_resolution?: number;
+}
+
+export interface EvaluateResponse {
+  results: EvaluatedResult[];
+  total: number;
+  passed: number;
+}
+
+export async function evaluateResults(
+  params: EvaluateParams,
+): Promise<EvaluateResponse> {
+  return request<EvaluateResponse>("POST", "/api/v1/autosearch/evaluate", {
+    media_type: params.media_type,
+    media_id: params.media_id,
+    title: params.title,
+    year: params.year,
+    quality_profile_id: params.quality_profile_id,
+    imdb_id: params.imdb_id,
+    tmdb_id: params.tmdb_id,
+    tvdb_id: params.tvdb_id,
+    season: params.season,
+    episode: params.episode,
+    results: params.results.map((r) => ({
+      indexer_id: r.indexer_id,
+      title: r.title,
+      guid: r.guid,
+      link: r.link,
+      info_url: r.info_url,
+      pub_date: r.publish_date,
+      size: r.size_bytes,
+      categories: r.categories,
+      quality: r.quality,
+      magnet_uri: r.magnet_uri,
+      infohash: r.infohash,
+      seeders: r.seeders,
+      peers:
+        r.seeders != null && r.leechers != null
+          ? r.seeders + r.leechers
+          : undefined,
+      freeleech: r.freeleech,
+    })),
+  });
+}
+
 // ---------- Streaming search (SSE) ----------
 
 export type IndexerStatus = "pending" | "searching" | "done" | "error" | "timeout";
