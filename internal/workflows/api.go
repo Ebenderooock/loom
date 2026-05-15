@@ -8,11 +8,12 @@ import (
 )
 
 // Router returns a chi.Router for workflow API endpoints.
-func Router(engine *Engine) chi.Router {
-	h := &handler{engine: engine}
+func Router(engine *Engine, orch *Orchestrator) chi.Router {
+	h := &handler{engine: engine, orch: orch}
 	r := chi.NewRouter()
 	r.Get("/", h.list)
 	r.Get("/{id}", h.get)
+	r.Get("/{id}/events", h.listEvents)
 	r.Post("/{id}/cancel", h.cancel)
 	r.Post("/{id}/retry", h.retry)
 	r.Delete("/{id}", h.delete)
@@ -21,6 +22,7 @@ func Router(engine *Engine) chi.Router {
 
 type handler struct {
 	engine *Engine
+	orch   *Orchestrator
 }
 
 func (h *handler) list(w http.ResponseWriter, r *http.Request) {
@@ -45,11 +47,33 @@ func (h *handler) get(w http.ResponseWriter, r *http.Request) {
 	wfWriteJSON(w, wf)
 }
 
+func (h *handler) listEvents(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	events, err := h.engine.store.ListEvents(r.Context(), id)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if events == nil {
+		events = []WorkflowEvent{}
+	}
+	wfWriteJSON(w, events)
+}
+
 func (h *handler) cancel(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
-	if err := h.engine.Cancel(r.Context(), id); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
+	if h.orch != nil {
+		reply := make(chan error, 1)
+		h.orch.Send(CmdCancel{WorkflowID: id, Reply: reply})
+		if err := <-reply; err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+	} else {
+		if err := h.engine.Cancel(r.Context(), id); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 	}
 	wf, _ := h.engine.store.Get(r.Context(), id)
 	wfWriteJSON(w, wf)
@@ -57,9 +81,18 @@ func (h *handler) cancel(w http.ResponseWriter, r *http.Request) {
 
 func (h *handler) retry(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
-	if err := h.engine.Retry(r.Context(), id); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
+	if h.orch != nil {
+		reply := make(chan error, 1)
+		h.orch.Send(CmdRetry{WorkflowID: id, Reply: reply})
+		if err := <-reply; err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+	} else {
+		if err := h.engine.Retry(r.Context(), id); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 	}
 	wf, _ := h.engine.store.Get(r.Context(), id)
 	wfWriteJSON(w, wf)

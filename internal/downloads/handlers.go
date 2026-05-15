@@ -747,7 +747,17 @@ func (s *Service) handleHistory(w http.ResponseWriter, r *http.Request) {
 // recordManualGrab records grab linkage for interactive search grabs.
 // If no media context is present or no workflow engine is configured, this is a no-op.
 func (s *Service) recordManualGrab(ctx context.Context, res AddResult, req AddRequest) {
-	if s.wfEngine == nil || req.MediaType == "" {
+	if req.MediaType == "" {
+		return
+	}
+
+	// Prefer orchestrator path.
+	if s.orchestrator != nil {
+		s.recordManualGrabOrchestrator(ctx, res, req)
+		return
+	}
+
+	if s.wfEngine == nil {
 		return
 	}
 	var err error
@@ -778,6 +788,39 @@ func (s *Service) recordManualGrab(ctx context.Context, res AddResult, req AddRe
 	} else {
 		s.logger.Info("recorded manual grab workflow",
 			"client_id", res.ClientID, "item_id", res.ItemID,
+			"media_type", req.MediaType)
+	}
+}
+
+// recordManualGrabOrchestrator uses the orchestrator for manual grab workflow tracking.
+func (s *Service) recordManualGrabOrchestrator(ctx context.Context, res AddResult, req AddRequest) {
+	var wf *workflows.Workflow
+	var err error
+	switch req.MediaType {
+	case "episode":
+		if len(req.EpisodeIDs) > 0 {
+			wf, err = s.orchestrator.StartSearch(ctx, workflows.TypeEpisodeSearch, workflows.MediaTypeEpisode, "", req.EpisodeIDs)
+		}
+	case "movie":
+		if req.MovieID != "" {
+			wf, err = s.orchestrator.StartSearch(ctx, workflows.TypeMovieSearch, workflows.MediaTypeMovie, "", []string{req.MovieID})
+		}
+	}
+	if err != nil {
+		s.logger.Warn("failed to create manual grab workflow via orchestrator",
+			"client_id", res.ClientID, "item_id", res.ItemID,
+			"media_type", req.MediaType, "err", err)
+		return
+	}
+	if wf != nil {
+		s.orchestrator.Send(workflows.CmdGrabbed{
+			WorkflowID: wf.ID,
+			ClientID:   res.ClientID,
+			DownloadID: res.ItemID,
+			Title:      req.Title,
+		})
+		s.logger.Info("recorded manual grab workflow via orchestrator",
+			"workflow_id", wf.ID, "client_id", res.ClientID, "item_id", res.ItemID,
 			"media_type", req.MediaType)
 	}
 }

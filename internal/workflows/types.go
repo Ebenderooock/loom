@@ -107,6 +107,35 @@ type Event struct {
 	CreatedAt  time.Time `json:"createdAt"`
 }
 
+// WorkflowEvent is a rich audit log entry for the orchestrator.
+// Unlike Event (state transitions only), WorkflowEvent captures all
+// significant occurrences with contextual metadata.
+type WorkflowEvent struct {
+	ID         int64     `json:"id"`
+	WorkflowID string    `json:"workflowId"`
+	EventType  string    `json:"eventType"`
+	Message    string    `json:"message,omitempty"`
+	Metadata   string    `json:"metadata,omitempty"` // JSON blob
+	CreatedAt  time.Time `json:"createdAt"`
+}
+
+// Event types for WorkflowEvent.EventType.
+const (
+	EventSearchStarted    = "search_started"
+	EventGrabbed          = "grabbed"
+	EventDownloading      = "downloading"
+	EventDownloadProgress = "download_progress"
+	EventDownloadComplete = "download_complete"
+	EventImportStarted    = "import_started"
+	EventImportSuccess    = "import_success"
+	EventImportFailed     = "import_failed"
+	EventStaleDetected    = "stale_detected"
+	EventRetried          = "retried"
+	EventFailed           = "failed"
+	EventCancelled        = "cancelled"
+	EventCompleted        = "completed"
+)
+
 // IsTerminal returns true if the workflow is in a final state.
 func (w *Workflow) IsTerminal() bool {
 	return w.State == StateCompleted || w.State == StateFailed || w.State == StateCancelled
