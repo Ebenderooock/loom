@@ -117,6 +117,7 @@ func wireDownloads(
 		CheckForStalled: true,
 		StallHandler:    stallHandler,
 		HistoryStore:    downloadHistoryStore,
+		Reconciler:      wfScheduler,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("init download monitor: %w", err)
