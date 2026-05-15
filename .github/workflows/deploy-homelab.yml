@@ -1,0 +1,53 @@
+# Deploy Loom to homelab Kubernetes cluster.
+#
+# Runs on a self-hosted runner inside the cluster so it has direct
+# access to kubectl/helm and the container registry.
+#
+# Trigger: push to main, or manual dispatch with an optional version override.
+name: Deploy to Homelab
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version override (leave blank to auto-increment)"
+        required: false
+
+# Only one deploy at a time.
+concurrency:
+  group: deploy-homelab
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: self-hosted          # your private runner label
+    timeout-minutes: 15
+    permissions:
+      contents: write             # push version bump commit
+      packages: write             # push to ghcr.io
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure git for version bump commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Deploy
+        run: ./scripts/deploy.sh ${{ github.event.inputs.version }}
