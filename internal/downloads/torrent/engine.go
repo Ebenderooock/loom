@@ -60,6 +60,7 @@ type trackedTorrent struct {
 	seedStartAt  *time.Time
 	seedPolicy   SeedPolicy
 	paused       bool
+	movedToDest  bool  // true once files have been moved from IncompleteDir → DownloadDir
 	downloaded   int64 // snapshot for ratio calculation
 	uploaded     int64
 
@@ -306,6 +307,7 @@ type TorrentStatus struct {
 	Title        string
 	Category     string
 	SavePath     string
+	ContentPath  string // actual filesystem path to the torrent's content
 	Status       string // "queued", "downloading", "seeding", "paused", "completed"
 	Progress     float64
 	SizeBytes    int64
@@ -413,6 +415,7 @@ func (e *Engine) buildStatus(tt *trackedTorrent) TorrentStatus {
 		Title:        tt.title,
 		Category:     tt.category,
 		SavePath:     tt.savePath,
+		ContentPath:  e.contentPath(t),
 		Status:       status,
 		Progress:     progress,
 		SizeBytes:    size,
@@ -424,6 +427,24 @@ func (e *Engine) buildStatus(tt *trackedTorrent) TorrentStatus {
 		AddedAt:      tt.addedAt,
 		Paused:       tt.paused,
 	}
+}
+
+// contentPath returns the absolute filesystem path where the torrent's
+// data actually lives. This uses the torrent's real content name (from
+// metadata) rather than Loom's title, which may differ. After move-on-
+// complete, files are in DownloadDir; before that, they're in dataDir
+// (which may be IncompleteDir).
+func (e *Engine) contentPath(t *torrent.Torrent) string {
+	name := t.Name()
+	if name == "" {
+		return "" // metadata not yet available
+	}
+	hash := strings.ToLower(t.InfoHash().HexString())
+	tt, ok := e.items[hash]
+	if ok && tt.movedToDest && e.cfg.IncompleteDir != "" {
+		return filepath.Join(e.cfg.DownloadDir, name)
+	}
+	return filepath.Join(e.dataDir, name)
 }
 
 // Pause stops peer traffic for the given torrents by zeroing their
@@ -711,6 +732,27 @@ func (e *Engine) enforceSeedPolicies() {
 	for hash, tt := range e.items {
 		if tt.paused || !tt.t.Complete().Bool() {
 			continue
+		}
+
+		// Move completed files from IncompleteDir → DownloadDir.
+		if !tt.movedToDest && e.cfg.IncompleteDir != "" {
+			name := tt.t.Name()
+			if name != "" {
+				src := filepath.Join(e.cfg.IncompleteDir, name)
+				dst := filepath.Join(e.cfg.DownloadDir, name)
+				if src != dst {
+					if err := os.Rename(src, dst); err != nil {
+						e.logger.Error("move-on-complete failed",
+							"hash", hash, "src", src, "dst", dst, "error", err)
+					} else {
+						e.logger.Info("moved completed torrent to download dir",
+							"hash", hash, "src", src, "dst", dst)
+						tt.movedToDest = true
+					}
+				} else {
+					tt.movedToDest = true
+				}
+			}
 		}
 
 		// Track when seeding started.
