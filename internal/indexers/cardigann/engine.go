@@ -475,7 +475,7 @@ func (e *Engine) Search(ctx context.Context, q indexers.Query) (*indexers.Result
 	paths := e.searchPaths()
 
 	// Pre-compute shared values once for all paths.
-	keywords := q.Term
+	keywords := indexers.SanitizeTerm(q.Term, q.Season > 0 || q.Episode > 0)
 	if len(e.def.Search.KeywordsFilters) > 0 {
 		keywords = applyFilters(keywords, e.def.Search.KeywordsFilters)
 		slog.Debug("cardigann: keywords filtered", "indexer", e.id, "raw", q.Term, "filtered", keywords, "filterCount", len(e.def.Search.KeywordsFilters))

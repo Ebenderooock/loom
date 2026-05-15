@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/ebenderooock/loom/internal/indexers"
@@ -222,7 +223,16 @@ func buildAddRequest(result *indexers.Result) AddRequest {
 		req.Magnet = fmt.Sprintf("magnet:?xt=urn:btih:%s", result.Infohash)
 	}
 	if result.Link != "" {
-		req.TorrentURL = result.Link
+		// Some indexers put magnet URIs in the Link field instead of
+		// MagnetURI. Route them correctly so we don't try to HTTP-fetch
+		// a magnet: scheme URL.
+		if strings.HasPrefix(result.Link, "magnet:") {
+			if req.Magnet == "" {
+				req.Magnet = result.Link
+			}
+		} else {
+			req.TorrentURL = result.Link
+		}
 	}
 	req.Normalize()
 	return req
