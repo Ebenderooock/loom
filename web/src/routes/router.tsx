@@ -262,6 +262,17 @@ const workflowsRoute = createRoute({
   errorComponent: ErrorFallback,
 });
 
+const workflowDetailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/workflows/$workflowId",
+  component: lazyRouteComponent(
+    () => import("@/pages/workflow-detail"),
+    "WorkflowDetailPage",
+  ),
+  pendingComponent: PageLoader,
+  errorComponent: ErrorFallback,
+});
+
 const routeTree = rootRoute.addChildren([
   setupRoute,
   indexRoute,
@@ -282,6 +293,7 @@ const routeTree = rootRoute.addChildren([
   importListsRoute,
   eventsRoute,
   workflowsRoute,
+  workflowDetailRoute,
   settingsRoute,
 ]);
 
