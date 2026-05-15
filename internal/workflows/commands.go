@@ -87,6 +87,15 @@ type CmdRetry struct {
 
 func (CmdRetry) commandTag() {}
 
+// CmdDownloadRemoved signals that a download was removed by the user.
+// The orchestrator finds and cancels any associated workflow.
+type CmdDownloadRemoved struct {
+	ClientID   string
+	DownloadID string
+}
+
+func (CmdDownloadRemoved) commandTag() {}
+
 // CmdTick is an internal command for periodic health checks.
 // Sent by the orchestrator's own ticker, not by external callers.
 type CmdTick struct{}

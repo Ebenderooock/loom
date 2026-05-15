@@ -35,6 +35,7 @@ import {
 import {
   ListPlus,
   RefreshCw,
+  Loader2,
   Trash2,
   ChevronDown,
   ChevronRight,
@@ -161,9 +162,7 @@ function ListRow({
           onClick={() => syncMut.mutate(list.id)}
           title="Sync now"
         >
-          <RefreshCw
-            className={`h-4 w-4 ${syncMut.isPending ? "animate-spin" : ""}`}
-          />
+          {syncMut.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
         </Button>
 
         <Button

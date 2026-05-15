@@ -31,7 +31,7 @@ import {
   Download, Search, Users, Clapperboard,
   Archive, ArchiveRestore, HardDriveDownload,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, formatBytes, relativeTime } from "@/lib/utils";
 import { toast } from "sonner";
 import { StatusBadge } from "./status-badge";
 import { ReleaseSearchDialog } from "@/components/search/release-search-dialog";
@@ -181,6 +181,10 @@ export function MovieDetailSheet({
   const [autoSearching, setAutoSearching] = useState(false);
   const [rescanning, setRescanning] = useState(false);
   const [discoverPerson, setDiscoverPerson] = useState<{ id: number; name: string } | null>(null);
+  const [movieFiles, setMovieFiles] = useState<any[]>([]);
+  const [movieFilesLoading, setMovieFilesLoading] = useState(false);
+  const [movieHistory, setMovieHistory] = useState<any[]>([]);
+  const [movieHistoryLoading, setMovieHistoryLoading] = useState(false);
 
   const handleAutoSearch = async () => {
     if (!movie) return;
@@ -230,6 +234,22 @@ export function MovieDetailSheet({
         .then(data => setCredits(data))
         .catch((err) => console.error("fetch failed:", err))
         .finally(() => setCreditsLoading(false));
+      // Fetch movie files
+      setMovieFiles([]);
+      setMovieFilesLoading(true);
+      apiFetch(`/api/v1/movies/files/${movie.id}`)
+        .then(r => r.ok ? r.json() : [])
+        .then(data => setMovieFiles(Array.isArray(data) ? data : []))
+        .catch(() => setMovieFiles([]))
+        .finally(() => setMovieFilesLoading(false));
+      // Fetch history
+      setMovieHistory([]);
+      setMovieHistoryLoading(true);
+      apiFetch(`/api/v1/movies/${movie.id}/history`)
+        .then(r => r.ok ? r.json() : [])
+        .then(data => setMovieHistory(Array.isArray(data) ? data : []))
+        .catch(() => setMovieHistory([]))
+        .finally(() => setMovieHistoryLoading(false));
     }
   }, [movie, open]);
 
@@ -440,7 +460,7 @@ export function MovieDetailSheet({
             <div className="flex items-center gap-1.5">
               {/* Primary actions with labels */}
               <Button size="sm" variant="outline" className="gap-1.5 h-8 text-xs" onClick={handleAutoSearch} disabled={autoSearching} title="Automated search (uses quality profile to pick the best result)">
-                <Search className={cn("w-3.5 h-3.5", autoSearching && "animate-spin")} />{autoSearching ? "Searching..." : "Search"}
+                {autoSearching ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}{autoSearching ? "Searching..." : "Search"}
               </Button>
               <Button size="sm" variant="outline" className="gap-1.5 h-8 text-xs" onClick={() => setSearchOpen(true)} title="Interactive search — browse releases manually">
                 <Download className="w-3.5 h-3.5" />Browse
@@ -454,10 +474,10 @@ export function MovieDetailSheet({
 
               {/* Secondary actions — icon only */}
               <Button size="icon" variant="ghost" className="h-8 w-8" onClick={handleRefresh} disabled={refreshing} title="Refresh metadata from TMDB">
-                <RefreshCw className={cn("w-3.5 h-3.5", refreshing && "animate-spin")} />
+                {refreshing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
               </Button>
               <Button size="icon" variant="ghost" className="h-8 w-8" onClick={handleRescan} disabled={rescanning} title="Rescan library folder for new files">
-                <HardDriveDownload className={cn("w-3.5 h-3.5", rescanning && "animate-spin")} />
+                {rescanning ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <HardDriveDownload className="w-3.5 h-3.5" />}
               </Button>
               <Button size="icon" variant="ghost" className="h-8 w-8" onClick={handleArchiveToggle} disabled={archiving} title={movie.monitoringStatus === "unmonitored" ? "Unarchive" : "Archive"}>
                 {movie.monitoringStatus === "unmonitored" ? <ArchiveRestore className="w-3.5 h-3.5" /> : <Archive className="w-3.5 h-3.5" />}
@@ -663,32 +683,79 @@ export function MovieDetailSheet({
 
             {/* ── Movie Files ── */}
             <CollapsibleSection title="Movie Files" icon={FileVideo} defaultOpen={false}>
-              <div className="flex flex-col items-center justify-center py-8 text-center">
-                <FileVideo className="w-10 h-10 text-muted-foreground/20 mb-3" />
-                <p className="text-sm text-muted-foreground">No movie files found</p>
-                <p className="text-xs text-muted-foreground/60 mt-1">
-                  Files will appear here once the movie is downloaded
-                </p>
-                <div className="flex gap-2 mt-4">
-                  <Button size="sm" variant="outline" className="gap-1.5 text-xs" onClick={handleAutoSearch} disabled={autoSearching} title="Automated search">
-                    <Search className={cn("w-3.5 h-3.5", autoSearching && "animate-spin")} />{autoSearching ? "Searching..." : "Search"}
-                  </Button>
-                  <Button size="sm" variant="outline" className="gap-1.5 text-xs" onClick={() => setSearchOpen(true)}>
-                    <Download className="w-3.5 h-3.5" />Interactive Search
-                  </Button>
+              {movieFilesLoading ? (
+                <div className="flex items-center gap-2 py-4 text-sm text-muted-foreground">
+                  <Loader2 className="w-4 h-4 animate-spin" /> Loading files…
                 </div>
-              </div>
+              ) : movieFiles.length > 0 ? (
+                <div className="space-y-2">
+                  {movieFiles.map((f: any) => (
+                    <div key={f.id} className="flex items-start gap-3 p-3 rounded-lg bg-muted/20 border border-border/30">
+                      <FileVideo className="w-4 h-4 mt-0.5 text-muted-foreground shrink-0" />
+                      <div className="min-w-0 flex-1 space-y-1">
+                        <p className="text-sm font-medium truncate" title={f.filePath}>{f.filePath?.split("/").pop() || f.filePath}</p>
+                        <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                          {f.size != null && <span>{formatBytes(f.size)}</span>}
+                          {f.quality && <Badge variant="outline" className="text-[10px] h-4">{f.quality}</Badge>}
+                          {f.format && <span>{f.format}</span>}
+                          {f.createdAt && <span>{relativeTime(f.createdAt)}</span>}
+                        </div>
+                        <p className="text-[11px] text-muted-foreground/60 truncate" title={f.filePath}>{f.filePath}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center py-8 text-center">
+                  <FileVideo className="w-10 h-10 text-muted-foreground/20 mb-3" />
+                  <p className="text-sm text-muted-foreground">No movie files found</p>
+                  <p className="text-xs text-muted-foreground/60 mt-1">
+                    Files will appear here once the movie is downloaded
+                  </p>
+                  <div className="flex gap-2 mt-4">
+                    <Button size="sm" variant="outline" className="gap-1.5 text-xs" onClick={handleAutoSearch} disabled={autoSearching} title="Automated search">
+                      {autoSearching ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}{autoSearching ? "Searching..." : "Search"}
+                    </Button>
+                    <Button size="sm" variant="outline" className="gap-1.5 text-xs" onClick={() => setSearchOpen(true)}>
+                      <Download className="w-3.5 h-3.5" />Interactive Search
+                    </Button>
+                  </div>
+                </div>
+              )}
             </CollapsibleSection>
 
             {/* ── History ── */}
             <CollapsibleSection title="History" icon={History} defaultOpen={false}>
-              <div className="flex flex-col items-center justify-center py-8 text-center">
-                <History className="w-10 h-10 text-muted-foreground/20 mb-3" />
-                <p className="text-sm text-muted-foreground">No history available</p>
-                <p className="text-xs text-muted-foreground/60 mt-1">
-                  Download and import history will appear here
-                </p>
-              </div>
+              {movieHistoryLoading ? (
+                <div className="flex items-center gap-2 py-4 text-sm text-muted-foreground">
+                  <Loader2 className="w-4 h-4 animate-spin" /> Loading history…
+                </div>
+              ) : movieHistory.length > 0 ? (
+                <div className="space-y-2">
+                  {movieHistory.map((h: any, i: number) => (
+                    <div key={h.id || i} className="flex items-start gap-3 p-3 rounded-lg bg-muted/20 border border-border/30">
+                      <div className={cn("w-2 h-2 mt-1.5 rounded-full shrink-0", h.status === "completed" || h.status === "success" ? "bg-green-500" : h.status === "failed" ? "bg-red-500" : "bg-yellow-500")} />
+                      <div className="min-w-0 flex-1 space-y-1">
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline" className="text-[10px] h-4 capitalize">{h.type}</Badge>
+                          <span className="text-xs text-muted-foreground">{relativeTime(h.date)}</span>
+                        </div>
+                        {h.title && <p className="text-sm">{h.title}</p>}
+                        {h.destPath && <p className="text-[11px] text-muted-foreground/60 truncate" title={h.destPath}>{h.destPath}</p>}
+                        {h.error && <p className="text-xs text-red-400">{h.error}</p>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center py-8 text-center">
+                  <History className="w-10 h-10 text-muted-foreground/20 mb-3" />
+                  <p className="text-sm text-muted-foreground">No history available</p>
+                  <p className="text-xs text-muted-foreground/60 mt-1">
+                    Download and import history will appear here
+                  </p>
+                </div>
+              )}
             </CollapsibleSection>
 
             {/* ── Cast & Crew ── */}

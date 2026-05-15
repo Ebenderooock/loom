@@ -565,6 +565,10 @@ func (s *Service) handleRemove(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadGateway, "operation_failed", err.Error())
 		return
 	}
+	// Cancel any workflows tracking these downloads
+	if s.orchestrator != nil {
+		s.orchestrator.NotifyDownloadRemoved(id, req.IDs)
+	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
@@ -822,6 +826,10 @@ func (s *Service) handleActivityRemove(w http.ResponseWriter, r *http.Request) {
 	if err := c.Remove(r.Context(), req.IDs, req.DeleteFiles); err != nil {
 		writeError(w, http.StatusBadGateway, "operation_failed", err.Error())
 		return
+	}
+	// Cancel any workflows tracking these downloads
+	if s.orchestrator != nil {
+		s.orchestrator.NotifyDownloadRemoved(req.ClientID, req.IDs)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
