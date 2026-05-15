@@ -8,6 +8,7 @@ import {
   ArrowDown,
   ArrowUp,
   RefreshCw,
+  Loader2,
   Import,
   Square,
   Pause,
@@ -691,7 +692,7 @@ function ActiveDownloads() {
           disabled={refreshing}
           className="text-zinc-400 hover:text-zinc-200 h-8"
         >
-          <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${refreshing ? "animate-spin" : ""}`} />
+          {refreshing ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5 mr-1.5" />}
           Refresh
         </Button>
       </div>

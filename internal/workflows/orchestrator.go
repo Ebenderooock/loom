@@ -129,6 +129,13 @@ func (o *Orchestrator) NotifyDownloadProgress(clientID, downloadID string, progr
 	})
 }
 
+// NotifyDownloadRemoved is called when a user removes a download from the client.
+func (o *Orchestrator) NotifyDownloadRemoved(clientID string, downloadIDs []string) {
+	for _, dlID := range downloadIDs {
+		o.Send(CmdDownloadRemoved{ClientID: clientID, DownloadID: dlID})
+	}
+}
+
 // StartSearch is the synchronous API for creating a new workflow.
 // Callers need the workflow ID back to later send CmdGrabbed.
 func (o *Orchestrator) StartSearch(ctx context.Context, wfType, mediaType, qualityProfileID string, mediaIDs []string) (*Workflow, error) {
@@ -207,6 +214,8 @@ func (o *Orchestrator) handle(ctx context.Context, cmd Command) {
 		o.handleImportResult(ctx, c)
 	case CmdCancel:
 		o.handleCancel(ctx, c)
+	case CmdDownloadRemoved:
+		o.handleDownloadRemoved(ctx, c)
 	case CmdRetry:
 		o.handleRetry(ctx, c)
 	default:
@@ -458,6 +467,32 @@ func (o *Orchestrator) handleRetry(ctx context.Context, cmd CmdRetry) {
 	if cmd.Reply != nil {
 		cmd.Reply <- err
 	}
+}
+
+func (o *Orchestrator) handleDownloadRemoved(ctx context.Context, cmd CmdDownloadRemoved) {
+	wf, err := o.engine.FindByDownload(ctx, cmd.ClientID, cmd.DownloadID)
+	if err != nil {
+		o.logger.Error("failed to find workflow for removed download",
+			"client_id", cmd.ClientID, "download_id", cmd.DownloadID, "error", err)
+		return
+	}
+	if wf == nil {
+		return // no workflow tracks this download
+	}
+	if wf.IsTerminal() {
+		return // already done
+	}
+
+	err = o.engine.Cancel(ctx, wf.ID)
+	if err != nil {
+		o.logger.Warn("failed to cancel workflow for removed download",
+			"workflow_id", wf.ID, "error", err)
+		return
+	}
+	o.logEvent(ctx, wf.ID, EventCancelled, "Download removed by user", map[string]any{
+		"client_id":   cmd.ClientID,
+		"download_id": cmd.DownloadID,
+	})
 }
 
 // ── Progress coalescing ───────────────────────────────────────────────

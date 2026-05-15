@@ -142,16 +142,27 @@ func (e *Engine) markImporting(ctx context.Context, workflowID string) error {
 
 // markCompleted transitions to completed (import successful).
 func (e *Engine) markCompleted(ctx context.Context, workflowID, message string) error {
-	// Try from importing first, then post_download (fast path)
+	// Try from importing first (normal path)
 	ok, err := e.store.Transition(ctx, workflowID, StateImporting, StateCompleted, message)
 	if err != nil {
 		return err
 	}
-	if !ok {
-		return fmt.Errorf("workflow %s not in importing state", workflowID)
+	if ok {
+		e.logger.Info("workflow completed", "id", workflowID)
+		return nil
 	}
-	e.logger.Info("workflow completed", "id", workflowID)
-	return nil
+
+	// Fallback: recover from failed state (stale detection raced with import)
+	ok, err = e.store.Transition(ctx, workflowID, StateFailed, StateCompleted, message)
+	if err != nil {
+		return err
+	}
+	if ok {
+		e.logger.Info("workflow completed (recovered from failed)", "id", workflowID)
+		return nil
+	}
+
+	return fmt.Errorf("workflow %s not in importing or failed state", workflowID)
 }
 
 // markFailed records failure and either retries or marks as permanently failed.
