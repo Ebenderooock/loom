@@ -25,6 +25,16 @@ type Reconciler interface {
 	Reconcile(ctx context.Context, activeDownloads map[string]string)
 }
 
+// MonitorOrchNotifier is an optional interface for the orchestrator to receive
+// download completion and progress events from the monitor without introducing
+// a direct dependency on the workflows package.
+type MonitorOrchNotifier interface {
+	// NotifyDownloadComplete tells the orchestrator that a download has finished.
+	NotifyDownloadComplete(clientID, downloadID, title, category string)
+	// NotifyDownloadProgress reports progress for a specific download.
+	NotifyDownloadProgress(clientID, downloadID string, progress float64, downSpeed, upSpeed int64)
+}
+
 // Monitor periodically checks the status of downloads on all configured
 // clients and emits completion events when items finish. It decouples
 // status polling from the indexer intake and routing pipelines, reducing
@@ -37,6 +47,7 @@ type Monitor struct {
 	stallHandler *StallHandler
 	historyStore *HistoryStore
 	reconciler   Reconciler
+	orchNotifier MonitorOrchNotifier
 
 	// Configurable check interval. Defaults to 30 seconds; can be
 	// overridden via env variable or test injection.
@@ -68,6 +79,7 @@ type MonitorOptions struct {
 	StallHandler    *StallHandler
 	HistoryStore    *HistoryStore
 	Reconciler      Reconciler
+	OrchNotifier    MonitorOrchNotifier
 }
 
 // NewMonitor returns a Monitor wired to the Service and event bus.
@@ -101,6 +113,7 @@ func NewMonitor(opts MonitorOptions) (*Monitor, error) {
 		stallHandler:    opts.StallHandler,
 		historyStore:    opts.HistoryStore,
 		reconciler:      opts.Reconciler,
+		orchNotifier:    opts.OrchNotifier,
 		checkInterval:   opts.CheckInterval,
 		stallTimeout:    opts.StallTimeout,
 		checkForStalled: opts.CheckForStalled,
@@ -136,6 +149,18 @@ func (m *Monitor) Run(ctx context.Context) error {
 
 	// Process results: emit DownloadCompleted for any newly completed items.
 	m.emitCompletions(ctx, status.Items)
+
+	// Forward progress updates to orchestrator for in-progress downloads.
+	if m.orchNotifier != nil {
+		for _, item := range status.Items {
+			if item.Status == StatusItemDownloading || item.Status == StatusItemPaused {
+				m.orchNotifier.NotifyDownloadProgress(
+					item.ClientID, item.ID, item.Progress,
+					0, 0,
+				)
+			}
+		}
+	}
 
 	// Process results: detect stalled/failed downloads.
 	if m.checkForStalled {
@@ -187,6 +212,11 @@ func (m *Monitor) emitCompletions(ctx context.Context, items []Item) {
 					CompletedAt: m.clock.Now(),
 				}
 				_ = m.bus.Publish(ctx, event)
+
+				// Notify orchestrator for workflow-tracked downloads.
+				if m.orchNotifier != nil {
+					m.orchNotifier.NotifyDownloadComplete(item.ClientID, item.ID, item.Title, item.Category)
+				}
 
 				// Persist to history store if available.
 				if m.historyStore != nil {

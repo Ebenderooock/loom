@@ -114,6 +114,33 @@ func (p *ImportPipeline) Stop() {
 	}
 }
 
+// RunImport performs the import for a specific download, bypassing the event bus.
+// This is the entry point used by the workflow orchestrator.
+// It returns the list of imported file paths on success.
+func (p *ImportPipeline) RunImport(ctx context.Context, clientID, downloadID, title, category string) ([]string, error) {
+	ev := &downloads.DownloadCompletedEvent{
+		DownloadID: downloadID,
+		ClientID:   clientID,
+		Title:      title,
+		Category:   category,
+	}
+
+	p.logger.Info("orchestrator-triggered import starting",
+		"download_id", downloadID, "client_id", clientID, "title", title)
+
+	downloadPath, err := p.resolveDownloadPath(ctx, ev)
+	if err != nil {
+		p.recordFailure(ctx, "", "", title, "", err)
+		return nil, fmt.Errorf("resolve download path: %w", err)
+	}
+
+	if err := p.processImport(ctx, ev, downloadPath); err != nil {
+		return nil, err
+	}
+
+	return []string{downloadPath}, nil
+}
+
 // handleCompleted processes a download completion event.
 func (p *ImportPipeline) handleCompleted(ctx context.Context, ev eventbus.Event) error {
 	completed, ok := ev.(*downloads.DownloadCompletedEvent)

@@ -62,6 +62,16 @@ func (s *Store) migrate() error {
 
 		CREATE INDEX IF NOT EXISTS idx_workflows_state ON workflows(state);
 		CREATE INDEX IF NOT EXISTS idx_workflow_items_media ON workflow_items(media_type, media_id);
+
+		CREATE TABLE IF NOT EXISTS workflow_events (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			workflow_id TEXT NOT NULL REFERENCES workflows(id) ON DELETE CASCADE,
+			event_type TEXT NOT NULL,
+			message TEXT,
+			metadata TEXT,
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+		);
+		CREATE INDEX IF NOT EXISTS idx_workflow_events_wf ON workflow_events(workflow_id);
 	`)
 	if err != nil {
 		return err
@@ -199,6 +209,15 @@ func (s *Store) SetDownload(ctx context.Context, id, clientID, downloadID, title
 	_, err := s.db.ExecContext(ctx, `
 		UPDATE workflows SET download_client_id = ?, download_id = ?, grab_title = ?, updated_at = ?
 		WHERE id = ?`, clientID, downloadID, title, time.Now(), id,
+	)
+	return err
+}
+
+// SetMetadata updates the workflow's metadata JSON blob.
+func (s *Store) SetMetadata(ctx context.Context, id, metadata string) error {
+	_, err := s.db.ExecContext(ctx, `
+		UPDATE workflows SET metadata = ?, updated_at = ?
+		WHERE id = ?`, nullStr(metadata), time.Now(), id,
 	)
 	return err
 }
@@ -483,6 +502,41 @@ func (s *Store) getHistory(ctx context.Context, workflowID string) ([]Event, err
 			return nil, err
 		}
 		ev.Message = msg.String
+		events = append(events, ev)
+	}
+	return events, rows.Err()
+}
+
+// LogEvent writes a rich audit event to the workflow_events table.
+func (s *Store) LogEvent(ctx context.Context, workflowID, eventType, message, metadata string) error {
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO workflow_events (workflow_id, event_type, message, metadata, created_at)
+		VALUES (?, ?, ?, ?, ?)`,
+		workflowID, eventType, nullStr(message), nullStr(metadata), time.Now(),
+	)
+	return err
+}
+
+// ListEvents returns all audit events for a workflow, ordered chronologically.
+func (s *Store) ListEvents(ctx context.Context, workflowID string) ([]WorkflowEvent, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT id, workflow_id, event_type, message, metadata, created_at
+		FROM workflow_events WHERE workflow_id = ?
+		ORDER BY created_at ASC, id ASC`, workflowID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var events []WorkflowEvent
+	for rows.Next() {
+		var ev WorkflowEvent
+		var msg, meta sql.NullString
+		if err := rows.Scan(&ev.ID, &ev.WorkflowID, &ev.EventType, &msg, &meta, &ev.CreatedAt); err != nil {
+			return nil, err
+		}
+		ev.Message = msg.String
+		ev.Metadata = meta.String
 		events = append(events, ev)
 	}
 	return events, rows.Err()

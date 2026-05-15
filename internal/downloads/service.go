@@ -64,6 +64,7 @@ type Service struct {
 	routeExtensions    []RouteMounter
 	historyStore       *HistoryStore
 	wfEngine           *workflows.Engine
+	orchestrator       *workflows.Orchestrator
 	movieStatusUpdater MovieStatusUpdater
 
 	mu sync.RWMutex
@@ -120,6 +121,13 @@ func (s *Service) SetWorkflowEngine(wf *workflows.Engine) {
 	s.mu.Unlock()
 }
 
+// SetOrchestrator sets the workflow orchestrator for unified state management.
+func (s *Service) SetOrchestrator(o *workflows.Orchestrator) {
+	s.mu.Lock()
+	s.orchestrator = o
+	s.mu.Unlock()
+}
+
 // SetMovieStatusUpdater sets the movie status updater for the service.
 func (s *Service) SetMovieStatusUpdater(u MovieStatusUpdater) {
 	s.mu.Lock()
@@ -131,6 +139,19 @@ func (s *Service) SetMovieStatusUpdater(u MovieStatusUpdater) {
 // Must be called before the HTTP server is started.
 func (s *Service) AddRouteExtension(m RouteMounter) {
 	s.routeExtensions = append(s.routeExtensions, m)
+}
+
+// ActiveDownloads returns all active downloads across all clients as a map
+// of "clientID:downloadID" → status string. Implements workflows.DownloadStatusProvider.
+func (s *Service) ActiveDownloads(ctx context.Context) (map[string]string, error) {
+	opts := s.FanOutOpts(nil)
+	status := s.registry.Status(ctx, nil, opts)
+	result := make(map[string]string, len(status.Items))
+	for _, item := range status.Items {
+		key := item.ClientID + ":" + item.ID
+		result[key] = string(item.Status)
+	}
+	return result, nil
 }
 
 // HydrateAll reads every persisted client and registers a live

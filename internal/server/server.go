@@ -121,6 +121,7 @@ type Server struct {
 	auditLog        *auditlog.Logger
 	autoSearchEngine *autosearch.Engine
 	wfEngine         *workflows.Engine
+	orchestrator     *workflows.Orchestrator
 	periodicScanner  *scheduler.PeriodicScanner
 	syncProfileStore *syncprofiles.Store
 	discoverRouter   http.Handler
@@ -467,6 +468,16 @@ func (s *Server) SetWorkflowEngine(wf *workflows.Engine) {
 	s.wfEngine = wf
 }
 
+// SetOrchestrator installs the workflow orchestrator.
+func (s *Server) SetOrchestrator(o *workflows.Orchestrator) {
+	s.orchestrator = o
+}
+
+// Orchestrator returns the workflow orchestrator (may be nil if not wired yet).
+func (s *Server) Orchestrator() *workflows.Orchestrator {
+	return s.orchestrator
+}
+
 // SetSyncProfileStore installs the sync profile store and rebuilds the
 // HTTP handler so the /api/v1/sync-profiles routes are reachable.
 func (s *Server) SetSyncProfileStore(st *syncprofiles.Store) {
@@ -646,7 +657,7 @@ func (s *Server) newMux() http.Handler {
 
 		// Workflow routes
 		if s.wfEngine != nil {
-			r.Mount("/api/v1/workflows", workflows.Router(s.wfEngine))
+			r.Mount("/api/v1/workflows", workflows.Router(s.wfEngine, s.orchestrator))
 		}
 
 		// Custom formats routes
