@@ -25,7 +25,7 @@ concurrency:
 
 jobs:
   deploy:
-    runs-on: self-hosted          # your private runner label
+    runs-on: arc-runners
     timeout-minutes: 15
     permissions:
       contents: write             # push version bump commit

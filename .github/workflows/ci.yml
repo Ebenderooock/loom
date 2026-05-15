@@ -20,7 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: [arc-runners, macos-latest, windows-latest]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -30,7 +30,7 @@ jobs:
       - run: go mod download
       - run: go vet ./...
       - run: go test -race -count=1 -coverprofile=coverage.out ./...
-      - if: matrix.os == 'ubuntu-latest'
+      - if: matrix.os == 'arc-runners'
         uses: actions/upload-artifact@v4
         with:
           name: coverage
@@ -38,7 +38,7 @@ jobs:
 
   lint:
     name: Lint
-    runs-on: ubuntu-latest
+    runs-on: arc-runners
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -51,7 +51,7 @@ jobs:
 
   vuln:
     name: govulncheck
-    runs-on: ubuntu-latest
+    runs-on: arc-runners
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -63,7 +63,7 @@ jobs:
 
   build:
     name: Build matrix
-    runs-on: ubuntu-latest
+    runs-on: arc-runners
     needs: [go, lint]
     strategy:
       fail-fast: false
@@ -91,7 +91,7 @@ jobs:
 
   web:
     name: Frontend
-    runs-on: ubuntu-latest
+    runs-on: arc-runners
     defaults:
       run:
         working-directory: web
