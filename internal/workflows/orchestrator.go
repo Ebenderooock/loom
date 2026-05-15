@@ -460,13 +460,95 @@ func (o *Orchestrator) handleCancel(ctx context.Context, cmd CmdCancel) {
 }
 
 func (o *Orchestrator) handleRetry(ctx context.Context, cmd CmdRetry) {
-	err := o.engine.Retry(ctx, cmd.WorkflowID)
-	if err == nil {
-		o.logEvent(ctx, cmd.WorkflowID, EventRetried, "Manual retry", nil)
+	wf, err := o.engine.Store().Get(ctx, cmd.WorkflowID)
+	if err != nil {
+		if cmd.Reply != nil {
+			cmd.Reply <- err
+		}
+		return
 	}
+	if wf.State != StateFailed {
+		err = fmt.Errorf("can only retry failed workflows, current state: %s", wf.State)
+		if cmd.Reply != nil {
+			cmd.Reply <- err
+		}
+		return
+	}
+
+	// Smart retry: check download status to determine the best recovery point
+	if wf.DownloadClientID != "" && wf.DownloadID != "" && o.dlStatus != nil {
+		err = o.smartRetry(ctx, wf)
+	} else {
+		// No download info — start from scratch
+		err = o.engine.Retry(ctx, wf.ID)
+		if err == nil {
+			o.logEvent(ctx, wf.ID, EventRetried, "Manual retry (re-search)", nil)
+		}
+	}
+
 	if cmd.Reply != nil {
 		cmd.Reply <- err
 	}
+}
+
+// smartRetry checks the download state and picks the optimal retry point.
+func (o *Orchestrator) smartRetry(ctx context.Context, wf *Workflow) error {
+	downloads, err := o.dlStatus.ActiveDownloads(ctx)
+	if err != nil {
+		o.logger.Warn("smart retry: failed to query downloads, falling back to re-search",
+			"workflow_id", wf.ID, "error", err)
+		if err := o.engine.Retry(ctx, wf.ID); err != nil {
+			return err
+		}
+		o.logEvent(ctx, wf.ID, EventRetried, "Manual retry (re-search, download query failed)", nil)
+		return nil
+	}
+
+	key := wf.DownloadClientID + ":" + wf.DownloadID
+	dlState, exists := downloads[key]
+
+	switch {
+	case !exists:
+		// Download gone — re-search from scratch
+		if err := o.engine.Retry(ctx, wf.ID); err != nil {
+			return err
+		}
+		o.logEvent(ctx, wf.ID, EventRetried, "Manual retry (re-search, download not found)", nil)
+
+	case dlState == "completed":
+		// Download complete — skip straight to import
+		if err := o.engine.RecoverToImporting(ctx, wf.ID, "Manual retry (download complete, re-importing)"); err != nil {
+			return err
+		}
+		o.logEvent(ctx, wf.ID, EventRetried, "Manual retry (re-importing)", nil)
+		category := o.categoryFromMetadata(wf.Metadata)
+		o.dispatchImport(ctx, wf.ID, wf.DownloadClientID, wf.DownloadID, wf.GrabTitle, category)
+
+	case dlState == "seeding":
+		// Still seeding — go to post_download to evaluate seed requirements
+		if err := o.engine.RecoverToPostDownload(ctx, wf.ID, "Manual retry (seeding, evaluating seed requirements)"); err != nil {
+			return err
+		}
+		o.logEvent(ctx, wf.ID, EventRetried, "Manual retry (evaluating seed status)", nil)
+
+	case dlState == "downloading":
+		// Still downloading — resume from downloading state
+		if err := o.engine.RecoverToDownloading(ctx, wf.ID, "Manual retry (download still active)"); err != nil {
+			return err
+		}
+		o.logEvent(ctx, wf.ID, EventRetried, "Manual retry (download resuming)", nil)
+
+	default:
+		// Unknown state — fall back to re-search
+		o.logger.Warn("smart retry: unknown download state, falling back to re-search",
+			"workflow_id", wf.ID, "dl_state", dlState)
+		if err := o.engine.Retry(ctx, wf.ID); err != nil {
+			return err
+		}
+		o.logEvent(ctx, wf.ID, EventRetried, fmt.Sprintf("Manual retry (re-search, unknown dl state: %s)", dlState), nil)
+	}
+
+	return nil
 }
 
 func (o *Orchestrator) handleDownloadRemoved(ctx context.Context, cmd CmdDownloadRemoved) {
@@ -740,20 +822,16 @@ func (o *Orchestrator) reconcileOnBoot(ctx context.Context) {
 
 	o.logger.Info("running startup reconciliation")
 
-	active, err := o.store.ListActive(ctx)
-	if err != nil {
-		o.logger.Error("reconcile: failed to list active workflows", "error", err)
-		return
-	}
-
-	if len(active) == 0 {
-		o.logger.Debug("reconcile: no active workflows")
-		return
-	}
-
 	downloads, err := o.dlStatus.ActiveDownloads(ctx)
 	if err != nil {
 		o.logger.Error("reconcile: failed to query download state", "error", err)
+		return
+	}
+
+	// Phase 1: Reconcile active (non-terminal) workflows
+	active, err := o.store.ListActive(ctx)
+	if err != nil {
+		o.logger.Error("reconcile: failed to list active workflows", "error", err)
 		return
 	}
 
@@ -767,6 +845,15 @@ func (o *Orchestrator) reconcileOnBoot(ctx context.Context) {
 		dlState, exists := downloads[key]
 
 		switch {
+		case wf.State == StateImporting:
+			// Import goroutine was killed on restart — re-dispatch
+			o.logger.Info("reconcile: re-dispatching import for interrupted workflow",
+				"workflow_id", wf.ID)
+			category := o.categoryFromMetadata(wf.Metadata)
+			o.logEvent(ctx, wf.ID, EventImportStarted, "Re-dispatching import after restart", nil)
+			o.dispatchImport(ctx, wf.ID, wf.DownloadClientID, wf.DownloadID, wf.GrabTitle, category)
+			reconciled++
+
 		case !exists && wf.State == StateDownloading:
 			// Download disappeared — might have completed while we were down
 			o.logger.Warn("reconcile: download not found, may have completed",
@@ -808,6 +895,47 @@ func (o *Orchestrator) reconcileOnBoot(ctx context.Context) {
 			_ = o.engine.markDownloading(ctx, wf.ID)
 			o.logEvent(ctx, wf.ID, EventDownloading, "Reconciled: download active", nil)
 			reconciled++
+		}
+	}
+
+	// Phase 2: Recover recently-failed workflows that have completed downloads
+	failed, err := o.store.ListRecentlyFailed(ctx, time.Now().Add(-24*time.Hour))
+	if err != nil {
+		o.logger.Error("reconcile: failed to list recently failed workflows", "error", err)
+	} else {
+		for _, wf := range failed {
+			if wf.DownloadClientID == "" || wf.DownloadID == "" {
+				continue
+			}
+			key := wf.DownloadClientID + ":" + wf.DownloadID
+			dlState, exists := downloads[key]
+			if !exists {
+				continue
+			}
+
+			switch dlState {
+			case "completed":
+				o.logger.Info("reconcile: recovering failed workflow with completed download",
+					"workflow_id", wf.ID)
+				if err := o.engine.RecoverToImporting(ctx, wf.ID, "Boot recovery: download complete, re-importing"); err != nil {
+					o.logger.Error("reconcile: failed to recover to importing", "workflow_id", wf.ID, "error", err)
+					continue
+				}
+				o.logEvent(ctx, wf.ID, EventRetried, "Boot recovery: re-importing", nil)
+				category := o.categoryFromMetadata(wf.Metadata)
+				o.dispatchImport(ctx, wf.ID, wf.DownloadClientID, wf.DownloadID, wf.GrabTitle, category)
+				reconciled++
+
+			case "seeding":
+				o.logger.Info("reconcile: recovering failed workflow with seeding download",
+					"workflow_id", wf.ID)
+				if err := o.engine.RecoverToPostDownload(ctx, wf.ID, "Boot recovery: download seeding, evaluating"); err != nil {
+					o.logger.Error("reconcile: failed to recover to post_download", "workflow_id", wf.ID, "error", err)
+					continue
+				}
+				o.logEvent(ctx, wf.ID, EventRetried, "Boot recovery: evaluating seed status", nil)
+				reconciled++
+			}
 		}
 	}
 

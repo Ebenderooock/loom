@@ -231,7 +231,7 @@ func (e *Engine) Cancel(ctx context.Context, workflowID string) error {
 	return nil
 }
 
-// Retry restarts a failed workflow from the appropriate state.
+// Retry restarts a failed workflow from searching (no download available).
 func (e *Engine) Retry(ctx context.Context, workflowID string) error {
 	wf, err := e.store.Get(ctx, workflowID)
 	if err != nil {
@@ -241,16 +241,69 @@ func (e *Engine) Retry(ctx context.Context, workflowID string) error {
 		return fmt.Errorf("can only retry failed workflows, current state: %s", wf.State)
 	}
 
-	// Reset retry count and restart from searching
-	retryState := StateSearching
-	ok, err := e.store.Transition(ctx, workflowID, StateFailed, retryState, "Manual retry by user")
+	if err := e.store.ResetRetry(ctx, workflowID); err != nil {
+		return fmt.Errorf("reset retry count: %w", err)
+	}
+
+	ok, err := e.store.Transition(ctx, workflowID, StateFailed, StateSearching, "Manual retry by user (re-search)")
 	if err != nil {
 		return err
 	}
 	if !ok {
 		return fmt.Errorf("workflow %s transition failed", workflowID)
 	}
-	e.logger.Info("workflow retried manually", "id", workflowID)
+	e.logger.Info("workflow retried manually (re-search)", "id", workflowID)
+	return nil
+}
+
+// RecoverToImporting transitions a failed workflow directly to importing.
+// Used when the download is already complete and only the import needs to run.
+func (e *Engine) RecoverToImporting(ctx context.Context, workflowID, reason string) error {
+	if err := e.store.ResetRetry(ctx, workflowID); err != nil {
+		return fmt.Errorf("reset retry count: %w", err)
+	}
+	ok, err := e.store.Transition(ctx, workflowID, StateFailed, StateImporting, reason)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return fmt.Errorf("workflow %s not in failed state", workflowID)
+	}
+	e.logger.Info("workflow recovered to importing", "id", workflowID, "reason", reason)
+	return nil
+}
+
+// RecoverToPostDownload transitions a failed workflow to post_download.
+// Used when the download is seeding and seed requirements need re-evaluation.
+func (e *Engine) RecoverToPostDownload(ctx context.Context, workflowID, reason string) error {
+	if err := e.store.ResetRetry(ctx, workflowID); err != nil {
+		return fmt.Errorf("reset retry count: %w", err)
+	}
+	ok, err := e.store.Transition(ctx, workflowID, StateFailed, StatePostDownload, reason)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return fmt.Errorf("workflow %s not in failed state", workflowID)
+	}
+	e.logger.Info("workflow recovered to post_download", "id", workflowID, "reason", reason)
+	return nil
+}
+
+// RecoverToDownloading transitions a failed workflow to downloading.
+// Used when the download is still active.
+func (e *Engine) RecoverToDownloading(ctx context.Context, workflowID, reason string) error {
+	if err := e.store.ResetRetry(ctx, workflowID); err != nil {
+		return fmt.Errorf("reset retry count: %w", err)
+	}
+	ok, err := e.store.Transition(ctx, workflowID, StateFailed, StateDownloading, reason)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return fmt.Errorf("workflow %s not in failed state", workflowID)
+	}
+	e.logger.Info("workflow recovered to downloading", "id", workflowID, "reason", reason)
 	return nil
 }
 

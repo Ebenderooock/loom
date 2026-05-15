@@ -48,7 +48,7 @@ var ValidTransitions = map[string][]string{
 	StateDownloading:  {StatePostDownload, StateFailed, StateCancelled},
 	StatePostDownload: {StateImporting, StateFailed, StateCancelled},
 	StateImporting:    {StateCompleted, StateFailed, StateCancelled},
-	StateFailed:       {StateSearching, StateImporting, StateCompleted}, // retry paths + stale recovery
+	StateFailed:       {StateSearching, StateDownloading, StatePostDownload, StateImporting, StateCompleted},
 }
 
 // Retry behavior per failed state
