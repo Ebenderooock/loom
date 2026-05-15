@@ -292,25 +292,38 @@ func (e *Engine) SearchAndGrab(ctx context.Context, req SearchRequest) (*SearchR
 		}
 	}
 
-	// Request-chain fallback: try ID-based search first, then text fallback.
-	queries := e.buildQueryChain(req)
+	// Request-chain fallback: try tiers in order; within each tier,
+	// aggregate results from all queries, evaluate, and stop at the
+	// first tier that produces accepted results.
+	tiers := e.buildQueryChain(req)
 	var scored []ScoredRelease
 	rejectCounts := make(map[string]int)
 	totalConsidered := 0
 
-	// Try each query in the chain. If one returns results but all are
-	// rejected, continue to the next (weaker) query instead of giving up.
-	for _, q := range queries {
-		agg := e.indexerSvc.Search(ctx, q, nil, 30*time.Second)
-		if len(agg.Results) == 0 {
+	for tierIdx, tier := range tiers {
+		var tierResults []indexers.Result
+		var tierIDsBased bool
+
+		for _, q := range tier {
+			agg := e.indexerSvc.Search(ctx, q, nil, 30*time.Second)
+			tierResults = append(tierResults, agg.Results...)
+			if q.IMDBID != "" || q.TVDBID != "" || q.TMDBID != "" {
+				tierIDsBased = true
+			}
+		}
+
+		if len(tierResults) == 0 {
+			e.logger.Debug("autosearch: tier returned no results, trying next",
+				"tier", tierIdx,
+				"queries", len(tier),
+			)
 			continue
 		}
 
-		idBasedQuery := q.IMDBID != "" || q.TVDBID != "" || q.TMDBID != ""
-		totalConsidered += len(agg.Results)
+		totalConsidered += len(tierResults)
 
-		for _, res := range agg.Results {
-			sr := e.evaluateResult(req, res, qualDefs, allowedMap, allowedDefs, formatScores, profile, existing, cutoffTier, idBasedQuery)
+		for _, res := range tierResults {
+			sr := e.evaluateResult(req, res, qualDefs, allowedMap, allowedDefs, formatScores, profile, existing, cutoffTier, tierIDsBased)
 			if sr.Rejected {
 				rejectCounts[sr.RejectReason]++
 				e.logger.Debug("autosearch: result rejected",
@@ -334,15 +347,14 @@ func (e *Engine) SearchAndGrab(ctx context.Context, req SearchRequest) (*SearchR
 			scored = append(scored, sr)
 		}
 
-		// If this query produced at least one accepted result, stop.
+		// If this tier produced at least one accepted result, stop.
 		if len(scored) > 0 {
 			break
 		}
-		// Otherwise continue to the next query in the chain.
-		e.logger.Debug("autosearch: all results rejected for query, trying next",
-			"query_term", q.Term,
-			"id_based", idBasedQuery,
-			"results", len(agg.Results),
+		// Otherwise continue to the next tier.
+		e.logger.Debug("autosearch: all results rejected for tier, trying next",
+			"tier", tierIdx,
+			"results", len(tierResults),
 		)
 	}
 
@@ -612,12 +624,20 @@ func (e *Engine) verifyIdentity(req SearchRequest, parsed *parser.Release, idBas
 	}
 
 	// Title matching: verify the parsed title is close to the requested title.
+	// Uses Sonarr's CleanSeriesTitle for normalization (strips articles,
+	// punctuation, diacritics) which is designed specifically for comparing
+	// a search title against a release title.
 	if req.Title != "" {
-		parsedTitle := normalizeTitle(parsed.Title)
-		wantTitle := normalizeTitle(req.Title)
+		parsedTitle := parser.CleanSeriesTitle(parsed.Title)
+		wantTitle := parser.CleanSeriesTitle(req.Title)
 
 		if parsedTitle != "" && wantTitle != "" {
-			distance := levenshteinDistance(strings.ToLower(parsedTitle), strings.ToLower(wantTitle))
+			// Direct equality after cleaning handles the majority of cases.
+			if parsedTitle == wantTitle {
+				return ""
+			}
+
+			distance := levenshteinDistance(parsedTitle, wantTitle)
 			maxLen := max(len(parsedTitle), len(wantTitle))
 			if maxLen > 0 {
 				similarity := 1.0 - float64(distance)/float64(maxLen)
@@ -945,14 +965,24 @@ func buildDownloadRequest(res *indexers.Result) downloads.AddRequest {
 	return req
 }
 
-// buildQueryChain builds a prioritized list of indexer queries for
-// request-chain fallback. Tries strongest ID first, then weaker IDs,
-// then text-only search. The caller stops at the first query that
-// returns results.
-func (e *Engine) buildQueryChain(req SearchRequest) []indexers.Query {
+// buildQueryChain builds a tiered list of indexer queries for
+// request-chain fallback, faithfully porting the Arr stack's search
+// strategy.
+//
+// Return type is [][]Query: each outer slice is a "tier". All queries
+// within a tier are executed and their results aggregated; only if the
+// entire tier produces no usable results does the caller fall back to
+// the next tier.
+//
+// Tier 0: ID-based queries (tvsearch/movie with external IDs)
+// Tier 1: Title-based queries (tvsearch with q= for TV, search with q= for movies)
+//
+// Each alternate title generates its own query within the same tier.
+func (e *Engine) buildQueryChain(req SearchRequest) [][]indexers.Query {
 	base := indexers.Query{
-		Season:  req.Season,
-		Episode: req.Episode,
+		Season:    req.Season,
+		Episode:   req.Episode,
+		DailyDate: req.DailyDate,
 	}
 
 	switch req.MediaType {
@@ -962,42 +992,81 @@ func (e *Engine) buildQueryChain(req SearchRequest) []indexers.Query {
 		base.Categories = []indexers.Category{5000, 5010, 5020, 5030, 5040, 5045, 5050, 5060, 5070, 5080}
 	}
 
-	var chain []indexers.Query
+	var tiers [][]indexers.Query
 
-	// Priority 1: IMDB ID (most universal and precise).
-	if req.IMDBID != "" {
-		q := base
-		q.IMDBID = req.IMDBID
-		chain = append(chain, q)
+	// --- Tier 0: ID-based search ---
+	// Aggregate all available IDs into one query (like Arr's aggregated ID search).
+	if req.IMDBID != "" || req.TVDBID != "" || req.TMDBID != "" {
+		var idQueries []indexers.Query
+
+		if req.MediaType == "movie" {
+			// Radarr: movie mode with tmdbid/imdbid.
+			q := base
+			q.Mode = indexers.ModeMovie
+			if req.TMDBID != "" {
+				q.TMDBID = req.TMDBID
+			}
+			if req.IMDBID != "" {
+				q.IMDBID = req.IMDBID
+			}
+			idQueries = append(idQueries, q)
+		} else {
+			// Sonarr: tvsearch mode with tvdbid/imdbid.
+			q := base
+			q.Mode = indexers.ModeTVSearch
+			if req.TVDBID != "" {
+				q.TVDBID = req.TVDBID
+			}
+			if req.IMDBID != "" {
+				q.IMDBID = req.IMDBID
+			}
+			if req.TMDBID != "" {
+				q.TMDBID = req.TMDBID
+			}
+			idQueries = append(idQueries, q)
+		}
+
+		if len(idQueries) > 0 {
+			tiers = append(tiers, idQueries)
+		}
 	}
 
-	// Priority 2: TVDB ID (strong for series).
-	if req.TVDBID != "" {
-		q := base
-		q.TVDBID = req.TVDBID
-		chain = append(chain, q)
+	// --- Tier 1: Title-based search ---
+	// Each title variant (primary + alternates) generates its own query.
+	titles := []string{req.Title}
+	for _, alt := range req.AlternateTitles {
+		if alt != "" && alt != req.Title {
+			titles = append(titles, alt)
+		}
 	}
 
-	// Priority 3: TMDB ID.
-	if req.TMDBID != "" {
-		q := base
-		q.TMDBID = req.TMDBID
-		chain = append(chain, q)
+	if len(titles) > 0 && titles[0] != "" {
+		var titleQueries []indexers.Query
+		for _, title := range titles {
+			q := base
+			q.Term = title
+
+			switch req.MediaType {
+			case "movie":
+				// Radarr: generic search mode with "Title Year".
+				q.Mode = indexers.ModeSearch
+				q.Year = req.Year
+			case "series", "episode":
+				// Sonarr: tvsearch mode with q=Title + season/ep params.
+				q.Mode = indexers.ModeTVSearch
+			}
+
+			titleQueries = append(titleQueries, q)
+		}
+		tiers = append(tiers, titleQueries)
 	}
 
-	// Priority 4: Text search fallback.
-	if req.Title != "" {
-		q := base
-		q.Term = req.Title
-		chain = append(chain, q)
+	// If no IDs and no title, a single empty query as fallback.
+	if len(tiers) == 0 {
+		tiers = append(tiers, []indexers.Query{base})
 	}
 
-	// If no IDs and no title, use an empty query (shouldn't happen).
-	if len(chain) == 0 {
-		chain = append(chain, base)
-	}
-
-	return chain
+	return tiers
 }
 
 // getExistingQuality determines the quality state of existing files for

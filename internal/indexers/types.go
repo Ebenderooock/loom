@@ -87,10 +87,37 @@ type Caps struct {
 	SupportedIDs []string `json:"supported_ids"`
 }
 
+// SearchMode controls which Newznab/Torznab API mode is used for a query.
+// When empty, the mode is inferred from the query fields; when set
+// explicitly, the mode is forced (and the query is skipped for indexers
+// that don't support it).
+type SearchMode string
+
+const (
+	// ModeAuto lets the indexer client infer the best mode from the
+	// query fields and indexer capabilities.
+	ModeAuto SearchMode = ""
+
+	// ModeTVSearch forces the Newznab "tvsearch" mode.
+	ModeTVSearch SearchMode = "tvsearch"
+
+	// ModeMovie forces the Newznab "movie" mode.
+	ModeMovie SearchMode = "movie"
+
+	// ModeSearch forces the generic Newznab "search" mode (text only).
+	ModeSearch SearchMode = "search"
+)
+
 // Query is the input to Search. Zero-valued fields mean "no filter".
 type Query struct {
-	// Term is the free-text search string.
+	// Term is the free-text search string. For Newznab/Torznab this
+	// becomes the q= parameter. Must NOT be pre-URL-encoded — the
+	// indexer client handles encoding.
 	Term string `json:"query"`
+
+	// Mode explicitly selects the Newznab search mode. When empty
+	// (ModeAuto), the mode is inferred from the other fields.
+	Mode SearchMode `json:"mode,omitempty"`
 
 	// Categories restricts results to the given Newznab categories;
 	// empty means any.
@@ -106,6 +133,15 @@ type Query struct {
 	// means unset.
 	Season  int `json:"season,omitempty"`
 	Episode int `json:"episode,omitempty"`
+
+	// Year is the release year. For movie text-search queries (Radarr
+	// behavior), it is appended to the q= term: "Title Year".
+	Year int `json:"year,omitempty"`
+
+	// DailyDate encodes a daily-show air date as "YYYY-MM-DD". When
+	// set, tvsearch queries encode it as season=YYYY&ep=MM/DD per
+	// the Newznab daily-episode convention.
+	DailyDate string `json:"daily_date,omitempty"`
 
 	// Limit caps the rows returned by a single indexer. Zero means
 	// "indexer default".

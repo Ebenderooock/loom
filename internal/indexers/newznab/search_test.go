@@ -136,7 +136,7 @@ func TestParseSearchResponse_MalformedXML(t *testing.T) {
 func TestBuildQuery_Pagination(t *testing.T) {
 	t.Parallel()
 	q := indexers.Query{Term: "ubuntu", Limit: 25, Categories: []indexers.Category{4000}}
-	mode, params := buildQuery(q, Config{}, indexers.Caps{})
+	mode, params, _ := buildQuery(q, Config{}, indexers.Caps{})
 	if mode != "search" {
 		t.Errorf("mode = %q, want search", mode)
 	}
@@ -164,7 +164,7 @@ func TestBuildQuery_RoutesToMovieAndTV(t *testing.T) {
 		{"imdb routes to movie", indexers.Query{IMDBID: "tt0111161"}, "movie"},
 		{"tmdb routes to movie", indexers.Query{TMDBID: "550"}, "movie"},
 		{"tvdb routes to tvsearch", indexers.Query{TVDBID: "12345"}, "tvsearch"},
-		{"season routes to tvsearch", indexers.Query{Season: 2}, "tvsearch"},
+		{"season routes to tvsearch", indexers.Query{Season: 2, Term: "Breaking Bad"}, "tvsearch"},
 		{"movie categories route to movie", indexers.Query{Term: "Avengers", Categories: []indexers.Category{2000}}, "movie"},
 		{"movie subcategories route to movie", indexers.Query{Term: "test", Categories: []indexers.Category{2000, 2040, 2050}}, "movie"},
 		{"tv categories route to tvsearch", indexers.Query{Term: "Breaking Bad", Categories: []indexers.Category{5000}}, "tvsearch"},
@@ -177,7 +177,7 @@ func TestBuildQuery_RoutesToMovieAndTV(t *testing.T) {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			mode, _ := buildQuery(tc.q, Config{}, indexers.Caps{})
+			mode, _, _ := buildQuery(tc.q, Config{}, indexers.Caps{})
 			if mode != tc.want {
 				t.Errorf("mode = %q, want %q", mode, tc.want)
 			}
@@ -187,7 +187,7 @@ func TestBuildQuery_RoutesToMovieAndTV(t *testing.T) {
 
 func TestBuildQuery_StripsIMDBPrefix(t *testing.T) {
 	t.Parallel()
-	_, params := buildQuery(indexers.Query{IMDBID: "tt0111161"}, Config{}, indexers.Caps{})
+	_, params, _ := buildQuery(indexers.Query{IMDBID: "tt0111161"}, Config{}, indexers.Caps{})
 	if got := params.Get("imdbid"); got != "0111161" {
 		t.Errorf("imdbid = %q, want 0111161", got)
 	}

@@ -14,17 +14,19 @@ import (
 // SearchRequest describes what to search for and which quality
 // profile to evaluate results against.
 type SearchRequest struct {
-	MediaType        string `json:"media_type"`         // "movie" or "series"
-	MediaID          string `json:"media_id"`           // movie or series UUID
-	Title            string `json:"title"`              // search term
-	Year             int    `json:"year,omitempty"`      // release year for movies (for ±1 verification)
-	QualityProfileID string `json:"quality_profile_id"` // profile to score against
-	IMDBID           string `json:"imdb_id,omitempty"`
-	TMDBID           string `json:"tmdb_id,omitempty"`
-	TVDBID           string `json:"tvdb_id,omitempty"`
-	Season           int    `json:"season,omitempty"`
-	Episode          int    `json:"episode,omitempty"`
-	Runtime          int    `json:"runtime,omitempty"` // minutes; used for per-minute size limits
+	MediaType        string   `json:"media_type"`         // "movie", "series", or "episode"
+	MediaID          string   `json:"media_id"`           // movie or series UUID
+	Title            string   `json:"title"`              // primary title (used for query building)
+	AlternateTitles  []string `json:"alternate_titles,omitempty"` // scene/alternate titles
+	Year             int      `json:"year,omitempty"`      // release year for movies (for ±1 verification and text query)
+	QualityProfileID string   `json:"quality_profile_id"` // profile to score against
+	IMDBID           string   `json:"imdb_id,omitempty"`
+	TMDBID           string   `json:"tmdb_id,omitempty"`
+	TVDBID           string   `json:"tvdb_id,omitempty"`
+	Season           int      `json:"season,omitempty"`
+	Episode          int      `json:"episode,omitempty"`
+	DailyDate        string   `json:"daily_date,omitempty"` // "YYYY-MM-DD" for daily shows
+	Runtime          int      `json:"runtime,omitempty"`    // minutes; used for per-minute size limits
 }
 
 // SearchResult is returned by Engine.SearchAndGrab.
