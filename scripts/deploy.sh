@@ -29,7 +29,7 @@ info() { echo "▸ $*"; }
 
 # ── 1. Resolve version ──────────────────────────────────────────────
 
-current_tag=$(grep -E '^\s+tag:' "$VALUES_FILE" | head -1 | sed 's/.*tag:\s*"\(.*\)"/\1/')
+current_tag=$(grep -E '^[[:space:]]*tag:' "$VALUES_FILE" | head -1 | sed 's/.*tag:[[:space:]]*"\{0,1\}\([0-9][0-9.]*\)"\{0,1\}.*/\1/')
 [ -n "$current_tag" ] || die "Could not read current tag from $VALUES_FILE"
 
 if [ $# -ge 1 ]; then
@@ -68,8 +68,11 @@ docker push "${IMAGE}:latest"
 # ── 4. Update values-homelab.yaml ────────────────────────────────────
 
 info "Updating $VALUES_FILE → tag: \"${NEW_TAG}\""
-sed -i.bak "s/tag: \"${current_tag}\"/tag: \"${NEW_TAG}\"/" "$VALUES_FILE"
-rm -f "${VALUES_FILE}.bak"
+if [[ "$OSTYPE" == darwin* ]]; then
+  sed -i '' "s/tag: \"${current_tag}\"/tag: \"${NEW_TAG}\"/" "$VALUES_FILE"
+else
+  sed -i "s/tag: \"${current_tag}\"/tag: \"${NEW_TAG}\"/" "$VALUES_FILE"
+fi
 
 # ── 5. Commit and push version bump ─────────────────────────────────
 
