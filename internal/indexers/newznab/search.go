@@ -37,7 +37,8 @@ func buildQuery(q indexers.Query, cfg Config, caps indexers.Caps) (mode string, 
 	params = url.Values{}
 	mode = chooseMode(q, caps)
 	if t := strings.TrimSpace(q.Term); t != "" {
-		params.Set("q", t)
+		hasSEP := mode == "tvsearch" || mode == "movie"
+		params.Set("q", indexers.SanitizeTerm(t, hasSEP))
 	}
 	if cats := pickCategories(q, cfg); len(cats) > 0 {
 		params.Set("cat", strings.Join(cats, ","))
