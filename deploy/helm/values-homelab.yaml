@@ -8,7 +8,7 @@ replicaCount: 1
 image:
   repository: ghcr.io/ebenderooock/loom
   pullPolicy: IfNotPresent
-  tag: "0.1.45"
+  tag: "0.1.46"
 
 # ---------- Security context (match existing containers) ----------
 podSecurityContext:
