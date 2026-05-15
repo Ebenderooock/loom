@@ -745,55 +745,12 @@ func (s *Service) handleHistory(w http.ResponseWriter, r *http.Request) {
 }
 
 // recordManualGrab records grab linkage for interactive search grabs.
-// If no media context is present or no workflow engine is configured, this is a no-op.
+// If no media context is present or no orchestrator is configured, this is a no-op.
 func (s *Service) recordManualGrab(ctx context.Context, res AddResult, req AddRequest) {
-	if req.MediaType == "" {
+	if req.MediaType == "" || s.orchestrator == nil {
 		return
 	}
 
-	// Prefer orchestrator path.
-	if s.orchestrator != nil {
-		s.recordManualGrabOrchestrator(ctx, res, req)
-		return
-	}
-
-	if s.wfEngine == nil {
-		return
-	}
-	var err error
-	switch req.MediaType {
-	case "episode":
-		if len(req.EpisodeIDs) > 0 {
-			wf, werr := s.wfEngine.StartSearch(ctx, workflows.TypeEpisodeSearch, workflows.MediaTypeEpisode, "", req.EpisodeIDs)
-			if werr != nil {
-				err = werr
-			} else {
-				err = s.wfEngine.MarkGrabbed(ctx, wf.ID, res.ClientID, res.ItemID, req.Title)
-			}
-		}
-	case "movie":
-		if req.MovieID != "" {
-			wf, werr := s.wfEngine.StartSearch(ctx, workflows.TypeMovieSearch, workflows.MediaTypeMovie, "", []string{req.MovieID})
-			if werr != nil {
-				err = werr
-			} else {
-				err = s.wfEngine.MarkGrabbed(ctx, wf.ID, res.ClientID, res.ItemID, req.Title)
-			}
-		}
-	}
-	if err != nil {
-		s.logger.Warn("failed to record manual grab workflow",
-			"client_id", res.ClientID, "item_id", res.ItemID,
-			"media_type", req.MediaType, "err", err)
-	} else {
-		s.logger.Info("recorded manual grab workflow",
-			"client_id", res.ClientID, "item_id", res.ItemID,
-			"media_type", req.MediaType)
-	}
-}
-
-// recordManualGrabOrchestrator uses the orchestrator for manual grab workflow tracking.
-func (s *Service) recordManualGrabOrchestrator(ctx context.Context, res AddResult, req AddRequest) {
 	var wf *workflows.Workflow
 	var err error
 	switch req.MediaType {
@@ -807,7 +764,7 @@ func (s *Service) recordManualGrabOrchestrator(ctx context.Context, res AddResul
 		}
 	}
 	if err != nil {
-		s.logger.Warn("failed to create manual grab workflow via orchestrator",
+		s.logger.Warn("failed to create manual grab workflow",
 			"client_id", res.ClientID, "item_id", res.ItemID,
 			"media_type", req.MediaType, "err", err)
 		return
@@ -819,7 +776,7 @@ func (s *Service) recordManualGrabOrchestrator(ctx context.Context, res AddResul
 			DownloadID: res.ItemID,
 			Title:      req.Title,
 		})
-		s.logger.Info("recorded manual grab workflow via orchestrator",
+		s.logger.Info("recorded manual grab workflow",
 			"workflow_id", wf.ID, "client_id", res.ClientID, "item_id", res.ItemID,
 			"media_type", req.MediaType)
 	}

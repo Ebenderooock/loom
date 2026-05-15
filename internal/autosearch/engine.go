@@ -49,7 +49,6 @@ type Engine struct {
 	dlRegistry   *downloads.Registry
 	movieSvc     movies.Service
 	seriesSvc    series.Service
-	wfEngine     *workflows.Engine
 	orchestrator *workflows.Orchestrator
 	logger       *slog.Logger
 	audit        *auditlog.Logger
@@ -64,7 +63,6 @@ func NewEngine(
 	dlRegistry *downloads.Registry,
 	movieSvc movies.Service,
 	seriesSvc series.Service,
-	wfEngine *workflows.Engine,
 	logger *slog.Logger,
 	opts ...EngineOption,
 ) *Engine {
@@ -79,7 +77,6 @@ func NewEngine(
 		dlRegistry:   dlRegistry,
 		movieSvc:     movieSvc,
 		seriesSvc:    seriesSvc,
-		wfEngine:     wfEngine,
 		logger:       logger.With("module", "autosearch"),
 	}
 	for _, o := range opts {
@@ -273,8 +270,6 @@ func (e *Engine) SearchAndGrab(ctx context.Context, req SearchRequest) (*SearchR
 		var store *workflows.Store
 		if e.orchestrator != nil {
 			store = e.orchestrator.Store()
-		} else if e.wfEngine != nil {
-			store = e.wfEngine.Store()
 		}
 		if store != nil {
 			existing, err := store.FindActiveForMedia(ctx, mediaType, req.MediaID)
@@ -1129,77 +1124,11 @@ func matchStoredQualityToTier(
 
 // recordGrab creates/updates the workflow with grab info so the pipeline can track it.
 func (e *Engine) recordGrab(ctx context.Context, req SearchRequest, grabbed *GrabbedRelease) {
-	if grabbed == nil {
+	if grabbed == nil || e.orchestrator == nil {
 		return
 	}
 
-	// Prefer orchestrator path when available.
-	if e.orchestrator != nil {
-		e.recordGrabOrchestrator(ctx, req, grabbed)
-		return
-	}
-
-	// Legacy: direct wfEngine calls.
-	if e.wfEngine == nil {
-		return
-	}
-
-	switch req.MediaType {
-	case "movie":
-		if req.MediaID == "" {
-			return
-		}
-		wf, err := e.wfEngine.Store().FindActiveForMedia(ctx, workflows.MediaTypeMovie, req.MediaID)
-		if err != nil || wf == nil {
-			wf, err = e.wfEngine.StartSearch(ctx, workflows.TypeMovieSearch, workflows.MediaTypeMovie, req.QualityProfileID, []string{req.MediaID})
-			if err != nil {
-				e.logger.Warn("failed to create movie workflow", "error", err)
-				return
-			}
-		}
-		if err := e.wfEngine.MarkGrabbed(ctx, wf.ID, grabbed.ClientID, grabbed.DownloadID, grabbed.Title); err != nil {
-			e.logger.Warn("failed to mark workflow grabbed", "error", err)
-		}
-
-	case "series", "episode":
-		if req.MediaID == "" || e.seriesSvc == nil {
-			return
-		}
-
-		var seasonFilter *int
-		if req.Season > 0 {
-			s := req.Season
-			seasonFilter = &s
-		}
-
-		episodes, err := e.seriesSvc.ListEpisodes(ctx, req.MediaID, seasonFilter)
-		if err != nil {
-			e.logger.Warn("failed to list episodes for workflow tracking", "error", err)
-			return
-		}
-
-		var episodeIDs []string
-		for _, ep := range episodes {
-			if req.Episode > 0 {
-				if ep.EpisodeNumber == req.Episode {
-					episodeIDs = append(episodeIDs, ep.ID)
-				}
-			} else {
-				episodeIDs = append(episodeIDs, ep.ID)
-			}
-		}
-
-		if len(episodeIDs) > 0 {
-			wf, err := e.wfEngine.StartSearch(ctx, workflows.TypeEpisodeSearch, workflows.MediaTypeEpisode, req.QualityProfileID, episodeIDs)
-			if err != nil {
-				e.logger.Warn("failed to create episode workflow", "error", err)
-				return
-			}
-			if err := e.wfEngine.MarkGrabbed(ctx, wf.ID, grabbed.ClientID, grabbed.DownloadID, grabbed.Title); err != nil {
-				e.logger.Warn("failed to mark episode workflow grabbed", "error", err)
-			}
-		}
-	}
+	e.recordGrabOrchestrator(ctx, req, grabbed)
 }
 
 // recordGrabOrchestrator uses the unified orchestrator for workflow creation and state transitions.

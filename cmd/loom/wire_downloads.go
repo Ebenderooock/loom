@@ -23,10 +23,9 @@ import (
 // downloadWiring holds lifecycle objects produced by wireDownloads
 // so the caller can manage their shutdown.
 type downloadWiring struct {
-	importPipeline    *imports.ImportPipeline
+	importPipeline     *imports.ImportPipeline
 	orchestratorCancel context.CancelFunc
-	monitorCancel     context.CancelFunc
-	schedulerCancel   context.CancelFunc
+	monitorCancel      context.CancelFunc
 }
 
 // wireDownloads constructs download-related services (remote paths,
@@ -58,7 +57,6 @@ func wireDownloads(
 		return nil, fmt.Errorf("init workflow store: %w", err)
 	}
 	wfEngine := workflows.NewEngine(wfStore, workflowMediaAdapter{moviesSvc}, logger)
-	wfScheduler := workflows.NewScheduler(wfEngine, logger)
 
 	downloadSvc.SetWorkflowEngine(wfEngine)
 	downloadSvc.SetMovieStatusUpdater(movieStatusAdapter{moviesSvc})
@@ -79,7 +77,7 @@ func wireDownloads(
 	cfEngine := customformats.NewEngine(cfFormats)
 	autoSearchEngine := autosearch.NewEngine(
 		indexerSvc, media.qpStore, cfEngine, cfStore,
-		downloadSvc.Registry(), moviesSvc, media.seriesSvc, wfEngine, logger,
+		downloadSvc.Registry(), moviesSvc, media.seriesSvc, logger,
 		autosearch.WithAuditLogger(auditLogger),
 		autosearch.WithOrchestrator(orchestrator),
 	)
@@ -129,7 +127,6 @@ func wireDownloads(
 		CheckForStalled: true,
 		StallHandler:    stallHandler,
 		HistoryStore:    downloadHistoryStore,
-		Reconciler:      wfScheduler,
 		OrchNotifier:    orchestrator,
 	})
 	if err != nil {
@@ -137,10 +134,6 @@ func wireDownloads(
 	}
 	monCtx, monCancel := context.WithCancel(ctx)
 	go downloadMonitor.RunLoop(monCtx)
-
-	// Workflow scheduler — stale detection + prune
-	schedCtx, schedCancel := context.WithCancel(ctx)
-	go wfScheduler.RunLoop(schedCtx)
 
 	// Start orchestrator goroutine
 	orchCtx, orchCancel := context.WithCancel(ctx)
@@ -151,10 +144,9 @@ func wireDownloads(
 	// (handled in server.go newMux via wfEngine field)
 
 	return &downloadWiring{
-		importPipeline:    importPipeline,
+		importPipeline:     importPipeline,
 		orchestratorCancel: orchCancel,
-		monitorCancel:     monCancel,
-		schedulerCancel:   schedCancel,
+		monitorCancel:      monCancel,
 	}, nil
 }
 

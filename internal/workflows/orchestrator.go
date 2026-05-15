@@ -5,14 +5,28 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 )
 
 const (
-	commandBufferSize  = 256
-	maxConcurrentImports = 2
+	commandBufferSize     = 256
+	maxConcurrentImports  = 2
 	progressFlushInterval = 60 * time.Second
+	importRetryDelay      = 30 * time.Second
+)
+
+// importRetryStrategy classifies how an import failure should be retried.
+type importRetryStrategy int
+
+const (
+	// retryImport re-dispatches the import after a delay (transient errors like path not found).
+	retryImport importRetryStrategy = iota
+	// retrySearch transitions back to searching state (wrong release matched).
+	retrySearch
+	// failPermanent marks the workflow as permanently failed (non-retryable errors).
+	failPermanent
 )
 
 // ImportFunc is the function signature the orchestrator calls to run an import.
@@ -217,7 +231,7 @@ func (o *Orchestrator) handleSearchStarted(ctx context.Context, cmd CmdSearchSta
 }
 
 func (o *Orchestrator) handleGrabbed(ctx context.Context, cmd CmdGrabbed) {
-	if err := o.engine.MarkGrabbed(ctx, cmd.WorkflowID, cmd.ClientID, cmd.DownloadID, cmd.Title); err != nil {
+	if err := o.engine.markGrabbed(ctx, cmd.WorkflowID, cmd.ClientID, cmd.DownloadID, cmd.Title); err != nil {
 		o.logger.Error("failed to mark grabbed", "workflow_id", cmd.WorkflowID, "error", err)
 		o.logEvent(ctx, cmd.WorkflowID, EventFailed, "Failed to mark grabbed: "+err.Error(), nil)
 		return
@@ -230,7 +244,7 @@ func (o *Orchestrator) handleGrabbed(ctx context.Context, cmd CmdGrabbed) {
 	})
 
 	// Also transition to downloading immediately — the download client has accepted it
-	if err := o.engine.MarkDownloading(ctx, cmd.WorkflowID); err != nil {
+	if err := o.engine.markDownloading(ctx, cmd.WorkflowID); err != nil {
 		o.logger.Debug("grabbed → downloading transition deferred", "workflow_id", cmd.WorkflowID)
 	} else {
 		o.logEvent(ctx, cmd.WorkflowID, EventDownloading, "Download started", nil)
@@ -254,7 +268,7 @@ func (o *Orchestrator) handleDownloadComplete(ctx context.Context, cmd CmdDownlo
 
 	// Ensure we're at least in downloading state
 	if wf.State == StateGrabbed {
-		_ = o.engine.MarkDownloading(ctx, wf.ID)
+		_ = o.engine.markDownloading(ctx, wf.ID)
 	}
 
 	o.logEvent(ctx, wf.ID, EventDownloadComplete, "Download finished: "+cmd.Title, map[string]any{
@@ -265,7 +279,7 @@ func (o *Orchestrator) handleDownloadComplete(ctx context.Context, cmd CmdDownlo
 	})
 
 	// Transition to importing
-	if err := o.engine.MarkImporting(ctx, wf.ID); err != nil {
+	if err := o.engine.markImporting(ctx, wf.ID); err != nil {
 		o.logger.Error("failed to mark importing", "workflow_id", wf.ID, "error", err)
 		o.logEvent(ctx, wf.ID, EventImportFailed, "Failed to start import: "+err.Error(), nil)
 		return
@@ -283,17 +297,111 @@ func (o *Orchestrator) handleImportResult(ctx context.Context, cmd CmdImportResu
 		meta := map[string]any{"imported_paths": cmd.ImportedPaths}
 		o.logEvent(ctx, cmd.WorkflowID, EventImportSuccess, msg, meta)
 
-		if err := o.engine.MarkCompleted(ctx, cmd.WorkflowID, msg); err != nil {
+		if err := o.engine.markCompleted(ctx, cmd.WorkflowID, msg); err != nil {
 			o.logger.Error("failed to mark completed", "workflow_id", cmd.WorkflowID, "error", err)
 		}
-	} else {
-		o.logEvent(ctx, cmd.WorkflowID, EventImportFailed, "Import failed: "+cmd.Error, map[string]any{
-			"error": cmd.Error,
-		})
+		return
+	}
 
-		if err := o.engine.MarkFailed(ctx, cmd.WorkflowID, "Import failed: "+cmd.Error); err != nil {
-			o.logger.Error("failed to mark failed", "workflow_id", cmd.WorkflowID, "error", err)
+	strategy := o.classifyImportError(cmd.Error)
+
+	o.logEvent(ctx, cmd.WorkflowID, EventImportFailed, "Import failed: "+cmd.Error, map[string]any{
+		"error":          cmd.Error,
+		"retry_strategy": strategy.String(),
+	})
+
+	switch strategy {
+	case retryImport:
+		// Look up workflow to get download info for re-dispatch.
+		wf, err := o.store.Get(ctx, cmd.WorkflowID)
+		if err != nil {
+			o.logger.Error("failed to fetch workflow for retry", "workflow_id", cmd.WorkflowID, "error", err)
+			break
 		}
+
+		o.logger.Info("scheduling import retry after delay",
+			"workflow_id", cmd.WorkflowID, "delay", importRetryDelay, "error", cmd.Error)
+
+		// Extract category from metadata if available.
+		category := o.categoryFromMetadata(wf.Metadata)
+
+		time.AfterFunc(importRetryDelay, func() {
+			o.logEvent(ctx, wf.ID, EventRetried, "Re-importing after delay", map[string]any{
+				"retry_strategy": strategy.String(),
+				"delay":          importRetryDelay.String(),
+			})
+			o.dispatchImport(ctx, wf.ID, wf.DownloadClientID, wf.DownloadID, wf.GrabTitle, category)
+		})
+		return
+
+	case retrySearch:
+		o.logger.Info("import failed with no match, falling back to re-search",
+			"workflow_id", cmd.WorkflowID, "error", cmd.Error)
+		if err := o.engine.markFailed(ctx, cmd.WorkflowID, "Import failed (re-search): "+cmd.Error); err != nil {
+			o.logger.Error("failed to mark failed for re-search", "workflow_id", cmd.WorkflowID, "error", err)
+		}
+		return
+
+	case failPermanent:
+		o.logger.Warn("import failed permanently",
+			"workflow_id", cmd.WorkflowID, "error", cmd.Error)
+		// Force max-retry exhaustion by passing a clear permanent failure message.
+		if err := o.engine.markFailed(ctx, cmd.WorkflowID, "Import failed permanently: "+cmd.Error); err != nil {
+			o.logger.Error("failed to mark permanently failed", "workflow_id", cmd.WorkflowID, "error", err)
+		}
+		return
+	}
+}
+
+// classifyImportError determines the retry strategy based on the error message.
+func (o *Orchestrator) classifyImportError(errMsg string) importRetryStrategy {
+	lower := strings.ToLower(errMsg)
+
+	// Non-retryable errors — fail immediately.
+	for _, s := range []string{"permission denied", "access denied", "unauthorized"} {
+		if strings.Contains(lower, s) {
+			return failPermanent
+		}
+	}
+
+	// Errors suggesting the wrong release was grabbed — re-search.
+	for _, s := range []string{"no match found", "no files found", "unmatched", "wrong series"} {
+		if strings.Contains(lower, s) {
+			return retrySearch
+		}
+	}
+
+	// Transient errors — retry the import after a delay.
+	// This includes "path not found", timeouts, and any other unclassified error.
+	return retryImport
+}
+
+// categoryFromMetadata extracts the "category" field from a workflow's metadata JSON.
+func (o *Orchestrator) categoryFromMetadata(metadata string) string {
+	if metadata == "" {
+		return ""
+	}
+	var m map[string]any
+	if err := json.Unmarshal([]byte(metadata), &m); err != nil {
+		return ""
+	}
+	if cat, ok := m["category"].(string); ok {
+		return cat
+	}
+	return ""
+}
+
+// String returns a human-readable label for the retry strategy.
+func (s importRetryStrategy) String() string {
+	switch s {
+	case retryImport:
+		return "retry_import"
+	case retrySearch:
+		return "retry_search"
+	case failPermanent:
+		return "fail_permanent"
+	default:
+		return "unknown"
 	}
 }
 
@@ -340,7 +448,7 @@ func (o *Orchestrator) flushProgress(ctx context.Context) {
 
 		// Ensure we're in downloading state
 		if wf.State == StateGrabbed {
-			_ = o.engine.MarkDownloading(ctx, wf.ID)
+			_ = o.engine.markDownloading(ctx, wf.ID)
 			o.logEvent(ctx, wf.ID, EventDownloading, "Download confirmed active", nil)
 		}
 
@@ -408,7 +516,7 @@ func (o *Orchestrator) handleStale(ctx context.Context) {
 			fmt.Sprintf("Stale in %s state for %s", wf.State, age.Round(time.Second)),
 			map[string]any{"state": wf.State, "age_seconds": int(age.Seconds())})
 
-		err := o.engine.MarkFailed(ctx, wf.ID,
+		err := o.engine.markFailed(ctx, wf.ID,
 			fmt.Sprintf("Stale in %s state for %s", wf.State, age.Round(time.Second)))
 		if err != nil {
 			o.logger.Error("failed to handle stale workflow", "id", wf.ID, "error", err)
@@ -483,7 +591,7 @@ func (o *Orchestrator) reconcileOnBoot(ctx context.Context) {
 				reconciled++
 			}
 		case exists && dlState == "downloading" && wf.State == StateGrabbed:
-			_ = o.engine.MarkDownloading(ctx, wf.ID)
+			_ = o.engine.markDownloading(ctx, wf.ID)
 			o.logEvent(ctx, wf.ID, EventDownloading, "Reconciled: download active", nil)
 			reconciled++
 		}

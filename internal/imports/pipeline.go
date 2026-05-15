@@ -142,6 +142,9 @@ func (p *ImportPipeline) RunImport(ctx context.Context, clientID, downloadID, ti
 }
 
 // handleCompleted processes a download completion event.
+// For orphan downloads (not tracked by a workflow), this is the only import path.
+// For orchestrator-tracked downloads, state management is handled by the orchestrator;
+// this path only runs the actual file import logic.
 func (p *ImportPipeline) handleCompleted(ctx context.Context, ev eventbus.Event) error {
 	completed, ok := ev.(*downloads.DownloadCompletedEvent)
 	if !ok {
@@ -154,21 +157,15 @@ func (p *ImportPipeline) handleCompleted(ctx context.Context, ev eventbus.Event)
 		"title", completed.Title,
 	)
 
-	// Advance the workflow to "importing" so the stale detector
-	// doesn't misreport the state while the import runs.
-	p.markWorkflowImporting(ctx, completed)
-
 	downloadPath, err := p.resolveDownloadPath(ctx, completed)
 	if err != nil {
 		p.logger.Error("failed to resolve download path", "error", err, "title", completed.Title)
 		p.recordFailure(ctx, "", "", completed.Title, "", err)
-		p.markWorkflowFailed(ctx, completed, err)
 		return nil // don't block the event bus
 	}
 
 	if err := p.processImport(ctx, completed, downloadPath); err != nil {
 		p.logger.Error("import failed", "error", err, "title", completed.Title, "path", downloadPath)
-		p.markWorkflowFailed(ctx, completed, err)
 		return nil
 	}
 	return nil
@@ -368,9 +365,6 @@ func (p *ImportPipeline) importSingleFile(ctx context.Context, ev *downloads.Dow
 		DestPath:  destFile,
 	})
 
-	// Mark workflow completed now that import succeeded
-	p.markWorkflowCompleted(ctx, ev)
-
 	return nil
 }
 
@@ -468,57 +462,6 @@ func (p *ImportPipeline) matchByGrab(ctx context.Context, ev *downloads.Download
 	}
 
 	return nil, nil
-}
-
-// markWorkflowImporting transitions the workflow to the importing state so
-// that the stale detector correctly reports the phase if anything hangs.
-func (p *ImportPipeline) markWorkflowImporting(ctx context.Context, ev *downloads.DownloadCompletedEvent) {
-	if p.wfEngine == nil || ev.ClientID == "" || ev.DownloadID == "" {
-		return
-	}
-
-	wf, err := p.wfEngine.Store().FindByDownload(ctx, ev.ClientID, ev.DownloadID)
-	if err != nil || wf == nil {
-		return
-	}
-
-	if err := p.wfEngine.MarkImporting(ctx, wf.ID); err != nil {
-		p.logger.Debug("could not mark workflow as importing (may already be past that state)",
-			"workflow_id", wf.ID, "error", err)
-	}
-}
-
-// markWorkflowFailed marks the workflow as failed, which triggers retry logic
-// in the workflow engine. On final failure, the scheduler will reset media status.
-func (p *ImportPipeline) markWorkflowFailed(ctx context.Context, ev *downloads.DownloadCompletedEvent, importErr error) {
-	if p.wfEngine == nil || ev.ClientID == "" || ev.DownloadID == "" {
-		return
-	}
-
-	wf, err := p.wfEngine.Store().FindByDownload(ctx, ev.ClientID, ev.DownloadID)
-	if err != nil || wf == nil {
-		return
-	}
-
-	if err := p.wfEngine.MarkFailed(ctx, wf.ID, importErr.Error()); err != nil {
-		p.logger.Warn("failed to mark workflow as failed", "workflow_id", wf.ID, "error", err)
-	}
-}
-
-// markWorkflowCompleted marks the workflow as completed after a successful import.
-func (p *ImportPipeline) markWorkflowCompleted(ctx context.Context, ev *downloads.DownloadCompletedEvent) {
-	if p.wfEngine == nil || ev.ClientID == "" || ev.DownloadID == "" {
-		return
-	}
-
-	wf, err := p.wfEngine.Store().FindByDownload(ctx, ev.ClientID, ev.DownloadID)
-	if err != nil || wf == nil {
-		return
-	}
-
-	if err := p.wfEngine.MarkCompleted(ctx, wf.ID, "import successful"); err != nil {
-		p.logger.Warn("failed to mark workflow as completed", "workflow_id", wf.ID, "error", err)
-	}
 }
 
 // updateLibrary adds a file record to the appropriate service.

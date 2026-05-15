@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"time"
 )
 
 // MediaStatusUpdater abstracts movie/episode status updates.
@@ -70,8 +69,8 @@ func (e *Engine) StartSearch(ctx context.Context, wfType, mediaType, qualityProf
 	return wf, nil
 }
 
-// MarkGrabbed transitions a workflow from searching → grabbed and records download info.
-func (e *Engine) MarkGrabbed(ctx context.Context, workflowID, clientID, downloadID, title string) error {
+// markGrabbed transitions a workflow from searching → grabbed and records download info.
+func (e *Engine) markGrabbed(ctx context.Context, workflowID, clientID, downloadID, title string) error {
 	ok, err := e.store.Transition(ctx, workflowID, StateSearching, StateGrabbed, "Release grabbed: "+title)
 	if err != nil {
 		return fmt.Errorf("transition to grabbed: %w", err)
@@ -101,8 +100,8 @@ func (e *Engine) MarkGrabbed(ctx context.Context, workflowID, clientID, download
 	return nil
 }
 
-// MarkDownloading transitions from grabbed → downloading (download client confirmed).
-func (e *Engine) MarkDownloading(ctx context.Context, workflowID string) error {
+// markDownloading transitions from grabbed → downloading (download client confirmed).
+func (e *Engine) markDownloading(ctx context.Context, workflowID string) error {
 	ok, err := e.store.Transition(ctx, workflowID, StateGrabbed, StateDownloading, "Download started")
 	if err != nil {
 		return err
@@ -115,8 +114,8 @@ func (e *Engine) MarkDownloading(ctx context.Context, workflowID string) error {
 	return nil
 }
 
-// MarkImporting transitions from downloading → importing.
-func (e *Engine) MarkImporting(ctx context.Context, workflowID string) error {
+// markImporting transitions from downloading → importing.
+func (e *Engine) markImporting(ctx context.Context, workflowID string) error {
 	ok, err := e.store.Transition(ctx, workflowID, StateDownloading, StateImporting, "Download complete, importing")
 	if err != nil {
 		return err
@@ -128,8 +127,8 @@ func (e *Engine) MarkImporting(ctx context.Context, workflowID string) error {
 	return nil
 }
 
-// MarkCompleted transitions to completed (import successful).
-func (e *Engine) MarkCompleted(ctx context.Context, workflowID, message string) error {
+// markCompleted transitions to completed (import successful).
+func (e *Engine) markCompleted(ctx context.Context, workflowID, message string) error {
 	// Try from importing first, but also allow from downloading (fast imports)
 	ok, err := e.store.Transition(ctx, workflowID, StateImporting, StateCompleted, message)
 	if err != nil {
@@ -149,8 +148,8 @@ func (e *Engine) MarkCompleted(ctx context.Context, workflowID, message string) 
 	return nil
 }
 
-// MarkFailed records failure and either retries or marks as permanently failed.
-func (e *Engine) MarkFailed(ctx context.Context, workflowID, errMsg string) error {
+// markFailed records failure and either retries or marks as permanently failed.
+func (e *Engine) markFailed(ctx context.Context, workflowID, errMsg string) error {
 	wf, err := e.store.Get(ctx, workflowID)
 	if err != nil {
 		return err
@@ -266,25 +265,4 @@ func (e *Engine) resetMediaStatus(ctx context.Context, wf *Workflow) {
 			}
 		}
 	}
-}
-
-// HandleStaleWorkflows checks for stuck workflows and takes action.
-func (e *Engine) HandleStaleWorkflows(ctx context.Context) error {
-	stale, err := e.store.StaleWorkflows(ctx)
-	if err != nil {
-		return err
-	}
-
-	for _, wf := range stale {
-		age := time.Since(wf.UpdatedAt)
-		e.logger.Warn("stale workflow detected",
-			"id", wf.ID, "state", wf.State, "age", age.Round(time.Second))
-
-		err := e.MarkFailed(ctx, wf.ID,
-			fmt.Sprintf("Stale in %s state for %s", wf.State, age.Round(time.Second)))
-		if err != nil {
-			e.logger.Error("failed to handle stale workflow", "id", wf.ID, "error", err)
-		}
-	}
-	return nil
 }
