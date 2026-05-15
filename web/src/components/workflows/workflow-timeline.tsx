@@ -130,7 +130,7 @@ function TimelineItem({
           </span>
           <span className="text-xs text-muted-foreground/50">·</span>
           <span className="text-xs text-muted-foreground capitalize">
-            {event.event_type.replace(/_/g, " ")}
+            {event.event_type ? event.event_type.replace(/_/g, " ") : ""}
           </span>
         </div>
         <MetadataSection metadata={event.metadata} />
