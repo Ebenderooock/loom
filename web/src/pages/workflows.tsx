@@ -22,6 +22,7 @@ import {
   Trash2,
   XCircle,
 } from "lucide-react";
+import { Link } from "@tanstack/react-router";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -272,7 +273,13 @@ function WorkflowRow({
   return (
     <TableRow className={isFailed ? "bg-red-950/10" : undefined}>
       <TableCell className="font-medium truncate max-w-[200px]" title={wf.grabTitle || wf.id}>
-        {wf.grabTitle || wf.id.slice(0, 8)}
+        <Link
+          to="/workflows/$workflowId"
+          params={{ workflowId: wf.id }}
+          className="hover:underline"
+        >
+          {wf.grabTitle || wf.id.slice(0, 8)}
+        </Link>
       </TableCell>
       <TableCell className="text-muted-foreground text-xs">
         <TypeLabel type={wf.type} />
