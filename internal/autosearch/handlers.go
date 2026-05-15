@@ -26,6 +26,7 @@ func NewHandler(engine *Engine, logger *slog.Logger) *Handler {
 // Mount registers autosearch routes on the given mux.
 func (h *Handler) Mount(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/autosearch", h.HandleAutoSearch)
+	mux.HandleFunc("POST /api/v1/autosearch/evaluate", h.HandleEvaluate)
 }
 
 // HandleAutoSearch triggers an automated search + grab for a media item.
@@ -56,4 +57,32 @@ func (h *Handler) HandleAutoSearch(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(result)
+}
+
+// HandleEvaluate scores a set of indexer results against a quality profile
+// without grabbing. Used by the manual search UI to show quality badges.
+func (h *Handler) HandleEvaluate(w http.ResponseWriter, r *http.Request) {
+	var req EvaluateRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, `{"error":"invalid request body"}`, http.StatusBadRequest)
+		return
+	}
+
+	if len(req.Results) == 0 {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(&EvaluateResponse{Results: []EvaluatedResult{}})
+		return
+	}
+
+	resp, err := h.engine.Evaluate(r.Context(), req)
+	if err != nil {
+		h.logger.Error("evaluate failed", "error", err)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
 }
