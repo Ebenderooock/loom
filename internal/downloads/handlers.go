@@ -357,17 +357,18 @@ func (s *Service) handleTestConfig(w http.ResponseWriter, r *http.Request) {
 	}
 
 	def := Definition{
-		ID:       "_test_ephemeral",
-		Kind:     req.Kind,
-		Name:     req.Name,
-		Protocol: req.Protocol,
-		Enabled:  true,
-		Host:     req.Host,
-		Port:     req.Port,
-		TLS:      req.TLS,
-		Username: req.Username,
-		Password: req.Password,
-		Config:   req.Config,
+		ID:              "_test_ephemeral",
+		Kind:            req.Kind,
+		Name:            req.Name,
+		Protocol:        req.Protocol,
+		Enabled:         true,
+		Host:            req.Host,
+		Port:            req.Port,
+		TLS:             req.TLS,
+		Username:        req.Username,
+		Password:        req.Password,
+		Config:          req.Config,
+		SavePathDefault: req.SavePathDefault,
 	}
 
 	c, err := build(r.Context(), def)

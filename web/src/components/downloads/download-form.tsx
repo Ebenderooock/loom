@@ -203,6 +203,8 @@ export function DownloadForm({
           tls: values.tls,
           username: values.username,
           password: values.password,
+          config: values.config,
+          save_path_default: values.save_path_default,
         });
       }
       setTestResult(res);
