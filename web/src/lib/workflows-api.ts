@@ -46,11 +46,11 @@ export type WorkflowEventType =
 
 export interface WorkflowTimelineEvent {
   id: string;
-  workflow_id: string;
-  event_type: WorkflowEventType;
+  workflowId: string;
+  eventType: WorkflowEventType;
   message: string;
   metadata: string;
-  created_at: string;
+  createdAt: string;
 }
 
 export interface Workflow {

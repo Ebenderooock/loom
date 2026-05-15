@@ -99,7 +99,7 @@ function TimelineItem({
   event: WorkflowTimelineEvent;
   isLast: boolean;
 }) {
-  const config = getEventConfig(event.event_type);
+  const config = getEventConfig(event.eventType);
   const Icon = config.icon;
 
   return (
@@ -126,11 +126,11 @@ function TimelineItem({
         </div>
         <div className="mt-0.5 flex items-center gap-2">
           <span className="text-xs text-muted-foreground">
-            {relativeTime(event.created_at)}
+            {relativeTime(event.createdAt)}
           </span>
           <span className="text-xs text-muted-foreground/50">·</span>
           <span className="text-xs text-muted-foreground capitalize">
-            {event.event_type ? event.event_type.replace(/_/g, " ") : ""}
+            {event.eventType ? event.eventType.replace(/_/g, " ") : ""}
           </span>
         </div>
         <MetadataSection metadata={event.metadata} />
@@ -156,7 +156,7 @@ export function WorkflowTimeline({ workflowId }: { workflowId: string }) {
   }
 
   const sorted = [...(events ?? [])].sort(
-    (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+    (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
   );
 
   if (sorted.length === 0) {
