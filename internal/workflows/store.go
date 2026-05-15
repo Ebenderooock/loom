@@ -554,3 +554,67 @@ func MetadataFromMap(m map[string]any) string {
 	b, _ := json.Marshal(m)
 	return string(b)
 }
+
+// PostDownloadPolicy holds the seed requirements and settling config
+// persisted in workflow metadata under the "post_download" key.
+type PostDownloadPolicy struct {
+	SeedRatioLimit       *float64  `json:"seed_ratio_limit,omitempty"`
+	SeedTimeLimitMinutes *int      `json:"seed_time_limit_minutes,omitempty"`
+	SettlingDelay        int       `json:"settling_delay_seconds,omitempty"` // default 5
+	StartedAt            time.Time `json:"started_at,omitempty"`
+}
+
+// Default settling delay when no explicit value is configured.
+const DefaultSettlingDelaySec = 5
+
+// SetPostDownloadPolicy merges seed policy into workflow metadata without
+// overwriting other keys.
+func (s *Store) SetPostDownloadPolicy(ctx context.Context, id string, policy PostDownloadPolicy) error {
+	wf, err := s.Get(ctx, id)
+	if err != nil {
+		return err
+	}
+	m := make(map[string]any)
+	if wf.Metadata != "" {
+		_ = json.Unmarshal([]byte(wf.Metadata), &m)
+	}
+	m["post_download"] = policy
+	return s.SetMetadata(ctx, id, MetadataFromMap(m))
+}
+
+// GetPostDownloadPolicy reads the seed policy from workflow metadata.
+func GetPostDownloadPolicy(metadata string) *PostDownloadPolicy {
+	if metadata == "" {
+		return nil
+	}
+	var m map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(metadata), &m); err != nil {
+		return nil
+	}
+	raw, ok := m["post_download"]
+	if !ok {
+		return nil
+	}
+	var p PostDownloadPolicy
+	if err := json.Unmarshal(raw, &p); err != nil {
+		return nil
+	}
+	return &p
+}
+
+// MergeMetadata updates specific keys in the workflow metadata JSON without
+// overwriting other keys.
+func (s *Store) MergeMetadata(ctx context.Context, id string, patch map[string]any) error {
+	wf, err := s.Get(ctx, id)
+	if err != nil {
+		return err
+	}
+	m := make(map[string]any)
+	if wf.Metadata != "" {
+		_ = json.Unmarshal([]byte(wf.Metadata), &m)
+	}
+	for k, v := range patch {
+		m[k] = v
+	}
+	return s.SetMetadata(ctx, id, MetadataFromMap(m))
+}

@@ -26,10 +26,12 @@ func (CmdSearchStarted) commandTag() {}
 
 // CmdGrabbed records that a release was grabbed (searching → grabbed).
 type CmdGrabbed struct {
-	WorkflowID string
-	ClientID   string
-	DownloadID string
-	Title      string
+	WorkflowID           string
+	ClientID             string
+	DownloadID           string
+	Title                string
+	SeedRatioLimit       *float64
+	SeedTimeLimitMinutes *int
 }
 
 func (CmdGrabbed) commandTag() {}
@@ -42,6 +44,8 @@ type CmdDownloadProgress struct {
 	Progress   float64
 	DownSpeed  int64
 	UpSpeed    int64
+	Ratio      float64
+	Status     string // download client item status (e.g. "seeding", "completed")
 }
 
 func (CmdDownloadProgress) commandTag() {}

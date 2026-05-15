@@ -26,7 +26,7 @@ type MonitorOrchNotifier interface {
 	// NotifyDownloadComplete tells the orchestrator that a download has finished.
 	NotifyDownloadComplete(clientID, downloadID, title, category string)
 	// NotifyDownloadProgress reports progress for a specific download.
-	NotifyDownloadProgress(clientID, downloadID string, progress float64, downSpeed, upSpeed int64)
+	NotifyDownloadProgress(clientID, downloadID string, progress float64, downSpeed, upSpeed int64, ratio float64, status string)
 }
 
 // Monitor periodically checks the status of downloads on all configured
@@ -141,13 +141,15 @@ func (m *Monitor) Run(ctx context.Context) error {
 	// Process results: emit DownloadCompleted for any newly completed items.
 	m.emitCompletions(ctx, status.Items)
 
-	// Forward progress updates to orchestrator for in-progress downloads.
+	// Forward progress updates to orchestrator for in-progress and seeding downloads.
 	if m.orchNotifier != nil {
 		for _, item := range status.Items {
-			if item.Status == StatusItemDownloading || item.Status == StatusItemPaused {
+			switch item.Status {
+			case StatusItemDownloading, StatusItemPaused, StatusItemSeeding:
 				m.orchNotifier.NotifyDownloadProgress(
 					item.ClientID, item.ID, item.Progress,
-					0, 0,
+					item.DownloadRate, item.UploadRate,
+					item.Ratio, string(item.Status),
 				)
 			}
 		}

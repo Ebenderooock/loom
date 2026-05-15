@@ -114,14 +114,27 @@ func (e *Engine) markDownloading(ctx context.Context, workflowID string) error {
 	return nil
 }
 
-// markImporting transitions from downloading → importing.
-func (e *Engine) markImporting(ctx context.Context, workflowID string) error {
-	ok, err := e.store.Transition(ctx, workflowID, StateDownloading, StateImporting, "Download complete, importing")
+// markPostDownload transitions from downloading → post_download (download finished, awaiting seed/settle).
+func (e *Engine) markPostDownload(ctx context.Context, workflowID string) error {
+	ok, err := e.store.Transition(ctx, workflowID, StateDownloading, StatePostDownload, "Download complete, post-download phase")
 	if err != nil {
 		return err
 	}
 	if !ok {
 		return fmt.Errorf("workflow %s not in downloading state", workflowID)
+	}
+	e.logger.Info("workflow post_download", "id", workflowID)
+	return nil
+}
+
+// markImporting transitions from post_download → importing.
+func (e *Engine) markImporting(ctx context.Context, workflowID string) error {
+	ok, err := e.store.Transition(ctx, workflowID, StatePostDownload, StateImporting, "Post-download complete, importing")
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return fmt.Errorf("workflow %s not in post_download state", workflowID)
 	}
 	e.logger.Info("workflow importing", "id", workflowID)
 	return nil
@@ -129,20 +142,13 @@ func (e *Engine) markImporting(ctx context.Context, workflowID string) error {
 
 // markCompleted transitions to completed (import successful).
 func (e *Engine) markCompleted(ctx context.Context, workflowID, message string) error {
-	// Try from importing first, but also allow from downloading (fast imports)
+	// Try from importing first, then post_download (fast path)
 	ok, err := e.store.Transition(ctx, workflowID, StateImporting, StateCompleted, message)
 	if err != nil {
 		return err
 	}
 	if !ok {
-		// Try from downloading directly (some imports happen immediately)
-		ok, err = e.store.Transition(ctx, workflowID, StateDownloading, StateCompleted, message)
-		if err != nil {
-			return err
-		}
-		if !ok {
-			return fmt.Errorf("workflow %s not in importing/downloading state", workflowID)
-		}
+		return fmt.Errorf("workflow %s not in importing state", workflowID)
 	}
 	e.logger.Info("workflow completed", "id", workflowID)
 	return nil

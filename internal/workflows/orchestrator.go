@@ -117,13 +117,15 @@ func (o *Orchestrator) NotifyDownloadComplete(clientID, downloadID, title, categ
 }
 
 // NotifyDownloadProgress satisfies downloads.MonitorOrchNotifier.
-func (o *Orchestrator) NotifyDownloadProgress(clientID, downloadID string, progress float64, downSpeed, upSpeed int64) {
+func (o *Orchestrator) NotifyDownloadProgress(clientID, downloadID string, progress float64, downSpeed, upSpeed int64, ratio float64, status string) {
 	o.Send(CmdDownloadProgress{
 		ClientID:   clientID,
 		DownloadID: downloadID,
 		Progress:   progress,
 		DownSpeed:  downSpeed,
 		UpSpeed:    upSpeed,
+		Ratio:      ratio,
+		Status:     status,
 	})
 }
 
@@ -181,6 +183,7 @@ func (o *Orchestrator) Run(ctx context.Context) {
 			o.handle(ctx, cmd)
 		case <-ticker.C:
 			o.handleStale(ctx)
+			o.checkPostDownloadWorkflows(ctx)
 		case <-progressTicker.C:
 			o.flushProgress(ctx)
 		case <-pruneTicker.C:
@@ -197,7 +200,7 @@ func (o *Orchestrator) handle(ctx context.Context, cmd Command) {
 	case CmdGrabbed:
 		o.handleGrabbed(ctx, c)
 	case CmdDownloadProgress:
-		o.bufferProgress(c)
+		o.bufferProgress(ctx, c)
 	case CmdDownloadComplete:
 		o.handleDownloadComplete(ctx, c)
 	case CmdImportResult:
@@ -243,6 +246,17 @@ func (o *Orchestrator) handleGrabbed(ctx context.Context, cmd CmdGrabbed) {
 		"title":       cmd.Title,
 	})
 
+	// Persist seed policy so post_download phase knows the requirements.
+	if cmd.SeedRatioLimit != nil || cmd.SeedTimeLimitMinutes != nil {
+		policy := PostDownloadPolicy{
+			SeedRatioLimit:       cmd.SeedRatioLimit,
+			SeedTimeLimitMinutes: cmd.SeedTimeLimitMinutes,
+		}
+		if err := o.store.SetPostDownloadPolicy(ctx, cmd.WorkflowID, policy); err != nil {
+			o.logger.Warn("failed to store seed policy", "workflow_id", cmd.WorkflowID, "error", err)
+		}
+	}
+
 	// Also transition to downloading immediately — the download client has accepted it
 	if err := o.engine.markDownloading(ctx, cmd.WorkflowID); err != nil {
 		o.logger.Debug("grabbed → downloading transition deferred", "workflow_id", cmd.WorkflowID)
@@ -278,17 +292,38 @@ func (o *Orchestrator) handleDownloadComplete(ctx context.Context, cmd CmdDownlo
 		"category":    cmd.Category,
 	})
 
-	// Transition to importing
-	if err := o.engine.markImporting(ctx, wf.ID); err != nil {
-		o.logger.Error("failed to mark importing", "workflow_id", wf.ID, "error", err)
-		o.logEvent(ctx, wf.ID, EventImportFailed, "Failed to start import: "+err.Error(), nil)
+	// Transition to post_download (settling + seed tracking) instead of
+	// importing immediately. This gives the download client time to
+	// release file locks and lets torrents seed to their target ratio.
+	if err := o.engine.markPostDownload(ctx, wf.ID); err != nil {
+		o.logger.Error("failed to mark post_download", "workflow_id", wf.ID, "error", err)
+		o.logEvent(ctx, wf.ID, EventImportFailed, "Failed to enter post-download: "+err.Error(), nil)
 		return
 	}
 
-	o.logEvent(ctx, wf.ID, EventImportStarted, "Import dispatched", nil)
+	// Stamp the post_download start time.
+	policy := GetPostDownloadPolicy(wf.Metadata)
+	if policy == nil {
+		policy = &PostDownloadPolicy{}
+	}
+	policy.StartedAt = time.Now()
+	if policy.SettlingDelay == 0 {
+		policy.SettlingDelay = DefaultSettlingDelaySec
+	}
+	if err := o.store.SetPostDownloadPolicy(ctx, wf.ID, *policy); err != nil {
+		o.logger.Warn("failed to stamp post_download start", "workflow_id", wf.ID, "error", err)
+	}
 
-	// Dispatch import asynchronously via bounded worker pool
-	o.dispatchImport(ctx, wf.ID, cmd.ClientID, cmd.DownloadID, cmd.Title, cmd.Category)
+	// Store category in metadata for later import dispatch.
+	if cmd.Category != "" {
+		_ = o.store.MergeMetadata(ctx, wf.ID, map[string]any{"category": cmd.Category})
+	}
+
+	o.logEvent(ctx, wf.ID, EventPostDownloadStart, "Post-download phase started", map[string]any{
+		"settling_delay_sec":     policy.SettlingDelay,
+		"seed_ratio_limit":      policy.SeedRatioLimit,
+		"seed_time_limit_min":   policy.SeedTimeLimitMinutes,
+	})
 }
 
 func (o *Orchestrator) handleImportResult(ctx context.Context, cmd CmdImportResult) {
@@ -427,7 +462,19 @@ func (o *Orchestrator) handleRetry(ctx context.Context, cmd CmdRetry) {
 
 // ── Progress coalescing ───────────────────────────────────────────────
 
-func (o *Orchestrator) bufferProgress(cmd CmdDownloadProgress) {
+func (o *Orchestrator) bufferProgress(ctx context.Context, cmd CmdDownloadProgress) {
+	// For workflows in post_download, evaluate immediately instead of
+	// buffering — seed/settling checks need prompt evaluation.
+	wf, err := o.engine.FindByDownload(ctx, cmd.ClientID, cmd.DownloadID)
+	if err == nil && wf != nil && wf.State == StatePostDownload {
+		_ = o.store.MergeMetadata(ctx, wf.ID, map[string]any{
+			"ratio":  cmd.Ratio,
+			"status": cmd.Status,
+		})
+		o.evaluatePostDownload(ctx, wf, cmd.Ratio, cmd.Status)
+		return
+	}
+
 	o.progressMu.Lock()
 	defer o.progressMu.Unlock()
 	key := cmd.ClientID + ":" + cmd.DownloadID
@@ -452,14 +499,127 @@ func (o *Orchestrator) flushProgress(ctx context.Context) {
 			o.logEvent(ctx, wf.ID, EventDownloading, "Download confirmed active", nil)
 		}
 
-		// Update metadata with progress info
-		meta := MetadataFromMap(map[string]any{
+		// Update metadata with progress info (merge to preserve seed policy)
+		_ = o.store.MergeMetadata(ctx, wf.ID, map[string]any{
 			"progress":   p.Progress,
 			"down_speed": p.DownSpeed,
 			"up_speed":   p.UpSpeed,
+			"ratio":      p.Ratio,
+			"status":     p.Status,
 		})
-		_ = o.store.SetMetadata(ctx, wf.ID, meta)
+
+		// Check if a post_download workflow is ready for import.
+		if wf.State == StatePostDownload {
+			o.evaluatePostDownload(ctx, wf, p.Ratio, p.Status)
+		}
 	}
+}
+
+// ── Post-download evaluation ──────────────────────────────────────────
+
+// evaluatePostDownload checks whether a post_download workflow is ready
+// to transition to importing. Called from progress flushes and periodic ticks.
+func (o *Orchestrator) evaluatePostDownload(ctx context.Context, wf *Workflow, currentRatio float64, currentStatus string) {
+	policy := GetPostDownloadPolicy(wf.Metadata)
+	if policy == nil || policy.StartedAt.IsZero() {
+		// No policy or not stamped yet — wait for next tick.
+		return
+	}
+
+	now := time.Now()
+	elapsed := now.Sub(policy.StartedAt)
+
+	// 1. Settling delay must have passed.
+	settleDelay := time.Duration(policy.SettlingDelay) * time.Second
+	if settleDelay == 0 {
+		settleDelay = time.Duration(DefaultSettlingDelaySec) * time.Second
+	}
+	if elapsed < settleDelay {
+		return
+	}
+
+	// 2. If seeding requirements exist and the item is still seeding, check them.
+	isSeeding := currentStatus == "seeding"
+	hasSeedRequirements := policy.SeedRatioLimit != nil || policy.SeedTimeLimitMinutes != nil
+
+	if isSeeding && hasSeedRequirements {
+		// Check each configured requirement. A nil limit means "not configured"
+		// (don't count as met). If both are configured, either being met is
+		// sufficient (OR semantics: seed until ratio OR time, whichever first).
+		ratioConfigured := policy.SeedRatioLimit != nil
+		timeConfigured := policy.SeedTimeLimitMinutes != nil
+		ratioMet := ratioConfigured && currentRatio >= *policy.SeedRatioLimit
+		timeMet := timeConfigured && elapsed >= time.Duration(*policy.SeedTimeLimitMinutes)*time.Minute
+
+		if !ratioMet && !timeMet {
+			// No configured requirement has been met — keep waiting.
+			return
+		}
+
+		o.logger.Info("seed requirements met",
+			"workflow_id", wf.ID,
+			"ratio", currentRatio,
+			"ratio_limit", policy.SeedRatioLimit,
+			"elapsed_min", int(elapsed.Minutes()),
+			"time_limit_min", policy.SeedTimeLimitMinutes,
+		)
+		o.logEvent(ctx, wf.ID, EventSeedingProgress, "Seed requirements met, proceeding to import", map[string]any{
+			"ratio":          currentRatio,
+			"ratio_limit":    policy.SeedRatioLimit,
+			"elapsed_min":    int(elapsed.Minutes()),
+			"time_limit_min": policy.SeedTimeLimitMinutes,
+		})
+	}
+
+	// 3. Ready to import — transition.
+	o.transitionToImport(ctx, wf)
+}
+
+// checkPostDownloadWorkflows is called on each scheduler tick to evaluate
+// post_download workflows that may not have received recent progress updates
+// (e.g. Usenet downloads with no seeding, or torrents that finished seeding
+// and the client removed them).
+func (o *Orchestrator) checkPostDownloadWorkflows(ctx context.Context) {
+	active, err := o.store.ListActive(ctx)
+	if err != nil {
+		return
+	}
+	for _, wf := range active {
+		if wf.State != StatePostDownload {
+			continue
+		}
+
+		// Read last known status from metadata.
+		var ratio float64
+		var status string
+		if wf.Metadata != "" {
+			var m map[string]any
+			if json.Unmarshal([]byte(wf.Metadata), &m) == nil {
+				if r, ok := m["ratio"].(float64); ok {
+					ratio = r
+				}
+				if s, ok := m["status"].(string); ok {
+					status = s
+				}
+			}
+		}
+
+		o.evaluatePostDownload(ctx, wf, ratio, status)
+	}
+}
+
+// transitionToImport moves a workflow from post_download to importing
+// and dispatches the import.
+func (o *Orchestrator) transitionToImport(ctx context.Context, wf *Workflow) {
+	if err := o.engine.markImporting(ctx, wf.ID); err != nil {
+		o.logger.Error("failed to mark importing from post_download", "workflow_id", wf.ID, "error", err)
+		return
+	}
+
+	category := o.categoryFromMetadata(wf.Metadata)
+
+	o.logEvent(ctx, wf.ID, EventImportStarted, "Import dispatched", nil)
+	o.dispatchImport(ctx, wf.ID, wf.DownloadClientID, wf.DownloadID, wf.GrabTitle, category)
 }
 
 // ── Import dispatch ───────────────────────────────────────────────────
@@ -578,6 +738,12 @@ func (o *Orchestrator) reconcileOnBoot(ctx context.Context) {
 				"workflow_id", wf.ID, "state", wf.State)
 			o.logEvent(ctx, wf.ID, EventStaleDetected,
 				"Download not found during startup reconciliation", nil)
+		case !exists && wf.State == StatePostDownload:
+			// Download removed after seeding — ready to import
+			o.logger.Info("reconcile: post_download item no longer in client, importing",
+				"workflow_id", wf.ID)
+			o.transitionToImport(ctx, wf)
+			reconciled++
 		case exists && (dlState == "completed" || dlState == "seeding"):
 			// Download completed while we were down
 			if wf.State == StateGrabbed || wf.State == StateDownloading {
@@ -588,6 +754,19 @@ func (o *Orchestrator) reconcileOnBoot(ctx context.Context) {
 					DownloadID: wf.DownloadID,
 					Title:      wf.GrabTitle,
 				})
+				reconciled++
+			} else if wf.State == StatePostDownload {
+				// Re-evaluate seed requirements with current data
+				var ratio float64
+				if wf.Metadata != "" {
+					var m map[string]any
+					if json.Unmarshal([]byte(wf.Metadata), &m) == nil {
+						if r, ok := m["ratio"].(float64); ok {
+							ratio = r
+						}
+					}
+				}
+				o.evaluatePostDownload(ctx, wf, ratio, dlState)
 				reconciled++
 			}
 		case exists && dlState == "downloading" && wf.State == StateGrabbed:
