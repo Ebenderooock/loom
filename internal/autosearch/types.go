@@ -17,6 +17,7 @@ type SearchRequest struct {
 	MediaType        string `json:"media_type"`         // "movie" or "series"
 	MediaID          string `json:"media_id"`           // movie or series UUID
 	Title            string `json:"title"`              // search term
+	Year             int    `json:"year,omitempty"`      // release year for movies (for ±1 verification)
 	QualityProfileID string `json:"quality_profile_id"` // profile to score against
 	IMDBID           string `json:"imdb_id,omitempty"`
 	TMDBID           string `json:"tmdb_id,omitempty"`

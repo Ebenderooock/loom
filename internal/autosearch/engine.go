@@ -167,56 +167,69 @@ func (e *Engine) SearchAndGrab(ctx context.Context, req SearchRequest) (*SearchR
 
 	// Request-chain fallback: try ID-based search first, then text fallback.
 	queries := e.buildQueryChain(req)
-	var allResults []indexers.Result
+	var scored []ScoredRelease
+	rejectCounts := make(map[string]int)
+	totalConsidered := 0
 
+	// Try each query in the chain. If one returns results but all are
+	// rejected, continue to the next (weaker) query instead of giving up.
 	for _, q := range queries {
 		agg := e.indexerSvc.Search(ctx, q, nil, 30*time.Second)
-		allResults = append(allResults, agg.Results...)
-		if len(allResults) > 0 {
-			break // Got results, stop trying weaker queries.
+		if len(agg.Results) == 0 {
+			continue
 		}
+
+		idBasedQuery := q.IMDBID != "" || q.TVDBID != "" || q.TMDBID != ""
+		totalConsidered += len(agg.Results)
+
+		for _, res := range agg.Results {
+			sr := e.evaluateResult(req, res, qualDefs, allowedMap, allowedDefs, formatScores, profile, existing, cutoffTier, idBasedQuery)
+			if sr.Rejected {
+				rejectCounts[sr.RejectReason]++
+				e.logger.Debug("autosearch: result rejected",
+					"title", res.Title,
+					"reason", sr.RejectReason,
+					"parsed_source", func() string {
+						if sr.Parsed != nil {
+							return sr.Parsed.Source
+						}
+						return ""
+					}(),
+					"parsed_resolution", func() int {
+						if sr.Parsed != nil {
+							return sr.Parsed.Resolution
+						}
+						return 0
+					}(),
+				)
+				continue
+			}
+			scored = append(scored, sr)
+		}
+
+		// If this query produced at least one accepted result, stop.
+		if len(scored) > 0 {
+			break
+		}
+		// Otherwise continue to the next query in the chain.
+		e.logger.Debug("autosearch: all results rejected for query, trying next",
+			"query_term", q.Term,
+			"id_based", idBasedQuery,
+			"results", len(agg.Results),
+		)
 	}
 
 	result := &SearchResult{
-		Considered: len(allResults),
+		Considered: totalConsidered,
 	}
 
-	if len(allResults) == 0 {
+	if totalConsidered == 0 {
 		result.Reason = "no results from indexers"
 		e.logSearchCompleted(ctx, req, result)
 		return result, nil
 	}
 
-	// Score and filter each result.
-	rejectCounts := make(map[string]int)
-	var scored []ScoredRelease
-
-	for _, res := range allResults {
-		sr := e.evaluateResult(req, res, qualDefs, allowedMap, allowedDefs, formatScores, profile, existing, cutoffTier)
-		if sr.Rejected {
-			rejectCounts[sr.RejectReason]++
-			e.logger.Debug("autosearch: result rejected",
-				"title", res.Title,
-				"reason", sr.RejectReason,
-				"parsed_source", func() string {
-					if sr.Parsed != nil {
-						return sr.Parsed.Source
-					}
-					return ""
-				}(),
-				"parsed_resolution", func() int {
-					if sr.Parsed != nil {
-						return sr.Parsed.Resolution
-					}
-					return 0
-				}(),
-			)
-			continue
-		}
-		scored = append(scored, sr)
-	}
-
-	result.Rejected = result.Considered - len(scored)
+	result.Rejected = totalConsidered - len(scored)
 
 	// Build top reject stats.
 	for reason, count := range rejectCounts {
@@ -329,6 +342,7 @@ func (e *Engine) evaluateResult(
 	profile *qualityprofiles.QualityProfile,
 	existing existingQuality,
 	cutoffTier int,
+	idBasedQuery bool,
 ) ScoredRelease {
 	sr := ScoredRelease{Result: res}
 
@@ -337,7 +351,7 @@ func (e *Engine) evaluateResult(
 	sr.Parsed = parsed
 
 	// Identity verification: ensure the result matches the requested media.
-	if reason := e.verifyIdentity(req, parsed); reason != "" {
+	if reason := e.verifyIdentity(req, parsed, idBasedQuery); reason != "" {
 		sr.Rejected = true
 		sr.RejectReason = reason
 		return sr
@@ -448,23 +462,55 @@ func (e *Engine) evaluateResult(
 }
 
 // verifyIdentity checks that a parsed result matches the requested media.
-// Returns empty string if the result is valid, or a rejection reason.
-func (e *Engine) verifyIdentity(req SearchRequest, parsed *parser.Release) string {
-	if parsed == nil || req.Title == "" {
+// For ID-based queries (IMDB/TVDB/TMDB), the indexer already filtered by
+// the external ID so title matching is relaxed (0.3 threshold instead of
+// 0.5). For text-only queries the threshold is stricter (0.5). Returns
+// empty string if the result is valid, or a rejection reason.
+func (e *Engine) verifyIdentity(req SearchRequest, parsed *parser.Release, idBasedQuery bool) string {
+	if parsed == nil {
 		return ""
 	}
 
-	// Title matching: verify the parsed title is close to the requested title.
-	parsedTitle := normalizeTitle(parsed.Title)
-	wantTitle := normalizeTitle(req.Title)
+	// Year verification for movies: reject if parsed year differs by >1
+	// from the requested year. This catches wrong movies with similar
+	// titles (e.g. remakes, reboots).
+	if req.MediaType == "movie" && req.Year > 0 && parsed.Year > 0 {
+		diff := req.Year - parsed.Year
+		if diff < 0 {
+			diff = -diff
+		}
+		if diff > 1 {
+			return "wrong_year"
+		}
+	}
 
-	if parsedTitle != "" && wantTitle != "" {
-		distance := levenshteinDistance(strings.ToLower(parsedTitle), strings.ToLower(wantTitle))
-		maxLen := max(len(parsedTitle), len(wantTitle))
-		if maxLen > 0 {
-			similarity := 1.0 - float64(distance)/float64(maxLen)
-			if similarity < 0.6 {
-				return "title_mismatch"
+	// Title matching: verify the parsed title is close to the requested title.
+	if req.Title != "" {
+		parsedTitle := normalizeTitle(parsed.Title)
+		wantTitle := normalizeTitle(req.Title)
+
+		if parsedTitle != "" && wantTitle != "" {
+			distance := levenshteinDistance(strings.ToLower(parsedTitle), strings.ToLower(wantTitle))
+			maxLen := max(len(parsedTitle), len(wantTitle))
+			if maxLen > 0 {
+				similarity := 1.0 - float64(distance)/float64(maxLen)
+				// ID-based results are pre-filtered by the indexer,
+				// so we only need a loose sanity check. Text-only
+				// searches need a tighter threshold.
+				threshold := 0.5
+				if idBasedQuery {
+					threshold = 0.3
+				}
+				if similarity < threshold {
+					e.logger.Debug("autosearch: title mismatch",
+						"want", wantTitle,
+						"got", parsedTitle,
+						"similarity", similarity,
+						"threshold", threshold,
+						"id_based", idBasedQuery,
+					)
+					return "title_mismatch"
+				}
 			}
 		}
 	}

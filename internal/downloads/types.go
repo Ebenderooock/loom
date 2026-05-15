@@ -158,6 +158,12 @@ type Item struct {
 	Ratio           float64    `json:"ratio,omitempty"`
 	Message         string     `json:"message,omitempty"`
 	SavePath        string     `json:"save_path,omitempty"`
+
+	// ContentPath is the actual filesystem path where the download's
+	// content lives. For torrent clients this is dataDir + the torrent's
+	// content name (which may differ from Title). Import pipeline
+	// prefers this over filepath.Join(SavePath, Title).
+	ContentPath string `json:"content_path,omitempty"`
 }
 
 // Priority describes a queue-position change direction.

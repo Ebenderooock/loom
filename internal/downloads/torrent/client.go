@@ -199,6 +199,7 @@ func (c *Client) Status(ctx context.Context, ids ...string) ([]downloads.Item, e
 			UploadRate:      s.UploadRate,
 			Ratio:           s.Ratio,
 			SavePath:        s.SavePath,
+			ContentPath:     s.ContentPath,
 		})
 	}
 	return items, nil

@@ -127,6 +127,10 @@ func (p *ImportPipeline) handleCompleted(ctx context.Context, ev eventbus.Event)
 		"title", completed.Title,
 	)
 
+	// Advance the workflow to "importing" so the stale detector
+	// doesn't misreport the state while the import runs.
+	p.markWorkflowImporting(ctx, completed)
+
 	downloadPath, err := p.resolveDownloadPath(ctx, completed)
 	if err != nil {
 		p.logger.Error("failed to resolve download path", "error", err, "title", completed.Title)
@@ -160,9 +164,16 @@ func (p *ImportPipeline) resolveDownloadPath(ctx context.Context, ev *downloads.
 	}
 
 	for _, item := range items {
-		if item.ID == ev.DownloadID && item.SavePath != "" {
-			path := filepath.Join(item.SavePath, item.Title)
-			return p.applyRemotePathMapping(ctx, ev.ClientID, path), nil
+		if item.ID == ev.DownloadID {
+			// Prefer ContentPath (actual on-disk location set by the
+			// download client) over the SavePath+Title heuristic.
+			if item.ContentPath != "" {
+				return p.applyRemotePathMapping(ctx, ev.ClientID, item.ContentPath), nil
+			}
+			if item.SavePath != "" {
+				path := filepath.Join(item.SavePath, item.Title)
+				return p.applyRemotePathMapping(ctx, ev.ClientID, path), nil
+			}
 		}
 	}
 
@@ -430,6 +441,24 @@ func (p *ImportPipeline) matchByGrab(ctx context.Context, ev *downloads.Download
 	}
 
 	return nil, nil
+}
+
+// markWorkflowImporting transitions the workflow to the importing state so
+// that the stale detector correctly reports the phase if anything hangs.
+func (p *ImportPipeline) markWorkflowImporting(ctx context.Context, ev *downloads.DownloadCompletedEvent) {
+	if p.wfEngine == nil || ev.ClientID == "" || ev.DownloadID == "" {
+		return
+	}
+
+	wf, err := p.wfEngine.Store().FindByDownload(ctx, ev.ClientID, ev.DownloadID)
+	if err != nil || wf == nil {
+		return
+	}
+
+	if err := p.wfEngine.MarkImporting(ctx, wf.ID); err != nil {
+		p.logger.Debug("could not mark workflow as importing (may already be past that state)",
+			"workflow_id", wf.ID, "error", err)
+	}
 }
 
 // markWorkflowFailed marks the workflow as failed, which triggers retry logic
