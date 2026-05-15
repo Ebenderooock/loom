@@ -107,6 +107,13 @@ type AddRequest struct {
 	// Tags are passed through to kinds that support tagging.
 	Tags []string `json:"tags,omitempty"`
 
+	// Seed policy overrides — when set, these override the download
+	// client's default seed policy for this individual item. Typically
+	// populated from the originating indexer's config so that private
+	// trackers can enforce stricter seeding requirements.
+	SeedRatioLimit       *float64 `json:"seed_ratio_limit,omitempty"`
+	SeedTimeLimitMinutes *int     `json:"seed_time_limit_minutes,omitempty"`
+
 	// Media context — optional fields used to record grab linkage so the
 	// import pipeline can deterministically match completed downloads to
 	// the correct media item. Set by the interactive search dialog.
@@ -267,3 +274,10 @@ var ErrNotFound = errors.New("download client not found")
 // ErrUnknownKind is returned when a Definition references a Kind that
 // has not been registered.
 var ErrUnknownKind = errors.New("unknown download client kind")
+
+// DetailProvider is an optional interface that DownloadClient
+// implementations can satisfy to provide rich per-item detail
+// (peers, files, trackers). The builtin/torrent kind implements this.
+type DetailProvider interface {
+	Detail(ctx context.Context, id string) (any, error)
+}

@@ -234,6 +234,27 @@ type Definition struct {
 	UpdatedAt    time.Time `json:"updated_at"`
 }
 
+// SeedConfig holds optional per-indexer seed policy overrides. These
+// are stored inside the indexer's Config JSON blob and, when present,
+// override the download client's default seed policy for grabs
+// originating from this indexer.
+type SeedConfig struct {
+	RatioLimit       *float64 `json:"seed_ratio_limit,omitempty"`
+	TimeLimitMinutes *int     `json:"seed_time_limit_minutes,omitempty"`
+}
+
+// ParseSeedConfig extracts seed policy overrides from an indexer
+// definition's Config JSON. Returns a zero SeedConfig (both nil) if
+// the definition has no config or no seed fields.
+func ParseSeedConfig(def Definition) SeedConfig {
+	if len(def.Config) == 0 {
+		return SeedConfig{}
+	}
+	var sc SeedConfig
+	_ = json.Unmarshal(def.Config, &sc)
+	return sc
+}
+
 // Health is the persisted shape of an indexer_health row.
 type Health struct {
 	IndexerID     string        `json:"indexer_id"`

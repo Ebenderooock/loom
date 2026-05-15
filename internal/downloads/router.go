@@ -11,6 +11,11 @@ import (
 	"github.com/ebenderooock/loom/internal/metadata"
 )
 
+// IndexerConfigLookup resolves an indexer ID to its Definition. The
+// Router uses this to extract per-indexer seed overrides at grab time
+// without importing the indexers.Service directly (avoiding cycles).
+type IndexerConfigLookup func(ctx context.Context, id string) (indexers.Definition, error)
+
 // Router is a service that listens for indexer search results and routes
 // them to configured download clients. It decouples the indexer intake
 // pipeline from downloads, allowing each to run independently and recover
@@ -27,6 +32,7 @@ type Router struct {
 	logger         *slog.Logger
 	clock          Clock
 	metadataRouter *metadata.Router
+	indexerLookup  IndexerConfigLookup
 
 	// unsubscribe is the function returned by Subscribe; stored so
 	// we can clean up on shutdown if needed.
@@ -35,7 +41,9 @@ type Router struct {
 
 // NewRouter wires a Router to a downloads Service, metadata Router, and event bus.
 // It immediately subscribes to indexer results but does not block.
-func NewRouter(svc *Service, metadataRouter *metadata.Router, bus eventbus.Bus, logger *slog.Logger, clock Clock) *Router {
+// The optional indexerLookup, when non-nil, enables per-indexer seed
+// policy overrides on grabs.
+func NewRouter(svc *Service, metadataRouter *metadata.Router, bus eventbus.Bus, logger *slog.Logger, clock Clock, indexerLookup IndexerConfigLookup) *Router {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -48,6 +56,7 @@ func NewRouter(svc *Service, metadataRouter *metadata.Router, bus eventbus.Bus, 
 		bus:            bus,
 		logger:         logger.With("module", "downloads/router"),
 		clock:          clock,
+		indexerLookup:  indexerLookup,
 	}
 
 	// Subscribe to indexer results. The handler runs synchronously in
@@ -122,6 +131,14 @@ func (r *Router) handleIndexerResult(ctx context.Context, ev eventbus.Event) err
 	var addErr error
 	for _, client := range clients {
 		req := buildAddRequest(result)
+		// Apply per-indexer seed policy overrides when available.
+		if r.indexerLookup != nil && result.IndexerID != "" {
+			if def, lookupErr := r.indexerLookup(ctx, result.IndexerID); lookupErr == nil {
+				sc := indexers.ParseSeedConfig(def)
+				req.SeedRatioLimit = sc.RatioLimit
+				req.SeedTimeLimitMinutes = sc.TimeLimitMinutes
+			}
+		}
 		if req.Magnet == "" && req.TorrentURL == "" && len(req.RawBytes) == 0 {
 			r.logger.Error("router: download request has no magnet/URL/bytes",
 				"title", result.Title,
