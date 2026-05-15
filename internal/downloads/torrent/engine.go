@@ -512,6 +512,164 @@ func (e *Engine) FreeSpace() (int64, error) {
 	return int64(stat.Bavail) * int64(stat.Bsize), nil
 }
 
+// PeerInfo describes a single connected peer.
+type PeerInfo struct {
+	IP       string  `json:"ip"`
+	Port     int     `json:"port"`
+	Client   string  `json:"client"`
+	Flags    string  `json:"flags"`
+	Progress float64 `json:"progress"`
+	DownRate int64   `json:"down_rate"`
+	UpRate   int64   `json:"up_rate"`
+}
+
+// FileInfo describes a single file within the torrent.
+type FileInfo struct {
+	Path     string  `json:"path"`
+	Size     int64   `json:"size"`
+	Progress float64 `json:"progress"`
+	Priority string  `json:"priority"`
+}
+
+// TrackerInfo describes a single tracker.
+type TrackerInfo struct {
+	URL    string `json:"url"`
+	Tier   int    `json:"tier"`
+	Status string `json:"status"`
+	Peers  int    `json:"peers"`
+}
+
+// TorrentDetail carries full detail for a single torrent.
+type TorrentDetail struct {
+	TorrentStatus
+	Peers      []PeerInfo    `json:"peers"`
+	Files      []FileInfo    `json:"files"`
+	Trackers   []TrackerInfo `json:"trackers"`
+	TotalPeers int           `json:"total_peers"`
+	TotalSeeds int           `json:"total_seeds"`
+	AddedAt    time.Time     `json:"added_at"`
+	Comment    string        `json:"comment"`
+	CreatedBy  string        `json:"created_by"`
+	InfoHash   string        `json:"info_hash"`
+}
+
+// Detail returns comprehensive detail for the torrent identified by hash.
+func (e *Engine) Detail(hash string) (*TorrentDetail, error) {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+
+	key := strings.ToLower(hash)
+	tt, ok := e.items[key]
+	if !ok {
+		return nil, fmt.Errorf("%w: %s", ErrTorrentNotFound, hash)
+	}
+
+	detail := &TorrentDetail{
+		TorrentStatus: e.buildStatus(tt),
+		InfoHash:      key,
+		AddedAt:       tt.addedAt,
+	}
+
+	t := tt.t
+
+	// Metadata fields from the info dict.
+	if info := t.Info(); info != nil {
+		detail.Comment = t.Metainfo().Comment
+		detail.CreatedBy = t.Metainfo().CreatedBy
+	}
+
+	// Peers.
+	conns := t.PeerConns()
+	peers := make([]PeerInfo, 0, len(conns))
+	totalSeeds := 0
+	for _, pc := range conns {
+		ra := pc.RemoteAddr
+		host, portStr := "", ""
+		if ra != nil {
+			host, portStr, _ = net.SplitHostPort(ra.String())
+		}
+		port := 0
+		if portStr != "" {
+			fmt.Sscanf(portStr, "%d", &port)
+		}
+
+		numPieces := t.NumPieces()
+		peerPieceCount := int(pc.PeerPieces().GetCardinality())
+		progress := float64(peerPieceCount) / float64(max(1, numPieces))
+		if progress > 1 {
+			progress = 1
+		}
+
+		peerStats := pc.Peer.Stats()
+
+		// Client name may not be set yet.
+		clientName := ""
+		if v := pc.PeerClientName.Load(); v != nil {
+			clientName, _ = v.(string)
+		}
+
+		if progress >= 1.0 {
+			totalSeeds++
+		}
+		peers = append(peers, PeerInfo{
+			IP:       host,
+			Port:     port,
+			Client:   clientName,
+			Progress: progress,
+			DownRate: peerStats.BytesReadUsefulData.Int64(),
+			UpRate:   peerStats.BytesWrittenData.Int64(),
+		})
+	}
+	detail.Peers = peers
+	detail.TotalPeers = len(conns)
+	detail.TotalSeeds = totalSeeds
+
+	// Files.
+	if t.Info() != nil {
+		tFiles := t.Files()
+		files := make([]FileInfo, 0, len(tFiles))
+		for _, f := range tFiles {
+			var fprog float64
+			if f.Length() > 0 {
+				fprog = float64(f.BytesCompleted()) / float64(f.Length())
+				if fprog > 1 {
+					fprog = 1
+				}
+			}
+			priority := "normal"
+			if f.Priority() == torrent.PiecePriorityNone {
+				priority = "skip"
+			}
+			files = append(files, FileInfo{
+				Path:     f.DisplayPath(),
+				Size:     f.Length(),
+				Progress: fprog,
+				Priority: priority,
+			})
+		}
+		detail.Files = files
+	}
+
+	// Trackers.
+	if t.Info() != nil {
+		mi := t.Metainfo()
+		announces := mi.UpvertedAnnounceList()
+		trackers := make([]TrackerInfo, 0)
+		for tier, tierURLs := range announces {
+			for _, u := range tierURLs {
+				trackers = append(trackers, TrackerInfo{
+					URL:    u,
+					Tier:   tier,
+					Status: "working",
+				})
+			}
+		}
+		detail.Trackers = trackers
+	}
+
+	return detail, nil
+}
+
 // enforceSeedPolicies is called periodically by the seeding supervisor.
 // It scans all tracked torrents and pauses any that have exceeded their
 // seed ratio or seed time limit.

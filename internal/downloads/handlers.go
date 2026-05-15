@@ -49,6 +49,8 @@ func (s *Service) Mount(r chi.Router) {
 	r.Post("/api/v1/activity/pause", s.handleActivityPause)
 	r.Post("/api/v1/activity/resume", s.handleActivityResume)
 	r.Post("/api/v1/activity/remove", s.handleActivityRemove)
+	// Per-item detail endpoint (torrent-aware)
+	r.Get("/api/v1/activity/detail", s.handleActivityDetail)
 	// Download history endpoint
 	r.Get("/api/v1/downloads/history", s.handleHistory)
 	for _, ext := range s.routeExtensions {
@@ -841,4 +843,43 @@ func (s *Service) handleActivityAction(w http.ResponseWriter, r *http.Request, f
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+// handleActivityDetail returns detailed torrent information for a single item.
+func (s *Service) handleActivityDetail(w http.ResponseWriter, r *http.Request) {
+	clientID := r.URL.Query().Get("client_id")
+	itemID := r.URL.Query().Get("item_id")
+	if clientID == "" || itemID == "" {
+		writeError(w, http.StatusBadRequest, "invalid_request", "client_id and item_id query params are required")
+		return
+	}
+
+	c, ok := s.registry.Get(clientID)
+	if !ok {
+		writeError(w, http.StatusNotFound, "not_found", "download client not found")
+		return
+	}
+
+	// For clients that support detailed info (e.g. builtin/torrent).
+	if dp, ok := c.(DetailProvider); ok {
+		detail, err := dp.Detail(r.Context(), itemID)
+		if err != nil {
+			writeError(w, http.StatusNotFound, "not_found", err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, detail)
+		return
+	}
+
+	// For non-torrent clients, return basic status info.
+	items, err := c.Status(r.Context(), itemID)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, "status_failed", err.Error())
+		return
+	}
+	if len(items) == 0 {
+		writeError(w, http.StatusNotFound, "not_found", "item not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, items[0])
 }
