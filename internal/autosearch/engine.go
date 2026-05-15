@@ -922,15 +922,17 @@ func (e *Engine) grabRelease(ctx context.Context, sr *ScoredRelease) (*GrabbedRe
 	)
 
 	return &GrabbedRelease{
-		Title:          sr.Result.Title,
-		IndexerID:      sr.Result.IndexerID,
-		Size:           sr.Result.Size,
-		QualityTier:    sr.QualityTier,
-		FormatScore:    sr.FormatScore,
-		CompositeScore: sr.CompositeScore(),
-		FormatMatches:  sr.FormatMatches,
-		ClientID:       target.ID(),
-		DownloadID:     addResult.ItemID,
+		Title:                sr.Result.Title,
+		IndexerID:            sr.Result.IndexerID,
+		Size:                 sr.Result.Size,
+		QualityTier:          sr.QualityTier,
+		FormatScore:          sr.FormatScore,
+		CompositeScore:       sr.CompositeScore(),
+		FormatMatches:        sr.FormatMatches,
+		ClientID:             target.ID(),
+		DownloadID:           addResult.ItemID,
+		SeedRatioLimit:       req.SeedRatioLimit,
+		SeedTimeLimitMinutes: req.SeedTimeLimitMinutes,
 	}, nil
 }
 
@@ -1213,10 +1215,12 @@ func (e *Engine) recordGrabOrchestrator(ctx context.Context, req SearchRequest, 
 			return
 		}
 		e.orchestrator.Send(workflows.CmdGrabbed{
-			WorkflowID: wf.ID,
-			ClientID:   grabbed.ClientID,
-			DownloadID: grabbed.DownloadID,
-			Title:      grabbed.Title,
+			WorkflowID:           wf.ID,
+			ClientID:             grabbed.ClientID,
+			DownloadID:           grabbed.DownloadID,
+			Title:                grabbed.Title,
+			SeedRatioLimit:       grabbed.SeedRatioLimit,
+			SeedTimeLimitMinutes: grabbed.SeedTimeLimitMinutes,
 		})
 
 	case "series", "episode":
@@ -1254,10 +1258,12 @@ func (e *Engine) recordGrabOrchestrator(ctx context.Context, req SearchRequest, 
 				return
 			}
 			e.orchestrator.Send(workflows.CmdGrabbed{
-				WorkflowID: wf.ID,
-				ClientID:   grabbed.ClientID,
-				DownloadID: grabbed.DownloadID,
-				Title:      grabbed.Title,
+				WorkflowID:           wf.ID,
+				ClientID:             grabbed.ClientID,
+				DownloadID:           grabbed.DownloadID,
+				Title:                grabbed.Title,
+				SeedRatioLimit:       grabbed.SeedRatioLimit,
+				SeedTimeLimitMinutes: grabbed.SeedTimeLimitMinutes,
 			})
 		}
 	}

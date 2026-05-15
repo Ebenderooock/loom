@@ -109,6 +109,30 @@ func waitForCondition(t *testing.T, timeout time.Duration, check func() bool) {
 	t.Fatal("timed out waiting for condition")
 }
 
+func mustGet(t *testing.T, store *Store, ctx context.Context, id string) *Workflow {
+	t.Helper()
+	wf, err := store.Get(ctx, id)
+	if err != nil {
+		t.Fatalf("store.Get(%s): %v", id, err)
+	}
+	return wf
+}
+
+// backdateSettling sets the post_download start time to the past so the
+// settling delay is immediately satisfied in tests.
+func backdateSettling(t *testing.T, store *Store, ctx context.Context, wfID string) {
+	t.Helper()
+	wf := mustGet(t, store, ctx, wfID)
+	policy := GetPostDownloadPolicy(wf.Metadata)
+	if policy == nil {
+		policy = &PostDownloadPolicy{}
+	}
+	policy.StartedAt = time.Now().Add(-1 * time.Minute)
+	if err := store.SetPostDownloadPolicy(ctx, wfID, *policy); err != nil {
+		t.Fatalf("backdate settling: %v", err)
+	}
+}
+
 // ── Tests ─────────────────────────────────────────────────────────────
 
 func TestOrchestratorStartSearch(t *testing.T) {
@@ -208,8 +232,23 @@ func TestOrchestratorDownloadComplete(t *testing.T) {
 		Category:   "movies",
 	})
 
-	// Should transition to importing and dispatch import
+	// Should transition to post_download first
 	waitForCondition(t, 2*time.Second, func() bool {
+		got, _ := store.Get(ctx, wf.ID)
+		return got != nil && got.State == StatePostDownload
+	})
+
+	// Backdate settling start so the delay is satisfied, then trigger evaluation.
+	backdateSettling(t, store, ctx, wf.ID)
+
+	// Send a progress update with status "completed" to trigger evaluation.
+	orch.Send(CmdDownloadProgress{
+		ClientID: "qbit-1", DownloadID: "dl-002",
+		Progress: 1.0, Status: "completed",
+	})
+
+	// Should transition to importing and dispatch import
+	waitForCondition(t, 3*time.Second, func() bool {
 		got, _ := store.Get(ctx, wf.ID)
 		return got != nil && (got.State == StateImporting || got.State == StateCompleted)
 	})
@@ -258,6 +297,17 @@ func TestOrchestratorImportSuccess(t *testing.T) {
 		Category:   "movies",
 	})
 
+	// Wait for post_download, then backdate and trigger evaluation.
+	waitForCondition(t, 2*time.Second, func() bool {
+		got, _ := store.Get(ctx, wf.ID)
+		return got != nil && got.State == StatePostDownload
+	})
+	backdateSettling(t, store, ctx, wf.ID)
+	orch.Send(CmdDownloadProgress{
+		ClientID: "qbit-1", DownloadID: "dl-s1",
+		Progress: 1.0, Status: "completed",
+	})
+
 	// Import succeeds (mock returns paths, no error) → completed
 	waitForCondition(t, 3*time.Second, func() bool {
 		got, _ := store.Get(ctx, wf.ID)
@@ -297,6 +347,17 @@ func TestOrchestratorImportFailure(t *testing.T) {
 		DownloadID: "dl-f1",
 		Title:      "Fail.Movie",
 		Category:   "movies",
+	})
+
+	// Wait for post_download, then backdate and trigger evaluation.
+	waitForCondition(t, 2*time.Second, func() bool {
+		got, _ := store.Get(ctx, wf.ID)
+		return got != nil && got.State == StatePostDownload
+	})
+	backdateSettling(t, store, ctx, wf.ID)
+	orch.Send(CmdDownloadProgress{
+		ClientID: "qbit-1", DownloadID: "dl-f1",
+		Progress: 1.0, Status: "completed",
 	})
 
 	// "permission denied" triggers failPermanent → markFailed is called immediately.
@@ -436,5 +497,65 @@ func TestOrchestratorEventLogging(t *testing.T) {
 			t.Errorf("missing event type %s, got types: %v", expected, types)
 		}
 	}
+}
+
+func TestOrchestratorSeedingWaitsForRatio(t *testing.T) {
+	ratioLimit := 1.5
+	imp := &mockImporter{paths: []string{"/media/movie.mkv"}}
+	orch, store := testOrchestrator(t, imp)
+	ctx, _ := startOrchestrator(t, orch)
+
+	wf, err := orch.StartSearch(ctx, TypeMovieSearch, MediaTypeMovie, "qp-1", []string{"movie-seed1"})
+	if err != nil {
+		t.Fatalf("StartSearch: %v", err)
+	}
+
+	// Grab with seed ratio requirement
+	orch.Send(CmdGrabbed{
+		WorkflowID:     wf.ID,
+		ClientID:       "qbit-1",
+		DownloadID:     "dl-seed1",
+		Title:          "Seed.Movie",
+		SeedRatioLimit: &ratioLimit,
+	})
+	waitForCondition(t, 2*time.Second, func() bool {
+		got, _ := store.Get(ctx, wf.ID)
+		return got != nil && got.State == StateDownloading
+	})
+
+	// Download complete → post_download
+	orch.Send(CmdDownloadComplete{
+		ClientID: "qbit-1", DownloadID: "dl-seed1",
+		Title: "Seed.Movie", Category: "movies",
+	})
+	waitForCondition(t, 2*time.Second, func() bool {
+		got, _ := store.Get(ctx, wf.ID)
+		return got != nil && got.State == StatePostDownload
+	})
+
+	// Backdate settling so only seed ratio matters.
+	backdateSettling(t, store, ctx, wf.ID)
+
+	// Send seeding progress with ratio below limit — should NOT transition.
+	orch.Send(CmdDownloadProgress{
+		ClientID: "qbit-1", DownloadID: "dl-seed1",
+		Progress: 1.0, Ratio: 0.5, Status: "seeding",
+	})
+	time.Sleep(100 * time.Millisecond)
+
+	got, _ := store.Get(ctx, wf.ID)
+	if got.State != StatePostDownload {
+		t.Fatalf("expected post_download while seeding below ratio, got %s", got.State)
+	}
+
+	// Now send progress with ratio meeting the limit.
+	orch.Send(CmdDownloadProgress{
+		ClientID: "qbit-1", DownloadID: "dl-seed1",
+		Progress: 1.0, Ratio: 1.6, Status: "seeding",
+	})
+	waitForCondition(t, 3*time.Second, func() bool {
+		got, _ := store.Get(ctx, wf.ID)
+		return got != nil && (got.State == StateImporting || got.State == StateCompleted)
+	})
 }
 

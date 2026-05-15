@@ -40,15 +40,17 @@ type SearchResult struct {
 
 // GrabbedRelease describes the release that was sent to a download client.
 type GrabbedRelease struct {
-	Title          string                    `json:"title"`
-	IndexerID      string                    `json:"indexer_id"`
-	Size           int64                     `json:"size"`
-	QualityTier    int                       `json:"quality_tier"`
-	FormatScore    int                       `json:"format_score"`
-	CompositeScore float64                   `json:"composite_score"`
-	FormatMatches  []customformats.FormatMatch `json:"format_matches,omitempty"`
-	ClientID       string                    `json:"client_id"`
-	DownloadID     string                    `json:"download_id"`
+	Title                string                    `json:"title"`
+	IndexerID            string                    `json:"indexer_id"`
+	Size                 int64                     `json:"size"`
+	QualityTier          int                       `json:"quality_tier"`
+	FormatScore          int                       `json:"format_score"`
+	CompositeScore       float64                   `json:"composite_score"`
+	FormatMatches        []customformats.FormatMatch `json:"format_matches,omitempty"`
+	ClientID             string                    `json:"client_id"`
+	DownloadID           string                    `json:"download_id"`
+	SeedRatioLimit       *float64                  `json:"seed_ratio_limit,omitempty"`
+	SeedTimeLimitMinutes *int                      `json:"seed_time_limit_minutes,omitempty"`
 }
 
 // ScoredRelease is a search result after parsing, quality matching,

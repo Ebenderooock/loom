@@ -771,10 +771,12 @@ func (s *Service) recordManualGrab(ctx context.Context, res AddResult, req AddRe
 	}
 	if wf != nil {
 		s.orchestrator.Send(workflows.CmdGrabbed{
-			WorkflowID: wf.ID,
-			ClientID:   res.ClientID,
-			DownloadID: res.ItemID,
-			Title:      req.Title,
+			WorkflowID:           wf.ID,
+			ClientID:             res.ClientID,
+			DownloadID:           res.ItemID,
+			Title:                req.Title,
+			SeedRatioLimit:       req.SeedRatioLimit,
+			SeedTimeLimitMinutes: req.SeedTimeLimitMinutes,
 		})
 		s.logger.Info("recorded manual grab workflow",
 			"workflow_id", wf.ID, "client_id", res.ClientID, "item_id", res.ItemID,
