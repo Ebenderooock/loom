@@ -19,6 +19,12 @@ type stalledState struct {
 	lastProgressAt  time.Time
 }
 
+// Reconciler is called after each monitor sweep with the current download
+// state so that workflow pipelines can be kept in sync.
+type Reconciler interface {
+	Reconcile(ctx context.Context, activeDownloads map[string]string)
+}
+
 // Monitor periodically checks the status of downloads on all configured
 // clients and emits completion events when items finish. It decouples
 // status polling from the indexer intake and routing pipelines, reducing
@@ -30,6 +36,7 @@ type Monitor struct {
 	clock        Clock
 	stallHandler *StallHandler
 	historyStore *HistoryStore
+	reconciler   Reconciler
 
 	// Configurable check interval. Defaults to 30 seconds; can be
 	// overridden via env variable or test injection.
@@ -60,6 +67,7 @@ type MonitorOptions struct {
 	CheckForStalled bool
 	StallHandler    *StallHandler
 	HistoryStore    *HistoryStore
+	Reconciler      Reconciler
 }
 
 // NewMonitor returns a Monitor wired to the Service and event bus.
@@ -92,6 +100,7 @@ func NewMonitor(opts MonitorOptions) (*Monitor, error) {
 		clock:           opts.Clock,
 		stallHandler:    opts.StallHandler,
 		historyStore:    opts.HistoryStore,
+		reconciler:      opts.Reconciler,
 		checkInterval:   opts.CheckInterval,
 		stallTimeout:    opts.StallTimeout,
 		checkForStalled: opts.CheckForStalled,
@@ -131,6 +140,16 @@ func (m *Monitor) Run(ctx context.Context) error {
 	// Process results: detect stalled/failed downloads.
 	if m.checkForStalled {
 		m.detectStalled(ctx, status.Items)
+	}
+
+	// Reconcile workflow state with actual downloads.
+	if m.reconciler != nil {
+		activeDownloads := make(map[string]string, len(status.Items))
+		for _, item := range status.Items {
+			key := item.ClientID + ":" + item.ID
+			activeDownloads[key] = string(item.Status)
+		}
+		m.reconciler.Reconcile(ctx, activeDownloads)
 	}
 
 	m.logger.Debug("monitor: status sweep completed", "items", len(status.Items))
