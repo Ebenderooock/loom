@@ -62,6 +62,13 @@ type trackedTorrent struct {
 	paused       bool
 	downloaded   int64 // snapshot for ratio calculation
 	uploaded     int64
+
+	// Speed tracking — computed from byte deltas between Status() calls.
+	lastSpeedSampleAt time.Time
+	lastBytesRead     int64
+	lastBytesWritten  int64
+	downloadRate      int64 // bytes/sec
+	uploadRate        int64 // bytes/sec
 }
 
 // Engine wraps a single anacrolix/torrent.Client and manages its
@@ -314,8 +321,8 @@ type TorrentStatus struct {
 // Status returns the current state of the requested torrents. An
 // empty hashes slice returns all tracked torrents.
 func (e *Engine) Status(hashes ...string) []TorrentStatus {
-	e.mu.RLock()
-	defer e.mu.RUnlock()
+	e.mu.Lock()
+	defer e.mu.Unlock()
 
 	var targets []*trackedTorrent
 	if len(hashes) == 0 {
@@ -340,7 +347,7 @@ func (e *Engine) Status(hashes ...string) []TorrentStatus {
 }
 
 // buildStatus creates a TorrentStatus snapshot from a trackedTorrent.
-// Must be called with e.mu held (at least RLock).
+// Must be called with e.mu held (write lock for speed tracking).
 func (e *Engine) buildStatus(tt *trackedTorrent) TorrentStatus {
 	t := tt.t
 	stats := t.Stats()
@@ -349,6 +356,30 @@ func (e *Engine) buildStatus(tt *trackedTorrent) TorrentStatus {
 	uploaded := stats.BytesWrittenData.Int64()
 	bytesCompleted := t.BytesCompleted()
 	size := t.Length()
+
+	// Compute speed from byte deltas since last sample.
+	now := time.Now()
+	if !tt.lastSpeedSampleAt.IsZero() {
+		elapsed := now.Sub(tt.lastSpeedSampleAt).Seconds()
+		if elapsed >= 0.5 {
+			tt.downloadRate = int64(float64(downloaded-tt.lastBytesRead) / elapsed)
+			tt.uploadRate = int64(float64(uploaded-tt.lastBytesWritten) / elapsed)
+			if tt.downloadRate < 0 {
+				tt.downloadRate = 0
+			}
+			if tt.uploadRate < 0 {
+				tt.uploadRate = 0
+			}
+			tt.lastSpeedSampleAt = now
+			tt.lastBytesRead = downloaded
+			tt.lastBytesWritten = uploaded
+		}
+	} else {
+		// First sample — seed the values, rate stays 0.
+		tt.lastSpeedSampleAt = now
+		tt.lastBytesRead = downloaded
+		tt.lastBytesWritten = uploaded
+	}
 
 	var progress float64
 	if size > 0 {
@@ -378,18 +409,20 @@ func (e *Engine) buildStatus(tt *trackedTorrent) TorrentStatus {
 	}
 
 	return TorrentStatus{
-		Hash:       strings.ToLower(t.InfoHash().HexString()),
-		Title:      tt.title,
-		Category:   tt.category,
-		SavePath:   tt.savePath,
-		Status:     status,
-		Progress:   progress,
-		SizeBytes:  size,
-		Downloaded: downloaded,
-		Uploaded:   uploaded,
-		Ratio:      ratio,
-		AddedAt:    tt.addedAt,
-		Paused:     tt.paused,
+		Hash:         strings.ToLower(t.InfoHash().HexString()),
+		Title:        tt.title,
+		Category:     tt.category,
+		SavePath:     tt.savePath,
+		Status:       status,
+		Progress:     progress,
+		SizeBytes:    size,
+		Downloaded:   downloaded,
+		Uploaded:     uploaded,
+		DownloadRate: tt.downloadRate,
+		UploadRate:   tt.uploadRate,
+		Ratio:        ratio,
+		AddedAt:      tt.addedAt,
+		Paused:       tt.paused,
 	}
 }
 

@@ -653,7 +653,7 @@ function ActiveDownloads() {
 
   React.useEffect(() => {
     fetchActivity();
-    const interval = setInterval(() => fetchActivity(), 5000);
+    const interval = setInterval(() => fetchActivity(), 2000);
     return () => clearInterval(interval);
   }, [fetchActivity]);
 

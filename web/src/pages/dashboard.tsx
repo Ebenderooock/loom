@@ -14,10 +14,11 @@ import {
   useDashboardIndexers,
   useDashboardDownloadClients,
   useDashboardIndexerHealth,
+  useDashboardActivity,
 } from "@/lib/dashboard-api";
 import { useSetPageHeader } from "@/hooks/use-page-header";
 import { Link } from "@tanstack/react-router";
-import { cn, formatBytes } from "@/lib/utils";
+import { cn, formatBytes, formatSpeed } from "@/lib/utils";
 import {
   Film,
   Tv,
@@ -28,10 +29,11 @@ import {
   Rss,
   CheckCircle2,
   AlertTriangle,
-  Clock,
   Rocket,
   Settings,
   FolderOpen,
+  ArrowDown,
+  ArrowUp,
   type LucideIcon,
 } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
@@ -351,24 +353,91 @@ function StorageCard() {
 // Recent Activity (placeholder)
 // ---------------------------------------------------------------------------
 
-function RecentActivityCard() {
+function ActiveDownloadsCard() {
+  const { data: items, isLoading } = useDashboardActivity();
+
+  const active = (items ?? []).filter(
+    (i) => i.status === "downloading" || i.status === "seeding" || i.status === "queued",
+  );
+  const totalDown = active.reduce((s, i) => s + (i.download_rate || 0), 0);
+  const totalUp = active.reduce((s, i) => s + (i.upload_rate || 0), 0);
+
   return (
     <Card>
       <CardHeader className="pb-3">
-        <CardTitle className="text-base">Recent Activity</CardTitle>
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-base">Active Downloads</CardTitle>
+          {active.length > 0 && (
+            <div className="flex items-center gap-3 text-xs text-muted-foreground">
+              {totalDown > 0 && (
+                <span className="flex items-center gap-1">
+                  <ArrowDown className="h-3 w-3 text-blue-400" />
+                  <span className="font-medium text-foreground/80">{formatSpeed(totalDown)}</span>
+                </span>
+              )}
+              {totalUp > 0 && (
+                <span className="flex items-center gap-1">
+                  <ArrowUp className="h-3 w-3 text-green-400" />
+                  <span className="font-medium text-foreground/80">{formatSpeed(totalUp)}</span>
+                </span>
+              )}
+            </div>
+          )}
+        </div>
       </CardHeader>
       <CardContent>
-        <div className="flex flex-col items-center justify-center py-10 text-center">
-          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-muted/50">
-            <Clock className="h-7 w-7 text-muted-foreground/50" />
+        {isLoading ? (
+          <div className="space-y-3">
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-full" />
           </div>
-          <p className="mt-3 text-sm font-medium text-muted-foreground">
-            No recent activity
-          </p>
-          <p className="mt-1 text-xs text-muted-foreground/60">
-            Grabs and imports will show up here
-          </p>
-        </div>
+        ) : active.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-8 text-center">
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted/50">
+              <Download className="h-6 w-6 text-muted-foreground/50" />
+            </div>
+            <p className="mt-3 text-sm text-muted-foreground">No active downloads</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {active.slice(0, 5).map((item) => (
+              <div key={item.id} className="space-y-1.5">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="truncate text-sm font-medium">{item.title}</span>
+                  <span className="shrink-0 text-xs text-muted-foreground">
+                    {item.status === "downloading" && item.download_rate > 0
+                      ? formatSpeed(item.download_rate)
+                      : item.status}
+                  </span>
+                </div>
+                <Progress value={Math.round(item.progress * 100)} className="h-1.5" />
+                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                  <span>{Math.round(item.progress * 100)}%</span>
+                  {item.size_bytes > 0 && (
+                    <span>
+                      {formatBytes(item.downloaded_bytes)} / {formatBytes(item.size_bytes)}
+                    </span>
+                  )}
+                </div>
+              </div>
+            ))}
+            {active.length > 5 && (
+              <Link
+                to="/downloads"
+                className="block text-center text-xs text-muted-foreground hover:text-primary"
+              >
+                + {active.length - 5} more
+              </Link>
+            )}
+          </div>
+        )}
+        {active.length > 0 && (
+          <div className="mt-3 border-t border-border/50 pt-3">
+            <Button variant="outline" size="sm" className="w-full" asChild>
+              <Link to="/downloads">View all downloads</Link>
+            </Button>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
@@ -441,10 +510,10 @@ export function DashboardPage() {
         <SystemHealthCard />
       </div>
 
-      {/* Row 3: Storage + Recent Activity */}
+      {/* Row 3: Storage + Active Downloads */}
       <div className="grid gap-4 md:grid-cols-2">
         <StorageCard />
-        <RecentActivityCard />
+        <ActiveDownloadsCard />
       </div>
     </div>
   );
