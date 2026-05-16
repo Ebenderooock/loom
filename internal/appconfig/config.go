@@ -26,12 +26,20 @@ type Persistence struct {
 	Path   string `json:"path"`
 }
 
+// RecycleBinConfig holds settings for the import recycle bin.
+type RecycleBinConfig struct {
+	Enabled       bool   `json:"enabled" yaml:"enabled"`
+	Path          string `json:"path" yaml:"path"`
+	RetentionDays int    `json:"retentionDays" yaml:"retentionDays"`
+}
+
 // Config is the root configuration structure
 type Config struct {
-	SetupComplete bool          `json:"setup_complete"`
-	Admin         Admin         `json:"admin"`
-	Persistence   Persistence   `json:"persistence"`
-	Libraries     []Library     `json:"libraries"`
+	SetupComplete bool             `json:"setup_complete"`
+	Admin         Admin            `json:"admin"`
+	Persistence   Persistence      `json:"persistence"`
+	Libraries     []Library        `json:"libraries"`
+	RecycleBin    RecycleBinConfig `json:"recycle_bin"`
 }
 
 // Load reads and parses the config file from the given path
