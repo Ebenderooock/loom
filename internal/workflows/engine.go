@@ -307,6 +307,56 @@ func (e *Engine) RecoverToDownloading(ctx context.Context, workflowID, reason st
 	return nil
 }
 
+// StartImport creates a workflow for a manual import operation.
+// The workflow starts directly in "importing" state, skipping search/download phases.
+func (e *Engine) StartImport(ctx context.Context, mediaType string, mediaIDs []string, grabTitle string) (*Workflow, error) {
+	items := make([]Item, len(mediaIDs))
+	for i, id := range mediaIDs {
+		items[i] = Item{MediaType: mediaType, MediaID: id}
+	}
+
+	wf := &Workflow{
+		Type:       TypeManualImport,
+		State:      StateImporting,
+		MediaType:  mediaType,
+		GrabTitle:  grabTitle,
+		MaxRetries: 0,
+		Items:      items,
+	}
+
+	if err := e.store.Create(ctx, wf); err != nil {
+		return nil, fmt.Errorf("create import workflow: %w", err)
+	}
+
+	e.logger.Info("import workflow started",
+		"id", wf.ID, "media_type", mediaType, "grab_title", grabTitle)
+	return wf, nil
+}
+
+// CompleteImport transitions an import workflow to completed.
+func (e *Engine) CompleteImport(ctx context.Context, workflowID string) error {
+	ok, err := e.store.Transition(ctx, workflowID, StateImporting, StateCompleted, "Import completed")
+	if err != nil {
+		return err
+	}
+	if !ok {
+		e.logger.Warn("import workflow not in importing state", "id", workflowID)
+	}
+	return nil
+}
+
+// FailImport transitions an import workflow to failed.
+func (e *Engine) FailImport(ctx context.Context, workflowID, reason string) error {
+	ok, err := e.store.Transition(ctx, workflowID, StateImporting, StateFailed, reason)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		e.logger.Warn("import workflow not in importing state", "id", workflowID)
+	}
+	return nil
+}
+
 // FindByDownload finds a workflow by download client + download ID.
 func (e *Engine) FindByDownload(ctx context.Context, clientID, downloadID string) (*Workflow, error) {
 	return e.store.FindByDownload(ctx, clientID, downloadID)
