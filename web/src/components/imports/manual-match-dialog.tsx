@@ -81,7 +81,7 @@ export function ManualMatchDialog({
       setSelectedSeries(null);
       setEpisodes([]);
       setSelectedEpisode(null);
-      setSeasonNum(scanResult.detected_season || 1);
+      setSeasonNum(scanResult.detected_season ?? 1);
       setError("");
     }
   }, [open, scanResult]);
@@ -333,15 +333,23 @@ export function ManualMatchDialog({
                       value={String(seasonNum)}
                       onValueChange={(v) => void handleSeasonChange(Number(v))}
                     >
-                      <SelectTrigger className="w-[80px]">
+                      <SelectTrigger className="w-[120px]">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {Array.from({ length: 30 }, (_, i) => i + 1).map((n) => (
-                          <SelectItem key={n} value={String(n)}>
-                            {n}
-                          </SelectItem>
-                        ))}
+                        {(selectedSeries?.seasons ?? [])
+                          .slice()
+                          .sort((a, b) => a.seasonNumber - b.seasonNumber)
+                          .map((s) => (
+                            <SelectItem
+                              key={s.seasonNumber}
+                              value={String(s.seasonNumber)}
+                            >
+                              {s.seasonNumber === 0
+                                ? "Specials"
+                                : `Season ${s.seasonNumber}`}
+                            </SelectItem>
+                          ))}
                       </SelectContent>
                     </Select>
                   </div>

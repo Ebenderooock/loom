@@ -134,12 +134,19 @@ export interface LocalMovie {
   imdbId?: string;
 }
 
+export interface LocalSeriesSeason {
+  id: string;
+  seasonNumber: number;
+  episodeCount: number;
+}
+
 export interface LocalSeries {
   id: string;
   title: string;
   year: number;
   tmdbId?: string;
   imdbId?: string;
+  seasons?: LocalSeriesSeason[];
 }
 
 export interface SeriesEpisode {

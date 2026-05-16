@@ -369,10 +369,13 @@ func (r *sqlRepo) GetEpisodeStats(ctx context.Context, seriesID string) (*Episod
 		`SELECT
 			COUNT(*) as total,
 			SUM(CASE WHEN has_file = 1 THEN 1 ELSE 0 END) as downloaded,
-			SUM(CASE WHEN monitored = 1 THEN 1 ELSE 0 END) as monitored,
-			SUM(CASE WHEN monitored = 1 AND has_file = 0 AND (air_date != '' AND air_date <= date('now')) THEN 1 ELSE 0 END) as missing,
+			SUM(CASE WHEN e.monitored = 1 THEN 1 ELSE 0 END) as monitored,
+			SUM(CASE WHEN e.monitored = 1 AND has_file = 0 AND (air_date != '' AND air_date <= date('now'))
+				AND s.season_number != 0 THEN 1 ELSE 0 END) as missing,
 			SUM(CASE WHEN air_date != '' AND air_date <= date('now') THEN 1 ELSE 0 END) as aired
-		 FROM episodes WHERE series_id = ?`, seriesID,
+		 FROM episodes e
+		 JOIN seasons s ON e.season_id = s.id
+		 WHERE e.series_id = ?`, seriesID,
 	).Scan(&stats.TotalEpisodes, &stats.DownloadedEpisodes, &stats.MonitoredEpisodes, &stats.MissingEpisodes, &stats.AiredEpisodes)
 	return stats, err
 }
@@ -380,13 +383,16 @@ func (r *sqlRepo) GetEpisodeStats(ctx context.Context, seriesID string) (*Episod
 func (r *sqlRepo) GetAllEpisodeStats(ctx context.Context) (map[string]*EpisodeStats, error) {
 	rows, err := r.db.QueryContext(ctx,
 		`SELECT
-			series_id,
+			e.series_id,
 			COUNT(*) as total,
 			SUM(CASE WHEN has_file = 1 THEN 1 ELSE 0 END) as downloaded,
-			SUM(CASE WHEN monitored = 1 THEN 1 ELSE 0 END) as monitored,
-			SUM(CASE WHEN monitored = 1 AND has_file = 0 AND (air_date != '' AND air_date <= date('now')) THEN 1 ELSE 0 END) as missing,
+			SUM(CASE WHEN e.monitored = 1 THEN 1 ELSE 0 END) as monitored,
+			SUM(CASE WHEN e.monitored = 1 AND has_file = 0 AND (air_date != '' AND air_date <= date('now'))
+				AND s.season_number != 0 THEN 1 ELSE 0 END) as missing,
 			SUM(CASE WHEN air_date != '' AND air_date <= date('now') THEN 1 ELSE 0 END) as aired
-		 FROM episodes GROUP BY series_id`)
+		 FROM episodes e
+		 JOIN seasons s ON e.season_id = s.id
+		 GROUP BY e.series_id`)
 	if err != nil {
 		return nil, err
 	}
@@ -407,13 +413,16 @@ func (r *sqlRepo) GetAllEpisodeStats(ctx context.Context) (map[string]*EpisodeSt
 func (r *sqlRepo) GetSeasonEpisodeStats(ctx context.Context, seriesID string) (map[string]*EpisodeStats, error) {
 	rows, err := r.db.QueryContext(ctx,
 		`SELECT
-			season_id,
+			e.season_id,
 			COUNT(*) as total,
 			SUM(CASE WHEN has_file = 1 THEN 1 ELSE 0 END) as downloaded,
-			SUM(CASE WHEN monitored = 1 THEN 1 ELSE 0 END) as monitored,
-			SUM(CASE WHEN monitored = 1 AND has_file = 0 AND (air_date != '' AND air_date <= date('now')) THEN 1 ELSE 0 END) as missing,
+			SUM(CASE WHEN e.monitored = 1 THEN 1 ELSE 0 END) as monitored,
+			SUM(CASE WHEN e.monitored = 1 AND has_file = 0 AND (air_date != '' AND air_date <= date('now'))
+				AND s.season_number != 0 THEN 1 ELSE 0 END) as missing,
 			SUM(CASE WHEN air_date != '' AND air_date <= date('now') THEN 1 ELSE 0 END) as aired
-		 FROM episodes WHERE series_id = ? GROUP BY season_id`, seriesID)
+		 FROM episodes e
+		 JOIN seasons s ON e.season_id = s.id
+		 WHERE e.series_id = ? GROUP BY e.season_id`, seriesID)
 	if err != nil {
 		return nil, err
 	}
