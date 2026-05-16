@@ -56,6 +56,7 @@ type ImportPipeline struct {
 	importMode      ImportMode
 	decisionLog     *DecisionLogger
 	unsub           func()
+	importSem       chan struct{} // bounds concurrent manual imports
 }
 
 // NewPipeline creates and wires an ImportPipeline. Call Start to
@@ -98,6 +99,7 @@ func NewPipeline(opts PipelineOptions) (*ImportPipeline, error) {
 		logger:          logger,
 		importMode:      opts.ImportMode,
 		decisionLog:     NewDecisionLogger(opts.DB, logger),
+		importSem:       make(chan struct{}, 2), // max 2 concurrent manual imports
 	}, nil
 }
 
@@ -610,6 +612,104 @@ func (p *ImportPipeline) recordStatus(ctx context.Context, mediaType, mediaID, s
 		time.Now().UTC(),
 	)
 	return err
+}
+
+// SubmitManualImport validates the path and runs the import in a background
+// goroutine with bounded concurrency. Returns an error only if validation
+// fails or the queue is full. Import results are delivered via
+// notifications/events, not via the return value.
+func (p *ImportPipeline) SubmitManualImport(path string) error {
+	info, err := os.Stat(path)
+	if err != nil {
+		return fmt.Errorf("path not found: %w", err)
+	}
+
+	var mediaFiles []string
+	if info.IsDir() {
+		mediaFiles, err = scanMediaFiles(path)
+		if err != nil {
+			return fmt.Errorf("scan: %w", err)
+		}
+	} else {
+		ext := filepath.Ext(path)
+		if !mediaExtensions[ext] {
+			return fmt.Errorf("not a media file: %s", path)
+		}
+		mediaFiles = []string{path}
+	}
+	if len(mediaFiles) == 0 {
+		return fmt.Errorf("no media files found in %s", path)
+	}
+
+	// Try to acquire a slot; reject if full.
+	select {
+	case p.importSem <- struct{}{}:
+	default:
+		return fmt.Errorf("import queue full, try again later")
+	}
+
+	go func() {
+		defer func() { <-p.importSem }()
+		ctx := context.Background()
+		p.logger.Info("manual import starting (async)", "path", path, "files", len(mediaFiles))
+		if err := p.ImportManual(ctx, path); err != nil {
+			p.logger.Error("manual import failed", "path", path, "error", err)
+		}
+	}()
+	return nil
+}
+
+// SubmitManualMatch validates the request and runs the exact-match import
+// in a background goroutine with bounded concurrency.
+func (p *ImportPipeline) SubmitManualMatch(path string, mediaType MediaType, mediaID string) error {
+	// Validate path exists before queuing
+	if _, err := os.Stat(path); err != nil {
+		return fmt.Errorf("path not found: %w", err)
+	}
+
+	select {
+	case p.importSem <- struct{}{}:
+	default:
+		return fmt.Errorf("import queue full, try again later")
+	}
+
+	go func() {
+		defer func() { <-p.importSem }()
+		ctx := context.Background()
+		p.logger.Info("manual match import starting (async)",
+			"path", path, "media_type", mediaType, "media_id", mediaID)
+		if _, err := p.ImportManualMatch(ctx, path, mediaType, mediaID); err != nil {
+			p.logger.Error("manual match import failed",
+				"path", path, "media_type", mediaType, "media_id", mediaID, "error", err)
+		}
+	}()
+	return nil
+}
+
+// SubmitReimport validates the request and runs the reimport in a background
+// goroutine with bounded concurrency.
+func (p *ImportPipeline) SubmitReimport(mediaType MediaType, mediaID, sourcePath string, opts ReimportOptions) error {
+	if _, err := os.Stat(sourcePath); err != nil {
+		return fmt.Errorf("path not found: %w", err)
+	}
+
+	select {
+	case p.importSem <- struct{}{}:
+	default:
+		return fmt.Errorf("import queue full, try again later")
+	}
+
+	go func() {
+		defer func() { <-p.importSem }()
+		ctx := context.Background()
+		p.logger.Info("reimport starting (async)",
+			"media_type", mediaType, "media_id", mediaID, "source_path", sourcePath)
+		if _, err := p.ReimportFile(ctx, mediaType, mediaID, sourcePath, opts); err != nil {
+			p.logger.Error("reimport failed",
+				"media_type", mediaType, "media_id", mediaID, "source_path", sourcePath, "error", err)
+		}
+	}()
+	return nil
 }
 
 // ImportManual triggers an import for an arbitrary filesystem path.

@@ -56,11 +56,15 @@ func handleManualImport(p *ImportPipeline) http.HandlerFunc {
 			return
 		}
 
-		if err := p.ImportManual(r.Context(), req.Path); err != nil {
-			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
+		if err := p.SubmitManualImport(req.Path); err != nil {
+			status := http.StatusUnprocessableEntity
+			if err.Error() == "import queue full, try again later" {
+				status = http.StatusServiceUnavailable
+			}
+			writeJSON(w, status, map[string]string{"error": err.Error()})
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+		writeJSON(w, http.StatusAccepted, map[string]string{"status": "accepted"})
 	}
 }
 
@@ -81,12 +85,15 @@ func handleManualMatch(p *ImportPipeline) http.HandlerFunc {
 			return
 		}
 
-		record, err := p.ImportManualMatch(r.Context(), req.Path, MediaType(req.MediaType), req.MediaID)
-		if err != nil {
-			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
+		if err := p.SubmitManualMatch(req.Path, MediaType(req.MediaType), req.MediaID); err != nil {
+			status := http.StatusUnprocessableEntity
+			if err.Error() == "import queue full, try again later" {
+				status = http.StatusServiceUnavailable
+			}
+			writeJSON(w, status, map[string]string{"error": err.Error()})
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"data": record})
+		writeJSON(w, http.StatusAccepted, map[string]string{"status": "accepted"})
 	}
 }
 
@@ -119,14 +126,17 @@ func handleReimport(p *ImportPipeline) http.HandlerFunc {
 			policy = ConflictPolicy(req.ConflictPolicy)
 		}
 
-		record, err := p.ReimportFile(r.Context(), MediaType(req.MediaType), req.MediaID, req.SourcePath, ReimportOptions{
+		if err := p.SubmitReimport(MediaType(req.MediaType), req.MediaID, req.SourcePath, ReimportOptions{
 			ConflictPolicy: policy,
-		})
-		if err != nil {
-			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
+		}); err != nil {
+			status := http.StatusUnprocessableEntity
+			if err.Error() == "import queue full, try again later" {
+				status = http.StatusServiceUnavailable
+			}
+			writeJSON(w, status, map[string]string{"error": err.Error()})
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"data": record})
+		writeJSON(w, http.StatusAccepted, map[string]string{"status": "accepted"})
 	}
 }
 
