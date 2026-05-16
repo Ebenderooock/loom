@@ -19,11 +19,17 @@ type Matcher struct {
 	moviesSvc  movies.Service
 	seriesSvc  series.Service
 	libStore   *libraries.Store
+	altMatcher *AltTitleMatcher
 }
 
 // NewMatcher creates a Matcher backed by the movies and series services.
 func NewMatcher(moviesSvc movies.Service, seriesSvc series.Service, libStore *libraries.Store) *Matcher {
 	return &Matcher{moviesSvc: moviesSvc, seriesSvc: seriesSvc, libStore: libStore}
+}
+
+// SetAltTitleMatcher installs an alternative-title fallback matcher.
+func (m *Matcher) SetAltTitleMatcher(alt *AltTitleMatcher) {
+	m.altMatcher = alt
 }
 
 // parsedRelease holds the extracted metadata from a release name.
@@ -200,6 +206,18 @@ func (m *Matcher) matchMovie(ctx context.Context, p parsedRelease) (*MatchResult
 
 	best := fuzzyMatchMovie(results, p)
 	if best == nil {
+		// Fallback: try alternative titles
+		if m.altMatcher != nil {
+			altMovie, err := m.altMatcher.MatchMovieByAltTitle(ctx, p.Title, p.Year)
+			if err != nil {
+				return nil, fmt.Errorf("alt title match: %w", err)
+			}
+			if altMovie != nil {
+				best = altMovie
+			}
+		}
+	}
+	if best == nil {
 		return &MatchResult{Matched: false}, nil
 	}
 
@@ -227,6 +245,18 @@ func (m *Matcher) matchSeries(ctx context.Context, p parsedRelease) (*MatchResul
 	}
 
 	best := fuzzyMatchSeries(candidates, p)
+	if best == nil {
+		// Fallback: try alternative titles
+		if m.altMatcher != nil {
+			altSeries, err := m.altMatcher.MatchSeriesByAltTitle(ctx, p.Title, p.Year)
+			if err != nil {
+				return nil, fmt.Errorf("alt title match: %w", err)
+			}
+			if altSeries != nil {
+				best = altSeries
+			}
+		}
+	}
 	if best == nil {
 		return &MatchResult{Matched: false}, nil
 	}

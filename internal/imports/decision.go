@@ -1,6 +1,10 @@
 package imports
 
-import "context"
+import (
+	"context"
+
+	"github.com/ebenderooock/loom/internal/parser"
+)
 
 // ImportRejectionReason categorizes why a file was rejected.
 type ImportRejectionReason string
@@ -23,12 +27,15 @@ type ImportRejection struct {
 
 // ImportCandidate holds all context needed for import decisions.
 type ImportCandidate struct {
-	SourcePath string
-	DestPath   string
-	FileSize   int64
-	Match      *MatchResult
-	ImportMode ImportMode
-	IsManual   bool
+	SourcePath       string
+	DestPath         string
+	FileSize         int64
+	Match            *MatchResult
+	ImportMode       ImportMode
+	IsManual         bool
+	QualityProfileID string          // the media item's assigned quality profile
+	ExistingQuality  string          // quality-definition name of existing file (empty if none)
+	IncomingRelease  *parser.Release // parsed release info for the incoming file
 }
 
 // ImportEvaluation holds the result of running all specs against a candidate.
