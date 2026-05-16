@@ -26,7 +26,7 @@ export function MovieCard({
   return (
     <div
       className={cn(
-        "group relative rounded-lg overflow-hidden shadow-lg transition-all duration-200 hover:scale-[1.03] hover:shadow-xl cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+        "group relative rounded-lg overflow-hidden shadow-lg transition-all duration-200 hover:scale-[1.02] hover:-translate-y-1 hover:shadow-xl cursor-pointer border border-transparent hover:border-accent/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background",
         selected && "ring-2 ring-accent ring-offset-2 ring-offset-background",
       )}
       tabIndex={0}
@@ -82,7 +82,7 @@ export function MovieCard({
       )}
 
       {/* Status bar at bottom */}
-      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/60 to-transparent p-3 pt-8">
+      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/95 via-black/70 to-transparent p-3 pt-8">
         <div className="flex items-center justify-between gap-1">
           <StatusBadge status={movie.status} />
           {movie.monitoringStatus === "unmonitored" && (
@@ -94,7 +94,7 @@ export function MovieCard({
       </div>
 
       {/* Hover overlay with details */}
-      <div className="absolute inset-0 bg-black/85 p-4 flex flex-col justify-between opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none">
+      <div className="absolute inset-0 bg-black/80 backdrop-blur-sm p-4 flex flex-col justify-between opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none">
         <div>
           <h3 className="text-sm font-bold text-white">{movie.title}</h3>
           <p className="text-xs text-gray-400 mt-0.5">{movie.year} • {movie.runtime ? `${movie.runtime}m` : "—"}</p>

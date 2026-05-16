@@ -22,7 +22,8 @@ export default function CodeBlock({ code, title }: CodeBlockProps) {
           <span className="text-sm text-zinc-400 font-medium">{title}</span>
           <button
             onClick={handleCopy}
-            className="flex items-center gap-1.5 text-xs text-zinc-400 hover:text-white transition-colors px-2 py-1 rounded hover:bg-zinc-800"
+            aria-label="Copy code"
+            className="flex items-center gap-1.5 text-xs text-zinc-400 hover:text-white transition-colors px-2 py-1 rounded hover:bg-zinc-800 focus-visible:ring-2 focus-visible:ring-brand-purple focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
           >
             {copied ? <Check size={14} className="text-green-400" /> : <Copy size={14} />}
             {copied ? 'Copied!' : 'Copy'}

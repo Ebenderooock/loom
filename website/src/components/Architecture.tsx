@@ -47,8 +47,8 @@ export default function Architecture() {
 
               {/* Arrow */}
               <div className="hidden lg:flex items-center justify-center">
-                <svg width="60" height="20" className="text-brand-purple/50">
-                  <line x1="0" y1="10" x2="50" y2="10" stroke="currentColor" strokeWidth="2" strokeDasharray="4 4" />
+                <svg width="60" height="20" className="text-brand-purple/50" aria-hidden="true">
+                  <line x1="0" y1="10" x2="50" y2="10" stroke="currentColor" strokeWidth="2" strokeDasharray="6 4" className="animate-dash-flow" />
                   <polygon points="50,5 60,10 50,15" fill="currentColor" />
                 </svg>
               </div>
@@ -56,8 +56,8 @@ export default function Architecture() {
               {/* Core */}
               <div className="relative">
                 <div className="absolute -inset-4 bg-gradient-to-r from-brand-purple/10 via-brand-blue/10 to-brand-cyan/10 rounded-2xl blur-xl" />
-                <div className="relative p-6 rounded-2xl border-2 border-brand-purple/30 bg-zinc-900/80 text-center">
-                  <img src="/loom-logo.png" alt="Loom" className="w-10 h-10 mx-auto mb-3" />
+                <div className="relative p-6 rounded-2xl border-2 border-brand-purple/30 bg-zinc-900/80 text-center animate-core-pulse">
+                  <img src="/loom-logo.png" alt="Loom" width={40} height={40} className="w-10 h-10 mx-auto mb-3" />
                   <h3 className="text-lg font-bold text-gradient mb-2">Loom Core</h3>
                   <div className="space-y-1.5 text-xs text-zinc-400">
                     <div className="px-2 py-1 rounded bg-zinc-800/50">Indexer Manager</div>
@@ -70,8 +70,8 @@ export default function Architecture() {
 
               {/* Arrow */}
               <div className="hidden lg:flex items-center justify-center">
-                <svg width="60" height="20" className="text-brand-blue/50">
-                  <line x1="0" y1="10" x2="50" y2="10" stroke="currentColor" strokeWidth="2" strokeDasharray="4 4" />
+                <svg width="60" height="20" className="text-brand-blue/50" aria-hidden="true">
+                  <line x1="0" y1="10" x2="50" y2="10" stroke="currentColor" strokeWidth="2" strokeDasharray="6 4" className="animate-dash-flow" />
                   <polygon points="50,5 60,10 50,15" fill="currentColor" />
                 </svg>
               </div>

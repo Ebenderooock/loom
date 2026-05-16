@@ -2,18 +2,28 @@ import { motion, useInView } from 'framer-motion'
 import { useRef } from 'react'
 
 const phases = [
-  { id: 0, title: 'Foundation', status: 'done', description: 'Project structure, CI/CD, core framework' },
-  { id: 1, title: 'Configuration & Storage', status: 'done', description: 'Config system, SQLite, migrations' },
-  { id: 2, title: 'Indexer Engine', status: 'done', description: 'Cardigann YAML, Newznab, Torznab, 542 indexers' },
-  { id: 3, title: 'Download Clients', status: 'in-progress', description: 'qBittorrent, Transmission, SABnzbd, NZBGet' },
-  { id: 4, title: 'Media Management', status: 'planned', description: 'Library scanning, metadata, file management' },
-  { id: 5, title: 'Search & Automation', status: 'planned', description: 'RSS, auto-search, quality profiles' },
-  { id: 6, title: 'API Compatibility', status: 'planned', description: 'Wire-compatible *arr API endpoints' },
-  { id: 7, title: 'Notifications', status: 'planned', description: 'Discord, webhooks, Gotify, Ntfy' },
-  { id: 8, title: 'Web UI', status: 'planned', description: 'React 19 frontend, mobile-first' },
-  { id: 9, title: 'Import & Migration', status: 'planned', description: 'Import from existing *arr databases' },
-  { id: 10, title: 'Plugin SDK', status: 'planned', description: 'gRPC plugin system, out-of-process' },
-  { id: 11, title: 'Stable Release', status: 'planned', description: 'v1.0 — production-ready' },
+  { id: 0, title: 'Foundation', status: 'done', description: 'Project structure, CI/CD, Makefile, core framework, SQLite with migrations' },
+  { id: 1, title: 'Indexer Engine', status: 'done', description: 'Cardigann YAML engine, Newznab & Torznab support, 542 indexers built in' },
+  { id: 2, title: 'Download Clients', status: 'done', description: 'qBittorrent, Transmission, Deluge, rTorrent, SABnzbd, NZBGet integration' },
+  { id: 3, title: 'Built-in Torrent Client', status: 'done', description: 'Zero-dependency BitTorrent client baked into the binary — no external client needed' },
+  { id: 4, title: 'Workflow Engine', status: 'done', description: 'Full state machine: search → grab → download → post-download → import → complete' },
+  { id: 5, title: 'Smart Retry & Recovery', status: 'done', description: 'Intelligent retry from optimal point, boot reconciliation for interrupted imports' },
+  { id: 6, title: 'Media Management', status: 'done', description: 'Movies & TV shows library, metadata from TMDB, file renaming, collision detection' },
+  { id: 7, title: 'Web UI', status: 'done', description: 'React 19 + TypeScript frontend — library, search, downloads, workflows, settings' },
+  { id: 8, title: 'API Compatibility', status: 'done', description: 'Wire-compatible *arr API endpoints for Overseerr, Jellyseerr, Bazarr, and more' },
+  { id: 9, title: 'Observability', status: 'done', description: 'OpenTelemetry, Prometheus /metrics, structured JSON logs, pprof profiling' },
+  { id: 10, title: 'Notifications', status: 'done', description: 'Discord, Webhook, Gotify, Ntfy — grabs, downloads, imports, and health alerts' },
+  { id: 11, title: 'Import Lists', status: 'done', description: 'Automatic library sync from Trakt, IMDB, Plex watchlists, and more' },
+  { id: 12, title: 'TV Show Automation', status: 'done', description: 'Season pack handling, episode monitoring, automatic searches for new episodes' },
+  { id: 13, title: 'Import & Migration', status: 'done', description: 'One-click import from existing Radarr, Sonarr, and Prowlarr databases' },
+  { id: 14, title: 'Quality Profiles', status: 'done', description: 'Custom quality rankings, scoring, custom formats, and upgrade-until thresholds' },
+  { id: 15, title: 'Usenet / NZB Support', status: 'planned', description: 'Built-in NZB downloading and Usenet indexer integration — no external NZB client needed' },
+  { id: 16, title: 'Media Requests', status: 'planned', description: 'User request portal, Discord/Telegram bots, approval workflows — Overseerr built in' },
+  { id: 17, title: 'Library Maintenance', status: 'planned', description: 'Duplicate detection, orphan cleanup, quality upgrade pruning — Maintainerr built in' },
+  { id: 18, title: 'Media Server Analytics', status: 'planned', description: 'Play session tracking, watch history, smart library decisions — Tautulli built in' },
+  { id: 19, title: 'Script Engine', status: 'planned', description: 'Hook into every stage — search, scoring, download handling, importing, organizing, notifications. Replace or extend any pipeline with community scripts.' },
+  { id: 20, title: 'Script Marketplace', status: 'planned', description: 'Browse, install, and share scripts built by the community — turning users into contributors who make Loom better for everyone' },
+  { id: 21, title: 'Stable Release', status: 'planned', description: 'v1.0 — production-ready, battle-tested, fully documented' },
 ]
 
 function statusIcon(status: string) {
@@ -85,8 +95,16 @@ export default function Roadmap() {
 
         {/* Timeline */}
         <div className="relative">
-          {/* Vertical line */}
+          {/* Vertical line - base */}
           <div className="absolute left-4 sm:left-6 top-0 bottom-0 w-px bg-zinc-800" />
+          {/* Animated progress overlay */}
+          <motion.div
+            className="absolute left-4 sm:left-6 top-0 w-px"
+            style={{ background: `linear-gradient(to bottom, #22c55e 0%, #22c55e ${progress * 0.9}%, #f59e0b ${progress * 0.95}%, #3f3f46 ${progress}%)` }}
+            initial={{ height: 0 }}
+            animate={isInView ? { height: '100%' } : {}}
+            transition={{ duration: 2, delay: 0.5, ease: 'easeOut' }}
+          />
 
           <div className="space-y-4">
             {phases.map((phase, i) => (

@@ -1,5 +1,5 @@
 import { motion, useInView } from 'framer-motion'
-import { useRef } from 'react'
+import { useRef, useCallback } from 'react'
 import { MessageCircle, BookOpen, Star } from 'lucide-react'
 import { GithubIcon } from './icons'
 
@@ -31,6 +31,18 @@ export default function Community() {
   const ref = useRef(null)
   const isInView = useInView(ref, { once: true, margin: '-50px' })
 
+  const handleTiltMove = useCallback((e: React.MouseEvent<HTMLAnchorElement>) => {
+    const el = e.currentTarget
+    const rect = el.getBoundingClientRect()
+    const x = (e.clientX - rect.left) / rect.width - 0.5
+    const y = (e.clientY - rect.top) / rect.height - 0.5
+    el.style.transform = `perspective(1000px) rotateY(${x * 8}deg) rotateX(${-y * 8}deg) scale(1.02)`
+  }, [])
+
+  const handleTiltLeave = useCallback((e: React.MouseEvent<HTMLAnchorElement>) => {
+    e.currentTarget.style.transform = 'perspective(1000px) rotateY(0deg) rotateX(0deg) scale(1)'
+  }, [])
+
   return (
     <section className="relative py-24 sm:py-32">
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -59,7 +71,9 @@ export default function Community() {
               initial={{ opacity: 0, y: 30 }}
               animate={isInView ? { opacity: 1, y: 0 } : {}}
               transition={{ duration: 0.5, delay: 0.2 + i * 0.1 }}
-              className="group glass glass-hover rounded-2xl p-6 text-center transition-all duration-300 hover:scale-[1.02]"
+              onMouseMove={handleTiltMove}
+              onMouseLeave={handleTiltLeave}
+              className="group glass glass-hover rounded-2xl p-6 text-center tilt-card focus-visible:ring-2 focus-visible:ring-brand-purple focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
             >
               <link.icon size={28} className="mx-auto mb-4 text-brand-purple group-hover:text-brand-blue transition-colors" />
               <h3 className="text-lg font-semibold text-white mb-2">{link.title}</h3>
@@ -82,7 +96,7 @@ export default function Community() {
             href="https://github.com/Ebenderooock/loom"
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-brand-purple/10 to-brand-blue/10 border border-brand-purple/30 text-white hover:border-brand-purple/60 transition-all duration-300 hover:scale-105"
+            className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-brand-purple/10 to-brand-blue/10 border border-brand-purple/30 text-white hover:border-brand-purple/60 transition-all duration-300 hover:scale-105 focus-visible:ring-2 focus-visible:ring-brand-purple focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
           >
             <Star size={18} className="text-yellow-400" />
             <span>Star on GitHub</span>
