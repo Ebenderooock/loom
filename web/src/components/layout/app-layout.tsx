@@ -316,7 +316,12 @@ function AppLayoutInner({ children }: { children?: React.ReactNode }) {
                 </SheetContent>
               </Sheet>
 
-              {/* Page title + subtitle */}
+              {/* Logo + page title */}
+              <Link to="/" className="flex items-center gap-2 md:hidden" aria-label="Loom home">
+                <img src="/loom.svg" alt="" className="h-7 w-7" aria-hidden="true" />
+                <span className="text-lg font-bold gradient-text">Loom</span>
+              </Link>
+
               {header.title && (
                 <div className="hidden md:flex items-baseline gap-2 min-w-0">
                   <span className="text-sm font-semibold whitespace-nowrap">{header.title}</span>
