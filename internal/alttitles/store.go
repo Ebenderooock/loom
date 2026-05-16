@@ -72,3 +72,29 @@ func (s *Store) GetByMediaID(ctx context.Context, mediaID, mediaType string) ([]
 	}
 	return out, rows.Err()
 }
+
+// SearchByTitle returns all alternate titles matching the given title
+// (case-insensitive) filtered by media type ("movie" or "series").
+func (s *Store) SearchByTitle(ctx context.Context, title, mediaType string) ([]*AltTitle, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT id, media_id, media_type, title, language, source, created_at
+		FROM alternate_titles
+		WHERE media_type = ? AND LOWER(title) = LOWER(?)
+		ORDER BY created_at ASC`, mediaType, title)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []*AltTitle
+	for rows.Next() {
+		a := &AltTitle{}
+		var ts string
+		if err := rows.Scan(&a.ID, &a.MediaID, &a.MediaType, &a.Title, &a.Language, &a.Source, &ts); err != nil {
+			return nil, err
+		}
+		a.CreatedAt, _ = time.Parse("2006-01-02T15:04:05Z", ts)
+		out = append(out, a)
+	}
+	return out, rows.Err()
+}

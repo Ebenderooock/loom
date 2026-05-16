@@ -12,11 +12,13 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/ebenderooock/loom/internal/alttitles"
 	"github.com/ebenderooock/loom/internal/downloads"
 	"github.com/ebenderooock/loom/internal/kernel/eventbus"
 	"github.com/ebenderooock/loom/internal/libraries"
 	"github.com/ebenderooock/loom/internal/movies"
 	"github.com/ebenderooock/loom/internal/notifications"
+	"github.com/ebenderooock/loom/internal/parser"
 	"github.com/ebenderooock/loom/internal/safety"
 	"github.com/ebenderooock/loom/internal/series"
 	"github.com/ebenderooock/loom/internal/workflows"
@@ -37,6 +39,9 @@ type PipelineOptions struct {
 	ReviewStore      *safety.ReviewStore
 	Logger           *slog.Logger
 	ImportMode       ImportMode
+	RecycleBin       *RecycleBin
+	QualityProfiles  QualityProfileGetter
+	AltTitleStore    *alttitles.Store
 }
 
 // ImportPipeline subscribes to download completion events, scans files,
@@ -56,6 +61,11 @@ type ImportPipeline struct {
 	importMode      ImportMode
 	decisions       *DecisionMaker
 	decisionLog     *DecisionLogger
+	subtitles       *SubtitleService
+	extras          *ExtraService
+	verifier        *ImportVerifier
+	recycler        *RecycleBin
+	cleaner         *FolderCleaner
 	unsub           func()
 	importSem       chan struct{} // bounds concurrent manual imports
 }
@@ -86,12 +96,31 @@ func NewPipeline(opts PipelineOptions) (*ImportPipeline, error) {
 	}
 
 	logger := opts.Logger.With("module", "imports")
+	matcher := NewMatcher(opts.MoviesSvc, opts.SeriesSvc, opts.LibStore)
+
+	// Wire alternative-title matching if a store is provided.
+	if opts.AltTitleStore != nil {
+		matcher.SetAltTitleMatcher(NewAltTitleMatcher(opts.AltTitleStore, opts.MoviesSvc, opts.SeriesSvc))
+	}
+
+	// Build the import spec chain, including the upgrade spec when profiles are available.
+	specs := []ImportSpec{
+		&SampleSpec{},
+		&FreeSpaceSpec{},
+		&UnpackingSpec{},
+		&DangerousFileSpec{},
+		NewAlreadyImportedSpec(opts.DB),
+	}
+	if opts.QualityProfiles != nil {
+		specs = append(specs, NewUpgradeSpec(opts.QualityProfiles))
+	}
+
 	return &ImportPipeline{
 		db:              opts.DB,
 		bus:             opts.Bus,
 		downloadSvc:     opts.DownloadSvc,
 		remotePathStore: opts.RemotePathStore,
-		matcher:         NewMatcher(opts.MoviesSvc, opts.SeriesSvc, opts.LibStore),
+		matcher:         matcher,
 		wfEngine:        opts.WorkflowEngine,
 		moviesSvc:       opts.MoviesSvc,
 		notifSvc:        opts.NotifSvc,
@@ -99,13 +128,13 @@ func NewPipeline(opts PipelineOptions) (*ImportPipeline, error) {
 		reviewStore:     opts.ReviewStore,
 		logger:          logger,
 		importMode:      opts.ImportMode,
-		decisions: NewDecisionMaker(
-			&SampleSpec{},
-			&FreeSpaceSpec{},
-			&UnpackingSpec{},
-			&DangerousFileSpec{},
-		),
+		decisions:       NewDecisionMaker(specs...),
 		decisionLog:     NewDecisionLogger(opts.DB, logger),
+		subtitles:       &SubtitleService{},
+		extras:          &ExtraService{},
+		verifier:        &ImportVerifier{},
+		recycler:        opts.RecycleBin,
+		cleaner:         &FolderCleaner{},
 		importSem:       make(chan struct{}, 2), // max 2 concurrent manual imports
 	}, nil
 }
@@ -305,6 +334,17 @@ func (p *ImportPipeline) processImport(ctx context.Context, ev *downloads.Downlo
 		"imported", imported,
 		"total", len(mediaFiles),
 	)
+
+	// Clean up source folder if it only contains junk after import.
+	// Only for download-triggered imports (non-manual).
+	if imported > 0 && ev.DownloadID != "" && info.IsDir() && p.cleaner != nil {
+		if cleaned, err := p.cleaner.CleanFolder(scanPath); err != nil {
+			p.logger.Warn("folder cleanup failed", "path", scanPath, "error", err)
+		} else if cleaned {
+			p.logger.Info("cleaned empty download folder", "path", scanPath)
+		}
+	}
+
 	return nil
 }
 
@@ -344,13 +384,17 @@ func (p *ImportPipeline) importSingleFile(ctx context.Context, ev *downloads.Dow
 		fileSize = srcInfo.Size()
 	}
 	candidate := &ImportCandidate{
-		SourcePath: mediaFile,
-		DestPath:   destFile,
-		FileSize:   fileSize,
-		Match:      match,
-		ImportMode: p.importMode,
-		IsManual:   ev.DownloadID == "",
+		SourcePath:      mediaFile,
+		DestPath:        destFile,
+		FileSize:        fileSize,
+		Match:           match,
+		ImportMode:      p.importMode,
+		IsManual:        ev.DownloadID == "",
+		IncomingRelease: parser.Parse(filepath.Base(mediaFile)),
 	}
+
+	// Populate quality profile and existing quality for upgrade checks.
+	p.enrichCandidateQuality(ctx, candidate)
 	eval := p.decisions.Evaluate(ctx, candidate)
 	if !eval.Approved() {
 		reasons := make([]string, len(eval.Rejections))
@@ -398,11 +442,59 @@ func (p *ImportPipeline) importSingleFile(ctx context.Context, ev *downloads.Dow
 			})
 			return nil
 		}
+
+		// Destination exists with different size — upgrade scenario.
+		// Recycle the old file instead of overwriting it.
+		if p.recycler != nil {
+			libraryRoot := filepath.Dir(match.DestPath)
+			if err := p.recycler.Recycle(destFile, libraryRoot); err != nil {
+				p.logger.Warn("failed to recycle existing file, will overwrite",
+					"dest", destFile, "error", err)
+			}
+		}
 	}
 
 	// Import the file
 	if err := importFile(mediaFile, destFile, p.importMode); err != nil {
 		return p.recordFailure(ctx, string(match.MediaType), match.MediaID, ev.Title, mediaFile, err)
+	}
+
+	// Verify imported file
+	if p.verifier != nil {
+		vr := p.verifier.Verify(destFile, fileSize)
+		if !vr.OK {
+			p.logger.Error("import verification failed",
+				"dest", destFile, "reason", vr.Reason)
+			_ = os.Remove(destFile)
+			return p.recordFailure(ctx, string(match.MediaType), match.MediaID, ev.Title, mediaFile,
+				fmt.Errorf("verification failed: %s", vr.Reason))
+		}
+	}
+
+	// Import associated subtitle files (failures are non-fatal)
+	if subs, err := p.subtitles.FindSubtitles(mediaFile); err != nil {
+		p.logger.Warn("failed to scan for subtitles", "source", mediaFile, "error", err)
+	} else {
+		for _, sub := range subs {
+			if err := p.subtitles.ImportSubtitle(sub, destFile, p.importMode); err != nil {
+				p.logger.Warn("failed to import subtitle", "subtitle", sub.Path, "error", err)
+			} else {
+				p.logger.Info("imported subtitle", "subtitle", sub.Path, "language", sub.Language)
+			}
+		}
+	}
+
+	// Import associated extra files (failures are non-fatal)
+	if extras, err := p.extras.FindExtras(mediaFile); err != nil {
+		p.logger.Warn("failed to scan for extras", "source", mediaFile, "error", err)
+	} else {
+		for _, extra := range extras {
+			if err := p.extras.ImportExtra(extra, destFile, p.importMode); err != nil {
+				p.logger.Warn("failed to import extra", "extra", extra, "error", err)
+			} else {
+				p.logger.Info("imported extra", "extra", extra)
+			}
+		}
 	}
 
 	// Update database
@@ -997,4 +1089,42 @@ func (p *ImportPipeline) previewSingleFile(ctx context.Context, filePath string)
 	}
 
 	return preview
+}
+
+// enrichCandidateQuality populates QualityProfileID and ExistingQuality
+// on the candidate so the UpgradeSpec can make informed decisions.
+func (p *ImportPipeline) enrichCandidateQuality(ctx context.Context, c *ImportCandidate) {
+	if c.Match == nil || !c.Match.Matched {
+		return
+	}
+
+	switch c.Match.MediaType {
+	case MediaTypeMovie:
+		movie, err := p.moviesSvc.GetMovie(ctx, c.Match.MediaID)
+		if err != nil {
+			return
+		}
+		c.QualityProfileID = movie.QualityProfileID
+
+		files, err := p.moviesSvc.ListMovieFiles(ctx, movie.ID)
+		if err != nil || len(files) == 0 {
+			return
+		}
+		// Use the quality of the first (usually only) existing file.
+		c.ExistingQuality = files[0].Quality
+
+	case MediaTypeEpisode:
+		ep, err := p.matcher.seriesSvc.GetEpisode(ctx, c.Match.MediaID)
+		if err != nil {
+			return
+		}
+		show, err := p.matcher.seriesSvc.GetSeries(ctx, ep.SeriesID)
+		if err != nil {
+			return
+		}
+		c.QualityProfileID = show.QualityProfileID
+		// Episode files don't have a list method, but HasFile indicates
+		// whether a file exists. Without file quality info, leave
+		// ExistingQuality empty so the upgrade spec allows the import.
+	}
 }
