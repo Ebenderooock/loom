@@ -2,25 +2,20 @@ import * as React from "react";
 import { Link, Outlet, useRouterState } from "@tanstack/react-router";
 import { apiFetch } from "@/lib/fetch";
 import {
-  Bell,
   Calendar,
   ChevronDown,
   Download,
   Film,
   FolderOpen,
-  Languages,
   LayoutDashboard,
   ListPlus,
   ListTodo,
   Menu,
-  Network,
   HeartPulse,
   Radio,
   ScrollText,
   Search,
   Settings,
-  Shield,
-  SlidersHorizontal,
   Rss,
   Tv,
   Workflow,
@@ -100,22 +95,11 @@ const NAV_SECTIONS: NavSection[] = [
     ],
   },
   {
-    id: "profiles",
-    label: "Profiles",
-    items: [
-      { to: "/quality-profiles", label: "Quality", Icon: Shield },
-      { to: "/custom-formats", label: "Custom Formats", Icon: SlidersHorizontal },
-      { to: "/language-profiles", label: "Languages", Icon: Languages },
-    ],
-  },
-  {
     id: "system",
     label: "System",
     items: [
       { to: "/indexers/health", label: "Health", Icon: HeartPulse },
       { to: "/events", label: "Events", Icon: ScrollText },
-      { to: "/notifications", label: "Notifications", Icon: Bell },
-      { to: "/proxies", label: "Proxies", Icon: Network },
       { to: "/settings", label: "Settings", Icon: Settings },
     ],
   },
