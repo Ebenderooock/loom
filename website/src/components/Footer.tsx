@@ -5,7 +5,7 @@ export default function Footer() {
         <div className="flex flex-col md:flex-row items-center justify-between gap-6">
           {/* Logo & tagline */}
           <div className="flex items-center gap-3">
-            <img src="/loom-logo.png" alt="Loom" width={32} height={32} className="w-8 h-8" />
+            <img src="/loom-logo.png" alt="Loom" className="h-8 w-auto" />
             <div>
               <span className="font-bold text-gradient">Loom</span>
               <p className="text-xs text-zinc-500">Unified Media Automation</p>

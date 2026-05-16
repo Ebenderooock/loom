@@ -34,7 +34,7 @@ export default function Navbar() {
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
           <a href="#" className="flex items-center gap-2.5 focus-visible:ring-2 focus-visible:ring-brand-purple focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 rounded">
-            <img src="/loom-logo.png" alt="Loom" className="h-8 w-8" />
+            <img src="/loom-logo.png" alt="Loom" className="h-8 w-auto" />
             <span className="text-xl font-bold text-gradient">Loom</span>
           </a>
 

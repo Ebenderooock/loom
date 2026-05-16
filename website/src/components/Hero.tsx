@@ -87,7 +87,7 @@ export default function Hero() {
         >
           <div className="relative">
             <div className="absolute inset-0 blur-2xl bg-brand-purple/30 rounded-full scale-150 animate-pulse-glow" />
-            <img src="/loom-logo.png" alt="Loom" width={128} height={128} className="relative w-24 h-24 sm:w-32 sm:h-32 mx-auto" />
+            <img src="/loom-logo.png" alt="Loom" className="relative h-24 w-auto sm:h-32 mx-auto" />
           </div>
         </motion.div>
 
