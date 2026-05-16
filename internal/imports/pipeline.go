@@ -195,16 +195,49 @@ func (p *ImportPipeline) handleCompleted(ctx context.Context, ev eventbus.Event)
 		"title", completed.Title,
 	)
 
+	// Check if an orchestrator workflow already owns this download.
+	var isOrchestrated bool
+	if p.wfEngine != nil && completed.ClientID != "" && completed.DownloadID != "" {
+		wf, err := p.wfEngine.FindByDownload(ctx, completed.ClientID, completed.DownloadID)
+		if err != nil {
+			p.logger.Warn("failed to check workflow for download", "error", err)
+		}
+		if wf != nil {
+			isOrchestrated = true
+		}
+	}
+
+	// For orphan downloads, create a trackable workflow.
+	var wfID string
+	if !isOrchestrated && p.wfEngine != nil {
+		wf, wfErr := p.wfEngine.StartImport(ctx, "", nil, completed.Title)
+		if wfErr != nil {
+			p.logger.Warn("failed to create orphan import workflow", "title", completed.Title, "error", wfErr)
+		} else {
+			wfID = wf.ID
+		}
+	}
+
 	downloadPath, err := p.resolveDownloadPath(ctx, completed)
 	if err != nil {
 		p.logger.Error("failed to resolve download path", "error", err, "title", completed.Title)
 		p.recordFailure(ctx, "", "", completed.Title, "", err)
+		if wfID != "" {
+			_ = p.wfEngine.FailImport(ctx, wfID, err.Error())
+		}
 		return nil // don't block the event bus
 	}
 
 	if err := p.processImport(ctx, completed, downloadPath); err != nil {
 		p.logger.Error("import failed", "error", err, "title", completed.Title, "path", downloadPath)
+		if wfID != "" {
+			_ = p.wfEngine.FailImport(ctx, wfID, err.Error())
+		}
 		return nil
+	}
+
+	if wfID != "" {
+		_ = p.wfEngine.CompleteImport(ctx, wfID)
 	}
 	return nil
 }
@@ -781,12 +814,35 @@ func (p *ImportPipeline) SubmitManualImport(path string) error {
 		return fmt.Errorf("import queue full, try again later")
 	}
 
+	// Create a workflow so the import is trackable in the UI.
+	var wfID string
+	if p.wfEngine != nil {
+		grabTitle := filepath.Base(path)
+		wf, wfErr := p.wfEngine.StartImport(context.Background(), "", nil, grabTitle)
+		if wfErr != nil {
+			p.logger.Warn("failed to create import workflow", "path", path, "error", wfErr)
+		} else {
+			wfID = wf.ID
+		}
+	}
+
 	go func() {
 		defer func() { <-p.importSem }()
 		ctx := context.Background()
 		p.logger.Info("manual import starting (async)", "path", path, "files", len(mediaFiles))
 		if err := p.ImportManual(ctx, path); err != nil {
 			p.logger.Error("manual import failed", "path", path, "error", err)
+			if wfID != "" {
+				if fErr := p.wfEngine.FailImport(ctx, wfID, err.Error()); fErr != nil {
+					p.logger.Error("failed to mark import workflow failed", "id", wfID, "error", fErr)
+				}
+			}
+			return
+		}
+		if wfID != "" {
+			if cErr := p.wfEngine.CompleteImport(ctx, wfID); cErr != nil {
+				p.logger.Error("failed to mark import workflow completed", "id", wfID, "error", cErr)
+			}
 		}
 	}()
 	return nil
@@ -806,6 +862,18 @@ func (p *ImportPipeline) SubmitManualMatch(path string, mediaType MediaType, med
 		return fmt.Errorf("import queue full, try again later")
 	}
 
+	// Create a workflow so the import is trackable in the UI.
+	var wfID string
+	if p.wfEngine != nil {
+		grabTitle := filepath.Base(path)
+		wf, wfErr := p.wfEngine.StartImport(context.Background(), string(mediaType), []string{mediaID}, grabTitle)
+		if wfErr != nil {
+			p.logger.Warn("failed to create import workflow", "path", path, "error", wfErr)
+		} else {
+			wfID = wf.ID
+		}
+	}
+
 	go func() {
 		defer func() { <-p.importSem }()
 		ctx := context.Background()
@@ -814,6 +882,17 @@ func (p *ImportPipeline) SubmitManualMatch(path string, mediaType MediaType, med
 		if _, err := p.ImportManualMatch(ctx, path, mediaType, mediaID); err != nil {
 			p.logger.Error("manual match import failed",
 				"path", path, "media_type", mediaType, "media_id", mediaID, "error", err)
+			if wfID != "" {
+				if fErr := p.wfEngine.FailImport(ctx, wfID, err.Error()); fErr != nil {
+					p.logger.Error("failed to mark import workflow failed", "id", wfID, "error", fErr)
+				}
+			}
+			return
+		}
+		if wfID != "" {
+			if cErr := p.wfEngine.CompleteImport(ctx, wfID); cErr != nil {
+				p.logger.Error("failed to mark import workflow completed", "id", wfID, "error", cErr)
+			}
 		}
 	}()
 	return nil
@@ -832,6 +911,18 @@ func (p *ImportPipeline) SubmitReimport(mediaType MediaType, mediaID, sourcePath
 		return fmt.Errorf("import queue full, try again later")
 	}
 
+	// Create a workflow so the reimport is trackable in the UI.
+	var wfID string
+	if p.wfEngine != nil {
+		grabTitle := filepath.Base(sourcePath)
+		wf, wfErr := p.wfEngine.StartImport(context.Background(), string(mediaType), []string{mediaID}, grabTitle)
+		if wfErr != nil {
+			p.logger.Warn("failed to create reimport workflow", "source_path", sourcePath, "error", wfErr)
+		} else {
+			wfID = wf.ID
+		}
+	}
+
 	go func() {
 		defer func() { <-p.importSem }()
 		ctx := context.Background()
@@ -840,6 +931,17 @@ func (p *ImportPipeline) SubmitReimport(mediaType MediaType, mediaID, sourcePath
 		if _, err := p.ReimportFile(ctx, mediaType, mediaID, sourcePath, opts); err != nil {
 			p.logger.Error("reimport failed",
 				"media_type", mediaType, "media_id", mediaID, "source_path", sourcePath, "error", err)
+			if wfID != "" {
+				if fErr := p.wfEngine.FailImport(ctx, wfID, err.Error()); fErr != nil {
+					p.logger.Error("failed to mark reimport workflow failed", "id", wfID, "error", fErr)
+				}
+			}
+			return
+		}
+		if wfID != "" {
+			if cErr := p.wfEngine.CompleteImport(ctx, wfID); cErr != nil {
+				p.logger.Error("failed to mark reimport workflow completed", "id", wfID, "error", cErr)
+			}
 		}
 	}()
 	return nil
