@@ -7,7 +7,7 @@ const highlights = [
   {
     icon: Box,
     title: 'One Binary',
-    description: 'A single ~30MB Go binary replaces three .NET applications. Deploy once, manage everything.',
+    description: 'A single ~60MB Go binary. Deploy once, manage movies, TV shows, and indexers from one place.',
     gradient: 'from-brand-purple to-brand-blue',
   },
   {
@@ -38,12 +38,12 @@ export default function WhatIsLoom() {
           transition={{ duration: 0.7 }}
           className="text-center mb-16"
         >
-          <h2 className="text-3xl sm:text-4xl font-bold mb-4">
+          <h2 className="text-3xl sm:text-4xl font-bold mb-4" style={{ textWrap: 'balance' }}>
             What is <span className="text-gradient">Loom</span>?
           </h2>
           <p className="text-zinc-400 text-lg max-w-3xl mx-auto leading-relaxed">
-            Loom is a from-scratch, clean-room reimplementation of the *arr stack. Not a fork —
-            a complete rethink of media automation built with modern tooling, designed for
+            Loom is a from-scratch, clean-room media automation platform. Not a fork —
+            a complete rethink built with modern tooling, designed for
             containers, and obsessed with simplicity.
           </p>
         </motion.div>

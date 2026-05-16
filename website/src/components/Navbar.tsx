@@ -24,7 +24,7 @@ export default function Navbar() {
       initial={{ y: -100 }}
       animate={{ y: 0 }}
       transition={{ duration: 0.6 }}
-      className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
+      className={`fixed top-0 left-0 right-0 z-50 transition-[background-color,border-color,backdrop-filter] duration-300 ${
         scrolled
           ? 'bg-zinc-950/80 backdrop-blur-xl border-b border-zinc-800/50'
           : 'bg-transparent'
@@ -33,7 +33,7 @@ export default function Navbar() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
-          <a href="#" className="flex items-center gap-2.5">
+          <a href="#" className="flex items-center gap-2.5 focus-visible:ring-2 focus-visible:ring-brand-purple focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 rounded">
             <img src="/loom-logo.png" alt="Loom" className="h-8 w-8" />
             <span className="text-xl font-bold text-gradient">Loom</span>
           </a>
@@ -44,7 +44,7 @@ export default function Navbar() {
               <a
                 key={link.href}
                 href={link.href}
-                className="text-sm text-zinc-400 hover:text-white transition-colors duration-200"
+                className="text-sm text-zinc-400 hover:text-white transition-colors duration-200 focus-visible:ring-2 focus-visible:ring-brand-purple focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 rounded"
               >
                 {link.label}
               </a>
@@ -53,7 +53,7 @@ export default function Navbar() {
               href="https://github.com/Ebenderooock/loom"
               target="_blank"
               rel="noopener noreferrer"
-              className="text-sm px-4 py-2 rounded-lg bg-brand-purple/10 border border-brand-purple/30 text-brand-purple hover:bg-brand-purple/20 transition-all duration-200"
+              className="text-sm px-4 py-2 rounded-lg bg-brand-purple/10 border border-brand-purple/30 text-brand-purple hover:bg-brand-purple/20 transition-all duration-200 focus-visible:ring-2 focus-visible:ring-brand-purple focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950"
             >
               GitHub
             </a>
@@ -62,9 +62,10 @@ export default function Navbar() {
           {/* Mobile toggle */}
           <button
             onClick={() => setMobileOpen(!mobileOpen)}
-            className="md:hidden text-zinc-400 hover:text-white"
+            aria-label={mobileOpen ? 'Close menu' : 'Open menu'}
+            className="md:hidden text-zinc-400 hover:text-white focus-visible:ring-2 focus-visible:ring-brand-purple focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 rounded"
           >
-            {mobileOpen ? <X size={24} /> : <Menu size={24} />}
+            {mobileOpen ? <X size={24} aria-hidden="true" /> : <Menu size={24} aria-hidden="true" />}
           </button>
         </div>
       </div>
@@ -82,7 +83,7 @@ export default function Navbar() {
                 key={link.href}
                 href={link.href}
                 onClick={() => setMobileOpen(false)}
-                className="block text-zinc-300 hover:text-white py-2"
+                className="block text-zinc-300 hover:text-white py-2 focus-visible:ring-2 focus-visible:ring-brand-purple focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 rounded"
               >
                 {link.label}
               </a>
@@ -91,7 +92,7 @@ export default function Navbar() {
               href="https://github.com/Ebenderooock/loom"
               target="_blank"
               rel="noopener noreferrer"
-              className="block text-brand-purple py-2"
+              className="block text-brand-purple py-2 focus-visible:ring-2 focus-visible:ring-brand-purple focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 rounded"
             >
               GitHub →
             </a>

@@ -60,11 +60,13 @@ function StatCard({
   loading,
 }: StatCardProps) {
   return (
-    <Card className="relative overflow-hidden">
+    <Card className="relative overflow-hidden group card-glow">
+      {/* Subtle gradient accent line at top */}
+      <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-accent/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
       <CardContent className="flex items-center gap-4 p-5">
         <div
           className={cn(
-            "flex h-12 w-12 shrink-0 items-center justify-center rounded-full",
+            "flex h-12 w-12 shrink-0 items-center justify-center rounded-xl transition-transform duration-300 group-hover:scale-110",
             accent,
           )}
         >
@@ -113,7 +115,9 @@ function WelcomeSection() {
   ];
 
   return (
-    <Card className="border-primary/30 bg-gradient-to-br from-primary/5 via-card to-card">
+    <Card className="border-accent/20 bg-gradient-to-br from-primary/8 via-card to-accent/5 overflow-hidden relative">
+      <div className="absolute -top-20 -right-20 h-40 w-40 rounded-full bg-accent/5 blur-3xl pointer-events-none" />
+      <div className="absolute -bottom-10 -left-10 h-32 w-32 rounded-full bg-primary/5 blur-3xl pointer-events-none" />
       <CardHeader className="pb-2">
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/15">
@@ -133,9 +137,9 @@ function WelcomeSection() {
             <Link
               key={step.number}
               to={step.href}
-              className="group flex gap-3 rounded-lg border border-border/50 bg-muted/30 p-4 transition-colors hover:border-primary/40 hover:bg-muted/50"
+              className="group flex gap-3 rounded-xl border border-border/30 bg-card/50 backdrop-blur-sm p-4 transition-all duration-300 hover:border-accent/30 hover:bg-accent/5 hover:shadow-lg hover:shadow-accent/5 hover:-translate-y-0.5"
             >
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/15 text-sm font-bold text-primary">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-primary/20 to-accent/20 text-sm font-bold text-accent">
                 {step.number}
               </div>
               <div className="min-w-0">
@@ -167,7 +171,7 @@ function QuickActionsCard() {
   ];
 
   return (
-    <Card className="flex flex-col">
+    <Card className="flex flex-col card-glow">
       <CardHeader className="pb-3">
         <CardTitle className="text-base">Quick Actions</CardTitle>
       </CardHeader>
@@ -178,7 +182,7 @@ function QuickActionsCard() {
               key={action.label}
               variant="outline"
               size="sm"
-              className="justify-start gap-2"
+              className="justify-start gap-2 hover:border-accent/30 transition-all duration-200"
               asChild
             >
               <Link to={action.href}>
@@ -247,7 +251,7 @@ function SystemHealthCard() {
             )}
           </div>
         ) : (
-          <div className="flex items-center gap-2 rounded-md bg-emerald-500/10 px-3 py-2 text-sm text-emerald-400">
+          <div className="flex items-center gap-2 rounded-md bg-emerald-500/10 border border-emerald-500/20 shadow-sm shadow-emerald-500/5 px-3 py-2 text-sm text-emerald-400">
             <CheckCircle2 className="h-4 w-4 shrink-0" />
             All systems operational
           </div>
@@ -393,7 +397,7 @@ function ActiveDownloadsCard() {
           </div>
         ) : active.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-8 text-center">
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted/50">
+            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-muted/30 border border-border/30">
               <Download className="h-6 w-6 text-muted-foreground/50" />
             </div>
             <p className="mt-3 text-sm text-muted-foreground">No active downloads</p>
@@ -401,7 +405,7 @@ function ActiveDownloadsCard() {
         ) : (
           <div className="space-y-3">
             {active.slice(0, 5).map((item) => (
-              <div key={item.id} className="space-y-1.5">
+              <div key={item.id} className="space-y-1.5 rounded-lg p-2 -mx-2 transition-colors duration-200 hover:bg-accent/5">
                 <div className="flex items-center justify-between gap-2">
                   <span className="truncate text-sm font-medium">{item.title}</span>
                   <span className="shrink-0 text-xs text-muted-foreground">
@@ -464,7 +468,7 @@ export function DashboardPage() {
     !isLoading && movieCount === 0 && seriesCount === 0;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-fade-in-up">
       {/* Welcome state for fresh installs */}
       {isFreshInstall && <WelcomeSection />}
 

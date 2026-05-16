@@ -11,17 +11,20 @@ import Footer from './components/Footer'
 
 export default function App() {
   return (
-    <div className="min-h-screen bg-zinc-950 text-white overflow-x-hidden">
+    <div className="min-h-screen bg-zinc-950 text-white overflow-x-hidden touch-manipulation">
+      <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-[100] focus:px-4 focus:py-2 focus:bg-brand-purple focus:text-white focus:rounded-lg">Skip to Content</a>
       <Navbar />
-      <Hero />
-      <WhatIsLoom />
-      <Features />
-      <WhyLoom />
-      <Architecture />
-      <GettingStarted />
-      <Roadmap />
-      <Community />
-      <Footer />
+      <main id="main">
+        <Hero />
+        <WhatIsLoom />
+        <Features />
+        <WhyLoom />
+        <Architecture />
+        <GettingStarted />
+        <Roadmap />
+        <Community />
+        <Footer />
+      </main>
     </div>
   )
 }

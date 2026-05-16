@@ -210,8 +210,8 @@ function SidebarNav({
                     className={cn(
                       "flex items-center gap-2.5 rounded-md px-3 py-1.5 text-[13px] font-medium transition-colors",
                       active
-                        ? "bg-accent text-accent-foreground"
-                        : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+                        ? "bg-accent/15 text-accent border-l-2 border-accent shadow-sm shadow-accent/5"
+                        : "text-muted-foreground hover:bg-accent/8 hover:text-foreground",
                       collapsed && "justify-center px-2",
                     )}
                     aria-current={active ? "page" : undefined}
@@ -242,14 +242,14 @@ function SidebarNav({
 
 function Brand({ collapsed }: { collapsed?: boolean }) {
   return (
-    <div className="flex h-14 items-center gap-2 border-b border-border px-4">
+    <div className="flex h-14 items-center gap-2.5 border-b border-border/50 px-4">
       <div
         aria-hidden="true"
-        className="flex h-8 w-8 items-center justify-center rounded-md bg-primary text-primary-foreground"
+        className="relative flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-primary via-secondary to-accent shadow-lg shadow-primary/20"
       >
-        <span className="text-sm font-bold">L</span>
+        <span className="text-sm font-bold text-white">L</span>
       </div>
-      {!collapsed && <span className="text-lg font-semibold">Loom</span>}
+      {!collapsed && <span className="text-lg font-bold gradient-text">Loom</span>}
     </div>
   );
 }
@@ -273,7 +273,7 @@ function AppLayoutInner({ children }: { children?: React.ReactNode }) {
       <aside
         aria-label="Sidebar"
         className={cn(
-          "hidden shrink-0 border-r border-border bg-card md:flex md:flex-col md:sticky md:top-0 md:h-screen md:min-h-0",
+          "hidden shrink-0 border-r border-border/50 bg-card/80 backdrop-blur-xl md:flex md:flex-col md:sticky md:top-0 md:h-screen md:min-h-0",
           collapsed ? "md:w-16" : "md:w-56",
         )}
       >
@@ -294,7 +294,7 @@ function AppLayoutInner({ children }: { children?: React.ReactNode }) {
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-border bg-background/80 px-4 backdrop-blur">
+        <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-border/50 bg-background/70 px-4 backdrop-blur-xl">
           {!paletteOpen ? (
             <>
               <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
@@ -332,7 +332,7 @@ function AppLayoutInner({ children }: { children?: React.ReactNode }) {
                 <Button
                   variant="outline"
                   size="sm"
-                  className="gap-2"
+                  className="gap-2 border-border/50 hover:border-accent/30 hover:shadow-sm hover:shadow-accent/10"
                   onClick={() => setPaletteOpen(true)}
                   aria-label="Open command palette"
                 >
@@ -382,7 +382,7 @@ function AppLayoutInner({ children }: { children?: React.ReactNode }) {
           />
         )}
 
-        <main id="main" className="min-w-0 flex-1 overflow-x-hidden p-4 md:p-6">
+        <main id="main" className="min-w-0 flex-1 overflow-x-hidden p-4 md:p-6 page-enter">
           {children ?? <Outlet />}
         </main>
       </div>
