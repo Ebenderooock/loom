@@ -141,11 +141,14 @@ func (m *Monitor) Run(ctx context.Context) error {
 	// Process results: emit DownloadCompleted for any newly completed items.
 	m.emitCompletions(ctx, status.Items)
 
-	// Forward progress updates to orchestrator for in-progress and seeding downloads.
+	// Forward progress updates to orchestrator for in-progress, seeding,
+	// and completed downloads. Including completed ensures the orchestrator
+	// can recover workflows stuck in "downloading" if the completion command
+	// was dropped or deduped.
 	if m.orchNotifier != nil {
 		for _, item := range status.Items {
 			switch item.Status {
-			case StatusItemDownloading, StatusItemPaused, StatusItemSeeding:
+			case StatusItemDownloading, StatusItemPaused, StatusItemSeeding, StatusItemCompleted:
 				m.orchNotifier.NotifyDownloadProgress(
 					item.ClientID, item.ID, item.Progress,
 					item.DownloadRate, item.UploadRate,

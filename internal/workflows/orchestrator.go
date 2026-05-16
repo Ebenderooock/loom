@@ -289,6 +289,18 @@ func (o *Orchestrator) handleDownloadComplete(ctx context.Context, cmd CmdDownlo
 		return
 	}
 
+	// Idempotent: if already past downloading, nothing to do.
+	switch wf.State {
+	case StatePostDownload, StateImporting, StateCompleted:
+		o.logger.Debug("download complete received but workflow already advanced",
+			"workflow_id", wf.ID, "state", wf.State)
+		return
+	case StateFailed, StateCancelled:
+		o.logger.Debug("download complete received for terminal workflow",
+			"workflow_id", wf.ID, "state", wf.State)
+		return
+	}
+
 	// Ensure we're at least in downloading state
 	if wf.State == StateGrabbed {
 		_ = o.engine.markDownloading(ctx, wf.ID)
@@ -583,13 +595,28 @@ func (o *Orchestrator) bufferProgress(ctx context.Context, cmd CmdDownloadProgre
 	// For workflows in post_download, evaluate immediately instead of
 	// buffering — seed/settling checks need prompt evaluation.
 	wf, err := o.engine.FindByDownload(ctx, cmd.ClientID, cmd.DownloadID)
-	if err == nil && wf != nil && wf.State == StatePostDownload {
-		_ = o.store.MergeMetadata(ctx, wf.ID, map[string]any{
-			"ratio":  cmd.Ratio,
-			"status": cmd.Status,
-		})
-		o.evaluatePostDownload(ctx, wf, cmd.Ratio, cmd.Status)
-		return
+	if err == nil && wf != nil {
+		if wf.State == StatePostDownload {
+			_ = o.store.MergeMetadata(ctx, wf.ID, map[string]any{
+				"ratio":  cmd.Ratio,
+				"status": cmd.Status,
+			})
+			o.evaluatePostDownload(ctx, wf, cmd.Ratio, cmd.Status)
+			return
+		}
+
+		// Recovery: if download is complete/seeding but workflow is still
+		// in grabbed/downloading, the completion command was missed.
+		if (cmd.Status == "seeding" || cmd.Status == "completed") &&
+			(wf.State == StateGrabbed || wf.State == StateDownloading) {
+			o.logger.Info("recovering missed completion via progress",
+				"workflow_id", wf.ID, "state", wf.State, "status", cmd.Status)
+			o.handleDownloadComplete(ctx, CmdDownloadComplete{
+				ClientID:   cmd.ClientID,
+				DownloadID: cmd.DownloadID,
+			})
+			return
+		}
 	}
 
 	o.progressMu.Lock()
@@ -607,6 +634,19 @@ func (o *Orchestrator) flushProgress(ctx context.Context) {
 	for _, p := range buf {
 		wf, err := o.engine.FindByDownload(ctx, p.ClientID, p.DownloadID)
 		if err != nil || wf == nil {
+			continue
+		}
+
+		// If the download is complete/seeding but the workflow is still in
+		// grabbed/downloading, the completion command was missed — recover.
+		if (p.Status == "seeding" || p.Status == "completed") &&
+			(wf.State == StateGrabbed || wf.State == StateDownloading) {
+			o.logger.Info("recovering missed download completion from progress update",
+				"workflow_id", wf.ID, "state", wf.State, "status", p.Status)
+			o.handleDownloadComplete(ctx, CmdDownloadComplete{
+				ClientID:   p.ClientID,
+				DownloadID: p.DownloadID,
+			})
 			continue
 		}
 
@@ -784,8 +824,43 @@ func (o *Orchestrator) handleStale(ctx context.Context) {
 		return
 	}
 
+	// Query current download states for recovery attempts.
+	var dlStates map[string]string
+	if o.dlStatus != nil {
+		dlStates, _ = o.dlStatus.ActiveDownloads(ctx)
+	}
+
 	for _, wf := range stale {
 		age := time.Since(wf.UpdatedAt)
+
+		// For downloading/grabbed workflows, attempt recovery before failing.
+		if wf.State == StateDownloading || wf.State == StateGrabbed {
+			if dlStates != nil && wf.DownloadClientID != "" && wf.DownloadID != "" {
+				key := wf.DownloadClientID + ":" + wf.DownloadID
+				if dlState, exists := dlStates[key]; exists {
+					if dlState == "completed" || dlState == "seeding" {
+						o.logger.Info("stale recovery: download is actually complete, recovering",
+							"workflow_id", wf.ID, "state", wf.State, "dl_state", dlState)
+						o.logEvent(ctx, wf.ID, EventStaleDetected,
+							fmt.Sprintf("Stale in %s but download is %s — recovering", wf.State, dlState), nil)
+						o.handleDownloadComplete(ctx, CmdDownloadComplete{
+							ClientID:   wf.DownloadClientID,
+							DownloadID: wf.DownloadID,
+							Title:      wf.GrabTitle,
+						})
+						continue
+					}
+					if dlState == "downloading" {
+						// Still downloading — touch updated_at to reset stale timer
+						_ = o.store.MergeMetadata(ctx, wf.ID, map[string]any{"stale_check": "still_downloading"})
+						o.logger.Debug("stale check: download still active, resetting timer",
+							"workflow_id", wf.ID)
+						continue
+					}
+				}
+			}
+		}
+
 		o.logger.Warn("stale workflow detected",
 			"id", wf.ID, "state", wf.State, "age", age.Round(time.Second))
 
