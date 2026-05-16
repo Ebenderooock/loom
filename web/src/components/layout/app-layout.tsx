@@ -243,7 +243,7 @@ function SidebarNav({
 function Brand({ collapsed }: { collapsed?: boolean }) {
   return (
     <div className="flex h-14 items-center gap-2.5 border-b border-border/50 px-4">
-      <img src="/loom-logo.png" alt="" className="h-8 w-8 rounded-lg" aria-hidden="true" />
+      <img src="/loom-logo.png" alt="" className="h-8 w-auto" aria-hidden="true" />
       {!collapsed && <span className="text-lg font-bold gradient-text">Loom</span>}
     </div>
   );
@@ -313,7 +313,7 @@ function AppLayoutInner({ children }: { children?: React.ReactNode }) {
 
               {/* Logo + page title */}
               <Link to="/" className="flex items-center gap-2 md:hidden" aria-label="Loom home">
-                <img src="/loom-logo.png" alt="" className="h-7 w-7" aria-hidden="true" />
+                <img src="/loom-logo.png" alt="" className="h-7 w-auto" aria-hidden="true" />
                 <span className="text-lg font-bold gradient-text">Loom</span>
               </Link>
 

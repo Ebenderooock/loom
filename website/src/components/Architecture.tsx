@@ -57,7 +57,7 @@ export default function Architecture() {
               <div className="relative">
                 <div className="absolute -inset-4 bg-gradient-to-r from-brand-purple/10 via-brand-blue/10 to-brand-cyan/10 rounded-2xl blur-xl" />
                 <div className="relative p-6 rounded-2xl border-2 border-brand-purple/30 bg-zinc-900/80 text-center animate-core-pulse">
-                  <img src="/loom-logo.png" alt="Loom" width={40} height={40} className="w-10 h-10 mx-auto mb-3" />
+                  <img src="/loom-logo.png" alt="Loom" className="h-10 w-auto mx-auto mb-3" />
                   <h3 className="text-lg font-bold text-gradient mb-2">Loom Core</h3>
                   <div className="space-y-1.5 text-xs text-zinc-400">
                     <div className="px-2 py-1 rounded bg-zinc-800/50">Indexer Manager</div>
