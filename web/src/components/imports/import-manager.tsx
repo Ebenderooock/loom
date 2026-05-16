@@ -308,9 +308,13 @@ function ScanTab() {
         onOpenChange={setMatchOpen}
         scanResult={matchTarget}
         onMatched={() => {
-          // Remove the matched item from results
+          // Mark the item as queued instead of removing it
           setResults((prev) =>
-            prev.filter((r) => r.file_path !== matchTarget?.file_path),
+            prev.map((r) =>
+              r.file_path === matchTarget?.file_path
+                ? { ...r, suggested_action: "import", matched_media: "Queued" }
+                : r,
+            ),
           );
           setMatchTarget(null);
         }}

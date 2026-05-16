@@ -117,12 +117,11 @@ export async function manualMatch(params: {
   path: string;
   media_type: string;
   media_id: string;
-}): Promise<ImportRecord> {
-  const r = await fetchJSON<{ data: ImportRecord }>(
+}): Promise<void> {
+  await fetchJSON<{ status: string }>(
     "/api/v1/imports/manual-match",
     { method: "POST", body: JSON.stringify(params) },
   );
-  return r.data;
 }
 
 // Local library search helpers

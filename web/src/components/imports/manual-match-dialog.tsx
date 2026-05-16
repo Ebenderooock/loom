@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { toast } from "sonner";
 import {
   Select,
   SelectContent,
@@ -167,6 +168,9 @@ export function ManualMatchDialog({
       { path: scanResult.file_path, media_type: matchMediaType, media_id: matchMediaId },
       {
         onSuccess: () => {
+          toast.success("Import queued", {
+            description: `${scanResult.file_path.split("/").pop()} will be imported shortly.`,
+          });
           onMatched();
           onOpenChange(false);
         },

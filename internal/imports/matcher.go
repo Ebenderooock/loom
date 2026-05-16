@@ -378,59 +378,129 @@ func fuzzyMatchSeries(candidates []*series.Series, p parsedRelease) *series.Seri
 }
 
 // titleSimilarity returns a 0-100 score for how similar two titles are.
+// Uses a combination of exact match, substring containment, and token
+// overlap with stop-word removal. Takes the best score across methods.
 func titleSimilarity(a, b string) int {
-	a = normalise(a)
-	b = normalise(b)
-	if a == b {
+	na := normalise(a)
+	nb := normalise(b)
+
+	// Exact normalised match
+	if na == nb {
 		return 100
 	}
-	if strings.Contains(a, b) || strings.Contains(b, a) {
-		shorter := len(a)
-		if len(b) < shorter {
-			shorter = len(b)
-		}
-		longer := len(a)
-		if len(b) > longer {
-			longer = len(b)
-		}
-		if longer == 0 {
-			return 0
-		}
-		return shorter * 100 / longer
-	}
 
-	// Word overlap score
-	aWords := strings.Fields(a)
-	bWords := strings.Fields(b)
-	if len(aWords) == 0 || len(bWords) == 0 {
-		return 0
-	}
-	matches := 0
-	for _, aw := range aWords {
-		for _, bw := range bWords {
-			if aw == bw {
-				matches++
-				break
+	best := 0
+
+	// Substring containment (character-level)
+	if strings.Contains(na, nb) || strings.Contains(nb, na) {
+		shorter := len(na)
+		if len(nb) < shorter {
+			shorter = len(nb)
+		}
+		longer := len(na)
+		if len(nb) > longer {
+			longer = len(nb)
+		}
+		if longer > 0 {
+			score := shorter * 100 / longer
+			if score > best {
+				best = score
 			}
 		}
 	}
-	total := len(aWords)
-	if len(bWords) > total {
-		total = len(bWords)
+
+	// Token-level scoring with stop words removed
+	aToks := tokenize(a)
+	bToks := tokenize(b)
+	if len(aToks) == 0 || len(bToks) == 0 {
+		return best
 	}
-	return matches * 100 / total
+
+	// Build sets for accurate intersection
+	aSet := make(map[string]bool, len(aToks))
+	for _, w := range aToks {
+		aSet[w] = true
+	}
+	bSet := make(map[string]bool, len(bToks))
+	for _, w := range bToks {
+		bSet[w] = true
+	}
+
+	intersection := 0
+	for w := range aSet {
+		if bSet[w] {
+			intersection++
+		}
+	}
+
+	// Containment: fraction of the SMALLER set found in the larger.
+	// Handles "Punisher" matching "Marvels Punisher" (1/1 = 100%).
+	minSize := len(aSet)
+	if len(bSet) < minSize {
+		minSize = len(bSet)
+	}
+	if minSize > 0 {
+		containment := intersection * 100 / minSize
+		if containment > best {
+			best = containment
+		}
+	}
+
+	// Jaccard: intersection / union. Penalizes noisy titles.
+	union := len(aSet)
+	for w := range bSet {
+		if !aSet[w] {
+			union++
+		}
+	}
+	if union > 0 {
+		jaccard := intersection * 100 / union
+		if jaccard > best {
+			best = jaccard
+		}
+	}
+
+	return best
 }
 
-// normalise lowercases and strips non-alphanumeric characters (except spaces).
+// normalise lowercases, expands common symbols, strips possessives,
+// and removes non-alphanumeric characters (except spaces).
 func normalise(s string) string {
 	s = strings.ToLower(s)
+	// Expand meaningful punctuation before stripping
+	s = strings.ReplaceAll(s, "&", " and ")
+	// Strip possessives: "marvel's" → "marvels"
+	s = strings.ReplaceAll(s, "'s", "s")
+	s = strings.ReplaceAll(s, "\u2019s", "s") // curly apostrophe
 	var b strings.Builder
 	for _, r := range s {
 		if unicode.IsLetter(r) || unicode.IsDigit(r) || r == ' ' {
 			b.WriteRune(r)
 		}
 	}
-	return strings.TrimSpace(b.String())
+	result := strings.TrimSpace(b.String())
+	// Collapse whitespace
+	result = regexp.MustCompile(`\s+`).ReplaceAllString(result, " ")
+	return result
+}
+
+// stopWords are common words removed from token-level scoring to avoid
+// diluting match quality.
+var stopWords = map[string]bool{
+	"the": true, "a": true, "an": true, "and": true, "or": true,
+	"of": true, "in": true, "to": true, "for": true, "is": true,
+}
+
+// tokenize splits a normalised string into meaningful words, removing stop words.
+func tokenize(s string) []string {
+	words := strings.Fields(normalise(s))
+	out := make([]string, 0, len(words))
+	for _, w := range words {
+		if !stopWords[w] && len(w) > 0 {
+			out = append(out, w)
+		}
+	}
+	return out
 }
 
 // sanitizeDirName replaces characters that are invalid in directory names.
