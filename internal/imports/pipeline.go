@@ -54,6 +54,7 @@ type ImportPipeline struct {
 	reviewStore     *safety.ReviewStore
 	logger          *slog.Logger
 	importMode      ImportMode
+	decisions       *DecisionMaker
 	decisionLog     *DecisionLogger
 	unsub           func()
 	importSem       chan struct{} // bounds concurrent manual imports
@@ -98,6 +99,12 @@ func NewPipeline(opts PipelineOptions) (*ImportPipeline, error) {
 		reviewStore:     opts.ReviewStore,
 		logger:          logger,
 		importMode:      opts.ImportMode,
+		decisions: NewDecisionMaker(
+			&SampleSpec{},
+			&FreeSpaceSpec{},
+			&UnpackingSpec{},
+			&DangerousFileSpec{},
+		),
 		decisionLog:     NewDecisionLogger(opts.DB, logger),
 		importSem:       make(chan struct{}, 2), // max 2 concurrent manual imports
 	}, nil
@@ -329,6 +336,40 @@ func (p *ImportPipeline) importSingleFile(ctx context.Context, ev *downloads.Dow
 
 	// Build destination path with proper naming
 	destFile := filepath.Join(match.DestPath, buildDestFilename(match, mediaFile))
+
+	// Run import decision engine (spec-based pre-checks)
+	srcInfo, statErr := os.Stat(mediaFile)
+	var fileSize int64
+	if statErr == nil {
+		fileSize = srcInfo.Size()
+	}
+	candidate := &ImportCandidate{
+		SourcePath: mediaFile,
+		DestPath:   destFile,
+		FileSize:   fileSize,
+		Match:      match,
+		ImportMode: p.importMode,
+		IsManual:   ev.DownloadID == "",
+	}
+	eval := p.decisions.Evaluate(ctx, candidate)
+	if !eval.Approved() {
+		reasons := make([]string, len(eval.Rejections))
+		for i, r := range eval.Rejections {
+			reasons[i] = r.Message
+			// Log each rejection to the decision log
+			_ = p.decisionLog.Log(ctx, ImportDecision{
+				SourcePath: mediaFile,
+				DestPath:   destFile,
+				MediaType:  string(match.MediaType),
+				MediaID:    match.MediaID,
+				Action:     "rejected",
+				Reason:     string(r.Reason) + ": " + r.Message,
+				FileSize:   fileSize,
+			})
+		}
+		return p.recordFailure(ctx, string(match.MediaType), match.MediaID, ev.Title, mediaFile,
+			fmt.Errorf("import rejected: %s", strings.Join(reasons, "; ")))
+	}
 
 	// Collision handling: if the destination already exists, check if it's the same file
 	if info, err := os.Stat(destFile); err == nil {
