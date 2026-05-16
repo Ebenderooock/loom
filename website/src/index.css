@@ -1,0 +1,101 @@
+@import "tailwindcss";
+
+@theme {
+  --color-brand-purple: #8b5cf6;
+  --color-brand-blue: #3b82f6;
+  --color-brand-pink: #ec4899;
+  --color-brand-cyan: #06b6d4;
+  --color-surface: #18181b;
+  --color-surface-light: #27272a;
+  --font-sans: "Inter", system-ui, -apple-system, sans-serif;
+}
+
+@layer base {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: #3f3f46 transparent;
+  }
+}
+
+@keyframes gradient-shift {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0px) rotate(0deg); }
+  33% { transform: translateY(-10px) rotate(1deg); }
+  66% { transform: translateY(5px) rotate(-1deg); }
+}
+
+@keyframes float-slow {
+  0%, 100% { transform: translateY(0px) translateX(0px); }
+  25% { transform: translateY(-20px) translateX(10px); }
+  50% { transform: translateY(-10px) translateX(-5px); }
+  75% { transform: translateY(-25px) translateX(15px); }
+}
+
+@keyframes pulse-glow {
+  0%, 100% { opacity: 0.4; transform: scale(1); }
+  50% { opacity: 0.8; transform: scale(1.05); }
+}
+
+@keyframes spin-slow {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.animate-gradient {
+  background-size: 200% 200%;
+  animation: gradient-shift 8s ease infinite;
+}
+
+.animate-float {
+  animation: float 6s ease-in-out infinite;
+}
+
+.animate-float-slow {
+  animation: float-slow 12s ease-in-out infinite;
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 4s ease-in-out infinite;
+}
+
+.animate-spin-slow {
+  animation: spin-slow 20s linear infinite;
+}
+
+/* Glass morphism */
+.glass {
+  background: rgba(24, 24, 27, 0.6);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(139, 92, 246, 0.1);
+}
+
+.glass-hover:hover {
+  background: rgba(24, 24, 27, 0.8);
+  border-color: rgba(139, 92, 246, 0.3);
+}
+
+.glow-purple {
+  box-shadow: 0 0 40px rgba(139, 92, 246, 0.3), 0 0 80px rgba(139, 92, 246, 0.1);
+}
+
+.glow-blue {
+  box-shadow: 0 0 40px rgba(59, 130, 246, 0.3), 0 0 80px rgba(59, 130, 246, 0.1);
+}
+
+.text-gradient {
+  background: linear-gradient(135deg, #8b5cf6, #3b82f6, #06b6d4);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.code-block {
+  background: #0f0f14;
+  border: 1px solid #27272a;
+  border-radius: 0.75rem;
+  font-family: "JetBrains Mono", "Fira Code", ui-monospace, monospace;
+}
