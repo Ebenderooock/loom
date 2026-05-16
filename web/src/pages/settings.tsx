@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { useNavigate } from "@tanstack/react-router";
+import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { NamingSettings } from "@/components/movies/naming-settings";
 import {
@@ -114,6 +115,7 @@ const CATEGORIES = [
   { id: "notifications", label: "Notifications" },
   { id: "connect", label: "Connect" },
   { id: "sync-profiles", label: "Sync Profiles" },
+  { id: "configuration", label: "Configuration" },
   { id: "ui", label: "UI" },
 ] as const;
 
@@ -2611,9 +2613,45 @@ function SettingsContent({ category }: { category: Category }) {
       return <ConnectPanel />;
     case "sync-profiles":
       return <SyncProfilesPanel />;
+    case "configuration":
+      return <ConfigurationPanel />;
     case "ui":
       return <UIPanel />;
   }
+}
+
+const CONFIG_LINKS = [
+  { to: "/quality-profiles", label: "Quality Profiles", description: "Manage quality cutoffs and preferred formats" },
+  { to: "/custom-formats", label: "Custom Formats", description: "Define custom format scoring rules" },
+  { to: "/language-profiles", label: "Language Profiles", description: "Configure preferred languages for media" },
+  { to: "/notifications", label: "Notification Agents", description: "Manage notification services and triggers" },
+  { to: "/proxies", label: "Proxies", description: "Configure proxy servers for indexer requests" },
+] as const;
+
+function ConfigurationPanel() {
+  return (
+    <div className="space-y-2">
+      <p className="text-sm text-muted-foreground mb-4">
+        Quick access to advanced configuration pages.
+      </p>
+      <div className="grid gap-3 sm:grid-cols-2">
+        {CONFIG_LINKS.map((link) => (
+          <Link
+            key={link.to}
+            to={link.to}
+            className="group flex flex-col rounded-lg border p-4 transition-colors hover:bg-accent"
+          >
+            <span className="font-medium group-hover:text-accent-foreground">
+              {link.label}
+            </span>
+            <span className="mt-1 text-xs text-muted-foreground">
+              {link.description}
+            </span>
+          </Link>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 // ─── Settings Page ──────────────────────────────────────────────────────
