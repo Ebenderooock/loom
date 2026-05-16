@@ -345,7 +345,7 @@ func (p *ImportPipeline) importSingleFile(ctx context.Context, ev *downloads.Dow
 			}
 			if match.MediaType == "movie" && match.MediaID != "" {
 				if err := p.moviesSvc.SetMovieStatus(ctx, match.MediaID, movies.MovieStatusAvailableRightQuality); err != nil {
-					p.logger.Error("failed to update movie status after import", "movie_id", match.MediaID, "error", err)
+					return fmt.Errorf("update movie status after import (existing file): %w", err)
 				}
 			}
 			p.publishNotification(ctx, match, destFile)
@@ -381,7 +381,7 @@ func (p *ImportPipeline) importSingleFile(ctx context.Context, ev *downloads.Dow
 	// Update movie status to available
 	if match.MediaType == "movie" && match.MediaID != "" {
 		if err := p.moviesSvc.SetMovieStatus(ctx, match.MediaID, movies.MovieStatusAvailableRightQuality); err != nil {
-			p.logger.Error("failed to update movie status after import", "movie_id", match.MediaID, "error", err)
+			return fmt.Errorf("update movie status after import: %w", err)
 		}
 	}
 
