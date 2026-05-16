@@ -5,12 +5,12 @@ import (
 	"fmt"
 	"path/filepath"
 	"regexp"
-	"strconv"
 	"strings"
 	"unicode"
 
 	"github.com/ebenderooock/loom/internal/libraries"
 	"github.com/ebenderooock/loom/internal/movies"
+	"github.com/ebenderooock/loom/internal/parser"
 	"github.com/ebenderooock/loom/internal/series"
 )
 
@@ -37,66 +37,78 @@ type parsedRelease struct {
 
 // Patterns for matching season/episode from release names.
 var (
-	// S01E02, s01e02
-	reSeasonEpisode = regexp.MustCompile(`(?i)[Ss](\d{1,2})[Ee](\d{1,3})`)
-	// Year in title: (2023) or .2023. or _2023_ or -2023-
-	reYear = regexp.MustCompile(`[\.\s\(_\-]?((?:19|20)\d{2})[\.\s\)_\-]?`)
 	// Release group suffix: -GROUP at end of name. Must be 4+ alpha chars
 	// (optionally followed by digits) to avoid stripping season markers like -S01.
 	reGroup = regexp.MustCompile(`(?i)\s*-\s*[a-z]{2,}[a-z0-9]*$`)
 )
 
 // parseReleaseName extracts title, year, season, and episode from a release name.
+// Delegates to the canonical parser package for extraction, then maps to the
+// local parsedRelease struct used by the matcher.
 func parseReleaseName(name string) parsedRelease {
+	r := parser.Parse(name)
+
+	var p parsedRelease
+	p.Year = r.Year
+	p.Season = r.Season
+	p.Episode = r.Episode
+
+	// Determine if this is a series (has season/episode info, season pack, daily date, or absolute episode)
+	if r.Season >= 0 || r.Episode >= 0 || r.IsSeasonPack || r.DailyDate != "" || r.AbsoluteEpisode >= 0 {
+		p.IsSeries = true
+	}
+
+	// Use the parser's cleaned title, but fall back to our own cleanTitle
+	// for backward compatibility with the matcher's title-cleaning logic
+	// (strip year, quality tags differently for fuzzy matching).
+	p.Title = cleanTitleFromParser(name, r)
+
+	return p
+}
+
+// cleanTitleFromParser builds a clean title for matching using parser results.
+func cleanTitleFromParser(name string, r *parser.Release) string {
 	// Remove file extension
 	name = strings.TrimSuffix(name, filepath.Ext(name))
 
 	// Strip bracket-enclosed tags early: [1080p], [BluRay], etc.
 	name = regexp.MustCompile(`\[([^\]]*)\]`).ReplaceAllStringFunc(name, func(m string) string {
 		inner := m[1 : len(m)-1]
-		// Keep bracketed content that looks like a year
 		if regexp.MustCompile(`^(19|20)\d{2}$`).MatchString(inner) {
-			return inner // remove brackets, keep year
+			return inner
 		}
-		return "" // strip tag
+		return ""
 	})
 
-	var p parsedRelease
+	var title string
 
-	// Check for season/episode pattern
-	if m := reSeasonEpisode.FindStringSubmatchIndex(name); m != nil {
-		p.IsSeries = true
-		p.Season, _ = strconv.Atoi(name[m[2]:m[3]])
-		p.Episode, _ = strconv.Atoi(name[m[4]:m[5]])
-		// Title is everything before the S01E02 pattern
+	// If series with S##E## pattern, title is everything before it
+	seRe := regexp.MustCompile(`(?i)[Ss](\d{1,2})[Ee](\d{1,3})`)
+	if m := seRe.FindStringSubmatchIndex(name); m != nil && r.Season >= 0 && r.Episode >= 0 {
 		titlePart := strings.TrimSpace(name[:m[0]])
-		p.Title = cleanTitle(titlePart)
+		title = cleanTitle(titlePart)
 	} else {
-		p.Title = cleanTitle(name)
+		title = cleanTitle(name)
 	}
 
-	// Extract year — match "(2016)" or ".2016." or " 2016 " etc.
-	if m := reYear.FindStringSubmatch(name); len(m) > 1 {
+	// Extract year string for removal
+	yearRe := regexp.MustCompile(`[\.\s\(_\-]?((?:19|20)\d{2})[\.\s\)_\-]?`)
+	if m := yearRe.FindStringSubmatch(name); len(m) > 1 && r.Year > 0 {
 		yearStr := m[1]
-		p.Year, _ = strconv.Atoi(yearStr)
-
-		// Remove year from title, including surrounding parens if present.
-		// Handle "(2016)", "( 2016 )", and bare "2016".
 		yearWithParens := regexp.MustCompile(`\(\s*` + yearStr + `\s*\)`)
-		if yearWithParens.MatchString(p.Title) {
-			p.Title = yearWithParens.ReplaceAllString(p.Title, "")
+		if yearWithParens.MatchString(title) {
+			title = yearWithParens.ReplaceAllString(title, "")
 		} else {
-			// Only strip bare year if it's NOT the first word (avoids eating "2001" from "2001 A Space Odyssey")
-			trimmed := strings.TrimSpace(p.Title)
+			trimmed := strings.TrimSpace(title)
 			if !strings.HasPrefix(trimmed, yearStr) {
-				p.Title = strings.Replace(p.Title, yearStr, "", 1)
+				title = strings.Replace(title, yearStr, "", 1)
 			}
 		}
-		p.Title = strings.TrimSpace(p.Title)
-		p.Title = strings.TrimRight(p.Title, " -.")
+		title = strings.TrimSpace(title)
+		title = strings.TrimRight(title, " -.")
 	}
 
-	return p
+	return title
 }
 
 // cleanTitle normalises a release title: replaces dots/underscores with

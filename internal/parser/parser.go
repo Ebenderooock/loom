@@ -27,14 +27,19 @@ type Release struct {
 	IsRepack        bool     // REPACK or RERIP tag detected
 	IsReal          bool     // REAL tag detected (fixes fake/nuked releases)
 	DailyDate       string   // "2024-01-30" for daily shows (empty if not daily)
+	AirDate         string   // Alias for DailyDate in YYYY-MM-DD format
 	AbsoluteEpisode int      // Anime absolute episode number (-1 if not found)
 	Audio           string   // DTS-HD MA, TrueHD, Atmos, AAC, FLAC, AC3, EAC3, etc.
 	Edition         string   // Movie edition: Director's Cut, Extended, IMAX, Theatrical, etc.
 	Group           string   // Release group name (e.g., "SPARKS", "FGT")
+	ReleaseGroup    string   // Alias for Group
 	Languages       []string // Detected languages (e.g., ["English", "French"])
 	IsMulti         bool     // MULTI tag detected (multiple audio tracks)
 	IsDualAudio     bool     // Dual-audio release
 	IsRemux         bool     // REMUX tag detected (lossless rip from disc)
+	Revision        int      // Version/revision number (v2=2, repack2=2, default 0; proper/repack without digit=2)
+	ImdbID          string   // IMDb ID extracted from name (e.g., "tt1234567")
+	TmdbID          string   // TMDB ID extracted from name (e.g., "12345")
 }
 
 // patternCache holds compiled regex patterns to avoid recompilation.
@@ -118,11 +123,12 @@ func Parse(releaseName string) *Release {
 		r.AbsoluteEpisode = extractAbsoluteEpisode(lower, releaseName)
 	}
 
-	// Extract proper/repack/real/remux flags
+	// Extract proper/repack/real/remux flags and revision
 	r.IsProper = extractFlag(lower, `(?:^|[\s.\-_])(proper)(?:$|[\s.\-_\d])`)
 	r.IsRepack = extractFlag(lower, `(?:^|[\s.\-_])(repack|rerip)(?:$|[\s.\-_\d])`)
 	r.IsReal = extractFlag(lower, `(?:^|[\s.\-_])(real)(?:$|[\s.\-_])`)
 	r.IsRemux = extractFlag(lower, `(?:^|[\s.\-_])(remux|bdremux)(?:$|[\s.\-_])`)
+	r.Revision = extractRevision(lower, r.IsProper, r.IsRepack)
 
 	// Extract audio codec
 	r.Audio = extractAudio(lower)
@@ -130,11 +136,19 @@ func Parse(releaseName string) *Release {
 	// Extract movie edition (Director's Cut, Extended, IMAX, etc.)
 	r.Edition = extractEdition(lower)
 
+	// Extract embedded IDs (IMDb, TMDB)
+	r.ImdbID = extractImdbID(lower)
+	r.TmdbID = extractTmdbID(lower)
+
 	// Extract title (everything before year or quality markers)
 	r.Title = extractTitle(releaseName, r.Year)
 
 	// Extract release group (last segment after a dash)
 	r.Group = extractGroup(releaseName)
+	r.ReleaseGroup = r.Group
+
+	// Populate AirDate alias
+	r.AirDate = r.DailyDate
 
 	// Extract languages via the dedicated language parser.
 	langResult := languages.ParseTitle(releaseName)
@@ -185,7 +199,7 @@ func extractBitdepth(lower string) int {
 	return 0 // Default to 8-bit (implicit)
 }
 
-// extractYear extracts year in [YYYY] or YYYY format.
+// extractYear extracts year in [YYYY] or (YYYY) or YYYY format.
 func extractYear(lower string) int {
 	// [YYYY] format
 	p := getPattern("year_bracket", `\[(\d{4})\]`)
@@ -195,9 +209,18 @@ func extractYear(lower string) int {
 		}
 	}
 
+	// (YYYY) format
+	p = getPattern("year_paren", `\((\d{4})\)`)
+	if matches := p.FindStringSubmatch(lower); len(matches) > 1 {
+		if year, err := strconv.Atoi(matches[1]); err == nil {
+			if year >= 1900 && year <= 2100 {
+				return year
+			}
+		}
+	}
+
 	// YYYY format (4 consecutive digits, typically year-like)
-	// Use lookahead/lookbehind to avoid false positives in resolution/bitrate
-	p = getPattern("year_standard", `(?:^|[\s\-\.]|19|20)(\d{4})(?:$|[\s\-\.]|[\.\s]rip)`)
+	p = getPattern("year_standard", `(?:^|[\s\-\._]|19|20)(\d{4})(?:$|[\s\-\._]|[\.\s]rip)`)
 	if matches := p.FindStringSubmatch(lower); len(matches) > 1 {
 		if year, err := strconv.Atoi(matches[1]); err == nil {
 			y := year
@@ -288,6 +311,23 @@ func extractSeasonEpisodeV2(lower string) (int, int, []int, bool) {
 	season := -1
 	episode := -1
 	var episodes []int
+
+	// S01E01-S01E03 cross-reference range (must check before simpler S##E## pattern)
+	crossP := getPattern("sxe_cross", `s(\d{1,2})e(\d{1,3})-s\d{1,2}e(\d{1,3})`)
+	if matches := crossP.FindStringSubmatch(lower); len(matches) > 3 {
+		if s, err := strconv.Atoi(matches[1]); err == nil {
+			season = s
+		}
+		startEp, _ := strconv.Atoi(matches[2])
+		endEp, _ := strconv.Atoi(matches[3])
+		if startEp > 0 && endEp >= startEp && endEp-startEp <= 24 {
+			episode = startEp
+			for ep := startEp; ep <= endEp; ep++ {
+				episodes = append(episodes, ep)
+			}
+			return season, episode, episodes, false
+		}
+	}
 
 	// S##E## pattern with multi-episode support:
 	// S01E01E02E03, S01E01-E03, S01E01-03, S01E01.E02, S01E01+E02
@@ -405,9 +445,9 @@ func extractSeasonEpisodeV2(lower string) (int, int, []int, bool) {
 
 // extractAbsoluteEpisode extracts anime-style absolute episode numbers.
 // Only called when no S##E## pattern was found.
-// Patterns: "- 05", "- 142", "[Group] Title - 05 [1080p]"
+// Patterns: "- 05", "- 142", "[Group] Title - 05 [1080p]", "Title - 142"
 func extractAbsoluteEpisode(lower string, original string) int {
-	// Require anime-style formatting: leading [Group] bracket suggests anime
+	// Pattern 1: leading [Group] bracket suggests anime — highest confidence
 	hasAnimeGroup := regexp.MustCompile(`^\[`).MatchString(strings.TrimSpace(original))
 
 	if hasAnimeGroup {
@@ -415,10 +455,19 @@ func extractAbsoluteEpisode(lower string, original string) int {
 		p := getPattern("absolute_ep", `\s-\s(\d{1,4})(?:\s|$|\[)`)
 		if matches := p.FindStringSubmatch(lower); len(matches) > 1 {
 			if ep, err := strconv.Atoi(matches[1]); err == nil {
-				// Sanity: episode numbers above 2000 are likely years
 				if ep > 0 && ep < 2000 {
 					return ep
 				}
+			}
+		}
+	}
+
+	// Pattern 2: "Title - ##" without brackets (broader, still requires " - " delimiter)
+	p := getPattern("absolute_ep_dash", `\s-\s(\d{1,4})(?:\s|$|\[)`)
+	if matches := p.FindStringSubmatch(lower); len(matches) > 1 {
+		if ep, err := strconv.Atoi(matches[1]); err == nil {
+			if ep > 0 && ep < 2000 {
+				return ep
 			}
 		}
 	}
@@ -489,13 +538,15 @@ func extractEdition(lower string) string {
 		{`(?:remastered)`, "Remastered"},
 		{`(?:unrated[\s.\-]?(?:cut|edition)?)`, "Unrated"},
 		{`(?:uncut)`, "Uncut"},
-		{`(?:\bimax\b)`, "IMAX"},
+		{`(?:\bimax\b(?:[\s.\-]?edition)?)`, "IMAX"},
 		{`(?:fan[\s.\-]?edit)`, "Fan Edit"},
+		{`(?:open[\s.\-]?matte)`, "Open Matte"},
 		{`(?:restored)`, "Restored"},
 		{`(?:anniversary[\s.\-]?(?:edition)?)`, "Anniversary Edition"},
 		{`(?:criterion[\s.\-]?(?:collection|edition)?)`, "Criterion"},
 		{`(?:special[\s.\-]?edition)`, "Special Edition"},
 		{`(?:limited[\s.\-]?edition)`, "Limited Edition"},
+		{`(?:diamond[\s.\-]?edition)`, "Diamond Edition"},
 	}
 
 	for _, ep := range editionPatterns {
@@ -504,6 +555,51 @@ func extractEdition(lower string) string {
 		}
 	}
 
+	return ""
+}
+
+// extractRevision extracts the version/revision number.
+// v2 → 2, repack2 → 2, proper without digit → 2, repack without digit → 2.
+func extractRevision(lower string, isProper, isRepack bool) int {
+	// Explicit version: v2, v3, etc.
+	vP := getPattern("revision_v", `(?:^|[\s.\-_])v(\d)(?:$|[\s.\-_])`)
+	if m := vP.FindStringSubmatch(lower); m != nil {
+		if v, err := strconv.Atoi(m[1]); err == nil {
+			return v
+		}
+	}
+
+	// Repack/rerip with digit: repack2, rerip3
+	rpP := getPattern("revision_repack_n", `(?:^|[\s.\-_])(?:repack|rerip)(\d)(?:$|[\s.\-_])`)
+	if m := rpP.FindStringSubmatch(lower); m != nil {
+		if v, err := strconv.Atoi(m[1]); err == nil {
+			return v
+		}
+	}
+
+	// PROPER or REPACK without explicit digit implies revision 2
+	if isProper || isRepack {
+		return 2
+	}
+
+	return 0
+}
+
+// extractImdbID extracts an IMDb ID (tt followed by 7-8 digits).
+func extractImdbID(lower string) string {
+	p := getPattern("imdb_id", `(tt\d{7,8})`)
+	if m := p.FindStringSubmatch(lower); m != nil {
+		return m[1]
+	}
+	return ""
+}
+
+// extractTmdbID extracts a TMDB ID from patterns like "tmdb-12345" or "tmdbid-12345".
+func extractTmdbID(lower string) string {
+	p := getPattern("tmdb_id", `tmdb(?:id)?[\-._\s]?(\d+)`)
+	if m := p.FindStringSubmatch(lower); m != nil {
+		return m[1]
+	}
 	return ""
 }
 
@@ -533,7 +629,11 @@ func extractTitle(name string, year int) string {
 		`(?i)\s*[\.\-\s_](?:720p?|1080p?|2160p?|4k|uhd)`, // resolution
 		`(?i)\s*[\.\-\s_](?:bluray|brrip|webrip|webdl|web[\-\s]dl|hdtv|dvdrip|remux)`, // source
 		`(?i)\s*[\.\-\s_](?:h\.?264|h\.?265|hevc|x\.?264|x\.?265|avc)`,               // codec
-		`(?i)\s*[\.\-\s_](?:proper|repack|rerip|internal|limited|directors|extended)`,  // tags
+		`(?i)\s*[\.\-\s_](?:proper|repack|rerip|internal|limited|directors|extended|open[\s._-]?matte|diamond)`,  // tags
+		`(?i)\s*[\.\-\s_](?:imax|unrated|uncut|remastered|theatrical|fan[\s._-]?edit|special[\s._-]?edition)`,  // edition tags
+		`(?i)\s*[\.\-\s_]v\d(?:$|[\s.\-_])`,                                                                    // version tag
+		`(?i)\s*[\.\-\s_]tt\d{7,8}`,                                                                            // imdb id
+		`(?i)\s*[\.\-\s_]tmdb(?:id)?[\-._\s]?\d+`,                                                              // tmdb id
 	}
 
 	cutIdx := len(clean)

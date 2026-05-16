@@ -691,3 +691,156 @@ func TestPatternCaching(t *testing.T) {
 		t.Logf("cache size after 10 parses: %d (patterns reused)", cacheLen)
 	}
 }
+
+// ── Revision Extraction ─────────────────────────────────────────────
+
+func TestRevisionExtraction(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		revision int
+		proper   bool
+		repack   bool
+	}{
+		{"v2", "Show.S01E01.v2.720p.HDTV.mkv", 2, false, false},
+		{"v3", "Show.S01E01.v3.720p.HDTV.mkv", 3, false, false},
+		{"proper implies 2", "Show.S01E01.PROPER.720p.HDTV.mkv", 2, true, false},
+		{"repack implies 2", "Show.S01E01.REPACK.1080p.BluRay.mkv", 2, false, true},
+		{"repack2", "Show.S01E01.REPACK2.720p.mkv", 2, false, true},
+		{"none", "Show.S01E01.1080p.BluRay.mkv", 0, false, false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			r := Parse(tc.input)
+			if r.Revision != tc.revision {
+				t.Errorf("Revision = %d, want %d", r.Revision, tc.revision)
+			}
+			if r.IsProper != tc.proper {
+				t.Errorf("IsProper = %v, want %v", r.IsProper, tc.proper)
+			}
+			if r.IsRepack != tc.repack {
+				t.Errorf("IsRepack = %v, want %v", r.IsRepack, tc.repack)
+			}
+		})
+	}
+}
+
+// ── Embedded ID Extraction ──────────────────────────────────────────
+
+func TestImdbIDExtraction(t *testing.T) {
+	tests := []struct {
+		name   string
+		input  string
+		imdbID string
+	}{
+		{"tt7 digits", "Movie.2024.tt1234567.1080p.mkv", "tt1234567"},
+		{"tt8 digits", "Movie.2024.tt12345678.1080p.mkv", "tt12345678"},
+		{"none", "Movie.2024.1080p.BluRay.mkv", ""},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			r := Parse(tc.input)
+			if r.ImdbID != tc.imdbID {
+				t.Errorf("ImdbID = %q, want %q", r.ImdbID, tc.imdbID)
+			}
+		})
+	}
+}
+
+func TestTmdbIDExtraction(t *testing.T) {
+	tests := []struct {
+		name   string
+		input  string
+		tmdbID string
+	}{
+		{"tmdb-12345", "Movie.2024.tmdb-12345.1080p.mkv", "12345"},
+		{"tmdbid-67890", "Movie.2024.tmdbid-67890.1080p.mkv", "67890"},
+		{"tmdb12345", "Movie.2024.tmdb12345.1080p.mkv", "12345"},
+		{"none", "Movie.2024.1080p.BluRay.mkv", ""},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			r := Parse(tc.input)
+			if r.TmdbID != tc.tmdbID {
+				t.Errorf("TmdbID = %q, want %q", r.TmdbID, tc.tmdbID)
+			}
+		})
+	}
+}
+
+// ── AirDate / ReleaseGroup Aliases ──────────────────────────────────
+
+func TestAliasFields(t *testing.T) {
+	// AirDate should match DailyDate
+	r := Parse("The.Daily.Show.2024.03.15.720p.WEB.mkv")
+	if r.AirDate != r.DailyDate {
+		t.Errorf("AirDate = %q, want %q (same as DailyDate)", r.AirDate, r.DailyDate)
+	}
+	if r.AirDate != "2024-03-15" {
+		t.Errorf("AirDate = %q, want 2024-03-15", r.AirDate)
+	}
+
+	// ReleaseGroup should match Group
+	r2 := Parse("Movie.2024.1080p.BluRay-SPARKS")
+	if r2.ReleaseGroup != r2.Group {
+		t.Errorf("ReleaseGroup = %q, want %q (same as Group)", r2.ReleaseGroup, r2.Group)
+	}
+	if r2.ReleaseGroup != "SPARKS" {
+		t.Errorf("ReleaseGroup = %q, want SPARKS", r2.ReleaseGroup)
+	}
+}
+
+// ── Cross-reference Multi-Episode S01E01-S01E03 ─────────────────────
+
+func TestCrossRefMultiEpisode(t *testing.T) {
+	r := Parse("Show.S01E01-S01E03.1080p.BluRay.mkv")
+	if r.Season != 1 {
+		t.Errorf("Season = %d, want 1", r.Season)
+	}
+	if r.Episode != 1 {
+		t.Errorf("Episode = %d, want 1", r.Episode)
+	}
+	want := []int{1, 2, 3}
+	if len(r.Episodes) != len(want) {
+		t.Fatalf("Episodes = %v, want %v", r.Episodes, want)
+	}
+	for i, ep := range want {
+		if r.Episodes[i] != ep {
+			t.Errorf("Episodes[%d] = %d, want %d", i, r.Episodes[i], ep)
+		}
+	}
+}
+
+// ── Broader Absolute Episode (no brackets) ──────────────────────────
+
+func TestAbsoluteEpisodeNoBrackets(t *testing.T) {
+	r := Parse("Naruto Shippuuden - 142 1080p.mkv")
+	if r.AbsoluteEpisode != 142 {
+		t.Errorf("AbsoluteEpisode = %d, want 142", r.AbsoluteEpisode)
+	}
+}
+
+// ── Edition: Open Matte, Diamond Edition ────────────────────────────
+
+func TestEditionOpenMatte(t *testing.T) {
+	r := Parse("Movie.2024.Open.Matte.1080p.BluRay.mkv")
+	if r.Edition != "Open Matte" {
+		t.Errorf("Edition = %q, want Open Matte", r.Edition)
+	}
+}
+
+func TestEditionDiamondEdition(t *testing.T) {
+	r := Parse("Movie.2024.Diamond.Edition.1080p.BluRay.mkv")
+	if r.Edition != "Diamond Edition" {
+		t.Errorf("Edition = %q, want Diamond Edition", r.Edition)
+	}
+}
+
+// ── Parenthesized Year ──────────────────────────────────────────────
+
+func TestParenthesizedYear(t *testing.T) {
+	r := Parse("Inception (2010) 1080p BluRay.mkv")
+	if r.Year != 2010 {
+		t.Errorf("Year = %d, want 2010", r.Year)
+	}
+}
