@@ -34,6 +34,7 @@ import {
   XCircle,
   AlertTriangle,
   ArrowUpDown,
+  Link2,
 } from "lucide-react";
 import {
   useScanFolder,
@@ -42,6 +43,7 @@ import {
   useReimportFile,
 } from "@/lib/imports-api";
 import type { ScanResult } from "@/lib/imports-api";
+import { ManualMatchDialog } from "./manual-match-dialog";
 
 // ─── Helpers ────────────────────────────────────────────────────────────
 
@@ -111,6 +113,8 @@ function ScanTab() {
   const manualImportMut = useManualImport();
   const reimportMut = useReimportFile();
   const [results, setResults] = React.useState<ScanResult[]>([]);
+  const [matchTarget, setMatchTarget] = React.useState<ScanResult | null>(null);
+  const [matchOpen, setMatchOpen] = React.useState(false);
 
   const handleScan = () => {
     if (!folderPath.trim()) return;
@@ -272,6 +276,19 @@ function ScanTab() {
                             )}
                           </Button>
                         )}
+                      {r.suggested_action === "no_match" && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            setMatchTarget(r);
+                            setMatchOpen(true);
+                          }}
+                        >
+                          <Link2 className="mr-1 h-4 w-4" />
+                          Match
+                        </Button>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -285,6 +302,19 @@ function ScanTab() {
           </CardContent>
         </Card>
       )}
+
+      <ManualMatchDialog
+        open={matchOpen}
+        onOpenChange={setMatchOpen}
+        scanResult={matchTarget}
+        onMatched={() => {
+          // Remove the matched item from results
+          setResults((prev) =>
+            prev.filter((r) => r.file_path !== matchTarget?.file_path),
+          );
+          setMatchTarget(null);
+        }}
+      />
     </div>
   );
 }
