@@ -26,13 +26,14 @@ func (s *Store) GetPreferences(ctx context.Context) (*MediaPreferences, error) {
 	row := s.db.QueryRowContext(ctx, `
 		SELECT id, preferred_audio, preferred_sub_languages,
 		       require_subtitles, prefer_hdr, prefer_atmos,
+		       default_quality_profile_id,
 		       created_at, updated_at
 		FROM media_preferences WHERE id = 'default'`)
 
 	p := &MediaPreferences{ID: "default"}
 	var audioJSON, subJSON string
 	var reqSub, hdr, atmos int
-	err := row.Scan(&p.ID, &audioJSON, &subJSON, &reqSub, &hdr, &atmos, &p.CreatedAt, &p.UpdatedAt)
+	err := row.Scan(&p.ID, &audioJSON, &subJSON, &reqSub, &hdr, &atmos, &p.DefaultQualityProfileID, &p.CreatedAt, &p.UpdatedAt)
 	if err == sql.ErrNoRows {
 		// Return sensible defaults
 		p.PreferredAudioCodecs = []string{}
@@ -79,15 +80,16 @@ func (s *Store) UpsertPreferences(ctx context.Context, p *MediaPreferences) erro
 	}
 
 	_, err := s.db.ExecContext(ctx, `
-		INSERT INTO media_preferences (id, preferred_audio, preferred_sub_languages, require_subtitles, prefer_hdr, prefer_atmos, updated_at)
-		VALUES ('default', ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+		INSERT INTO media_preferences (id, preferred_audio, preferred_sub_languages, require_subtitles, prefer_hdr, prefer_atmos, default_quality_profile_id, updated_at)
+		VALUES ('default', ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
 		ON CONFLICT(id) DO UPDATE SET
 			preferred_audio = excluded.preferred_audio,
 			preferred_sub_languages = excluded.preferred_sub_languages,
 			require_subtitles = excluded.require_subtitles,
 			prefer_hdr = excluded.prefer_hdr,
 			prefer_atmos = excluded.prefer_atmos,
+			default_quality_profile_id = excluded.default_quality_profile_id,
 			updated_at = CURRENT_TIMESTAMP`,
-		string(audioJSON), string(subJSON), reqSub, hdr, atmos)
+		string(audioJSON), string(subJSON), reqSub, hdr, atmos, p.DefaultQualityProfileID)
 	return err
 }

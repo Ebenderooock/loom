@@ -20,6 +20,7 @@ import {
   Plus, Search, Loader2, Tv, Check, ArrowLeft,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useMediaPreferences } from "@/lib/media-info-api";
 import type { Library } from "../../lib/libraries-api";
 import type { QualityProfile, TMDBSeriesResult } from "./types";
 import { TMDB_IMG } from "./types";
@@ -53,6 +54,7 @@ export function AddSeriesDialog({
   const [searchOnAdd, setSearchOnAdd] = useState(true);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>();
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const { data: mediaPrefs } = useMediaPreferences();
 
   useEffect(() => {
     if (open) {
@@ -62,14 +64,14 @@ export function AddSeriesDialog({
       setAddError("");
       const firstLib = libraries[0];
       setSelectedLibrary(firstLib?.id ?? "");
-      setSelectedProfile(firstLib?.quality_profile_id || (qualityProfiles[0]?.id ?? ""));
+      setSelectedProfile(firstLib?.quality_profile_id || mediaPrefs?.default_quality_profile_id || (qualityProfiles[0]?.id ?? ""));
       setSeriesType("standard");
       setSeasonFolder(true);
       setMonitoringStatus("all");
       setSearchOnAdd(true);
       setTimeout(() => searchInputRef.current?.focus(), 100);
     }
-  }, [open, qualityProfiles, libraries]);
+  }, [open, qualityProfiles, libraries, mediaPrefs]);
 
   const handleLibraryChange = useCallback((libId: string) => {
     setSelectedLibrary(libId);

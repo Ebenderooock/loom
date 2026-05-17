@@ -24,6 +24,7 @@ export interface MediaPreferences {
   require_subtitles: boolean;
   prefer_hdr: boolean;
   prefer_atmos: boolean;
+  default_quality_profile_id: string;
   created_at?: string;
   updated_at?: string;
 }
