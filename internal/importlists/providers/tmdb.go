@@ -32,18 +32,28 @@ func (p *TMDbProvider) Fetch(ctx context.Context, cfg ProviderConfig) ([]Item, e
 
 	var url string
 	if p.Popular {
-		url = fmt.Sprintf("https://api.themoviedb.org/3/movie/popular?api_key=%s", cfg.APIKey)
+		url = "https://api.themoviedb.org/3/movie/popular"
 	} else {
 		if cfg.URL == "" {
 			return nil, fmt.Errorf("tmdb: list URL or ID required")
 		}
-		url = fmt.Sprintf("https://api.themoviedb.org/3/list/%s?api_key=%s", cfg.URL, cfg.APIKey)
+		url = fmt.Sprintf("https://api.themoviedb.org/3/list/%s", cfg.URL)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("tmdb: build request: %w", err)
 	}
+
+	// Use Bearer auth for JWT tokens (len>100), query param for v3 keys.
+	if len(cfg.APIKey) > 100 {
+		req.Header.Set("Authorization", "Bearer "+cfg.APIKey)
+	} else {
+		q := req.URL.Query()
+		q.Add("api_key", cfg.APIKey)
+		req.URL.RawQuery = q.Encode()
+	}
+	req.Header.Set("Accept", "application/json")
 
 	resp, err := p.client.Do(req)
 	if err != nil {

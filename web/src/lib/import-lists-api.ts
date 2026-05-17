@@ -335,19 +335,20 @@ export function useDeleteExclusion() {
 export const LIST_TYPES: {
   value: ListType;
   label: string;
-  mediaType: MediaType;
+  mediaType?: MediaType;
   fields: string[];
+  urlPlaceholder?: string;
 }[] = [
   {
     value: "trakt_list",
     label: "Trakt List",
-    mediaType: "movie",
     fields: ["url"],
+    urlPlaceholder:
+      "https://trakt.tv/movies/anticipated or https://api.trakt.tv/...",
   },
   {
     value: "trakt_watchlist",
     label: "Trakt Watchlist",
-    mediaType: "movie",
     fields: [],
   },
   {
@@ -366,13 +367,13 @@ export const LIST_TYPES: {
     value: "tmdb_list",
     label: "TMDb List",
     mediaType: "movie",
-    fields: ["url", "api_key"],
+    fields: ["url"],
   },
   {
     value: "tmdb_popular",
     label: "TMDb Popular",
     mediaType: "movie",
-    fields: ["api_key"],
+    fields: [],
   },
   {
     value: "plex_watchlist",

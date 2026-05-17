@@ -419,7 +419,7 @@ function AddListForm({ onDone }: { onDone: () => void }) {
                   id="add-url"
                   value={form.url ?? ""}
                   onChange={(e) => setForm({ ...form, url: e.target.value })}
-                  placeholder="https://..."
+                  placeholder={typeMeta?.urlPlaceholder ?? "https://..."}
                 />
               </div>
             )}
