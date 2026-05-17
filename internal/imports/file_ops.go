@@ -60,6 +60,86 @@ func hardlinkFile(src, dst string) error {
 	return os.Link(src, dst)
 }
 
+// importFolder renames an entire source folder to the destination path,
+// preserving all contents (subtitles, NFOs, images, etc.).
+// Falls back to per-file move if rename fails (cross-device).
+func importFolder(srcDir, destDir string) error {
+	// If destination already exists, move contents into it
+	if _, err := os.Stat(destDir); err == nil {
+		return moveContents(srcDir, destDir)
+	}
+
+	// Ensure parent of destination exists
+	if err := os.MkdirAll(filepath.Dir(destDir), 0o755); err != nil {
+		return fmt.Errorf("create dest parent: %w", err)
+	}
+
+	// Try direct rename (same filesystem)
+	if err := os.Rename(srcDir, destDir); err == nil {
+		return nil
+	}
+
+	// Cross-device fallback: create dest and move contents
+	if err := os.MkdirAll(destDir, 0o755); err != nil {
+		return fmt.Errorf("create dest dir: %w", err)
+	}
+	return moveContents(srcDir, destDir)
+}
+
+// moveContents moves all files and subdirectories from src into dst.
+func moveContents(srcDir, destDir string) error {
+	entries, err := os.ReadDir(srcDir)
+	if err != nil {
+		return fmt.Errorf("read source dir: %w", err)
+	}
+	for _, entry := range entries {
+		srcPath := filepath.Join(srcDir, entry.Name())
+		dstPath := filepath.Join(destDir, entry.Name())
+		if err := os.Rename(srcPath, dstPath); err != nil {
+			// Cross-device: copy + delete
+			if entry.IsDir() {
+				if err := copyDir(srcPath, dstPath); err != nil {
+					return err
+				}
+				_ = os.RemoveAll(srcPath)
+			} else {
+				if err := copyFile(srcPath, dstPath); err != nil {
+					return err
+				}
+				_ = os.Remove(srcPath)
+			}
+		}
+	}
+	// Remove now-empty source dir
+	_ = os.Remove(srcDir)
+	return nil
+}
+
+// copyDir recursively copies a directory.
+func copyDir(src, dst string) error {
+	if err := os.MkdirAll(dst, 0o755); err != nil {
+		return err
+	}
+	entries, err := os.ReadDir(src)
+	if err != nil {
+		return err
+	}
+	for _, entry := range entries {
+		srcPath := filepath.Join(src, entry.Name())
+		dstPath := filepath.Join(dst, entry.Name())
+		if entry.IsDir() {
+			if err := copyDir(srcPath, dstPath); err != nil {
+				return err
+			}
+		} else {
+			if err := copyFile(srcPath, dstPath); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 // importFile performs the file import using the specified mode.
 // For "hardlink" mode, it falls back to copy on failure (cross-device).
 // For "hardlink_only" mode, it fails if the hardlink cannot be created.

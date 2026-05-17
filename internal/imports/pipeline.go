@@ -349,6 +349,8 @@ func (p *ImportPipeline) processImport(ctx context.Context, ev *downloads.Downlo
 	// 4. Match and import each media file
 	var lastErr error
 	imported := 0
+	// Track the destination folder for folder-level rename
+	var destFolder string
 	for _, mediaFile := range mediaFiles {
 		if err := p.importSingleFile(ctx, ev, mediaFile); err != nil {
 			p.logger.Error("failed to import file", "file", mediaFile, "error", err)
@@ -356,6 +358,12 @@ func (p *ImportPipeline) processImport(ctx context.Context, ev *downloads.Downlo
 			continue
 		}
 		imported++
+		// Capture destination folder from the first successful import
+		if destFolder == "" {
+			if m, mErr := p.resolveMatchForFile(ctx, ev, mediaFile); mErr == nil && m != nil && m.Matched {
+				destFolder = m.DestPath
+			}
+		}
 	}
 
 	if imported == 0 && lastErr != nil {
@@ -368,9 +376,28 @@ func (p *ImportPipeline) processImport(ctx context.Context, ev *downloads.Downlo
 		"total", len(mediaFiles),
 	)
 
-	// Clean up source folder if it only contains junk after import.
-	// Only for download-triggered imports (non-manual).
-	if imported > 0 && ev.DownloadID != "" && info.IsDir() && p.cleaner != nil {
+	// Rename source folder to destination folder to preserve subtitles/extras.
+	// Only for directory-based imports in move mode.
+	if imported > 0 && info.IsDir() && destFolder != "" && p.importMode == ImportModeMove {
+		if scanPath != destFolder {
+			if err := importFolder(scanPath, destFolder); err != nil {
+				p.logger.Warn("folder rename failed, falling back to cleanup",
+					"src", scanPath, "dest", destFolder, "error", err)
+				// Fall back to folder cleanup
+				if p.cleaner != nil {
+					if cleaned, cErr := p.cleaner.CleanFolder(scanPath); cErr != nil {
+						p.logger.Warn("folder cleanup failed", "path", scanPath, "error", cErr)
+					} else if cleaned {
+						p.logger.Info("cleaned empty download folder", "path", scanPath)
+					}
+				}
+			} else {
+				p.logger.Info("renamed source folder to library folder",
+					"src", scanPath, "dest", destFolder)
+			}
+		}
+	} else if imported > 0 && ev.DownloadID != "" && info.IsDir() && p.cleaner != nil {
+		// Non-move modes: clean up source folder if it only contains junk.
 		if cleaned, err := p.cleaner.CleanFolder(scanPath); err != nil {
 			p.logger.Warn("folder cleanup failed", "path", scanPath, "error", err)
 		} else if cleaned {
@@ -379,6 +406,18 @@ func (p *ImportPipeline) processImport(ctx context.Context, ev *downloads.Downlo
 	}
 
 	return nil
+}
+
+// resolveMatchForFile returns the match result for a file without importing it.
+func (p *ImportPipeline) resolveMatchForFile(ctx context.Context, ev *downloads.DownloadCompletedEvent, mediaFile string) (*MatchResult, error) {
+	match, err := p.matchByGrab(ctx, ev)
+	if err != nil || match == nil || !match.Matched {
+		match, err = p.matcher.Match(ctx, ev.Title)
+		if err != nil || match == nil || !match.Matched {
+			match, err = p.matcher.MatchPath(ctx, mediaFile)
+		}
+	}
+	return match, err
 }
 
 // importSingleFile matches and imports a single media file.
@@ -1018,18 +1057,42 @@ func (p *ImportPipeline) ImportManualMatch(ctx context.Context, path string, med
 		return nil, fmt.Errorf("resolve media: %w", err)
 	}
 
-	// Ensure destination directory exists
-	if err := os.MkdirAll(match.DestPath, 0755); err != nil {
-		return nil, fmt.Errorf("create destination directory: %w", err)
+	// For directory-based imports in move mode, rename the source folder to
+	// the destination folder path, preserving subtitles, NFOs, images, etc.
+	if info.IsDir() && p.importMode == ImportModeMove && path != match.DestPath {
+		if err := importFolder(path, match.DestPath); err != nil {
+			p.logger.Warn("folder rename failed, falling back to per-file import",
+				"src", path, "dest", match.DestPath, "error", err)
+			// Ensure destination directory exists for per-file fallback
+			if err := os.MkdirAll(match.DestPath, 0755); err != nil {
+				return nil, fmt.Errorf("create destination directory: %w", err)
+			}
+		} else {
+			p.logger.Info("renamed source folder to library folder",
+				"src", path, "dest", match.DestPath)
+			// Update media file paths to reflect the renamed folder
+			for i, mf := range mediaFiles {
+				rel, _ := filepath.Rel(path, mf)
+				mediaFiles[i] = filepath.Join(match.DestPath, rel)
+			}
+		}
+	} else {
+		// Ensure destination directory exists
+		if err := os.MkdirAll(match.DestPath, 0755); err != nil {
+			return nil, fmt.Errorf("create destination directory: %w", err)
+		}
 	}
 
 	var lastRecord *ImportRecord
 	for _, mf := range mediaFiles {
 		destFile := filepath.Join(match.DestPath, filepath.Base(mf))
 
-		if err := importFile(mf, destFile, p.importMode); err != nil {
-			_ = p.recordFailure(ctx, string(match.MediaType), match.MediaID, filepath.Base(mf), mf, err)
-			continue
+		// If source and dest are the same (folder was already renamed), skip the move
+		if mf != destFile {
+			if err := importFile(mf, destFile, p.importMode); err != nil {
+				_ = p.recordFailure(ctx, string(match.MediaType), match.MediaID, filepath.Base(mf), mf, err)
+				continue
+			}
 		}
 
 		if err := p.updateLibrary(ctx, match, destFile, mf); err != nil {
