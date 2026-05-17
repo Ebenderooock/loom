@@ -617,6 +617,10 @@ func extractTitle(name string, year int) string {
 		}
 	}
 
+	// Strip common website prefixes (e.g., "www.UIndex.org - ", "YTS.MX - ", "rarbg.to - ")
+	webPrefixRe := getPattern("web_prefix", `(?i)^(?:www\.)?[a-z0-9\-]+\.(?:org|com|net|io|me|to|cc|tv|info|xyz|mx|ch|li|ws|re|ru|se|am|ag|is|gs|lt|st)\s*[\-–]+\s*`)
+	clean = webPrefixRe.ReplaceAllString(clean, "")
+
 	// Remove content in square brackets at the start (group tags like [GroupName])
 	p := getPattern("title_leading_bracket", `^\[.*?\]\s*`)
 	clean = p.ReplaceAllString(clean, "")
