@@ -6,16 +6,23 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ebenderooock/loom/internal/connect"
 	"github.com/ebenderooock/loom/internal/importlists/providers"
 )
 
 // SyncManager periodically syncs all enabled import lists.
 type SyncManager struct {
-	store    *Store
-	logger   *slog.Logger
-	mu       sync.Mutex
-	cancel   context.CancelFunc
-	stopped  chan struct{}
+	store      *Store
+	connectSvc ConnectService
+	logger     *slog.Logger
+	mu         sync.Mutex
+	cancel     context.CancelFunc
+	stopped    chan struct{}
+}
+
+// ConnectService provides access to configured connections (e.g. Trakt OAuth).
+type ConnectService interface {
+	ListConnections(ctx context.Context) ([]*connect.Connection, error)
 }
 
 // NewSyncManager creates a SyncManager.
@@ -24,6 +31,13 @@ func NewSyncManager(store *Store, logger *slog.Logger) *SyncManager {
 		logger = slog.Default()
 	}
 	return &SyncManager{store: store, logger: logger}
+}
+
+// SetConnectService sets the connect service for credential lookups.
+// This allows lazy injection when the connect service is created after
+// the SyncManager.
+func (m *SyncManager) SetConnectService(svc ConnectService) {
+	m.connectSvc = svc
 }
 
 // Start begins the background sync loop. It checks every minute for lists
@@ -103,6 +117,21 @@ func (m *SyncManager) SyncList(ctx context.Context, l *ImportList) error {
 		APIKey:      l.APIKey,
 		AccessToken: l.AccessToken,
 		Settings:    l.Settings,
+	}
+
+	// For Trakt lists, fill in credentials from the user's Trakt connection
+	// if not explicitly set on the import list.
+	if (l.ListType == ListTypeTraktList || l.ListType == ListTypeTraktWatchlist) && m.connectSvc != nil {
+		if cfg.APIKey == "" || cfg.AccessToken == "" {
+			if traktConn := m.findTraktConnection(ctx); traktConn != nil {
+				if cfg.APIKey == "" {
+					cfg.APIKey = traktConn.Settings.ClientID
+				}
+				if cfg.AccessToken == "" {
+					cfg.AccessToken = traktConn.Settings.AccessToken
+				}
+			}
+		}
 	}
 
 	fetched, err := provider.Fetch(ctx, cfg)
@@ -197,4 +226,19 @@ func (m *SyncManager) providerFor(lt ListType) providers.ListProvider {
 	default:
 		return nil
 	}
+}
+
+// findTraktConnection returns the first enabled Trakt connection, or nil.
+func (m *SyncManager) findTraktConnection(ctx context.Context) *connect.Connection {
+	conns, err := m.connectSvc.ListConnections(ctx)
+	if err != nil {
+		m.logger.Warn("import-lists: failed to list connections for Trakt credentials", "err", err)
+		return nil
+	}
+	for _, c := range conns {
+		if c.Provider == connect.ProviderTrakt && c.Enabled && c.Settings.AccessToken != "" {
+			return c
+		}
+	}
+	return nil
 }

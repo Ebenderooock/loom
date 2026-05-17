@@ -48,6 +48,9 @@ func wireInfra(
 	connectSvc := connect.NewService(db.DB())
 	srv.SetConnect(connectSvc)
 
+	// Wire Trakt credentials into import list sync manager
+	media.importListSyncMgr.SetConnectService(connectSvc)
+
 	// Notification dispatcher — subscribes to domain events on the bus
 	// and fans out to all matching notification connections.
 	notifDispatcher := notifications.NewDispatcher(srv.Bus(), media.notifSvc, logger)
