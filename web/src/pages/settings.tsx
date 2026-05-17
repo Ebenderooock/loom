@@ -63,6 +63,7 @@ import {
   useUpdateMediaPreferences,
   useParseReleaseName,
 } from "@/lib/media-info-api";
+import { useQualityProfiles } from "@/lib/quality-profiles-api";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -2357,8 +2358,10 @@ function MediaPreferencesPanel() {
   const { data: prefs, isLoading } = useMediaPreferences();
   const updateMut = useUpdateMediaPreferences();
   const parseMut = useParseReleaseName();
+  const { data: qualityProfiles } = useQualityProfiles();
   const [testName, setTestName] = React.useState("");
 
+  const [defaultProfileId, setDefaultProfileId] = React.useState("");
   const [audioOrder, setAudioOrder] = React.useState<string[]>([]);
   const [subLangs, setSubLangs] = React.useState<string[]>([]);
   const [requireSubs, setRequireSubs] = React.useState(false);
@@ -2368,6 +2371,7 @@ function MediaPreferencesPanel() {
 
   React.useEffect(() => {
     if (prefs) {
+      setDefaultProfileId(prefs.default_quality_profile_id ?? "");
       setAudioOrder(prefs.preferred_audio ?? []);
       setSubLangs(prefs.preferred_sub_languages ?? []);
       setRequireSubs(prefs.require_subtitles);
@@ -2385,6 +2389,7 @@ function MediaPreferencesPanel() {
         require_subtitles: requireSubs,
         prefer_hdr: preferHDR,
         prefer_atmos: preferAtmos,
+        default_quality_profile_id: defaultProfileId,
       },
       {
         onSuccess: () => {
@@ -2431,6 +2436,23 @@ function MediaPreferencesPanel() {
 
   return (
     <div className="space-y-6">
+      {/* Default Quality Profile */}
+      <div className="space-y-2">
+        <Label className="text-base font-medium">Default Quality Profile</Label>
+        <p className="text-xs text-muted-foreground">
+          Used as the default when adding new movies or TV shows.
+        </p>
+        <Select value={defaultProfileId} onValueChange={(v) => { setDefaultProfileId(v); setDirty(true); }}>
+          <SelectTrigger><SelectValue placeholder="None (use first available)" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="">None</SelectItem>
+            {qualityProfiles?.map(p => (
+              <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
       {/* Audio Codec Priority */}
       <div className="space-y-3">
         <Label className="text-base font-medium">Audio Codec Priority</Label>
