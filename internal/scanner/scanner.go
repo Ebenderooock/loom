@@ -805,6 +805,11 @@ func slugify(s string) string {
 }
 
 // RescanMovie rescans a single movie's folder for updated files.
+// It first tries to scan the movie's specific folder (derived from existing
+// files or the naming convention). If no movie folder is found it falls back
+// to scanning the entire library root. Matching uses multi-pass fuzzy logic
+// (exact → containment → token similarity) so slightly different folder/file
+// names still get picked up.
 func (s *Scanner) RescanMovie(ctx context.Context, movieID, libraryPath string) (*ScanResult, error) {
 	movie, err := s.movieSvc.GetMovie(ctx, movieID)
 	if err != nil {
@@ -825,8 +830,15 @@ func (s *Scanner) RescanMovie(ctx context.Context, movieID, libraryPath string) 
 	s.unmatched[scanID] = nil
 	s.mu.Unlock()
 
-	// Walk the library path looking for files matching this movie
-	scanned, walkErr := walkFolder(libraryPath)
+	// Determine the best folder to scan:
+	// 1. Movie's folder derived from existing file paths
+	// 2. Folder matching the naming convention "{Title} ({Year})"
+	// 3. Fall back to the entire library root
+	scanPath := s.resolveMovieFolder(ctx, movie, libraryPath)
+
+	s.logger.Info("rescan: scanning folder", "movie", movie.Title, "path", scanPath)
+
+	scanned, walkErr := walkFolder(scanPath)
 	if walkErr != nil {
 		s.failScan(scanID, walkErr.Error())
 		return result, walkErr
@@ -836,22 +848,15 @@ func (s *Scanner) RescanMovie(ctx context.Context, movieID, libraryPath string) 
 	result.TotalFiles = len(scanned)
 	s.mu.Unlock()
 
-	normMovieTitle := normalizeTitle(movie.Title)
-
 	for _, sf := range scanned {
-		normParsed := normalizeTitle(sf.Rel.Title)
-		if normParsed != normMovieTitle {
-			continue
-		}
-		// Year check (allow ±1)
-		if movie.Year > 0 && sf.Rel.Year > 0 && abs(movie.Year-sf.Rel.Year) > 1 {
+		if !matchesMovie(sf.Rel.Title, sf.Rel.Year, movie.Title, movie.Year) {
 			continue
 		}
 
 		quality := qualityFromParsedInfo(sf.Rel.Resolution, sf.Rel.Source, sf.Rel.IsRemux)
 		if err := s.importFile(ctx, sf.Path, sf.Size, quality, sf.Rel.Source, &metadata.MovieMetadata{
-			Title: movie.Title,
-			Year:  movie.Year,
+			Title:  movie.Title,
+			Year:   movie.Year,
 			TMDBID: movie.TMDBID,
 			IMDBID: movie.IMDBID,
 		}, movie.LibraryID, movie.QualityProfileID); err != nil {
@@ -873,4 +878,78 @@ func (s *Scanner) RescanMovie(ctx context.Context, movieID, libraryPath string) 
 
 	s.logger.Info("movie rescan completed", "movie", movie.Title, "matched", result.Matched)
 	return result, nil
+}
+
+// resolveMovieFolder determines the folder to scan for a specific movie.
+// Priority: existing file → naming convention folder → library root.
+func (s *Scanner) resolveMovieFolder(ctx context.Context, movie *movies.Movie, libraryPath string) string {
+	// Try to derive from existing movie files
+	files, err := s.movieSvc.ListMovieFiles(ctx, movie.ID)
+	if err == nil && len(files) > 0 {
+		folder := filepath.Dir(files[0].FilePath)
+		if folder != libraryPath && folder != "." {
+			if _, statErr := os.Stat(folder); statErr == nil {
+				return folder
+			}
+		}
+	}
+
+	// Try the conventional folder name: "{Title} ({Year})"
+	conventionalName := movie.Title
+	if movie.Year > 0 {
+		conventionalName = fmt.Sprintf("%s (%d)", movie.Title, movie.Year)
+	}
+	conventionalPath := filepath.Join(libraryPath, conventionalName)
+	if _, statErr := os.Stat(conventionalPath); statErr == nil {
+		return conventionalPath
+	}
+
+	// Try finding a folder in the library that fuzzy-matches the movie title
+	entries, err := os.ReadDir(libraryPath)
+	if err == nil {
+		for _, entry := range entries {
+			if !entry.IsDir() {
+				continue
+			}
+			parsed := parser.Parse(entry.Name())
+			if matchesMovie(parsed.Title, parsed.Year, movie.Title, movie.Year) {
+				return filepath.Join(libraryPath, entry.Name())
+			}
+		}
+	}
+
+	// Fall back to entire library root
+	return libraryPath
+}
+
+// matchesMovie uses multi-pass matching (exact, containment, token similarity)
+// to determine if a parsed title+year matches a movie. Year is allowed ±1.
+func matchesMovie(parsedTitle string, parsedYear int, movieTitle string, movieYear int) bool {
+	if parsedTitle == "" {
+		return false
+	}
+
+	yearOK := func(py, my int) bool {
+		return py == 0 || my == 0 || py == my || abs(py-my) <= 1
+	}
+
+	normParsed := normalizeTitle(parsedTitle)
+	normMovie := normalizeTitle(movieTitle)
+
+	// Pass 1: exact normalized
+	if normParsed == normMovie && yearOK(parsedYear, movieYear) {
+		return true
+	}
+
+	// Pass 2: containment
+	if (strings.Contains(normParsed, normMovie) || strings.Contains(normMovie, normParsed)) && yearOK(parsedYear, movieYear) {
+		return true
+	}
+
+	// Pass 3: token similarity ≥ 80%
+	if tokenSimilarity(parsedTitle, movieTitle) >= 80 && yearOK(parsedYear, movieYear) {
+		return true
+	}
+
+	return false
 }
