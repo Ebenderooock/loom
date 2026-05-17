@@ -526,6 +526,11 @@ func (s *Scanner) importFile(ctx context.Context, filePath string, size int64, q
 				s.logger.Info("revived soft-deleted movie file", "path", filePath)
 			} else {
 				s.logger.Debug("file already imported", "path", filePath)
+				// Still ensure movie status is updated — file exists but
+				// status may be stale (e.g. "missing" or "unavailable").
+				if err := s.movieSvc.SetMovieStatus(ctx, movie.ID, movies.MovieStatusAvailableRightQuality); err != nil {
+					s.logger.Warn("failed to update movie status for existing file", "movie", movie.ID, "error", err)
+				}
 				return nil
 			}
 		} else {
