@@ -9,6 +9,7 @@ import {
   useExclusions,
   useCreateExclusion,
   useDeleteExclusion,
+  useTraktUserLists,
   LIST_TYPES,
   MONITOR_TYPES,
   SYNC_INTERVALS,
@@ -283,6 +284,10 @@ function AddListForm({ onDone }: { onDone: () => void }) {
   const typeMeta = LIST_TYPES.find((t) => t.value === form.list_type);
   const fields = typeMeta?.fields ?? [];
 
+  const isTraktType = form.list_type.startsWith("trakt_");
+  const showTraktListPicker = fields.includes("trakt_list_picker");
+  const { data: traktLists, isLoading: traktLoading, isError: traktError } = useTraktUserLists(showTraktListPicker);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     createMut.mutate(form, { onSuccess: onDone });
@@ -333,10 +338,39 @@ function AddListForm({ onDone }: { onDone: () => void }) {
               </Select>
             </div>
 
-            {(form.list_type === "trakt_list" || form.list_type === "trakt_watchlist") && (
+            {isTraktType && (
               <p className="col-span-full text-xs text-muted-foreground">
                 Credentials are automatically used from your Trakt connection in Settings → Connections.
               </p>
+            )}
+
+            {showTraktListPicker && (
+              <div className="space-y-2 col-span-full">
+                <Label htmlFor="add-trakt-list">Trakt List</Label>
+                {traktLoading ? (
+                  <p className="text-sm text-muted-foreground">Loading your Trakt lists…</p>
+                ) : traktError ? (
+                  <p className="text-sm text-destructive">
+                    Could not load Trakt lists. Please connect Trakt in Settings → Connections first.
+                  </p>
+                ) : (
+                  <Select
+                    value={form.url ?? ""}
+                    onValueChange={(val) => setForm({ ...form, url: val })}
+                  >
+                    <SelectTrigger id="add-trakt-list">
+                      <SelectValue placeholder="Select a list…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {traktLists?.map((tl) => (
+                        <SelectItem key={tl.slug} value={tl.slug}>
+                          {tl.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
             )}
 
             <div className="space-y-2">
