@@ -349,8 +349,6 @@ func (p *ImportPipeline) processImport(ctx context.Context, ev *downloads.Downlo
 	// 4. Match and import each media file
 	var lastErr error
 	imported := 0
-	// Track the destination folder for folder-level rename
-	var destFolder string
 	for _, mediaFile := range mediaFiles {
 		if err := p.importSingleFile(ctx, ev, mediaFile); err != nil {
 			p.logger.Error("failed to import file", "file", mediaFile, "error", err)
@@ -358,12 +356,6 @@ func (p *ImportPipeline) processImport(ctx context.Context, ev *downloads.Downlo
 			continue
 		}
 		imported++
-		// Capture destination folder from the first successful import
-		if destFolder == "" {
-			if m, mErr := p.resolveMatchForFile(ctx, ev, mediaFile); mErr == nil && m != nil && m.Matched {
-				destFolder = m.DestPath
-			}
-		}
 	}
 
 	if imported == 0 && lastErr != nil {
@@ -376,28 +368,9 @@ func (p *ImportPipeline) processImport(ctx context.Context, ev *downloads.Downlo
 		"total", len(mediaFiles),
 	)
 
-	// Rename source folder to destination folder to preserve subtitles/extras.
-	// Only for directory-based imports in move mode.
-	if imported > 0 && info.IsDir() && destFolder != "" && p.importMode == ImportModeMove {
-		if scanPath != destFolder {
-			if err := importFolder(scanPath, destFolder); err != nil {
-				p.logger.Warn("folder rename failed, falling back to cleanup",
-					"src", scanPath, "dest", destFolder, "error", err)
-				// Fall back to folder cleanup
-				if p.cleaner != nil {
-					if cleaned, cErr := p.cleaner.CleanFolder(scanPath); cErr != nil {
-						p.logger.Warn("folder cleanup failed", "path", scanPath, "error", cErr)
-					} else if cleaned {
-						p.logger.Info("cleaned empty download folder", "path", scanPath)
-					}
-				}
-			} else {
-				p.logger.Info("renamed source folder to library folder",
-					"src", scanPath, "dest", destFolder)
-			}
-		}
-	} else if imported > 0 && ev.DownloadID != "" && info.IsDir() && p.cleaner != nil {
-		// Non-move modes: clean up source folder if it only contains junk.
+	// Clean up source folder if it only contains junk after import.
+	// Only for download-triggered imports (non-manual).
+	if imported > 0 && ev.DownloadID != "" && info.IsDir() && p.cleaner != nil {
 		if cleaned, err := p.cleaner.CleanFolder(scanPath); err != nil {
 			p.logger.Warn("folder cleanup failed", "path", scanPath, "error", err)
 		} else if cleaned {
@@ -406,18 +379,6 @@ func (p *ImportPipeline) processImport(ctx context.Context, ev *downloads.Downlo
 	}
 
 	return nil
-}
-
-// resolveMatchForFile returns the match result for a file without importing it.
-func (p *ImportPipeline) resolveMatchForFile(ctx context.Context, ev *downloads.DownloadCompletedEvent, mediaFile string) (*MatchResult, error) {
-	match, err := p.matchByGrab(ctx, ev)
-	if err != nil || match == nil || !match.Matched {
-		match, err = p.matcher.Match(ctx, ev.Title)
-		if err != nil || match == nil || !match.Matched {
-			match, err = p.matcher.MatchPath(ctx, mediaFile)
-		}
-	}
-	return match, err
 }
 
 // importSingleFile matches and imports a single media file.
@@ -743,7 +704,15 @@ func (p *ImportPipeline) updateLibrary(ctx context.Context, match *MatchResult, 
 			Size:      info.Size(),
 			DateAdded: time.Now(),
 		}
-		return p.matcher.moviesSvc.AddMovieFile(ctx, mf)
+		if err := p.matcher.moviesSvc.AddMovieFile(ctx, mf); err != nil {
+			// If the file record already exists (e.g. rescan or retry), treat as success
+			if strings.Contains(err.Error(), "UNIQUE") || strings.Contains(err.Error(), "unique") {
+				p.logger.Debug("movie file record already exists", "path", destFile)
+				return nil
+			}
+			return err
+		}
+		return nil
 
 	case MediaTypeEpisode:
 		ef := &series.EpisodeFile{
@@ -752,7 +721,14 @@ func (p *ImportPipeline) updateLibrary(ctx context.Context, match *MatchResult, 
 			FilePath:  destFile,
 			FileSize:  info.Size(),
 		}
-		return p.matcher.seriesSvc.CreateEpisodeFile(ctx, ef)
+		if err := p.matcher.seriesSvc.CreateEpisodeFile(ctx, ef); err != nil {
+			if strings.Contains(err.Error(), "UNIQUE") || strings.Contains(err.Error(), "unique") {
+				p.logger.Debug("episode file record already exists", "path", destFile)
+				return nil
+			}
+			return err
+		}
+		return nil
 
 	default:
 		return fmt.Errorf("unknown media type: %s", match.MediaType)
