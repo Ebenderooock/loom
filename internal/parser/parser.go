@@ -645,6 +645,10 @@ func extractTitle(name string, year int) string {
 	}
 	clean = clean[:cutIdx]
 
+	// Collapse acronym patterns (e.g., "M.I.A" → "MIA", "S.H.I.E.L.D" → "SHIELD")
+	// before replacing dots with spaces so they stay as single words.
+	clean = collapseAcronyms(clean)
+
 	// Replace common separators with spaces
 	clean = strings.NewReplacer(".", " ", "_", " ", "-", " ").Replace(clean)
 
@@ -653,6 +657,31 @@ func extractTitle(name string, year int) string {
 	clean = strings.TrimSpace(spaceRe.ReplaceAllString(clean, " "))
 
 	return clean
+}
+
+// collapseAcronyms replaces dot-separated single-letter sequences
+// (e.g., "M.I.A", "S.H.I.E.L.D.", "C.S.I") with the letters joined
+// together ("MIA", "SHIELD", "CSI") so that dot-to-space replacement
+// doesn't split them into individual letters.
+func collapseAcronyms(s string) string {
+	// Match sequences of 2+ single letters separated by dots, with optional trailing dot
+	re := getPattern("acronym", `(?:^|(?P<pre>[^A-Za-z]))(?P<acr>(?:[A-Za-z]\.){2,}[A-Za-z]?)`)
+	return re.ReplaceAllStringFunc(s, func(m string) string {
+		// Preserve any leading non-letter character
+		prefix := ""
+		start := 0
+		if len(m) > 0 && !isLetter(rune(m[0])) {
+			prefix = string(m[0])
+			start = 1
+		}
+		// Remove dots from the acronym portion
+		acronym := strings.ReplaceAll(m[start:], ".", "")
+		return prefix + acronym
+	})
+}
+
+func isLetter(r rune) bool {
+	return (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z')
 }
 
 // extractGroup returns the release group from a release name.

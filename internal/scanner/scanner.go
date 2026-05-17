@@ -6,9 +6,11 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"github.com/google/uuid"
 	"github.com/ebenderooock/loom/internal/auditlog"
@@ -599,6 +601,8 @@ func autoMatch(title string, year int, results []*metadata.MovieMetadata) *metad
 
 func normalizeTitle(title string) string {
 	t := strings.ToLower(title)
+	// Collapse acronyms: "m.i.a" → "mia"
+	t = collapseAcronymsScan(t)
 	// Expand & to "and" before stripping punctuation
 	t = strings.ReplaceAll(t, "&", " and ")
 	// Strip possessives
@@ -634,6 +638,40 @@ func normalizeTitleForTokens(title string) string {
 		}
 	}
 	return strings.Join(strings.Fields(b.String()), " ")
+}
+
+// collapseAcronymsScan replaces dot- and space-separated single-letter
+// sequences (e.g., "m.i.a" → "mia", "m i a" → "mia").
+func collapseAcronymsScan(s string) string {
+	dotRe := regexp.MustCompile(`(?:^|[^a-zA-Z])((?:[a-zA-Z]\.){2,}[a-zA-Z]?)`)
+	s = dotRe.ReplaceAllStringFunc(s, func(m string) string {
+		prefix := ""
+		start := 0
+		if len(m) > 0 && !unicode.IsLetter(rune(m[0])) {
+			prefix = string(m[0])
+			start = 1
+		}
+		return prefix + strings.ReplaceAll(m[start:], ".", "")
+	})
+
+	spaceRe := regexp.MustCompile(`(?:^|[^a-zA-Z])((?:[a-zA-Z] ){2,}[a-zA-Z])(?:[^a-zA-Z]|$)`)
+	s = spaceRe.ReplaceAllStringFunc(s, func(m string) string {
+		prefix := ""
+		suffix := ""
+		start := 0
+		end := len(m)
+		if len(m) > 0 && !unicode.IsLetter(rune(m[0])) {
+			prefix = string(m[0])
+			start = 1
+		}
+		if end > 0 && !unicode.IsLetter(rune(m[end-1])) {
+			suffix = string(m[end-1])
+			end--
+		}
+		return prefix + strings.ReplaceAll(m[start:end], " ", "") + suffix
+	})
+
+	return s
 }
 
 // tokenize splits a title into meaningful words, removing stop words.
