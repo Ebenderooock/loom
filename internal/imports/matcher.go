@@ -125,6 +125,9 @@ func cleanTitle(raw string) string {
 	// Strip release group suffix (e.g., "-GROUP") before separator replacement
 	s := reGroup.ReplaceAllString(raw, "")
 
+	// Collapse acronyms (e.g., "M.I.A" → "MIA") before dot-to-space replacement
+	s = collapseAcronyms(s)
+
 	// Replace dots, underscores, and hyphens with spaces
 	s = strings.NewReplacer(".", " ", "_", " ", "-", " ").Replace(s)
 
@@ -509,6 +512,8 @@ func titleSimilarity(a, b string) int {
 // and removes non-alphanumeric characters (except spaces).
 func normalise(s string) string {
 	s = strings.ToLower(s)
+	// Collapse acronyms: "m.i.a" → "mia", "m i a" → "mia"
+	s = collapseAcronyms(s)
 	// Expand meaningful punctuation before stripping
 	s = strings.ReplaceAll(s, "&", " and ")
 	// Strip possessives: "marvel's" → "marvels"
@@ -543,6 +548,45 @@ func tokenize(s string) []string {
 		}
 	}
 	return out
+}
+
+// collapseAcronyms replaces dot-separated single-letter sequences
+// (e.g., "M.I.A" → "MIA", "S.H.I.E.L.D." → "SHIELD") and also
+// space-separated single-letter sequences (e.g., "M I A" → "MIA")
+// so they match regardless of separator style.
+func collapseAcronyms(s string) string {
+	// Dot-separated: "M.I.A" or "M.I.A."
+	dotRe := regexp.MustCompile(`(?:^|[^A-Za-z])((?:[A-Za-z]\.){2,}[A-Za-z]?)`)
+	s = dotRe.ReplaceAllStringFunc(s, func(m string) string {
+		prefix := ""
+		start := 0
+		if len(m) > 0 && !unicode.IsLetter(rune(m[0])) {
+			prefix = string(m[0])
+			start = 1
+		}
+		return prefix + strings.ReplaceAll(m[start:], ".", "")
+	})
+
+	// Space-separated single letters: "M I A" but not "A Beautiful Mind"
+	// Only match if ALL tokens are single letters and there are 2+
+	spaceRe := regexp.MustCompile(`(?:^|[^A-Za-z])((?:[A-Za-z] ){2,}[A-Za-z])(?:[^A-Za-z]|$)`)
+	s = spaceRe.ReplaceAllStringFunc(s, func(m string) string {
+		prefix := ""
+		suffix := ""
+		start := 0
+		end := len(m)
+		if len(m) > 0 && !unicode.IsLetter(rune(m[0])) {
+			prefix = string(m[0])
+			start = 1
+		}
+		if end > 0 && !unicode.IsLetter(rune(m[end-1])) {
+			suffix = string(m[end-1])
+			end--
+		}
+		return prefix + strings.ReplaceAll(m[start:end], " ", "") + suffix
+	})
+
+	return s
 }
 
 // sanitizeDirName replaces characters that are invalid in directory names.
