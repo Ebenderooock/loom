@@ -77,6 +77,7 @@ type ImportListItem struct {
 	IMDbID     string     `json:"imdb_id,omitempty"`
 	TMDbID     string     `json:"tmdb_id,omitempty"`
 	TVDbID     string     `json:"tvdb_id,omitempty"`
+	MediaType  string     `json:"media_type,omitempty"`
 	Status     ItemStatus `json:"status"`
 	LastSeen   time.Time  `json:"last_seen"`
 	CreatedAt  time.Time  `json:"created_at"`

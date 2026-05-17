@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os"
 	"time"
 
 	"github.com/ebenderooock/loom/internal/alttitles"
@@ -99,6 +100,15 @@ func wireMedia(
 	// Import lists
 	importListStore := importlists.NewStore(db.DB())
 	importListSyncMgr := importlists.NewSyncManager(importListStore, logger)
+	importListSyncMgr.SetTMDBAPIKey(func() string {
+		k := os.Getenv("LOOM_TMDB_API_KEY")
+		if k == "" {
+			k = defaultTMDBKey
+		}
+		return k
+	}())
+	importListSyncMgr.SetMoviesService(moviesSvc)
+	importListSyncMgr.SetSeriesService(seriesSvc)
 	srv.SetImportLists(importListStore, importListSyncMgr)
 
 	// Libraries scanner

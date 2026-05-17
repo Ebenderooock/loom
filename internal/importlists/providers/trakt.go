@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
+	"strings"
 	"time"
 )
 
@@ -26,17 +28,77 @@ func NewTraktWatchlist() *TraktProvider {
 	return &TraktProvider{Watchlist: true, client: &http.Client{Timeout: 30 * time.Second}}
 }
 
+// transformTraktURL converts web-facing Trakt URLs into API URLs.
+func transformTraktURL(raw string) string {
+	// Already an API URL — leave as-is.
+	if strings.HasPrefix(raw, "https://api.trakt.tv/") {
+		// For user lists, ensure /items suffix is present.
+		if strings.Contains(raw, "/users/") && strings.Contains(raw, "/lists/") && !strings.HasSuffix(raw, "/items") {
+			raw = strings.TrimRight(raw, "/") + "/items"
+		}
+		return raw
+	}
+
+	// Parse the URL to extract path and query params.
+	u, err := url.Parse(raw)
+	if err != nil {
+		return raw
+	}
+
+	host := strings.ToLower(u.Hostname())
+	if host != "trakt.tv" && host != "app.trakt.tv" && host != "www.trakt.tv" {
+		return raw
+	}
+
+	path := strings.TrimPrefix(u.Path, "/")
+	mode := u.Query().Get("mode")
+
+	// Handle /discover/{type}?mode={movie|show} pages.
+	if strings.HasPrefix(path, "discover/") {
+		category := strings.TrimPrefix(path, "discover/")
+		category = strings.Split(category, "/")[0] // e.g. "anticipated", "popular", "trending"
+
+		mediaPath := "movies"
+		if mode == "show" || mode == "shows" {
+			mediaPath = "shows"
+		}
+		return fmt.Sprintf("https://api.trakt.tv/%s/%s", mediaPath, category)
+	}
+
+	// Handle /movies/{category} and /shows/{category} pages.
+	if strings.HasPrefix(path, "movies/") || strings.HasPrefix(path, "shows/") {
+		return "https://api.trakt.tv/" + path
+	}
+
+	// Handle /users/{user}/lists/{list} pages.
+	if strings.HasPrefix(path, "users/") && strings.Contains(path, "/lists/") {
+		apiURL := "https://api.trakt.tv/" + strings.TrimRight(path, "/")
+		if !strings.HasSuffix(apiURL, "/items") {
+			apiURL += "/items"
+		}
+		return apiURL
+	}
+
+	// Fallback: reconstruct with API host.
+	return "https://api.trakt.tv/" + path
+}
+
 func (p *TraktProvider) Fetch(ctx context.Context, cfg ProviderConfig) ([]Item, error) {
 	if cfg.URL == "" && cfg.AccessToken == "" {
 		return nil, fmt.Errorf("trakt: URL or access token required")
 	}
 
-	url := cfg.URL
-	if url == "" && p.Watchlist {
-		url = "https://api.trakt.tv/users/me/watchlist/movies"
+	apiURL := cfg.URL
+	if apiURL == "" && p.Watchlist {
+		apiURL = "https://api.trakt.tv/users/me/watchlist/movies"
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	// Transform web URLs to API URLs.
+	if apiURL != "" {
+		apiURL = transformTraktURL(apiURL)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("trakt: build request: %w", err)
 	}
@@ -70,21 +132,27 @@ func (p *TraktProvider) Fetch(ctx context.Context, cfg ProviderConfig) ([]Item, 
 
 	var items []Item
 	for _, e := range entries {
-		m := e.Movie
-		if m.Title == "" {
-			m = e.Show
+		if e.Movie.Title != "" {
+			items = append(items, Item{
+				ExternalID: fmt.Sprintf("trakt-%d", e.Movie.IDs.Trakt),
+				Title:      e.Movie.Title,
+				Year:       e.Movie.Year,
+				IMDbID:     e.Movie.IDs.IMDB,
+				TMDbID:     fmt.Sprintf("%d", e.Movie.IDs.TMDB),
+				TVDbID:     fmt.Sprintf("%d", e.Movie.IDs.TVDB),
+				MediaType:  "movie",
+			})
+		} else if e.Show.Title != "" {
+			items = append(items, Item{
+				ExternalID: fmt.Sprintf("trakt-%d", e.Show.IDs.Trakt),
+				Title:      e.Show.Title,
+				Year:       e.Show.Year,
+				IMDbID:     e.Show.IDs.IMDB,
+				TMDbID:     fmt.Sprintf("%d", e.Show.IDs.TMDB),
+				TVDbID:     fmt.Sprintf("%d", e.Show.IDs.TVDB),
+				MediaType:  "series",
+			})
 		}
-		if m.Title == "" {
-			continue
-		}
-		items = append(items, Item{
-			ExternalID: fmt.Sprintf("trakt-%d", m.IDs.Trakt),
-			Title:      m.Title,
-			Year:       m.Year,
-			IMDbID:     m.IDs.IMDB,
-			TMDbID:     fmt.Sprintf("%d", m.IDs.TMDB),
-			TVDbID:     fmt.Sprintf("%d", m.IDs.TVDB),
-		})
 	}
 	return items, nil
 }

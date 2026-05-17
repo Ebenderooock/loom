@@ -25,4 +25,5 @@ type Item struct {
 	IMDbID     string
 	TMDbID     string
 	TVDbID     string
+	MediaType  string // "movie" or "series"; empty defaults to list-level setting
 }
