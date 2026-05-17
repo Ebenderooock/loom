@@ -342,13 +342,13 @@ export const LIST_TYPES: {
     value: "trakt_list",
     label: "Trakt List",
     mediaType: "movie",
-    fields: ["url", "api_key", "access_token"],
+    fields: ["url"],
   },
   {
     value: "trakt_watchlist",
     label: "Trakt Watchlist",
     mediaType: "movie",
-    fields: ["api_key", "access_token"],
+    fields: [],
   },
   {
     value: "imdb_list",

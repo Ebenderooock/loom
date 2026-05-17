@@ -333,6 +333,12 @@ function AddListForm({ onDone }: { onDone: () => void }) {
               </Select>
             </div>
 
+            {(form.list_type === "trakt_list" || form.list_type === "trakt_watchlist") && (
+              <p className="col-span-full text-xs text-muted-foreground">
+                Credentials are automatically used from your Trakt connection in Settings → Connections.
+              </p>
+            )}
+
             <div className="space-y-2">
               <Label htmlFor="add-media-type">Media Type</Label>
               <Select
