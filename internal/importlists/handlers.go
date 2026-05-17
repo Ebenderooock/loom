@@ -19,6 +19,7 @@ func Router(store *Store, syncMgr *SyncManager, logger *slog.Logger) chi.Router 
 	r.Get("/exclusions", listExclusions(store))
 	r.Post("/exclusions", createExclusion(store))
 	r.Delete("/exclusions/{id}", deleteExclusion(store))
+	r.Get("/trakt/lists", getTraktUserLists(syncMgr))
 
 	r.Get("/{id}", getList(store))
 	r.Put("/{id}", updateList(store))
@@ -257,5 +258,16 @@ func deleteExclusion(store *Store) http.HandlerFunc {
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+func getTraktUserLists(syncMgr *SyncManager) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		lists, err := syncMgr.GetTraktUserLists(r.Context())
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"data": lists})
 	}
 }

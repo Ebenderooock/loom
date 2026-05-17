@@ -142,9 +142,8 @@ func (m *SyncManager) SyncList(ctx context.Context, l *ImportList) error {
 		Settings:    l.Settings,
 	}
 
-	// For Trakt lists, fill in credentials from the user's Trakt connection
-	// if not explicitly set on the import list.
-	if (l.ListType == ListTypeTraktList || l.ListType == ListTypeTraktWatchlist) && m.connectSvc != nil {
+	// For Trakt lists, fill in credentials from the user's Trakt connection.
+	if isTraktListType(l.ListType) && m.connectSvc != nil {
 		if cfg.APIKey == "" || cfg.AccessToken == "" {
 			if traktConn := m.findTraktConnection(ctx); traktConn != nil {
 				if cfg.APIKey == "" {
@@ -244,6 +243,12 @@ func (m *SyncManager) providerFor(lt ListType) providers.ListProvider {
 		return providers.NewTraktList()
 	case ListTypeTraktWatchlist:
 		return providers.NewTraktWatchlist()
+	case ListTypeTraktPopular:
+		return providers.NewTraktPopular()
+	case ListTypeTraktTrending:
+		return providers.NewTraktTrending()
+	case ListTypeTraktAnticipated:
+		return providers.NewTraktAnticipated()
 	case ListTypeIMDbList:
 		return providers.NewIMDbList()
 	case ListTypeIMDbWatchlist:
@@ -259,6 +264,30 @@ func (m *SyncManager) providerFor(lt ListType) providers.ListProvider {
 	default:
 		return nil
 	}
+}
+
+// isTraktListType returns true for any Trakt-backed list type.
+func isTraktListType(lt ListType) bool {
+	switch lt {
+	case ListTypeTraktList, ListTypeTraktWatchlist,
+		ListTypeTraktPopular, ListTypeTraktTrending, ListTypeTraktAnticipated:
+		return true
+	default:
+		return false
+	}
+}
+
+// GetTraktUserLists fetches the authenticated user's custom Trakt lists
+// using the stored Trakt connection credentials.
+func (m *SyncManager) GetTraktUserLists(ctx context.Context) ([]providers.TraktUserList, error) {
+	if m.connectSvc == nil {
+		return nil, fmt.Errorf("connect service not configured")
+	}
+	conn := m.findTraktConnection(ctx)
+	if conn == nil {
+		return nil, fmt.Errorf("no Trakt connection found; connect Trakt in Settings → Connections")
+	}
+	return providers.FetchTraktUserLists(ctx, conn.Settings.ClientID, conn.Settings.AccessToken)
 }
 
 // findTraktConnection returns the first enabled Trakt connection, or nil.
