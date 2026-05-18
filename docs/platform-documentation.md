@@ -1717,17 +1717,38 @@ Extracts from release names: quality, codec, source, resolution, group name, aud
 
 ### 3.27 Events & Audit Log
 
-**What it does:** System event trail for debugging and compliance.
+**What it does:** Structured event trail recording all significant system actions for debugging, compliance, and user visibility.
 
-**API:** `GET /api/v1/system/audit-log`
+**API Endpoints:**
 
-**Database:** `audit_log`
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/system/audit-log` | Paginated list with filters |
+
+**Query Parameters:**
+
+| Param | Type | Description |
+|-------|------|-------------|
+| category | string | Filter by category (e.g. "safety", "download", "library") |
+| event_type | string | Filter by event type (e.g. "review.created", "download.grabbed") |
+| level | string | Filter by level (info, warn, error) |
+| entity_type | string | Filter by entity type (e.g. "movie", "review") |
+| entity_id | string | Filter by entity ID |
+| since | string | Start timestamp |
+| until | string | End timestamp |
+| limit | int | Page size |
+| offset | int | Pagination offset |
+
+**Entry Fields:**
+- `id`, `category`, `event_type`, `message`, `detail` (JSON), `entity_type`, `entity_id`, `level`, `source`, `created_at`
 
 **Events logged:**
-- Configuration changes
-- Media additions/deletions
+- Configuration changes, media additions/deletions
 - Download events (grab, complete, fail)
+- Safety/review state transitions
 - System health changes
+
+**Database:** `audit_log`
 
 ---
 
@@ -1754,14 +1775,23 @@ Extracts from release names: quality, codec, source, resolution, group name, aud
 
 ### 3.29 System / Health / Diagnostics
 
-**API endpoints:**
-- `GET /healthz` — basic health check
-- `GET /livez` — liveness probe
-- `GET /readyz` — readiness probe
-- `GET /metrics` — Prometheus metrics
-- `GET /api/v1/system/status` — version, commit, uptime
-- `GET /api/v1/system/health/*` — component health details
-- `GET /debug/pprof/*` — Go profiling (when enabled)
+**What it does:** Provides health checks, readiness probes, metrics, and system status for operational monitoring.
+
+**API Endpoints:**
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/healthz` | Basic health check (always 200 if process is alive) |
+| GET | `/livez` | Liveness probe (same as healthz) |
+| GET | `/readyz` | Readiness probe (checks DB connectivity) |
+| GET | `/metrics` | Prometheus metrics endpoint |
+| GET | `/api/v1/system/status` | Version, commit hash, uptime, build info |
+| GET | `/api/v1/system/health/*` | Component-level health details (indexers, clients, storage) |
+| GET | `/debug/pprof/*` | Go profiling endpoints (when debug mode enabled) |
+
+**Health Monitor:**
+- Tracks per-component health (indexers, download clients, storage)
+- Surfaces issues via the dashboard and API
 
 ---
 
