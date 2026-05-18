@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -13,6 +14,9 @@ import (
 
 	"github.com/ebenderooock/loom/internal/auditlog"
 )
+
+// ErrReviewNotFound is returned when a review ID doesn't exist or is already resolved.
+var ErrReviewNotFound = errors.New("review not found or already resolved")
 
 // ReviewStatus represents the state of a manual review entry.
 type ReviewStatus string
@@ -121,7 +125,7 @@ func (s *ReviewStore) resolve(ctx context.Context, id string, status ReviewStatu
 	}
 	n, _ := res.RowsAffected()
 	if n == 0 {
-		return fmt.Errorf("review %q not found or already resolved", id)
+		return ErrReviewNotFound
 	}
 	s.auditLog.Log(ctx, auditlog.Entry{
 		Category:   "safety",
@@ -206,7 +210,11 @@ func approveReview(store *ReviewStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id := chi.URLParam(r, "id")
 		if err := store.Approve(r.Context(), id); err != nil {
-			writeError(w, http.StatusNotFound, err.Error())
+			if errors.Is(err, ErrReviewNotFound) {
+				writeError(w, http.StatusNotFound, err.Error())
+				return
+			}
+			writeError(w, http.StatusInternalServerError, "failed to approve review")
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"status": "approved"})
@@ -217,7 +225,11 @@ func rejectReview(store *ReviewStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id := chi.URLParam(r, "id")
 		if err := store.Reject(r.Context(), id); err != nil {
-			writeError(w, http.StatusNotFound, err.Error())
+			if errors.Is(err, ErrReviewNotFound) {
+				writeError(w, http.StatusNotFound, err.Error())
+				return
+			}
+			writeError(w, http.StatusInternalServerError, "failed to reject review")
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"status": "rejected"})

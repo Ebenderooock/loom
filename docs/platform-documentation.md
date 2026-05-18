@@ -1461,9 +1461,30 @@ Returns `{ success: true/false, items: [...], count: N }` with up to 5 preview i
 
 ### 3.18 Sync Profiles
 
-**What it does:** Configures which indexers and categories to use for specific sync/search operations.
+**What it does:** Controls which indexers and categories a connected app (Radarr/Sonarr compatibility layer) can see. Allows filtering the indexer set per connected application.
 
-**API:** `/api/v1/sync-profiles`
+**API Endpoints:**
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/sync-profiles` | List all sync profiles |
+| POST | `/api/v1/sync-profiles` | Create sync profile |
+| GET | `/api/v1/sync-profiles/{id}` | Get profile by ID |
+| PUT | `/api/v1/sync-profiles/{id}` | Update profile (partial) |
+| DELETE | `/api/v1/sync-profiles/{id}` | Delete profile |
+
+**Data Model (SyncProfile):**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| id | string | Auto-generated UUID |
+| name | string | Display name (required) |
+| app_type | string | Target app type (e.g. "radarr", "sonarr") |
+| enabled | bool | Whether profile is active (default: true) |
+| indexers | array | List of `{ indexer_id, enabled }` mappings |
+| categories | array | List of `{ category, mapped_to }` mappings |
+| created_at | datetime | Creation timestamp |
+| updated_at | datetime | Last update timestamp |
 
 **Database:** `sync_profiles`, `sync_profile_indexers`, `sync_profile_categories`
 
@@ -1471,15 +1492,52 @@ Returns `{ success: true/false, items: [...], count: N }` with up to 5 preview i
 
 ### 3.19 Download Safety / Manual Review
 
-**What it does:** Allows manual review of releases before they're grabbed.
+**What it does:** Two-layer protection system: (1) automated pre-download validation that checks releases for dangerous extensions, suspicious patterns, and size anomalies, and (2) a manual review queue for releases that pass validation with warnings.
 
-**API:** `/api/v1/reviews`
+**API Endpoints:**
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/reviews` | List pending reviews |
+| GET | `/api/v1/reviews/count` | Count pending reviews |
+| POST | `/api/v1/reviews/{id}/approve` | Approve a review |
+| POST | `/api/v1/reviews/{id}/reject` | Reject a review |
+
+**Data Model (Review):**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| id | string | UUID |
+| media_type | string | "movie" or "episode" |
+| media_id | string | Associated media item ID |
+| download_path | string | Path of the release |
+| reason | string | Why manual review was triggered |
+| status | enum | `pending`, `approved`, `rejected` |
+| created_at | datetime | When review was created |
+| resolved_at | datetime | When review was approved/rejected |
+
+**Pre-Download Validation (ReleaseValidator):**
+
+Checks performed before any download grab:
+- **Dangerous extensions** — blocks .exe, .bat, .cmd, .msi, .scr, .pif, .vbs, .js, .ps1, etc.
+- **Suspicious patterns** — flags releases containing "password", "virus", "crack", "keygen", "patch"
+- **Size anomalies** — blocks movies outside 50MB–100GB range
+
+Severity levels:
+- `block` → release rejected outright, never grabbed
+- `warning` → release flagged, creates manual review entry
+
+**Post-Import Validation (PostValidator):**
+Runs after import to verify file integrity and flag issues.
+
+**Error Handling:**
+- Review not found or already resolved → 404
+- Database errors → 500
+
+**Audit Integration:**
+All review create/approve/reject actions logged to audit log with full context.
 
 **Database:** `manual_review`
-
-**Expected outcomes:**
-- Releases flagged for review are held until approved.
-- Prevents accidental downloads of unwanted content.
 
 ---
 
