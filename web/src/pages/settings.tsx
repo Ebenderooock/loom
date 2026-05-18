@@ -20,7 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { useNavigate } from "@tanstack/react-router";
+import { useNavigate, useSearch } from "@tanstack/react-router";
 import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { NamingSettings } from "@/components/movies/naming-settings";
@@ -1277,6 +1277,8 @@ function ConnectPanel() {
   const traktSyncWatchedMut = useTraktSyncWatched();
   const traktSyncCollectionMut = useTraktSyncCollection();
   const traktSyncWatchlistMut = useTraktSyncWatchlist();
+  const navigate = useNavigate();
+  const { trakt_code } = useSearch({ strict: false });
 
   const [dialogOpen, setDialogOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<ConnectConnection | null>(null);
@@ -1295,6 +1297,28 @@ function ConnectPanel() {
   const [formClientSecret, setFormClientSecret] = React.useState("");
   const [traktOAuthCode, setTraktOAuthCode] = React.useState("");
   const [traktAuthStep, setTraktAuthStep] = React.useState<"config" | "authorize" | "code" | "connected">("config");
+
+  // Auto-populate the OAuth code when returning from Trakt redirect
+  React.useEffect(() => {
+    if (trakt_code) {
+      setTraktOAuthCode(trakt_code);
+      setTraktAuthStep("code");
+      // Find the existing Trakt connection and open its edit dialog
+      const traktConn = connections.find((c) => c.provider === "trakt");
+      if (traktConn) {
+        setEditing(traktConn);
+        setFormProvider(traktConn.provider);
+        setFormName(traktConn.name);
+        setFormClientId(traktConn.settings.client_id ?? "");
+        setFormClientSecret(traktConn.settings.client_secret ?? "");
+        setFormNotifyOnImport(traktConn.notify_on_import);
+        setFormEnabled(traktConn.enabled);
+        setDialogOpen(true);
+      }
+      // Clear the search param so it doesn't re-trigger
+      navigate({ to: "/settings", search: {}, replace: true });
+    }
+  }, [trakt_code, connections, navigate]);
 
   const isTrakt = formProvider === "trakt";
 
@@ -2680,7 +2704,10 @@ function ConfigurationPanel() {
 
 export function SettingsPage() {
   useSetPageHeader("Settings");
-  const [active, setActive] = React.useState<Category>("general");
+  const { trakt_code } = useSearch({ strict: false });
+  const [active, setActive] = React.useState<Category>(
+    trakt_code ? "connect" : "general",
+  );
   const activeLabel =
     CATEGORIES.find((c) => c.id === active)?.label ?? "General";
 

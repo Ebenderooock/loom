@@ -120,6 +120,20 @@ const settingsRoute = createRoute({
   ),
   pendingComponent: PageLoader,
   errorComponent: ErrorFallback,
+  validateSearch: (search: Record<string, unknown>) => ({
+    trakt_code: (search.trakt_code as string) ?? undefined,
+  }),
+});
+
+const traktCallbackRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/settings/trakt/callback",
+  component: lazyRouteComponent(
+    () => import("@/pages/trakt-callback"),
+    "TraktCallbackPage",
+  ),
+  pendingComponent: PageLoader,
+  errorComponent: ErrorFallback,
 });
 
 const indexersRoute = createRoute({
@@ -294,6 +308,7 @@ const routeTree = rootRoute.addChildren([
   eventsRoute,
   workflowsRoute,
   workflowDetailRoute,
+  traktCallbackRoute,
   settingsRoute,
 ]);
 
