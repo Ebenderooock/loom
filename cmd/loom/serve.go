@@ -20,9 +20,12 @@ import (
 	"github.com/ebenderooock/loom/internal/rss"
 	"github.com/ebenderooock/loom/internal/kernel/config"
 	"github.com/ebenderooock/loom/internal/kernel/logging"
+	"github.com/ebenderooock/loom/internal/kernel/scheduler"
 	"github.com/ebenderooock/loom/internal/kernel/telemetry"
 	"github.com/ebenderooock/loom/internal/server"
 	"github.com/ebenderooock/loom/internal/storage"
+	"github.com/ebenderooock/loom/internal/systemlogs"
+	"github.com/ebenderooock/loom/internal/workflows"
 )
 
 func cmdServe(ctx context.Context, args []string) error {
@@ -115,9 +118,30 @@ func cmdServe(ctx context.Context, args []string) error {
 
 	auditLogger := auditlog.New(db.DB(), logger)
 
+	// System logs capture — ring buffer + DB persistence.
+	logBuf := logging.NewRingBuffer(cfg.Log.BufferSize)
+	sysLogStore := systemlogs.NewStore(db.DB())
+	sysLogBatchWriter := sysLogStore.NewBatchWriter(ctx)
+	captureLevel, _ := logging.ParseCaptureLevel(cfg.Log.CaptureLevel)
+	captureHandler := logging.NewCaptureHandler(logging.CaptureHandlerConfig{
+		Inner:             logger.Handler(),
+		Buffer:            logBuf,
+		DBSink:            sysLogBatchWriter.Sink(),
+		CaptureLevel:      captureLevel,
+		ExtractWorkflowID: workflows.WorkflowIDFromContext,
+	})
+	capturedLogger := slog.New(captureHandler)
+	slog.SetDefault(capturedLogger)
+	logger = capturedLogger
+
 	sched, err := buildScheduler(ctx, cfg, db, auditLogger, logger)
 	if err != nil {
 		return fmt.Errorf("init scheduler: %w", err)
+	}
+
+	// Register system log pruning job.
+	if err := scheduler.RegisterSystemLogPrune(ctx, sched, sysLogStore, cfg.Log.RetentionDays, logger); err != nil {
+		return fmt.Errorf("register system log prune: %w", err)
 	}
 
 	indexerSvc, err := buildIndexerService(ctx, cfg, db, logger)
@@ -170,6 +194,11 @@ func cmdServe(ctx context.Context, args []string) error {
 	srv.SetRSS(rssSvc)
 	srv.SetMovies(moviesSvc)
 	srv.SetCustomFormats(customformats.NewStore(db.DB()))
+	srv.SetSystemLogs(&systemlogs.HandlerDeps{
+		Store:   sysLogStore,
+		Buffer:  logBuf,
+		Capture: captureHandler,
+	})
 
 	// Wire media services (scanner, organizer, series, libraries, etc.)
 	media, err := wireMedia(ctx, cfg, db, srv, moviesSvc, auditLogger, logger)
@@ -200,6 +229,7 @@ func cmdServe(ctx context.Context, args []string) error {
 	infra.healthMon.Start(ctx)
 	defer infra.healthMon.Stop()
 	defer infra.auditSink.Close()
+	defer sysLogBatchWriter.Close()
 
 	errCh := make(chan error, 1)
 	go func() { errCh <- srv.Start() }()

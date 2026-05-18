@@ -1214,6 +1214,7 @@ func (e *Engine) recordGrabOrchestrator(ctx context.Context, req SearchRequest, 
 			e.logger.Warn("failed to create movie workflow via orchestrator", "error", err)
 			return
 		}
+		ctx = workflows.WithWorkflowID(ctx, wf.ID)
 		e.orchestrator.Send(workflows.CmdGrabbed{
 			WorkflowID:           wf.ID,
 			ClientID:             grabbed.ClientID,
@@ -1257,6 +1258,7 @@ func (e *Engine) recordGrabOrchestrator(ctx context.Context, req SearchRequest, 
 				e.logger.Warn("failed to create episode workflow via orchestrator", "error", err)
 				return
 			}
+			ctx = workflows.WithWorkflowID(ctx, wf.ID)
 			e.orchestrator.Send(workflows.CmdGrabbed{
 				WorkflowID:           wf.ID,
 				ClientID:             grabbed.ClientID,

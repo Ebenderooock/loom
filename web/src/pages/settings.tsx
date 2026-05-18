@@ -104,6 +104,7 @@ import {
 } from "@/lib/downloads-api";
 import { DownloadForm } from "@/components/downloads/download-form";
 import { SyncProfilesPanel } from "@/components/settings/sync-profiles-panel";
+import { SystemLogsPanel } from "@/components/settings/system-logs-panel";
 
 const CATEGORIES = [
   { id: "general", label: "General" },
@@ -118,6 +119,7 @@ const CATEGORIES = [
   { id: "sync-profiles", label: "Sync Profiles" },
   { id: "configuration", label: "Configuration" },
   { id: "ui", label: "UI" },
+  { id: "system", label: "System" },
 ] as const;
 
 type Category = (typeof CATEGORIES)[number]["id"];
@@ -2663,6 +2665,8 @@ function SettingsContent({ category }: { category: Category }) {
       return <ConfigurationPanel />;
     case "ui":
       return <UIPanel />;
+    case "system":
+      return <SystemLogsPanel />;
   }
 }
 

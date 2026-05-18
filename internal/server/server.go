@@ -69,6 +69,7 @@ import (
 	"github.com/ebenderooock/loom/internal/scheduler"
 	"github.com/ebenderooock/loom/internal/series"
 	"github.com/ebenderooock/loom/internal/storage"
+	"github.com/ebenderooock/loom/internal/systemlogs"
 	"github.com/ebenderooock/loom/internal/validation"
 )
 
@@ -120,6 +121,7 @@ type Server struct {
 	healthMonitor   *healthmonitor.Monitor
 	auditLog        *auditlog.Logger
 	autoSearchEngine *autosearch.Engine
+	systemLogsDeps  *systemlogs.HandlerDeps
 	wfEngine         *workflows.Engine
 	orchestrator     *workflows.Orchestrator
 	periodicScanner  *scheduler.PeriodicScanner
@@ -496,6 +498,14 @@ func (s *Server) SetDiscoverRouter(h http.Handler) {
 	}
 }
 
+// SetSystemLogs wires the system log viewer endpoints.
+func (s *Server) SetSystemLogs(deps *systemlogs.HandlerDeps) {
+	s.systemLogsDeps = deps
+	if s.httpSrv != nil {
+		s.httpSrv.Handler = s.newMux()
+	}
+}
+
 // Bus returns the server's event bus for wiring pipelines.
 func (s *Server) Bus() eventbus.Bus {
 	return s.bus
@@ -756,6 +766,11 @@ func (s *Server) newMux() http.Handler {
 		// System health monitoring (authenticated)
 		if s.healthMonitor != nil {
 			r.Mount("/api/v1/system/health", healthmonitor.Router(s.healthMonitor))
+		}
+
+		// System logs (authenticated)
+		if s.systemLogsDeps != nil {
+			r.Mount("/api/v1/system/logs", systemlogs.Router(*s.systemLogsDeps))
 		}
 
 		// Audit log (authenticated)

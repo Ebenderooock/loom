@@ -1,10 +1,12 @@
 import * as React from "react";
+import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { LoadingState } from "@/components/ui/loading-state";
 import { useSetPageHeader } from "@/hooks/use-page-header";
 import { WorkflowTimeline } from "@/components/workflows/workflow-timeline";
+import { LogViewer } from "@/components/logs/log-viewer";
 import { relativeTime } from "@/lib/utils";
 import {
   useWorkflow,
@@ -23,6 +25,7 @@ import {
   RefreshCw,
   Search,
   XCircle,
+  ScrollText,
 } from "lucide-react";
 import { useRouter, useParams } from "@tanstack/react-router";
 
@@ -50,6 +53,7 @@ export function WorkflowDetailPage() {
   const { data: workflow, isLoading, error } = useWorkflow(workflowId);
   const cancelMut = useCancelWorkflow();
   const retryMut = useRetryWorkflow();
+  const [activeTab, setActiveTab] = useState<"timeline" | "logs">("timeline");
 
   if (isLoading) return <LoadingState label="Loading workflow…" />;
 
@@ -134,15 +138,43 @@ export function WorkflowDetailPage() {
         </Card>
       )}
 
-      {/* Timeline */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">Event Timeline</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <WorkflowTimeline workflowId={workflowId} />
-        </CardContent>
-      </Card>
+      {/* Tab navigation */}
+      <div className="flex border-b border-border">
+        <button
+          className={`px-4 py-2 text-sm font-medium transition-colors ${activeTab === "timeline" ? "border-b-2 border-primary text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+          onClick={() => setActiveTab("timeline")}
+        >
+          Event Timeline
+        </button>
+        <button
+          className={`flex items-center gap-1.5 px-4 py-2 text-sm font-medium transition-colors ${activeTab === "logs" ? "border-b-2 border-primary text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+          onClick={() => setActiveTab("logs")}
+        >
+          <ScrollText className="h-3.5 w-3.5" />
+          Logs
+        </button>
+      </div>
+
+      {/* Tab content */}
+      {activeTab === "timeline" ? (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Event Timeline</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <WorkflowTimeline workflowId={workflowId} />
+          </CardContent>
+        </Card>
+      ) : (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Workflow Logs</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <LogViewer workflowId={workflowId} showConfig={false} showStreamToggle={isActive} />
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

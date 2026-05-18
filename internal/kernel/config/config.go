@@ -145,8 +145,11 @@ type HTTPConfig struct {
 }
 
 type LogConfig struct {
-	Level  string `mapstructure:"level"`
-	Format string `mapstructure:"format"`
+	Level        string `mapstructure:"level"`
+	Format       string `mapstructure:"format"`
+	CaptureLevel string `mapstructure:"capture_level"`
+	RetentionDays int   `mapstructure:"retention_days"`
+	BufferSize   int    `mapstructure:"buffer_size"`
 }
 
 type TelemetryConfig struct {
@@ -390,6 +393,9 @@ func applyDefaults(v *viper.Viper) {
 
 	v.SetDefault("log.level", "info")
 	v.SetDefault("log.format", "json")
+	v.SetDefault("log.capture_level", "warn")
+	v.SetDefault("log.retention_days", 7)
+	v.SetDefault("log.buffer_size", 5000)
 
 	v.SetDefault("telemetry.prometheus", true)
 	v.SetDefault("telemetry.trace_ratio", 0.0)
@@ -507,6 +513,16 @@ func (c *Config) Validate() error {
 	case "json", "text":
 	default:
 		return fmt.Errorf("invalid log.format %q", c.Log.Format)
+	}
+	if c.Log.CaptureLevel != "" {
+		switch strings.ToLower(c.Log.CaptureLevel) {
+		case "debug", "info", "warn", "error":
+		default:
+			return fmt.Errorf("invalid log.capture_level %q", c.Log.CaptureLevel)
+		}
+	}
+	if c.Log.RetentionDays < 0 {
+		return fmt.Errorf("log.retention_days must be non-negative")
 	}
 	if c.HTTP.Addr == "" {
 		return fmt.Errorf("http.addr must not be empty")

@@ -63,6 +63,7 @@ func (e *Engine) StartSearch(ctx context.Context, wfType, mediaType, qualityProf
 		return nil, fmt.Errorf("create workflow: %w", err)
 	}
 
+	ctx = WithWorkflowID(ctx, wf.ID)
 	e.logger.Info("workflow started",
 		"id", wf.ID, "type", wfType, "media_type", mediaType,
 		"media_ids", mediaIDs)
@@ -71,6 +72,7 @@ func (e *Engine) StartSearch(ctx context.Context, wfType, mediaType, qualityProf
 
 // markGrabbed transitions a workflow from searching → grabbed and records download info.
 func (e *Engine) markGrabbed(ctx context.Context, workflowID, clientID, downloadID, title string) error {
+	ctx = WithWorkflowID(ctx, workflowID)
 	ok, err := e.store.Transition(ctx, workflowID, StateSearching, StateGrabbed, "Release grabbed: "+title)
 	if err != nil {
 		return fmt.Errorf("transition to grabbed: %w", err)
@@ -102,6 +104,7 @@ func (e *Engine) markGrabbed(ctx context.Context, workflowID, clientID, download
 
 // markDownloading transitions from grabbed → downloading (download client confirmed).
 func (e *Engine) markDownloading(ctx context.Context, workflowID string) error {
+	ctx = WithWorkflowID(ctx, workflowID)
 	ok, err := e.store.Transition(ctx, workflowID, StateGrabbed, StateDownloading, "Download started")
 	if err != nil {
 		return err
@@ -116,6 +119,7 @@ func (e *Engine) markDownloading(ctx context.Context, workflowID string) error {
 
 // markPostDownload transitions from downloading → post_download (download finished, awaiting seed/settle).
 func (e *Engine) markPostDownload(ctx context.Context, workflowID string) error {
+	ctx = WithWorkflowID(ctx, workflowID)
 	ok, err := e.store.Transition(ctx, workflowID, StateDownloading, StatePostDownload, "Download complete, post-download phase")
 	if err != nil {
 		return err
@@ -129,6 +133,7 @@ func (e *Engine) markPostDownload(ctx context.Context, workflowID string) error 
 
 // markImporting transitions from post_download → importing.
 func (e *Engine) markImporting(ctx context.Context, workflowID string) error {
+	ctx = WithWorkflowID(ctx, workflowID)
 	ok, err := e.store.Transition(ctx, workflowID, StatePostDownload, StateImporting, "Post-download complete, importing")
 	if err != nil {
 		return err
@@ -142,6 +147,7 @@ func (e *Engine) markImporting(ctx context.Context, workflowID string) error {
 
 // markCompleted transitions to completed (import successful).
 func (e *Engine) markCompleted(ctx context.Context, workflowID, message string) error {
+	ctx = WithWorkflowID(ctx, workflowID)
 	// Try from importing first (normal path)
 	ok, err := e.store.Transition(ctx, workflowID, StateImporting, StateCompleted, message)
 	if err != nil {
@@ -167,6 +173,7 @@ func (e *Engine) markCompleted(ctx context.Context, workflowID, message string) 
 
 // markFailed records failure and either retries or marks as permanently failed.
 func (e *Engine) markFailed(ctx context.Context, workflowID, errMsg string) error {
+	ctx = WithWorkflowID(ctx, workflowID)
 	wf, err := e.store.Get(ctx, workflowID)
 	if err != nil {
 		return err
@@ -212,6 +219,7 @@ func (e *Engine) markFailed(ctx context.Context, workflowID, errMsg string) erro
 
 // Cancel cancels an active workflow.
 func (e *Engine) Cancel(ctx context.Context, workflowID string) error {
+	ctx = WithWorkflowID(ctx, workflowID)
 	wf, err := e.store.Get(ctx, workflowID)
 	if err != nil {
 		return err
@@ -233,6 +241,7 @@ func (e *Engine) Cancel(ctx context.Context, workflowID string) error {
 
 // Retry restarts a failed workflow from searching (no download available).
 func (e *Engine) Retry(ctx context.Context, workflowID string) error {
+	ctx = WithWorkflowID(ctx, workflowID)
 	wf, err := e.store.Get(ctx, workflowID)
 	if err != nil {
 		return err
@@ -259,6 +268,7 @@ func (e *Engine) Retry(ctx context.Context, workflowID string) error {
 // RecoverToImporting transitions a failed workflow directly to importing.
 // Used when the download is already complete and only the import needs to run.
 func (e *Engine) RecoverToImporting(ctx context.Context, workflowID, reason string) error {
+	ctx = WithWorkflowID(ctx, workflowID)
 	if err := e.store.ResetRetry(ctx, workflowID); err != nil {
 		return fmt.Errorf("reset retry count: %w", err)
 	}
@@ -276,6 +286,7 @@ func (e *Engine) RecoverToImporting(ctx context.Context, workflowID, reason stri
 // RecoverToPostDownload transitions a failed workflow to post_download.
 // Used when the download is seeding and seed requirements need re-evaluation.
 func (e *Engine) RecoverToPostDownload(ctx context.Context, workflowID, reason string) error {
+	ctx = WithWorkflowID(ctx, workflowID)
 	if err := e.store.ResetRetry(ctx, workflowID); err != nil {
 		return fmt.Errorf("reset retry count: %w", err)
 	}
@@ -293,6 +304,7 @@ func (e *Engine) RecoverToPostDownload(ctx context.Context, workflowID, reason s
 // RecoverToDownloading transitions a failed workflow to downloading.
 // Used when the download is still active.
 func (e *Engine) RecoverToDownloading(ctx context.Context, workflowID, reason string) error {
+	ctx = WithWorkflowID(ctx, workflowID)
 	if err := e.store.ResetRetry(ctx, workflowID); err != nil {
 		return fmt.Errorf("reset retry count: %w", err)
 	}
@@ -328,6 +340,7 @@ func (e *Engine) StartImport(ctx context.Context, mediaType string, mediaIDs []s
 		return nil, fmt.Errorf("create import workflow: %w", err)
 	}
 
+	ctx = WithWorkflowID(ctx, wf.ID)
 	e.logger.Info("import workflow started",
 		"id", wf.ID, "media_type", mediaType, "grab_title", grabTitle)
 	return wf, nil
@@ -335,6 +348,7 @@ func (e *Engine) StartImport(ctx context.Context, mediaType string, mediaIDs []s
 
 // CompleteImport transitions an import workflow to completed.
 func (e *Engine) CompleteImport(ctx context.Context, workflowID string) error {
+	ctx = WithWorkflowID(ctx, workflowID)
 	ok, err := e.store.Transition(ctx, workflowID, StateImporting, StateCompleted, "Import completed")
 	if err != nil {
 		return err
@@ -347,6 +361,7 @@ func (e *Engine) CompleteImport(ctx context.Context, workflowID string) error {
 
 // FailImport transitions an import workflow to failed.
 func (e *Engine) FailImport(ctx context.Context, workflowID, reason string) error {
+	ctx = WithWorkflowID(ctx, workflowID)
 	ok, err := e.store.Transition(ctx, workflowID, StateImporting, StateFailed, reason)
 	if err != nil {
 		return err
