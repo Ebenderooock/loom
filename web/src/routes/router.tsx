@@ -120,7 +120,7 @@ const settingsRoute = createRoute({
   ),
   pendingComponent: PageLoader,
   errorComponent: ErrorFallback,
-  validateSearch: (search: Record<string, unknown>) => ({
+  validateSearch: (search: Record<string, unknown>): { trakt_code?: string } => ({
     trakt_code: (search.trakt_code as string) ?? undefined,
   }),
 });

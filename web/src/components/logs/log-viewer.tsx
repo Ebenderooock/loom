@@ -1,4 +1,3 @@
-import * as React from "react";
 import { useState, useRef, useEffect } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -190,7 +189,7 @@ function LogTable({ entries }: { entries: LogEntry[] }) {
         className="max-h-[500px] overflow-y-auto rounded-md border border-border bg-zinc-950 font-mono text-xs"
       >
         {entries.map((entry) => {
-          const style = LEVEL_STYLES[entry.level] ?? LEVEL_STYLES.info;
+          const style = (LEVEL_STYLES[entry.level] ?? LEVEL_STYLES.info)!;
           const expanded = expandedIds.has(entry.id);
           const hasAttrs = entry.attrs && entry.attrs !== "{}";
           const ts = new Date(entry.timestamp).toLocaleTimeString();
