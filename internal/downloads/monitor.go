@@ -313,6 +313,13 @@ func (m *Monitor) RunLoop(ctx context.Context) {
 	defer ticker.Stop()
 
 	m.logger.Info("monitor: starting polling loop", "interval", m.checkInterval)
+
+	// Run an immediate sweep on startup so downloads that completed
+	// during a restart are detected without waiting for the first tick.
+	if err := m.Run(ctx); err != nil {
+		m.logger.Error("monitor: initial sweep error", "error", err)
+	}
+
 	for {
 		select {
 		case <-ctx.Done():

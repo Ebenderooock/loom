@@ -764,15 +764,52 @@ searching → grabbed → downloading → post_download → importing → comple
 
 **What it does:** Periodic background sweep of all download clients to detect state changes.
 
-**Process (Monitor.Run):**
-1. Iterate all registered download clients.
-2. Fetch current item list from each client.
-3. Compare against known active grabs in database.
-4. Detect:
-   - **Completions** → `emitCompletions` → publish `downloads.completed` event.
-   - **Stalls** → `detectStalled` → publish `downloads.stalled` event.
-   - **Failures** → publish `downloads.retry` or `downloads.failed`.
-5. Notify workflow orchestrator (`MonitorOrchNotifier`) to transition workflow state.
+**Scheduling:** Polls every 30 seconds (configurable `CheckInterval`). Runs an immediate sweep on startup, then continues on a ticker loop. Started as a goroutine in `cmd/loom/wire_downloads.go`.
+
+**Process (Monitor.Run — single sweep):**
+1. Fan out `Status()` across all registered download clients.
+2. Log per-client errors but continue (partial failure tolerance).
+3. `emitCompletions()` — detect newly completed/seeding items.
+4. Forward progress updates to workflow orchestrator for downloading/paused/seeding/completed items.
+5. `detectStalled()` — detect stalled and failed downloads (if enabled).
+
+**Completion detection (`emitCompletions`):**
+1. Check each item for `StatusItemCompleted` or `StatusItemSeeding`.
+2. Deduplicate against `lastCompleted` in-memory map (key: `clientID:itemID`).
+3. Cross-restart idempotency via `HistoryStore.WasCompleted()` (persisted DB check).
+4. Publish `DownloadCompletedEvent` on event bus.
+5. Notify workflow orchestrator via `NotifyDownloadComplete()`.
+6. Persist completion in `HistoryStore.RecordCompletion()`.
+7. Update `lastCompleted` set for next sweep.
+
+**Stall detection (`detectStalled`):**
+1. Track `StatusItemDownloading` items with progress bytes/rate.
+2. On first sighting, store initial progress and timestamp.
+3. If progress changes between sweeps, reset the stall timer.
+4. If progress is unchanged for `StallTimeout` (default 30 minutes), mark as stalled and invoke `StallHandler`.
+5. `StatusItemFailed` items are immediately handled via `StallHandler` (once per item).
+6. Prune tracking state for items no longer active.
+
+**Events published:**
+
+| Event | Description |
+|-------|-------------|
+| `downloads.completed` | Download finished — triggers import workflow |
+| `downloads.stalled` | Download stalled (no progress for timeout period) |
+| `downloads.retry` | Stalled download being retried |
+| `downloads.failed` | Download failed |
+| `downloads.queued` | New download queued (published elsewhere) |
+
+**Workflow orchestrator integration:**
+- `NotifyDownloadComplete()` → sends `CmdDownloadComplete` to orchestrator
+- `NotifyDownloadProgress()` → sends `CmdDownloadProgress` with rate/ratio/status
+- `NotifyDownloadRemoved()` → sends `CmdDownloadRemoved`
+- Progress is forwarded for `Downloading`, `Paused`, `Seeding`, `Completed` states
+
+**State tracking (in-memory):**
+- `lastCompleted` — set of `clientID:itemID` seen as completed in previous sweep
+- `lastProgress` — per-item progress bytes, download rate, and timestamp for stall detection
+- `stalledEmitted` — per-item flag to avoid duplicate stall notifications
 
 **Expected outcomes:**
 - Completed downloads are detected and trigger import workflows.
@@ -783,6 +820,11 @@ searching → grabbed → downloading → post_download → importing → comple
 - Client unreachable → monitor skips client, logs error.
 - Active grab record missing in DB → completion not matched.
 - Race condition between monitor sweep and manual user actions.
+
+**Known limitations:**
+- `HistoryStore.WasCompleted()` uses only `(client_id, download_id)` — if a client reuses IDs, deduplication may misfire.
+- `lastCompleted` is in-memory only; cross-restart idempotency relies entirely on the history table.
+- Event bus publish errors are silently ignored.
 
 ---
 
