@@ -316,7 +316,11 @@ func (s *Service) handlePatch(w http.ResponseWriter, r *http.Request) {
 func (s *Service) handleDelete(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	if err := s.Delete(r.Context(), id); err != nil {
-		writeError(w, http.StatusInternalServerError, "delete_failed", err.Error())
+		if errors.Is(err, ErrNotFound) {
+			writeError(w, http.StatusNotFound, "not_found", err.Error())
+		} else {
+			writeError(w, http.StatusInternalServerError, "delete_failed", err.Error())
+		}
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -875,7 +879,7 @@ func (s *Service) handleActivityDetail(w http.ResponseWriter, r *http.Request) {
 	if dp, ok := c.(DetailProvider); ok {
 		detail, err := dp.Detail(r.Context(), itemID)
 		if err != nil {
-			writeError(w, http.StatusNotFound, "not_found", err.Error())
+			writeError(w, http.StatusBadGateway, "detail_failed", err.Error())
 			return
 		}
 		writeJSON(w, http.StatusOK, detail)

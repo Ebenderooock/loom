@@ -472,16 +472,91 @@ Each scanned media file is tracked with: `id`, `library_id`, `path` (unique), `s
 
 **API:** `/api/v1/download-clients` — CRUD, test, categories, free-space, items, pause/resume/remove/priority/speed-limit/force-start/recheck/reannounce.
 
-**Supported clients:**
-- **Torrent:** qBittorrent, Transmission, Deluge
-- **Usenet:** SABnzbd, NZBGet
+**API endpoints:**
 
-**Key features:**
-- Live client registry — clients are hydrated at startup and kept alive.
-- Health tracking with circuit-breaker.
-- Free space monitoring.
-- Category management.
-- Per-item control: pause, resume, remove, set priority, speed limit, force start, recheck, reannounce.
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/v1/download-clients/` | List all clients with health info. |
+| `POST` | `/api/v1/download-clients/` | Create download client. |
+| `POST` | `/api/v1/download-clients/test` | Test unsaved client config. |
+| `GET` | `/api/v1/download-clients/{id}/` | Get single client with health. |
+| `PUT` | `/api/v1/download-clients/{id}/` | Replace client definition. |
+| `PATCH` | `/api/v1/download-clients/{id}/` | Partial update of client fields. |
+| `DELETE` | `/api/v1/download-clients/{id}/` | Delete client (returns 404 if not found). |
+| `POST` | `/api/v1/download-clients/{id}/test` | Test saved client connectivity. |
+| `GET` | `/api/v1/download-clients/{id}/categories` | List categories from client. |
+| `GET` | `/api/v1/download-clients/{id}/free-space` | Get free space from client. |
+| `GET` | `/api/v1/download-clients/{id}/items` | Get status of items (filter by `ids` query param). |
+| `POST` | `/api/v1/download-clients/{id}/items` | Add/grab a release to client. |
+| `POST` | `/api/v1/download-clients/{id}/pause` | Pause item(s). |
+| `POST` | `/api/v1/download-clients/{id}/resume` | Resume item(s). |
+| `POST` | `/api/v1/download-clients/{id}/remove` | Remove item(s). |
+| `POST` | `/api/v1/download-clients/{id}/set-priority` | Set item priority. |
+| `POST` | `/api/v1/download-clients/{id}/set-speed-limit` | Set speed limit. |
+| `POST` | `/api/v1/download-clients/{id}/force-start` | Force start item. |
+| `POST` | `/api/v1/download-clients/{id}/recheck` | Recheck item. |
+| `POST` | `/api/v1/download-clients/{id}/reannounce` | Reannounce to tracker. |
+| `GET` | `/api/v1/activity` | Activity queue across all clients. |
+| `POST` | `/api/v1/activity/pause` | Pause activity items. |
+| `POST` | `/api/v1/activity/resume` | Resume activity items. |
+| `POST` | `/api/v1/activity/remove` | Remove activity items. |
+| `GET` | `/api/v1/activity/detail` | Get detailed item info (tracker/peer/file details). |
+| `GET` | `/api/v1/downloads/history` | Download history. |
+
+**Supported client types:**
+
+| Kind | Protocol | Description |
+|------|----------|-------------|
+| `qbittorrent` | torrent | qBittorrent WebUI API |
+| `transmission` | torrent | Transmission RPC |
+| `deluge` | torrent | Deluge JSON-RPC |
+| `sabnzbd` | usenet | SABnzbd API |
+| `nzbget` | usenet | NZBGet JSON-RPC |
+| `builtin/torrent` | torrent | Built-in torrent client |
+| `builtin/null` | — | No-op null client for testing |
+
+**Download client model fields:**
+
+| Field | Description |
+|-------|-------------|
+| `id` | UUID |
+| `name` | Display name |
+| `kind` | Client type (see above) |
+| `protocol` | `torrent` or `usenet` |
+| `enabled` | Whether client is active |
+| `priority` | Selection priority (default 25, lower = higher priority) |
+| `host` / `port` / `tls` | Connection details |
+| `username` / `password` | Auth credentials |
+| `config` | JSON — client-specific settings |
+| `category_default` | Default category for new downloads |
+| `save_path_default` | Default save path |
+| `remove_completed` | Auto-remove completed downloads |
+| `remove_failed` | Auto-remove failed downloads |
+| `created_at` / `updated_at` | Timestamps |
+
+**Health tracking:**
+
+| Field | Description |
+|-------|-------------|
+| `client_id` | Client UUID |
+| `status` | `unknown`, `ok`, `degraded`, `failed` |
+| `last_checked_at` | Last health check time |
+| `last_success_at` / `last_failure_at` | Last success/failure time |
+| `last_error` | Last error message |
+| `consecutive_failures` | Failure counter |
+| `last_free_space_bytes` | Last known free space |
+| `last_categories` | Last known categories (JSON) |
+
+**Test connectivity:**
+- Saved client: calls `client.Test(ctx)` with timeout, persists health, records categories and free space on success.
+- Unsaved config: builds ephemeral client from request body, runs `Test()`, returns `{ok, error}`.
+
+**Key behaviours:**
+- Clients are hydrated into a live registry at startup.
+- Free space and categories are captured during health checks.
+- Per-item control endpoints support pause, resume, remove, priority, speed limit, force start, recheck, reannounce.
+- Activity endpoints aggregate items across all registered clients.
+- `DetailProvider` interface provides rich item info (tracker details, peer lists, file trees) for supported clients.
 
 **Expected outcomes:**
 - Client shows healthy with free space stats.
@@ -493,6 +568,9 @@ Each scanned media file is tracked with: `id`, `library_id`, `path` (unique), `s
 - Authentication failure.
 - Insufficient disk space → download may stall.
 - Client-specific API incompatibilities.
+
+**Known limitations:**
+- Priority-based client selection (`sortClientsByPriority`) is stubbed — clients are used in registry insertion order. TODO: Add `Priority()` to `DownloadClient` interface.
 
 ---
 
