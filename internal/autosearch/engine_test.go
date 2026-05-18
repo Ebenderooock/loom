@@ -329,7 +329,7 @@ func TestEvaluateResult_QualityFiltering(t *testing.T) {
 			Seeders: intPtr(10),
 			Size:    2 * 1024 * 1024 * 1024,
 		}
-		sr := engine.evaluateResult(SearchRequest{}, res, defs, allowedMap, allowedDefs, formatScores, &qualityprofiles.QualityProfile{}, existingQuality{}, -1)
+		sr := engine.evaluateResult(SearchRequest{}, res, defs, allowedMap, allowedDefs, formatScores, &qualityprofiles.QualityProfile{}, existingQuality{}, -1, false)
 		if sr.Rejected {
 			t.Errorf("expected not rejected, got rejected: %s", sr.RejectReason)
 		}
@@ -344,7 +344,7 @@ func TestEvaluateResult_QualityFiltering(t *testing.T) {
 			Seeders: intPtr(10),
 			Size:    1024 * 1024 * 1024,
 		}
-		sr := engine.evaluateResult(SearchRequest{}, res, defs, allowedMap, allowedDefs, formatScores, &qualityprofiles.QualityProfile{}, existingQuality{}, -1)
+		sr := engine.evaluateResult(SearchRequest{}, res, defs, allowedMap, allowedDefs, formatScores, &qualityprofiles.QualityProfile{}, existingQuality{}, -1, false)
 		if !sr.Rejected {
 			t.Error("expected rejected for disallowed quality")
 		}
@@ -359,7 +359,7 @@ func TestEvaluateResult_QualityFiltering(t *testing.T) {
 			Seeders: intPtr(0),
 			Size:    2 * 1024 * 1024 * 1024,
 		}
-		sr := engine.evaluateResult(SearchRequest{}, res, defs, allowedMap, allowedDefs, formatScores, &qualityprofiles.QualityProfile{}, existingQuality{}, -1)
+		sr := engine.evaluateResult(SearchRequest{}, res, defs, allowedMap, allowedDefs, formatScores, &qualityprofiles.QualityProfile{}, existingQuality{}, -1, false)
 		if !sr.Rejected {
 			t.Error("expected rejected for zero seeders")
 		}
@@ -391,7 +391,7 @@ func TestEvaluateResult_SizeFiltering(t *testing.T) {
 			Seeders: intPtr(10),
 			Size:    500 * 1024 * 1024, // 500MB
 		}
-		sr := engine.evaluateResult(SearchRequest{}, res, defs, allowedMap, allowedDefs, formatScores, &qualityprofiles.QualityProfile{}, existingQuality{}, -1)
+		sr := engine.evaluateResult(SearchRequest{}, res, defs, allowedMap, allowedDefs, formatScores, &qualityprofiles.QualityProfile{}, existingQuality{}, -1, false)
 		if !sr.Rejected {
 			t.Error("expected rejected for below min size")
 		}
@@ -406,7 +406,7 @@ func TestEvaluateResult_SizeFiltering(t *testing.T) {
 			Seeders: intPtr(10),
 			Size:    60 * 1024 * 1024 * 1024, // 60GB
 		}
-		sr := engine.evaluateResult(SearchRequest{}, res, defs, allowedMap, allowedDefs, formatScores, &qualityprofiles.QualityProfile{}, existingQuality{}, -1)
+		sr := engine.evaluateResult(SearchRequest{}, res, defs, allowedMap, allowedDefs, formatScores, &qualityprofiles.QualityProfile{}, existingQuality{}, -1, false)
 		if !sr.Rejected {
 			t.Error("expected rejected for above max size")
 		}
@@ -435,7 +435,7 @@ func TestEvaluateResult_MinFormatScore(t *testing.T) {
 			Size:    2 * 1024 * 1024 * 1024,
 		}
 		profile := &qualityprofiles.QualityProfile{MinFormatScore: 100}
-		sr := engine.evaluateResult(SearchRequest{}, res, defs, allowedMap, allowedDefs, formatScores, profile, existingQuality{}, -1)
+		sr := engine.evaluateResult(SearchRequest{}, res, defs, allowedMap, allowedDefs, formatScores, profile, existingQuality{}, -1, false)
 		if !sr.Rejected {
 			t.Error("expected rejected for below min format score")
 		}
@@ -451,7 +451,7 @@ func TestEvaluateResult_MinFormatScore(t *testing.T) {
 			Size:    2 * 1024 * 1024 * 1024,
 		}
 		profile := &qualityprofiles.QualityProfile{MinFormatScore: 0}
-		sr := engine.evaluateResult(SearchRequest{}, res, defs, allowedMap, allowedDefs, formatScores, profile, existingQuality{}, -1)
+		sr := engine.evaluateResult(SearchRequest{}, res, defs, allowedMap, allowedDefs, formatScores, profile, existingQuality{}, -1, false)
 		if sr.Rejected {
 			t.Errorf("expected not rejected, got: %s", sr.RejectReason)
 		}

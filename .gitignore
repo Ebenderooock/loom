@@ -43,3 +43,5 @@ web/playwright-report/
 web/test-results/
 web/*.tsbuildinfo
 run/data/
+website/node_modules/
+website/dist/

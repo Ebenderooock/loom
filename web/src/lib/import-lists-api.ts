@@ -8,6 +8,9 @@ import { apiFetch } from "@/lib/fetch";
 export type ListType =
   | "trakt_list"
   | "trakt_watchlist"
+  | "trakt_popular"
+  | "trakt_trending"
+  | "trakt_anticipated"
   | "imdb_list"
   | "imdb_watchlist"
   | "tmdb_list"
@@ -241,6 +244,25 @@ export async function deleteExclusion(id: string): Promise<void> {
   );
 }
 
+// ---------- Trakt user lists ----------
+
+export interface TraktUserList {
+  name: string;
+  slug: string;
+}
+
+export async function fetchTraktUserLists(
+  signal?: AbortSignal,
+): Promise<TraktUserList[]> {
+  const data = await request<{ data: TraktUserList[] }>(
+    "GET",
+    "/api/v1/import-lists/trakt/lists",
+    undefined,
+    signal,
+  );
+  return data?.data ?? [];
+}
+
 // ---------- Query keys ----------
 
 export const importListKeys = {
@@ -248,6 +270,7 @@ export const importListKeys = {
   list: () => [...importListKeys.all, "list"] as const,
   detail: (id: string) => [...importListKeys.all, "detail", id] as const,
   exclusions: () => [...importListKeys.all, "exclusions"] as const,
+  traktLists: () => [...importListKeys.all, "trakt-lists"] as const,
 };
 
 // ---------- React Query hooks ----------
@@ -330,25 +353,47 @@ export function useDeleteExclusion() {
   });
 }
 
+export function useTraktUserLists(enabled = true) {
+  return useQuery<TraktUserList[], Error>({
+    queryKey: importListKeys.traktLists(),
+    queryFn: ({ signal }) => fetchTraktUserLists(signal),
+    enabled,
+  });
+}
+
 // ---------- List type metadata ----------
 
 export const LIST_TYPES: {
   value: ListType;
   label: string;
-  mediaType: MediaType;
+  mediaType?: MediaType;
   fields: string[];
+  urlPlaceholder?: string;
 }[] = [
   {
     value: "trakt_list",
     label: "Trakt List",
-    mediaType: "movie",
-    fields: ["url", "api_key", "access_token"],
+    fields: ["trakt_list_picker"],
   },
   {
     value: "trakt_watchlist",
     label: "Trakt Watchlist",
-    mediaType: "movie",
-    fields: ["api_key", "access_token"],
+    fields: [],
+  },
+  {
+    value: "trakt_popular",
+    label: "Trakt Popular",
+    fields: [],
+  },
+  {
+    value: "trakt_trending",
+    label: "Trakt Trending",
+    fields: [],
+  },
+  {
+    value: "trakt_anticipated",
+    label: "Trakt Anticipated",
+    fields: [],
   },
   {
     value: "imdb_list",
@@ -366,13 +411,13 @@ export const LIST_TYPES: {
     value: "tmdb_list",
     label: "TMDb List",
     mediaType: "movie",
-    fields: ["url", "api_key"],
+    fields: ["url"],
   },
   {
     value: "tmdb_popular",
     label: "TMDb Popular",
     mediaType: "movie",
-    fields: ["api_key"],
+    fields: [],
   },
   {
     value: "plex_watchlist",

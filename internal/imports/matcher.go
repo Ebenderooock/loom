@@ -5,12 +5,12 @@ import (
 	"fmt"
 	"path/filepath"
 	"regexp"
-	"strconv"
 	"strings"
 	"unicode"
 
 	"github.com/ebenderooock/loom/internal/libraries"
 	"github.com/ebenderooock/loom/internal/movies"
+	"github.com/ebenderooock/loom/internal/parser"
 	"github.com/ebenderooock/loom/internal/series"
 )
 
@@ -19,11 +19,17 @@ type Matcher struct {
 	moviesSvc  movies.Service
 	seriesSvc  series.Service
 	libStore   *libraries.Store
+	altMatcher *AltTitleMatcher
 }
 
 // NewMatcher creates a Matcher backed by the movies and series services.
 func NewMatcher(moviesSvc movies.Service, seriesSvc series.Service, libStore *libraries.Store) *Matcher {
 	return &Matcher{moviesSvc: moviesSvc, seriesSvc: seriesSvc, libStore: libStore}
+}
+
+// SetAltTitleMatcher installs an alternative-title fallback matcher.
+func (m *Matcher) SetAltTitleMatcher(alt *AltTitleMatcher) {
+	m.altMatcher = alt
 }
 
 // parsedRelease holds the extracted metadata from a release name.
@@ -37,66 +43,78 @@ type parsedRelease struct {
 
 // Patterns for matching season/episode from release names.
 var (
-	// S01E02, s01e02
-	reSeasonEpisode = regexp.MustCompile(`(?i)[Ss](\d{1,2})[Ee](\d{1,3})`)
-	// Year in title: (2023) or .2023. or _2023_ or -2023-
-	reYear = regexp.MustCompile(`[\.\s\(_\-]?((?:19|20)\d{2})[\.\s\)_\-]?`)
 	// Release group suffix: -GROUP at end of name. Must be 4+ alpha chars
 	// (optionally followed by digits) to avoid stripping season markers like -S01.
 	reGroup = regexp.MustCompile(`(?i)\s*-\s*[a-z]{2,}[a-z0-9]*$`)
 )
 
 // parseReleaseName extracts title, year, season, and episode from a release name.
+// Delegates to the canonical parser package for extraction, then maps to the
+// local parsedRelease struct used by the matcher.
 func parseReleaseName(name string) parsedRelease {
+	r := parser.Parse(name)
+
+	var p parsedRelease
+	p.Year = r.Year
+	p.Season = r.Season
+	p.Episode = r.Episode
+
+	// Determine if this is a series (has season/episode info, season pack, daily date, or absolute episode)
+	if r.Season >= 0 || r.Episode >= 0 || r.IsSeasonPack || r.DailyDate != "" || r.AbsoluteEpisode >= 0 {
+		p.IsSeries = true
+	}
+
+	// Use the parser's cleaned title, but fall back to our own cleanTitle
+	// for backward compatibility with the matcher's title-cleaning logic
+	// (strip year, quality tags differently for fuzzy matching).
+	p.Title = cleanTitleFromParser(name, r)
+
+	return p
+}
+
+// cleanTitleFromParser builds a clean title for matching using parser results.
+func cleanTitleFromParser(name string, r *parser.Release) string {
 	// Remove file extension
 	name = strings.TrimSuffix(name, filepath.Ext(name))
 
 	// Strip bracket-enclosed tags early: [1080p], [BluRay], etc.
 	name = regexp.MustCompile(`\[([^\]]*)\]`).ReplaceAllStringFunc(name, func(m string) string {
 		inner := m[1 : len(m)-1]
-		// Keep bracketed content that looks like a year
 		if regexp.MustCompile(`^(19|20)\d{2}$`).MatchString(inner) {
-			return inner // remove brackets, keep year
+			return inner
 		}
-		return "" // strip tag
+		return ""
 	})
 
-	var p parsedRelease
+	var title string
 
-	// Check for season/episode pattern
-	if m := reSeasonEpisode.FindStringSubmatchIndex(name); m != nil {
-		p.IsSeries = true
-		p.Season, _ = strconv.Atoi(name[m[2]:m[3]])
-		p.Episode, _ = strconv.Atoi(name[m[4]:m[5]])
-		// Title is everything before the S01E02 pattern
+	// If series with S##E## pattern, title is everything before it
+	seRe := regexp.MustCompile(`(?i)[Ss](\d{1,2})[Ee](\d{1,3})`)
+	if m := seRe.FindStringSubmatchIndex(name); m != nil && r.Season >= 0 && r.Episode >= 0 {
 		titlePart := strings.TrimSpace(name[:m[0]])
-		p.Title = cleanTitle(titlePart)
+		title = cleanTitle(titlePart)
 	} else {
-		p.Title = cleanTitle(name)
+		title = cleanTitle(name)
 	}
 
-	// Extract year — match "(2016)" or ".2016." or " 2016 " etc.
-	if m := reYear.FindStringSubmatch(name); len(m) > 1 {
+	// Extract year string for removal
+	yearRe := regexp.MustCompile(`[\.\s\(_\-]?((?:19|20)\d{2})[\.\s\)_\-]?`)
+	if m := yearRe.FindStringSubmatch(name); len(m) > 1 && r.Year > 0 {
 		yearStr := m[1]
-		p.Year, _ = strconv.Atoi(yearStr)
-
-		// Remove year from title, including surrounding parens if present.
-		// Handle "(2016)", "( 2016 )", and bare "2016".
 		yearWithParens := regexp.MustCompile(`\(\s*` + yearStr + `\s*\)`)
-		if yearWithParens.MatchString(p.Title) {
-			p.Title = yearWithParens.ReplaceAllString(p.Title, "")
+		if yearWithParens.MatchString(title) {
+			title = yearWithParens.ReplaceAllString(title, "")
 		} else {
-			// Only strip bare year if it's NOT the first word (avoids eating "2001" from "2001 A Space Odyssey")
-			trimmed := strings.TrimSpace(p.Title)
+			trimmed := strings.TrimSpace(title)
 			if !strings.HasPrefix(trimmed, yearStr) {
-				p.Title = strings.Replace(p.Title, yearStr, "", 1)
+				title = strings.Replace(title, yearStr, "", 1)
 			}
 		}
-		p.Title = strings.TrimSpace(p.Title)
-		p.Title = strings.TrimRight(p.Title, " -.")
+		title = strings.TrimSpace(title)
+		title = strings.TrimRight(title, " -.")
 	}
 
-	return p
+	return title
 }
 
 // cleanTitle normalises a release title: replaces dots/underscores with
@@ -106,6 +124,9 @@ func parseReleaseName(name string) parsedRelease {
 func cleanTitle(raw string) string {
 	// Strip release group suffix (e.g., "-GROUP") before separator replacement
 	s := reGroup.ReplaceAllString(raw, "")
+
+	// Collapse acronyms (e.g., "M.I.A" → "MIA") before dot-to-space replacement
+	s = collapseAcronyms(s)
 
 	// Replace dots, underscores, and hyphens with spaces
 	s = strings.NewReplacer(".", " ", "_", " ", "-", " ").Replace(s)
@@ -188,6 +209,18 @@ func (m *Matcher) matchMovie(ctx context.Context, p parsedRelease) (*MatchResult
 
 	best := fuzzyMatchMovie(results, p)
 	if best == nil {
+		// Fallback: try alternative titles
+		if m.altMatcher != nil {
+			altMovie, err := m.altMatcher.MatchMovieByAltTitle(ctx, p.Title, p.Year)
+			if err != nil {
+				return nil, fmt.Errorf("alt title match: %w", err)
+			}
+			if altMovie != nil {
+				best = altMovie
+			}
+		}
+	}
+	if best == nil {
 		return &MatchResult{Matched: false}, nil
 	}
 
@@ -215,6 +248,18 @@ func (m *Matcher) matchSeries(ctx context.Context, p parsedRelease) (*MatchResul
 	}
 
 	best := fuzzyMatchSeries(candidates, p)
+	if best == nil {
+		// Fallback: try alternative titles
+		if m.altMatcher != nil {
+			altSeries, err := m.altMatcher.MatchSeriesByAltTitle(ctx, p.Title, p.Year)
+			if err != nil {
+				return nil, fmt.Errorf("alt title match: %w", err)
+			}
+			if altSeries != nil {
+				best = altSeries
+			}
+		}
+	}
 	if best == nil {
 		return &MatchResult{Matched: false}, nil
 	}
@@ -378,59 +423,170 @@ func fuzzyMatchSeries(candidates []*series.Series, p parsedRelease) *series.Seri
 }
 
 // titleSimilarity returns a 0-100 score for how similar two titles are.
+// Uses a combination of exact match, substring containment, and token
+// overlap with stop-word removal. Takes the best score across methods.
 func titleSimilarity(a, b string) int {
-	a = normalise(a)
-	b = normalise(b)
-	if a == b {
+	na := normalise(a)
+	nb := normalise(b)
+
+	// Exact normalised match
+	if na == nb {
 		return 100
 	}
-	if strings.Contains(a, b) || strings.Contains(b, a) {
-		shorter := len(a)
-		if len(b) < shorter {
-			shorter = len(b)
-		}
-		longer := len(a)
-		if len(b) > longer {
-			longer = len(b)
-		}
-		if longer == 0 {
-			return 0
-		}
-		return shorter * 100 / longer
-	}
 
-	// Word overlap score
-	aWords := strings.Fields(a)
-	bWords := strings.Fields(b)
-	if len(aWords) == 0 || len(bWords) == 0 {
-		return 0
-	}
-	matches := 0
-	for _, aw := range aWords {
-		for _, bw := range bWords {
-			if aw == bw {
-				matches++
-				break
+	best := 0
+
+	// Substring containment (character-level)
+	if strings.Contains(na, nb) || strings.Contains(nb, na) {
+		shorter := len(na)
+		if len(nb) < shorter {
+			shorter = len(nb)
+		}
+		longer := len(na)
+		if len(nb) > longer {
+			longer = len(nb)
+		}
+		if longer > 0 {
+			score := shorter * 100 / longer
+			if score > best {
+				best = score
 			}
 		}
 	}
-	total := len(aWords)
-	if len(bWords) > total {
-		total = len(bWords)
+
+	// Token-level scoring with stop words removed
+	aToks := tokenize(a)
+	bToks := tokenize(b)
+	if len(aToks) == 0 || len(bToks) == 0 {
+		return best
 	}
-	return matches * 100 / total
+
+	// Build sets for accurate intersection
+	aSet := make(map[string]bool, len(aToks))
+	for _, w := range aToks {
+		aSet[w] = true
+	}
+	bSet := make(map[string]bool, len(bToks))
+	for _, w := range bToks {
+		bSet[w] = true
+	}
+
+	intersection := 0
+	for w := range aSet {
+		if bSet[w] {
+			intersection++
+		}
+	}
+
+	// Containment: fraction of the SMALLER set found in the larger.
+	// Handles "Punisher" matching "Marvels Punisher" (1/1 = 100%).
+	minSize := len(aSet)
+	if len(bSet) < minSize {
+		minSize = len(bSet)
+	}
+	if minSize > 0 {
+		containment := intersection * 100 / minSize
+		if containment > best {
+			best = containment
+		}
+	}
+
+	// Jaccard: intersection / union. Penalizes noisy titles.
+	union := len(aSet)
+	for w := range bSet {
+		if !aSet[w] {
+			union++
+		}
+	}
+	if union > 0 {
+		jaccard := intersection * 100 / union
+		if jaccard > best {
+			best = jaccard
+		}
+	}
+
+	return best
 }
 
-// normalise lowercases and strips non-alphanumeric characters (except spaces).
+// normalise lowercases, expands common symbols, strips possessives,
+// and removes non-alphanumeric characters (except spaces).
 func normalise(s string) string {
 	s = strings.ToLower(s)
+	// Collapse acronyms: "m.i.a" → "mia", "m i a" → "mia"
+	s = collapseAcronyms(s)
+	// Expand meaningful punctuation before stripping
+	s = strings.ReplaceAll(s, "&", " and ")
+	// Strip possessives: "marvel's" → "marvels"
+	s = strings.ReplaceAll(s, "'s", "s")
+	s = strings.ReplaceAll(s, "\u2019s", "s") // curly apostrophe
 	var b strings.Builder
 	for _, r := range s {
 		if unicode.IsLetter(r) || unicode.IsDigit(r) || r == ' ' {
 			b.WriteRune(r)
 		}
 	}
-	return strings.TrimSpace(b.String())
+	result := strings.TrimSpace(b.String())
+	// Collapse whitespace
+	result = regexp.MustCompile(`\s+`).ReplaceAllString(result, " ")
+	return result
+}
+
+// stopWords are common words removed from token-level scoring to avoid
+// diluting match quality.
+var stopWords = map[string]bool{
+	"the": true, "a": true, "an": true, "and": true, "or": true,
+	"of": true, "in": true, "to": true, "for": true, "is": true,
+}
+
+// tokenize splits a normalised string into meaningful words, removing stop words.
+func tokenize(s string) []string {
+	words := strings.Fields(normalise(s))
+	out := make([]string, 0, len(words))
+	for _, w := range words {
+		if !stopWords[w] && len(w) > 0 {
+			out = append(out, w)
+		}
+	}
+	return out
+}
+
+// collapseAcronyms replaces dot-separated single-letter sequences
+// (e.g., "M.I.A" → "MIA", "S.H.I.E.L.D." → "SHIELD") and also
+// space-separated single-letter sequences (e.g., "M I A" → "MIA")
+// so they match regardless of separator style.
+func collapseAcronyms(s string) string {
+	// Dot-separated: "M.I.A" or "M.I.A."
+	dotRe := regexp.MustCompile(`(?:^|[^A-Za-z])((?:[A-Za-z]\.){2,}[A-Za-z]?)`)
+	s = dotRe.ReplaceAllStringFunc(s, func(m string) string {
+		prefix := ""
+		start := 0
+		if len(m) > 0 && !unicode.IsLetter(rune(m[0])) {
+			prefix = string(m[0])
+			start = 1
+		}
+		return prefix + strings.ReplaceAll(m[start:], ".", "")
+	})
+
+	// Space-separated single letters: "M I A" but not "A Beautiful Mind"
+	// Only match if ALL tokens are single letters and there are 2+
+	spaceRe := regexp.MustCompile(`(?:^|[^A-Za-z])((?:[A-Za-z] ){2,}[A-Za-z])(?:[^A-Za-z]|$)`)
+	s = spaceRe.ReplaceAllStringFunc(s, func(m string) string {
+		prefix := ""
+		suffix := ""
+		start := 0
+		end := len(m)
+		if len(m) > 0 && !unicode.IsLetter(rune(m[0])) {
+			prefix = string(m[0])
+			start = 1
+		}
+		if end > 0 && !unicode.IsLetter(rune(m[end-1])) {
+			suffix = string(m[end-1])
+			end--
+		}
+		return prefix + strings.ReplaceAll(m[start:end], " ", "") + suffix
+	})
+
+	return s
 }
 
 // sanitizeDirName replaces characters that are invalid in directory names.

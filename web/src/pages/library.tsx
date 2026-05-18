@@ -5,6 +5,7 @@ import {
   MoreHorizontal,
   Plus,
   RefreshCw,
+  Loader2,
   Trash2,
   Pencil,
   ChevronRight,
@@ -151,7 +152,7 @@ export function LibraryPage() {
       <div className="flex justify-end gap-2">
         {libraries && libraries.length > 0 && (
           <Button variant="outline" onClick={handleRescanAll} disabled={rescanningAll}>
-            <RefreshCw className={`mr-2 h-4 w-4 ${rescanningAll ? "animate-spin" : ""}`} />
+            {rescanningAll ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
             {rescanningAll ? "Scanning..." : "Rescan All"}
           </Button>
         )}

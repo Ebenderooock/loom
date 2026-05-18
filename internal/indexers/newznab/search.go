@@ -11,12 +11,20 @@ import (
 )
 
 // Search implements indexers.Indexer. The mode (`search`, `tvsearch`,
-// `movie`) is chosen from the Query: presence of imdb/tmdb routes us
-// to `movie`, presence of tvdb/season to `tvsearch`, otherwise plain
-// `search`.
+// `movie`) is chosen from the Query: explicit Mode takes precedence,
+// then presence of imdb/tmdb routes to `movie`, tvdb/season to
+// `tvsearch`, otherwise plain `search`.
+//
+// Returns nil results (not an error) when the query requires a mode or
+// ID scheme the indexer doesn't support — the caller should skip to
+// the next query in the chain rather than marking the indexer as failed.
 func (c *Client) Search(ctx context.Context, q indexers.Query) (*indexers.Results, error) {
 	caps := c.Caps()
-	mode, params := buildQuery(q, c.cfg, caps)
+	mode, params, ok := buildQuery(q, c.cfg, caps)
+	if !ok {
+		// Indexer can't service this query — return empty, not an error.
+		return &indexers.Results{IndexerID: c.id}, nil
+	}
 	body, err := c.get(ctx, c.buildURL(mode, params))
 	if err != nil {
 		return nil, err
@@ -29,66 +37,119 @@ func (c *Client) Search(ctx context.Context, q indexers.Query) (*indexers.Result
 }
 
 // buildQuery picks the search mode and packs Query into URL values.
-// When caps are known (non-empty), the mode and ID params are
-// restricted to what the indexer actually supports. Empty caps are
-// treated as "unknown — allow everything" to avoid regressing when
-// caps fetch failed.
-func buildQuery(q indexers.Query, cfg Config, caps indexers.Caps) (mode string, params url.Values) {
+//
+// The third return value (ok) is false when the indexer cannot service
+// the query — e.g. the required mode isn't in caps, or a required ID
+// scheme isn't supported. The caller should skip this query rather
+// than treating it as an error.
+//
+// Key behaviors ported from the Arr stack:
+//   - Explicit Mode on Query takes precedence over inference.
+//   - ID-based queries (TVDB/IMDB/TMDB) are only sent if the indexer
+//     supports the corresponding ID scheme; if none of the query's IDs
+//     are supported AND the query has no text term, ok=false.
+//   - The q= parameter uses the RAW title (not sanitized/normalized).
+//     url.Values handles URL-encoding.
+//   - For movie text fallback, Year is appended to the term.
+//   - For daily shows, DailyDate is encoded as season=YYYY&ep=MM/DD.
+func buildQuery(q indexers.Query, cfg Config, caps indexers.Caps) (mode string, params url.Values, ok bool) {
 	params = url.Values{}
-	mode = chooseMode(q, caps)
-	if t := strings.TrimSpace(q.Term); t != "" {
-		params.Set("q", t)
+	mode = resolveMode(q, caps)
+
+	// If the resolved mode isn't supported by caps, bail.
+	if !capsSupportsMode(caps, mode) {
+		return "", nil, false
 	}
+
+	// Build the q= term. Use the raw title — do NOT sanitize.
+	term := strings.TrimSpace(q.Term)
+	if term != "" {
+		qVal := term
+		// Radarr appends year to movie text queries.
+		if mode == "search" && q.Year > 0 {
+			qVal = term + " " + strconv.Itoa(q.Year)
+		}
+		params.Set("q", qVal)
+	}
+
 	if cats := pickCategories(q, cfg); len(cats) > 0 {
 		params.Set("cat", strings.Join(cats, ","))
 	}
-	// Only include ID params the indexer supports (or all if caps unknown).
+
+	// External IDs — only include what the indexer supports.
+	hasAnyID := false
 	if id := strings.TrimPrefix(strings.TrimSpace(q.IMDBID), "tt"); id != "" {
 		if capsSupportsID(caps, "imdb") {
 			params.Set("imdbid", id)
+			hasAnyID = true
 		}
 	}
 	if id := strings.TrimSpace(q.TVDBID); id != "" {
 		if capsSupportsID(caps, "tvdb") {
 			params.Set("tvdbid", id)
+			hasAnyID = true
 		}
 	}
 	if id := strings.TrimSpace(q.TMDBID); id != "" {
 		if capsSupportsID(caps, "tmdb") {
 			params.Set("tmdbid", id)
+			hasAnyID = true
 		}
 	}
-	if q.Season > 0 {
-		params.Set("season", strconv.Itoa(q.Season))
+
+	// If this was an ID-based query (tvsearch/movie with IDs) but no
+	// IDs were actually supported, and there's no text term either,
+	// the query is unsupported — skip it.
+	if !hasAnyID && term == "" && (mode == "tvsearch" || mode == "movie") {
+		return "", nil, false
 	}
-	if q.Episode > 0 {
-		params.Set("ep", strconv.Itoa(q.Episode))
+
+	// Season/Episode encoding.
+	if q.DailyDate != "" && len(q.DailyDate) == 10 {
+		// Daily show: season=YYYY, ep=MM/DD (Sonarr convention).
+		params.Set("season", q.DailyDate[:4])
+		params.Set("ep", q.DailyDate[5:7]+"/"+q.DailyDate[8:10])
+	} else {
+		if q.Season > 0 {
+			// Sonarr: season 0 → "00" to work around NNTMux.
+			if q.Season == 0 {
+				params.Set("season", "00")
+			} else {
+				params.Set("season", strconv.Itoa(q.Season))
+			}
+		}
+		if q.Episode > 0 {
+			params.Set("ep", strconv.Itoa(q.Episode))
+		}
 	}
+
 	if q.Limit > 0 {
 		params.Set("limit", strconv.Itoa(q.Limit))
 		params.Set("offset", "0")
 	}
-	return mode, params
+
+	return mode, params, true
 }
 
-// chooseMode reads the Query and routes to the most specific mode the
-// upstream supports. When caps are known, we verify the chosen mode
-// is actually supported; if not, we fall back to "search".
-func chooseMode(q indexers.Query, caps indexers.Caps) string {
-	preferred := inferPreferredMode(q)
-	if capsSupportsMode(caps, preferred) {
-		return preferred
+// resolveMode determines the Newznab API mode for a query.
+// Explicit Mode takes precedence; otherwise mode is inferred.
+func resolveMode(q indexers.Query, caps indexers.Caps) string {
+	// Explicit mode always wins.
+	if q.Mode != "" {
+		return string(q.Mode)
 	}
-	return "search"
+	return inferPreferredMode(q, caps)
 }
 
 // inferPreferredMode picks the ideal mode based on Query fields,
-// ignoring caps.
-func inferPreferredMode(q indexers.Query) string {
+// respecting caps. Unlike the previous chooseMode, this does NOT
+// silently fall back to "search" when the preferred mode is
+// unsupported — the caller is responsible for handling that.
+func inferPreferredMode(q indexers.Query, caps indexers.Caps) string {
 	switch {
 	case q.IMDBID != "" || q.TMDBID != "":
 		return "movie"
-	case q.TVDBID != "" || q.Season > 0 || q.Episode > 0:
+	case q.TVDBID != "" || q.Season > 0 || q.Episode > 0 || q.DailyDate != "":
 		return "tvsearch"
 	}
 

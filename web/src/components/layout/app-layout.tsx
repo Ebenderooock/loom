@@ -2,25 +2,20 @@ import * as React from "react";
 import { Link, Outlet, useRouterState } from "@tanstack/react-router";
 import { apiFetch } from "@/lib/fetch";
 import {
-  Bell,
   Calendar,
   ChevronDown,
   Download,
   Film,
   FolderOpen,
-  Languages,
   LayoutDashboard,
   ListPlus,
   ListTodo,
   Menu,
-  Network,
   HeartPulse,
   Radio,
   ScrollText,
   Search,
   Settings,
-  Shield,
-  SlidersHorizontal,
   Rss,
   Tv,
   Workflow,
@@ -100,22 +95,11 @@ const NAV_SECTIONS: NavSection[] = [
     ],
   },
   {
-    id: "profiles",
-    label: "Profiles",
-    items: [
-      { to: "/quality-profiles", label: "Quality", Icon: Shield },
-      { to: "/custom-formats", label: "Custom Formats", Icon: SlidersHorizontal },
-      { to: "/language-profiles", label: "Languages", Icon: Languages },
-    ],
-  },
-  {
     id: "system",
     label: "System",
     items: [
       { to: "/indexers/health", label: "Health", Icon: HeartPulse },
       { to: "/events", label: "Events", Icon: ScrollText },
-      { to: "/notifications", label: "Notifications", Icon: Bell },
-      { to: "/proxies", label: "Proxies", Icon: Network },
       { to: "/settings", label: "Settings", Icon: Settings },
     ],
   },
@@ -210,8 +194,8 @@ function SidebarNav({
                     className={cn(
                       "flex items-center gap-2.5 rounded-md px-3 py-1.5 text-[13px] font-medium transition-colors",
                       active
-                        ? "bg-accent text-accent-foreground"
-                        : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+                        ? "bg-accent/15 text-accent border-l-2 border-accent shadow-sm shadow-accent/5"
+                        : "text-muted-foreground hover:bg-accent/8 hover:text-foreground",
                       collapsed && "justify-center px-2",
                     )}
                     aria-current={active ? "page" : undefined}
@@ -242,14 +226,9 @@ function SidebarNav({
 
 function Brand({ collapsed }: { collapsed?: boolean }) {
   return (
-    <div className="flex h-14 items-center gap-2 border-b border-border px-4">
-      <div
-        aria-hidden="true"
-        className="flex h-8 w-8 items-center justify-center rounded-md bg-primary text-primary-foreground"
-      >
-        <span className="text-sm font-bold">L</span>
-      </div>
-      {!collapsed && <span className="text-lg font-semibold">Loom</span>}
+    <div className="flex h-14 items-center gap-2.5 border-b border-border/50 px-4">
+      <img src="/loom-logo.png" alt="" className="h-8 w-auto" aria-hidden="true" />
+      {!collapsed && <span className="text-lg font-bold gradient-text">Loom</span>}
     </div>
   );
 }
@@ -273,7 +252,7 @@ function AppLayoutInner({ children }: { children?: React.ReactNode }) {
       <aside
         aria-label="Sidebar"
         className={cn(
-          "hidden shrink-0 border-r border-border bg-card md:flex md:flex-col md:sticky md:top-0 md:h-screen md:min-h-0",
+          "hidden shrink-0 border-r border-border/50 bg-card/80 backdrop-blur-xl md:flex md:flex-col md:sticky md:top-0 md:h-screen md:min-h-0",
           collapsed ? "md:w-16" : "md:w-56",
         )}
       >
@@ -294,7 +273,7 @@ function AppLayoutInner({ children }: { children?: React.ReactNode }) {
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-border bg-background/80 px-4 backdrop-blur">
+        <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-border/50 bg-background/70 px-4 backdrop-blur-xl">
           {!paletteOpen ? (
             <>
               <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
@@ -316,7 +295,12 @@ function AppLayoutInner({ children }: { children?: React.ReactNode }) {
                 </SheetContent>
               </Sheet>
 
-              {/* Page title + subtitle */}
+              {/* Logo + page title */}
+              <Link to="/" className="flex items-center gap-2 md:hidden" aria-label="Loom home">
+                <img src="/loom-logo.png" alt="" className="h-7 w-auto" aria-hidden="true" />
+                <span className="text-lg font-bold gradient-text">Loom</span>
+              </Link>
+
               {header.title && (
                 <div className="hidden md:flex items-baseline gap-2 min-w-0">
                   <span className="text-sm font-semibold whitespace-nowrap">{header.title}</span>
@@ -332,7 +316,7 @@ function AppLayoutInner({ children }: { children?: React.ReactNode }) {
                 <Button
                   variant="outline"
                   size="sm"
-                  className="gap-2"
+                  className="gap-2 border-border/50 hover:border-accent/30 hover:shadow-sm hover:shadow-accent/10"
                   onClick={() => setPaletteOpen(true)}
                   aria-label="Open command palette"
                 >
@@ -382,7 +366,7 @@ function AppLayoutInner({ children }: { children?: React.ReactNode }) {
           />
         )}
 
-        <main id="main" className="min-w-0 flex-1 overflow-x-hidden p-4 md:p-6">
+        <main id="main" className="min-w-0 flex-1 overflow-x-hidden p-4 md:p-6 page-enter">
           {children ?? <Outlet />}
         </main>
       </div>

@@ -49,6 +49,8 @@ func (s *Service) Mount(r chi.Router) {
 	r.Post("/api/v1/activity/pause", s.handleActivityPause)
 	r.Post("/api/v1/activity/resume", s.handleActivityResume)
 	r.Post("/api/v1/activity/remove", s.handleActivityRemove)
+	// Per-item detail endpoint (torrent-aware)
+	r.Get("/api/v1/activity/detail", s.handleActivityDetail)
 	// Download history endpoint
 	r.Get("/api/v1/downloads/history", s.handleHistory)
 	for _, ext := range s.routeExtensions {
@@ -355,17 +357,18 @@ func (s *Service) handleTestConfig(w http.ResponseWriter, r *http.Request) {
 	}
 
 	def := Definition{
-		ID:       "_test_ephemeral",
-		Kind:     req.Kind,
-		Name:     req.Name,
-		Protocol: req.Protocol,
-		Enabled:  true,
-		Host:     req.Host,
-		Port:     req.Port,
-		TLS:      req.TLS,
-		Username: req.Username,
-		Password: req.Password,
-		Config:   req.Config,
+		ID:              "_test_ephemeral",
+		Kind:            req.Kind,
+		Name:            req.Name,
+		Protocol:        req.Protocol,
+		Enabled:         true,
+		Host:            req.Host,
+		Port:            req.Port,
+		TLS:             req.TLS,
+		Username:        req.Username,
+		Password:        req.Password,
+		Config:          req.Config,
+		SavePathDefault: req.SavePathDefault,
 	}
 
 	c, err := build(r.Context(), def)
@@ -562,6 +565,10 @@ func (s *Service) handleRemove(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadGateway, "operation_failed", err.Error())
 		return
 	}
+	// Cancel any workflows tracking these downloads
+	if s.orchestrator != nil {
+		s.orchestrator.NotifyDownloadRemoved(id, req.IDs)
+	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
@@ -742,39 +749,41 @@ func (s *Service) handleHistory(w http.ResponseWriter, r *http.Request) {
 }
 
 // recordManualGrab records grab linkage for interactive search grabs.
-// If no media context is present or no workflow engine is configured, this is a no-op.
+// If no media context is present or no orchestrator is configured, this is a no-op.
 func (s *Service) recordManualGrab(ctx context.Context, res AddResult, req AddRequest) {
-	if s.wfEngine == nil || req.MediaType == "" {
+	if req.MediaType == "" || s.orchestrator == nil {
 		return
 	}
+
+	var wf *workflows.Workflow
 	var err error
 	switch req.MediaType {
 	case "episode":
 		if len(req.EpisodeIDs) > 0 {
-			wf, werr := s.wfEngine.StartSearch(ctx, workflows.TypeEpisodeSearch, workflows.MediaTypeEpisode, "", req.EpisodeIDs)
-			if werr != nil {
-				err = werr
-			} else {
-				err = s.wfEngine.MarkGrabbed(ctx, wf.ID, res.ClientID, res.ItemID, req.Title)
-			}
+			wf, err = s.orchestrator.StartSearch(ctx, workflows.TypeEpisodeSearch, workflows.MediaTypeEpisode, "", req.EpisodeIDs)
 		}
 	case "movie":
 		if req.MovieID != "" {
-			wf, werr := s.wfEngine.StartSearch(ctx, workflows.TypeMovieSearch, workflows.MediaTypeMovie, "", []string{req.MovieID})
-			if werr != nil {
-				err = werr
-			} else {
-				err = s.wfEngine.MarkGrabbed(ctx, wf.ID, res.ClientID, res.ItemID, req.Title)
-			}
+			wf, err = s.orchestrator.StartSearch(ctx, workflows.TypeMovieSearch, workflows.MediaTypeMovie, "", []string{req.MovieID})
 		}
 	}
 	if err != nil {
-		s.logger.Warn("failed to record manual grab workflow",
+		s.logger.Warn("failed to create manual grab workflow",
 			"client_id", res.ClientID, "item_id", res.ItemID,
 			"media_type", req.MediaType, "err", err)
-	} else {
+		return
+	}
+	if wf != nil {
+		s.orchestrator.Send(workflows.CmdGrabbed{
+			WorkflowID:           wf.ID,
+			ClientID:             res.ClientID,
+			DownloadID:           res.ItemID,
+			Title:                req.Title,
+			SeedRatioLimit:       req.SeedRatioLimit,
+			SeedTimeLimitMinutes: req.SeedTimeLimitMinutes,
+		})
 		s.logger.Info("recorded manual grab workflow",
-			"client_id", res.ClientID, "item_id", res.ItemID,
+			"workflow_id", wf.ID, "client_id", res.ClientID, "item_id", res.ItemID,
 			"media_type", req.MediaType)
 	}
 }
@@ -818,6 +827,10 @@ func (s *Service) handleActivityRemove(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadGateway, "operation_failed", err.Error())
 		return
 	}
+	// Cancel any workflows tracking these downloads
+	if s.orchestrator != nil {
+		s.orchestrator.NotifyDownloadRemoved(req.ClientID, req.IDs)
+	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
@@ -841,4 +854,43 @@ func (s *Service) handleActivityAction(w http.ResponseWriter, r *http.Request, f
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+// handleActivityDetail returns detailed torrent information for a single item.
+func (s *Service) handleActivityDetail(w http.ResponseWriter, r *http.Request) {
+	clientID := r.URL.Query().Get("client_id")
+	itemID := r.URL.Query().Get("item_id")
+	if clientID == "" || itemID == "" {
+		writeError(w, http.StatusBadRequest, "invalid_request", "client_id and item_id query params are required")
+		return
+	}
+
+	c, ok := s.registry.Get(clientID)
+	if !ok {
+		writeError(w, http.StatusNotFound, "not_found", "download client not found")
+		return
+	}
+
+	// For clients that support detailed info (e.g. builtin/torrent).
+	if dp, ok := c.(DetailProvider); ok {
+		detail, err := dp.Detail(r.Context(), itemID)
+		if err != nil {
+			writeError(w, http.StatusNotFound, "not_found", err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, detail)
+		return
+	}
+
+	// For non-torrent clients, return basic status info.
+	items, err := c.Status(r.Context(), itemID)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, "status_failed", err.Error())
+		return
+	}
+	if len(items) == 0 {
+		writeError(w, http.StatusNotFound, "not_found", "item not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, items[0])
 }

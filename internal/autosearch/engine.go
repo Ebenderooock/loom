@@ -49,7 +49,7 @@ type Engine struct {
 	dlRegistry   *downloads.Registry
 	movieSvc     movies.Service
 	seriesSvc    series.Service
-	wfEngine     *workflows.Engine
+	orchestrator *workflows.Orchestrator
 	logger       *slog.Logger
 	audit        *auditlog.Logger
 }
@@ -63,7 +63,6 @@ func NewEngine(
 	dlRegistry *downloads.Registry,
 	movieSvc movies.Service,
 	seriesSvc series.Service,
-	wfEngine *workflows.Engine,
 	logger *slog.Logger,
 	opts ...EngineOption,
 ) *Engine {
@@ -78,7 +77,6 @@ func NewEngine(
 		dlRegistry:   dlRegistry,
 		movieSvc:     movieSvc,
 		seriesSvc:    seriesSvc,
-		wfEngine:     wfEngine,
 		logger:       logger.With("module", "autosearch"),
 	}
 	for _, o := range opts {
@@ -93,6 +91,129 @@ type EngineOption func(*Engine)
 // WithAuditLogger attaches an audit logger to the engine for search event tracking.
 func WithAuditLogger(al *auditlog.Logger) EngineOption {
 	return func(e *Engine) { e.audit = al }
+}
+
+// WithOrchestrator sets the workflow orchestrator for unified state management.
+func WithOrchestrator(o *workflows.Orchestrator) EngineOption {
+	return func(e *Engine) { e.orchestrator = o }
+}
+
+// Evaluate scores a set of indexer results against a quality profile
+// without grabbing anything. This is the dry-run counterpart to
+// SearchAndGrab, used by the manual search UI to display quality
+// badges, scores, and rejection reasons.
+func (e *Engine) Evaluate(ctx context.Context, req EvaluateRequest) (*EvaluateResponse, error) {
+	if req.QualityProfileID == "" {
+		return &EvaluateResponse{Results: make([]EvaluatedResult, 0), Total: len(req.Results)}, nil
+	}
+
+	profile, err := e.profileStore.Get(ctx, req.QualityProfileID)
+	if err != nil {
+		return nil, fmt.Errorf("load quality profile %s: %w", req.QualityProfileID, err)
+	}
+
+	var items []profileItem
+	if err := json.Unmarshal([]byte(profile.Items), &items); err != nil {
+		return nil, fmt.Errorf("parse quality items: %w", err)
+	}
+
+	qualDefs, err := e.movieSvc.ListQualityDefinitions(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("load quality definitions: %w", err)
+	}
+
+	allowedMap := make(map[string]int)
+	allowedDefs := make(map[string]bool)
+	for i, item := range items {
+		if item.Allowed {
+			allowedMap[item.ID] = i
+			allowedDefs[item.ID] = true
+		}
+	}
+
+	formatScores := make(map[string]int)
+	for _, fi := range profile.FormatItems {
+		formatScores[fi.FormatID] = fi.Score
+	}
+
+	existing := e.getExistingQuality(ctx, req.SearchRequest, qualDefs, allowedMap)
+
+	cutoffTier := -1
+	if profile.Cutoff != "" {
+		if ct, ok := allowedMap[profile.Cutoff]; ok {
+			cutoffTier = ct
+		}
+	}
+
+	// Determine if this looks like an ID-based search.
+	idBased := req.IMDBID != "" || req.TVDBID != "" || req.TMDBID != ""
+
+	resp := &EvaluateResponse{
+		Total:   len(req.Results),
+		Results: make([]EvaluatedResult, 0, len(req.Results)),
+	}
+
+	for _, res := range req.Results {
+		sr := e.evaluateResult(req.SearchRequest, res, qualDefs, allowedMap, allowedDefs, formatScores, profile, existing, cutoffTier, idBased)
+
+		er := EvaluatedResult{
+			IndexerID:   res.IndexerID,
+			Title:       res.Title,
+			Link:        res.Link,
+			SizeBytes:   res.Size,
+			PublishDate: res.PubDate.Format("2006-01-02T15:04:05Z"),
+			MagnetURI:   res.MagnetURI,
+			Infohash:    res.Infohash,
+			InfoURL:     res.InfoURL,
+			Freeleech:   res.Freeleech,
+
+			Rejected:       sr.Rejected,
+			RejectReason:   sr.RejectReason,
+			QualityTier:    sr.QualityTier,
+			FormatScore:    sr.FormatScore,
+			FormatMatches:  sr.FormatMatches,
+			CompositeScore: sr.CompositeScore(),
+		}
+
+		if res.Seeders != nil {
+			er.Seeders = *res.Seeders
+		}
+		if res.Peers != nil && res.Seeders != nil {
+			er.Leechers = *res.Peers - *res.Seeders
+			if er.Leechers < 0 {
+				er.Leechers = 0
+			}
+		}
+		for _, c := range res.Category {
+			er.Categories = append(er.Categories, int(c))
+		}
+
+		if sr.QualityDef != nil {
+			er.QualityName = sr.QualityDef.Title
+		}
+		if sr.Parsed != nil {
+			er.ParsedTitle = sr.Parsed.Title
+			er.ParsedYear = sr.Parsed.Year
+			er.ParsedSource = sr.Parsed.Source
+			er.ParsedRes = sr.Parsed.Resolution
+		}
+
+		if !sr.Rejected {
+			resp.Passed++
+		}
+
+		resp.Results = append(resp.Results, er)
+	}
+
+	// Sort by composite score descending (accepted first, then rejected).
+	sort.SliceStable(resp.Results, func(i, j int) bool {
+		if resp.Results[i].Rejected != resp.Results[j].Rejected {
+			return !resp.Results[i].Rejected
+		}
+		return resp.Results[i].CompositeScore > resp.Results[j].CompositeScore
+	})
+
+	return resp, nil
 }
 
 // SearchAndGrab executes the full automated search pipeline:
@@ -141,16 +262,22 @@ func (e *Engine) SearchAndGrab(ctx context.Context, req SearchRequest) (*SearchR
 	}
 
 	// Check if this media already has an active workflow (avoid duplicate downloads).
-	if e.wfEngine != nil && req.MediaID != "" {
+	if req.MediaID != "" {
 		mediaType := workflows.MediaTypeMovie
 		if req.MediaType == "series" || req.MediaType == "episode" {
 			mediaType = workflows.MediaTypeEpisode
 		}
-		existing, err := e.wfEngine.Store().FindActiveForMedia(ctx, mediaType, req.MediaID)
-		if err == nil && existing != nil {
-			return &SearchResult{
-				Reason: "already_grabbed",
-			}, nil
+		var store *workflows.Store
+		if e.orchestrator != nil {
+			store = e.orchestrator.Store()
+		}
+		if store != nil {
+			existing, err := store.FindActiveForMedia(ctx, mediaType, req.MediaID)
+			if err == nil && existing != nil {
+				return &SearchResult{
+					Reason: "already_grabbed",
+				}, nil
+			}
 		}
 	}
 
@@ -165,58 +292,83 @@ func (e *Engine) SearchAndGrab(ctx context.Context, req SearchRequest) (*SearchR
 		}
 	}
 
-	// Request-chain fallback: try ID-based search first, then text fallback.
-	queries := e.buildQueryChain(req)
-	var allResults []indexers.Result
+	// Request-chain fallback: try tiers in order; within each tier,
+	// aggregate results from all queries, evaluate, and stop at the
+	// first tier that produces accepted results.
+	tiers := e.buildQueryChain(req)
+	var scored []ScoredRelease
+	rejectCounts := make(map[string]int)
+	totalConsidered := 0
 
-	for _, q := range queries {
-		agg := e.indexerSvc.Search(ctx, q, nil, 30*time.Second)
-		allResults = append(allResults, agg.Results...)
-		if len(allResults) > 0 {
-			break // Got results, stop trying weaker queries.
+	for tierIdx, tier := range tiers {
+		var tierResults []indexers.Result
+		var tierIDsBased bool
+
+		for _, q := range tier {
+			agg := e.indexerSvc.Search(ctx, q, nil, 30*time.Second)
+			tierResults = append(tierResults, agg.Results...)
+			if q.IMDBID != "" || q.TVDBID != "" || q.TMDBID != "" {
+				tierIDsBased = true
+			}
 		}
+
+		if len(tierResults) == 0 {
+			e.logger.Debug("autosearch: tier returned no results, trying next",
+				"tier", tierIdx,
+				"queries", len(tier),
+			)
+			continue
+		}
+
+		totalConsidered += len(tierResults)
+
+		for _, res := range tierResults {
+			sr := e.evaluateResult(req, res, qualDefs, allowedMap, allowedDefs, formatScores, profile, existing, cutoffTier, tierIDsBased)
+			if sr.Rejected {
+				rejectCounts[sr.RejectReason]++
+				e.logger.Debug("autosearch: result rejected",
+					"title", res.Title,
+					"reason", sr.RejectReason,
+					"parsed_source", func() string {
+						if sr.Parsed != nil {
+							return sr.Parsed.Source
+						}
+						return ""
+					}(),
+					"parsed_resolution", func() int {
+						if sr.Parsed != nil {
+							return sr.Parsed.Resolution
+						}
+						return 0
+					}(),
+				)
+				continue
+			}
+			scored = append(scored, sr)
+		}
+
+		// If this tier produced at least one accepted result, stop.
+		if len(scored) > 0 {
+			break
+		}
+		// Otherwise continue to the next tier.
+		e.logger.Debug("autosearch: all results rejected for tier, trying next",
+			"tier", tierIdx,
+			"results", len(tierResults),
+		)
 	}
 
 	result := &SearchResult{
-		Considered: len(allResults),
+		Considered: totalConsidered,
 	}
 
-	if len(allResults) == 0 {
+	if totalConsidered == 0 {
 		result.Reason = "no results from indexers"
 		e.logSearchCompleted(ctx, req, result)
 		return result, nil
 	}
 
-	// Score and filter each result.
-	rejectCounts := make(map[string]int)
-	var scored []ScoredRelease
-
-	for _, res := range allResults {
-		sr := e.evaluateResult(req, res, qualDefs, allowedMap, allowedDefs, formatScores, profile, existing, cutoffTier)
-		if sr.Rejected {
-			rejectCounts[sr.RejectReason]++
-			e.logger.Debug("autosearch: result rejected",
-				"title", res.Title,
-				"reason", sr.RejectReason,
-				"parsed_source", func() string {
-					if sr.Parsed != nil {
-						return sr.Parsed.Source
-					}
-					return ""
-				}(),
-				"parsed_resolution", func() int {
-					if sr.Parsed != nil {
-						return sr.Parsed.Resolution
-					}
-					return 0
-				}(),
-			)
-			continue
-		}
-		scored = append(scored, sr)
-	}
-
-	result.Rejected = result.Considered - len(scored)
+	result.Rejected = totalConsidered - len(scored)
 
 	// Build top reject stats.
 	for reason, count := range rejectCounts {
@@ -329,6 +481,7 @@ func (e *Engine) evaluateResult(
 	profile *qualityprofiles.QualityProfile,
 	existing existingQuality,
 	cutoffTier int,
+	idBasedQuery bool,
 ) ScoredRelease {
 	sr := ScoredRelease{Result: res}
 
@@ -337,7 +490,7 @@ func (e *Engine) evaluateResult(
 	sr.Parsed = parsed
 
 	// Identity verification: ensure the result matches the requested media.
-	if reason := e.verifyIdentity(req, parsed); reason != "" {
+	if reason := e.verifyIdentity(req, parsed, idBasedQuery); reason != "" {
 		sr.Rejected = true
 		sr.RejectReason = reason
 		return sr
@@ -448,23 +601,63 @@ func (e *Engine) evaluateResult(
 }
 
 // verifyIdentity checks that a parsed result matches the requested media.
-// Returns empty string if the result is valid, or a rejection reason.
-func (e *Engine) verifyIdentity(req SearchRequest, parsed *parser.Release) string {
-	if parsed == nil || req.Title == "" {
+// For ID-based queries (IMDB/TVDB/TMDB), the indexer already filtered by
+// the external ID so title matching is relaxed (0.3 threshold instead of
+// 0.5). For text-only queries the threshold is stricter (0.5). Returns
+// empty string if the result is valid, or a rejection reason.
+func (e *Engine) verifyIdentity(req SearchRequest, parsed *parser.Release, idBasedQuery bool) string {
+	if parsed == nil {
 		return ""
 	}
 
-	// Title matching: verify the parsed title is close to the requested title.
-	parsedTitle := normalizeTitle(parsed.Title)
-	wantTitle := normalizeTitle(req.Title)
+	// Year verification for movies: reject if parsed year differs by >1
+	// from the requested year. This catches wrong movies with similar
+	// titles (e.g. remakes, reboots).
+	if req.MediaType == "movie" && req.Year > 0 && parsed.Year > 0 {
+		diff := req.Year - parsed.Year
+		if diff < 0 {
+			diff = -diff
+		}
+		if diff > 1 {
+			return "wrong_year"
+		}
+	}
 
-	if parsedTitle != "" && wantTitle != "" {
-		distance := levenshteinDistance(strings.ToLower(parsedTitle), strings.ToLower(wantTitle))
-		maxLen := max(len(parsedTitle), len(wantTitle))
-		if maxLen > 0 {
-			similarity := 1.0 - float64(distance)/float64(maxLen)
-			if similarity < 0.6 {
-				return "title_mismatch"
+	// Title matching: verify the parsed title is close to the requested title.
+	// Uses Sonarr's CleanSeriesTitle for normalization (strips articles,
+	// punctuation, diacritics) which is designed specifically for comparing
+	// a search title against a release title.
+	if req.Title != "" {
+		parsedTitle := parser.CleanSeriesTitle(parsed.Title)
+		wantTitle := parser.CleanSeriesTitle(req.Title)
+
+		if parsedTitle != "" && wantTitle != "" {
+			// Direct equality after cleaning handles the majority of cases.
+			if parsedTitle == wantTitle {
+				return ""
+			}
+
+			distance := levenshteinDistance(parsedTitle, wantTitle)
+			maxLen := max(len(parsedTitle), len(wantTitle))
+			if maxLen > 0 {
+				similarity := 1.0 - float64(distance)/float64(maxLen)
+				// ID-based results are pre-filtered by the indexer,
+				// so we only need a loose sanity check. Text-only
+				// searches need a tighter threshold.
+				threshold := 0.5
+				if idBasedQuery {
+					threshold = 0.3
+				}
+				if similarity < threshold {
+					e.logger.Debug("autosearch: title mismatch",
+						"want", wantTitle,
+						"got", parsedTitle,
+						"similarity", similarity,
+						"threshold", threshold,
+						"id_based", idBasedQuery,
+					)
+					return "title_mismatch"
+				}
 			}
 		}
 	}
@@ -696,6 +889,15 @@ func (e *Engine) grabRelease(ctx context.Context, sr *ScoredRelease) (*GrabbedRe
 	// Build the download request.
 	req := buildDownloadRequest(&sr.Result)
 
+	// Apply per-indexer seed policy overrides if available.
+	if sr.Result.IndexerID != "" {
+		if def, err := e.indexerSvc.Get(ctx, sr.Result.IndexerID); err == nil {
+			sc := indexers.ParseSeedConfig(def)
+			req.SeedRatioLimit = sc.RatioLimit
+			req.SeedTimeLimitMinutes = sc.TimeLimitMinutes
+		}
+	}
+
 	if req.Magnet == "" && req.TorrentURL == "" && len(req.RawBytes) == 0 {
 		e.logger.Error("autosearch: download request has no magnet/URL/bytes",
 			"title", sr.Result.Title,
@@ -720,15 +922,17 @@ func (e *Engine) grabRelease(ctx context.Context, sr *ScoredRelease) (*GrabbedRe
 	)
 
 	return &GrabbedRelease{
-		Title:          sr.Result.Title,
-		IndexerID:      sr.Result.IndexerID,
-		Size:           sr.Result.Size,
-		QualityTier:    sr.QualityTier,
-		FormatScore:    sr.FormatScore,
-		CompositeScore: sr.CompositeScore(),
-		FormatMatches:  sr.FormatMatches,
-		ClientID:       target.ID(),
-		DownloadID:     addResult.ItemID,
+		Title:                sr.Result.Title,
+		IndexerID:            sr.Result.IndexerID,
+		Size:                 sr.Result.Size,
+		QualityTier:          sr.QualityTier,
+		FormatScore:          sr.FormatScore,
+		CompositeScore:       sr.CompositeScore(),
+		FormatMatches:        sr.FormatMatches,
+		ClientID:             target.ID(),
+		DownloadID:           addResult.ItemID,
+		SeedRatioLimit:       req.SeedRatioLimit,
+		SeedTimeLimitMinutes: req.SeedTimeLimitMinutes,
 	}, nil
 }
 
@@ -763,14 +967,24 @@ func buildDownloadRequest(res *indexers.Result) downloads.AddRequest {
 	return req
 }
 
-// buildQueryChain builds a prioritized list of indexer queries for
-// request-chain fallback. Tries strongest ID first, then weaker IDs,
-// then text-only search. The caller stops at the first query that
-// returns results.
-func (e *Engine) buildQueryChain(req SearchRequest) []indexers.Query {
+// buildQueryChain builds a tiered list of indexer queries for
+// request-chain fallback, faithfully porting the Arr stack's search
+// strategy.
+//
+// Return type is [][]Query: each outer slice is a "tier". All queries
+// within a tier are executed and their results aggregated; only if the
+// entire tier produces no usable results does the caller fall back to
+// the next tier.
+//
+// Tier 0: ID-based queries (tvsearch/movie with external IDs)
+// Tier 1: Title-based queries (tvsearch with q= for TV, search with q= for movies)
+//
+// Each alternate title generates its own query within the same tier.
+func (e *Engine) buildQueryChain(req SearchRequest) [][]indexers.Query {
 	base := indexers.Query{
-		Season:  req.Season,
-		Episode: req.Episode,
+		Season:    req.Season,
+		Episode:   req.Episode,
+		DailyDate: req.DailyDate,
 	}
 
 	switch req.MediaType {
@@ -780,42 +994,81 @@ func (e *Engine) buildQueryChain(req SearchRequest) []indexers.Query {
 		base.Categories = []indexers.Category{5000, 5010, 5020, 5030, 5040, 5045, 5050, 5060, 5070, 5080}
 	}
 
-	var chain []indexers.Query
+	var tiers [][]indexers.Query
 
-	// Priority 1: IMDB ID (most universal and precise).
-	if req.IMDBID != "" {
-		q := base
-		q.IMDBID = req.IMDBID
-		chain = append(chain, q)
+	// --- Tier 0: ID-based search ---
+	// Aggregate all available IDs into one query (like Arr's aggregated ID search).
+	if req.IMDBID != "" || req.TVDBID != "" || req.TMDBID != "" {
+		var idQueries []indexers.Query
+
+		if req.MediaType == "movie" {
+			// Radarr: movie mode with tmdbid/imdbid.
+			q := base
+			q.Mode = indexers.ModeMovie
+			if req.TMDBID != "" {
+				q.TMDBID = req.TMDBID
+			}
+			if req.IMDBID != "" {
+				q.IMDBID = req.IMDBID
+			}
+			idQueries = append(idQueries, q)
+		} else {
+			// Sonarr: tvsearch mode with tvdbid/imdbid.
+			q := base
+			q.Mode = indexers.ModeTVSearch
+			if req.TVDBID != "" {
+				q.TVDBID = req.TVDBID
+			}
+			if req.IMDBID != "" {
+				q.IMDBID = req.IMDBID
+			}
+			if req.TMDBID != "" {
+				q.TMDBID = req.TMDBID
+			}
+			idQueries = append(idQueries, q)
+		}
+
+		if len(idQueries) > 0 {
+			tiers = append(tiers, idQueries)
+		}
 	}
 
-	// Priority 2: TVDB ID (strong for series).
-	if req.TVDBID != "" {
-		q := base
-		q.TVDBID = req.TVDBID
-		chain = append(chain, q)
+	// --- Tier 1: Title-based search ---
+	// Each title variant (primary + alternates) generates its own query.
+	titles := []string{req.Title}
+	for _, alt := range req.AlternateTitles {
+		if alt != "" && alt != req.Title {
+			titles = append(titles, alt)
+		}
 	}
 
-	// Priority 3: TMDB ID.
-	if req.TMDBID != "" {
-		q := base
-		q.TMDBID = req.TMDBID
-		chain = append(chain, q)
+	if len(titles) > 0 && titles[0] != "" {
+		var titleQueries []indexers.Query
+		for _, title := range titles {
+			q := base
+			q.Term = title
+
+			switch req.MediaType {
+			case "movie":
+				// Radarr: generic search mode with "Title Year".
+				q.Mode = indexers.ModeSearch
+				q.Year = req.Year
+			case "series", "episode":
+				// Sonarr: tvsearch mode with q=Title + season/ep params.
+				q.Mode = indexers.ModeTVSearch
+			}
+
+			titleQueries = append(titleQueries, q)
+		}
+		tiers = append(tiers, titleQueries)
 	}
 
-	// Priority 4: Text search fallback.
-	if req.Title != "" {
-		q := base
-		q.Term = req.Title
-		chain = append(chain, q)
+	// If no IDs and no title, a single empty query as fallback.
+	if len(tiers) == 0 {
+		tiers = append(tiers, []indexers.Query{base})
 	}
 
-	// If no IDs and no title, use an empty query (shouldn't happen).
-	if len(chain) == 0 {
-		chain = append(chain, base)
-	}
-
-	return chain
+	return tiers
 }
 
 // getExistingQuality determines the quality state of existing files for
@@ -942,28 +1195,33 @@ func matchStoredQualityToTier(
 
 // recordGrab creates/updates the workflow with grab info so the pipeline can track it.
 func (e *Engine) recordGrab(ctx context.Context, req SearchRequest, grabbed *GrabbedRelease) {
-	if e.wfEngine == nil || grabbed == nil {
+	if grabbed == nil || e.orchestrator == nil {
 		return
 	}
 
+	e.recordGrabOrchestrator(ctx, req, grabbed)
+}
+
+// recordGrabOrchestrator uses the unified orchestrator for workflow creation and state transitions.
+func (e *Engine) recordGrabOrchestrator(ctx context.Context, req SearchRequest, grabbed *GrabbedRelease) {
 	switch req.MediaType {
 	case "movie":
 		if req.MediaID == "" {
 			return
 		}
-		// Create workflow if one doesn't already exist for this search
-		wf, err := e.wfEngine.Store().FindActiveForMedia(ctx, workflows.MediaTypeMovie, req.MediaID)
-		if err != nil || wf == nil {
-			// Start fresh workflow
-			wf, err = e.wfEngine.StartSearch(ctx, workflows.TypeMovieSearch, workflows.MediaTypeMovie, req.QualityProfileID, []string{req.MediaID})
-			if err != nil {
-				e.logger.Warn("failed to create movie workflow", "error", err)
-				return
-			}
+		wf, err := e.orchestrator.StartSearch(ctx, workflows.TypeMovieSearch, workflows.MediaTypeMovie, req.QualityProfileID, []string{req.MediaID})
+		if err != nil {
+			e.logger.Warn("failed to create movie workflow via orchestrator", "error", err)
+			return
 		}
-		if err := e.wfEngine.MarkGrabbed(ctx, wf.ID, grabbed.ClientID, grabbed.DownloadID, grabbed.Title); err != nil {
-			e.logger.Warn("failed to mark workflow grabbed", "error", err)
-		}
+		e.orchestrator.Send(workflows.CmdGrabbed{
+			WorkflowID:           wf.ID,
+			ClientID:             grabbed.ClientID,
+			DownloadID:           grabbed.DownloadID,
+			Title:                grabbed.Title,
+			SeedRatioLimit:       grabbed.SeedRatioLimit,
+			SeedTimeLimitMinutes: grabbed.SeedTimeLimitMinutes,
+		})
 
 	case "series", "episode":
 		if req.MediaID == "" || e.seriesSvc == nil {
@@ -994,14 +1252,19 @@ func (e *Engine) recordGrab(ctx context.Context, req SearchRequest, grabbed *Gra
 		}
 
 		if len(episodeIDs) > 0 {
-			wf, err := e.wfEngine.StartSearch(ctx, workflows.TypeEpisodeSearch, workflows.MediaTypeEpisode, req.QualityProfileID, episodeIDs)
+			wf, err := e.orchestrator.StartSearch(ctx, workflows.TypeEpisodeSearch, workflows.MediaTypeEpisode, req.QualityProfileID, episodeIDs)
 			if err != nil {
-				e.logger.Warn("failed to create episode workflow", "error", err)
+				e.logger.Warn("failed to create episode workflow via orchestrator", "error", err)
 				return
 			}
-			if err := e.wfEngine.MarkGrabbed(ctx, wf.ID, grabbed.ClientID, grabbed.DownloadID, grabbed.Title); err != nil {
-				e.logger.Warn("failed to mark episode workflow grabbed", "error", err)
-			}
+			e.orchestrator.Send(workflows.CmdGrabbed{
+				WorkflowID:           wf.ID,
+				ClientID:             grabbed.ClientID,
+				DownloadID:           grabbed.DownloadID,
+				Title:                grabbed.Title,
+				SeedRatioLimit:       grabbed.SeedRatioLimit,
+				SeedTimeLimitMinutes: grabbed.SeedTimeLimitMinutes,
+			})
 		}
 	}
 }

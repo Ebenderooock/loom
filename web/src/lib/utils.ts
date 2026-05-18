@@ -28,9 +28,11 @@ export function formatSpeed(bytesPerSec: number): string {
   return `${formatBytes(bytesPerSec)}/s`;
 }
 
-export function relativeTime(iso: string): string {
+export function relativeTime(iso?: string | null): string {
+  if (!iso) return "—";
   const now = Date.now();
   const then = new Date(iso).getTime();
+  if (isNaN(then)) return "—";
   const diffSec = Math.floor((now - then) / 1000);
   if (diffSec < 60) return "just now";
   const diffMin = Math.floor(diffSec / 60);

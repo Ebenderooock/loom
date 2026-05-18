@@ -6,16 +6,19 @@ import "time"
 type ListType string
 
 const (
-	ListTypeTraktList      ListType = "trakt_list"
-	ListTypeTraktWatchlist ListType = "trakt_watchlist"
-	ListTypeIMDbList       ListType = "imdb_list"
-	ListTypeIMDbWatchlist  ListType = "imdb_watchlist"
-	ListTypeTMDbList       ListType = "tmdb_list"
-	ListTypeTMDbPopular    ListType = "tmdb_popular"
-	ListTypePlexWatchlist  ListType = "plex_watchlist"
-	ListTypeRSS            ListType = "rss"
-	ListTypeSonarr         ListType = "sonarr"
-	ListTypeRadarr         ListType = "radarr"
+	ListTypeTraktList        ListType = "trakt_list"
+	ListTypeTraktWatchlist   ListType = "trakt_watchlist"
+	ListTypeTraktPopular     ListType = "trakt_popular"
+	ListTypeTraktTrending    ListType = "trakt_trending"
+	ListTypeTraktAnticipated ListType = "trakt_anticipated"
+	ListTypeIMDbList         ListType = "imdb_list"
+	ListTypeIMDbWatchlist    ListType = "imdb_watchlist"
+	ListTypeTMDbList         ListType = "tmdb_list"
+	ListTypeTMDbPopular      ListType = "tmdb_popular"
+	ListTypePlexWatchlist    ListType = "plex_watchlist"
+	ListTypeRSS              ListType = "rss"
+	ListTypeSonarr           ListType = "sonarr"
+	ListTypeRadarr           ListType = "radarr"
 )
 
 // MediaType is "movie" or "series".
@@ -77,6 +80,7 @@ type ImportListItem struct {
 	IMDbID     string     `json:"imdb_id,omitempty"`
 	TMDbID     string     `json:"tmdb_id,omitempty"`
 	TVDbID     string     `json:"tvdb_id,omitempty"`
+	MediaType  string     `json:"media_type,omitempty"`
 	Status     ItemStatus `json:"status"`
 	LastSeen   time.Time  `json:"last_seen"`
 	CreatedAt  time.Time  `json:"created_at"`

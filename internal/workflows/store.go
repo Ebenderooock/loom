@@ -62,6 +62,16 @@ func (s *Store) migrate() error {
 
 		CREATE INDEX IF NOT EXISTS idx_workflows_state ON workflows(state);
 		CREATE INDEX IF NOT EXISTS idx_workflow_items_media ON workflow_items(media_type, media_id);
+
+		CREATE TABLE IF NOT EXISTS workflow_events (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			workflow_id TEXT NOT NULL REFERENCES workflows(id) ON DELETE CASCADE,
+			event_type TEXT NOT NULL,
+			message TEXT,
+			metadata TEXT,
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+		);
+		CREATE INDEX IF NOT EXISTS idx_workflow_events_wf ON workflow_events(workflow_id);
 	`)
 	if err != nil {
 		return err
@@ -199,6 +209,15 @@ func (s *Store) SetDownload(ctx context.Context, id, clientID, downloadID, title
 	_, err := s.db.ExecContext(ctx, `
 		UPDATE workflows SET download_client_id = ?, download_id = ?, grab_title = ?, updated_at = ?
 		WHERE id = ?`, clientID, downloadID, title, time.Now(), id,
+	)
+	return err
+}
+
+// SetMetadata updates the workflow's metadata JSON blob.
+func (s *Store) SetMetadata(ctx context.Context, id, metadata string) error {
+	_, err := s.db.ExecContext(ctx, `
+		UPDATE workflows SET metadata = ?, updated_at = ?
+		WHERE id = ?`, nullStr(metadata), time.Now(), id,
 	)
 	return err
 }
@@ -387,6 +406,27 @@ func (s *Store) StaleWorkflows(ctx context.Context) ([]*Workflow, error) {
 	return results, nil
 }
 
+// ResetRetry clears retry count and last error for a workflow (used on manual retry).
+func (s *Store) ResetRetry(ctx context.Context, id string) error {
+	_, err := s.db.ExecContext(ctx, `
+		UPDATE workflows SET retry_count = 0, last_error = NULL, updated_at = ?
+		WHERE id = ?`, time.Now(), id,
+	)
+	return err
+}
+
+// ListRecentlyFailed returns workflows in failed state updated since the given time.
+func (s *Store) ListRecentlyFailed(ctx context.Context, since time.Time) ([]*Workflow, error) {
+	return s.list(ctx, fmt.Sprintf(`
+		SELECT id, type, state, media_type, grab_title,
+			download_client_id, download_id, quality_profile_id,
+			retry_count, max_retries, last_error, metadata,
+			created_at, updated_at, completed_at
+		FROM workflows
+		WHERE state = 'failed' AND updated_at >= '%s'
+		ORDER BY updated_at DESC`, since.Format(time.RFC3339)))
+}
+
 // Delete removes a workflow and its items/history (cascade).
 func (s *Store) Delete(ctx context.Context, id string) error {
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -488,6 +528,41 @@ func (s *Store) getHistory(ctx context.Context, workflowID string) ([]Event, err
 	return events, rows.Err()
 }
 
+// LogEvent writes a rich audit event to the workflow_events table.
+func (s *Store) LogEvent(ctx context.Context, workflowID, eventType, message, metadata string) error {
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO workflow_events (workflow_id, event_type, message, metadata, created_at)
+		VALUES (?, ?, ?, ?, ?)`,
+		workflowID, eventType, nullStr(message), nullStr(metadata), time.Now(),
+	)
+	return err
+}
+
+// ListEvents returns all audit events for a workflow, ordered chronologically.
+func (s *Store) ListEvents(ctx context.Context, workflowID string) ([]WorkflowEvent, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT id, workflow_id, event_type, message, metadata, created_at
+		FROM workflow_events WHERE workflow_id = ?
+		ORDER BY created_at ASC, id ASC`, workflowID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var events []WorkflowEvent
+	for rows.Next() {
+		var ev WorkflowEvent
+		var msg, meta sql.NullString
+		if err := rows.Scan(&ev.ID, &ev.WorkflowID, &ev.EventType, &msg, &meta, &ev.CreatedAt); err != nil {
+			return nil, err
+		}
+		ev.Message = msg.String
+		ev.Metadata = meta.String
+		events = append(events, ev)
+	}
+	return events, rows.Err()
+}
+
 func nullStr(s string) any {
 	if s == "" {
 		return nil
@@ -499,4 +574,68 @@ func nullStr(s string) any {
 func MetadataFromMap(m map[string]any) string {
 	b, _ := json.Marshal(m)
 	return string(b)
+}
+
+// PostDownloadPolicy holds the seed requirements and settling config
+// persisted in workflow metadata under the "post_download" key.
+type PostDownloadPolicy struct {
+	SeedRatioLimit       *float64  `json:"seed_ratio_limit,omitempty"`
+	SeedTimeLimitMinutes *int      `json:"seed_time_limit_minutes,omitempty"`
+	SettlingDelay        int       `json:"settling_delay_seconds,omitempty"` // default 5
+	StartedAt            time.Time `json:"started_at,omitempty"`
+}
+
+// Default settling delay when no explicit value is configured.
+const DefaultSettlingDelaySec = 5
+
+// SetPostDownloadPolicy merges seed policy into workflow metadata without
+// overwriting other keys.
+func (s *Store) SetPostDownloadPolicy(ctx context.Context, id string, policy PostDownloadPolicy) error {
+	wf, err := s.Get(ctx, id)
+	if err != nil {
+		return err
+	}
+	m := make(map[string]any)
+	if wf.Metadata != "" {
+		_ = json.Unmarshal([]byte(wf.Metadata), &m)
+	}
+	m["post_download"] = policy
+	return s.SetMetadata(ctx, id, MetadataFromMap(m))
+}
+
+// GetPostDownloadPolicy reads the seed policy from workflow metadata.
+func GetPostDownloadPolicy(metadata string) *PostDownloadPolicy {
+	if metadata == "" {
+		return nil
+	}
+	var m map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(metadata), &m); err != nil {
+		return nil
+	}
+	raw, ok := m["post_download"]
+	if !ok {
+		return nil
+	}
+	var p PostDownloadPolicy
+	if err := json.Unmarshal(raw, &p); err != nil {
+		return nil
+	}
+	return &p
+}
+
+// MergeMetadata updates specific keys in the workflow metadata JSON without
+// overwriting other keys.
+func (s *Store) MergeMetadata(ctx context.Context, id string, patch map[string]any) error {
+	wf, err := s.Get(ctx, id)
+	if err != nil {
+		return err
+	}
+	m := make(map[string]any)
+	if wf.Metadata != "" {
+		_ = json.Unmarshal([]byte(wf.Metadata), &m)
+	}
+	for k, v := range patch {
+		m[k] = v
+	}
+	return s.SetMetadata(ctx, id, MetadataFromMap(m))
 }

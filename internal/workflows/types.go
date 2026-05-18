@@ -4,13 +4,14 @@ import "time"
 
 // Workflow states
 const (
-	StateSearching   = "searching"
-	StateGrabbed     = "grabbed"
-	StateDownloading = "downloading"
-	StateImporting   = "importing"
-	StateCompleted   = "completed"
-	StateFailed      = "failed"
-	StateCancelled   = "cancelled"
+	StateSearching    = "searching"
+	StateGrabbed      = "grabbed"
+	StateDownloading  = "downloading"
+	StatePostDownload = "post_download"
+	StateImporting    = "importing"
+	StateCompleted    = "completed"
+	StateFailed       = "failed"
+	StateCancelled    = "cancelled"
 )
 
 // Workflow types
@@ -33,19 +34,21 @@ const (
 
 // State timeouts for stale detection
 var StateTimeouts = map[string]time.Duration{
-	StateSearching:   5 * time.Minute,
-	StateGrabbed:     10 * time.Minute,
-	StateDownloading: 24 * time.Hour,
-	StateImporting:   30 * time.Minute,
+	StateSearching:    5 * time.Minute,
+	StateGrabbed:      10 * time.Minute,
+	StateDownloading:  24 * time.Hour,
+	StatePostDownload: 7 * 24 * time.Hour, // seeding can take days on private trackers
+	StateImporting:    30 * time.Minute,
 }
 
 // Valid transitions from each state
 var ValidTransitions = map[string][]string{
-	StateSearching:   {StateGrabbed, StateFailed, StateCancelled},
-	StateGrabbed:     {StateDownloading, StateFailed, StateCancelled},
-	StateDownloading: {StateImporting, StateFailed, StateCancelled},
-	StateImporting:   {StateCompleted, StateFailed, StateCancelled},
-	StateFailed:      {StateSearching, StateImporting}, // retry paths
+	StateSearching:    {StateGrabbed, StateFailed, StateCancelled},
+	StateGrabbed:      {StateDownloading, StateFailed, StateCancelled},
+	StateDownloading:  {StatePostDownload, StateFailed, StateCancelled},
+	StatePostDownload: {StateImporting, StateFailed, StateCancelled},
+	StateImporting:    {StateCompleted, StateFailed, StateCancelled},
+	StateFailed:       {StateSearching, StateDownloading, StatePostDownload, StateImporting, StateCompleted},
 }
 
 // Retry behavior per failed state
@@ -106,6 +109,37 @@ type Event struct {
 	Message    string    `json:"message,omitempty"`
 	CreatedAt  time.Time `json:"createdAt"`
 }
+
+// WorkflowEvent is a rich audit log entry for the orchestrator.
+// Unlike Event (state transitions only), WorkflowEvent captures all
+// significant occurrences with contextual metadata.
+type WorkflowEvent struct {
+	ID         int64     `json:"id"`
+	WorkflowID string    `json:"workflowId"`
+	EventType  string    `json:"eventType"`
+	Message    string    `json:"message,omitempty"`
+	Metadata   string    `json:"metadata,omitempty"` // JSON blob
+	CreatedAt  time.Time `json:"createdAt"`
+}
+
+// Event types for WorkflowEvent.EventType.
+const (
+	EventSearchStarted      = "search_started"
+	EventGrabbed            = "grabbed"
+	EventDownloading        = "downloading"
+	EventDownloadProgress   = "download_progress"
+	EventDownloadComplete   = "download_complete"
+	EventPostDownloadStart  = "post_download_started"
+	EventSeedingProgress    = "seeding_progress"
+	EventImportStarted      = "import_started"
+	EventImportSuccess      = "import_success"
+	EventImportFailed       = "import_failed"
+	EventStaleDetected      = "stale_detected"
+	EventRetried            = "retried"
+	EventFailed             = "failed"
+	EventCancelled          = "cancelled"
+	EventCompleted          = "completed"
+)
 
 // IsTerminal returns true if the workflow is in a final state.
 func (w *Workflow) IsTerminal() bool {

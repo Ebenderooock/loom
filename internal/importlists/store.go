@@ -153,7 +153,7 @@ func (s *Store) UpdateLastSync(ctx context.Context, id string, t time.Time) erro
 func (s *Store) ListItems(ctx context.Context, listID string) ([]*ImportListItem, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, list_id, external_id, title, year, imdb_id, tmdb_id,
-		       tvdb_id, status, last_seen, created_at
+		       tvdb_id, media_type, status, last_seen, created_at
 		FROM import_list_items WHERE list_id = ? ORDER BY title`, listID)
 	if err != nil {
 		return nil, err
@@ -181,16 +181,16 @@ func (s *Store) UpsertItem(ctx context.Context, item *ImportListItem) error {
 
 	_, err := s.db.ExecContext(ctx, `
 		INSERT INTO import_list_items
-		(id, list_id, external_id, title, year, imdb_id, tmdb_id, tvdb_id, status, last_seen, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		(id, list_id, external_id, title, year, imdb_id, tmdb_id, tvdb_id, media_type, status, last_seen, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			title = excluded.title, year = excluded.year,
 			imdb_id = excluded.imdb_id, tmdb_id = excluded.tmdb_id,
-			tvdb_id = excluded.tvdb_id, status = excluded.status,
-			last_seen = excluded.last_seen`,
+			tvdb_id = excluded.tvdb_id, media_type = excluded.media_type,
+			status = excluded.status, last_seen = excluded.last_seen`,
 		item.ID, item.ListID, item.ExternalID, item.Title, item.Year,
 		nullStr(item.IMDbID), nullStr(item.TMDbID), nullStr(item.TVDbID),
-		item.Status, item.LastSeen, now,
+		nullStr(item.MediaType), item.Status, item.LastSeen, now,
 	)
 	return err
 }
@@ -199,15 +199,15 @@ func (s *Store) UpsertItem(ctx context.Context, item *ImportListItem) error {
 func (s *Store) FindItemByExternalID(ctx context.Context, listID, externalID string) (*ImportListItem, error) {
 	row := s.db.QueryRowContext(ctx, `
 		SELECT id, list_id, external_id, title, year, imdb_id, tmdb_id,
-		       tvdb_id, status, last_seen, created_at
+		       tvdb_id, media_type, status, last_seen, created_at
 		FROM import_list_items WHERE list_id = ? AND external_id = ?`, listID, externalID)
 
 	item := &ImportListItem{}
 	var year sql.NullInt64
-	var imdb, tmdb, tvdb sql.NullString
+	var imdb, tmdb, tvdb, mediaType sql.NullString
 	err := row.Scan(
 		&item.ID, &item.ListID, &item.ExternalID, &item.Title, &year,
-		&imdb, &tmdb, &tvdb, &item.Status, &item.LastSeen, &item.CreatedAt,
+		&imdb, &tmdb, &tvdb, &mediaType, &item.Status, &item.LastSeen, &item.CreatedAt,
 	)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -222,6 +222,7 @@ func (s *Store) FindItemByExternalID(ctx context.Context, listID, externalID str
 	item.IMDbID = imdb.String
 	item.TMDbID = tmdb.String
 	item.TVDbID = tvdb.String
+	item.MediaType = mediaType.String
 	return item, nil
 }
 
@@ -353,10 +354,10 @@ func scanList(row rowScanner) (*ImportList, error) {
 func scanItem(row rowScanner) (*ImportListItem, error) {
 	item := &ImportListItem{}
 	var year sql.NullInt64
-	var imdb, tmdb, tvdb sql.NullString
+	var imdb, tmdb, tvdb, mediaType sql.NullString
 	err := row.Scan(
 		&item.ID, &item.ListID, &item.ExternalID, &item.Title, &year,
-		&imdb, &tmdb, &tvdb, &item.Status, &item.LastSeen, &item.CreatedAt,
+		&imdb, &tmdb, &tvdb, &mediaType, &item.Status, &item.LastSeen, &item.CreatedAt,
 	)
 	if err != nil {
 		return nil, err
@@ -368,6 +369,7 @@ func scanItem(row rowScanner) (*ImportListItem, error) {
 	item.IMDbID = imdb.String
 	item.TMDbID = tmdb.String
 	item.TVDbID = tvdb.String
+	item.MediaType = mediaType.String
 	return item, nil
 }
 

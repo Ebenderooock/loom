@@ -113,6 +113,77 @@ export async function triggerManualImport(path: string): Promise<void> {
   });
 }
 
+export async function manualMatch(params: {
+  path: string;
+  media_type: string;
+  media_id: string;
+}): Promise<void> {
+  await fetchJSON<{ status: string }>(
+    "/api/v1/imports/manual-match",
+    { method: "POST", body: JSON.stringify(params) },
+  );
+}
+
+// Local library search helpers
+
+export interface LocalMovie {
+  id: string;
+  title: string;
+  year: number;
+  tmdbId?: string;
+  imdbId?: string;
+}
+
+export interface LocalSeriesSeason {
+  id: string;
+  seasonNumber: number;
+  episodeCount: number;
+}
+
+export interface LocalSeries {
+  id: string;
+  title: string;
+  year: number;
+  tmdbId?: string;
+  imdbId?: string;
+  seasons?: LocalSeriesSeason[];
+}
+
+export interface SeriesEpisode {
+  id: string;
+  title: string;
+  seasonId: string;
+  episodeNumber: number;
+}
+
+export async function searchLocalMovies(
+  query: string,
+): Promise<LocalMovie[]> {
+  const r = await fetchJSON<{ data: LocalMovie[] }>(
+    `/api/v1/movies/search?q=${encodeURIComponent(query)}`,
+  );
+  return r.data;
+}
+
+export async function searchLocalSeries(
+  query: string,
+): Promise<LocalSeries[]> {
+  const r = await fetchJSON<{ data: LocalSeries[] }>(
+    `/api/v1/series?search=${encodeURIComponent(query)}`,
+  );
+  return r.data;
+}
+
+export async function fetchEpisodes(
+  seriesId: string,
+  seasonNum: number,
+): Promise<SeriesEpisode[]> {
+  const r = await fetchJSON<{ data: SeriesEpisode[] }>(
+    `/api/v1/series/${encodeURIComponent(seriesId)}/seasons/${seasonNum}/episodes`,
+  );
+  return r.data;
+}
+
 // ---------- React Query hooks ----------
 
 export function useImportHistory(limit = 50, offset = 0) {
@@ -155,6 +226,16 @@ export function useManualImport() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: triggerManualImport,
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["imports"] });
+    },
+  });
+}
+
+export function useManualMatch() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: manualMatch,
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["imports"] });
     },

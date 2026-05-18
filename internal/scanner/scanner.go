@@ -6,9 +6,11 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"github.com/google/uuid"
 	"github.com/ebenderooock/loom/internal/auditlog"
@@ -349,6 +351,34 @@ func (s *Scanner) processFile(ctx context.Context, scanID string, sf scannedFile
 		return nil
 	}
 
+	// Try local library match first to avoid unnecessary TMDB calls
+	localMovie, localErr := s.matchLocalMovie(ctx, title, year)
+	if localErr == nil && localMovie != nil {
+		s.mu.Lock()
+		result.Matched++
+		s.mu.Unlock()
+
+		meta := &metadata.MovieMetadata{
+			Title:      localMovie.Title,
+			Year:       localMovie.Year,
+			Overview:   localMovie.Overview,
+			PosterPath: localMovie.PosterPath,
+			Runtime:    localMovie.Runtime,
+			Rating:     localMovie.Rating,
+			TMDBID:     localMovie.TMDBID,
+			IMDBID:     localMovie.IMDBID,
+		}
+
+		if err := s.importFile(ctx, sf.Path, sf.Size, quality, sf.Rel.Source, meta, libraryID, ""); err != nil {
+			return err
+		}
+
+		s.mu.Lock()
+		result.Imported++
+		s.mu.Unlock()
+		return nil
+	}
+
 	// Search TMDB
 	results, err := s.metadata.FindMovieByQuery(ctx, title, year)
 	if err != nil {
@@ -496,6 +526,11 @@ func (s *Scanner) importFile(ctx context.Context, filePath string, size int64, q
 				s.logger.Info("revived soft-deleted movie file", "path", filePath)
 			} else {
 				s.logger.Debug("file already imported", "path", filePath)
+				// Still ensure movie status is updated — file exists but
+				// status may be stale (e.g. "missing" or "unavailable").
+				if err := s.movieSvc.SetMovieStatus(ctx, movie.ID, movies.MovieStatusAvailableRightQuality); err != nil {
+					s.logger.Warn("failed to update movie status for existing file", "movie", movie.ID, "error", err)
+				}
 				return nil
 			}
 		} else {
@@ -504,10 +539,8 @@ func (s *Scanner) importFile(ctx context.Context, filePath string, size int64, q
 	}
 
 	// File persisted — now update movie status
-	movie.Status = movies.MovieStatusAvailableRightQuality
-	movie.UpdatedAt = now
-	if err := s.movieSvc.UpdateMovie(ctx, movie); err != nil {
-		s.logger.Warn("failed to update movie status", "movieId", movie.ID, "err", err)
+	if err := s.movieSvc.SetMovieStatus(ctx, movie.ID, movies.MovieStatusAvailableRightQuality); err != nil {
+		return fmt.Errorf("update movie status after import: %w", err)
 	}
 
 	s.logger.Info("imported movie file",
@@ -534,10 +567,11 @@ func (s *Scanner) importFile(ctx context.Context, filePath string, size int64, q
 	return nil
 }
 
-// autoMatch tries to find an exact match from TMDB results.
+// autoMatch tries to find a match from TMDB results using multiple strategies.
 func autoMatch(title string, year int, results []*metadata.MovieMetadata) *metadata.MovieMetadata {
 	normTitle := normalizeTitle(title)
 
+	// Pass 1: exact normalized match (most reliable)
 	for _, r := range results {
 		normResult := normalizeTitle(r.Title)
 		if normTitle == normResult {
@@ -546,11 +580,39 @@ func autoMatch(title string, year int, results []*metadata.MovieMetadata) *metad
 			}
 		}
 	}
+
+	// Pass 2: containment match — if one title contains the other
+	for _, r := range results {
+		normResult := normalizeTitle(r.Title)
+		if strings.Contains(normTitle, normResult) || strings.Contains(normResult, normTitle) {
+			if year == 0 || r.Year == 0 || r.Year == year || abs(r.Year-year) <= 1 {
+				return r
+			}
+		}
+	}
+
+	// Pass 3: token overlap with high threshold
+	for _, r := range results {
+		score := tokenSimilarity(title, r.Title)
+		if score >= 80 {
+			if year == 0 || r.Year == 0 || r.Year == year || abs(r.Year-year) <= 1 {
+				return r
+			}
+		}
+	}
+
 	return nil
 }
 
 func normalizeTitle(title string) string {
 	t := strings.ToLower(title)
+	// Collapse acronyms: "m.i.a" → "mia"
+	t = collapseAcronymsScan(t)
+	// Expand & to "and" before stripping punctuation
+	t = strings.ReplaceAll(t, "&", " and ")
+	// Strip possessives
+	t = strings.ReplaceAll(t, "'s", "s")
+	t = strings.ReplaceAll(t, "\u2019s", "s")
 	// Remove articles
 	for _, article := range []string{"the ", "a ", "an "} {
 		t = strings.TrimPrefix(t, article)
@@ -563,6 +625,106 @@ func normalizeTitle(title string) string {
 		}
 	}
 	return b.String()
+}
+
+// normalizeTitleForTokens normalizes a title but preserves spaces for tokenization.
+func normalizeTitleForTokens(title string) string {
+	t := strings.ToLower(title)
+	t = strings.ReplaceAll(t, "&", " and ")
+	t = strings.ReplaceAll(t, "'s", "s")
+	t = strings.ReplaceAll(t, "\u2019s", "s")
+	for _, article := range []string{"the ", "a ", "an "} {
+		t = strings.TrimPrefix(t, article)
+	}
+	var b strings.Builder
+	for _, r := range t {
+		if r >= 'a' && r <= 'z' || r >= '0' && r <= '9' || r == ' ' {
+			b.WriteRune(r)
+		}
+	}
+	return strings.Join(strings.Fields(b.String()), " ")
+}
+
+// collapseAcronymsScan replaces dot- and space-separated single-letter
+// sequences (e.g., "m.i.a" → "mia", "m i a" → "mia").
+func collapseAcronymsScan(s string) string {
+	dotRe := regexp.MustCompile(`(?:^|[^a-zA-Z])((?:[a-zA-Z]\.){2,}[a-zA-Z]?)`)
+	s = dotRe.ReplaceAllStringFunc(s, func(m string) string {
+		prefix := ""
+		start := 0
+		if len(m) > 0 && !unicode.IsLetter(rune(m[0])) {
+			prefix = string(m[0])
+			start = 1
+		}
+		return prefix + strings.ReplaceAll(m[start:], ".", "")
+	})
+
+	spaceRe := regexp.MustCompile(`(?:^|[^a-zA-Z])((?:[a-zA-Z] ){2,}[a-zA-Z])(?:[^a-zA-Z]|$)`)
+	s = spaceRe.ReplaceAllStringFunc(s, func(m string) string {
+		prefix := ""
+		suffix := ""
+		start := 0
+		end := len(m)
+		if len(m) > 0 && !unicode.IsLetter(rune(m[0])) {
+			prefix = string(m[0])
+			start = 1
+		}
+		if end > 0 && !unicode.IsLetter(rune(m[end-1])) {
+			suffix = string(m[end-1])
+			end--
+		}
+		return prefix + strings.ReplaceAll(m[start:end], " ", "") + suffix
+	})
+
+	return s
+}
+
+// tokenize splits a title into meaningful words, removing stop words.
+func tokenize(s string) []string {
+	words := strings.Fields(normalizeTitleForTokens(s))
+	stopWords := map[string]bool{
+		"the": true, "a": true, "an": true, "and": true,
+		"or": true, "of": true, "in": true, "to": true,
+		"for": true, "is": true,
+	}
+	out := make([]string, 0, len(words))
+	for _, w := range words {
+		if !stopWords[w] && len(w) > 0 {
+			out = append(out, w)
+		}
+	}
+	return out
+}
+
+// tokenSimilarity computes token-level similarity between two titles.
+func tokenSimilarity(a, b string) int {
+	aToks := tokenize(a)
+	bToks := tokenize(b)
+	if len(aToks) == 0 || len(bToks) == 0 {
+		return 0
+	}
+	aSet := make(map[string]bool, len(aToks))
+	for _, w := range aToks {
+		aSet[w] = true
+	}
+	bSet := make(map[string]bool, len(bToks))
+	for _, w := range bToks {
+		bSet[w] = true
+	}
+	intersection := 0
+	for w := range aSet {
+		if bSet[w] {
+			intersection++
+		}
+	}
+	minSize := len(aSet)
+	if len(bSet) < minSize {
+		minSize = len(bSet)
+	}
+	if minSize == 0 {
+		return 0
+	}
+	return intersection * 100 / minSize
 }
 
 // qualityFromParsedInfo maps parsed release info to a canonical quality
@@ -633,6 +795,38 @@ func abs(x int) int {
 	return x
 }
 
+// matchLocalMovie checks the local library for a movie matching the given title and year.
+func (s *Scanner) matchLocalMovie(ctx context.Context, title string, year int) (*movies.Movie, error) {
+	allMovies, err := s.movieSvc.ListMovies(ctx, 0, 0)
+	if err != nil {
+		return nil, err
+	}
+
+	normTitle := normalizeTitle(title)
+
+	// Pass 1: exact normalized title + year
+	for _, m := range allMovies {
+		normM := normalizeTitle(m.Title)
+		if normTitle == normM {
+			if year == 0 || m.Year == 0 || m.Year == year || abs(m.Year-year) <= 1 {
+				return m, nil
+			}
+		}
+	}
+
+	// Pass 2: fuzzy token match with high threshold
+	for _, m := range allMovies {
+		score := tokenSimilarity(title, m.Title)
+		if score >= 80 {
+			if year == 0 || m.Year == 0 || m.Year == year || abs(m.Year-year) <= 1 {
+				return m, nil
+			}
+		}
+	}
+
+	return nil, nil
+}
+
 func slugify(s string) string {
 	lower := strings.ToLower(s)
 	var b strings.Builder
@@ -654,6 +848,11 @@ func slugify(s string) string {
 }
 
 // RescanMovie rescans a single movie's folder for updated files.
+// It first tries to scan the movie's specific folder (derived from existing
+// files or the naming convention). If no movie folder is found it falls back
+// to scanning the entire library root. Matching uses multi-pass fuzzy logic
+// (exact → containment → token similarity) so slightly different folder/file
+// names still get picked up.
 func (s *Scanner) RescanMovie(ctx context.Context, movieID, libraryPath string) (*ScanResult, error) {
 	movie, err := s.movieSvc.GetMovie(ctx, movieID)
 	if err != nil {
@@ -674,8 +873,15 @@ func (s *Scanner) RescanMovie(ctx context.Context, movieID, libraryPath string) 
 	s.unmatched[scanID] = nil
 	s.mu.Unlock()
 
-	// Walk the library path looking for files matching this movie
-	scanned, walkErr := walkFolder(libraryPath)
+	// Determine the best folder to scan:
+	// 1. Movie's folder derived from existing file paths
+	// 2. Folder matching the naming convention "{Title} ({Year})"
+	// 3. Fall back to the entire library root
+	scanPath := s.resolveMovieFolder(ctx, movie, libraryPath)
+
+	s.logger.Info("rescan: scanning folder", "movie", movie.Title, "path", scanPath)
+
+	scanned, walkErr := walkFolder(scanPath)
 	if walkErr != nil {
 		s.failScan(scanID, walkErr.Error())
 		return result, walkErr
@@ -685,22 +891,15 @@ func (s *Scanner) RescanMovie(ctx context.Context, movieID, libraryPath string) 
 	result.TotalFiles = len(scanned)
 	s.mu.Unlock()
 
-	normMovieTitle := normalizeTitle(movie.Title)
-
 	for _, sf := range scanned {
-		normParsed := normalizeTitle(sf.Rel.Title)
-		if normParsed != normMovieTitle {
-			continue
-		}
-		// Year check (allow ±1)
-		if movie.Year > 0 && sf.Rel.Year > 0 && abs(movie.Year-sf.Rel.Year) > 1 {
+		if !matchesMovie(sf.Rel.Title, sf.Rel.Year, movie.Title, movie.Year) {
 			continue
 		}
 
 		quality := qualityFromParsedInfo(sf.Rel.Resolution, sf.Rel.Source, sf.Rel.IsRemux)
 		if err := s.importFile(ctx, sf.Path, sf.Size, quality, sf.Rel.Source, &metadata.MovieMetadata{
-			Title: movie.Title,
-			Year:  movie.Year,
+			Title:  movie.Title,
+			Year:   movie.Year,
 			TMDBID: movie.TMDBID,
 			IMDBID: movie.IMDBID,
 		}, movie.LibraryID, movie.QualityProfileID); err != nil {
@@ -722,4 +921,78 @@ func (s *Scanner) RescanMovie(ctx context.Context, movieID, libraryPath string) 
 
 	s.logger.Info("movie rescan completed", "movie", movie.Title, "matched", result.Matched)
 	return result, nil
+}
+
+// resolveMovieFolder determines the folder to scan for a specific movie.
+// Priority: existing file → naming convention folder → library root.
+func (s *Scanner) resolveMovieFolder(ctx context.Context, movie *movies.Movie, libraryPath string) string {
+	// Try to derive from existing movie files
+	files, err := s.movieSvc.ListMovieFiles(ctx, movie.ID)
+	if err == nil && len(files) > 0 {
+		folder := filepath.Dir(files[0].FilePath)
+		if folder != libraryPath && folder != "." {
+			if _, statErr := os.Stat(folder); statErr == nil {
+				return folder
+			}
+		}
+	}
+
+	// Try the conventional folder name: "{Title} ({Year})"
+	conventionalName := movie.Title
+	if movie.Year > 0 {
+		conventionalName = fmt.Sprintf("%s (%d)", movie.Title, movie.Year)
+	}
+	conventionalPath := filepath.Join(libraryPath, conventionalName)
+	if _, statErr := os.Stat(conventionalPath); statErr == nil {
+		return conventionalPath
+	}
+
+	// Try finding a folder in the library that fuzzy-matches the movie title
+	entries, err := os.ReadDir(libraryPath)
+	if err == nil {
+		for _, entry := range entries {
+			if !entry.IsDir() {
+				continue
+			}
+			parsed := parser.Parse(entry.Name())
+			if matchesMovie(parsed.Title, parsed.Year, movie.Title, movie.Year) {
+				return filepath.Join(libraryPath, entry.Name())
+			}
+		}
+	}
+
+	// Fall back to entire library root
+	return libraryPath
+}
+
+// matchesMovie uses multi-pass matching (exact, containment, token similarity)
+// to determine if a parsed title+year matches a movie. Year is allowed ±1.
+func matchesMovie(parsedTitle string, parsedYear int, movieTitle string, movieYear int) bool {
+	if parsedTitle == "" {
+		return false
+	}
+
+	yearOK := func(py, my int) bool {
+		return py == 0 || my == 0 || py == my || abs(py-my) <= 1
+	}
+
+	normParsed := normalizeTitle(parsedTitle)
+	normMovie := normalizeTitle(movieTitle)
+
+	// Pass 1: exact normalized
+	if normParsed == normMovie && yearOK(parsedYear, movieYear) {
+		return true
+	}
+
+	// Pass 2: containment
+	if (strings.Contains(normParsed, normMovie) || strings.Contains(normMovie, normParsed)) && yearOK(parsedYear, movieYear) {
+		return true
+	}
+
+	// Pass 3: token similarity ≥ 80%
+	if tokenSimilarity(parsedTitle, movieTitle) >= 80 && yearOK(parsedYear, movieYear) {
+		return true
+	}
+
+	return false
 }

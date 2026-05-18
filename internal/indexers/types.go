@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"regexp"
+	"strings"
 	"time"
 )
 
@@ -85,10 +87,37 @@ type Caps struct {
 	SupportedIDs []string `json:"supported_ids"`
 }
 
+// SearchMode controls which Newznab/Torznab API mode is used for a query.
+// When empty, the mode is inferred from the query fields; when set
+// explicitly, the mode is forced (and the query is skipped for indexers
+// that don't support it).
+type SearchMode string
+
+const (
+	// ModeAuto lets the indexer client infer the best mode from the
+	// query fields and indexer capabilities.
+	ModeAuto SearchMode = ""
+
+	// ModeTVSearch forces the Newznab "tvsearch" mode.
+	ModeTVSearch SearchMode = "tvsearch"
+
+	// ModeMovie forces the Newznab "movie" mode.
+	ModeMovie SearchMode = "movie"
+
+	// ModeSearch forces the generic Newznab "search" mode (text only).
+	ModeSearch SearchMode = "search"
+)
+
 // Query is the input to Search. Zero-valued fields mean "no filter".
 type Query struct {
-	// Term is the free-text search string.
+	// Term is the free-text search string. For Newznab/Torznab this
+	// becomes the q= parameter. Must NOT be pre-URL-encoded — the
+	// indexer client handles encoding.
 	Term string `json:"query"`
+
+	// Mode explicitly selects the Newznab search mode. When empty
+	// (ModeAuto), the mode is inferred from the other fields.
+	Mode SearchMode `json:"mode,omitempty"`
 
 	// Categories restricts results to the given Newznab categories;
 	// empty means any.
@@ -105,9 +134,37 @@ type Query struct {
 	Season  int `json:"season,omitempty"`
 	Episode int `json:"episode,omitempty"`
 
+	// Year is the release year. For movie text-search queries (Radarr
+	// behavior), it is appended to the q= term: "Title Year".
+	Year int `json:"year,omitempty"`
+
+	// DailyDate encodes a daily-show air date as "YYYY-MM-DD". When
+	// set, tvsearch queries encode it as season=YYYY&ep=MM/DD per
+	// the Newznab daily-episode convention.
+	DailyDate string `json:"daily_date,omitempty"`
+
 	// Limit caps the rows returned by a single indexer. Zero means
 	// "indexer default".
 	Limit int `json:"limit,omitempty"`
+}
+
+// reSeasonEpisode matches season/episode patterns commonly embedded in
+// search queries (e.g. S01E01, S03, 1x05).
+var reSeasonEpisode = regexp.MustCompile(`(?i)\b[Ss]\d{1,2}(?:[Ee]\d{1,2})?\b|\b\d{1,2}[Xx]\d{1,2}\b`)
+
+// reSpecialChars matches punctuation that breaks most newznab/torznab
+// tokenizers.
+var reSpecialChars = regexp.MustCompile(`[''"""` + "`" + `:;!?@#$%^&*()+=\[\]{}<>|\\~/]`)
+
+// SanitizeTerm cleans a user-provided search term for indexer APIs.
+// When hasSeasonEpisodeParams is true the season/episode tokens are
+// stripped because they are sent as dedicated API parameters.
+func SanitizeTerm(term string, hasSeasonEpisodeParams bool) string {
+	if hasSeasonEpisodeParams {
+		term = reSeasonEpisode.ReplaceAllString(term, " ")
+	}
+	term = reSpecialChars.ReplaceAllString(term, " ")
+	return strings.TrimSpace(strings.Join(strings.Fields(term), " "))
 }
 
 // Result is one row from a single indexer's search response. Field
@@ -232,6 +289,27 @@ type Definition struct {
 	RequestDelay int       `json:"request_delay,omitempty"`
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
+}
+
+// SeedConfig holds optional per-indexer seed policy overrides. These
+// are stored inside the indexer's Config JSON blob and, when present,
+// override the download client's default seed policy for grabs
+// originating from this indexer.
+type SeedConfig struct {
+	RatioLimit       *float64 `json:"seed_ratio_limit,omitempty"`
+	TimeLimitMinutes *int     `json:"seed_time_limit_minutes,omitempty"`
+}
+
+// ParseSeedConfig extracts seed policy overrides from an indexer
+// definition's Config JSON. Returns a zero SeedConfig (both nil) if
+// the definition has no config or no seed fields.
+func ParseSeedConfig(def Definition) SeedConfig {
+	if len(def.Config) == 0 {
+		return SeedConfig{}
+	}
+	var sc SeedConfig
+	_ = json.Unmarshal(def.Config, &sc)
+	return sc
 }
 
 // Health is the persisted shape of an indexer_health row.

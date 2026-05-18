@@ -20,7 +20,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { useNavigate } from "@tanstack/react-router";
+import { useNavigate, useSearch } from "@tanstack/react-router";
+import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { NamingSettings } from "@/components/movies/naming-settings";
 import {
@@ -62,6 +63,7 @@ import {
   useUpdateMediaPreferences,
   useParseReleaseName,
 } from "@/lib/media-info-api";
+import { useQualityProfiles } from "@/lib/quality-profiles-api";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -114,6 +116,7 @@ const CATEGORIES = [
   { id: "notifications", label: "Notifications" },
   { id: "connect", label: "Connect" },
   { id: "sync-profiles", label: "Sync Profiles" },
+  { id: "configuration", label: "Configuration" },
   { id: "ui", label: "UI" },
 ] as const;
 
@@ -1274,6 +1277,8 @@ function ConnectPanel() {
   const traktSyncWatchedMut = useTraktSyncWatched();
   const traktSyncCollectionMut = useTraktSyncCollection();
   const traktSyncWatchlistMut = useTraktSyncWatchlist();
+  const navigate = useNavigate();
+  const { trakt_code } = useSearch({ strict: false });
 
   const [dialogOpen, setDialogOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<ConnectConnection | null>(null);
@@ -1292,6 +1297,28 @@ function ConnectPanel() {
   const [formClientSecret, setFormClientSecret] = React.useState("");
   const [traktOAuthCode, setTraktOAuthCode] = React.useState("");
   const [traktAuthStep, setTraktAuthStep] = React.useState<"config" | "authorize" | "code" | "connected">("config");
+
+  // Auto-populate the OAuth code when returning from Trakt redirect
+  React.useEffect(() => {
+    if (trakt_code) {
+      setTraktOAuthCode(trakt_code);
+      setTraktAuthStep("code");
+      // Find the existing Trakt connection and open its edit dialog
+      const traktConn = connections.find((c) => c.provider === "trakt");
+      if (traktConn) {
+        setEditing(traktConn);
+        setFormProvider(traktConn.provider);
+        setFormName(traktConn.name);
+        setFormClientId(traktConn.settings.client_id ?? "");
+        setFormClientSecret(traktConn.settings.client_secret ?? "");
+        setFormNotifyOnImport(traktConn.notify_on_import);
+        setFormEnabled(traktConn.enabled);
+        setDialogOpen(true);
+      }
+      // Clear the search param so it doesn't re-trigger
+      navigate({ to: "/settings", search: {}, replace: true });
+    }
+  }, [trakt_code, connections, navigate]);
 
   const isTrakt = formProvider === "trakt";
 
@@ -2355,8 +2382,10 @@ function MediaPreferencesPanel() {
   const { data: prefs, isLoading } = useMediaPreferences();
   const updateMut = useUpdateMediaPreferences();
   const parseMut = useParseReleaseName();
+  const { data: qualityProfiles } = useQualityProfiles();
   const [testName, setTestName] = React.useState("");
 
+  const [defaultProfileId, setDefaultProfileId] = React.useState("");
   const [audioOrder, setAudioOrder] = React.useState<string[]>([]);
   const [subLangs, setSubLangs] = React.useState<string[]>([]);
   const [requireSubs, setRequireSubs] = React.useState(false);
@@ -2366,6 +2395,7 @@ function MediaPreferencesPanel() {
 
   React.useEffect(() => {
     if (prefs) {
+      setDefaultProfileId(prefs.default_quality_profile_id ?? "");
       setAudioOrder(prefs.preferred_audio ?? []);
       setSubLangs(prefs.preferred_sub_languages ?? []);
       setRequireSubs(prefs.require_subtitles);
@@ -2383,6 +2413,7 @@ function MediaPreferencesPanel() {
         require_subtitles: requireSubs,
         prefer_hdr: preferHDR,
         prefer_atmos: preferAtmos,
+        default_quality_profile_id: defaultProfileId,
       },
       {
         onSuccess: () => {
@@ -2429,6 +2460,23 @@ function MediaPreferencesPanel() {
 
   return (
     <div className="space-y-6">
+      {/* Default Quality Profile */}
+      <div className="space-y-2">
+        <Label className="text-base font-medium">Default Quality Profile</Label>
+        <p className="text-xs text-muted-foreground">
+          Used as the default when adding new movies or TV shows.
+        </p>
+        <Select value={defaultProfileId} onValueChange={(v) => { setDefaultProfileId(v); setDirty(true); }}>
+          <SelectTrigger><SelectValue placeholder="None (use first available)" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="">None</SelectItem>
+            {qualityProfiles?.map(p => (
+              <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
       {/* Audio Codec Priority */}
       <div className="space-y-3">
         <Label className="text-base font-medium">Audio Codec Priority</Label>
@@ -2611,16 +2659,55 @@ function SettingsContent({ category }: { category: Category }) {
       return <ConnectPanel />;
     case "sync-profiles":
       return <SyncProfilesPanel />;
+    case "configuration":
+      return <ConfigurationPanel />;
     case "ui":
       return <UIPanel />;
   }
+}
+
+const CONFIG_LINKS = [
+  { to: "/quality-profiles", label: "Quality Profiles", description: "Manage quality cutoffs and preferred formats" },
+  { to: "/custom-formats", label: "Custom Formats", description: "Define custom format scoring rules" },
+  { to: "/language-profiles", label: "Language Profiles", description: "Configure preferred languages for media" },
+  { to: "/notifications", label: "Notification Agents", description: "Manage notification services and triggers" },
+  { to: "/proxies", label: "Proxies", description: "Configure proxy servers for indexer requests" },
+] as const;
+
+function ConfigurationPanel() {
+  return (
+    <div className="space-y-2">
+      <p className="text-sm text-muted-foreground mb-4">
+        Quick access to advanced configuration pages.
+      </p>
+      <div className="grid gap-3 sm:grid-cols-2">
+        {CONFIG_LINKS.map((link) => (
+          <Link
+            key={link.to}
+            to={link.to}
+            className="group flex flex-col rounded-lg border p-4 transition-colors hover:bg-accent"
+          >
+            <span className="font-medium group-hover:text-accent-foreground">
+              {link.label}
+            </span>
+            <span className="mt-1 text-xs text-muted-foreground">
+              {link.description}
+            </span>
+          </Link>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 // ─── Settings Page ──────────────────────────────────────────────────────
 
 export function SettingsPage() {
   useSetPageHeader("Settings");
-  const [active, setActive] = React.useState<Category>("general");
+  const { trakt_code } = useSearch({ strict: false });
+  const [active, setActive] = React.useState<Category>(
+    trakt_code ? "connect" : "general",
+  );
   const activeLabel =
     CATEGORIES.find((c) => c.id === active)?.label ?? "General";
 

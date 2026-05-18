@@ -20,7 +20,8 @@ type MediaPreferences struct {
 	PreferredSubLanguages []string `json:"preferred_sub_languages"`
 	RequireSubtitles      bool     `json:"require_subtitles"`
 	PreferHDR             bool     `json:"prefer_hdr"`
-	PreferAtmos           bool     `json:"prefer_atmos"`
-	CreatedAt             string   `json:"created_at,omitempty"`
+	PreferAtmos             bool     `json:"prefer_atmos"`
+	DefaultQualityProfileID string   `json:"default_quality_profile_id"`
+	CreatedAt               string   `json:"created_at,omitempty"`
 	UpdatedAt             string   `json:"updated_at,omitempty"`
 }

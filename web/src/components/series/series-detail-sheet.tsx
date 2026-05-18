@@ -320,7 +320,7 @@ function SeasonAccordion({
             disabled={autoSearchingSeason}
             onClick={handleAutoSearchSeason}
           >
-            <Search className={cn("w-3.5 h-3.5", autoSearchingSeason && "animate-spin")} />
+            {autoSearchingSeason ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}
           </button>
           <button
             className="p-1 rounded hover:bg-accent/10 text-muted-foreground hover:text-accent transition-colors"
@@ -420,7 +420,7 @@ function SeasonAccordion({
                           disabled={autoSearchingEp === ep.episodeNumber}
                           onClick={() => handleAutoSearchEpisode(ep)}
                         >
-                          <Search className={cn("w-3.5 h-3.5", autoSearchingEp === ep.episodeNumber && "animate-spin")} />
+                          {autoSearchingEp === ep.episodeNumber ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}
                         </button>
                         <button
                           className="p-1 rounded hover:bg-accent/10 text-muted-foreground hover:text-accent transition-colors"
@@ -779,7 +779,7 @@ export function SeriesDetailSheet({
             <div className="flex items-center gap-1.5">
               {/* Primary actions with labels */}
               <Button size="sm" variant="outline" className="gap-1.5 h-8 text-xs" title="Automatic search for all episodes" onClick={handleAutoSearch} disabled={autoSearching}>
-                <Search className={cn("w-3.5 h-3.5", autoSearching && "animate-spin")} />{autoSearching ? "Searching..." : "Search"}
+                {autoSearching ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}{autoSearching ? "Searching..." : "Search"}
               </Button>
               <Button size="sm" variant="outline" className="gap-1.5 h-8 text-xs" title="Interactive search — browse releases manually" onClick={() => openSearch({ title: series.title, query: series.title, mediaType: "series" })}>
                 <FolderSearch className="w-3.5 h-3.5" />Browse
@@ -793,10 +793,10 @@ export function SeriesDetailSheet({
 
               {/* Secondary actions — icon only */}
               <Button size="icon" variant="ghost" className="h-8 w-8" onClick={handleRefresh} disabled={refreshing} title="Refresh metadata from TMDB">
-                <RefreshCw className={cn("w-3.5 h-3.5", refreshing && "animate-spin")} />
+                {refreshing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
               </Button>
               <Button size="icon" variant="ghost" className="h-8 w-8" onClick={handleRescan} disabled={rescanning} title="Rescan library folder for new files">
-                <HardDriveDownload className={cn("w-3.5 h-3.5", rescanning && "animate-spin")} />
+                {rescanning ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <HardDriveDownload className="w-3.5 h-3.5" />}
               </Button>
               <Button size="icon" variant="ghost" className="h-8 w-8" onClick={handleArchiveToggle} disabled={archiving} title={series.monitoringStatus === "unmonitored" ? "Unarchive" : "Archive"}>
                 {series.monitoringStatus === "unmonitored" ? <ArchiveRestore className="w-3.5 h-3.5" /> : <Archive className="w-3.5 h-3.5" />}

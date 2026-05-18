@@ -29,6 +29,30 @@ export interface WorkflowEvent {
   createdAt: string;
 }
 
+export type WorkflowEventType =
+  | "search_started"
+  | "grabbed"
+  | "downloading"
+  | "download_progress"
+  | "download_complete"
+  | "import_started"
+  | "import_success"
+  | "import_failed"
+  | "stale_detected"
+  | "retried"
+  | "failed"
+  | "cancelled"
+  | "completed";
+
+export interface WorkflowTimelineEvent {
+  id: string;
+  workflowId: string;
+  eventType: WorkflowEventType;
+  message: string;
+  metadata: string;
+  createdAt: string;
+}
+
 export interface Workflow {
   id: string;
   type: WorkflowType;
@@ -71,6 +95,7 @@ export const workflowKeys = {
   all: ["workflows"] as const,
   list: () => [...workflowKeys.all, "list"] as const,
   detail: (id: string) => [...workflowKeys.all, "detail", id] as const,
+  events: (id: string) => [...workflowKeys.all, "events", id] as const,
 };
 
 export async function listWorkflows(signal?: AbortSignal): Promise<Workflow[]> {
@@ -109,6 +134,17 @@ export async function deleteWorkflow(id: string): Promise<void> {
   );
 }
 
+export async function getWorkflowEvents(
+  id: string,
+  signal?: AbortSignal,
+): Promise<WorkflowTimelineEvent[]> {
+  return request<WorkflowTimelineEvent[]>(
+    "GET",
+    `/api/v1/workflows/${encodeURIComponent(id)}/events`,
+    signal,
+  );
+}
+
 // ---------- React Query hooks ----------
 
 export function useWorkflows() {
@@ -125,6 +161,15 @@ export function useWorkflow(id: string) {
     queryFn: ({ signal }) => getWorkflow(id, signal),
     enabled: !!id,
     refetchInterval: 3000,
+  });
+}
+
+export function useWorkflowEvents(id: string) {
+  return useQuery<WorkflowTimelineEvent[], Error>({
+    queryKey: workflowKeys.events(id),
+    queryFn: ({ signal }) => getWorkflowEvents(id, signal),
+    enabled: !!id,
+    refetchInterval: 5000,
   });
 }
 

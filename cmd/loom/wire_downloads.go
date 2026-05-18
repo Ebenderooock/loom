@@ -23,9 +23,9 @@ import (
 // downloadWiring holds lifecycle objects produced by wireDownloads
 // so the caller can manage their shutdown.
 type downloadWiring struct {
-	importPipeline  *imports.ImportPipeline
-	monitorCancel   context.CancelFunc
-	schedulerCancel context.CancelFunc
+	importPipeline     *imports.ImportPipeline
+	orchestratorCancel context.CancelFunc
+	monitorCancel      context.CancelFunc
 }
 
 // wireDownloads constructs download-related services (remote paths,
@@ -57,11 +57,19 @@ func wireDownloads(
 		return nil, fmt.Errorf("init workflow store: %w", err)
 	}
 	wfEngine := workflows.NewEngine(wfStore, workflowMediaAdapter{moviesSvc}, logger)
-	wfScheduler := workflows.NewScheduler(wfEngine, logger)
 
 	downloadSvc.SetWorkflowEngine(wfEngine)
 	downloadSvc.SetMovieStatusUpdater(movieStatusAdapter{moviesSvc})
 	srv.SetWorkflowEngine(wfEngine)
+
+	// Workflow orchestrator — unified state coordinator (created early so callers can reference it)
+	orchestrator := workflows.NewOrchestrator(workflows.OrchestratorOpts{
+		Store:          wfStore,
+		Engine:         wfEngine,
+		Logger:         logger,
+		DownloadStatus: downloadSvc,
+	})
+	downloadSvc.SetOrchestrator(orchestrator)
 
 	// Autosearch decision engine
 	cfStore := customformats.NewStore(db.DB())
@@ -69,8 +77,9 @@ func wireDownloads(
 	cfEngine := customformats.NewEngine(cfFormats)
 	autoSearchEngine := autosearch.NewEngine(
 		indexerSvc, media.qpStore, cfEngine, cfStore,
-		downloadSvc.Registry(), moviesSvc, media.seriesSvc, wfEngine, logger,
+		downloadSvc.Registry(), moviesSvc, media.seriesSvc, logger,
 		autosearch.WithAuditLogger(auditLogger),
+		autosearch.WithOrchestrator(orchestrator),
 	)
 	srv.SetAutoSearchEngine(autoSearchEngine)
 
@@ -99,6 +108,7 @@ func wireDownloads(
 	}
 	importPipeline.Start()
 	srv.SetImportPipeline(importPipeline)
+	orchestrator.SetImportFn(importPipeline.RunImport)
 
 	// Download monitor — polls clients for completion
 	downloadHistoryStore := downloads.NewHistoryStore(db.DB())
@@ -117,6 +127,7 @@ func wireDownloads(
 		CheckForStalled: true,
 		StallHandler:    stallHandler,
 		HistoryStore:    downloadHistoryStore,
+		OrchNotifier:    orchestrator,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("init download monitor: %w", err)
@@ -124,17 +135,18 @@ func wireDownloads(
 	monCtx, monCancel := context.WithCancel(ctx)
 	go downloadMonitor.RunLoop(monCtx)
 
-	// Workflow scheduler — stale detection + prune
-	schedCtx, schedCancel := context.WithCancel(ctx)
-	go wfScheduler.RunLoop(schedCtx)
+	// Start orchestrator goroutine
+	orchCtx, orchCancel := context.WithCancel(ctx)
+	go orchestrator.Run(orchCtx)
+	srv.SetOrchestrator(orchestrator)
 
 	// Register workflow API routes
 	// (handled in server.go newMux via wfEngine field)
 
 	return &downloadWiring{
-		importPipeline:  importPipeline,
-		monitorCancel:   monCancel,
-		schedulerCancel: schedCancel,
+		importPipeline:     importPipeline,
+		orchestratorCancel: orchCancel,
+		monitorCancel:      monCancel,
 	}, nil
 }
 

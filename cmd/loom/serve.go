@@ -186,6 +186,7 @@ func cmdServe(ctx context.Context, args []string) error {
 	}
 	defer dlWiring.importPipeline.Stop()
 	defer dlWiring.monitorCancel()
+	defer dlWiring.orchestratorCancel()
 
 	// Wire infrastructure services (connect, compat, notifications, rolling search, health)
 	infra, err := wireInfra(ctx, db, srv, indexerSvc, downloadSvc, moviesSvc, media, auditLogger, logger)
