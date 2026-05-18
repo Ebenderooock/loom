@@ -40,6 +40,7 @@
    - 3.28 [Dashboard](#328-dashboard)
    - 3.29 [System / Health / Diagnostics](#329-system--health--diagnostics)
    - 3.30 [Compatibility Shims (arr-compat)](#330-compatibility-shims-arr-compat)
+   - 3.31 [System Logs](#331-system-logs)
 4. [Process Flows](#4-process-flows)
    - 4.1 [Manual Search & Grab Flow](#41-manual-search--grab-flow)
    - 4.2 [Automated Search & Grab Flow](#42-automated-search--grab-flow)
