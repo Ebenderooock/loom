@@ -90,5 +90,5 @@
 //	count, _ := orch.TriggerSearches(ctx, matches)
 //	stats, _ := orch.GetStats(ctx)
 //	fmt.Printf("Triggered %d searches; %d pending, %d completed\n",
-//		count, stats.PendingSearches, stats.CompletedSearhes)
+//		count, stats.PendingSearches, stats.CompletedSearches)
 package autosearch

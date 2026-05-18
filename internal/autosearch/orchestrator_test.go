@@ -214,8 +214,8 @@ func TestOrchestratorGetStats(t *testing.T) {
 		t.Errorf("expected 1 pending search, got %d", stats.PendingSearches)
 	}
 
-	if stats.CompletedSearhes != 1 {
-		t.Errorf("expected 1 completed search, got %d", stats.CompletedSearhes)
+	if stats.CompletedSearches != 1 {
+		t.Errorf("expected 1 completed search, got %d", stats.CompletedSearches)
 	}
 
 	if stats.FailedSearches != 1 {

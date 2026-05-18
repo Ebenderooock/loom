@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -84,7 +85,7 @@ func (o *Orchestrator) TriggerSearches(ctx context.Context, matches []Match) (in
 
 		if err := o.storeSearchEvent(ctx, event); err != nil {
 			// Log error but continue with other matches
-			fmt.Printf("failed to store search event: %v\n", err)
+			slog.Warn("failed to store search event", "error", err, "item_id", match.ItemID)
 			continue
 		}
 
@@ -179,7 +180,7 @@ func (o *Orchestrator) ensureSchema() error {
 type OrchestrationStats struct {
 	TotalMatches    int
 	PendingSearches int
-	CompletedSearhes int
+	CompletedSearches int
 	FailedSearches  int
 }
 
@@ -198,7 +199,7 @@ func (o *Orchestrator) GetStats(ctx context.Context) (OrchestrationStats, error)
 	// Count completed
 	err = o.db.QueryRowContext(ctx,
 		"SELECT COUNT(*) FROM search_history WHERE status IN ('found', 'not_found')",
-	).Scan(&stats.CompletedSearhes)
+	).Scan(&stats.CompletedSearches)
 	if err != nil && err != sql.ErrNoRows {
 		return stats, err
 	}
@@ -211,6 +212,6 @@ func (o *Orchestrator) GetStats(ctx context.Context) (OrchestrationStats, error)
 		return stats, err
 	}
 
-	stats.TotalMatches = stats.PendingSearches + stats.CompletedSearhes + stats.FailedSearches
+	stats.TotalMatches = stats.PendingSearches + stats.CompletedSearches + stats.FailedSearches
 	return stats, nil
 }

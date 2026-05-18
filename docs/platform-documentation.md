@@ -578,31 +578,57 @@ Each scanned media file is tracked with: `id`, `library_id`, `path` (unique), `s
 
 **What it does:** The core engine that searches indexers, evaluates results against quality profiles, and grabs the best match.
 
-**API:** `POST /api/v1/autosearch`
+**API endpoints:**
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/api/v1/autosearch` | Trigger automated search + grab for a media item. |
+| `POST` | `/api/v1/autosearch/evaluate` | Dry-run evaluate indexer results against quality profile (no grab). Used by manual search UI for quality badges. |
 
 **Process (Engine.SearchAndGrab):**
 1. Load the media item's quality profile.
 2. Load quality definitions (resolution/codec tiers).
 3. Build allowed quality tiers + custom format scores from profile.
-4. Parse existing file quality (if upgrading).
-5. Search all healthy indexers in parallel with timeouts.
-6. For each result, run `Engine.Evaluate`:
-   - Parse release name → extract quality, codec, source, group, etc.
-   - Check against allowed qualities in profile.
-   - Score using quality tier + custom format scores + seeder count + age + size + freeleech.
-   - Compare against existing file quality (reject if not an upgrade).
-   - Return accepted/rejected with composite score.
-7. Sort accepted results by score.
-8. Grab the best result → send to download client.
-9. Create workflow record tracking the pipeline state.
+4. Reject if media already has an active workflow (duplicate prevention).
+5. Inspect existing file quality (for upgrade comparison).
+6. Resolve cutoff tier from profile.
+7. Build tiered query chain:
+   - **Tier 0:** ID-based query (IMDb/TMDB/TVDB) if IDs present.
+   - **Tier 1:** Title/alternate title text queries.
+8. For each tier, search all queries via indexer fan-out.
+9. Parse + evaluate each result; stop at first tier with accepted results.
+10. If no results: return reason `"no results from indexers"`.
+11. If all rejected: return reason `"all results rejected"` with top reject counts.
+12. Sort accepted results by composite score descending.
+13. Grab best candidate; fall back to next-best if add fails.
+14. Record workflow linkage (if orchestrator present).
 
-**Scoring factors** (from `indexers/scoring.go`):
-- Quality tier (resolution/codec match)
-- Seeder count
-- Release age
-- File size
-- Freeleech status
-- Custom format score bonuses/penalties
+**Evaluate filters (in order):**
+1. Parse release name → extract quality, codec, source, group, etc.
+2. Identity check (title/year/IMDB match).
+3. Quality mapping against definitions.
+4. Allowed-quality check from profile.
+5. Upgrade logic: `quality_cutoff_met`, `upgrade_not_allowed`, `not_an_upgrade`, `existing_quality_unknown`.
+6. Zero-seeder reject.
+7. Min/max size from quality definition (scaled by runtime).
+8. Custom format scoring.
+9. Min format score reject.
+10. Tiebreaker computation.
+
+**Scoring formula (ScoredRelease.CompositeScore):**
+- `qualityWeight = (20 - qualityTier) × 1000` — quality tier dominates
+- `formatWeight = formatScore` — custom format score
+- `tiebreakerScore = seeders + age + size + freeleech`
+- `compositeScore = qualityWeight + formatWeight + tiebreakerScore`
+
+**Integration points:**
+- **Indexers:** `indexerSvc.Search()` for fan-out search across healthy indexers.
+- **Download clients:** `downloads.Registry` for grabbing best result.
+- **Workflows:** `orchestrator.StartSearch()` + `Send(CmdGrabbed)` for pipeline tracking.
+- **Quality profiles:** Profile items, cutoff, format items, min format score, upgrade allowed.
+- **Custom formats:** `customformats.Engine.ScoreRelease()` for bonus/penalty scoring.
+- **Movie/series services:** Existing file quality checks for upgrade decisions.
+- **Parser:** `internal/parser/` — release name parsing (title, year, resolution, source, codec, season/episode, etc.).
 
 **Expected outcomes:**
 - Best available release is grabbed and sent to download client.

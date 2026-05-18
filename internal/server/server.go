@@ -782,6 +782,7 @@ func (s *Server) newMux() http.Handler {
 		if s.autoSearchEngine != nil {
 			asHandler := autosearch.NewHandler(s.autoSearchEngine, s.logger)
 			r.Post("/api/v1/autosearch", asHandler.HandleAutoSearch)
+			r.Post("/api/v1/autosearch/evaluate", asHandler.HandleEvaluate)
 		}
 
 		// Filesystem browsing (authenticated)
