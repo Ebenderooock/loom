@@ -1252,17 +1252,60 @@ Seeding only runs when no profiles exist in the database. Quality definitions ar
 
 ### 3.14 Proxies
 
-**What it does:** HTTP/SOCKS proxy servers that can be attached to indexers.
+**What it does:** Manages proxy servers (HTTP, HTTPS, SOCKS5, FlareSolverr) that indexers can route traffic through. Provides a `TransportProvider` abstraction that indexer HTTP clients use to transparently route requests via configured proxies.
 
-**API:** `/api/v1/proxies` — CRUD, test.
+**API Endpoints:**
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/proxies` | List all proxies |
+| POST | `/api/v1/proxies` | Create proxy |
+| GET | `/api/v1/proxies/{id}` | Get proxy by ID |
+| PUT | `/api/v1/proxies/{id}` | Replace proxy |
+| PATCH | `/api/v1/proxies/{id}` | Partial update proxy |
+| DELETE | `/api/v1/proxies/{id}` | Delete proxy (fails if in use) |
+| POST | `/api/v1/proxies/{id}/test` | Test proxy connectivity |
+
+**Data Model:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| id | string | Auto-generated from kind + name |
+| name | string | Display name (required) |
+| kind | enum | `http`, `https`, `socks5`, `flaresolverr` |
+| config | object | Kind-specific configuration |
+| enabled | bool | Whether proxy is active |
+| created_at | datetime | Creation timestamp |
+| updated_at | datetime | Last update timestamp |
+
+**Proxy Kinds & Config:**
+
+- **http/https:** `host` (required), `port` (required), `username`, `password`
+- **socks5:** `host` (required), `port` (required), `username`, `password`
+- **flaresolverr:** `url` (required), `max_timeout` (seconds, default 60)
+
+**Error Handling:**
+
+- Validation errors (missing kind/name, invalid config) → 400 `invalid_config`
+- Proxy not found → 404 `not_found`
+- Delete when in use by indexers → 409 `in_use` (response includes indexer IDs)
+- Database/internal errors → 500 `internal`
+
+**Transport Integration:**
+
+The `TransportProvider` caches `http.Transport` instances per proxy ID. When an indexer is configured with a proxy ID, all HTTP requests for that indexer are routed through the corresponding proxy. The provider invalidates cached transports on proxy create/replace/patch to pick up configuration changes.
 
 **Expected outcomes:**
-- Indexer traffic routed through proxy.
-- Useful for accessing geo-restricted indexers.
+- Indexer traffic transparently routed through configured proxy.
+- FlareSolverr proxies handle Cloudflare-protected sites.
+- Proxy deletion blocked when indexers reference it (referential integrity).
+- Transport cache invalidated on proxy config changes.
 
 **Possible failures:**
-- Proxy unreachable → indexer searches fail.
-- Authentication failure.
+- Proxy unreachable → indexer searches fail with transport error.
+- Authentication failure → 407 from upstream proxy.
+- FlareSolverr timeout → falls back to error after `max_timeout` seconds.
+- Attempting to delete a proxy in use → 409 with list of dependent indexers.
 
 ---
 

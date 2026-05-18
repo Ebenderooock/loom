@@ -110,7 +110,12 @@ func (s *Service) handleCreate(w http.ResponseWriter, r *http.Request) {
 	p := Proxy{ID: req.ID, Kind: req.Kind, Name: req.Name, Enabled: enabled, Config: req.Config}
 	out, err := s.Create(r.Context(), p)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_config", err.Error())
+		var ve *ErrValidation
+		if errors.As(err, &ve) {
+			writeError(w, http.StatusBadRequest, "invalid_config", ve.Msg)
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "internal", err.Error())
 		return
 	}
 	writeJSON(w, http.StatusCreated, out)
@@ -143,7 +148,12 @@ func (s *Service) handleReplace(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusNotFound, "not_found", err.Error())
 			return
 		}
-		writeError(w, http.StatusBadRequest, "invalid_config", err.Error())
+		var ve *ErrValidation
+		if errors.As(err, &ve) {
+			writeError(w, http.StatusBadRequest, "invalid_config", ve.Msg)
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "internal", err.Error())
 		return
 	}
 	writeJSON(w, http.StatusOK, out)
@@ -178,7 +188,12 @@ func (s *Service) handlePatch(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusNotFound, "not_found", err.Error())
 			return
 		}
-		writeError(w, http.StatusBadRequest, "invalid_config", err.Error())
+		var ve *ErrValidation
+		if errors.As(err, &ve) {
+			writeError(w, http.StatusBadRequest, "invalid_config", ve.Msg)
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "internal", err.Error())
 		return
 	}
 	writeJSON(w, http.StatusOK, out)

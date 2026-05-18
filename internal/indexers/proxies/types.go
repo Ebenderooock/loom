@@ -161,6 +161,14 @@ type Patch struct {
 // ErrNotFound is returned when a proxy ID has no row.
 var ErrNotFound = errors.New("proxy not found")
 
+// ErrValidation wraps config/input validation errors to distinguish
+// them from infrastructure (DB) errors in the handler layer.
+type ErrValidation struct {
+	Msg string
+}
+
+func (e *ErrValidation) Error() string { return e.Msg }
+
 // ErrInUse is returned by Delete when one or more indexers still
 // reference the proxy. The wrapped IndexerIDs slice is exposed via
 // errors.As.

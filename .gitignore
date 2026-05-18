@@ -16,6 +16,12 @@ web/dist/
 web/.vite/
 web/coverage/
 
+# Node / frontend (website)
+website/node_modules/
+website/dist/
+website/.vite/
+website/coverage/
+
 # IDE
 .idea/
 .vscode/

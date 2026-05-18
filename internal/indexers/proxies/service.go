@@ -78,14 +78,14 @@ func (s *Service) Get(ctx context.Context, id string) (Proxy, error) {
 // empty.
 func (s *Service) Create(ctx context.Context, p Proxy) (Proxy, error) {
 	if strings.TrimSpace(string(p.Kind)) == "" {
-		return Proxy{}, errors.New("kind is required")
+		return Proxy{}, &ErrValidation{Msg: "kind is required"}
 	}
 	if strings.TrimSpace(p.Name) == "" {
-		return Proxy{}, errors.New("name is required")
+		return Proxy{}, &ErrValidation{Msg: "name is required"}
 	}
 	canonical, err := ValidateConfig(p.Kind, p.Config)
 	if err != nil {
-		return Proxy{}, err
+		return Proxy{}, &ErrValidation{Msg: err.Error()}
 	}
 	p.Config = canonical
 	if strings.TrimSpace(p.ID) == "" {
@@ -102,17 +102,17 @@ func (s *Service) Create(ctx context.Context, p Proxy) (Proxy, error) {
 // Replace overwrites a proxy by ID.
 func (s *Service) Replace(ctx context.Context, p Proxy) (Proxy, error) {
 	if strings.TrimSpace(p.ID) == "" {
-		return Proxy{}, errors.New("id is required")
+		return Proxy{}, &ErrValidation{Msg: "id is required"}
 	}
 	if strings.TrimSpace(string(p.Kind)) == "" {
-		return Proxy{}, errors.New("kind is required")
+		return Proxy{}, &ErrValidation{Msg: "kind is required"}
 	}
 	if strings.TrimSpace(p.Name) == "" {
-		return Proxy{}, errors.New("name is required")
+		return Proxy{}, &ErrValidation{Msg: "name is required"}
 	}
 	canonical, err := ValidateConfig(p.Kind, p.Config)
 	if err != nil {
-		return Proxy{}, err
+		return Proxy{}, &ErrValidation{Msg: err.Error()}
 	}
 	p.Config = canonical
 	out, err := s.repo.Replace(ctx, p)
@@ -126,7 +126,7 @@ func (s *Service) Replace(ctx context.Context, p Proxy) (Proxy, error) {
 // Patch applies a partial update.
 func (s *Service) Patch(ctx context.Context, patch Patch) (Proxy, error) {
 	if strings.TrimSpace(patch.ID) == "" {
-		return Proxy{}, errors.New("id is required")
+		return Proxy{}, &ErrValidation{Msg: "id is required"}
 	}
 	if patch.Config != nil {
 		// Need the kind to validate. Use the patch's kind when set,
@@ -143,7 +143,7 @@ func (s *Service) Patch(ctx context.Context, patch Patch) (Proxy, error) {
 		}
 		canonical, err := ValidateConfig(kind, *patch.Config)
 		if err != nil {
-			return Proxy{}, err
+			return Proxy{}, &ErrValidation{Msg: err.Error()}
 		}
 		patch.Config = &canonical
 	}
