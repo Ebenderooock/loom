@@ -71,8 +71,34 @@ func (e *Engine) StartSearch(ctx context.Context, wfType, mediaType, qualityProf
 }
 
 // markGrabbed transitions a workflow from searching → grabbed and records download info.
+// If another active workflow already tracks the same download (e.g. two episode searches
+// grabbed the same season pack), the current workflow's items are merged into the existing
+// one and the current workflow is cancelled to avoid a UNIQUE constraint violation.
 func (e *Engine) markGrabbed(ctx context.Context, workflowID, clientID, downloadID, title string) error {
 	ctx = WithWorkflowID(ctx, workflowID)
+
+	// Check if another workflow already tracks this download.
+	existing, err := e.store.FindByDownload(ctx, clientID, downloadID)
+	if err != nil {
+		return fmt.Errorf("find existing download workflow: %w", err)
+	}
+	if existing != nil && existing.ID != workflowID {
+		// Merge our items into the existing workflow and cancel this one.
+		thisWf, err := e.store.Get(ctx, workflowID)
+		if err != nil {
+			return fmt.Errorf("get workflow for merge: %w", err)
+		}
+		if err := e.store.MergeItems(ctx, existing.ID, thisWf.Items); err != nil {
+			return fmt.Errorf("merge items: %w", err)
+		}
+		// Cancel the duplicate workflow.
+		e.store.Transition(ctx, workflowID, StateSearching, StateCancelled,
+			"Merged into workflow "+existing.ID+" (same download)")
+		e.logger.Info("workflow merged into existing",
+			"merged_id", workflowID, "target_id", existing.ID, "title", title)
+		return nil
+	}
+
 	ok, err := e.store.Transition(ctx, workflowID, StateSearching, StateGrabbed, "Release grabbed: "+title)
 	if err != nil {
 		return fmt.Errorf("transition to grabbed: %w", err)

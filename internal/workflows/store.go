@@ -444,6 +444,18 @@ func (s *Store) Delete(ctx context.Context, id string) error {
 	return tx.Commit()
 }
 
+// MergeItems adds items to an existing workflow, ignoring duplicates.
+func (s *Store) MergeItems(ctx context.Context, workflowID string, items []Item) error {
+	for _, item := range items {
+		_, _ = s.db.ExecContext(ctx, `
+			INSERT OR IGNORE INTO workflow_items (workflow_id, media_type, media_id)
+			VALUES (?, ?, ?)`,
+			workflowID, item.MediaType, item.MediaID,
+		)
+	}
+	return nil
+}
+
 // --- Helpers ---
 
 func (s *Store) list(ctx context.Context, query string) ([]*Workflow, error) {

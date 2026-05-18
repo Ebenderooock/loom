@@ -224,7 +224,112 @@ func (e *Engine) Evaluate(ctx context.Context, req EvaluateRequest) (*EvaluateRe
 //  5. Score: quality tier + custom format score + tiebreakers
 //  6. Reject results below MinFormatScore
 //  7. Grab the highest-scoring result
+//
+// For TV series, follows Sonarr's search strategy:
+//   - Season search (Season > 0, Episode == 0): try season pack first, then individual episodes
+//   - Series search (Season == 0, Episode == 0): iterate seasons, trying pack then episodes for each
 func (e *Engine) SearchAndGrab(ctx context.Context, req SearchRequest) (*SearchResult, error) {
+	// Sonarr-style fallback for season/series searches.
+	if (req.MediaType == "series" || req.MediaType == "episode") && e.seriesSvc != nil && req.Episode == 0 {
+		return e.searchSeriesFallback(ctx, req)
+	}
+
+	return e.searchAndGrabSingle(ctx, req)
+}
+
+// searchSeriesFallback implements Sonarr-style search: try season pack first,
+// then fall back to individual episode searches.
+func (e *Engine) searchSeriesFallback(ctx context.Context, req SearchRequest) (*SearchResult, error) {
+	if req.Season > 0 {
+		// Single season: try pack first, then episodes.
+		return e.searchSeasonWithFallback(ctx, req)
+	}
+
+	// Full series: iterate through each season.
+	seasons, err := e.seriesSvc.ListSeasons(ctx, req.MediaID)
+	if err != nil {
+		e.logger.Warn("failed to list seasons for series search, falling back to single search",
+			"series_id", req.MediaID, "error", err)
+		return e.searchAndGrabSingle(ctx, req)
+	}
+
+	combined := &SearchResult{}
+	for _, season := range seasons {
+		if ctx.Err() != nil {
+			break
+		}
+		if season.SeasonNumber == 0 {
+			continue // skip specials
+		}
+		seasonReq := req
+		seasonReq.Season = season.SeasonNumber
+		result, err := e.searchSeasonWithFallback(ctx, seasonReq)
+		if err != nil {
+			e.logger.Warn("season search failed", "season", season.SeasonNumber, "error", err)
+			continue
+		}
+		combined.Considered += result.Considered
+		combined.Rejected += result.Rejected
+		if result.Grabbed != nil && combined.Grabbed == nil {
+			combined.Grabbed = result.Grabbed
+		}
+	}
+	if combined.Grabbed == nil && combined.Considered == 0 {
+		combined.Reason = "no results from any season"
+	}
+	return combined, nil
+}
+
+// searchSeasonWithFallback tries a season pack search first, then falls back
+// to searching for each individual episode in the season.
+func (e *Engine) searchSeasonWithFallback(ctx context.Context, req SearchRequest) (*SearchResult, error) {
+	// Try season pack first (Season set, Episode == 0).
+	result, err := e.searchAndGrabSingle(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	if result.Grabbed != nil {
+		e.logger.Info("season pack found", "season", req.Season, "title", result.Grabbed.Title)
+		return result, nil
+	}
+
+	// Season pack not found or all rejected — try individual episodes.
+	e.logger.Info("no season pack found, falling back to individual episodes",
+		"season", req.Season, "title", req.Title)
+
+	seasonFilter := req.Season
+	episodes, err := e.seriesSvc.ListEpisodes(ctx, req.MediaID, &seasonFilter)
+	if err != nil {
+		e.logger.Warn("failed to list episodes for fallback", "error", err)
+		return result, nil // return the season pack result as-is
+	}
+
+	for _, ep := range episodes {
+		if ctx.Err() != nil {
+			break
+		}
+		epReq := req
+		epReq.Episode = ep.EpisodeNumber
+		epReq.MediaType = "episode"
+
+		epResult, err := e.searchAndGrabSingle(ctx, epReq)
+		if err != nil {
+			e.logger.Warn("episode search failed", "season", req.Season,
+				"episode", ep.EpisodeNumber, "error", err)
+			continue
+		}
+		result.Considered += epResult.Considered
+		result.Rejected += epResult.Rejected
+		if epResult.Grabbed != nil && result.Grabbed == nil {
+			result.Grabbed = epResult.Grabbed
+		}
+	}
+
+	return result, nil
+}
+
+// searchAndGrabSingle executes a single search+grab (no fallback logic).
+func (e *Engine) searchAndGrabSingle(ctx context.Context, req SearchRequest) (*SearchResult, error) {
 	// Load the quality profile.
 	profile, err := e.profileStore.Get(ctx, req.QualityProfileID)
 	if err != nil {
