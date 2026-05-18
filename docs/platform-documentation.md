@@ -242,25 +242,121 @@ Each scanned media file is tracked with: `id`, `library_id`, `path` (unique), `s
 
 ### 3.3 TV Series
 
-**What it does:** Series entity management with season/episode granularity.
+**What it does:** Series entity management with season/episode granularity — seasons, episodes, episode files, credits, and episode stats.
 
 **API:** `/api/v1/series`
 
-**Key actions:**
-- Add series (TMDB lookup → create with seasons/episodes)
-- Monitor at series, season, or episode level
-- Import existing series from library scan
-- Bulk actions same as movies
+**API endpoints:**
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/v1/series/` | List series with filters (`search`, `status`, `monitored`, `sort`, `order`). Returns `episodeStats` per series. |
+| `POST` | `/api/v1/series/` | Add series from TMDB — creates seasons/episodes. Optional `search: true` triggers immediate indexer search. |
+| `GET` | `/api/v1/series/search?q=` | Search TMDB for TV series. |
+| `GET` | `/api/v1/series/lookup?tmdbId=` | Lookup specific TMDB series details. |
+| `POST` | `/api/v1/series/bulk` | Bulk update (monitoring status, quality profile) or delete multiple series. |
+| `POST` | `/api/v1/series/bulk-archive` | Archive multiple series by IDs. |
+| `POST` | `/api/v1/series/bulk-unarchive` | Unarchive multiple series by IDs. |
+| `GET` | `/api/v1/series/{id}` | Get series with seasons, episodes, and episodeStats. |
+| `PUT` | `/api/v1/series/{id}` | Update series fields (title, year, overview, genres, monitoring, quality profile, etc.). |
+| `DELETE` | `/api/v1/series/{id}` | Delete series. May auto-unmonitor if library has unmonitor-on-delete enabled. |
+| `PUT` | `/api/v1/series/{id}/monitoring` | Set monitoring status (validated against enum). |
+| `POST` | `/api/v1/series/{id}/refresh` | Re-fetch metadata from TMDB — recreates seasons/episodes/credits. |
+| `POST` | `/api/v1/series/{id}/archive` | Set monitoring to `archived`. |
+| `POST` | `/api/v1/series/{id}/unarchive` | Set monitoring to `monitored`. |
+| `GET` | `/api/v1/series/{id}/credits` | Get cast and crew (split by role). |
+| `GET` | `/api/v1/series/{id}/seasons` | List seasons with per-season episode stats. |
+| `GET` | `/api/v1/series/{id}/seasons/{seasonNum}/episodes` | List episodes for a season. Includes grab status when workflow store is available. |
+| `POST` | `/api/v1/series/scan/` | Start a library scan for series. |
+| `GET` | `/api/v1/series/scan/unmatched` | List unmatched files from last scan. |
+| `GET` | `/api/v1/series/scan/{scanId}` | Get scan status. |
+| `POST` | `/api/v1/series/{id}/rescan` | Rescan a single series folder. |
+
+**Series model fields:**
+
+| Field | Description |
+|-------|-------------|
+| `id` | UUID |
+| `title` | Display title |
+| `year` | First air year |
+| `imdb_id` | IMDB identifier |
+| `tmdb_id` | TMDB identifier (primary metadata key) |
+| `tvdb_id` | TVDB identifier |
+| `overview` | Plot summary |
+| `genres` | Genre list (JSON array) |
+| `runtime` | Episode runtime in minutes |
+| `rating` | TMDB rating |
+| `backdrop_path` / `poster_path` | Image URLs |
+| `network` | Primary network (e.g. "HBO", "Netflix") |
+| `status` | Airing status (see below) |
+| `series_type` | Type classification (see below) |
+| `metadata_provider` | Source of metadata (currently TMDB only) |
+| `quality_profile_id` | Assigned quality profile |
+| `library_id` | Which library this series belongs to |
+| `monitoring_status` | Monitoring state (see below) |
+| `season_folder` | Whether to use season subfolders for organisation |
+| `release_date` | First air date |
+| `created_at` / `updated_at` | Timestamps |
+| `seasons` | Populated on read — list of Season objects |
+| `episodes` | Populated on read — list of Episode objects |
+
+**Season model:** `id`, `series_id`, `season_number`, `title`, `overview`, `poster_path`, `monitored`, `episode_count`, `created_at`, `updated_at`
+
+**Episode model:** `id`, `series_id`, `season_id`, `episode_number`, `title`, `overview`, `air_date`, `runtime`, `still_path`, `monitored`, `has_file`, `created_at`, `updated_at`
+
+**EpisodeFile model:** `id`, `episode_id`, `series_id`, `file_path`, `file_size`, `quality`, `source`, `resolution`, `codec`, `media_info` (JSON), `created_at`, `updated_at`
+
+**SeriesCredit model:** `id`, `series_id`, `person_name`, `character_name`, `role`, `profile_path`, `tmdb_person_id`, `display_order`
+
+**EpisodeStats:** `totalEpisodes`, `downloadedEpisodes`, `monitoredEpisodes`, `missingEpisodes` (monitored but not downloaded), `airedEpisodes` (air_date ≤ today)
+
+**Series status values:**
+
+| Status | Description |
+|--------|-------------|
+| `continuing` | Currently airing |
+| `ended` | Finished airing |
+| `upcoming` | Not yet aired |
+| `cancelled` | Cancelled |
+
+**Series type values:** `standard`, `daily`, `anime`
+
+**Monitoring status values:**
+
+| Status | Description |
+|--------|-------------|
+| `all` | Monitor all episodes |
+| `future` | Only future episodes |
+| `missing` | Only missing episodes |
+| `existing` | Only existing episodes |
+| `pilot` | Only pilot episode |
+| `firstSeason` | First season only |
+| `lastSeason` | Latest season only |
+| `none` | No monitoring |
+| `monitored` | General monitored state |
+| `unmonitored` | Explicitly unmonitored |
+| `archived` | Archived — excluded from searches |
+
+**Key behaviours:**
+- Adding a series fetches full metadata from TMDB including all seasons and episodes.
+- If `monitoringStatus` is omitted on add, defaults to `all`.
+- `SetMonitoringStatus` validates against the enum — invalid values are rejected.
+- Refresh re-fetches from TMDB and **recreates** seasons/episodes/credits — local edits are lost.
+- List endpoint supports in-memory filtering by `search`, `status`, `monitored` and sorting by `title`, `year`, `added`, `network`, `rating`.
+- Bulk operations (`bulk`, `bulk-archive`, `bulk-unarchive`) process items independently — individual failures do not abort the batch.
+- Delete may auto-set to `unmonitored` first if the library has `unmonitor_on_delete` enabled.
 
 **Expected outcomes:**
-- Series shows season/episode grid with per-episode status.
-- Missing episodes are eligible for automated search.
+- Series shows season/episode grid with per-episode status and download state.
+- Missing episodes (monitored + not downloaded + aired) are eligible for automated search.
 - Season packs can satisfy multiple episode needs at once.
+- Episode stats show progress at series level and per-season level.
 
 **Possible failures:**
 - Episode numbering mismatches (especially anime — see §3.23).
 - Season pack handling edge cases.
 - Partial season availability.
+- Refresh overwrites any local metadata edits.
 
 ---
 

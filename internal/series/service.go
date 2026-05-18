@@ -246,9 +246,27 @@ func (s *service) DeleteSeries(ctx context.Context, id string) error {
 	return s.repo.DeleteSeries(ctx, id)
 }
 
+// validMonitoringStatuses maps all valid monitoring status values.
+var validMonitoringStatuses = map[MonitoringStatus]bool{
+	MonitoringAll:         true,
+	MonitoringFuture:      true,
+	MonitoringMissing:     true,
+	MonitoringExisting:    true,
+	MonitoringPilot:       true,
+	MonitoringFirstSeason: true,
+	MonitoringLastSeason:  true,
+	MonitoringNone:        true,
+	MonitoringMonitored:   true,
+	MonitoringUnmonitored: true,
+	MonitoringArchived:    true,
+}
+
 func (s *service) SetMonitoringStatus(ctx context.Context, seriesID string, status MonitoringStatus) error {
 	if seriesID == "" {
 		return fmt.Errorf("series: ID required")
+	}
+	if !validMonitoringStatuses[status] {
+		return fmt.Errorf("series: invalid monitoring status: %q", status)
 	}
 
 	sr, err := s.repo.GetSeries(ctx, seriesID)
