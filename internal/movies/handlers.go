@@ -131,7 +131,7 @@ func RouterWithSearch(service Service, indexerSvc *indexers.Service, grabStore G
 }
 
 func movieToResponse(m *Movie) map[string]interface{} {
-	return map[string]interface{}{
+	resp := map[string]interface{}{
 		"id":               m.ID,
 		"title":            m.Title,
 		"year":             m.Year,
@@ -153,6 +153,13 @@ func movieToResponse(m *Movie) map[string]interface{} {
 		"createdAt":        m.CreatedAt.Format("2006-01-02T15:04:05Z"),
 		"updatedAt":        m.UpdatedAt.Format("2006-01-02T15:04:05Z"),
 	}
+	if m.LastSearchAt != nil {
+		resp["lastSearchAt"] = m.LastSearchAt.Format("2006-01-02T15:04:05Z")
+	}
+	if m.DeletedAt != nil {
+		resp["deletedAt"] = m.DeletedAt.Format("2006-01-02T15:04:05Z")
+	}
+	return resp
 }
 
 // Handlers
@@ -173,14 +180,26 @@ func listMovies(svc Service, grabStore GrabChecker) http.HandlerFunc {
 			}
 		}
 
-		movies, err := svc.ListMovies(r.Context(), limit, offset)
+		q := r.URL.Query()
+		hasFilters := q.Get("search") != "" || q.Get("status") != "" ||
+			q.Get("quality") != "" || q.Get("monitored") != ""
+
+		var movies []*Movie
+		var err error
+
+		if hasFilters {
+			// When filtering, fetch all movies so we can filter then paginate.
+			totalCount, _ := svc.CountMovies(r.Context())
+			movies, err = svc.ListMovies(r.Context(), totalCount, 0)
+		} else {
+			movies, err = svc.ListMovies(r.Context(), limit, offset)
+		}
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 
 		// In-memory filtering
-		q := r.URL.Query()
 		if search := q.Get("search"); search != "" {
 			search = strings.ToLower(search)
 			filtered := movies[:0]
@@ -250,11 +269,27 @@ func listMovies(svc Service, grabStore GrabChecker) http.HandlerFunc {
 			})
 		}
 
-		// Get the total count from the database (independent of limit/offset/filters)
-		totalCount, err := svc.CountMovies(r.Context())
-		if err != nil {
-			slog.Warn("failed to count movies", "err", err)
-			totalCount = len(movies)
+		// When filtering, the total reflects the filtered set and we
+		// apply pagination after filtering.
+		totalCount := len(movies)
+		if hasFilters {
+			if offset < len(movies) {
+				end := offset + limit
+				if end > len(movies) {
+					end = len(movies)
+				}
+				movies = movies[offset:end]
+			} else {
+				movies = nil
+			}
+		} else {
+			// No filters — total comes from the DB.
+			tc, err := svc.CountMovies(r.Context())
+			if err != nil {
+				slog.Warn("failed to count movies", "err", err)
+				tc = len(movies)
+			}
+			totalCount = tc
 		}
 
 		// Look up grabbed status for all movies in the response.

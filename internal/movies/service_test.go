@@ -49,6 +49,14 @@ func (r *mockRepo) UpdateMovie(_ context.Context, m *Movie) error {
 	r.movies[m.ID] = m
 	return nil
 }
+func (r *mockRepo) UpdateMovieStatus(_ context.Context, id string, status MovieStatus) error {
+	m, ok := r.movies[id]
+	if !ok {
+		return errors.New("not found")
+	}
+	m.Status = status
+	return nil
+}
 func (r *mockRepo) DeleteMovie(_ context.Context, id string) error {
 	if r.deleteMovieErr != nil {
 		return r.deleteMovieErr

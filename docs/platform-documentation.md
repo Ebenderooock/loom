@@ -238,10 +238,6 @@ Each scanned media file is tracked with: `id`, `library_id`, `path` (unique), `s
 - Movie added but no indexer has results → stays "missing."
 - Duplicate detection if movie already exists (checked by TMDB ID and IMDB ID).
 
-**Known issues:**
-- List endpoint filters in memory after pagination, so `total` count may not reflect filtered results.
-- `movieToResponse()` omits some fields (`last_search_at`, `deleted_at`) from API responses.
-
 ---
 
 ### 3.3 TV Series
