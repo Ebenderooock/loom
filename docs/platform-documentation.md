@@ -1168,32 +1168,85 @@ Seeding only runs when no profiles exist in the database. Quality definitions ar
 
 ### 3.13 Notifications
 
-**What it does:** Sends notifications on system events to various channels.
+**What it does:** Sends notifications on system events to various channels via a dispatcher with worker pool and retry.
 
-**API:** `/api/v1/notifications` — CRUD, test, history.
+**API endpoints:**
 
-**Supported services:** Discord, Slack, Telegram, Email, Webhook, and others.
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/v1/notifications` | List all notification connections |
+| `POST` | `/api/v1/notifications` | Create connection |
+| `GET` | `/api/v1/notifications/history` | List notification history |
+| `POST` | `/api/v1/notifications/test` | Test config without saving |
+| `GET` | `/api/v1/notifications/{id}` | Get connection |
+| `PUT` | `/api/v1/notifications/{id}` | Update connection (pointer fields for partial update) |
+| `DELETE` | `/api/v1/notifications/{id}` | Delete connection |
+| `POST` | `/api/v1/notifications/{id}/test` | Test saved connection |
 
-**Event triggers:**
-| Event | When it fires |
-|-------|--------------|
-| Grab | Release sent to download client |
-| Download | Download completed |
-| Upgrade | Quality upgrade imported |
-| Rename | Media file renamed/moved |
-| Delete | Media deleted |
-| Health Issue | Indexer/client health problem |
-| Application Update | New Loom version available |
+**Supported services:**
+
+| Type | Transport | Key settings |
+|------|-----------|-------------|
+| `discord` | Webhook embed POST | `webhookURL` |
+| `slack` | Webhook blocks POST | `webhookURL` |
+| `telegram` | Bot API sendMessage | `botToken`, `chatID` |
+| `email` | SMTP | `host`, `port` (default 587), `from`, `to`, `username`, `password`, `tls` |
+| `webhook` | Generic JSON POST | `webhookURL` |
+| `gotify` | REST API | `serverURL`, `apiKey` |
+| `pushover` | REST API | `apiKey`, `userKey` |
+| `apprise` | REST API | `serverURL` |
+| `ntfy` | REST API | `serverURL`, `topic` (appended to URL path) |
+
+**Event types and triggers:**
+
+| EventType | Bus topic | Trigger |
+|-----------|-----------|---------|
+| `on_grab` | `downloads.queued` | Release sent to download client |
+| `on_download` | `downloads.completed`, `imports.completed` | Download or import completed |
+| `on_upgrade` | — | Quality upgrade imported |
+| `on_rename` | — | Media file renamed/moved |
+| `on_delete` | — | Media deleted |
+| `on_health_issue` | `downloads.stalled`, `downloads.failed`, `imports.failed` | Health problem detected |
+| `on_application_update` | — | New Loom version available |
+| `on_test` | — | Manual test send |
+
+**Connection data model:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | string | Auto-generated |
+| `name` | string | Display name |
+| `type` | ConnectionType | Service type (see above) |
+| `enabled` | bool | Whether connection is active |
+| `settings` | ConnectionSettings | Service-specific credentials |
+| `onGrab`…`onApplicationUpdate` | bool | Per-event subscription flags |
+| `tags` | []string | Tag-based filtering |
+
+**Dispatcher flow:**
+1. `Start()` subscribes to 6 event bus topics, launches 4 worker goroutines.
+2. Bus event → `handleEvent()` maps topic to `EventType` via `topicEventMap`.
+3. `formatEvent()` renders `Notification{Title, Message, Data}` from event payload.
+4. Loads all connections, filters to enabled + subscribed for the event type.
+5. Enqueues `dispatchJob` per matching connection to buffered channel (cap 64).
+6. Worker picks job, applies template override if configured, picks sender by type.
+7. Sends with 15-second timeout context.
+8. On failure: retries up to 3 times with exponential backoff (2s, 4s, 8s).
+9. Logs history entry (success or failure) via `LogHistory`.
+
+**Template system:**
+- Default templates per event type (e.g., `Grabbed: {{.Title}} ({{.Year}}) — {{.Quality}} from {{.Indexer}}`).
+- Per-connection `TemplateOverride` field for custom Go `text/template` messages.
+- Available variables: `Title`, `Year`, `Quality`, `Indexer`, `Size`, `EventType`, `MediaType`.
 
 **Expected outcomes:**
-- Notifications sent in parallel to all configured channels.
-- History log shows past notifications.
+- Notifications sent in parallel via worker pool to all matching connections.
+- History log shows past notifications with success/failure status.
 - Test send verifies configuration.
 
 **Possible failures:**
-- Service unreachable → notification silently fails, logged in history.
-- Invalid webhook URL or API token.
-- Rate limiting by notification service.
+- Service unreachable → retried 3 times, then logged as permanent failure in history.
+- Invalid webhook URL or API token → sender returns error.
+- Rate limiting by notification service → retry may succeed on backoff.
 
 ---
 

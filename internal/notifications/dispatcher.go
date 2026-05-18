@@ -56,6 +56,7 @@ type Dispatcher struct {
 	wg     sync.WaitGroup
 	cancel context.CancelFunc
 	unsubs []func()
+	done   chan struct{}
 }
 
 // NewDispatcher creates a dispatcher but does not start it.
@@ -65,6 +66,7 @@ func NewDispatcher(bus eventbus.Bus, svc Service, logger *slog.Logger) *Dispatch
 		svc:    svc,
 		logger: logger.With("component", "notification-dispatcher"),
 		jobs:   make(chan dispatchJob, 64),
+		done:   make(chan struct{}),
 	}
 }
 
@@ -101,6 +103,7 @@ func (d *Dispatcher) Stop() {
 	if d.cancel != nil {
 		d.cancel()
 	}
+	close(d.done)
 	close(d.jobs)
 	d.wg.Wait()
 
@@ -181,6 +184,8 @@ func (d *Dispatcher) send(ctx context.Context, job dispatchJob) {
 			)
 			time.AfterFunc(wait, func() {
 				select {
+				case <-d.done:
+					d.logger.Warn("retry dropped, dispatcher stopped", "connection", conn.Name)
 				case d.jobs <- dispatchJob{conn: conn, notif: job.notif, attempt: job.attempt + 1}:
 				default:
 					d.logger.Warn("retry queue full, dropping", "connection", conn.Name)

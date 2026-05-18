@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/smtp"
 	"net/url"
+	"strings"
 	"time"
 )
 
@@ -222,15 +223,16 @@ type NtfySender struct{}
 func (nt *NtfySender) Send(ctx context.Context, n Notification, s ConnectionSettings) error {
 	topicURL := s.ServerURL
 	if topicURL == "" {
-		return fmt.Errorf("ntfy: server_url (topic URL) is required")
+		return fmt.Errorf("ntfy: server_url is required")
+	}
+	// Append topic to URL if provided separately (e.g., "https://ntfy.sh" + "/mytopic").
+	if s.Topic != "" {
+		topicURL = strings.TrimRight(topicURL, "/") + "/" + s.Topic
 	}
 	payload := map[string]any{
 		"title":   n.Title,
 		"message": n.Message,
 		"tags":    []string{"loudspeaker"},
-	}
-	if s.Topic != "" {
-		payload["topic"] = s.Topic
 	}
 	return postJSON(ctx, topicURL, payload)
 }
