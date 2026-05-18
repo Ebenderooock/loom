@@ -1543,42 +1543,88 @@ All review create/approve/reject actions logged to audit log with full context.
 
 ### 3.20 Blocklist
 
-**What it does:** Prevents specific releases from being grabbed again.
+**What it does:** Prevents specific releases from being grabbed again. Releases are blocklisted by their content hash, so even if they appear on a different indexer they'll be skipped.
 
-**API:** `/api/v1/blocklist`
+**API Endpoints:**
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/blocklist` | List all blocklisted releases |
+| DELETE | `/api/v1/blocklist` | Clear entire blocklist |
+| DELETE | `/api/v1/blocklist/{id}` | Remove single entry |
+
+**Data Model (BlocklistEntry):**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| id | string | Entry ID |
+| title | string | Release title |
+| indexer_id | string | Indexer where release was found |
+| release_hash | string | Content hash for matching |
+| reason | string | Why it was blocklisted |
+| created_at | datetime | When blocklisted |
+
+**Integration:**
+- `IsBlocked(releaseHash)` is checked during search result evaluation
+- Entries created automatically when imports fail or manually by user
+- Uses `INSERT OR REPLACE` for idempotent additions
 
 **Database:** `blocklist`
-
-**Expected outcomes:**
-- Blocklisted releases are skipped during search evaluation.
-- Useful for releases that failed import or had quality issues.
 
 ---
 
 ### 3.21 Remote Path Mappings
 
-**What it does:** Maps paths between the download client's filesystem and Loom's filesystem.
+**What it does:** Maps paths between the download client's filesystem and Loom's filesystem, enabling setups where the download client runs on a different machine or in a different container.
 
-**API:** `/api/v1/download-clients/remote-path-mappings`
+**API Endpoints:**
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/download-clients/remote-path-mappings` | List all mappings |
+| POST | `/api/v1/download-clients/remote-path-mappings` | Create mapping |
+| DELETE | `/api/v1/download-clients/remote-path-mappings/{id}` | Delete mapping |
+
+**Data Model (RemotePathMapping):**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| id | string | UUID |
+| client_id | string | Associated download client ID (required) |
+| remote_path | string | Path prefix as seen by download client (required) |
+| local_path | string | Equivalent path on Loom's filesystem (required) |
+| created_at | datetime | Creation timestamp |
+
+**Usage:** During import, if a download's reported path starts with `remote_path`, it's rewritten to start with `local_path` before file operations. Applied automatically based on the download client's ID.
 
 **Database:** `remote_path_mappings`
-
-**Use case:** When the download client runs on a different machine or in a different container, the completed download path may differ from what Loom sees.
-
-**Expected outcomes:**
-- Loom correctly locates completed downloads for import.
-
-**Possible failures:**
-- Incorrect mapping → import can't find files → workflow fails at import stage.
-- Missing mapping when client and Loom have different mount points.
 
 ---
 
 ### 3.22 Language Profiles
 
-**What it does:** Configures preferred languages for media search and selection.
+**What it does:** Configures preferred audio/subtitle language priority for media search and quality evaluation.
 
-**API:** `/api/v1/languages` (implied)
+**API Endpoints:**
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/languages` | List all known languages |
+| GET | `/api/v1/language-profiles` | List all profiles |
+| POST | `/api/v1/language-profiles` | Create profile |
+| GET | `/api/v1/language-profiles/{id}` | Get profile |
+| PUT | `/api/v1/language-profiles/{id}` | Update profile |
+| DELETE | `/api/v1/language-profiles/{id}` | Delete profile |
+
+**Data Model (LanguageProfile):**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| id | string | Slugified from name |
+| name | string | Display name (required) |
+| languages | array | Ordered list of language preferences |
+| cutoff_language | string | Minimum acceptable language |
+| upgrade_allowed | bool | Whether to upgrade for better language match |
 
 **Database:** `language_profiles`
 
@@ -1586,21 +1632,49 @@ All review create/approve/reject actions logged to audit log with full context.
 
 ### 3.23 Anime Handling
 
-**What it does:** Special handling for anime episode numbering (absolute vs season-based).
+**What it does:** Manages anime-specific episode numbering (absolute vs season-based vs AniDB) and provides release name parsing for anime groups/fansub conventions.
 
-**API:** `/api/v1/anime`
+**API Endpoints:**
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/anime/preferences/{seriesId}` | Get anime preferences for series |
+| PUT | `/api/v1/anime/preferences/{seriesId}` | Set anime preferences |
+| GET | `/api/v1/anime/mappings/{seriesId}` | Get episode number mappings |
+| PUT | `/api/v1/anime/mappings/{seriesId}` | Replace episode mappings |
+| POST | `/api/v1/anime/parse` | Parse anime release name |
+| GET | `/api/v1/anime/groups` | List known fansub groups |
+
+**Numbering Schemes:** `absolute`, `season`, `anidb`
+
+**Episode Mappings:** Explicit mapping between absolute episode numbers and season/episode pairs. Validated before persistence.
 
 **Database:** `anime_preferences`, `anime_mappings`
-
-**Key challenge:** Anime often uses absolute episode numbers (1-900+) rather than Season×Episode format. Mapping between the two requires external databases.
 
 ---
 
 ### 3.24 Alternate Titles
 
-**What it does:** Associates alternate/foreign titles with media for better search matching.
+**What it does:** Associates alternate/foreign titles with movies and series for improved search matching. During import, the AltTitleMatcher compares parsed release titles against stored alternate titles to identify media that wouldn't match on primary title alone.
 
-**API:** `/api/v1/alt-titles`
+**API Endpoints:**
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/alt-titles?media_id=X&media_type=Y` | List alt titles for media |
+| POST | `/api/v1/alt-titles` | Create alt title |
+| DELETE | `/api/v1/alt-titles/{id}` | Delete alt title |
+
+**Data Model (AltTitle):**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| id | string | UUID |
+| media_id | string | Associated movie/series ID (required) |
+| media_type | string | "movie" or "series" (required) |
+| title | string | The alternate title (required) |
+| language | string | Language code (optional) |
+| source | string | Where the title came from (e.g. "tmdb", "manual") |
 
 **Database:** `alternate_titles`
 
@@ -1608,24 +1682,36 @@ All review create/approve/reject actions logged to audit log with full context.
 
 ### 3.25 Season Packs
 
-**What it does:** Handles season pack downloads that contain multiple episodes.
-
-**API:** `/api/v1/packs`
+**What it does:** Handles season pack downloads that contain multiple episodes. During import, the unpacking spec identifies season packs and extracts individual episodes for proper file organization.
 
 **Database:** `season_pack_history`
+
+**Integration:** Works with the import pipeline (`spec_unpacking.go`) to detect season packs and match contained episodes to the correct series/season.
 
 ---
 
 ### 3.26 Media Info & Naming
 
-**What it does:** Parsing release names and configuring naming conventions.
+**What it does:** Parses release names to extract structured metadata and manages user preferences for file naming/import behavior.
 
-**API:** `/api/v1/media-info` — `getMediaPreferences`, `updateMediaPreferences`, `parseReleaseName`
+**API Endpoints:**
 
-**Key features:**
-- Release name parser extracts: quality, codec, source, group, resolution, etc.
-- Naming settings control how imported files are renamed.
-- Import mode configuration (copy, move, hardlink).
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/media-info/preferences` | Get media preferences |
+| PUT | `/api/v1/media-info/preferences` | Update media preferences |
+| POST | `/api/v1/media-info/parse` | Parse a release name |
+
+**Parse Result:**
+Extracts from release names: quality, codec, source, resolution, group name, audio info, edition, year, proper/repack flags, and more.
+
+**Media Preferences:**
+- Import mode (copy, move, hardlink)
+- Preferred audio codecs (ordered list)
+- Preferred subtitle languages
+- Naming templates for movies and episodes
+
+**Database:** `naming_config`
 
 ---
 
