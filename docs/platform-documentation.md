@@ -1417,13 +1417,45 @@ Returns `{ success: true/false, items: [...], count: N }` with up to 5 preview i
 
 ### 3.17 Calendar
 
-**What it does:** Shows upcoming and recent media releases on a calendar view.
+**What it does:** Provides a unified calendar view of media release dates — movie releases (theatrical, digital, general) and episode air dates within a specified date range.
 
-**API:** `/api/v1/calendar`
+**API Endpoints:**
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/calendar` | List calendar events in date range |
+
+**Query Parameters:**
+
+| Param | Type | Default | Description |
+|-------|------|---------|-------------|
+| start | string (YYYY-MM-DD) | First of current month | Range start |
+| end | string (YYYY-MM-DD) | Last of current month | Range end |
+
+**Response Model (Event):**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| id | string | Media item ID |
+| title | string | Display title (for episodes: "Series - S01E02 - Title") |
+| type | enum | `movie` or `episode` |
+| releaseType | string | `release`, `theatrical`, or `digital` (movies only) |
+| date | string | Event date (YYYY-MM-DD) |
+| status | enum | `missing` or `downloaded` |
+| year | int | Release year (movies only) |
+| seriesTitle | string | Parent series title (episodes only) |
+| season | int | Season number (episodes only) |
+| episode | int | Episode number (episodes only) |
+| episodeTitle | string | Individual episode title (episodes only) |
+
+**Logic:**
+- Movies: queries `movies` table for rows where `release_date`, `theatrical_date`, or `digital_date` falls within range. A single movie can produce up to 3 events (one per release type, only for dates within range).
+- Episodes: queries `episodes` joined with `series` and `seasons` for rows where `air_date` is within range.
+- Status derived from movie status field (missing/unreleased → "missing") or episode `has_file` flag.
 
 **Expected outcomes:**
-- Month view showing release dates for monitored series/movies.
-- Highlights missing items that need searching.
+- Month/range view showing all release dates for monitored content.
+- Missing items visible for manual triggering of searches.
 
 ---
 

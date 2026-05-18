@@ -94,7 +94,7 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 			calStatus = "downloaded"
 		}
 		appendMovieEvent := func(date, releaseType string) {
-			if date != "" {
+			if date != "" && date >= startStr && date <= endStr {
 				events = append(events, Event{
 					ID: id, Title: title, Type: "movie",
 					ReleaseType: releaseType, Date: date,
