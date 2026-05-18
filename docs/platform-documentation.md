@@ -1309,16 +1309,57 @@ The `TransportProvider` caches `http.Transport` instances per proxy ID. When an 
 
 ---
 
-### 3.15 Sources (RSS)
+### 3.15 Sources (RSS & Scraper)
 
-**What it does:** User-defined RSS sources for discovering new releases.
+**What it does:** Manages user-configured content sources — both RSS feeds and web scrapers. Sources are periodically synced to discover new releases, with items stored in the `rss_items` table for deduplication and downstream processing.
 
-**API:** `/api/v1/sources` (implied from frontend)
+**API Endpoints:**
 
-**Expected outcomes:**
-- RSS feeds are periodically fetched.
-- New items stored in `rss_items` table.
-- Can trigger automated search for matching media.
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/rss/sources` | List all sources |
+| POST | `/api/v1/rss/sources` | Create source |
+| GET | `/api/v1/rss/sources/{id}` | Get source by ID |
+| PUT | `/api/v1/rss/sources/{id}` | Replace source |
+| PATCH | `/api/v1/rss/sources/{id}` | Partial update |
+| DELETE | `/api/v1/rss/sources/{id}` | Delete source |
+| POST | `/api/v1/rss/sources/{id}/test` | Test source (returns preview items) |
+
+**Data Model (UserSource):**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| id | string | Auto-generated from type + name |
+| name | string | Display name (required) |
+| type | enum | `rss` or `scraper` |
+| enabled | bool | Whether source is active for sync |
+| config | object | Type-specific configuration |
+| last_sync_at | datetime | Last successful sync timestamp |
+| created_at | datetime | Creation timestamp |
+| updated_at | datetime | Last update timestamp |
+
+**Source Types & Config:**
+
+- **rss:** `url` (required), `auth_type` (none/basic/apikey), `username`, `password`, `api_key`
+- **scraper:** `url` (required), `selector_type` (css/xpath, required), `item_selector` (required), `title_selector` (required), `link_selector`, `published_selector`, `pagination` object (type: none/page_number/offset, page_param, offset_param, page_size), `auth_type`, credentials
+
+**Sync Architecture:**
+
+- `SyncManager` registers enabled sources and periodically calls `Fetch()` on each
+- Items are deduplicated by GUID + source_id combination (INSERT OR IGNORE)
+- Failed individual source syncs are logged but don't block other sources
+- Stats tracked: total syncs, successful/failed syncs, items stored/deduped, last sync time
+- Cleanup job removes items older than configured retention
+
+**Error Handling:**
+
+- Source not found → 404 `not_found`
+- Validation errors (missing name/type/config, invalid config) → 400 `invalid_request` / `invalid_config`
+- Name conflict → 409 `name_exists`
+- Internal/DB errors → 500 `server_error`
+
+**Test Endpoint:**
+Returns `{ success: true/false, items: [...], count: N }` with up to 5 preview items from a live fetch, allowing users to validate their source configuration before enabling sync.
 
 ---
 

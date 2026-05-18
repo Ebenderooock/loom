@@ -2,6 +2,7 @@ package rss
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -134,8 +135,12 @@ func (s *SourcesService) handleGetSource(w http.ResponseWriter, r *http.Request)
 
 	source, err := s.GetSource(r.Context(), id)
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			writeError(w, http.StatusNotFound, "not_found", "source not found")
+			return
+		}
 		s.logger.Error("get source failed", "err", err)
-		writeError(w, http.StatusNotFound, "not_found", "source not found")
+		writeError(w, http.StatusInternalServerError, "server_error", "failed to get source")
 		return
 	}
 
@@ -210,6 +215,10 @@ func (s *SourcesService) handleUpdateSource(w http.ResponseWriter, r *http.Reque
 
 	source, err := s.UpdateSource(r.Context(), id, req.Name, req.Type, enabled, req.Config)
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			writeError(w, http.StatusNotFound, "not_found", "source not found")
+			return
+		}
 		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
 			writeError(w, http.StatusConflict, "name_exists", "source name already exists")
 			return
@@ -247,8 +256,12 @@ func (s *SourcesService) handlePatchSource(w http.ResponseWriter, r *http.Reques
 	// Fetch the existing source to preserve unpatched fields
 	existing, err := s.GetSource(r.Context(), id)
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			writeError(w, http.StatusNotFound, "not_found", "source not found")
+			return
+		}
 		s.logger.Error("get source failed", "err", err)
-		writeError(w, http.StatusNotFound, "not_found", "source not found")
+		writeError(w, http.StatusInternalServerError, "server_error", "failed to get source")
 		return
 	}
 
@@ -301,6 +314,10 @@ func (s *SourcesService) handleDeleteSource(w http.ResponseWriter, r *http.Reque
 	}
 
 	if err := s.DeleteSource(r.Context(), id); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			writeError(w, http.StatusNotFound, "not_found", "source not found")
+			return
+		}
 		s.logger.Error("delete source failed", "err", err)
 		writeError(w, http.StatusInternalServerError, "server_error", "failed to delete source")
 		return
@@ -320,8 +337,12 @@ func (s *SourcesService) handleTestSource(w http.ResponseWriter, r *http.Request
 
 	source, err := s.GetSource(r.Context(), id)
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			writeError(w, http.StatusNotFound, "not_found", "source not found")
+			return
+		}
 		s.logger.Error("get source failed", "err", err)
-		writeError(w, http.StatusNotFound, "not_found", "source not found")
+		writeError(w, http.StatusInternalServerError, "server_error", "failed to get source")
 		return
 	}
 
