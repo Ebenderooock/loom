@@ -305,6 +305,7 @@ func (s *service) SetMonitoringStatus(ctx context.Context, movieID string, statu
 		MonitoringStatusMonitored:   true,
 		MonitoringStatusUnmonitored: true,
 		MonitoringStatusDeleted:     true,
+		MonitoringStatusArchived:    true,
 	}
 	if !validStatuses[status] {
 		return fmt.Errorf("movies: invalid monitoring status: %s", status)

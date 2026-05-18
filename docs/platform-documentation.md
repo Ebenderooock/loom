@@ -160,26 +160,87 @@ Each scanned media file is tracked with: `id`, `library_id`, `path` (unique), `s
 
 ### 3.2 Movies
 
-**What it does:** Core movie entity management — add, search TMDB, monitor, track quality status, organise files.
+**What it does:** Core movie entity management — add, search TMDB, monitor, track quality status, organise files, view credits and history.
 
 **API:** `/api/v1/movies`
 
-**Key actions:**
-- Add movie (TMDB lookup → create record → optionally trigger search)
-- Import existing movies from library scan
-- Monitor / unmonitor
-- Bulk actions: assign quality profile, delete, monitor/unmonitor
-- View detail: file info, quality, custom format scores
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/` | List movies (paginated: `limit`, `offset`; in-memory filters: `search`, `status`, `quality`, `monitored`; sort: `sort`, `order`) |
+| POST | `/` | Add movie (TMDB lookup → create record → optionally trigger search via `search_on_add`) |
+| GET | `/search?q=` | Search local movie records |
+| GET | `/lookup?term=` | Search TMDB for movies (metadata provider) |
+| POST | `/bulk` | Bulk update: set `monitoring_status`, `quality_profile_id`, or `delete` for multiple IDs |
+| POST | `/bulk-archive` | Bulk set monitoring to `archived` |
+| POST | `/bulk-unarchive` | Bulk set monitoring to `monitored` |
+| GET | `/files/{movieID}` | List media files for a movie |
+| GET | `/{id}` | Get single movie |
+| PUT | `/{id}` | Update movie fields |
+| DELETE | `/{id}` | Soft-delete movie |
+| PUT | `/{id}/monitoring` | Change monitoring status |
+| POST | `/{id}/refresh` | Re-fetch metadata from TMDB |
+| POST | `/{id}/archive` | Set monitoring to `archived` |
+| POST | `/{id}/unarchive` | Set monitoring to `monitored` |
+| GET | `/{id}/credits` | Fetch cast/crew from TMDB |
+| GET | `/{id}/history` | View history of grabs/imports for this movie |
+
+**Movie model fields:**
+| Field | Description |
+|-------|-------------|
+| `id` | UUID |
+| `title` | Display title |
+| `year` | Release year |
+| `imdb_id` | IMDB identifier |
+| `tmdb_id` | TMDB identifier (primary metadata key) |
+| `tvdb_id` | TVDB identifier |
+| `overview` | Plot summary |
+| `genres` | Genre list |
+| `runtime` | Runtime in minutes |
+| `rating` | TMDB rating |
+| `backdrop_path` / `poster_path` | Image URLs |
+| `metadata_provider` | Source of metadata (currently TMDB only) |
+| `quality_profile_id` | Assigned quality profile |
+| `library_id` | Which library this movie belongs to |
+| `status` | Current status (see below) |
+| `release_date` | General release date |
+| `theatrical_date` / `digital_date` | Specific release dates |
+| `last_search_at` | When the last automated search ran |
+| `monitoring_status` | Monitoring state (see below) |
+| `created_at` / `updated_at` / `deleted_at` | Timestamps |
+
+**Status values:**
+| Status | Meaning |
+|--------|---------|
+| `missing` | No file on disk |
+| `unreleased` | Movie not yet released |
+| `downloading` | Active download in progress |
+| `storing` | File being processed/imported |
+| `available_wrong_quality` | File exists but below quality cutoff |
+| `available_right_quality` | File meets quality cutoff |
+| `available_higher_quality` | File exceeds quality cutoff |
+
+**Monitoring status values:** `monitored`, `unmonitored`, `deleted`, `archived`
+
+**Key behaviours:**
+- Add movie performs TMDB lookup by title/year, creating a local record with metadata.
+- `search_on_add` option triggers an immediate automated search after adding.
+- Refresh re-fetches metadata from TMDB (title, overview, images, release dates).
+- Quality profile determines what releases are acceptable and when upgrades are sought.
+- Bulk operations allow managing multiple movies at once from the UI.
 
 **Expected outcomes:**
-- Movie appears in library with status: missing / downloading / available.
+- Movie appears in library with status: missing → downloading → available.
 - Monitored movies are eligible for automated search.
 - Quality upgrades happen when a better release is found (within profile rules).
 
 **Possible failures:**
 - TMDB lookup fails (network, rate limit).
 - Movie added but no indexer has results → stays "missing."
-- Duplicate detection if movie already exists.
+- Duplicate detection if movie already exists (checked by TMDB ID and IMDB ID).
+
+**Known issues:**
+- List endpoint filters in memory after pagination, so `total` count may not reflect filtered results.
+- `movieToResponse()` omits some fields (`last_search_at`, `deleted_at`) from API responses.
 
 ---
 
