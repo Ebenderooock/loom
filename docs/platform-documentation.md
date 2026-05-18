@@ -366,21 +366,90 @@ Each scanned media file is tracked with: `id`, `library_id`, `path` (unique), `s
 
 **API:** `/api/v1/indexers` — CRUD, search, test, caps, definitions, health, rules, query log.
 
-**Key features:**
-- **Catalogue:** bundled Cardigann definitions for 100+ trackers.
-- **Manual config:** Newznab/Torznab URL + API key.
-- **Proxy support:** route indexer traffic through configured proxies.
-- **Health tracking:** per-indexer success rate, latency, failure count, circuit-breaker state.
-- **Query logging:** every search is logged with timing and results for diagnostics.
-- **Rate limiting:** per-indexer rate limits to avoid bans.
-- **Rules:** indexer-specific rules for release matching.
-- **Jackett import:** import indexer configs from Jackett.
+**API endpoints:**
 
-**Process:**
-1. User adds indexer from catalogue or manually.
-2. Loom tests connectivity and fetches capabilities (caps).
-3. Indexer becomes available for search operations.
-4. Health is tracked per search; degraded indexers get circuit-broken.
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/v1/indexers/` | List all indexers with health and rate-limit info. |
+| `POST` | `/api/v1/indexers/` | Create indexer from definition or manual config. |
+| `POST` | `/api/v1/indexers/search` | Fan-out search across selected/all healthy indexers. |
+| `POST` | `/api/v1/indexers/search/stream` | SSE streaming fan-out search with per-indexer results. |
+| `POST` | `/api/v1/indexers/test` | Test an ephemeral indexer config without saving. |
+| `GET` | `/api/v1/indexers/definitions` | List Cardigann catalogue (bundled tracker definitions). |
+| `GET` | `/api/v1/indexers/{id}` | Get single indexer with health info. |
+| `PUT` | `/api/v1/indexers/{id}` | Replace indexer definition entirely. |
+| `PATCH` | `/api/v1/indexers/{id}` | Partial update of indexer fields. |
+| `DELETE` | `/api/v1/indexers/{id}` | Delete indexer. |
+| `GET` | `/api/v1/indexers/{id}/caps` | Fetch live capabilities from indexer. |
+| `POST` | `/api/v1/indexers/{id}/test` | Test a saved indexer's connectivity. |
+| `GET` | `/api/v1/indexers/health/` | Search health summary for all indexers. |
+| `GET` | `/api/v1/indexers/health/{id}` | Search health for one indexer. |
+| `POST` | `/api/v1/indexers/health/reset` | Reset all search-health metrics. |
+| `POST` | `/api/v1/indexers/health/{id}/reset` | Reset one indexer's search-health metrics. |
+| `GET` | `/api/v1/search/log/` | List query log entries (paginated with `limit`, `offset`). |
+| `GET` | `/api/v1/search/log/{id}` | Get single query with per-indexer breakdown. |
+| `DELETE` | `/api/v1/search/log/` | Prune query log entries older than `days` (default 30). |
+| `GET` | `/api/v1/indexers/rules/` | List indexer rules. |
+| `POST` | `/api/v1/indexers/rules/` | Create indexer rule. |
+| `DELETE` | `/api/v1/indexers/rules/{ruleID}` | Delete indexer rule. |
+| `POST` | `/api/v1/indexers/import-jackett` | Import indexers from Jackett instance. |
+
+**Indexer definition fields:**
+
+| Field | Description |
+|-------|-------------|
+| `id` | Unique ID (auto-generated or `jackett-{name}` for imports) |
+| `kind` | Protocol — `newznab` or `torznab` |
+| `name` | Display name |
+| `enabled` | Whether indexer participates in searches |
+| `priority` | Search priority (lower = higher priority) |
+| `config` | JSON — URL, API key, and indexer-specific settings |
+| `categories` | JSON — supported categories |
+| `tags` | JSON — tags for rule filtering |
+| `proxy_id` | Optional proxy to route traffic through |
+| `rate_limit_per_min` | Per-indexer rate limit (requests per minute) |
+| `rate_limit_burst` | Burst allowance for rate limiter |
+| `retry_max_attempts` | Max retry attempts on failure |
+| `created_at` / `updated_at` | Timestamps |
+
+**Health tracking (two layers):**
+
+1. **Persisted DB health** (`indexer_health` table): `indexer_id`, `status` (unknown/ok/degraded/failed), `last_checked_at`, `last_success_at`, `latency_ms`, `last_error`, `last_caps_json`. Updated on `TestOne()` and search result processing.
+
+2. **In-memory search health** (`SearchHealthTracker`): Rolling metrics — total/success/fail counts, last search/error timestamps, rolling response times (100 samples), API call timestamps (24h window). Status derived from success rate: >90% → healthy, >70% → degraded, else failing.
+
+**Query logging:**
+- Every search operation is logged to `search_query_log` with per-indexer breakdown in `search_query_indexer_log`.
+- Fields: query text, type, media type/ID, timing, total results, status, and per-indexer latency/result count/errors.
+
+**Rate limiting:**
+- Per-indexer configurable `rate_limit_per_min`, `rate_limit_burst`, `retry_max_attempts`.
+- Implemented as HTTP transport wrapper — throttles requests before they reach the indexer.
+- `RequestDelay` on definition caps RPM.
+
+**Circuit breaker / availability:**
+- **IndexerAvailability** (in-memory): Failure-based cooldown with escalating backoff — 5min → 15min → 30min → 1h.
+- Methods: `RecordSuccess`, `RecordFailure`, `IsAvailable`, `FilterAvailable`.
+- Unavailable indexers are skipped during fan-out search.
+
+**Rules system:**
+- Rules filter which indexers are eligible for a given media type.
+- Fields: `indexer_id`, `media_type`, `category_filter`, `tag_filter`, `priority`, `enabled`.
+- Fail-open: if no rules exist for a media type, all indexers are used.
+
+**Catalogue:**
+- Bundled Cardigann definitions for 100+ trackers.
+- `GET /definitions` returns summaries: ID, name, description, type, language, links, settings, categories.
+
+**Jackett import:**
+- `POST /import-jackett` with `jackettUrl` + `apiKey`.
+- Fetches configured indexers from Jackett API, creates Loom definitions prefixed `jackett-`.
+- Auto-detects `newznab` vs `torznab` from Jackett type.
+
+**Key features:**
+- **Proxy support:** route indexer traffic through configured proxies.
+- **Fan-out search:** parallel search across all healthy/available indexers with per-indexer timeouts.
+- **SSE streaming search:** results stream in real-time as each indexer responds.
 
 **Expected outcomes:**
 - Indexer shows "healthy" with recent success metrics.
@@ -388,9 +457,12 @@ Each scanned media file is tracked with: `id`, `library_id`, `path` (unique), `s
 
 **Possible failures:**
 - Invalid API key → test fails, health marked unhealthy.
-- Indexer down → circuit breaker opens, indexer skipped in searches.
+- Indexer down → circuit breaker opens after escalating backoff, indexer skipped in searches.
 - Rate limit hit → temporary failure, auto-retry later.
 - Caps fetch fails → search categories may be wrong.
+
+**Known limitations:**
+- `resolveIndexerID` maps by name (not ID) in search diagnostics — fragile if names are duplicated or renamed.
 
 ---
 

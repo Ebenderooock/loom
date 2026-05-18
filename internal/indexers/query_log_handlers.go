@@ -1,6 +1,8 @@
 package indexers
 
 import (
+	"database/sql"
+	"errors"
 	"net/http"
 	"strconv"
 	"time"
@@ -38,7 +40,11 @@ func (s *Service) handleQueryLogGet(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	entry, err := s.queryLog.GetQuery(r.Context(), id)
 	if err != nil {
-		writeError(w, http.StatusNotFound, "not_found", "query not found")
+		if errors.Is(err, sql.ErrNoRows) {
+			writeError(w, http.StatusNotFound, "not_found", "query not found")
+		} else {
+			writeError(w, http.StatusInternalServerError, "get_failed", err.Error())
+		}
 		return
 	}
 	writeJSON(w, http.StatusOK, entry)
