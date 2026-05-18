@@ -1,7 +1,9 @@
 package workflows
 
 import (
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -41,7 +43,11 @@ func (h *handler) get(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	wf, err := h.engine.store.Get(r.Context(), id)
 	if err != nil {
-		http.Error(w, "workflow not found", http.StatusNotFound)
+		if errors.Is(err, sql.ErrNoRows) {
+			http.Error(w, "workflow not found", http.StatusNotFound)
+		} else {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
 		return
 	}
 	wfWriteJSON(w, wf)

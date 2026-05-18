@@ -648,7 +648,39 @@ Each scanned media file is tracked with: `id`, `library_id`, `path` (unique), `s
 
 **What it does:** State machine tracking the full lifecycle of a search-to-import operation.
 
-**API:** `/api/v1/workflows` — list, get, events, cancel, retry, delete.
+**API endpoints:**
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/v1/workflows` | List recent workflows (last 50). |
+| `GET` | `/api/v1/workflows/{id}` | Get single workflow with items and history. |
+| `GET` | `/api/v1/workflows/{id}/events` | List audit events for a workflow. |
+| `POST` | `/api/v1/workflows/{id}/cancel` | Cancel an active workflow. Routes through orchestrator if available. |
+| `POST` | `/api/v1/workflows/{id}/retry` | Retry a failed workflow. Routes through orchestrator if available. |
+| `DELETE` | `/api/v1/workflows/{id}` | Delete workflow and all associated items/history. |
+
+**Workflow model fields:**
+
+| Field | Description |
+|-------|-------------|
+| `id` | UUID |
+| `type` | Workflow type |
+| `state` | Current state (see state machine below) |
+| `media_type` | `movie` or `episode` |
+| `grab_title` | Release title that was grabbed |
+| `download_client_id` | Download client handling this workflow |
+| `download_id` | ID within the download client |
+| `quality_profile_id` | Quality profile used for search |
+| `retry_count` | Number of retry attempts |
+| `max_retries` | Maximum allowed retries |
+| `last_error` | Last error message |
+| `metadata` | JSON metadata (indexer, quality, size, etc.) |
+| `created_at` / `updated_at` | Timestamps |
+| `completed_at` | When workflow completed (nullable) |
+| `items` | Populated on read — associated workflow items |
+| `history` | Populated on read — state transition history |
+
+**WorkflowEvent fields:** `id`, `workflow_id`, `from_state`, `to_state`, `message`, `created_at`
 
 **State machine:**
 ```
@@ -661,22 +693,57 @@ searching → grabbed → downloading → post_download → importing → comple
 ```
 
 **States explained:**
+
 | State | Meaning |
 |-------|---------|
 | `searching` | Indexers are being queried for this media item |
 | `grabbed` | A release was selected and sent to the download client |
 | `downloading` | Download client is actively downloading the item |
-| `post_download` | Download complete, awaiting processing |
+| `post_download` | Download complete, awaiting processing (seeding ratio/time checks) |
 | `importing` | File is being moved/renamed into the library |
 | `completed` | Successfully imported into library |
 | `failed` | An error occurred at any stage |
 | `cancelled` | User cancelled the workflow |
 
+**Valid transitions:**
+
+| From | To |
+|------|----|
+| `searching` | `grabbed`, `failed`, `cancelled` |
+| `grabbed` | `downloading`, `failed`, `cancelled` |
+| `downloading` | `post_download`, `failed`, `cancelled` |
+| `post_download` | `importing`, `failed`, `cancelled` |
+| `importing` | `completed`, `failed`, `cancelled` |
+| `failed` | `searching`, `downloading`, `post_download`, `importing`, `completed` (via retry/recovery) |
+
+**Orchestrator commands:**
+- `CmdSearchStarted` — new search initiated
+- `CmdGrabbed` — release grabbed, sent to download client
+- `CmdDownloadProgress` — progress update from download monitor
+- `CmdDownloadComplete` — download finished
+- `CmdImportResult` — import succeeded or failed
+- `CmdCancel` — user cancellation
+- `CmdRetry` — user retry (with smart retry logic)
+- `CmdDownloadRemoved` — download removed externally
+- `CmdTick` — periodic maintenance (stale detection, pruning, post-download checks)
+
 **Key behaviours:**
 - **Duplicate prevention:** only one active workflow per media item at a time.
-- **Retry:** failed workflows can be retried (counter tracks attempts).
+- **Retry:** failed workflows can be retried with smart retry (targets appropriate state based on failure point).
+- **Recovery:** `RecoverToImporting`, `RecoverToPostDownload`, `RecoverToDownloading` for manual recovery.
 - **Cancel:** cancels the workflow and resets media status.
 - **Media status:** workflow transitions update the media item's status (missing → downloading → available).
+- **Post-download policy:** seeding ratio/time gating before import.
+- **Boot reconciliation:** on startup, reconciles workflow state with actual download client state.
+- **Progress buffering:** download progress updates are coalesced to reduce DB writes.
+- **Stale detection:** workflows stuck beyond state timeouts are detected and handled.
+- **Pruning:** completed workflows are pruned periodically.
+
+**Integration points:**
+- **AutoSearch:** `orchestrator.StartSearch()` + `Send(CmdGrabbed)` to create and advance workflows.
+- **Download monitor:** `NotifyDownloadComplete`, `NotifyDownloadProgress`, `NotifyDownloadRemoved`.
+- **Import pipeline:** `importFn` callback triggered on transition to `importing`.
+- **Media services:** status updates on workflow transitions.
 
 **Expected outcomes:**
 - User can see real-time pipeline progress on the Workflows page.

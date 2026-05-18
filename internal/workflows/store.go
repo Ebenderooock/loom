@@ -281,27 +281,27 @@ func (s *Store) ListActive(ctx context.Context) ([]*Workflow, error) {
 
 // ListRecent returns recent workflows (active + recently completed).
 func (s *Store) ListRecent(ctx context.Context, limit int) ([]*Workflow, error) {
-	return s.list(ctx, fmt.Sprintf(`
+	return s.listArgs(ctx, `
 		SELECT id, type, state, media_type, grab_title,
 			download_client_id, download_id, quality_profile_id,
 			retry_count, max_retries, last_error, metadata,
 			created_at, updated_at, completed_at
 		FROM workflows
 		ORDER BY updated_at DESC
-		LIMIT %d`, limit))
+		LIMIT ?`, limit)
 }
 
 // FindByDownload looks up active workflow by download client + download ID.
 func (s *Store) FindByDownload(ctx context.Context, clientID, downloadID string) (*Workflow, error) {
-	rows, err := s.list(ctx, fmt.Sprintf(`
+	rows, err := s.listArgs(ctx, `
 		SELECT id, type, state, media_type, grab_title,
 			download_client_id, download_id, quality_profile_id,
 			retry_count, max_retries, last_error, metadata,
 			created_at, updated_at, completed_at
 		FROM workflows
-		WHERE download_client_id = '%s' AND download_id = '%s'
+		WHERE download_client_id = ? AND download_id = ?
 		AND state NOT IN ('completed', 'failed', 'cancelled')
-		LIMIT 1`, clientID, downloadID))
+		LIMIT 1`, clientID, downloadID)
 	if err != nil {
 		return nil, err
 	}
@@ -390,14 +390,14 @@ func (s *Store) StaleWorkflows(ctx context.Context) ([]*Workflow, error) {
 
 	for state, timeout := range StateTimeouts {
 		cutoff := now.Add(-timeout)
-		wfs, err := s.list(ctx, fmt.Sprintf(`
+		wfs, err := s.listArgs(ctx, `
 			SELECT id, type, state, media_type, grab_title,
 				download_client_id, download_id, quality_profile_id,
 				retry_count, max_retries, last_error, metadata,
 				created_at, updated_at, completed_at
 			FROM workflows
-			WHERE state = '%s' AND updated_at < '%s'`,
-			state, cutoff.Format(time.RFC3339)))
+			WHERE state = ? AND updated_at < ?`,
+			string(state), cutoff)
 		if err != nil {
 			return nil, err
 		}
@@ -417,14 +417,14 @@ func (s *Store) ResetRetry(ctx context.Context, id string) error {
 
 // ListRecentlyFailed returns workflows in failed state updated since the given time.
 func (s *Store) ListRecentlyFailed(ctx context.Context, since time.Time) ([]*Workflow, error) {
-	return s.list(ctx, fmt.Sprintf(`
+	return s.listArgs(ctx, `
 		SELECT id, type, state, media_type, grab_title,
 			download_client_id, download_id, quality_profile_id,
 			retry_count, max_retries, last_error, metadata,
 			created_at, updated_at, completed_at
 		FROM workflows
-		WHERE state = 'failed' AND updated_at >= '%s'
-		ORDER BY updated_at DESC`, since.Format(time.RFC3339)))
+		WHERE state = 'failed' AND updated_at >= ?
+		ORDER BY updated_at DESC`, since)
 }
 
 // Delete removes a workflow and its items/history (cascade).
@@ -447,7 +447,11 @@ func (s *Store) Delete(ctx context.Context, id string) error {
 // --- Helpers ---
 
 func (s *Store) list(ctx context.Context, query string) ([]*Workflow, error) {
-	rows, err := s.db.QueryContext(ctx, query)
+	return s.listArgs(ctx, query)
+}
+
+func (s *Store) listArgs(ctx context.Context, query string, args ...any) ([]*Workflow, error) {
+	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
