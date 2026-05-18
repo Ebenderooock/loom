@@ -1,6 +1,7 @@
 package libraries
 
 import (
+	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -256,9 +257,10 @@ func scanLibrary(store *Store, scanner *Scanner, logger *slog.Logger) http.Handl
 			return
 		}
 
-		// Run scan in background.
+		// Run scan in background with a detached context so it
+		// isn't cancelled when the HTTP handler returns 202.
 		go func() {
-			if err := scanner.ScanLibrary(r.Context(), lib); err != nil {
+			if err := scanner.ScanLibrary(context.Background(), lib); err != nil {
 				logger.Error("libraries: scan failed", "id", id, "err", err)
 			}
 		}()

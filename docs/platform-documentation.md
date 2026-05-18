@@ -123,18 +123,28 @@ Loom aims to be a **single Go binary** that replaces the trio of Radarr (movies)
 
 ### 3.1 Libraries
 
-**What it does:** Organises media into root folders on disk. Each library has a path, media type (movie/series), and default settings for items added to it.
+**What it does:** Organises media into root folders on disk. Each library has a name, path, media type (movie/series), and default settings for items added to it.
 
 **API:** `GET/POST/PUT/DELETE /api/v1/libraries`, `POST /{id}/scan`, `GET /{id}/unmapped`
 
 **Key fields:**
-- `path` — root filesystem path (e.g. `/media/movies`)
+- `name` — human-readable label for the library
+- `path` — root filesystem path (e.g. `/media/movies`), must be unique
 - `media_type` — `movie` or `series`
-- `monitor_on_add` — whether new items are auto-monitored
-- `quality_profile_id` — default quality profile for new items
+- `monitor_on_add` — whether new items are auto-monitored (default: true)
+- `quality_profile_id` — default quality profile for new items (default: `"default"`)
 - `unmonitor_on_delete` — unmonitor media when library is deleted
 - `auto_archive_watched` — archive items after they're marked watched (via Trakt)
-- `auto_archive_days_after_watch` — delay before archiving
+- `auto_archive_days_after_watch` — delay in days before archiving
+
+**Computed fields (returned in API responses):**
+- `accessible` — whether the path is reachable on disk
+- `disk_space` — `{ total_bytes, used_bytes, free_bytes }` for the library volume
+- `file_count` — number of indexed media files in `library_files`
+- `unmapped_count` — number of top-level folders not matched to any media record
+
+**Related table — `library_files`:**
+Each scanned media file is tracked with: `id`, `library_id`, `path` (unique), `size_bytes`, `media_id` (nullable — set when matched to a movie/series), `last_scanned`, `created_at`.
 
 **Expected outcomes:**
 - Library appears in dashboard storage stats with disk usage.
@@ -1037,30 +1047,37 @@ Sync endpoints now available:
 
 ```
 User clicks "Scan Library"
-   OR triggered on startup/schedule
         │
         ▼
 POST /api/v1/libraries/{id}/scan
+  → returns 202 Accepted immediately
+  → scan runs in background goroutine
         │
         ▼
 ┌────────────────────────────────────┐
-│  Scanner:                          │
+│  libraries.Scanner.ScanLibrary:    │
 │  1. Walk filesystem under library  │
-│     path                           │
-│  2. Index files into library_files │
-│  3. Parse media info from files    │
-│  4. Match files to existing        │
-│     movie/series records           │
-│  5. Identify unmapped folders      │
-│  6. Update media status (available │
-│     if file found)                 │
-│  7. Calculate disk usage stats     │
+│     path recursively               │
+│  2. Skip hidden directories        │
+│  3. Index video files (.mkv, .mp4, │
+│     .avi, etc.) into library_files │
+│     via UpsertFile (ON CONFLICT    │
+│     updates size + last_scanned)   │
+│  4. Delete stale files not seen    │
+│     since scan start               │
+│  5. Compute disk space stats       │
 └────────────────────────────────────┘
         │
         ▼
 Library shows updated file counts
 Unmapped folders available for review
 Dashboard shows updated storage stats
+
+Note: The libraries scanner only indexes
+files. Matching files to movie/series
+records and parsing media info is handled
+separately by the media scanner
+(internal/scanner/).
 ```
 
 ---
