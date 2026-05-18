@@ -109,6 +109,17 @@ func (h *qpHandler) delete(w http.ResponseWriter, r *http.Request) {
 
 func (h *qpHandler) getFormatScores(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
+
+	// Verify profile exists first
+	if _, err := h.store.Get(r.Context(), id); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			writeError(w, http.StatusNotFound, "quality profile not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
 	items, err := h.store.GetFormatScores(r.Context(), id)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())

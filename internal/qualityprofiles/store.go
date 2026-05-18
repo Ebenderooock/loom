@@ -151,7 +151,10 @@ func (s *Store) SetFormatScores(ctx context.Context, profileID string, items []F
 	var exists int
 	err := s.db.QueryRowContext(ctx, `SELECT 1 FROM quality_profiles_v2 WHERE id = ?`, profileID).Scan(&exists)
 	if err != nil {
-		return sql.ErrNoRows
+		if err == sql.ErrNoRows {
+			return sql.ErrNoRows
+		}
+		return fmt.Errorf("check profile exists: %w", err)
 	}
 	return s.replaceFormatItems(ctx, profileID, items)
 }
@@ -259,7 +262,10 @@ func (s *Store) getFromV1(ctx context.Context, id string) (*QualityProfile, erro
 		return nil, err
 	}
 
-	itemsJSON, _ := json.Marshal(items)
+	itemsJSON, err := json.Marshal(items)
+	if err != nil {
+		return nil, fmt.Errorf("marshal v1 profile items: %w", err)
+	}
 
 	return &QualityProfile{
 		ID:             id,

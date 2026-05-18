@@ -832,22 +832,70 @@ searching → grabbed → downloading → post_download → importing → comple
 
 **What it does:** Defines quality preferences that control what releases are acceptable and when upgrades should happen.
 
-**API:** `/api/v1/quality-profiles` — CRUD + format score endpoints.
+**API endpoints:**
 
-**Key concepts:**
-- **Quality tiers:** ordered list of acceptable qualities (e.g., HDTV-720p < Bluray-1080p < Remux-2160p).
-- **Cutoff:** the quality tier at which Loom stops searching for upgrades.
-- **Allowed items:** which quality tiers are acceptable at all.
-- **Custom format scores:** bonus/penalty scores applied per custom format match.
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/v1/quality-profiles` | List all profiles (with format items) |
+| `POST` | `/api/v1/quality-profiles` | Create profile (name required) |
+| `GET` | `/api/v1/quality-profiles/{id}` | Get single profile (v2 with v1 fallback) |
+| `PUT` | `/api/v1/quality-profiles/{id}` | Update profile |
+| `DELETE` | `/api/v1/quality-profiles/{id}` | Delete profile |
+| `GET` | `/api/v1/quality-profiles/{id}/format-scores` | Get custom format scores for profile |
+| `PUT` | `/api/v1/quality-profiles/{id}/format-scores` | Replace all format scores for profile |
+
+**Data model:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | string | Auto-generated hex ID (32 chars) |
+| `name` | string | Display name (required on create) |
+| `cutoff` | string | Quality item ID at which upgrades stop |
+| `minFormatScore` | int | Minimum combined custom format score to accept a release |
+| `cutoffFormatScore` | int | Format score threshold for upgrade cutoff |
+| `upgradeAllowed` | bool | Whether automatic upgrades are enabled |
+| `items` | string | JSON array of `QualityItem` objects (ordered quality tiers) |
+| `formatItems` | []FormatItem | Custom format score overrides for this profile |
+
+**QualityItem (within Items JSON):**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | string | Quality definition ID |
+| `name` | string | Display name (e.g., `bluray-1080p`) |
+| `preferred` | bool | Whether this is the preferred quality |
+| `allowed` | bool | Whether releases of this quality are acceptable |
+
+**Quality name derivation (from releases):**
+Source is normalised to: `bluray`, `webdl`, `webrip`, `hdtv`, `dvd`, `sdtv`.
+Resolution is normalised to: `2160p`, `1080p`, `720p`, `480p`.
+Combined as `{source}-{resolution}`, with `-remux` appended when applicable.
+
+**Available quality tiers (from seed data):**
+`sdtv`, `webdl-480p`, `dvd`, `hdtv-720p`, `webdl-720p`, `webrip-720p`, `bluray-720p`, `hdtv-1080p`, `webdl-1080p`, `webrip-1080p`, `bluray-1080p`, `bluray-1080p-remux`, `hdtv-2160p`, `webdl-2160p`, `webrip-2160p`, `bluray-2160p`, `bluray-2160p-remux`.
+
+**Ranking logic:**
+- `Rank(qualityName)` — case-insensitive lookup against allowed items; returns 0-based index or -1 if not found/not allowed.
+- `IsAllowed(qualityName)` — returns `Rank() >= 0`.
+- `CutoffRank()` — returns the rank of the cutoff quality item.
+- Higher rank = better quality. Upgrades happen when a release has a higher rank than the current file, up to cutoff.
+
+**Default profiles (seeded on first run):**
+`Any`, `HD-720p/1080p`, `HD-1080p`, `Ultra-HD`, `Ultra-HD Remux`, `HD-720p`.
+Seeding only runs when no profiles exist in the database. Quality definitions are fetched from the movie service.
+
+**V1 fallback:** `Get()` falls back to the legacy `quality_profiles` table if the ID is not found in `quality_profiles_v2`, converting to the v2 shape transparently.
 
 **Expected outcomes:**
 - Only releases matching allowed qualities are grabbed.
 - Upgrades happen automatically when a better-scoring release is found.
 - Upgrades stop once the cutoff quality is reached.
+- Custom format scores provide fine-grained preference control.
 
 **Possible failures:**
 - Profile too restrictive → nothing ever matches.
 - Custom format scores misconfigured → wrong release preferred.
+- V1 profile referenced by movie/series that has no v2 equivalent → transparent fallback.
 
 ---
 
