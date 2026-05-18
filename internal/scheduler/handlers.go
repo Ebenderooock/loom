@@ -1,6 +1,7 @@
 package scheduler
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 
@@ -26,7 +27,7 @@ func handleStatus(rs *RollingSearcher) http.HandlerFunc {
 
 func handleTrigger(rs *RollingSearcher) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		go rs.Trigger(r.Context())
+		go rs.Trigger(context.Background())
 		writeJSON(w, http.StatusOK, map[string]string{"status": "triggered"})
 	}
 }

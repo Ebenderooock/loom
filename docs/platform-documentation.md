@@ -1365,23 +1365,53 @@ Returns `{ success: true/false, items: [...], count: N }` with up to 5 preview i
 
 ### 3.16 Rolling Search
 
-**What it does:** Scheduled background search that cycles through monitored media looking for missing or upgradable items.
+**What it does:** Background scheduler that periodically searches indexers for missing library items (movies and episodes) in small, quota-aware batches. Ensures media is eventually found without manual intervention.
 
-**API:** `/api/v1/rolling-search`
+**API Endpoints:**
 
-**Process:**
-- Maintains `search_state` table tracking position in the media library.
-- Periodically picks the next batch of monitored items.
-- Runs autosearch for each.
-- Avoids hammering indexers by spreading searches over time.
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/v1/rolling-search/status` | Get scheduler status |
+| POST | `/api/v1/rolling-search/trigger` | Trigger immediate search run |
+| GET | `/api/v1/rolling-search/config` | Get configuration |
+| PUT | `/api/v1/rolling-search/config` | Update configuration |
+
+**Configuration (RollingSearchConfig):**
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| enabled | bool | false | Whether scheduler is active |
+| intervalHours | int | 12 | Hours between search cycles |
+| batchSize | int | 5 | Items to search per cycle |
+| minResearchDays | int | 7 | Min days before re-searching an item |
+| maxSearchesPerDay | int | 100 | Per-indexer daily quota limit |
+
+**Status Response (RollingSearchStatus):**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| running | bool | Whether scheduler is currently active |
+| lastRunAt | datetime | Last completed run timestamp |
+| nextRunAt | datetime | Next scheduled run timestamp |
+| itemsSearched | int | Total items searched since boot |
+| itemsInQueue | int | Items eligible for search |
+| quotaUsage | map | Per-indexer search count today |
+
+**Search Logic:**
+1. Each cycle splits batch 50/50 between movies and episodes
+2. `GetCandidates` returns items not searched within `minResearchDays`
+3. For each candidate, queries all enabled indexers that haven't hit quota
+4. Records search timestamp in `search_state` table to prevent re-searching too soon
+5. Per-indexer quota resets daily
 
 **Expected outcomes:**
-- Missing media eventually gets found and downloaded without manual intervention.
-- Upgrades happen as better releases become available.
+- Missing media eventually discovered without manual intervention.
+- Indexers protected from overload via per-indexer daily quotas.
+- Upgrades happen as better releases appear on indexers.
 
 **Possible failures:**
-- State gets stuck if errors accumulate.
-- Indexer rate limits slow progress.
+- All indexers quota-exhausted → searches skipped (logged at debug level).
+- Indexer errors → individual candidate search fails, others continue.
 
 ---
 
