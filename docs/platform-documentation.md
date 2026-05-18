@@ -995,27 +995,80 @@ Seeding only runs when no profiles exist in the database. Quality definitions ar
 
 **What it does:** Automatically adds movies/series from external list sources.
 
-**API:** `/api/v1/import-lists` — CRUD, sync, exclusions, Trakt user lists.
+**API endpoints:**
 
-**Supported providers:**
-| Provider | List types |
-|----------|-----------|
-| Trakt | User list, watchlist, popular, trending, anticipated |
-| IMDb | User list, watchlist |
-| TMDb | User list, popular |
-| Plex | Watchlist |
-| Radarr | External Radarr instance |
-| Sonarr | External Sonarr instance |
-| RSS | Custom RSS feed |
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/v1/import-lists` | List all import lists (with item counts) |
+| `POST` | `/api/v1/import-lists` | Create import list (name + list_type required) |
+| `GET` | `/api/v1/import-lists/{id}` | Get list with all items |
+| `PUT` | `/api/v1/import-lists/{id}` | Update list (merge semantics — omitted fields preserved) |
+| `DELETE` | `/api/v1/import-lists/{id}` | Delete list |
+| `POST` | `/api/v1/import-lists/{id}/sync` | Trigger manual sync |
+| `GET` | `/api/v1/import-lists/exclusions` | List all exclusions |
+| `POST` | `/api/v1/import-lists/exclusions` | Create exclusion (title required) |
+| `DELETE` | `/api/v1/import-lists/exclusions/{id}` | Delete exclusion |
+| `GET` | `/api/v1/import-lists/trakt/lists` | Fetch authenticated user's Trakt lists |
+
+**Data model (ImportList):**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | string | Auto-generated |
+| `name` | string | Display name |
+| `listType` | ListType | Provider type (see below) |
+| `enabled` | bool | Whether background sync is active |
+| `url` | string | Provider-specific URL or list slug |
+| `apiKey` | string | API key for provider |
+| `accessToken` | string | OAuth token (Trakt, Plex) |
+| `syncIntervalMinutes` | int | Sync frequency (default: 360) |
+| `libraryPath` | string | Target library ID for added items |
+| `qualityProfileID` | string | Quality profile for added items (default: "default") |
+| `mediaType` | MediaType | `movie` or `series` (default: movie) |
+| `monitorType` | MonitorType | `all`, `future`, `missing`, `none` (default: all) |
+| `searchOnAdd` | bool | Auto-search when items are added |
+| `settings` | string | Provider-specific JSON settings |
+| `lastSync` | *time.Time | Last successful sync timestamp |
+
+**Supported list types:**
+
+| ListType | Provider | Description |
+|----------|----------|-------------|
+| `trakt_list` | Trakt | User's custom list (slug in URL) |
+| `trakt_watchlist` | Trakt | User's watchlist (auth required) |
+| `trakt_popular` | Trakt | Popular movies or shows (media type aware) |
+| `trakt_trending` | Trakt | Trending movies or shows (media type aware) |
+| `trakt_anticipated` | Trakt | Anticipated movies or shows (media type aware) |
+| `imdb_list` | IMDb | User list (URL) |
+| `imdb_watchlist` | IMDb | Watchlist (URL) |
+| `tmdb_list` | TMDb | User list (URL + API key) |
+| `tmdb_popular` | TMDb | Popular items |
+| `plex_watchlist` | Plex | Plex watchlist (access token) |
+| `rss` | RSS | Custom RSS feed (URL) |
+| `sonarr` | — | Defined but not yet implemented |
+| `radarr` | — | Defined but not yet implemented |
+
+**Item statuses:** `pending` → `added` | `excluded` | `failed`
 
 **Sync process (SyncManager.SyncList):**
-1. Fetch items from provider API.
-2. Fill credentials (Trakt OAuth tokens from Connect, TMDb API key from config).
-3. Check exclusion list → skip excluded items.
-4. Upsert items into import list items table.
-5. Update `last_sync` timestamp.
-6. Process pending items → create movie/series records in library.
-7. Background sync loop runs every minute.
+1. Lock global mutex (one sync at a time).
+2. Resolve provider by `ListType` and `MediaType`.
+3. Build `ProviderConfig` from list fields.
+4. For Trakt types: fill missing API key/access token from Connect service.
+5. For TMDb types: fill missing API key from config.
+6. Call `provider.Fetch()` to get items from external API.
+7. For each fetched item:
+   - Check exclusion list by IMDb/TMDb/TVDb ID → mark `excluded` if matched.
+   - Check for existing item by ExternalID.
+   - Upsert item with `pending` or `excluded` status.
+8. Update `last_sync` timestamp.
+9. Process pending items → create movie/series records in library.
+
+**Background sync:** Ticker runs every 60 seconds. Immediate initial tick on startup. Only syncs lists where `enabled=true` and sync interval has elapsed.
+
+**Exclusion matching:** Matches by any known external ID (IMDb, TMDb, TVDb). Excluded items are stored but never added to the library.
+
+**Duplicate detection:** Movies use UNIQUE constraint + error string matching. Series check for existing TMDb ID before adding.
 
 **Expected outcomes:**
 - New items appear in library automatically.
@@ -1024,9 +1077,14 @@ Seeding only runs when no profiles exist in the database. Quality definitions ar
 
 **Possible failures:**
 - Provider API down or rate-limited.
-- Trakt OAuth token expired → needs refresh.
+- Trakt OAuth token expired → needs refresh via Connect service.
 - TMDb API key missing → TMDb lists fail.
 - Items not found in TMDB metadata → skipped.
+
+**Known limitations:**
+- `sonarr` and `radarr` list types are defined but have no provider implementation.
+- Global mutex means only one list syncs at a time.
+- Duplicate detection for movies relies on error string matching (`UNIQUE constraint` / `already exists`).
 
 ---
 

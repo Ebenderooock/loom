@@ -265,7 +265,7 @@ func getTraktUserLists(syncMgr *SyncManager) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		lists, err := syncMgr.GetTraktUserLists(r.Context())
 		if err != nil {
-			writeError(w, http.StatusBadRequest, err.Error())
+			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"data": lists})

@@ -36,25 +36,40 @@ func NewTraktWatchlist() *TraktProvider {
 }
 
 // NewTraktPopular returns a provider for Trakt popular movies/shows.
-func NewTraktPopular() *TraktProvider {
+// mediaType should be "movie" or "series" to select the right endpoint.
+func NewTraktPopular(mediaType string) *TraktProvider {
+	category := "movies"
+	if mediaType == "series" {
+		category = "shows"
+	}
 	return &TraktProvider{
-		endpoint: "https://api.trakt.tv/movies/popular",
+		endpoint: "https://api.trakt.tv/" + category + "/popular",
 		client:   &http.Client{Timeout: 30 * time.Second},
 	}
 }
 
 // NewTraktTrending returns a provider for Trakt trending movies/shows.
-func NewTraktTrending() *TraktProvider {
+// mediaType should be "movie" or "series" to select the right endpoint.
+func NewTraktTrending(mediaType string) *TraktProvider {
+	category := "movies"
+	if mediaType == "series" {
+		category = "shows"
+	}
 	return &TraktProvider{
-		endpoint: "https://api.trakt.tv/movies/trending",
+		endpoint: "https://api.trakt.tv/" + category + "/trending",
 		client:   &http.Client{Timeout: 30 * time.Second},
 	}
 }
 
 // NewTraktAnticipated returns a provider for Trakt anticipated movies/shows.
-func NewTraktAnticipated() *TraktProvider {
+// mediaType should be "movie" or "series" to select the right endpoint.
+func NewTraktAnticipated(mediaType string) *TraktProvider {
+	category := "movies"
+	if mediaType == "series" {
+		category = "shows"
+	}
 	return &TraktProvider{
-		endpoint: "https://api.trakt.tv/movies/anticipated",
+		endpoint: "https://api.trakt.tv/" + category + "/anticipated",
 		client:   &http.Client{Timeout: 30 * time.Second},
 	}
 }

@@ -129,7 +129,7 @@ func (m *SyncManager) SyncList(ctx context.Context, l *ImportList) error {
 
 	m.logger.Info("import-lists: syncing", "list", l.Name, "type", l.ListType)
 
-	provider := m.providerFor(l.ListType)
+	provider := m.providerFor(l.ListType, l.MediaType)
 	if provider == nil {
 		m.logger.Warn("import-lists: unsupported type", "type", l.ListType)
 		return nil
@@ -237,18 +237,18 @@ func (m *SyncManager) SyncList(ctx context.Context, l *ImportList) error {
 	return nil
 }
 
-func (m *SyncManager) providerFor(lt ListType) providers.ListProvider {
+func (m *SyncManager) providerFor(lt ListType, mediaType MediaType) providers.ListProvider {
 	switch lt {
 	case ListTypeTraktList:
 		return providers.NewTraktList()
 	case ListTypeTraktWatchlist:
 		return providers.NewTraktWatchlist()
 	case ListTypeTraktPopular:
-		return providers.NewTraktPopular()
+		return providers.NewTraktPopular(string(mediaType))
 	case ListTypeTraktTrending:
-		return providers.NewTraktTrending()
+		return providers.NewTraktTrending(string(mediaType))
 	case ListTypeTraktAnticipated:
-		return providers.NewTraktAnticipated()
+		return providers.NewTraktAnticipated(string(mediaType))
 	case ListTypeIMDbList:
 		return providers.NewIMDbList()
 	case ListTypeIMDbWatchlist:
