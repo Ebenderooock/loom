@@ -1090,31 +1090,77 @@ Seeding only runs when no profiles exist in the database. Quality definitions ar
 
 ### 3.12 Connect (Plex / Emby / Jellyfin / Trakt)
 
-**What it does:** Integrates with media servers and tracking services.
+**What it does:** Integrates with media servers and tracking services for library refresh and watch status sync.
 
-**API:** `/api/v1/connect` — CRUD, test, Trakt OAuth, Trakt sync.
+**API endpoints:**
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/v1/connect` | List all connections |
+| `POST` | `/api/v1/connect` | Create connection |
+| `POST` | `/api/v1/connect/test` | Test connection config (without saving) |
+| `GET` | `/api/v1/connect/{id}` | Get connection |
+| `PUT` | `/api/v1/connect/{id}` | Update connection (pointer fields for partial update) |
+| `DELETE` | `/api/v1/connect/{id}` | Delete connection |
+| `POST` | `/api/v1/connect/{id}/test` | Test saved connection |
+| `POST` | `/api/v1/connect/trakt/oauth/authorize` | Get Trakt authorize URL |
+| `POST` | `/api/v1/connect/trakt/oauth/callback` | Exchange code for token |
+| `POST` | `/api/v1/connect/trakt/oauth/refresh/{id}` | Refresh Trakt access token |
+| `POST` | `/api/v1/connect/trakt/sync/watched/{id}` | Sync watched status (+ auto-archive) |
+| `POST` | `/api/v1/connect/trakt/sync/collection/{id}` | Sync collection |
+| `POST` | `/api/v1/connect/trakt/sync/watchlist/{id}` | Sync watchlist |
+
+**Data model (Connection):**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | string | UUID |
+| `name` | string | Display name |
+| `provider` | ProviderType | `plex`, `emby`, `jellyfin`, `trakt` |
+| `enabled` | bool | Whether connection is active |
+| `settings` | ProviderSettings | Provider-specific credentials (see below) |
+| `notifyOnImport` | bool | Trigger library refresh on media import |
+
+**ProviderSettings fields:**
+
+| Field | Used by | Description |
+|-------|---------|-------------|
+| `host` | Plex, Emby, Jellyfin | Server URL |
+| `apiKey` | Plex, Emby, Jellyfin | API key / token |
+| `clientID` | Trakt | Trakt OAuth client ID |
+| `clientSecret` | Trakt | Trakt OAuth client secret |
+| `accessToken` | Trakt | OAuth access token |
+| `refreshToken` | Trakt | OAuth refresh token |
+| `tokenExpiry` | Trakt | Token expiry timestamp |
 
 **Providers:**
 
-| Provider | Features |
-|----------|----------|
-| Plex | Library refresh on import, host + API key auth |
-| Emby | Library refresh on import, host + API key auth |
-| Jellyfin | Library refresh on import, host + API key auth |
-| Trakt | OAuth2 auth, sync watched/collection/watchlist, auto-archive watched items |
+| Provider | Test | Library Refresh |
+|----------|------|-----------------|
+| Plex | `GET /identity` with `X-Plex-Token` | Iterates all library sections, refreshes each |
+| Emby | `GET /System/Info` with `X-Emby-Token` | `POST /Library/Refresh` |
+| Jellyfin | `GET /System/Info` with MediaBrowser token | `POST /Library/Refresh` |
+| Trakt | `GET /users/me` with Trakt headers | No-op |
 
-**Trakt-specific:**
-- OAuth2 flow: authorize URL → user approves → callback with code → token exchange.
-- Sync endpoints: watched, collection, watchlist.
-- `mediaArchiver` bridges Trakt watched status to auto-archive in libraries.
-- Token refresh for long-lived connections.
+**Trakt OAuth flow:**
+1. `POST /trakt/oauth/authorize` — client provides `client_id` + `redirect_uri`, receives Trakt authorize URL.
+2. User approves in browser → redirected back with `code`.
+3. `POST /trakt/oauth/callback` — exchanges `code` for access/refresh tokens, stores in connection settings.
+4. `POST /trakt/oauth/refresh/{id}` — refreshes expired access token using stored refresh token.
+
+**Trakt sync:**
+- **Watched:** Fetches `/sync/watched/movies` + `/sync/watched/shows`. Optional `MediaArchiver` auto-archives watched items in libraries.
+- **Collection:** Fetches `/sync/collection/movies` + `/sync/collection/shows`. Returns counts.
+- **Watchlist:** Fetches `/users/me/watchlist/movies` + `/users/me/watchlist/shows`. Returns counts.
+
+**Library refresh (NotifyAll):** On import events, iterates all enabled connections with `notifyOnImport=true`, calls provider's `NotifyLibraryUpdate` in parallel goroutines.
 
 **Expected outcomes:**
 - Plex/Emby/Jellyfin: library auto-refreshes when new media is imported.
-- Trakt: watched status syncs, watched items auto-archive, watchlist syncs to import list.
+- Trakt: watched status syncs, watched items auto-archive, watchlist syncs.
 
 **Possible failures:**
-- Media server unreachable → refresh silently fails.
+- Media server unreachable → refresh logged as warning, does not block import.
 - Trakt OAuth expired → needs manual re-auth or refresh.
 - Trakt API rate limits.
 

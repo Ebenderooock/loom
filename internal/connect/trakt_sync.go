@@ -102,8 +102,14 @@ func handleSyncWatched(svc Service, archiver MediaArchiver) http.HandlerFunc {
 		}
 
 		var movieList, showList []any
-		_ = json.Unmarshal(movies, &movieList)
-		_ = json.Unmarshal(shows, &showList)
+		if err := json.Unmarshal(movies, &movieList); err != nil {
+			writeError(w, http.StatusBadGateway, "trakt: invalid watched movies response: "+err.Error())
+			return
+		}
+		if err := json.Unmarshal(shows, &showList); err != nil {
+			writeError(w, http.StatusBadGateway, "trakt: invalid watched shows response: "+err.Error())
+			return
+		}
 
 		resp := map[string]any{
 			"synced":        "watched",
@@ -146,8 +152,14 @@ func handleSyncCollection(svc Service) http.HandlerFunc {
 		}
 
 		var movieList, showList []any
-		_ = json.Unmarshal(movies, &movieList)
-		_ = json.Unmarshal(shows, &showList)
+		if err := json.Unmarshal(movies, &movieList); err != nil {
+			writeError(w, http.StatusBadGateway, "trakt: invalid collection movies response: "+err.Error())
+			return
+		}
+		if err := json.Unmarshal(shows, &showList); err != nil {
+			writeError(w, http.StatusBadGateway, "trakt: invalid collection shows response: "+err.Error())
+			return
+		}
 
 		writeJSON(w, http.StatusOK, map[string]any{
 			"synced":         "collection",
@@ -178,8 +190,14 @@ func handleSyncWatchlist(svc Service) http.HandlerFunc {
 		}
 
 		var movieList, showList []any
-		_ = json.Unmarshal(movies, &movieList)
-		_ = json.Unmarshal(shows, &showList)
+		if err := json.Unmarshal(movies, &movieList); err != nil {
+			writeError(w, http.StatusBadGateway, "trakt: invalid watchlist movies response: "+err.Error())
+			return
+		}
+		if err := json.Unmarshal(shows, &showList); err != nil {
+			writeError(w, http.StatusBadGateway, "trakt: invalid watchlist shows response: "+err.Error())
+			return
+		}
 
 		writeJSON(w, http.StatusOK, map[string]any{
 			"synced":         "watchlist",

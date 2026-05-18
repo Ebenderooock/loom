@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -172,11 +172,11 @@ func (s *service) NotifyAll(ctx context.Context, eventType string) error {
 			defer wg.Done()
 			p, err := ProviderFor(c.Provider)
 			if err != nil {
-				log.Printf("connect: unknown provider %q for %q", c.Provider, c.Name)
+				slog.Warn("connect: unknown provider", "provider", c.Provider, "connection", c.Name)
 				return
 			}
 			if err := p.NotifyLibraryUpdate(ctx, c.Settings); err != nil {
-				log.Printf("connect: library update failed for %q (%s): %v", c.Name, c.Provider, err)
+				slog.Warn("connect: library update failed", "connection", c.Name, "provider", c.Provider, "error", err)
 			}
 		}(conn)
 	}
