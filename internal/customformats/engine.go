@@ -124,6 +124,12 @@ func specMatch(spec Specification, ri ReleaseInfo) bool {
 		return matchSize(spec.Fields, ri)
 	case ImplIndexerFlag:
 		return matchIndexerFlag(spec.Fields, ri)
+	case ImplFileInfo:
+		// FileInfoSpec conditions only apply to post-download file evaluation
+		// via EvalFile/ScoreFile. During release matching they are skipped
+		// (vacuously true) so they don't block formats that mix release and
+		// file-based conditions.
+		return true
 	default:
 		return false
 	}

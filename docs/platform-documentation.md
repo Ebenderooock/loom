@@ -901,23 +901,93 @@ Seeding only runs when no profiles exist in the database. Quality definitions ar
 
 ### 3.10 Custom Formats
 
-**What it does:** Rule-based release name matching that assigns scores to releases.
+**What it does:** Rule-based release matching engine that identifies releases with specific attributes. Format scores are assigned per quality profile, not per format — the engine only determines which formats match.
 
-**API:** `/api/v1/custom-formats` — CRUD, test, import presets.
+**API endpoints:**
 
-**How it works:**
-- Each custom format has one or more conditions (regex patterns, size ranges, etc.).
-- When a release name matches all conditions, the format's score (from the quality profile) is added.
-- Positive scores = preferred, negative scores = penalised.
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/v1/custom-formats` | List all custom formats |
+| `POST` | `/api/v1/custom-formats` | Create format (id + name required) |
+| `POST` | `/api/v1/custom-formats/test` | Test a release title against all formats |
+| `GET` | `/api/v1/custom-formats/{id}` | Get single format |
+| `PUT` | `/api/v1/custom-formats/{id}` | Update format |
+| `DELETE` | `/api/v1/custom-formats/{id}` | Delete format |
 
-**Examples:**
-- "DV" format → +100 score for Dolby Vision releases.
-- "x265" format → +50 for HEVC encoding.
-- "CAM" format → -1000 to reject cam rips.
+**Data model:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | string | User-provided or auto-generated ID |
+| `name` | string | Display name |
+| `includeWhenRenaming` | bool | Include format tag in file rename |
+| `specifications` | []Specification | Array of matching conditions |
+
+**Specification fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `name` | string | Condition display name |
+| `implementation` | string | Condition type (see below) |
+| `negate` | bool | Invert the match result |
+| `required` | bool | Must match for group to pass (AND within group) |
+| `fields` | map | Condition-specific parameters |
+
+**Condition types (Implementation):**
+
+| Type | Fields | Matches against |
+|------|--------|-----------------|
+| `ReleaseTitleSpec` | `value` (regex) | Release title (case-insensitive) |
+| `QualitySpec` | `value` | Parsed quality string |
+| `SourceSpec` | `value` | Source (BluRay, WEB-DL, etc.) |
+| `ResolutionSpec` | `value` | Resolution (2160p, 1080p, etc.) |
+| `CodecSpec` | `value` | Codec (x265, x264, AV1, etc.) |
+| `AudioSpec` | `value` | Audio format (Atmos, TrueHD, etc.) |
+| `ReleaseGroupSpec` | `value` | Release group name |
+| `LanguageSpec` | `value` | Language name |
+| `SizeSpec` | `min`, `max` | File size in GB |
+| `IndexerFlagSpec` | `value` | Indexer flag |
+| `FileInfoSpec` | codec, resolution, audio, size | Post-download file properties only |
+
+**Matching logic (same as Radarr/Sonarr):**
+1. Specifications are grouped by `Implementation` type.
+2. Within a group: **OR** logic — at least one spec must match.
+3. `Required=true` specs act as **AND** within their group — if any required spec fails, the group fails.
+4. Across groups: **AND** logic — every group must pass.
+5. `Negate=true` inverts the raw spec result before group evaluation.
+6. `FileInfoSpec` conditions are vacuously true during release matching (they only apply to `ScoreFile`/`EvalFile`).
+
+**Release name parser extracts:**
+- Resolution: `2160p`, `1080p`, `720p`, `480p`
+- Source: `BluRay`, `WEB-DL`, `WEBRip`, `HDTV`, `DVDRip`, `CAM`, `TS`, `TC`
+- Codec: `x265`, `x264`, `AV1`, `VP9`, `XviD`, `DivX`
+- Audio: `DTS-HD MA`, `DTS-HD`, `TrueHD`, `Atmos`, `FLAC`, `AAC`, `DD5.1`, `DTS`, `EAC3`, `Opus`
+- Group: trailing `-GROUP` token
+- Languages: multi/dual audio detection + language word list
+
+**Built-in presets:**
+
+| ID | Name | Description |
+|----|------|-------------|
+| `prefer-hevc` | Prefer x265/HEVC | Matches HEVC/x265 releases |
+| `prefer-atmos-truehd` | Prefer Atmos/TrueHD | Matches Atmos and TrueHD audio |
+| `avoid-lq-groups` | Avoid LQ Groups | Matches known low-quality release groups |
+| `prefer-bluray` | Prefer BluRay | Matches BluRay source releases |
+| `avoid-cam-ts` | Avoid CAM/TS | Matches CAM and TS sources |
+
+**Scoring integration:** `FormatMatch.Score` is always 0 from the engine — actual scores come from the quality profile's format items (`quality_profile_format_items` table). The autosearch engine looks up `formatScores[match.CustomFormatID]` to get the effective score per match.
+
+**File-based matching (`ScoreFile`/`EvalFile`):** Post-download evaluation against real file properties (size, codec, resolution, audio extracted from filename + stat). Used for import decisions and file organisation.
 
 **Expected outcomes:**
 - Releases are ranked considering both quality tier and format scores.
 - Users can fine-tune preferences without changing quality profiles.
+- Test endpoint shows which formats match a given release title.
+
+**Possible failures:**
+- Invalid regex in `ReleaseTitleSpec` → condition silently returns false.
+- `matchSize` with both min/max at 0 → vacuously true (matches everything).
+- Custom format scores misconfigured in quality profile → wrong release preferred.
 
 ---
 
