@@ -29,6 +29,8 @@ type Service interface {
 	SearchMovies(ctx context.Context, query string) ([]*Movie, error)
 	LookupMovies(ctx context.Context, term string) ([]*metadata.MovieMetadata, error)
 	GetMovie(ctx context.Context, id string) (*Movie, error)
+	GetMovieByTMDBID(ctx context.Context, tmdbID string) (*Movie, error)
+	GetMovieByIMDBID(ctx context.Context, imdbID string) (*Movie, error)
 	GetMovieCredits(ctx context.Context, movieID string) (*metadata.Credits, error)
 	AddMovie(ctx context.Context, movie *Movie) error
 	UpdateMovie(ctx context.Context, movie *Movie) error
@@ -203,6 +205,22 @@ func (s *service) GetMovie(ctx context.Context, id string) (*Movie, error) {
 	}
 
 	return movie, nil
+}
+
+// GetMovieByTMDBID retrieves a movie by its TMDB ID.
+func (s *service) GetMovieByTMDBID(ctx context.Context, tmdbID string) (*Movie, error) {
+	if tmdbID == "" {
+		return nil, fmt.Errorf("movies: TMDB ID required")
+	}
+	return s.repo.GetMovieByTMDBID(ctx, tmdbID)
+}
+
+// GetMovieByIMDBID retrieves a movie by its IMDB ID.
+func (s *service) GetMovieByIMDBID(ctx context.Context, imdbID string) (*Movie, error) {
+	if imdbID == "" {
+		return nil, fmt.Errorf("movies: IMDB ID required")
+	}
+	return s.repo.GetMovieByIMDBID(ctx, imdbID)
 }
 
 // GetMovieCredits fetches credits (cast & crew) for a movie from TMDB.

@@ -351,9 +351,15 @@ func (m *SyncManager) addMovieToLibrary(ctx context.Context, l *ImportList, item
 		return fmt.Errorf("movies service not configured")
 	}
 
-	// Check if the movie already exists in the library by TMDb ID.
+	// Check if the movie already exists in the library by TMDb ID or IMDb ID.
 	if item.TMDbID != "" && item.TMDbID != "0" {
-		existing, err := m.findExistingMovieByTMDBID(ctx, item.TMDbID)
+		existing, err := m.moviesSvc.GetMovieByTMDBID(ctx, item.TMDbID)
+		if err == nil && existing != nil {
+			return nil // already in library
+		}
+	}
+	if item.IMDbID != "" {
+		existing, err := m.moviesSvc.GetMovieByIMDBID(ctx, item.IMDbID)
 		if err == nil && existing != nil {
 			return nil // already in library
 		}
@@ -391,6 +397,12 @@ func (m *SyncManager) addMovieToLibrary(ctx context.Context, l *ImportList, item
 		return fmt.Errorf("add movie %q: %w", item.Title, err)
 	}
 
+	// Enrich metadata (poster, overview, genres, etc.) from TMDb.
+	if err := m.moviesSvc.RefreshMovie(ctx, movie.ID); err != nil {
+		m.logger.Warn("import-lists: metadata enrichment failed (movie added without poster)",
+			"title", item.Title, "err", err)
+	}
+
 	m.logger.Info("import-lists: added movie", "title", item.Title, "tmdb_id", tmdbID)
 	return nil
 }
@@ -399,14 +411,6 @@ func (m *SyncManager) addMovieToLibrary(ctx context.Context, l *ImportList, item
 func (m *SyncManager) addSeriesToLibrary(ctx context.Context, l *ImportList, item *ImportListItem) error {
 	if m.seriesSvc == nil {
 		return fmt.Errorf("series service not configured")
-	}
-
-	// Check if the series already exists by TMDb ID.
-	if item.TMDbID != "" && item.TMDbID != "0" {
-		existing, err := m.findExistingSeriesByTMDBID(ctx, item.TMDbID)
-		if err == nil && existing != nil {
-			return nil // already in library
-		}
 	}
 
 	req := &series.AddSeriesRequest{
@@ -425,36 +429,6 @@ func (m *SyncManager) addSeriesToLibrary(ctx context.Context, l *ImportList, ite
 
 	m.logger.Info("import-lists: added series", "title", item.Title, "tmdb_id", item.TMDbID)
 	return nil
-}
-
-// findExistingMovieByTMDBID checks whether a movie with the given TMDB ID
-// already exists in the library.
-func (m *SyncManager) findExistingMovieByTMDBID(ctx context.Context, tmdbID string) (*movies.Movie, error) {
-	allMovies, err := m.moviesSvc.ListMovies(ctx, 0, 0)
-	if err != nil {
-		return nil, err
-	}
-	for _, mv := range allMovies {
-		if mv.TMDBID != nil && *mv.TMDBID == tmdbID {
-			return mv, nil
-		}
-	}
-	return nil, nil
-}
-
-// findExistingSeriesByTMDBID checks whether a series with the given TMDB ID
-// already exists in the library.
-func (m *SyncManager) findExistingSeriesByTMDBID(ctx context.Context, tmdbID string) (*series.Series, error) {
-	allSeries, err := m.seriesSvc.ListSeries(ctx)
-	if err != nil {
-		return nil, err
-	}
-	for _, s := range allSeries {
-		if s.TMDBID != nil && *s.TMDBID == tmdbID {
-			return s, nil
-		}
-	}
-	return nil, nil
 }
 
 // makeMovieSlug generates a URL-safe slug for a movie.

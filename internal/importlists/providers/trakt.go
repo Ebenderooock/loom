@@ -126,23 +126,39 @@ func (p *TraktProvider) Fetch(ctx context.Context, cfg ProviderConfig) ([]Item, 
 	var items []Item
 	for _, e := range entries {
 		if e.Movie.Title != "" {
+			tmdbID := ""
+			if e.Movie.IDs.TMDB != 0 {
+				tmdbID = fmt.Sprintf("%d", e.Movie.IDs.TMDB)
+			}
+			tvdbID := ""
+			if e.Movie.IDs.TVDB != 0 {
+				tvdbID = fmt.Sprintf("%d", e.Movie.IDs.TVDB)
+			}
 			items = append(items, Item{
 				ExternalID: fmt.Sprintf("trakt-%d", e.Movie.IDs.Trakt),
 				Title:      e.Movie.Title,
 				Year:       e.Movie.Year,
 				IMDbID:     e.Movie.IDs.IMDB,
-				TMDbID:     fmt.Sprintf("%d", e.Movie.IDs.TMDB),
-				TVDbID:     fmt.Sprintf("%d", e.Movie.IDs.TVDB),
+				TMDbID:     tmdbID,
+				TVDbID:     tvdbID,
 				MediaType:  "movie",
 			})
 		} else if e.Show.Title != "" {
+			tmdbID := ""
+			if e.Show.IDs.TMDB != 0 {
+				tmdbID = fmt.Sprintf("%d", e.Show.IDs.TMDB)
+			}
+			tvdbID := ""
+			if e.Show.IDs.TVDB != 0 {
+				tvdbID = fmt.Sprintf("%d", e.Show.IDs.TVDB)
+			}
 			items = append(items, Item{
 				ExternalID: fmt.Sprintf("trakt-%d", e.Show.IDs.Trakt),
 				Title:      e.Show.Title,
 				Year:       e.Show.Year,
 				IMDbID:     e.Show.IDs.IMDB,
-				TMDbID:     fmt.Sprintf("%d", e.Show.IDs.TMDB),
-				TVDbID:     fmt.Sprintf("%d", e.Show.IDs.TVDB),
+				TMDbID:     tmdbID,
+				TVDbID:     tvdbID,
 				MediaType:  "series",
 			})
 		}
