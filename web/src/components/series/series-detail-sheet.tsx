@@ -175,7 +175,7 @@ function SeasonAccordion({
   seriesId: string;
   season: Season;
   seriesTitle: string;
-  seriesData: { qualityProfileId: string; imdbId?: string; tmdbId?: string };
+  seriesData: { qualityProfileId: string; imdbId?: string; tmdbId?: string; tvdbId?: string };
   onSearchOpen: (ctx: {
     title: string;
     query: string;
@@ -224,6 +224,7 @@ function SeasonAccordion({
         quality_profile_id: seriesData.qualityProfileId,
         imdb_id: seriesData.imdbId || undefined,
         tmdb_id: seriesData.tmdbId || undefined,
+        tvdb_id: seriesData.tvdbId || undefined,
         season: season.seasonNumber,
         episode: ep.episodeNumber,
       });
@@ -252,6 +253,7 @@ function SeasonAccordion({
         quality_profile_id: seriesData.qualityProfileId,
         imdb_id: seriesData.imdbId || undefined,
         tmdb_id: seriesData.tmdbId || undefined,
+        tvdb_id: seriesData.tvdbId || undefined,
         season: season.seasonNumber,
       });
       if (result.grabbed) {
@@ -515,6 +517,7 @@ export function SeriesDetailSheet({
         quality_profile_id: series.qualityProfileId,
         imdb_id: series.imdbId || undefined,
         tmdb_id: series.tmdbId || undefined,
+        tvdb_id: series.tvdbId || undefined,
       });
       if (result.grabbed) {
         toast.success(`Grabbed: ${result.grabbed.title}`, {
@@ -900,7 +903,7 @@ export function SeriesDetailSheet({
                   {seasons
                     .sort((a, b) => a.seasonNumber - b.seasonNumber)
                     .map(season => (
-                      <SeasonAccordion key={season.id} seriesId={series.id} season={season} seriesTitle={series.title} seriesData={{ qualityProfileId: series.qualityProfileId, imdbId: series.imdbId, tmdbId: series.tmdbId }} onSearchOpen={openSearch} />
+                      <SeasonAccordion key={season.id} seriesId={series.id} season={season} seriesTitle={series.title} seriesData={{ qualityProfileId: series.qualityProfileId, imdbId: series.imdbId, tmdbId: series.tmdbId, tvdbId: series.tvdbId }} onSearchOpen={openSearch} />
                     ))}
                 </div>
               )}

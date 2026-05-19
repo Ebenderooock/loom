@@ -146,6 +146,21 @@ func (s *service) AddSeries(ctx context.Context, req *AddSeriesRequest) (*Series
 	}
 
 	tmdbIDStr := req.TMDBID
+
+	// Extract external IDs (IMDB, TVDB) from TMDB response
+	var imdbID, tvdbID *string
+	if extIDs, ok := details["external_ids"].(map[string]interface{}); ok {
+		if v := getString(extIDs, "imdb_id"); v != "" {
+			imdbID = &v
+		}
+		if v, ok := extIDs["tvdb_id"]; ok && v != nil {
+			s := fmt.Sprintf("%.0f", v)
+			if s != "0" {
+				tvdbID = &s
+			}
+		}
+	}
+
 	monStatus := MonitoringStatus(req.MonitoringStatus)
 	if monStatus == "" {
 		monStatus = MonitoringAll
@@ -166,7 +181,9 @@ func (s *service) AddSeries(ctx context.Context, req *AddSeriesRequest) (*Series
 		ID:               slug,
 		Title:            title,
 		Year:             year,
+		IMDBID:           imdbID,
 		TMDBID:           &tmdbIDStr,
+		TVDBID:           tvdbID,
 		Overview:         getString(details, "overview"),
 		Genres:           genres,
 		Runtime:          getInt(details, "episode_run_time"),
@@ -336,6 +353,19 @@ func (s *service) RefreshSeries(ctx context.Context, id string) error {
 		sr.Status = StatusContinuing
 	}
 
+	// Extract external IDs (IMDB, TVDB) from TMDB response
+	if extIDs, ok := details["external_ids"].(map[string]interface{}); ok {
+		if v := getString(extIDs, "imdb_id"); v != "" {
+			sr.IMDBID = &v
+		}
+		if v, ok := extIDs["tvdb_id"]; ok && v != nil {
+			s := fmt.Sprintf("%.0f", v)
+			if s != "0" {
+				sr.TVDBID = &s
+			}
+		}
+	}
+
 	if err := s.repo.UpdateSeries(ctx, sr); err != nil {
 		return fmt.Errorf("series: update: %w", err)
 	}
@@ -464,7 +494,7 @@ func (s *service) LookupTMDB(ctx context.Context, tmdbID string) (map[string]int
 }
 
 func (s *service) fetchTMDBDetails(ctx context.Context, tmdbID string) (map[string]interface{}, error) {
-	u := fmt.Sprintf("https://api.themoviedb.org/3/tv/%s?append_to_response=credits", tmdbID)
+	u := fmt.Sprintf("https://api.themoviedb.org/3/tv/%s?append_to_response=credits,external_ids", tmdbID)
 	body, err := s.tmdbGet(ctx, u)
 	if err != nil {
 		return nil, err

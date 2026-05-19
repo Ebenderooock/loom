@@ -17,6 +17,7 @@ export interface Series {
   year: number;
   imdbId?: string;
   tmdbId?: string;
+  tvdbId?: string;
   overview: string;
   genres: string[];
   runtime: number;
