@@ -67,6 +67,7 @@ import (
 	"github.com/ebenderooock/loom/internal/safety"
 	"github.com/ebenderooock/loom/internal/scanner"
 	"github.com/ebenderooock/loom/internal/scheduler"
+	"github.com/ebenderooock/loom/internal/searchdebug"
 	"github.com/ebenderooock/loom/internal/series"
 	"github.com/ebenderooock/loom/internal/storage"
 	"github.com/ebenderooock/loom/internal/systemlogs"
@@ -121,6 +122,7 @@ type Server struct {
 	healthMonitor   *healthmonitor.Monitor
 	auditLog        *auditlog.Logger
 	autoSearchEngine *autosearch.Engine
+	searchDebugStore *searchdebug.Store
 	systemLogsDeps  *systemlogs.HandlerDeps
 	wfEngine         *workflows.Engine
 	orchestrator     *workflows.Orchestrator
@@ -157,18 +159,19 @@ func New(cfg *config.Config, appCfg *appconfig.Config, logger *slog.Logger, tel 
 	}
 
 	s := &Server{
-		cfg:         cfg,
-		appCfg:      appCfg,
-		logger:      logger,
-		tel:         tel,
-		db:          db,
-		bus:         bus,
-		authSvc:     authSvc,
-		indexerSvc:  indexerSvc,
-		moviesSvc:   moviesSvc,
-		reviewStore: safety.NewReviewStore(db.DB()),
-		aggSvc:      aggSvc,
-		httpMetrics: telemetry.NewHTTPMetrics(tel.Registry()),
+		cfg:              cfg,
+		appCfg:           appCfg,
+		logger:           logger,
+		tel:              tel,
+		db:               db,
+		bus:              bus,
+		authSvc:          authSvc,
+		indexerSvc:       indexerSvc,
+		moviesSvc:        moviesSvc,
+		reviewStore:      safety.NewReviewStore(db.DB()),
+		aggSvc:           aggSvc,
+		searchDebugStore: searchdebug.NewStore(db.DB()),
+		httpMetrics:      telemetry.NewHTTPMetrics(tel.Registry()),
 	}
 
 	telemetry.InitAppMetrics(tel.Registry())
@@ -463,6 +466,12 @@ func (s *Server) SetAutoSearchEngine(e *autosearch.Engine) {
 	if s.httpSrv != nil {
 		s.httpSrv.Handler = s.newMux()
 	}
+}
+
+// SearchDebugStore returns the search debug log store for wiring into the
+// autosearch engine.
+func (s *Server) SearchDebugStore() *searchdebug.Store {
+	return s.searchDebugStore
 }
 
 // SetWorkflowEngine sets the workflow engine for tracking download→media linkage.
@@ -783,6 +792,11 @@ func (s *Server) newMux() http.Handler {
 			asHandler := autosearch.NewHandler(s.autoSearchEngine, s.logger)
 			r.Post("/api/v1/autosearch", asHandler.HandleAutoSearch)
 			r.Post("/api/v1/autosearch/evaluate", asHandler.HandleEvaluate)
+		}
+
+		// Search debug log (authenticated)
+		if s.searchDebugStore != nil {
+			r.Mount("/api/v1/search-debug", searchdebug.Router(s.searchDebugStore))
 		}
 
 		// Filesystem browsing (authenticated)

@@ -21,6 +21,7 @@ import (
 	"github.com/ebenderooock/loom/internal/movies"
 	"github.com/ebenderooock/loom/internal/parser"
 	"github.com/ebenderooock/loom/internal/qualityprofiles"
+	"github.com/ebenderooock/loom/internal/searchdebug"
 	"github.com/ebenderooock/loom/internal/series"
 	"github.com/ebenderooock/loom/internal/workflows"
 )
@@ -52,6 +53,7 @@ type Engine struct {
 	orchestrator *workflows.Orchestrator
 	logger       *slog.Logger
 	audit        *auditlog.Logger
+	debugStore   *searchdebug.Store
 }
 
 // NewEngine creates an autosearch Engine.
@@ -96,6 +98,11 @@ func WithAuditLogger(al *auditlog.Logger) EngineOption {
 // WithOrchestrator sets the workflow orchestrator for unified state management.
 func WithOrchestrator(o *workflows.Orchestrator) EngineOption {
 	return func(e *Engine) { e.orchestrator = o }
+}
+
+// WithDebugStore sets the search debug log store for detailed search tracing.
+func WithDebugStore(s *searchdebug.Store) EngineOption {
+	return func(e *Engine) { e.debugStore = s }
 }
 
 // Evaluate scores a set of indexer results against a quality profile
@@ -330,22 +337,63 @@ func (e *Engine) searchSeasonWithFallback(ctx context.Context, req SearchRequest
 
 // searchAndGrabSingle executes a single search+grab (no fallback logic).
 func (e *Engine) searchAndGrabSingle(ctx context.Context, req SearchRequest) (*SearchResult, error) {
+	startTime := time.Now()
+
+	// Debug log entry — collected throughout, persisted via defer.
+	var dbg *searchdebug.Entry
+	if e.debugStore != nil {
+		dbg = &searchdebug.Entry{
+			ID:               searchdebug.NewID(),
+			CreatedAt:        startTime,
+			MediaType:        req.MediaType,
+			MediaID:          req.MediaID,
+			Title:            req.Title,
+			Year:             req.Year,
+			Season:           req.Season,
+			Episode:          req.Episode,
+			IMDBID:           req.IMDBID,
+			TVDBID:           req.TVDBID,
+			TMDBID:           req.TMDBID,
+			QualityProfileID: req.QualityProfileID,
+			Request:          req,
+			Outcome:          "unknown",
+		}
+		defer func() {
+			dbg.DurationMS = time.Since(startTime).Milliseconds()
+			if err := e.debugStore.Create(context.Background(), dbg); err != nil {
+				e.logger.Warn("failed to persist search debug log", "error", err)
+			}
+		}()
+	}
+
 	// Load the quality profile.
 	profile, err := e.profileStore.Get(ctx, req.QualityProfileID)
 	if err != nil {
 		e.logSearchFailed(ctx, req, fmt.Sprintf("load quality profile: %v", err))
+		if dbg != nil {
+			dbg.Outcome = "profile_load_failed"
+			dbg.ErrorMessage = err.Error()
+		}
 		return nil, fmt.Errorf("load quality profile %s: %w", req.QualityProfileID, err)
 	}
 
 	// Parse quality items from the profile's JSON Items field.
 	var items []profileItem
 	if err := json.Unmarshal([]byte(profile.Items), &items); err != nil {
+		if dbg != nil {
+			dbg.Outcome = "profile_parse_failed"
+			dbg.ErrorMessage = err.Error()
+		}
 		return nil, fmt.Errorf("parse quality items: %w", err)
 	}
 
 	// Load quality definitions for matching parsed releases.
 	qualDefs, err := e.movieSvc.ListQualityDefinitions(ctx)
 	if err != nil {
+		if dbg != nil {
+			dbg.Outcome = "quality_defs_failed"
+			dbg.ErrorMessage = err.Error()
+		}
 		return nil, fmt.Errorf("load quality definitions: %w", err)
 	}
 
@@ -379,6 +427,9 @@ func (e *Engine) searchAndGrabSingle(ctx context.Context, req SearchRequest) (*S
 		if store != nil {
 			existing, err := store.FindActiveForMedia(ctx, mediaType, req.MediaID)
 			if err == nil && existing != nil {
+				if dbg != nil {
+					dbg.Outcome = "already_grabbed"
+				}
 				return &SearchResult{
 					Reason: "already_grabbed",
 				}, nil
@@ -409,11 +460,60 @@ func (e *Engine) searchAndGrabSingle(ctx context.Context, req SearchRequest) (*S
 		var tierResults []indexers.Result
 		var tierIDsBased bool
 
+		// Capture debug tier detail.
+		tierDetail := searchdebug.TierDetail{TierIndex: tierIdx}
 		for _, q := range tier {
+			if dbg != nil {
+				cats := make([]int, len(q.Categories))
+				for i, c := range q.Categories {
+					cats[i] = int(c)
+				}
+				tierDetail.Queries = append(tierDetail.Queries, searchdebug.QueryDetail{
+					Term:       q.Term,
+					Mode:       string(q.Mode),
+					IMDBID:     q.IMDBID,
+					TVDBID:     q.TVDBID,
+					TMDBID:     q.TMDBID,
+					Season:     q.Season,
+					Episode:    q.Episode,
+					Year:       q.Year,
+					Categories: cats,
+				})
+			}
+
 			agg := e.indexerSvc.Search(ctx, q, nil, 30*time.Second)
 			tierResults = append(tierResults, agg.Results...)
 			if q.IMDBID != "" || q.TVDBID != "" || q.TMDBID != "" {
 				tierIDsBased = true
+			}
+
+			// Capture per-indexer results for debug.
+			if dbg != nil && agg.Diagnostics != nil {
+				for _, d := range agg.Diagnostics.Indexers {
+					ir := searchdebug.IndexerResult{
+						IndexerID:   d.Name,
+						IndexerName: d.Name,
+						Status:      d.Status,
+						ResultCount: d.ResultCount,
+						LatencyMS:   d.ResponseTimeMS,
+						Error:       d.ErrorMessage,
+					}
+					// Attach sanitized result entries (cap at 50 per indexer).
+					for i, r := range agg.Results {
+						if i >= 50 {
+							break
+						}
+						if r.IndexerID != "" {
+							// Only include results from this indexer.
+							resolvedName := r.IndexerID
+							if resolvedName != d.Name {
+								continue
+							}
+						}
+						ir.Results = append(ir.Results, sanitizeResult(r))
+					}
+					dbg.IndexerResults = append(dbg.IndexerResults, ir)
+				}
 			}
 		}
 
@@ -422,11 +522,16 @@ func (e *Engine) searchAndGrabSingle(ctx context.Context, req SearchRequest) (*S
 				"tier", tierIdx,
 				"queries", len(tier),
 			)
+			if dbg != nil {
+				dbg.Tiers = append(dbg.Tiers, tierDetail)
+			}
 			continue
 		}
 
 		totalConsidered += len(tierResults)
+		tierDetail.ResultCount = len(tierResults)
 
+		var tierAccepted int
 		for _, res := range tierResults {
 			sr := e.evaluateResult(req, res, qualDefs, allowedMap, allowedDefs, formatScores, profile, existing, cutoffTier, tierIDsBased)
 			if sr.Rejected {
@@ -447,13 +552,26 @@ func (e *Engine) searchAndGrabSingle(ctx context.Context, req SearchRequest) (*S
 						return 0
 					}(),
 				)
-				continue
+			} else {
+				scored = append(scored, sr)
+				tierAccepted++
 			}
-			scored = append(scored, sr)
+
+			// Capture evaluation details for debug.
+			if dbg != nil {
+				dbg.Evaluation = append(dbg.Evaluation, scoredToEval(sr))
+			}
 		}
+
+		tierDetail.AcceptedCount = tierAccepted
+		tierDetail.RejectedCount = len(tierResults) - tierAccepted
 
 		// If this tier produced at least one accepted result, stop.
 		if len(scored) > 0 {
+			tierDetail.StoppedHere = true
+			if dbg != nil {
+				dbg.Tiers = append(dbg.Tiers, tierDetail)
+			}
 			break
 		}
 		// Otherwise continue to the next tier.
@@ -461,6 +579,9 @@ func (e *Engine) searchAndGrabSingle(ctx context.Context, req SearchRequest) (*S
 			"tier", tierIdx,
 			"results", len(tierResults),
 		)
+		if dbg != nil {
+			dbg.Tiers = append(dbg.Tiers, tierDetail)
+		}
 	}
 
 	result := &SearchResult{
@@ -469,11 +590,19 @@ func (e *Engine) searchAndGrabSingle(ctx context.Context, req SearchRequest) (*S
 
 	if totalConsidered == 0 {
 		result.Reason = "no results from indexers"
+		if dbg != nil {
+			dbg.Outcome = "no_results"
+			dbg.TotalResults = 0
+		}
 		e.logSearchCompleted(ctx, req, result)
 		return result, nil
 	}
 
 	result.Rejected = totalConsidered - len(scored)
+	if dbg != nil {
+		dbg.TotalResults = totalConsidered
+		dbg.TotalRejected = result.Rejected
+	}
 
 	// Build top reject stats.
 	for reason, count := range rejectCounts {
@@ -490,6 +619,9 @@ func (e *Engine) searchAndGrabSingle(ctx context.Context, req SearchRequest) (*S
 			"considered", result.Considered,
 			"top_rejects", result.TopRejects,
 		)
+		if dbg != nil {
+			dbg.Outcome = "all_rejected"
+		}
 		e.logSearchCompleted(ctx, req, result)
 		return result, nil
 	}
@@ -519,12 +651,20 @@ func (e *Engine) searchAndGrabSingle(ctx context.Context, req SearchRequest) (*S
 		}
 		if err != nil {
 			result.Reason = fmt.Sprintf("grab failed for all %d candidates: %v", len(scored), err)
+			if dbg != nil {
+				dbg.Outcome = "grab_failed"
+				dbg.ErrorMessage = err.Error()
+			}
 			e.logSearchFailed(ctx, req, result.Reason)
 			return result, nil
 		}
 	}
 
 	result.Grabbed = grabbed
+	if dbg != nil {
+		dbg.Outcome = "grabbed"
+		dbg.GrabbedTitle = grabbed.Title
+	}
 
 	// Record the grab linkage for UI status tracking.
 	e.recordGrab(ctx, req, grabbed)
@@ -1374,4 +1514,49 @@ func (e *Engine) recordGrabOrchestrator(ctx context.Context, req SearchRequest, 
 			})
 		}
 	}
+}
+
+// sanitizeResult converts an indexer Result to a debug-safe ResultEntry
+// (strips download URLs, passkeys, magnets).
+func sanitizeResult(r indexers.Result) searchdebug.ResultEntry {
+	pubDate := ""
+	if !r.PubDate.IsZero() {
+		pubDate = r.PubDate.Format(time.RFC3339)
+	}
+	return searchdebug.ResultEntry{
+		Title:     r.Title,
+		Size:      r.Size,
+		Seeders:   r.Seeders,
+		Peers:     r.Peers,
+		Quality:   r.Quality,
+		PubDate:   pubDate,
+		Freeleech: r.Freeleech,
+		Internal:  r.Internal,
+		Scene:     r.Scene,
+		IndexerID: r.IndexerID,
+	}
+}
+
+// scoredToEval converts a ScoredRelease to a debug EvalResult.
+func scoredToEval(sr ScoredRelease) searchdebug.EvalResult {
+	ev := searchdebug.EvalResult{
+		Title:          sr.Result.Title,
+		IndexerID:      sr.Result.IndexerID,
+		Rejected:       sr.Rejected,
+		RejectReason:   sr.RejectReason,
+		QualityTier:    sr.QualityTier,
+		FormatScore:    sr.FormatScore,
+		CompositeScore: sr.CompositeScore(),
+		Size:           sr.Result.Size,
+		Seeders:        sr.Result.Seeders,
+	}
+	if sr.Parsed != nil {
+		ev.ParsedTitle = sr.Parsed.Title
+		ev.ParsedSource = sr.Parsed.Source
+		ev.ParsedRes = sr.Parsed.Resolution
+	}
+	if sr.QualityDef != nil {
+		ev.QualityName = sr.QualityDef.Name
+	}
+	return ev
 }

@@ -80,6 +80,7 @@ func wireDownloads(
 		downloadSvc.Registry(), moviesSvc, media.seriesSvc, logger,
 		autosearch.WithAuditLogger(auditLogger),
 		autosearch.WithOrchestrator(orchestrator),
+		autosearch.WithDebugStore(srv.SearchDebugStore()),
 	)
 	srv.SetAutoSearchEngine(autoSearchEngine)
 

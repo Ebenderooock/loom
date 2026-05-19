@@ -19,6 +19,7 @@ import {
   Rss,
   Tv,
   Workflow,
+  Bug,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -92,6 +93,7 @@ const NAV_SECTIONS: NavSection[] = [
       { to: "/indexers", label: "Indexers", Icon: Radio },
       { to: "/sources", label: "RSS Feeds", Icon: Rss },
       { to: "/import-lists", label: "Import Lists", Icon: ListPlus },
+      { to: "/search-debug", label: "Search Debug", Icon: Bug },
     ],
   },
   {

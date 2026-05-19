@@ -287,6 +287,17 @@ const workflowDetailRoute = createRoute({
   errorComponent: ErrorFallback,
 });
 
+const searchDebugRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/search-debug",
+  component: lazyRouteComponent(
+    () => import("@/pages/search-debug"),
+    "SearchDebugPage",
+  ),
+  pendingComponent: PageLoader,
+  errorComponent: ErrorFallback,
+});
+
 const routeTree = rootRoute.addChildren([
   setupRoute,
   indexRoute,
@@ -308,6 +319,7 @@ const routeTree = rootRoute.addChildren([
   eventsRoute,
   workflowsRoute,
   workflowDetailRoute,
+  searchDebugRoute,
   traktCallbackRoute,
   settingsRoute,
 ]);
