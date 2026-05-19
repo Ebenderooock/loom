@@ -26,6 +26,11 @@ type FlareSolverrClient struct {
 	httpc          *http.Client
 	defaultTimeout time.Duration
 
+	// sema limits concurrent FlareSolverr requests. FlareSolverr processes
+	// requests sequentially with a single browser, so parallel requests
+	// just queue up and timeout. The semaphore prevents request pileup.
+	sema chan struct{}
+
 	// Per-domain UA cache: after a successful FlareSolverr solve, the
 	// returned UserAgent is cached so subsequent requests to the same
 	// domain can inject it without re-solving. Matches Prowlarr's
@@ -47,6 +52,7 @@ func NewFlareSolverrClient(httpc *http.Client, defaultTimeout time.Duration) *Fl
 	return &FlareSolverrClient{
 		httpc:          httpc,
 		defaultTimeout: defaultTimeout,
+		sema:           make(chan struct{}, 2), // limit to 2 concurrent FlareSolverr requests
 		uaCache:        make(map[string]cachedUA),
 	}
 }
@@ -141,6 +147,15 @@ type flareCookie struct {
 }
 
 func (c *FlareSolverrClient) do(ctx context.Context, cfg FlareSolverrConfig, body flareReq) (flareEnvelope, error) {
+	// Acquire semaphore to limit concurrency — FlareSolverr uses a single
+	// browser and queues requests internally, causing timeouts under load.
+	select {
+	case c.sema <- struct{}{}:
+		defer func() { <-c.sema }()
+	case <-ctx.Done():
+		return flareEnvelope{}, fmt.Errorf("flaresolverr: context expired waiting for semaphore: %w", ctx.Err())
+	}
+
 	if body.MaxTimeout == 0 {
 		ms := c.defaultTimeout.Milliseconds()
 		if cfg.MaxTimeoutSec > 0 {

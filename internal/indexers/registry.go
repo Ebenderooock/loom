@@ -202,6 +202,16 @@ func (r *Registry) Search(ctx context.Context, q Query, opts SearchOptions) Aggr
 	searchStart := time.Now()
 
 	for _, ix := range targets {
+		// Skip indexers that can't handle the query's IDs when there's no
+		// text fallback. Without this, indexers like TPB return generic
+		// results when they receive ID params they don't understand.
+		if q.Term == "" && queryHasIDs(q) && !indexerSupportsAnyQueryID(ix, q) {
+			slog.Debug("registry: skipping indexer (no supported IDs, no text fallback)",
+				"indexer", ix.Name(), "query_ids", queryIDSummary(q))
+			ch <- partial{id: ix.ID(), name: ix.Name(), err: fmt.Errorf("skipped: indexer does not support any of the query's ID types")}
+			continue
+		}
+
 		wg.Add(1)
 		ix := ix
 		sem <- struct{}{}
@@ -324,6 +334,21 @@ func (r *Registry) SearchStream(ctx context.Context, q Query, opts SearchOptions
 	var totalResults, totalErrors int32
 
 	for _, ix := range targets {
+		// Skip indexers that can't handle the query's IDs when there's no
+		// text fallback (same check as Search).
+		if q.Term == "" && queryHasIDs(q) && !indexerSupportsAnyQueryID(ix, q) {
+			slog.Debug("registry: stream skipping indexer (no supported IDs, no text fallback)",
+				"indexer", ix.Name(), "query_ids", queryIDSummary(q))
+			select {
+			case events <- StreamEvent{
+				Type: EventIndexerError, IndexerID: ix.ID(), IndexerName: ix.Name(),
+				Error: "skipped: indexer does not support any of the query's ID types", Status: "skipped",
+			}:
+			case <-ctx.Done():
+			}
+			continue
+		}
+
 		wg.Add(1)
 		go func(ix Indexer) {
 			defer wg.Done()
@@ -507,4 +532,47 @@ func deduplicateResults(results []Result) []Result {
 		slog.Debug("dedup: removed duplicate results", "removed", dupes, "remaining", len(out))
 	}
 	return out
+}
+
+// queryHasIDs returns true when the query carries at least one external ID.
+func queryHasIDs(q Query) bool {
+	return q.IMDBID != "" || q.TVDBID != "" || q.TMDBID != ""
+}
+
+// indexerSupportsAnyQueryID checks whether the indexer advertises support
+// for at least one of the ID types present in the query.
+func indexerSupportsAnyQueryID(ix Indexer, q Query) bool {
+	caps := ix.Caps()
+	if len(caps.SupportedIDs) == 0 {
+		return true // unknown caps → allow (don't break existing indexers)
+	}
+	supported := make(map[string]bool, len(caps.SupportedIDs))
+	for _, id := range caps.SupportedIDs {
+		supported[strings.ToLower(id)] = true
+	}
+	if q.IMDBID != "" && (supported["imdbid"] || supported["imdb"]) {
+		return true
+	}
+	if q.TVDBID != "" && (supported["tvdbid"] || supported["tvdb"]) {
+		return true
+	}
+	if q.TMDBID != "" && (supported["tmdbid"] || supported["tmdb"]) {
+		return true
+	}
+	return false
+}
+
+// queryIDSummary returns a human-readable summary of which IDs are set.
+func queryIDSummary(q Query) string {
+	var parts []string
+	if q.IMDBID != "" {
+		parts = append(parts, "imdb="+q.IMDBID)
+	}
+	if q.TVDBID != "" {
+		parts = append(parts, "tvdb="+q.TVDBID)
+	}
+	if q.TMDBID != "" {
+		parts = append(parts, "tmdb="+q.TMDBID)
+	}
+	return strings.Join(parts, ",")
 }
