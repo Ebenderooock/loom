@@ -481,7 +481,7 @@ func (e *Engine) searchAndGrabSingle(ctx context.Context, req SearchRequest) (*S
 				})
 			}
 
-			agg := e.indexerSvc.Search(ctx, q, nil, 30*time.Second)
+			agg := e.indexerSvc.Search(ctx, q, nil, 120*time.Second)
 			tierResults = append(tierResults, agg.Results...)
 			if q.IMDBID != "" || q.TVDBID != "" || q.TMDBID != "" {
 				tierIDsBased = true

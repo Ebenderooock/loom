@@ -65,7 +65,7 @@ func NewClient(config Config) *Client {
 
 // GetMovie fetches movie metadata by TMDb ID.
 func (c *Client) GetMovie(ctx context.Context, tmdbID int) (*metadata.MovieMetadata, error) {
-	url := fmt.Sprintf("%s/movie/%d", c.config.BaseURL, tmdbID)
+	url := fmt.Sprintf("%s/movie/%d?append_to_response=external_ids", c.config.BaseURL, tmdbID)
 	body, err := c.doRequest(ctx, url)
 	if err != nil {
 		return nil, err
@@ -81,7 +81,7 @@ func (c *Client) GetMovie(ctx context.Context, tmdbID int) (*metadata.MovieMetad
 
 // GetTV fetches TV series metadata by TMDb ID.
 func (c *Client) GetTV(ctx context.Context, tvID int) (*metadata.SeriesMetadata, error) {
-	url := fmt.Sprintf("%s/tv/%d", c.config.BaseURL, tvID)
+	url := fmt.Sprintf("%s/tv/%d?append_to_response=external_ids", c.config.BaseURL, tvID)
 	body, err := c.doRequest(ctx, url)
 	if err != nil {
 		return nil, err

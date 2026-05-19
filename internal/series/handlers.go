@@ -293,7 +293,7 @@ func fireSeriesSearch(series *Series, indexerSvc *indexers.Service) {
 		q.TMDBID = *series.TMDBID
 	}
 
-	result := indexerSvc.Search(ctx, q, nil, 30*time.Second)
+	result := indexerSvc.Search(ctx, q, nil, 120*time.Second)
 	if len(result.Errors) > 0 {
 		slog.Warn("search-on-add had errors for series",
 			"series", series.Title, "errors", result.Errors)

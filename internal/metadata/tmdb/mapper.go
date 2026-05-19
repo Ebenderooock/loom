@@ -39,6 +39,12 @@ func mapMovieResponse(resp *MovieResponse) *metadata.MovieMetadata {
 		m.IMDBID = &resp.IMDBID
 	}
 
+	// Extract TVDB ID from external_ids (requires append_to_response=external_ids)
+	if resp.ExternalIDs != nil && resp.ExternalIDs.TVDBID > 0 {
+		tvdbStr := strconv.Itoa(resp.ExternalIDs.TVDBID)
+		m.TVDBID = &tvdbStr
+	}
+
 	// Extract genres
 	for _, g := range resp.Genres {
 		m.Genres = append(m.Genres, g.Name)
@@ -62,9 +68,17 @@ func mapTVResponse(resp *TVResponse) *metadata.SeriesMetadata {
 	tmdbIDStr := strconv.Itoa(resp.ID)
 	s.TMDBID = &tmdbIDStr
 
-	// Set IMDB ID if available
+	// Set IMDB ID if available (direct field or from external_ids)
 	if resp.IMDBID != "" {
 		s.IMDBID = &resp.IMDBID
+	} else if resp.ExternalIDs != nil && resp.ExternalIDs.IMDBID != "" {
+		s.IMDBID = &resp.ExternalIDs.IMDBID
+	}
+
+	// Extract TVDB ID from external_ids (requires append_to_response=external_ids)
+	if resp.ExternalIDs != nil && resp.ExternalIDs.TVDBID > 0 {
+		tvdbStr := strconv.Itoa(resp.ExternalIDs.TVDBID)
+		s.TVDBID = &tvdbStr
 	}
 
 	// Extract genres

@@ -476,7 +476,7 @@ func fireMovieSearch(movie *Movie, indexerSvc *indexers.Service) {
 		q.TMDBID = *movie.TMDBID
 	}
 
-	result := indexerSvc.Search(ctx, q, nil, 30*time.Second)
+	result := indexerSvc.Search(ctx, q, nil, 120*time.Second)
 	if len(result.Errors) > 0 {
 		slog.Warn("search-on-add had errors for movie",
 			"movie", movie.Title, "errors", result.Errors)

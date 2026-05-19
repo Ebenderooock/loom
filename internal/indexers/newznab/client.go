@@ -18,7 +18,7 @@ import (
 
 const (
 	defaultUserAgent = "Loom/0.1 (+https://loom.dev)"
-	defaultTimeout   = 30 * time.Second
+	defaultTimeout   = 120 * time.Second
 )
 
 // attrFlavour distinguishes which extended-attribute namespace the
