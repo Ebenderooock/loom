@@ -29,6 +29,8 @@ import {
   useSearchDebugList,
   useSearchDebugStats,
   useSearchDebugEntry,
+  useActiveSearches,
+  useSearchQueueSSE,
   type SearchDebugParams,
   type SearchDebugEntry,
   type TierDetail,
@@ -48,6 +50,7 @@ import {
   CheckCircle2,
   XCircle,
   Clock,
+  Loader2,
 } from "lucide-react";
 
 const PAGE_SIZE = 50;
@@ -80,6 +83,7 @@ function outcomeBadge(outcome: string) {
     already_grabbed: "bg-blue-500/10 text-blue-400 border-0",
     profile_load_failed: "bg-red-500/10 text-red-500 border-0",
     error: "bg-red-500/10 text-red-500 border-0",
+    stale: "bg-gray-500/10 text-gray-400 border-0",
   };
   return (
     <Badge
@@ -87,6 +91,46 @@ function outcomeBadge(outcome: string) {
       className={`text-[10px] px-1.5 capitalize ${styles[outcome] ?? "bg-gray-500/10 text-gray-400 border-0"}`}
     >
       {outcome.replace(/_/g, " ")}
+    </Badge>
+  );
+}
+
+function statusBadge(status: string) {
+  const styles: Record<string, { class: string; icon?: React.ReactNode }> = {
+    searching: {
+      class: "bg-blue-500/10 text-blue-400 border-0",
+      icon: <Loader2 className="h-3 w-3 animate-spin" />,
+    },
+    evaluating: {
+      class: "bg-purple-500/10 text-purple-400 border-0",
+      icon: <Loader2 className="h-3 w-3 animate-spin" />,
+    },
+    grabbing: {
+      class: "bg-orange-500/10 text-orange-400 border-0",
+      icon: <Loader2 className="h-3 w-3 animate-spin" />,
+    },
+    completed: {
+      class: "bg-green-500/10 text-green-500 border-0",
+    },
+    failed: {
+      class: "bg-red-500/10 text-red-500 border-0",
+    },
+    cancelled: {
+      class: "bg-gray-500/10 text-gray-400 border-0",
+    },
+  };
+  const s = styles[status] ?? {
+    class: "bg-gray-500/10 text-gray-400 border-0",
+  };
+  return (
+    <Badge
+      variant="outline"
+      className={`text-[10px] px-1.5 capitalize ${s.class}`}
+    >
+      <span className="flex items-center gap-1">
+        {s.icon}
+        {status}
+      </span>
     </Badge>
   );
 }
@@ -216,6 +260,58 @@ function StatsSummary() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+// ─── Active searches panel ──────────────────────────────────────────────
+
+function ActiveSearches() {
+  const { data } = useActiveSearches();
+  const entries = data?.entries ?? [];
+
+  if (entries.length === 0) return null;
+
+  return (
+    <Card className="border-blue-500/30 bg-blue-500/5">
+      <CardHeader className="pb-2 pt-3 px-4">
+        <CardTitle className="text-xs font-medium text-blue-400 flex items-center gap-1.5">
+          <Loader2 className="h-3.5 w-3.5 animate-spin" /> Active Searches ({entries.length})
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="px-4 pb-3">
+        <div className="space-y-2">
+          {entries.map((e) => (
+            <div
+              key={e.id}
+              className="flex items-center gap-3 text-sm"
+            >
+              {statusBadge(e.status)}
+              <span className="font-medium truncate">
+                {e.title}
+                {e.season > 0 && (
+                  <span className="text-xs text-muted-foreground ml-1">
+                    S{String(e.season).padStart(2, "0")}
+                    {e.episode > 0 && `E${String(e.episode).padStart(2, "0")}`}
+                  </span>
+                )}
+              </span>
+              <span className="text-xs text-muted-foreground capitalize">
+                {e.media_type}
+              </span>
+              {e.total_results > 0 && (
+                <span className="text-xs tabular-nums text-muted-foreground">
+                  {e.total_results} results
+                </span>
+              )}
+              <span className="ml-auto text-xs text-muted-foreground tabular-nums flex items-center gap-1">
+                <Clock className="h-3 w-3" />
+                {e.duration_ms > 0 ? `${e.duration_ms}ms` : "…"}
+              </span>
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -504,6 +600,7 @@ function SearchRow({
         <TableCell className="text-xs tabular-nums">
           {seasonEpisodeLabel(entry)}
         </TableCell>
+        <TableCell>{statusBadge(entry.status)}</TableCell>
         <TableCell>{outcomeBadge(entry.outcome)}</TableCell>
         <TableCell className="text-xs text-right tabular-nums">
           {entry.total_results}
@@ -520,7 +617,7 @@ function SearchRow({
       </TableRow>
       {expanded && (
         <TableRow className="bg-muted/20 hover:bg-muted/20">
-          <TableCell colSpan={8} className="p-3 pl-6">
+          <TableCell colSpan={9} className="p-3 pl-6">
             <DetailPanel entryId={entry.id} />
           </TableCell>
         </TableRow>
@@ -532,7 +629,10 @@ function SearchRow({
 // ─── Main page ──────────────────────────────────────────────────────────
 
 export function SearchDebugPage() {
-  useSetPageHeader("Search Debug");
+  useSetPageHeader("Search Queue");
+
+  // Subscribe to SSE for real-time updates.
+  useSearchQueueSSE();
 
   const [outcome, setOutcome] = React.useState("all");
   const [mediaType, setMediaType] = React.useState("all");
@@ -560,6 +660,9 @@ export function SearchDebugPage() {
     <div className="space-y-4">
       {/* Stats */}
       <StatsSummary />
+
+      {/* Active searches */}
+      <ActiveSearches />
 
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-3">
@@ -595,7 +698,7 @@ export function SearchDebugPage() {
           variant="outline"
           size="icon"
           onClick={() =>
-            qc.invalidateQueries({ queryKey: ["search-debug"] })
+            qc.invalidateQueries({ queryKey: ["search-queue"] })
           }
           aria-label="Refresh"
         >
@@ -616,6 +719,7 @@ export function SearchDebugPage() {
               <TableHead>Title</TableHead>
               <TableHead className="w-[80px]">Media</TableHead>
               <TableHead className="w-[70px]">S/E</TableHead>
+              <TableHead className="w-[90px]">Status</TableHead>
               <TableHead className="w-[110px]">Outcome</TableHead>
               <TableHead className="w-[70px] text-right">Results</TableHead>
               <TableHead className="w-[70px] text-right">Rejected</TableHead>
@@ -625,27 +729,27 @@ export function SearchDebugPage() {
           <TableBody>
             {isLoading && (
               <TableRow>
-                <TableCell colSpan={8}>
-                  <LoadingState label="Loading search debug entries…" />
+                <TableCell colSpan={9}>
+                  <LoadingState label="Loading search queue…" />
                 </TableCell>
               </TableRow>
             )}
             {isError && (
               <TableRow>
                 <TableCell
-                  colSpan={8}
+                  colSpan={9}
                   className="text-center text-destructive py-8"
                 >
-                  Failed to load search debug data.
+                  Failed to load search queue data.
                 </TableCell>
               </TableRow>
             )}
             {!isLoading && !isError && entries.length === 0 && (
               <TableRow>
-                <TableCell colSpan={8}>
+                <TableCell colSpan={9}>
                   <EmptyState
-                    title="No search debug entries"
-                    description="Search debug data will appear here as searches are executed."
+                    title="No search queue entries"
+                    description="Search data will appear here as searches are executed."
                   />
                 </TableCell>
               </TableRow>

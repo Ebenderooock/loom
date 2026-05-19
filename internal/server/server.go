@@ -123,6 +123,7 @@ type Server struct {
 	auditLog        *auditlog.Logger
 	autoSearchEngine *autosearch.Engine
 	searchDebugStore *searchdebug.Store
+	searchDebugHub   *searchdebug.Hub
 	systemLogsDeps  *systemlogs.HandlerDeps
 	wfEngine         *workflows.Engine
 	orchestrator     *workflows.Orchestrator
@@ -171,6 +172,7 @@ func New(cfg *config.Config, appCfg *appconfig.Config, logger *slog.Logger, tel 
 		reviewStore:      safety.NewReviewStore(db.DB()),
 		aggSvc:           aggSvc,
 		searchDebugStore: searchdebug.NewStore(db.DB()),
+		searchDebugHub:   searchdebug.NewHub(),
 		httpMetrics:      telemetry.NewHTTPMetrics(tel.Registry()),
 	}
 
@@ -472,6 +474,11 @@ func (s *Server) SetAutoSearchEngine(e *autosearch.Engine) {
 // autosearch engine.
 func (s *Server) SearchDebugStore() *searchdebug.Store {
 	return s.searchDebugStore
+}
+
+// SearchDebugHub returns the SSE broadcast hub for search queue updates.
+func (s *Server) SearchDebugHub() *searchdebug.Hub {
+	return s.searchDebugHub
 }
 
 // SetWorkflowEngine sets the workflow engine for tracking download→media linkage.
@@ -794,9 +801,11 @@ func (s *Server) newMux() http.Handler {
 			r.Post("/api/v1/autosearch/evaluate", asHandler.HandleEvaluate)
 		}
 
-		// Search debug log (authenticated)
+		// Search debug log / search queue (authenticated)
 		if s.searchDebugStore != nil {
-			r.Mount("/api/v1/search-debug", searchdebug.Router(s.searchDebugStore))
+			queueRouter := searchdebug.Router(s.searchDebugStore, s.searchDebugHub)
+			r.Mount("/api/v1/search-debug", queueRouter)
+			r.Mount("/api/v1/search-queue", queueRouter)
 		}
 
 		// Filesystem browsing (authenticated)
@@ -957,6 +966,15 @@ func (e *etagWriter) Write(b []byte) (int, error) {
 
 // Start begins serving and blocks until ListenAndServe returns.
 func (s *Server) Start() error {
+	// Clean up stale search entries from any previous crash/restart.
+	if s.searchDebugStore != nil {
+		if n, err := s.searchDebugStore.MarkStale(context.Background(), 10*time.Minute); err != nil {
+			s.logger.Warn("failed to mark stale search entries", "error", err)
+		} else if n > 0 {
+			s.logger.Info("marked stale search entries", "count", n)
+		}
+	}
+
 	s.ready.Store(true)
 	s.logger.Info("listening", "addr", s.cfg.HTTP.Addr)
 	if err := s.httpSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {

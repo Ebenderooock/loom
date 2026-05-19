@@ -81,6 +81,7 @@ func wireDownloads(
 		autosearch.WithAuditLogger(auditLogger),
 		autosearch.WithOrchestrator(orchestrator),
 		autosearch.WithDebugStore(srv.SearchDebugStore()),
+		autosearch.WithDebugHub(srv.SearchDebugHub()),
 	)
 	srv.SetAutoSearchEngine(autoSearchEngine)
 

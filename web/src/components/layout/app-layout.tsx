@@ -93,7 +93,7 @@ const NAV_SECTIONS: NavSection[] = [
       { to: "/indexers", label: "Indexers", Icon: Radio },
       { to: "/sources", label: "RSS Feeds", Icon: Rss },
       { to: "/import-lists", label: "Import Lists", Icon: ListPlus },
-      { to: "/search-debug", label: "Search Debug", Icon: Bug },
+      { to: "/search-queue", label: "Search Queue", Icon: Bug },
     ],
   },
   {

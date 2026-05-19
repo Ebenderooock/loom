@@ -289,7 +289,7 @@ const workflowDetailRoute = createRoute({
 
 const searchDebugRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: "/search-debug",
+  path: "/search-queue",
   component: lazyRouteComponent(
     () => import("@/pages/search-debug"),
     "SearchDebugPage",

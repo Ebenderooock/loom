@@ -7,10 +7,23 @@ import (
 	"time"
 )
 
+// Search status lifecycle constants.
+const (
+	StatusSearching  = "searching"
+	StatusEvaluating = "evaluating"
+	StatusGrabbing   = "grabbing"
+	StatusCompleted  = "completed"
+	StatusFailed     = "failed"
+	StatusCancelled  = "cancelled"
+)
+
 // Entry is a single search debug log entry.
 type Entry struct {
 	ID               string          `json:"id"`
 	CreatedAt        time.Time       `json:"created_at"`
+	UpdatedAt        time.Time       `json:"updated_at"`
+	Status           string          `json:"status"`
+	SearchRunID      string          `json:"search_run_id,omitempty"`
 	MediaType        string          `json:"media_type"`
 	MediaID          string          `json:"media_id"`
 	Title            string          `json:"title"`
@@ -31,6 +44,22 @@ type Entry struct {
 	Outcome          string          `json:"outcome"`
 	DurationMS       int64           `json:"duration_ms"`
 	ErrorMessage     string          `json:"error_message,omitempty"`
+}
+
+// StatusUpdate is a lightweight event sent over SSE when a queue entry changes.
+type StatusUpdate struct {
+	ID            string `json:"id"`
+	Status        string `json:"status"`
+	Outcome       string `json:"outcome,omitempty"`
+	Title         string `json:"title"`
+	MediaType     string `json:"media_type"`
+	Season        int    `json:"season,omitempty"`
+	Episode       int    `json:"episode,omitempty"`
+	SearchRunID   string `json:"search_run_id,omitempty"`
+	TotalResults  int    `json:"total_results"`
+	TotalRejected int    `json:"total_rejected"`
+	DurationMS    int64  `json:"duration_ms"`
+	ErrorMessage  string `json:"error_message,omitempty"`
 }
 
 // TierDetail captures what happened at each query tier.
@@ -103,6 +132,7 @@ type ListParams struct {
 	MediaType string
 	MediaID   string
 	Outcome   string
+	Status    string
 	Limit     int
 	Offset    int
 }

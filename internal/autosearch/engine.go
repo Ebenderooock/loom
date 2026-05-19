@@ -54,6 +54,7 @@ type Engine struct {
 	logger       *slog.Logger
 	audit        *auditlog.Logger
 	debugStore   *searchdebug.Store
+	debugHub     *searchdebug.Hub
 }
 
 // NewEngine creates an autosearch Engine.
@@ -103,6 +104,11 @@ func WithOrchestrator(o *workflows.Orchestrator) EngineOption {
 // WithDebugStore sets the search debug log store for detailed search tracing.
 func WithDebugStore(s *searchdebug.Store) EngineOption {
 	return func(e *Engine) { e.debugStore = s }
+}
+
+// WithDebugHub sets the SSE broadcast hub for real-time search queue updates.
+func WithDebugHub(h *searchdebug.Hub) EngineOption {
+	return func(e *Engine) { e.debugHub = h }
 }
 
 // Evaluate scores a set of indexer results against a quality profile
@@ -236,6 +242,11 @@ func (e *Engine) Evaluate(ctx context.Context, req EvaluateRequest) (*EvaluateRe
 //   - Season search (Season > 0, Episode == 0): try season pack first, then individual episodes
 //   - Series search (Season == 0, Episode == 0): iterate seasons, trying pack then episodes for each
 func (e *Engine) SearchAndGrab(ctx context.Context, req SearchRequest) (*SearchResult, error) {
+	// Assign a search run ID for grouping sub-searches.
+	if req.SearchRunID == "" {
+		req.SearchRunID = searchdebug.NewID()
+	}
+
 	// Sonarr-style fallback for season/series searches.
 	if (req.MediaType == "series" || req.MediaType == "episode") && e.seriesSvc != nil && req.Episode == 0 {
 		return e.searchSeriesFallback(ctx, req)
@@ -339,12 +350,15 @@ func (e *Engine) searchSeasonWithFallback(ctx context.Context, req SearchRequest
 func (e *Engine) searchAndGrabSingle(ctx context.Context, req SearchRequest) (*SearchResult, error) {
 	startTime := time.Now()
 
-	// Debug log entry — collected throughout, persisted via defer.
+	// Debug/queue entry — created immediately, updated progressively.
 	var dbg *searchdebug.Entry
 	if e.debugStore != nil {
 		dbg = &searchdebug.Entry{
 			ID:               searchdebug.NewID(),
 			CreatedAt:        startTime,
+			UpdatedAt:        startTime,
+			Status:           searchdebug.StatusSearching,
+			SearchRunID:      req.SearchRunID,
 			MediaType:        req.MediaType,
 			MediaID:          req.MediaID,
 			Title:            req.Title,
@@ -356,13 +370,28 @@ func (e *Engine) searchAndGrabSingle(ctx context.Context, req SearchRequest) (*S
 			TMDBID:           req.TMDBID,
 			QualityProfileID: req.QualityProfileID,
 			Request:          req,
-			Outcome:          "unknown",
+			Outcome:          "",
+		}
+		// Persist immediately so the UI can show it as "searching".
+		if err := e.debugStore.Create(context.Background(), dbg); err != nil {
+			e.logger.Warn("failed to create search queue entry", "error", err)
+		} else {
+			e.publishUpdate(dbg)
 		}
 		defer func() {
 			dbg.DurationMS = time.Since(startTime).Milliseconds()
-			if err := e.debugStore.Create(context.Background(), dbg); err != nil {
-				e.logger.Warn("failed to persist search debug log", "error", err)
+			if dbg.Status != searchdebug.StatusCompleted && dbg.Status != searchdebug.StatusFailed {
+				if ctx.Err() != nil {
+					dbg.Status = searchdebug.StatusCancelled
+					dbg.Outcome = "cancelled"
+				} else {
+					dbg.Status = searchdebug.StatusCompleted
+				}
 			}
+			if err := e.debugStore.Update(context.Background(), dbg); err != nil {
+				e.logger.Warn("failed to update search queue entry", "error", err)
+			}
+			e.publishUpdate(dbg)
 		}()
 	}
 
@@ -373,6 +402,7 @@ func (e *Engine) searchAndGrabSingle(ctx context.Context, req SearchRequest) (*S
 		if dbg != nil {
 			dbg.Outcome = "profile_load_failed"
 			dbg.ErrorMessage = err.Error()
+			dbg.Status = searchdebug.StatusFailed
 		}
 		return nil, fmt.Errorf("load quality profile %s: %w", req.QualityProfileID, err)
 	}
@@ -383,6 +413,7 @@ func (e *Engine) searchAndGrabSingle(ctx context.Context, req SearchRequest) (*S
 		if dbg != nil {
 			dbg.Outcome = "profile_parse_failed"
 			dbg.ErrorMessage = err.Error()
+			dbg.Status = searchdebug.StatusFailed
 		}
 		return nil, fmt.Errorf("parse quality items: %w", err)
 	}
@@ -393,6 +424,7 @@ func (e *Engine) searchAndGrabSingle(ctx context.Context, req SearchRequest) (*S
 		if dbg != nil {
 			dbg.Outcome = "quality_defs_failed"
 			dbg.ErrorMessage = err.Error()
+			dbg.Status = searchdebug.StatusFailed
 		}
 		return nil, fmt.Errorf("load quality definitions: %w", err)
 	}
@@ -429,6 +461,7 @@ func (e *Engine) searchAndGrabSingle(ctx context.Context, req SearchRequest) (*S
 			if err == nil && existing != nil {
 				if dbg != nil {
 					dbg.Outcome = "already_grabbed"
+					dbg.Status = searchdebug.StatusCompleted
 				}
 				return &SearchResult{
 					Reason: "already_grabbed",
@@ -524,12 +557,21 @@ func (e *Engine) searchAndGrabSingle(ctx context.Context, req SearchRequest) (*S
 			)
 			if dbg != nil {
 				dbg.Tiers = append(dbg.Tiers, tierDetail)
+				dbg.TotalResults = totalConsidered
+				e.updateDebugEntry(dbg)
 			}
 			continue
 		}
 
 		totalConsidered += len(tierResults)
 		tierDetail.ResultCount = len(tierResults)
+
+		// Transition to evaluating status.
+		if dbg != nil {
+			dbg.Status = searchdebug.StatusEvaluating
+			dbg.TotalResults = totalConsidered
+			e.updateDebugEntry(dbg)
+		}
 
 		var tierAccepted int
 		for _, res := range tierResults {
@@ -593,6 +635,7 @@ func (e *Engine) searchAndGrabSingle(ctx context.Context, req SearchRequest) (*S
 		if dbg != nil {
 			dbg.Outcome = "no_results"
 			dbg.TotalResults = 0
+			dbg.Status = searchdebug.StatusCompleted
 		}
 		e.logSearchCompleted(ctx, req, result)
 		return result, nil
@@ -621,6 +664,7 @@ func (e *Engine) searchAndGrabSingle(ctx context.Context, req SearchRequest) (*S
 		)
 		if dbg != nil {
 			dbg.Outcome = "all_rejected"
+			dbg.Status = searchdebug.StatusCompleted
 		}
 		e.logSearchCompleted(ctx, req, result)
 		return result, nil
@@ -633,6 +677,10 @@ func (e *Engine) searchAndGrabSingle(ctx context.Context, req SearchRequest) (*S
 
 	// Grab the best result.
 	best := scored[0]
+	if dbg != nil {
+		dbg.Status = searchdebug.StatusGrabbing
+		e.updateDebugEntry(dbg)
+	}
 	grabbed, err := e.grabRelease(ctx, &best)
 	if err != nil {
 		// If grab fails, try the next best.
@@ -654,6 +702,7 @@ func (e *Engine) searchAndGrabSingle(ctx context.Context, req SearchRequest) (*S
 			if dbg != nil {
 				dbg.Outcome = "grab_failed"
 				dbg.ErrorMessage = err.Error()
+				dbg.Status = searchdebug.StatusFailed
 			}
 			e.logSearchFailed(ctx, req, result.Reason)
 			return result, nil
@@ -664,6 +713,7 @@ func (e *Engine) searchAndGrabSingle(ctx context.Context, req SearchRequest) (*S
 	if dbg != nil {
 		dbg.Outcome = "grabbed"
 		dbg.GrabbedTitle = grabbed.Title
+		dbg.Status = searchdebug.StatusCompleted
 	}
 
 	// Record the grab linkage for UI status tracking.
@@ -671,6 +721,26 @@ func (e *Engine) searchAndGrabSingle(ctx context.Context, req SearchRequest) (*S
 
 	e.logSearchCompleted(ctx, req, result)
 	return result, nil
+}
+
+// updateDebugEntry persists the current state of a debug entry and broadcasts
+// a lightweight SSE update to connected clients.
+func (e *Engine) updateDebugEntry(dbg *searchdebug.Entry) {
+	if e.debugStore == nil {
+		return
+	}
+	if err := e.debugStore.Update(context.Background(), dbg); err != nil {
+		e.logger.Warn("failed to update search queue entry", "error", err)
+	}
+	e.publishUpdate(dbg)
+}
+
+// publishUpdate broadcasts a lightweight status update via the SSE hub.
+func (e *Engine) publishUpdate(dbg *searchdebug.Entry) {
+	if e.debugHub == nil {
+		return
+	}
+	e.debugHub.Publish(searchdebug.MakeStatusUpdate(dbg))
 }
 
 // logSearchCompleted writes a search.completed audit entry.

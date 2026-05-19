@@ -2,6 +2,7 @@ package searchdebug
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 	"time"
@@ -10,10 +11,12 @@ import (
 )
 
 // Router returns a chi.Router for the search debug log endpoints.
-func Router(store *Store) chi.Router {
+func Router(store *Store, hub *Hub) chi.Router {
 	r := chi.NewRouter()
 	r.Get("/", handleList(store))
+	r.Get("/active", handleActive(store))
 	r.Get("/stats", handleStats(store))
+	r.Get("/stream", handleStream(hub))
 	r.Get("/{id}", handleGet(store))
 	r.Delete("/prune", handlePrune(store))
 	return r
@@ -32,6 +35,7 @@ func handleList(store *Store) http.HandlerFunc {
 			MediaType: q.Get("media_type"),
 			MediaID:   q.Get("media_id"),
 			Outcome:   q.Get("outcome"),
+			Status:    q.Get("status"),
 			Limit:     limit,
 			Offset:    offset,
 		}
@@ -48,6 +52,21 @@ func handleList(store *Store) http.HandlerFunc {
 			"total":   total,
 			"limit":   params.Limit,
 			"offset":  params.Offset,
+		})
+	}
+}
+
+func handleActive(store *Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		entries, err := store.ListActive(r.Context())
+		if err != nil {
+			http.Error(w, `{"error":"`+err.Error()+`"}`, http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{
+			"entries": entries,
 		})
 	}
 }
@@ -76,6 +95,43 @@ func handleStats(store *Store) http.HandlerFunc {
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(stats)
+	}
+}
+
+func handleStream(hub *Hub) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		flusher, ok := w.(http.Flusher)
+		if !ok {
+			http.Error(w, "streaming unsupported", http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("Cache-Control", "no-cache")
+		w.Header().Set("Connection", "keep-alive")
+		w.Header().Set("X-Accel-Buffering", "no")
+
+		ch := hub.Subscribe()
+		defer hub.Unsubscribe(ch)
+
+		// Send initial keepalive so the client knows we're connected.
+		fmt.Fprintf(w, ": connected\n\n")
+		flusher.Flush()
+
+		ctx := r.Context()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case update, ok := <-ch:
+				if !ok {
+					return
+				}
+				data, _ := json.Marshal(update)
+				fmt.Fprintf(w, "event: search-update\ndata: %s\n\n", data)
+				flusher.Flush()
+			}
+		}
 	}
 }
 
