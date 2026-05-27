@@ -519,12 +519,11 @@ func (e *Engine) searchAndGrabSingle(ctx context.Context, req SearchRequest) (*S
 			if q.IMDBID != "" || q.TVDBID != "" || q.TMDBID != "" {
 				tierIDsBased = true
 			}
-
 			// Capture per-indexer results for debug.
 			if dbg != nil && agg.Diagnostics != nil {
 				for _, d := range agg.Diagnostics.Indexers {
 					ir := searchdebug.IndexerResult{
-						IndexerID:   d.Name,
+						IndexerID:   d.ID,
 						IndexerName: d.Name,
 						Status:      d.Status,
 						ResultCount: d.ResultCount,
@@ -532,18 +531,16 @@ func (e *Engine) searchAndGrabSingle(ctx context.Context, req SearchRequest) (*S
 						Error:       d.ErrorMessage,
 					}
 					// Attach sanitized result entries (cap at 50 per indexer).
-					for i, r := range agg.Results {
-						if i >= 50 {
+					var count int
+					for _, r := range agg.Results {
+						if count >= 50 {
 							break
 						}
-						if r.IndexerID != "" {
-							// Only include results from this indexer.
-							resolvedName := r.IndexerID
-							if resolvedName != d.Name {
-								continue
-							}
+						if r.IndexerID != "" && r.IndexerID != d.ID {
+							continue
 						}
 						ir.Results = append(ir.Results, sanitizeResult(r))
+						count++
 					}
 					dbg.IndexerResults = append(dbg.IndexerResults, ir)
 				}
@@ -979,6 +976,18 @@ func (e *Engine) verifyIdentity(req SearchRequest, parsed *parser.Release, idBas
 
 	// Series-specific checks.
 	if req.MediaType == "series" || req.MediaType == "episode" {
+		// Season pack search: reject single-episode releases but allow multi-episode
+		// files (e.g. S04E01-E08) which may cover the whole season.
+		// Mirrors Sonarr: SeasonSearchCriteria only checks season number; individual
+		// episodes are accepted if they are in the requested episode list. We are
+		// stricter here (season-pack-first strategy) but we must not reject files
+		// that bundle several episodes together.
+		if req.Season > 0 && req.Episode == 0 {
+			if parsed.Episode > 0 && !parsed.IsSeasonPack && len(parsed.Episodes) <= 1 {
+				return "not_a_season_pack"
+			}
+		}
+
 		// Season pack rejection for single-episode searches.
 		if req.Episode > 0 && parsed.IsSeasonPack {
 			return "season_pack_for_episode_search"
@@ -991,7 +1000,7 @@ func (e *Engine) verifyIdentity(req SearchRequest, parsed *parser.Release, idBas
 
 		// Episode verification (only for single-episode searches).
 		if req.Episode > 0 && parsed.Episode > 0 && parsed.Episode != req.Episode {
-			// Check multi-episode — accept if any episode matches.
+			// Check multi-episode — accept if any episode in the file matches.
 			found := false
 			for _, ep := range parsed.Episodes {
 				if ep == req.Episode {
