@@ -627,6 +627,7 @@ func (p *ImportPipeline) matchByGrab(ctx context.Context, ev *downloads.Download
 			Matched:   true,
 			MediaType: MediaTypeEpisode,
 			MediaID:   ep.ID,
+			SeriesID:  ep.SeriesID,
 			Title:     s.Title,
 			Year:      s.Year,
 			Season:    seasonNum,
@@ -718,6 +719,7 @@ func (p *ImportPipeline) updateLibrary(ctx context.Context, match *MatchResult, 
 		ef := &series.EpisodeFile{
 			ID:        uuid.New().String(),
 			EpisodeID: match.MediaID,
+			SeriesID:  match.SeriesID,
 			FilePath:  destFile,
 			FileSize:  info.Size(),
 		}

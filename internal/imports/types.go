@@ -52,6 +52,7 @@ type MatchResult struct {
 	Matched   bool
 	MediaType MediaType
 	MediaID   string
+	SeriesID  string // populated for MediaTypeEpisode
 	Title     string
 	Year      int
 	Season    int

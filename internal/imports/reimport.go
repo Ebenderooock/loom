@@ -205,6 +205,7 @@ func (p *ImportPipeline) resolveMediaDestination(ctx context.Context, mediaType 
 							Matched:   true,
 							MediaType: MediaTypeEpisode,
 							MediaID:   mediaID,
+							SeriesID:  s.ID,
 							Title:     s.Title,
 							Season:    season.SeasonNumber,
 							Episode:   ep.EpisodeNumber,

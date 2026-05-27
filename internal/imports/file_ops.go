@@ -7,7 +7,9 @@ import (
 	"path/filepath"
 )
 
-// copyFile copies src to dst, preserving file permissions.
+// copyFile copies src to dst. The destination file is always created with
+// 0o644 permissions so that retry attempts can overwrite it even when the
+// source file is read-only.
 func copyFile(src, dst string) error {
 	in, err := os.Open(src)
 	if err != nil {
@@ -15,16 +17,11 @@ func copyFile(src, dst string) error {
 	}
 	defer in.Close()
 
-	info, err := in.Stat()
-	if err != nil {
-		return fmt.Errorf("stat source: %w", err)
-	}
-
 	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 		return fmt.Errorf("create dest dir: %w", err)
 	}
 
-	out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, info.Mode())
+	out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
 	if err != nil {
 		return fmt.Errorf("create dest: %w", err)
 	}
