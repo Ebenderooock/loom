@@ -9,7 +9,7 @@ const {
   ListToolsRequestSchema,
 } = require("@modelcontextprotocol/sdk/types.js");
 
-const LOOM_BASE_URL = process.env.LOOM_URL || "http://localhost:7878";
+const LOOM_BASE_URL = process.env.LOOM_URL || "https://loom.media.deroock.co.nz";
 const LOOM_API_KEY = process.env.LOOM_API_KEY || "";
 
 const server = new Server({

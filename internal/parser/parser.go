@@ -627,9 +627,11 @@ func extractTitle(name string, year int) string {
 
 	// Find the cutoff point: year in parentheses, year standalone, or first quality/episode marker
 	cutPatterns := []string{
-		`(?i)(?:^|[\s._-])s\d{1,2}e\d{1,3}`,             // S##E## season+episode
+		`(?i)(?:^|[\s._-])s\d{1,2}e\d{1,3}`,             // S##E## season+episode (must come before S## only)
 		`(?i)(?:^|[\s._-])\d{1,2}x\d{1,3}`,              // ##x## season+episode
-		`\s*[\(\[]?\d{4}[\)\]]?[\s\.\-_]`,                 // year with optional parens/brackets
+		`(?i)[\s._-]s\d{1,2}(?:[\s._-]|$)`,              // S## only (season pack, no episode)
+		`(?i)(?:^|[\s._-])season[\s._-]*\d`,              // "Season N" word
+		`\s*[\(\[]?\d{4}[\)\]]?[\s\.\-_]`,                // year with optional parens/brackets
 		`(?i)\s*[\.\-\s_](?:720p?|1080p?|2160p?|4k|uhd)`, // resolution
 		`(?i)\s*[\.\-\s_](?:bluray|brrip|webrip|webdl|web[\-\s]dl|hdtv|dvdrip|remux)`, // source
 		`(?i)\s*[\.\-\s_](?:h\.?264|h\.?265|hevc|x\.?264|x\.?265|avc)`,               // codec

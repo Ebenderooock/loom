@@ -1,6 +1,6 @@
 -- +goose Up
 ALTER TABLE search_debug_log ADD COLUMN status TEXT NOT NULL DEFAULT 'completed';
-ALTER TABLE search_debug_log ADD COLUMN updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE search_debug_log ADD COLUMN updated_at DATETIME NOT NULL DEFAULT '1970-01-01 00:00:00';
 ALTER TABLE search_debug_log ADD COLUMN search_run_id TEXT NOT NULL DEFAULT '';
 
 CREATE INDEX idx_search_debug_log_status ON search_debug_log(status);

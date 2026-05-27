@@ -935,42 +935,26 @@ func (e *Engine) verifyIdentity(req SearchRequest, parsed *parser.Release, idBas
 		}
 	}
 
-	// Title matching: verify the parsed title is close to the requested title.
-	// Uses Sonarr's CleanSeriesTitle for normalization (strips articles,
-	// punctuation, diacritics) which is designed specifically for comparing
-	// a search title against a release title.
-	if req.Title != "" {
+	// Title matching: verify the parsed title matches the requested title.
+	//
+	// For ID-based queries (TVDB/IMDB/TMDB), the indexer pre-filtered by
+	// external ID — trust the indexer and skip title comparison entirely.
+	// This mirrors Sonarr's SeriesSpecification which compares DB IDs,
+	// not titles.
+	//
+	// For title-based queries, use exact equality after CleanSeriesTitle
+	// normalization (strips articles, punctuation, diacritics). Sonarr
+	// does not use fuzzy/Levenshtein matching.
+	if !idBasedQuery && req.Title != "" {
 		parsedTitle := parser.CleanSeriesTitle(parsed.Title)
 		wantTitle := parser.CleanSeriesTitle(req.Title)
 
-		if parsedTitle != "" && wantTitle != "" {
-			// Direct equality after cleaning handles the majority of cases.
-			if parsedTitle == wantTitle {
-				return ""
-			}
-
-			distance := levenshteinDistance(parsedTitle, wantTitle)
-			maxLen := max(len(parsedTitle), len(wantTitle))
-			if maxLen > 0 {
-				similarity := 1.0 - float64(distance)/float64(maxLen)
-				// ID-based results are pre-filtered by the indexer,
-				// so we only need a loose sanity check. Text-only
-				// searches need a tighter threshold.
-				threshold := 0.5
-				if idBasedQuery {
-					threshold = 0.3
-				}
-				if similarity < threshold {
-					e.logger.Debug("autosearch: title mismatch",
-						"want", wantTitle,
-						"got", parsedTitle,
-						"similarity", similarity,
-						"threshold", threshold,
-						"id_based", idBasedQuery,
-					)
-					return "title_mismatch"
-				}
-			}
+		if parsedTitle != "" && wantTitle != "" && parsedTitle != wantTitle {
+			e.logger.Debug("autosearch: title mismatch",
+				"want", wantTitle,
+				"got", parsedTitle,
+			)
+			return "title_mismatch"
 		}
 	}
 
@@ -999,7 +983,8 @@ func (e *Engine) verifyIdentity(req SearchRequest, parsed *parser.Release, idBas
 		}
 
 		// Episode verification (only for single-episode searches).
-		if req.Episode > 0 && parsed.Episode > 0 && parsed.Episode != req.Episode {
+		// Use != -1 instead of > 0 to also catch episode 0 (specials).
+		if req.Episode > 0 && parsed.Episode != -1 && parsed.Episode != req.Episode {
 			// Check multi-episode — accept if any episode in the file matches.
 			found := false
 			for _, ep := range parsed.Episodes {

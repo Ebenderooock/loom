@@ -11,9 +11,9 @@ COPY web/ ./
 RUN pnpm run build
 
 # ---------- backend build ----------
-FROM golang:1.26-alpine AS build
+FROM golang:1.26 AS build
 WORKDIR /src
-RUN apk add --no-cache git ca-certificates
+RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates && rm -rf /var/lib/apt/lists/*
 COPY go.mod go.sum* ./
 RUN go mod download
 COPY . .

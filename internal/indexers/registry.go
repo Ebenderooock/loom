@@ -116,6 +116,7 @@ type SearchOptions struct {
 // contribution to a fan-out search. Surfaced via the diagnostics
 // field of the search response.
 type IndexerDiagnostic struct {
+	ID             string `json:"id"`
 	Name           string `json:"name"`
 	Status         string `json:"status"` // "ok", "error", "timeout"
 	ResponseTimeMS int64  `json:"response_time_ms"`
@@ -233,6 +234,7 @@ func (r *Registry) Search(ctx context.Context, q Query, opts SearchOptions) Aggr
 	diags := make([]IndexerDiagnostic, 0, len(targets))
 	for p := range ch {
 		d := IndexerDiagnostic{
+			ID:             p.id,
 			Name:           p.name,
 			ResponseTimeMS: p.elapsed.Milliseconds(),
 		}

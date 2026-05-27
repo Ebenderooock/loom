@@ -602,6 +602,7 @@ func (s *Service) Search(ctx context.Context, q Query, ids []string, perTimeout 
 				name = ix.Name()
 			}
 			agg.Diagnostics.Indexers = append(agg.Diagnostics.Indexers, IndexerDiagnostic{
+				ID:           id,
 				Name:         name,
 				Status:       "skipped",
 				ErrorMessage: "circuit breaker cooldown",
@@ -612,7 +613,10 @@ func (s *Service) Search(ctx context.Context, q Query, ids []string, perTimeout 
 	// Record search metrics and query log entries for each indexer.
 	if agg.Diagnostics != nil {
 		for _, d := range agg.Diagnostics.Indexers {
-			indexerID := s.resolveIndexerID(d.Name)
+			indexerID := d.ID
+			if indexerID == "" {
+				indexerID = s.resolveIndexerID(d.Name) // fallback for backwards compat
+			}
 			if indexerID == "" {
 				continue
 			}

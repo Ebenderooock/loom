@@ -348,6 +348,19 @@ func (o *Orchestrator) handleDownloadComplete(ctx context.Context, cmd CmdDownlo
 }
 
 func (o *Orchestrator) handleImportResult(ctx context.Context, cmd CmdImportResult) {
+	// Guard: if the workflow is already in a terminal state (e.g. cancelled while
+	// an import was in-flight) ignore this result entirely — no more retries.
+	currentWf, err := o.store.Get(ctx, cmd.WorkflowID)
+	if err != nil {
+		o.logger.Error("failed to fetch workflow for import result", "workflow_id", cmd.WorkflowID, "error", err)
+		return
+	}
+	if currentWf.IsTerminal() {
+		o.logger.Debug("ignoring import result for terminal workflow",
+			"workflow_id", cmd.WorkflowID, "state", currentWf.State)
+		return
+	}
+
 	if cmd.Success {
 		msg := "Import completed successfully"
 		meta := map[string]any{"imported_paths": cmd.ImportedPaths}
@@ -375,13 +388,41 @@ func (o *Orchestrator) handleImportResult(ctx context.Context, cmd CmdImportResu
 			break
 		}
 
+		// Increment retry count and check exhaustion. markFailed handles both:
+		// - retries remaining: increments counter, leaves workflow in importing state
+		//   (importing→importing is an invalid transition that silently no-ops).
+		// - retries exhausted: transitions to failed and resets media status.
+		if err := o.engine.markFailed(ctx, cmd.WorkflowID, "Import transient error: "+cmd.Error); err != nil {
+			o.logger.Error("failed to record import retry", "workflow_id", cmd.WorkflowID, "error", err)
+			break
+		}
+
+		// Re-fetch to see whether retries were exhausted (workflow now failed).
+		updatedWf, err := o.store.Get(ctx, cmd.WorkflowID)
+		if err != nil {
+			o.logger.Error("failed to re-fetch workflow after retry increment", "workflow_id", cmd.WorkflowID, "error", err)
+			break
+		}
+		if updatedWf.IsTerminal() {
+			// Retries exhausted — markFailed transitioned to failed.
+			return
+		}
+
 		o.logger.Info("scheduling import retry after delay",
-			"workflow_id", cmd.WorkflowID, "delay", importRetryDelay, "error", cmd.Error)
+			"workflow_id", cmd.WorkflowID, "retry", updatedWf.RetryCount,
+			"max", updatedWf.MaxRetries, "delay", importRetryDelay, "error", cmd.Error)
 
 		// Extract category from metadata if available.
 		category := o.categoryFromMetadata(wf.Metadata)
 
 		time.AfterFunc(importRetryDelay, func() {
+			// Re-check workflow state: it may have been cancelled while waiting.
+			latestWf, err := o.store.Get(ctx, wf.ID)
+			if err != nil || latestWf.IsTerminal() || latestWf.State != StateImporting {
+				o.logger.Debug("aborting scheduled import retry — workflow no longer in importing state",
+					"workflow_id", wf.ID)
+				return
+			}
 			o.logEvent(ctx, wf.ID, EventRetried, "Re-importing after delay", map[string]any{
 				"retry_strategy": strategy.String(),
 				"delay":          importRetryDelay.String(),
@@ -793,6 +834,15 @@ func (o *Orchestrator) dispatchImport(ctx context.Context, workflowID, clientID,
 		case o.importSem <- struct{}{}:
 			defer func() { <-o.importSem }()
 		case <-ctx.Done():
+			return
+		}
+
+		// Re-check state after acquiring the slot: the workflow may have been
+		// cancelled or otherwise terminated while we were waiting.
+		currentWf, err := o.store.Get(ctx, workflowID)
+		if err != nil || currentWf.IsTerminal() || currentWf.State != StateImporting {
+			o.logger.Debug("aborting import — workflow no longer in importing state",
+				"workflow_id", workflowID)
 			return
 		}
 
