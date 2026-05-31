@@ -1,6 +1,8 @@
 package autosearch
 
 import (
+	"io"
+	"log/slog"
 	"testing"
 
 	"github.com/ebenderooock/loom/internal/customformats"
@@ -457,3 +459,309 @@ func TestEvaluateResult_MinFormatScore(t *testing.T) {
 		}
 	})
 }
+
+// ── verifyIdentity tests ──────────────────────────────────────────────────────
+
+func newEngine() *Engine {
+	return &Engine{logger: slog.New(slog.NewTextHandler(io.Discard, nil))}
+}
+
+func TestVerifyIdentity_NilParsed(t *testing.T) {
+	e := newEngine()
+	if got := e.verifyIdentity(SearchRequest{}, nil, false); got != "" {
+		t.Errorf("expected empty, got %q", got)
+	}
+}
+
+func TestVerifyIdentity_TitleMatch(t *testing.T) {
+	e := newEngine()
+	tests := []struct {
+		name         string
+		reqTitle     string
+		parsedTitle  string
+		idBased      bool
+		wantRejected bool
+		wantReason   string
+	}{
+		{
+			name:        "exact match passes",
+			reqTitle:    "FROM",
+			parsedTitle: "FROM",
+			wantRejected: false,
+		},
+		{
+			name:        "case insensitive match passes",
+			reqTitle:    "Breaking Bad",
+			parsedTitle: "breaking bad",
+			wantRejected: false,
+		},
+		{
+			name:         "mismatch rejected",
+			reqTitle:     "FROM",
+			parsedTitle:  "Fringe",
+			wantRejected: true,
+			wantReason:   "title_mismatch",
+		},
+		{
+			name:        "id-based skips title check entirely",
+			reqTitle:    "FROM",
+			parsedTitle: "Fringe",
+			idBased:     true,
+			wantRejected: false,
+		},
+		{
+			name:        "empty parsed title skips check",
+			reqTitle:    "FROM",
+			parsedTitle: "",
+			wantRejected: false,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			req := SearchRequest{MediaType: "episode", Title: tc.reqTitle}
+			parsed := &parser.Release{Title: tc.parsedTitle}
+			got := e.verifyIdentity(req, parsed, tc.idBased)
+			if tc.wantRejected && got != tc.wantReason {
+				t.Errorf("expected reason %q, got %q", tc.wantReason, got)
+			}
+			if !tc.wantRejected && got != "" {
+				t.Errorf("expected pass, got %q", got)
+			}
+		})
+	}
+}
+
+func TestVerifyIdentity_SeasonPackTitle(t *testing.T) {
+	// Regression: "FROM.S04.Complete.1080p" must parse title as "FROM",
+	// not "FROM S04 Complete" — otherwise the season pack gets rejected
+	// with title_mismatch. Verify via the parser + verifyIdentity pipeline.
+	e := newEngine()
+	parsed := parser.Parse("FROM.S04.Complete.1080p.WEB-DL.x264")
+	if parsed == nil {
+		t.Fatal("parse returned nil")
+	}
+	if parser.CleanSeriesTitle(parsed.Title) != "from" {
+		t.Errorf("parser produced wrong title %q; want 'from'. Season pack title extraction broken.", parsed.Title)
+	}
+	req := SearchRequest{MediaType: "series", Title: "FROM", Season: 4}
+	if got := e.verifyIdentity(req, parsed, false); got != "" {
+		t.Errorf("season pack should not be rejected, got %q", got)
+	}
+}
+
+func TestVerifyIdentity_EpisodeChecks(t *testing.T) {
+	e := newEngine()
+	tests := []struct {
+		name       string
+		req        SearchRequest
+		parsed     *parser.Release
+		wantReason string
+	}{
+		{
+			name:   "correct episode passes",
+			req:    SearchRequest{MediaType: "episode", Title: "FROM", Season: 4, Episode: 1},
+			parsed: &parser.Release{Title: "FROM", Season: 4, Episode: 1},
+		},
+		{
+			name:       "wrong episode rejected",
+			req:        SearchRequest{MediaType: "episode", Title: "FROM", Season: 4, Episode: 1},
+			parsed:     &parser.Release{Title: "FROM", Season: 4, Episode: 4},
+			wantReason: "wrong_episode",
+		},
+		{
+			name:       "wrong season rejected",
+			req:        SearchRequest{MediaType: "episode", Title: "FROM", Season: 4, Episode: 1},
+			parsed:     &parser.Release{Title: "FROM", Season: 3, Episode: 1},
+			wantReason: "wrong_season",
+		},
+		{
+			name:   "season pack for season search passes",
+			req:    SearchRequest{MediaType: "series", Title: "FROM", Season: 4},
+			parsed: &parser.Release{Title: "FROM", Season: 4, IsSeasonPack: true},
+		},
+		{
+			name:       "single episode rejected for season search",
+			req:        SearchRequest{MediaType: "series", Title: "FROM", Season: 4},
+			parsed:     &parser.Release{Title: "FROM", Season: 4, Episode: 1},
+			wantReason: "not_a_season_pack",
+		},
+		{
+			name:       "season pack rejected for episode search",
+			req:        SearchRequest{MediaType: "episode", Title: "FROM", Season: 4, Episode: 1},
+			parsed:     &parser.Release{Title: "FROM", Season: 4, IsSeasonPack: true},
+			wantReason: "season_pack_for_episode_search",
+		},
+		{
+			name:   "multi-episode file contains requested episode — passes",
+			req:    SearchRequest{MediaType: "episode", Title: "FROM", Season: 4, Episode: 1},
+			parsed: &parser.Release{Title: "FROM", Season: 4, Episode: 1, Episodes: []int{1, 2, 3}},
+		},
+		{
+			// Bug 3 regression: old code used `parsed.Episode > 0` which skipped
+			// validation entirely when episode=0 (specials), allowing ep0 to
+			// match any episode search. Fixed to `!= -1` so ep0 is properly checked.
+			name:       "episode 0 (special) rejected for non-special search — Bug 3 regression",
+			req:        SearchRequest{MediaType: "episode", Title: "FROM", Season: 1, Episode: 1},
+			parsed:     &parser.Release{Title: "FROM", Season: 1, Episode: 0, Episodes: []int{}},
+			wantReason: "wrong_episode",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := e.verifyIdentity(tc.req, tc.parsed, false)
+			if got != tc.wantReason {
+				t.Errorf("want reason %q, got %q", tc.wantReason, got)
+			}
+		})
+	}
+}
+
+func TestVerifyIdentity_MovieYear(t *testing.T) {
+	e := newEngine()
+	tests := []struct {
+		name       string
+		reqYear    int
+		parsedYear int
+		wantReason string
+	}{
+		{"exact year passes", 2022, 2022, ""},
+		{"off by 1 passes", 2022, 2023, ""},
+		{"off by 2 rejected", 2022, 2024, "wrong_year"},
+		{"no parsed year skips check", 2022, 0, ""},
+		{"no req year skips check", 0, 2022, ""},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			req := SearchRequest{MediaType: "movie", Title: "Inception", Year: tc.reqYear}
+			parsed := &parser.Release{Title: "Inception", Year: tc.parsedYear}
+			got := e.verifyIdentity(req, parsed, false)
+			if got != tc.wantReason {
+				t.Errorf("want %q, got %q", tc.wantReason, got)
+			}
+		})
+	}
+}
+
+// ── buildQueryChain tests ─────────────────────────────────────────────────────
+
+func TestBuildQueryChain_EpisodeWithIDs(t *testing.T) {
+	e := newEngine()
+	req := SearchRequest{
+		MediaType: "episode",
+		Title:     "FROM",
+		Season:    4, Episode: 1,
+		TVDBID: "12345",
+		TMDBID: "99999",
+	}
+	tiers := e.buildQueryChain(req)
+	if len(tiers) != 2 {
+		t.Fatalf("expected 2 tiers (ID + title), got %d", len(tiers))
+	}
+	// Tier 0: ID-based
+	if tiers[0][0].TVDBID != "12345" {
+		t.Errorf("tier 0 should carry TVDB ID")
+	}
+	if tiers[0][0].Mode != indexers.ModeTVSearch {
+		t.Errorf("tier 0 should be tvsearch mode")
+	}
+	// Tier 1: title-based
+	if tiers[1][0].Term != "FROM" {
+		t.Errorf("tier 1 term should be FROM, got %q", tiers[1][0].Term)
+	}
+}
+
+func TestBuildQueryChain_EpisodeNoIDs(t *testing.T) {
+	e := newEngine()
+	req := SearchRequest{MediaType: "episode", Title: "FROM", Season: 4, Episode: 1}
+	tiers := e.buildQueryChain(req)
+	if len(tiers) != 1 {
+		t.Fatalf("expected 1 tier (title only), got %d", len(tiers))
+	}
+	if tiers[0][0].Term != "FROM" {
+		t.Errorf("expected term FROM, got %q", tiers[0][0].Term)
+	}
+	if tiers[0][0].Season != 4 || tiers[0][0].Episode != 1 {
+		t.Errorf("season/episode not propagated")
+	}
+}
+
+func TestBuildQueryChain_MovieWithIMDB(t *testing.T) {
+	e := newEngine()
+	req := SearchRequest{
+		MediaType: "movie",
+		Title:     "Inception",
+		Year:      2010,
+		IMDBID:    "tt1375666",
+		TMDBID:    "27205",
+	}
+	tiers := e.buildQueryChain(req)
+	if len(tiers) != 2 {
+		t.Fatalf("expected 2 tiers, got %d", len(tiers))
+	}
+	// Tier 0 movie ID query
+	if tiers[0][0].Mode != indexers.ModeMovie {
+		t.Errorf("movie tier 0 should be movie mode")
+	}
+	if tiers[0][0].IMDBID != "tt1375666" {
+		t.Errorf("IMDB ID not set in tier 0")
+	}
+	// Tier 1 title query
+	if tiers[1][0].Mode != indexers.ModeSearch {
+		t.Errorf("movie title tier should be search mode")
+	}
+	if tiers[1][0].Year != 2010 {
+		t.Errorf("year not propagated in title tier")
+	}
+}
+
+func TestBuildQueryChain_AlternateTitles(t *testing.T) {
+	e := newEngine()
+	req := SearchRequest{
+		MediaType:       "episode",
+		Title:           "FROM",
+		AlternateTitles: []string{"FROM (2022)", ""},
+	}
+	tiers := e.buildQueryChain(req)
+	// Should have 1 tier with 2 queries (primary + one non-empty alt)
+	if len(tiers) != 1 {
+		t.Fatalf("expected 1 tier, got %d", len(tiers))
+	}
+	if len(tiers[0]) != 2 {
+		t.Errorf("expected 2 title queries, got %d", len(tiers[0]))
+	}
+}
+
+func TestBuildQueryChain_TVCategories(t *testing.T) {
+	e := newEngine()
+	tiers := e.buildQueryChain(SearchRequest{MediaType: "episode", Title: "FROM"})
+	for _, q := range tiers[0] {
+		found := false
+		for _, cat := range q.Categories {
+			if cat == 5000 {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Error("TV categories (5000 range) not set for episode search")
+		}
+	}
+}
+
+func TestBuildQueryChain_MovieCategories(t *testing.T) {
+	e := newEngine()
+	tiers := e.buildQueryChain(SearchRequest{MediaType: "movie", Title: "Inception"})
+	for _, q := range tiers[0] {
+		found := false
+		for _, cat := range q.Categories {
+			if cat == 2000 {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Error("movie categories (2000 range) not set for movie search")
+		}
+	}
+}
+
