@@ -403,7 +403,10 @@ const TOOLS = [
 
 // ─── Server setup ─────────────────────────────────────────────────────────────
 
-const server = new Server({ name:"loom-mcp", version:"3.0.0" });
+const server = new Server(
+  { name:"loom-mcp", version:"3.0.0" },
+  { capabilities: { tools: {} } }
+);
 
 server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOLS }));
 
