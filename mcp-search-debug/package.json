@@ -1,0 +1,12 @@
+{
+  "name": "loom-mcp",
+  "version": "2.0.0",
+  "description": "Loom MCP server — full control and observability",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0"
+  }
+}
