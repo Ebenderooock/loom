@@ -3,6 +3,7 @@ package imports
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"os"
@@ -267,6 +268,21 @@ func (p *ImportPipeline) resolveDownloadPath(ctx context.Context, ev *downloads.
 			}
 			if item.SavePath != "" {
 				path := filepath.Join(item.SavePath, item.Title)
+				return p.applyRemotePathMapping(ctx, ev.ClientID, path), nil
+			}
+		}
+	}
+
+	// The item is no longer present in the download client (e.g. removed after
+	// seeding). Try the path we cached in workflow metadata when the download
+	// first completed — this survives client-side removal.
+	if p.wfEngine != nil {
+		if wf, err := p.wfEngine.FindByDownload(ctx, ev.ClientID, ev.DownloadID); err == nil && wf != nil {
+			if cached := metadataString(wf.Metadata, "content_path"); cached != "" {
+				return p.applyRemotePathMapping(ctx, ev.ClientID, cached), nil
+			}
+			if sp := metadataString(wf.Metadata, "save_path"); sp != "" {
+				path := filepath.Join(sp, ev.Title)
 				return p.applyRemotePathMapping(ctx, ev.ClientID, path), nil
 			}
 		}
@@ -1270,4 +1286,20 @@ func (p *ImportPipeline) enrichCandidateQuality(ctx context.Context, c *ImportCa
 		// whether a file exists. Without file quality info, leave
 		// ExistingQuality empty so the upgrade spec allows the import.
 	}
+}
+
+// metadataString extracts a string field from a JSON metadata blob.
+// Returns "" if the blob is empty, not valid JSON, or the field is absent.
+func metadataString(metadata, key string) string {
+	if metadata == "" {
+		return ""
+	}
+	var m map[string]any
+	if err := json.Unmarshal([]byte(metadata), &m); err != nil {
+		return ""
+	}
+	if v, ok := m[key].(string); ok {
+		return v
+	}
+	return ""
 }

@@ -53,10 +53,12 @@ func (CmdDownloadProgress) commandTag() {}
 // CmdDownloadComplete signals that a download has finished (detected by monitor).
 // The orchestrator resolves the workflow by clientID+downloadID.
 type CmdDownloadComplete struct {
-	ClientID   string
-	DownloadID string
-	Title      string
-	Category   string
+	ClientID    string
+	DownloadID  string
+	Title       string
+	Category    string
+	ContentPath string // actual on-disk path (from download client Status); may be empty
+	SavePath    string // client save directory; used as fallback if ContentPath is empty
 }
 
 func (CmdDownloadComplete) commandTag() {}

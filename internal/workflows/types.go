@@ -33,15 +33,23 @@ const (
 	ItemPending = "pending"
 )
 
-// State timeouts for stale detection
+// State timeouts for stale detection.
+// StateDownloading is intentionally absent — a large download on a slow
+// connection can legitimately take many days. Downloading workflows are
+// handled with a smarter progress-aware check in handleStale instead.
 var StateTimeouts = map[string]time.Duration{
 	StateSearching:    5 * time.Minute,
 	StateGrabbed:      10 * time.Minute,
-	StateDownloading:  24 * time.Hour,
 	StatePostDownload: 7 * 24 * time.Hour, // seeding can take days on private trackers
 	StateImporting:    30 * time.Minute,
 	StateCleaningUp:   15 * time.Minute,
 }
+
+// DownloadingStaleThreshold is the minimum time a downloading workflow must
+// have had zero contact with the download client before it is considered stale.
+// Progress events reset the workflow's updated_at, so this only triggers when
+// the client is unreachable AND the download has been silent for this long.
+const DownloadingStaleThreshold = 7 * 24 * time.Hour
 
 // Valid transitions from each state
 var ValidTransitions = map[string][]string{

@@ -24,7 +24,9 @@ type stalledState struct {
 // a direct dependency on the workflows package.
 type MonitorOrchNotifier interface {
 	// NotifyDownloadComplete tells the orchestrator that a download has finished.
-	NotifyDownloadComplete(clientID, downloadID, title, category string)
+	// contentPath is the actual on-disk path; savePath is the client's save directory.
+	// Either may be empty if the client doesn't report them.
+	NotifyDownloadComplete(clientID, downloadID, title, category, contentPath, savePath string)
 	// NotifyDownloadProgress reports progress for a specific download.
 	NotifyDownloadProgress(clientID, downloadID string, progress float64, downSpeed, upSpeed int64, ratio float64, status string)
 }
@@ -201,7 +203,7 @@ func (m *Monitor) emitCompletions(ctx context.Context, items []Item) {
 
 				// Notify orchestrator for workflow-tracked downloads.
 				if m.orchNotifier != nil {
-					m.orchNotifier.NotifyDownloadComplete(item.ClientID, item.ID, item.Title, item.Category)
+					m.orchNotifier.NotifyDownloadComplete(item.ClientID, item.ID, item.Title, item.Category, item.ContentPath, item.SavePath)
 				}
 
 				// Persist to history store if available.

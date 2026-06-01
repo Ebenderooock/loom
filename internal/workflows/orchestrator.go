@@ -130,12 +130,14 @@ func (o *Orchestrator) Send(cmd Command) {
 }
 
 // NotifyDownloadComplete satisfies downloads.MonitorOrchNotifier.
-func (o *Orchestrator) NotifyDownloadComplete(clientID, downloadID, title, category string) {
+func (o *Orchestrator) NotifyDownloadComplete(clientID, downloadID, title, category, contentPath, savePath string) {
 	o.Send(CmdDownloadComplete{
-		ClientID:   clientID,
-		DownloadID: downloadID,
-		Title:      title,
-		Category:   category,
+		ClientID:    clientID,
+		DownloadID:  downloadID,
+		Title:       title,
+		Category:    category,
+		ContentPath: contentPath,
+		SavePath:    savePath,
 	})
 }
 
@@ -358,9 +360,20 @@ func (o *Orchestrator) handleDownloadComplete(ctx context.Context, cmd CmdDownlo
 		o.logger.Warn("failed to stamp post_download start", "workflow_id", wf.ID, "error", err)
 	}
 
-	// Store category in metadata for later import dispatch.
+	// Store category and content path in metadata for later import dispatch.
+	patch := map[string]any{}
 	if cmd.Category != "" {
-		_ = o.store.MergeMetadata(ctx, wf.ID, map[string]any{"category": cmd.Category})
+		patch["category"] = cmd.Category
+	}
+	// Cache the download path so the import pipeline can resolve it even if
+	// the item is later removed from the download client (e.g. after seeding).
+	if cmd.ContentPath != "" {
+		patch["content_path"] = cmd.ContentPath
+	} else if cmd.SavePath != "" {
+		patch["save_path"] = cmd.SavePath
+	}
+	if len(patch) > 0 {
+		_ = o.store.MergeMetadata(ctx, wf.ID, patch)
 	}
 
 	o.logEvent(ctx, wf.ID, EventPostDownloadStart, "Post-download phase started", map[string]any{
@@ -1018,6 +1031,24 @@ func (o *Orchestrator) handleStale(ctx context.Context) {
 						continue
 					}
 				}
+			}
+
+			// For downloading state, only fail if the item is gone AND silent
+			// for longer than the dedicated downloading threshold. This avoids
+			// false-positives for large files on slow connections where progress
+			// events may be temporarily absent (client restart, network blip).
+			if wf.State == StateDownloading {
+				if age < DownloadingStaleThreshold {
+					// Still within tolerance — reset the timer so this workflow
+					// doesn't immediately re-appear as stale next tick.
+					_ = o.store.MergeMetadata(ctx, wf.ID, map[string]any{"stale_check": "within_threshold"})
+					o.logger.Debug("stale check: downloading within threshold, extending",
+						"workflow_id", wf.ID, "age", age.Round(time.Minute))
+					continue
+				}
+				// Beyond threshold AND item not found in any client — genuinely stale.
+				o.logger.Warn("stale workflow: download silent beyond threshold",
+					"id", wf.ID, "age", age.Round(time.Minute))
 			}
 		}
 

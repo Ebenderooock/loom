@@ -384,6 +384,8 @@ func (s *Store) ActiveMediaIDs(ctx context.Context, mediaType string, ids []stri
 }
 
 // StaleWorkflows returns workflows stuck in a state longer than expected.
+// Downloading workflows are included separately using DownloadingStaleThreshold
+// so that large files on slow connections are not falsely marked stale.
 func (s *Store) StaleWorkflows(ctx context.Context) ([]*Workflow, error) {
 	now := time.Now()
 	var results []*Workflow
@@ -403,6 +405,23 @@ func (s *Store) StaleWorkflows(ctx context.Context) ([]*Workflow, error) {
 		}
 		results = append(results, wfs...)
 	}
+
+	// Include downloading workflows that have been silent beyond the generous
+	// threshold. The orchestrator will apply further progress-aware logic.
+	dlCutoff := now.Add(-DownloadingStaleThreshold)
+	dlWfs, err := s.listArgs(ctx, `
+		SELECT id, type, state, media_type, grab_title,
+			download_client_id, download_id, quality_profile_id,
+			retry_count, max_retries, last_error, metadata,
+			created_at, updated_at, completed_at
+		FROM workflows
+		WHERE state = ? AND updated_at < ?`,
+		StateDownloading, dlCutoff)
+	if err != nil {
+		return nil, err
+	}
+	results = append(results, dlWfs...)
+
 	return results, nil
 }
 
