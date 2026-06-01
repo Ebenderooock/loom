@@ -465,12 +465,20 @@ func (p *ImportPipeline) importSingleFile(ctx context.Context, ev *downloads.Dow
 	}
 
 	// Collision handling: if the destination already exists, check if it's the same file
-	if info, err := os.Stat(destFile); err == nil {
+	if destInfo, err := os.Stat(destFile); err == nil {
 		srcInfo, srcErr := os.Stat(mediaFile)
-		if srcErr == nil && info.Size() == srcInfo.Size() {
-			// Same size — treat as already imported
-			p.logger.Info("destination file already exists with same size, treating as imported",
-				"dest", destFile, "src", mediaFile)
+
+		// If source is gone (already moved on a prior attempt) OR sizes match, treat as already imported.
+		alreadyMoved := srcErr != nil
+		sameSizeMatch := srcErr == nil && destInfo.Size() == srcInfo.Size()
+		if alreadyMoved || sameSizeMatch {
+			if alreadyMoved {
+				p.logger.Info("source file gone and destination exists, treating prior import as successful",
+					"dest", destFile, "src", mediaFile)
+			} else {
+				p.logger.Info("destination file already exists with same size, treating as imported",
+					"dest", destFile, "src", mediaFile)
+			}
 			if err := p.updateLibrary(ctx, match, destFile, mediaFile); err != nil {
 				p.logger.Warn("library update for existing file failed", "error", err)
 			}
@@ -479,7 +487,8 @@ func (p *ImportPipeline) importSingleFile(ctx context.Context, ev *downloads.Dow
 			}
 			if match.MediaType == "movie" && match.MediaID != "" {
 				if err := p.moviesSvc.SetMovieStatus(ctx, match.MediaID, movies.MovieStatusAvailableRightQuality); err != nil {
-					return fmt.Errorf("update movie status after import (existing file): %w", err)
+					p.logger.Warn("failed to update movie status after import (existing file), will be corrected on rescan",
+						"movie_id", match.MediaID, "error", err)
 				}
 			}
 			p.publishNotification(ctx, match, destFile)
@@ -563,7 +572,9 @@ func (p *ImportPipeline) importSingleFile(ctx context.Context, ev *downloads.Dow
 	// Update movie status to available
 	if match.MediaType == "movie" && match.MediaID != "" {
 		if err := p.moviesSvc.SetMovieStatus(ctx, match.MediaID, movies.MovieStatusAvailableRightQuality); err != nil {
-			return fmt.Errorf("update movie status after import: %w", err)
+			// Non-fatal: file is already in the library. Status will be corrected on next rescan.
+			p.logger.Warn("failed to update movie status after import, will be corrected on rescan",
+				"movie_id", match.MediaID, "error", err)
 		}
 	}
 
