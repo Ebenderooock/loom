@@ -28,7 +28,9 @@ type MonitorOrchNotifier interface {
 	// Either may be empty if the client doesn't report them.
 	NotifyDownloadComplete(clientID, downloadID, title, category, contentPath, savePath string)
 	// NotifyDownloadProgress reports progress for a specific download.
-	NotifyDownloadProgress(clientID, downloadID string, progress float64, downSpeed, upSpeed int64, ratio float64, status string)
+	// contentPath and savePath are passed so the orchestrator can cache them in
+	// workflow metadata before the download client removes the completed item.
+	NotifyDownloadProgress(clientID, downloadID string, progress float64, downSpeed, upSpeed int64, ratio float64, status, contentPath, savePath string)
 }
 
 // Monitor periodically checks the status of downloads on all configured
@@ -155,6 +157,7 @@ func (m *Monitor) Run(ctx context.Context) error {
 					item.ClientID, item.ID, item.Progress,
 					item.DownloadRate, item.UploadRate,
 					item.Ratio, string(item.Status),
+					item.ContentPath, item.SavePath,
 				)
 			}
 		}

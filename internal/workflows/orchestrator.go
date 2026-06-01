@@ -45,12 +45,19 @@ type CleanupFunc func(ctx context.Context, clientID, downloadID string, imported
 // mediaType is "movie" or "episode"; mediaIDs are the affected item IDs.
 type MediaRefreshFunc func(ctx context.Context, mediaType string, mediaIDs []string) error
 
+// ActiveDownloadInfo carries the status and path info for a single download.
+type ActiveDownloadInfo struct {
+	Status      string
+	ContentPath string // actual on-disk path reported by the download client
+	SavePath    string // client save directory; used as fallback
+}
+
 // DownloadStatusProvider allows the orchestrator to query current download state
 // for startup reconciliation without importing the downloads package.
 type DownloadStatusProvider interface {
-	// ActiveDownloads returns a map of "clientID:downloadID" → status string
+	// ActiveDownloads returns a map of "clientID:downloadID" → ActiveDownloadInfo
 	// for all currently active downloads across all clients.
-	ActiveDownloads(ctx context.Context) (map[string]string, error)
+	ActiveDownloads(ctx context.Context) (map[string]ActiveDownloadInfo, error)
 }
 
 // OrchestratorOpts configures the Orchestrator.
@@ -142,15 +149,17 @@ func (o *Orchestrator) NotifyDownloadComplete(clientID, downloadID, title, categ
 }
 
 // NotifyDownloadProgress satisfies downloads.MonitorOrchNotifier.
-func (o *Orchestrator) NotifyDownloadProgress(clientID, downloadID string, progress float64, downSpeed, upSpeed int64, ratio float64, status string) {
+func (o *Orchestrator) NotifyDownloadProgress(clientID, downloadID string, progress float64, downSpeed, upSpeed int64, ratio float64, status, contentPath, savePath string) {
 	o.Send(CmdDownloadProgress{
-		ClientID:   clientID,
-		DownloadID: downloadID,
-		Progress:   progress,
-		DownSpeed:  downSpeed,
-		UpSpeed:    upSpeed,
-		Ratio:      ratio,
-		Status:     status,
+		ClientID:    clientID,
+		DownloadID:  downloadID,
+		Progress:    progress,
+		DownSpeed:   downSpeed,
+		UpSpeed:     upSpeed,
+		Ratio:       ratio,
+		Status:      status,
+		ContentPath: contentPath,
+		SavePath:    savePath,
 	})
 }
 
@@ -681,7 +690,7 @@ func (o *Orchestrator) smartRetry(ctx context.Context, wf *Workflow) error {
 	}
 
 	key := wf.DownloadClientID + ":" + wf.DownloadID
-	dlState, exists := downloads[key]
+	info, exists := downloads[key]
 
 	switch {
 	case !exists:
@@ -691,7 +700,7 @@ func (o *Orchestrator) smartRetry(ctx context.Context, wf *Workflow) error {
 		}
 		o.logEvent(ctx, wf.ID, EventRetried, "Manual retry (re-search, download not found)", nil)
 
-	case dlState == "completed":
+	case info.Status == "completed":
 		// Download complete — skip straight to import
 		if err := o.engine.RecoverToImporting(ctx, wf.ID, "Manual retry (download complete, re-importing)"); err != nil {
 			return err
@@ -700,14 +709,14 @@ func (o *Orchestrator) smartRetry(ctx context.Context, wf *Workflow) error {
 		category := o.categoryFromMetadata(wf.Metadata)
 		o.dispatchImport(ctx, wf.ID, wf.DownloadClientID, wf.DownloadID, wf.GrabTitle, category)
 
-	case dlState == "seeding":
+	case info.Status == "seeding":
 		// Still seeding — go to post_download to evaluate seed requirements
 		if err := o.engine.RecoverToPostDownload(ctx, wf.ID, "Manual retry (seeding, evaluating seed requirements)"); err != nil {
 			return err
 		}
 		o.logEvent(ctx, wf.ID, EventRetried, "Manual retry (evaluating seed status)", nil)
 
-	case dlState == "downloading":
+	case info.Status == "downloading":
 		// Still downloading — resume from downloading state
 		if err := o.engine.RecoverToDownloading(ctx, wf.ID, "Manual retry (download still active)"); err != nil {
 			return err
@@ -717,11 +726,11 @@ func (o *Orchestrator) smartRetry(ctx context.Context, wf *Workflow) error {
 	default:
 		// Unknown state — fall back to re-search
 		o.logger.Warn("smart retry: unknown download state, falling back to re-search",
-			"workflow_id", wf.ID, "dl_state", dlState)
+			"workflow_id", wf.ID, "dl_state", info.Status)
 		if err := o.engine.Retry(ctx, wf.ID); err != nil {
 			return err
 		}
-		o.logEvent(ctx, wf.ID, EventRetried, fmt.Sprintf("Manual retry (re-search, unknown dl state: %s)", dlState), nil)
+		o.logEvent(ctx, wf.ID, EventRetried, fmt.Sprintf("Manual retry (re-search, unknown dl state: %s)", info.Status), nil)
 	}
 
 	return nil
@@ -776,8 +785,10 @@ func (o *Orchestrator) bufferProgress(ctx context.Context, cmd CmdDownloadProgre
 			o.logger.Info("recovering missed completion via progress",
 				"workflow_id", wf.ID, "state", wf.State, "status", cmd.Status)
 			o.handleDownloadComplete(ctx, CmdDownloadComplete{
-				ClientID:   cmd.ClientID,
-				DownloadID: cmd.DownloadID,
+				ClientID:    cmd.ClientID,
+				DownloadID:  cmd.DownloadID,
+				ContentPath: cmd.ContentPath,
+				SavePath:    cmd.SavePath,
 			})
 			return
 		}
@@ -808,8 +819,10 @@ func (o *Orchestrator) flushProgress(ctx context.Context) {
 			o.logger.Info("recovering missed download completion from progress update",
 				"workflow_id", wf.ID, "state", wf.State, "status", p.Status)
 			o.handleDownloadComplete(ctx, CmdDownloadComplete{
-				ClientID:   p.ClientID,
-				DownloadID: p.DownloadID,
+				ClientID:    p.ClientID,
+				DownloadID:  p.DownloadID,
+				ContentPath: p.ContentPath,
+				SavePath:    p.SavePath,
 			})
 			continue
 		}
@@ -820,14 +833,22 @@ func (o *Orchestrator) flushProgress(ctx context.Context) {
 			o.logEvent(ctx, wf.ID, EventDownloading, "Download confirmed active", nil)
 		}
 
-		// Update metadata with progress info (merge to preserve seed policy)
-		_ = o.store.MergeMetadata(ctx, wf.ID, map[string]any{
+		// Update metadata with progress info (merge to preserve seed policy).
+		// Also cache content/save paths so they survive download client removal.
+		patch := map[string]any{
 			"progress":   p.Progress,
 			"down_speed": p.DownSpeed,
 			"up_speed":   p.UpSpeed,
 			"ratio":      p.Ratio,
 			"status":     p.Status,
-		})
+		}
+		if p.ContentPath != "" {
+			patch["content_path"] = p.ContentPath
+		}
+		if p.SavePath != "" {
+			patch["save_path"] = p.SavePath
+		}
+		_ = o.store.MergeMetadata(ctx, wf.ID, patch)
 
 		// Check if a post_download workflow is ready for import.
 		if wf.State == StatePostDownload {
@@ -998,7 +1019,7 @@ func (o *Orchestrator) handleStale(ctx context.Context) {
 	}
 
 	// Query current download states for recovery attempts.
-	var dlStates map[string]string
+	var dlStates map[string]ActiveDownloadInfo
 	if o.dlStatus != nil {
 		dlStates, _ = o.dlStatus.ActiveDownloads(ctx)
 	}
@@ -1010,20 +1031,22 @@ func (o *Orchestrator) handleStale(ctx context.Context) {
 		if wf.State == StateDownloading || wf.State == StateGrabbed {
 			if dlStates != nil && wf.DownloadClientID != "" && wf.DownloadID != "" {
 				key := wf.DownloadClientID + ":" + wf.DownloadID
-				if dlState, exists := dlStates[key]; exists {
-					if dlState == "completed" || dlState == "seeding" {
+				if info, exists := dlStates[key]; exists {
+					if info.Status == "completed" || info.Status == "seeding" {
 						o.logger.Info("stale recovery: download is actually complete, recovering",
-							"workflow_id", wf.ID, "state", wf.State, "dl_state", dlState)
+							"workflow_id", wf.ID, "state", wf.State, "dl_state", info.Status)
 						o.logEvent(ctx, wf.ID, EventStaleDetected,
-							fmt.Sprintf("Stale in %s but download is %s — recovering", wf.State, dlState), nil)
+							fmt.Sprintf("Stale in %s but download is %s — recovering", wf.State, info.Status), nil)
 						o.handleDownloadComplete(ctx, CmdDownloadComplete{
-							ClientID:   wf.DownloadClientID,
-							DownloadID: wf.DownloadID,
-							Title:      wf.GrabTitle,
+							ClientID:    wf.DownloadClientID,
+							DownloadID:  wf.DownloadID,
+							Title:       wf.GrabTitle,
+							ContentPath: info.ContentPath,
+							SavePath:    info.SavePath,
 						})
 						continue
 					}
-					if dlState == "downloading" {
+					if info.Status == "downloading" {
 						// Still downloading — touch updated_at to reset stale timer
 						_ = o.store.MergeMetadata(ctx, wf.ID, map[string]any{"stale_check": "still_downloading"})
 						o.logger.Debug("stale check: download still active, resetting timer",
@@ -1108,7 +1131,7 @@ func (o *Orchestrator) reconcileOnBoot(ctx context.Context) {
 		}
 
 		key := wf.DownloadClientID + ":" + wf.DownloadID
-		dlState, exists := downloads[key]
+		info, exists := downloads[key]
 
 		switch {
 		case wf.State == StateImporting:
@@ -1149,15 +1172,17 @@ func (o *Orchestrator) reconcileOnBoot(ctx context.Context) {
 				"workflow_id", wf.ID)
 			o.transitionToImport(ctx, wf)
 			reconciled++
-		case exists && (dlState == "completed" || dlState == "seeding"):
+		case exists && (info.Status == "completed" || info.Status == "seeding"):
 			// Download completed while we were down
 			if wf.State == StateGrabbed || wf.State == StateDownloading {
 				o.logger.Info("reconcile: recovering completed download",
 					"workflow_id", wf.ID, "state", wf.State)
 				o.handleDownloadComplete(ctx, CmdDownloadComplete{
-					ClientID:   wf.DownloadClientID,
-					DownloadID: wf.DownloadID,
-					Title:      wf.GrabTitle,
+					ClientID:    wf.DownloadClientID,
+					DownloadID:  wf.DownloadID,
+					Title:       wf.GrabTitle,
+					ContentPath: info.ContentPath,
+					SavePath:    info.SavePath,
 				})
 				reconciled++
 			} else if wf.State == StatePostDownload {
@@ -1171,10 +1196,10 @@ func (o *Orchestrator) reconcileOnBoot(ctx context.Context) {
 						}
 					}
 				}
-				o.evaluatePostDownload(ctx, wf, ratio, dlState)
+				o.evaluatePostDownload(ctx, wf, ratio, info.Status)
 				reconciled++
 			}
-		case exists && dlState == "downloading" && wf.State == StateGrabbed:
+		case exists && info.Status == "downloading" && wf.State == StateGrabbed:
 			_ = o.engine.markDownloading(ctx, wf.ID)
 			o.logEvent(ctx, wf.ID, EventDownloading, "Reconciled: download active", nil)
 			reconciled++
@@ -1191,12 +1216,12 @@ func (o *Orchestrator) reconcileOnBoot(ctx context.Context) {
 				continue
 			}
 			key := wf.DownloadClientID + ":" + wf.DownloadID
-			dlState, exists := downloads[key]
+			info, exists := downloads[key]
 			if !exists {
 				continue
 			}
 
-			switch dlState {
+			switch info.Status {
 			case "completed":
 				o.logger.Info("reconcile: recovering failed workflow with completed download",
 					"workflow_id", wf.ID)

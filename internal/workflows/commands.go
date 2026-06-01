@@ -39,13 +39,15 @@ func (CmdGrabbed) commandTag() {}
 // CmdDownloadProgress is a low-priority update coalesced per tick.
 // Does not trigger state transitions — only updates metadata.
 type CmdDownloadProgress struct {
-	ClientID   string
-	DownloadID string
-	Progress   float64
-	DownSpeed  int64
-	UpSpeed    int64
-	Ratio      float64
-	Status     string // download client item status (e.g. "seeding", "completed")
+	ClientID    string
+	DownloadID  string
+	Progress    float64
+	DownSpeed   int64
+	UpSpeed     int64
+	Ratio       float64
+	Status      string // download client item status (e.g. "seeding", "completed")
+	ContentPath string // actual on-disk path; cached in metadata to survive client removal
+	SavePath    string // client save directory; used as fallback
 }
 
 func (CmdDownloadProgress) commandTag() {}

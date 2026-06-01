@@ -142,14 +142,18 @@ func (s *Service) AddRouteExtension(m RouteMounter) {
 }
 
 // ActiveDownloads returns all active downloads across all clients as a map
-// of "clientID:downloadID" → status string. Implements workflows.DownloadStatusProvider.
-func (s *Service) ActiveDownloads(ctx context.Context) (map[string]string, error) {
+// of "clientID:downloadID" → ActiveDownloadInfo. Implements workflows.DownloadStatusProvider.
+func (s *Service) ActiveDownloads(ctx context.Context) (map[string]workflows.ActiveDownloadInfo, error) {
 	opts := s.FanOutOpts(nil)
 	status := s.registry.Status(ctx, nil, opts)
-	result := make(map[string]string, len(status.Items))
+	result := make(map[string]workflows.ActiveDownloadInfo, len(status.Items))
 	for _, item := range status.Items {
 		key := item.ClientID + ":" + item.ID
-		result[key] = string(item.Status)
+		result[key] = workflows.ActiveDownloadInfo{
+			Status:      string(item.Status),
+			ContentPath: item.ContentPath,
+			SavePath:    item.SavePath,
+		}
 	}
 	return result, nil
 }
