@@ -139,8 +139,10 @@ func (c *Client) Add(ctx context.Context, req downloads.AddRequest) (downloads.A
 	}
 
 	return downloads.AddResult{
-		ClientID: c.id,
-		ItemID:   hash,
+		ClientID:    c.id,
+		ItemID:      hash,
+		ContentPath: c.engine.ContentPathByHash(hash),
+		SavePath:    savePath,
 	}, nil
 }
 

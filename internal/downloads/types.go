@@ -136,8 +136,10 @@ func (r *AddRequest) Normalize() {
 // per-kind ID is opaque to the downloads package — callers store it
 // and pass it back into Status/Pause/Resume/Remove.
 type AddResult struct {
-	ClientID string `json:"client_id"`
-	ItemID   string `json:"item_id"`
+	ClientID    string `json:"client_id"`
+	ItemID      string `json:"item_id"`
+	ContentPath string `json:"content_path,omitempty"` // actual on-disk path; populated by clients that know it at add time
+	SavePath    string `json:"save_path,omitempty"`
 }
 
 // ItemStatus is a single in-flight or completed download as reported

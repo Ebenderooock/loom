@@ -289,6 +289,22 @@ func (o *Orchestrator) handleGrabbed(ctx context.Context, cmd CmdGrabbed) {
 		"title":       cmd.Title,
 	})
 
+	// Cache the actual on-disk path immediately at grab time so it survives
+	// restarts and client-side removal. The builtin torrent client populates
+	// ContentPath from t.Name() right after add; external clients may leave it empty.
+	patch := map[string]any{}
+	if cmd.ContentPath != "" {
+		patch["content_path"] = cmd.ContentPath
+	}
+	if cmd.SavePath != "" {
+		patch["save_path"] = cmd.SavePath
+	}
+	if len(patch) > 0 {
+		if err := o.store.MergeMetadata(ctx, cmd.WorkflowID, patch); err != nil {
+			o.logger.Warn("failed to cache content path at grab time", "workflow_id", cmd.WorkflowID, "error", err)
+		}
+	}
+
 	// Persist seed policy so post_download phase knows the requirements.
 	if cmd.SeedRatioLimit != nil || cmd.SeedTimeLimitMinutes != nil {
 		policy := PostDownloadPolicy{

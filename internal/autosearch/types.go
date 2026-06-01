@@ -50,6 +50,8 @@ type GrabbedRelease struct {
 	FormatMatches        []customformats.FormatMatch `json:"format_matches,omitempty"`
 	ClientID             string                    `json:"client_id"`
 	DownloadID           string                    `json:"download_id"`
+	ContentPath          string                    `json:"content_path,omitempty"`  // actual on-disk path; may be empty for external clients
+	SavePath             string                    `json:"save_path,omitempty"`
 	SeedRatioLimit       *float64                  `json:"seed_ratio_limit,omitempty"`
 	SeedTimeLimitMinutes *int                      `json:"seed_time_limit_minutes,omitempty"`
 }

@@ -783,6 +783,8 @@ func (s *Service) recordManualGrab(ctx context.Context, res AddResult, req AddRe
 			ClientID:             res.ClientID,
 			DownloadID:           res.ItemID,
 			Title:                req.Title,
+			ContentPath:          res.ContentPath,
+			SavePath:             res.SavePath,
 			SeedRatioLimit:       req.SeedRatioLimit,
 			SeedTimeLimitMinutes: req.SeedTimeLimitMinutes,
 		})

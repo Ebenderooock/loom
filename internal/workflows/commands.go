@@ -30,6 +30,8 @@ type CmdGrabbed struct {
 	ClientID             string
 	DownloadID           string
 	Title                string
+	ContentPath          string // actual torrent folder name on disk; cached so it survives client removal/restart
+	SavePath             string // client save directory
 	SeedRatioLimit       *float64
 	SeedTimeLimitMinutes *int
 }

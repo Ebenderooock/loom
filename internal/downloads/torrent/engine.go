@@ -447,6 +447,25 @@ func (e *Engine) contentPath(t *torrent.Torrent) string {
 	return filepath.Join(e.dataDir, name)
 }
 
+// ContentPathByHash returns the on-disk content path for a tracked torrent by its
+// lowercase infohash. Returns empty string if the hash is unknown or metadata is
+// not yet available. Callers should use this immediately after Add to cache the
+// real folder name before any restart can lose the in-memory state.
+func (e *Engine) ContentPathByHash(hash string) string {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	tt, ok := e.items[strings.ToLower(hash)]
+	if !ok {
+		return ""
+	}
+	return e.contentPath(tt.t)
+}
+
+// SavePath returns the configured download directory (effective save path).
+func (e *Engine) SavePath() string {
+	return e.cfg.DownloadDir
+}
+
 // Pause stops peer traffic for the given torrents by zeroing their
 // max established connections.
 func (e *Engine) Pause(hashes ...string) error {
