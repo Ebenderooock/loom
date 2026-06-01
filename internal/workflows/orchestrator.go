@@ -1120,12 +1120,29 @@ func (o *Orchestrator) reconcileOnBoot(ctx context.Context) {
 			o.dispatchImport(ctx, wf.ID, wf.DownloadClientID, wf.DownloadID, wf.GrabTitle, category)
 			reconciled++
 
+		case wf.State == StateCleaningUp:
+			// Cleanup goroutine was killed on restart — re-run it.
+			o.logger.Info("reconcile: re-running post-import cleanup for interrupted workflow",
+				"workflow_id", wf.ID)
+			o.logEvent(ctx, wf.ID, EventCleanupStarted, "Re-running cleanup after restart", nil)
+			go o.runPostImportCleanup(ctx, wf, nil)
+			reconciled++
+
 		case !exists && wf.State == StateDownloading:
-			// Download disappeared — might have completed while we were down
-			o.logger.Warn("reconcile: download not found, may have completed",
-				"workflow_id", wf.ID, "state", wf.State)
-			o.logEvent(ctx, wf.ID, EventStaleDetected,
-				"Download not found during startup reconciliation", nil)
+			// Download disappeared while we were down — treat it as completed
+			// and attempt to import. The download may have finished and been
+			// removed from the client (e.g. client auto-removed after seeding),
+			// or the import path is cached in metadata from a prior run.
+			o.logger.Info("reconcile: downloading workflow missing from client, treating as completed",
+				"workflow_id", wf.ID)
+			o.logEvent(ctx, wf.ID, EventDownloadComplete,
+				"Download not found at startup — treating as completed", nil)
+			o.handleDownloadComplete(ctx, CmdDownloadComplete{
+				ClientID:   wf.DownloadClientID,
+				DownloadID: wf.DownloadID,
+				Title:      wf.GrabTitle,
+			})
+			reconciled++
 		case !exists && wf.State == StatePostDownload:
 			// Download removed after seeding — ready to import
 			o.logger.Info("reconcile: post_download item no longer in client, importing",
