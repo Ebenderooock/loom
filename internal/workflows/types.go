@@ -9,6 +9,7 @@ const (
 	StateDownloading  = "downloading"
 	StatePostDownload = "post_download"
 	StateImporting    = "importing"
+	StateCleaningUp   = "cleaning_up"
 	StateCompleted    = "completed"
 	StateFailed       = "failed"
 	StateCancelled    = "cancelled"
@@ -39,6 +40,7 @@ var StateTimeouts = map[string]time.Duration{
 	StateDownloading:  24 * time.Hour,
 	StatePostDownload: 7 * 24 * time.Hour, // seeding can take days on private trackers
 	StateImporting:    30 * time.Minute,
+	StateCleaningUp:   15 * time.Minute,
 }
 
 // Valid transitions from each state
@@ -47,7 +49,8 @@ var ValidTransitions = map[string][]string{
 	StateGrabbed:      {StateDownloading, StateFailed, StateCancelled},
 	StateDownloading:  {StatePostDownload, StateFailed, StateCancelled},
 	StatePostDownload: {StateImporting, StateFailed, StateCancelled},
-	StateImporting:    {StateCompleted, StateFailed, StateCancelled},
+	StateImporting:    {StateCleaningUp, StateCompleted, StateFailed, StateCancelled},
+	StateCleaningUp:   {StateCompleted, StateFailed, StateCancelled},
 	StateFailed:       {StateSearching, StateDownloading, StatePostDownload, StateImporting, StateCompleted},
 }
 
@@ -134,6 +137,8 @@ const (
 	EventImportStarted      = "import_started"
 	EventImportSuccess      = "import_success"
 	EventImportFailed       = "import_failed"
+	EventCleanupStarted     = "cleanup_started"
+	EventCleanupCompleted   = "cleanup_completed"
 	EventStaleDetected      = "stale_detected"
 	EventRetried            = "retried"
 	EventFailed             = "failed"

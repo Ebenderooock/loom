@@ -72,6 +72,13 @@ func Router(h *Handler) chi.Router {
 	r.Get("/api/v3/system/status", h.systemStatus)
 	r.Get("/api/v3/tag", h.listTags)
 
+	// Prowlarr calls these indexer endpoints when testing/syncing to a Radarr app.
+	r.Get("/api/v3/indexer/schema", h.listIndexerSchema)
+	r.Get("/api/v3/indexer", h.listIndexers)
+	r.Post("/api/v3/indexer", h.createIndexer)
+	r.Put("/api/v3/indexer/{id}", h.updateIndexer)
+	r.Delete("/api/v3/indexer/{id}", h.deleteIndexer)
+
 	return r
 }
 
@@ -304,8 +311,42 @@ func (h *Handler) listTags(w http.ResponseWriter, _ *http.Request) {
 }
 
 // ---------------------------------------------------------------------------
-// Helpers
+// Indexers (Prowlarr sync target)
 // ---------------------------------------------------------------------------
+
+func (h *Handler) listIndexerSchema(w http.ResponseWriter, _ *http.Request) {
+	h.jsonOK(w, []any{})
+}
+
+func (h *Handler) listIndexers(w http.ResponseWriter, _ *http.Request) {
+	h.jsonOK(w, []any{})
+}
+
+func (h *Handler) createIndexer(w http.ResponseWriter, r *http.Request) {
+	var body map[string]any
+	_ = json.NewDecoder(r.Body).Decode(&body)
+	if body == nil {
+		body = map[string]any{}
+	}
+	if _, ok := body["id"]; !ok {
+		body["id"] = 1
+	}
+	w.WriteHeader(http.StatusCreated)
+	h.jsonOK(w, body)
+}
+
+func (h *Handler) updateIndexer(w http.ResponseWriter, r *http.Request) {
+	var body map[string]any
+	_ = json.NewDecoder(r.Body).Decode(&body)
+	if body == nil {
+		body = map[string]any{}
+	}
+	h.jsonOK(w, body)
+}
+
+func (h *Handler) deleteIndexer(w http.ResponseWriter, _ *http.Request) {
+	w.WriteHeader(http.StatusOK)
+}
 
 func (h *Handler) resolveMovieID(w http.ResponseWriter, r *http.Request) (string, bool) {
 	raw := chi.URLParam(r, "id")

@@ -68,6 +68,13 @@ func Router(h *Handler) chi.Router {
 
 		// System
 		r.Get("/system/status", h.systemStatus)
+
+		// Prowlarr indexer sync endpoints
+		r.Get("/indexer/schema", h.listIndexerSchema)
+		r.Get("/indexer", h.listIndexers)
+		r.Post("/indexer", h.createIndexer)
+		r.Put("/indexer/{id}", h.updateIndexer)
+		r.Delete("/indexer/{id}", h.deleteIndexer)
 	})
 
 	return r
@@ -485,6 +492,43 @@ func (h *Handler) systemStatus(w http.ResponseWriter, _ *http.Request) {
 		StartTime:      now,
 		OsName:         runtime.GOOS,
 	})
+}
+
+// ---------------------------------------------------------------------------
+// Indexers (Prowlarr sync target)
+// ---------------------------------------------------------------------------
+
+func (h *Handler) listIndexerSchema(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, []any{})
+}
+
+func (h *Handler) listIndexers(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, []any{})
+}
+
+func (h *Handler) createIndexer(w http.ResponseWriter, r *http.Request) {
+	var body map[string]any
+	_ = json.NewDecoder(r.Body).Decode(&body)
+	if body == nil {
+		body = map[string]any{}
+	}
+	if _, ok := body["id"]; !ok {
+		body["id"] = 1
+	}
+	writeJSON(w, http.StatusCreated, body)
+}
+
+func (h *Handler) updateIndexer(w http.ResponseWriter, r *http.Request) {
+	var body map[string]any
+	_ = json.NewDecoder(r.Body).Decode(&body)
+	if body == nil {
+		body = map[string]any{}
+	}
+	writeJSON(w, http.StatusOK, body)
+}
+
+func (h *Handler) deleteIndexer(w http.ResponseWriter, _ *http.Request) {
+	w.WriteHeader(http.StatusOK)
 }
 
 // --- internal helpers ---

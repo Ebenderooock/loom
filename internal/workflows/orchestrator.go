@@ -34,6 +34,17 @@ const (
 // It returns the imported file paths or an error.
 type ImportFunc func(ctx context.Context, clientID, downloadID, title, category string) ([]string, error)
 
+// CleanupFunc is called after a successful import to remove the download from
+// the client queue and clean any remaining junk from the source folder.
+// clientID and downloadID identify the torrent/nzb; importedPaths are the
+// library destinations (used to locate the source folder if needed).
+type CleanupFunc func(ctx context.Context, clientID, downloadID string, importedPaths []string) error
+
+// MediaRefreshFunc is called after a successful import to refresh media
+// metadata and file status in the library.
+// mediaType is "movie" or "episode"; mediaIDs are the affected item IDs.
+type MediaRefreshFunc func(ctx context.Context, mediaType string, mediaIDs []string) error
+
 // DownloadStatusProvider allows the orchestrator to query current download state
 // for startup reconciliation without importing the downloads package.
 type DownloadStatusProvider interface {
@@ -48,6 +59,8 @@ type OrchestratorOpts struct {
 	Engine         *Engine
 	Logger         *slog.Logger
 	ImportFn       ImportFunc
+	CleanupFn      CleanupFunc      // optional; if nil, cleanup phase is skipped
+	MediaRefreshFn MediaRefreshFunc // optional; if nil, media refresh is skipped
 	DownloadStatus DownloadStatusProvider // optional, for startup reconciliation
 }
 
@@ -55,11 +68,13 @@ type OrchestratorOpts struct {
 // It consumes typed commands from a buffered channel and serializes all
 // mutations through a single goroutine — eliminating scattered Mark* calls.
 type Orchestrator struct {
-	store    *Store
-	engine   *Engine
-	logger   *slog.Logger
-	importFn ImportFunc
-	dlStatus DownloadStatusProvider
+	store          *Store
+	engine         *Engine
+	logger         *slog.Logger
+	importFn       ImportFunc
+	cleanupFn      CleanupFunc
+	mediaRefreshFn MediaRefreshFunc
+	dlStatus       DownloadStatusProvider
 
 	commands chan Command
 
@@ -78,20 +93,28 @@ func (o *Orchestrator) Store() *Store { return o.store }
 // SetImportFn sets the import function after construction (for wiring order flexibility).
 func (o *Orchestrator) SetImportFn(fn ImportFunc) { o.importFn = fn }
 
+// SetCleanupFn sets the post-import cleanup function.
+func (o *Orchestrator) SetCleanupFn(fn CleanupFunc) { o.cleanupFn = fn }
+
+// SetMediaRefreshFn sets the post-import media refresh function.
+func (o *Orchestrator) SetMediaRefreshFn(fn MediaRefreshFunc) { o.mediaRefreshFn = fn }
+
 // NewOrchestrator creates a workflow orchestrator.
 func NewOrchestrator(opts OrchestratorOpts) *Orchestrator {
 	if opts.Logger == nil {
 		opts.Logger = slog.Default()
 	}
 	return &Orchestrator{
-		store:       opts.Store,
-		engine:      opts.Engine,
-		logger:      opts.Logger.With("component", "workflow-orchestrator"),
-		importFn:    opts.ImportFn,
-		dlStatus:    opts.DownloadStatus,
-		commands:    make(chan Command, commandBufferSize),
-		importSem:   make(chan struct{}, maxConcurrentImports),
-		progressBuf: make(map[string]*CmdDownloadProgress),
+		store:          opts.Store,
+		engine:         opts.Engine,
+		logger:         opts.Logger.With("component", "workflow-orchestrator"),
+		importFn:       opts.ImportFn,
+		cleanupFn:      opts.CleanupFn,
+		mediaRefreshFn: opts.MediaRefreshFn,
+		dlStatus:       opts.DownloadStatus,
+		commands:       make(chan Command, commandBufferSize),
+		importSem:      make(chan struct{}, maxConcurrentImports),
+		progressBuf:    make(map[string]*CmdDownloadProgress),
 	}
 }
 
@@ -366,9 +389,31 @@ func (o *Orchestrator) handleImportResult(ctx context.Context, cmd CmdImportResu
 		meta := map[string]any{"imported_paths": cmd.ImportedPaths}
 		o.logEvent(ctx, cmd.WorkflowID, EventImportSuccess, msg, meta)
 
-		if err := o.engine.markCompleted(ctx, cmd.WorkflowID, msg); err != nil {
-			o.logger.Error("failed to mark completed", "workflow_id", cmd.WorkflowID, "error", err)
+		// Fetch workflow to get download client/ID and media info for cleanup and refresh.
+		wf, err := o.store.Get(ctx, cmd.WorkflowID)
+		if err != nil {
+			o.logger.Error("failed to fetch workflow for post-import", "workflow_id", cmd.WorkflowID, "error", err)
+			// Best-effort: still mark completed even if we can't clean up.
+			if err := o.engine.markCompleted(ctx, cmd.WorkflowID, msg); err != nil {
+				o.logger.Error("failed to mark completed", "workflow_id", cmd.WorkflowID, "error", err)
+			}
+			return
 		}
+
+		// Transition to cleaning_up state so the user can see progress.
+		if err := o.engine.markCleaningUp(ctx, cmd.WorkflowID, "Running post-import cleanup"); err != nil {
+			o.logger.Warn("failed to transition to cleaning_up, completing directly",
+				"workflow_id", cmd.WorkflowID, "error", err)
+			if err := o.engine.markCompleted(ctx, cmd.WorkflowID, msg); err != nil {
+				o.logger.Error("failed to mark completed", "workflow_id", cmd.WorkflowID, "error", err)
+			}
+			return
+		}
+		o.logEvent(ctx, cmd.WorkflowID, EventCleanupStarted, "Post-import cleanup started", nil)
+
+		// Run cleanup and media refresh in a background goroutine so the
+		// orchestrator command loop isn't blocked.
+		go o.runPostImportCleanup(ctx, wf, cmd.ImportedPaths)
 		return
 	}
 
@@ -450,12 +495,77 @@ func (o *Orchestrator) handleImportResult(ctx context.Context, cmd CmdImportResu
 	}
 }
 
+// runPostImportCleanup handles the cleanup_up phase after a successful import:
+//  1. Calls cleanupFn (if set) to remove the download from the client and
+//     scrub any remaining junk from the source folder.
+//  2. Calls mediaRefreshFn (if set) to refresh movie/series metadata and
+//     file status in the library.
+//  3. Marks the workflow as completed.
+//
+// This runs in a background goroutine so the orchestrator command loop is
+// never blocked.
+func (o *Orchestrator) runPostImportCleanup(ctx context.Context, wf *Workflow, importedPaths []string) {
+	wfID := wf.ID
+
+	// Step 1: remove download from client + clean folder.
+	if o.cleanupFn != nil && wf.DownloadClientID != "" && wf.DownloadID != "" {
+		if err := o.cleanupFn(ctx, wf.DownloadClientID, wf.DownloadID, importedPaths); err != nil {
+			// Non-fatal — log and continue to completion.
+			o.logger.Warn("post-import cleanup failed (non-fatal)",
+				"workflow_id", wfID,
+				"client_id", wf.DownloadClientID,
+				"download_id", wf.DownloadID,
+				"error", err,
+			)
+		} else {
+			o.logger.Info("post-import cleanup succeeded",
+				"workflow_id", wfID,
+				"client_id", wf.DownloadClientID,
+				"download_id", wf.DownloadID,
+			)
+		}
+	}
+
+	// Step 2: refresh media status.
+	if o.mediaRefreshFn != nil && len(wf.Items) > 0 {
+		var mediaIDs []string
+		mediaType := wf.MediaType
+		for _, item := range wf.Items {
+			mediaIDs = append(mediaIDs, item.MediaID)
+		}
+		if err := o.mediaRefreshFn(ctx, mediaType, mediaIDs); err != nil {
+			o.logger.Warn("post-import media refresh failed (non-fatal)",
+				"workflow_id", wfID,
+				"media_type", mediaType,
+				"media_ids", mediaIDs,
+				"error", err,
+			)
+		} else {
+			o.logger.Info("post-import media refresh succeeded",
+				"workflow_id", wfID,
+				"media_type", mediaType,
+				"media_ids", mediaIDs,
+			)
+		}
+	}
+
+	o.logEvent(ctx, wfID, EventCleanupCompleted, "Post-import cleanup completed", nil)
+
+	if err := o.engine.markCompleted(ctx, wfID, "Import and cleanup completed"); err != nil {
+		o.logger.Error("failed to mark completed after cleanup", "workflow_id", wfID, "error", err)
+	}
+}
+
 // classifyImportError determines the retry strategy based on the error message.
 func (o *Orchestrator) classifyImportError(errMsg string) importRetryStrategy {
 	lower := strings.ToLower(errMsg)
 
 	// Non-retryable errors — fail immediately.
-	for _, s := range []string{"permission denied", "access denied", "unauthorized"} {
+	for _, s := range []string{
+		"permission denied", "access denied", "unauthorized",
+		"already been imported", "already imported",
+		"import rejected",
+	} {
 		if strings.Contains(lower, s) {
 			return failPermanent
 		}

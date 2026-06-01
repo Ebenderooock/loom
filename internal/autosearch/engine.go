@@ -1270,7 +1270,16 @@ func buildDownloadRequest(res *indexers.Result) downloads.AddRequest {
 		req.Magnet = fmt.Sprintf("magnet:?xt=urn:btih:%s", res.Infohash)
 	}
 	if res.Link != "" {
-		req.TorrentURL = res.Link
+		// Some indexers (e.g. EZTV) store the magnet URI in the Link field
+		// rather than MagnetURI. Detect this and route it correctly so we
+		// don't try to HTTP-fetch a magnet: URI.
+		if strings.HasPrefix(strings.ToLower(res.Link), "magnet:") {
+			if req.Magnet == "" {
+				req.Magnet = res.Link
+			}
+		} else {
+			req.TorrentURL = res.Link
+		}
 	}
 	req.Normalize()
 	return req

@@ -55,10 +55,17 @@ type SOCKS5Config struct {
 // from kernel/config indexers.proxies.flaresolverr_default_timeout).
 // All requests are stateless — no FlareSolverr sessions are used,
 // matching Prowlarr's approach.
+//
+// MaxConcurrency caps how many simultaneous FlareSolverr calls Loom
+// issues at once. Set this to (replicas × concurrency_per_pod); the
+// Kubernetes Service load-balances across pods so each pod gets at
+// most concurrency_per_pod parallel requests. Zero falls back to the
+// package default (2).
 type FlareSolverrConfig struct {
-	URL           string `json:"url"`
-	MaxTimeoutSec int    `json:"max_timeout_sec,omitempty"`
-	SessionMode   string `json:"session_mode,omitempty"` // "shared" or "per-request"; currently informational
+	URL            string `json:"url"`
+	MaxTimeoutSec  int    `json:"max_timeout_sec,omitempty"`
+	SessionMode    string `json:"session_mode,omitempty"` // "shared" or "per-request"; currently informational
+	MaxConcurrency int    `json:"max_concurrency,omitempty"`
 }
 
 // ParseHTTPConfig validates and decodes an http/https config blob.

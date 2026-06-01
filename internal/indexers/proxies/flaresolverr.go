@@ -22,14 +22,14 @@ import (
 // The client is fully stateless per request — no FlareSolverr sessions
 // are created or reused, matching Prowlarr's approach. Only
 // "request.get" is supported (search URLs are GETs).
+//
+// Concurrency is controlled per-RoundTripper (per proxy row) via a
+// semaphore sized from FlareSolverrConfig.MaxConcurrency. This means
+// the limit automatically tracks however many replicas are running:
+// set MaxConcurrency = replicas × concurrency_per_pod.
 type FlareSolverrClient struct {
 	httpc          *http.Client
 	defaultTimeout time.Duration
-
-	// sema limits concurrent FlareSolverr requests. FlareSolverr processes
-	// requests sequentially with a single browser, so parallel requests
-	// just queue up and timeout. The semaphore prevents request pileup.
-	sema chan struct{}
 
 	// Per-domain UA cache: after a successful FlareSolverr solve, the
 	// returned UserAgent is cached so subsequent requests to the same
@@ -52,7 +52,6 @@ func NewFlareSolverrClient(httpc *http.Client, defaultTimeout time.Duration) *Fl
 	return &FlareSolverrClient{
 		httpc:          httpc,
 		defaultTimeout: defaultTimeout,
-		sema:           make(chan struct{}, 2), // limit to 2 concurrent FlareSolverr requests
 		uaCache:        make(map[string]cachedUA),
 	}
 }
@@ -92,11 +91,22 @@ func (c *FlareSolverrClient) cacheUserAgent(host, ua string) {
 // RoundTripperFor returns an http.RoundTripper that follows Prowlarr's
 // PreRequest/PostResponse pattern: requests go direct first, FlareSolverr
 // is called only when Cloudflare is detected, and solutions are cached.
+//
+// The returned RoundTripper holds a semaphore sized to
+// cfg.MaxConcurrency (default 2) so parallel searches don't overload
+// the FlareSolverr backend. With multiple replicas, set
+// MaxConcurrency = replicas × concurrency_per_pod so the load-balanced
+// fleet is fully utilised without overwhelming any single pod.
 func (c *FlareSolverrClient) RoundTripperFor(_ string, cfg FlareSolverrConfig) http.RoundTripper {
+	concurrency := cfg.MaxConcurrency
+	if concurrency <= 0 {
+		concurrency = 2
+	}
 	return &flareRoundTripper{
 		c:           c,
 		cfg:         cfg,
 		base:        http.DefaultTransport,
+		sema:        make(chan struct{}, concurrency),
 		cookieCache: make(map[string][]flareCookie),
 	}
 }
@@ -147,15 +157,6 @@ type flareCookie struct {
 }
 
 func (c *FlareSolverrClient) do(ctx context.Context, cfg FlareSolverrConfig, body flareReq) (flareEnvelope, error) {
-	// Acquire semaphore to limit concurrency — FlareSolverr uses a single
-	// browser and queues requests internally, causing timeouts under load.
-	select {
-	case c.sema <- struct{}{}:
-		defer func() { <-c.sema }()
-	case <-ctx.Done():
-		return flareEnvelope{}, fmt.Errorf("flaresolverr: context expired waiting for semaphore: %w", ctx.Err())
-	}
-
 	if body.MaxTimeout == 0 {
 		ms := c.defaultTimeout.Milliseconds()
 		if cfg.MaxTimeoutSec > 0 {
@@ -205,6 +206,11 @@ type flareRoundTripper struct {
 	c    *FlareSolverrClient
 	cfg  FlareSolverrConfig
 	base http.RoundTripper // direct transport (no proxy)
+
+	// sema limits concurrent FlareSolverr solve calls for this proxy row.
+	// Sized from FlareSolverrConfig.MaxConcurrency (default 2) so it
+	// tracks the number of live FlareSolverr replicas.
+	sema chan struct{}
 
 	// Per-domain cookie cache (cf_clearance etc.).
 	cookieMu    sync.RWMutex
@@ -271,7 +277,14 @@ func (rt *flareRoundTripper) RoundTrip(req *http.Request) (*http.Response, error
 	slog.Info("flaresolverr: cloudflare detected, solving via FlareSolverr",
 		"host", host, "status", resp.StatusCode)
 
-	// Step 2: call FlareSolverr to solve the challenge.
+	// Step 2: acquire semaphore then call FlareSolverr to solve.
+	select {
+	case rt.sema <- struct{}{}:
+		defer func() { <-rt.sema }()
+	case <-req.Context().Done():
+		return nil, fmt.Errorf("flaresolverr: context expired waiting for semaphore: %w", req.Context().Err())
+	}
+
 	fsBody := flareReq{Cmd: "request.get", URL: req.URL.String()}
 	if cookies := req.Cookies(); len(cookies) > 0 {
 		fsBody.Cookies = make([]flareCookie, len(cookies))

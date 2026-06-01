@@ -832,13 +832,13 @@ func (s *Server) newMux() http.Handler {
 				r.Use(requireAPIKey(s.apiKeyStore))
 			}
 			if s.compatRadarr != nil {
-				r.Mount("/compat/radarr/api/v3", radarrv3.Router(s.compatRadarr))
+				r.Mount("/compat/radarr", radarrv3.Router(s.compatRadarr))
 			}
 			if s.compatSonarr != nil {
-				r.Mount("/compat/sonarr/api/v3", sonarrv3.Router(s.compatSonarr))
+				r.Mount("/compat/sonarr", sonarrv3.Router(s.compatSonarr))
 			}
 			if s.compatProwlarr != nil {
-				r.Mount("/compat/prowlarr/api/v1", prowlarrv1.Router(s.compatProwlarr))
+				r.Mount("/compat/prowlarr", prowlarrv1.Router(s.compatProwlarr))
 			}
 		})
 	}

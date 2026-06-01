@@ -46,6 +46,17 @@ func Router(h *Handler) chi.Router {
 		r.Get("/indexerstats", h.indexerStats)
 		r.Get("/tag", h.listTags)
 		r.Get("/health", h.health)
+
+		// Applications endpoints — Prowlarr exposes these so that
+		// downstream apps (Radarr, Sonarr) can register themselves and
+		// test connectivity. Loom acknowledges all operations successfully.
+		r.Get("/applications", h.listApplications)
+		r.Post("/applications", h.createApplication)
+		r.Get("/applications/{id}", h.getApplication)
+		r.Put("/applications/{id}", h.updateApplication)
+		r.Delete("/applications/{id}", h.deleteApplication)
+		r.Post("/applications/test", h.testApplication)
+		r.Post("/applications/{id}/test", h.testApplication)
 	})
 	r.Get("/api/v1/system/status", h.systemStatus)
 
@@ -254,6 +265,52 @@ func (h *Handler) listTags(w http.ResponseWriter, _ *http.Request) {
 
 func (h *Handler) health(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, []prowlarrHealth{})
+}
+
+// --- applications endpoints ---
+
+// testApplication handles POST /api/v1/applications/test and
+// POST /api/v1/applications/{id}/test.
+// Prowlarr uses this to verify connectivity to downstream apps
+// (Radarr, Sonarr). An empty array means "no validation errors" = success.
+func (h *Handler) testApplication(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, []any{})
+}
+
+func (h *Handler) listApplications(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, []prowlarrApplication{})
+}
+
+func (h *Handler) createApplication(w http.ResponseWriter, r *http.Request) {
+	var app prowlarrApplication
+	if err := json.NewDecoder(r.Body).Decode(&app); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid body")
+		return
+	}
+	if app.ID == 0 {
+		app.ID = 1
+	}
+	writeJSON(w, http.StatusCreated, app)
+}
+
+func (h *Handler) getApplication(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, prowlarrApplication{
+		ID:   1,
+		Name: "Loom",
+	})
+}
+
+func (h *Handler) updateApplication(w http.ResponseWriter, r *http.Request) {
+	var app prowlarrApplication
+	if err := json.NewDecoder(r.Body).Decode(&app); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid body")
+		return
+	}
+	writeJSON(w, http.StatusAccepted, app)
+}
+
+func (h *Handler) deleteApplication(w http.ResponseWriter, _ *http.Request) {
+	w.WriteHeader(http.StatusOK)
 }
 
 // allowedIndexerIDs returns a set of indexer IDs allowed by the sync

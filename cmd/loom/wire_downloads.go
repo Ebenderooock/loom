@@ -112,6 +112,53 @@ func wireDownloads(
 	srv.SetImportPipeline(importPipeline)
 	orchestrator.SetImportFn(importPipeline.RunImport)
 
+	// Wire post-import cleanup: remove download from client queue + clean source folder.
+	folderCleaner := &imports.FolderCleaner{}
+	orchestrator.SetCleanupFn(func(ctx context.Context, clientID, downloadID string, _ []string) error {
+		c, ok := downloadSvc.Registry().Get(clientID)
+		if !ok {
+			return fmt.Errorf("download client %q not found in registry", clientID)
+		}
+		// Get content path before removing so we can clean the folder.
+		items, err := c.Status(ctx, downloadID)
+		var contentPath string
+		if err == nil && len(items) > 0 {
+			contentPath = items[0].ContentPath
+			if contentPath == "" {
+				contentPath = items[0].SavePath
+			}
+		}
+		// Remove from client queue (keep files; they've been moved/hardlinked to library).
+		if err := c.Remove(ctx, []string{downloadID}, false); err != nil {
+			return fmt.Errorf("remove download from client: %w", err)
+		}
+		// Clean up any leftover junk in the source folder.
+		if contentPath != "" {
+			if _, err := folderCleaner.CleanFolder(contentPath); err != nil {
+				// Non-fatal: log but don't fail the cleanup step.
+				logger.Warn("folder cleanup failed", "path", contentPath, "error", err)
+			}
+		}
+		return nil
+	})
+
+	// Wire post-import media refresh.
+	orchestrator.SetMediaRefreshFn(func(ctx context.Context, mediaType string, mediaIDs []string) error {
+		for _, id := range mediaIDs {
+			switch mediaType {
+			case "movie":
+				if err := moviesSvc.RefreshMovie(ctx, id); err != nil {
+					return fmt.Errorf("refresh movie %s: %w", id, err)
+				}
+			case "episode":
+				if err := media.seriesSvc.RefreshSeries(ctx, id); err != nil {
+					return fmt.Errorf("refresh series %s: %w", id, err)
+				}
+			}
+		}
+		return nil
+	})
+
 	// Download monitor — polls clients for completion
 	downloadHistoryStore := downloads.NewHistoryStore(db.DB())
 	stallHandler := downloads.NewStallHandler(downloads.StallHandlerOptions{

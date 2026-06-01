@@ -91,3 +91,19 @@ type prowlarrIndexerStat struct {
 }
 
 var startTime = time.Now()
+
+// prowlarrApplication is the Prowlarr v1 JSON shape for an application
+// (downstream app like Radarr or Sonarr).
+type prowlarrApplication struct {
+	ID             int             `json:"id"`
+	Name           string          `json:"name"`
+	SyncLevel      string          `json:"syncLevel,omitempty"`
+	BaseURL        string          `json:"baseUrl,omitempty"`
+	ProwlarrURL    string          `json:"prowlarrUrl,omitempty"`
+	APIKey         string          `json:"apiKey,omitempty"`
+	AppProfileID   int             `json:"appProfileId,omitempty"`
+	Tags           []int           `json:"tags"`
+	Fields         []prowlarrField `json:"fields,omitempty"`
+	Implementation string          `json:"implementation,omitempty"`
+	ConfigContract string          `json:"configContract,omitempty"`
+}

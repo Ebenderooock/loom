@@ -61,10 +61,15 @@ func (s *Service) FindMovie(ctx context.Context, params SearchMovieParams) (*Mov
 		}
 	}
 
-	// Try cache by search query (search results, shorter TTL)
-	searchKey := s.movieSearchKey(params.Title, params.Year)
-	if m, ok := s.cache.Get("search:movie:" + searchKey); ok {
-		return m.(*MovieMetadata), nil
+	// Try cache by search query only when we have a title (external-ID-only
+	// lookups must not share the degenerate md5(":0") cache key).
+	var searchKey string
+	hasExternalID := params.TMDBID != "" || params.IMDBID != "" || params.TVDBID != ""
+	if params.Title != "" && !hasExternalID {
+		searchKey = s.movieSearchKey(params.Title, params.Year)
+		if m, ok := s.cache.Get("search:movie:" + searchKey); ok {
+			return m.(*MovieMetadata), nil
+		}
 	}
 
 	// Try database by external ID
@@ -130,8 +135,12 @@ func (s *Service) FindMovie(ctx context.Context, params SearchMovieParams) (*Mov
 			if movie.TVDBID != nil {
 				s.cache.Set("movie:tvdb:"+*movie.TVDBID, movie, TTLFullDetails)
 			}
-			// Cache search result
-			s.cache.Set("search:movie:"+searchKey, movie, TTLSearchResult)
+			// Cache search result only when a title was the primary lookup key
+			// (prevents the degenerate md5(":0") key from cross-contaminating
+			// unrelated TMDB-ID-only lookups).
+			if searchKey != "" {
+				s.cache.Set("search:movie:"+searchKey, movie, TTLSearchResult)
+			}
 			// Write to database
 			if err := s.putMovieWithID(ctx, movie); err != nil {
 				// Log but don't fail; cache is sufficient fallback
@@ -163,10 +172,13 @@ func (s *Service) FindSeries(ctx context.Context, params SearchSeriesParams) (*S
 		}
 	}
 
-	// Try cache by search query
-	searchKey := s.seriesSearchKey(params.Title)
-	if ser, ok := s.cache.Get("search:series:" + searchKey); ok {
-		return ser.(*SeriesMetadata), nil
+	// Try cache by search query only when a title was provided.
+	hasSeriesExternalID := params.TMDBID != "" || params.IMDBID != "" || params.TVDBID != ""
+	if params.Title != "" && !hasSeriesExternalID {
+		searchKey := s.seriesSearchKey(params.Title)
+		if ser, ok := s.cache.Get("search:series:" + searchKey); ok {
+			return ser.(*SeriesMetadata), nil
+		}
 	}
 
 	// Try database by external ID

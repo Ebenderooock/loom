@@ -174,8 +174,18 @@ func (e *Engine) markImporting(ctx context.Context, workflowID string) error {
 // markCompleted transitions to completed (import successful).
 func (e *Engine) markCompleted(ctx context.Context, workflowID, message string) error {
 	ctx = WithWorkflowID(ctx, workflowID)
-	// Try from importing first (normal path)
-	ok, err := e.store.Transition(ctx, workflowID, StateImporting, StateCompleted, message)
+	// Try from cleaning_up first (normal path after cleanup phase)
+	ok, err := e.store.Transition(ctx, workflowID, StateCleaningUp, StateCompleted, message)
+	if err != nil {
+		return err
+	}
+	if ok {
+		e.logger.Info("workflow completed", "id", workflowID)
+		return nil
+	}
+
+	// Try from importing (skipped cleanup path)
+	ok, err = e.store.Transition(ctx, workflowID, StateImporting, StateCompleted, message)
 	if err != nil {
 		return err
 	}
@@ -194,7 +204,21 @@ func (e *Engine) markCompleted(ctx context.Context, workflowID, message string) 
 		return nil
 	}
 
-	return fmt.Errorf("workflow %s not in importing or failed state", workflowID)
+	return fmt.Errorf("workflow %s not in cleaning_up, importing, or failed state", workflowID)
+}
+
+// markCleaningUp transitions from importing to cleaning_up.
+func (e *Engine) markCleaningUp(ctx context.Context, workflowID, message string) error {
+	ctx = WithWorkflowID(ctx, workflowID)
+	ok, err := e.store.Transition(ctx, workflowID, StateImporting, StateCleaningUp, message)
+	if err != nil {
+		return err
+	}
+	if ok {
+		e.logger.Info("workflow cleaning up", "id", workflowID)
+		return nil
+	}
+	return fmt.Errorf("workflow %s not in importing state for cleanup transition", workflowID)
 }
 
 // markFailed records failure and either retries or marks as permanently failed.
