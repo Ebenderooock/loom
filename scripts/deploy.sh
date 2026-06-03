@@ -15,6 +15,7 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 VALUES_FILE="$REPO_ROOT/deploy/helm/values-homelab.yaml"
+LOCAL_VALUES_FILE="$REPO_ROOT/deploy/helm/values-homelab.local.yaml"
 CHART_DIR="$REPO_ROOT/deploy/helm/loom"
 DOCKERFILE="$REPO_ROOT/deploy/docker/Dockerfile"
 IMAGE="ghcr.io/ebenderooock/loom"
@@ -84,8 +85,15 @@ git -C "$REPO_ROOT" push origin "$BRANCH"
 # ── 6. Deploy to Kubernetes ──────────────────────────────────────────
 
 info "Deploying ${RELEASE} to namespace ${NAMESPACE} ..."
+# Layer an optional gitignored local override (e.g. real ingress host) on top.
+LOCAL_VALUES_ARGS=()
+if [[ -f "$LOCAL_VALUES_FILE" ]]; then
+  info "Applying local overrides from $(basename "$LOCAL_VALUES_FILE")"
+  LOCAL_VALUES_ARGS=(-f "$LOCAL_VALUES_FILE")
+fi
 helm upgrade --install "$RELEASE" "$CHART_DIR" \
   -f "$VALUES_FILE" \
+  "${LOCAL_VALUES_ARGS[@]}" \
   -n "$NAMESPACE" \
   --create-namespace \
   --wait \

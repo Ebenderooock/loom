@@ -62,3 +62,6 @@ website/dist/
 /22/
 /radarr/
 /references/
+
+# Local-only helm overrides (real ingress host, etc.)
+deploy/helm/values-homelab.local.yaml
