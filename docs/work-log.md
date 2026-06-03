@@ -34,6 +34,7 @@ _(none — promote new asks into the Backlog below)_
 | LW-005 | improvement | P2 | System    | Configurable Log Level, retention period, etc.              | approved    |
 | LW-006 | improvement | P2 | Discover  | Discover filters (list/genre/year) + sorting                | approved    |
 | LW-007 | bug         | P1 | Imports   | Post-download import reports failure though file was moved  | done        |
+| LW-008 | improvement | P2 | Downloads | Downloads Cleanup Tool / Process                            | approved   |
 
 ### Details
 
@@ -96,6 +97,10 @@ post-copy `os.Remove(src)` — once the copy succeeds and the source is gone,
 the move is complete, so it returns success instead of a false failure. Other
 remove errors (e.g. permissions) still propagate. Covered by
 `file_ops_test.go`.
+
+
+#### LW-008 — Downloads Cleanup Tool / Process · `improvement` · P2 · Downloads
+Downloads Cleanup tool reviews all the contents of the downloads folder against what is downloading, what is missing from the libraries and what is importing, if there are any orphaned items, they go onto a review list for the user to review, otherwise they get automatically deleted after a configurable amount of days (default 7).
 
 ---
 
