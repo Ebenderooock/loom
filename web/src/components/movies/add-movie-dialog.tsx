@@ -70,6 +70,16 @@ export function AddMovieDialog({
     }
   }, [open, qualityProfiles, libraries, mediaPrefs]);
 
+  // Guarantee a valid quality profile is always selected once profiles load,
+  // independent of dialog open state. Preserves any still-valid selection.
+  useEffect(() => {
+    if (qualityProfiles.length === 0) return;
+    setSelectedProfile((prev) => {
+      if (prev && qualityProfiles.some((p) => p.id === prev)) return prev;
+      return libraries[0]?.quality_profile_id || mediaPrefs?.default_quality_profile_id || qualityProfiles[0].id;
+    });
+  }, [qualityProfiles, libraries, mediaPrefs]);
+
   const handleLibraryChange = useCallback((libId: string) => {
     setSelectedLibrary(libId);
     const lib = libraries.find(l => l.id === libId);
