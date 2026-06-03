@@ -1,0 +1,20 @@
+{
+  "mcpServers": {
+    "shadcn": {
+      "command": "npx",
+      "args": ["shadcn@latest", "mcp"]
+    },
+    "playwright": {
+      "command": "node",
+      "args": ["./mcp-playwright/server.js"]
+    },
+    "loom": {
+      "command": "node",
+      "args": ["./mcp-search-debug/server.js"],
+      "env": {
+        "LOOM_URL": "http://localhost:8080",
+        "LOOM_API_KEY": "loom_your_api_key_here"
+      }
+    }
+  }
+}
