@@ -193,3 +193,25 @@ Legend: ✅ done · 🚧 in progress · ⏳ planned
 - ⏳ Bandwidth & transcoding stats
 - ⏳ Dashboard widgets (graphs, top content, active streams)
 - ⏳ Notification triggers on activity (new user, stream started, etc.)
+
+## ⏳ Phase 16 — Music support (Lidarr-equivalent)
+
+- ⏳ Artist/album/track data model & API
+- ⏳ MusicBrainz metadata integration
+- ⏳ Audio quality profiles (formats, bitrate, lossless)
+- ⏳ Monitored artists & albums, missing detection
+- ⏳ Release search, scoring & grab (reuses indexer/download pipeline)
+- ⏳ Import, rename & library scanning (artist/album folders)
+- ⏳ Music library UI (artist grid, album detail, track table)
+- ⏳ Calendar & RSS/list integration for new releases
+
+## ⏳ Phase 17 — Books support (Readarr-equivalent)
+
+- ⏳ Author/book/edition data model & API
+- ⏳ Metadata integration (Goodreads / OpenLibrary)
+- ⏳ eBook & audiobook quality profiles (epub/mobi/pdf, m4b/mp3)
+- ⏳ Monitored authors & books, missing detection
+- ⏳ Release search, scoring & grab (reuses indexer/download pipeline)
+- ⏳ Import, rename & library scanning (author/book folders)
+- ⏳ Books library UI (author grid, book detail, edition selection)
+- ⏳ Calendar & RSS/list integration for new releases
