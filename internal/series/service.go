@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -39,18 +40,24 @@ type Service interface {
 }
 
 type service struct {
-	repo       Repository
-	tmdbAPIKey string
-	httpClient *http.Client
+	repo            Repository
+	tmdbAPIKey      string
+	httpClient      *http.Client
+	episodeProvider EpisodeProvider
 }
 
-// NewService creates a new series Service.
-func NewService(repo Repository, tmdbAPIKey string) Service {
-	return &service{
+// NewService creates a new series Service. Optional behaviour (such as an
+// external episode provider for anime segmentation) is supplied via options.
+func NewService(repo Repository, tmdbAPIKey string, opts ...Option) Service {
+	s := &service{
 		repo:       repo,
 		tmdbAPIKey: tmdbAPIKey,
 		httpClient: &http.Client{Timeout: 15 * time.Second},
 	}
+	for _, o := range opts {
+		o(s)
+	}
+	return s
 }
 
 func (s *service) ListSeries(ctx context.Context) ([]*Series, error) {
@@ -207,36 +214,23 @@ func (s *service) AddSeries(ctx context.Context, req *AddSeriesRequest) (*Series
 		return nil, fmt.Errorf("series: create: %w", err)
 	}
 
-	// Create seasons and episodes from TMDB data
-	if seasons, ok := details["seasons"].([]interface{}); ok {
-		for _, sRaw := range seasons {
-			sm, ok := sRaw.(map[string]interface{})
-			if !ok {
-				continue
+	// Create seasons and episodes. For anime, prefer the external episode
+	// provider (TVDB aired order) so multi-cour seasons match release numbering.
+	stored := false
+	if s.useTVDBEpisodes(sr) {
+		ok, err := s.populateProviderEpisodes(ctx, sr, nowt)
+		if err != nil {
+			slog.Default().Warn("series: anime episode fetch failed; falling back to TMDB", "series", sr.ID, "error", err)
+		} else if ok {
+			sr.MetadataProvider = "tvdb"
+			stored = true
+			if err := s.repo.UpdateSeries(ctx, sr); err != nil {
+				slog.Default().Warn("series: failed to persist provider metadata", "series", sr.ID, "error", err)
 			}
-
-			seasonNum := getInt(sm, "season_number")
-			seasonID := fmt.Sprintf("%s-s%02d", slug, seasonNum)
-
-			season := &Season{
-				ID:           seasonID,
-				SeriesID:     sr.ID,
-				SeasonNumber: seasonNum,
-				Title:        getString(sm, "name"),
-				Overview:     getString(sm, "overview"),
-				PosterPath:   getString(sm, "poster_path"),
-				Monitored:    true,
-				EpisodeCount: getInt(sm, "episode_count"),
-				CreatedAt:    nowt,
-				UpdatedAt:    nowt,
-			}
-			if err := s.repo.CreateSeason(ctx, season); err != nil {
-				continue
-			}
-
-			// Fetch individual season episodes from TMDB
-			s.fetchAndStoreEpisodes(ctx, req.TMDBID, seasonNum, sr.ID, seasonID, nowt)
 		}
+	}
+	if !stored {
+		s.createSeasonsFromTMDB(ctx, details, sr.ID, req.TMDBID, nowt)
 	}
 
 	// Save credits
@@ -366,11 +360,33 @@ func (s *service) RefreshSeries(ctx context.Context, id string) error {
 		}
 	}
 
+	// For anime, fetch the provider (TVDB) aired-order episodes BEFORE deleting
+	// existing data, so a provider failure never wipes the current structure.
+	var animeSeasons []*Season
+	var animeEpisodes []*Episode
+	animeOK := false
+	if s.useTVDBEpisodes(sr) {
+		if tvdbID := s.resolveTVDBID(ctx, sr); tvdbID != 0 {
+			eps, err := s.episodeProvider.SeriesEpisodes(ctx, tvdbID)
+			if err != nil {
+				slog.Default().Warn("series: anime refresh fetch failed; falling back to TMDB", "series", sr.ID, "error", err)
+			} else {
+				animeSeasons, animeEpisodes = buildSeasonsAndEpisodes(sr.ID, eps, nowt)
+				animeOK = len(animeEpisodes) > 0
+			}
+		}
+	}
+	if animeOK {
+		sr.MetadataProvider = "tvdb"
+	} else if sr.SeriesType != TypeAnime {
+		sr.MetadataProvider = "tmdb"
+	}
+
 	if err := s.repo.UpdateSeries(ctx, sr); err != nil {
 		return fmt.Errorf("series: update: %w", err)
 	}
 
-	// Delete existing children, then re-create from fresh TMDB data
+	// Delete existing children, then re-create from fresh data
 	if err := s.repo.DeleteEpisodesBySeriesID(ctx, sr.ID); err != nil {
 		return fmt.Errorf("series: delete episodes: %w", err)
 	}
@@ -381,35 +397,15 @@ func (s *service) RefreshSeries(ctx context.Context, id string) error {
 		return fmt.Errorf("series: delete credits: %w", err)
 	}
 
-	// Re-create seasons and episodes
-	if seasons, ok := details["seasons"].([]interface{}); ok {
-		for _, sRaw := range seasons {
-			sm, ok := sRaw.(map[string]interface{})
-			if !ok {
-				continue
-			}
-
-			seasonNum := getInt(sm, "season_number")
-			seasonID := fmt.Sprintf("%s-s%02d", sr.ID, seasonNum)
-
-			season := &Season{
-				ID:           seasonID,
-				SeriesID:     sr.ID,
-				SeasonNumber: seasonNum,
-				Title:        getString(sm, "name"),
-				Overview:     getString(sm, "overview"),
-				PosterPath:   getString(sm, "poster_path"),
-				Monitored:    true,
-				EpisodeCount: getInt(sm, "episode_count"),
-				CreatedAt:    nowt,
-				UpdatedAt:    nowt,
-			}
-			if err := s.repo.CreateSeason(ctx, season); err != nil {
-				continue
-			}
-
-			s.fetchAndStoreEpisodes(ctx, *sr.TMDBID, seasonNum, sr.ID, seasonID, nowt)
+	if animeOK {
+		for _, se := range animeSeasons {
+			_ = s.repo.CreateSeason(ctx, se)
 		}
+		for _, e := range animeEpisodes {
+			_ = s.repo.CreateEpisode(ctx, e)
+		}
+	} else {
+		s.createSeasonsFromTMDB(ctx, details, sr.ID, *sr.TMDBID, nowt)
 	}
 
 	// Re-create credits
@@ -530,6 +526,166 @@ func (s *service) tmdbGet(ctx context.Context, rawURL string) ([]byte, error) {
 		return nil, fmt.Errorf("series: tmdb returned %d: %s", resp.StatusCode, string(body))
 	}
 	return body, nil
+}
+
+// useTVDBEpisodes reports whether the external episode provider should be used
+// to segment this series (anime only, and only when a provider is configured).
+func (s *service) useTVDBEpisodes(sr *Series) bool {
+	return sr != nil && sr.SeriesType == TypeAnime && s.episodeProvider != nil
+}
+
+// resolveTVDBID returns the numeric TVDB ID for a series, resolving it via the
+// episode provider when the series has none stored. A newly resolved ID is
+// written back onto sr so the caller can persist it. Returns 0 if unresolved.
+func (s *service) resolveTVDBID(ctx context.Context, sr *Series) int {
+	if sr.TVDBID != nil && *sr.TVDBID != "" {
+		if id, err := strconv.Atoi(*sr.TVDBID); err == nil && id > 0 {
+			return id
+		}
+	}
+	if s.episodeProvider == nil {
+		return 0
+	}
+	ext := map[string]string{}
+	if sr.IMDBID != nil && *sr.IMDBID != "" {
+		ext["imdb"] = *sr.IMDBID
+	}
+	if sr.TMDBID != nil && *sr.TMDBID != "" {
+		ext["tmdb"] = *sr.TMDBID
+	}
+	id, err := s.episodeProvider.ResolveSeriesID(ctx, sr.Title, sr.Year, ext)
+	if err != nil || id <= 0 {
+		if err != nil {
+			slog.Default().Warn("series: tvdb id resolution failed", "series", sr.ID, "error", err)
+		}
+		return 0
+	}
+	idStr := strconv.Itoa(id)
+	sr.TVDBID = &idStr
+	return id
+}
+
+// populateProviderEpisodes fetches aired-order episodes from the configured
+// provider and stores normalized seasons + episodes. It returns true when
+// episodes were stored. Callers must clear existing children beforehand.
+func (s *service) populateProviderEpisodes(ctx context.Context, sr *Series, ts time.Time) (bool, error) {
+	tvdbID := s.resolveTVDBID(ctx, sr)
+	if tvdbID == 0 {
+		return false, nil
+	}
+	eps, err := s.episodeProvider.SeriesEpisodes(ctx, tvdbID)
+	if err != nil {
+		return false, err
+	}
+	seasons, episodes := buildSeasonsAndEpisodes(sr.ID, eps, ts)
+	if len(episodes) == 0 {
+		return false, nil
+	}
+	for _, se := range seasons {
+		_ = s.repo.CreateSeason(ctx, se)
+	}
+	for _, e := range episodes {
+		_ = s.repo.CreateEpisode(ctx, e)
+	}
+	return true, nil
+}
+
+// createSeasonsFromTMDB creates the season rows from TMDB details and fetches
+// each season's episodes from TMDB.
+func (s *service) createSeasonsFromTMDB(ctx context.Context, details map[string]interface{}, seriesID, tmdbID string, ts time.Time) {
+	seasons, ok := details["seasons"].([]interface{})
+	if !ok {
+		return
+	}
+	for _, sRaw := range seasons {
+		sm, ok := sRaw.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		seasonNum := getInt(sm, "season_number")
+		seasonID := fmt.Sprintf("%s-s%02d", seriesID, seasonNum)
+		season := &Season{
+			ID:           seasonID,
+			SeriesID:     seriesID,
+			SeasonNumber: seasonNum,
+			Title:        getString(sm, "name"),
+			Overview:     getString(sm, "overview"),
+			PosterPath:   getString(sm, "poster_path"),
+			Monitored:    true,
+			EpisodeCount: getInt(sm, "episode_count"),
+			CreatedAt:    ts,
+			UpdatedAt:    ts,
+		}
+		if err := s.repo.CreateSeason(ctx, season); err != nil {
+			continue
+		}
+		s.fetchAndStoreEpisodes(ctx, tmdbID, seasonNum, seriesID, seasonID, ts)
+	}
+}
+
+// buildSeasonsAndEpisodes converts a provider's flat episode list into
+// normalized Season and Episode rows. Invalid entries (negative season or
+// non-positive episode numbers) are skipped and duplicate (season, episode)
+// pairs are dropped. Seasons are emitted in first-seen order.
+func buildSeasonsAndEpisodes(seriesID string, eps []ProviderEpisode, ts time.Time) ([]*Season, []*Episode) {
+	type seKey struct{ s, e int }
+	seen := make(map[seKey]bool)
+	counts := make(map[int]int)
+	var order []int
+	var episodes []*Episode
+
+	for _, ep := range eps {
+		if ep.SeasonNumber < 0 || ep.EpisodeNumber <= 0 {
+			continue
+		}
+		k := seKey{ep.SeasonNumber, ep.EpisodeNumber}
+		if seen[k] {
+			continue
+		}
+		seen[k] = true
+		if _, ok := counts[ep.SeasonNumber]; !ok {
+			order = append(order, ep.SeasonNumber)
+		}
+		counts[ep.SeasonNumber]++
+		seasonID := fmt.Sprintf("%s-s%02d", seriesID, ep.SeasonNumber)
+		episodes = append(episodes, &Episode{
+			ID:            fmt.Sprintf("%s-e%03d", seasonID, ep.EpisodeNumber),
+			SeriesID:      seriesID,
+			SeasonID:      seasonID,
+			EpisodeNumber: ep.EpisodeNumber,
+			Title:         ep.Title,
+			Overview:      ep.Overview,
+			AirDate:       ep.AirDate,
+			Runtime:       ep.Runtime,
+			StillPath:     ep.StillPath,
+			Monitored:     true,
+			CreatedAt:     ts,
+			UpdatedAt:     ts,
+		})
+	}
+
+	var seasons []*Season
+	for _, sn := range order {
+		seasonID := fmt.Sprintf("%s-s%02d", seriesID, sn)
+		seasons = append(seasons, &Season{
+			ID:           seasonID,
+			SeriesID:     seriesID,
+			SeasonNumber: sn,
+			Title:        seasonTitle(sn),
+			Monitored:    true,
+			EpisodeCount: counts[sn],
+			CreatedAt:    ts,
+			UpdatedAt:    ts,
+		})
+	}
+	return seasons, episodes
+}
+
+func seasonTitle(n int) string {
+	if n == 0 {
+		return "Specials"
+	}
+	return fmt.Sprintf("Season %d", n)
 }
 
 func (s *service) fetchAndStoreEpisodes(ctx context.Context, tmdbID string, seasonNum int, seriesID, seasonID string, ts time.Time) {
