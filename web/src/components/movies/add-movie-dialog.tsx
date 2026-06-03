@@ -76,7 +76,7 @@ export function AddMovieDialog({
     if (qualityProfiles.length === 0) return;
     setSelectedProfile((prev) => {
       if (prev && qualityProfiles.some((p) => p.id === prev)) return prev;
-      return libraries[0]?.quality_profile_id || mediaPrefs?.default_quality_profile_id || qualityProfiles[0].id;
+      return libraries[0]?.quality_profile_id || mediaPrefs?.default_quality_profile_id || qualityProfiles[0]?.id || "";
     });
   }, [qualityProfiles, libraries, mediaPrefs]);
 
