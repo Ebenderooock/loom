@@ -326,7 +326,7 @@ function SeasonAccordion({
           </button>
           <button
             className="p-1 rounded hover:bg-accent/10 text-muted-foreground hover:text-accent transition-colors"
-            title="Interactive search for season"
+            title="Manual search for season"
             onClick={() => onSearchOpen({
               title: `${seriesTitle} ${season.seasonNumber === 0 ? "Specials" : `S${season.seasonNumber.toString().padStart(2, "0")}`}`,
               query: `${seriesTitle} S${season.seasonNumber.toString().padStart(2, "0")}`,
@@ -426,7 +426,7 @@ function SeasonAccordion({
                         </button>
                         <button
                           className="p-1 rounded hover:bg-accent/10 text-muted-foreground hover:text-accent transition-colors"
-                          title="Interactive search"
+                          title="Manual search"
                           onClick={() => onSearchOpen({
                             title: `${seriesTitle} S${season.seasonNumber.toString().padStart(2, "0")}E${ep.episodeNumber.toString().padStart(2, "0")}`,
                             query: `${seriesTitle} S${season.seasonNumber.toString().padStart(2, "0")}E${ep.episodeNumber.toString().padStart(2, "0")}`,
@@ -784,8 +784,8 @@ export function SeriesDetailSheet({
               <Button size="sm" variant="outline" className="gap-1.5 h-8 text-xs" title="Automatic search for all episodes" onClick={handleAutoSearch} disabled={autoSearching}>
                 {autoSearching ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}{autoSearching ? "Searching..." : "Search"}
               </Button>
-              <Button size="sm" variant="outline" className="gap-1.5 h-8 text-xs" title="Interactive search — browse releases manually" onClick={() => openSearch({ title: series.title, query: series.title, mediaType: "series" })}>
-                <FolderSearch className="w-3.5 h-3.5" />Browse
+              <Button size="sm" variant="outline" className="gap-1.5 h-8 text-xs" title="Manual search — browse releases manually" onClick={() => openSearch({ title: series.title, query: series.title, mediaType: "series" })}>
+                <FolderSearch className="w-3.5 h-3.5" />Manual Search
               </Button>
               <Button size="sm" variant="outline" className="gap-1.5 h-8 text-xs" onClick={() => { setEditing(true); setEditProfile(series.qualityProfileId); setEditMonitoring(series.monitoringStatus); }} title="Edit series settings">
                 <Pencil className="w-3.5 h-3.5" />Edit

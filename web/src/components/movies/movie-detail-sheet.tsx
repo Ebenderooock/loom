@@ -462,8 +462,8 @@ export function MovieDetailSheet({
               <Button size="sm" variant="outline" className="gap-1.5 h-8 text-xs" onClick={handleAutoSearch} disabled={autoSearching} title="Automated search (uses quality profile to pick the best result)">
                 {autoSearching ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}{autoSearching ? "Searching..." : "Search"}
               </Button>
-              <Button size="sm" variant="outline" className="gap-1.5 h-8 text-xs" onClick={() => setSearchOpen(true)} title="Interactive search — browse releases manually">
-                <Download className="w-3.5 h-3.5" />Browse
+              <Button size="sm" variant="outline" className="gap-1.5 h-8 text-xs" onClick={() => setSearchOpen(true)} title="Manual search — browse releases manually">
+                <Download className="w-3.5 h-3.5" />Manual Search
               </Button>
               <Button size="sm" variant="outline" className="gap-1.5 h-8 text-xs" onClick={() => { setEditing(true); setEditProfile(movie.qualityProfileId); setEditMonitoring(movie.monitoringStatus); }} title="Edit movie settings">
                 <Pencil className="w-3.5 h-3.5" />Edit
@@ -717,7 +717,7 @@ export function MovieDetailSheet({
                       {autoSearching ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}{autoSearching ? "Searching..." : "Search"}
                     </Button>
                     <Button size="sm" variant="outline" className="gap-1.5 text-xs" onClick={() => setSearchOpen(true)}>
-                      <Download className="w-3.5 h-3.5" />Interactive Search
+                      <Download className="w-3.5 h-3.5" />Manual Search
                     </Button>
                   </div>
                 </div>

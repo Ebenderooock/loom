@@ -2384,6 +2384,9 @@ const SUB_LANGUAGES = [
 ];
 
 function MediaPreferencesPanel() {
+  // Radix Select forbids an empty-string item value, so use a sentinel for the
+  // "None" option and map it to/from the stored empty string.
+  const NO_PROFILE = "__none__";
   const { data: prefs, isLoading } = useMediaPreferences();
   const updateMut = useUpdateMediaPreferences();
   const parseMut = useParseReleaseName();
@@ -2471,10 +2474,10 @@ function MediaPreferencesPanel() {
         <p className="text-xs text-muted-foreground">
           Used as the default when adding new movies or TV shows.
         </p>
-        <Select value={defaultProfileId} onValueChange={(v) => { setDefaultProfileId(v); setDirty(true); }}>
+        <Select value={defaultProfileId || NO_PROFILE} onValueChange={(v) => { setDefaultProfileId(v === NO_PROFILE ? "" : v); setDirty(true); }}>
           <SelectTrigger><SelectValue placeholder="None (use first available)" /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="">None</SelectItem>
+            <SelectItem value={NO_PROFILE}>None</SelectItem>
             {qualityProfiles?.map(p => (
               <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
             ))}

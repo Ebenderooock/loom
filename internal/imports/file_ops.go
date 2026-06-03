@@ -46,7 +46,14 @@ func moveFile(src, dst string) error {
 	if err := copyFile(src, dst); err != nil {
 		return err
 	}
-	return os.Remove(src)
+	// The copy succeeded, so the file is now in its destination. If removing the
+	// source fails because it is already gone (e.g. a concurrent/duplicate import
+	// removed it first), the move has effectively succeeded — do not report a
+	// false failure that would mark the whole import as failed and trigger retries.
+	if err := os.Remove(src); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
 }
 
 // hardlinkFile creates a hard link from src to dst.
