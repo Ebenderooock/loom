@@ -38,3 +38,16 @@ type Option func(*service)
 func WithEpisodeProvider(p EpisodeProvider) Option {
 	return func(s *service) { s.episodeProvider = p }
 }
+
+// PostRefreshHook is invoked after a successful RefreshSeries. Because a refresh
+// deletes and re-creates a series' episodes (assigning new episode IDs), any
+// existing episode_file links are orphaned. The hook re-links on-disk files to
+// the freshly created episodes (typically by triggering a series scan). It is
+// best-effort: failures must not fail the refresh.
+type PostRefreshHook func(ctx context.Context, seriesID string)
+
+// WithPostRefreshHook configures a hook run after each successful refresh to
+// re-link on-disk episode files to the re-created episodes.
+func WithPostRefreshHook(fn PostRefreshHook) Option {
+	return func(s *service) { s.postRefreshHook = fn }
+}

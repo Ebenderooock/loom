@@ -23,6 +23,7 @@ type Service interface {
 	DeleteSeries(ctx context.Context, id string) error
 	SetMonitoringStatus(ctx context.Context, seriesID string, status MonitoringStatus) error
 	RefreshSeries(ctx context.Context, id string) error
+	SetPostRefreshHook(fn PostRefreshHook)
 
 	ListSeasons(ctx context.Context, seriesID string) ([]*Season, error)
 	ListEpisodes(ctx context.Context, seriesID string, seasonNum *int) ([]*Episode, error)
@@ -44,6 +45,15 @@ type service struct {
 	tmdbAPIKey      string
 	httpClient      *http.Client
 	episodeProvider EpisodeProvider
+	postRefreshHook PostRefreshHook
+}
+
+// SetPostRefreshHook installs the post-refresh re-link hook. It exists in
+// addition to WithPostRefreshHook because the hook (which drives the series
+// scanner) is only available after the scanner has been constructed from the
+// service, creating a late-binding dependency.
+func (s *service) SetPostRefreshHook(fn PostRefreshHook) {
+	s.postRefreshHook = fn
 }
 
 // NewService creates a new series Service. Optional behaviour (such as an
@@ -410,6 +420,13 @@ func (s *service) RefreshSeries(ctx context.Context, id string) error {
 
 	// Re-create credits
 	s.fetchAndStoreCredits(ctx, details, sr.ID)
+
+	// The delete+recreate above orphans any existing episode_file links (new
+	// episode IDs). Re-link on-disk files to the fresh episodes. Best-effort:
+	// a failure here must not fail the refresh.
+	if s.postRefreshHook != nil {
+		s.postRefreshHook(ctx, sr.ID)
+	}
 
 	return nil
 }
