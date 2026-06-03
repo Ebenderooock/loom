@@ -27,7 +27,9 @@ func (s *Store) GetCandidates(ctx context.Context, mediaType string, limit int, 
 	switch mediaType {
 	case "movie":
 		query = `
-			SELECT m.id, m.title, m.year
+			SELECT m.id, m.title, m.year,
+			       COALESCE(m.imdb_id, ''), COALESCE(m.tvdb_id, ''), COALESCE(m.tmdb_id, ''),
+			       0, 0
 			FROM movies m
 			LEFT JOIN search_state ss ON ss.media_type = 'movie' AND ss.media_id = m.id
 			WHERE m.status = 'missing'
@@ -37,9 +39,12 @@ func (s *Store) GetCandidates(ctx context.Context, mediaType string, limit int, 
 			LIMIT ?`
 	case "episode":
 		query = `
-			SELECT e.id, e.title, 0
+			SELECT e.id, e.title, 0,
+			       COALESCE(s.imdb_id, ''), COALESCE(s.tvdb_id, ''), COALESCE(s.tmdb_id, ''),
+			       se.season_number, e.episode_number
 			FROM episodes e
 			JOIN series s ON e.series_id = s.id
+			JOIN seasons se ON e.season_id = se.id AND se.series_id = e.series_id
 			LEFT JOIN search_state ss ON ss.media_type = 'episode' AND ss.media_id = e.id
 			WHERE e.has_file = 0
 			  AND e.monitored = 1
@@ -63,7 +68,8 @@ func (s *Store) GetCandidates(ctx context.Context, mediaType string, limit int, 
 	for rows.Next() {
 		var c SearchCandidate
 		c.MediaType = mediaType
-		if err := rows.Scan(&c.MediaID, &c.Title, &c.Year); err != nil {
+		if err := rows.Scan(&c.MediaID, &c.Title, &c.Year,
+			&c.IMDBID, &c.TVDBID, &c.TMDBID, &c.Season, &c.Episode); err != nil {
 			return nil, err
 		}
 		c.Priority = pri

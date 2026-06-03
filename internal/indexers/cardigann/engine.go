@@ -661,6 +661,14 @@ func (e *Engine) fetch(ctx context.Context, method, target string, params url.Va
 		}
 		full = full + sep + params.Encode()
 	}
+	// Definitions embed keywords directly in the path/query (e.g.
+	// "q.php?q={{ .Keywords }}" or "search/{{ .Keywords }}"). A
+	// multi-word term leaves literal spaces in the URL, which Go sends
+	// verbatim in the request line — an invalid request-target that
+	// Cloudflare answers with a 403 (then wrongly triggers a
+	// FlareSolverr solve). .NET (Jackett/Prowlarr) percent-encodes these
+	// automatically; replicate that for spaces, the dominant case.
+	full = strings.ReplaceAll(full, " ", "%20")
 	if method == http.MethodPost {
 		req, err = http.NewRequestWithContext(ctx, method, full, strings.NewReader(params.Encode()))
 		if err == nil {

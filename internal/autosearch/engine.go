@@ -1000,6 +1000,34 @@ func (e *Engine) verifyIdentity(req SearchRequest, parsed *parser.Release, idBas
 				return "wrong_episode"
 			}
 		}
+
+		// Daily-show date verification. When the request targets a dated
+		// episode (daily/talk shows), require the parsed air date to match.
+		// Indexers like EZTV's IMDb API return the whole-series feed, so
+		// without this a wrong-dated episode could slip through because
+		// date-named releases have parsed.Episode == -1 (the episode check
+		// above is skipped).
+		if req.DailyDate != "" {
+			if parsed.DailyDate == "" {
+				return "missing_air_date"
+			}
+			if parsed.DailyDate != req.DailyDate {
+				return "wrong_air_date"
+			}
+		}
+
+		// Unverifiable single-episode guard. A single-episode search must
+		// positively identify the episode. Reject releases that carry
+		// neither a parseable episode number, a multi-episode list, a daily
+		// date, nor a season-pack marker — otherwise an ID-filtered
+		// whole-series feed (e.g. EZTV's API) could yield a wrong-episode
+		// grab. Standard releases (Clarkson's Farm S05E04 → Episode 4) are
+		// unaffected because parsed.Episode is set.
+		if req.Episode > 0 && req.DailyDate == "" &&
+			parsed.Episode == -1 && len(parsed.Episodes) == 0 &&
+			parsed.DailyDate == "" && !parsed.IsSeasonPack {
+			return "unverifiable_episode"
+		}
 	}
 
 	return ""

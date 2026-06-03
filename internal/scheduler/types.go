@@ -32,6 +32,11 @@ type SearchCandidate struct {
 	MediaID        string     `json:"mediaId"`
 	Title          string     `json:"title"`
 	Year           int        `json:"year,omitempty"`
+	IMDBID         string     `json:"imdbId,omitempty"`
+	TVDBID         string     `json:"tvdbId,omitempty"`
+	TMDBID         string     `json:"tmdbId,omitempty"`
+	Season         int        `json:"season,omitempty"`
+	Episode        int        `json:"episode,omitempty"`
 	LastSearchedAt *time.Time `json:"lastSearchedAt,omitempty"`
 	Priority       int        `json:"priority"`
 }

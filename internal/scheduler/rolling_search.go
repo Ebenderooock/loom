@@ -194,7 +194,10 @@ func (rs *RollingSearcher) searchCandidate(ctx context.Context, c SearchCandidat
 
 	// Build query with explicit mode and year, matching Arr stack behavior.
 	q := indexers.Query{
-		Term: c.Title,
+		Term:   c.Title,
+		IMDBID: c.IMDBID,
+		TVDBID: c.TVDBID,
+		TMDBID: c.TMDBID,
 	}
 	switch c.MediaType {
 	case "movie":
@@ -204,6 +207,8 @@ func (rs *RollingSearcher) searchCandidate(ctx context.Context, c SearchCandidat
 	case "episode":
 		q.Categories = []indexers.Category{indexers.CategoryTV}
 		q.Mode = indexers.ModeTVSearch
+		q.Season = c.Season
+		q.Episode = c.Episode
 	}
 
 	// Fan out across all enabled indexers, respecting quotas.
