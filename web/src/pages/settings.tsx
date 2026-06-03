@@ -71,6 +71,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Switch } from "@/components/ui/switch";
+import { useAuth } from "@/hooks/use-auth";
+import { useFeatures, useSetFeature } from "@/lib/features-api";
 import {
   useConnections as useConnectConnections,
   useCreateConnection as useCreateConnect,
@@ -108,6 +110,7 @@ import { SystemLogsPanel } from "@/components/settings/system-logs-panel";
 
 const CATEGORIES = [
   { id: "general", label: "General" },
+  { id: "features", label: "Features" },
   { id: "media-management", label: "Media Management" },
   { id: "media-preferences", label: "Media Preferences" },
 
@@ -2640,10 +2643,84 @@ function MediaPreferencesPanel() {
   );
 }
 
+function FeaturesPanel() {
+  const { user } = useAuth();
+  const { data: features, isLoading } = useFeatures();
+  const setFeature = useSetFeature();
+  // Admin gates mutation; no-auth mode (no user) is treated as permitted to
+  // match the backend's no-op admin middleware.
+  const canEdit = !user || user.role === "admin";
+
+  const toggle = (key: string, label: string, enabled: boolean) => {
+    setFeature.mutate(
+      { key, enabled },
+      {
+        onSuccess: () =>
+          toast.success(`${label} ${enabled ? "enabled" : "disabled"}`),
+        onError: (e) =>
+          toast.error(e instanceof Error ? e.message : "Failed to update"),
+      },
+    );
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+        <Loader2 className="h-4 w-4 animate-spin" /> Loading features…
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-muted-foreground">
+        Enable or disable optional platform features. Changes apply
+        immediately.
+      </p>
+      {!canEdit && (
+        <p className="text-xs text-muted-foreground">
+          Only administrators can change feature settings.
+        </p>
+      )}
+      <div className="divide-y rounded-md border">
+        {(features ?? []).map((f) => (
+          <div
+            key={f.key}
+            className="flex items-start justify-between gap-4 p-4"
+          >
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium">{f.label}</span>
+                <Badge variant="outline" className="text-[10px]">
+                  {f.category}
+                </Badge>
+              </div>
+              <p className="text-xs text-muted-foreground">{f.description}</p>
+            </div>
+            <Switch
+              checked={f.enabled}
+              disabled={!canEdit || setFeature.isPending}
+              onCheckedChange={(v) => toggle(f.key, f.label, v === true)}
+              aria-label={`Toggle ${f.label}`}
+            />
+          </div>
+        ))}
+        {(features ?? []).length === 0 && (
+          <div className="p-4 text-sm text-muted-foreground">
+            No configurable features.
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function SettingsContent({ category }: { category: Category }) {
   switch (category) {
     case "general":
       return <GeneralPanel />;
+    case "features":
+      return <FeaturesPanel />;
     case "media-management":
       return <MediaManagementPanel />;
     case "media-preferences":

@@ -10,6 +10,7 @@ import (
 	"github.com/ebenderooock/loom/internal/autosearch"
 	"github.com/ebenderooock/loom/internal/customformats"
 	"github.com/ebenderooock/loom/internal/downloads"
+	"github.com/ebenderooock/loom/internal/featureflags"
 	"github.com/ebenderooock/loom/internal/imports"
 	"github.com/ebenderooock/loom/internal/indexers"
 	"github.com/ebenderooock/loom/internal/kernel/config"
@@ -82,6 +83,7 @@ func wireDownloads(
 		autosearch.WithOrchestrator(orchestrator),
 		autosearch.WithDebugStore(srv.SearchDebugStore()),
 		autosearch.WithDebugHub(srv.SearchDebugHub()),
+		autosearch.WithSearchLogEnabled(srv.Features().EnabledFunc(featureflags.KeySearchLog)),
 	)
 	srv.SetAutoSearchEngine(autoSearchEngine)
 

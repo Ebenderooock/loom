@@ -55,6 +55,9 @@ type Engine struct {
 	audit        *auditlog.Logger
 	debugStore   *searchdebug.Store
 	debugHub     *searchdebug.Hub
+	// searchLogEnabled, when set, gates whether new search debug log entries
+	// are recorded. A nil func means "always enabled" (back-compat).
+	searchLogEnabled func() bool
 }
 
 // NewEngine creates an autosearch Engine.
@@ -109,6 +112,14 @@ func WithDebugStore(s *searchdebug.Store) EngineOption {
 // WithDebugHub sets the SSE broadcast hub for real-time search queue updates.
 func WithDebugHub(h *searchdebug.Hub) EngineOption {
 	return func(e *Engine) { e.debugHub = h }
+}
+
+// WithSearchLogEnabled gates recording of new search debug log entries behind
+// a feature flag. When the supplied func returns false, searches run normally
+// but no new trace entries are created or updated. Historical entries are
+// unaffected. A nil func (or this option unused) means always enabled.
+func WithSearchLogEnabled(fn func() bool) EngineOption {
+	return func(e *Engine) { e.searchLogEnabled = fn }
 }
 
 // Evaluate scores a set of indexer results against a quality profile
@@ -351,8 +362,10 @@ func (e *Engine) searchAndGrabSingle(ctx context.Context, req SearchRequest) (*S
 	startTime := time.Now()
 
 	// Debug/queue entry — created immediately, updated progressively.
+	// Skipped entirely when the Search Log feature is disabled, so no new
+	// rows are written (all downstream writes are guarded by dbg != nil).
 	var dbg *searchdebug.Entry
-	if e.debugStore != nil {
+	if e.debugStore != nil && (e.searchLogEnabled == nil || e.searchLogEnabled()) {
 		dbg = &searchdebug.Entry{
 			ID:               searchdebug.NewID(),
 			CreatedAt:        startTime,

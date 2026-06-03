@@ -1,6 +1,7 @@
 import * as React from "react";
 import { Link, Outlet, useRouterState } from "@tanstack/react-router";
 import { apiFetch } from "@/lib/fetch";
+import { useFeatureEnabled } from "@/lib/features-api";
 import {
   Calendar,
   ChevronDown,
@@ -134,6 +135,7 @@ function SidebarNav({
   const router = useRouterState();
   const path = router.location.pathname;
   const reviewCount = useReviewCount();
+  const searchLogEnabled = useFeatureEnabled("search_log");
 
   // Track which sections are expanded — all open by default
   const [openSections, setOpenSections] = React.useState<Record<string, boolean>>(() =>
@@ -186,7 +188,11 @@ function SidebarNav({
 
             {/* Nav items */}
             {(isOpen || collapsed || !hasLabel) &&
-              section.items.map(({ to, label, Icon, badge }) => {
+              section.items
+                .filter(
+                  ({ to }) => to !== "/search-queue" || searchLogEnabled,
+                )
+                .map(({ to, label, Icon, badge }) => {
                 const active =
                   to === "/" ? path === "/" : path === to || path.startsWith(`${to}/`);
                 return (

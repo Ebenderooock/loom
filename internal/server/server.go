@@ -34,30 +34,30 @@ import (
 	"github.com/ebenderooock/loom/internal/apikeys"
 	"github.com/ebenderooock/loom/internal/appconfig"
 	"github.com/ebenderooock/loom/internal/auditlog"
+	"github.com/ebenderooock/loom/internal/auth"
 	"github.com/ebenderooock/loom/internal/autosearch"
+	"github.com/ebenderooock/loom/internal/buildinfo"
 	"github.com/ebenderooock/loom/internal/commands"
 	"github.com/ebenderooock/loom/internal/compat/prowlarrv1"
 	"github.com/ebenderooock/loom/internal/compat/radarrv3"
 	"github.com/ebenderooock/loom/internal/compat/sonarrv3"
 	"github.com/ebenderooock/loom/internal/compat/syncprofiles"
 	"github.com/ebenderooock/loom/internal/connect"
-	"github.com/ebenderooock/loom/internal/episodeorder"
-	"github.com/ebenderooock/loom/internal/auth"
-	"github.com/ebenderooock/loom/internal/libraries"
-	"github.com/ebenderooock/loom/internal/buildinfo"
 	"github.com/ebenderooock/loom/internal/customformats"
 	"github.com/ebenderooock/loom/internal/downloads"
-	"github.com/ebenderooock/loom/internal/workflows"
+	"github.com/ebenderooock/loom/internal/episodeorder"
+	"github.com/ebenderooock/loom/internal/featureflags"
 	"github.com/ebenderooock/loom/internal/healthmonitor"
 	"github.com/ebenderooock/loom/internal/importlists"
 	"github.com/ebenderooock/loom/internal/imports"
 	"github.com/ebenderooock/loom/internal/indexers"
 	"github.com/ebenderooock/loom/internal/indexers/newznabserver"
-	"github.com/ebenderooock/loom/internal/languages"
-	"github.com/ebenderooock/loom/internal/mediainfo"
 	"github.com/ebenderooock/loom/internal/kernel/config"
 	"github.com/ebenderooock/loom/internal/kernel/eventbus"
 	"github.com/ebenderooock/loom/internal/kernel/telemetry"
+	"github.com/ebenderooock/loom/internal/languages"
+	"github.com/ebenderooock/loom/internal/libraries"
+	"github.com/ebenderooock/loom/internal/mediainfo"
 	"github.com/ebenderooock/loom/internal/movies"
 	"github.com/ebenderooock/loom/internal/notifications"
 	"github.com/ebenderooock/loom/internal/organizer"
@@ -72,66 +72,68 @@ import (
 	"github.com/ebenderooock/loom/internal/storage"
 	"github.com/ebenderooock/loom/internal/systemlogs"
 	"github.com/ebenderooock/loom/internal/validation"
+	"github.com/ebenderooock/loom/internal/workflows"
 )
 
 // Server holds wired dependencies for the HTTP listener.
 type Server struct {
-	cfg        *config.Config
-	appCfg     *appconfig.Config
-	logger     *slog.Logger
-	httpSrv    *http.Server
-	tel        *telemetry.Telemetry
-	db         storage.DB
-	bus        eventbus.Bus
-	authSvc    *auth.Service
-	indexerSvc *indexers.Service
-	downloadSvc *downloads.Service
-	blocklistStore *downloads.BlocklistStore
-	moviesSvc  movies.Service
-	rssSvc     *rss.SourcesService
-	scannerSvc *scanner.Scanner
-	seriesScannerSvc *scanner.SeriesScanner
-	organizerSvc *organizer.Organizer
-	seriesSvc  series.Service
-	notifSvc   notifications.Service
-	connectSvc connect.Service
-	reviewStore *safety.ReviewStore
-	importPipeline *imports.ImportPipeline
-	langStore   *languages.Store
+	cfg               *config.Config
+	appCfg            *appconfig.Config
+	logger            *slog.Logger
+	httpSrv           *http.Server
+	tel               *telemetry.Telemetry
+	db                storage.DB
+	bus               eventbus.Bus
+	authSvc           *auth.Service
+	indexerSvc        *indexers.Service
+	downloadSvc       *downloads.Service
+	blocklistStore    *downloads.BlocklistStore
+	moviesSvc         movies.Service
+	rssSvc            *rss.SourcesService
+	scannerSvc        *scanner.Scanner
+	seriesScannerSvc  *scanner.SeriesScanner
+	organizerSvc      *organizer.Organizer
+	seriesSvc         series.Service
+	notifSvc          notifications.Service
+	connectSvc        connect.Service
+	reviewStore       *safety.ReviewStore
+	importPipeline    *imports.ImportPipeline
+	langStore         *languages.Store
 	customFormatStore *customformats.Store
-	rollingSearch  *scheduler.RollingSearcher
-	aggSvc     *newznabserver.Server
-	altTitleStore *alttitles.Store
-	animeStore *anime.Store
-	validator        *validation.Validator
-	indexerRuleStore *indexers.RuleStore
-	importListStore  *importlists.Store
-	importListSync   *importlists.SyncManager
-	mediaInfoStore *mediainfo.Store
-	packsStore *packs.Store
+	rollingSearch     *scheduler.RollingSearcher
+	aggSvc            *newznabserver.Server
+	altTitleStore     *alttitles.Store
+	animeStore        *anime.Store
+	validator         *validation.Validator
+	indexerRuleStore  *indexers.RuleStore
+	importListStore   *importlists.Store
+	importListSync    *importlists.SyncManager
+	mediaInfoStore    *mediainfo.Store
+	packsStore        *packs.Store
 	episodeOrderStore *episodeorder.Store
-	libStore   *libraries.Store
-	libScanner *libraries.Scanner
-	apiKeyStore *apikeys.Store
-	cmdQueue    *commands.Queue
-	qpStore     *qualityprofiles.Store
-	calendarHandler http.Handler
-	compatRadarr    *radarrv3.Handler
-	compatSonarr    *sonarrv3.Handler
-	compatProwlarr  *prowlarrv1.Handler
-	healthMonitor   *healthmonitor.Monitor
-	auditLog        *auditlog.Logger
-	autoSearchEngine *autosearch.Engine
-	searchDebugStore *searchdebug.Store
-	searchDebugHub   *searchdebug.Hub
-	systemLogsDeps  *systemlogs.HandlerDeps
-	wfEngine         *workflows.Engine
-	orchestrator     *workflows.Orchestrator
-	periodicScanner  *scheduler.PeriodicScanner
-	syncProfileStore *syncprofiles.Store
-	discoverRouter   http.Handler
-	httpMetrics *telemetry.HTTPMetrics
-	ready      atomic.Bool
+	libStore          *libraries.Store
+	libScanner        *libraries.Scanner
+	apiKeyStore       *apikeys.Store
+	cmdQueue          *commands.Queue
+	qpStore           *qualityprofiles.Store
+	calendarHandler   http.Handler
+	compatRadarr      *radarrv3.Handler
+	compatSonarr      *sonarrv3.Handler
+	compatProwlarr    *prowlarrv1.Handler
+	healthMonitor     *healthmonitor.Monitor
+	auditLog          *auditlog.Logger
+	autoSearchEngine  *autosearch.Engine
+	searchDebugStore  *searchdebug.Store
+	searchDebugHub    *searchdebug.Hub
+	featureFlags      *featureflags.Service
+	systemLogsDeps    *systemlogs.HandlerDeps
+	wfEngine          *workflows.Engine
+	orchestrator      *workflows.Orchestrator
+	periodicScanner   *scheduler.PeriodicScanner
+	syncProfileStore  *syncprofiles.Store
+	discoverRouter    http.Handler
+	httpMetrics       *telemetry.HTTPMetrics
+	ready             atomic.Bool
 }
 
 // New constructs a Server but does not start listening. The caller must
@@ -173,10 +175,14 @@ func New(cfg *config.Config, appCfg *appconfig.Config, logger *slog.Logger, tel 
 		aggSvc:           aggSvc,
 		searchDebugStore: searchdebug.NewStore(db.DB()),
 		searchDebugHub:   searchdebug.NewHub(),
+		featureFlags:     featureflags.NewService(featureflags.NewStore(db.DB()), logger),
 		httpMetrics:      telemetry.NewHTTPMetrics(tel.Registry()),
 	}
 
 	telemetry.InitAppMetrics(tel.Registry())
+
+	// Warm the feature flag cache from persisted overrides (best-effort).
+	s.featureFlags.Load(context.Background())
 
 	mux := s.newMux()
 
@@ -479,6 +485,11 @@ func (s *Server) SearchDebugStore() *searchdebug.Store {
 // SearchDebugHub returns the SSE broadcast hub for search queue updates.
 func (s *Server) SearchDebugHub() *searchdebug.Hub {
 	return s.searchDebugHub
+}
+
+// Features returns the feature flag service for wiring into other components.
+func (s *Server) Features() *featureflags.Service {
+	return s.featureFlags
 }
 
 // SetWorkflowEngine sets the workflow engine for tracking download→media linkage.
@@ -808,6 +819,15 @@ func (s *Server) newMux() http.Handler {
 			r.Mount("/api/v1/search-queue", queueRouter)
 		}
 
+		// Feature flags (authenticated; mutations admin-only)
+		if s.featureFlags != nil {
+			var adminMW func(http.Handler) http.Handler
+			if s.authSvc != nil {
+				adminMW = s.authSvc.RequireRole("admin")
+			}
+			r.Mount("/api/v1/features", featureflags.Router(s.featureFlags, adminMW))
+		}
+
 		// Filesystem browsing (authenticated)
 		r.Get("/api/v1/filesystem", handleFilesystemBrowse(s.cfg))
 
@@ -817,7 +837,7 @@ func (s *Server) newMux() http.Handler {
 		}
 	})
 
-	// Newznab/Torznab aggregator. Mounted OUTSIDE the auth group because clients 
+	// Newznab/Torznab aggregator. Mounted OUTSIDE the auth group because clients
 	// (Sonarr, Radarr, Prowlarr) supply credentials via the ?apikey= query param and
 	// expect Newznab XML errors, not JSON.
 	if s.aggSvc != nil {
