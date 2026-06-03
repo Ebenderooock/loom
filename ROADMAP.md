@@ -6,6 +6,22 @@ are independent.
 
 Legend: ✅ done · 🚧 in progress · ⏳ planned
 
+> Status reviewed against the codebase. Phases 0–10 are delivered.
+> Remaining work is tracked in [GitHub Milestones](https://github.com/Ebenderooock/loom/milestones):
+> Plugin SDK (P6), 1.0 hardening (P11), torrent client polish (P12),
+> media requests & multi-user (P13), library maintenance tooling (P14),
+> and media-server analytics (P15).
+
+## ✅ Beyond the original plan (shipped)
+
+- ✅ Discover section — browse import-list/RSS feeds and add titles manually
+  (per-list `auto` vs `discover` mode)
+- ✅ Feature-flag system (admin-toggleable capabilities; e.g. Search Log)
+- ✅ Global quick-search command palette (live movie/series search + deep links)
+- ✅ Wire-compatibility shims (Radarr v3 / Sonarr v3 / Prowlarr v1) so Overseerr,
+  Ombi, etc. can talk to Loom
+- ✅ Migration importers (`loom migrate import --from {radarr,sonarr,prowlarr}`)
+
 ---
 
 ## ✅ Phase 0 — Repo & engineering foundations
@@ -45,7 +61,7 @@ Legend: ✅ done · 🚧 in progress · ⏳ planned
 - ✅ Freeleech / tracker intelligence (FL/Internal/Scene detection)
 - ✅ Cardigann template expansion (Go text/template in search URL paths)
 
-## 🚧 Phase 3 — Download pipeline
+## ✅ Phase 3 — Download pipeline
 
 - ✅ Download grab flow (magnet URI + NZB)
 - ✅ Automated search decision engine (search → score → filter → grab)
@@ -55,12 +71,12 @@ Legend: ✅ done · 🚧 in progress · ⏳ planned
 - ✅ Hardlink-only import mode (move / hardlink / hardlink_only)
 - ✅ Download client CRUD in settings (add/edit/delete with test connection)
 - ✅ Search timeout chain (120s default, frontend → handler → registry → HTTP → FlareSolverr)
-- ⏳ Full import/post-processing pipeline (detect complete → rename → move/hardlink)
-- ⏳ Grab cleanup on import completion
-- ⏳ Remote-path mappings, blocklist, redownload-on-failure
-- ⏳ Deterministic import behavior
-- ⏳ Smarter re-import logic
-- ⏳ Smart stalled/failed download handling
+- ✅ Full import/post-processing pipeline (detect complete → rename → move/hardlink)
+- ✅ Grab cleanup on import completion
+- ✅ Remote-path mappings, blocklist, redownload-on-failure
+- ✅ Deterministic import behavior
+- ✅ Smarter re-import logic
+- ✅ Smart stalled/failed download handling
 
 ## ✅ Phase 4 — Movies module (Radarr-equivalent)
 
@@ -68,9 +84,9 @@ Legend: ✅ done · 🚧 in progress · ⏳ planned
 - ✅ Root folder management
 - ✅ Quality profiles & custom formats with scoring
 - ✅ Frontend movies page (poster grid, detail modal, search)
-- ⏳ RSS sync
-- ⏳ Collections & lists
-- ⏳ Calendar integration
+- ✅ RSS sync
+- ✅ Collections & lists
+- ✅ Calendar integration
 
 ## ✅ Phase 5 — Series module (Sonarr-equivalent)
 
@@ -81,10 +97,10 @@ Legend: ✅ done · 🚧 in progress · ⏳ planned
 - ✅ Series library scanning with season-folder support
 - ✅ Auto-search buttons per episode/season (direct API call)
 - ✅ Interactive search dialog for manual release selection
-- ⏳ Anime handling (AniDB/AniList mapping, absolute numbering)
-- ⏳ Multi-season pack support
-- ⏳ Specials & mini-series handling
-- ⏳ Alternate episode ordering (DVD, absolute, etc.)
+- ✅ Anime handling (AniDB/AniList mapping, absolute numbering)
+- ✅ Multi-season pack support
+- ✅ Specials & mini-series handling
+- ✅ Alternate episode ordering (DVD, absolute, etc.)
 
 ## ✅ Phase 6 — Notifications & automation
 
@@ -92,7 +108,7 @@ Legend: ✅ done · 🚧 in progress · ⏳ planned
 - ✅ Rich notification templates (Go text/template, per-channel overrides)
 - ✅ Event bus integration with async fan-out
 - ✅ Frontend notifications page (CRUD, test, template editor)
-- ⏳ Proactive health alerts
+- ✅ Proactive health alerts
 - ⏳ Plugin SDK / custom scripts
 
 ## ✅ Phase 7 — Download safety
@@ -102,36 +118,36 @@ Legend: ✅ done · 🚧 in progress · ⏳ planned
 - ✅ Manual review queue with approve/reject
 - ✅ Frontend safety settings + Activity reviews tab
 
-## ⏳ Phase 8 — Advanced custom formats
+## ✅ Phase 8 — Advanced custom formats
 
-- ⏳ AND/OR logic, nested conditions, reusable building blocks
-- ⏳ Custom format scoring integration with download decisions
-- ⏳ Metadata-aware post-download matching
+- ✅ AND/OR logic, nested conditions, reusable building blocks
+- ✅ Custom format scoring integration with download decisions
+- ✅ Metadata-aware post-download matching
 
-## ⏳ Phase 9 — Language & international support
+## ✅ Phase 9 — Language & international support
 
-- ⏳ Language profiles (priority-based, per-library)
-- ⏳ Subtitle/audio track awareness
-- ⏳ International release handling (MULTi, dual-audio)
+- ✅ Language profiles (priority-based, per-library)
+- ✅ Subtitle/audio track awareness
+- ✅ International release handling (MULTi, dual-audio)
 
-## ⏳ Phase 10 — Long-tail search & scale
+## ✅ Phase 10 — Long-tail search & scale
 
-- ⏳ Rolling missing search (scheduled, gradual)
-- ⏳ Quota-aware API call tracking
-- ⏳ Old/rare content search strategy
-- ⏳ RSS sync (scheduled feed polling)
+- ✅ Rolling missing search (scheduled, gradual)
+- ✅ Quota-aware API call tracking
+- ✅ Old/rare content search strategy
+- ✅ RSS sync (scheduled feed polling)
 
-## ⏳ Phase 11 — Deployment, hardening & 1.0
+## 🚧 Phase 11 — Deployment, hardening & 1.0
 
-- ⏳ Indexer health dashboard (uptime, response times, error rates)
-- ⏳ Per-media indexer rules
-- ⏳ Distroless multi-arch images, Helm chart
-- ⏳ Grafana dashboards, backup/restore CLI
-- ⏳ Wire-compatibility: Radarr/Sonarr/Prowlarr API shape parity
-- ⏳ Migration tooling: `loom migrate import --from {radarr,sonarr,prowlarr}`
+- ✅ Indexer health dashboard (uptime, response times, error rates)
+- ✅ Per-media indexer rules
+- ✅ Distroless multi-arch images, Helm chart
+- ✅ Grafana dashboards, backup/restore CLI
+- ✅ Wire-compatibility: Radarr/Sonarr/Prowlarr API shape parity
+- ✅ Migration tooling: `loom migrate import --from {radarr,sonarr,prowlarr}`
 - ⏳ Performance benchmarks, public documentation site, **1.0 release**
 
-## ✅ Phase 12 — Native torrent client
+## 🚧 Phase 12 — Native torrent client
 
 - ✅ Embed [anacrolix/torrent](https://github.com/anacrolix/torrent) as built-in BitTorrent engine
 - ✅ Magnet resolution, DHT, PEX, piece verification
@@ -156,20 +172,20 @@ Legend: ✅ done · 🚧 in progress · ⏳ planned
 - ⏳ Request status tracking & notifications to requestors
 - ⏳ Multi-user auth (invite links, OAuth, or simple PIN-based access)
 
-## ⏳ Phase 14 — Library maintenance (Cleanarr/Maintainerr-equivalent)
+## 🚧 Phase 14 — Library maintenance (Cleanarr/Maintainerr-equivalent)
 
 - ⏳ Duplicate detection (same media, multiple files/qualities)
 - ⏳ Unmatched media identification (files not linked to any library entry)
-- ⏳ Orphaned download cleanup (completed downloads never imported)
+- ✅ Orphaned download cleanup (completed downloads never imported)
 - ⏳ Quality upgrade cleanup (remove lower quality when upgrade exists)
 - ⏳ Empty folder pruning
-- ⏳ Disk space analysis & recommendations
+- 🚧 Disk space analysis & recommendations (analysis via health monitor; no recommendations UI)
 - ⏳ Dry-run mode with approval queue before destructive actions
 - ⏳ Scheduled maintenance runs (configurable frequency)
 
-## ⏳ Phase 15 — Media server analytics (Tautulli-equivalent)
+## 🚧 Phase 15 — Media server analytics (Tautulli-equivalent)
 
-- ⏳ Plex / Jellyfin / Emby integration (play session tracking)
+- ✅ Plex / Jellyfin / Emby integration (play session tracking)
 - ⏳ User activity & concurrent stream monitoring
 - ⏳ Most/least watched content reports
 - ⏳ Watch history per user & per media item
