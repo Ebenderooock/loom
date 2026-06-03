@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   IndexerForm,
   validateIndexerForm,
@@ -73,12 +74,14 @@ describe("IndexerForm rendering", () => {
     const user = userEvent.setup();
     let called = false;
     render(
-      <IndexerForm
-        proxies={[]}
-        onSubmit={() => {
-          called = true;
-        }}
-      />,
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })}>
+        <IndexerForm
+          proxies={[]}
+          onSubmit={() => {
+            called = true;
+          }}
+        />
+      </QueryClientProvider>,
     );
     // Clear the required name field then submit.
     await user.clear(screen.getByLabelText(/^name$/i));
