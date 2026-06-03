@@ -254,6 +254,17 @@ const importListsRoute = createRoute({
   errorComponent: ErrorFallback,
 });
 
+const discoverRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/discover",
+  component: lazyRouteComponent(
+    () => import("@/pages/discover"),
+    "DiscoverPage",
+  ),
+  pendingComponent: PageLoader,
+  errorComponent: ErrorFallback,
+});
+
 const eventsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/events",
@@ -304,6 +315,7 @@ const routeTree = rootRoute.addChildren([
   libraryRoute,
   moviesRoute,
   seriesRoute,
+  discoverRoute,
   activityRoute,
   calendarRoute,
   indexerHealthRoute,

@@ -4,6 +4,7 @@ import { apiFetch } from "@/lib/fetch";
 import {
   Calendar,
   ChevronDown,
+  Compass,
   Download,
   Film,
   FolderOpen,
@@ -73,6 +74,7 @@ const NAV_SECTIONS: NavSection[] = [
     items: [
       { to: "/movies", label: "Movies", Icon: Film },
       { to: "/series", label: "TV Shows", Icon: Tv },
+      { to: "/discover", label: "Discover", Icon: Compass },
       { to: "/calendar", label: "Calendar", Icon: Calendar },
       { to: "/library", label: "Library", Icon: FolderOpen },
     ],

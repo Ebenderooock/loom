@@ -109,6 +109,7 @@ func wireMedia(
 	}())
 	importListSyncMgr.SetMoviesService(moviesSvc)
 	importListSyncMgr.SetSeriesService(seriesSvc)
+	importListSyncMgr.SetTMDBClient(buildTMDBClient())
 	srv.SetImportLists(importListStore, importListSyncMgr)
 
 	// Libraries scanner

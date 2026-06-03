@@ -11,6 +11,7 @@ import (
 
 	"github.com/ebenderooock/loom/internal/connect"
 	"github.com/ebenderooock/loom/internal/importlists/providers"
+	"github.com/ebenderooock/loom/internal/metadata/tmdb"
 	"github.com/ebenderooock/loom/internal/movies"
 	"github.com/ebenderooock/loom/internal/series"
 )
@@ -22,6 +23,7 @@ type SyncManager struct {
 	moviesSvc  movies.Service
 	seriesSvc  series.Service
 	tmdbAPIKey string
+	tmdbClient *tmdb.Client
 	logger     *slog.Logger
 	mu         sync.Mutex
 	cancel     context.CancelFunc
@@ -61,6 +63,12 @@ func (m *SyncManager) SetSeriesService(svc series.Service) {
 // SetTMDBAPIKey sets the TMDB API key for TMDb list providers.
 func (m *SyncManager) SetTMDBAPIKey(key string) {
 	m.tmdbAPIKey = key
+}
+
+// SetTMDBClient sets the TMDB client used to enrich Discover items with
+// poster/overview metadata during sync.
+func (m *SyncManager) SetTMDBClient(c *tmdb.Client) {
+	m.tmdbClient = c
 }
 
 // Start begins the background sync loop. It checks every minute for lists
@@ -199,6 +207,7 @@ func (m *SyncManager) SyncList(ctx context.Context, l *ImportList) error {
 			if excluded {
 				existing.Status = ItemStatusExcluded
 			}
+			m.enrichItem(ctx, existing, l)
 			if err := m.store.UpsertItem(ctx, existing); err != nil {
 				m.logger.Error("import-lists: upsert existing failed", "err", err)
 			}
@@ -221,6 +230,7 @@ func (m *SyncManager) SyncList(ctx context.Context, l *ImportList) error {
 			MediaType:  fi.MediaType,
 			Status:     status,
 		}
+		m.enrichItem(ctx, item, l)
 		if err := m.store.UpsertItem(ctx, item); err != nil {
 			m.logger.Error("import-lists: insert failed", "err", err)
 		}
@@ -231,10 +241,60 @@ func (m *SyncManager) SyncList(ctx context.Context, l *ImportList) error {
 		m.logger.Error("import-lists: update last_sync failed", "err", err)
 	}
 
-	// Process pending items — actually add them to the library.
-	m.processPendingItems(ctx, l)
+	// Only auto-add to the library when the list is in auto mode. In discover
+	// mode the items remain pending and surface in the Discover section for
+	// manual adding.
+	if l.Mode != ListModeDiscover {
+		m.processPendingItems(ctx, l)
+	}
 
 	return nil
+}
+
+// enrichItem best-effort populates PosterPath/Overview from TMDB when missing.
+// Failures are logged and ignored so sync never breaks on metadata errors.
+func (m *SyncManager) enrichItem(ctx context.Context, item *ImportListItem, l *ImportList) {
+	if m.tmdbClient == nil || item.PosterPath != "" {
+		return
+	}
+	if item.TMDbID == "" || item.TMDbID == "0" {
+		return
+	}
+	tmdbID, err := strconv.Atoi(item.TMDbID)
+	if err != nil {
+		return
+	}
+
+	mediaType := item.MediaType
+	if mediaType == "" {
+		mediaType = string(l.MediaType)
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	if mediaType == string(MediaTypeSeries) {
+		meta, err := m.tmdbClient.GetTV(ctx, tmdbID)
+		if err != nil {
+			m.logger.Debug("import-lists: tmdb tv enrich failed", "title", item.Title, "err", err)
+			return
+		}
+		item.PosterPath = meta.PosterPath
+		if item.Overview == "" {
+			item.Overview = meta.Overview
+		}
+		return
+	}
+
+	meta, err := m.tmdbClient.GetMovie(ctx, tmdbID)
+	if err != nil {
+		m.logger.Debug("import-lists: tmdb movie enrich failed", "title", item.Title, "err", err)
+		return
+	}
+	item.PosterPath = meta.PosterPath
+	if item.Overview == "" {
+		item.Overview = meta.Overview
+	}
 }
 
 func (m *SyncManager) providerFor(lt ListType, mediaType MediaType) providers.ListProvider {

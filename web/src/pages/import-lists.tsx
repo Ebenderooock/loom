@@ -150,11 +150,33 @@ function ListRow({
           {list.enabled ? "Enabled" : "Disabled"}
         </Badge>
 
+        <Badge variant="outline">
+          {list.mode === "discover" ? "Discover" : "Auto-add"}
+        </Badge>
+
         {list.last_sync && (
           <span className="text-xs text-muted-foreground whitespace-nowrap">
             Last sync: {new Date(list.last_sync).toLocaleString()}
           </span>
         )}
+
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={() =>
+            updateMut.mutate({
+              id: list.id,
+              body: { mode: list.mode === "discover" ? "auto" : "discover" },
+            })
+          }
+          title={
+            list.mode === "discover"
+              ? "Switch to auto-add"
+              : "Switch to discover (list only)"
+          }
+        >
+          {list.mode === "discover" ? "Set Auto" : "Set Discover"}
+        </Button>
 
         <Button
           size="sm"
@@ -276,6 +298,7 @@ function AddListForm({ onDone }: { onDone: () => void }) {
     monitor_type: "all",
     sync_interval_minutes: 360,
     search_on_add: true,
+    mode: "auto",
     url: "",
     api_key: "",
     access_token: "",
@@ -392,6 +415,29 @@ function AddListForm({ onDone }: { onDone: () => void }) {
                   <SelectItem value="series">Series</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="add-mode">Mode</Label>
+              <Select
+                value={form.mode}
+                onValueChange={(val) =>
+                  setForm({ ...form, mode: val as "auto" | "discover" })
+                }
+              >
+                <SelectTrigger id="add-mode">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="auto">Auto-add to library</SelectItem>
+                  <SelectItem value="discover">Discover (list only)</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                {form.mode === "discover"
+                  ? "Items appear in Discover for manual adding; nothing is added automatically."
+                  : "Every fetched item is automatically added to your library."}
+              </p>
             </div>
 
             <div className="space-y-2">

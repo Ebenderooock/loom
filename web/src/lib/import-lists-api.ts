@@ -23,6 +23,7 @@ export type ListType =
 export type MediaType = "movie" | "series";
 export type MonitorType = "all" | "future" | "missing" | "none";
 export type ItemStatus = "pending" | "added" | "excluded" | "failed";
+export type ListMode = "auto" | "discover";
 
 export interface ImportList {
   id: string;
@@ -38,6 +39,7 @@ export interface ImportList {
   media_type: MediaType;
   monitor_type: MonitorType;
   search_on_add: boolean;
+  mode: ListMode;
   last_sync?: string;
   settings: string;
   created_at: string;
@@ -54,9 +56,17 @@ export interface ImportListItem {
   imdb_id?: string;
   tmdb_id?: string;
   tvdb_id?: string;
+  media_type?: string;
   status: ItemStatus;
+  poster_path?: string;
+  overview?: string;
   last_seen: string;
   created_at: string;
+}
+
+export interface DiscoverItem extends ImportListItem {
+  list_name: string;
+  in_library: boolean;
 }
 
 export interface ImportListExclusion {
@@ -82,6 +92,7 @@ export interface CreateImportListRequest {
   media_type?: MediaType;
   monitor_type?: MonitorType;
   search_on_add?: boolean;
+  mode?: ListMode;
   settings?: string;
 }
 
@@ -98,6 +109,7 @@ export interface UpdateImportListRequest {
   media_type?: MediaType;
   monitor_type?: MonitorType;
   search_on_add?: boolean;
+  mode?: ListMode;
   settings?: string;
 }
 
@@ -263,6 +275,31 @@ export async function fetchTraktUserLists(
   return data?.data ?? [];
 }
 
+// ---------- Discover feed ----------
+
+export async function fetchDiscover(
+  mediaType: MediaType,
+  signal?: AbortSignal,
+): Promise<DiscoverItem[]> {
+  const data = await request<{ data: DiscoverItem[] }>(
+    "GET",
+    `/api/v1/import-lists/discover?media_type=${encodeURIComponent(mediaType)}`,
+    undefined,
+    signal,
+  );
+  return data?.data ?? [];
+}
+
+export async function addDiscoverItem(
+  itemId: string,
+): Promise<{ data: ImportListItem }> {
+  return request<{ data: ImportListItem }>(
+    "POST",
+    "/api/v1/import-lists/discover/add",
+    { item_id: itemId },
+  );
+}
+
 // ---------- Query keys ----------
 
 export const importListKeys = {
@@ -271,6 +308,8 @@ export const importListKeys = {
   detail: (id: string) => [...importListKeys.all, "detail", id] as const,
   exclusions: () => [...importListKeys.all, "exclusions"] as const,
   traktLists: () => [...importListKeys.all, "trakt-lists"] as const,
+  discover: (mediaType: MediaType) =>
+    [...importListKeys.all, "discover", mediaType] as const,
 };
 
 // ---------- React Query hooks ----------
@@ -358,6 +397,22 @@ export function useTraktUserLists(enabled = true) {
     queryKey: importListKeys.traktLists(),
     queryFn: ({ signal }) => fetchTraktUserLists(signal),
     enabled,
+  });
+}
+
+export function useDiscover(mediaType: MediaType) {
+  return useQuery<DiscoverItem[], Error>({
+    queryKey: importListKeys.discover(mediaType),
+    queryFn: ({ signal }) => fetchDiscover(mediaType, signal),
+  });
+}
+
+export function useAddDiscoverItem() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: addDiscoverItem,
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: [...importListKeys.all, "discover"] }),
   });
 }
 

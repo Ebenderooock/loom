@@ -28,7 +28,7 @@ func (s *Store) ListAll(ctx context.Context) ([]*ImportList, error) {
 		SELECT id, name, list_type, enabled, url, api_key, access_token,
 		       sync_interval_minutes, root_folder_path, quality_profile_id,
 		       media_type, monitor_type, search_on_add, last_sync, settings,
-		       created_at, updated_at
+		       created_at, updated_at, mode
 		FROM import_lists ORDER BY name`)
 	if err != nil {
 		return nil, err
@@ -52,7 +52,7 @@ func (s *Store) Get(ctx context.Context, id string) (*ImportList, error) {
 		SELECT id, name, list_type, enabled, url, api_key, access_token,
 		       sync_interval_minutes, root_folder_path, quality_profile_id,
 		       media_type, monitor_type, search_on_add, last_sync, settings,
-		       created_at, updated_at
+		       created_at, updated_at, mode
 		FROM import_lists WHERE id = ?`, id)
 
 	l := &ImportList{}
@@ -60,12 +60,13 @@ func (s *Store) Get(ctx context.Context, id string) (*ImportList, error) {
 		enabled, searchOnAdd int
 		url, apiKey, token, rootFolder sql.NullString
 		lastSync sql.NullTime
+		mode sql.NullString
 	)
 	err := row.Scan(
 		&l.ID, &l.Name, &l.ListType, &enabled, &url, &apiKey, &token,
 		&l.SyncIntervalMinutes, &rootFolder, &l.QualityProfileID,
 		&l.MediaType, &l.MonitorType, &searchOnAdd, &lastSync, &l.Settings,
-		&l.CreatedAt, &l.UpdatedAt,
+		&l.CreatedAt, &l.UpdatedAt, &mode,
 	)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -79,6 +80,7 @@ func (s *Store) Get(ctx context.Context, id string) (*ImportList, error) {
 	l.APIKey = apiKey.String
 	l.AccessToken = token.String
 	l.LibraryPath = rootFolder.String
+	l.Mode = normalizeMode(mode.String)
 	if lastSync.Valid {
 		l.LastSync = &lastSync.Time
 	}
@@ -96,18 +98,21 @@ func (s *Store) Create(ctx context.Context, l *ImportList) error {
 	if l.Settings == "" {
 		l.Settings = "{}"
 	}
+	if l.Mode == "" {
+		l.Mode = ListModeAuto
+	}
 
 	_, err := s.db.ExecContext(ctx, `
 		INSERT INTO import_lists
 		(id, name, list_type, enabled, url, api_key, access_token,
 		 sync_interval_minutes, root_folder_path, quality_profile_id,
-		 media_type, monitor_type, search_on_add, settings, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		 media_type, monitor_type, search_on_add, settings, created_at, updated_at, mode)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		l.ID, l.Name, l.ListType, boolToInt(l.Enabled),
 		nullStr(l.URL), nullStr(l.APIKey), nullStr(l.AccessToken),
 		l.SyncIntervalMinutes, nullStr(l.LibraryPath), l.QualityProfileID,
 		l.MediaType, l.MonitorType, boolToInt(l.SearchOnAdd),
-		l.Settings, l.CreatedAt, l.UpdatedAt,
+		l.Settings, l.CreatedAt, l.UpdatedAt, string(l.Mode),
 	)
 	return err
 }
@@ -115,18 +120,21 @@ func (s *Store) Create(ctx context.Context, l *ImportList) error {
 // Update modifies an existing import list.
 func (s *Store) Update(ctx context.Context, l *ImportList) error {
 	l.UpdatedAt = time.Now().UTC()
+	if l.Mode == "" {
+		l.Mode = ListModeAuto
+	}
 	_, err := s.db.ExecContext(ctx, `
 		UPDATE import_lists SET
 			name = ?, list_type = ?, enabled = ?, url = ?, api_key = ?,
 			access_token = ?, sync_interval_minutes = ?, root_folder_path = ?,
 			quality_profile_id = ?, media_type = ?, monitor_type = ?,
-			search_on_add = ?, settings = ?, updated_at = ?
+			search_on_add = ?, settings = ?, updated_at = ?, mode = ?
 		WHERE id = ?`,
 		l.Name, l.ListType, boolToInt(l.Enabled),
 		nullStr(l.URL), nullStr(l.APIKey), nullStr(l.AccessToken),
 		l.SyncIntervalMinutes, nullStr(l.LibraryPath), l.QualityProfileID,
 		l.MediaType, l.MonitorType, boolToInt(l.SearchOnAdd),
-		l.Settings, l.UpdatedAt, l.ID,
+		l.Settings, l.UpdatedAt, string(l.Mode), l.ID,
 	)
 	return err
 }
@@ -153,7 +161,7 @@ func (s *Store) UpdateLastSync(ctx context.Context, id string, t time.Time) erro
 func (s *Store) ListItems(ctx context.Context, listID string) ([]*ImportListItem, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, list_id, external_id, title, year, imdb_id, tmdb_id,
-		       tvdb_id, media_type, status, last_seen, created_at
+		       tvdb_id, media_type, status, last_seen, created_at, poster_path, overview
 		FROM import_list_items WHERE list_id = ? ORDER BY title`, listID)
 	if err != nil {
 		return nil, err
@@ -181,16 +189,18 @@ func (s *Store) UpsertItem(ctx context.Context, item *ImportListItem) error {
 
 	_, err := s.db.ExecContext(ctx, `
 		INSERT INTO import_list_items
-		(id, list_id, external_id, title, year, imdb_id, tmdb_id, tvdb_id, media_type, status, last_seen, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		(id, list_id, external_id, title, year, imdb_id, tmdb_id, tvdb_id, media_type, status, last_seen, created_at, poster_path, overview)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			title = excluded.title, year = excluded.year,
 			imdb_id = excluded.imdb_id, tmdb_id = excluded.tmdb_id,
 			tvdb_id = excluded.tvdb_id, media_type = excluded.media_type,
-			status = excluded.status, last_seen = excluded.last_seen`,
+			status = excluded.status, last_seen = excluded.last_seen,
+			poster_path = excluded.poster_path, overview = excluded.overview`,
 		item.ID, item.ListID, item.ExternalID, item.Title, item.Year,
 		nullStr(item.IMDbID), nullStr(item.TMDbID), nullStr(item.TVDbID),
 		nullStr(item.MediaType), item.Status, item.LastSeen, now,
+		item.PosterPath, item.Overview,
 	)
 	return err
 }
@@ -199,15 +209,16 @@ func (s *Store) UpsertItem(ctx context.Context, item *ImportListItem) error {
 func (s *Store) FindItemByExternalID(ctx context.Context, listID, externalID string) (*ImportListItem, error) {
 	row := s.db.QueryRowContext(ctx, `
 		SELECT id, list_id, external_id, title, year, imdb_id, tmdb_id,
-		       tvdb_id, media_type, status, last_seen, created_at
+		       tvdb_id, media_type, status, last_seen, created_at, poster_path, overview
 		FROM import_list_items WHERE list_id = ? AND external_id = ?`, listID, externalID)
 
 	item := &ImportListItem{}
 	var year sql.NullInt64
-	var imdb, tmdb, tvdb, mediaType sql.NullString
+	var imdb, tmdb, tvdb, mediaType, poster, overview sql.NullString
 	err := row.Scan(
 		&item.ID, &item.ListID, &item.ExternalID, &item.Title, &year,
 		&imdb, &tmdb, &tvdb, &mediaType, &item.Status, &item.LastSeen, &item.CreatedAt,
+		&poster, &overview,
 	)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -223,7 +234,81 @@ func (s *Store) FindItemByExternalID(ctx context.Context, listID, externalID str
 	item.TMDbID = tmdb.String
 	item.TVDbID = tvdb.String
 	item.MediaType = mediaType.String
+	item.PosterPath = poster.String
+	item.Overview = overview.String
 	return item, nil
+}
+
+// GetItem returns a single import list item by ID.
+func (s *Store) GetItem(ctx context.Context, id string) (*ImportListItem, error) {
+	row := s.db.QueryRowContext(ctx, `
+		SELECT id, list_id, external_id, title, year, imdb_id, tmdb_id,
+		       tvdb_id, media_type, status, last_seen, created_at, poster_path, overview
+		FROM import_list_items WHERE id = ?`, id)
+	item, err := scanItem(row)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return item, nil
+}
+
+// discoverRow pairs a discover item with its parent list context.
+type discoverRow struct {
+	Item     *ImportListItem
+	ListName string
+	MediaType string
+}
+
+// ListDiscoverItems returns items belonging to enabled discover-mode lists,
+// filtered by effective media type ("movie" or "series"), excluding excluded items.
+func (s *Store) ListDiscoverItems(ctx context.Context, mediaType string) ([]*discoverRow, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT i.id, i.list_id, i.external_id, i.title, i.year, i.imdb_id, i.tmdb_id,
+		       i.tvdb_id, i.media_type, i.status, i.last_seen, i.created_at,
+		       i.poster_path, i.overview, l.name, l.media_type
+		FROM import_list_items i
+		JOIN import_lists l ON i.list_id = l.id
+		WHERE l.mode = 'discover' AND l.enabled = 1 AND i.status != 'excluded'
+		  AND COALESCE(NULLIF(i.media_type, ''), l.media_type) = ?
+		ORDER BY i.title`, mediaType)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []*discoverRow
+	for rows.Next() {
+		item := &ImportListItem{}
+		var year sql.NullInt64
+		var imdb, tmdb, tvdb, itemMedia, poster, overview sql.NullString
+		var listName, listMedia string
+		if err := rows.Scan(
+			&item.ID, &item.ListID, &item.ExternalID, &item.Title, &year,
+			&imdb, &tmdb, &tvdb, &itemMedia, &item.Status, &item.LastSeen, &item.CreatedAt,
+			&poster, &overview, &listName, &listMedia,
+		); err != nil {
+			return nil, err
+		}
+		if year.Valid {
+			y := int(year.Int64)
+			item.Year = &y
+		}
+		item.IMDbID = imdb.String
+		item.TMDbID = tmdb.String
+		item.TVDbID = tvdb.String
+		item.MediaType = itemMedia.String
+		item.PosterPath = poster.String
+		item.Overview = overview.String
+		eff := item.MediaType
+		if eff == "" {
+			eff = listMedia
+		}
+		out = append(out, &discoverRow{Item: item, ListName: listName, MediaType: eff})
+	}
+	return out, rows.Err()
 }
 
 // --- Exclusions ---
@@ -329,12 +414,13 @@ func scanList(row rowScanner) (*ImportList, error) {
 		enabled, searchOnAdd int
 		url, apiKey, token, rootFolder sql.NullString
 		lastSync sql.NullTime
+		mode sql.NullString
 	)
 	err := row.Scan(
 		&l.ID, &l.Name, &l.ListType, &enabled, &url, &apiKey, &token,
 		&l.SyncIntervalMinutes, &rootFolder, &l.QualityProfileID,
 		&l.MediaType, &l.MonitorType, &searchOnAdd, &lastSync, &l.Settings,
-		&l.CreatedAt, &l.UpdatedAt,
+		&l.CreatedAt, &l.UpdatedAt, &mode,
 	)
 	if err != nil {
 		return nil, err
@@ -345,6 +431,7 @@ func scanList(row rowScanner) (*ImportList, error) {
 	l.APIKey = apiKey.String
 	l.AccessToken = token.String
 	l.LibraryPath = rootFolder.String
+	l.Mode = normalizeMode(mode.String)
 	if lastSync.Valid {
 		l.LastSync = &lastSync.Time
 	}
@@ -354,10 +441,11 @@ func scanList(row rowScanner) (*ImportList, error) {
 func scanItem(row rowScanner) (*ImportListItem, error) {
 	item := &ImportListItem{}
 	var year sql.NullInt64
-	var imdb, tmdb, tvdb, mediaType sql.NullString
+	var imdb, tmdb, tvdb, mediaType, poster, overview sql.NullString
 	err := row.Scan(
 		&item.ID, &item.ListID, &item.ExternalID, &item.Title, &year,
 		&imdb, &tmdb, &tvdb, &mediaType, &item.Status, &item.LastSeen, &item.CreatedAt,
+		&poster, &overview,
 	)
 	if err != nil {
 		return nil, err
@@ -370,7 +458,17 @@ func scanItem(row rowScanner) (*ImportListItem, error) {
 	item.TMDbID = tmdb.String
 	item.TVDbID = tvdb.String
 	item.MediaType = mediaType.String
+	item.PosterPath = poster.String
+	item.Overview = overview.String
 	return item, nil
+}
+
+// normalizeMode coerces a stored mode string to a valid ListMode, defaulting to auto.
+func normalizeMode(s string) ListMode {
+	if ListMode(s) == ListModeDiscover {
+		return ListModeDiscover
+	}
+	return ListModeAuto
 }
 
 func boolToInt(b bool) int {

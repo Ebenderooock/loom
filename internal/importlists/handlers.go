@@ -21,6 +21,10 @@ func Router(store *Store, syncMgr *SyncManager, logger *slog.Logger) chi.Router 
 	r.Delete("/exclusions/{id}", deleteExclusion(store))
 	r.Get("/trakt/lists", getTraktUserLists(syncMgr))
 
+	// Discover feed (items from discover-mode lists).
+	r.Get("/discover", listDiscover(syncMgr))
+	r.Post("/discover/add", addDiscover(syncMgr, logger))
+
 	r.Get("/{id}", getList(store))
 	r.Put("/{id}", updateList(store))
 	r.Delete("/{id}", deleteList(store))
@@ -93,6 +97,9 @@ func createList(store *Store) http.HandlerFunc {
 		}
 		if l.QualityProfileID == "" {
 			l.QualityProfileID = "default"
+		}
+		if l.Mode != ListModeDiscover {
+			l.Mode = ListModeAuto
 		}
 
 		if err := store.Create(r.Context(), &l); err != nil {
@@ -173,6 +180,12 @@ func updateList(store *Store) http.HandlerFunc {
 		}
 		if update.Settings == "" {
 			update.Settings = existing.Settings
+		}
+		if update.Mode == "" {
+			update.Mode = existing.Mode
+		}
+		if update.Mode != ListModeDiscover {
+			update.Mode = ListModeAuto
 		}
 
 		if err := store.Update(r.Context(), &update); err != nil {
@@ -269,5 +282,50 @@ func getTraktUserLists(syncMgr *SyncManager) http.HandlerFunc {
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"data": lists})
+	}
+}
+
+func listDiscover(syncMgr *SyncManager) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		mediaType := r.URL.Query().Get("media_type")
+		if mediaType == "" {
+			mediaType = string(MediaTypeMovie)
+		}
+		if mediaType != string(MediaTypeMovie) && mediaType != string(MediaTypeSeries) {
+			writeError(w, http.StatusBadRequest, "media_type must be 'movie' or 'series'")
+			return
+		}
+		items, err := syncMgr.DiscoverItems(r.Context(), mediaType)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		if items == nil {
+			items = []*DiscoverItem{}
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"data": items})
+	}
+}
+
+func addDiscover(syncMgr *SyncManager, logger *slog.Logger) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			ItemID string `json:"item_id"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
+			return
+		}
+		if body.ItemID == "" {
+			writeError(w, http.StatusBadRequest, "item_id is required")
+			return
+		}
+		item, err := syncMgr.AddDiscoverItem(r.Context(), body.ItemID)
+		if err != nil {
+			logger.Error("import-lists: discover add failed", "item", body.ItemID, "err", err)
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"data": item})
 	}
 }

@@ -21,6 +21,17 @@ const (
 	ListTypeRadarr           ListType = "radarr"
 )
 
+// ListMode controls whether a list auto-adds items or only surfaces them in
+// the Discover section for manual adding.
+type ListMode string
+
+const (
+	// ListModeAuto auto-adds every fetched item to the library (legacy behaviour).
+	ListModeAuto ListMode = "auto"
+	// ListModeDiscover only lists fetched items; the user adds them manually.
+	ListModeDiscover ListMode = "discover"
+)
+
 // MediaType is "movie" or "series".
 type MediaType string
 
@@ -64,6 +75,7 @@ type ImportList struct {
 	MediaType           MediaType  `json:"media_type"`
 	MonitorType         MonitorType `json:"monitor_type"`
 	SearchOnAdd         bool       `json:"search_on_add"`
+	Mode                ListMode   `json:"mode"`
 	LastSync            *time.Time `json:"last_sync,omitempty"`
 	Settings            string     `json:"settings"`
 	CreatedAt           time.Time  `json:"created_at"`
@@ -82,6 +94,8 @@ type ImportListItem struct {
 	TVDbID     string     `json:"tvdb_id,omitempty"`
 	MediaType  string     `json:"media_type,omitempty"`
 	Status     ItemStatus `json:"status"`
+	PosterPath string     `json:"poster_path,omitempty"`
+	Overview   string     `json:"overview,omitempty"`
 	LastSeen   time.Time  `json:"last_seen"`
 	CreatedAt  time.Time  `json:"created_at"`
 }
