@@ -102,6 +102,16 @@ func (c *Client) Name() string { return c.name }
 // calls return the cached snapshot. Errors during lazy fetch surface
 // as an empty Caps (callers who need the error should use Test).
 func (c *Client) Caps() indexers.Caps {
+	ctx, cancel := context.WithTimeout(context.Background(), c.cfg.Timeout.duration())
+	defer cancel()
+	return c.capsWithContext(ctx)
+}
+
+// capsWithContext returns cached caps when present, otherwise lazy-fetches
+// using the supplied context so the caller's deadline (e.g. the
+// per-indexer search timeout) governs the network round-trip instead of
+// an unbounded background fetch.
+func (c *Client) capsWithContext(ctx context.Context) indexers.Caps {
 	c.capsMu.RLock()
 	if c.capsHit {
 		defer c.capsMu.RUnlock()
@@ -109,8 +119,6 @@ func (c *Client) Caps() indexers.Caps {
 	}
 	c.capsMu.RUnlock()
 
-	ctx, cancel := context.WithTimeout(context.Background(), c.cfg.Timeout.duration())
-	defer cancel()
 	caps, err := c.fetchAndStoreCaps(ctx)
 	if err != nil {
 		return indexers.Caps{}

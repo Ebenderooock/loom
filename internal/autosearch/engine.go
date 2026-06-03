@@ -514,7 +514,10 @@ func (e *Engine) searchAndGrabSingle(ctx context.Context, req SearchRequest) (*S
 				})
 			}
 
-			agg := e.indexerSvc.Search(ctx, q, nil, 120*time.Second)
+			// Pass 0 so the indexer service applies its configured
+			// fail-fast per-indexer timeout (15s direct, 65s for
+			// FlareSolverr-proxied indexers) instead of a flat 120s.
+			agg := e.indexerSvc.Search(ctx, q, nil, 0)
 			tierResults = append(tierResults, agg.Results...)
 			if q.IMDBID != "" || q.TVDBID != "" || q.TMDBID != "" {
 				tierIDsBased = true

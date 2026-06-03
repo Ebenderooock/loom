@@ -44,10 +44,11 @@ type FlareSolverrClient struct {
 // httpc may be nil; the package falls back to a sensible default.
 func NewFlareSolverrClient(httpc *http.Client, defaultTimeout time.Duration) *FlareSolverrClient {
 	if httpc == nil {
-		httpc = &http.Client{Timeout: 120 * time.Second}
+		// http timeout = FlareSolverr maxTimeout + 5s headroom (Prowlarr parity).
+		httpc = &http.Client{Timeout: 65 * time.Second}
 	}
 	if defaultTimeout <= 0 {
-		defaultTimeout = 90 * time.Second
+		defaultTimeout = 60 * time.Second
 	}
 	return &FlareSolverrClient{
 		httpc:          httpc,

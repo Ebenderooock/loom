@@ -35,9 +35,10 @@ func NewIndexerAvailability(clock Clock) *IndexerAvailability {
 	}
 }
 
-// backoffSteps defines the escalating cooldown durations. After
-// len(backoffSteps) consecutive failures the cooldown caps at the
-// last value.
+// backoffSteps defines the escalating cooldown durations applied from
+// the second consecutive failure onward (a single transient failure is
+// tolerated without disabling the indexer — see backoffFor). After
+// len(backoffSteps) escalations the cooldown caps at the last value.
 var backoffSteps = []time.Duration{
 	5 * time.Minute,
 	15 * time.Minute,
@@ -46,10 +47,14 @@ var backoffSteps = []time.Duration{
 }
 
 func backoffFor(failures int) time.Duration {
-	if failures <= 0 {
+	// Tolerate a single transient failure (timeout, blip) without
+	// disabling the indexer, so a user who retries immediately isn't
+	// met with a skipped indexer. Only escalate to a cooldown once an
+	// indexer fails twice in a row.
+	if failures <= 1 {
 		return 0
 	}
-	idx := failures - 1
+	idx := failures - 2
 	if idx >= len(backoffSteps) {
 		idx = len(backoffSteps) - 1
 	}

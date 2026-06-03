@@ -19,7 +19,7 @@ import (
 // ID scheme the indexer doesn't support — the caller should skip to
 // the next query in the chain rather than marking the indexer as failed.
 func (c *Client) Search(ctx context.Context, q indexers.Query) (*indexers.Results, error) {
-	caps := c.Caps()
+	caps := c.capsWithContext(ctx)
 	mode, params, ok := buildQuery(q, c.cfg, caps)
 	if !ok {
 		// Indexer can't service this query — return empty, not an error.

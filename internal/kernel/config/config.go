@@ -59,6 +59,7 @@ type Config struct {
 //   - Proxies governs Phase 2e per-indexer outbound proxies.
 type IndexersConfig struct {
 	SearchTimeoutSec      int              `mapstructure:"search_timeout"`
+	ProxySearchTimeoutSec int              `mapstructure:"proxy_search_timeout"`
 	MaxParallel           int              `mapstructure:"max_parallel"`
 	HealthCheckSchedule   string           `mapstructure:"health_check_schedule"`
 	HealthCheckTimeoutSec int              `mapstructure:"health_check_timeout"`
@@ -452,11 +453,12 @@ func applyDefaults(v *viper.Viper) {
 	v.SetDefault("scheduler.timezone", "Local")
 	v.SetDefault("scheduler.shutdown_grace", 30)
 
-	v.SetDefault("indexers.search_timeout", 120)
+	v.SetDefault("indexers.search_timeout", 15)
+	v.SetDefault("indexers.proxy_search_timeout", 65)
 	v.SetDefault("indexers.max_parallel", 8)
 	v.SetDefault("indexers.health_check_schedule", "*/10 * * * *")
-	v.SetDefault("indexers.health_check_timeout", 120)
-	v.SetDefault("indexers.proxies.flaresolverr_default_timeout", 90)
+	v.SetDefault("indexers.health_check_timeout", 15)
+	v.SetDefault("indexers.proxies.flaresolverr_default_timeout", 60)
 	v.SetDefault("indexers.proxies.test_probe_url", "https://www.google.com/generate_204")
 	v.SetDefault("indexers.cardigann.definitions_dir", "")
 

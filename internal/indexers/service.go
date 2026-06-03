@@ -33,6 +33,10 @@ type ServiceOptions struct {
 	Logger             *slog.Logger
 	Clock              Clock
 	SearchTimeout      time.Duration
+	// ProxySearchTimeout bounds a single proxied (e.g. FlareSolverr)
+	// indexer search. A real Cloudflare solve can take tens of seconds,
+	// so this is larger than SearchTimeout. Zero defaults to 65s.
+	ProxySearchTimeout time.Duration
 	MaxParallel        int
 	HealthCheckTimeout time.Duration
 	// RouteExtensions are additional sub-mounters that Mount calls
@@ -75,6 +79,7 @@ type Service struct {
 	logger             *slog.Logger
 	clock              Clock
 	searchTimeout      time.Duration
+	proxyTimeout       time.Duration
 	maxParallel        int
 	healthCheckTimeout time.Duration
 	routeExtensions      []RouteMounter
@@ -102,13 +107,16 @@ func NewService(opts ServiceOptions) (*Service, error) {
 		opts.Clock = SystemClock{}
 	}
 	if opts.SearchTimeout <= 0 {
-		opts.SearchTimeout = 120 * time.Second
+		opts.SearchTimeout = 15 * time.Second
+	}
+	if opts.ProxySearchTimeout <= 0 {
+		opts.ProxySearchTimeout = 65 * time.Second
 	}
 	if opts.MaxParallel <= 0 {
 		opts.MaxParallel = 8
 	}
 	if opts.HealthCheckTimeout <= 0 {
-		opts.HealthCheckTimeout = 120 * time.Second
+		opts.HealthCheckTimeout = 15 * time.Second
 	}
 	sht := opts.SearchHealthTracker
 	if sht == nil {
@@ -124,6 +132,7 @@ func NewService(opts ServiceOptions) (*Service, error) {
 		logger:              opts.Logger.With("module", "indexers"),
 		clock:               opts.Clock,
 		searchTimeout:       opts.SearchTimeout,
+		proxyTimeout:        opts.ProxySearchTimeout,
 		maxParallel:         opts.MaxParallel,
 		healthCheckTimeout:  opts.HealthCheckTimeout,
 		routeExtensions:     opts.RouteExtensions,
@@ -550,6 +559,41 @@ func (s *Service) TestOne(ctx context.Context, id string) (Health, error) {
 	return h, err
 }
 
+// proxyTimeoutOverrides builds a per-indexer timeout map granting any
+// indexer that has a proxy configured (e.g. FlareSolverr) the longer
+// proxyTimeout budget, since a real Cloudflare solve can take tens of
+// seconds. Direct indexers are left to the fail-fast searchTimeout.
+func (s *Service) proxyTimeoutOverrides(ctx context.Context, ids []string) map[string]time.Duration {
+	if s.proxyTimeout <= 0 || s.repo == nil {
+		return nil
+	}
+	defs, err := s.repo.List(ctx)
+	if err != nil {
+		s.logger.Warn("proxy timeout overrides: list definitions failed", "err", err)
+		return nil
+	}
+	want := make(map[string]struct{}, len(ids))
+	for _, id := range ids {
+		want[id] = struct{}{}
+	}
+	overrides := make(map[string]time.Duration)
+	for _, d := range defs {
+		if d.ProxyID == "" {
+			continue
+		}
+		if len(want) > 0 {
+			if _, ok := want[d.ID]; !ok {
+				continue
+			}
+		}
+		overrides[d.ID] = s.proxyTimeout
+	}
+	if len(overrides) == 0 {
+		return nil
+	}
+	return overrides
+}
+
 // Search fans an aggregated search out across the registered
 // indexers, applying the configured timeout/parallelism caps.
 func (s *Service) Search(ctx context.Context, q Query, ids []string, perTimeout time.Duration) AggregatedResults {
@@ -576,19 +620,27 @@ func (s *Service) Search(ctx context.Context, q Query, ids []string, perTimeout 
 	agg := s.registry.Search(ctx, q, SearchOptions{
 		IndexerIDs:        availableIDs,
 		PerIndexerTimeout: perTimeout,
+		TimeoutOverrides:  s.proxyTimeoutOverrides(ctx, availableIDs),
 		MaxParallel:       s.maxParallel,
 	})
 
 	// Record availability: clear on success, record failure on error.
+	// A "skipped" status (indexer can't service this query's IDs) is
+	// neither — it must not trip or clear the circuit breaker, otherwise
+	// the ID-tier search would disable indexers before the title-tier
+	// fallback ever runs.
 	if agg.Diagnostics != nil {
 		for _, d := range agg.Diagnostics.Indexers {
 			indexerID := s.resolveIndexerID(d.Name)
 			if indexerID == "" {
 				continue
 			}
-			if d.Status == "error" || d.Status == "timeout" {
+			switch d.Status {
+			case "error", "timeout":
 				s.indexerAvailability.RecordFailure(indexerID)
-			} else {
+			case "skipped":
+				// no-op
+			default:
 				s.indexerAvailability.RecordSuccess(indexerID)
 			}
 		}
@@ -699,6 +751,7 @@ func (s *Service) SearchStream(ctx context.Context, q Query, ids []string, perTi
 	go s.registry.SearchStream(ctx, q, SearchOptions{
 		IndexerIDs:        availableIDs,
 		PerIndexerTimeout: perTimeout,
+		TimeoutOverrides:  s.proxyTimeoutOverrides(ctx, availableIDs),
 		MaxParallel:       s.maxParallel,
 	}, internal)
 
@@ -708,13 +761,20 @@ func (s *Service) SearchStream(ctx context.Context, q Query, ids []string, perTi
 			indexerID := evt.IndexerID
 			dur := time.Duration(evt.ElapsedMS) * time.Millisecond
 			var searchErr error
+			// A "skipped" event (indexer can't service this query's IDs)
+			// is neither success nor failure — it must not trip or clear
+			// the circuit breaker, or the ID-tier search would disable
+			// indexers before the title-tier fallback runs.
+			skipped := evt.Type == EventIndexerError && evt.Status == "skipped"
 			if evt.Type == EventIndexerError {
-				searchErr = errors.New(evt.Error)
-				s.indexerAvailability.RecordFailure(indexerID)
+				if !skipped {
+					searchErr = errors.New(evt.Error)
+					s.indexerAvailability.RecordFailure(indexerID)
+				}
 			} else {
 				s.indexerAvailability.RecordSuccess(indexerID)
 			}
-			if s.searchHealthTracker != nil {
+			if s.searchHealthTracker != nil && !skipped {
 				s.searchHealthTracker.RecordSearch(indexerID, dur, evt.ResultCount, searchErr)
 			}
 			if s.queryLog != nil && queryLogID != "" {

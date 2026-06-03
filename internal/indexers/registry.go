@@ -107,9 +107,27 @@ type SearchOptions struct {
 	// means "use the parent context as-is".
 	PerIndexerTimeout time.Duration
 
+	// TimeoutOverrides supplies a per-indexer timeout keyed by indexer
+	// ID. When an indexer has an entry here it takes precedence over
+	// PerIndexerTimeout. Used to grant FlareSolverr-proxied indexers a
+	// longer budget (a real Cloudflare solve can take tens of seconds)
+	// while keeping direct indexers fail-fast.
+	TimeoutOverrides map[string]time.Duration
+
 	// MaxParallel caps the number of concurrent in-flight searches.
 	// Zero or negative means "no cap".
 	MaxParallel int
+}
+
+// timeoutFor returns the effective per-indexer timeout for the given
+// indexer ID, preferring a TimeoutOverrides entry over the default.
+func (o SearchOptions) timeoutFor(id string) time.Duration {
+	if o.TimeoutOverrides != nil {
+		if t, ok := o.TimeoutOverrides[id]; ok && t > 0 {
+			return t
+		}
+	}
+	return o.PerIndexerTimeout
 }
 
 // IndexerDiagnostic records timing and status for a single indexer's
@@ -196,6 +214,7 @@ func (r *Registry) Search(ctx context.Context, q Query, opts SearchOptions) Aggr
 		name    string
 		out     *Results
 		err     error
+		skipped bool
 		elapsed time.Duration
 	}
 	ch := make(chan partial, len(targets))
@@ -209,7 +228,7 @@ func (r *Registry) Search(ctx context.Context, q Query, opts SearchOptions) Aggr
 		if q.Term == "" && queryHasIDs(q) && !indexerSupportsAnyQueryID(ix, q) {
 			slog.Debug("registry: skipping indexer (no supported IDs, no text fallback)",
 				"indexer", ix.Name(), "query_ids", queryIDSummary(q))
-			ch <- partial{id: ix.ID(), name: ix.Name(), err: fmt.Errorf("skipped: indexer does not support any of the query's ID types")}
+			ch <- partial{id: ix.ID(), name: ix.Name(), skipped: true}
 			continue
 		}
 
@@ -220,7 +239,7 @@ func (r *Registry) Search(ctx context.Context, q Query, opts SearchOptions) Aggr
 			defer wg.Done()
 			defer func() { <-sem }()
 			start := time.Now()
-			res, err := runOne(ctx, ix, q, opts.PerIndexerTimeout)
+			res, err := runOne(ctx, ix, q, opts.timeoutFor(ix.ID()))
 			ch <- partial{id: ix.ID(), name: ix.Name(), out: res, err: err, elapsed: time.Since(start)}
 		}()
 	}
@@ -238,7 +257,10 @@ func (r *Registry) Search(ctx context.Context, q Query, opts SearchOptions) Aggr
 			Name:           p.name,
 			ResponseTimeMS: p.elapsed.Milliseconds(),
 		}
-		if p.err != nil {
+		if p.skipped {
+			d.Status = "skipped"
+			d.ErrorMessage = "indexer does not support any of the query's ID types"
+		} else if p.err != nil {
 			agg.Errors[p.id] = p.err.Error()
 			d.ErrorMessage = p.err.Error()
 			if errors.Is(p.err, context.DeadlineExceeded) {
@@ -369,7 +391,7 @@ func (r *Registry) SearchStream(ctx context.Context, q Query, opts SearchOptions
 			}
 
 			start := time.Now()
-			res, err := runOne(ctx, ix, q, opts.PerIndexerTimeout)
+			res, err := runOne(ctx, ix, q, opts.timeoutFor(ix.ID()))
 			elapsed := time.Since(start).Milliseconds()
 
 			if err != nil {
