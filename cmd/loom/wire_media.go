@@ -70,6 +70,26 @@ func wireMedia(
 	seriesScannerSvc := buildSeriesScanner(seriesSvc, logger)
 	srv.SetSeriesScanner(seriesScannerSvc)
 
+	// After a refresh re-creates a series' episodes (new IDs), re-link on-disk
+	// files by triggering a per-series scan. Best-effort; never fails refresh.
+	// Use a detached, bounded context so a client disconnect mid-refresh can't
+	// leave the re-link half-applied (which would re-orphan episode files).
+	seriesSvc.SetPostRefreshHook(func(ctx context.Context, seriesID string) {
+		rescanCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Minute)
+		defer cancel()
+		sr, err := seriesSvc.GetSeries(rescanCtx, seriesID)
+		if err != nil || sr.LibraryID == "" {
+			return
+		}
+		lib, err := libStore.Get(rescanCtx, sr.LibraryID)
+		if err != nil {
+			return
+		}
+		if _, err := seriesScannerSvc.RescanSeries(rescanCtx, seriesID, lib.Path); err != nil {
+			logger.Debug("post-refresh rescan failed", "series", seriesID, "error", err)
+		}
+	})
+
 	// Periodic library scan (every 6 hours)
 	periodicScanner := scheduler.NewPeriodicScanner(
 		seriesScannerSvc,
