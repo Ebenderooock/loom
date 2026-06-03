@@ -264,6 +264,13 @@ export LOOM_METADATA_TVDB_PIN=optional_pin               # optional
 export LOOM_METADATA_TVDB_SEASON_TYPE=official           # optional, default "official"
 ```
 
+Official release images ship with a **bundled TVDB key** injected at build time
+(`-ldflags "-X github.com/ebenderooock/loom/cmd/loom.defaultTVDBKey=..."`), so
+anime segmentation works out of the box without users supplying their own key.
+`LOOM_METADATA_TVDB_APIKEY` still takes precedence when set, letting operators
+override the bundled key with their own. Builds from source have no bundled key
+and fall back to TMDB unless the env var is provided.
+
 - `LOOM_METADATA_TVDB_SEASON_TYPE` selects the TVDB season ordering:
   `default`, `official` (aired order, matches Sonarr's default), `dvd`,
   `absolute`, `alternate`, or `regional`.

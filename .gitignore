@@ -65,3 +65,6 @@ website/dist/
 
 # Local-only helm overrides (real ingress host, etc.)
 deploy/helm/values-homelab.local.yaml
+
+# Build-time secrets baked into the Docker image (TVDB key, etc.)
+deploy/.build-secrets.env

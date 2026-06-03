@@ -47,6 +47,15 @@ fi
 COMMIT=$(git -C "$REPO_ROOT" rev-parse --short HEAD)
 DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
+# Optional build-time secrets (gitignored). Provides TVDB_APIKEY so the bundled
+# TVDB key gets baked into the image — keeps it out of the public source tree.
+BUILD_SECRETS_FILE="$REPO_ROOT/deploy/.build-secrets.env"
+if [[ -f "$BUILD_SECRETS_FILE" ]]; then
+  info "Loading build secrets from $(basename "$BUILD_SECRETS_FILE")"
+  # shellcheck disable=SC1090
+  set -a; source "$BUILD_SECRETS_FILE"; set +a
+fi
+
 # ── 2. Build Docker image ───────────────────────────────────────────
 
 info "Building Docker image ${IMAGE}:${NEW_TAG} ..."
@@ -55,6 +64,7 @@ docker build \
   --build-arg VERSION="$NEW_TAG" \
   --build-arg COMMIT="$COMMIT" \
   --build-arg DATE="$DATE" \
+  --build-arg TVDB_APIKEY="${TVDB_APIKEY:-}" \
   -t "${IMAGE}:${NEW_TAG}" \
   -t "${IMAGE}:latest" \
   -f "$DOCKERFILE" \

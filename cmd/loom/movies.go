@@ -24,6 +24,13 @@ import (
 // Override via LOOM_TMDB_API_KEY env var or config.
 const defaultTMDBKey = "eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiI3NzU0NWI2ODU0ZjIzNGZjYjRhYzdlZTQzM2FjMTc4MyIsIm5iZiI6MTQyNDA4OTIyNi45ODgsInN1YiI6IjU0ZTFlMDhhOTI1MTQxMmM4ZTAwMTM2ZiIsInNjb3BlcyI6WyJhcGlfcmVhZCJdLCJ2ZXJzaW9uIjoxfQ.sS6ImS7Y3HZKNLF6z8G_G8kVafIyYmZHKbOUtSydiMI"
 
+// defaultTVDBKey is an optional application-level TVDB v4 API key injected at
+// build time via -ldflags "-X github.com/ebenderooock/loom/cmd/loom.defaultTVDBKey=...".
+// It is empty in source (this is a public repo); when a key is baked into the
+// image, anime season segmentation works out of the box without users needing
+// their own key. Override at runtime via LOOM_METADATA_TVDB_APIKEY.
+var defaultTVDBKey string
+
 // buildMoviesService constructs the movies.Service backed by the storage
 // engine in cfg and returns the wired service.
 func buildMoviesService(ctx context.Context, cfg *config.Config, db storage.DB, logger *slog.Logger, bus eventbus.Bus) (movies.Service, error) {
@@ -99,7 +106,12 @@ func buildSeriesService(db storage.DB) series.Service {
 	var opts []series.Option
 	// Optional TVDB episode provider: enables correct multi-cour anime season
 	// segmentation so releases numbered with the TVDB/scene S01/S02 split match.
-	if tvdbKey := os.Getenv("LOOM_METADATA_TVDB_APIKEY"); tvdbKey != "" {
+	// Key resolution: LOOM_METADATA_TVDB_APIKEY env > build-time bundled key.
+	tvdbKey := os.Getenv("LOOM_METADATA_TVDB_APIKEY")
+	if tvdbKey == "" {
+		tvdbKey = defaultTVDBKey
+	}
+	if tvdbKey != "" {
 		client := tvdb.NewClient(tvdb.Config{
 			APIKey: tvdbKey,
 			PIN:    os.Getenv("LOOM_METADATA_TVDB_PIN"),

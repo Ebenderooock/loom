@@ -21,13 +21,15 @@ COPY --from=web /web/dist ./web/dist
 ARG VERSION=dev
 ARG COMMIT=unknown
 ARG DATE
+ARG TVDB_APIKEY=""
 RUN CGO_ENABLED=0 go build \
     -trimpath \
     -tags embed \
     -ldflags "-s -w \
       -X github.com/ebenderooock/loom/internal/buildinfo.Version=${VERSION} \
       -X github.com/ebenderooock/loom/internal/buildinfo.Commit=${COMMIT} \
-      -X github.com/ebenderooock/loom/internal/buildinfo.Date=${DATE}" \
+      -X github.com/ebenderooock/loom/internal/buildinfo.Date=${DATE} \
+      -X github.com/ebenderooock/loom/cmd/loom.defaultTVDBKey=${TVDB_APIKEY}" \
     -o /out/loom ./cmd/loom
 
 # ---------- runtime ----------
