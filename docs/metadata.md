@@ -242,6 +242,36 @@ export LOOM_METADATA_TVDB_PIN=optional_pin_for_higher_limits  # optional
 - Combined: higher hit rate for international/niche series
 - Fallback: if TVDB unavailable, service tries TMDB
 
+### Anime multi-cour season segmentation
+
+TMDB frequently collapses multi-cour anime (a show that airs in distinct
+broadcast runs, e.g. "Solo Leveling" Season 1 then Season 2) into a single
+TMDB-numbered season. Scene/torrent releases, however, follow the TVDB split
+and are numbered `S02Exx`. When Loom builds seasons from TMDB alone, the
+second cour is never created, so those releases never match.
+
+To fix this, the **series service** (`internal/series`) can fetch episode
+listings directly from TVDB for series whose type is `anime`. When a TVDB key
+is configured, adding or refreshing an anime series resolves its TVDB ID (via
+search when not already stored) and segments seasons/episodes using TVDB's
+ordering instead of TMDB's. Non-anime series, and all series when no TVDB key
+is set, continue to use TMDB.
+
+**Configuration** (reuses the TVDB provider credentials):
+```bash
+export LOOM_METADATA_TVDB_APIKEY=your_tvdb_api_key       # required to enable
+export LOOM_METADATA_TVDB_PIN=optional_pin               # optional
+export LOOM_METADATA_TVDB_SEASON_TYPE=official           # optional, default "official"
+```
+
+- `LOOM_METADATA_TVDB_SEASON_TYPE` selects the TVDB season ordering:
+  `default`, `official` (aired order, matches Sonarr's default), `dvd`,
+  `absolute`, `alternate`, or `regional`.
+- **Graceful fallback:** if `LOOM_METADATA_TVDB_APIKEY` is unset, the episode
+  provider is not wired and Loom builds seasons from TMDB exactly as before.
+- A series mis-typed as `standard` can be flipped to `anime` from the series
+  detail panel and then refreshed to re-segment its seasons.
+
 ## Integration Points
 
 ### Movies Module (Phase 5)

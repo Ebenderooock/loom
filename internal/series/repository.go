@@ -135,11 +135,11 @@ func (r *sqlRepo) CreateSeries(ctx context.Context, s *Series) error {
 func (r *sqlRepo) UpdateSeries(ctx context.Context, s *Series) error {
 	genreBytes, _ := json.Marshal(s.Genres)
 	_, err := r.db.ExecContext(ctx,
-		`UPDATE series SET title = ?, year = ?, overview = ?, genres = ?, runtime = ?, rating = ?, backdrop_path = ?, poster_path = ?, network = ?, status = ?, series_type = ?, quality_profile_id = ?, library_id = ?, monitoring_status = ?, season_folder = ?, release_date = ?, updated_at = ?
+		`UPDATE series SET title = ?, year = ?, imdb_id = ?, tvdb_id = ?, overview = ?, genres = ?, runtime = ?, rating = ?, backdrop_path = ?, poster_path = ?, network = ?, status = ?, series_type = ?, metadata_provider = ?, quality_profile_id = ?, library_id = ?, monitoring_status = ?, season_folder = ?, release_date = ?, updated_at = ?
 		 WHERE id = ?`,
-		s.Title, s.Year, s.Overview, string(genreBytes), s.Runtime, s.Rating,
+		s.Title, s.Year, s.IMDBID, s.TVDBID, s.Overview, string(genreBytes), s.Runtime, s.Rating,
 		s.BackdropPath, s.PosterPath, s.Network,
-		string(s.Status), string(s.SeriesType),
+		string(s.Status), string(s.SeriesType), s.MetadataProvider,
 		s.QualityProfileID, s.LibraryID, string(s.MonitoringStatus),
 		s.SeasonFolder, s.ReleaseDate, s.UpdatedAt.Format(time.RFC3339), s.ID,
 	)

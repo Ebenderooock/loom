@@ -55,6 +55,40 @@ type RatingsInfo struct {
 	IMDB float64 `json:"imdb,omitempty"`
 }
 
+// SeriesEpisodesResponse is the JSON response from
+// GET /series/{id}/episodes/{season-type}.
+type SeriesEpisodesResponse struct {
+	Data  SeriesEpisodesData `json:"data"`
+	Links PageLinks          `json:"links"`
+}
+
+// SeriesEpisodesData holds the episodes payload of a series-episodes response.
+type SeriesEpisodesData struct {
+	Episodes []EpisodeBaseRecord `json:"episodes"`
+}
+
+// EpisodeBaseRecord is a TVDB v4 base episode record.
+type EpisodeBaseRecord struct {
+	ID             int    `json:"id"`
+	Name           string `json:"name"`
+	Overview       string `json:"overview"`
+	Image          string `json:"image"`
+	Aired          string `json:"aired"`
+	Runtime        int    `json:"runtime"`
+	SeasonNumber   int    `json:"seasonNumber"`
+	Number         int    `json:"number"`
+	AbsoluteNumber int    `json:"absoluteNumber"`
+}
+
+// PageLinks contains TVDB pagination links.
+type PageLinks struct {
+	Prev      string `json:"prev"`
+	Self      string `json:"self"`
+	Next      string `json:"next"`
+	TotalItems int   `json:"total_items"`
+	PageSize  int    `json:"page_size"`
+}
+
 // SearchResponse wraps search results from TVDB.
 type SearchResponse struct {
 	Data []SearchResult `json:"data"`

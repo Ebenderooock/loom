@@ -11,6 +11,7 @@ import (
 	"github.com/ebenderooock/loom/internal/libraries"
 	"github.com/ebenderooock/loom/internal/metadata"
 	"github.com/ebenderooock/loom/internal/metadata/tmdb"
+	"github.com/ebenderooock/loom/internal/metadata/tvdb"
 	"github.com/ebenderooock/loom/internal/movies"
 	"github.com/ebenderooock/loom/internal/notifications"
 	"github.com/ebenderooock/loom/internal/organizer"
@@ -94,7 +95,26 @@ func buildSeriesService(db storage.DB) series.Service {
 		apiKey = defaultTMDBKey
 	}
 	repo := series.NewRepository(db.DB())
-	return series.NewService(repo, apiKey)
+
+	var opts []series.Option
+	// Optional TVDB episode provider: enables correct multi-cour anime season
+	// segmentation so releases numbered with the TVDB/scene S01/S02 split match.
+	if tvdbKey := os.Getenv("LOOM_METADATA_TVDB_APIKEY"); tvdbKey != "" {
+		client := tvdb.NewClient(tvdb.Config{
+			APIKey: tvdbKey,
+			PIN:    os.Getenv("LOOM_METADATA_TVDB_PIN"),
+		})
+		seasonType := os.Getenv("LOOM_METADATA_TVDB_SEASON_TYPE")
+		if seasonType == "" {
+			seasonType = "official"
+		}
+		opts = append(opts, series.WithEpisodeProvider(&tvdbEpisodeProvider{
+			client:     client,
+			seasonType: seasonType,
+		}))
+	}
+
+	return series.NewService(repo, apiKey, opts...)
 }
 
 // buildSeriesScanner constructs the series scanner backed by the series service.

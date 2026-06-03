@@ -110,6 +110,80 @@ func (c *Client) GetSeries(ctx context.Context, tvdbID int) (*metadata.SeriesMet
 	return MapSeriesToMetadata(data), nil
 }
 
+// GetSeriesEpisodes retrieves all episodes for a series in the given season type
+// (e.g. "official" for aired order, "absolute", "dvd"). It paginates the TVDB
+// endpoint until no further episodes are returned.
+func (c *Client) GetSeriesEpisodes(ctx context.Context, tvdbID int, seasonType string) ([]EpisodeBaseRecord, error) {
+	if seasonType == "" {
+		seasonType = "official"
+	}
+	if err := c.ensureToken(ctx); err != nil {
+		return nil, err
+	}
+
+	const maxPages = 200
+	var episodes []EpisodeBaseRecord
+
+	for page := 0; page < maxPages; page++ {
+		u, _ := url.Parse(fmt.Sprintf("%s/series/%d/episodes/%s", c.config.BaseURL, tvdbID, url.PathEscape(seasonType)))
+		q := u.Query()
+		q.Set("page", strconv.Itoa(page))
+		u.RawQuery = q.Encode()
+		reqURL := u.String()
+
+		resp, err := c.doRequest(ctx, "GET", reqURL, nil)
+		if err != nil {
+			return nil, err
+		}
+
+		if resp.StatusCode == http.StatusUnauthorized {
+			resp.Body.Close()
+			c.tokenMutex.Lock()
+			c.token = ""
+			c.tokenMutex.Unlock()
+			if err := c.ensureToken(ctx); err != nil {
+				return nil, err
+			}
+			resp, err = c.doRequest(ctx, "GET", reqURL, nil)
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		if resp.StatusCode == http.StatusNotFound {
+			resp.Body.Close()
+			return nil, NewNotFoundError(fmt.Sprintf("series %d not found", tvdbID))
+		}
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
+			if resp.StatusCode >= 500 {
+				return nil, NewServerError(resp.StatusCode, string(body))
+			}
+			return nil, NewClientError(resp.StatusCode, string(body))
+		}
+
+		var er SeriesEpisodesResponse
+		if err := json.NewDecoder(resp.Body).Decode(&er); err != nil {
+			resp.Body.Close()
+			return nil, NewNetworkError(err)
+		}
+		resp.Body.Close()
+
+		if len(er.Data.Episodes) == 0 {
+			break
+		}
+		episodes = append(episodes, er.Data.Episodes...)
+
+		// Stop when the API reports no further page.
+		if er.Links.Next == "" {
+			break
+		}
+	}
+
+	return episodes, nil
+}
+
 // GetEpisode retrieves episode metadata by series TVDB ID and season/episode numbers.
 func (c *Client) GetEpisode(ctx context.Context, seriesTVDBID, season, episode int) (*metadata.EpisodeMetadata, error) {
 	// TVDB v4 requires episode ID, not season/episode numbers directly.
