@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
+import { useSearch, useNavigate } from "@tanstack/react-router";
 import { apiFetch } from "@/lib/fetch";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -128,6 +129,11 @@ export function MoviesPage() {
   const [detailMovie, setDetailMovie] = useState<Movie | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
 
+  // Deep-link: open a specific movie's detail when navigated with ?focus=<id>
+  // (e.g. from the global command palette).
+  const navigate = useNavigate();
+  const { focus } = useSearch({ strict: false }) as { focus?: string };
+
   const fetchAll = useCallback(async (background = false) => {
     if (!isAuthenticated) return;
     if (!background) setIsLoading(true);
@@ -155,6 +161,45 @@ export function MoviesPage() {
   }, [isAuthenticated]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
+
+  // Open the detail sheet for a deep-linked movie (e.g. from the global command
+  // palette). Resolve from the loaded list, falling back to a by-ID fetch for
+  // movies outside this page's window, then clear the param.
+  useEffect(() => {
+    if (!focus || isLoading) return;
+    const clear = () => void navigate({ to: "/movies", search: {}, replace: true });
+    const existing = movies.find(m => m.id === focus);
+    if (existing) {
+      setDetailMovie(existing);
+      setDetailOpen(true);
+      clear();
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await apiFetch(`/api/v1/movies/${focus}`);
+        if (cancelled) return;
+        if (res.ok) {
+          const data = await res.json();
+          const movie: Movie = data?.data ?? data;
+          if (movie?.id) {
+            setDetailMovie(movie);
+            setDetailOpen(true);
+          } else {
+            toast.error("Movie not found");
+          }
+        } else {
+          toast.error("Movie not found");
+        }
+      } catch {
+        if (!cancelled) toast.error("Could not open movie");
+      } finally {
+        if (!cancelled) clear();
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [focus, isLoading, movies, navigate]);
 
   // Background polling every 30s to pick up status changes (grab → downloading → available)
   useEffect(() => {

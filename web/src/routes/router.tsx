@@ -87,6 +87,9 @@ const moviesRoute = createRoute({
   component: lazyRouteComponent(() => import("@/pages/movies"), "MoviesPage"),
   pendingComponent: PageLoader,
   errorComponent: ErrorFallback,
+  validateSearch: (search: Record<string, unknown>): { focus?: string } => ({
+    focus: (search.focus as string) ?? undefined,
+  }),
 });
 
 const activityRoute = createRoute({
@@ -186,6 +189,9 @@ const seriesRoute = createRoute({
   component: lazyRouteComponent(() => import("@/pages/series"), "SeriesPage"),
   pendingComponent: PageLoader,
   errorComponent: ErrorFallback,
+  validateSearch: (search: Record<string, unknown>): { focus?: string } => ({
+    focus: (search.focus as string) ?? undefined,
+  }),
 });
 
 const notificationsRoute = createRoute({

@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
+import { useSearch, useNavigate } from "@tanstack/react-router";
 import { apiFetch } from "@/lib/fetch";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -124,6 +125,11 @@ export function SeriesPage() {
   const [detailSeries, setDetailSeries] = useState<Series | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
 
+  // Deep-link: open a specific series' detail when navigated with ?focus=<id>
+  // (e.g. from the global command palette).
+  const navigate = useNavigate();
+  const { focus } = useSearch({ strict: false }) as { focus?: string };
+
   const fetchAll = useCallback(async () => {
     if (!isAuthenticated) return;
     setIsLoading(true);
@@ -145,6 +151,45 @@ export function SeriesPage() {
   }, [isAuthenticated]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
+
+  // Open the detail sheet for a deep-linked series (e.g. from the global command
+  // palette). Resolve from the loaded list, falling back to a by-ID fetch, then
+  // clear the param.
+  useEffect(() => {
+    if (!focus || isLoading) return;
+    const clear = () => void navigate({ to: "/series", search: {}, replace: true });
+    const existing = seriesList.find(s => s.id === focus);
+    if (existing) {
+      setDetailSeries(existing);
+      setDetailOpen(true);
+      clear();
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await apiFetch(`/api/v1/series/${focus}`);
+        if (cancelled) return;
+        if (res.ok) {
+          const data = await res.json();
+          const s: Series = data?.data ?? data;
+          if (s?.id) {
+            setDetailSeries(s);
+            setDetailOpen(true);
+          } else {
+            toast.error("Series not found");
+          }
+        } else {
+          toast.error("Series not found");
+        }
+      } catch {
+        if (!cancelled) toast.error("Could not open series");
+      } finally {
+        if (!cancelled) clear();
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [focus, isLoading, seriesList, navigate]);
 
   const existingTmdbIds = useMemo(
     () => new Set(seriesList.map(s => s.tmdbId).filter(Boolean) as string[]),

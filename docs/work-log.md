@@ -27,7 +27,7 @@ _(none — promote new asks into the Backlog below)_
 
 | ID | Type | Pri | Area | Title | Status |
 |--------|-------------|----|-----------|-------------------------------------------------------------|-------------|
-| LW-001 | bug         | P1 | Search    | Global quick-search across all platform content             | approved    |
+| LW-001 | bug         | P1 | Search    | Global quick-search across all platform content             | done        |
 | LW-002 | improvement | P3 | UI        | Rename "Browse" → "Manual Search"                           | done        |
 | LW-003 | improvement | P2 | Downloads | UI controls for the built-in torrent downloader             | approved    |
 | LW-004 | bug         | P1 | Settings  | Media Preferences page crashes (empty Select.Item value)    | done        |
@@ -42,6 +42,16 @@ _(none — promote new asks into the Backlog below)_
 Quick search is not fully implemented. It should let the user search for **any
 content across the entire platform** (movies, series, indexers/releases,
 settings, etc.), not just the current page's scope.
+
+Fix (v0.1.89): rewrote the command palette (`web/src/components/command-palette.tsx`)
+from navigation-only into a live search. When the user types, it fetches the
+movie and series libraries (react-query, lazy/`enabled` on query, 60s stale) and
+filters client-side (manual filtering, `shouldFilter={false}`), showing grouped
+**Movies / TV Shows / Navigation** results (Navigation now covers every app
+route). Selecting a movie/series deep-links via `?focus=<id>`. Added
+`validateSearch` (`focus`) to the movies & series routes; both pages resolve the
+param to open the detail sheet — from the loaded list, or by a by-ID fetch for
+items outside the page window — then clear the param and toast on not-found.
 
 #### LW-002 — Rename "Browse" → "Manual Search" · `improvement` · P3 · UI
 "Browse" is the wrong term for the manual indexer search action. Rename the
