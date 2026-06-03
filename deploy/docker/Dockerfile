@@ -29,7 +29,7 @@ RUN CGO_ENABLED=0 go build \
       -X github.com/ebenderooock/loom/internal/buildinfo.Version=${VERSION} \
       -X github.com/ebenderooock/loom/internal/buildinfo.Commit=${COMMIT} \
       -X github.com/ebenderooock/loom/internal/buildinfo.Date=${DATE} \
-      -X github.com/ebenderooock/loom/cmd/loom.defaultTVDBKey=${TVDB_APIKEY}" \
+      -X main.defaultTVDBKey=${TVDB_APIKEY}" \
     -o /out/loom ./cmd/loom
 
 # ---------- runtime ----------
