@@ -480,6 +480,7 @@ export function SeriesDetailSheet({
   const [editing, setEditing] = useState(false);
   const [editProfile, setEditProfile] = useState("");
   const [editMonitoring, setEditMonitoring] = useState("");
+  const [editSeriesType, setEditSeriesType] = useState("standard");
   const [saving, setSaving] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -550,6 +551,7 @@ export function SeriesDetailSheet({
       setEditing(false);
       setEditProfile(series.qualityProfileId);
       setEditMonitoring(series.monitoringStatus);
+      setEditSeriesType(series.seriesType || "standard");
       setOverviewExpanded(false);
 
       // Fetch credits
@@ -587,6 +589,7 @@ export function SeriesDetailSheet({
         body: JSON.stringify({
           qualityProfileId: editProfile,
           monitoringStatus: editMonitoring,
+          seriesType: editSeriesType,
         }),
       });
       if (res.ok) {
@@ -787,7 +790,7 @@ export function SeriesDetailSheet({
               <Button size="sm" variant="outline" className="gap-1.5 h-8 text-xs" title="Manual search — browse releases manually" onClick={() => openSearch({ title: series.title, query: series.title, mediaType: "series" })}>
                 <FolderSearch className="w-3.5 h-3.5" />Manual Search
               </Button>
-              <Button size="sm" variant="outline" className="gap-1.5 h-8 text-xs" onClick={() => { setEditing(true); setEditProfile(series.qualityProfileId); setEditMonitoring(series.monitoringStatus); }} title="Edit series settings">
+              <Button size="sm" variant="outline" className="gap-1.5 h-8 text-xs" onClick={() => { setEditing(true); setEditProfile(series.qualityProfileId); setEditMonitoring(series.monitoringStatus); setEditSeriesType(series.seriesType || "standard"); }} title="Edit series settings">
                 <Pencil className="w-3.5 h-3.5" />Edit
               </Button>
 
@@ -833,6 +836,17 @@ export function SeriesDetailSheet({
                     <SelectContent>
                       <SelectItem value="monitored">Monitored</SelectItem>
                       <SelectItem value="unmonitored">Unmonitored</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium">Series Type</label>
+                  <Select value={editSeriesType} onValueChange={setEditSeriesType}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="standard">Standard</SelectItem>
+                      <SelectItem value="daily">Daily</SelectItem>
+                      <SelectItem value="anime">Anime</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
