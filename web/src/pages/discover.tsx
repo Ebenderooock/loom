@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Check, Loader2, Plus, Compass } from "lucide-react";
+import { CardGridSkeleton } from "@/components/ui/skeletons";
 
 export function DiscoverPage() {
   const { setHeader } = usePageHeader();
@@ -38,9 +39,7 @@ function DiscoverGrid({ mediaType }: { mediaType: MediaType }) {
   const { data: items, isLoading, isError, error } = useDiscover(mediaType);
 
   if (isLoading) {
-    return (
-      <p className="text-sm text-muted-foreground">Loading…</p>
-    );
+    return <CardGridSkeleton count={12} />;
   }
   if (isError) {
     return (

@@ -1,6 +1,7 @@
 import * as React from "react";
 import { apiFetch } from "@/lib/fetch";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { TableSkeleton } from "@/components/ui/skeletons";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -265,8 +266,8 @@ function FolderBrowserDialog({
             )}
 
             {loading ? (
-              <div className="flex items-center justify-center py-8 text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin mr-2" /> Loading…
+              <div className="py-2">
+                <TableSkeleton rows={4} cols={3} />
               </div>
             ) : (
               <div className="overflow-y-auto max-h-[40vh] rounded-md border border-border">

@@ -11,7 +11,9 @@ import {
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Plus, MoreVertical, Pencil, Trash2, Loader2 } from "lucide-react";
+import { Plus, MoreVertical, Pencil, Trash2, Loader2, Layers } from "lucide-react";
+import { ListSkeleton } from "@/components/ui/skeletons";
+import { EmptyState } from "@/components/ui/empty-state";
 import { toast } from "sonner";
 import {
   useQualityProfiles,
@@ -130,13 +132,13 @@ export function QualityProfilesPage() {
       </div>
 
       {isLoading ? (
-        <div className="flex items-center gap-2 text-muted-foreground py-8 justify-center">
-          <Loader2 className="h-4 w-4 animate-spin" /> Loading profiles…
-        </div>
+        <ListSkeleton rows={4} />
       ) : profiles.length === 0 ? (
-        <div className="text-center py-12 text-muted-foreground">
-          No quality profiles yet. Click &quot;Add Profile&quot; to create one.
-        </div>
+        <EmptyState
+          icon={<Layers />}
+          title="No quality profiles yet"
+          description="Quality profiles decide which releases Loom grabs and when to upgrade. Create one to get started."
+        />
       ) : (
         <div className="space-y-3">
           {profiles.map((qp) => {

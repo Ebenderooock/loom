@@ -2,6 +2,7 @@ import { useState, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useSetPageHeader } from "@/hooks/use-page-header";
 import { useCalendarEvents, type CalendarEvent } from "@/lib/calendar-api";
 import { ChevronLeft, ChevronRight } from "lucide-react";
@@ -91,8 +92,12 @@ export function CalendarPage() {
         </CardHeader>
         <CardContent>
           {isLoading ? (
-            <div className="flex items-center justify-center py-12 text-muted-foreground">
-              Loading…
+            <div className="grid grid-cols-7 gap-px overflow-hidden rounded-md border border-border bg-border" role="status" aria-label="Loading calendar">
+              {Array.from({ length: 42 }).map((_, i) => (
+                <div key={i} className="min-h-[5rem] bg-card p-1.5">
+                  <Skeleton className="h-4 w-4 rounded" />
+                </div>
+              ))}
             </div>
           ) : (
             <div

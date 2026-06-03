@@ -25,6 +25,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ListSkeleton } from "@/components/ui/skeletons";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Select,
@@ -76,7 +77,7 @@ function ListsTab() {
   const [expandedId, setExpandedId] = React.useState<string | null>(null);
 
   if (isLoading) {
-    return <p className="text-sm text-muted-foreground">Loading…</p>;
+    return <ListSkeleton rows={4} />;
   }
 
   return (
@@ -225,7 +226,9 @@ function ListItemsPanel({ listId }: { listId: string }) {
 
   if (isLoading) {
     return (
-      <div className="px-8 py-2 text-sm text-muted-foreground">Loading…</div>
+      <div className="px-8 py-3">
+        <ListSkeleton rows={3} />
+      </div>
     );
   }
   if (!data?.items?.length) {
@@ -615,7 +618,7 @@ function ExclusionsTab() {
       </form>
 
       {isLoading ? (
-        <p className="text-sm text-muted-foreground">Loading…</p>
+        <ListSkeleton rows={3} />
       ) : !exclusions?.length ? (
         <p className="text-sm text-muted-foreground">
           No exclusions. Items you exclude won't be re-added by any import list.

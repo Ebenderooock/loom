@@ -256,6 +256,7 @@ function AppLayoutInner({ children }: { children?: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = React.useState(false);
   const { open: paletteOpen, setOpen: setPaletteOpen } = useCommandPalette();
   const { header } = usePageHeader();
+  const routePath = useRouterState({ select: (s) => s.location.pathname });
 
   return (
     <div className="flex min-h-screen w-full bg-background text-foreground">
@@ -376,8 +377,10 @@ function AppLayoutInner({ children }: { children?: React.ReactNode }) {
           />
         )}
 
-        <main id="main" className="min-w-0 flex-1 overflow-x-hidden p-4 md:p-6 page-enter">
-          {children ?? <Outlet />}
+        <main id="main" className="min-w-0 flex-1 overflow-x-hidden p-4 md:p-6">
+          <div key={routePath} className="page-enter">
+            {children ?? <Outlet />}
+          </div>
         </main>
       </div>
 
