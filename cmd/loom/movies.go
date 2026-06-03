@@ -25,10 +25,10 @@ import (
 const defaultTMDBKey = "eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiI3NzU0NWI2ODU0ZjIzNGZjYjRhYzdlZTQzM2FjMTc4MyIsIm5iZiI6MTQyNDA4OTIyNi45ODgsInN1YiI6IjU0ZTFlMDhhOTI1MTQxMmM4ZTAwMTM2ZiIsInNjb3BlcyI6WyJhcGlfcmVhZCJdLCJ2ZXJzaW9uIjoxfQ.sS6ImS7Y3HZKNLF6z8G_G8kVafIyYmZHKbOUtSydiMI"
 
 // defaultTVDBKey is an optional application-level TVDB v4 API key injected at
-// build time via -ldflags "-X github.com/ebenderooock/loom/cmd/loom.defaultTVDBKey=...".
-// It is empty in source (this is a public repo); when a key is baked into the
-// image, anime season segmentation works out of the box without users needing
-// their own key. Override at runtime via LOOM_METADATA_TVDB_APIKEY.
+// build time via -ldflags "-X main.defaultTVDBKey=...". It is empty in source
+// (this is a public repo); when a key is baked into the image, anime season
+// segmentation works out of the box without users needing their own key.
+// Override at runtime via LOOM_METADATA_TVDB_APIKEY.
 var defaultTVDBKey string
 
 // buildMoviesService constructs the movies.Service backed by the storage
