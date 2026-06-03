@@ -124,6 +124,15 @@ export function PersonDiscoverDialog({
     }
   }, [open, personId, fetchFilmography]);
 
+  // Guarantee a valid quality profile is always selected once profiles load.
+  useEffect(() => {
+    if (qualityProfiles.length === 0) return;
+    setSelectedProfile((prev) => {
+      if (prev && qualityProfiles.some((p) => p.id === prev)) return prev;
+      return libraries[0]?.quality_profile_id || qualityProfiles[0].id;
+    });
+  }, [qualityProfiles, libraries]);
+
   const movieCredits = data?.credits.filter(c => c.media_type === "movie") ?? [];
   const tvCredits = data?.credits.filter(c => c.media_type === "tv") ?? [];
 
