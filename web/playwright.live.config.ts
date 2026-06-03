@@ -2,13 +2,13 @@
  * Playwright config for running E2E tests against a live Loom instance.
  *
  * Usage:
- *   LOOM_URL=https://loom.media.deroock.co.za \
+ *   LOOM_URL=https://your-loom.example.com \
  *   LOOM_USER=admin LOOM_PASS=secret \
  *   npx playwright test --config playwright.live.config.ts
  */
 import { defineConfig, devices } from "@playwright/test";
 
-const baseURL = process.env.LOOM_URL || "https://loom.media.deroock.co.za";
+const baseURL = process.env.LOOM_URL || "http://localhost:8080";
 
 export default defineConfig({
   testDir: "./e2e/live",

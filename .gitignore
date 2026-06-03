@@ -51,3 +51,14 @@ web/*.tsbuildinfo
 run/data/
 website/node_modules/
 website/dist/
+
+# Local MCP config — contains a live API key, keep local-only
+/.mcp.json
+
+# All node_modules (incl. MCP helper servers)
+**/node_modules/
+
+# Vendored / reference clones — do not commit (licensing)
+/22/
+/radarr/
+/references/

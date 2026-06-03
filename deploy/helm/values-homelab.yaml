@@ -40,14 +40,14 @@ ingress:
     # Uncomment for automatic TLS via cert-manager:
     cert-manager.io/cluster-issuer: letsencrypt-prod
   hosts:
-    - host: loom.media.deroock.co.za  # <-- change to your domain
+    - host: loom.example.com  # <-- change to your domain
       paths:
         - path: /
           pathType: Prefix
   tls:
     - secretName: loom-tls
       hosts:
-        - loom.media.deroock.co.za
+        - loom.example.com
 
 # ---------- Persistence ----------
 # Config volume — on your Synology k8s persistence volume

@@ -5,7 +5,7 @@ const { Server } = require("@modelcontextprotocol/sdk/server/index.js");
 const { StdioServerTransport } = require("@modelcontextprotocol/sdk/server/stdio.js");
 const { CallToolRequestSchema, ListToolsRequestSchema } = require("@modelcontextprotocol/sdk/types.js");
 
-const LOOM_BASE_URL = process.env.LOOM_URL || "https://loom.media.deroock.co.za";
+const LOOM_BASE_URL = process.env.LOOM_URL || "http://localhost:8080";
 const LOOM_API_KEY  = process.env.LOOM_API_KEY || "";
 
 // ─── HTTP helper ───────────────────────────────────────────────────────────────
