@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Plus, RefreshCw, Play } from "lucide-react";
+import { Plus, RefreshCw, Play, SearchX } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { EmptyState } from "@/components/ui/empty-state";
 import {
   Tabs,
   TabsContent,
@@ -125,9 +126,11 @@ function ResultsGrid({
 
   if (!results || results.length === 0) {
     return (
-      <div className="rounded-md border border-dashed border-border p-8 text-center text-muted-foreground">
-        No results. Try a different search.
-      </div>
+      <EmptyState
+        icon={<SearchX />}
+        title="No results"
+        description="Try a different search term or check your spelling."
+      />
     );
   }
 

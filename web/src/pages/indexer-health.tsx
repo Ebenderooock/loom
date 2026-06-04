@@ -1,5 +1,5 @@
 import * as React from "react";
-import { RotateCcw, ChevronDown, ChevronUp } from "lucide-react";
+import { RotateCcw, ChevronDown, ChevronUp, HeartPulse } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useSetPageHeader } from "@/hooks/use-page-header";
 import { useApiClient } from "@/lib/api-client";
@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
+import { EmptyState } from "@/components/ui/empty-state";
 
 // ---------- Types ----------
 
@@ -263,16 +264,19 @@ export function IndexerHealthPage() {
       {!isLoading && !isError && (
         <>
           <SummaryBar items={items} />
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {items.map((item) => (
-              <HealthCard key={item.indexer_id} item={item} />
-            ))}
-            {items.length === 0 && (
-              <p className="col-span-full text-sm text-muted-foreground">
-                No indexer health data available yet.
-              </p>
-            )}
-          </div>
+          {items.length === 0 ? (
+            <EmptyState
+              icon={<HeartPulse />}
+              title="No indexer health data yet"
+              description="Health metrics appear here once your indexers have run some searches."
+            />
+          ) : (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {items.map((item) => (
+                <HealthCard key={item.indexer_id} item={item} />
+              ))}
+            </div>
+          )}
         </>
       )}
     </div>
