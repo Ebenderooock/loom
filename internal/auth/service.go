@@ -123,9 +123,9 @@ func LoadOrCreateSessionSecret(ctx context.Context, store Store, configured stri
 func StoreFromDB(db storage.DB) (Store, error) {
 	switch db.Engine() {
 	case storage.EngineSQLite:
-		return SQLiteStore{Q: dbsqlite.New(db.DB())}, nil
+		return SQLiteStore{Q: dbsqlite.New(db.DB()), DB: db.DB()}, nil
 	case storage.EnginePostgres:
-		return PostgresStore{Q: dbpg.New(db.DB())}, nil
+		return PostgresStore{Q: dbpg.New(db.DB()), DB: db.DB()}, nil
 	default:
 		return nil, errors.New("auth: unknown storage engine")
 	}
@@ -158,6 +158,11 @@ func (s *Service) ReconcileAdmin(ctx context.Context) (User, error) {
 		if err := s.store.UpdateUserAdmin(ctx, adminID, s.appConfig.Admin.Username, s.appConfig.Admin.PasswordHash); err != nil {
 			return User{}, fmt.Errorf("auth: update admin user: %w", err)
 		}
+		// Force role back to admin: OIDC/proxy reconciliation could have
+		// demoted the protected admin while it was offline.
+		if err := s.store.UpdateUserRole(ctx, adminID, "admin"); err != nil {
+			return User{}, fmt.Errorf("auth: restore admin role: %w", err)
+		}
 		u, err := s.store.GetUserByID(ctx, adminID)
 		if err != nil {
 			return User{}, fmt.Errorf("auth: get admin user after update: %w", err)
@@ -178,6 +183,12 @@ func (s *Service) ReconcileAdmin(ctx context.Context) (User, error) {
 		}
 		if err := s.store.SetMeta(ctx, schemaMetaAdminUserID, fmt.Sprintf("%d", u.ID)); err != nil {
 			return User{}, fmt.Errorf("auth: save admin user id: %w", err)
+		}
+		if u.Role != "admin" {
+			if err := s.store.UpdateUserRole(ctx, u.ID, "admin"); err != nil {
+				return User{}, fmt.Errorf("auth: restore admin role: %w", err)
+			}
+			u.Role = "admin"
 		}
 		s.logger.Info("admin user tracked from existing user", "username", u.Username, "id", u.ID)
 		return u, nil

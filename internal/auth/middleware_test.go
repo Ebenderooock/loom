@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ebenderooock/loom/internal/appconfig"
 	"github.com/ebenderooock/loom/internal/auth"
 	"github.com/ebenderooock/loom/internal/kernel/config"
 	"github.com/ebenderooock/loom/internal/storage"
@@ -57,6 +58,8 @@ func newTestService(t *testing.T) (*auth.Service, auth.Store, int64) {
 	svc, err := auth.NewService(auth.ServiceOptions{
 		Store:         store,
 		Logger:        quietLogger(),
+		AppConfig:     &appconfig.Config{},
+		AppConfigPath: filepath.Join(t.TempDir(), "config.json"),
 		SessionSecret: []byte("a-test-session-secret-32bytes!!!"),
 		SessionTTL:    time.Hour,
 		Proxy:         proxy,

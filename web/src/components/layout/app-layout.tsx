@@ -7,6 +7,7 @@ import {
   ChevronDown,
   Compass,
   Inbox,
+  UsersRound,
   Download,
   Film,
   FolderOpen,
@@ -48,12 +49,14 @@ import {
 } from "@/components/command-palette";
 import { cn } from "@/lib/utils";
 import { PageHeaderProvider, usePageHeader } from "@/hooks/use-page-header";
+import { useAuth } from "@/hooks/use-auth";
 
 interface NavItem {
   to: string;
   label: string;
   Icon: typeof LayoutDashboard;
   badge?: "review";
+  adminOnly?: boolean;
 }
 
 interface NavSection {
@@ -107,6 +110,7 @@ const NAV_SECTIONS: NavSection[] = [
     items: [
       { to: "/indexers/health", label: "Health", Icon: HeartPulse },
       { to: "/events", label: "Events", Icon: ScrollText },
+      { to: "/users", label: "Users", Icon: UsersRound, adminOnly: true },
       { to: "/settings", label: "Settings", Icon: Settings },
     ],
   },
@@ -138,6 +142,8 @@ function SidebarNav({
   const path = router.location.pathname;
   const reviewCount = useReviewCount();
   const searchLogEnabled = useFeatureEnabled("search_log");
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
 
   // Track which sections are expanded — all open by default
   const [openSections, setOpenSections] = React.useState<Record<string, boolean>>(() =>
@@ -194,6 +200,7 @@ function SidebarNav({
                 .filter(
                   ({ to }) => to !== "/search-queue" || searchLogEnabled,
                 )
+                .filter(({ adminOnly }) => !adminOnly || isAdmin)
                 .map(({ to, label, Icon, badge }) => {
                 const active =
                   to === "/" ? path === "/" : path === to || path.startsWith(`${to}/`);

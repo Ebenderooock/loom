@@ -282,6 +282,14 @@ const requestsRoute = createRoute({
   errorComponent: ErrorFallback,
 });
 
+const usersRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/users",
+  component: lazyRouteComponent(() => import("@/pages/users"), "UsersPage"),
+  pendingComponent: PageLoader,
+  errorComponent: ErrorFallback,
+});
+
 const eventsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/events",
@@ -334,6 +342,7 @@ const routeTree = rootRoute.addChildren([
   seriesRoute,
   discoverRoute,
   requestsRoute,
+  usersRoute,
   activityRoute,
   calendarRoute,
   indexerHealthRoute,

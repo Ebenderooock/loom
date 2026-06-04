@@ -48,12 +48,24 @@ type CreateAPIKeyParams struct {
 	ExpiresAt *time.Time
 }
 
+// UserSummary is a read model for admin user listings, including timestamps.
+type UserSummary struct {
+	ID        int64     `json:"id"`
+	Username  string    `json:"username"`
+	Email     string    `json:"email"`
+	Role      string    `json:"role"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
 // Store is the storage seam consumed by the auth Service.
 type Store interface {
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
 	GetUserByUsername(ctx context.Context, username string) (User, error)
 	GetUserByID(ctx context.Context, id int64) (User, error)
 	CountUsers(ctx context.Context) (int64, error)
+	ListUsers(ctx context.Context) ([]UserSummary, error)
+	DeleteUser(ctx context.Context, id int64) error
+	UpdateUserRole(ctx context.Context, id int64, role string) error
 	UpdateUserPassword(ctx context.Context, id int64, hash string) error
 	UpdateUserAdmin(ctx context.Context, id int64, username, hash string) error
 	UpdateUserOIDC(ctx context.Context, id int64, email, role string) (User, error)
@@ -72,7 +84,10 @@ type Store interface {
 var ErrNoRows = sql.ErrNoRows
 
 // SQLiteStore adapts dbsqlite.Queries to Store.
-type SQLiteStore struct{ Q *dbsqlite.Queries }
+type SQLiteStore struct {
+	Q  *dbsqlite.Queries
+	DB *sql.DB
+}
 
 func nullStr(s string) sql.NullString {
 	if s == "" {
@@ -158,6 +173,20 @@ func (s SQLiteStore) UpdateUserPassword(ctx context.Context, id int64, hash stri
 	})
 }
 
+func (s SQLiteStore) ListUsers(ctx context.Context) ([]UserSummary, error) {
+	return listUsers(ctx, s.DB)
+}
+
+func (s SQLiteStore) DeleteUser(ctx context.Context, id int64) error {
+	_, err := s.DB.ExecContext(ctx, `DELETE FROM users WHERE id = ?`, id)
+	return err
+}
+
+func (s SQLiteStore) UpdateUserRole(ctx context.Context, id int64, role string) error {
+	_, err := s.DB.ExecContext(ctx, `UPDATE users SET role = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`, role, id)
+	return err
+}
+
 func (s SQLiteStore) UpdateUserAdmin(ctx context.Context, id int64, username, hash string) error {
 	return s.Q.UpdateUserAdmin(ctx, dbsqlite.UpdateUserAdminParams{
 		ID:           id,
@@ -233,7 +262,10 @@ func (s SQLiteStore) SetMeta(ctx context.Context, key, value string) error {
 }
 
 // PostgresStore adapts dbpg.Queries to Store.
-type PostgresStore struct{ Q *dbpg.Queries }
+type PostgresStore struct {
+	Q  *dbpg.Queries
+	DB *sql.DB
+}
 
 func pgUser(u dbpg.User) User {
 	return User{
@@ -303,6 +335,20 @@ func (s PostgresStore) UpdateUserPassword(ctx context.Context, id int64, hash st
 		ID:           id,
 		PasswordHash: hash,
 	})
+}
+
+func (s PostgresStore) ListUsers(ctx context.Context) ([]UserSummary, error) {
+	return listUsers(ctx, s.DB)
+}
+
+func (s PostgresStore) DeleteUser(ctx context.Context, id int64) error {
+	_, err := s.DB.ExecContext(ctx, `DELETE FROM users WHERE id = $1`, id)
+	return err
+}
+
+func (s PostgresStore) UpdateUserRole(ctx context.Context, id int64, role string) error {
+	_, err := s.DB.ExecContext(ctx, `UPDATE users SET role = $1, updated_at = now() WHERE id = $2`, role, id)
+	return err
 }
 
 func (s PostgresStore) UpdateUserAdmin(ctx context.Context, id int64, username, hash string) error {
@@ -377,4 +423,55 @@ func (s PostgresStore) GetMeta(ctx context.Context, key string) (string, error) 
 
 func (s PostgresStore) SetMeta(ctx context.Context, key, value string) error {
 	return s.Q.SetSchemaMeta(ctx, dbpg.SetSchemaMetaParams{Key: key, Value: value})
+}
+
+// listUsers reads all users ordered by id. Shared by both engines since the
+// users table schema is identical; it tolerates both time.Time (postgres) and
+// string (sqlite CURRENT_TIMESTAMP) created_at representations.
+func listUsers(ctx context.Context, db *sql.DB) ([]UserSummary, error) {
+	rows, err := db.QueryContext(ctx, `SELECT id, username, email, role, created_at FROM users ORDER BY id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []UserSummary
+	for rows.Next() {
+		var (
+			u     UserSummary
+			email sql.NullString
+			ts    any
+		)
+		if err := rows.Scan(&u.ID, &u.Username, &email, &u.Role, &ts); err != nil {
+			return nil, err
+		}
+		u.Email = email.String
+		u.CreatedAt = parseCreatedAt(ts)
+		out = append(out, u)
+	}
+	return out, rows.Err()
+}
+
+func parseCreatedAt(v any) time.Time {
+	switch t := v.(type) {
+	case time.Time:
+		return t
+	case []byte:
+		return parseCreatedAtStr(string(t))
+	case string:
+		return parseCreatedAtStr(t)
+	default:
+		return time.Time{}
+	}
+}
+
+func parseCreatedAtStr(s string) time.Time {
+	if s == "" {
+		return time.Time{}
+	}
+	for _, layout := range []string{time.RFC3339, "2006-01-02 15:04:05"} {
+		if t, err := time.Parse(layout, s); err == nil {
+			return t
+		}
+	}
+	return time.Time{}
 }

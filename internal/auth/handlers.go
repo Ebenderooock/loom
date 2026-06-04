@@ -27,6 +27,14 @@ func (s *Service) Mount(r chi.Router) {
 			r.Get("/apikeys", s.handleListAPIKeys)
 			r.Delete("/apikeys/{id}", s.handleRevokeAPIKey)
 		})
+		r.Group(func(r chi.Router) {
+			r.Use(s.RequireRole("admin"))
+			r.Get("/users", s.handleListUsers)
+			r.Post("/users", s.handleCreateUser)
+			r.Delete("/users/{id}", s.handleDeleteUser)
+			r.Patch("/users/{id}/role", s.handleUpdateUserRole)
+			r.Post("/users/{id}/password", s.handleResetUserPassword)
+		})
 	})
 }
 
