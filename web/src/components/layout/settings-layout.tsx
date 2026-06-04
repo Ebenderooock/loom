@@ -2,6 +2,7 @@ import * as React from "react";
 import { Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
 import {
   Bell,
+  Bot,
   Bug,
   Download,
   Film,
@@ -137,6 +138,7 @@ export const SETTINGS_GROUPS: SettingsNavGroup[] = [
     label: "Integrations",
     items: [
       { to: "/settings/notifications", label: "Notifications", Icon: Bell, kind: "page" },
+      { to: "/settings/request-bots", label: "Request Bots", Icon: Bot, kind: "page" },
       {
         to: "/settings/connect",
         label: "Connect",

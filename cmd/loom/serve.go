@@ -163,7 +163,7 @@ func cmdServe(ctx context.Context, args []string) error {
 	// Create the shared event bus before server and services that need it.
 	bus := eventbus.NewInProc()
 
-	moviesSvc, err := buildMoviesService(ctx, cfg, db, logger, bus)
+	moviesSvc, metadataSvc, err := buildMoviesService(ctx, cfg, db, logger, bus)
 	if err != nil {
 		return fmt.Errorf("init movies: %w", err)
 	}
@@ -227,6 +227,18 @@ func cmdServe(ctx context.Context, args []string) error {
 	// Wire media requests (users request; admins approve → auto-add + grab).
 	requestsSvc := buildRequestsService(db, moviesSvc, media.seriesSvc, dlWiring.autoSearchEngine, media.libStore, media.qpStore, logger)
 	srv.SetRequests(requestsSvc)
+
+	// Wire interactive request bots (Telegram + Discord).
+	botAuthStore, err := buildAuthStore(db)
+	if err != nil {
+		return fmt.Errorf("init bot auth store: %w", err)
+	}
+	botsRouter, botsSupervisor := buildBots(db, requestsSvc, metadataSvc, botAuthStore, authSvc.RequireRole("admin"), logger)
+	srv.SetBots(botsRouter)
+	if err := botsSupervisor.Start(ctx); err != nil {
+		logger.Error("bots: initial start failed", "err", err)
+	}
+	defer botsSupervisor.Shutdown()
 
 	// Wire infrastructure services (connect, compat, notifications, rolling search, health)
 	infra, err := wireInfra(ctx, db, srv, indexerSvc, downloadSvc, moviesSvc, media, auditLogger, logger)
