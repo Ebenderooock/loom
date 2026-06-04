@@ -18,15 +18,25 @@ import {
   FileText,
   Radio,
   Info,
+  Gauge,
 } from "lucide-react";
 import { apiFetch } from "@/lib/fetch";
 import { useSetPageHeader } from "@/hooks/use-page-header";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import { ImportManager } from "@/components/imports/import-manager";
+import {
+  useDownloads,
+  useTorrentStatus,
+  useSetTorrentSpeedLimits,
+  useTorrentPauseAll,
+  useTorrentResumeAll,
+} from "@/lib/downloads-api";
 import { toast } from "sonner";
 import {
   Sheet,
@@ -736,6 +746,214 @@ function ActiveDownloads() {
   );
 }
 
+// ─── Built-in Torrent Engine Panel ──────────────────────────────────────
+
+const MB = 1024 * 1024;
+
+function bytesToMbInput(bytes: number): string {
+  if (!bytes || bytes <= 0) return "0";
+  // Show up to 2 decimals, trimming trailing zeros.
+  return String(Math.round((bytes / MB) * 100) / 100);
+}
+
+function StatPill({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="flex flex-col">
+      <span className="text-[10px] uppercase tracking-wide text-zinc-500">
+        {label}
+      </span>
+      <span className="text-sm font-medium text-zinc-100 tabular-nums">
+        {value}
+      </span>
+    </div>
+  );
+}
+
+function TorrentEnginePanel() {
+  const { data: clients } = useDownloads();
+  const torrentClient = React.useMemo(
+    () => clients?.find((c) => c.kind === "builtin/torrent" && c.enabled),
+    [clients],
+  );
+  const clientId = torrentClient?.id;
+
+  const { data: summary } = useTorrentStatus(clientId, {
+    // Keep showing the last value while the engine briefly errors.
+    retry: false,
+  });
+  const setLimits = useSetTorrentSpeedLimits();
+  const pauseAll = useTorrentPauseAll();
+  const resumeAll = useTorrentResumeAll();
+
+  const [downInput, setDownInput] = React.useState("0");
+  const [upInput, setUpInput] = React.useState("0");
+  const [dirty, setDirty] = React.useState(false);
+
+  // Sync editable inputs from the server value until the user edits them.
+  React.useEffect(() => {
+    if (!summary || dirty) return;
+    setDownInput(bytesToMbInput(summary.download_limit));
+    setUpInput(bytesToMbInput(summary.upload_limit));
+  }, [summary, dirty]);
+
+  if (!clientId) return null;
+
+  const applyLimits = () => {
+    const down = Math.max(0, Math.round(parseFloat(downInput || "0") * MB)) || 0;
+    const up = Math.max(0, Math.round(parseFloat(upInput || "0") * MB)) || 0;
+    setLimits.mutate(
+      { clientId, download_limit: down, upload_limit: up },
+      {
+        onSuccess: (data) => {
+          // Reflect the server's authoritative values, then unfreeze polling.
+          setDownInput(bytesToMbInput(data.download_limit));
+          setUpInput(bytesToMbInput(data.upload_limit));
+          setDirty(false);
+          toast.success("Speed limits updated");
+        },
+        onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to update limits"),
+      },
+    );
+  };
+
+  return (
+    <Card className="bg-zinc-900/50 border-zinc-800">
+      <CardContent className="space-y-4 pt-5">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Gauge className="h-4 w-4 text-zinc-400" />
+            <span className="text-sm font-medium text-zinc-100">
+              Built-in Torrent Engine
+            </span>
+            <Badge variant="outline" className="text-[10px] text-zinc-400 border-zinc-700">
+              {torrentClient?.name}
+            </Badge>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8"
+              disabled={pauseAll.isPending}
+              onClick={() =>
+                pauseAll.mutate(clientId, {
+                  onSuccess: () => toast.success("All torrents paused"),
+                  onError: (e) => toast.error(e instanceof Error ? e.message : "Pause failed"),
+                })
+              }
+            >
+              <Pause className="h-3.5 w-3.5 mr-1.5" />
+              Pause all
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8"
+              disabled={resumeAll.isPending}
+              onClick={() =>
+                resumeAll.mutate(clientId, {
+                  onSuccess: () => toast.success("All torrents resumed"),
+                  onError: (e) => toast.error(e instanceof Error ? e.message : "Resume failed"),
+                })
+              }
+            >
+              <Play className="h-3.5 w-3.5 mr-1.5" />
+              Resume all
+            </Button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-4 lg:grid-cols-6">
+          <StatPill label="Torrents" value={summary?.total_torrents ?? "—"} />
+          <StatPill label="Downloading" value={summary?.downloading ?? "—"} />
+          <StatPill label="Seeding" value={summary?.seeding ?? "—"} />
+          <StatPill label="Paused" value={summary?.paused ?? "—"} />
+          <StatPill
+            label="Down rate"
+            value={
+              <span className="flex items-center gap-1 text-blue-400">
+                <ArrowDown className="h-3 w-3" />
+                {formatSpeed(summary?.download_rate ?? 0)}
+              </span>
+            }
+          />
+          <StatPill
+            label="Up rate"
+            value={
+              <span className="flex items-center gap-1 text-green-400">
+                <ArrowUp className="h-3 w-3" />
+                {formatSpeed(summary?.upload_rate ?? 0)}
+              </span>
+            }
+          />
+        </div>
+
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-zinc-500">
+          <span>
+            Port <span className="text-zinc-300 tabular-nums">{summary?.listen_port ?? "—"}</span>
+          </span>
+          <span className={summary?.dht ? "text-zinc-300" : "text-zinc-600"}>DHT</span>
+          <span className={summary?.pex ? "text-zinc-300" : "text-zinc-600"}>PEX</span>
+          <span className={summary?.upnp ? "text-zinc-300" : "text-zinc-600"}>UPnP</span>
+          {summary?.save_path && (
+            <span className="truncate">
+              Save path <span className="font-mono text-zinc-300">{summary.save_path}</span>
+            </span>
+          )}
+        </div>
+
+        <div className="flex flex-wrap items-end gap-4 border-t border-zinc-800 pt-4">
+          <div className="space-y-1">
+            <Label htmlFor="torrent-down-limit" className="text-[11px] text-zinc-400">
+              Download limit (MB/s, 0 = unlimited)
+            </Label>
+            <Input
+              id="torrent-down-limit"
+              type="number"
+              min={0}
+              step="0.1"
+              value={downInput}
+              onChange={(e) => {
+                setDownInput(e.target.value);
+                setDirty(true);
+              }}
+              className="h-8 w-40"
+            />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="torrent-up-limit" className="text-[11px] text-zinc-400">
+              Upload limit (MB/s, 0 = unlimited)
+            </Label>
+            <Input
+              id="torrent-up-limit"
+              type="number"
+              min={0}
+              step="0.1"
+              value={upInput}
+              onChange={(e) => {
+                setUpInput(e.target.value);
+                setDirty(true);
+              }}
+              className="h-8 w-40"
+            />
+          </div>
+          <Button
+            size="sm"
+            className="h-8"
+            disabled={!dirty || setLimits.isPending}
+            onClick={applyLimits}
+          >
+            {setLimits.isPending ? (
+              <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+            ) : null}
+            Apply limits
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 // ─── Downloads Page ─────────────────────────────────────────────────────
 
 export function DownloadsPage() {
@@ -754,7 +972,8 @@ export function DownloadsPage() {
             Imports
           </TabsTrigger>
         </TabsList>
-        <TabsContent value="active">
+        <TabsContent value="active" className="space-y-4">
+          <TorrentEnginePanel />
           <ActiveDownloads />
         </TabsContent>
         <TabsContent value="imports">

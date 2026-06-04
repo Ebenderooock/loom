@@ -41,6 +41,11 @@ func (s *Service) Mount(r chi.Router) {
 			r.Post("/force-start", s.handleForceStart)
 			r.Post("/recheck", s.handleRecheck)
 			r.Post("/reannounce", s.handleReannounce)
+			// Built-in torrent engine management (no-op for other kinds).
+			r.Get("/torrent/status", s.handleTorrentStatus)
+			r.Post("/torrent/speed-limits", s.handleTorrentSpeedLimits)
+			r.Post("/torrent/pause-all", s.handleTorrentPauseAll)
+			r.Post("/torrent/resume-all", s.handleTorrentResumeAll)
 		})
 	})
 	// Aggregate activity endpoint across all download clients
@@ -899,4 +904,133 @@ func (s *Service) handleActivityDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, items[0])
+}
+
+// --- built-in torrent engine management ------------------------------
+
+// torrentManagerFor resolves the client by id and asserts it supports
+// torrent-engine management. It writes the appropriate error response and
+// returns ok=false when the client is missing or not a built-in torrent.
+func (s *Service) torrentManagerFor(w http.ResponseWriter, id string) (TorrentManager, bool) {
+	c, ok := s.registry.Get(id)
+	if !ok {
+		writeError(w, http.StatusNotFound, "not_found", "download client not found")
+		return nil, false
+	}
+	mgr, ok := c.(TorrentManager)
+	if !ok {
+		writeError(w, http.StatusBadRequest, "unsupported", "client is not a built-in torrent downloader")
+		return nil, false
+	}
+	return mgr, true
+}
+
+// handleTorrentStatus returns an aggregate snapshot of the built-in
+// torrent engine for the management UI.
+func (s *Service) handleTorrentStatus(w http.ResponseWriter, r *http.Request) {
+	mgr, ok := s.torrentManagerFor(w, chi.URLParam(r, "id"))
+	if !ok {
+		return
+	}
+	writeJSON(w, http.StatusOK, mgr.EngineSummary())
+}
+
+type speedLimitsRequest struct {
+	// Bytes per second. 0 (or omitted) = unlimited. Negative is clamped to 0.
+	DownloadLimit int64 `json:"download_limit"`
+	UploadLimit   int64 `json:"upload_limit"`
+}
+
+// handleTorrentSpeedLimits applies global download/upload caps to the
+// running engine and persists them to the client config so they survive a
+// restart.
+func (s *Service) handleTorrentSpeedLimits(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	mgr, ok := s.torrentManagerFor(w, id)
+	if !ok {
+		return
+	}
+	var req speedLimitsRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", "invalid JSON body")
+		return
+	}
+	if req.DownloadLimit < 0 {
+		req.DownloadLimit = 0
+	}
+	if req.UploadLimit < 0 {
+		req.UploadLimit = 0
+	}
+
+	mgr.SetSpeedLimits(req.DownloadLimit, req.UploadLimit)
+
+	// Best-effort persistence: merge the new caps into the stored config
+	// blob so they are re-applied on a cold start. A failure here does not
+	// undo the live change.
+	if err := s.persistTorrentSpeedLimits(r.Context(), id, req.DownloadLimit, req.UploadLimit); err != nil {
+		s.logger.Warn("persisting torrent speed limits failed", "id", id, "err", err)
+	}
+
+	writeJSON(w, http.StatusOK, mgr.EngineSummary())
+}
+
+// persistTorrentSpeedLimits merges the speed caps into the client's stored
+// JSON config and patches the definition.
+func (s *Service) persistTorrentSpeedLimits(ctx context.Context, id string, down, up int64) error {
+	def, err := s.Get(ctx, id)
+	if err != nil {
+		return err
+	}
+	cfg := map[string]json.RawMessage{}
+	if len(def.Config) > 0 {
+		if err := json.Unmarshal(def.Config, &cfg); err != nil {
+			return err
+		}
+	}
+	cfg["download_speed_limit"], _ = json.Marshal(down)
+	cfg["upload_speed_limit"], _ = json.Marshal(up)
+	merged, err := json.Marshal(cfg)
+	if err != nil {
+		return err
+	}
+	_, err = s.Patch(ctx, Patch{ID: id, Config: merged})
+	return err
+}
+
+// handleTorrentPauseAll pauses every torrent in the built-in engine.
+func (s *Service) handleTorrentPauseAll(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	c, ok := s.registry.Get(id)
+	if !ok {
+		writeError(w, http.StatusNotFound, "not_found", "download client not found")
+		return
+	}
+	if _, ok := c.(TorrentManager); !ok {
+		writeError(w, http.StatusBadRequest, "unsupported", "client is not a built-in torrent downloader")
+		return
+	}
+	if err := c.Pause(r.Context()); err != nil {
+		writeError(w, http.StatusBadGateway, "pause_failed", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+// handleTorrentResumeAll resumes every torrent in the built-in engine.
+func (s *Service) handleTorrentResumeAll(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	c, ok := s.registry.Get(id)
+	if !ok {
+		writeError(w, http.StatusNotFound, "not_found", "download client not found")
+		return
+	}
+	if _, ok := c.(TorrentManager); !ok {
+		writeError(w, http.StatusBadRequest, "unsupported", "client is not a built-in torrent downloader")
+		return
+	}
+	if err := c.Resume(r.Context()); err != nil {
+		writeError(w, http.StatusBadGateway, "resume_failed", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
