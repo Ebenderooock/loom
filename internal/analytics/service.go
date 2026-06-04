@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/ebenderooock/loom/internal/connect"
+	"github.com/ebenderooock/loom/internal/kernel/eventbus"
 	"github.com/google/uuid"
 )
 
@@ -41,15 +42,21 @@ type Service struct {
 	store   *Store
 	conns   ConnectionSource
 	fetch   SessionFetcher
+	bus     eventbus.Bus
 	logger  *slog.Logger
 	minPlay time.Duration // minimum watched time to count a play in stats
 
 	mu       sync.RWMutex
 	snapshot []LiveStream
+
+	// baselined is false until the first Sample completes; the baseline pass
+	// suppresses start events for already-running streams.
+	baselined bool
 }
 
-// NewService creates an analytics service.
-func NewService(store *Store, conns ConnectionSource, logger *slog.Logger) *Service {
+// NewService creates an analytics service. bus may be nil (playback start/stop
+// notifications are then disabled).
+func NewService(store *Store, conns ConnectionSource, bus eventbus.Bus, logger *slog.Logger) *Service {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -57,6 +64,7 @@ func NewService(store *Store, conns ConnectionSource, logger *slog.Logger) *Serv
 		store:    store,
 		conns:    conns,
 		fetch:    defaultFetcher,
+		bus:      bus,
 		logger:   logger.With("module", "analytics"),
 		minPlay:  60 * time.Second,
 		snapshot: []LiveStream{},
@@ -151,6 +159,13 @@ func (s *Service) Sample(ctx context.Context, interval time.Duration) {
 	now := time.Now().UTC()
 	grace := 2 * interval
 
+	// The first sample after startup is a baseline: ResetOrphans has just closed
+	// all open rows, so every active session looks "new". Suppress start events
+	// for that pass so a restart doesn't spam "Playback Started" for streams that
+	// were already running.
+	suppressStarts := !s.baselined
+	s.baselined = true
+
 	// Preserve previous snapshot entries for connections that failed this tick
 	// (mark stale by keeping them) and rebuild from successful ones.
 	prev := s.ActiveStreams()
@@ -160,23 +175,43 @@ func (s *Service) Sample(ctx context.Context, interval time.Duration) {
 	}
 
 	newSnapshot := []LiveStream{}
+	var events []*PlaybackEvent
 	for _, res := range results {
 		if !res.ok {
 			// Keep last-known streams for this connection rather than dropping.
 			newSnapshot = append(newSnapshot, prevByConn[res.conn.ID]...)
 			continue
 		}
-		newSnapshot = append(newSnapshot, s.persistConnection(ctx, res.conn, res.sessions, now, grace)...)
+		streams, evs := s.persistConnection(ctx, res.conn, res.sessions, now, grace, suppressStarts)
+		newSnapshot = append(newSnapshot, streams...)
+		events = append(events, evs...)
 	}
 
 	s.mu.Lock()
 	s.snapshot = newSnapshot
 	s.mu.Unlock()
+
+	// Publish playback start/stop notifications after persistence succeeds, so a
+	// notification only ever corresponds to a real recorded state change.
+	s.publish(ctx, events)
+}
+
+// publish emits collected playback events on the bus (best-effort, nil-safe).
+func (s *Service) publish(ctx context.Context, events []*PlaybackEvent) {
+	if s.bus == nil || len(events) == 0 {
+		return
+	}
+	for _, ev := range events {
+		if err := s.bus.Publish(ctx, ev); err != nil {
+			s.logger.Warn("analytics: publish playback event failed", "topic", ev.Topic(), "error", err)
+		}
+	}
 }
 
 // persistConnection reconciles one connection's active sessions against its
-// open history rows and returns the live streams for the snapshot.
-func (s *Service) persistConnection(ctx context.Context, c *connect.Connection, sessions []connect.Session, now time.Time, grace time.Duration) []LiveStream {
+// open history rows and returns the live streams for the snapshot plus any
+// playback start/stop events to publish.
+func (s *Service) persistConnection(ctx context.Context, c *connect.Connection, sessions []connect.Session, now time.Time, grace time.Duration, suppressStarts bool) ([]LiveStream, []*PlaybackEvent) {
 	open, err := s.store.OpenRowsForConn(ctx, c.ID)
 	if err != nil {
 		s.logger.Warn("analytics: load open rows failed", "connection", c.Name, "error", err)
@@ -189,6 +224,7 @@ func (s *Service) persistConnection(ctx context.Context, c *connect.Connection, 
 
 	active := map[sessionKey]bool{}
 	streams := make([]LiveStream, 0, len(sessions))
+	var events []*PlaybackEvent
 
 	for _, sess := range sessions {
 		k := sessionKey{session: sess.SessionKey, media: sess.MediaID}
@@ -208,7 +244,7 @@ func (s *Service) persistConnection(ctx context.Context, c *connect.Connection, 
 				}
 				watched += delta.Milliseconds()
 			}
-			if err := s.store.UpdateOpen(ctx, row.ID, now, sess.PositionMs, watched, sess.Transcode); err != nil {
+			if err := s.store.UpdateOpen(ctx, row.ID, now, sess.PositionMs, watched, sess.Transcode, sess.BitrateKbps); err != nil {
 				s.logger.Warn("analytics: update row failed", "error", err)
 			} else {
 				row.WatchedMs = watched
@@ -232,19 +268,18 @@ func (s *Service) persistConnection(ctx context.Context, c *connect.Connection, 
 				LastPositionMs:   sess.PositionMs,
 				DurationMs:       sess.DurationMs,
 				WatchedMs:        0,
+				BitrateKbps:      sess.BitrateKbps,
 			}
 			if err := s.store.InsertOpen(ctx, rec); err != nil {
 				s.logger.Warn("analytics: insert row failed", "error", err)
+			} else if !suppressStarts {
+				events = append(events, newPlaybackEvent(TopicPlaybackStarted, c.Name, rec))
 			}
 		}
 
 		sess.ConnectionID = c.ID
 		sess.Provider = c.Provider
-		streams = append(streams, LiveStream{
-			Session:        sess,
-			ConnectionName: c.Name,
-			Progress:       progress(sess.PositionMs, sess.DurationMs),
-		})
+		streams = append(streams, liveStreamFrom(sess, c.Name))
 	}
 
 	// Reap: close open rows for this connection that are no longer active and
@@ -256,13 +291,16 @@ func (s *Service) persistConnection(ctx context.Context, c *connect.Connection, 
 			continue
 		}
 		if row.LastSeenAt.Before(cutoff) {
-			if err := s.store.Close(ctx, row.ID, row.LastSeenAt, "disappeared"); err != nil {
+			closed, err := s.store.Close(ctx, row.ID, row.LastSeenAt, "disappeared")
+			if err != nil {
 				s.logger.Warn("analytics: close row failed", "error", err)
+			} else if closed {
+				events = append(events, newPlaybackEvent(TopicPlaybackStopped, c.Name, row))
 			}
 		}
 	}
 
-	return streams
+	return streams, events
 }
 
 func progress(pos, dur int64) float64 {

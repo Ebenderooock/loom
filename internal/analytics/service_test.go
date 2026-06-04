@@ -4,12 +4,14 @@ import (
 	"context"
 	"database/sql"
 	"io"
+	"sync"
 	"log/slog"
 	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/ebenderooock/loom/internal/connect"
+	"github.com/ebenderooock/loom/internal/kernel/eventbus"
 	"github.com/ebenderooock/loom/internal/kernel/config"
 	"github.com/ebenderooock/loom/internal/storage"
 )
@@ -43,12 +45,39 @@ func quiet() *slog.Logger {
 	return slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelError}))
 }
 
-func newSvc(t *testing.T, conns ...*connect.Connection) (*Service, *Store) {
+// captureBus records published events for assertions. It satisfies
+// eventbus.Bus; Subscribe is unused in these tests.
+type captureBus struct {
+	mu     sync.Mutex
+	events []eventbus.Event
+}
+
+func (b *captureBus) Publish(_ context.Context, ev eventbus.Event) error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.events = append(b.events, ev)
+	return nil
+}
+
+func (b *captureBus) Subscribe(string, eventbus.Handler) func() { return func() {} }
+
+func (b *captureBus) topics() []string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	out := make([]string, len(b.events))
+	for i, e := range b.events {
+		out[i] = e.Topic()
+	}
+	return out
+}
+
+func newSvc(t *testing.T, conns ...*connect.Connection) (*Service, *Store, *captureBus) {
 	t.Helper()
 	db := openTestDB(t)
 	store := NewStore(db)
-	svc := NewService(store, &fakeSource{conns: conns}, quiet())
-	return svc, store
+	bus := &captureBus{}
+	svc := NewService(store, &fakeSource{conns: conns}, bus, quiet())
+	return svc, store, bus
 }
 
 func plexConn(id, name string) *connect.Connection {
@@ -56,7 +85,7 @@ func plexConn(id, name string) *connect.Connection {
 }
 
 func TestPersistContinuityAccumulatesWatched(t *testing.T) {
-	svc, store := newSvc(t)
+	svc, store, _ := newSvc(t)
 	conn := plexConn("c1", "Plex")
 	ctx := context.Background()
 	grace := 60 * time.Second
@@ -66,8 +95,8 @@ func TestPersistContinuityAccumulatesWatched(t *testing.T) {
 		PositionMs: 1000, DurationMs: 600000}
 
 	t0 := time.Date(2026, 6, 4, 20, 0, 0, 0, time.UTC)
-	svc.persistConnection(ctx, conn, []connect.Session{sess}, t0, grace)
-	svc.persistConnection(ctx, conn, []connect.Session{sess}, t0.Add(30*time.Second), grace)
+	svc.persistConnection(ctx, conn, []connect.Session{sess}, t0, grace, false)
+	svc.persistConnection(ctx, conn, []connect.Session{sess}, t0.Add(30*time.Second), grace, false)
 
 	open, err := store.OpenRowsForConn(ctx, "c1")
 	if err != nil {
@@ -82,16 +111,16 @@ func TestPersistContinuityAccumulatesWatched(t *testing.T) {
 }
 
 func TestPersistCapsDeltaAtGrace(t *testing.T) {
-	svc, store := newSvc(t)
+	svc, store, _ := newSvc(t)
 	conn := plexConn("c1", "Plex")
 	ctx := context.Background()
 	grace := 60 * time.Second
 	sess := connect.Session{SessionKey: "10", MediaID: "100", State: "playing", DurationMs: 600000}
 
 	t0 := time.Date(2026, 6, 4, 20, 0, 0, 0, time.UTC)
-	svc.persistConnection(ctx, conn, []connect.Session{sess}, t0, grace)
+	svc.persistConnection(ctx, conn, []connect.Session{sess}, t0, grace, false)
 	// A long gap (server unreachable): delta is 10m but must cap at grace (60s).
-	svc.persistConnection(ctx, conn, []connect.Session{sess}, t0.Add(10*time.Minute), grace)
+	svc.persistConnection(ctx, conn, []connect.Session{sess}, t0.Add(10*time.Minute), grace, false)
 
 	open, _ := store.OpenRowsForConn(ctx, "c1")
 	if len(open) != 1 || open[0].WatchedMs != 60000 {
@@ -100,7 +129,7 @@ func TestPersistCapsDeltaAtGrace(t *testing.T) {
 }
 
 func TestPausedDoesNotAccumulate(t *testing.T) {
-	svc, store := newSvc(t)
+	svc, store, _ := newSvc(t)
 	conn := plexConn("c1", "Plex")
 	ctx := context.Background()
 	grace := 60 * time.Second
@@ -109,8 +138,8 @@ func TestPausedDoesNotAccumulate(t *testing.T) {
 	paused.State = "paused"
 
 	t0 := time.Date(2026, 6, 4, 20, 0, 0, 0, time.UTC)
-	svc.persistConnection(ctx, conn, []connect.Session{playing}, t0, grace)
-	svc.persistConnection(ctx, conn, []connect.Session{paused}, t0.Add(30*time.Second), grace)
+	svc.persistConnection(ctx, conn, []connect.Session{playing}, t0, grace, false)
+	svc.persistConnection(ctx, conn, []connect.Session{paused}, t0.Add(30*time.Second), grace, false)
 
 	open, _ := store.OpenRowsForConn(ctx, "c1")
 	if len(open) != 1 || open[0].WatchedMs != 0 {
@@ -119,17 +148,17 @@ func TestPausedDoesNotAccumulate(t *testing.T) {
 }
 
 func TestReapOnDisappear(t *testing.T) {
-	svc, store := newSvc(t)
+	svc, store, _ := newSvc(t)
 	conn := plexConn("c1", "Plex")
 	ctx := context.Background()
 	grace := 60 * time.Second
 	sess := connect.Session{SessionKey: "10", MediaID: "100", State: "playing", DurationMs: 600000}
 
 	t0 := time.Date(2026, 6, 4, 20, 0, 0, 0, time.UTC)
-	svc.persistConnection(ctx, conn, []connect.Session{sess}, t0, grace)
+	svc.persistConnection(ctx, conn, []connect.Session{sess}, t0, grace, false)
 
 	// Disappears; now is past lastSeen + grace, so it must be closed.
-	svc.persistConnection(ctx, conn, nil, t0.Add(2*grace+time.Second), grace)
+	svc.persistConnection(ctx, conn, nil, t0.Add(2*grace+time.Second), grace, false)
 
 	open, _ := store.OpenRowsForConn(ctx, "c1")
 	if len(open) != 0 {
@@ -142,16 +171,16 @@ func TestReapOnDisappear(t *testing.T) {
 }
 
 func TestReapWaitsForGrace(t *testing.T) {
-	svc, store := newSvc(t)
+	svc, store, _ := newSvc(t)
 	conn := plexConn("c1", "Plex")
 	ctx := context.Background()
 	grace := 60 * time.Second
 	sess := connect.Session{SessionKey: "10", MediaID: "100", State: "playing", DurationMs: 600000}
 
 	t0 := time.Date(2026, 6, 4, 20, 0, 0, 0, time.UTC)
-	svc.persistConnection(ctx, conn, []connect.Session{sess}, t0, grace)
+	svc.persistConnection(ctx, conn, []connect.Session{sess}, t0, grace, false)
 	// Missed a single poll (30s) — within grace, must NOT reap.
-	svc.persistConnection(ctx, conn, nil, t0.Add(30*time.Second), grace)
+	svc.persistConnection(ctx, conn, nil, t0.Add(30*time.Second), grace, false)
 
 	open, _ := store.OpenRowsForConn(ctx, "c1")
 	if len(open) != 1 {
@@ -160,7 +189,7 @@ func TestReapWaitsForGrace(t *testing.T) {
 }
 
 func TestDistinctMediaSameSessionKey(t *testing.T) {
-	svc, store := newSvc(t)
+	svc, store, _ := newSvc(t)
 	conn := plexConn("c1", "Plex")
 	ctx := context.Background()
 	grace := 60 * time.Second
@@ -168,7 +197,7 @@ func TestDistinctMediaSameSessionKey(t *testing.T) {
 
 	a := connect.Session{SessionKey: "10", MediaID: "100", State: "playing", DurationMs: 1}
 	b := connect.Session{SessionKey: "10", MediaID: "200", State: "playing", DurationMs: 1}
-	svc.persistConnection(ctx, conn, []connect.Session{a, b}, t0, grace)
+	svc.persistConnection(ctx, conn, []connect.Session{a, b}, t0, grace, false)
 
 	open, _ := store.OpenRowsForConn(ctx, "c1")
 	if len(open) != 2 {
@@ -177,11 +206,11 @@ func TestDistinctMediaSameSessionKey(t *testing.T) {
 }
 
 func TestResetOrphansClosesOpenRows(t *testing.T) {
-	svc, store := newSvc(t)
+	svc, store, _ := newSvc(t)
 	conn := plexConn("c1", "Plex")
 	ctx := context.Background()
 	sess := connect.Session{SessionKey: "10", MediaID: "100", State: "playing", DurationMs: 1}
-	svc.persistConnection(ctx, conn, []connect.Session{sess}, time.Now().UTC(), 60*time.Second)
+	svc.persistConnection(ctx, conn, []connect.Session{sess}, time.Now().UTC(), 60*time.Second, false)
 
 	svc.ResetOrphans(ctx)
 
@@ -192,7 +221,7 @@ func TestResetOrphansClosesOpenRows(t *testing.T) {
 }
 
 func TestStatsThresholdAndAggregates(t *testing.T) {
-	svc, store := newSvc(t)
+	svc, store, _ := newSvc(t)
 	ctx := context.Background()
 	now := time.Now().UTC()
 
@@ -228,7 +257,7 @@ func TestStatsThresholdAndAggregates(t *testing.T) {
 func TestSampleIsolatesFailedConnection(t *testing.T) {
 	connA := plexConn("a", "A")
 	connB := plexConn("b", "B")
-	svc, store := newSvc(t, connA, connB)
+	svc, store, _ := newSvc(t, connA, connB)
 	ctx := context.Background()
 
 	failB := false
@@ -255,4 +284,153 @@ func TestSampleIsolatesFailedConnection(t *testing.T) {
 	if len(openB) != 1 {
 		t.Fatalf("failed connection's history must not be reaped, %d open", len(openB))
 	}
+}
+
+func countTopic(topics []string, want string) int {
+n := 0
+for _, tp := range topics {
+if tp == want {
+n++
+}
+}
+return n
+}
+
+func topicsOf(evs []*PlaybackEvent) []string {
+out := make([]string, 0, len(evs))
+for _, ev := range evs {
+out = append(out, ev.Topic())
+}
+return out
+}
+
+func TestSamplePublishesStartAndStop(t *testing.T) {
+conn := plexConn("c1", "Plex")
+svc, _, bus := newSvc(t, conn)
+ctx := context.Background()
+
+playing := false
+svc.fetch = func(_ context.Context, c *connect.Connection) ([]connect.Session, error) {
+if !playing {
+return nil, nil
+}
+return []connect.Session{{SessionKey: "1", MediaID: "m1", User: "alice",
+MediaType: "movie", FullTitle: "Movie A", State: "playing", DurationMs: 600000}}, nil
+}
+
+// Baseline sample (nothing playing) primes the service past the startup pass.
+svc.Sample(ctx, 30*time.Second)
+if got := len(bus.topics()); got != 0 {
+t.Fatalf("baseline sample must emit nothing, got %v", bus.topics())
+}
+
+// Now a session appears -> one start event.
+playing = true
+svc.Sample(ctx, 30*time.Second)
+if got := countTopic(bus.topics(), TopicPlaybackStarted); got != 1 {
+t.Fatalf("expected 1 start event, got %d (%v)", got, bus.topics())
+}
+
+// Second sample with the same session must NOT emit another start.
+svc.Sample(ctx, 30*time.Second)
+if got := countTopic(bus.topics(), TopicPlaybackStarted); got != 1 {
+t.Fatalf("expected still 1 start event after continuity, got %d", got)
+}
+
+// Stop playing; one tick later it's within grace -> no stop yet.
+playing = false
+svc.Sample(ctx, 30*time.Second)
+if got := countTopic(bus.topics(), TopicPlaybackStopped); got != 0 {
+t.Fatalf("one-tick disappearance must not emit a stop, got %d", got)
+}
+}
+
+func TestFirstSampleSuppressesStartEvents(t *testing.T) {
+conn := plexConn("c1", "Plex")
+svc, _, bus := newSvc(t, conn)
+ctx := context.Background()
+
+svc.fetch = func(_ context.Context, c *connect.Connection) ([]connect.Session, error) {
+return []connect.Session{{SessionKey: "1", MediaID: "m1", User: "alice",
+	MediaType: "movie", FullTitle: "Movie A", State: "playing", DurationMs: 600000}}, nil
+}
+
+// The baseline sample after startup must not emit a start event for a stream
+// that was already running before Loom started (avoids restart spam).
+svc.Sample(ctx, 30*time.Second)
+if got := countTopic(bus.topics(), TopicPlaybackStarted); got != 0 {
+t.Fatalf("baseline sample must suppress start events, got %d (%v)", got, bus.topics())
+}
+}
+
+func TestPersistConnectionReturnsStartAndStopEvents(t *testing.T) {
+conn := plexConn("c1", "Plex")
+svc, _, _ := newSvc(t, conn)
+ctx := context.Background()
+grace := 60 * time.Second
+t0 := time.Date(2026, 6, 4, 20, 0, 0, 0, time.UTC)
+sess := connect.Session{SessionKey: "1", MediaID: "m1", User: "alice", MediaType: "movie",
+FullTitle: "Movie A", State: "playing", DurationMs: 600000}
+
+// New row -> exactly one start event returned.
+_, evs := svc.persistConnection(ctx, conn, []connect.Session{sess}, t0, grace, false)
+if countTopic(topicsOf(evs), TopicPlaybackStarted) != 1 || len(evs) != 1 {
+t.Fatalf("expected 1 start event, got %v", topicsOf(evs))
+}
+
+// Suppressed baseline -> no start event for the same continuing session.
+_, evs = svc.persistConnection(ctx, conn, []connect.Session{sess}, t0.Add(30*time.Second), grace, true)
+if len(evs) != 0 {
+t.Fatalf("continuing session must not emit events, got %v", topicsOf(evs))
+}
+
+// Session gone past grace -> exactly one stop event returned.
+_, evs = svc.persistConnection(ctx, conn, nil, t0.Add(2*grace+time.Second), grace, false)
+if countTopic(topicsOf(evs), TopicPlaybackStopped) != 1 || len(evs) != 1 {
+t.Fatalf("expected 1 stop event after grace, got %v", topicsOf(evs))
+}
+}
+
+func TestStartupReapEmitsNoEvents(t *testing.T) {
+conn := plexConn("c1", "Plex")
+svc, _, bus := newSvc(t, conn)
+ctx := context.Background()
+sess := connect.Session{SessionKey: "1", MediaID: "m1", State: "playing", DurationMs: 600000}
+svc.persistConnection(ctx, conn, []connect.Session{sess}, time.Now().UTC(), 60*time.Second, false)
+
+svc.ResetOrphans(ctx)
+
+if len(bus.topics()) != 0 {
+t.Fatalf("startup reap must not publish events, got %v", bus.topics())
+}
+}
+
+func TestStickyTranscodeCounts(t *testing.T) {
+svc, _, _ := newSvc(t)
+conn := plexConn("c1", "Plex")
+ctx := context.Background()
+grace := 60 * time.Second
+t0 := time.Date(2026, 6, 4, 20, 0, 0, 0, time.UTC)
+
+// First sample: transcoding. Second sample: direct-play. The play must still
+// count as a transcode (sticky) and the bitrate must be retained.
+transcoding := connect.Session{SessionKey: "1", MediaID: "m1", User: "alice", MediaType: "movie",
+FullTitle: "Movie A", State: "playing", DurationMs: 600000, Transcode: true, BitrateKbps: 8000}
+direct := transcoding
+direct.Transcode = false
+direct.BitrateKbps = 0
+
+svc.persistConnection(ctx, conn, []connect.Session{transcoding}, t0, grace, false)
+svc.persistConnection(ctx, conn, []connect.Session{direct}, t0.Add(90*time.Second), grace, false)
+
+stats, err := svc.Stats(ctx, 30)
+if err != nil {
+t.Fatalf("stats: %v", err)
+}
+if stats.Totals.TranscodePlays != 1 || stats.Totals.DirectPlays != 0 {
+t.Fatalf("expected sticky transcode (1 transcode, 0 direct), got %+v", stats.Totals)
+}
+if stats.Totals.AvgBitrateKbps != 8000 {
+t.Fatalf("expected retained 8000 kbps avg, got %d", stats.Totals.AvgBitrateKbps)
+}
 }

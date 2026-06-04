@@ -19,6 +19,8 @@ const (
 	topicDownloadFailed    = "downloads.failed"
 	topicImportCompleted   = "imports.completed"
 	topicImportFailed      = "imports.failed"
+	topicPlaybackStarted   = "analytics.playback.started"
+	topicPlaybackStopped   = "analytics.playback.stopped"
 )
 
 // topicEventMap maps event bus topics to notification EventTypes.
@@ -29,6 +31,8 @@ var topicEventMap = map[string]EventType{
 	topicDownloadFailed:    EventOnHealthIssue,
 	topicImportCompleted:   EventOnDownload,
 	topicImportFailed:      EventOnHealthIssue,
+	topicPlaybackStarted:   EventOnPlayback,
+	topicPlaybackStopped:   EventOnPlayback,
 }
 
 const (
@@ -275,6 +279,17 @@ func formatEvent(eventType EventType, ev eventbus.Event) Notification {
 	case topicImportFailed:
 		title = "Import Failed"
 		message = fmt.Sprintf("Failed to import %s: %s", dataStr(data, "title"), dataStr(data, "error"))
+
+	case topicPlaybackStarted:
+		title = "Playback Started"
+		message = fmt.Sprintf("%s started watching %s", dataStr(data, "user"), dataStr(data, "title"))
+		if d := dataStr(data, "server"); d != "(unknown)" {
+			message += fmt.Sprintf(" on %s", d)
+		}
+
+	case topicPlaybackStopped:
+		title = "Playback Stopped"
+		message = fmt.Sprintf("%s stopped watching %s", dataStr(data, "user"), dataStr(data, "title"))
 
 	default:
 		title = "Loom Event"

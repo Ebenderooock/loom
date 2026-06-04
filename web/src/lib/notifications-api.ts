@@ -48,6 +48,7 @@ export interface NotificationConnection {
   on_delete: boolean;
   on_health_issue: boolean;
   on_application_update: boolean;
+  on_playback: boolean;
   tags: string[];
   created_at: string;
   updated_at: string;
@@ -65,6 +66,7 @@ export interface CreateConnectionRequest {
   on_delete?: boolean;
   on_health_issue?: boolean;
   on_application_update?: boolean;
+  on_playback?: boolean;
   tags?: string[];
 }
 
@@ -80,6 +82,7 @@ export interface UpdateConnectionRequest {
   on_delete?: boolean;
   on_health_issue?: boolean;
   on_application_update?: boolean;
+  on_playback?: boolean;
   tags?: string[];
 }
 
@@ -357,6 +360,7 @@ export const EVENT_TYPES = [
   { key: "on_delete" as const, label: "On Delete" },
   { key: "on_health_issue" as const, label: "On Health Issue" },
   { key: "on_application_update" as const, label: "On App Update" },
+  { key: "on_playback" as const, label: "On Playback" },
 ];
 
 export const TEMPLATE_VARIABLES = [

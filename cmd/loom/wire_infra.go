@@ -54,7 +54,7 @@ func wireInfra(
 
 	// Media analytics — live stream monitoring + watch history, sampled from
 	// enabled Plex/Emby/Jellyfin connections and gated by a feature flag.
-	analyticsSvc := analytics.NewService(analytics.NewStore(db.DB()), connectSvc, logger)
+	analyticsSvc := analytics.NewService(analytics.NewStore(db.DB()), connectSvc, srv.Bus(), logger)
 	srv.SetAnalytics(analyticsSvc)
 	analyticsPoller := analytics.NewPoller(
 		analyticsSvc,

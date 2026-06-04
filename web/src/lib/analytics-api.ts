@@ -19,6 +19,7 @@ export interface LiveStream {
   position_ms: number;
   duration_ms: number;
   transcode: boolean;
+  bitrate_kbps: number;
   progress: number; // 0..100
 }
 
@@ -35,6 +36,7 @@ export interface HistoryRecord {
   last_seen_at: string;
   duration_ms: number;
   watched_ms: number;
+  bitrate_kbps: number;
   ended_at?: string;
 }
 
@@ -59,7 +61,14 @@ export interface DayCount {
 
 export interface AnalyticsStats {
   window_days: number;
-  totals: { plays: number; unique_users: number; watched_ms: number };
+  totals: {
+    plays: number;
+    unique_users: number;
+    watched_ms: number;
+    transcode_plays: number;
+    direct_plays: number;
+    avg_bitrate_kbps: number;
+  };
   top_users: UserStat[];
   top_media: MediaStat[];
   least_media: MediaStat[];
@@ -108,4 +117,11 @@ export function formatWatched(ms: number): string {
   const h = Math.floor(totalMin / 60);
   const m = totalMin % 60;
   return m > 0 ? `${h}h ${m}m` : `${h}h`;
+}
+
+// formatBitrate renders a kbps value as Mbps/kbps; 0 means "unknown".
+export function formatBitrate(kbps: number): string {
+  if (!kbps || kbps <= 0) return "—";
+  if (kbps >= 1000) return `${(kbps / 1000).toFixed(1)} Mbps`;
+  return `${Math.round(kbps)} kbps`;
 }
