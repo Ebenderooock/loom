@@ -16,13 +16,13 @@ type Kind string
 // Built-in kinds that ship with the downloads core. Real kinds land
 // in later phases and register themselves during their package init.
 const (
-	KindNull            Kind = "builtin/null"
-	KindBuiltinTorrent  Kind = "builtin/torrent"
-	KindQBittorrent     Kind = "qbittorrent"
-	KindTransmission    Kind = "transmission"
-	KindDeluge          Kind = "deluge"
-	KindSABnzbd         Kind = "sabnzbd"
-	KindNZBGet          Kind = "nzbget"
+	KindNull           Kind = "builtin/null"
+	KindBuiltinTorrent Kind = "builtin/torrent"
+	KindQBittorrent    Kind = "qbittorrent"
+	KindTransmission   Kind = "transmission"
+	KindDeluge         Kind = "deluge"
+	KindSABnzbd        Kind = "sabnzbd"
+	KindNZBGet         Kind = "nzbget"
 )
 
 // Protocol is the wire family the kind speaks. We model only torrent
@@ -117,7 +117,7 @@ type AddRequest struct {
 	// Media context — optional fields used to record grab linkage so the
 	// import pipeline can deterministically match completed downloads to
 	// the correct media item. Set by the interactive search dialog.
-	MediaType  string   `json:"media_type,omitempty"`  // "movie" or "episode"
+	MediaType  string   `json:"media_type,omitempty"` // "movie" or "episode"
 	SeriesID   string   `json:"series_id,omitempty"`
 	EpisodeIDs []string `json:"episode_ids,omitempty"`
 	MovieID    string   `json:"movie_id,omitempty"`
@@ -288,4 +288,33 @@ var ErrUnknownKind = errors.New("unknown download client kind")
 // (peers, files, trackers). The builtin/torrent kind implements this.
 type DetailProvider interface {
 	Detail(ctx context.Context, id string) (any, error)
+}
+
+// TorrentEngineSummary is an aggregate snapshot of the built-in torrent
+// engine, surfaced to the management UI.
+type TorrentEngineSummary struct {
+	TotalTorrents int    `json:"total_torrents"`
+	Downloading   int    `json:"downloading"`
+	Seeding       int    `json:"seeding"`
+	Paused        int    `json:"paused"`
+	DownloadRate  int64  `json:"download_rate"`  // aggregate bytes/sec
+	UploadRate    int64  `json:"upload_rate"`    // aggregate bytes/sec
+	DownloadLimit int64  `json:"download_limit"` // bytes/sec, 0 = unlimited
+	UploadLimit   int64  `json:"upload_limit"`   // bytes/sec, 0 = unlimited
+	ListenPort    int    `json:"listen_port"`
+	DHT           bool   `json:"dht"`
+	PEX           bool   `json:"pex"`
+	UPnP          bool   `json:"upnp"`
+	SavePath      string `json:"save_path"`
+}
+
+// TorrentManager is an optional interface implemented by the
+// builtin/torrent client to expose engine-level management: an aggregate
+// status summary and live global speed-limit control.
+type TorrentManager interface {
+	// EngineSummary returns an aggregate snapshot of the engine.
+	EngineSummary() TorrentEngineSummary
+	// SetSpeedLimits sets the global download/upload caps in bytes/sec.
+	// A value of 0 means unlimited. The change takes effect immediately.
+	SetSpeedLimits(downBytesPerSec, upBytesPerSec int64)
 }

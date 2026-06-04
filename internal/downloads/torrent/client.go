@@ -63,6 +63,31 @@ func (c *Client) Detail(_ context.Context, id string) (any, error) {
 	return c.engine.Detail(id)
 }
 
+// EngineSummary implements downloads.TorrentManager.
+func (c *Client) EngineSummary() downloads.TorrentEngineSummary {
+	s := c.engine.Summary()
+	return downloads.TorrentEngineSummary{
+		TotalTorrents: s.TotalTorrents,
+		Downloading:   s.Downloading,
+		Seeding:       s.Seeding,
+		Paused:        s.Paused,
+		DownloadRate:  s.DownloadRate,
+		UploadRate:    s.UploadRate,
+		DownloadLimit: s.DownloadLimit,
+		UploadLimit:   s.UploadLimit,
+		ListenPort:    s.ListenPort,
+		DHT:           s.DHT,
+		PEX:           s.PEX,
+		UPnP:          s.UPnP,
+		SavePath:      s.SavePath,
+	}
+}
+
+// SetSpeedLimits implements downloads.TorrentManager.
+func (c *Client) SetSpeedLimits(downBytesPerSec, upBytesPerSec int64) {
+	c.engine.SetSpeedLimits(downBytesPerSec, upBytesPerSec)
+}
+
 // ID implements downloads.DownloadClient.
 func (c *Client) ID() string { return c.id }
 

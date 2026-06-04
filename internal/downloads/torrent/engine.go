@@ -16,6 +16,7 @@ import (
 	"github.com/anacrolix/torrent"
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/storage"
+	"golang.org/x/time/rate"
 )
 
 // metadataTimeout is how long we wait for a magnet's metadata to
@@ -52,17 +53,17 @@ type torrentMeta struct {
 
 // trackedTorrent pairs the anacrolix torrent handle with Loom metadata.
 type trackedTorrent struct {
-	t            *torrent.Torrent
-	title        string
-	category     string
-	savePath     string
-	addedAt      time.Time
-	seedStartAt  *time.Time
-	seedPolicy   SeedPolicy
-	paused       bool
-	movedToDest  bool  // true once files have been moved from IncompleteDir → DownloadDir
-	downloaded   int64 // snapshot for ratio calculation
-	uploaded     int64
+	t           *torrent.Torrent
+	title       string
+	category    string
+	savePath    string
+	addedAt     time.Time
+	seedStartAt *time.Time
+	seedPolicy  SeedPolicy
+	paused      bool
+	movedToDest bool  // true once files have been moved from IncompleteDir → DownloadDir
+	downloaded  int64 // snapshot for ratio calculation
+	uploaded    int64
 
 	// Speed tracking — computed from byte deltas between Status() calls.
 	lastSpeedSampleAt time.Time
@@ -82,6 +83,46 @@ type Engine struct {
 	items   map[string]*trackedTorrent // keyed by lowercase infohash hex
 	cancel  context.CancelFunc
 	dataDir string
+
+	// Live rate limiters shared with the anacrolix client config so the
+	// global download/upload caps can be changed at runtime.
+	downLimiter *rate.Limiter
+	upLimiter   *rate.Limiter
+}
+
+// rateLimiterBurst is the minimum token-bucket burst applied to a finite
+// rate limiter so individual piece requests are never starved.
+const rateLimiterBurst = 1 << 20 // 1 MiB
+
+// newRateLimiter builds a rate limiter for the given cap in bytes/sec.
+// A value <= 0 means unlimited.
+func newRateLimiter(bytesPerSec int64) *rate.Limiter {
+	if bytesPerSec <= 0 {
+		return rate.NewLimiter(rate.Inf, 0)
+	}
+	burst := bytesPerSec
+	if burst < rateLimiterBurst {
+		burst = rateLimiterBurst
+	}
+	return rate.NewLimiter(rate.Limit(bytesPerSec), int(burst))
+}
+
+// applyRateLimit updates a live limiter to the given cap in bytes/sec.
+func applyRateLimit(l *rate.Limiter, bytesPerSec int64) {
+	if l == nil {
+		return
+	}
+	if bytesPerSec <= 0 {
+		l.SetLimit(rate.Inf)
+		l.SetBurst(0)
+		return
+	}
+	burst := bytesPerSec
+	if burst < rateLimiterBurst {
+		burst = rateLimiterBurst
+	}
+	l.SetLimit(rate.Limit(bytesPerSec))
+	l.SetBurst(int(burst))
 }
 
 // NewEngine creates the anacrolix torrent client with the supplied
@@ -136,6 +177,13 @@ func NewEngine(cfg Config, logger *slog.Logger) (*Engine, error) {
 
 	tcfg.SetListenAddr(net.JoinHostPort("", fmt.Sprintf("%d", cfg.ListenPort)))
 
+	// Global speed caps. anacrolix throttles using these limiters; we keep
+	// references so the caps can be changed at runtime via SetSpeedLimits.
+	downLimiter := newRateLimiter(cfg.DownloadSpeedLimit)
+	upLimiter := newRateLimiter(cfg.UploadSpeedLimit)
+	tcfg.DownloadRateLimiter = downLimiter
+	tcfg.UploadRateLimiter = upLimiter
+
 	cl, err := torrent.NewClient(tcfg)
 	if err != nil {
 		_ = pc.Close()
@@ -148,14 +196,18 @@ func NewEngine(cfg Config, logger *slog.Logger) (*Engine, error) {
 		"dht", cfg.EnableDHT,
 		"pex", cfg.EnablePEX,
 		"upnp", cfg.EnableUPnP,
+		"download_limit", cfg.DownloadSpeedLimit,
+		"upload_limit", cfg.UploadSpeedLimit,
 	)
 
 	return &Engine{
-		client:  cl,
-		cfg:     cfg,
-		logger:  logger,
-		items:   make(map[string]*trackedTorrent),
-		dataDir: dataDir,
+		client:      cl,
+		cfg:         cfg,
+		logger:      logger,
+		items:       make(map[string]*trackedTorrent),
+		dataDir:     dataDir,
+		downLimiter: downLimiter,
+		upLimiter:   upLimiter,
 	}, nil
 }
 
@@ -346,6 +398,76 @@ func (e *Engine) Status(hashes ...string) []TorrentStatus {
 		out = append(out, e.buildStatus(tt))
 	}
 	return out
+}
+
+// EngineSummary aggregates the engine's live state for the management UI.
+type EngineSummary struct {
+	TotalTorrents int
+	Downloading   int
+	Seeding       int
+	Paused        int
+	DownloadRate  int64 // aggregate bytes/sec
+	UploadRate    int64 // aggregate bytes/sec
+	DownloadLimit int64 // bytes/sec, 0 = unlimited
+	UploadLimit   int64 // bytes/sec, 0 = unlimited
+	ListenPort    int
+	DHT           bool
+	PEX           bool
+	UPnP          bool
+	SavePath      string
+}
+
+// Summary returns an aggregate snapshot of the engine state.
+func (e *Engine) Summary() EngineSummary {
+	statuses := e.Status() // refreshes per-torrent rates; takes the lock itself
+
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+
+	sum := EngineSummary{
+		TotalTorrents: len(statuses),
+		DownloadLimit: e.cfg.DownloadSpeedLimit,
+		UploadLimit:   e.cfg.UploadSpeedLimit,
+		ListenPort:    e.cfg.ListenPort,
+		DHT:           e.cfg.EnableDHT,
+		PEX:           e.cfg.EnablePEX,
+		UPnP:          e.cfg.EnableUPnP,
+		SavePath:      e.cfg.DownloadDir,
+	}
+	for _, s := range statuses {
+		sum.DownloadRate += s.DownloadRate
+		sum.UploadRate += s.UploadRate
+		switch s.Status {
+		case "paused":
+			sum.Paused++
+		case "seeding":
+			sum.Seeding++
+		default:
+			sum.Downloading++
+		}
+	}
+	return sum
+}
+
+// SetSpeedLimits updates the global download/upload caps (bytes/sec, 0 =
+// unlimited) on the running engine. The change takes effect immediately.
+func (e *Engine) SetSpeedLimits(downBytesPerSec, upBytesPerSec int64) {
+	if downBytesPerSec < 0 {
+		downBytesPerSec = 0
+	}
+	if upBytesPerSec < 0 {
+		upBytesPerSec = 0
+	}
+	e.mu.Lock()
+	e.cfg.DownloadSpeedLimit = downBytesPerSec
+	e.cfg.UploadSpeedLimit = upBytesPerSec
+	dl, ul := e.downLimiter, e.upLimiter
+	e.mu.Unlock()
+
+	applyRateLimit(dl, downBytesPerSec)
+	applyRateLimit(ul, upBytesPerSec)
+	e.logger.Info("engine speed limits updated",
+		"download_limit", downBytesPerSec, "upload_limit", upBytesPerSec)
 }
 
 // buildStatus creates a TorrentStatus snapshot from a trackedTorrent.

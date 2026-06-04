@@ -259,6 +259,61 @@ export async function grabRelease(
   );
 }
 
+// ---------- Built-in torrent engine management ----------
+
+export interface TorrentEngineSummary {
+  total_torrents: number;
+  downloading: number;
+  seeding: number;
+  paused: number;
+  download_rate: number; // aggregate bytes/sec
+  upload_rate: number; // aggregate bytes/sec
+  download_limit: number; // bytes/sec, 0 = unlimited
+  upload_limit: number; // bytes/sec, 0 = unlimited
+  listen_port: number;
+  dht: boolean;
+  pex: boolean;
+  upnp: boolean;
+  save_path: string;
+}
+
+export async function getTorrentStatus(
+  clientId: string,
+  signal?: AbortSignal,
+): Promise<TorrentEngineSummary> {
+  return request<TorrentEngineSummary>(
+    "GET",
+    `/api/v1/download-clients/${encodeURIComponent(clientId)}/torrent/status`,
+    undefined,
+    signal,
+  );
+}
+
+export async function setTorrentSpeedLimits(
+  clientId: string,
+  body: { download_limit: number; upload_limit: number },
+): Promise<TorrentEngineSummary> {
+  return request<TorrentEngineSummary>(
+    "POST",
+    `/api/v1/download-clients/${encodeURIComponent(clientId)}/torrent/speed-limits`,
+    body,
+  );
+}
+
+export async function torrentPauseAll(clientId: string): Promise<void> {
+  await request<void>(
+    "POST",
+    `/api/v1/download-clients/${encodeURIComponent(clientId)}/torrent/pause-all`,
+  );
+}
+
+export async function torrentResumeAll(clientId: string): Promise<void> {
+  await request<void>(
+    "POST",
+    `/api/v1/download-clients/${encodeURIComponent(clientId)}/torrent/resume-all`,
+  );
+}
+
 // ---------- React Query hooks ----------
 
 /**
@@ -350,6 +405,76 @@ export function useGrabRelease() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: downloadKeys.all });
       qc.invalidateQueries({ queryKey: ["movies"] });
+    },
+  });
+}
+
+// ---------- Built-in torrent engine hooks ----------
+
+export const torrentEngineKeys = {
+  status: (id: string) => [...downloadKeys.all, "torrent-status", id] as const,
+};
+
+/**
+ * Poll the built-in torrent engine status. Only enabled when a clientId is
+ * supplied for a builtin/torrent client.
+ */
+export function useTorrentStatus(
+  clientId: string | undefined,
+  options?: Omit<
+    UseQueryOptions<TorrentEngineSummary, Error>,
+    "queryKey" | "queryFn"
+  >,
+) {
+  return useQuery<TorrentEngineSummary, Error>({
+    queryKey: torrentEngineKeys.status(clientId ?? ""),
+    queryFn: ({ signal }) => getTorrentStatus(clientId as string, signal),
+    enabled: !!clientId,
+    refetchInterval: 5000,
+    ...options,
+  });
+}
+
+export function useSetTorrentSpeedLimits() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      clientId,
+      download_limit,
+      upload_limit,
+    }: {
+      clientId: string;
+      download_limit: number;
+      upload_limit: number;
+    }) => setTorrentSpeedLimits(clientId, { download_limit, upload_limit }),
+    onSuccess: (data, { clientId }) => {
+      // Seed the status cache with the authoritative summary the server
+      // returned so the panel reflects the new limits immediately.
+      qc.setQueryData(torrentEngineKeys.status(clientId), data);
+      qc.invalidateQueries({ queryKey: torrentEngineKeys.status(clientId) });
+      qc.invalidateQueries({ queryKey: downloadKeys.all });
+    },
+  });
+}
+
+export function useTorrentPauseAll() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (clientId: string) => torrentPauseAll(clientId),
+    onSuccess: (_data, clientId) => {
+      qc.invalidateQueries({ queryKey: torrentEngineKeys.status(clientId) });
+      qc.invalidateQueries({ queryKey: downloadKeys.all });
+    },
+  });
+}
+
+export function useTorrentResumeAll() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (clientId: string) => torrentResumeAll(clientId),
+    onSuccess: (_data, clientId) => {
+      qc.invalidateQueries({ queryKey: torrentEngineKeys.status(clientId) });
+      qc.invalidateQueries({ queryKey: downloadKeys.all });
     },
   });
 }
