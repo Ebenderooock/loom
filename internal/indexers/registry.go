@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -210,12 +211,13 @@ func (r *Registry) Search(ctx context.Context, q Query, opts SearchOptions) Aggr
 	sem := make(chan struct{}, limit)
 
 	type partial struct {
-		id      string
-		name    string
-		out     *Results
-		err     error
-		skipped bool
-		elapsed time.Duration
+		id         string
+		name       string
+		out        *Results
+		err        error
+		skipped    bool
+		skipReason string
+		elapsed    time.Duration
 	}
 	ch := make(chan partial, len(targets))
 	var wg sync.WaitGroup
@@ -228,7 +230,20 @@ func (r *Registry) Search(ctx context.Context, q Query, opts SearchOptions) Aggr
 		if q.Term == "" && queryHasIDs(q) && !indexerSupportsAnyQueryID(ix, q) {
 			slog.Debug("registry: skipping indexer (no supported IDs, no text fallback)",
 				"indexer", ix.Name(), "query_ids", queryIDSummary(q))
-			ch <- partial{id: ix.ID(), name: ix.Name(), skipped: true}
+			ch <- partial{id: ix.ID(), name: ix.Name(), skipped: true,
+				skipReason: "indexer does not support any of the query's ID types"}
+			continue
+		}
+
+		// Skip indexers whose advertised categories cannot serve this
+		// query (e.g. a movies-only indexer for a TV search). This avoids
+		// wasted requests/timeouts and the false "indexer failed"
+		// diagnostics they produce.
+		if !indexerServesCategories(ix, q) {
+			slog.Debug("registry: skipping indexer (categories not served)",
+				"indexer", ix.Name(), "query_categories", queryCategorySummary(q))
+			ch <- partial{id: ix.ID(), name: ix.Name(), skipped: true,
+				skipReason: "indexer does not serve the requested categories"}
 			continue
 		}
 
@@ -259,7 +274,10 @@ func (r *Registry) Search(ctx context.Context, q Query, opts SearchOptions) Aggr
 		}
 		if p.skipped {
 			d.Status = "skipped"
-			d.ErrorMessage = "indexer does not support any of the query's ID types"
+			d.ErrorMessage = p.skipReason
+			if d.ErrorMessage == "" {
+				d.ErrorMessage = "indexer skipped"
+			}
 		} else if p.err != nil {
 			agg.Errors[p.id] = p.err.Error()
 			d.ErrorMessage = p.err.Error()
@@ -367,6 +385,21 @@ func (r *Registry) SearchStream(ctx context.Context, q Query, opts SearchOptions
 			case events <- StreamEvent{
 				Type: EventIndexerError, IndexerID: ix.ID(), IndexerName: ix.Name(),
 				Error: "skipped: indexer does not support any of the query's ID types", Status: "skipped",
+			}:
+			case <-ctx.Done():
+			}
+			continue
+		}
+
+		// Skip indexers whose categories cannot serve this query (same
+		// check as Search).
+		if !indexerServesCategories(ix, q) {
+			slog.Debug("registry: stream skipping indexer (categories not served)",
+				"indexer", ix.Name(), "query_categories", queryCategorySummary(q))
+			select {
+			case events <- StreamEvent{
+				Type: EventIndexerError, IndexerID: ix.ID(), IndexerName: ix.Name(),
+				Error: "skipped: indexer does not serve the requested categories", Status: "skipped",
 			}:
 			case <-ctx.Done():
 			}
@@ -584,6 +617,51 @@ func indexerSupportsAnyQueryID(ix Indexer, q Query) bool {
 		return true
 	}
 	return false
+}
+
+// indexerServesCategories reports whether the indexer can serve the
+// query's requested categories. It compares at the top-level family
+// granularity (e.g. 2040 → 2000) so a movies-only indexer is skipped
+// for a TV search and vice-versa. An indexer that advertises no
+// categories is allowed (unknown caps → don't break it); a query that
+// requests no categories matches every indexer.
+func indexerServesCategories(ix Indexer, q Query) bool {
+	if len(q.Categories) == 0 {
+		return true
+	}
+	caps := ix.Caps()
+	if len(caps.Categories) == 0 {
+		return true // unknown caps → allow
+	}
+	families := make(map[Category]bool, len(caps.Categories))
+	for _, c := range caps.Categories {
+		families[c.Family()] = true
+	}
+	for _, qc := range q.Categories {
+		if families[qc.Family()] {
+			return true
+		}
+	}
+	return false
+}
+
+// queryCategorySummary returns a human-readable summary of requested
+// category families for diagnostics.
+func queryCategorySummary(q Query) string {
+	if len(q.Categories) == 0 {
+		return ""
+	}
+	parts := make([]string, 0, len(q.Categories))
+	seen := make(map[Category]bool, len(q.Categories))
+	for _, c := range q.Categories {
+		f := c.Family()
+		if seen[f] {
+			continue
+		}
+		seen[f] = true
+		parts = append(parts, strconv.Itoa(int(f)))
+	}
+	return strings.Join(parts, ",")
 }
 
 // queryIDSummary returns a human-readable summary of which IDs are set.

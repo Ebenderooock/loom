@@ -152,18 +152,30 @@ type Query struct {
 // search queries (e.g. S01E01, S03, 1x05).
 var reSeasonEpisode = regexp.MustCompile(`(?i)\b[Ss]\d{1,2}(?:[Ee]\d{1,2})?\b|\b\d{1,2}[Xx]\d{1,2}\b`)
 
-// reSpecialChars matches punctuation that breaks most newznab/torznab
-// tokenizers.
-var reSpecialChars = regexp.MustCompile(`[''"""` + "`" + `:;!?@#$%^&*()+=\[\]{}<>|\\~/]`)
+// reStripChars matches apostrophes, quotes and backticks — intra-word
+// punctuation that must be removed entirely (not replaced with a space)
+// so possessives and contractions collapse the way release names do.
+// e.g. "Clarkson's Farm" → "Clarksons Farm", not "Clarkson s Farm".
+// Covers both ASCII and the common "smart" Unicode variants.
+var reStripChars = regexp.MustCompile(`['"` + "`" + "\u2018\u2019\u201C\u201D]")
+
+// reSeparatorChars matches punctuation that genuinely separates words
+// and so collapses to a space.
+var reSeparatorChars = regexp.MustCompile(`[:;!?@#$%^&*()+=\[\]{}<>|\\~/]`)
 
 // SanitizeTerm cleans a user-provided search term for indexer APIs.
 // When hasSeasonEpisodeParams is true the season/episode tokens are
 // stripped because they are sent as dedicated API parameters.
+//
+// Apostrophes/quotes are deleted (so "Clarkson's" → "Clarksons"),
+// matching Prowlarr/Sonarr normalisation and the way scene/p2p release
+// names drop them; other special characters become spaces.
 func SanitizeTerm(term string, hasSeasonEpisodeParams bool) string {
 	if hasSeasonEpisodeParams {
 		term = reSeasonEpisode.ReplaceAllString(term, " ")
 	}
-	term = reSpecialChars.ReplaceAllString(term, " ")
+	term = reStripChars.ReplaceAllString(term, "")
+	term = reSeparatorChars.ReplaceAllString(term, " ")
 	return strings.TrimSpace(strings.Join(strings.Fields(term), " "))
 }
 
