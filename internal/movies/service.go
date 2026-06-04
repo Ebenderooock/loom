@@ -33,6 +33,11 @@ type Service interface {
 	GetMovieByIMDBID(ctx context.Context, imdbID string) (*Movie, error)
 	GetMovieCredits(ctx context.Context, movieID string) (*metadata.Credits, error)
 	AddMovie(ctx context.Context, movie *Movie) error
+	// AddMovieByTMDBID fetches movie metadata server-side from TMDB and adds the
+	// movie. Used by flows (e.g. media requests) where the caller is not trusted
+	// to supply metadata. Returns the existing movie if one already exists for
+	// the TMDB ID (idempotent).
+	AddMovieByTMDBID(ctx context.Context, tmdbID, qualityProfileID, libraryID string, monitored bool) (*Movie, error)
 	UpdateMovie(ctx context.Context, movie *Movie) error
 	DeleteMovie(ctx context.Context, id string) error
 	SetMonitoringStatus(ctx context.Context, movieID string, status MonitoringStatus) error
@@ -275,7 +280,81 @@ func (s *service) AddMovie(ctx context.Context, movie *Movie) error {
 	return nil
 }
 
-// UpdateMovie updates an existing movie.
+// AddMovieByTMDBID fetches metadata from TMDB server-side and adds the movie.
+// It is idempotent: if a movie already exists for the TMDB ID it is returned
+// unchanged. The caller-supplied quality profile and library are applied; all
+// descriptive metadata comes from the trusted provider, never the caller.
+func (s *service) AddMovieByTMDBID(ctx context.Context, tmdbID, qualityProfileID, libraryID string, monitored bool) (*Movie, error) {
+	if tmdbID == "" {
+		return nil, fmt.Errorf("movies: TMDB ID required")
+	}
+	if qualityProfileID == "" {
+		return nil, fmt.Errorf("movies: quality profile required")
+	}
+	if libraryID == "" {
+		return nil, fmt.Errorf("movies: library required")
+	}
+	if s.metadata == nil {
+		return nil, fmt.Errorf("movies: metadata provider not configured")
+	}
+
+	if existing, err := s.repo.GetMovieByTMDBID(ctx, tmdbID); err == nil && existing != nil {
+		return existing, nil
+	}
+
+	meta, err := s.metadata.FindMovieByTMDBID(ctx, tmdbID)
+	if err != nil {
+		return nil, fmt.Errorf("movies: tmdb lookup: %w", err)
+	}
+	if meta == nil || meta.Title == "" {
+		return nil, fmt.Errorf("movies: tmdb returned no data for ID %s", tmdbID)
+	}
+
+	slug := slugify(meta.Title)
+	if meta.Year > 0 {
+		slug = slug + "-" + strconv.Itoa(meta.Year)
+	}
+
+	status := MovieStatusMissing
+	if meta.ReleaseDate != "" {
+		if t, perr := time.Parse("2006-01-02", meta.ReleaseDate); perr == nil && t.After(time.Now()) {
+			status = MovieStatusUnreleased
+		}
+	}
+
+	monitoring := MonitoringStatusMonitored
+	if !monitored {
+		monitoring = MonitoringStatusUnmonitored
+	}
+
+	tmdbCopy := tmdbID
+	now := time.Now()
+	movie := &Movie{
+		ID:               slug,
+		Title:            meta.Title,
+		Year:             meta.Year,
+		IMDBID:           meta.IMDBID,
+		TMDBID:           &tmdbCopy,
+		TVDBID:           meta.TVDBID,
+		Overview:         meta.Overview,
+		Genres:           meta.Genres,
+		Runtime:          meta.Runtime,
+		Rating:           meta.Rating,
+		PosterPath:       meta.PosterPath,
+		QualityProfileID: qualityProfileID,
+		LibraryID:        libraryID,
+		Status:           status,
+		ReleaseDate:      meta.ReleaseDate,
+		MonitoringStatus: monitoring,
+		CreatedAt:        now,
+		UpdatedAt:        now,
+	}
+
+	if err := s.AddMovie(ctx, movie); err != nil {
+		return nil, err
+	}
+	return movie, nil
+}
 func (s *service) UpdateMovie(ctx context.Context, movie *Movie) error {
 	if movie == nil {
 		return fmt.Errorf("movies: movie required")
