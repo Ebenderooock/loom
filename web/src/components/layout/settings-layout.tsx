@@ -204,14 +204,29 @@ export function SettingsLayout() {
     }
   }, [active, setHeader]);
 
-  // The settings layout stays mounted while sub-routes swap, so the window scroll
-  // position is otherwise preserved across navigation. Reset it to the top on each
-  // section change; without this, landing on a tall, async-loading panel (e.g.
-  // Libraries & Naming) while scrolled down causes the sticky sub-nav to visibly
-  // shift as the content clamps and then grows.
+  // The settings layout stays mounted while sub-routes swap, so the sticky
+  // sub-nav (an independent overflow-y-auto scroll container) otherwise keeps
+  // whatever scroll position the browser left it in — e.g. clicking a lower
+  // item focus-scrolls the container, pushing the top groups out of view and
+  // leaving them hidden after navigation. Deterministically reset the nav to
+  // the top on each section change, then only scroll down far enough to reveal
+  // the active item when it sits below the first screenful.
+  const navRef = React.useRef<HTMLElement>(null);
   const activeTo = active?.to;
-  React.useEffect(() => {
+  React.useLayoutEffect(() => {
     window.scrollTo({ top: 0 });
+    const nav = navRef.current;
+    if (!nav) return;
+    nav.scrollTop = 0;
+    const activeEl = nav.querySelector<HTMLElement>('[aria-current="page"]');
+    if (!activeEl) return;
+    const top =
+      activeEl.getBoundingClientRect().top -
+      nav.getBoundingClientRect().top +
+      nav.scrollTop;
+    if (top + activeEl.offsetHeight > nav.clientHeight) {
+      nav.scrollTop = top - 16;
+    }
   }, [activeTo]);
 
   return (
@@ -241,6 +256,7 @@ export function SettingsLayout() {
 
       {/* Desktop grouped sub-nav */}
       <nav
+        ref={navRef}
         aria-label="Settings sections"
         className="hidden lg:block lg:sticky lg:top-20 lg:self-start lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto scrollbar-thin"
       >

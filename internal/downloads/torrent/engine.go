@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -20,9 +21,50 @@ import (
 )
 
 // metadataTimeout is how long we wait for a magnet's metadata to
-// resolve before giving up. Thirty seconds is generous for public
-// swarms and tolerable for private trackers.
-const metadataTimeout = 30 * time.Second
+// resolve before giving up. Sixty seconds tolerates slow swarms and
+// cold trackers while still failing in a reasonable time.
+const metadataTimeout = 60 * time.Second
+
+// defaultTrackers is a curated list of reliable public BitTorrent
+// trackers used to bootstrap peer discovery for magnet links. In
+// NAT'd/containerised environments (e.g. Kubernetes) inbound peer
+// connectivity and DHT responsiveness are limited, so announcing to
+// well-known trackers is the most reliable way to find peers and pull
+// metadata. anacrolix dedups these against any trackers already present
+// in the magnet, so injecting them is safe.
+var defaultTrackers = []string{
+	"udp://tracker.opentrackr.org:1337/announce",
+	"udp://open.tracker.cl:1337/announce",
+	"udp://open.demonii.com:1337/announce",
+	"udp://exodus.desync.com:6969/announce",
+	"udp://tracker.torrent.eu.org:451/announce",
+	"udp://open.stealth.si:80/announce",
+	"https://tracker.gbitt.info:443/announce",
+	"https://tracker.tamersunion.org:443/announce",
+	"https://opentracker.i2p.rocks:443/announce",
+	"https://tracker1.520.jp:443/announce",
+}
+
+// defaultAnnounceList wraps each tracker in its own tier so anacrolix
+// announces to all of them in parallel.
+func defaultAnnounceList() [][]string {
+	list := make([][]string, len(defaultTrackers))
+	for i, tr := range defaultTrackers {
+		list[i] = []string{tr}
+	}
+	return list
+}
+
+// magnetHasTrackers reports whether a magnet URI already carries one or
+// more tracker (tr) parameters. Private-tracker magnets always do, so we
+// use this to avoid announcing private infohashes to public trackers.
+func magnetHasTrackers(magnet string) bool {
+	u, err := url.Parse(magnet)
+	if err != nil {
+		return false
+	}
+	return len(u.Query()["tr"]) > 0
+}
 
 // seedCheckInterval controls how often the seeding supervisor scans
 // all tracked torrents to enforce ratio/time policies.
@@ -259,6 +301,16 @@ func (e *Engine) AddMagnet(ctx context.Context, magnet string, meta torrentMeta)
 	t, err := e.client.AddMagnet(magnet)
 	if err != nil {
 		return "", fmt.Errorf("builtin/torrent: adding magnet: %w", err)
+	}
+
+	// When a magnet carries no trackers it can only find peers via DHT,
+	// which is slow or unreachable behind NAT/in containers and is the
+	// usual cause of metadata-resolution timeouts. Inject public trackers
+	// in that case. Magnets that already list trackers (including all
+	// private-tracker magnets) are left untouched so we never announce a
+	// private infohash to public trackers.
+	if !magnetHasTrackers(magnet) {
+		t.AddTrackers(defaultAnnounceList())
 	}
 
 	// Wait for metadata with a timeout.
