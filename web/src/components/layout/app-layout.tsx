@@ -187,7 +187,12 @@ function AppLayoutInner({ children }: { children?: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = React.useState(false);
   const { open: paletteOpen, setOpen: setPaletteOpen } = useCommandPalette();
   const { header } = usePageHeader();
-  const routePath = useRouterState({ select: (s) => s.location.pathname });
+  // Animate (and remount) only when the top-level section changes, so that
+  // navigating between sub-pages within a section (e.g. Settings) swaps the
+  // content without remounting the section's own layout/sub-nav.
+  const sectionKey = useRouterState({
+    select: (s) => "/" + (s.location.pathname.split("/")[1] ?? ""),
+  });
 
   return (
     <div className="flex min-h-screen w-full bg-background text-foreground">
@@ -309,7 +314,7 @@ function AppLayoutInner({ children }: { children?: React.ReactNode }) {
         )}
 
         <main id="main" className="min-w-0 flex-1 overflow-x-hidden p-4 md:p-6">
-          <div key={routePath} className="page-enter">
+          <div key={sectionKey} className="page-enter">
             {children ?? <Outlet />}
           </div>
         </main>

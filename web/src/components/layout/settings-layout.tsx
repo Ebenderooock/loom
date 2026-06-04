@@ -269,15 +269,17 @@ export function SettingsLayout() {
 
       {/* Content */}
       <div className="min-w-0">
-        {active?.kind === "panel" && (
-          <header className="mb-5">
-            <h1 className="text-xl font-semibold tracking-tight">{active.label}</h1>
-            {active.description && (
-              <p className="mt-1 text-sm text-muted-foreground">{active.description}</p>
-            )}
-          </header>
-        )}
-        <Outlet />
+        <div key={active?.to ?? path} className="page-enter">
+          {active?.kind === "panel" && (
+            <header className="mb-5">
+              <h1 className="text-xl font-semibold tracking-tight">{active.label}</h1>
+              {active.description && (
+                <p className="mt-1 text-sm text-muted-foreground">{active.description}</p>
+              )}
+            </header>
+          )}
+          <Outlet />
+        </div>
       </div>
     </div>
   );
