@@ -129,10 +129,11 @@ func (c *Client) Add(ctx context.Context, req downloads.AddRequest) (downloads.A
 	}
 
 	meta := torrentMeta{
-		Title:      req.Title,
-		Category:   category,
-		SavePath:   savePath,
-		SeedPolicy: seedPolicy,
+		Title:            req.Title,
+		Category:         category,
+		SavePath:         savePath,
+		SeedPolicy:       seedPolicy,
+		ExpectedInfohash: req.Infohash,
 	}
 
 	var hash string
@@ -142,15 +143,32 @@ func (c *Client) Add(ctx context.Context, req downloads.AddRequest) (downloads.A
 	case len(req.RawBytes) > 0:
 		hash, err = c.engine.AddTorrentBytes(ctx, req.RawBytes, meta)
 
+	case req.TorrentURL != "":
+		// Prefer fetching the .torrent file over adding a magnet. A
+		// .torrent file embeds the metainfo, so metadata resolves
+		// instantly without any peer/DHT/tracker discovery. Magnets —
+		// especially the bare infohash magnets synthesised from an
+		// indexer's hash, which carry no trackers — depend on peer
+		// discovery, and DHT is effectively dead in NAT'd/containerised
+		// deployments. Using the .torrent avoids spurious
+		// "metadata resolution timed out" grab failures.
+		data, fetchErr := fetchTorrentURL(ctx, req.TorrentURL)
+		if fetchErr == nil {
+			hash, err = c.engine.AddTorrentBytes(ctx, data, meta)
+		} else {
+			err = fetchErr
+		}
+		// Fall back to the magnet only when the .torrent is
+		// unreachable/invalid AND the magnet was explicitly supplied by
+		// the indexer (it carries trackers). We never fall back to a
+		// synthesised bare-infohash magnet: it would fail the same way
+		// and could leak a private infohash to public trackers.
+		if err != nil && magnetHasTrackers(req.Magnet) {
+			hash, err = c.engine.AddMagnet(ctx, req.Magnet, meta)
+		}
+
 	case req.Magnet != "":
 		hash, err = c.engine.AddMagnet(ctx, req.Magnet, meta)
-
-	case req.TorrentURL != "":
-		data, fetchErr := fetchTorrentURL(ctx, req.TorrentURL)
-		if fetchErr != nil {
-			return downloads.AddResult{}, fetchErr
-		}
-		hash, err = c.engine.AddTorrentBytes(ctx, data, meta)
 
 	default:
 		return downloads.AddResult{}, fmt.Errorf(
