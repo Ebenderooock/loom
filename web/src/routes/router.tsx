@@ -5,6 +5,7 @@ import {
   createRouter,
   lazyRouteComponent,
   redirect,
+  Outlet,
 } from "@tanstack/react-router";
 import { AppLayout } from "@/components/layout/app-layout";
 import { SettingsLayout } from "@/components/layout/settings-layout";
@@ -37,6 +38,13 @@ function RootComponent() {
   }
 
   if (!isAuthenticated) {
+    // Public self-service invite acceptance lives outside the auth gate.
+    if (
+      typeof window !== "undefined" &&
+      window.location.pathname.startsWith("/invite/")
+    ) {
+      return <Outlet />;
+    }
     return (
       <Suspense fallback={<PageLoader />}>
         <AuthPage />
@@ -352,9 +360,18 @@ const workflowDetailRedirectRoute = createRoute({
   },
 });
 
+const inviteRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/invite/$token",
+  component: lazyRouteComponent(() => import("@/pages/invite"), "InvitePage"),
+  pendingComponent: PageLoader,
+  errorComponent: ErrorFallback,
+});
+
 const routeTree = rootRoute.addChildren([
   setupRoute,
   indexRoute,
+  inviteRoute,
   libraryRoute,
   moviesRoute,
   seriesRoute,
