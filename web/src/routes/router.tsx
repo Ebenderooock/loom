@@ -4,8 +4,10 @@ import {
   createRoute,
   createRouter,
   lazyRouteComponent,
+  redirect,
 } from "@tanstack/react-router";
 import { AppLayout } from "@/components/layout/app-layout";
+import { SettingsLayout } from "@/components/layout/settings-layout";
 import { NotFoundPage } from "@/pages/not-found";
 import { ErrorFallback } from "@/components/ui/error-fallback";
 import { useAuth } from "@/hooks/use-auth";
@@ -73,10 +75,7 @@ const indexRoute = createRoute({
 const libraryRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/library",
-  component: lazyRouteComponent(
-    () => import("@/pages/library"),
-    "LibraryPage",
-  ),
+  component: lazyRouteComponent(() => import("@/pages/library"), "LibraryPage"),
   pendingComponent: PageLoader,
   errorComponent: ErrorFallback,
 });
@@ -92,13 +91,37 @@ const moviesRoute = createRoute({
   }),
 });
 
+const seriesRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/series",
+  component: lazyRouteComponent(() => import("@/pages/series"), "SeriesPage"),
+  pendingComponent: PageLoader,
+  errorComponent: ErrorFallback,
+  validateSearch: (search: Record<string, unknown>): { focus?: string } => ({
+    focus: (search.focus as string) ?? undefined,
+  }),
+});
+
+const discoverRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/discover",
+  component: lazyRouteComponent(() => import("@/pages/discover"), "DiscoverPage"),
+  pendingComponent: PageLoader,
+  errorComponent: ErrorFallback,
+});
+
+const requestsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/requests",
+  component: lazyRouteComponent(() => import("@/pages/requests"), "RequestsPage"),
+  pendingComponent: PageLoader,
+  errorComponent: ErrorFallback,
+});
+
 const activityRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/activity",
-  component: lazyRouteComponent(
-    () => import("@/pages/activity"),
-    "ActivityPage",
-  ),
+  component: lazyRouteComponent(() => import("@/pages/activity"), "ActivityPage"),
   pendingComponent: PageLoader,
   errorComponent: ErrorFallback,
 });
@@ -106,57 +129,7 @@ const activityRoute = createRoute({
 const calendarRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/calendar",
-  component: lazyRouteComponent(
-    () => import("@/pages/calendar"),
-    "CalendarPage",
-  ),
-  pendingComponent: PageLoader,
-  errorComponent: ErrorFallback,
-});
-
-const settingsRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/settings",
-  component: lazyRouteComponent(
-    () => import("@/pages/settings"),
-    "SettingsPage",
-  ),
-  pendingComponent: PageLoader,
-  errorComponent: ErrorFallback,
-  validateSearch: (search: Record<string, unknown>): { trakt_code?: string } => ({
-    trakt_code: (search.trakt_code as string) ?? undefined,
-  }),
-});
-
-const traktCallbackRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/settings/trakt/callback",
-  component: lazyRouteComponent(
-    () => import("@/pages/trakt-callback"),
-    "TraktCallbackPage",
-  ),
-  pendingComponent: PageLoader,
-  errorComponent: ErrorFallback,
-});
-
-const indexersRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/indexers",
-  component: lazyRouteComponent(
-    () => import("@/pages/indexers"),
-    "IndexersPage",
-  ),
-  pendingComponent: PageLoader,
-  errorComponent: ErrorFallback,
-});
-
-const proxiesRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/proxies",
-  component: lazyRouteComponent(
-    () => import("@/pages/proxies"),
-    "ProxiesPage",
-  ),
+  component: lazyRouteComponent(() => import("@/pages/calendar"), "CalendarPage"),
   pendingComponent: PageLoader,
   errorComponent: ErrorFallback,
 });
@@ -172,166 +145,211 @@ const downloadsRoute = createRoute({
   errorComponent: ErrorFallback,
 });
 
-const sourcesRoute = createRoute({
+// ─── Settings (layout + nested sections) ─────────────────────────────────
+
+const settingsRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: "/sources",
-  component: lazyRouteComponent(
-    () => import("@/pages/sources"),
-    "SourcesPage",
-  ),
-  pendingComponent: PageLoader,
+  path: "/settings",
+  component: SettingsLayout,
   errorComponent: ErrorFallback,
 });
 
-const seriesRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/series",
-  component: lazyRouteComponent(() => import("@/pages/series"), "SeriesPage"),
+const settingsIndexRoute = createRoute({
+  getParentRoute: () => settingsRoute,
+  path: "/",
+  beforeLoad: () => {
+    throw redirect({ to: "/settings/general", replace: true });
+  },
+});
+
+function settingsChild<const P extends string>(
+  path: P,
+  loader: () => Promise<Record<string, unknown>>,
+  exportName: string,
+) {
+  return createRoute({
+    getParentRoute: () => settingsRoute,
+    path,
+    component: lazyRouteComponent(loader as never, exportName),
+    pendingComponent: PageLoader,
+    errorComponent: ErrorFallback,
+  });
+}
+
+const settingsGeneralRoute = settingsChild(
+  "general",
+  () => import("@/pages/settings"),
+  "GeneralPanel",
+);
+const settingsAppearanceRoute = settingsChild(
+  "appearance",
+  () => import("@/pages/settings"),
+  "UIPanel",
+);
+const settingsFeaturesRoute = settingsChild(
+  "features",
+  () => import("@/pages/settings"),
+  "FeaturesPanel",
+);
+const settingsMediaManagementRoute = settingsChild(
+  "media-management",
+  () => import("@/pages/settings"),
+  "MediaManagementPanel",
+);
+const settingsMediaPreferencesRoute = settingsChild(
+  "media-preferences",
+  () => import("@/pages/settings"),
+  "MediaPreferencesPanel",
+);
+const settingsQualityProfilesRoute = settingsChild(
+  "quality-profiles",
+  () => import("@/pages/quality-profiles"),
+  "QualityProfilesPage",
+);
+const settingsCustomFormatsRoute = settingsChild(
+  "custom-formats",
+  () => import("@/pages/custom-formats"),
+  "CustomFormatsPage",
+);
+const settingsLanguageProfilesRoute = settingsChild(
+  "language-profiles",
+  () => import("@/pages/language-profiles"),
+  "LanguageProfilesPage",
+);
+const settingsDownloadClientsRoute = settingsChild(
+  "download-clients",
+  () => import("@/pages/settings"),
+  "DownloadClientsPanel",
+);
+const settingsDownloadSafetyRoute = settingsChild(
+  "download-safety",
+  () => import("@/pages/settings"),
+  "DownloadSafetyPanel",
+);
+const settingsRollingSearchRoute = settingsChild(
+  "rolling-search",
+  () => import("@/pages/settings"),
+  "RollingSearchPanel",
+);
+const settingsIndexersRoute = settingsChild(
+  "indexers",
+  () => import("@/pages/indexers"),
+  "IndexersPage",
+);
+const settingsSourcesRoute = settingsChild(
+  "sources",
+  () => import("@/pages/sources"),
+  "SourcesPage",
+);
+const settingsImportListsRoute = settingsChild(
+  "import-lists",
+  () => import("@/pages/import-lists"),
+  "ImportListsPage",
+);
+const settingsProxiesRoute = settingsChild(
+  "proxies",
+  () => import("@/pages/proxies"),
+  "ProxiesPage",
+);
+const settingsSearchQueueRoute = settingsChild(
+  "search-queue",
+  () => import("@/pages/search-debug"),
+  "SearchDebugPage",
+);
+const settingsNotificationsRoute = settingsChild(
+  "notifications",
+  () => import("@/pages/notifications"),
+  "NotificationsPage",
+);
+const settingsConnectRoute = createRoute({
+  getParentRoute: () => settingsRoute,
+  path: "connect",
+  component: lazyRouteComponent(() => import("@/pages/settings"), "ConnectPanel"),
   pendingComponent: PageLoader,
   errorComponent: ErrorFallback,
-  validateSearch: (search: Record<string, unknown>): { focus?: string } => ({
-    focus: (search.focus as string) ?? undefined,
+  validateSearch: (search: Record<string, unknown>): { trakt_code?: string } => ({
+    trakt_code: (search.trakt_code as string) ?? undefined,
   }),
 });
+const settingsSyncProfilesRoute = settingsChild(
+  "sync-profiles",
+  () => import("@/components/settings/sync-profiles-panel"),
+  "SyncProfilesPanel",
+);
+const settingsHealthRoute = settingsChild(
+  "health",
+  () => import("@/pages/indexer-health"),
+  "IndexerHealthPage",
+);
+const settingsEventsRoute = settingsChild(
+  "events",
+  () => import("@/pages/events"),
+  "EventsPage",
+);
+const settingsWorkflowsRoute = settingsChild(
+  "workflows",
+  () => import("@/pages/workflows"),
+  "WorkflowsPage",
+);
+const settingsWorkflowDetailRoute = settingsChild(
+  "workflows/$workflowId",
+  () => import("@/pages/workflow-detail"),
+  "WorkflowDetailPage",
+);
+const settingsSystemRoute = settingsChild(
+  "system",
+  () => import("@/components/settings/system-logs-panel"),
+  "SystemLogsPanel",
+);
+const settingsUsersRoute = settingsChild(
+  "users",
+  () => import("@/pages/users"),
+  "UsersPage",
+);
+const settingsTraktCallbackRoute = settingsChild(
+  "trakt/callback",
+  () => import("@/pages/trakt-callback"),
+  "TraktCallbackPage",
+);
 
-const notificationsRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/notifications",
-  component: lazyRouteComponent(
-    () => import("@/pages/notifications"),
-    "NotificationsPage",
-  ),
-  pendingComponent: PageLoader,
-  errorComponent: ErrorFallback,
-});
+// ─── Backward-compatible redirects from old top-level paths ──────────────
 
-const languageProfilesRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/language-profiles",
-  component: lazyRouteComponent(
-    () => import("@/pages/language-profiles"),
-    "LanguageProfilesPage",
-  ),
-  pendingComponent: PageLoader,
-  errorComponent: ErrorFallback,
-});
+function redirectRoute<const F extends string>(from: F, to: string) {
+  return createRoute({
+    getParentRoute: () => rootRoute,
+    path: from,
+    beforeLoad: () => {
+      throw redirect({ to: to as never, replace: true });
+    },
+  });
+}
 
-const indexerHealthRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/indexers/health",
-  component: lazyRouteComponent(
-    () => import("@/pages/indexer-health"),
-    "IndexerHealthPage",
-  ),
-  pendingComponent: PageLoader,
-  errorComponent: ErrorFallback,
-});
+const redirects = [
+  redirectRoute("/indexers", "/settings/indexers"),
+  redirectRoute("/indexers/health", "/settings/health"),
+  redirectRoute("/sources", "/settings/sources"),
+  redirectRoute("/import-lists", "/settings/import-lists"),
+  redirectRoute("/proxies", "/settings/proxies"),
+  redirectRoute("/quality-profiles", "/settings/quality-profiles"),
+  redirectRoute("/custom-formats", "/settings/custom-formats"),
+  redirectRoute("/language-profiles", "/settings/language-profiles"),
+  redirectRoute("/notifications", "/settings/notifications"),
+  redirectRoute("/events", "/settings/events"),
+  redirectRoute("/users", "/settings/users"),
+  redirectRoute("/workflows", "/settings/workflows"),
+  redirectRoute("/search-queue", "/settings/search-queue"),
+];
 
-const customFormatsRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/custom-formats",
-  component: lazyRouteComponent(
-    () => import("@/pages/custom-formats"),
-    "CustomFormatsPage",
-  ),
-  pendingComponent: PageLoader,
-  errorComponent: ErrorFallback,
-});
-
-const qualityProfilesRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/quality-profiles",
-  component: lazyRouteComponent(
-    () => import("@/pages/quality-profiles"),
-    "QualityProfilesPage",
-  ),
-  pendingComponent: PageLoader,
-  errorComponent: ErrorFallback,
-});
-
-const importListsRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/import-lists",
-  component: lazyRouteComponent(
-    () => import("@/pages/import-lists"),
-    "ImportListsPage",
-  ),
-  pendingComponent: PageLoader,
-  errorComponent: ErrorFallback,
-});
-
-const discoverRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/discover",
-  component: lazyRouteComponent(
-    () => import("@/pages/discover"),
-    "DiscoverPage",
-  ),
-  pendingComponent: PageLoader,
-  errorComponent: ErrorFallback,
-});
-
-const requestsRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/requests",
-  component: lazyRouteComponent(
-    () => import("@/pages/requests"),
-    "RequestsPage",
-  ),
-  pendingComponent: PageLoader,
-  errorComponent: ErrorFallback,
-});
-
-const usersRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/users",
-  component: lazyRouteComponent(() => import("@/pages/users"), "UsersPage"),
-  pendingComponent: PageLoader,
-  errorComponent: ErrorFallback,
-});
-
-const eventsRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/events",
-  component: lazyRouteComponent(
-    () => import("@/pages/events"),
-    "EventsPage",
-  ),
-  pendingComponent: PageLoader,
-  errorComponent: ErrorFallback,
-});
-
-const workflowsRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/workflows",
-  component: lazyRouteComponent(
-    () => import("@/pages/workflows"),
-    "WorkflowsPage",
-  ),
-  pendingComponent: PageLoader,
-  errorComponent: ErrorFallback,
-});
-
-const workflowDetailRoute = createRoute({
+const workflowDetailRedirectRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/workflows/$workflowId",
-  component: lazyRouteComponent(
-    () => import("@/pages/workflow-detail"),
-    "WorkflowDetailPage",
-  ),
-  pendingComponent: PageLoader,
-  errorComponent: ErrorFallback,
-});
-
-const searchDebugRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/search-queue",
-  component: lazyRouteComponent(
-    () => import("@/pages/search-debug"),
-    "SearchDebugPage",
-  ),
-  pendingComponent: PageLoader,
-  errorComponent: ErrorFallback,
+  beforeLoad: ({ params }) => {
+    throw redirect({
+      to: "/settings/workflows/$workflowId",
+      params: { workflowId: (params as { workflowId: string }).workflowId },
+      replace: true,
+    });
+  },
 });
 
 const routeTree = rootRoute.addChildren([
@@ -342,25 +360,40 @@ const routeTree = rootRoute.addChildren([
   seriesRoute,
   discoverRoute,
   requestsRoute,
-  usersRoute,
   activityRoute,
   calendarRoute,
-  indexerHealthRoute,
-  indexersRoute,
-  proxiesRoute,
   downloadsRoute,
-  sourcesRoute,
-  notificationsRoute,
-  languageProfilesRoute,
-  customFormatsRoute,
-  qualityProfilesRoute,
-  importListsRoute,
-  eventsRoute,
-  workflowsRoute,
-  workflowDetailRoute,
-  searchDebugRoute,
-  traktCallbackRoute,
-  settingsRoute,
+  settingsRoute.addChildren([
+    settingsIndexRoute,
+    settingsGeneralRoute,
+    settingsAppearanceRoute,
+    settingsFeaturesRoute,
+    settingsMediaManagementRoute,
+    settingsMediaPreferencesRoute,
+    settingsQualityProfilesRoute,
+    settingsCustomFormatsRoute,
+    settingsLanguageProfilesRoute,
+    settingsDownloadClientsRoute,
+    settingsDownloadSafetyRoute,
+    settingsRollingSearchRoute,
+    settingsIndexersRoute,
+    settingsSourcesRoute,
+    settingsImportListsRoute,
+    settingsProxiesRoute,
+    settingsSearchQueueRoute,
+    settingsNotificationsRoute,
+    settingsConnectRoute,
+    settingsSyncProfilesRoute,
+    settingsHealthRoute,
+    settingsEventsRoute,
+    settingsWorkflowsRoute,
+    settingsWorkflowDetailRoute,
+    settingsSystemRoute,
+    settingsUsersRoute,
+    settingsTraktCallbackRoute,
+  ]),
+  ...redirects,
+  workflowDetailRedirectRoute,
 ]);
 
 export const router = createRouter({

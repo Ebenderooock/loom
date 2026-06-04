@@ -7,7 +7,7 @@ export function TraktCallbackPage() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const code = params.get("code") ?? "";
-    navigate({ to: "/settings", search: { trakt_code: code } });
+    navigate({ to: "/settings/connect", search: { trakt_code: code } });
   }, [navigate]);
 
   return (
