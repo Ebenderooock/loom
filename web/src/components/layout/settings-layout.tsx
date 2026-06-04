@@ -204,6 +204,16 @@ export function SettingsLayout() {
     }
   }, [active, setHeader]);
 
+  // The settings layout stays mounted while sub-routes swap, so the window scroll
+  // position is otherwise preserved across navigation. Reset it to the top on each
+  // section change; without this, landing on a tall, async-loading panel (e.g.
+  // Libraries & Naming) while scrolled down causes the sticky sub-nav to visibly
+  // shift as the content clamps and then grows.
+  const activeTo = active?.to;
+  React.useEffect(() => {
+    window.scrollTo({ top: 0 });
+  }, [activeTo]);
+
   return (
     <div className="grid gap-6 lg:grid-cols-[15rem_1fr]">
       {/* Mobile section picker */}
