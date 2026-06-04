@@ -44,6 +44,14 @@ spec:
             - name: http
               containerPort: {{ .Values.service.port }}
               protocol: TCP
+            {{- if .Values.torrent.expose.enabled }}
+            - name: bt-tcp
+              containerPort: {{ .Values.torrent.listenPort }}
+              protocol: TCP
+            - name: bt-udp
+              containerPort: {{ .Values.torrent.listenPort }}
+              protocol: UDP
+            {{- end }}
           env:
             - name: LOOM_HTTP_ADDR
               value: ":{{ .Values.service.port }}"
