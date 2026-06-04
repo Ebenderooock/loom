@@ -40,6 +40,36 @@ service:
   type: ClusterIP
   port: 8989
 
+# ---------- BitTorrent peer port ----------
+# Exposes the built-in torrent client's listen port so inbound peer
+# connections and DHT work. Behind NAT/in-cluster the pod is otherwise a
+# "leech" (outbound-only): DHT-only magnets struggle to find peers and
+# metadata resolution can time out. The port is preserved end-to-end so
+# DHT/tracker announces (which advertise listenPort) stay correct.
+#
+# listenPort MUST match the port configured on the builtin/torrent
+# download client in Loom (default 6881).
+#
+# For reachability from the public internet you must also port-forward
+# WAN:listenPort -> <service IP>:listenPort on your router.
+torrent:
+  listenPort: 6881
+  expose:
+    enabled: false
+    # LoadBalancer (e.g. MetalLB) is recommended because it preserves the
+    # port. NodePort and ClusterIP are also accepted.
+    type: LoadBalancer
+    # Optional fixed IP for LoadBalancer services (honoured by MetalLB via
+    # the metallb.io/loadBalancerIPs annotation). Empty = auto-assign.
+    loadBalancerIP: ""
+    # Preserve client source IPs (better peer/DHT behaviour). Only applied
+    # for non-ClusterIP services.
+    externalTrafficPolicy: Local
+    annotations: {}
+    # nodePort / nodePortUdp only apply when type is NodePort (30000-32767).
+    nodePort: 0
+    nodePortUdp: 0
+
 ingress:
   enabled: false
   className: ""
