@@ -91,6 +91,12 @@ type torrentMeta struct {
 	Category   string
 	SavePath   string
 	SeedPolicy SeedPolicy
+
+	// ExpectedInfohash, when set, is compared against the infohash of a
+	// fetched .torrent file before it is added. This guards against an
+	// indexer download URL that resolves to the wrong (stale, redirected,
+	// or malicious) torrent. Empty disables the check.
+	ExpectedInfohash string
 }
 
 // trackedTorrent pairs the anacrolix torrent handle with Loom metadata.
@@ -358,6 +364,16 @@ func (e *Engine) AddTorrentBytes(ctx context.Context, data []byte, meta torrentM
 	mi, err := metainfo.Load(bytes.NewReader(data))
 	if err != nil {
 		return "", fmt.Errorf("%w: parsing torrent bytes: %v", ErrInvalidInput, err)
+	}
+
+	// Verify the fetched torrent matches the infohash the indexer
+	// advertised. A mismatch means the download URL served the wrong
+	// content, so we refuse it rather than grab something unexpected.
+	if meta.ExpectedInfohash != "" {
+		got := strings.ToLower(mi.HashInfoBytes().HexString())
+		if want := strings.ToLower(strings.TrimSpace(meta.ExpectedInfohash)); got != want {
+			return "", fmt.Errorf("%w: torrent infohash %s does not match expected %s", ErrInvalidInput, got, want)
+		}
 	}
 
 	t, err := e.client.AddTorrent(mi)

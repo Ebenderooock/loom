@@ -11,6 +11,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/metainfo"
@@ -49,6 +50,152 @@ func TestAdd_NoInput(t *testing.T) {
 	}
 	if !errors.Is(err, ErrInvalidInput) {
 		t.Errorf("error = %v, want ErrInvalidInput", err)
+	}
+}
+
+// --- Add dispatch: prefer .torrent URL over magnet ---
+
+// torrentInfohash returns the lowercase hex infohash of a .torrent blob.
+func torrentInfohash(t *testing.T, data []byte) string {
+	t.Helper()
+	mi, err := metainfo.Load(bytes.NewReader(data))
+	if err != nil {
+		t.Fatalf("load torrent: %v", err)
+	}
+	return strings.ToLower(mi.HashInfoBytes().HexString())
+}
+
+// serveTorrent serves the given bytes as a .torrent file.
+func serveTorrent(t *testing.T, data []byte) *httptest.Server {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/x-bittorrent")
+		w.Write(data)
+	}))
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+func newAddTestClient(t *testing.T) *Client {
+	t.Helper()
+	e := newTestEngine(t)
+	return &Client{id: "c", name: "c", engine: e, defConfig: Config{DownloadDir: e.dataDir}}
+}
+
+// When both a bare-infohash magnet and a fetchable .torrent URL are
+// present, Add must prefer the .torrent (instant metadata). The test
+// engine has DHT disabled, so a wrong choice of the trackerless magnet
+// would fail with a metadata timeout rather than succeed quickly.
+func TestAdd_PrefersTorrentURLOverMagnet(t *testing.T) {
+	t.Parallel()
+	cl := newAddTestClient(t)
+
+	data := buildMinimalTorrent(t)
+	ih := torrentInfohash(t, data)
+	srv := serveTorrent(t, data)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	res, err := cl.Add(ctx, downloads.AddRequest{
+		Title:      "x",
+		Infohash:   ih,
+		Magnet:     "magnet:?xt=urn:btih:" + ih, // bare, no trackers
+		TorrentURL: srv.URL + "/x.torrent",
+	})
+	if err != nil {
+		t.Fatalf("Add: %v", err)
+	}
+	if res.ItemID != ih {
+		t.Errorf("ItemID = %q, want %q", res.ItemID, ih)
+	}
+}
+
+// A .torrent whose infohash does not match the indexer-advertised hash
+// must be rejected, and must NOT fall back to the synthesized bare
+// magnet (which carries no trackers).
+func TestAdd_TorrentURLInfohashMismatchRejected(t *testing.T) {
+	t.Parallel()
+	cl := newAddTestClient(t)
+
+	data := buildMinimalTorrent(t)
+	srv := serveTorrent(t, data)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	_, err := cl.Add(ctx, downloads.AddRequest{
+		Title:      "x",
+		Infohash:   strings.Repeat("a", 40), // wrong hash → bare magnet via Normalize
+		TorrentURL: srv.URL + "/x.torrent",
+	})
+	if err == nil {
+		t.Fatal("expected error for infohash mismatch")
+	}
+	if !errors.Is(err, ErrInvalidInput) {
+		t.Errorf("error = %v, want ErrInvalidInput", err)
+	}
+	if errors.Is(err, ErrMetadataTimeout) {
+		t.Error("must not fall back to the synthesized bare magnet")
+	}
+}
+
+// When the .torrent fetch fails and an explicit tracker-bearing magnet
+// is available, Add falls back to the magnet. The transformed error
+// (metadata timeout from AddMagnet, not the HTTP 404) proves fallback.
+func TestAdd_FallsBackToExplicitMagnet(t *testing.T) {
+	t.Parallel()
+	cl := newAddTestClient(t)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	magnet := "magnet:?xt=urn:btih:" + strings.Repeat("b", 40) +
+		"&tr=udp%3A%2F%2Ftracker.invalid%3A1337%2Fannounce"
+	_, err := cl.Add(ctx, downloads.AddRequest{
+		Title:      "x",
+		Magnet:     magnet, // explicit, has trackers
+		TorrentURL: srv.URL + "/x.torrent",
+	})
+	if !errors.Is(err, ErrMetadataTimeout) {
+		t.Errorf("error = %v, want ErrMetadataTimeout (proving magnet fallback)", err)
+	}
+}
+
+// When the .torrent fetch fails and only a synthesized bare-infohash
+// magnet exists, Add does NOT fall back (privacy: never announce a
+// possibly-private bare infohash to public trackers). The original
+// fetch error surfaces.
+func TestAdd_NoFallbackToBareMagnet(t *testing.T) {
+	t.Parallel()
+	cl := newAddTestClient(t)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	_, err := cl.Add(ctx, downloads.AddRequest{
+		Title:      "x",
+		Infohash:   strings.Repeat("c", 40), // → bare magnet via Normalize
+		TorrentURL: srv.URL + "/x.torrent",
+	})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if errors.Is(err, ErrMetadataTimeout) {
+		t.Error("must not fall back to the synthesized bare magnet")
+	}
+	if !strings.Contains(err.Error(), "404") {
+		t.Errorf("expected the HTTP fetch error to surface, got %v", err)
 	}
 }
 
