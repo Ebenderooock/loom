@@ -64,6 +64,7 @@ import (
 	"github.com/ebenderooock/loom/internal/organizer"
 	"github.com/ebenderooock/loom/internal/packs"
 	"github.com/ebenderooock/loom/internal/qualityprofiles"
+	"github.com/ebenderooock/loom/internal/requests"
 	"github.com/ebenderooock/loom/internal/rss"
 	"github.com/ebenderooock/loom/internal/safety"
 	"github.com/ebenderooock/loom/internal/scanner"
@@ -99,6 +100,7 @@ type Server struct {
 	connectSvc        connect.Service
 	reviewStore       *safety.ReviewStore
 	cleanupSvc        *cleanup.Service
+	requestsSvc       *requests.Service
 	importPipeline    *imports.ImportPipeline
 	langStore         *languages.Store
 	customFormatStore *customformats.Store
@@ -316,6 +318,15 @@ func (s *Server) SetImportPipeline(p *imports.ImportPipeline) {
 // handler so the /api/v1/cleanup routes are reachable.
 func (s *Server) SetCleanup(svc *cleanup.Service) {
 	s.cleanupSvc = svc
+	if s.httpSrv != nil {
+		s.httpSrv.Handler = s.newMux()
+	}
+}
+
+// SetRequests installs the media-requests service and rebuilds the HTTP
+// handler so the /api/v1/requests routes are reachable.
+func (s *Server) SetRequests(svc *requests.Service) {
+	s.requestsSvc = svc
 	if s.httpSrv != nil {
 		s.httpSrv.Handler = s.newMux()
 	}
@@ -696,6 +707,15 @@ func (s *Server) newMux() http.Handler {
 		// Downloads cleanup routes
 		if s.cleanupSvc != nil {
 			r.Mount("/api/v1/cleanup", cleanup.Router(s.cleanupSvc))
+		}
+
+		// Media requests routes (user create/list-own; admin approve/reject).
+		if s.requestsSvc != nil {
+			adminMW := func(next http.Handler) http.Handler { return next }
+			if s.authSvc != nil {
+				adminMW = s.authSvc.RequireRole("admin")
+			}
+			r.Mount("/api/v1/requests", requests.Router(s.requestsSvc, adminMW))
 		}
 
 		// Rolling search routes

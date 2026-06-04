@@ -224,6 +224,10 @@ func cmdServe(ctx context.Context, args []string) error {
 		return fmt.Errorf("register cleanup job: %w", err)
 	}
 
+	// Wire media requests (users request; admins approve → auto-add + grab).
+	requestsSvc := buildRequestsService(db, moviesSvc, media.seriesSvc, dlWiring.autoSearchEngine, media.libStore, media.qpStore, logger)
+	srv.SetRequests(requestsSvc)
+
 	// Wire infrastructure services (connect, compat, notifications, rolling search, health)
 	infra, err := wireInfra(ctx, db, srv, indexerSvc, downloadSvc, moviesSvc, media, auditLogger, logger)
 	if err != nil {

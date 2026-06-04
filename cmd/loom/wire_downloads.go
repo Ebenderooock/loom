@@ -27,6 +27,7 @@ type downloadWiring struct {
 	importPipeline     *imports.ImportPipeline
 	orchestratorCancel context.CancelFunc
 	monitorCancel      context.CancelFunc
+	autoSearchEngine   *autosearch.Engine
 }
 
 // wireDownloads constructs download-related services (remote paths,
@@ -198,6 +199,7 @@ func wireDownloads(
 		importPipeline:     importPipeline,
 		orchestratorCancel: orchCancel,
 		monitorCancel:      monCancel,
+		autoSearchEngine:   autoSearchEngine,
 	}, nil
 }
 
