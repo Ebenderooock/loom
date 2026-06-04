@@ -22,7 +22,6 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { NamingSettings } from "@/components/movies/naming-settings";
 import {
@@ -47,7 +46,6 @@ import {
   Check,
   Key,
   Shield,
-  Bell,
   Plug,
   ExternalLink,
   Download,
@@ -58,7 +56,6 @@ import {
   Search,
   MoreHorizontal,
 } from "lucide-react";
-import { useSetPageHeader } from "@/hooks/use-page-header";
 import {
   useMediaPreferences,
   useUpdateMediaPreferences,
@@ -106,27 +103,6 @@ import {
   type Download as DownloadClient,
 } from "@/lib/downloads-api";
 import { DownloadForm } from "@/components/downloads/download-form";
-import { SyncProfilesPanel } from "@/components/settings/sync-profiles-panel";
-import { SystemLogsPanel } from "@/components/settings/system-logs-panel";
-
-const CATEGORIES = [
-  { id: "general", label: "General" },
-  { id: "features", label: "Features" },
-  { id: "media-management", label: "Media Management" },
-  { id: "media-preferences", label: "Media Preferences" },
-
-  { id: "download-clients", label: "Download Clients" },
-  { id: "download-safety", label: "Download Safety" },
-  { id: "rolling-search", label: "Rolling Search" },
-  { id: "notifications", label: "Notifications" },
-  { id: "connect", label: "Connect" },
-  { id: "sync-profiles", label: "Sync Profiles" },
-  { id: "configuration", label: "Configuration" },
-  { id: "ui", label: "UI" },
-  { id: "system", label: "System" },
-] as const;
-
-type Category = (typeof CATEGORIES)[number]["id"];
 
 // ─── Types ──────────────────────────────────────────────────────────────
 
@@ -616,7 +592,7 @@ function LibrariesPanel() {
 
 // ─── Media Management Panel ─────────────────────────────────────────────
 
-function MediaManagementPanel() {
+export function MediaManagementPanel() {
   return (
     <div className="space-y-8">
       <LibrariesPanel />
@@ -682,7 +658,7 @@ function ImportModePanel() {
 
 // ─── General Panel ──────────────────────────────────────────────────────
 
-function GeneralPanel() {
+export function GeneralPanel() {
   const [logLevel, setLogLevel] = React.useState("info");
   const [apiKey, setApiKey] = React.useState<string | null>(null);
   const [copied, setCopied] = React.useState(false);
@@ -816,7 +792,7 @@ function GeneralPanel() {
 
 // ─── Download Clients Panel ─────────────────────────────────────────────
 
-function DownloadClientsPanel() {
+export function DownloadClientsPanel() {
   const { data: clients = [], isLoading } = useDownloads();
   const createClient = useCreateDownload();
   const patchClient = usePatchDownload();
@@ -1230,47 +1206,9 @@ function RemotePathMappingsSection() {
   );
 }
 
-// ─── Notifications Panel ────────────────────────────────────────────────
-
-function NotificationsPanel() {
-  const navigate = useNavigate();
-  return (
-    <div className="space-y-6">
-      <div>
-        <h3 className="text-sm font-medium text-zinc-100 mb-1">Notifications</h3>
-        <p className="text-xs text-zinc-500">
-          Configure how Loom notifies you about events like grabs, downloads, and health issues.
-        </p>
-      </div>
-
-      <Card className="bg-zinc-900/50 border-zinc-800">
-        <CardContent className="p-6">
-          <div className="flex items-start gap-4">
-            <div className="rounded-full bg-teal-600/10 p-3 shrink-0">
-              <Bell className="h-6 w-6 text-teal-400" />
-            </div>
-            <div className="space-y-3">
-              <p className="text-sm text-zinc-400">
-                Manage your notification connections — set up Discord, Slack, Telegram,
-                email, webhooks, and more. Choose which events trigger each channel.
-              </p>
-              <Button
-                variant="secondary"
-                onClick={() => navigate({ to: "/notifications" })}
-              >
-                Manage Notifications
-              </Button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
-
 // ─── Connect Panel ──────────────────────────────────────────────────────
 
-function ConnectPanel() {
+export function ConnectPanel() {
   const { data: connections = [], isLoading } = useConnectConnections();
   const createMut = useCreateConnect();
   const updateMut = useUpdateConnect();
@@ -1322,7 +1260,7 @@ function ConnectPanel() {
         setDialogOpen(true);
       }
       // Clear the search param so it doesn't re-trigger
-      navigate({ to: "/settings", search: {}, replace: true });
+      navigate({ to: "/settings/connect", search: {}, replace: true });
     }
   }, [trakt_code, connections, navigate]);
 
@@ -1832,7 +1770,7 @@ function ConnectPanel() {
 
 // ─── Download Safety Panel ──────────────────────────────────────────────
 
-function DownloadSafetyPanel() {
+export function DownloadSafetyPanel() {
   const [blockDangerous, setBlockDangerous] = React.useState(true);
   const [patterns, setPatterns] = React.useState<string[]>([
     "password",
@@ -1984,7 +1922,7 @@ function DownloadSafetyPanel() {
 
 // ─── UI Panel ───────────────────────────────────────────────────────────
 
-function UIPanel() {
+export function UIPanel() {
   const [theme, setTheme] = React.useState("dark");
   const [pageSize, setPageSize] = React.useState(() => {
     return localStorage.getItem("loom-page-size") || "25";
@@ -2125,7 +2063,7 @@ interface RollingSearchStatus {
   quotaUsage: Record<string, number>;
 }
 
-function RollingSearchPanel() {
+export function RollingSearchPanel() {
   const [config, setConfig] = React.useState<RollingSearchConfig | null>(null);
   const [status, setStatus] = React.useState<RollingSearchStatus | null>(null);
   const [loading, setLoading] = React.useState(true);
@@ -2384,7 +2322,7 @@ const SUB_LANGUAGES = [
   { code: "tr", label: "Turkish" },
 ];
 
-function MediaPreferencesPanel() {
+export function MediaPreferencesPanel() {
   // Radix Select forbids an empty-string item value, so use a sentinel for the
   // "None" option and map it to/from the stored empty string.
   const NO_PROFILE = "__none__";
@@ -2647,7 +2585,7 @@ function MediaPreferencesPanel() {
   );
 }
 
-function FeaturesPanel() {
+export function FeaturesPanel() {
   const { user } = useAuth();
   const { data: features, isLoading } = useFeatures();
   const setFeature = useSetFeature();
@@ -2714,120 +2652,6 @@ function FeaturesPanel() {
             No configurable features.
           </div>
         )}
-      </div>
-    </div>
-  );
-}
-
-function SettingsContent({ category }: { category: Category }) {
-  switch (category) {
-    case "general":
-      return <GeneralPanel />;
-    case "features":
-      return <FeaturesPanel />;
-    case "media-management":
-      return <MediaManagementPanel />;
-    case "media-preferences":
-      return <MediaPreferencesPanel />;
-
-    case "download-clients":
-      return <DownloadClientsPanel />;
-    case "download-safety":
-      return <DownloadSafetyPanel />;
-    case "rolling-search":
-      return <RollingSearchPanel />;
-    case "notifications":
-      return <NotificationsPanel />;
-    case "connect":
-      return <ConnectPanel />;
-    case "sync-profiles":
-      return <SyncProfilesPanel />;
-    case "configuration":
-      return <ConfigurationPanel />;
-    case "ui":
-      return <UIPanel />;
-    case "system":
-      return <SystemLogsPanel />;
-  }
-}
-
-const CONFIG_LINKS = [
-  { to: "/quality-profiles", label: "Quality Profiles", description: "Manage quality cutoffs and preferred formats" },
-  { to: "/custom-formats", label: "Custom Formats", description: "Define custom format scoring rules" },
-  { to: "/language-profiles", label: "Language Profiles", description: "Configure preferred languages for media" },
-  { to: "/notifications", label: "Notification Agents", description: "Manage notification services and triggers" },
-  { to: "/proxies", label: "Proxies", description: "Configure proxy servers for indexer requests" },
-] as const;
-
-function ConfigurationPanel() {
-  return (
-    <div className="space-y-2">
-      <p className="text-sm text-muted-foreground mb-4">
-        Quick access to advanced configuration pages.
-      </p>
-      <div className="grid gap-3 sm:grid-cols-2">
-        {CONFIG_LINKS.map((link) => (
-          <Link
-            key={link.to}
-            to={link.to}
-            className="group flex flex-col rounded-lg border p-4 transition-colors hover:bg-accent"
-          >
-            <span className="font-medium group-hover:text-accent-foreground">
-              {link.label}
-            </span>
-            <span className="mt-1 text-xs text-muted-foreground">
-              {link.description}
-            </span>
-          </Link>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// ─── Settings Page ──────────────────────────────────────────────────────
-
-export function SettingsPage() {
-  useSetPageHeader("Settings");
-  const { trakt_code } = useSearch({ strict: false });
-  const [active, setActive] = React.useState<Category>(
-    trakt_code ? "connect" : "general",
-  );
-  const activeLabel =
-    CATEGORIES.find((c) => c.id === active)?.label ?? "General";
-
-  return (
-    <div className="space-y-6">
-      <div className="grid gap-6 md:grid-cols-[14rem_1fr]">
-        <nav aria-label="Settings sections">
-          <ul className="flex flex-col gap-1">
-            {CATEGORIES.map((c) => (
-              <li key={c.id}>
-                <button
-                  type="button"
-                  onClick={() => setActive(c.id)}
-                  aria-current={active === c.id ? "page" : undefined}
-                  className={cn(
-                    "w-full rounded-md px-3 py-2 text-left text-sm transition-colors",
-                    active === c.id
-                      ? "bg-accent text-accent-foreground"
-                      : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
-                  )}
-                >
-                  {c.label}
-                </button>
-              </li>
-            ))}
-          </ul>
-        </nav>
-        <Card>
-          <CardHeader>
-            <CardTitle>{activeLabel}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <SettingsContent category={active} />
-          </CardContent>
-        </Card>
       </div>
     </div>
   );

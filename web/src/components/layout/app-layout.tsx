@@ -1,29 +1,19 @@
 import * as React from "react";
 import { Link, Outlet, useRouterState } from "@tanstack/react-router";
 import { apiFetch } from "@/lib/fetch";
-import { useFeatureEnabled } from "@/lib/features-api";
 import {
   Calendar,
-  ChevronDown,
   Compass,
   Inbox,
-  UsersRound,
   Download,
   Film,
   FolderOpen,
   LayoutDashboard,
-  ListPlus,
   ListTodo,
   Menu,
-  HeartPulse,
-  Radio,
-  ScrollText,
   Search,
   Settings,
-  Rss,
   Tv,
-  Workflow,
-  Bug,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -49,72 +39,27 @@ import {
 } from "@/components/command-palette";
 import { cn } from "@/lib/utils";
 import { PageHeaderProvider, usePageHeader } from "@/hooks/use-page-header";
-import { useAuth } from "@/hooks/use-auth";
 
 interface NavItem {
   to: string;
   label: string;
   Icon: typeof LayoutDashboard;
   badge?: "review";
-  adminOnly?: boolean;
 }
 
-interface NavSection {
-  id: string;
-  label: string;
-  items: NavItem[];
-}
-
-const NAV_SECTIONS: NavSection[] = [
-  {
-    id: "main",
-    label: "",
-    items: [
-      { to: "/", label: "Dashboard", Icon: LayoutDashboard },
-    ],
-  },
-  {
-    id: "media",
-    label: "Media",
-    items: [
-      { to: "/movies", label: "Movies", Icon: Film },
-      { to: "/series", label: "TV Shows", Icon: Tv },
-      { to: "/discover", label: "Discover", Icon: Compass },
-      { to: "/requests", label: "Requests", Icon: Inbox },
-      { to: "/calendar", label: "Calendar", Icon: Calendar },
-      { to: "/library", label: "Library", Icon: FolderOpen },
-    ],
-  },
-  {
-    id: "activity",
-    label: "Activity",
-    items: [
-      { to: "/downloads", label: "Downloads", Icon: Download },
-      { to: "/activity", label: "History", Icon: ListTodo, badge: "review" },
-      { to: "/workflows", label: "Workflows", Icon: Workflow },
-    ],
-  },
-  {
-    id: "search",
-    label: "Search",
-    items: [
-      { to: "/indexers", label: "Indexers", Icon: Radio },
-      { to: "/sources", label: "RSS Feeds", Icon: Rss },
-      { to: "/import-lists", label: "Import Lists", Icon: ListPlus },
-      { to: "/search-queue", label: "Search Queue", Icon: Bug },
-    ],
-  },
-  {
-    id: "system",
-    label: "System",
-    items: [
-      { to: "/indexers/health", label: "Health", Icon: HeartPulse },
-      { to: "/events", label: "Events", Icon: ScrollText },
-      { to: "/users", label: "Users", Icon: UsersRound, adminOnly: true },
-      { to: "/settings", label: "Settings", Icon: Settings },
-    ],
-  },
+const PRIMARY_NAV: NavItem[] = [
+  { to: "/", label: "Dashboard", Icon: LayoutDashboard },
+  { to: "/discover", label: "Discover", Icon: Compass },
+  { to: "/requests", label: "Requests", Icon: Inbox },
+  { to: "/movies", label: "Movies", Icon: Film },
+  { to: "/series", label: "TV Shows", Icon: Tv },
+  { to: "/calendar", label: "Calendar", Icon: Calendar },
+  { to: "/library", label: "Library", Icon: FolderOpen },
+  { to: "/activity", label: "Activity", Icon: ListTodo, badge: "review" },
+  { to: "/downloads", label: "Downloads", Icon: Download },
 ];
+
+const SETTINGS_NAV: NavItem = { to: "/settings", label: "Settings", Icon: Settings };
 
 function useReviewCount() {
   const [count, setCount] = React.useState(0);
@@ -131,6 +76,52 @@ function useReviewCount() {
   return count;
 }
 
+function NavLinkRow({
+  item,
+  active,
+  collapsed,
+  onNavigate,
+  reviewCount,
+}: {
+  item: NavItem;
+  active: boolean;
+  collapsed?: boolean;
+  onNavigate?: () => void;
+  reviewCount: number;
+}) {
+  const { to, label, Icon, badge } = item;
+  return (
+    <Link
+      to={to}
+      onClick={onNavigate}
+      title={collapsed ? label : undefined}
+      className={cn(
+        "flex items-center gap-2.5 rounded-md px-3 py-2 text-[13px] font-medium transition-colors",
+        active
+          ? "bg-accent/15 text-accent border-l-2 border-accent shadow-sm shadow-accent/5"
+          : "text-muted-foreground hover:bg-accent/8 hover:text-foreground",
+        collapsed && "justify-center px-2",
+      )}
+      aria-current={active ? "page" : undefined}
+    >
+      <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
+      {!collapsed && (
+        <span className="flex items-center gap-2 truncate">
+          {label}
+          {badge === "review" && reviewCount > 0 && (
+            <Badge
+              variant="destructive"
+              className="h-4 min-w-[1rem] px-1 text-[10px] leading-none"
+            >
+              {reviewCount}
+            </Badge>
+          )}
+        </span>
+      )}
+    </Link>
+  );
+}
+
 function SidebarNav({
   collapsed,
   onNavigate,
@@ -141,104 +132,35 @@ function SidebarNav({
   const router = useRouterState();
   const path = router.location.pathname;
   const reviewCount = useReviewCount();
-  const searchLogEnabled = useFeatureEnabled("search_log");
-  const { user } = useAuth();
-  const isAdmin = user?.role === "admin";
 
-  // Track which sections are expanded — all open by default
-  const [openSections, setOpenSections] = React.useState<Record<string, boolean>>(() =>
-    Object.fromEntries(NAV_SECTIONS.map((s) => [s.id, true]))
-  );
-
-  const toggleSection = (id: string) =>
-    setOpenSections((prev) => ({ ...prev, [id]: !prev[id] }));
-
-  // Auto-expand section containing the active route
-  React.useEffect(() => {
-    for (const section of NAV_SECTIONS) {
-      const hasActive = section.items.some(({ to }) =>
-        to === "/" ? path === "/" : path === to || path.startsWith(`${to}/`)
-      );
-      if (hasActive && !openSections[section.id]) {
-        setOpenSections((prev) => ({ ...prev, [section.id]: true }));
-      }
-    }
-  }, [path]);
+  const isActive = (to: string) =>
+    to === "/" ? path === "/" : path === to || path.startsWith(`${to}/`);
 
   return (
-    <nav aria-label="Primary" className="flex flex-col gap-0.5 p-2 overflow-y-auto flex-1 min-h-0 scrollbar-thin">
-      {NAV_SECTIONS.map((section) => {
-        const isOpen = openSections[section.id];
-        const hasLabel = section.label !== "";
+    <nav
+      aria-label="Primary"
+      className="flex flex-col gap-0.5 p-2 overflow-y-auto flex-1 min-h-0 scrollbar-thin"
+    >
+      {PRIMARY_NAV.map((item) => (
+        <NavLinkRow
+          key={item.to}
+          item={item}
+          active={isActive(item.to)}
+          collapsed={collapsed}
+          onNavigate={onNavigate}
+          reviewCount={reviewCount}
+        />
+      ))}
 
-        return (
-          <div key={section.id}>
-            {/* Section header */}
-            {hasLabel && !collapsed && (
-              <button
-                onClick={() => toggleSection(section.id)}
-                className="flex w-full items-center justify-between px-3 py-1.5 mt-2 mb-0.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/60 hover:text-muted-foreground transition-colors"
-              >
-                {section.label}
-                <ChevronDown
-                  className={cn(
-                    "h-3 w-3 transition-transform duration-200",
-                    !isOpen && "-rotate-90"
-                  )}
-                />
-              </button>
-            )}
+      <div className="mx-2 my-2 border-t border-border/50" />
 
-            {/* Collapsed: show a thin divider between sections */}
-            {hasLabel && collapsed && (
-              <div className="mx-2 my-2 border-t border-border/50" />
-            )}
-
-            {/* Nav items */}
-            {(isOpen || collapsed || !hasLabel) &&
-              section.items
-                .filter(
-                  ({ to }) => to !== "/search-queue" || searchLogEnabled,
-                )
-                .filter(({ adminOnly }) => !adminOnly || isAdmin)
-                .map(({ to, label, Icon, badge }) => {
-                const active =
-                  to === "/" ? path === "/" : path === to || path.startsWith(`${to}/`);
-                return (
-                  <Link
-                    key={to}
-                    to={to}
-                    onClick={onNavigate}
-                    title={collapsed ? label : undefined}
-                    className={cn(
-                      "flex items-center gap-2.5 rounded-md px-3 py-1.5 text-[13px] font-medium transition-colors",
-                      active
-                        ? "bg-accent/15 text-accent border-l-2 border-accent shadow-sm shadow-accent/5"
-                        : "text-muted-foreground hover:bg-accent/8 hover:text-foreground",
-                      collapsed && "justify-center px-2",
-                    )}
-                    aria-current={active ? "page" : undefined}
-                  >
-                    <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
-                    {!collapsed && (
-                      <span className="flex items-center gap-2 truncate">
-                        {label}
-                        {badge === "review" && reviewCount > 0 && (
-                          <Badge
-                            variant="destructive"
-                            className="h-4 min-w-[1rem] px-1 text-[10px] leading-none"
-                          >
-                            {reviewCount}
-                          </Badge>
-                        )}
-                      </span>
-                    )}
-                  </Link>
-                );
-              })}
-          </div>
-        );
-      })}
+      <NavLinkRow
+        item={SETTINGS_NAV}
+        active={isActive(SETTINGS_NAV.to)}
+        collapsed={collapsed}
+        onNavigate={onNavigate}
+        reviewCount={reviewCount}
+      />
     </nav>
   );
 }
