@@ -19,6 +19,8 @@ import {
   Radio,
   Info,
   Gauge,
+  Trash2,
+  EyeOff,
 } from "lucide-react";
 import { apiFetch } from "@/lib/fetch";
 import { useSetPageHeader } from "@/hooks/use-page-header";
@@ -27,6 +29,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import { ImportManager } from "@/components/imports/import-manager";
@@ -37,6 +40,15 @@ import {
   useTorrentPauseAll,
   useTorrentResumeAll,
 } from "@/lib/downloads-api";
+import {
+  useOrphans,
+  useCleanupSettings,
+  useScanCleanup,
+  useSaveCleanupSettings,
+  useApproveOrphan,
+  useIgnoreOrphan,
+  type Orphan,
+} from "@/lib/cleanup-api";
 import { toast } from "sonner";
 import {
   Sheet,
@@ -954,6 +966,214 @@ function TorrentEnginePanel() {
   );
 }
 
+// ─── Cleanup Tab ────────────────────────────────────────────────────────
+
+function relativeAge(iso: string): string {
+  const then = new Date(iso).getTime();
+  if (!then) return "—";
+  const days = Math.floor((Date.now() - then) / 86_400_000);
+  if (days <= 0) return "today";
+  if (days === 1) return "1 day ago";
+  return `${days} days ago`;
+}
+
+function OrphanRow({
+  orphan,
+  onApprove,
+  onIgnore,
+  busy,
+}: {
+  orphan: Orphan;
+  onApprove: (id: string) => void;
+  onIgnore: (id: string) => void;
+  busy: boolean;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-4 px-4 py-3">
+      <div className="min-w-0">
+        <div className="truncate font-mono text-xs text-zinc-200">{orphan.path}</div>
+        <div className="mt-0.5 flex items-center gap-3 text-[11px] text-zinc-500">
+          <span className="tabular-nums">{formatBytes(orphan.size_bytes)}</span>
+          <span>first seen {relativeAge(orphan.first_seen_at)}</span>
+          {orphan.client_name && <span>{orphan.client_name}</span>}
+          {orphan.status === "delete_failed" && (
+            <span className="text-red-400">delete failed{orphan.error ? `: ${orphan.error}` : ""}</span>
+          )}
+        </div>
+      </div>
+      <div className="flex shrink-0 items-center gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-8"
+          disabled={busy}
+          onClick={() => onIgnore(orphan.id)}
+        >
+          <EyeOff className="h-3.5 w-3.5 mr-1.5" />
+          Keep
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-8 text-red-400 hover:text-red-300"
+          disabled={busy}
+          onClick={() => onApprove(orphan.id)}
+        >
+          <Trash2 className="h-3.5 w-3.5 mr-1.5" />
+          Delete
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function CleanupTab() {
+  const { data: orphans, isLoading } = useOrphans("pending");
+  const { data: settings } = useCleanupSettings();
+  const scan = useScanCleanup();
+  const saveSettings = useSaveCleanupSettings();
+  const approve = useApproveOrphan();
+  const ignore = useIgnoreOrphan();
+
+  const [retention, setRetention] = React.useState("7");
+  const [autoDelete, setAutoDelete] = React.useState(true);
+  const [dirty, setDirty] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!settings || dirty) return;
+    setRetention(String(settings.retention_days));
+    setAutoDelete(settings.auto_delete_enabled);
+  }, [settings, dirty]);
+
+  const busy = approve.isPending || ignore.isPending;
+
+  const onApprove = (id: string) =>
+    approve.mutate(id, {
+      onSuccess: () => toast.success("Orphan deleted"),
+      onError: (e) => toast.error(e instanceof Error ? e.message : "Delete failed"),
+    });
+  const onIgnore = (id: string) =>
+    ignore.mutate(id, {
+      onSuccess: () => toast.success("Orphan kept"),
+      onError: (e) => toast.error(e instanceof Error ? e.message : "Failed"),
+    });
+
+  const saveCfg = () => {
+    const days = Math.max(1, parseInt(retention || "7", 10) || 7);
+    saveSettings.mutate(
+      { auto_delete_enabled: autoDelete, retention_days: days },
+      {
+        onSuccess: () => {
+          setDirty(false);
+          toast.success("Cleanup settings saved");
+        },
+        onError: (e) => toast.error(e instanceof Error ? e.message : "Save failed"),
+      },
+    );
+  };
+
+  return (
+    <div className="space-y-4">
+      <Card className="bg-zinc-900/50 border-zinc-800">
+        <CardContent className="space-y-4 pt-5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Trash2 className="h-4 w-4 text-zinc-400" />
+              <span className="text-sm font-medium text-zinc-100">Cleanup settings</span>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 text-zinc-400 hover:text-zinc-200"
+              disabled={scan.isPending}
+              onClick={() =>
+                scan.mutate(undefined, {
+                  onSuccess: (r) => toast.success(`Scan complete — ${r.found} orphan(s)`),
+                  onError: (e) => toast.error(e instanceof Error ? e.message : "Scan failed"),
+                })
+              }
+            >
+              {scan.isPending ? (
+                <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+              ) : (
+                <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
+              )}
+              Scan now
+            </Button>
+          </div>
+
+          <p className="text-xs text-zinc-500">
+            Files in your download folders that are no longer tied to any active download or
+            import are listed below for review. Media libraries are never touched.
+          </p>
+
+          <div className="flex flex-wrap items-end gap-6 border-t border-zinc-800 pt-4">
+            <div className="flex items-center gap-2">
+              <Switch
+                id="cleanup-auto-delete"
+                checked={autoDelete}
+                onCheckedChange={(v) => {
+                  setAutoDelete(v);
+                  setDirty(true);
+                }}
+              />
+              <Label htmlFor="cleanup-auto-delete" className="text-xs text-zinc-300">
+                Auto-delete orphans
+              </Label>
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="cleanup-retention" className="text-[11px] text-zinc-400">
+                Retention (days)
+              </Label>
+              <Input
+                id="cleanup-retention"
+                type="number"
+                min={1}
+                value={retention}
+                onChange={(e) => {
+                  setRetention(e.target.value);
+                  setDirty(true);
+                }}
+                className="h-8 w-28"
+              />
+            </div>
+            <Button size="sm" className="h-8" disabled={!dirty || saveSettings.isPending} onClick={saveCfg}>
+              {saveSettings.isPending ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : null}
+              Save
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {isLoading ? (
+        <Card className="bg-zinc-900/50 border-zinc-800">
+          <CardContent>
+            <LoadingState label="Scanning download folders…" />
+          </CardContent>
+        </Card>
+      ) : !orphans || orphans.length === 0 ? (
+        <Card className="bg-zinc-900/50 border-zinc-800 border-dashed">
+          <CardContent>
+            <EmptyState
+              icon={<Trash2 className="h-10 w-10" />}
+              title="No orphans found"
+              description="Everything in your download folders is accounted for. Run a scan to check again."
+            />
+          </CardContent>
+        </Card>
+      ) : (
+        <Card className="bg-zinc-900/50 border-zinc-800 overflow-hidden">
+          <div className="divide-y divide-zinc-800/50">
+            {orphans.map((o) => (
+              <OrphanRow key={o.id} orphan={o} onApprove={onApprove} onIgnore={onIgnore} busy={busy} />
+            ))}
+          </div>
+        </Card>
+      )}
+    </div>
+  );
+}
+
 // ─── Downloads Page ─────────────────────────────────────────────────────
 
 export function DownloadsPage() {
@@ -971,6 +1191,10 @@ export function DownloadsPage() {
             <Import className="h-3.5 w-3.5" />
             Imports
           </TabsTrigger>
+          <TabsTrigger value="cleanup" className="flex items-center gap-1.5">
+            <Trash2 className="h-3.5 w-3.5" />
+            Cleanup
+          </TabsTrigger>
         </TabsList>
         <TabsContent value="active" className="space-y-4">
           <TorrentEnginePanel />
@@ -978,6 +1202,9 @@ export function DownloadsPage() {
         </TabsContent>
         <TabsContent value="imports">
           <ImportManager />
+        </TabsContent>
+        <TabsContent value="cleanup">
+          <CleanupTab />
         </TabsContent>
       </Tabs>
     </div>

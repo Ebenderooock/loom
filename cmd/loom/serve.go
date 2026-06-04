@@ -15,13 +15,13 @@ import (
 	"github.com/ebenderooock/loom/internal/auditlog"
 	"github.com/ebenderooock/loom/internal/backup"
 	"github.com/ebenderooock/loom/internal/customformats"
-	"github.com/ebenderooock/loom/internal/kernel/eventbus"
-	"github.com/ebenderooock/loom/internal/migrate"
-	"github.com/ebenderooock/loom/internal/rss"
 	"github.com/ebenderooock/loom/internal/kernel/config"
+	"github.com/ebenderooock/loom/internal/kernel/eventbus"
 	"github.com/ebenderooock/loom/internal/kernel/logging"
 	"github.com/ebenderooock/loom/internal/kernel/scheduler"
 	"github.com/ebenderooock/loom/internal/kernel/telemetry"
+	"github.com/ebenderooock/loom/internal/migrate"
+	"github.com/ebenderooock/loom/internal/rss"
 	"github.com/ebenderooock/loom/internal/server"
 	"github.com/ebenderooock/loom/internal/storage"
 	"github.com/ebenderooock/loom/internal/systemlogs"
@@ -216,6 +216,13 @@ func cmdServe(ctx context.Context, args []string) error {
 	defer dlWiring.importPipeline.Stop()
 	defer dlWiring.monitorCancel()
 	defer dlWiring.orchestratorCancel()
+
+	// Wire downloads-cleanup (scan orphans in download folders + auto-delete).
+	cleanupSvc := buildCleanupService(db, downloadSvc, dlWiring.importPipeline, media.libStore, appCfg, logger)
+	srv.SetCleanup(cleanupSvc)
+	if err := registerCleanupJob(ctx, sched, cleanupSvc); err != nil {
+		return fmt.Errorf("register cleanup job: %w", err)
+	}
 
 	// Wire infrastructure services (connect, compat, notifications, rolling search, health)
 	infra, err := wireInfra(ctx, db, srv, indexerSvc, downloadSvc, moviesSvc, media, auditLogger, logger)
