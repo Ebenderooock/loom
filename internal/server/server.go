@@ -103,6 +103,7 @@ type Server struct {
 	reviewStore       *safety.ReviewStore
 	cleanupSvc        *cleanup.Service
 	requestsSvc       *requests.Service
+	botsRouter        http.Handler
 	importPipeline    *imports.ImportPipeline
 	langStore         *languages.Store
 	customFormatStore *customformats.Store
@@ -337,6 +338,16 @@ func (s *Server) SetCleanup(svc *cleanup.Service) {
 // handler so the /api/v1/requests routes are reachable.
 func (s *Server) SetRequests(svc *requests.Service) {
 	s.requestsSvc = svc
+	if s.httpSrv != nil {
+		s.httpSrv.Handler = s.newMux()
+	}
+}
+
+// SetBots installs the request-bot HTTP router and rebuilds the HTTP handler so
+// the /api/v1/bots routes are reachable. The router is built by the caller so
+// the server package need not know the bot service's dependencies.
+func (s *Server) SetBots(router http.Handler) {
+	s.botsRouter = router
 	if s.httpSrv != nil {
 		s.httpSrv.Handler = s.newMux()
 	}
@@ -735,6 +746,11 @@ func (s *Server) newMux() http.Handler {
 				adminMW = s.authSvc.RequireRole("admin")
 			}
 			r.Mount("/api/v1/requests", requests.Router(s.requestsSvc, adminMW))
+		}
+
+		// Request-bot routes (config + account linking).
+		if s.botsRouter != nil {
+			r.Mount("/api/v1/bots", s.botsRouter)
 		}
 
 		// Rolling search routes

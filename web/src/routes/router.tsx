@@ -277,6 +277,11 @@ const settingsNotificationsRoute = settingsChild(
   () => import("@/pages/notifications"),
   "NotificationsPage",
 );
+const settingsRequestBotsRoute = settingsChild(
+  "request-bots",
+  () => import("@/pages/request-bots"),
+  "RequestBotsPage",
+);
 const settingsConnectRoute = createRoute({
   getParentRoute: () => settingsRoute,
   path: "connect",
@@ -408,6 +413,7 @@ const routeTree = rootRoute.addChildren([
     settingsProxiesRoute,
     settingsSearchQueueRoute,
     settingsNotificationsRoute,
+    settingsRequestBotsRoute,
     settingsConnectRoute,
     settingsSyncProfilesRoute,
     settingsHealthRoute,

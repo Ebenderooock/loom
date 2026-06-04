@@ -32,8 +32,9 @@ const defaultTMDBKey = "eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiI3NzU0NWI2ODU0ZjIzNGZjYjR
 var defaultTVDBKey string
 
 // buildMoviesService constructs the movies.Service backed by the storage
-// engine in cfg and returns the wired service.
-func buildMoviesService(ctx context.Context, cfg *config.Config, db storage.DB, logger *slog.Logger, bus eventbus.Bus) (movies.Service, error) {
+// engine in cfg and returns the wired service together with the metadata
+// service it uses (shared with the request bots for catalog search).
+func buildMoviesService(ctx context.Context, cfg *config.Config, db storage.DB, logger *slog.Logger, bus eventbus.Bus) (movies.Service, *metadata.Service, error) {
 	repo := movies.NewRepository(db.DB())
 
 	// Build metadata service with TMDB provider
@@ -55,7 +56,7 @@ func buildMoviesService(ctx context.Context, cfg *config.Config, db storage.DB, 
 	// Seed default quality definitions and profiles on first run
 	movies.SeedDefaults(ctx, svc)
 
-	return svc, nil
+	return svc, metadataSvc, nil
 }
 
 // buildScanner constructs the library scanner backed by the movies service.

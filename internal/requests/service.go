@@ -73,6 +73,11 @@ func NewService(opts Options) *Service {
 // Store exposes the underlying store for read handlers.
 func (s *Service) Store() *Store { return s.store }
 
+// Get returns a single request by id.
+func (s *Service) Get(ctx context.Context, id string) (Request, error) {
+	return s.store.Get(ctx, id)
+}
+
 // ErrAlreadyAvailable indicates the requested media already exists in the library.
 var ErrAlreadyAvailable = errors.New("requests: media already available")
 
