@@ -161,7 +161,7 @@ func (s *Store) UpdateLastSync(ctx context.Context, id string, t time.Time) erro
 func (s *Store) ListItems(ctx context.Context, listID string) ([]*ImportListItem, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, list_id, external_id, title, year, imdb_id, tmdb_id,
-		       tvdb_id, media_type, status, last_seen, created_at, poster_path, overview
+		       tvdb_id, media_type, status, last_seen, created_at, poster_path, overview, genres
 		FROM import_list_items WHERE list_id = ? ORDER BY title`, listID)
 	if err != nil {
 		return nil, err
@@ -189,18 +189,19 @@ func (s *Store) UpsertItem(ctx context.Context, item *ImportListItem) error {
 
 	_, err := s.db.ExecContext(ctx, `
 		INSERT INTO import_list_items
-		(id, list_id, external_id, title, year, imdb_id, tmdb_id, tvdb_id, media_type, status, last_seen, created_at, poster_path, overview)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		(id, list_id, external_id, title, year, imdb_id, tmdb_id, tvdb_id, media_type, status, last_seen, created_at, poster_path, overview, genres)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			title = excluded.title, year = excluded.year,
 			imdb_id = excluded.imdb_id, tmdb_id = excluded.tmdb_id,
 			tvdb_id = excluded.tvdb_id, media_type = excluded.media_type,
 			status = excluded.status, last_seen = excluded.last_seen,
-			poster_path = excluded.poster_path, overview = excluded.overview`,
+			poster_path = excluded.poster_path, overview = excluded.overview,
+			genres = excluded.genres`,
 		item.ID, item.ListID, item.ExternalID, item.Title, item.Year,
 		nullStr(item.IMDbID), nullStr(item.TMDbID), nullStr(item.TVDbID),
 		nullStr(item.MediaType), item.Status, item.LastSeen, now,
-		item.PosterPath, item.Overview,
+		item.PosterPath, item.Overview, encodeGenres(item.Genres),
 	)
 	return err
 }
@@ -209,16 +210,16 @@ func (s *Store) UpsertItem(ctx context.Context, item *ImportListItem) error {
 func (s *Store) FindItemByExternalID(ctx context.Context, listID, externalID string) (*ImportListItem, error) {
 	row := s.db.QueryRowContext(ctx, `
 		SELECT id, list_id, external_id, title, year, imdb_id, tmdb_id,
-		       tvdb_id, media_type, status, last_seen, created_at, poster_path, overview
+		       tvdb_id, media_type, status, last_seen, created_at, poster_path, overview, genres
 		FROM import_list_items WHERE list_id = ? AND external_id = ?`, listID, externalID)
 
 	item := &ImportListItem{}
 	var year sql.NullInt64
-	var imdb, tmdb, tvdb, mediaType, poster, overview sql.NullString
+	var imdb, tmdb, tvdb, mediaType, poster, overview, genres sql.NullString
 	err := row.Scan(
 		&item.ID, &item.ListID, &item.ExternalID, &item.Title, &year,
 		&imdb, &tmdb, &tvdb, &mediaType, &item.Status, &item.LastSeen, &item.CreatedAt,
-		&poster, &overview,
+		&poster, &overview, &genres,
 	)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -236,6 +237,7 @@ func (s *Store) FindItemByExternalID(ctx context.Context, listID, externalID str
 	item.MediaType = mediaType.String
 	item.PosterPath = poster.String
 	item.Overview = overview.String
+	item.Genres = decodeGenres(genres.String)
 	return item, nil
 }
 
@@ -243,7 +245,7 @@ func (s *Store) FindItemByExternalID(ctx context.Context, listID, externalID str
 func (s *Store) GetItem(ctx context.Context, id string) (*ImportListItem, error) {
 	row := s.db.QueryRowContext(ctx, `
 		SELECT id, list_id, external_id, title, year, imdb_id, tmdb_id,
-		       tvdb_id, media_type, status, last_seen, created_at, poster_path, overview
+		       tvdb_id, media_type, status, last_seen, created_at, poster_path, overview, genres
 		FROM import_list_items WHERE id = ?`, id)
 	item, err := scanItem(row)
 	if err == sql.ErrNoRows {
@@ -268,7 +270,7 @@ func (s *Store) ListDiscoverItems(ctx context.Context, mediaType string) ([]*dis
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT i.id, i.list_id, i.external_id, i.title, i.year, i.imdb_id, i.tmdb_id,
 		       i.tvdb_id, i.media_type, i.status, i.last_seen, i.created_at,
-		       i.poster_path, i.overview, l.name, l.media_type
+		       i.poster_path, i.overview, i.genres, l.name, l.media_type
 		FROM import_list_items i
 		JOIN import_lists l ON i.list_id = l.id
 		WHERE l.mode = 'discover' AND l.enabled = 1 AND i.status != 'excluded'
@@ -283,12 +285,12 @@ func (s *Store) ListDiscoverItems(ctx context.Context, mediaType string) ([]*dis
 	for rows.Next() {
 		item := &ImportListItem{}
 		var year sql.NullInt64
-		var imdb, tmdb, tvdb, itemMedia, poster, overview sql.NullString
+		var imdb, tmdb, tvdb, itemMedia, poster, overview, genres sql.NullString
 		var listName, listMedia string
 		if err := rows.Scan(
 			&item.ID, &item.ListID, &item.ExternalID, &item.Title, &year,
 			&imdb, &tmdb, &tvdb, &itemMedia, &item.Status, &item.LastSeen, &item.CreatedAt,
-			&poster, &overview, &listName, &listMedia,
+			&poster, &overview, &genres, &listName, &listMedia,
 		); err != nil {
 			return nil, err
 		}
@@ -302,6 +304,7 @@ func (s *Store) ListDiscoverItems(ctx context.Context, mediaType string) ([]*dis
 		item.MediaType = itemMedia.String
 		item.PosterPath = poster.String
 		item.Overview = overview.String
+		item.Genres = decodeGenres(genres.String)
 		eff := item.MediaType
 		if eff == "" {
 			eff = listMedia
@@ -441,11 +444,11 @@ func scanList(row rowScanner) (*ImportList, error) {
 func scanItem(row rowScanner) (*ImportListItem, error) {
 	item := &ImportListItem{}
 	var year sql.NullInt64
-	var imdb, tmdb, tvdb, mediaType, poster, overview sql.NullString
+	var imdb, tmdb, tvdb, mediaType, poster, overview, genres sql.NullString
 	err := row.Scan(
 		&item.ID, &item.ListID, &item.ExternalID, &item.Title, &year,
 		&imdb, &tmdb, &tvdb, &mediaType, &item.Status, &item.LastSeen, &item.CreatedAt,
-		&poster, &overview,
+		&poster, &overview, &genres,
 	)
 	if err != nil {
 		return nil, err
@@ -460,7 +463,35 @@ func scanItem(row rowScanner) (*ImportListItem, error) {
 	item.MediaType = mediaType.String
 	item.PosterPath = poster.String
 	item.Overview = overview.String
+	item.Genres = decodeGenres(genres.String)
 	return item, nil
+}
+
+// encodeGenres serialises genre names as a pipe-separated string. Pipe is used
+// (rather than comma) because genre names may contain commas/ampersands.
+func encodeGenres(genres []string) string {
+	cleaned := make([]string, 0, len(genres))
+	for _, g := range genres {
+		if g = strings.TrimSpace(g); g != "" {
+			cleaned = append(cleaned, g)
+		}
+	}
+	return strings.Join(cleaned, "|")
+}
+
+// decodeGenres parses a pipe-separated genre string back into a slice.
+func decodeGenres(s string) []string {
+	if strings.TrimSpace(s) == "" {
+		return nil
+	}
+	parts := strings.Split(s, "|")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 // normalizeMode coerces a stored mode string to a valid ListMode, defaulting to auto.

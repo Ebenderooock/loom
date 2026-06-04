@@ -251,10 +251,14 @@ func (m *SyncManager) SyncList(ctx context.Context, l *ImportList) error {
 	return nil
 }
 
-// enrichItem best-effort populates PosterPath/Overview from TMDB when missing.
-// Failures are logged and ignored so sync never breaks on metadata errors.
+// enrichItem best-effort populates PosterPath/Overview/Genres from TMDB when
+// missing. Failures are logged and ignored so sync never breaks on metadata errors.
 func (m *SyncManager) enrichItem(ctx context.Context, item *ImportListItem, l *ImportList) {
-	if m.tmdbClient == nil || item.PosterPath != "" {
+	if m.tmdbClient == nil {
+		return
+	}
+	// Fetch when any cacheable field is still missing.
+	if item.PosterPath != "" && len(item.Genres) > 0 {
 		return
 	}
 	if item.TMDbID == "" || item.TMDbID == "0" {
@@ -279,9 +283,14 @@ func (m *SyncManager) enrichItem(ctx context.Context, item *ImportListItem, l *I
 			m.logger.Debug("import-lists: tmdb tv enrich failed", "title", item.Title, "err", err)
 			return
 		}
-		item.PosterPath = meta.PosterPath
+		if item.PosterPath == "" {
+			item.PosterPath = meta.PosterPath
+		}
 		if item.Overview == "" {
 			item.Overview = meta.Overview
+		}
+		if len(item.Genres) == 0 {
+			item.Genres = meta.Genres
 		}
 		return
 	}
@@ -291,9 +300,14 @@ func (m *SyncManager) enrichItem(ctx context.Context, item *ImportListItem, l *I
 		m.logger.Debug("import-lists: tmdb movie enrich failed", "title", item.Title, "err", err)
 		return
 	}
-	item.PosterPath = meta.PosterPath
+	if item.PosterPath == "" {
+		item.PosterPath = meta.PosterPath
+	}
 	if item.Overview == "" {
 		item.Overview = meta.Overview
+	}
+	if len(item.Genres) == 0 {
+		item.Genres = meta.Genres
 	}
 }
 

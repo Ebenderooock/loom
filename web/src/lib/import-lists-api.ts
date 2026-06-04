@@ -67,6 +67,7 @@ export interface ImportListItem {
 export interface DiscoverItem extends ImportListItem {
   list_name: string;
   in_library: boolean;
+  genres?: string[];
 }
 
 export interface ImportListExclusion {
