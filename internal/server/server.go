@@ -30,6 +30,7 @@ import (
 	"github.com/go-chi/httprate"
 
 	"github.com/ebenderooock/loom/internal/alttitles"
+	"github.com/ebenderooock/loom/internal/analytics"
 	"github.com/ebenderooock/loom/internal/anime"
 	"github.com/ebenderooock/loom/internal/apikeys"
 	"github.com/ebenderooock/loom/internal/appconfig"
@@ -98,6 +99,7 @@ type Server struct {
 	seriesSvc         series.Service
 	notifSvc          notifications.Service
 	connectSvc        connect.Service
+	analyticsSvc      *analytics.Service
 	reviewStore       *safety.ReviewStore
 	cleanupSvc        *cleanup.Service
 	requestsSvc       *requests.Service
@@ -280,6 +282,14 @@ func (s *Server) SetNotifications(svc notifications.Service) {
 // SetConnect installs the connect service and rebuilds the HTTP handler.
 func (s *Server) SetConnect(svc connect.Service) {
 	s.connectSvc = svc
+	if s.httpSrv != nil {
+		s.httpSrv.Handler = s.newMux()
+	}
+}
+
+// SetAnalytics installs the media-analytics service and rebuilds the handler.
+func (s *Server) SetAnalytics(svc *analytics.Service) {
+	s.analyticsSvc = svc
 	if s.httpSrv != nil {
 		s.httpSrv.Handler = s.newMux()
 	}
@@ -694,6 +704,15 @@ func (s *Server) newMux() http.Handler {
 				}
 			}
 			r.Mount("/api/v1/connect", connect.Router(s.connectSvc, archiver))
+		}
+
+		// Media analytics routes (admin-only; expose other users' activity).
+		if s.analyticsSvc != nil {
+			adminMW := func(next http.Handler) http.Handler { return next }
+			if s.authSvc != nil {
+				adminMW = s.authSvc.RequireRole("admin")
+			}
+			r.Mount("/api/v1/analytics", analytics.Router(s.analyticsSvc, adminMW))
 		}
 
 		// Calendar routes

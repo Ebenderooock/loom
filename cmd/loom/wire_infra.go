@@ -3,7 +3,9 @@ package main
 import (
 	"context"
 	"log/slog"
+	"time"
 
+	"github.com/ebenderooock/loom/internal/analytics"
 	"github.com/ebenderooock/loom/internal/auditlog"
 	"github.com/ebenderooock/loom/internal/compat/prowlarrv1"
 	"github.com/ebenderooock/loom/internal/compat/radarrv3"
@@ -11,6 +13,7 @@ import (
 	"github.com/ebenderooock/loom/internal/compat/syncprofiles"
 	"github.com/ebenderooock/loom/internal/connect"
 	"github.com/ebenderooock/loom/internal/downloads"
+	"github.com/ebenderooock/loom/internal/featureflags"
 	"github.com/ebenderooock/loom/internal/healthmonitor"
 	"github.com/ebenderooock/loom/internal/indexers"
 	"github.com/ebenderooock/loom/internal/libraries"
@@ -28,6 +31,7 @@ type infraWiring struct {
 	rollingSearcher *scheduler.RollingSearcher
 	healthMon       *healthmonitor.Monitor
 	auditSink       *auditlog.Sink
+	analyticsPoller *analytics.Poller
 }
 
 // wireInfra constructs infrastructure services (connect, compat shims,
@@ -47,6 +51,17 @@ func wireInfra(
 	// Connect (media server integrations)
 	connectSvc := connect.NewService(db.DB())
 	srv.SetConnect(connectSvc)
+
+	// Media analytics — live stream monitoring + watch history, sampled from
+	// enabled Plex/Emby/Jellyfin connections and gated by a feature flag.
+	analyticsSvc := analytics.NewService(analytics.NewStore(db.DB()), connectSvc, logger)
+	srv.SetAnalytics(analyticsSvc)
+	analyticsPoller := analytics.NewPoller(
+		analyticsSvc,
+		30*time.Second,
+		srv.Features().EnabledFunc(featureflags.KeyMediaAnalytics),
+		logger,
+	)
 
 	// Wire Trakt credentials into import list sync manager
 	media.importListSyncMgr.SetConnectService(connectSvc)
@@ -89,6 +104,7 @@ func wireInfra(
 		rollingSearcher: rollingSearcher,
 		healthMon:       healthMon,
 		auditSink:       auditSink,
+		analyticsPoller: analyticsPoller,
 	}, nil
 }
 

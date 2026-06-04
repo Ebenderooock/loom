@@ -76,3 +76,24 @@ type UpdateRequest struct {
 	Settings       *ProviderSettings `json:"settings,omitempty"`
 	NotifyOnImport *bool             `json:"notify_on_import,omitempty"`
 }
+
+// Session is a single active playback reported by a media server. The
+// connection-identifying fields are populated by callers; providers fill the
+// media/playback fields.
+type Session struct {
+	ConnectionID     string       `json:"connection_id"`
+	ConnectionName   string       `json:"connection_name"`
+	Provider         ProviderType `json:"provider"`
+	SessionKey       string       `json:"session_key"`
+	MediaID          string       `json:"media_id"`
+	User             string       `json:"user"`
+	MediaType        string       `json:"media_type"` // movie | episode | other
+	Title            string       `json:"title"`
+	GrandparentTitle string       `json:"grandparent_title,omitempty"`
+	FullTitle        string       `json:"full_title"`
+	Device           string       `json:"device,omitempty"`
+	State            string       `json:"state"` // playing | paused
+	PositionMs       int64        `json:"position_ms"`
+	DurationMs       int64        `json:"duration_ms"`
+	Transcode        bool         `json:"transcode"`
+}
