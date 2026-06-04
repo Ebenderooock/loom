@@ -14,6 +14,9 @@ import (
 type Provider interface {
 	Test(ctx context.Context, settings ProviderSettings) error
 	NotifyLibraryUpdate(ctx context.Context, settings ProviderSettings) error
+	// ActiveSessions returns the playback sessions currently active on the
+	// server. Providers that don't stream (e.g. Trakt) return nil, nil.
+	ActiveSessions(ctx context.Context, settings ProviderSettings) ([]Session, error)
 }
 
 var httpClient = &http.Client{Timeout: 15 * time.Second}

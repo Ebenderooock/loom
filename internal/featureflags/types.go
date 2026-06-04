@@ -11,6 +11,11 @@ const (
 	// queue). When disabled the autosearch engine stops recording new search
 	// trace entries; historical entries remain readable.
 	KeySearchLog = "search_log"
+
+	// KeyMediaAnalytics toggles media-server analytics sampling. When disabled
+	// the poller stops collecting new play history; existing history and the
+	// reports remain readable.
+	KeyMediaAnalytics = "media_analytics"
 )
 
 // FlagDef is the static, in-code definition of a feature toggle.
@@ -35,6 +40,13 @@ var Definitions = []FlagDef{
 		Key:         KeySearchLog,
 		Label:       "Search Log",
 		Description: "Record detailed per-search traces (indexer results, rejection reasons, grabs) shown under Search Queue. Disabling stops new traces; existing history stays viewable.",
+		Category:    "Diagnostics",
+		Default:     true,
+	},
+	{
+		Key:         KeyMediaAnalytics,
+		Label:       "Media Analytics",
+		Description: "Monitor active streams and record watch history from connected Plex/Emby/Jellyfin servers, shown under Analytics. Disabling stops new sampling; existing history stays viewable.",
 		Category:    "Diagnostics",
 		Default:     true,
 	},

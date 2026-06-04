@@ -2,6 +2,7 @@ import * as React from "react";
 import { Link, Outlet, useRouterState } from "@tanstack/react-router";
 import { apiFetch } from "@/lib/fetch";
 import {
+  Activity,
   Calendar,
   Compass,
   Inbox,
@@ -38,6 +39,8 @@ import {
   useCommandPalette,
 } from "@/components/command-palette";
 import { cn } from "@/lib/utils";
+import { useFeatureEnabled } from "@/lib/features-api";
+import { useAuth } from "@/hooks/use-auth";
 import { PageHeaderProvider, usePageHeader } from "@/hooks/use-page-header";
 
 interface NavItem {
@@ -132,6 +135,17 @@ function SidebarNav({
   const router = useRouterState();
   const path = router.location.pathname;
   const reviewCount = useReviewCount();
+  const { user } = useAuth();
+  const analyticsEnabled = useFeatureEnabled("media_analytics");
+  const showAnalytics = analyticsEnabled && user?.role === "admin";
+
+  const navItems = React.useMemo(() => {
+    if (!showAnalytics) return PRIMARY_NAV;
+    return [
+      ...PRIMARY_NAV,
+      { to: "/analytics", label: "Analytics", Icon: Activity } as NavItem,
+    ];
+  }, [showAnalytics]);
 
   const isActive = (to: string) =>
     to === "/" ? path === "/" : path === to || path.startsWith(`${to}/`);
@@ -141,7 +155,7 @@ function SidebarNav({
       aria-label="Primary"
       className="flex flex-col gap-0.5 p-2 overflow-y-auto flex-1 min-h-0 scrollbar-thin"
     >
-      {PRIMARY_NAV.map((item) => (
+      {navItems.map((item) => (
         <NavLinkRow
           key={item.to}
           item={item}

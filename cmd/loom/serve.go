@@ -239,6 +239,10 @@ func cmdServe(ctx context.Context, args []string) error {
 	defer infra.rollingSearcher.Stop()
 	infra.healthMon.Start(ctx)
 	defer infra.healthMon.Stop()
+	if infra.analyticsPoller != nil {
+		infra.analyticsPoller.Start(ctx)
+		defer infra.analyticsPoller.Stop()
+	}
 	defer infra.auditSink.Close()
 	defer sysLogBatchWriter.Close()
 

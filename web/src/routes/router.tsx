@@ -126,6 +126,14 @@ const requestsRoute = createRoute({
   errorComponent: ErrorFallback,
 });
 
+const analyticsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/analytics",
+  component: lazyRouteComponent(() => import("@/pages/analytics"), "AnalyticsPage"),
+  pendingComponent: PageLoader,
+  errorComponent: ErrorFallback,
+});
+
 const activityRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/activity",
@@ -377,6 +385,7 @@ const routeTree = rootRoute.addChildren([
   seriesRoute,
   discoverRoute,
   requestsRoute,
+  analyticsRoute,
   activityRoute,
   calendarRoute,
   downloadsRoute,
