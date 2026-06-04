@@ -70,3 +70,39 @@ type CreateInput struct {
 func validMediaType(t MediaType) bool {
 	return t == MediaMovie || t == MediaSeries
 }
+
+// quotaCountedStatuses are the request states that consume a user's quota slot.
+// rejected/failed are re-requestable and therefore do not count.
+var quotaCountedStatuses = []Status{StatusPending, StatusApproving, StatusApproved, StatusAvailable}
+
+// Quota configuration bounds.
+const (
+	// DefaultWindowDays is the rolling window used when limits are first set.
+	DefaultWindowDays = 7
+	// MaxWindowDays caps the rolling window to keep counts bounded.
+	MaxWindowDays = 3650
+)
+
+// QuotaConfig is the global, per-user request quota. A limit of 0 means
+// unlimited for that media type. WindowDays is the rolling window (in days)
+// over which counted requests accumulate.
+type QuotaConfig struct {
+	MovieLimit  int `json:"movie_limit"`
+	SeriesLimit int `json:"series_limit"`
+	WindowDays  int `json:"window_days"`
+}
+
+// MediaQuota is a single media type's quota usage for a user.
+type MediaQuota struct {
+	Limit     int  `json:"limit"`     // 0 = unlimited
+	Used      int  `json:"used"`      // requests counted in the window
+	Remaining int  `json:"remaining"` // -1 = unlimited
+	Unlimited bool `json:"unlimited"`
+}
+
+// QuotaStatus is a user's current quota usage across media types.
+type QuotaStatus struct {
+	WindowDays int        `json:"window_days"`
+	Movie      MediaQuota `json:"movie"`
+	Series     MediaQuota `json:"series"`
+}

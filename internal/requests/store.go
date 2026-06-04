@@ -20,6 +20,10 @@ var ErrDuplicate = errors.New("requests: an open request already exists for this
 // request's status changed concurrently (e.g. approved while being rejected).
 var ErrConflict = errors.New("requests: request state changed concurrently")
 
+// ErrQuotaExceeded is returned when a user has reached their request limit for a
+// media type within the configured rolling window.
+var ErrQuotaExceeded = errors.New("requests: request quota exceeded")
+
 // Store persists media requests.
 type Store struct {
 	db *sql.DB
@@ -231,4 +235,127 @@ func affectedOne(res sql.Result, err error) error {
 		return ErrConflict
 	}
 	return nil
+}
+
+// statusPlaceholders renders the quota-counted statuses as a SQL list and args.
+func statusPlaceholders() (string, []any) {
+	parts := make([]string, len(quotaCountedStatuses))
+	args := make([]any, len(quotaCountedStatuses))
+	for i, st := range quotaCountedStatuses {
+		parts[i] = "?"
+		args[i] = string(st)
+	}
+	return strings.Join(parts, ", "), args
+}
+
+// GetQuotaConfig returns the global per-user request quota.
+func (s *Store) GetQuotaConfig(ctx context.Context) (QuotaConfig, error) {
+	var c QuotaConfig
+	err := s.db.QueryRowContext(ctx,
+		`SELECT movie_limit, series_limit, window_days FROM request_quota_config WHERE id = 1`,
+	).Scan(&c.MovieLimit, &c.SeriesLimit, &c.WindowDays)
+	if errors.Is(err, sql.ErrNoRows) {
+		// Defensive: row should exist from migration; treat as unlimited.
+		return QuotaConfig{WindowDays: DefaultWindowDays}, nil
+	}
+	return c, err
+}
+
+// SetQuotaConfig persists the global per-user request quota.
+func (s *Store) SetQuotaConfig(ctx context.Context, c QuotaConfig) error {
+	now := time.Now().UTC().Format(tsLayout)
+	res, err := s.db.ExecContext(ctx, `
+		UPDATE request_quota_config
+		SET movie_limit = ?, series_limit = ?, window_days = ?, updated_at = ?
+		WHERE id = 1`,
+		c.MovieLimit, c.SeriesLimit, c.WindowDays, now)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		_, err = s.db.ExecContext(ctx, `
+			INSERT INTO request_quota_config (id, movie_limit, series_limit, window_days, updated_at)
+			VALUES (1, ?, ?, ?, ?)`,
+			c.MovieLimit, c.SeriesLimit, c.WindowDays, now)
+	}
+	return err
+}
+
+// CountUserRequests returns how many of a user's requests for the given media
+// type currently consume a quota slot within the rolling window. A zero `since`
+// counts across all time.
+func (s *Store) CountUserRequests(ctx context.Context, userID string, mt MediaType, since time.Time) (int, error) {
+	statusList, statusArgs := statusPlaceholders()
+	q := `SELECT COUNT(*) FROM media_requests
+		WHERE user_id = ? AND media_type = ? AND status IN (` + statusList + `)`
+	args := append([]any{userID, string(mt)}, statusArgs...)
+	if !since.IsZero() {
+		q += ` AND created_at >= ?`
+		args = append(args, since.UTC().Format(tsLayout))
+	}
+	var n int
+	err := s.db.QueryRowContext(ctx, q, args...).Scan(&n)
+	return n, err
+}
+
+// CreateWithinQuota atomically enforces a per-user quota and inserts a new
+// pending request. It serializes against concurrent inserts (BEGIN IMMEDIATE)
+// so a user cannot exceed `limit` by racing. It returns ErrQuotaExceeded when
+// the user already has `limit` counted requests of r.MediaType in the window.
+func (s *Store) CreateWithinQuota(ctx context.Context, r Request, limit int, since time.Time) (Request, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return Request{}, err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	// Acquire a write lock up front so the count below cannot be invalidated by
+	// a concurrent insert before we commit.
+	if _, err := tx.ExecContext(ctx, `UPDATE request_quota_config SET id = id WHERE id = 1`); err != nil {
+		return Request{}, err
+	}
+
+	statusList, statusArgs := statusPlaceholders()
+	countQ := `SELECT COUNT(*) FROM media_requests
+		WHERE user_id = ? AND media_type = ? AND status IN (` + statusList + `)`
+	countArgs := append([]any{r.UserID, string(r.MediaType)}, statusArgs...)
+	if !since.IsZero() {
+		countQ += ` AND created_at >= ?`
+		countArgs = append(countArgs, since.UTC().Format(tsLayout))
+	}
+	var used int
+	if err := tx.QueryRowContext(ctx, countQ, countArgs...).Scan(&used); err != nil {
+		return Request{}, err
+	}
+	if used >= limit {
+		return Request{}, ErrQuotaExceeded
+	}
+
+	r.ID = uuid.NewString()
+	now := time.Now().UTC()
+	r.CreatedAt = now
+	r.UpdatedAt = now
+	r.Status = StatusPending
+	_, err = tx.ExecContext(ctx, `
+		INSERT INTO media_requests
+			(id, user_id, username, media_type, tmdb_id, title, year, poster_path,
+			 overview, status, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)`,
+		r.ID, r.UserID, r.Username, string(r.MediaType), r.TMDBID, r.Title, r.Year,
+		r.PosterPath, r.Overview, now.Format(tsLayout), now.Format(tsLayout),
+	)
+	if err != nil {
+		if isUniqueViolation(err) {
+			return Request{}, ErrDuplicate
+		}
+		return Request{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return Request{}, err
+	}
+	return r, nil
 }

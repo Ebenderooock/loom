@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"time"
 )
 
 // Fulfiller adds requested media to the library and triggers a grab. It is the
@@ -77,8 +78,9 @@ var ErrAlreadyAvailable = errors.New("requests: media already available")
 
 // Create validates and stores a new request on behalf of the given user. It
 // rejects unsupported media types, missing TMDB ids, already-available media,
-// and duplicate open requests.
-func (s *Service) Create(ctx context.Context, userID, username string, in CreateInput) (Request, error) {
+// and duplicate open requests. Non-admin users are subject to the configured
+// per-user quota; admins (isAdmin) bypass it.
+func (s *Service) Create(ctx context.Context, userID, username string, isAdmin bool, in CreateInput) (Request, error) {
 	if !validMediaType(in.MediaType) {
 		return Request{}, fmt.Errorf("requests: invalid media type %q", in.MediaType)
 	}
@@ -100,7 +102,7 @@ func (s *Service) Create(ctx context.Context, userID, username string, in Create
 		}
 	}
 
-	return s.store.Create(ctx, Request{
+	req := Request{
 		UserID:     userID,
 		Username:   username,
 		MediaType:  in.MediaType,
@@ -109,7 +111,36 @@ func (s *Service) Create(ctx context.Context, userID, username string, in Create
 		Year:       in.Year,
 		PosterPath: in.PosterPath,
 		Overview:   in.Overview,
-	})
+	}
+
+	// Enforce the per-user quota for non-admins when a limit is configured.
+	if !isAdmin {
+		cfg, err := s.store.GetQuotaConfig(ctx)
+		if err != nil {
+			return Request{}, fmt.Errorf("requests: loading quota: %w", err)
+		}
+		if limit := quotaLimitFor(cfg, in.MediaType); limit > 0 {
+			return s.store.CreateWithinQuota(ctx, req, limit, quotaSince(cfg))
+		}
+	}
+
+	return s.store.Create(ctx, req)
+}
+
+// quotaLimitFor returns the configured limit for a media type (0 = unlimited).
+func quotaLimitFor(cfg QuotaConfig, mt MediaType) int {
+	if mt == MediaMovie {
+		return cfg.MovieLimit
+	}
+	return cfg.SeriesLimit
+}
+
+// quotaSince returns the start of the rolling quota window (zero = all time).
+func quotaSince(cfg QuotaConfig) time.Time {
+	if cfg.WindowDays <= 0 {
+		return time.Time{}
+	}
+	return time.Now().UTC().AddDate(0, 0, -cfg.WindowDays)
 }
 
 func (s *Service) mediaExists(ctx context.Context, mt MediaType, tmdbID string) (string, error) {
@@ -127,6 +158,68 @@ func (s *Service) ListAll(ctx context.Context, status Status) ([]Request, error)
 // ListMine returns the given user's requests.
 func (s *Service) ListMine(ctx context.Context, userID string) ([]Request, error) {
 	return s.store.ListByUser(ctx, userID)
+}
+
+// GetQuotaConfig returns the global per-user request quota.
+func (s *Service) GetQuotaConfig(ctx context.Context) (QuotaConfig, error) {
+	return s.store.GetQuotaConfig(ctx)
+}
+
+// ErrInvalidQuota indicates a quota config failed validation.
+var ErrInvalidQuota = errors.New("requests: invalid quota configuration")
+
+// SetQuotaConfig validates and persists the global per-user request quota.
+// Limits must be non-negative; the window is clamped to [1, MaxWindowDays] and
+// defaults to DefaultWindowDays when limits are set without an explicit window.
+func (s *Service) SetQuotaConfig(ctx context.Context, c QuotaConfig) (QuotaConfig, error) {
+	if c.MovieLimit < 0 || c.SeriesLimit < 0 {
+		return QuotaConfig{}, fmt.Errorf("%w: limits must be non-negative", ErrInvalidQuota)
+	}
+	if c.WindowDays <= 0 {
+		c.WindowDays = DefaultWindowDays
+	}
+	if c.WindowDays > MaxWindowDays {
+		return QuotaConfig{}, fmt.Errorf("%w: window_days must be <= %d", ErrInvalidQuota, MaxWindowDays)
+	}
+	if err := s.store.SetQuotaConfig(ctx, c); err != nil {
+		return QuotaConfig{}, err
+	}
+	return c, nil
+}
+
+// QuotaStatus reports a user's current quota usage. Admins (isAdmin) are
+// exempt and reported as unlimited, though their usage is still counted for
+// informational display.
+func (s *Service) QuotaStatus(ctx context.Context, userID string, isAdmin bool) (QuotaStatus, error) {
+	cfg, err := s.store.GetQuotaConfig(ctx)
+	if err != nil {
+		return QuotaStatus{}, err
+	}
+	since := quotaSince(cfg)
+	movieUsed, err := s.store.CountUserRequests(ctx, userID, MediaMovie, since)
+	if err != nil {
+		return QuotaStatus{}, err
+	}
+	seriesUsed, err := s.store.CountUserRequests(ctx, userID, MediaSeries, since)
+	if err != nil {
+		return QuotaStatus{}, err
+	}
+	return QuotaStatus{
+		WindowDays: cfg.WindowDays,
+		Movie:      mediaQuota(cfg.MovieLimit, movieUsed, isAdmin),
+		Series:     mediaQuota(cfg.SeriesLimit, seriesUsed, isAdmin),
+	}, nil
+}
+
+func mediaQuota(limit, used int, isAdmin bool) MediaQuota {
+	if isAdmin || limit <= 0 {
+		return MediaQuota{Limit: limit, Used: used, Remaining: -1, Unlimited: true}
+	}
+	remaining := limit - used
+	if remaining < 0 {
+		remaining = 0
+	}
+	return MediaQuota{Limit: limit, Used: used, Remaining: remaining, Unlimited: false}
 }
 
 // Approve fulfills a pending request: it validates the admin-chosen target,

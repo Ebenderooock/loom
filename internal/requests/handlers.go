@@ -24,6 +24,7 @@ func Router(svc *Service, adminOnly func(http.Handler) http.Handler) chi.Router 
 	// Any authenticated user.
 	r.Post("/", svc.handleCreate)
 	r.Get("/mine", svc.handleListMine)
+	r.Get("/quota", svc.handleQuotaStatus)
 
 	// Admin only.
 	r.Group(func(ar chi.Router) {
@@ -31,6 +32,8 @@ func Router(svc *Service, adminOnly func(http.Handler) http.Handler) chi.Router 
 		ar.Get("/", svc.handleListAll)
 		ar.Post("/{id}/approve", svc.handleApprove)
 		ar.Post("/{id}/reject", svc.handleReject)
+		ar.Get("/quota/config", svc.handleGetQuotaConfig)
+		ar.Put("/quota/config", svc.handleSetQuotaConfig)
 	})
 
 	return r
@@ -59,7 +62,7 @@ func (s *Service) handleCreate(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
-	req, err := s.Create(r.Context(), userIDStr(id), id.Username, in)
+	req, err := s.Create(r.Context(), userIDStr(id), id.Username, id.HasRole("admin"), in)
 	switch {
 	case errors.Is(err, ErrDuplicate):
 		writeError(w, http.StatusConflict, err.Error())
@@ -67,11 +70,55 @@ func (s *Service) handleCreate(w http.ResponseWriter, r *http.Request) {
 	case errors.Is(err, ErrAlreadyAvailable):
 		writeError(w, http.StatusConflict, "this title is already in your library")
 		return
+	case errors.Is(err, ErrQuotaExceeded):
+		writeError(w, http.StatusTooManyRequests, "you have reached your request limit; try again later")
+		return
 	case err != nil:
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	writeJSON(w, http.StatusCreated, req)
+}
+
+func (s *Service) handleQuotaStatus(w http.ResponseWriter, r *http.Request) {
+	id := auth.IdentityFrom(r.Context())
+	if id == nil {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	status, err := s.QuotaStatus(r.Context(), userIDStr(id), id.HasRole("admin"))
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, status)
+}
+
+func (s *Service) handleGetQuotaConfig(w http.ResponseWriter, r *http.Request) {
+	cfg, err := s.GetQuotaConfig(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, cfg)
+}
+
+func (s *Service) handleSetQuotaConfig(w http.ResponseWriter, r *http.Request) {
+	var cfg QuotaConfig
+	if err := json.NewDecoder(r.Body).Decode(&cfg); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	saved, err := s.SetQuotaConfig(r.Context(), cfg)
+	switch {
+	case errors.Is(err, ErrInvalidQuota):
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	case err != nil:
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, saved)
 }
 
 func (s *Service) handleListMine(w http.ResponseWriter, r *http.Request) {

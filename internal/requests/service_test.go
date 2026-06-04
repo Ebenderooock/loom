@@ -90,7 +90,7 @@ func TestCreateAndListMine(t *testing.T) {
 	svc := newSvc(t, &fakeFulfiller{}, okValidator{})
 	ctx := context.Background()
 
-	r, err := svc.Create(ctx, "1", "alice", CreateInput{MediaType: MediaMovie, TMDBID: "603", Title: "The Matrix"})
+	r, err := svc.Create(ctx, "1", "alice", false, CreateInput{MediaType: MediaMovie, TMDBID: "603", Title: "The Matrix"})
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
@@ -111,10 +111,10 @@ func TestCreateRejectsInvalid(t *testing.T) {
 	svc := newSvc(t, &fakeFulfiller{}, okValidator{})
 	ctx := context.Background()
 
-	if _, err := svc.Create(ctx, "1", "alice", CreateInput{MediaType: "music", TMDBID: "1"}); err == nil {
+	if _, err := svc.Create(ctx, "1", "alice", false, CreateInput{MediaType: "music", TMDBID: "1"}); err == nil {
 		t.Fatal("expected invalid media type error")
 	}
-	if _, err := svc.Create(ctx, "1", "alice", CreateInput{MediaType: MediaMovie, TMDBID: "  "}); err == nil {
+	if _, err := svc.Create(ctx, "1", "alice", false, CreateInput{MediaType: MediaMovie, TMDBID: "  "}); err == nil {
 		t.Fatal("expected missing tmdb error")
 	}
 }
@@ -123,10 +123,10 @@ func TestCreateDuplicateOpen(t *testing.T) {
 	svc := newSvc(t, &fakeFulfiller{}, okValidator{})
 	ctx := context.Background()
 
-	if _, err := svc.Create(ctx, "1", "alice", CreateInput{MediaType: MediaMovie, TMDBID: "603"}); err != nil {
+	if _, err := svc.Create(ctx, "1", "alice", false, CreateInput{MediaType: MediaMovie, TMDBID: "603"}); err != nil {
 		t.Fatalf("Create: %v", err)
 	}
-	_, err := svc.Create(ctx, "2", "bob", CreateInput{MediaType: MediaMovie, TMDBID: "603"})
+	_, err := svc.Create(ctx, "2", "bob", false, CreateInput{MediaType: MediaMovie, TMDBID: "603"})
 	if !errors.Is(err, ErrDuplicate) {
 		t.Fatalf("err = %v, want ErrDuplicate", err)
 	}
@@ -135,7 +135,7 @@ func TestCreateDuplicateOpen(t *testing.T) {
 func TestCreateAlreadyAvailable(t *testing.T) {
 	f := &fakeFulfiller{movieExists: map[string]string{"603": "movie-1"}}
 	svc := newSvc(t, f, okValidator{})
-	_, err := svc.Create(context.Background(), "1", "alice", CreateInput{MediaType: MediaMovie, TMDBID: "603"})
+	_, err := svc.Create(context.Background(), "1", "alice", false, CreateInput{MediaType: MediaMovie, TMDBID: "603"})
 	if !errors.Is(err, ErrAlreadyAvailable) {
 		t.Fatalf("err = %v, want ErrAlreadyAvailable", err)
 	}
@@ -146,7 +146,7 @@ func TestApproveHappyPath(t *testing.T) {
 	svc := newSvc(t, f, okValidator{})
 	ctx := context.Background()
 
-	r, _ := svc.Create(ctx, "1", "alice", CreateInput{MediaType: MediaMovie, TMDBID: "603"})
+	r, _ := svc.Create(ctx, "1", "alice", false, CreateInput{MediaType: MediaMovie, TMDBID: "603"})
 	out, err := svc.Approve(ctx, r.ID, "qp-1", "lib-1", "admin")
 	if err != nil {
 		t.Fatalf("Approve: %v", err)
@@ -162,7 +162,7 @@ func TestApproveHappyPath(t *testing.T) {
 func TestApproveValidatesTarget(t *testing.T) {
 	svc := newSvc(t, &fakeFulfiller{}, rejectValidator{})
 	ctx := context.Background()
-	r, _ := svc.Create(ctx, "1", "alice", CreateInput{MediaType: MediaMovie, TMDBID: "603"})
+	r, _ := svc.Create(ctx, "1", "alice", false, CreateInput{MediaType: MediaMovie, TMDBID: "603"})
 	if _, err := svc.Approve(ctx, r.ID, "bad-qp", "bad-lib", "admin"); err == nil {
 		t.Fatal("expected validation error")
 	}
@@ -183,7 +183,7 @@ func TestApproveFulfillFailureMarksFailed(t *testing.T) {
 	f := &fakeFulfiller{fulfillErr: errors.New("boom")}
 	svc := newSvc(t, f, okValidator{})
 	ctx := context.Background()
-	r, _ := svc.Create(ctx, "1", "alice", CreateInput{MediaType: MediaMovie, TMDBID: "603"})
+	r, _ := svc.Create(ctx, "1", "alice", false, CreateInput{MediaType: MediaMovie, TMDBID: "603"})
 	if _, err := svc.Approve(ctx, r.ID, "qp", "lib", "admin"); err == nil {
 		t.Fatal("expected fulfillment error")
 	}
@@ -192,7 +192,7 @@ func TestApproveFulfillFailureMarksFailed(t *testing.T) {
 		t.Fatalf("status = %q, want failed", got.Status)
 	}
 	// A failed request is re-requestable.
-	if _, err := svc.Create(ctx, "1", "alice", CreateInput{MediaType: MediaMovie, TMDBID: "603"}); err != nil {
+	if _, err := svc.Create(ctx, "1", "alice", false, CreateInput{MediaType: MediaMovie, TMDBID: "603"}); err != nil {
 		t.Fatalf("resubmit after failure: %v", err)
 	}
 }
@@ -201,7 +201,7 @@ func TestApproveAlreadyExistingShortCircuits(t *testing.T) {
 	f := &fakeFulfiller{}
 	svc := newSvc(t, f, okValidator{})
 	ctx := context.Background()
-	r, _ := svc.Create(ctx, "1", "alice", CreateInput{MediaType: MediaMovie, TMDBID: "603"})
+	r, _ := svc.Create(ctx, "1", "alice", false, CreateInput{MediaType: MediaMovie, TMDBID: "603"})
 	// Media appears in the library between create and approve.
 	f.mu.Lock()
 	f.movieExists = map[string]string{"603": "movie-7"}
@@ -223,7 +223,7 @@ func TestApproveConcurrentClaimsOnce(t *testing.T) {
 	f := &fakeFulfiller{fulfilledMedia: "movie-1"}
 	svc := newSvc(t, f, okValidator{})
 	ctx := context.Background()
-	r, _ := svc.Create(ctx, "1", "alice", CreateInput{MediaType: MediaMovie, TMDBID: "603"})
+	r, _ := svc.Create(ctx, "1", "alice", false, CreateInput{MediaType: MediaMovie, TMDBID: "603"})
 
 	var wg sync.WaitGroup
 	var success int32
@@ -249,7 +249,7 @@ func TestRejectAfterApproveFails(t *testing.T) {
 	f := &fakeFulfiller{fulfilledMedia: "movie-1"}
 	svc := newSvc(t, f, okValidator{})
 	ctx := context.Background()
-	r, _ := svc.Create(ctx, "1", "alice", CreateInput{MediaType: MediaMovie, TMDBID: "603"})
+	r, _ := svc.Create(ctx, "1", "alice", false, CreateInput{MediaType: MediaMovie, TMDBID: "603"})
 	if _, err := svc.Approve(ctx, r.ID, "qp", "lib", "admin"); err != nil {
 		t.Fatalf("Approve: %v", err)
 	}
@@ -261,7 +261,7 @@ func TestRejectAfterApproveFails(t *testing.T) {
 func TestReject(t *testing.T) {
 	svc := newSvc(t, &fakeFulfiller{}, okValidator{})
 	ctx := context.Background()
-	r, _ := svc.Create(ctx, "1", "alice", CreateInput{MediaType: MediaMovie, TMDBID: "603"})
+	r, _ := svc.Create(ctx, "1", "alice", false, CreateInput{MediaType: MediaMovie, TMDBID: "603"})
 	out, err := svc.Reject(ctx, r.ID, "not now", "admin")
 	if err != nil {
 		t.Fatalf("Reject: %v", err)
@@ -270,7 +270,123 @@ func TestReject(t *testing.T) {
 		t.Fatalf("out = %+v", out)
 	}
 	// Rejected request is re-requestable.
-	if _, err := svc.Create(ctx, "1", "alice", CreateInput{MediaType: MediaMovie, TMDBID: "603"}); err != nil {
+	if _, err := svc.Create(ctx, "1", "alice", false, CreateInput{MediaType: MediaMovie, TMDBID: "603"}); err != nil {
 		t.Fatalf("resubmit after reject: %v", err)
+	}
+}
+
+func TestQuotaEnforcement(t *testing.T) {
+	svc := newSvc(t, &fakeFulfiller{}, okValidator{})
+	ctx := context.Background()
+
+	if _, err := svc.SetQuotaConfig(ctx, QuotaConfig{MovieLimit: 2, SeriesLimit: 0, WindowDays: 7}); err != nil {
+		t.Fatalf("SetQuotaConfig: %v", err)
+	}
+
+	// Two distinct movie requests are allowed.
+	if _, err := svc.Create(ctx, "1", "alice", false, CreateInput{MediaType: MediaMovie, TMDBID: "1"}); err != nil {
+		t.Fatalf("first: %v", err)
+	}
+	if _, err := svc.Create(ctx, "1", "alice", false, CreateInput{MediaType: MediaMovie, TMDBID: "2"}); err != nil {
+		t.Fatalf("second: %v", err)
+	}
+	// Third exceeds the movie quota.
+	if _, err := svc.Create(ctx, "1", "alice", false, CreateInput{MediaType: MediaMovie, TMDBID: "3"}); !errors.Is(err, ErrQuotaExceeded) {
+		t.Fatalf("third movie: expected ErrQuotaExceeded, got %v", err)
+	}
+	// Series is unlimited (limit 0) so it still works.
+	if _, err := svc.Create(ctx, "1", "alice", false, CreateInput{MediaType: MediaSeries, TMDBID: "10"}); err != nil {
+		t.Fatalf("series unlimited: %v", err)
+	}
+	// A different user has their own quota.
+	if _, err := svc.Create(ctx, "2", "bob", false, CreateInput{MediaType: MediaMovie, TMDBID: "4"}); err != nil {
+		t.Fatalf("other user: %v", err)
+	}
+}
+
+func TestQuotaAdminBypass(t *testing.T) {
+	svc := newSvc(t, &fakeFulfiller{}, okValidator{})
+	ctx := context.Background()
+	if _, err := svc.SetQuotaConfig(ctx, QuotaConfig{MovieLimit: 1, WindowDays: 7}); err != nil {
+		t.Fatalf("SetQuotaConfig: %v", err)
+	}
+	for i, tmdb := range []string{"1", "2", "3"} {
+		if _, err := svc.Create(ctx, "9", "admin", true, CreateInput{MediaType: MediaMovie, TMDBID: tmdb}); err != nil {
+			t.Fatalf("admin create %d: %v", i, err)
+		}
+	}
+}
+
+func TestQuotaRejectedDoesNotCount(t *testing.T) {
+	svc := newSvc(t, &fakeFulfiller{}, okValidator{})
+	ctx := context.Background()
+	if _, err := svc.SetQuotaConfig(ctx, QuotaConfig{MovieLimit: 1, WindowDays: 7}); err != nil {
+		t.Fatalf("SetQuotaConfig: %v", err)
+	}
+	r, err := svc.Create(ctx, "1", "alice", false, CreateInput{MediaType: MediaMovie, TMDBID: "1"})
+	if err != nil {
+		t.Fatalf("first: %v", err)
+	}
+	// At the limit now.
+	if _, err := svc.Create(ctx, "1", "alice", false, CreateInput{MediaType: MediaMovie, TMDBID: "2"}); !errors.Is(err, ErrQuotaExceeded) {
+		t.Fatalf("expected quota exceeded, got %v", err)
+	}
+	// Rejecting the first frees the slot.
+	if _, err := svc.Reject(ctx, r.ID, "no", "admin"); err != nil {
+		t.Fatalf("reject: %v", err)
+	}
+	if _, err := svc.Create(ctx, "1", "alice", false, CreateInput{MediaType: MediaMovie, TMDBID: "2"}); err != nil {
+		t.Fatalf("after reject: %v", err)
+	}
+}
+
+func TestQuotaStatusReporting(t *testing.T) {
+	svc := newSvc(t, &fakeFulfiller{}, okValidator{})
+	ctx := context.Background()
+	if _, err := svc.SetQuotaConfig(ctx, QuotaConfig{MovieLimit: 5, SeriesLimit: 0, WindowDays: 7}); err != nil {
+		t.Fatalf("SetQuotaConfig: %v", err)
+	}
+	if _, err := svc.Create(ctx, "1", "alice", false, CreateInput{MediaType: MediaMovie, TMDBID: "1"}); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	st, err := svc.QuotaStatus(ctx, "1", false)
+	if err != nil {
+		t.Fatalf("QuotaStatus: %v", err)
+	}
+	if st.WindowDays != 7 {
+		t.Fatalf("window = %d, want 7", st.WindowDays)
+	}
+	if st.Movie.Limit != 5 || st.Movie.Used != 1 || st.Movie.Remaining != 4 || st.Movie.Unlimited {
+		t.Fatalf("movie quota = %+v", st.Movie)
+	}
+	if !st.Series.Unlimited || st.Series.Remaining != -1 {
+		t.Fatalf("series quota = %+v", st.Series)
+	}
+	// Admin sees unlimited even with a configured limit.
+	adminSt, err := svc.QuotaStatus(ctx, "9", true)
+	if err != nil {
+		t.Fatalf("admin QuotaStatus: %v", err)
+	}
+	if !adminSt.Movie.Unlimited {
+		t.Fatalf("admin movie should be unlimited: %+v", adminSt.Movie)
+	}
+}
+
+func TestSetQuotaConfigValidation(t *testing.T) {
+	svc := newSvc(t, &fakeFulfiller{}, okValidator{})
+	ctx := context.Background()
+	if _, err := svc.SetQuotaConfig(ctx, QuotaConfig{MovieLimit: -1}); !errors.Is(err, ErrInvalidQuota) {
+		t.Fatalf("negative limit: got %v", err)
+	}
+	if _, err := svc.SetQuotaConfig(ctx, QuotaConfig{MovieLimit: 3, WindowDays: 99999}); !errors.Is(err, ErrInvalidQuota) {
+		t.Fatalf("huge window: got %v", err)
+	}
+	// Zero window defaults to DefaultWindowDays.
+	saved, err := svc.SetQuotaConfig(ctx, QuotaConfig{MovieLimit: 3, WindowDays: 0})
+	if err != nil {
+		t.Fatalf("default window: %v", err)
+	}
+	if saved.WindowDays != DefaultWindowDays {
+		t.Fatalf("window = %d, want %d", saved.WindowDays, DefaultWindowDays)
 	}
 }
