@@ -144,12 +144,53 @@ export async function rejectRequest(
   });
 }
 
+// ---------- Quotas ----------
+
+export interface MediaQuota {
+  limit: number;
+  used: number;
+  remaining: number; // -1 = unlimited
+  unlimited: boolean;
+}
+
+export interface QuotaStatus {
+  window_days: number;
+  movie: MediaQuota;
+  series: MediaQuota;
+}
+
+export interface QuotaConfig {
+  movie_limit: number;
+  series_limit: number;
+  window_days: number;
+}
+
+export async function getQuotaStatus(
+  signal?: AbortSignal,
+): Promise<QuotaStatus> {
+  return request("GET", "/api/v1/requests/quota", undefined, signal);
+}
+
+export async function getQuotaConfig(
+  signal?: AbortSignal,
+): Promise<QuotaConfig> {
+  return request("GET", "/api/v1/requests/quota/config", undefined, signal);
+}
+
+export async function updateQuotaConfig(
+  cfg: QuotaConfig,
+): Promise<QuotaConfig> {
+  return request("PUT", "/api/v1/requests/quota/config", cfg);
+}
+
 // ---------- Query keys ----------
 
 export const requestKeys = {
   all: ["requests"] as const,
   mine: () => [...requestKeys.all, "mine"] as const,
   list: (status?: string) => [...requestKeys.all, "list", status ?? "all"] as const,
+  quota: () => [...requestKeys.all, "quota"] as const,
+  quotaConfig: () => [...requestKeys.all, "quota", "config"] as const,
 };
 
 // ---------- React Query hooks ----------
@@ -197,6 +238,30 @@ export function useRejectRequest() {
   return useMutation({
     mutationFn: ({ id, reason }: { id: string; reason: string }) =>
       rejectRequest(id, reason),
+    onSuccess: () => qc.invalidateQueries({ queryKey: requestKeys.all }),
+  });
+}
+
+export function useQuotaStatus(enabled = true) {
+  return useQuery<QuotaStatus, Error>({
+    queryKey: requestKeys.quota(),
+    queryFn: ({ signal }) => getQuotaStatus(signal),
+    enabled,
+  });
+}
+
+export function useQuotaConfig(enabled = true) {
+  return useQuery<QuotaConfig, Error>({
+    queryKey: requestKeys.quotaConfig(),
+    queryFn: ({ signal }) => getQuotaConfig(signal),
+    enabled,
+  });
+}
+
+export function useUpdateQuotaConfig() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: updateQuotaConfig,
     onSuccess: () => qc.invalidateQueries({ queryKey: requestKeys.all }),
   });
 }

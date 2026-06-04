@@ -8,7 +8,11 @@ import {
   useCreateRequest,
   useApproveRequest,
   useRejectRequest,
+  useQuotaStatus,
+  useQuotaConfig,
+  useUpdateQuotaConfig,
   type MediaRequest,
+  type MediaQuota,
   type RequestMediaType,
   type RequestStatus,
 } from "@/lib/requests-api";
@@ -33,7 +37,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Check, Loader2, Plus, Search, X, Inbox } from "lucide-react";
+import { Check, Loader2, Plus, Search, X, Inbox, Gauge } from "lucide-react";
+import { toast } from "sonner";
 
 const TMDB_IMG = "https://image.tmdb.org/t/p";
 
@@ -574,6 +579,132 @@ function ManageRequests() {
   );
 }
 
+function QuotaPill({ label, q }: { label: string; q: MediaQuota }) {
+  if (q.unlimited) {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-md border border-border/60 px-2.5 py-1 text-xs text-muted-foreground">
+        <span className="font-medium text-foreground">{label}</span> unlimited
+      </span>
+    );
+  }
+  const exhausted = q.remaining <= 0;
+  return (
+    <span
+      className={
+        "inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs " +
+        (exhausted
+          ? "border-destructive/40 text-destructive"
+          : "border-border/60 text-muted-foreground")
+      }
+    >
+      <span className="font-medium text-foreground">{label}</span>
+      {q.used} of {q.limit} used
+    </span>
+  );
+}
+
+function QuotaBanner() {
+  const { data, isLoading } = useQuotaStatus();
+  if (isLoading || !data) return null;
+  if (data.movie.unlimited && data.series.unlimited) return null;
+  return (
+    <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border/60 bg-muted/30 px-3 py-2">
+      <Gauge className="h-4 w-4 text-muted-foreground" />
+      <QuotaPill label="Movies" q={data.movie} />
+      <QuotaPill label="TV" q={data.series} />
+      <span className="text-xs text-muted-foreground">
+        in the last {data.window_days} day{data.window_days === 1 ? "" : "s"}
+      </span>
+    </div>
+  );
+}
+
+function QuotaConfigCard() {
+  const { data, isLoading } = useQuotaConfig();
+  const update = useUpdateQuotaConfig();
+  const [movie, setMovie] = React.useState("");
+  const [series, setSeries] = React.useState("");
+  const [windowDays, setWindowDays] = React.useState("");
+
+  React.useEffect(() => {
+    if (data) {
+      setMovie(String(data.movie_limit));
+      setSeries(String(data.series_limit));
+      setWindowDays(String(data.window_days));
+    }
+  }, [data]);
+
+  if (isLoading) {
+    return <p className="text-sm text-muted-foreground">Loading quota…</p>;
+  }
+
+  const toInt = (s: string) => Math.max(0, Math.floor(Number(s) || 0));
+
+  function save(e: React.FormEvent) {
+    e.preventDefault();
+    update.mutate(
+      {
+        movie_limit: toInt(movie),
+        series_limit: toInt(series),
+        window_days: Math.max(1, toInt(windowDays) || 7),
+      },
+      {
+        onSuccess: () => toast.success("Request quota saved"),
+        onError: (err) =>
+          toast.error(err instanceof Error ? err.message : "Failed to save quota"),
+      },
+    );
+  }
+
+  return (
+    <form
+      onSubmit={save}
+      className="flex flex-col gap-4 rounded-lg border border-border/60 p-4 sm:flex-row sm:items-end"
+    >
+      <div className="flex-1 space-y-1">
+        <label className="text-xs font-medium text-muted-foreground">
+          Movies per user
+        </label>
+        <Input
+          type="number"
+          min={0}
+          value={movie}
+          onChange={(e) => setMovie(e.target.value)}
+        />
+      </div>
+      <div className="flex-1 space-y-1">
+        <label className="text-xs font-medium text-muted-foreground">
+          TV shows per user
+        </label>
+        <Input
+          type="number"
+          min={0}
+          value={series}
+          onChange={(e) => setSeries(e.target.value)}
+        />
+      </div>
+      <div className="flex-1 space-y-1">
+        <label className="text-xs font-medium text-muted-foreground">
+          Window (days)
+        </label>
+        <Input
+          type="number"
+          min={1}
+          value={windowDays}
+          onChange={(e) => setWindowDays(e.target.value)}
+        />
+      </div>
+      <Button type="submit" disabled={update.isPending}>
+        {update.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+        Save
+      </Button>
+      <p className="text-xs text-muted-foreground sm:max-w-[12rem]">
+        0 = unlimited. Admins are exempt from quotas.
+      </p>
+    </form>
+  );
+}
+
 export function RequestsPage() {
   const { setHeader } = usePageHeader();
   const { user } = useAuth();
@@ -586,6 +717,7 @@ export function RequestsPage() {
         <h2 className="flex items-center gap-2 text-lg font-semibold">
           <Inbox className="h-5 w-5" /> Request media
         </h2>
+        <QuotaBanner />
         <SearchAndRequest />
       </section>
 
@@ -593,6 +725,17 @@ export function RequestsPage() {
         <h2 className="text-lg font-semibold">My requests</h2>
         <MyRequests />
       </section>
+
+      {isAdmin && (
+        <section className="space-y-3">
+          <h2 className="text-lg font-semibold">Request quota</h2>
+          <p className="text-sm text-muted-foreground">
+            Limit how many requests each non-admin user can make in a rolling
+            window.
+          </p>
+          <QuotaConfigCard />
+        </section>
+      )}
 
       {isAdmin && (
         <section className="space-y-3">
