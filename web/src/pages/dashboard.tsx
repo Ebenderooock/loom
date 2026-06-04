@@ -17,6 +17,14 @@ import {
   useDashboardActivity,
 } from "@/lib/dashboard-api";
 import { useSetPageHeader } from "@/hooks/use-page-header";
+import { useAuth } from "@/hooks/use-auth";
+import { useFeatureEnabled } from "@/lib/features-api";
+import {
+  useActiveStreams,
+  useAnalyticsStats,
+  formatWatched,
+  formatBitrate,
+} from "@/lib/analytics-api";
 import { Link } from "@tanstack/react-router";
 import { cn, formatBytes, formatSpeed } from "@/lib/utils";
 import {
@@ -34,8 +42,14 @@ import {
   FolderOpen,
   ArrowDown,
   ArrowUp,
+  Activity,
+  MonitorPlay,
+  PlayCircle,
+  PauseCircle,
+  Zap,
   type LucideIcon,
 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 
 // ---------------------------------------------------------------------------
@@ -458,6 +472,10 @@ export function DashboardPage() {
   const dlClients = useDashboardDownloadClients();
   useSetPageHeader("Dashboard");
 
+  const { user } = useAuth();
+  const analyticsEnabled = useFeatureEnabled("media_analytics");
+  const showAnalytics = analyticsEnabled && user?.role === "admin";
+
   const movieCount = movies.data?.total ?? 0;
   const seriesCount = series.data?.total ?? 0;
   const indexerCount = indexers.data?.indexers?.length ?? 0;
@@ -519,6 +537,93 @@ export function DashboardPage() {
         <StorageCard />
         <ActiveDownloadsCard />
       </div>
+
+      {/* Row 4: Media-server analytics (admin + feature flag) */}
+      {showAnalytics && <DashboardAnalyticsRow />}
+    </div>
+  );
+}
+
+function DashboardAnalyticsRow() {
+  const { data: streams } = useActiveStreams();
+  const { data: stats } = useAnalyticsStats(7);
+  const totalBandwidth = (streams ?? []).reduce((sum, s) => sum + (s.bitrate_kbps || 0), 0);
+
+  return (
+    <div className="grid gap-4 md:grid-cols-2">
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Activity className="h-4 w-4 text-accent" /> Active streams
+            {streams && streams.length > 0 && (
+              <Badge variant="secondary">{streams.length}</Badge>
+            )}
+            {totalBandwidth > 0 && (
+              <Badge variant="outline" className="ml-auto gap-1 font-normal">
+                <Zap className="h-3 w-3" /> {formatBitrate(totalBandwidth)}
+              </Badge>
+            )}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {!streams || streams.length === 0 ? (
+            <p className="flex items-center gap-2 py-4 text-sm text-muted-foreground">
+              <MonitorPlay className="h-4 w-4" /> Nothing playing right now.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {streams.slice(0, 5).map((s) => (
+                <div
+                  key={`${s.connection_id}-${s.session_key}-${s.media_id}`}
+                  className="flex items-center gap-2 text-sm"
+                >
+                  {s.state === "paused" ? (
+                    <PauseCircle className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  ) : (
+                    <PlayCircle className="h-4 w-4 shrink-0 text-accent" />
+                  )}
+                  <span className="min-w-0 flex-1 truncate">{s.full_title || s.title}</span>
+                  <span className="shrink-0 text-xs text-muted-foreground">
+                    {s.user || "Unknown"}
+                  </span>
+                  {s.transcode && <Zap className="h-3 w-3 shrink-0 text-amber-400" />}
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="mt-3 border-t pt-3 text-right">
+            <Link to="/analytics" className="text-xs text-accent hover:underline">
+              View analytics →
+            </Link>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">Last 7 days</CardTitle>
+        </CardHeader>
+        <CardContent className="grid grid-cols-3 gap-3">
+          <MiniStat label="Plays" value={stats ? String(stats.totals.plays) : "—"} />
+          <MiniStat
+            label="Viewers"
+            value={stats ? String(stats.totals.unique_users) : "—"}
+          />
+          <MiniStat
+            label="Watch time"
+            value={stats ? formatWatched(stats.totals.watched_ms) : "—"}
+          />
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function MiniStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg border bg-card/50 p-3">
+      <p className="text-xl font-semibold leading-none">{value}</p>
+      <p className="mt-1 text-xs text-muted-foreground">{label}</p>
     </div>
   );
 }

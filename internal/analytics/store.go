@@ -28,7 +28,7 @@ func (s *Store) OpenRowsForConn(ctx context.Context, connID string) ([]HistoryRe
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, connection_id, provider, session_key, media_id, user, media_type,
 		       title, grandparent_title, full_title, device, transcode,
-		       started_at, last_seen_at, last_position_ms, duration_ms, watched_ms
+		       started_at, last_seen_at, last_position_ms, duration_ms, watched_ms, bitrate_kbps
 		FROM play_history
 		WHERE connection_id = ? AND ended_at IS NULL`, connID)
 	if err != nil {
@@ -43,7 +43,7 @@ func (s *Store) OpenRowsForConn(ctx context.Context, connID string) ([]HistoryRe
 		var transcode int
 		if err := rows.Scan(&r.ID, &r.ConnectionID, &r.Provider, &r.SessionKey, &r.MediaID,
 			&r.User, &r.MediaType, &r.Title, &r.GrandparentTitle, &r.FullTitle, &r.Device, &transcode,
-			&started, &lastSeen, &r.LastPositionMs, &r.DurationMs, &r.WatchedMs); err != nil {
+			&started, &lastSeen, &r.LastPositionMs, &r.DurationMs, &r.WatchedMs, &r.BitrateKbps); err != nil {
 			return nil, fmt.Errorf("scan open row: %w", err)
 		}
 		r.Transcode = transcode != 0
@@ -64,44 +64,52 @@ func (s *Store) InsertOpen(ctx context.Context, r HistoryRecord) error {
 		INSERT INTO play_history
 		(id, connection_id, provider, session_key, media_id, user, media_type,
 		 title, grandparent_title, full_title, device, transcode,
-		 started_at, last_seen_at, last_position_ms, duration_ms, watched_ms)
-		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		 started_at, last_seen_at, last_position_ms, duration_ms, watched_ms, bitrate_kbps)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		r.ID, r.ConnectionID, r.Provider, r.SessionKey, r.MediaID, r.User, r.MediaType,
 		r.Title, r.GrandparentTitle, r.FullTitle, r.Device, transcode,
 		r.StartedAt.UTC().Format(tsLayout), r.LastSeenAt.UTC().Format(tsLayout),
-		r.LastPositionMs, r.DurationMs, r.WatchedMs)
+		r.LastPositionMs, r.DurationMs, r.WatchedMs, r.BitrateKbps)
 	if err != nil {
 		return fmt.Errorf("insert open: %w", err)
 	}
 	return nil
 }
 
-// UpdateOpen advances an open row with the latest sample.
-func (s *Store) UpdateOpen(ctx context.Context, id string, lastSeen time.Time, positionMs, watchedMs int64, transcode bool) error {
+// UpdateOpen advances an open row with the latest sample. The transcode flag is
+// sticky: once a session is observed transcoding it stays marked, so a session
+// that switches modes still counts as a transcode play. Bitrate is recorded
+// only when the sample reports a non-zero value (direct play often reports 0).
+func (s *Store) UpdateOpen(ctx context.Context, id string, lastSeen time.Time, positionMs, watchedMs int64, transcode bool, bitrateKbps int64) error {
 	t := 0
 	if transcode {
 		t = 1
 	}
 	_, err := s.db.ExecContext(ctx, `
 		UPDATE play_history
-		SET last_seen_at = ?, last_position_ms = ?, watched_ms = ?, transcode = ?
+		SET last_seen_at = ?, last_position_ms = ?, watched_ms = ?,
+		    transcode = CASE WHEN ? = 1 THEN 1 ELSE transcode END,
+		    bitrate_kbps = CASE WHEN ? > 0 THEN ? ELSE bitrate_kbps END
 		WHERE id = ?`,
-		lastSeen.UTC().Format(tsLayout), positionMs, watchedMs, t, id)
+		lastSeen.UTC().Format(tsLayout), positionMs, watchedMs, t, bitrateKbps, bitrateKbps, id)
 	if err != nil {
 		return fmt.Errorf("update open: %w", err)
 	}
 	return nil
 }
 
-// Close finalises an open row, setting ended_at and a reason.
-func (s *Store) Close(ctx context.Context, id string, endedAt time.Time, reason string) error {
-	_, err := s.db.ExecContext(ctx, `
+// Close finalises an open row, setting ended_at and a reason. It returns true
+// when a row was actually closed (so callers only emit a stop event for genuine
+// transitions, never for a no-op close).
+func (s *Store) Close(ctx context.Context, id string, endedAt time.Time, reason string) (bool, error) {
+	res, err := s.db.ExecContext(ctx, `
 		UPDATE play_history SET ended_at = ?, end_reason = ? WHERE id = ? AND ended_at IS NULL`,
 		endedAt.UTC().Format(tsLayout), reason, id)
 	if err != nil {
-		return fmt.Errorf("close row: %w", err)
+		return false, fmt.Errorf("close row: %w", err)
 	}
-	return nil
+	n, _ := res.RowsAffected()
+	return n > 0, nil
 }
 
 // CloseAllOpen finalises every open row (used on startup to clear orphans).
@@ -126,7 +134,7 @@ func (s *Store) ListHistory(ctx context.Context, f HistoryFilter) ([]HistoryReco
 	query := `
 		SELECT id, connection_id, provider, session_key, media_id, user, media_type,
 		       title, grandparent_title, full_title, device, transcode,
-		       started_at, last_seen_at, last_position_ms, duration_ms, watched_ms, ended_at
+		       started_at, last_seen_at, last_position_ms, duration_ms, watched_ms, bitrate_kbps, ended_at
 		FROM play_history`
 	args := []any{}
 	if f.User != "" {
@@ -150,7 +158,7 @@ func (s *Store) ListHistory(ctx context.Context, f HistoryFilter) ([]HistoryReco
 		var transcode int
 		if err := rows.Scan(&r.ID, &r.ConnectionID, &r.Provider, &r.SessionKey, &r.MediaID,
 			&r.User, &r.MediaType, &r.Title, &r.GrandparentTitle, &r.FullTitle, &r.Device, &transcode,
-			&started, &lastSeen, &r.LastPositionMs, &r.DurationMs, &r.WatchedMs, &ended); err != nil {
+			&started, &lastSeen, &r.LastPositionMs, &r.DurationMs, &r.WatchedMs, &r.BitrateKbps, &ended); err != nil {
 			return nil, fmt.Errorf("scan history: %w", err)
 		}
 		r.Transcode = transcode != 0
@@ -174,9 +182,15 @@ func (s *Store) Stats(ctx context.Context, since time.Time, windowDays int, minW
 
 	// Totals.
 	row := s.db.QueryRowContext(ctx, `
-		SELECT COUNT(*), COUNT(DISTINCT user), COALESCE(SUM(watched_ms),0)
-		FROM play_history WHERE started_at >= ? AND watched_ms >= ?`, sinceStr, minWatchedMs)
-	if err := row.Scan(&st.Totals.Plays, &st.Totals.UniqueUsers, &st.Totals.WatchedMs); err != nil {
+		SELECT COUNT(*), COUNT(DISTINCT user), COALESCE(SUM(watched_ms),0),
+		       COALESCE(SUM(CASE WHEN transcode = 1 THEN 1 ELSE 0 END),0),
+		       COALESCE(SUM(CASE WHEN transcode = 0 THEN 1 ELSE 0 END),0),
+		       COALESCE((SELECT CAST(AVG(bitrate_kbps) AS INTEGER) FROM play_history
+		                 WHERE started_at >= ? AND watched_ms >= ? AND bitrate_kbps > 0),0)
+		FROM play_history WHERE started_at >= ? AND watched_ms >= ?`,
+		sinceStr, minWatchedMs, sinceStr, minWatchedMs)
+	if err := row.Scan(&st.Totals.Plays, &st.Totals.UniqueUsers, &st.Totals.WatchedMs,
+		&st.Totals.TranscodePlays, &st.Totals.DirectPlays, &st.Totals.AvgBitrateKbps); err != nil {
 		return nil, fmt.Errorf("stats totals: %w", err)
 	}
 

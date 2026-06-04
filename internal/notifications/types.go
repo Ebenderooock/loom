@@ -32,6 +32,7 @@ const (
 	EventOnDelete            EventType = "on_delete"
 	EventOnHealthIssue       EventType = "on_health_issue"
 	EventOnApplicationUpdate EventType = "on_application_update"
+	EventOnPlayback          EventType = "on_playback"
 	EventOnTest              EventType = "on_test"
 )
 
@@ -49,6 +50,7 @@ type Connection struct {
 	OnDelete            bool             `json:"on_delete"`
 	OnHealthIssue       bool             `json:"on_health_issue"`
 	OnApplicationUpdate bool             `json:"on_application_update"`
+	OnPlayback          bool             `json:"on_playback"`
 	Tags                StringSlice      `json:"tags"`
 	CreatedAt           time.Time        `json:"created_at"`
 	UpdatedAt           time.Time        `json:"updated_at"`
@@ -71,6 +73,8 @@ func (c *Connection) SubscribesTo(event EventType) bool {
 		return c.OnHealthIssue
 	case EventOnApplicationUpdate:
 		return c.OnApplicationUpdate
+	case EventOnPlayback:
+		return c.OnPlayback
 	default:
 		return false
 	}
@@ -176,6 +180,7 @@ type CreateConnectionRequest struct {
 	OnDelete            bool               `json:"on_delete"`
 	OnHealthIssue       bool               `json:"on_health_issue"`
 	OnApplicationUpdate bool               `json:"on_application_update"`
+	OnPlayback          bool               `json:"on_playback"`
 	Tags                []string           `json:"tags,omitempty"`
 }
 
@@ -192,5 +197,6 @@ type UpdateConnectionRequest struct {
 	OnDelete            *bool               `json:"on_delete,omitempty"`
 	OnHealthIssue       *bool               `json:"on_health_issue,omitempty"`
 	OnApplicationUpdate *bool               `json:"on_application_update,omitempty"`
+	OnPlayback          *bool               `json:"on_playback,omitempty"`
 	Tags                []string            `json:"tags,omitempty"`
 }

@@ -29,6 +29,7 @@ type HistoryRecord struct {
 	LastPositionMs   int64      `json:"last_position_ms"`
 	DurationMs       int64      `json:"duration_ms"`
 	WatchedMs        int64      `json:"watched_ms"`
+	BitrateKbps      int64      `json:"bitrate_kbps"`
 	EndedAt          *time.Time `json:"ended_at,omitempty"`
 }
 
@@ -49,9 +50,12 @@ type HistoryFilter struct {
 
 // Totals summarises activity over a window.
 type Totals struct {
-	Plays       int   `json:"plays"`
-	UniqueUsers int   `json:"unique_users"`
-	WatchedMs   int64 `json:"watched_ms"`
+	Plays          int   `json:"plays"`
+	UniqueUsers    int   `json:"unique_users"`
+	WatchedMs      int64 `json:"watched_ms"`
+	TranscodePlays int   `json:"transcode_plays"`
+	DirectPlays    int   `json:"direct_plays"`
+	AvgBitrateKbps int64 `json:"avg_bitrate_kbps"` // average reported session bitrate (>0 only)
 }
 
 // UserStat is per-user aggregate activity.

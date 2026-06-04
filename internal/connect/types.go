@@ -96,4 +96,5 @@ type Session struct {
 	PositionMs       int64        `json:"position_ms"`
 	DurationMs       int64        `json:"duration_ms"`
 	Transcode        bool         `json:"transcode"`
+	BitrateKbps      int64        `json:"bitrate_kbps"` // streaming bitrate in kbps, 0 if unknown
 }

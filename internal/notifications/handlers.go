@@ -93,6 +93,7 @@ func createConnection(svc Service) http.HandlerFunc {
 			OnDelete:            req.OnDelete,
 			OnHealthIssue:       req.OnHealthIssue,
 			OnApplicationUpdate: req.OnApplicationUpdate,
+			OnPlayback:          req.OnPlayback,
 			Tags:                req.Tags,
 		}
 
@@ -172,6 +173,9 @@ func updateConnection(svc Service) http.HandlerFunc {
 		}
 		if req.OnApplicationUpdate != nil {
 			existing.OnApplicationUpdate = *req.OnApplicationUpdate
+		}
+		if req.OnPlayback != nil {
+			existing.OnPlayback = *req.OnPlayback
 		}
 		if req.Tags != nil {
 			existing.Tags = req.Tags

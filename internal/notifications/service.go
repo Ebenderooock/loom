@@ -39,7 +39,7 @@ func (s *service) ListConnections(ctx context.Context) ([]*Connection, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, name, type, enabled, settings,
 		       on_grab, on_download, on_upgrade, on_rename, on_delete,
-		       on_health_issue, on_application_update, tags, created_at, updated_at
+		       on_health_issue, on_application_update, on_playback, tags, created_at, updated_at
 		FROM notification_connections ORDER BY name ASC`)
 	if err != nil {
 		return nil, fmt.Errorf("list connections: %w", err)
@@ -61,7 +61,7 @@ func (s *service) GetConnection(ctx context.Context, id string) (*Connection, er
 	row := s.db.QueryRowContext(ctx, `
 		SELECT id, name, type, enabled, settings,
 		       on_grab, on_download, on_upgrade, on_rename, on_delete,
-		       on_health_issue, on_application_update, tags, created_at, updated_at
+		       on_health_issue, on_application_update, on_playback, tags, created_at, updated_at
 		FROM notification_connections WHERE id = ?`, id)
 
 	c, err := scanConnectionRow(row)
@@ -94,11 +94,11 @@ func (s *service) CreateConnection(ctx context.Context, c *Connection) error {
 	_, err = s.db.ExecContext(ctx, `
 		INSERT INTO notification_connections
 		(id, name, type, enabled, settings, on_grab, on_download, on_upgrade,
-		 on_rename, on_delete, on_health_issue, on_application_update, tags, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		 on_rename, on_delete, on_health_issue, on_application_update, on_playback, tags, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		c.ID, c.Name, string(c.Type), c.Enabled, string(settingsJSON),
 		c.OnGrab, c.OnDownload, c.OnUpgrade, c.OnRename, c.OnDelete,
-		c.OnHealthIssue, c.OnApplicationUpdate, string(tagsJSON),
+		c.OnHealthIssue, c.OnApplicationUpdate, c.OnPlayback, string(tagsJSON),
 		c.CreatedAt.Format(time.RFC3339), c.UpdatedAt.Format(time.RFC3339))
 	if err != nil {
 		return fmt.Errorf("create connection: %w", err)
@@ -122,12 +122,12 @@ func (s *service) UpdateConnection(ctx context.Context, c *Connection) error {
 		UPDATE notification_connections
 		SET name = ?, type = ?, enabled = ?, settings = ?,
 		    on_grab = ?, on_download = ?, on_upgrade = ?, on_rename = ?,
-		    on_delete = ?, on_health_issue = ?, on_application_update = ?,
+		    on_delete = ?, on_health_issue = ?, on_application_update = ?, on_playback = ?,
 		    tags = ?, updated_at = ?
 		WHERE id = ?`,
 		c.Name, string(c.Type), c.Enabled, string(settingsJSON),
 		c.OnGrab, c.OnDownload, c.OnUpgrade, c.OnRename,
-		c.OnDelete, c.OnHealthIssue, c.OnApplicationUpdate,
+		c.OnDelete, c.OnHealthIssue, c.OnApplicationUpdate, c.OnPlayback,
 		string(tagsJSON), c.UpdatedAt.Format(time.RFC3339), c.ID)
 	if err != nil {
 		return fmt.Errorf("update connection: %w", err)
@@ -284,7 +284,7 @@ func scanConnection(rows *sql.Rows) (*Connection, error) {
 	var createdAt, updatedAt string
 	if err := rows.Scan(&c.ID, &c.Name, &c.Type, &c.Enabled, &c.Settings,
 		&c.OnGrab, &c.OnDownload, &c.OnUpgrade, &c.OnRename, &c.OnDelete,
-		&c.OnHealthIssue, &c.OnApplicationUpdate, &c.Tags, &createdAt, &updatedAt); err != nil {
+		&c.OnHealthIssue, &c.OnApplicationUpdate, &c.OnPlayback, &c.Tags, &createdAt, &updatedAt); err != nil {
 		return nil, fmt.Errorf("scan connection: %w", err)
 	}
 	c.CreatedAt, _ = time.Parse(time.RFC3339, createdAt)
@@ -298,7 +298,7 @@ func scanConnectionRow(row *sql.Row) (*Connection, error) {
 	var createdAt, updatedAt string
 	if err := row.Scan(&c.ID, &c.Name, &c.Type, &c.Enabled, &c.Settings,
 		&c.OnGrab, &c.OnDownload, &c.OnUpgrade, &c.OnRename, &c.OnDelete,
-		&c.OnHealthIssue, &c.OnApplicationUpdate, &c.Tags, &createdAt, &updatedAt); err != nil {
+		&c.OnHealthIssue, &c.OnApplicationUpdate, &c.OnPlayback, &c.Tags, &createdAt, &updatedAt); err != nil {
 		return nil, err
 	}
 	c.CreatedAt, _ = time.Parse(time.RFC3339, createdAt)

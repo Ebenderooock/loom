@@ -6,6 +6,7 @@ import {
   useAnalyticsStats,
   useAnalyticsHistory,
   formatWatched,
+  formatBitrate,
   type MediaStat,
   type UserStat,
 } from "@/lib/analytics-api";
@@ -77,6 +78,7 @@ function MediaTypeIcon({ type }: { type: string }) {
 
 function ActiveStreams() {
   const { data: streams, isLoading } = useActiveStreams();
+  const totalBandwidth = (streams ?? []).reduce((sum, s) => sum + (s.bitrate_kbps || 0), 0);
 
   return (
     <Card>
@@ -85,6 +87,11 @@ function ActiveStreams() {
           <Activity className="h-4 w-4" /> Active streams
           {streams && streams.length > 0 && (
             <Badge variant="secondary">{streams.length}</Badge>
+          )}
+          {totalBandwidth > 0 && (
+            <Badge variant="outline" className="ml-auto gap-1 font-normal">
+              <Zap className="h-3 w-3" /> {formatBitrate(totalBandwidth)} total
+            </Badge>
           )}
         </CardTitle>
         <CardDescription>Live playback across your media servers.</CardDescription>
@@ -115,6 +122,7 @@ function ActiveStreams() {
                       {s.user || "Unknown"}
                       {s.device ? ` · ${s.device}` : ""}
                       {` · ${s.connection_name}`}
+                      {s.bitrate_kbps > 0 ? ` · ${formatBitrate(s.bitrate_kbps)}` : ""}
                     </p>
                   </div>
                   <div className="flex shrink-0 items-center gap-1">
@@ -268,6 +276,21 @@ export function AnalyticsPage() {
           icon={<Clock className="h-5 w-5" />}
           label="Watch time"
           value={s ? formatWatched(s.totals.watched_ms) : "—"}
+        />
+        <StatCard
+          icon={<Zap className="h-5 w-5" />}
+          label="Transcoded plays"
+          value={s ? String(s.totals.transcode_plays) : "—"}
+        />
+        <StatCard
+          icon={<MonitorPlay className="h-5 w-5" />}
+          label="Direct plays"
+          value={s ? String(s.totals.direct_plays) : "—"}
+        />
+        <StatCard
+          icon={<Activity className="h-5 w-5" />}
+          label="Avg session bitrate"
+          value={s ? formatBitrate(s.totals.avg_bitrate_kbps) : "—"}
         />
       </div>
 

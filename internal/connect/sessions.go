@@ -56,6 +56,12 @@ type plexSession struct {
 	Index            int    `json:"index"`
 	ViewOffset       int64  `json:"viewOffset"`
 	Duration         int64  `json:"duration"`
+	Media            []struct {
+		Bitrate int64 `json:"bitrate"`
+	} `json:"Media"`
+	Session *struct {
+		Bandwidth int64 `json:"bandwidth"`
+	} `json:"Session"`
 	User             struct {
 		Title string `json:"title"`
 	} `json:"User"`
@@ -105,6 +111,14 @@ func (p *plexProvider) ActiveSessions(ctx context.Context, s ProviderSettings) (
 		if m.Player.State == "paused" {
 			state = "paused"
 		}
+		// Prefer the live streaming bandwidth Plex reports for the session;
+		// fall back to the source media bitrate.
+		var bitrate int64
+		if m.Session != nil && m.Session.Bandwidth > 0 {
+			bitrate = m.Session.Bandwidth
+		} else if len(m.Media) > 0 {
+			bitrate = m.Media[0].Bitrate
+		}
 		out = append(out, Session{
 			SessionKey:       m.SessionKey,
 			MediaID:          m.RatingKey,
@@ -118,6 +132,7 @@ func (p *plexProvider) ActiveSessions(ctx context.Context, s ProviderSettings) (
 			PositionMs:       m.ViewOffset,
 			DurationMs:       m.Duration,
 			Transcode:        m.TranscodeSession != nil,
+			BitrateKbps:      bitrate,
 		})
 	}
 	return out, nil
@@ -143,6 +158,9 @@ type embySession struct {
 		IsPaused      bool   `json:"IsPaused"`
 		PlayMethod    string `json:"PlayMethod"`
 	} `json:"PlayState"`
+	TranscodingInfo *struct {
+		Bitrate int64 `json:"Bitrate"` // bits per second
+	} `json:"TranscodingInfo"`
 }
 
 // ticksToMs converts .NET 100ns ticks to milliseconds.
@@ -176,6 +194,11 @@ func parseEmbySessions(body []byte) ([]Session, error) {
 			transcode = strings.EqualFold(s.PlayState.PlayMethod, "Transcode")
 			pos = ticksToMs(s.PlayState.PositionTicks)
 		}
+		// Emby/Jellyfin only report a bitrate while transcoding (bits/sec).
+		var bitrate int64
+		if s.TranscodingInfo != nil && s.TranscodingInfo.Bitrate > 0 {
+			bitrate = s.TranscodingInfo.Bitrate / 1000
+		}
 		out = append(out, Session{
 			SessionKey:       s.ID,
 			MediaID:          item.ID,
@@ -189,6 +212,7 @@ func parseEmbySessions(body []byte) ([]Session, error) {
 			PositionMs:       pos,
 			DurationMs:       ticksToMs(item.RunTimeTicks),
 			Transcode:        transcode,
+			BitrateKbps:      bitrate,
 		})
 	}
 	return out, nil
