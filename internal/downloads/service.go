@@ -8,8 +8,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/ebenderooock/loom/internal/workflows"
+	"github.com/go-chi/chi/v5"
 )
 
 // Clock is the small time abstraction the package uses so tests can
@@ -156,6 +156,26 @@ func (s *Service) ActiveDownloads(ctx context.Context) (map[string]workflows.Act
 		}
 	}
 	return result, nil
+}
+
+// TrackedDownloadPaths returns the content and save paths of every active
+// download across all enabled clients. The boolean reports whether the result
+// is complete: it is false when any client's status query failed. Callers that
+// make destructive decisions (e.g. downloads cleanup) must treat an incomplete
+// set as unsafe, since a temporarily unreachable client would otherwise make
+// its live downloads look like orphans.
+func (s *Service) TrackedDownloadPaths(ctx context.Context) (paths []string, complete bool) {
+	opts := s.FanOutOpts(nil)
+	status := s.registry.Status(ctx, nil, opts)
+	for _, item := range status.Items {
+		if item.ContentPath != "" {
+			paths = append(paths, item.ContentPath)
+		}
+		if item.SavePath != "" {
+			paths = append(paths, item.SavePath)
+		}
+	}
+	return paths, len(status.Errors) == 0
 }
 
 // HydrateAll reads every persisted client and registers a live

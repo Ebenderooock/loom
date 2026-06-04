@@ -37,6 +37,7 @@ import (
 	"github.com/ebenderooock/loom/internal/auth"
 	"github.com/ebenderooock/loom/internal/autosearch"
 	"github.com/ebenderooock/loom/internal/buildinfo"
+	"github.com/ebenderooock/loom/internal/cleanup"
 	"github.com/ebenderooock/loom/internal/commands"
 	"github.com/ebenderooock/loom/internal/compat/prowlarrv1"
 	"github.com/ebenderooock/loom/internal/compat/radarrv3"
@@ -97,6 +98,7 @@ type Server struct {
 	notifSvc          notifications.Service
 	connectSvc        connect.Service
 	reviewStore       *safety.ReviewStore
+	cleanupSvc        *cleanup.Service
 	importPipeline    *imports.ImportPipeline
 	langStore         *languages.Store
 	customFormatStore *customformats.Store
@@ -305,6 +307,15 @@ func (s *Server) SetPeriodicScanner(ps *scheduler.PeriodicScanner) {
 // SetImportPipeline installs the import pipeline and rebuilds the HTTP handler.
 func (s *Server) SetImportPipeline(p *imports.ImportPipeline) {
 	s.importPipeline = p
+	if s.httpSrv != nil {
+		s.httpSrv.Handler = s.newMux()
+	}
+}
+
+// SetCleanup installs the downloads-cleanup service and rebuilds the HTTP
+// handler so the /api/v1/cleanup routes are reachable.
+func (s *Server) SetCleanup(svc *cleanup.Service) {
+	s.cleanupSvc = svc
 	if s.httpSrv != nil {
 		s.httpSrv.Handler = s.newMux()
 	}
@@ -681,6 +692,11 @@ func (s *Server) newMux() http.Handler {
 
 		// Manual review routes (download safety)
 		r.Mount("/api/v1/reviews", safety.Router(s.reviewStore))
+
+		// Downloads cleanup routes
+		if s.cleanupSvc != nil {
+			r.Mount("/api/v1/cleanup", cleanup.Router(s.cleanupSvc))
+		}
 
 		// Rolling search routes
 		if s.rollingSearch != nil {
