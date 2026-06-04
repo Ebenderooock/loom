@@ -27,6 +27,9 @@ type ServiceOptions struct {
 	CookieSecure  bool
 	OIDC          *OIDC
 	Proxy         *ProxyAuth
+	// Invites is optional; when nil, invite endpoints report the feature as
+	// disabled. Production wires NewInviteStore(db.DB()).
+	Invites *InviteStore
 }
 
 // Service is the orchestrator: middleware, handlers, and CLI all use
@@ -41,6 +44,7 @@ type Service struct {
 	cookieSecure  bool
 	oidc          *OIDC
 	proxy         *ProxyAuth
+	invites       *InviteStore
 }
 
 // NewService validates options and returns the configured Service. The
@@ -74,6 +78,7 @@ func NewService(opts ServiceOptions) (*Service, error) {
 		cookieSecure:  opts.CookieSecure,
 		oidc:          opts.OIDC,
 		proxy:         opts.Proxy,
+		invites:       opts.Invites,
 	}, nil
 }
 

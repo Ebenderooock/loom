@@ -47,5 +47,6 @@ func buildAuthService(ctx context.Context, cfg *config.Config, db storage.DB, ap
 		CookieSecure:  cfg.Auth.CookieSecure,
 		OIDC:          oidc,
 		Proxy:         proxyCfg,
+		Invites:       auth.NewInviteStore(db.DB()),
 	})
 }

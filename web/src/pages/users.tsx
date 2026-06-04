@@ -46,7 +46,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Loader2, Plus, Trash2, KeyRound, Users, ShieldAlert } from "lucide-react";
+import { Loader2, Plus, Trash2, KeyRound, Users, ShieldAlert, Link2, Copy, Mail } from "lucide-react";
+import {
+  useInvites,
+  useCreateInvite,
+  useRevokeInvite,
+  type Invite,
+} from "@/lib/invites-api";
 
 function errMessage(e: unknown, fallback: string): string {
   if (e instanceof ApiError) return e.message;
@@ -409,6 +415,210 @@ function UsersTable({ currentUserId }: { currentUserId: number }) {
   );
 }
 
+function inviteStatusVariant(status: Invite["status"]) {
+  if (status === "pending") return "default" as const;
+  if (status === "used") return "secondary" as const;
+  return "outline" as const;
+}
+
+const EXPIRY_OPTIONS: { label: string; hours: number }[] = [
+  { label: "1 day", hours: 24 },
+  { label: "3 days", hours: 72 },
+  { label: "7 days", hours: 168 },
+  { label: "30 days", hours: 720 },
+];
+
+function InvitesCard() {
+  const invites = useInvites();
+  const create = useCreateInvite();
+  const revoke = useRevokeInvite();
+  const [email, setEmail] = React.useState("");
+  const [role, setRole] = React.useState<UserRole>("user");
+  const [expiryHours, setExpiryHours] = React.useState("168");
+
+  function submit(e: React.FormEvent) {
+    e.preventDefault();
+    create.mutate(
+      {
+        email: email.trim() || undefined,
+        role,
+        expires_in_hours: Number(expiryHours),
+      },
+      {
+        onSuccess: (inv) => {
+          setEmail("");
+          if (inv.url) {
+            void navigator.clipboard?.writeText(inv.url).then(
+              () => toast.success("Invite link created and copied to clipboard"),
+              () => toast.success("Invite link created"),
+            );
+          } else {
+            toast.success("Invite created");
+          }
+        },
+        onError: (err) => toast.error(errMessage(err, "Failed to create invite")),
+      },
+    );
+  }
+
+  function copyLink(inv: Invite) {
+    if (!inv.url) return;
+    void navigator.clipboard?.writeText(inv.url).then(
+      () => toast.success("Invite link copied"),
+      () => toast.error("Could not copy link"),
+    );
+  }
+
+  const rows = invites.data ?? [];
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Link2 className="h-4 w-4" /> Invite links
+        </CardTitle>
+        <CardDescription>
+          Generate a shareable link so someone can self-register without you
+          setting a password. Links are single-use and expire.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        <form
+          onSubmit={submit}
+          className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 lg:items-end"
+        >
+          <div className="space-y-1">
+            <Label htmlFor="inv-email">Email (optional)</Label>
+            <Input
+              id="inv-email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              autoComplete="off"
+              placeholder="friend@example.com"
+            />
+          </div>
+          <div className="space-y-1">
+            <Label>Role</Label>
+            <Select value={role} onValueChange={(v) => setRole(v as UserRole)}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="user">user</SelectItem>
+                <SelectItem value="admin">admin</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1">
+            <Label>Expires in</Label>
+            <Select value={expiryHours} onValueChange={setExpiryHours}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {EXPIRY_OPTIONS.map((o) => (
+                  <SelectItem key={o.hours} value={String(o.hours)}>
+                    {o.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <Button type="submit" disabled={create.isPending}>
+            {create.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            Create invite
+          </Button>
+        </form>
+
+        {invites.isLoading ? (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" /> Loading invites…
+          </div>
+        ) : rows.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No invites yet.</p>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Email</TableHead>
+                <TableHead>Role</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Expires</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {rows.map((inv) => (
+                <TableRow key={inv.id}>
+                  <TableCell className="flex items-center gap-1.5">
+                    {inv.email ? (
+                      <>
+                        <Mail className="h-3.5 w-3.5 text-muted-foreground" />
+                        {inv.email}
+                      </>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    <RoleBadge role={inv.role} />
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant={inviteStatusVariant(inv.status)}>
+                      {inv.status}
+                      {inv.status === "used" && inv.used_by_name
+                        ? ` · ${inv.used_by_name}`
+                        : ""}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {inv.expires_at
+                      ? new Date(inv.expires_at).toLocaleString()
+                      : "—"}
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center justify-end gap-2">
+                      {inv.status === "pending" && inv.url && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => copyLink(inv)}
+                        >
+                          <Copy className="mr-1.5 h-3.5 w-3.5" /> Copy link
+                        </Button>
+                      )}
+                      {inv.status === "pending" && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          aria-label="Revoke invite"
+                          disabled={revoke.isPending}
+                          onClick={() =>
+                            revoke.mutate(inv.id, {
+                              onSuccess: () => toast.success("Invite revoked"),
+                              onError: (err) =>
+                                toast.error(
+                                  errMessage(err, "Failed to revoke invite"),
+                                ),
+                            })
+                          }
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export function UsersPage() {
   const { setHeader } = usePageHeader();
   const { user } = useAuth();
@@ -437,6 +647,8 @@ export function UsersPage() {
       </section>
 
       <CreateUserCard />
+
+      <InvitesCard />
 
       <UsersTable currentUserId={user?.id ?? -1} />
     </div>

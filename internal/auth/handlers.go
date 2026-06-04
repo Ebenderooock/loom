@@ -20,6 +20,9 @@ func (s *Service) Mount(r chi.Router) {
 		r.Post("/logout", s.handleLogout)
 		r.Get("/oidc/login", s.handleOIDCLogin)
 		r.Get("/oidc/callback", s.handleOIDCCallback)
+		// Public invite redemption (token holder self-registers).
+		r.Get("/invites/redeem/{token}", s.handlePublicInvite)
+		r.Post("/invites/redeem/{token}/accept", s.handleAcceptInvite)
 		r.Group(func(r chi.Router) {
 			r.Use(s.RequireAuth)
 			r.Get("/me", s.handleMe)
@@ -34,6 +37,9 @@ func (s *Service) Mount(r chi.Router) {
 			r.Delete("/users/{id}", s.handleDeleteUser)
 			r.Patch("/users/{id}/role", s.handleUpdateUserRole)
 			r.Post("/users/{id}/password", s.handleResetUserPassword)
+			r.Post("/invites", s.handleCreateInvite)
+			r.Get("/invites", s.handleListInvites)
+			r.Delete("/invites/{id}", s.handleRevokeInvite)
 		})
 	})
 }
