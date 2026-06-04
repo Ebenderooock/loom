@@ -96,6 +96,7 @@ type ImportListItem struct {
 	Status     ItemStatus `json:"status"`
 	PosterPath string     `json:"poster_path,omitempty"`
 	Overview   string     `json:"overview,omitempty"`
+	Genres     []string   `json:"genres,omitempty"`
 	LastSeen   time.Time  `json:"last_seen"`
 	CreatedAt  time.Time  `json:"created_at"`
 }
