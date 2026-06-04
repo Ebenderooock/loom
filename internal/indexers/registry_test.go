@@ -113,6 +113,84 @@ func TestRegistrySearchSelectsByID(t *testing.T) {
 	}
 }
 
+// --- p3: capability-based (category) indexer selection ---
+
+func TestRegistrySearchSkipsIndexerByCategoryCaps(t *testing.T) {
+	t.Parallel()
+	r := indexers.NewRegistry()
+	movies := &fakeIndexer{
+		id:   "movies",
+		name: "MoviesOnly",
+		caps: indexers.Caps{Categories: []indexers.Category{indexers.CategoryMovies}},
+		results: []indexers.Result{
+			{IndexerID: "movies", Title: "M", MagnetURI: "magnet:?xt=urn:btih:aaa"},
+		},
+	}
+	tv := &fakeIndexer{
+		id:   "tv",
+		name: "TVOnly",
+		caps: indexers.Caps{Categories: []indexers.Category{indexers.CategoryTV}},
+		results: []indexers.Result{
+			{IndexerID: "tv", Title: "T", Category: []indexers.Category{indexers.CategoryTV},
+				MagnetURI: "magnet:?xt=urn:btih:bbb"},
+		},
+	}
+	_ = r.Register(movies)
+	_ = r.Register(tv)
+
+	q := indexers.Query{Term: "show", Categories: []indexers.Category{indexers.CategoryTV}}
+	out := r.Search(context.Background(), q, indexers.SearchOptions{})
+
+	if movies.calls.Load() != 0 {
+		t.Errorf("movies-only indexer should be skipped for a TV search, got %d calls", movies.calls.Load())
+	}
+	if tv.calls.Load() != 1 {
+		t.Errorf("tv indexer should be queried once, got %d", tv.calls.Load())
+	}
+	if _, ok := out.Errors["movies"]; ok {
+		t.Error("a skipped indexer must not be reported as an error")
+	}
+	if out.Diagnostics == nil {
+		t.Fatal("expected diagnostics")
+	}
+	var found bool
+	for _, d := range out.Diagnostics.Indexers {
+		if d.ID == "movies" {
+			found = true
+			if d.Status != "skipped" {
+				t.Errorf("movies status = %q, want skipped", d.Status)
+			}
+		}
+	}
+	if !found {
+		t.Error("expected a diagnostic entry for the skipped indexer")
+	}
+}
+
+func TestRegistrySearchUnknownCategoryCapsNotSkipped(t *testing.T) {
+	t.Parallel()
+	r := indexers.NewRegistry()
+	// No advertised categories → unknown caps → must not be skipped.
+	any := &fakeIndexer{
+		id:   "any",
+		name: "AnyCat",
+		results: []indexers.Result{
+			{IndexerID: "any", Title: "X", Category: []indexers.Category{indexers.CategoryTV},
+				MagnetURI: "magnet:?xt=urn:btih:ccc"},
+		},
+	}
+	_ = r.Register(any)
+
+	q := indexers.Query{Term: "show", Categories: []indexers.Category{indexers.CategoryTV}}
+	out := r.Search(context.Background(), q, indexers.SearchOptions{})
+	if any.calls.Load() != 1 {
+		t.Errorf("indexer with unknown caps should be queried, got %d calls", any.calls.Load())
+	}
+	if len(out.Results) != 1 {
+		t.Errorf("expected 1 result, got %d", len(out.Results))
+	}
+}
+
 func TestRegistrySearchSurfacesIndexerError(t *testing.T) {
 	t.Parallel()
 	r := indexers.NewRegistry()
