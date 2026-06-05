@@ -248,7 +248,8 @@ type RPCError struct {
 func (c *Client) call(ctx context.Context, method string, params []any, out any) error {
 	// auth.* methods bootstrap the session — calling ensureLoggedIn
 	// for them would recurse forever.
-	if !strings.HasPrefix(method, "auth.") {
+	isAuthMethod := strings.HasPrefix(method, "auth.")
+	if !isAuthMethod {
 		if err := c.ensureLoggedIn(ctx); err != nil {
 			return err
 		}
@@ -258,8 +259,12 @@ func (c *Client) call(ctx context.Context, method string, params []any, out any)
 	if err != nil {
 		return err
 	}
-	if status == http.StatusUnauthorized || status == http.StatusForbidden ||
-		(rpcErr != nil && isAuthError(rpcErr)) {
+	// Re-login + retry on session expiry, but never for auth.* calls:
+	// those ARE the login handshake (login() holds loginMu, so a nested
+	// c.login here would deadlock), and a rejected auth.login must
+	// surface as the original auth failure rather than retry forever.
+	if !isAuthMethod && (status == http.StatusUnauthorized || status == http.StatusForbidden ||
+		(rpcErr != nil && isAuthError(rpcErr))) {
 		if loginErr := c.login(ctx); loginErr != nil {
 			return loginErr
 		}
