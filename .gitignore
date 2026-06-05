@@ -68,3 +68,7 @@ deploy/helm/values-homelab.local.yaml
 
 # Build-time secrets baked into the Docker image (TVDB key, etc.)
 deploy/.build-secrets.env
+
+# Curated release source tarball produced during the release workflow.
+# Kept out of git so GoReleaser does not see a dirty tree.
+loom-source-v*.tar.gz
