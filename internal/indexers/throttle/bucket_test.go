@@ -2,6 +2,7 @@ package throttle
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -99,7 +100,7 @@ func TestBucket_AcquireRespectsContext(t *testing.T) {
 	time.Sleep(20 * time.Millisecond)
 	cancel()
 	wg.Wait()
-	if v := gotErr.Load(); v == nil || v.(error) != context.Canceled {
+	if v := gotErr.Load(); v == nil || !errors.Is(v.(error), context.Canceled) {
 		t.Fatalf("expected context.Canceled, got %v", v)
 	}
 }

@@ -199,7 +199,8 @@ func errorsAs(err error, target any) bool {
 
 func asTarget(err error, target any) bool {
 	if t, ok := target.(**proxies.ErrInUse); ok {
-		if e, ok := err.(*proxies.ErrInUse); ok {
+		e := &proxies.ErrInUse{}
+		if errors.As(err, &e) {
 			*t = e
 			return true
 		}

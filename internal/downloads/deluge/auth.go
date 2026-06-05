@@ -21,7 +21,7 @@ func (c *Client) login(ctx context.Context) error {
 	// failure here is the original auth failure rather than a
 	// recursive one.
 	if err := c.call(ctx, "auth.login", []any{c.cfg.password}, &ok); err != nil {
-		return fmt.Errorf("%w: %v", ErrAuthFailed, err)
+		return fmt.Errorf("%w: %w", ErrAuthFailed, err)
 	}
 	if !ok {
 		return fmt.Errorf("%w: auth.login returned false", ErrAuthFailed)

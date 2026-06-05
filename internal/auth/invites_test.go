@@ -2,6 +2,7 @@ package auth_test
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"strconv"
 	"testing"
@@ -133,7 +134,7 @@ func TestAcceptInviteHappyPath(t *testing.T) {
 	}
 
 	// Single-use: a second redemption must fail and not create another account.
-	if _, err := svc.AcceptInvite(ctx, inv.Token, "friend2", "s3cretpw!"); err != auth.ErrInviteInvalid {
+	if _, err := svc.AcceptInvite(ctx, inv.Token, "friend2", "s3cretpw!"); !errors.Is(err, auth.ErrInviteInvalid) {
 		t.Fatalf("expected ErrInviteInvalid on reuse, got %v", err)
 	}
 
@@ -158,10 +159,10 @@ func TestAcceptInviteExpired(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("seed expired invite: %v", err)
 	}
-	if _, err := svc.LookupInvite(ctx, "expiredtoken"); err != auth.ErrInviteInvalid {
+	if _, err := svc.LookupInvite(ctx, "expiredtoken"); !errors.Is(err, auth.ErrInviteInvalid) {
 		t.Fatalf("expected ErrInviteInvalid on lookup, got %v", err)
 	}
-	if _, err := svc.AcceptInvite(ctx, "expiredtoken", "late", "s3cretpw!"); err != auth.ErrInviteInvalid {
+	if _, err := svc.AcceptInvite(ctx, "expiredtoken", "late", "s3cretpw!"); !errors.Is(err, auth.ErrInviteInvalid) {
 		t.Fatalf("expected ErrInviteInvalid on accept, got %v", err)
 	}
 }
@@ -175,11 +176,11 @@ func TestAcceptInviteValidationDoesNotBurnLink(t *testing.T) {
 		t.Fatalf("CreateInvite: %v", err)
 	}
 	// Weak password is rejected before the invite is claimed.
-	if _, err := svc.AcceptInvite(ctx, inv.Token, "bob", "short"); err != auth.ErrWeakPassword {
+	if _, err := svc.AcceptInvite(ctx, inv.Token, "bob", "short"); !errors.Is(err, auth.ErrWeakPassword) {
 		t.Fatalf("expected ErrWeakPassword, got %v", err)
 	}
 	// Empty username likewise.
-	if _, err := svc.AcceptInvite(ctx, inv.Token, "  ", "s3cretpw!"); err != auth.ErrInvalidUsername {
+	if _, err := svc.AcceptInvite(ctx, inv.Token, "  ", "s3cretpw!"); !errors.Is(err, auth.ErrInvalidUsername) {
 		t.Fatalf("expected ErrInvalidUsername, got %v", err)
 	}
 	// The invite is still redeemable.
@@ -197,7 +198,7 @@ func TestAcceptInviteDuplicateUsernameReleasesLink(t *testing.T) {
 		t.Fatalf("CreateInvite: %v", err)
 	}
 	// "admin" already exists.
-	if _, err := svc.AcceptInvite(ctx, inv.Token, "admin", "s3cretpw!"); err != auth.ErrUserExists {
+	if _, err := svc.AcceptInvite(ctx, inv.Token, "admin", "s3cretpw!"); !errors.Is(err, auth.ErrUserExists) {
 		t.Fatalf("expected ErrUserExists, got %v", err)
 	}
 	list, _ := svc.ListInvites(ctx)
@@ -221,10 +222,10 @@ func TestRevokeInvite(t *testing.T) {
 	if err := svc.RevokeInvite(ctx, inv.ID); err != nil {
 		t.Fatalf("RevokeInvite: %v", err)
 	}
-	if _, err := svc.LookupInvite(ctx, inv.Token); err != auth.ErrInviteInvalid {
+	if _, err := svc.LookupInvite(ctx, inv.Token); !errors.Is(err, auth.ErrInviteInvalid) {
 		t.Fatalf("expected revoked invite to be invalid, got %v", err)
 	}
-	if err := svc.RevokeInvite(ctx, inv.ID); err != auth.ErrInviteNotFound {
+	if err := svc.RevokeInvite(ctx, inv.ID); !errors.Is(err, auth.ErrInviteNotFound) {
 		t.Fatalf("expected ErrInviteNotFound on second revoke, got %v", err)
 	}
 }
@@ -243,10 +244,10 @@ func TestInvitesDisabledWhenStoreNil(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewService: %v", err)
 	}
-	if _, err := svc.CreateInvite(ctx, 1, "", "user", 0); err != auth.ErrInvitesDisabled {
+	if _, err := svc.CreateInvite(ctx, 1, "", "user", 0); !errors.Is(err, auth.ErrInvitesDisabled) {
 		t.Fatalf("expected ErrInvitesDisabled, got %v", err)
 	}
-	if _, err := svc.LookupInvite(ctx, "x"); err != auth.ErrInvitesDisabled {
+	if _, err := svc.LookupInvite(ctx, "x"); !errors.Is(err, auth.ErrInvitesDisabled) {
 		t.Fatalf("expected ErrInvitesDisabled, got %v", err)
 	}
 }

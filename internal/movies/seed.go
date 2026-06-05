@@ -3,6 +3,7 @@ package movies
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"log"
 	"time"
 
@@ -153,7 +154,7 @@ func SeedDefaults(ctx context.Context, svc Service) {
 			UpdatedAt:      time.Now(),
 		}
 		if err := svc.AddQualityProfile(ctx, qp); err != nil {
-			if err == sql.ErrNoRows {
+			if errors.Is(err, sql.ErrNoRows) {
 				continue
 			}
 			log.Printf("movies: failed to seed quality profile %q: %v", p.name, err)

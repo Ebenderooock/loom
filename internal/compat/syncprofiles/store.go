@@ -3,6 +3,7 @@ package syncprofiles
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 
@@ -62,7 +63,7 @@ func (s *Store) Get(ctx context.Context, id string) (*SyncProfile, error) {
 		 FROM sync_profiles WHERE id = ?`, id,
 	).Scan(&p.ID, &p.Name, &p.AppType, &p.Enabled, &createdAt, &updatedAt)
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			return nil, fmt.Errorf("sync profile not found: %s", id)
 		}
 		return nil, fmt.Errorf("get sync_profile: %w", err)
@@ -167,7 +168,7 @@ func (s *Store) FilteredIndexerIDs(ctx context.Context, profileID string) ([]str
 		`SELECT enabled FROM sync_profiles WHERE id = ?`, profileID,
 	).Scan(&enabled)
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
 		}
 		return nil, err

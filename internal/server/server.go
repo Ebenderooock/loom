@@ -1008,6 +1008,7 @@ func (s *Server) recoverer(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
 			if rv := recover(); rv != nil {
+				//nolint:errorlint // rv is the recovered value (interface{}), not an error; a direct identity comparison is correct here
 				if rv == http.ErrAbortHandler {
 					panic(rv)
 				}

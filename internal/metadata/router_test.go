@@ -396,17 +396,18 @@ func TestConcurrentResolves_RaceSafe(t *testing.T) {
 			defer wg.Done()
 
 			// Mix different resolve types
-			if idx%3 == 0 {
+			switch idx % 3 {
+			case 0:
 				_, err := router.ResolveMovie(ctx, "Test Movie", 2024, map[string]string{})
 				if err != nil {
 					errors <- fmt.Errorf("ResolveMovie error: %w", err)
 				}
-			} else if idx%3 == 1 {
+			case 1:
 				_, err := router.ResolveSeries(ctx, "Test Series", map[string]string{})
 				if err != nil {
 					errors <- fmt.Errorf("ResolveSeries error: %w", err)
 				}
-			} else {
+			default:
 				_, err := router.ResolveEpisode(ctx, "tvdb:123", 1, 1)
 				if err != nil {
 					errors <- fmt.Errorf("ResolveEpisode error: %w", err)

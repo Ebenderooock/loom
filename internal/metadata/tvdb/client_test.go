@@ -3,6 +3,7 @@ package tvdb
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -68,7 +69,8 @@ func TestLogin_InvalidCredentials(t *testing.T) {
 		t.Fatalf("expected error for invalid credentials")
 	}
 
-	if e, ok := err.(*ClientError); !ok || e.Code != ErrCodeUnauthorized {
+	var e *ClientError
+	if !errors.As(err, &e) || e.Code != ErrCodeUnauthorized {
 		t.Fatalf("expected ErrCodeUnauthorized, got %v", err)
 	}
 }
@@ -157,7 +159,8 @@ func TestGetSeries_NotFound(t *testing.T) {
 		t.Fatalf("expected error for not found")
 	}
 
-	if e, ok := err.(*ClientError); !ok || e.Code != ErrCodeNotFound {
+	var e *ClientError
+	if !errors.As(err, &e) || e.Code != ErrCodeNotFound {
 		t.Fatalf("expected ErrCodeNotFound, got %v", err)
 	}
 
@@ -193,7 +196,8 @@ func TestGetSeries_ServerError(t *testing.T) {
 		t.Fatalf("expected error for server error")
 	}
 
-	if e, ok := err.(*ClientError); !ok || e.Code != ErrCodeServerError {
+	var e *ClientError
+	if !errors.As(err, &e) || e.Code != ErrCodeServerError {
 		t.Fatalf("expected ErrCodeServerError, got %v", err)
 	}
 }

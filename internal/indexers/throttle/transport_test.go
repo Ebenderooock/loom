@@ -2,6 +2,7 @@ package throttle
 
 import (
 	"context"
+	"errors"
 	"io"
 	"math/rand"
 	"net/http"
@@ -161,7 +162,7 @@ func TestTransport_CtxCancelDuringBackoff(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error after ctx cancel")
 	}
-	if err != context.Canceled {
+	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("want context.Canceled, got %v", err)
 	}
 }

@@ -83,18 +83,18 @@ func normaliseSource(s string) string {
 
 func normaliseCodec(s string) string {
 	lower := strings.ToLower(strings.ReplaceAll(s, ".", ""))
-	switch {
-	case lower == "x265" || lower == "h265" || lower == "hevc":
+	switch lower {
+	case "x265", "h265", "hevc":
 		return "x265"
-	case lower == "x264" || lower == "h264":
+	case "x264", "h264":
 		return "x264"
-	case lower == "av1":
+	case "av1":
 		return "AV1"
-	case lower == "vp9":
+	case "vp9":
 		return "VP9"
-	case lower == "xvid":
+	case "xvid":
 		return "XviD"
-	case lower == "divx":
+	case "divx":
 		return "DivX"
 	default:
 		return s

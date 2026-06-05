@@ -220,7 +220,7 @@ func fetchTorrentURL(ctx context.Context, rawURL string) ([]byte, error) {
 
 	// Validate that this is actually a torrent file.
 	if _, err := metainfo.Load(bytes.NewReader(data)); err != nil {
-		return nil, fmt.Errorf("%w: URL %q did not return a valid torrent file: %v", ErrInvalidInput, rawURL, err)
+		return nil, fmt.Errorf("%w: URL %q did not return a valid torrent file: %w", ErrInvalidInput, rawURL, err)
 	}
 
 	return data, nil

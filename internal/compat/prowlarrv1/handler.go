@@ -89,7 +89,7 @@ func (h *Handler) listIndexers(w http.ResponseWriter, r *http.Request) {
 	out := make([]prowlarrIndexer, 0, len(defs))
 	for _, dh := range defs {
 		if allowed != nil {
-			if _, ok := allowed[dh.Definition.ID]; !ok {
+			if _, ok := allowed[dh.ID]; !ok {
 				continue
 			}
 		}
@@ -114,10 +114,10 @@ func (h *Handler) getIndexer(w http.ResponseWriter, r *http.Request) {
 	}
 
 	for _, dh := range defs {
-		if intID(dh.Definition.ID) == numID {
+		if intID(dh.ID) == numID {
 			// Check sync-profile membership.
 			if allowed := h.allowedIndexerIDs(r); allowed != nil {
-				if _, ok := allowed[dh.Definition.ID]; !ok {
+				if _, ok := allowed[dh.ID]; !ok {
 					writeError(w, http.StatusNotFound, "indexer not found")
 					return
 				}
@@ -172,7 +172,7 @@ func (h *Handler) search(w http.ResponseWriter, r *http.Request) {
 		}
 		pairs := make([]defPair, 0, len(defs))
 		for _, dh := range defs {
-			pairs = append(pairs, defPair{strID: dh.Definition.ID, numID: intID(dh.Definition.ID)})
+			pairs = append(pairs, defPair{strID: dh.ID, numID: intID(dh.ID)})
 		}
 		for _, s := range strings.Split(idStr, ",") {
 			s = strings.TrimSpace(s)
@@ -212,9 +212,9 @@ func (h *Handler) search(w http.ResponseWriter, r *http.Request) {
 	lookup := make(map[string]idInfo)
 	if defs, err := h.svc.List(r.Context()); err == nil {
 		for _, dh := range defs {
-			lookup[dh.Definition.ID] = idInfo{
-				numID:    intID(dh.Definition.ID),
-				protocol: protocolFromKind(dh.Definition.Kind),
+			lookup[dh.ID] = idInfo{
+				numID:    intID(dh.ID),
+				protocol: protocolFromKind(dh.Kind),
 			}
 		}
 	}

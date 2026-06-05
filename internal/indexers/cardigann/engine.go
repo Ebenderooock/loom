@@ -161,7 +161,7 @@ func (e *Engine) Test(ctx context.Context) error {
 	resp, err := e.http.Do(req)
 	if err != nil {
 		if indexers.IsTimeoutErr(err) {
-			return fmt.Errorf("cardigann: test request: %w (%v)", indexers.ErrIndexerTimeout, err)
+			return fmt.Errorf("cardigann: test request: %w (%w)", indexers.ErrIndexerTimeout, err)
 		}
 		return fmt.Errorf("cardigann: test request: %w", err)
 	}
@@ -701,7 +701,7 @@ func (e *Engine) fetch(ctx context.Context, method, target string, params url.Va
 		// Wrap timeout errors with the package-level sentinel so the
 		// service layer can classify uniformly.
 		if indexers.IsTimeoutErr(derr) {
-			return nil, fmt.Errorf("cardigann: %s %s: %w (%v)", method, target, indexers.ErrIndexerTimeout, derr)
+			return nil, fmt.Errorf("cardigann: %s %s: %w (%w)", method, target, indexers.ErrIndexerTimeout, derr)
 		}
 		return nil, fmt.Errorf("cardigann: %s %s: %w", method, target, derr)
 	}

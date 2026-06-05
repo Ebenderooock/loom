@@ -3,6 +3,7 @@ package tmdb
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -90,7 +91,8 @@ func TestGetMovieNotFound(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
-	if ce, ok := err.(*ClientError); !ok || ce.Code != ErrCodeNotFound {
+	var ce *ClientError
+	if !errors.As(err, &ce) || ce.Code != ErrCodeNotFound {
 		t.Errorf("expected ErrCodeNotFound, got %T: %v", err, err)
 	}
 }
@@ -117,7 +119,8 @@ func TestGetMovieUnauthorized(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
-	if ce, ok := err.(*ClientError); !ok || ce.Code != ErrCodeUnauthorized {
+	var ce *ClientError
+	if !errors.As(err, &ce) || ce.Code != ErrCodeUnauthorized {
 		t.Errorf("expected ErrCodeUnauthorized, got %T: %v", err, err)
 	}
 }
@@ -127,8 +130,8 @@ func TestGetMovieRateLimit(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		callCount.Add(1)
 		if callCount.Load() == 1 {
-			w.WriteHeader(http.StatusTooManyRequests)
 			w.Header().Set("Retry-After", "1")
+			w.WriteHeader(http.StatusTooManyRequests)
 			json.NewEncoder(w).Encode(ErrorResponse{
 				StatusCode:    429,
 				StatusMessage: "Your request count (1) is over the allowed limit of 0.",
@@ -429,7 +432,8 @@ func TestContextCancellation(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected context error, got nil")
 	}
-	if ce, ok := err.(*ClientError); !ok || ce.Code != ErrCodeContextError {
+	var ce *ClientError
+	if !errors.As(err, &ce) || ce.Code != ErrCodeContextError {
 		t.Errorf("expected ErrCodeContextError, got %T: %v", err, err)
 	}
 }
@@ -599,8 +603,8 @@ func TestRetryAfterHeader(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		callCount.Add(1)
 		if callCount.Load() == 1 {
-			w.WriteHeader(http.StatusTooManyRequests)
 			w.Header().Set("Retry-After", "2")
+			w.WriteHeader(http.StatusTooManyRequests)
 			json.NewEncoder(w).Encode(ErrorResponse{
 				StatusCode:    429,
 				StatusMessage: "Rate limit exceeded",

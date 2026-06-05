@@ -220,8 +220,8 @@ func (rs *RollingSearcher) searchCandidate(ctx context.Context, c SearchCandidat
 
 	var ids []string
 	for _, dh := range defs {
-		if dh.Definition.Enabled && rs.quota.CanSearch(dh.Definition.ID) {
-			ids = append(ids, dh.Definition.ID)
+		if dh.Enabled && rs.quota.CanSearch(dh.ID) {
+			ids = append(ids, dh.ID)
 		}
 	}
 	if len(ids) == 0 {

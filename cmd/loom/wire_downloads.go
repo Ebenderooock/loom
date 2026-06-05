@@ -131,7 +131,7 @@ func wireDownloads(
 				contentPath = items[0].SavePath
 			}
 		}
-		// Remove from client queue (keep files; they've been moved/hardlinked to library).
+		// Remove from client queue (keep files; they've been moved/hardline to library).
 		if err := c.Remove(ctx, []string{downloadID}, false); err != nil {
 			return fmt.Errorf("remove download from client: %w", err)
 		}

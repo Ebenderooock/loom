@@ -3,6 +3,7 @@ package bots
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"strconv"
 	"strings"
 	"testing"
@@ -354,7 +355,7 @@ func TestStore_RedeemLinkCodeFlow(t *testing.T) {
 		t.Fatalf("unexpected link %+v", link)
 	}
 	// Code is single-use.
-	if _, err := st.RedeemLinkCode(ctx, lc.Code, 42); err != ErrInvalidCode {
+	if _, err := st.RedeemLinkCode(ctx, lc.Code, 42); !errors.Is(err, ErrInvalidCode) {
 		t.Fatalf("expected ErrInvalidCode on reuse, got %v", err)
 	}
 }
@@ -367,7 +368,7 @@ func TestStore_RedeemRejectsReassignToOtherUser(t *testing.T) {
 		t.Fatal(err)
 	}
 	lc2, _ := st.CreateLinkCode(ctx, PlatformTelegram, "ext1", "alice")
-	if _, err := st.RedeemLinkCode(ctx, lc2.Code, 2); err != ErrLinkedToOther {
+	if _, err := st.RedeemLinkCode(ctx, lc2.Code, 2); !errors.Is(err, ErrLinkedToOther) {
 		t.Fatalf("expected ErrLinkedToOther, got %v", err)
 	}
 	// Same user re-link is idempotent.

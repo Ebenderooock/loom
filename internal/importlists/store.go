@@ -3,6 +3,7 @@ package importlists
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -248,7 +249,7 @@ func (s *Store) GetItem(ctx context.Context, id string) (*ImportListItem, error)
 		       tvdb_id, media_type, status, last_seen, created_at, poster_path, overview, genres
 		FROM import_list_items WHERE id = ?`, id)
 	item, err := scanItem(row)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -55,7 +56,7 @@ func (s *Store) Get(ctx context.Context, id string) (*Plugin, error) {
 		FROM plugins WHERE id = ?`, id)
 	p, err := scanPlugin(row)
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			return nil, fmt.Errorf("plugin not found: %s", id)
 		}
 		return nil, err

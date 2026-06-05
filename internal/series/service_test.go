@@ -96,10 +96,7 @@ func (r *mockRepo) ListEpisodes(_ context.Context, seriesID string, seasonNum *i
 		return eps, nil
 	}
 	var filtered []*Episode
-	for _, e := range eps {
-		// Simple filter by season ID containing the season number
-		filtered = append(filtered, e)
-	}
+	filtered = append(filtered, eps...)
 	return filtered, nil
 }
 func (r *mockRepo) GetEpisode(_ context.Context, id string) (*Episode, error) {

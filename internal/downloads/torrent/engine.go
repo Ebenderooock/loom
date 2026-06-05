@@ -327,7 +327,7 @@ func (e *Engine) AddMagnet(ctx context.Context, magnet string, meta torrentMeta)
 	case <-t.GotInfo():
 	case <-waitCtx.Done():
 		t.Drop()
-		return "", fmt.Errorf("%w: %v", ErrMetadataTimeout, waitCtx.Err())
+		return "", fmt.Errorf("%w: %w", ErrMetadataTimeout, waitCtx.Err())
 	}
 
 	hash := strings.ToLower(t.InfoHash().HexString())
@@ -363,7 +363,7 @@ func (e *Engine) AddMagnet(ctx context.Context, magnet string, meta torrentMeta)
 func (e *Engine) AddTorrentBytes(ctx context.Context, data []byte, meta torrentMeta) (string, error) {
 	mi, err := metainfo.Load(bytes.NewReader(data))
 	if err != nil {
-		return "", fmt.Errorf("%w: parsing torrent bytes: %v", ErrInvalidInput, err)
+		return "", fmt.Errorf("%w: parsing torrent bytes: %w", ErrInvalidInput, err)
 	}
 
 	// Verify the fetched torrent matches the infohash the indexer
@@ -390,7 +390,7 @@ func (e *Engine) AddTorrentBytes(ctx context.Context, data []byte, meta torrentM
 	case <-t.GotInfo():
 	case <-waitCtx.Done():
 		t.Drop()
-		return "", fmt.Errorf("%w: %v", ErrMetadataTimeout, waitCtx.Err())
+		return "", fmt.Errorf("%w: %w", ErrMetadataTimeout, waitCtx.Err())
 	}
 
 	hash := strings.ToLower(t.InfoHash().HexString())
@@ -860,7 +860,7 @@ func (e *Engine) Detail(hash string) (*TorrentDetail, error) {
 			progress = 1
 		}
 
-		peerStats := pc.Peer.Stats()
+		peerStats := pc.Stats()
 
 		// Client name may not be set yet.
 		clientName := ""

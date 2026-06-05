@@ -3,6 +3,7 @@ package musicbrainz
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -75,7 +76,8 @@ func TestGetArtist_NotFound(t *testing.T) {
 		t.Fatal("expected error, got nil")
 	}
 
-	clientErr, ok := err.(*ClientError)
+	clientErr := &ClientError{}
+	ok := errors.As(err, &clientErr)
 	if !ok {
 		t.Fatalf("expected ClientError, got %T", err)
 	}
@@ -106,7 +108,8 @@ func TestGetArtist_ServerError(t *testing.T) {
 		t.Fatal("expected error, got nil")
 	}
 
-	clientErr, ok := err.(*ClientError)
+	clientErr := &ClientError{}
+	ok := errors.As(err, &clientErr)
 	if !ok {
 		t.Fatalf("expected ClientError, got %T", err)
 	}
@@ -438,7 +441,8 @@ func TestContextTimeout(t *testing.T) {
 		t.Fatal("expected context timeout error")
 	}
 
-	clientErr, ok := err.(*ClientError)
+	clientErr := &ClientError{}
+	ok := errors.As(err, &clientErr)
 	if !ok {
 		t.Fatalf("expected ClientError, got %T", err)
 	}

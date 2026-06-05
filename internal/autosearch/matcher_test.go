@@ -301,7 +301,7 @@ func TestTypoTolerance(t *testing.T) {
 		shouldMatch bool
 	}{
 		{"Inception.2010.1080p", true},
-		{"Incpetion.2010.1080p", true},  // One char swap (distance=1)
+		{"Inception.2010.1080p", true},  // One char swap (distance=1)
 		{"Inceptin.2010.1080p", true},   // Missing one char (distance=1)
 		{"nception.2010.1080p", true},   // Missing first char (distance=1)
 		{"Inceptionn.2010.1080p", true}, // Extra char (distance=1)

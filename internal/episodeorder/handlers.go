@@ -3,6 +3,7 @@ package episodeorder
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 
@@ -106,7 +107,7 @@ func deleteMapping(store *Store) http.HandlerFunc {
 			return
 		}
 		if err := store.DeleteMapping(r.Context(), id); err != nil {
-			if err == sql.ErrNoRows {
+			if errors.Is(err, sql.ErrNoRows) {
 				writeJSON(w, http.StatusNotFound, map[string]string{"error": "mapping not found"})
 				return
 			}

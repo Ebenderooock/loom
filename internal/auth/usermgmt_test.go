@@ -2,6 +2,7 @@ package auth_test
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"strconv"
 	"testing"
@@ -93,20 +94,20 @@ func TestCreateUserValidation(t *testing.T) {
 	ctx := context.Background()
 	svc, _, _ := newUserMgmtService(t)
 
-	if _, err := svc.CreateUserAccount(ctx, "", "password1", "", "user"); err != auth.ErrInvalidUsername {
+	if _, err := svc.CreateUserAccount(ctx, "", "password1", "", "user"); !errors.Is(err, auth.ErrInvalidUsername) {
 		t.Fatalf("empty username: got %v", err)
 	}
-	if _, err := svc.CreateUserAccount(ctx, "x", "short", "", "user"); err != auth.ErrWeakPassword {
+	if _, err := svc.CreateUserAccount(ctx, "x", "short", "", "user"); !errors.Is(err, auth.ErrWeakPassword) {
 		t.Fatalf("weak password: got %v", err)
 	}
-	if _, err := svc.CreateUserAccount(ctx, "x", "password1", "", "superuser"); err != auth.ErrInvalidRole {
+	if _, err := svc.CreateUserAccount(ctx, "x", "password1", "", "superuser"); !errors.Is(err, auth.ErrInvalidRole) {
 		t.Fatalf("bad role: got %v", err)
 	}
 	// duplicate
 	if _, err := svc.CreateUserAccount(ctx, "dup", "password1", "", "user"); err != nil {
 		t.Fatalf("first create: %v", err)
 	}
-	if _, err := svc.CreateUserAccount(ctx, "dup", "password1", "", "user"); err != auth.ErrUserExists {
+	if _, err := svc.CreateUserAccount(ctx, "dup", "password1", "", "user"); !errors.Is(err, auth.ErrUserExists) {
 		t.Fatalf("duplicate: got %v", err)
 	}
 }
@@ -121,15 +122,15 @@ func TestDeleteUserGuards(t *testing.T) {
 	}
 
 	// Cannot delete the protected primary admin.
-	if err := svc.DeleteUserAccount(ctx, bob.ID, adminID); err != auth.ErrProtectedUser {
+	if err := svc.DeleteUserAccount(ctx, bob.ID, adminID); !errors.Is(err, auth.ErrProtectedUser) {
 		t.Fatalf("delete admin: got %v", err)
 	}
 	// Cannot delete self.
-	if err := svc.DeleteUserAccount(ctx, bob.ID, bob.ID); err != auth.ErrSelfModify {
+	if err := svc.DeleteUserAccount(ctx, bob.ID, bob.ID); !errors.Is(err, auth.ErrSelfModify) {
 		t.Fatalf("delete self: got %v", err)
 	}
 	// Not found.
-	if err := svc.DeleteUserAccount(ctx, adminID, 99999); err != auth.ErrUserNotFound {
+	if err := svc.DeleteUserAccount(ctx, adminID, 99999); !errors.Is(err, auth.ErrUserNotFound) {
 		t.Fatalf("delete missing: got %v", err)
 	}
 	// Happy path: admin deletes bob.
@@ -151,13 +152,13 @@ func TestSetUserRoleGuards(t *testing.T) {
 		t.Fatalf("create: %v", err)
 	}
 
-	if _, err := svc.SetUserRole(ctx, bob.ID, adminID, "user"); err != auth.ErrProtectedUser {
+	if _, err := svc.SetUserRole(ctx, bob.ID, adminID, "user"); !errors.Is(err, auth.ErrProtectedUser) {
 		t.Fatalf("demote admin: got %v", err)
 	}
-	if _, err := svc.SetUserRole(ctx, bob.ID, bob.ID, "admin"); err != auth.ErrSelfModify {
+	if _, err := svc.SetUserRole(ctx, bob.ID, bob.ID, "admin"); !errors.Is(err, auth.ErrSelfModify) {
 		t.Fatalf("self role: got %v", err)
 	}
-	if _, err := svc.SetUserRole(ctx, adminID, bob.ID, "wizard"); err != auth.ErrInvalidRole {
+	if _, err := svc.SetUserRole(ctx, adminID, bob.ID, "wizard"); !errors.Is(err, auth.ErrInvalidRole) {
 		t.Fatalf("bad role: got %v", err)
 	}
 	u, err := svc.SetUserRole(ctx, adminID, bob.ID, "admin")
@@ -178,10 +179,10 @@ func TestResetUserPassword(t *testing.T) {
 		t.Fatalf("create: %v", err)
 	}
 
-	if err := svc.ResetUserPassword(ctx, bob.ID, "short"); err != auth.ErrWeakPassword {
+	if err := svc.ResetUserPassword(ctx, bob.ID, "short"); !errors.Is(err, auth.ErrWeakPassword) {
 		t.Fatalf("weak: got %v", err)
 	}
-	if err := svc.ResetUserPassword(ctx, adminID, "newpassword1"); err != auth.ErrProtectedUser {
+	if err := svc.ResetUserPassword(ctx, adminID, "newpassword1"); !errors.Is(err, auth.ErrProtectedUser) {
 		t.Fatalf("reset admin: got %v", err)
 	}
 	if err := svc.ResetUserPassword(ctx, bob.ID, "newpassword1"); err != nil {

@@ -66,7 +66,7 @@ func register() {
 		// During unit tests the telemetry package may not be Init'd,
 		// so we tolerate a nil Default and fall back to the default
 		// prometheus registerer just so the collectors are usable.
-		var reg prometheus.Registerer = prometheus.DefaultRegisterer
+		var reg = prometheus.DefaultRegisterer
 		if t := telemetry.Default(); t != nil && t.Registry() != nil {
 			reg = t.Registry()
 		}

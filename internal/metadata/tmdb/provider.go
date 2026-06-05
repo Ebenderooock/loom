@@ -2,6 +2,7 @@ package tmdb
 
 import (
 	"context"
+	"errors"
 	"strconv"
 
 	"github.com/ebenderooock/loom/internal/metadata"
@@ -84,7 +85,8 @@ func (p *Provider) FindEpisode(ctx context.Context, seriesID string, season int,
 	ep, err := p.client.GetEpisode(ctx, tvID, season, episode)
 	if err != nil {
 		// If 404, return nil (not found) rather than error
-		if clientErr, ok := err.(*ClientError); ok && clientErr.Code == ErrCodeNotFound {
+		var clientErr *ClientError
+		if errors.As(err, &clientErr) && clientErr.Code == ErrCodeNotFound {
 			return nil, nil
 		}
 		return nil, err

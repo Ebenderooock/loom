@@ -37,7 +37,7 @@
 // Example matches:
 //   - "Inception.2010.1080p" vs "Inception (2010)" → 1.0 confidence (exact)
 //   - "Matrix.1999.1080p" vs "The Matrix (1999)" → 0.95+ confidence (minor difference)
-//   - "Incpetion.2010.1080p" vs "Inception (2010)" → 0.80+ confidence (typo tolerance)
+//   - "Inception.2010.1080p" vs "Inception (2010)" → 0.80+ confidence (typo tolerance)
 //   - "Inception.2009.1080p" vs "Inception (2010)" → 0.70+ confidence (year mismatch)
 //
 // # Integration Points

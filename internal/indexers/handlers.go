@@ -567,12 +567,7 @@ func (s *Service) handleListDefinitions(w http.ResponseWriter, r *http.Request) 
 			Categories:  d.Categories,
 		}
 		for _, st := range d.Settings {
-			j.Settings = append(j.Settings, settingJSON{
-				Name:    st.Name,
-				Type:    st.Type,
-				Label:   st.Label,
-				Default: st.Default,
-			})
+			j.Settings = append(j.Settings, settingJSON(st))
 		}
 		defs = append(defs, j)
 	}

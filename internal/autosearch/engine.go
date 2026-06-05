@@ -866,7 +866,7 @@ func (e *Engine) evaluateResult(
 				sr.RejectReason = "not_an_upgrade"
 				return sr
 			}
-			if tier == existing.Tier && !(parsed.IsProper || parsed.IsRepack) {
+			if tier == existing.Tier && (!parsed.IsProper && !parsed.IsRepack) {
 				sr.Rejected = true
 				sr.RejectReason = "not_an_upgrade"
 				return sr

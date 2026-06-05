@@ -36,7 +36,7 @@ func TestProviderRoutesThroughHTTPProxy(t *testing.T) {
 		}
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
-			http.Error(w, err.Error(), 502)
+			http.Error(w, err.Error(), http.StatusBadGateway)
 			return
 		}
 		defer resp.Body.Close()

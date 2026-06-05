@@ -103,7 +103,7 @@ func CurrentTransportProvider() TransportProvider {
 func TransportForDefinition(def Definition) (http.RoundTripper, error) {
 	// Step 1: pick the base / proxy transport.
 	var (
-		base http.RoundTripper = http.DefaultTransport
+		base = http.DefaultTransport
 		err  error
 	)
 	if def.ProxyID != "" {

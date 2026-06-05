@@ -1190,7 +1190,8 @@ func (o *Orchestrator) reconcileOnBoot(ctx context.Context) {
 			reconciled++
 		case exists && (info.Status == "completed" || info.Status == "seeding"):
 			// Download completed while we were down
-			if wf.State == StateGrabbed || wf.State == StateDownloading {
+			switch wf.State {
+			case StateGrabbed, StateDownloading:
 				o.logger.Info("reconcile: recovering completed download",
 					"workflow_id", wf.ID, "state", wf.State)
 				o.handleDownloadComplete(ctx, CmdDownloadComplete{
@@ -1201,7 +1202,7 @@ func (o *Orchestrator) reconcileOnBoot(ctx context.Context) {
 					SavePath:    info.SavePath,
 				})
 				reconciled++
-			} else if wf.State == StatePostDownload {
+			case StatePostDownload:
 				// Re-evaluate seed requirements with current data
 				var ratio float64
 				if wf.Metadata != "" {

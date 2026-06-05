@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"sync"
@@ -66,7 +67,7 @@ func (s *service) GetConnection(ctx context.Context, id string) (*Connection, er
 
 	c, err := scanConnectionRow(row)
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			return nil, fmt.Errorf("connection not found: %s", id)
 		}
 		return nil, fmt.Errorf("get connection: %w", err)

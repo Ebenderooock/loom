@@ -91,7 +91,7 @@ func CurrentRateLimitProvider() RateLimitProvider {
 // a future per-client proxy column drops in without API churn.
 func TransportForDefinition(def Definition) (http.RoundTripper, error) {
 	var (
-		base http.RoundTripper = http.DefaultTransport
+		base = http.DefaultTransport
 		err  error
 	)
 	// Reserved for a future per-client proxy_id column. The provider
