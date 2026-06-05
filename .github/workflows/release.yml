@@ -20,12 +20,19 @@ jobs:
         with:
           go-version: "1.26"
           cache: true
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
       - name: Build web UI
         # GoReleaser builds the binaries with `-tags embed`, which embeds
         # web/dist/* into the binary. web/dist is gitignored, so it must be
         # produced here first. Fail loudly if the build yields nothing.
         run: |
-          corepack enable
           cd web
           pnpm install --frozen-lockfile
           pnpm run build
