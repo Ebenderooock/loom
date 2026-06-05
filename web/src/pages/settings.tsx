@@ -222,6 +222,7 @@ function FolderBrowserDialog({
               onChange={(e) => setManualPath(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleSelect()}
               className="font-mono text-sm"
+              // eslint-disable-next-line jsx-a11y/no-autofocus -- intentional: focus the manual-path input on open
               autoFocus
             />
           </div>
@@ -424,6 +425,7 @@ function AddLibraryDialog({
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 className="text-sm"
+                // eslint-disable-next-line jsx-a11y/no-autofocus -- intentional: focus the rename input when editing
                 autoFocus
               />
 
@@ -1033,7 +1035,7 @@ function RemotePathMappingsSection() {
       .then((r) => (r.ok ? r.json() : []))
       .then((data) => {
         const list = Array.isArray(data?.download_clients) ? data.download_clients : Array.isArray(data) ? data : [];
-        setClients(list.map((c: any) => ({ id: c.id, name: c.name })));
+        setClients(list.map((c: { id: string; name: string }) => ({ id: c.id, name: c.name })));
       })
       .catch(() => {});
   }, []);
@@ -1056,7 +1058,7 @@ function RemotePathMappingsSection() {
           setFormLocalPath("");
           toast.success("Remote path mapping created");
         },
-        onError: (err: any) => toast.error(err.message || "Failed to create mapping"),
+        onError: (err) => toast.error(err instanceof Error ? err.message : "Failed to create mapping"),
       }
     );
   };
@@ -2504,8 +2506,9 @@ export function MediaPreferencesPanel() {
 
       {/* Toggles */}
       <div className="space-y-3">
-        <label className="flex items-center gap-2 text-sm">
+        <label htmlFor="pref-require-subs" className="flex items-center gap-2 text-sm">
           <Checkbox
+            id="pref-require-subs"
             checked={requireSubs}
             onCheckedChange={(v) => {
               setRequireSubs(!!v);
@@ -2514,8 +2517,9 @@ export function MediaPreferencesPanel() {
           />
           Require subtitles (penalize releases without subs)
         </label>
-        <label className="flex items-center gap-2 text-sm">
+        <label htmlFor="pref-hdr" className="flex items-center gap-2 text-sm">
           <Checkbox
+            id="pref-hdr"
             checked={preferHDR}
             onCheckedChange={(v) => {
               setPreferHDR(!!v);
@@ -2524,8 +2528,9 @@ export function MediaPreferencesPanel() {
           />
           Prefer HDR releases
         </label>
-        <label className="flex items-center gap-2 text-sm">
+        <label htmlFor="pref-atmos" className="flex items-center gap-2 text-sm">
           <Checkbox
+            id="pref-atmos"
             checked={preferAtmos}
             onCheckedChange={(v) => {
               setPreferAtmos(!!v);

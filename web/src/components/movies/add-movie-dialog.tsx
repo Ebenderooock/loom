@@ -195,16 +195,16 @@ export function AddMovieDialog({
               </div>
               <div className="mt-6 grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <label className="text-sm font-medium">Library</label>
+                  <label htmlFor="add-movie-library" className="text-sm font-medium">Library</label>
                   <Select value={selectedLibrary} onValueChange={handleLibraryChange}>
-                    <SelectTrigger><SelectValue placeholder="Select library" /></SelectTrigger>
+                    <SelectTrigger id="add-movie-library"><SelectValue placeholder="Select library" /></SelectTrigger>
                     <SelectContent>{libraries.map(lib => <SelectItem key={lib.id} value={lib.id}>{lib.name}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-sm font-medium">Quality Profile</label>
+                  <label htmlFor="add-movie-profile" className="text-sm font-medium">Quality Profile</label>
                   <Select value={selectedProfile} onValueChange={setSelectedProfile}>
-                    <SelectTrigger><SelectValue placeholder="Select quality profile" /></SelectTrigger>
+                    <SelectTrigger id="add-movie-profile"><SelectValue placeholder="Select quality profile" /></SelectTrigger>
                     <SelectContent>{qualityProfiles.map(qp => <SelectItem key={qp.id} value={qp.id}>{qp.name}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>

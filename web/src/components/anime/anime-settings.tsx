@@ -190,7 +190,7 @@ export function AnimeSettings({ seriesId }: AnimeSettingsProps) {
 
       {/* Dual Audio */}
       <div className="flex items-center gap-3">
-        <label className="relative inline-flex cursor-pointer items-center">
+        <label aria-label="Require Dual Audio" className="relative inline-flex cursor-pointer items-center">
           <input
             type="checkbox"
             className="peer sr-only"

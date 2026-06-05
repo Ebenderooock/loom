@@ -42,6 +42,25 @@ import type { Library } from "../../lib/libraries-api";
 import type { Movie, QualityProfile, Credits, CreditPerson } from "./types";
 import { TMDB_IMG } from "./types";
 
+interface MovieFileItem {
+  id?: string | number;
+  filePath?: string;
+  size?: number;
+  quality?: string;
+  format?: string;
+  createdAt?: string;
+}
+
+interface MovieHistoryItem {
+  id?: string | number;
+  status?: string;
+  type?: string;
+  date?: string;
+  title?: string;
+  destPath?: string;
+  error?: string;
+}
+
 // ─── Collapsible Section ──────────────────────────────────────────────
 
 function CollapsibleSection({
@@ -181,9 +200,9 @@ export function MovieDetailSheet({
   const [autoSearching, setAutoSearching] = useState(false);
   const [rescanning, setRescanning] = useState(false);
   const [discoverPerson, setDiscoverPerson] = useState<{ id: number; name: string } | null>(null);
-  const [movieFiles, setMovieFiles] = useState<any[]>([]);
+  const [movieFiles, setMovieFiles] = useState<MovieFileItem[]>([]);
   const [movieFilesLoading, setMovieFilesLoading] = useState(false);
-  const [movieHistory, setMovieHistory] = useState<any[]>([]);
+  const [movieHistory, setMovieHistory] = useState<MovieHistoryItem[]>([]);
   const [movieHistoryLoading, setMovieHistoryLoading] = useState(false);
 
   const handleAutoSearch = async () => {
@@ -210,10 +229,10 @@ export function MovieDetailSheet({
           description: result.reason || `${result.considered} considered, ${result.rejected} rejected`,
         });
       }
-    } catch (err: any) {
+    } catch (err) {
       toast.error("Auto search failed", {
         id: toastId,
-        description: err.message,
+        description: err instanceof Error ? err.message : String(err),
       });
     } finally {
       setAutoSearching(false);
@@ -498,18 +517,18 @@ export function MovieDetailSheet({
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-muted-foreground">Quality Profile</label>
+                  <label htmlFor="movie-edit-profile" className="text-xs font-medium text-muted-foreground">Quality Profile</label>
                   <Select value={editProfile} onValueChange={setEditProfile}>
-                    <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+                    <SelectTrigger id="movie-edit-profile" className="h-9 text-sm"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       {profiles.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-muted-foreground">Monitoring</label>
+                  <label htmlFor="movie-edit-monitoring" className="text-xs font-medium text-muted-foreground">Monitoring</label>
                   <Select value={editMonitoring} onValueChange={setEditMonitoring}>
-                    <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+                    <SelectTrigger id="movie-edit-monitoring" className="h-9 text-sm"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="monitored">Monitored</SelectItem>
                       <SelectItem value="unmonitored">Unmonitored</SelectItem>
@@ -689,7 +708,7 @@ export function MovieDetailSheet({
                 </div>
               ) : movieFiles.length > 0 ? (
                 <div className="space-y-2">
-                  {movieFiles.map((f: any) => (
+                  {movieFiles.map((f) => (
                     <div key={f.id} className="flex items-start gap-3 p-3 rounded-lg bg-muted/20 border border-border/30">
                       <FileVideo className="w-4 h-4 mt-0.5 text-muted-foreground shrink-0" />
                       <div className="min-w-0 flex-1 space-y-1">
@@ -732,7 +751,7 @@ export function MovieDetailSheet({
                 </div>
               ) : movieHistory.length > 0 ? (
                 <div className="space-y-2">
-                  {movieHistory.map((h: any, i: number) => (
+                  {movieHistory.map((h, i: number) => (
                     <div key={h.id || i} className="flex items-start gap-3 p-3 rounded-lg bg-muted/20 border border-border/30">
                       <div className={cn("w-2 h-2 mt-1.5 rounded-full shrink-0", h.status === "completed" || h.status === "success" ? "bg-green-500" : h.status === "failed" ? "bg-red-500" : "bg-yellow-500")} />
                       <div className="min-w-0 flex-1 space-y-1">

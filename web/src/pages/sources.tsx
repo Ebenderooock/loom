@@ -10,7 +10,7 @@ import {
   useDeleteSource,
   useTestSource,
 } from "@/lib/sources-api";
-import type { UserSource, UserSourceCreate } from "@/lib/sources-api";
+import type { UserSource, UserSourceCreate, UserSourcePatch } from "@/lib/sources-api";
 import { SourcesTable } from "@/components/sources/SourcesTable";
 import { SourceForm } from "@/components/sources/SourceForm";
 import { SourceTestPreview } from "@/components/sources/SourceTestPreview";
@@ -45,7 +45,7 @@ export function SourcesPage() {
   };
 
   const handleSave = async (
-    data: UserSourceCreate | { id: string; patch: Partial<any> },
+    data: UserSourceCreate | { id: string; patch: UserSourcePatch },
   ) => {
     try {
       if ("id" in data) {

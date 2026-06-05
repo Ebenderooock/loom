@@ -76,7 +76,7 @@ export function SourceForm({ open, source, onClose, onSave, isLoading }: SourceF
           name: source.name,
           type: source.type,
           enabled: source.enabled,
-          config: source.config as any,
+          config: source.config as FormValues["config"],
         }
       : {
           name: "",

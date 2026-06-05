@@ -195,7 +195,7 @@ function ProfileDialog({
         );
       }
     }
-  }, [state.kind, allLanguages]);
+  }, [state.kind, allLanguages, existing, isEdit]);
 
   const handleSave = () => {
     const numbered = priorities.map((p, i) => ({ ...p, priority: i + 1 }));

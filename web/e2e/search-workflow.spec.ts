@@ -58,7 +58,7 @@ async function mockCorrectSearchStream(
   releases: Array<Record<string, unknown>>,
 ) {
   await page.route("**/api/v1/indexers/search/stream*", async (route) => {
-    var events: string[] = [];
+    const events: string[] = [];
 
     // search-start event with indexers array
     events.push(
@@ -109,7 +109,7 @@ async function mockCorrectSearchStream(
 }
 
 async function setupMovieAndOpen(page: import("@playwright/test").Page) {
-  var movie = makeMovie();
+  const movie = makeMovie();
   await mockMovies(page, [movie as any]);
   await mockGet(page, "movies/mov-1", movie);
   await mockGet(page, "movies/mov-1/credits", { cast: [], crew: [] });
@@ -141,7 +141,7 @@ test.describe("Search Workflow", () => {
   });
 
   test("search dialog shows streaming results", async ({ page }) => {
-    var releases = [
+    const releases = [
       makeRelease({ id: "rel-1", title: "Test.Movie.2024.1080p.BluRay.x264", seeders: 50, guid: "g1" }),
       makeRelease({ id: "rel-2", title: "Test.Movie.2024.720p.WEB-DL", quality: "720p", seeders: 25, size: 2000000000, guid: "g2" }),
     ];
@@ -158,7 +158,7 @@ test.describe("Search Workflow", () => {
   });
 
   test("grab button triggers download grab", async ({ page }) => {
-    var releases = [makeRelease({ guid: "g-grab" })];
+    const releases = [makeRelease({ guid: "g-grab" })];
 
     await setupMovieAndOpen(page);
     await mockCorrectSearchStream(page, releases);
@@ -182,13 +182,13 @@ test.describe("Search Workflow", () => {
     await expect(page.getByText("Test.Movie.2024.1080p.BluRay.x264")).toBeVisible({ timeout: 15000 });
 
     // Wait for the grab button to be enabled (download clients loaded)
-    var grabBtn = page.getByRole("dialog").last().locator("button[title*='Grab']").first();
+    const grabBtn = page.getByRole("dialog").last().locator("button[title*='Grab']").first();
     await expect(grabBtn).toBeEnabled({ timeout: 10000 });
     await grabBtn.click();
   });
 
   test("search results show release information", async ({ page }) => {
-    var releases = [
+    const releases = [
       makeRelease({
         id: "rel-info",
         title: "Info.Movie.2024.2160p.UHD.BluRay",
@@ -210,7 +210,7 @@ test.describe("Search Workflow", () => {
   });
 
   test("multiple results from search stream render", async ({ page }) => {
-    var releases = [
+    const releases = [
       makeRelease({ id: "rel-a", title: "Alpha.2024.1080p", guid: "ga" }),
       makeRelease({ id: "rel-b", title: "Beta.2024.720p", quality: "720p", guid: "gb" }),
       makeRelease({ id: "rel-c", title: "Gamma.2024.2160p", quality: "2160p", guid: "gc" }),

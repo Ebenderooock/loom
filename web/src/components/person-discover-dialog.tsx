@@ -245,9 +245,9 @@ export function PersonDiscoverDialog({
 
             <div className="space-y-3">
               <div>
-                <label className="text-sm font-medium mb-1 block">Library</label>
+                <label htmlFor="person-discover-library" className="text-sm font-medium mb-1 block">Library</label>
                 <Select value={selectedLibrary} onValueChange={setSelectedLibrary}>
-                  <SelectTrigger><SelectValue placeholder="Select library" /></SelectTrigger>
+                  <SelectTrigger id="person-discover-library"><SelectValue placeholder="Select library" /></SelectTrigger>
                   <SelectContent>
                     {libraries.map(l => (
                       <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>
@@ -257,9 +257,9 @@ export function PersonDiscoverDialog({
               </div>
 
               <div>
-                <label className="text-sm font-medium mb-1 block">Quality Profile</label>
+                <label htmlFor="person-discover-profile" className="text-sm font-medium mb-1 block">Quality Profile</label>
                 <Select value={selectedProfile} onValueChange={setSelectedProfile}>
-                  <SelectTrigger><SelectValue placeholder="Select profile" /></SelectTrigger>
+                  <SelectTrigger id="person-discover-profile"><SelectValue placeholder="Select profile" /></SelectTrigger>
                   <SelectContent>
                     {qualityProfiles.map(p => (
                       <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
@@ -269,12 +269,12 @@ export function PersonDiscoverDialog({
               </div>
 
               <div className="flex items-center gap-4">
-                <label className="flex items-center gap-2 text-sm cursor-pointer">
-                  <Checkbox checked={monitored} onCheckedChange={(c) => setMonitored(!!c)} />
+                <label htmlFor="person-discover-monitored" className="flex items-center gap-2 text-sm cursor-pointer">
+                  <Checkbox id="person-discover-monitored" checked={monitored} onCheckedChange={(c) => setMonitored(!!c)} />
                   Monitored
                 </label>
-                <label className="flex items-center gap-2 text-sm cursor-pointer">
-                  <Checkbox checked={searchOnAdd} onCheckedChange={(c) => setSearchOnAdd(!!c)} />
+                <label htmlFor="person-discover-search" className="flex items-center gap-2 text-sm cursor-pointer">
+                  <Checkbox id="person-discover-search" checked={searchOnAdd} onCheckedChange={(c) => setSearchOnAdd(!!c)} />
                   Search on add
                 </label>
               </div>

@@ -388,9 +388,9 @@ function ApproveDialog({
         </DialogHeader>
         <div className="space-y-4 py-2">
           <div className="space-y-1.5">
-            <label className="text-sm font-medium">Library</label>
+            <label htmlFor="request-approve-library" className="text-sm font-medium">Library</label>
             <Select value={libraryId} onValueChange={onLibraryChange}>
-              <SelectTrigger>
+              <SelectTrigger id="request-approve-library">
                 <SelectValue placeholder="Select a library" />
               </SelectTrigger>
               <SelectContent>
@@ -408,9 +408,9 @@ function ApproveDialog({
             )}
           </div>
           <div className="space-y-1.5">
-            <label className="text-sm font-medium">Quality profile</label>
+            <label htmlFor="request-approve-qp" className="text-sm font-medium">Quality profile</label>
             <Select value={qpId} onValueChange={setQpId}>
-              <SelectTrigger>
+              <SelectTrigger id="request-approve-qp">
                 <SelectValue placeholder="Select a quality profile" />
               </SelectTrigger>
               <SelectContent>
@@ -479,8 +479,9 @@ function RejectDialog({
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-2 py-2">
-          <label className="text-sm font-medium">Reason (optional)</label>
+          <label htmlFor="reject-reason" className="text-sm font-medium">Reason (optional)</label>
           <Input
+            id="reject-reason"
             value={reason}
             onChange={(e) => setReason(e.target.value)}
             placeholder="Why is this being rejected?"
@@ -662,10 +663,11 @@ function QuotaConfigCard() {
       className="flex flex-col gap-4 rounded-lg border border-border/60 p-4 sm:flex-row sm:items-end"
     >
       <div className="flex-1 space-y-1">
-        <label className="text-xs font-medium text-muted-foreground">
+        <label htmlFor="quota-movie" className="text-xs font-medium text-muted-foreground">
           Movies per user
         </label>
         <Input
+          id="quota-movie"
           type="number"
           min={0}
           value={movie}
@@ -673,10 +675,11 @@ function QuotaConfigCard() {
         />
       </div>
       <div className="flex-1 space-y-1">
-        <label className="text-xs font-medium text-muted-foreground">
+        <label htmlFor="quota-series" className="text-xs font-medium text-muted-foreground">
           TV shows per user
         </label>
         <Input
+          id="quota-series"
           type="number"
           min={0}
           value={series}
@@ -684,10 +687,11 @@ function QuotaConfigCard() {
         />
       </div>
       <div className="flex-1 space-y-1">
-        <label className="text-xs font-medium text-muted-foreground">
+        <label htmlFor="quota-window" className="text-xs font-medium text-muted-foreground">
           Window (days)
         </label>
         <Input
+          id="quota-window"
           type="number"
           min={1}
           value={windowDays}

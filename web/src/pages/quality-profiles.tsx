@@ -340,6 +340,7 @@ function ProfileDialog({
               onChange={(e) => setName(e.target.value)}
               placeholder="e.g. HD-1080p"
               className="bg-zinc-900 border-zinc-700"
+              // eslint-disable-next-line jsx-a11y/no-autofocus -- intentional: focus the name field when the form opens
               autoFocus
             />
           </div>
@@ -380,7 +381,6 @@ function ProfileDialog({
                   <div key={group.source}>
                     <label
                       className="flex items-center gap-3 px-3 py-2 bg-zinc-800/70 cursor-pointer sticky top-0 z-10 border-b border-zinc-700/50"
-                      onClick={(e) => { e.preventDefault(); toggleGroup(group.defs); }}
                     >
                       <Checkbox
                         checked={groupAllChecked}

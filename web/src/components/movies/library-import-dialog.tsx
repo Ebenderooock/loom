@@ -207,7 +207,7 @@ export function LibraryImportDialog({
               </p>
 
               <div className="space-y-2">
-                <label className="text-sm font-medium">Library</label>
+                <span className="text-sm font-medium">Library</span>
                 {libraries.length === 0 ? (
                   <p className="text-sm text-destructive">
                     No libraries configured. Add one in Settings first.

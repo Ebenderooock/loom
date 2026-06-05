@@ -201,7 +201,15 @@ function LogTable({ entries }: { entries: LogEntry[] }) {
             >
               <div
                 className="flex items-start gap-2 cursor-pointer"
+                role="button"
+                tabIndex={hasAttrs ? 0 : -1}
                 onClick={() => hasAttrs && toggleExpand(entry.id)}
+                onKeyDown={(e) => {
+                  if (hasAttrs && (e.key === "Enter" || e.key === " ")) {
+                    e.preventDefault();
+                    toggleExpand(entry.id);
+                  }
+                }}
               >
                 {hasAttrs && (
                   expanded

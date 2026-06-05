@@ -238,7 +238,15 @@ function QueueItemRow({ item, onRefresh, onSelect }: { item: QueueItem; onRefres
   return (
     <div
       className="group flex items-center gap-4 px-4 py-3 border-b border-zinc-800/50 last:border-0 hover:bg-zinc-800/30 transition-colors cursor-pointer"
+      role="button"
+      tabIndex={0}
       onClick={() => onSelect(item)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onSelect(item);
+        }
+      }}
     >
       {/* Title + message */}
       <div className="flex-1 min-w-0">
@@ -311,6 +319,7 @@ function QueueItemRow({ item, onRefresh, onSelect }: { item: QueueItem; onRefres
       )}
 
       {/* Actions */}
+      {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events -- non-interactive wrapper; only stops row activation so its child buttons work */}
       <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
         {/* Pause / Resume */}
         {canPauseResume && (

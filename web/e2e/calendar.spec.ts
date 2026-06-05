@@ -3,9 +3,9 @@ import { mockBaseApp, mockGet } from "./helpers/mock-api";
 
 // Build a date string for the 15th of the current month
 function currentMonthDate(day: number) {
-  var now = new Date();
-  var month = String(now.getMonth() + 1).padStart(2, "0");
-  var d = String(day).padStart(2, "0");
+  const now = new Date();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const d = String(day).padStart(2, "0");
   return now.getFullYear() + "-" + month + "-" + d;
 }
 
@@ -52,7 +52,7 @@ test.describe("Calendar Page", () => {
   });
 
   test("calendar shows movie events", async ({ page }) => {
-    var events = [
+    const events = [
       makeCalendarEvent({
         id: "cal-1",
         title: "Test Movie",
@@ -70,7 +70,7 @@ test.describe("Calendar Page", () => {
   });
 
   test("calendar shows episode events", async ({ page }) => {
-    var events = [
+    const events = [
       makeCalendarEvent({
         id: "cal-2",
         title: "Test Series",
@@ -100,8 +100,8 @@ test.describe("Calendar Page", () => {
 
     // Find the next month button (second icon button in the card header)
     // Layout: [ChevronLeft] [MonthLabel] [ChevronRight]
-    var headerRow = page.locator("main").locator(".flex.flex-row").first();
-    var buttons = headerRow.locator("button");
+    const headerRow = page.locator("main").locator(".flex.flex-row").first();
+    const buttons = headerRow.locator("button");
 
     // Click the second button (ChevronRight / next month)
     await buttons.nth(1).click();
@@ -117,8 +117,8 @@ test.describe("Calendar Page", () => {
     await expect(page.locator("[role='grid']")).toBeVisible({ timeout: 10000 });
 
     // Find the prev month button (first icon button in the card header)
-    var headerRow = page.locator("main").locator(".flex.flex-row").first();
-    var buttons = headerRow.locator("button");
+    const headerRow = page.locator("main").locator(".flex.flex-row").first();
+    const buttons = headerRow.locator("button");
 
     // Click the first button (ChevronLeft / prev month)
     await buttons.nth(0).click();
@@ -133,9 +133,9 @@ test.describe("Calendar Page", () => {
     await expect(page.locator("[role='grid']")).toBeVisible({ timeout: 10000 });
 
     // Column headers should show weekday abbreviations
-    var headers = page.locator("[role='columnheader']");
+    const headers = page.locator("[role='columnheader']");
     await expect(headers.first()).toBeVisible({ timeout: 5000 });
-    var headerCount = await headers.count();
+    const headerCount = await headers.count();
     expect(headerCount).toBe(7);
   });
 
@@ -146,12 +146,12 @@ test.describe("Calendar Page", () => {
     await expect(page.locator("[role='grid']")).toBeVisible({ timeout: 10000 });
 
     // Today cell should have a ring highlight
-    var todayCell = page.locator("[class*='ring-primary']").first();
+    const todayCell = page.locator("[class*='ring-primary']").first();
     await expect(todayCell).toBeVisible({ timeout: 5000 });
   });
 
   test("calendar shows multiple event types with different colors", async ({ page }) => {
-    var events = [
+    const events = [
       makeCalendarEvent({
         id: "cal-1",
         title: "Movie Release",
@@ -192,20 +192,20 @@ test.describe("Calendar Page", () => {
 
     await expect(page.locator("[role='grid']")).toBeVisible({ timeout: 10000 });
     // Grid cells should exist
-    var cells = page.locator("[role='gridcell']");
+    const cells = page.locator("[role='gridcell']");
     await expect(cells.first()).toBeVisible({ timeout: 5000 });
   });
 
   test("calendar fetches data for current month range", async ({ page }) => {
-    var calendarReq = page.waitForRequest(
+    const calendarReq = page.waitForRequest(
       function(req) { return req.url().includes("/api/v1/calendar") && req.method() === "GET"; }
     );
 
     await mockCalendar(page, []);
     await page.goto("/calendar");
 
-    var req = await calendarReq;
-    var url = req.url();
+    const req = await calendarReq;
+    const url = req.url();
     // URL should have start and end query params
     expect(url).toContain("start=");
     expect(url).toContain("end=");

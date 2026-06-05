@@ -70,8 +70,8 @@ test.describe("Events / History Page", () => {
   });
 
   test("category filter changes the displayed events", async ({ page }) => {
-    var searchEntry = makeEntry({ id: "evt-1", category: "search", message: "Search completed" });
-    var downloadEntry = makeEntry({
+    const searchEntry = makeEntry({ id: "evt-1", category: "search", message: "Search completed" });
+    const downloadEntry = makeEntry({
       id: "evt-2",
       category: "download",
       event_type: "download_started",
@@ -88,7 +88,7 @@ test.describe("Events / History Page", () => {
     // Now override with a filtered response when category changes
     // The UI sends category param to API - mock a filtered response
     await page.route("**/api/v1/system/audit-log*", async (route) => {
-      var url = route.request().url();
+      const url = route.request().url();
       if (route.request().method() === "GET" && url.includes("category=download")) {
         await route.fulfill({
           status: 200,
@@ -113,8 +113,8 @@ test.describe("Events / History Page", () => {
   });
 
   test("level filter works", async ({ page }) => {
-    var infoEntry = makeEntry({ id: "evt-1", level: "info", message: "Info event" });
-    var errorEntry = makeEntry({
+    const infoEntry = makeEntry({ id: "evt-1", level: "info", message: "Info event" });
+    const errorEntry = makeEntry({
       id: "evt-2",
       level: "error",
       message: "Error event occurred",
@@ -129,7 +129,7 @@ test.describe("Events / History Page", () => {
 
     // Override route for filtered response
     await page.route("**/api/v1/system/audit-log*", async (route) => {
-      var url = route.request().url();
+      const url = route.request().url();
       if (route.request().method() === "GET" && url.includes("level=error")) {
         await route.fulfill({
           status: 200,
@@ -153,7 +153,7 @@ test.describe("Events / History Page", () => {
   });
 
   test("expandable row shows detail JSON", async ({ page }) => {
-    var entry = makeEntry({
+    const entry = makeEntry({
       detail: JSON.stringify({ query_log_id: "ql-1", results: 15, indexer: "TestIndexer" }),
     });
     await mockAuditLog(page, [entry]);
@@ -170,7 +170,7 @@ test.describe("Events / History Page", () => {
   });
 
   test("search diagnostics section loads per-indexer breakdown", async ({ page }) => {
-    var entry = makeEntry({
+    const entry = makeEntry({
       detail: JSON.stringify({ query_log_id: "ql-1", results: 15 }),
     });
     await mockAuditLog(page, [entry]);
@@ -213,10 +213,10 @@ test.describe("Events / History Page", () => {
     await expect(page.getByText("Search completed for Test Movie")).toBeVisible({ timeout: 10000 });
 
     // Verify refresh button exists and click it
-    var refreshBtn = page.getByRole("button", { name: "Refresh" });
+    const refreshBtn = page.getByRole("button", { name: "Refresh" });
     await expect(refreshBtn).toBeVisible();
 
-    var auditReq = page.waitForRequest(
+    const auditReq = page.waitForRequest(
       function(req) { return req.url().includes("/api/v1/system/audit-log") && req.method() === "GET"; }
     );
     await refreshBtn.click();
@@ -225,8 +225,8 @@ test.describe("Events / History Page", () => {
 
   test("pagination works with next and previous", async ({ page }) => {
     // Create 60 entries to trigger pagination (PAGE_SIZE=50)
-    var entries = [];
-    for (var i = 0; i < 50; i++) {
+    const entries = [];
+    for (let i = 0; i < 50; i++) {
       entries.push(makeEntry({
         id: "evt-" + i,
         message: "Event number " + i,
@@ -239,9 +239,9 @@ test.describe("Events / History Page", () => {
         await route.fallback();
         return;
       }
-      var url = route.request().url();
-      var offsetMatch = url.match(/offset=(\d+)/);
-      var currentOffset = offsetMatch ? parseInt(offsetMatch[1]) : 0;
+      const url = route.request().url();
+      const offsetMatch = url.match(/offset=(\d+)/);
+      const currentOffset = offsetMatch ? parseInt(offsetMatch[1]) : 0;
 
       if (currentOffset >= 50) {
         await route.fulfill({
@@ -275,7 +275,7 @@ test.describe("Events / History Page", () => {
     await expect(page.getByText(/1.*50 of 51/)).toBeVisible();
 
     // Next button should be enabled
-    var nextBtn = page.getByRole("button", { name: /Next/i });
+    const nextBtn = page.getByRole("button", { name: /Next/i });
     await expect(nextBtn).toBeEnabled();
 
     // Click next
@@ -286,7 +286,7 @@ test.describe("Events / History Page", () => {
   });
 
   test("different event types render correctly", async ({ page }) => {
-    var entries = [
+    const entries = [
       makeEntry({
         id: "evt-1",
         category: "search",

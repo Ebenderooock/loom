@@ -15,6 +15,10 @@ vi.mock("@/lib/api", () => ({
   useSystemStatus: () => ({ data: undefined, isLoading: true, isError: false }),
 }));
 
+vi.mock("@/hooks/use-auth", () => ({
+  useAuth: () => ({ user: { role: "admin" } }),
+}));
+
 function renderApp() {
   const root = createRootRoute({ component: AppLayout });
   const index = createRoute({

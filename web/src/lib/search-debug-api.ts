@@ -20,7 +20,7 @@ export interface SearchDebugEntry {
   tvdb_id: string;
   tmdb_id: string;
   quality_profile_id: string;
-  request?: any;
+  request?: Record<string, unknown>;
   tiers?: TierDetail[];
   indexer_results?: IndexerResult[];
   evaluation?: EvalResult[];

@@ -323,7 +323,16 @@ function AppLayoutInner({ children }: { children?: React.ReactNode }) {
           <div
             className="fixed inset-0 z-20 bg-black/50 backdrop-blur-[2px]"
             style={{ top: "3.5rem" }}
+            role="button"
+            tabIndex={0}
+            aria-label="Close search"
             onClick={() => setPaletteOpen(false)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " " || e.key === "Escape") {
+                e.preventDefault();
+                setPaletteOpen(false);
+              }
+            }}
           />
         )}
 

@@ -26,6 +26,7 @@ import {
   useProviderTest,
   type MovieMetadata,
   type SeriesMetadata,
+  type TestResult,
   ApiError,
 } from "@/lib/metadata-api";
 
@@ -58,8 +59,9 @@ function SearchForm({
     <form onSubmit={handleSubmit} className="space-y-4 rounded-md border border-border p-4">
       <div className="grid gap-4 md:grid-cols-4">
         <div className="md:col-span-2">
-          <label className="block text-sm font-medium mb-2">Query</label>
+          <label htmlFor="metadata-query" className="block text-sm font-medium mb-2">Query</label>
           <Input
+            id="metadata-query"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="e.g., The Matrix, Breaking Bad"
@@ -67,8 +69,9 @@ function SearchForm({
           />
         </div>
         <div>
-          <label className="block text-sm font-medium mb-2">Type</label>
+          <label htmlFor="metadata-type" className="block text-sm font-medium mb-2">Type</label>
           <select
+            id="metadata-type"
             value={type}
             onChange={(e) => setType(e.target.value as MediaType)}
             disabled={isLoading}
@@ -79,8 +82,9 @@ function SearchForm({
           </select>
         </div>
         <div>
-          <label className="block text-sm font-medium mb-2">Year (optional)</label>
+          <label htmlFor="metadata-year" className="block text-sm font-medium mb-2">Year (optional)</label>
           <Input
+            id="metadata-year"
             type="number"
             value={year}
             onChange={(e) => setYear(e.target.value)}
@@ -139,7 +143,7 @@ function ResultsGrid({
       {results.map((result, idx) => {
         const isMovie = "runtime" in result;
         const title = result.title;
-        const year = (result as any).year || (result as any).first_air_date?.split("-")[0];
+        const year = (result as { year?: number }).year || (result as { first_air_date?: string }).first_air_date?.split("-")[0];
         const poster = result.poster_path;
         const rating = result.rating;
         const overview = result.overview;
@@ -248,7 +252,7 @@ function CacheStatsTable() {
 function ProviderStatusCard({ provider }: { provider: "tmdb" | "tvdb" | "musicbrainz" }) {
   const { data: status, isLoading } = useProviderStatus(provider);
   const test = useProviderTest(provider);
-  const [testResult, setTestResult] = React.useState<any>(null);
+  const [testResult, setTestResult] = React.useState<TestResult | null>(null);
 
   async function handleTest() {
     try {
@@ -324,7 +328,7 @@ function ProviderStatusCard({ provider }: { provider: "tmdb" | "tvdb" | "musicbr
 // --- Main Page ---
 
 export function MetadataPage() {
-  const search = useMetadataSearch("", "movie");
+  const search = useMetadataSearch();
   const importMutation = useMetadataImport();
   const [results, setResults] = React.useState<SearchResult[]>([]);
   const [importDialog, setImportDialog] = React.useState<{
@@ -334,10 +338,7 @@ export function MetadataPage() {
 
   async function handleSearch(query: string, type: MediaType, year?: number) {
     try {
-      await search.mutateAsync();
-      // Re-create mutation with correct params for next search
-      const newSearch = useMetadataSearch(query, type, year);
-      const results = await newSearch.mutateAsync();
+      const results = await search.mutateAsync({ query, type, year });
       setResults((results as SearchResult[]) || []);
       toast.success(`Found ${(results as SearchResult[])?.length ?? 0} results`);
     } catch (err) {

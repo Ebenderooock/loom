@@ -77,6 +77,7 @@ export function NamingSettings() {
         // Use defaults if not configured yet
         fetchPreview(DEFAULTS);
       });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- load once on mount; fetchPreview is stable (useCallback with empty deps)
   }, []);
 
   const fetchPreview = useCallback(async (cfg: NamingConfig) => {

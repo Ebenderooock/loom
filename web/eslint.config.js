@@ -44,5 +44,18 @@ export default tseslint.config(
     files: ["**/*.stories.@(ts|tsx)"],
     extends: [...storybook.configs["flat/recommended"]],
   },
+  {
+    // Tests legitimately use `any` for mocks/fixtures and have unused
+    // parameters (e.g. Playwright's `({ page })` destructuring).
+    files: [
+      "e2e/**",
+      "**/__tests__/**",
+      "**/*.{test,spec}.{ts,tsx}",
+    ],
+    rules: {
+      "@typescript-eslint/no-explicit-any": "off",
+      "@typescript-eslint/no-unused-vars": "off",
+    },
+  },
   prettier,
 );

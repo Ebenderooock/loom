@@ -24,7 +24,7 @@ test.describe("Settings CRUD", () => {
       if (route.request().method() === "GET") {
         // Return both shapes: wrapper for useDownloads hook, but also ensure it works as array
         // The useDownloads hook reads .download_clients; the apiFetch path treats response as array
-        var path = new URL(route.request().url()).pathname;
+        const path = new URL(route.request().url()).pathname;
         if (path.endsWith("/")) {
           await route.fulfill({ status: 200, json: { download_clients: [SAMPLE_DOWNLOAD_CLIENT] } });
         } else {
@@ -68,7 +68,7 @@ test.describe("Settings CRUD", () => {
     await expect(page.getByText(SAMPLE_LIBRARY.path)).toBeVisible({ timeout: 10000 });
 
     // Click Add button to open add library dialog
-    var addBtn = page.getByRole("button", { name: /Add/i }).first();
+    const addBtn = page.getByRole("button", { name: /Add/i }).first();
     await addBtn.click();
 
     // Dialog should appear
@@ -91,7 +91,7 @@ test.describe("Settings CRUD", () => {
     await expect(page.getByText(SAMPLE_DOWNLOAD_CLIENT.name)).toBeVisible({ timeout: 10000 });
 
     // Click Add Client button
-    var addClientBtn = page.getByRole("button", { name: /Add Client|Add/i }).first();
+    const addClientBtn = page.getByRole("button", { name: /Add Client|Add/i }).first();
     await addClientBtn.click();
     await expect(page.getByRole("dialog")).toBeVisible({ timeout: 5000 });
   });

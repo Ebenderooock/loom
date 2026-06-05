@@ -47,7 +47,7 @@ function makeSeries(overrides: Record<string, unknown> = {}) {
 }
 
 function setupSeriesMocks(page: import("@playwright/test").Page, overrides: Record<string, unknown> = {}) {
-  var series = makeSeries(overrides);
+  const series = makeSeries(overrides);
   return Promise.all([
     mockSeriesApi(page, [series as any]),
     mockGet(page, "series/ser-1", series),
@@ -83,7 +83,7 @@ test.describe("Series Lifecycle", () => {
   test("series detail sheet opens when clicking a series card", async ({ page }) => {
     await setupSeriesMocks(page);
     await page.goto("/series");
-    var card = page.locator("main").getByText("Test Series").first();
+    const card = page.locator("main").getByText("Test Series").first();
     await expect(card).toBeVisible({ timeout: 10000 });
     await card.click();
     // Sheet should show series title
@@ -119,7 +119,7 @@ test.describe("Series Lifecycle", () => {
     await page.locator("main").getByText("Test Series").first().click();
     await page.waitForTimeout(1000);
 
-    var monitorReq = page.waitForRequest(
+    const monitorReq = page.waitForRequest(
       function(req) {
         return req.url().includes("/api/v1/series/ser-1/monitoring") && req.method() === "PUT";
       }
@@ -144,7 +144,7 @@ test.describe("Series Lifecycle", () => {
     await page.locator("main").getByText("Test Series").first().click();
     await page.waitForTimeout(1000);
 
-    var searchReq = page.waitForRequest(
+    const searchReq = page.waitForRequest(
       function(req) {
         return req.url().includes("/api/v1/autosearch") && req.method() === "POST";
       }
@@ -171,7 +171,7 @@ test.describe("Series Lifecycle", () => {
     // Confirmation dialog
     await expect(page.getByText(/Delete Series/i)).toBeVisible({ timeout: 5000 });
 
-    var deleteReq = page.waitForRequest(
+    const deleteReq = page.waitForRequest(
       function(req) {
         return req.url().includes("/api/v1/series/ser-1") && req.method() === "DELETE";
       }
@@ -182,7 +182,7 @@ test.describe("Series Lifecycle", () => {
   });
 
   test("refresh metadata triggers POST refresh", async ({ page }) => {
-    var series = await setupSeriesMocks(page);
+    const series = await setupSeriesMocks(page);
 
     await mockRoute(page, "POST", "series/ser-1/refresh", async (route) => {
       await route.fulfill({ status: 200, json: { ok: true } });
@@ -193,7 +193,7 @@ test.describe("Series Lifecycle", () => {
     await page.locator("main").getByText("Test Series").first().click();
     await page.waitForTimeout(1000);
 
-    var refreshReq = page.waitForRequest(
+    const refreshReq = page.waitForRequest(
       function(req) {
         return req.url().includes("/api/v1/series/ser-1/refresh") && req.method() === "POST";
       }
@@ -214,7 +214,7 @@ test.describe("Series Lifecycle", () => {
     await page.locator("main").getByText("Test Series").first().click();
     await page.waitForTimeout(1000);
 
-    var archiveReq = page.waitForRequest(
+    const archiveReq = page.waitForRequest(
       function(req) {
         return req.url().includes("/api/v1/series/ser-1/archive") && req.method() === "POST";
       }

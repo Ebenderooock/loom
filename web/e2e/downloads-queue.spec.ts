@@ -71,7 +71,7 @@ test.describe("Downloads Queue", () => {
     await page.goto("/downloads");
     await expect(page.getByText("Test.Movie.2024.1080p.BluRay.x264")).toBeVisible({ timeout: 10000 });
 
-    var pauseReq = page.waitForRequest(
+    const pauseReq = page.waitForRequest(
       function(req) { return req.url().includes("/api/v1/activity/pause") && req.method() === "POST"; }
     );
 
@@ -89,7 +89,7 @@ test.describe("Downloads Queue", () => {
     await page.goto("/downloads");
     await expect(page.getByText("Test.Movie.2024.1080p.BluRay.x264")).toBeVisible({ timeout: 10000 });
 
-    var resumeReq = page.waitForRequest(
+    const resumeReq = page.waitForRequest(
       function(req) { return req.url().includes("/api/v1/activity/resume") && req.method() === "POST"; }
     );
 
@@ -107,7 +107,7 @@ test.describe("Downloads Queue", () => {
     await page.goto("/downloads");
     await expect(page.getByText("Test.Movie.2024.1080p.BluRay.x264")).toBeVisible({ timeout: 10000 });
 
-    var removeReq = page.waitForRequest(
+    const removeReq = page.waitForRequest(
       function(req) { return req.url().includes("/api/v1/activity/remove") && req.method() === "POST"; }
     );
 
@@ -115,7 +115,7 @@ test.describe("Downloads Queue", () => {
     await page.locator("button[title*='remove']").first().click();
 
     // Confirm if a confirmation dialog appears
-    var confirmBtn = page.getByRole("button", { name: /Confirm|Yes|Remove/i });
+    const confirmBtn = page.getByRole("button", { name: /Confirm|Yes|Remove/i });
     if (await confirmBtn.isVisible({ timeout: 2000 }).catch(function() { return false; })) {
       await confirmBtn.click();
     }
@@ -133,11 +133,11 @@ test.describe("Downloads Queue", () => {
     await page.goto("/downloads");
     await expect(page.getByText("Test.Movie.2024.1080p.BluRay.x264")).toBeVisible({ timeout: 10000 });
 
-    var importReq = page.waitForRequest(
+    const importReq = page.waitForRequest(
       function(req) { return req.url().includes("/api/v1/imports/manual") && req.method() === "POST"; }
     );
 
-    var forceImportBtn = page.locator("button[title='Force Import']").first();
+    const forceImportBtn = page.locator("button[title='Force Import']").first();
     if (await forceImportBtn.isVisible({ timeout: 3000 }).catch(function() { return false; })) {
       await forceImportBtn.click();
       await importReq;
@@ -150,7 +150,7 @@ test.describe("Downloads Queue", () => {
 
     await expect(page.getByText("Test.Movie.2024.1080p.BluRay.x264")).toBeVisible({ timeout: 10000 });
 
-    var refreshReq = page.waitForRequest(
+    const refreshReq = page.waitForRequest(
       function(req) { return req.url().includes("/api/v1/activity") && req.method() === "GET"; }
     );
 
@@ -159,7 +159,7 @@ test.describe("Downloads Queue", () => {
   });
 
   test("multiple downloads are listed", async ({ page }) => {
-    var items = [
+    const items = [
       makeQueueItem({ id: "dl-1", title: "Movie.One.2024.1080p.BluRay", progress: 0.8 }),
       makeQueueItem({ id: "dl-2", title: "Movie.Two.2024.720p.WEB-DL", progress: 0.3, status: "downloading" }),
       makeQueueItem({ id: "dl-3", title: "Movie.Three.2024.4K.UHD", progress: 0.0, status: "queued" }),
@@ -187,7 +187,7 @@ test.describe("Downloads Queue", () => {
     await mockActivity(page, []);
     await page.goto("/downloads");
 
-    var importsTab = page.getByRole("tab", { name: /Imports/i });
+    const importsTab = page.getByRole("tab", { name: /Imports/i });
     await expect(importsTab).toBeVisible({ timeout: 10000 });
   });
 });

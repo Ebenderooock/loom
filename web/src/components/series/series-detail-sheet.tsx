@@ -234,8 +234,8 @@ function SeasonAccordion({
       } else {
         toast.warning(`No suitable release found`, { id: toastId, description: result.reason || `${result.considered} considered, ${result.rejected} rejected` });
       }
-    } catch (err: any) {
-      toast.error("Auto search failed", { id: toastId, description: err.message });
+    } catch (err) {
+      toast.error("Auto search failed", { id: toastId, description: err instanceof Error ? err.message : String(err) });
     } finally {
       setAutoSearchingEp(null);
     }
@@ -262,8 +262,8 @@ function SeasonAccordion({
       } else {
         toast.warning(`No suitable release found`, { id: toastId, description: result.reason || `${result.considered} considered, ${result.rejected} rejected` });
       }
-    } catch (err: any) {
-      toast.error("Auto search failed", { id: toastId, description: err.message });
+    } catch (err) {
+      toast.error("Auto search failed", { id: toastId, description: err instanceof Error ? err.message : String(err) });
     } finally {
       setAutoSearchingSeason(false);
     }
@@ -315,6 +315,7 @@ function SeasonAccordion({
         <div className="flex-1" />
 
         {/* Season action icons */}
+        {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events -- non-interactive wrapper; only stops row activation so its child buttons work */}
         <div className="flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>
           <button
             className="p-1 rounded hover:bg-accent/10 text-muted-foreground hover:text-accent transition-colors"
@@ -531,10 +532,10 @@ export function SeriesDetailSheet({
           description: result.reason || `${result.considered} considered, ${result.rejected} rejected`,
         });
       }
-    } catch (err: any) {
+    } catch (err) {
       toast.error("Auto search failed", {
         id: toastId,
-        description: err.message,
+        description: err instanceof Error ? err.message : String(err),
       });
     } finally {
       setAutoSearching(false);
@@ -823,16 +824,16 @@ export function SeriesDetailSheet({
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <label className="text-xs font-medium">Quality Profile</label>
+                  <label htmlFor="series-edit-profile" className="text-xs font-medium">Quality Profile</label>
                   <Select value={editProfile} onValueChange={setEditProfile}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectTrigger id="series-edit-profile"><SelectValue /></SelectTrigger>
                     <SelectContent>{profiles.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-xs font-medium">Monitoring</label>
+                  <label htmlFor="series-edit-monitoring" className="text-xs font-medium">Monitoring</label>
                   <Select value={editMonitoring} onValueChange={setEditMonitoring}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectTrigger id="series-edit-monitoring"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="monitored">Monitored</SelectItem>
                       <SelectItem value="unmonitored">Unmonitored</SelectItem>
@@ -840,9 +841,9 @@ export function SeriesDetailSheet({
                   </Select>
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-xs font-medium">Series Type</label>
+                  <label htmlFor="series-edit-type" className="text-xs font-medium">Series Type</label>
                   <Select value={editSeriesType} onValueChange={setEditSeriesType}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectTrigger id="series-edit-type"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="standard">Standard</SelectItem>
                       <SelectItem value="daily">Daily</SelectItem>

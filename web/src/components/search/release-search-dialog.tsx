@@ -515,8 +515,9 @@ function FilterBar({
               />
             </div>
             {hasFreeleech && (
-              <label className="flex items-center gap-1.5 cursor-pointer select-none pb-1">
+              <label htmlFor="freeleech-only" className="flex items-center gap-1.5 cursor-pointer select-none pb-1">
                 <Checkbox
+                  id="freeleech-only"
                   checked={filters.freeleechOnly}
                   onCheckedChange={(v) =>
                     onChange({ ...filters, freeleechOnly: v === true })
@@ -711,7 +712,7 @@ export function ReleaseSearchDialog({
     );
 
     abortRef.current = controller;
-  }, [query, mediaType]);
+  }, [query, mediaType, tmdbId, tvdbId, imdbId, season, episode]);
 
   // Auto-run search when dialog opens with autoSearch enabled
   useEffect(() => {
@@ -746,6 +747,7 @@ export function ReleaseSearchDialog({
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search query…"
             className="flex-1"
+            // eslint-disable-next-line jsx-a11y/no-autofocus -- intentional: focus the search field when the dialog opens
             autoFocus
           />
           <Button type="submit" disabled={loading} className="gap-1.5">

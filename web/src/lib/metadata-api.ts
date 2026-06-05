@@ -98,13 +98,13 @@ async function httpPost<T>(path: string, body: unknown): Promise<T> {
 
 // ---------- React Query Hooks ----------
 
-export function useMetadataSearch(query: string, type: string, year?: number) {
+export function useMetadataSearch() {
   return useMutation({
-    mutationFn: async () => {
-      if (!query) throw new Error("Query cannot be empty");
+    mutationFn: async (params: { query: string; type: string; year?: number }) => {
+      if (!params.query) throw new Error("Query cannot be empty");
       return httpPost<MovieMetadata[] | SeriesMetadata[]>(
         "/api/metadata/search",
-        { query, type, year }
+        { query: params.query, type: params.type, year: params.year }
       );
     },
   });

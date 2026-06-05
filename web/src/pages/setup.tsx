@@ -646,8 +646,9 @@ export function SetupPage() {
 
             <div className="space-y-4">
               <div className="space-y-2">
-                <label className="text-sm font-medium text-neutral-light">Username</label>
+                <label htmlFor="setup-username" className="text-sm font-medium text-neutral-light">Username</label>
                 <Input
+                  id="setup-username"
                   type="text"
                   placeholder="Enter username"
                   value={username}
@@ -658,8 +659,9 @@ export function SetupPage() {
               </div>
 
               <div className="space-y-2">
-                <label className="text-sm font-medium text-neutral-light">Password</label>
+                <label htmlFor="setup-password" className="text-sm font-medium text-neutral-light">Password</label>
                 <Input
+                  id="setup-password"
                   type="password"
                   placeholder="Enter password"
                   value={password}
@@ -670,8 +672,9 @@ export function SetupPage() {
               </div>
 
               <div className="space-y-2">
-                <label className="text-sm font-medium text-neutral-light">Email (Optional)</label>
+                <label htmlFor="setup-email" className="text-sm font-medium text-neutral-light">Email (Optional)</label>
                 <Input
+                  id="setup-email"
                   type="email"
                   placeholder="Enter email"
                   value={email}

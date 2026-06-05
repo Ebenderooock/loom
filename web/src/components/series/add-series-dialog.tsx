@@ -176,23 +176,23 @@ export function AddSeriesDialog({
 
               <div className="mt-6 grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <label className="text-sm font-medium">Library</label>
+                  <label htmlFor="add-series-library" className="text-sm font-medium">Library</label>
                   <Select value={selectedLibrary} onValueChange={handleLibraryChange}>
-                    <SelectTrigger><SelectValue placeholder="Select library" /></SelectTrigger>
+                    <SelectTrigger id="add-series-library"><SelectValue placeholder="Select library" /></SelectTrigger>
                     <SelectContent>{libraries.map(lib => <SelectItem key={lib.id} value={lib.id}>{lib.name}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-sm font-medium">Quality Profile</label>
+                  <label htmlFor="add-series-profile" className="text-sm font-medium">Quality Profile</label>
                   <Select value={selectedProfile} onValueChange={setSelectedProfile}>
-                    <SelectTrigger><SelectValue placeholder="Select quality profile" /></SelectTrigger>
+                    <SelectTrigger id="add-series-profile"><SelectValue placeholder="Select quality profile" /></SelectTrigger>
                     <SelectContent>{qualityProfiles.map(qp => <SelectItem key={qp.id} value={qp.id}>{qp.name}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-sm font-medium">Series Type</label>
+                  <label htmlFor="add-series-type" className="text-sm font-medium">Series Type</label>
                   <Select value={seriesType} onValueChange={setSeriesType}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectTrigger id="add-series-type"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="standard">Standard</SelectItem>
                       <SelectItem value="daily">Daily</SelectItem>
@@ -204,9 +204,9 @@ export function AddSeriesDialog({
 
               <div className="flex items-center gap-6 mt-4">
                 <div className="flex-1">
-                  <label className="text-xs text-muted-foreground mb-1 block">Monitor</label>
+                  <label htmlFor="add-series-monitor" className="text-xs text-muted-foreground mb-1 block">Monitor</label>
                   <Select value={monitoringStatus} onValueChange={setMonitoringStatus}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectTrigger id="add-series-monitor"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">All Episodes</SelectItem>
                       <SelectItem value="future">Future Episodes</SelectItem>

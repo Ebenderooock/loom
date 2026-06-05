@@ -65,19 +65,13 @@ export function MovieCard({
 
       {/* Checkbox */}
       {(selectMode || selected) && (
-        <div
-          className="absolute top-2 left-2 z-10"
-          onClick={(e) => { e.stopPropagation(); onToggleSelect(); }}
-        >
-          <Checkbox checked={selected} className="h-5 w-5 border-white/60 data-[state=checked]:bg-accent data-[state=checked]:border-accent" />
+        <div className="absolute top-2 left-2 z-10">
+          <Checkbox checked={selected} onClick={(e) => e.stopPropagation()} onCheckedChange={() => onToggleSelect()} className="h-5 w-5 border-white/60 data-[state=checked]:bg-accent data-[state=checked]:border-accent" />
         </div>
       )}
       {!selectMode && !selected && (
-        <div
-          className="absolute top-2 left-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-200"
-          onClick={(e) => { e.stopPropagation(); onToggleSelect(); }}
-        >
-          <Checkbox checked={false} className="h-5 w-5 border-white/60" />
+        <div className="absolute top-2 left-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+          <Checkbox checked={false} onClick={(e) => e.stopPropagation()} onCheckedChange={() => onToggleSelect()} className="h-5 w-5 border-white/60" />
         </div>
       )}
 

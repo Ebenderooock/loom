@@ -77,6 +77,7 @@ export function OrganizeDialog({
     } finally {
       setLoading(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally keyed on the id-list contents (string), not the array's identity
   }, [movieIds.join(",")]);
 
   useEffect(() => {
