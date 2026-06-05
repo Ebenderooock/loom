@@ -48,10 +48,10 @@ func (m *mockImporter) callCount() int {
 }
 
 type mockDownloadStatus struct {
-	downloads map[string]string
+	downloads map[string]ActiveDownloadInfo
 }
 
-func (m *mockDownloadStatus) ActiveDownloads(ctx context.Context) (map[string]string, error) {
+func (m *mockDownloadStatus) ActiveDownloads(ctx context.Context) (map[string]ActiveDownloadInfo, error) {
 	return m.downloads, nil
 }
 
@@ -82,7 +82,7 @@ func testOrchestrator(t *testing.T, imp *mockImporter) (*Orchestrator, *Store) {
 		Engine:         engine,
 		Logger:         slog.Default(),
 		ImportFn:       imp.fn,
-		DownloadStatus: &mockDownloadStatus{downloads: map[string]string{}},
+		DownloadStatus: &mockDownloadStatus{downloads: map[string]ActiveDownloadInfo{}},
 	})
 	return orch, store
 }
