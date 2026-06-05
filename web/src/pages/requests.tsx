@@ -50,13 +50,34 @@ interface LookupResult {
   overview?: string;
 }
 
-const STATUS_STYLES: Record<RequestStatus, { label: string; className: string }> = {
-  pending: { label: "Pending", className: "bg-amber-500/15 text-amber-500 border-amber-500/30" },
-  approving: { label: "Approving", className: "bg-blue-500/15 text-blue-500 border-blue-500/30" },
-  approved: { label: "Approved", className: "bg-emerald-500/15 text-emerald-500 border-emerald-500/30" },
-  available: { label: "Available", className: "bg-emerald-500/15 text-emerald-500 border-emerald-500/30" },
-  rejected: { label: "Rejected", className: "bg-red-500/15 text-red-500 border-red-500/30" },
-  failed: { label: "Failed", className: "bg-red-500/15 text-red-500 border-red-500/30" },
+const STATUS_STYLES: Record<
+  RequestStatus,
+  { label: string; className: string }
+> = {
+  pending: {
+    label: "Pending",
+    className: "bg-amber-500/15 text-amber-500 border-amber-500/30",
+  },
+  approving: {
+    label: "Approving",
+    className: "bg-blue-500/15 text-blue-500 border-blue-500/30",
+  },
+  approved: {
+    label: "Approved",
+    className: "bg-emerald-500/15 text-emerald-500 border-emerald-500/30",
+  },
+  available: {
+    label: "Available",
+    className: "bg-emerald-500/15 text-emerald-500 border-emerald-500/30",
+  },
+  rejected: {
+    label: "Rejected",
+    className: "bg-red-500/15 text-red-500 border-red-500/30",
+  },
+  failed: {
+    label: "Failed",
+    className: "bg-red-500/15 text-red-500 border-red-500/30",
+  },
 };
 
 function StatusBadge({ status }: { status: RequestStatus }) {
@@ -138,21 +159,18 @@ function SearchAndRequest() {
     return m;
   }, [mine]);
 
-  const runSearch = React.useCallback(
-    (mt: RequestMediaType, q: string) => {
-      if (q.trim().length < 2) {
-        setResults([]);
-        return;
-      }
-      setSearching(true);
-      const controller = new AbortController();
-      lookup(mt, q, controller.signal)
-        .then(setResults)
-        .catch(() => setResults([]))
-        .finally(() => setSearching(false));
-    },
-    [],
-  );
+  const runSearch = React.useCallback((mt: RequestMediaType, q: string) => {
+    if (q.trim().length < 2) {
+      setResults([]);
+      return;
+    }
+    setSearching(true);
+    const controller = new AbortController();
+    lookup(mt, q, controller.signal)
+      .then(setResults)
+      .catch(() => setResults([]))
+      .finally(() => setSearching(false));
+  }, []);
 
   const onTermChange = (val: string) => {
     setTerm(val);
@@ -186,7 +204,10 @@ function SearchAndRequest() {
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-        <Tabs value={mediaType} onValueChange={(v) => onMediaTypeChange(v as RequestMediaType)}>
+        <Tabs
+          value={mediaType}
+          onValueChange={(v) => onMediaTypeChange(v as RequestMediaType)}
+        >
           <TabsList>
             <TabsTrigger value="movie">Movies</TabsTrigger>
             <TabsTrigger value="series">TV Shows</TabsTrigger>
@@ -214,8 +235,13 @@ function SearchAndRequest() {
           const key = `${mediaType}:${r.tmdbId}`;
           const alreadyStatus = existing[key];
           const localResult = requested[key];
-          const isRequested = localResult === "ok" || (!!alreadyStatus && alreadyStatus !== "rejected" && alreadyStatus !== "failed");
-          const errMsg = localResult && localResult !== "ok" ? localResult : undefined;
+          const isRequested =
+            localResult === "ok" ||
+            (!!alreadyStatus &&
+              alreadyStatus !== "rejected" &&
+              alreadyStatus !== "failed");
+          const errMsg =
+            localResult && localResult !== "ok" ? localResult : undefined;
           return (
             <div
               key={key}
@@ -383,12 +409,18 @@ function ApproveDialog({
           <DialogTitle>Approve request</DialogTitle>
           <DialogDescription>
             {request?.title}
-            {request?.year ? ` (${request.year})` : ""} — choose where to add it.
+            {request?.year ? ` (${request.year})` : ""} — choose where to add
+            it.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-2">
           <div className="space-y-1.5">
-            <label htmlFor="request-approve-library" className="text-sm font-medium">Library</label>
+            <label
+              htmlFor="request-approve-library"
+              className="text-sm font-medium"
+            >
+              Library
+            </label>
             <Select value={libraryId} onValueChange={onLibraryChange}>
               <SelectTrigger id="request-approve-library">
                 <SelectValue placeholder="Select a library" />
@@ -403,12 +435,15 @@ function ApproveDialog({
             </Select>
             {eligibleLibraries.length === 0 && (
               <p className="text-xs text-red-500">
-                No {request?.media_type === "movie" ? "movie" : "TV"} library configured.
+                No {request?.media_type === "movie" ? "movie" : "TV"} library
+                configured.
               </p>
             )}
           </div>
           <div className="space-y-1.5">
-            <label htmlFor="request-approve-qp" className="text-sm font-medium">Quality profile</label>
+            <label htmlFor="request-approve-qp" className="text-sm font-medium">
+              Quality profile
+            </label>
             <Select value={qpId} onValueChange={setQpId}>
               <SelectTrigger id="request-approve-qp">
                 <SelectValue placeholder="Select a quality profile" />
@@ -432,7 +467,9 @@ function ApproveDialog({
             onClick={submit}
             disabled={!libraryId || !qpId || approve.isPending}
           >
-            {approve.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            {approve.isPending && (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            )}
             Approve &amp; add
           </Button>
         </DialogFooter>
@@ -479,7 +516,9 @@ function RejectDialog({
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-2 py-2">
-          <label htmlFor="reject-reason" className="text-sm font-medium">Reason (optional)</label>
+          <label htmlFor="reject-reason" className="text-sm font-medium">
+            Reason (optional)
+          </label>
           <Input
             id="reject-reason"
             value={reason}
@@ -492,8 +531,14 @@ function RejectDialog({
           <Button variant="outline" onClick={onClose}>
             Cancel
           </Button>
-          <Button variant="destructive" onClick={submit} disabled={reject.isPending}>
-            {reject.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+          <Button
+            variant="destructive"
+            onClick={submit}
+            disabled={reject.isPending}
+          >
+            {reject.isPending && (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            )}
             Reject
           </Button>
         </DialogFooter>
@@ -542,7 +587,10 @@ function ManageRequests() {
     <div className="space-y-4">
       <div className="flex items-center gap-2">
         <span className="text-sm text-muted-foreground">Filter</span>
-        <Select value={status} onValueChange={(v) => setStatus(v as RequestStatus | "all")}>
+        <Select
+          value={status}
+          onValueChange={(v) => setStatus(v as RequestStatus | "all")}
+        >
           <SelectTrigger className="w-40">
             <SelectValue />
           </SelectTrigger>
@@ -559,7 +607,9 @@ function ManageRequests() {
       {isLoading ? (
         <p className="text-sm text-muted-foreground">Loading…</p>
       ) : !data || data.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No requests in this state.</p>
+        <p className="text-sm text-muted-foreground">
+          No requests in this state.
+        </p>
       ) : (
         <div className="space-y-2">
           {data.map((r) => (
@@ -652,7 +702,9 @@ function QuotaConfigCard() {
       {
         onSuccess: () => toast.success("Request quota saved"),
         onError: (err) =>
-          toast.error(err instanceof Error ? err.message : "Failed to save quota"),
+          toast.error(
+            err instanceof Error ? err.message : "Failed to save quota",
+          ),
       },
     );
   }
@@ -663,7 +715,10 @@ function QuotaConfigCard() {
       className="flex flex-col gap-4 rounded-lg border border-border/60 p-4 sm:flex-row sm:items-end"
     >
       <div className="flex-1 space-y-1">
-        <label htmlFor="quota-movie" className="text-xs font-medium text-muted-foreground">
+        <label
+          htmlFor="quota-movie"
+          className="text-xs font-medium text-muted-foreground"
+        >
           Movies per user
         </label>
         <Input
@@ -675,7 +730,10 @@ function QuotaConfigCard() {
         />
       </div>
       <div className="flex-1 space-y-1">
-        <label htmlFor="quota-series" className="text-xs font-medium text-muted-foreground">
+        <label
+          htmlFor="quota-series"
+          className="text-xs font-medium text-muted-foreground"
+        >
           TV shows per user
         </label>
         <Input
@@ -687,7 +745,10 @@ function QuotaConfigCard() {
         />
       </div>
       <div className="flex-1 space-y-1">
-        <label htmlFor="quota-window" className="text-xs font-medium text-muted-foreground">
+        <label
+          htmlFor="quota-window"
+          className="text-xs font-medium text-muted-foreground"
+        >
           Window (days)
         </label>
         <Input

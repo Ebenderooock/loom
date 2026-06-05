@@ -13,11 +13,24 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  AlertCircle, CheckCircle2, Lock, Copy, Check,
-  FolderOpen, Rss, Download, Trash2, Loader2,
+  AlertCircle,
+  CheckCircle2,
+  Lock,
+  Copy,
+  Check,
+  FolderOpen,
+  Rss,
+  Download,
+  Trash2,
+  Loader2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { createLibrary, deleteLibrary, type Library, MEDIA_TYPES } from "@/lib/libraries-api";
+import {
+  createLibrary,
+  deleteLibrary,
+  type Library,
+  MEDIA_TYPES,
+} from "@/lib/libraries-api";
 
 type SetupStep =
   | "welcome"
@@ -42,25 +55,31 @@ const STEP_LABELS: Record<SetupStep, string> = {
   welcome: "Welcome",
   credentials: "Account",
   "display-key": "API Key",
-  "libraries": "Libraries",
+  libraries: "Libraries",
   indexers: "Indexers",
   "download-clients": "Downloads",
   complete: "Done",
 };
 
-const CLIENT_TYPES = ["qbittorrent", "sabnzbd", "nzbget", "deluge", "transmission"] as const;
+const CLIENT_TYPES = [
+  "qbittorrent",
+  "sabnzbd",
+  "nzbget",
+  "deluge",
+  "transmission",
+] as const;
 
 // ─── Step Indicator ──────────────────────────────────────────────────
 
 function StepIndicator({ current }: { current: SetupStep }) {
   const idx = STEPS.indexOf(current);
   return (
-    <div className="flex items-center justify-center gap-1.5 mb-6">
+    <div className="mb-6 flex items-center justify-center gap-1.5">
       {STEPS.map((s, i) => (
         <div key={s} className="flex items-center gap-1.5">
           <div
             className={cn(
-              "w-2.5 h-2.5 rounded-full transition-colors",
+              "h-2.5 w-2.5 rounded-full transition-colors",
               i < idx
                 ? "bg-teal-electric"
                 : i === idx
@@ -121,11 +140,11 @@ function LibrariesStep({
   };
 
   return (
-    <div className="bg-neutral-card rounded-lg shadow-lg p-8 space-y-6">
-      <div className="text-center space-y-2">
-        <FolderOpen className="w-8 h-8 text-teal-electric mx-auto" />
+    <div className="space-y-6 rounded-lg bg-neutral-card p-8 shadow-lg">
+      <div className="space-y-2 text-center">
+        <FolderOpen className="mx-auto h-8 w-8 text-teal-electric" />
         <h2 className="text-2xl font-bold text-neutral-light">Libraries</h2>
-        <p className="text-neutral-muted text-sm">
+        <p className="text-sm text-neutral-muted">
           Add libraries where your movie/series collections live
         </p>
       </div>
@@ -133,7 +152,9 @@ function LibrariesStep({
       {error && (
         <Alert className="border-semantic-error/30 bg-semantic-error/10">
           <AlertCircle className="h-4 w-4 text-semantic-error" />
-          <AlertDescription className="text-semantic-error">{error}</AlertDescription>
+          <AlertDescription className="text-semantic-error">
+            {error}
+          </AlertDescription>
         </Alert>
       )}
 
@@ -143,15 +164,17 @@ function LibrariesStep({
             placeholder="Library name"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            className="bg-neutral-dark border-purple-rich/30 text-neutral-light placeholder:text-neutral-muted focus:border-teal-electric"
+            className="border-purple-rich/30 bg-neutral-dark text-neutral-light placeholder:text-neutral-muted focus:border-teal-electric"
           />
           <Select value={mediaType} onValueChange={setMediaType}>
-            <SelectTrigger className="w-32 bg-neutral-dark border-purple-rich/30 text-neutral-light">
+            <SelectTrigger className="w-32 border-purple-rich/30 bg-neutral-dark text-neutral-light">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {MEDIA_TYPES.map(mt => (
-                <SelectItem key={mt.value} value={mt.value}>{mt.label}</SelectItem>
+              {MEDIA_TYPES.map((mt) => (
+                <SelectItem key={mt.value} value={mt.value}>
+                  {mt.label}
+                </SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -161,15 +184,21 @@ function LibrariesStep({
             placeholder="/mnt/media/movies"
             value={path}
             onChange={(e) => setPath(e.target.value)}
-            className="bg-neutral-dark border-purple-rich/30 text-neutral-light placeholder:text-neutral-muted focus:border-teal-electric"
-            onKeyDown={(e) => { if (e.key === "Enter") addLib(); }}
+            className="border-purple-rich/30 bg-neutral-dark text-neutral-light placeholder:text-neutral-muted focus:border-teal-electric"
+            onKeyDown={(e) => {
+              if (e.key === "Enter") addLib();
+            }}
           />
           <Button
             onClick={addLib}
             disabled={adding || !name.trim() || !path.trim()}
-            className="bg-teal-electric hover:bg-teal-ocean text-neutral-dark shrink-0"
+            className="shrink-0 bg-teal-electric text-neutral-dark hover:bg-teal-ocean"
           >
-            {adding ? <Loader2 className="w-4 h-4 animate-spin" /> : "Add Library"}
+            {adding ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              "Add Library"
+            )}
           </Button>
         </div>
 
@@ -178,16 +207,20 @@ function LibrariesStep({
             {libraries.map((lib) => (
               <div
                 key={lib.id}
-                className="flex items-center gap-2 bg-neutral-dark/50 rounded px-3 py-2 text-sm text-neutral-light"
+                className="flex items-center gap-2 rounded bg-neutral-dark/50 px-3 py-2 text-sm text-neutral-light"
               >
-                <FolderOpen className="w-4 h-4 text-teal-electric shrink-0" />
-                <span className="flex-1 truncate">{lib.name} — {lib.path}</span>
-                <span className="text-xs text-neutral-muted capitalize">{lib.media_type}</span>
+                <FolderOpen className="h-4 w-4 shrink-0 text-teal-electric" />
+                <span className="flex-1 truncate">
+                  {lib.name} — {lib.path}
+                </span>
+                <span className="text-xs capitalize text-neutral-muted">
+                  {lib.media_type}
+                </span>
                 <button
                   onClick={() => removeLib(lib.id)}
-                  className="text-neutral-muted hover:text-semantic-error transition-colors"
+                  className="text-neutral-muted transition-colors hover:text-semantic-error"
                 >
-                  <Trash2 className="w-3.5 h-3.5" />
+                  <Trash2 className="h-3.5 w-3.5" />
                 </button>
               </div>
             ))}
@@ -199,16 +232,12 @@ function LibrariesStep({
         <Button onClick={onBack} variant="outline" className="flex-1">
           Back
         </Button>
-        <Button
-          onClick={onNext}
-          variant="outline"
-          className="flex-1"
-        >
+        <Button onClick={onNext} variant="outline" className="flex-1">
           Skip
         </Button>
         <Button
           onClick={onNext}
-          className="flex-1 bg-teal-electric hover:bg-teal-ocean text-neutral-dark font-medium"
+          className="flex-1 bg-teal-electric font-medium text-neutral-dark hover:bg-teal-ocean"
         >
           Next
         </Button>
@@ -270,11 +299,11 @@ function IndexersStep({
   };
 
   return (
-    <div className="bg-neutral-card rounded-lg shadow-lg p-8 space-y-6">
-      <div className="text-center space-y-2">
-        <Rss className="w-8 h-8 text-teal-electric mx-auto" />
+    <div className="space-y-6 rounded-lg bg-neutral-card p-8 shadow-lg">
+      <div className="space-y-2 text-center">
+        <Rss className="mx-auto h-8 w-8 text-teal-electric" />
         <h2 className="text-2xl font-bold text-neutral-light">Indexers</h2>
-        <p className="text-neutral-muted text-sm">
+        <p className="text-sm text-neutral-muted">
           Add indexers to search for releases
         </p>
       </div>
@@ -282,7 +311,9 @@ function IndexersStep({
       {error && (
         <Alert className="border-semantic-error/30 bg-semantic-error/10">
           <AlertCircle className="h-4 w-4 text-semantic-error" />
-          <AlertDescription className="text-semantic-error">{error}</AlertDescription>
+          <AlertDescription className="text-semantic-error">
+            {error}
+          </AlertDescription>
         </Alert>
       )}
 
@@ -291,26 +322,30 @@ function IndexersStep({
           placeholder="Indexer name"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          className="bg-neutral-dark border-purple-rich/30 text-neutral-light placeholder:text-neutral-muted focus:border-teal-electric"
+          className="border-purple-rich/30 bg-neutral-dark text-neutral-light placeholder:text-neutral-muted focus:border-teal-electric"
         />
         <Input
           placeholder="URL (e.g. https://indexer.example.com)"
           value={url}
           onChange={(e) => setUrl(e.target.value)}
-          className="bg-neutral-dark border-purple-rich/30 text-neutral-light placeholder:text-neutral-muted focus:border-teal-electric"
+          className="border-purple-rich/30 bg-neutral-dark text-neutral-light placeholder:text-neutral-muted focus:border-teal-electric"
         />
         <Input
           placeholder="API Key"
           value={apiKey}
           onChange={(e) => setApiKey(e.target.value)}
-          className="bg-neutral-dark border-purple-rich/30 text-neutral-light placeholder:text-neutral-muted focus:border-teal-electric"
+          className="border-purple-rich/30 bg-neutral-dark text-neutral-light placeholder:text-neutral-muted focus:border-teal-electric"
         />
         <Button
           onClick={addIndexer}
           disabled={adding || !name.trim() || !url.trim()}
-          className="w-full bg-teal-electric hover:bg-teal-ocean text-neutral-dark"
+          className="w-full bg-teal-electric text-neutral-dark hover:bg-teal-ocean"
         >
-          {adding ? <Loader2 className="w-4 h-4 animate-spin" /> : "Add Indexer"}
+          {adding ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            "Add Indexer"
+          )}
         </Button>
 
         {indexers.length > 0 && (
@@ -318,11 +353,13 @@ function IndexersStep({
             {indexers.map((idx) => (
               <div
                 key={idx.id}
-                className="flex items-center gap-2 bg-neutral-dark/50 rounded px-3 py-2 text-sm text-neutral-light"
+                className="flex items-center gap-2 rounded bg-neutral-dark/50 px-3 py-2 text-sm text-neutral-light"
               >
-                <Rss className="w-4 h-4 text-teal-electric shrink-0" />
+                <Rss className="h-4 w-4 shrink-0 text-teal-electric" />
                 <span className="flex-1 truncate">{idx.name}</span>
-                <span className="text-xs text-neutral-muted truncate max-w-[140px]">{idx.url}</span>
+                <span className="max-w-[140px] truncate text-xs text-neutral-muted">
+                  {idx.url}
+                </span>
               </div>
             ))}
           </div>
@@ -338,7 +375,7 @@ function IndexersStep({
         </Button>
         <Button
           onClick={onNext}
-          className="flex-1 bg-teal-electric hover:bg-teal-ocean text-neutral-dark font-medium"
+          className="flex-1 bg-teal-electric font-medium text-neutral-dark hover:bg-teal-ocean"
         >
           Next
         </Button>
@@ -408,11 +445,13 @@ function DownloadClientsStep({
   };
 
   return (
-    <div className="bg-neutral-card rounded-lg shadow-lg p-8 space-y-6">
-      <div className="text-center space-y-2">
-        <Download className="w-8 h-8 text-teal-electric mx-auto" />
-        <h2 className="text-2xl font-bold text-neutral-light">Download Client</h2>
-        <p className="text-neutral-muted text-sm">
+    <div className="space-y-6 rounded-lg bg-neutral-card p-8 shadow-lg">
+      <div className="space-y-2 text-center">
+        <Download className="mx-auto h-8 w-8 text-teal-electric" />
+        <h2 className="text-2xl font-bold text-neutral-light">
+          Download Client
+        </h2>
+        <p className="text-sm text-neutral-muted">
           Configure a download client for grabbing releases
         </p>
       </div>
@@ -420,7 +459,9 @@ function DownloadClientsStep({
       {error && (
         <Alert className="border-semantic-error/30 bg-semantic-error/10">
           <AlertCircle className="h-4 w-4 text-semantic-error" />
-          <AlertDescription className="text-semantic-error">{error}</AlertDescription>
+          <AlertDescription className="text-semantic-error">
+            {error}
+          </AlertDescription>
         </Alert>
       )}
 
@@ -429,10 +470,10 @@ function DownloadClientsStep({
           placeholder="Client name"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          className="bg-neutral-dark border-purple-rich/30 text-neutral-light placeholder:text-neutral-muted focus:border-teal-electric"
+          className="border-purple-rich/30 bg-neutral-dark text-neutral-light placeholder:text-neutral-muted focus:border-teal-electric"
         />
         <Select value={type} onValueChange={setType}>
-          <SelectTrigger className="bg-neutral-dark border-purple-rich/30 text-neutral-light">
+          <SelectTrigger className="border-purple-rich/30 bg-neutral-dark text-neutral-light">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -448,14 +489,14 @@ function DownloadClientsStep({
             placeholder="Host"
             value={host}
             onChange={(e) => setHost(e.target.value)}
-            className="col-span-2 bg-neutral-dark border-purple-rich/30 text-neutral-light placeholder:text-neutral-muted focus:border-teal-electric"
+            className="col-span-2 border-purple-rich/30 bg-neutral-dark text-neutral-light placeholder:text-neutral-muted focus:border-teal-electric"
           />
           <Input
             placeholder="Port"
             type="number"
             value={port}
             onChange={(e) => setPort(e.target.value)}
-            className="bg-neutral-dark border-purple-rich/30 text-neutral-light placeholder:text-neutral-muted focus:border-teal-electric"
+            className="border-purple-rich/30 bg-neutral-dark text-neutral-light placeholder:text-neutral-muted focus:border-teal-electric"
           />
         </div>
         <div className="grid grid-cols-2 gap-2">
@@ -463,22 +504,22 @@ function DownloadClientsStep({
             placeholder="Username"
             value={username}
             onChange={(e) => setUsername(e.target.value)}
-            className="bg-neutral-dark border-purple-rich/30 text-neutral-light placeholder:text-neutral-muted focus:border-teal-electric"
+            className="border-purple-rich/30 bg-neutral-dark text-neutral-light placeholder:text-neutral-muted focus:border-teal-electric"
           />
           <Input
             placeholder="Password"
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="bg-neutral-dark border-purple-rich/30 text-neutral-light placeholder:text-neutral-muted focus:border-teal-electric"
+            className="border-purple-rich/30 bg-neutral-dark text-neutral-light placeholder:text-neutral-muted focus:border-teal-electric"
           />
         </div>
         <Button
           onClick={addClient}
           disabled={adding || !name.trim() || !host.trim()}
-          className="w-full bg-teal-electric hover:bg-teal-ocean text-neutral-dark"
+          className="w-full bg-teal-electric text-neutral-dark hover:bg-teal-ocean"
         >
-          {adding ? <Loader2 className="w-4 h-4 animate-spin" /> : "Add Client"}
+          {adding ? <Loader2 className="h-4 w-4 animate-spin" /> : "Add Client"}
         </Button>
 
         {clients.length > 0 && (
@@ -486,9 +527,9 @@ function DownloadClientsStep({
             {clients.map((c) => (
               <div
                 key={c.id}
-                className="flex items-center gap-2 bg-neutral-dark/50 rounded px-3 py-2 text-sm text-neutral-light"
+                className="flex items-center gap-2 rounded bg-neutral-dark/50 px-3 py-2 text-sm text-neutral-light"
               >
-                <Download className="w-4 h-4 text-teal-electric shrink-0" />
+                <Download className="h-4 w-4 shrink-0 text-teal-electric" />
                 <span className="flex-1 truncate">{c.name}</span>
                 <span className="text-xs text-neutral-muted">{c.type}</span>
               </div>
@@ -506,7 +547,7 @@ function DownloadClientsStep({
         </Button>
         <Button
           onClick={onNext}
-          className="flex-1 bg-teal-electric hover:bg-teal-ocean text-neutral-dark font-medium"
+          className="flex-1 bg-teal-electric font-medium text-neutral-dark hover:bg-teal-ocean"
         >
           Next
         </Button>
@@ -580,26 +621,30 @@ export function SetupPage() {
   };
 
   return (
-    <div className="w-full min-h-screen flex items-center justify-center bg-gradient-to-br from-purple-midnight via-neutral-dark to-teal-deep py-8">
-      <div className="w-full max-w-md mx-auto px-4">
+    <div className="flex min-h-screen w-full items-center justify-center bg-gradient-to-br from-purple-midnight via-neutral-dark to-teal-deep py-8">
+      <div className="mx-auto w-full max-w-md px-4">
         <StepIndicator current={step} />
 
         {/* Welcome Step */}
         {step === "welcome" && (
-          <div className="bg-neutral-card rounded-lg shadow-lg p-8 space-y-6">
-            <div className="text-center space-y-4">
+          <div className="space-y-6 rounded-lg bg-neutral-card p-8 shadow-lg">
+            <div className="space-y-4 text-center">
               <img
                 src="/loom-logo.png"
                 alt="Loom Logo"
-                className="h-16 mx-auto object-contain"
+                className="mx-auto h-16 object-contain"
               />
               <div className="space-y-2">
-                <h1 className="text-3xl font-bold text-neutral-light">Welcome to Loom</h1>
-                <p className="text-neutral-muted">Let's get you set up in just a few steps</p>
+                <h1 className="text-3xl font-bold text-neutral-light">
+                  Welcome to Loom
+                </h1>
+                <p className="text-neutral-muted">
+                  Let's get you set up in just a few steps
+                </p>
               </div>
             </div>
 
-            <div className="bg-purple-midnight/20 border border-purple-rich/30 rounded-lg p-4 space-y-3">
+            <div className="space-y-3 rounded-lg border border-purple-rich/30 bg-purple-midnight/20 p-4">
               {[
                 ["Create Admin Account", "Set up your credentials for Loom"],
                 ["Generate API Key", "Get an API key for integrations"],
@@ -608,7 +653,7 @@ export function SetupPage() {
                 ["Download Client", "Set up a download client"],
               ].map(([title, desc]) => (
                 <div key={title} className="flex items-start gap-3">
-                  <CheckCircle2 className="w-5 h-5 text-teal-electric mt-0.5 flex-shrink-0" />
+                  <CheckCircle2 className="mt-0.5 h-5 w-5 flex-shrink-0 text-teal-electric" />
                   <div>
                     <p className="font-medium text-neutral-light">{title}</p>
                     <p className="text-sm text-neutral-muted">{desc}</p>
@@ -619,7 +664,7 @@ export function SetupPage() {
 
             <Button
               onClick={() => goTo("credentials")}
-              className="w-full bg-purple-rich hover:bg-purple-midnight text-white font-medium py-2"
+              className="w-full bg-purple-rich py-2 font-medium text-white hover:bg-purple-midnight"
             >
               Get Started
             </Button>
@@ -628,11 +673,13 @@ export function SetupPage() {
 
         {/* Credentials Step */}
         {step === "credentials" && (
-          <div className="bg-neutral-card rounded-lg shadow-lg p-8 space-y-6">
-            <div className="text-center space-y-2">
-              <Lock className="w-8 h-8 text-teal-electric mx-auto" />
-              <h2 className="text-2xl font-bold text-neutral-light">Create Your Account</h2>
-              <p className="text-neutral-muted text-sm">
+          <div className="space-y-6 rounded-lg bg-neutral-card p-8 shadow-lg">
+            <div className="space-y-2 text-center">
+              <Lock className="mx-auto h-8 w-8 text-teal-electric" />
+              <h2 className="text-2xl font-bold text-neutral-light">
+                Create Your Account
+              </h2>
+              <p className="text-sm text-neutral-muted">
                 Set up your admin credentials to access Loom
               </p>
             </div>
@@ -640,13 +687,20 @@ export function SetupPage() {
             {error && (
               <Alert className="border-semantic-error/30 bg-semantic-error/10">
                 <AlertCircle className="h-4 w-4 text-semantic-error" />
-                <AlertDescription className="text-semantic-error">{error}</AlertDescription>
+                <AlertDescription className="text-semantic-error">
+                  {error}
+                </AlertDescription>
               </Alert>
             )}
 
             <div className="space-y-4">
               <div className="space-y-2">
-                <label htmlFor="setup-username" className="text-sm font-medium text-neutral-light">Username</label>
+                <label
+                  htmlFor="setup-username"
+                  className="text-sm font-medium text-neutral-light"
+                >
+                  Username
+                </label>
                 <Input
                   id="setup-username"
                   type="text"
@@ -654,12 +708,17 @@ export function SetupPage() {
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                   disabled={isLoading}
-                  className="bg-neutral-dark border-purple-rich/30 text-neutral-light placeholder:text-neutral-muted focus:border-teal-electric"
+                  className="border-purple-rich/30 bg-neutral-dark text-neutral-light placeholder:text-neutral-muted focus:border-teal-electric"
                 />
               </div>
 
               <div className="space-y-2">
-                <label htmlFor="setup-password" className="text-sm font-medium text-neutral-light">Password</label>
+                <label
+                  htmlFor="setup-password"
+                  className="text-sm font-medium text-neutral-light"
+                >
+                  Password
+                </label>
                 <Input
                   id="setup-password"
                   type="password"
@@ -667,12 +726,17 @@ export function SetupPage() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   disabled={isLoading}
-                  className="bg-neutral-dark border-purple-rich/30 text-neutral-light placeholder:text-neutral-muted focus:border-teal-electric"
+                  className="border-purple-rich/30 bg-neutral-dark text-neutral-light placeholder:text-neutral-muted focus:border-teal-electric"
                 />
               </div>
 
               <div className="space-y-2">
-                <label htmlFor="setup-email" className="text-sm font-medium text-neutral-light">Email (Optional)</label>
+                <label
+                  htmlFor="setup-email"
+                  className="text-sm font-medium text-neutral-light"
+                >
+                  Email (Optional)
+                </label>
                 <Input
                   id="setup-email"
                   type="email"
@@ -680,7 +744,7 @@ export function SetupPage() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   disabled={isLoading}
-                  className="bg-neutral-dark border-purple-rich/30 text-neutral-light placeholder:text-neutral-muted focus:border-teal-electric"
+                  className="border-purple-rich/30 bg-neutral-dark text-neutral-light placeholder:text-neutral-muted focus:border-teal-electric"
                 />
               </div>
 
@@ -701,7 +765,7 @@ export function SetupPage() {
               <Button
                 onClick={completeSetup}
                 disabled={isLoading || !username.trim() || !password.trim()}
-                className="flex-1 bg-teal-electric hover:bg-teal-ocean text-neutral-dark font-medium"
+                className="flex-1 bg-teal-electric font-medium text-neutral-dark hover:bg-teal-ocean"
               >
                 {isLoading ? "Setting up..." : "Create Account"}
               </Button>
@@ -711,59 +775,66 @@ export function SetupPage() {
 
         {/* Display API Key Step */}
         {step === "display-key" && (
-          <div className="bg-neutral-card rounded-lg shadow-lg p-8 space-y-6">
-            <div className="text-center space-y-2">
+          <div className="space-y-6 rounded-lg bg-neutral-card p-8 shadow-lg">
+            <div className="space-y-2 text-center">
               <div className="flex justify-center">
-                <CheckCircle2 className="w-12 h-12 text-semantic-success" />
+                <CheckCircle2 className="h-12 w-12 text-semantic-success" />
               </div>
-              <h2 className="text-2xl font-bold text-neutral-light">Account Created!</h2>
-              <p className="text-neutral-muted text-sm">
+              <h2 className="text-2xl font-bold text-neutral-light">
+                Account Created!
+              </h2>
+              <p className="text-sm text-neutral-muted">
                 Save your API key for integrations and API access
               </p>
             </div>
 
-            <div className="bg-neutral-dark rounded-lg p-4 border border-teal-electric/30 space-y-3">
+            <div className="space-y-3 rounded-lg border border-teal-electric/30 bg-neutral-dark p-4">
               <div className="flex items-center justify-between">
-                <p className="text-xs font-medium text-neutral-muted uppercase tracking-wide">API Key</p>
+                <p className="text-xs font-medium uppercase tracking-wide text-neutral-muted">
+                  API Key
+                </p>
                 <button
                   onClick={() => {
                     navigator.clipboard.writeText(generatedApiKey);
                     setCopied(true);
                     setTimeout(() => setCopied(false), 2000);
                   }}
-                  className="inline-flex items-center gap-2 text-xs px-2 py-1 rounded bg-teal-electric/10 text-teal-electric hover:bg-teal-electric/20 transition-colors"
+                  className="inline-flex items-center gap-2 rounded bg-teal-electric/10 px-2 py-1 text-xs text-teal-electric transition-colors hover:bg-teal-electric/20"
                 >
                   {copied ? (
                     <>
-                      <Check className="w-3 h-3" />
+                      <Check className="h-3 w-3" />
                       Copied!
                     </>
                   ) : (
                     <>
-                      <Copy className="w-3 h-3" />
+                      <Copy className="h-3 w-3" />
                       Copy
                     </>
                   )}
                 </button>
               </div>
-              <code className="block text-sm text-neutral-light font-mono break-all bg-neutral-dark/50 p-2 rounded">
+              <code className="block break-all rounded bg-neutral-dark/50 p-2 font-mono text-sm text-neutral-light">
                 {generatedApiKey}
               </code>
               <p className="text-xs text-semantic-warning">
-                ⚠️ Save this key in a secure location. You won't be able to see it again.
+                ⚠️ Save this key in a secure location. You won't be able to see
+                it again.
               </p>
             </div>
 
             <Alert className="border-semantic-info/30 bg-semantic-info/10">
               <AlertCircle className="h-4 w-4 text-semantic-info" />
-              <AlertDescription className="text-semantic-info text-sm">
-                Use this API key as <code className="bg-neutral-dark px-1 rounded">X-API-Key</code> header for API requests
+              <AlertDescription className="text-sm text-semantic-info">
+                Use this API key as{" "}
+                <code className="rounded bg-neutral-dark px-1">X-API-Key</code>{" "}
+                header for API requests
               </AlertDescription>
             </Alert>
 
             <Button
               onClick={() => goTo("libraries")}
-              className="w-full bg-teal-electric hover:bg-teal-ocean text-neutral-dark font-medium"
+              className="w-full bg-teal-electric font-medium text-neutral-dark hover:bg-teal-ocean"
             >
               Continue Setup
             </Button>
@@ -796,17 +867,21 @@ export function SetupPage() {
 
         {/* Complete Step */}
         {step === "complete" && (
-          <div className="bg-neutral-card rounded-lg shadow-lg p-8 space-y-6">
-            <div className="text-center space-y-2">
+          <div className="space-y-6 rounded-lg bg-neutral-card p-8 shadow-lg">
+            <div className="space-y-2 text-center">
               <div className="flex justify-center">
-                <CheckCircle2 className="w-12 h-12 text-semantic-success" />
+                <CheckCircle2 className="h-12 w-12 text-semantic-success" />
               </div>
-              <h2 className="text-2xl font-bold text-neutral-light">All Set!</h2>
-              <p className="text-neutral-muted">Your setup is complete. Redirecting...</p>
+              <h2 className="text-2xl font-bold text-neutral-light">
+                All Set!
+              </h2>
+              <p className="text-neutral-muted">
+                Your setup is complete. Redirecting...
+              </p>
             </div>
 
-            <div className="w-full bg-neutral-dark rounded-full h-1 overflow-hidden">
-              <div className="h-full bg-gradient-to-r from-teal-electric to-purple-rich animate-pulse" />
+            <div className="h-1 w-full overflow-hidden rounded-full bg-neutral-dark">
+              <div className="h-full animate-pulse bg-gradient-to-r from-teal-electric to-purple-rich" />
             </div>
           </div>
         )}

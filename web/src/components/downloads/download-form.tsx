@@ -7,7 +7,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { CheckCircle2, XCircle, Loader2 } from "lucide-react";
-import type { Download, DownloadKind, DownloadProtocol } from "@/lib/downloads-api";
+import type {
+  Download,
+  DownloadKind,
+  DownloadProtocol,
+} from "@/lib/downloads-api";
 import { useTestDownloadConfig, useTestDownload } from "@/lib/downloads-api";
 
 const DOWNLOAD_KINDS: {
@@ -92,9 +96,14 @@ export function validateDownloadForm(
   }
   if (!BUILTIN_KINDS.has(values.kind)) {
     if (!values.host.trim()) {
-      errors.host = "Enter the host address (e.g., localhost or 192.168.1.100).";
+      errors.host =
+        "Enter the host address (e.g., localhost or 192.168.1.100).";
     }
-    if (!Number.isFinite(values.port) || values.port < 1 || values.port > 65535) {
+    if (
+      !Number.isFinite(values.port) ||
+      values.port < 1 ||
+      values.port > 65535
+    ) {
       errors.port = "Port must be between 1 and 65535.";
     }
   }
@@ -156,21 +165,25 @@ export function DownloadForm({
       save_path_default: initial?.save_path_default ?? "",
       remove_completed: initial?.remove_completed ?? false,
       remove_failed: initial?.remove_failed ?? false,
-      config: (initial?.config as Record<string, unknown>) ?? (isBuiltin ? {
-        listen_port: 6881,
-        download_dir: "",
-        incomplete_dir: "",
-        seed_ratio_limit: 1.0,
-        seed_time_limit_minutes: 0,
-        max_connections: 200,
-        max_upload_slots: 50,
-        enable_dht: true,
-        enable_pex: true,
-        enable_upnp: false,
-        download_speed_limit: 0,
-        upload_speed_limit: 0,
-        max_active_torrents: 25,
-      } : undefined),
+      config:
+        (initial?.config as Record<string, unknown>) ??
+        (isBuiltin
+          ? {
+              listen_port: 6881,
+              download_dir: "",
+              incomplete_dir: "",
+              seed_ratio_limit: 1.0,
+              seed_time_limit_minutes: 0,
+              max_connections: 200,
+              max_upload_slots: 50,
+              enable_dht: true,
+              enable_pex: true,
+              enable_upnp: false,
+              download_speed_limit: 0,
+              upload_speed_limit: 0,
+              max_active_torrents: 25,
+            }
+          : undefined),
     };
   });
 
@@ -348,7 +361,9 @@ export function DownloadForm({
           </div>
 
           <div className="grid gap-2">
-            <Label htmlFor="incomplete-dir">Incomplete directory (optional)</Label>
+            <Label htmlFor="incomplete-dir">
+              Incomplete directory (optional)
+            </Label>
             <Input
               id="incomplete-dir"
               value={(values.config?.incomplete_dir as string) ?? ""}
@@ -356,7 +371,8 @@ export function DownloadForm({
               placeholder="/downloads/incomplete"
             />
             <p className="text-xs text-muted-foreground">
-              Temporary directory for in-progress downloads. If empty, uses download directory.
+              Temporary directory for in-progress downloads. If empty, uses
+              download directory.
             </p>
           </div>
 
@@ -369,7 +385,9 @@ export function DownloadForm({
                 min={1}
                 max={65535}
                 value={(values.config?.listen_port as number) ?? 6881}
-                onChange={(e) => updateConfig("listen_port", Number(e.target.value))}
+                onChange={(e) =>
+                  updateConfig("listen_port", Number(e.target.value))
+                }
               />
             </div>
             <div className="grid gap-2">
@@ -380,7 +398,9 @@ export function DownloadForm({
                 min={1}
                 max={500}
                 value={(values.config?.max_active_torrents as number) ?? 25}
-                onChange={(e) => updateConfig("max_active_torrents", Number(e.target.value))}
+                onChange={(e) =>
+                  updateConfig("max_active_torrents", Number(e.target.value))
+                }
               />
             </div>
           </div>
@@ -394,7 +414,9 @@ export function DownloadForm({
                 min={0}
                 step={0.1}
                 value={(values.config?.seed_ratio_limit as number) ?? 1.0}
-                onChange={(e) => updateConfig("seed_ratio_limit", Number(e.target.value))}
+                onChange={(e) =>
+                  updateConfig("seed_ratio_limit", Number(e.target.value))
+                }
               />
               <p className="text-xs text-muted-foreground">
                 Stop seeding after reaching this ratio. 0 = seed forever.
@@ -407,7 +429,12 @@ export function DownloadForm({
                 type="number"
                 min={0}
                 value={(values.config?.seed_time_limit_minutes as number) ?? 0}
-                onChange={(e) => updateConfig("seed_time_limit_minutes", Number(e.target.value))}
+                onChange={(e) =>
+                  updateConfig(
+                    "seed_time_limit_minutes",
+                    Number(e.target.value),
+                  )
+                }
               />
               <p className="text-xs text-muted-foreground">
                 Stop seeding after this many minutes. 0 = no time limit.
@@ -422,8 +449,15 @@ export function DownloadForm({
                 id="dl-speed"
                 type="number"
                 min={0}
-                value={Math.round(((values.config?.download_speed_limit as number) ?? 0) / 1024)}
-                onChange={(e) => updateConfig("download_speed_limit", Number(e.target.value) * 1024)}
+                value={Math.round(
+                  ((values.config?.download_speed_limit as number) ?? 0) / 1024,
+                )}
+                onChange={(e) =>
+                  updateConfig(
+                    "download_speed_limit",
+                    Number(e.target.value) * 1024,
+                  )
+                }
               />
               <p className="text-xs text-muted-foreground">0 = unlimited.</p>
             </div>
@@ -433,8 +467,15 @@ export function DownloadForm({
                 id="ul-speed"
                 type="number"
                 min={0}
-                value={Math.round(((values.config?.upload_speed_limit as number) ?? 0) / 1024)}
-                onChange={(e) => updateConfig("upload_speed_limit", Number(e.target.value) * 1024)}
+                value={Math.round(
+                  ((values.config?.upload_speed_limit as number) ?? 0) / 1024,
+                )}
+                onChange={(e) =>
+                  updateConfig(
+                    "upload_speed_limit",
+                    Number(e.target.value) * 1024,
+                  )
+                }
               />
               <p className="text-xs text-muted-foreground">0 = unlimited.</p>
             </div>
@@ -448,7 +489,9 @@ export function DownloadForm({
                 type="number"
                 min={1}
                 value={(values.config?.max_connections as number) ?? 200}
-                onChange={(e) => updateConfig("max_connections", Number(e.target.value))}
+                onChange={(e) =>
+                  updateConfig("max_connections", Number(e.target.value))
+                }
               />
             </div>
             <div className="grid gap-2">
@@ -458,7 +501,9 @@ export function DownloadForm({
                 type="number"
                 min={1}
                 value={(values.config?.max_upload_slots as number) ?? 50}
-                onChange={(e) => updateConfig("max_upload_slots", Number(e.target.value))}
+                onChange={(e) =>
+                  updateConfig("max_upload_slots", Number(e.target.value))
+                }
               />
             </div>
           </div>
@@ -513,7 +558,9 @@ export function DownloadForm({
                 onChange={(e) => update("host", e.target.value)}
                 placeholder="localhost"
                 aria-invalid={Boolean(errors.host)}
-                aria-describedby={errors.host ? "download-host-error" : undefined}
+                aria-describedby={
+                  errors.host ? "download-host-error" : undefined
+                }
               />
               {errors.host ? (
                 <p id="download-host-error" className="text-xs text-red-600">
@@ -686,9 +733,9 @@ export function DownloadForm({
           }`}
         >
           {testResult.ok ? (
-            <CheckCircle2 className="w-4 h-4 shrink-0" />
+            <CheckCircle2 className="h-4 w-4 shrink-0" />
           ) : (
-            <XCircle className="w-4 h-4 shrink-0" />
+            <XCircle className="h-4 w-4 shrink-0" />
           )}
           <span>
             {testResult.ok
@@ -712,7 +759,7 @@ export function DownloadForm({
         >
           {testing ? (
             <>
-              <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
+              <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
               Testing…
             </>
           ) : (

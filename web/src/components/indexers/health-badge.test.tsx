@@ -27,10 +27,7 @@ describe("mapHealth", () => {
 
   it("downgrades a stale ok status to degraded", () => {
     const old = new Date(NOW.getTime() - 36 * 60 * 60 * 1000).toISOString();
-    const summary = mapHealth(
-      h({ status: "ok", last_checked_at: old }),
-      NOW,
-    );
+    const summary = mapHealth(h({ status: "ok", last_checked_at: old }), NOW);
     expect(summary.status).toBe("degraded");
     expect(summary.label).toBe("Stale");
   });

@@ -1,9 +1,5 @@
 import { test, expect } from "@playwright/test";
-import {
-  mockBaseApp,
-  mockSeriesApi,
-  SAMPLE_SERIES,
-} from "./helpers/mock-api";
+import { mockBaseApp, mockSeriesApi, SAMPLE_SERIES } from "./helpers/mock-api";
 
 test.describe("Series Page", () => {
   test.beforeEach(async ({ page }) => {
@@ -14,9 +10,9 @@ test.describe("Series Page", () => {
   test("renders series page heading", async ({ page }) => {
     await page.goto("/series");
     // useSetPageHeader("TV Shows") renders as <span> in header — hidden on mobile
-    await expect(
-      page.locator("header").getByText("TV Shows"),
-    ).toBeAttached({ timeout: 10000 });
+    await expect(page.locator("header").getByText("TV Shows")).toBeAttached({
+      timeout: 10000,
+    });
   });
 
   test("displays series in the list", async ({ page }) => {
@@ -28,9 +24,9 @@ test.describe("Series Page", () => {
 
   test("shows add series button", async ({ page }) => {
     await page.goto("/series");
-    await expect(
-      page.getByRole("button", { name: /add/i }),
-    ).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole("button", { name: /add/i })).toBeVisible({
+      timeout: 10000,
+    });
   });
 
   test("renders empty state when no series", async ({ page }) => {
@@ -46,8 +42,8 @@ test.describe("Series Page", () => {
     await page.goto("/series");
 
     // Empty state shows "No series yet"
-    await expect(
-      page.getByText("No series yet"),
-    ).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText("No series yet")).toBeVisible({
+      timeout: 10000,
+    });
   });
 });

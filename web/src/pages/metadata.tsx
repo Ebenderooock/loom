@@ -12,12 +12,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/ui/empty-state";
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   useMetadataSearch,
   useMetadataImport,
@@ -56,10 +51,18 @@ function SearchForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4 rounded-md border border-border p-4">
+    <form
+      onSubmit={handleSubmit}
+      className="space-y-4 rounded-md border border-border p-4"
+    >
       <div className="grid gap-4 md:grid-cols-4">
         <div className="md:col-span-2">
-          <label htmlFor="metadata-query" className="block text-sm font-medium mb-2">Query</label>
+          <label
+            htmlFor="metadata-query"
+            className="mb-2 block text-sm font-medium"
+          >
+            Query
+          </label>
           <Input
             id="metadata-query"
             value={query}
@@ -69,20 +72,30 @@ function SearchForm({
           />
         </div>
         <div>
-          <label htmlFor="metadata-type" className="block text-sm font-medium mb-2">Type</label>
+          <label
+            htmlFor="metadata-type"
+            className="mb-2 block text-sm font-medium"
+          >
+            Type
+          </label>
           <select
             id="metadata-type"
             value={type}
             onChange={(e) => setType(e.target.value as MediaType)}
             disabled={isLoading}
-            className="w-full px-3 py-2 border border-border rounded-md bg-background text-sm"
+            className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
           >
             <option value="movie">Movie</option>
             <option value="series">Series</option>
           </select>
         </div>
         <div>
-          <label htmlFor="metadata-year" className="block text-sm font-medium mb-2">Year (optional)</label>
+          <label
+            htmlFor="metadata-year"
+            className="mb-2 block text-sm font-medium"
+          >
+            Year (optional)
+          </label>
           <Input
             id="metadata-year"
             type="number"
@@ -118,7 +131,10 @@ function ResultsGrid({
     return (
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {Array.from({ length: 6 }).map((_, i) => (
-          <div key={i} className="rounded-md border border-border p-4 space-y-2">
+          <div
+            key={i}
+            className="space-y-2 rounded-md border border-border p-4"
+          >
             <Skeleton className="h-48 w-full" />
             <Skeleton className="h-4 w-full" />
             <Skeleton className="h-4 w-3/4" />
@@ -143,48 +159,53 @@ function ResultsGrid({
       {results.map((result, idx) => {
         const isMovie = "runtime" in result;
         const title = result.title;
-        const year = (result as { year?: number }).year || (result as { first_air_date?: string }).first_air_date?.split("-")[0];
+        const year =
+          (result as { year?: number }).year ||
+          (result as { first_air_date?: string }).first_air_date?.split("-")[0];
         const poster = result.poster_path;
         const rating = result.rating;
         const overview = result.overview;
 
         return (
           <div
-            key={result.tmdb_id ?? result.imdb_id ?? result.tvdb_id ?? `result-${idx}`}
-            className="rounded-md border border-border overflow-hidden hover:shadow-md transition-shadow"
+            key={
+              result.tmdb_id ??
+              result.imdb_id ??
+              result.tvdb_id ??
+              `result-${idx}`
+            }
+            className="overflow-hidden rounded-md border border-border transition-shadow hover:shadow-md"
           >
             {poster && (
               <img
                 src={poster}
                 alt={title}
-                className="w-full h-48 object-cover"
+                className="h-48 w-full object-cover"
               />
             )}
             {!poster && (
-              <div className="w-full h-48 bg-muted flex items-center justify-center text-muted-foreground text-sm">
+              <div className="flex h-48 w-full items-center justify-center bg-muted text-sm text-muted-foreground">
                 No poster
               </div>
             )}
-            <div className="p-3 space-y-2">
+            <div className="space-y-2 p-3">
               <div>
-                <h3 className="font-medium line-clamp-2">{title}</h3>
+                <h3 className="line-clamp-2 font-medium">{title}</h3>
                 <div className="text-xs text-muted-foreground">
                   {isMovie ? "Movie" : "Series"} {year && `• ${year}`}
                 </div>
               </div>
               {rating && (
-                <div className="text-sm">
-                  ⭐ {rating.toFixed(1)}/10
-                </div>
+                <div className="text-sm">⭐ {rating.toFixed(1)}/10</div>
               )}
               {overview && (
-                <p className="text-xs text-muted-foreground line-clamp-2">
+                <p className="line-clamp-2 text-xs text-muted-foreground">
                   {overview}
                 </p>
               )}
               <Button
                 size="sm"
-                className="w-full mt-2"
+                className="mt-2 w-full"
                 onClick={() => onImport(result, isMovie ? "movie" : "series")}
                 disabled={isImporting}
               >
@@ -199,7 +220,13 @@ function ResultsGrid({
 }
 
 function CacheStatsTable() {
-  const { data: stats, isLoading, isError, error, refetch } = useMetadataStats();
+  const {
+    data: stats,
+    isLoading,
+    isError,
+    error,
+    refetch,
+  } = useMetadataStats();
 
   if (isLoading) {
     return (
@@ -214,7 +241,8 @@ function CacheStatsTable() {
   if (isError) {
     return (
       <div className="rounded-md border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-700">
-        Failed to load cache stats: {error instanceof Error ? error.message : "Unknown error"}
+        Failed to load cache stats:{" "}
+        {error instanceof Error ? error.message : "Unknown error"}
       </div>
     );
   }
@@ -222,7 +250,12 @@ function CacheStatsTable() {
   return (
     <div className="space-y-4">
       <div className="flex justify-end">
-        <Button size="sm" variant="outline" onClick={() => refetch()} className="gap-2">
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => refetch()}
+          className="gap-2"
+        >
           <RefreshCw className="h-4 w-4" />
           Refresh
         </Button>
@@ -230,15 +263,21 @@ function CacheStatsTable() {
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <div className="rounded-md border border-border p-4">
           <div className="text-sm text-muted-foreground">Hit Rate</div>
-          <div className="text-2xl font-semibold">{stats?.hit_rate?.toFixed(1) ?? 0}%</div>
+          <div className="text-2xl font-semibold">
+            {stats?.hit_rate?.toFixed(1) ?? 0}%
+          </div>
         </div>
         <div className="rounded-md border border-border p-4">
           <div className="text-sm text-muted-foreground">Miss Rate</div>
-          <div className="text-2xl font-semibold">{stats?.miss_rate?.toFixed(1) ?? 0}%</div>
+          <div className="text-2xl font-semibold">
+            {stats?.miss_rate?.toFixed(1) ?? 0}%
+          </div>
         </div>
         <div className="rounded-md border border-border p-4">
           <div className="text-sm text-muted-foreground">Cache Size</div>
-          <div className="text-2xl font-semibold">{stats?.cache_size ?? 0} KB</div>
+          <div className="text-2xl font-semibold">
+            {stats?.cache_size ?? 0} KB
+          </div>
         </div>
         <div className="rounded-md border border-border p-4">
           <div className="text-sm text-muted-foreground">Entries</div>
@@ -249,7 +288,11 @@ function CacheStatsTable() {
   );
 }
 
-function ProviderStatusCard({ provider }: { provider: "tmdb" | "tvdb" | "musicbrainz" }) {
+function ProviderStatusCard({
+  provider,
+}: {
+  provider: "tmdb" | "tvdb" | "musicbrainz";
+}) {
   const { data: status, isLoading } = useProviderStatus(provider);
   const test = useProviderTest(provider);
   const [testResult, setTestResult] = React.useState<TestResult | null>(null);
@@ -271,33 +314,36 @@ function ProviderStatusCard({ provider }: { provider: "tmdb" | "tvdb" | "musicbr
 
   const statusBadge =
     !status || status.status === "unconfigured" ? (
-      <span className="inline-flex items-center gap-1 text-xs font-medium text-yellow-700 bg-yellow-100 px-2 py-1 rounded">
+      <span className="inline-flex items-center gap-1 rounded bg-yellow-100 px-2 py-1 text-xs font-medium text-yellow-700">
         ⚠ Unconfigured
       </span>
     ) : status.status === "error" ? (
-      <span className="inline-flex items-center gap-1 text-xs font-medium text-red-700 bg-red-100 px-2 py-1 rounded">
+      <span className="inline-flex items-center gap-1 rounded bg-red-100 px-2 py-1 text-xs font-medium text-red-700">
         ✗ Error
       </span>
     ) : (
-      <span className="inline-flex items-center gap-1 text-xs font-medium text-green-700 bg-green-100 px-2 py-1 rounded">
+      <span className="inline-flex items-center gap-1 rounded bg-green-100 px-2 py-1 text-xs font-medium text-green-700">
         ✓ OK
       </span>
     );
 
   return (
     <div className="rounded-md border border-border p-4">
-      <div className="flex items-start justify-between mb-3">
+      <div className="mb-3 flex items-start justify-between">
         <div>
           <h3 className="font-medium capitalize">{provider}</h3>
           <div className="mt-1">{statusBadge}</div>
         </div>
       </div>
-      <div className="text-xs text-muted-foreground space-y-1 mb-3">
+      <div className="mb-3 space-y-1 text-xs text-muted-foreground">
         <div>
-          API Key: {status?.configured_api_key ? "✓ Configured" : "✗ Not configured"}
+          API Key:{" "}
+          {status?.configured_api_key ? "✓ Configured" : "✗ Not configured"}
         </div>
         {status?.last_test_time && (
-          <div>Last test: {new Date(status.last_test_time).toLocaleString()}</div>
+          <div>
+            Last test: {new Date(status.last_test_time).toLocaleString()}
+          </div>
         )}
         {status?.last_test_latency_ms && (
           <div>Latency: {status.last_test_latency_ms}ms</div>
@@ -313,7 +359,7 @@ function ProviderStatusCard({ provider }: { provider: "tmdb" | "tvdb" | "musicbr
         {test.isPending ? "Testing..." : "Test"}
       </Button>
       {testResult && (
-        <div className="mt-2 text-xs text-muted-foreground p-2 bg-muted rounded">
+        <div className="mt-2 rounded bg-muted p-2 text-xs text-muted-foreground">
           {testResult.ok ? (
             <div>✓ Test passed ({testResult.latency_ms}ms)</div>
           ) : (
@@ -340,7 +386,9 @@ export function MetadataPage() {
     try {
       const results = await search.mutateAsync({ query, type, year });
       setResults((results as SearchResult[]) || []);
-      toast.success(`Found ${(results as SearchResult[])?.length ?? 0} results`);
+      toast.success(
+        `Found ${(results as SearchResult[])?.length ?? 0} results`,
+      );
     } catch (err) {
       const message = err instanceof ApiError ? err.message : String(err);
       toast.error(`Search failed: ${message}`);
@@ -374,11 +422,8 @@ export function MetadataPage() {
           <TabsTrigger value="providers">Provider Status</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="search" className="space-y-6 mt-6">
-          <SearchForm
-            onSearch={handleSearch}
-            isLoading={search.isPending}
-          />
+        <TabsContent value="search" className="mt-6 space-y-6">
+          <SearchForm onSearch={handleSearch} isLoading={search.isPending} />
           <ResultsGrid
             results={results}
             isLoading={search.isPending}
@@ -387,11 +432,11 @@ export function MetadataPage() {
           />
         </TabsContent>
 
-        <TabsContent value="cache" className="space-y-6 mt-6">
+        <TabsContent value="cache" className="mt-6 space-y-6">
           <CacheStatsTable />
         </TabsContent>
 
-        <TabsContent value="providers" className="space-y-6 mt-6">
+        <TabsContent value="providers" className="mt-6 space-y-6">
           <div className="grid gap-4 md:grid-cols-3">
             <ProviderStatusCard provider="tmdb" />
             <ProviderStatusCard provider="tvdb" />
@@ -400,24 +445,29 @@ export function MetadataPage() {
         </TabsContent>
       </Tabs>
 
-      <Dialog open={!!importDialog} onOpenChange={(open) => !open && setImportDialog(null)}>
+      <Dialog
+        open={!!importDialog}
+        onOpenChange={(open) => !open && setImportDialog(null)}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Confirm Import</DialogTitle>
             <DialogDescription>
-              Are you sure you want to import "{importDialog?.result.title}"?
-              It will be cached for 7 days.
+              Are you sure you want to import "{importDialog?.result.title}"? It
+              will be cached for 7 days.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-3 max-h-64 overflow-y-auto">
+          <div className="max-h-64 space-y-3 overflow-y-auto">
             <div>
               <div className="text-sm font-medium">Title</div>
-              <div className="text-sm text-muted-foreground">{importDialog?.result.title}</div>
+              <div className="text-sm text-muted-foreground">
+                {importDialog?.result.title}
+              </div>
             </div>
             {importDialog?.result.overview && (
               <div>
                 <div className="text-sm font-medium">Overview</div>
-                <div className="text-sm text-muted-foreground line-clamp-3">
+                <div className="line-clamp-3 text-sm text-muted-foreground">
                   {importDialog.result.overview}
                 </div>
               </div>
@@ -431,7 +481,7 @@ export function MetadataPage() {
               </div>
             )}
           </div>
-          <div className="flex gap-2 justify-end">
+          <div className="flex justify-end gap-2">
             <Button
               variant="outline"
               onClick={() => setImportDialog(null)}

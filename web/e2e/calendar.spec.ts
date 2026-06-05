@@ -21,7 +21,10 @@ function makeCalendarEvent(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function mockCalendar(page: import("@playwright/test").Page, events: unknown[] = []) {
+function mockCalendar(
+  page: import("@playwright/test").Page,
+  events: unknown[] = [],
+) {
   return page.route("**/api/v1/calendar*", async (route) => {
     if (route.request().method() === "GET") {
       await route.fulfill({
@@ -43,9 +46,9 @@ test.describe("Calendar Page", () => {
     await mockCalendar(page, []);
     await page.goto("/calendar");
 
-    await expect(
-      page.locator("header").getByText("Calendar"),
-    ).toBeAttached({ timeout: 10000 });
+    await expect(page.locator("header").getByText("Calendar")).toBeAttached({
+      timeout: 10000,
+    });
 
     // Calendar grid should be present
     await expect(page.locator("[role='grid']")).toBeVisible({ timeout: 10000 });
@@ -150,7 +153,9 @@ test.describe("Calendar Page", () => {
     await expect(todayCell).toBeVisible({ timeout: 5000 });
   });
 
-  test("calendar shows multiple event types with different colors", async ({ page }) => {
+  test("calendar shows multiple event types with different colors", async ({
+    page,
+  }) => {
     const events = [
       makeCalendarEvent({
         id: "cal-1",
@@ -183,7 +188,9 @@ test.describe("Calendar Page", () => {
     await page.goto("/calendar");
 
     await expect(page.locator("[role='grid']")).toBeVisible({ timeout: 10000 });
-    await expect(page.getByText("Movie Release")).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText("Movie Release")).toBeVisible({
+      timeout: 10000,
+    });
   });
 
   test("empty calendar shows grid with no events", async ({ page }) => {
@@ -197,9 +204,9 @@ test.describe("Calendar Page", () => {
   });
 
   test("calendar fetches data for current month range", async ({ page }) => {
-    const calendarReq = page.waitForRequest(
-      function(req) { return req.url().includes("/api/v1/calendar") && req.method() === "GET"; }
-    );
+    const calendarReq = page.waitForRequest(function (req) {
+      return req.url().includes("/api/v1/calendar") && req.method() === "GET";
+    });
 
     await mockCalendar(page, []);
     await page.goto("/calendar");

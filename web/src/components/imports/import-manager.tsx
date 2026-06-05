@@ -1,10 +1,5 @@
 import * as React from "react";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -50,12 +45,9 @@ import { ManualMatchDialog } from "./manual-match-dialog";
 import { formatBytes } from "@/lib/utils";
 
 function confidenceBadge(c: number) {
-  if (c >= 0.8)
-    return <Badge className="bg-green-600 text-white">High</Badge>;
+  if (c >= 0.8) return <Badge className="bg-green-600 text-white">High</Badge>;
   if (c >= 0.5)
-    return (
-      <Badge className="bg-yellow-500 text-black">Medium</Badge>
-    );
+    return <Badge className="bg-yellow-500 text-black">Medium</Badge>;
   return <Badge variant="secondary">Low</Badge>;
 }
 
@@ -90,9 +82,7 @@ function actionBadge(action: string) {
         </Badge>
       );
     case "keep_both":
-      return (
-        <Badge className="bg-purple-600 text-white">Keep Both</Badge>
-      );
+      return <Badge className="bg-purple-600 text-white">Keep Both</Badge>;
     case "no_match":
       return (
         <Badge variant="destructive">
@@ -353,10 +343,7 @@ function DecisionLogTab() {
               }}
               className="max-w-xs"
             />
-            <Select
-              value={String(pageSize)}
-              onValueChange={() => setPage(0)}
-            >
+            <Select value={String(pageSize)} onValueChange={() => setPage(0)}>
               <SelectTrigger className="w-[120px]">
                 <SelectValue />
               </SelectTrigger>
@@ -402,10 +389,16 @@ function DecisionLogTab() {
                         <TableCell className="whitespace-nowrap text-xs">
                           {new Date(d.created_at).toLocaleString()}
                         </TableCell>
-                        <TableCell className="max-w-[150px] truncate font-mono text-xs" title={d.source_path}>
+                        <TableCell
+                          className="max-w-[150px] truncate font-mono text-xs"
+                          title={d.source_path}
+                        >
                           {d.source_path.split("/").pop()}
                         </TableCell>
-                        <TableCell className="max-w-[150px] truncate font-mono text-xs" title={d.dest_path}>
+                        <TableCell
+                          className="max-w-[150px] truncate font-mono text-xs"
+                          title={d.dest_path}
+                        >
                           {d.dest_path.split("/").pop()}
                         </TableCell>
                         <TableCell>
@@ -413,7 +406,10 @@ function DecisionLogTab() {
                             <Badge variant="outline" className="text-xs">
                               {d.media_type}
                             </Badge>
-                            <span className="max-w-[100px] truncate text-xs" title={d.media_id}>
+                            <span
+                              className="max-w-[100px] truncate text-xs"
+                              title={d.media_id}
+                            >
                               {d.media_id}
                             </span>
                           </div>

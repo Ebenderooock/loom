@@ -73,7 +73,8 @@ function DiscoverGrid({ mediaType }: { mediaType: MediaType }) {
 
   const visible = React.useMemo(() => {
     let out = [...(items ?? [])];
-    if (listFilter !== ALL) out = out.filter((it) => it.list_name === listFilter);
+    if (listFilter !== ALL)
+      out = out.filter((it) => it.list_name === listFilter);
     if (genreFilter !== ALL)
       out = out.filter((it) => (it.genres ?? []).includes(genreFilter));
     if (yearFilter !== ALL)
@@ -84,9 +85,13 @@ function DiscoverGrid({ mediaType }: { mediaType: MediaType }) {
         case "title-desc":
           return b.title.localeCompare(a.title);
         case "year-desc":
-          return (b.year ?? 0) - (a.year ?? 0) || a.title.localeCompare(b.title);
+          return (
+            (b.year ?? 0) - (a.year ?? 0) || a.title.localeCompare(b.title)
+          );
         case "year-asc":
-          return (a.year ?? 0) - (b.year ?? 0) || a.title.localeCompare(b.title);
+          return (
+            (a.year ?? 0) - (b.year ?? 0) || a.title.localeCompare(b.title)
+          );
         case "title-asc":
         default:
           return a.title.localeCompare(b.title);

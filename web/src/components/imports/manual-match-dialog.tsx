@@ -46,7 +46,9 @@ export function ManualMatchDialog({
   scanResult,
   onMatched,
 }: ManualMatchDialogProps) {
-  const isSeries = !!(scanResult?.detected_season || scanResult?.detected_episode);
+  const isSeries = !!(
+    scanResult?.detected_season || scanResult?.detected_episode
+  );
   const [mediaType, setMediaType] = React.useState<"movie" | "series">(
     isSeries ? "series" : "movie",
   );
@@ -55,13 +57,17 @@ export function ManualMatchDialog({
 
   // Movie state
   const [movies, setMovies] = React.useState<LocalMovie[]>([]);
-  const [selectedMovie, setSelectedMovie] = React.useState<LocalMovie | null>(null);
+  const [selectedMovie, setSelectedMovie] = React.useState<LocalMovie | null>(
+    null,
+  );
 
   // Series state
   const [seriesList, setSeriesList] = React.useState<LocalSeries[]>([]);
-  const [selectedSeries, setSelectedSeries] = React.useState<LocalSeries | null>(null);
+  const [selectedSeries, setSelectedSeries] =
+    React.useState<LocalSeries | null>(null);
   const [episodes, setEpisodes] = React.useState<SeriesEpisode[]>([]);
-  const [selectedEpisode, setSelectedEpisode] = React.useState<SeriesEpisode | null>(null);
+  const [selectedEpisode, setSelectedEpisode] =
+    React.useState<SeriesEpisode | null>(null);
   const [seasonNum, setSeasonNum] = React.useState<number>(1);
   const [loadingEpisodes, setLoadingEpisodes] = React.useState(false);
 
@@ -72,7 +78,9 @@ export function ManualMatchDialog({
   React.useEffect(() => {
     if (open && scanResult) {
       const detected = scanResult.detected_title || "";
-      const series = !!(scanResult.detected_season || scanResult.detected_episode);
+      const series = !!(
+        scanResult.detected_season || scanResult.detected_episode
+      );
       setMediaType(series ? "series" : "movie");
       setQuery(detected);
       setMovies([]);
@@ -165,7 +173,11 @@ export function ManualMatchDialog({
     }
 
     matchMut.mutate(
-      { path: scanResult.file_path, media_type: matchMediaType, media_id: matchMediaId },
+      {
+        path: scanResult.file_path,
+        media_type: matchMediaType,
+        media_id: matchMediaId,
+      },
       {
         onSuccess: () => {
           toast.success("Import queued", {
@@ -328,7 +340,9 @@ export function ManualMatchDialog({
                     </Button>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="text-sm text-muted-foreground">Season</span>
+                    <span className="text-sm text-muted-foreground">
+                      Season
+                    </span>
                     <Select
                       value={String(seasonNum)}
                       onValueChange={(v) => void handleSeasonChange(Number(v))}
@@ -396,9 +410,7 @@ export function ManualMatchDialog({
           </TabsContent>
         </Tabs>
 
-        {error && (
-          <p className="text-sm text-destructive">{error}</p>
-        )}
+        {error && <p className="text-sm text-destructive">{error}</p>}
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>

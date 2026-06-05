@@ -103,9 +103,7 @@ function ListsTab() {
             key={l.id}
             list={l}
             expanded={expandedId === l.id}
-            onToggle={() =>
-              setExpandedId(expandedId === l.id ? null : l.id)
-            }
+            onToggle={() => setExpandedId(expandedId === l.id ? null : l.id)}
           />
         ))}
       </div>
@@ -139,8 +137,8 @@ function ListRow({
           )}
         </button>
 
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium truncate">{list.name}</p>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-medium">{list.name}</p>
           <p className="text-xs text-muted-foreground">
             {typeMeta?.label ?? list.list_type} · {list.media_type} ·{" "}
             {list.item_count ?? 0} items
@@ -156,7 +154,7 @@ function ListRow({
         </Badge>
 
         {list.last_sync && (
-          <span className="text-xs text-muted-foreground whitespace-nowrap">
+          <span className="whitespace-nowrap text-xs text-muted-foreground">
             Last sync: {new Date(list.last_sync).toLocaleString()}
           </span>
         )}
@@ -186,7 +184,11 @@ function ListRow({
           onClick={() => syncMut.mutate(list.id)}
           title="Sync now"
         >
-          {syncMut.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+          {syncMut.isPending ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <RefreshCw className="h-4 w-4" />
+          )}
         </Button>
 
         <Button
@@ -243,7 +245,7 @@ function ListItemsPanel({ listId }: { listId: string }) {
     <div className="px-8 pb-3">
       <table className="w-full text-sm">
         <thead>
-          <tr className="text-left text-xs text-muted-foreground border-b border-border">
+          <tr className="border-b border-border text-left text-xs text-muted-foreground">
             <th className="py-1 pr-4">Title</th>
             <th className="py-1 pr-4">Year</th>
             <th className="py-1 pr-4">IMDb</th>
@@ -253,7 +255,10 @@ function ListItemsPanel({ listId }: { listId: string }) {
         </thead>
         <tbody>
           {data.items.map((item) => (
-            <tr key={item.id} className="border-b border-border/50 last:border-0">
+            <tr
+              key={item.id}
+              className="border-b border-border/50 last:border-0"
+            >
               <td className="py-1 pr-4">{item.title}</td>
               <td className="py-1 pr-4">{item.year ?? "—"}</td>
               <td className="py-1 pr-4 font-mono text-xs">
@@ -312,7 +317,11 @@ function AddListForm({ onDone }: { onDone: () => void }) {
 
   const isTraktType = form.list_type.startsWith("trakt_");
   const showTraktListPicker = fields.includes("trakt_list_picker");
-  const { data: traktLists, isLoading: traktLoading, isError: traktError } = useTraktUserLists(showTraktListPicker);
+  const {
+    data: traktLists,
+    isLoading: traktLoading,
+    isError: traktError,
+  } = useTraktUserLists(showTraktListPicker);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -366,18 +375,22 @@ function AddListForm({ onDone }: { onDone: () => void }) {
 
             {isTraktType && (
               <p className="col-span-full text-xs text-muted-foreground">
-                Credentials are automatically used from your Trakt connection in Settings → Connections.
+                Credentials are automatically used from your Trakt connection in
+                Settings → Connections.
               </p>
             )}
 
             {showTraktListPicker && (
-              <div className="space-y-2 col-span-full">
+              <div className="col-span-full space-y-2">
                 <Label htmlFor="add-trakt-list">Trakt List</Label>
                 {traktLoading ? (
-                  <p className="text-sm text-muted-foreground">Loading your Trakt lists…</p>
+                  <p className="text-sm text-muted-foreground">
+                    Loading your Trakt lists…
+                  </p>
                 ) : traktError ? (
                   <p className="text-sm text-destructive">
-                    Could not load Trakt lists. Please connect Trakt in Settings → Connections first.
+                    Could not load Trakt lists. Please connect Trakt in Settings
+                    → Connections first.
                   </p>
                 ) : (
                   <Select
@@ -450,11 +463,7 @@ function AddListForm({ onDone }: { onDone: () => void }) {
                 onValueChange={(val) =>
                   setForm({
                     ...form,
-                    monitor_type: val as
-                      | "all"
-                      | "future"
-                      | "missing"
-                      | "none",
+                    monitor_type: val as "all" | "future" | "missing" | "none",
                   })
                 }
               >
@@ -627,7 +636,7 @@ function ExclusionsTab() {
         <div className="divide-y divide-border rounded-md border border-border">
           {exclusions.map((ex: ImportListExclusion) => (
             <div key={ex.id} className="flex items-center gap-3 px-4 py-2">
-              <div className="flex-1 min-w-0">
+              <div className="min-w-0 flex-1">
                 <p className="text-sm font-medium">{ex.title}</p>
                 <p className="text-xs text-muted-foreground">
                   {[ex.imdb_id, ex.tmdb_id, ex.tvdb_id]
@@ -651,5 +660,3 @@ function ExclusionsTab() {
     </div>
   );
 }
-
-

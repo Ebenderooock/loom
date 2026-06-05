@@ -79,14 +79,14 @@ export function InvitePage() {
   };
 
   return (
-    <div className="w-full h-screen flex items-center justify-center bg-gradient-to-br from-purple-midnight via-neutral-dark to-teal-deep">
-      <div className="w-full max-w-md mx-auto px-4">
-        <div className="bg-neutral-card rounded-lg shadow-lg p-8 space-y-6">
-          <div className="text-center space-y-4">
+    <div className="flex h-screen w-full items-center justify-center bg-gradient-to-br from-purple-midnight via-neutral-dark to-teal-deep">
+      <div className="mx-auto w-full max-w-md px-4">
+        <div className="space-y-6 rounded-lg bg-neutral-card p-8 shadow-lg">
+          <div className="space-y-4 text-center">
             <img
               src="/loom-logo.png"
               alt="Loom Logo"
-              className="h-16 mx-auto object-contain"
+              className="mx-auto h-16 object-contain"
             />
             <div className="space-y-2">
               <h1 className="text-3xl font-bold text-neutral-light">
@@ -127,7 +127,8 @@ export function InvitePage() {
             <>
               {phase === "checking" && (
                 <div className="flex items-center justify-center gap-2 py-8 text-neutral-muted">
-                  <Loader2 className="h-5 w-5 animate-spin" /> Checking your invite…
+                  <Loader2 className="h-5 w-5 animate-spin" /> Checking your
+                  invite…
                 </div>
               )}
 
@@ -135,8 +136,8 @@ export function InvitePage() {
                 <Alert variant="destructive">
                   <AlertCircle className="h-4 w-4" />
                   <AlertDescription>
-                    This invite link is invalid, has expired, or has already been
-                    used. Ask your administrator for a new one.
+                    This invite link is invalid, has expired, or has already
+                    been used. Ask your administrator for a new one.
                   </AlertDescription>
                 </Alert>
               )}
@@ -155,7 +156,10 @@ export function InvitePage() {
                     </p>
                   )}
                   <div className="space-y-1.5">
-                    <label htmlFor="invite-username" className="text-sm text-neutral-light">
+                    <label
+                      htmlFor="invite-username"
+                      className="text-sm text-neutral-light"
+                    >
                       Username
                     </label>
                     <Input
@@ -167,7 +171,10 @@ export function InvitePage() {
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <label htmlFor="invite-password" className="text-sm text-neutral-light">
+                    <label
+                      htmlFor="invite-password"
+                      className="text-sm text-neutral-light"
+                    >
                       Password
                     </label>
                     <Input
@@ -180,7 +187,10 @@ export function InvitePage() {
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <label htmlFor="invite-confirm" className="text-sm text-neutral-light">
+                    <label
+                      htmlFor="invite-confirm"
+                      className="text-sm text-neutral-light"
+                    >
                       Confirm password
                     </label>
                     <Input
@@ -192,10 +202,15 @@ export function InvitePage() {
                       disabled={phase === "submitting"}
                     />
                   </div>
-                  <Button type="submit" className="w-full" disabled={phase === "submitting"}>
+                  <Button
+                    type="submit"
+                    className="w-full"
+                    disabled={phase === "submitting"}
+                  >
                     {phase === "submitting" ? (
                       <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Creating account…
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />{" "}
+                        Creating account…
                       </>
                     ) : (
                       "Create account"

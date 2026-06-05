@@ -90,10 +90,7 @@ describe("toPatchPayload — diffing", () => {
   });
 
   it("includes a fresh config when fields differ", () => {
-    const patch = toPatchPayload(
-      values({ api_key: "rotated" }),
-      origin(),
-    );
+    const patch = toPatchPayload(values({ api_key: "rotated" }), origin());
     expect(patch.config).toEqual({
       url: "https://nzbhydra.example/api",
       api_key: "rotated",

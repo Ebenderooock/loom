@@ -10,7 +10,11 @@ import {
   useDeleteSource,
   useTestSource,
 } from "@/lib/sources-api";
-import type { UserSource, UserSourceCreate, UserSourcePatch } from "@/lib/sources-api";
+import type {
+  UserSource,
+  UserSourceCreate,
+  UserSourcePatch,
+} from "@/lib/sources-api";
 import { SourcesTable } from "@/components/sources/SourcesTable";
 import { SourceForm } from "@/components/sources/SourceForm";
 import { SourceTestPreview } from "@/components/sources/SourceTestPreview";
@@ -65,7 +69,8 @@ export function SourcesPage() {
     } catch (error) {
       toast({
         title: "Error",
-        description: error instanceof Error ? error.message : "Failed to save source",
+        description:
+          error instanceof Error ? error.message : "Failed to save source",
         variant: "destructive",
       });
     }
@@ -85,7 +90,8 @@ export function SourcesPage() {
     } catch (error) {
       toast({
         title: "Error",
-        description: error instanceof Error ? error.message : "Failed to delete source",
+        description:
+          error instanceof Error ? error.message : "Failed to delete source",
         variant: "destructive",
       });
     }
@@ -115,7 +121,8 @@ export function SourcesPage() {
     } catch (error) {
       toast({
         title: "Test Error",
-        description: error instanceof Error ? error.message : "Failed to test source",
+        description:
+          error instanceof Error ? error.message : "Failed to test source",
         variant: "destructive",
       });
     }
@@ -158,7 +165,9 @@ export function SourcesPage() {
         onClose={handleClosePreview}
         isLoading={testMutation.isPending}
         result={testMutation.data}
-        error={testMutation.error instanceof Error ? testMutation.error : undefined}
+        error={
+          testMutation.error instanceof Error ? testMutation.error : undefined
+        }
         sourceName={previewSource?.name}
       />
     </div>

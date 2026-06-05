@@ -201,7 +201,10 @@ function ProfileDialog({
                 </SelectTrigger>
                 <SelectContent>
                   {APP_TYPES.map((t) => (
-                    <SelectItem key={t.value || "__any__"} value={t.value || "__any__"}>
+                    <SelectItem
+                      key={t.value || "__any__"}
+                      value={t.value || "__any__"}
+                    >
                       {t.label}
                     </SelectItem>
                   ))}

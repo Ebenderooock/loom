@@ -28,7 +28,11 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useForm, type FieldPath } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import type { UserSource, UserSourceCreate, SourceType } from "@/lib/sources-api";
+import type {
+  UserSource,
+  UserSourceCreate,
+  SourceType,
+} from "@/lib/sources-api";
 
 const RSSConfigSchema = z.object({
   url: z.string().url("Must be a valid URL"),
@@ -62,12 +66,22 @@ interface SourceFormProps {
   open: boolean;
   source?: UserSource;
   onClose: () => void;
-  onSave: (data: UserSourceCreate | { id: string; patch: Partial<FormValues> }) => void;
+  onSave: (
+    data: UserSourceCreate | { id: string; patch: Partial<FormValues> },
+  ) => void;
   isLoading?: boolean;
 }
 
-export function SourceForm({ open, source, onClose, onSave, isLoading }: SourceFormProps) {
-  const [sourceType, setSourceType] = useState<SourceType>(source?.type ?? "rss");
+export function SourceForm({
+  open,
+  source,
+  onClose,
+  onSave,
+  isLoading,
+}: SourceFormProps) {
+  const [sourceType, setSourceType] = useState<SourceType>(
+    source?.type ?? "rss",
+  );
 
   const form = useForm<FormValues>({
     resolver: zodResolver(FormSchema),
@@ -187,9 +201,14 @@ export function SourceForm({ open, source, onClose, onSave, isLoading }: SourceF
             render={({ field }) => (
               <FormItem className="flex items-center gap-2">
                 <FormControl>
-                  <Checkbox checked={field.value} onCheckedChange={field.onChange} />
+                  <Checkbox
+                    checked={field.value}
+                    onCheckedChange={field.onChange}
+                  />
                 </FormControl>
-                <FormLabel className="mb-0 cursor-pointer">Enable this source</FormLabel>
+                <FormLabel className="mb-0 cursor-pointer">
+                  Enable this source
+                </FormLabel>
               </FormItem>
             )}
           />
@@ -208,7 +227,9 @@ export function SourceForm({ open, source, onClose, onSave, isLoading }: SourceF
                         {...form.register("config.url")}
                       />
                     </FormControl>
-                    <FormMessage>{form.formState.errors.config?.url?.message}</FormMessage>
+                    <FormMessage>
+                      {form.formState.errors.config?.url?.message}
+                    </FormMessage>
                   </FormItem>
                 )}
               />
@@ -228,7 +249,10 @@ export function SourceForm({ open, source, onClose, onSave, isLoading }: SourceF
                     </FormControl>
                     <FormDescription>Minimum 15 minutes</FormDescription>
                     <FormMessage>
-                      {form.formState.errors.config?.refresh_interval_minutes?.message}
+                      {
+                        form.formState.errors.config?.refresh_interval_minutes
+                          ?.message
+                      }
                     </FormMessage>
                   </FormItem>
                 )}
@@ -250,7 +274,9 @@ export function SourceForm({ open, source, onClose, onSave, isLoading }: SourceF
                         {...form.register("config.url")}
                       />
                     </FormControl>
-                    <FormMessage>{form.formState.errors.config?.url?.message}</FormMessage>
+                    <FormMessage>
+                      {form.formState.errors.config?.url?.message}
+                    </FormMessage>
                   </FormItem>
                 )}
               />
@@ -263,9 +289,15 @@ export function SourceForm({ open, source, onClose, onSave, isLoading }: SourceF
                     <FormItem>
                       <FormLabel>Selector Type</FormLabel>
                       <Select
-                        value={(form.getValues().config as Record<string, unknown>)?.selector_type as string ?? "css"}
+                        value={
+                          ((form.getValues().config as Record<string, unknown>)
+                            ?.selector_type as string) ?? "css"
+                        }
                         onValueChange={(val) =>
-                          form.setValue("config.selector_type" as FieldPath<FormValues>, val)
+                          form.setValue(
+                            "config.selector_type" as FieldPath<FormValues>,
+                            val,
+                          )
                         }
                       >
                         <FormControl>
@@ -289,8 +321,16 @@ export function SourceForm({ open, source, onClose, onSave, isLoading }: SourceF
                     <FormItem>
                       <FormLabel>Auth Type</FormLabel>
                       <Select
-                        value={(form.getValues().config as Record<string, unknown>)?.auth_type as string ?? "none"}
-                        onValueChange={(val) => form.setValue("config.auth_type" as FieldPath<FormValues>, val)}
+                        value={
+                          ((form.getValues().config as Record<string, unknown>)
+                            ?.auth_type as string) ?? "none"
+                        }
+                        onValueChange={(val) =>
+                          form.setValue(
+                            "config.auth_type" as FieldPath<FormValues>,
+                            val,
+                          )
+                        }
                       >
                         <FormControl>
                           <SelectTrigger>
@@ -320,9 +360,17 @@ export function SourceForm({ open, source, onClose, onSave, isLoading }: SourceF
                         {...form.register("config.item_selector")}
                       />
                     </FormControl>
-                    <FormDescription>CSS or XPath to each item container</FormDescription>
+                    <FormDescription>
+                      CSS or XPath to each item container
+                    </FormDescription>
                     <FormMessage>
-                      {(form.formState.errors.config as Record<string, { message?: string }> | undefined)?.item_selector?.message}
+                      {
+                        (
+                          form.formState.errors.config as
+                            | Record<string, { message?: string }>
+                            | undefined
+                        )?.item_selector?.message
+                      }
                     </FormMessage>
                   </FormItem>
                 )}
@@ -335,11 +383,22 @@ export function SourceForm({ open, source, onClose, onSave, isLoading }: SourceF
                   <FormItem>
                     <FormLabel>Title Selector *</FormLabel>
                     <FormControl>
-                      <Input placeholder="h2" {...form.register("config.title_selector")} />
+                      <Input
+                        placeholder="h2"
+                        {...form.register("config.title_selector")}
+                      />
                     </FormControl>
-                    <FormDescription>CSS or XPath to the title within each item</FormDescription>
+                    <FormDescription>
+                      CSS or XPath to the title within each item
+                    </FormDescription>
                     <FormMessage>
-                      {(form.formState.errors.config as Record<string, { message?: string }> | undefined)?.title_selector?.message}
+                      {
+                        (
+                          form.formState.errors.config as
+                            | Record<string, { message?: string }>
+                            | undefined
+                        )?.title_selector?.message
+                      }
                     </FormMessage>
                   </FormItem>
                 )}
@@ -353,7 +412,10 @@ export function SourceForm({ open, source, onClose, onSave, isLoading }: SourceF
                     <FormItem>
                       <FormLabel>Link Selector</FormLabel>
                       <FormControl>
-                        <Input placeholder="a" {...form.register("config.link_selector")} />
+                        <Input
+                          placeholder="a"
+                          {...form.register("config.link_selector")}
+                        />
                       </FormControl>
                     </FormItem>
                   )}
@@ -366,7 +428,10 @@ export function SourceForm({ open, source, onClose, onSave, isLoading }: SourceF
                     <FormItem>
                       <FormLabel>Published Selector</FormLabel>
                       <FormControl>
-                        <Input placeholder=".date" {...form.register("config.published_selector")} />
+                        <Input
+                          placeholder=".date"
+                          {...form.register("config.published_selector")}
+                        />
                       </FormControl>
                     </FormItem>
                   )}

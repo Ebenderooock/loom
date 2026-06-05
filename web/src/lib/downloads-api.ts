@@ -99,7 +99,12 @@ export class ApiError extends Error {
   status: number;
   code?: string;
   details?: unknown;
-  constructor(status: number, message: string, code?: string, details?: unknown) {
+  constructor(
+    status: number,
+    message: string,
+    code?: string,
+    details?: unknown,
+  ) {
     super(message);
     this.status = status;
     this.code = code;
@@ -139,7 +144,12 @@ async function request<T>(
       env?.error?.message ??
       (typeof parsed === "string" ? parsed : undefined) ??
       `${method} ${path} failed: ${res.status} ${res.statusText}`;
-    throw new ApiError(res.status, message, env?.error?.code, env?.error?.details);
+    throw new ApiError(
+      res.status,
+      message,
+      env?.error?.code,
+      env?.error?.details,
+    );
   }
   return parsed as T;
 }
@@ -168,7 +178,10 @@ export async function listDownloads(signal?: AbortSignal): Promise<Download[]> {
 /**
  * Fetch a single download client by ID.
  */
-export async function getDownload(id: string, signal?: AbortSignal): Promise<Download> {
+export async function getDownload(
+  id: string,
+  signal?: AbortSignal,
+): Promise<Download> {
   return request<Download>(
     "GET",
     `/api/v1/download-clients/${encodeURIComponent(id)}`,
@@ -202,7 +215,10 @@ export async function patchDownload(
  * Delete a download client.
  */
 export async function deleteDownload(id: string): Promise<void> {
-  await request<void>("DELETE", `/api/v1/download-clients/${encodeURIComponent(id)}`);
+  await request<void>(
+    "DELETE",
+    `/api/v1/download-clients/${encodeURIComponent(id)}`,
+  );
 }
 
 /**
@@ -218,11 +234,7 @@ export async function testDownload(id: string): Promise<TestResult> {
 export async function testDownloadConfig(
   payload: Record<string, unknown>,
 ): Promise<TestResult> {
-  return request<TestResult>(
-    "POST",
-    "/api/v1/download-clients/test",
-    payload,
-  );
+  return request<TestResult>("POST", "/api/v1/download-clients/test", payload);
 }
 
 // ---------- Grab (send release to download client) ----------

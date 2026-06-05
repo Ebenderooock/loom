@@ -168,7 +168,12 @@ export class ApiError extends Error {
   status: number;
   code?: string;
   details?: unknown;
-  constructor(status: number, message: string, code?: string, details?: unknown) {
+  constructor(
+    status: number,
+    message: string,
+    code?: string,
+    details?: unknown,
+  ) {
     super(message);
     this.status = status;
     this.code = code;
@@ -209,7 +214,12 @@ async function request<T>(
       env?.error?.message ??
       (typeof parsed === "string" ? parsed : undefined) ??
       `${method} ${path} failed: ${res.status} ${res.statusText}`;
-    throw new ApiError(res.status, message, env?.error?.code, env?.error?.details);
+    throw new ApiError(
+      res.status,
+      message,
+      env?.error?.code,
+      env?.error?.details,
+    );
   }
   return parsed as T;
 }
@@ -234,7 +244,9 @@ export interface IndexerDefinition {
   categories?: string[];
 }
 
-export async function listDefinitions(signal?: AbortSignal): Promise<IndexerDefinition[]> {
+export async function listDefinitions(
+  signal?: AbortSignal,
+): Promise<IndexerDefinition[]> {
   const env = await request<{ data: IndexerDefinition[] }>(
     "GET",
     "/api/v1/indexers/definitions",
@@ -250,7 +262,10 @@ export const definitionKeys = {
 };
 
 export function useDefinitions(
-  options?: Omit<UseQueryOptions<IndexerDefinition[], Error>, "queryKey" | "queryFn">,
+  options?: Omit<
+    UseQueryOptions<IndexerDefinition[], Error>,
+    "queryKey" | "queryFn"
+  >,
 ) {
   return useQuery<IndexerDefinition[], Error>({
     queryKey: definitionKeys.list(),
@@ -286,7 +301,11 @@ export async function patchIndexer(
   id: string,
   body: IndexerPatch,
 ): Promise<Indexer> {
-  return request<Indexer>("PATCH", `/api/v1/indexers/${encodeURIComponent(id)}`, body);
+  return request<Indexer>(
+    "PATCH",
+    `/api/v1/indexers/${encodeURIComponent(id)}`,
+    body,
+  );
 }
 
 export async function deleteIndexer(id: string): Promise<void> {
@@ -427,7 +446,12 @@ export async function evaluateResults(
 
 // ---------- Streaming search (SSE) ----------
 
-export type IndexerStatus = "pending" | "searching" | "done" | "error" | "timeout";
+export type IndexerStatus =
+  | "pending"
+  | "searching"
+  | "done"
+  | "error"
+  | "timeout";
 
 export interface IndexerStreamState {
   id: string;
@@ -439,7 +463,12 @@ export interface IndexerStreamState {
 }
 
 export interface StreamSearchEvent {
-  type: "search-start" | "indexer-start" | "indexer-result" | "indexer-error" | "done";
+  type:
+    | "search-start"
+    | "indexer-start"
+    | "indexer-result"
+    | "indexer-error"
+    | "done";
   indexer_id?: string;
   indexer_name?: string;
   results?: SearchResult[];
@@ -456,9 +485,25 @@ export interface StreamSearchEvent {
 export interface StreamSearchCallbacks {
   onSearchStart?: (indexers: { id: string; name: string }[]) => void;
   onIndexerStart?: (id: string, name: string) => void;
-  onIndexerResult?: (id: string, name: string, results: SearchResult[], count: number, elapsedMs: number) => void;
-  onIndexerError?: (id: string, name: string, error: string, status: string, elapsedMs: number) => void;
-  onDone?: (totalResults: number, totalErrors: number, durationMs: number) => void;
+  onIndexerResult?: (
+    id: string,
+    name: string,
+    results: SearchResult[],
+    count: number,
+    elapsedMs: number,
+  ) => void;
+  onIndexerError?: (
+    id: string,
+    name: string,
+    error: string,
+    status: string,
+    elapsedMs: number,
+  ) => void;
+  onDone?: (
+    totalResults: number,
+    totalErrors: number,
+    durationMs: number,
+  ) => void;
   onError?: (error: Error) => void;
 }
 
@@ -497,7 +542,9 @@ export function streamSearch(
         try {
           const env = JSON.parse(text);
           if (env?.error?.message) msg = env.error.message;
-        } catch { /* ignore */ }
+        } catch {
+          /* ignore */
+        }
         callbacks.onError?.(new Error(msg));
         return;
       }
@@ -517,7 +564,9 @@ export function streamSearch(
         if (inactivityTimer) clearTimeout(inactivityTimer);
         inactivityTimer = setTimeout(() => {
           controller.abort();
-          callbacks.onError?.(new Error("Search timed out — no response from server"));
+          callbacks.onError?.(
+            new Error("Search timed out — no response from server"),
+          );
         }, 150_000); // 150s — gives headroom above the 120s backend timeout
       };
       resetInactivityTimer();
@@ -564,7 +613,10 @@ export function streamSearch(
               callbacks.onSearchStart?.(evt.indexers ?? []);
               break;
             case "indexer-start":
-              callbacks.onIndexerStart?.(evt.indexer_id ?? "", evt.indexer_name ?? "");
+              callbacks.onIndexerStart?.(
+                evt.indexer_id ?? "",
+                evt.indexer_name ?? "",
+              );
               break;
             case "indexer-result":
               callbacks.onIndexerResult?.(
@@ -627,7 +679,11 @@ export async function createProxy(body: ProxyCreate): Promise<Proxy> {
 }
 
 export async function patchProxy(id: string, body: ProxyPatch): Promise<Proxy> {
-  return request<Proxy>("PATCH", `/api/v1/proxies/${encodeURIComponent(id)}`, body);
+  return request<Proxy>(
+    "PATCH",
+    `/api/v1/proxies/${encodeURIComponent(id)}`,
+    body,
+  );
 }
 
 export async function deleteProxy(id: string): Promise<void> {

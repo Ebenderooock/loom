@@ -11,7 +11,11 @@ import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
-  FolderSearch, Loader2, CheckCircle2, AlertCircle, FileVideo,
+  FolderSearch,
+  Loader2,
+  CheckCircle2,
+  AlertCircle,
+  FileVideo,
 } from "lucide-react";
 import type { Library } from "../../lib/libraries-api";
 
@@ -104,7 +108,9 @@ export function SeriesLibraryImportDialog({
             pollTimeoutRef.current = setTimeout(poll, 1500);
           } else {
             setScanning(false);
-            const unmatchedRes = await apiFetch("/api/v1/series/scan/unmatched");
+            const unmatchedRes = await apiFetch(
+              "/api/v1/series/scan/unmatched",
+            );
             const files: UnmatchedFile[] = await unmatchedRes.json();
             if (mountedRef.current) {
               setUnmatchedFiles(files);
@@ -127,27 +133,29 @@ export function SeriesLibraryImportDialog({
 
   const progress = scanResult
     ? scanResult.totalFiles > 0
-      ? ((scanResult.matched + scanResult.unmatched) / scanResult.totalFiles) * 100
+      ? ((scanResult.matched + scanResult.unmatched) / scanResult.totalFiles) *
+        100
       : 0
     : 0;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[85vh] overflow-hidden flex flex-col">
+      <DialogContent className="flex max-h-[85vh] max-w-2xl flex-col overflow-hidden">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <FolderSearch className="w-5 h-5" />
+            <FolderSearch className="h-5 w-5" />
             Import Existing Series
           </DialogTitle>
         </DialogHeader>
 
-        <div className="flex-1 overflow-auto space-y-4">
+        <div className="flex-1 space-y-4 overflow-auto">
           {/* Library selection */}
           {!scanResult && !scanning && (
             <div className="space-y-4">
               <p className="text-sm text-muted-foreground">
-                Scan a library to discover TV shows. Show folders will be matched
-                against TMDB and added automatically, then episode files will be linked.
+                Scan a library to discover TV shows. Show folders will be
+                matched against TMDB and added automatically, then episode files
+                will be linked.
               </p>
 
               <div className="space-y-2">
@@ -158,14 +166,14 @@ export function SeriesLibraryImportDialog({
                   </p>
                 ) : (
                   <div className="space-y-1">
-                    {libraries.map(lib => (
+                    {libraries.map((lib) => (
                       <button
                         key={lib.id}
                         onClick={() => setSelectedLibrary(lib.id)}
-                        className={`w-full text-left px-3 py-2 rounded-md text-sm transition-colors ${
+                        className={`w-full rounded-md px-3 py-2 text-left text-sm transition-colors ${
                           selectedLibrary === lib.id
-                            ? "bg-primary/10 border border-primary/30 text-primary"
-                            : "bg-muted/30 hover:bg-muted/50 border border-transparent"
+                            ? "border border-primary/30 bg-primary/10 text-primary"
+                            : "border border-transparent bg-muted/30 hover:bg-muted/50"
                         }`}
                       >
                         {lib.path}
@@ -180,7 +188,7 @@ export function SeriesLibraryImportDialog({
                 disabled={!selectedLibrary}
                 className="w-full gap-2"
               >
-                <FolderSearch className="w-4 h-4" />
+                <FolderSearch className="h-4 w-4" />
                 Start Scan
               </Button>
             </div>
@@ -190,21 +198,29 @@ export function SeriesLibraryImportDialog({
           {scanning && scanResult && (
             <div className="space-y-4">
               <div className="flex items-center gap-2 text-sm">
-                <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                <Loader2 className="h-4 w-4 animate-spin text-primary" />
                 <span>Scanning for TV shows...</span>
               </div>
               <Progress value={progress} className="h-2" />
               <div className="grid grid-cols-3 gap-3 text-center">
-                <div className="p-3 rounded-lg bg-muted/30">
-                  <div className="text-2xl font-bold">{scanResult.totalFiles}</div>
-                  <div className="text-xs text-muted-foreground">Files Found</div>
+                <div className="rounded-lg bg-muted/30 p-3">
+                  <div className="text-2xl font-bold">
+                    {scanResult.totalFiles}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    Files Found
+                  </div>
                 </div>
-                <div className="p-3 rounded-lg bg-emerald-500/10">
-                  <div className="text-2xl font-bold text-emerald-500">{scanResult.matched}</div>
+                <div className="rounded-lg bg-emerald-500/10 p-3">
+                  <div className="text-2xl font-bold text-emerald-500">
+                    {scanResult.matched}
+                  </div>
                   <div className="text-xs text-muted-foreground">Matched</div>
                 </div>
-                <div className="p-3 rounded-lg bg-amber-500/10">
-                  <div className="text-2xl font-bold text-amber-500">{scanResult.unmatched}</div>
+                <div className="rounded-lg bg-amber-500/10 p-3">
+                  <div className="text-2xl font-bold text-amber-500">
+                    {scanResult.unmatched}
+                  </div>
                   <div className="text-xs text-muted-foreground">Unmatched</div>
                 </div>
               </div>
@@ -216,40 +232,53 @@ export function SeriesLibraryImportDialog({
             <div className="space-y-4">
               <div className="flex items-center gap-2">
                 {scanResult.status === "completed" ? (
-                  <CheckCircle2 className="w-5 h-5 text-emerald-500" />
+                  <CheckCircle2 className="h-5 w-5 text-emerald-500" />
                 ) : (
-                  <AlertCircle className="w-5 h-5 text-destructive" />
+                  <AlertCircle className="h-5 w-5 text-destructive" />
                 )}
                 <span className="font-medium">
-                  Scan {scanResult.status === "completed" ? "Complete" : "Failed"}
+                  Scan{" "}
+                  {scanResult.status === "completed" ? "Complete" : "Failed"}
                 </span>
               </div>
 
               <div className="grid grid-cols-4 gap-3 text-center">
-                <div className="p-3 rounded-lg bg-muted/30">
-                  <div className="text-xl font-bold">{scanResult.totalFiles}</div>
+                <div className="rounded-lg bg-muted/30 p-3">
+                  <div className="text-xl font-bold">
+                    {scanResult.totalFiles}
+                  </div>
                   <div className="text-xs text-muted-foreground">Total</div>
                 </div>
-                <div className="p-3 rounded-lg bg-emerald-500/10">
-                  <div className="text-xl font-bold text-emerald-500">{scanResult.imported}</div>
+                <div className="rounded-lg bg-emerald-500/10 p-3">
+                  <div className="text-xl font-bold text-emerald-500">
+                    {scanResult.imported}
+                  </div>
                   <div className="text-xs text-muted-foreground">Imported</div>
                 </div>
-                <div className="p-3 rounded-lg bg-blue-500/10">
-                  <div className="text-xl font-bold text-blue-500">{scanResult.matched}</div>
+                <div className="rounded-lg bg-blue-500/10 p-3">
+                  <div className="text-xl font-bold text-blue-500">
+                    {scanResult.matched}
+                  </div>
                   <div className="text-xs text-muted-foreground">Matched</div>
                 </div>
-                <div className="p-3 rounded-lg bg-amber-500/10">
-                  <div className="text-xl font-bold text-amber-500">{scanResult.unmatched}</div>
+                <div className="rounded-lg bg-amber-500/10 p-3">
+                  <div className="text-xl font-bold text-amber-500">
+                    {scanResult.unmatched}
+                  </div>
                   <div className="text-xs text-muted-foreground">Unmatched</div>
                 </div>
               </div>
 
               {scanResult.errors && scanResult.errors.length > 0 && (
-                <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20">
-                  <div className="text-sm font-medium text-destructive mb-1">Errors</div>
-                  <div className="text-xs text-destructive/80 space-y-0.5">
+                <div className="rounded-lg border border-destructive/20 bg-destructive/10 p-3">
+                  <div className="mb-1 text-sm font-medium text-destructive">
+                    Errors
+                  </div>
+                  <div className="space-y-0.5 text-xs text-destructive/80">
                     {scanResult.errors.slice(0, 5).map((e, i) => (
-                      <div key={i} className="truncate">{e}</div>
+                      <div key={i} className="truncate">
+                        {e}
+                      </div>
                     ))}
                     {scanResult.errors.length > 5 && (
                       <div>...and {scanResult.errors.length - 5} more</div>
@@ -261,33 +290,40 @@ export function SeriesLibraryImportDialog({
               {/* Unmatched files list */}
               {unmatchedFiles.length > 0 && (
                 <div className="space-y-2">
-                  <h3 className="text-sm font-medium flex items-center gap-2">
-                    <AlertCircle className="w-4 h-4 text-amber-500" />
+                  <h3 className="flex items-center gap-2 text-sm font-medium">
+                    <AlertCircle className="h-4 w-4 text-amber-500" />
                     Unmatched Files ({unmatchedFiles.length})
                   </h3>
                   <p className="text-xs text-muted-foreground">
-                    These episode files couldn&apos;t be matched to any series or episode.
+                    These episode files couldn&apos;t be matched to any series
+                    or episode.
                   </p>
                   <ScrollArea className="max-h-[300px]">
                     <div className="space-y-1">
-                      {unmatchedFiles.map(f => (
+                      {unmatchedFiles.map((f) => (
                         <div
                           key={f.id}
-                          className="w-full text-left px-3 py-2 rounded-md text-sm bg-muted/20 flex items-center gap-2"
+                          className="flex w-full items-center gap-2 rounded-md bg-muted/20 px-3 py-2 text-left text-sm"
                         >
-                          <FileVideo className="w-4 h-4 text-muted-foreground shrink-0" />
-                          <div className="flex-1 min-w-0">
+                          <FileVideo className="h-4 w-4 shrink-0 text-muted-foreground" />
+                          <div className="min-w-0 flex-1">
                             <div className="truncate font-mono text-xs">
                               {f.filePath.split("/").pop()}
                             </div>
-                            <div className="flex gap-2 mt-0.5">
+                            <div className="mt-0.5 flex gap-2">
                               {f.parsedTitle && (
-                                <Badge variant="outline" className="text-[10px] h-4">
+                                <Badge
+                                  variant="outline"
+                                  className="h-4 text-[10px]"
+                                >
                                   {f.parsedTitle}
                                 </Badge>
                               )}
                               {f.quality && f.quality !== "unknown" && (
-                                <Badge variant="secondary" className="text-[10px] h-4">
+                                <Badge
+                                  variant="secondary"
+                                  className="h-4 text-[10px]"
+                                >
                                   {f.quality}
                                 </Badge>
                               )}
@@ -304,7 +340,12 @@ export function SeriesLibraryImportDialog({
                 <Button variant="outline" onClick={() => onOpenChange(false)}>
                   Close
                 </Button>
-                <Button onClick={() => { setScanResult(null); setScanning(false); }}>
+                <Button
+                  onClick={() => {
+                    setScanResult(null);
+                    setScanning(false);
+                  }}
+                >
                   Scan Again
                 </Button>
               </div>

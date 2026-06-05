@@ -55,7 +55,11 @@ async function request<T>(
   const text = await res.text();
   let parsed: unknown;
   if (text.length > 0) {
-    try { parsed = JSON.parse(text); } catch { parsed = undefined; }
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      parsed = undefined;
+    }
   }
   if (!res.ok) {
     const env = parsed as { error?: string } | undefined;
@@ -69,12 +73,25 @@ async function request<T>(
 
 // ---------- API functions ----------
 
-export async function getMediaPreferences(signal?: AbortSignal): Promise<MediaPreferences> {
-  return request<MediaPreferences>("GET", "/api/v1/media-info/preferences", undefined, signal);
+export async function getMediaPreferences(
+  signal?: AbortSignal,
+): Promise<MediaPreferences> {
+  return request<MediaPreferences>(
+    "GET",
+    "/api/v1/media-info/preferences",
+    undefined,
+    signal,
+  );
 }
 
-export async function updateMediaPreferences(prefs: Partial<MediaPreferences>): Promise<MediaPreferences> {
-  return request<MediaPreferences>("PUT", "/api/v1/media-info/preferences", prefs);
+export async function updateMediaPreferences(
+  prefs: Partial<MediaPreferences>,
+): Promise<MediaPreferences> {
+  return request<MediaPreferences>(
+    "PUT",
+    "/api/v1/media-info/preferences",
+    prefs,
+  );
 }
 
 export async function parseReleaseName(name: string): Promise<MediaInfo> {

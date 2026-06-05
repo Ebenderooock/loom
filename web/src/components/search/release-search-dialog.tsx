@@ -46,8 +46,6 @@ import {
 
 // ─── Helpers ──────────────────────────────────────────────────────────
 
-
-
 function formatAge(iso?: string): string {
   if (!iso) return "—";
   const t = Date.parse(iso);
@@ -129,7 +127,10 @@ function countActiveFilters(f: SearchFilters): number {
   return n;
 }
 
-function applyFilters(results: SearchResult[], f: SearchFilters): SearchResult[] {
+function applyFilters(
+  results: SearchResult[],
+  f: SearchFilters,
+): SearchResult[] {
   return results.filter((r) => {
     if (f.indexers.size > 0 && !f.indexers.has(r.indexer_id)) return false;
     if (f.qualities.size > 0 && !f.qualities.has(qualityBadge(r))) return false;
@@ -211,8 +212,7 @@ function GrabButton({
         });
         toast.success(`Grabbed: ${result.title}`);
       } catch (err) {
-        const msg =
-          err instanceof Error ? err.message : "Grab failed";
+        const msg = err instanceof Error ? err.message : "Grab failed";
         toast.error(msg);
       } finally {
         setGrabbing(false);
@@ -230,7 +230,7 @@ function GrabButton({
         disabled
         title="No download clients configured"
       >
-        <Download className="w-3.5 h-3.5" />
+        <Download className="h-3.5 w-3.5" />
       </Button>
     );
   }
@@ -246,9 +246,9 @@ function GrabButton({
         onClick={() => doGrab(clients[0]!.id)}
       >
         {grabbing ? (
-          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
         ) : (
-          <Download className="w-3.5 h-3.5" />
+          <Download className="h-3.5 w-3.5" />
         )}
       </Button>
     );
@@ -265,9 +265,9 @@ function GrabButton({
           title="Grab release"
         >
           {grabbing ? (
-            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
           ) : (
-            <Download className="w-3.5 h-3.5" />
+            <Download className="h-3.5 w-3.5" />
           )}
         </Button>
       </DropdownMenuTrigger>
@@ -284,58 +284,89 @@ function GrabButton({
 
 // ─── Search Diagnostics ───────────────────────────────────────────────
 
-function IndexerStatusGrid({ indexers }: { indexers: Map<string, IndexerStreamState> }) {
+function IndexerStatusGrid({
+  indexers,
+}: {
+  indexers: Map<string, IndexerStreamState>;
+}) {
   if (indexers.size === 0) return null;
 
   const entries = Array.from(indexers.values());
-  const searching = entries.filter((i) => i.status === "searching" || i.status === "pending").length;
+  const searching = entries.filter(
+    (i) => i.status === "searching" || i.status === "pending",
+  ).length;
   const done = entries.filter((i) => i.status === "done").length;
-  const failed = entries.filter((i) => i.status === "error" || i.status === "timeout").length;
+  const failed = entries.filter(
+    (i) => i.status === "error" || i.status === "timeout",
+  ).length;
   const totalResults = entries.reduce((sum, i) => sum + i.resultCount, 0);
 
   return (
     <div className="rounded-md border border-border bg-muted/30 text-sm">
       <div className="flex items-center gap-3 px-3 py-1.5 text-xs text-muted-foreground">
-        <Activity className="w-3.5 h-3.5 shrink-0" />
+        <Activity className="h-3.5 w-3.5 shrink-0" />
         <span>
           {searching > 0 ? (
             <>
-              <Loader2 className="w-3 h-3 animate-spin inline mr-1" />
+              <Loader2 className="mr-1 inline h-3 w-3 animate-spin" />
               Searching {searching} indexer{searching !== 1 ? "s" : ""}…
             </>
           ) : (
             `${totalResults} result${totalResults !== 1 ? "s" : ""}`
           )}
-          {done > 0 && <span className="text-green-600 dark:text-green-400"> · {done} done</span>}
-          {failed > 0 && <span className="text-red-600 dark:text-red-400"> · {failed} failed</span>}
+          {done > 0 && (
+            <span className="text-green-600 dark:text-green-400">
+              {" "}
+              · {done} done
+            </span>
+          )}
+          {failed > 0 && (
+            <span className="text-red-600 dark:text-red-400">
+              {" "}
+              · {failed} failed
+            </span>
+          )}
         </span>
       </div>
-      <div className="px-3 pb-2 flex flex-wrap gap-1.5">
+      <div className="flex flex-wrap gap-1.5 px-3 pb-2">
         {entries.map((ix) => (
           <div
             key={ix.id}
             className={cn(
               "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium transition-all",
               ix.status === "pending" && "bg-muted text-muted-foreground",
-              ix.status === "searching" && "bg-blue-500/15 text-blue-700 dark:text-blue-300",
-              ix.status === "done" && "bg-green-500/10 text-green-700 dark:text-green-300",
-              ix.status === "error" && "bg-red-500/10 text-red-700 dark:text-red-300",
-              ix.status === "timeout" && "bg-yellow-500/10 text-yellow-700 dark:text-yellow-300",
+              ix.status === "searching" &&
+                "bg-blue-500/15 text-blue-700 dark:text-blue-300",
+              ix.status === "done" &&
+                "bg-green-500/10 text-green-700 dark:text-green-300",
+              ix.status === "error" &&
+                "bg-red-500/10 text-red-700 dark:text-red-300",
+              ix.status === "timeout" &&
+                "bg-yellow-500/10 text-yellow-700 dark:text-yellow-300",
             )}
             title={ix.error ? `${ix.name}: ${ix.error}` : ix.name}
           >
-            {ix.status === "pending" && <Clock className="w-3 h-3" />}
-            {ix.status === "searching" && <Loader2 className="w-3 h-3 animate-spin" />}
-            {ix.status === "done" && <CheckCircle2 className="w-3 h-3" />}
-            {ix.status === "error" && <XCircle className="w-3 h-3" />}
-            {ix.status === "timeout" && <AlertTriangle className="w-3 h-3" />}
-            <span className="truncate max-w-[8rem]">{ix.name}</span>
+            {ix.status === "pending" && <Clock className="h-3 w-3" />}
+            {ix.status === "searching" && (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            )}
+            {ix.status === "done" && <CheckCircle2 className="h-3 w-3" />}
+            {ix.status === "error" && <XCircle className="h-3 w-3" />}
+            {ix.status === "timeout" && <AlertTriangle className="h-3 w-3" />}
+            <span className="max-w-[8rem] truncate">{ix.name}</span>
             {ix.status === "done" && ix.resultCount > 0 && (
               <span className="tabular-nums opacity-70">{ix.resultCount}</span>
             )}
-            {(ix.status === "done" || ix.status === "error" || ix.status === "timeout") && ix.elapsedMs > 0 && (
-              <span className="tabular-nums opacity-50">{ix.elapsedMs < 1000 ? `${ix.elapsedMs}ms` : `${(ix.elapsedMs / 1000).toFixed(1)}s`}</span>
-            )}
+            {(ix.status === "done" ||
+              ix.status === "error" ||
+              ix.status === "timeout") &&
+              ix.elapsedMs > 0 && (
+                <span className="tabular-nums opacity-50">
+                  {ix.elapsedMs < 1000
+                    ? `${ix.elapsedMs}ms`
+                    : `${(ix.elapsedMs / 1000).toFixed(1)}s`}
+                </span>
+              )}
           </div>
         ))}
       </div>
@@ -390,19 +421,22 @@ function FilterBar({
         <Button
           variant="outline"
           size="sm"
-          className="gap-1.5 h-7 text-xs"
+          className="h-7 gap-1.5 text-xs"
           onClick={() => setExpanded((v) => !v)}
         >
-          <Filter className="w-3.5 h-3.5" />
+          <Filter className="h-3.5 w-3.5" />
           Filters
           {activeCount > 0 && (
-            <Badge variant="secondary" className="ml-1 h-4 min-w-4 px-1 text-[10px]">
+            <Badge
+              variant="secondary"
+              className="ml-1 h-4 min-w-4 px-1 text-[10px]"
+            >
               {activeCount}
             </Badge>
           )}
           <ChevronDown
             className={cn(
-              "w-3 h-3 transition-transform",
+              "h-3 w-3 transition-transform",
               expanded && "rotate-180",
             )}
           />
@@ -411,24 +445,26 @@ function FilterBar({
           <Button
             variant="ghost"
             size="sm"
-            className="gap-1 h-7 text-xs text-muted-foreground"
+            className="h-7 gap-1 text-xs text-muted-foreground"
             onClick={clearAll}
           >
-            <X className="w-3 h-3" />
+            <X className="h-3 w-3" />
             Clear
           </Button>
         )}
         {/* Inline title filter (always visible) */}
         <Input
           value={filters.titleFilter}
-          onChange={(e) => onChange({ ...filters, titleFilter: e.target.value })}
+          onChange={(e) =>
+            onChange({ ...filters, titleFilter: e.target.value })
+          }
           placeholder="Filter by name…"
-          className="h-7 text-xs flex-1 max-w-xs"
+          className="h-7 max-w-xs flex-1 text-xs"
         />
       </div>
 
       {expanded && (
-        <div className="rounded-md border border-border bg-muted/30 p-3 space-y-3 text-xs">
+        <div className="space-y-3 rounded-md border border-border bg-muted/30 p-3 text-xs">
           {/* Row 1: Indexers + Quality */}
           <div className="flex flex-wrap gap-4">
             {/* Indexer multi-select */}
@@ -438,18 +474,20 @@ function FilterBar({
                 {availableIndexers.map((id) => (
                   <label
                     key={id}
-                    className="flex items-center gap-1 cursor-pointer select-none"
+                    className="flex cursor-pointer select-none items-center gap-1"
                   >
                     <Checkbox
                       checked={filters.indexers.has(id)}
                       onCheckedChange={() => toggleIndexer(id)}
                       className="h-3.5 w-3.5"
                     />
-                    <span className="truncate max-w-[8rem]">{id}</span>
+                    <span className="max-w-[8rem] truncate">{id}</span>
                   </label>
                 ))}
                 {availableIndexers.length === 0 && (
-                  <span className="text-muted-foreground italic">No indexers</span>
+                  <span className="italic text-muted-foreground">
+                    No indexers
+                  </span>
                 )}
               </div>
             </div>
@@ -461,14 +499,19 @@ function FilterBar({
                 {QUALITY_OPTIONS.map((q) => (
                   <label
                     key={q}
-                    className="flex items-center gap-1 cursor-pointer select-none"
+                    className="flex cursor-pointer select-none items-center gap-1"
                   >
                     <Checkbox
                       checked={filters.qualities.has(q)}
                       onCheckedChange={() => toggleQuality(q)}
                       className="h-3.5 w-3.5"
                     />
-                    <span className={cn("rounded px-1 py-0.5 text-[10px] font-semibold", QUALITY_COLORS[q])}>
+                    <span
+                      className={cn(
+                        "rounded px-1 py-0.5 text-[10px] font-semibold",
+                        QUALITY_COLORS[q],
+                      )}
+                    >
                       {q}
                     </span>
                   </label>
@@ -480,42 +523,57 @@ function FilterBar({
           {/* Row 2: Size + Seeders + Freeleech */}
           <div className="flex flex-wrap items-end gap-4">
             <div className="space-y-1">
-              <span className="font-medium text-muted-foreground">Min Size (MB)</span>
+              <span className="font-medium text-muted-foreground">
+                Min Size (MB)
+              </span>
               <Input
                 type="number"
                 min={0}
                 step="any"
                 value={filters.minSizeMB}
-                onChange={(e) => onChange({ ...filters, minSizeMB: e.target.value })}
+                onChange={(e) =>
+                  onChange({ ...filters, minSizeMB: e.target.value })
+                }
                 className="h-7 w-24 text-xs"
                 placeholder="0"
               />
             </div>
             <div className="space-y-1">
-              <span className="font-medium text-muted-foreground">Max Size (GB)</span>
+              <span className="font-medium text-muted-foreground">
+                Max Size (GB)
+              </span>
               <Input
                 type="number"
                 min={0}
                 step="any"
                 value={filters.maxSizeGB}
-                onChange={(e) => onChange({ ...filters, maxSizeGB: e.target.value })}
+                onChange={(e) =>
+                  onChange({ ...filters, maxSizeGB: e.target.value })
+                }
                 className="h-7 w-24 text-xs"
                 placeholder="∞"
               />
             </div>
             <div className="space-y-1">
-              <span className="font-medium text-muted-foreground">Min Seeders</span>
+              <span className="font-medium text-muted-foreground">
+                Min Seeders
+              </span>
               <Input
                 type="number"
                 min={0}
                 value={filters.minSeeders}
-                onChange={(e) => onChange({ ...filters, minSeeders: e.target.value })}
+                onChange={(e) =>
+                  onChange({ ...filters, minSeeders: e.target.value })
+                }
                 className="h-7 w-20 text-xs"
                 placeholder="0"
               />
             </div>
             {hasFreeleech && (
-              <label htmlFor="freeleech-only" className="flex items-center gap-1.5 cursor-pointer select-none pb-1">
+              <label
+                htmlFor="freeleech-only"
+                className="flex cursor-pointer select-none items-center gap-1.5 pb-1"
+              >
                 <Checkbox
                   id="freeleech-only"
                   checked={filters.freeleechOnly}
@@ -524,7 +582,7 @@ function FilterBar({
                   }
                   className="h-3.5 w-3.5"
                 />
-                <span className="rounded px-1.5 py-0.5 text-[10px] font-semibold bg-green-500/15 text-green-700 dark:text-green-300">
+                <span className="rounded bg-green-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-green-700 dark:text-green-300">
                   Freeleech only
                 </span>
               </label>
@@ -557,7 +615,9 @@ export function ReleaseSearchDialog({
   const [query, setQuery] = useState(initialQuery ?? title);
   const [results, setResults] = useState<SearchResult[]>([]);
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [indexerStates, setIndexerStates] = useState<Map<string, IndexerStreamState>>(new Map());
+  const [indexerStates, setIndexerStates] = useState<
+    Map<string, IndexerStreamState>
+  >(new Map());
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
   const [errorsExpanded, setErrorsExpanded] = useState(false);
@@ -606,113 +666,120 @@ export function ReleaseSearchDialog({
     }
   }, [open, title, initialQuery]);
 
-  const runSearch = useCallback((e?: React.FormEvent) => {
-    e?.preventDefault();
-    const q = query.trim();
-    if (!q) return;
+  const runSearch = useCallback(
+    (e?: React.FormEvent) => {
+      e?.preventDefault();
+      const q = query.trim();
+      if (!q) return;
 
-    // Abort any previous search
-    abortRef.current?.abort();
+      // Abort any previous search
+      abortRef.current?.abort();
 
-    setLoading(true);
-    setSearched(true);
-    setResults([]);
-    setErrors({});
-    setIndexerStates(new Map());
-    setFilters({ ...EMPTY_FILTERS });
-    resultCountRef.current = 0;
+      setLoading(true);
+      setSearched(true);
+      setResults([]);
+      setErrors({});
+      setIndexerStates(new Map());
+      setFilters({ ...EMPTY_FILTERS });
+      resultCountRef.current = 0;
 
-    const controller = streamSearch(
-      {
-        q,
-        categories: CATEGORY_MAP[mediaType],
-        imdb_id: imdbId,
-        tvdb_id: tvdbId != null ? String(tvdbId) : undefined,
-        tmdb_id: tmdbId != null ? String(tmdbId) : undefined,
-        season,
-        episode,
-        timeout_ms: 120_000,
-      },
-      {
-        onSearchStart: (indexers) => {
-          setIndexerStates((prev) => {
-            const next = new Map(prev);
-            for (const ix of indexers) {
-              next.set(ix.id, {
-                id: ix.id,
-                name: ix.name,
-                status: "pending",
+      const controller = streamSearch(
+        {
+          q,
+          categories: CATEGORY_MAP[mediaType],
+          imdb_id: imdbId,
+          tvdb_id: tvdbId != null ? String(tvdbId) : undefined,
+          tmdb_id: tmdbId != null ? String(tmdbId) : undefined,
+          season,
+          episode,
+          timeout_ms: 120_000,
+        },
+        {
+          onSearchStart: (indexers) => {
+            setIndexerStates((prev) => {
+              const next = new Map(prev);
+              for (const ix of indexers) {
+                next.set(ix.id, {
+                  id: ix.id,
+                  name: ix.name,
+                  status: "pending",
+                  resultCount: 0,
+                  elapsedMs: 0,
+                });
+              }
+              return next;
+            });
+          },
+          onIndexerStart: (id, name) => {
+            setIndexerStates((prev) => {
+              const next = new Map(prev);
+              const existing = next.get(id);
+              next.set(id, {
+                id,
+                name: existing?.name ?? name,
+                status: "searching",
                 resultCount: 0,
                 elapsedMs: 0,
               });
+              return next;
+            });
+          },
+          onIndexerResult: (id, name, newResults, count, elapsedMs) => {
+            setResults((prev) => [...prev, ...newResults]);
+            resultCountRef.current += newResults.length;
+            setIndexerStates((prev) => {
+              const next = new Map(prev);
+              next.set(id, {
+                id,
+                name: next.get(id)?.name ?? name,
+                status: "done",
+                resultCount: count,
+                elapsedMs,
+              });
+              return next;
+            });
+          },
+          onIndexerError: (id, name, error, status, elapsedMs) => {
+            setErrors((prev) => ({ ...prev, [name]: error }));
+            setIndexerStates((prev) => {
+              const next = new Map(prev);
+              next.set(id, {
+                id,
+                name: next.get(id)?.name ?? name,
+                status: (status === "timeout"
+                  ? "timeout"
+                  : "error") as IndexerStatus,
+                resultCount: 0,
+                elapsedMs,
+                error,
+              });
+              return next;
+            });
+          },
+          onDone: () => {
+            setLoading(false);
+            const total = resultCountRef.current;
+            if (total > 0) {
+              toast.success(
+                `Search complete: ${total} result${total !== 1 ? "s" : ""} found`,
+              );
+            } else {
+              toast.warning(
+                "Search complete: no results found across any indexer.",
+              );
             }
-            return next;
-          });
+          },
+          onError: (err) => {
+            toast.error(err.message);
+            setLoading(false);
+          },
         },
-        onIndexerStart: (id, name) => {
-          setIndexerStates((prev) => {
-            const next = new Map(prev);
-            const existing = next.get(id);
-            next.set(id, {
-              id,
-              name: existing?.name ?? name,
-              status: "searching",
-              resultCount: 0,
-              elapsedMs: 0,
-            });
-            return next;
-          });
-        },
-        onIndexerResult: (id, name, newResults, count, elapsedMs) => {
-          setResults((prev) => [...prev, ...newResults]);
-          resultCountRef.current += newResults.length;
-          setIndexerStates((prev) => {
-            const next = new Map(prev);
-            next.set(id, {
-              id,
-              name: next.get(id)?.name ?? name,
-              status: "done",
-              resultCount: count,
-              elapsedMs,
-            });
-            return next;
-          });
-        },
-        onIndexerError: (id, name, error, status, elapsedMs) => {
-          setErrors((prev) => ({ ...prev, [name]: error }));
-          setIndexerStates((prev) => {
-            const next = new Map(prev);
-            next.set(id, {
-              id,
-              name: next.get(id)?.name ?? name,
-              status: (status === "timeout" ? "timeout" : "error") as IndexerStatus,
-              resultCount: 0,
-              elapsedMs,
-              error,
-            });
-            return next;
-          });
-        },
-        onDone: () => {
-          setLoading(false);
-          const total = resultCountRef.current;
-          if (total > 0) {
-            toast.success(
-              `Search complete: ${total} result${total !== 1 ? "s" : ""} found`,
-            );
-          } else {
-            toast.warning("Search complete: no results found across any indexer.");
-          }
-        },
-        onError: (err) => {
-          toast.error(err.message);
-          setLoading(false);
-        },
-      },
-    );
+      );
 
-    abortRef.current = controller;
-  }, [query, mediaType, tmdbId, tvdbId, imdbId, season, episode]);
+      abortRef.current = controller;
+    },
+    [query, mediaType, tmdbId, tvdbId, imdbId, season, episode],
+  );
 
   // Auto-run search when dialog opens with autoSearch enabled
   useEffect(() => {
@@ -726,10 +793,10 @@ export function ReleaseSearchDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[85vh] flex flex-col">
+      <DialogContent className="flex max-h-[85vh] max-w-4xl flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Search className="w-4 h-4" />
+            <Search className="h-4 w-4" />
             Search: {title}
           </DialogTitle>
           <DialogDescription>
@@ -738,10 +805,7 @@ export function ReleaseSearchDialog({
         </DialogHeader>
 
         {/* Search form */}
-        <form
-          onSubmit={runSearch}
-          className="flex items-center gap-2"
-        >
+        <form onSubmit={runSearch} className="flex items-center gap-2">
           <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -752,39 +816,45 @@ export function ReleaseSearchDialog({
           />
           <Button type="submit" disabled={loading} className="gap-1.5">
             {loading ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
+              <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
-              <Search className="w-4 h-4" />
+              <Search className="h-4 w-4" />
             )}
             Search
           </Button>
         </form>
 
         {/* Live indexer status */}
-        {searched && indexerStates.size > 0 && <IndexerStatusGrid indexers={indexerStates} />}
+        {searched && indexerStates.size > 0 && (
+          <IndexerStatusGrid indexers={indexerStates} />
+        )}
 
         {/* Indexer errors */}
         {errorEntries.length > 0 && (
           <div className="rounded-md border border-amber-500/40 bg-amber-500/10 text-sm">
             <button
               onClick={() => setErrorsExpanded((v) => !v)}
-              className="flex items-center gap-2 w-full px-3 py-2 text-amber-700 dark:text-amber-300"
+              className="flex w-full items-center gap-2 px-3 py-2 text-amber-700 dark:text-amber-300"
             >
-              <AlertTriangle className="w-4 h-4 shrink-0" />
+              <AlertTriangle className="h-4 w-4 shrink-0" />
               <span>
-                {errorEntries.length} indexer{errorEntries.length > 1 ? "s" : ""} reported errors
+                {errorEntries.length} indexer
+                {errorEntries.length > 1 ? "s" : ""} reported errors
               </span>
               <ChevronDown
                 className={cn(
-                  "w-4 h-4 ml-auto transition-transform",
+                  "ml-auto h-4 w-4 transition-transform",
                   errorsExpanded && "rotate-180",
                 )}
               />
             </button>
             {errorsExpanded && (
-              <div className="px-3 pb-2 space-y-1">
+              <div className="space-y-1 px-3 pb-2">
                 {errorEntries.map(([id, msg]) => (
-                  <p key={id} className="text-xs text-amber-600 dark:text-amber-400">
+                  <p
+                    key={id}
+                    className="text-xs text-amber-600 dark:text-amber-400"
+                  >
                     <span className="font-medium">{id}:</span> {msg}
                   </p>
                 ))}
@@ -795,37 +865,41 @@ export function ReleaseSearchDialog({
 
         {/* Filters */}
         {searched && results.length > 0 && (
-          <FilterBar results={results} filters={filters} onChange={setFilters} />
+          <FilterBar
+            results={results}
+            filters={filters}
+            onChange={setFilters}
+          />
         )}
 
         {/* Results table */}
         <div className="flex-1 overflow-auto rounded-md border border-border">
           <table className="w-full text-sm">
             <caption className="sr-only">Search results</caption>
-            <thead className="bg-muted/50 text-left sticky top-0 z-10">
+            <thead className="sticky top-0 z-10 bg-muted/50 text-left">
               <tr>
                 <th scope="col" className="px-3 py-2">
                   Title
                 </th>
-                <th scope="col" className="px-3 py-2 w-16">
+                <th scope="col" className="w-16 px-3 py-2">
                   Quality
                 </th>
-                <th scope="col" className="px-3 py-2 w-14">
+                <th scope="col" className="w-14 px-3 py-2">
                   Score
                 </th>
-                <th scope="col" className="px-3 py-2 w-20">
+                <th scope="col" className="w-20 px-3 py-2">
                   Size
                 </th>
-                <th scope="col" className="px-3 py-2 w-14">
+                <th scope="col" className="w-14 px-3 py-2">
                   Age
                 </th>
-                <th scope="col" className="px-3 py-2 w-16">
+                <th scope="col" className="w-16 px-3 py-2">
                   S/L
                 </th>
-                <th scope="col" className="px-3 py-2 w-24">
+                <th scope="col" className="w-24 px-3 py-2">
                   Indexer
                 </th>
-                <th scope="col" className="px-3 py-2 w-16">
+                <th scope="col" className="w-16 px-3 py-2">
                   Actions
                 </th>
               </tr>
@@ -841,33 +915,39 @@ export function ReleaseSearchDialog({
                   </td>
                 </tr>
               )}
-              {searched && !loading && filteredResults.length === 0 && results.length === 0 && (
-                <tr>
-                  <td
-                    colSpan={8}
-                    className="px-3 py-10 text-center text-muted-foreground"
-                  >
-                    No results found.
-                  </td>
-                </tr>
-              )}
-              {searched && !loading && filteredResults.length === 0 && results.length > 0 && (
-                <tr>
-                  <td
-                    colSpan={8}
-                    className="px-3 py-10 text-center text-muted-foreground"
-                  >
-                    No results match the current filters.
-                  </td>
-                </tr>
-              )}
+              {searched &&
+                !loading &&
+                filteredResults.length === 0 &&
+                results.length === 0 && (
+                  <tr>
+                    <td
+                      colSpan={8}
+                      className="px-3 py-10 text-center text-muted-foreground"
+                    >
+                      No results found.
+                    </td>
+                  </tr>
+                )}
+              {searched &&
+                !loading &&
+                filteredResults.length === 0 &&
+                results.length > 0 && (
+                  <tr>
+                    <td
+                      colSpan={8}
+                      className="px-3 py-10 text-center text-muted-foreground"
+                    >
+                      No results match the current filters.
+                    </td>
+                  </tr>
+                )}
               {loading && results.length === 0 && (
                 <tr>
                   <td
                     colSpan={8}
                     className="px-3 py-10 text-center text-muted-foreground"
                   >
-                    <Loader2 className="w-5 h-5 animate-spin inline-block mr-2" />
+                    <Loader2 className="mr-2 inline-block h-5 w-5 animate-spin" />
                     Searching indexers…
                   </td>
                 </tr>
@@ -875,79 +955,84 @@ export function ReleaseSearchDialog({
               {filteredResults.map((r, idx) => {
                 const qb = qualityBadge(r);
                 return (
-                <tr
-                  key={`${r.indexer_id}-${r.link}-${idx}`}
-                  className="border-t border-border hover:bg-accent/5 transition-colors"
-                >
-                  <td className="px-3 py-2">
-                    <div className="font-medium text-xs leading-snug line-clamp-2">
-                      {r.title}
-                    </div>
-                    {/* Tracker flags */}
-                    {(r.freeleech || r.internal || r.scene) && (
-                      <div className="flex gap-1 mt-0.5">
-                        {r.freeleech && (
-                          <span className="rounded px-1 py-0.5 text-[9px] font-semibold bg-green-500/15 text-green-700 dark:text-green-300">
-                            FL
-                          </span>
+                  <tr
+                    key={`${r.indexer_id}-${r.link}-${idx}`}
+                    className="border-t border-border transition-colors hover:bg-accent/5"
+                  >
+                    <td className="px-3 py-2">
+                      <div className="line-clamp-2 text-xs font-medium leading-snug">
+                        {r.title}
+                      </div>
+                      {/* Tracker flags */}
+                      {(r.freeleech || r.internal || r.scene) && (
+                        <div className="mt-0.5 flex gap-1">
+                          {r.freeleech && (
+                            <span className="rounded bg-green-500/15 px-1 py-0.5 text-[9px] font-semibold text-green-700 dark:text-green-300">
+                              FL
+                            </span>
+                          )}
+                          {r.internal && (
+                            <span className="rounded bg-blue-500/15 px-1 py-0.5 text-[9px] font-semibold text-blue-700 dark:text-blue-300">
+                              Internal
+                            </span>
+                          )}
+                          {r.scene && (
+                            <span className="rounded bg-orange-500/15 px-1 py-0.5 text-[9px] font-semibold text-orange-700 dark:text-orange-300">
+                              Scene
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-2">
+                      <span
+                        className={cn(
+                          "inline-block rounded px-1.5 py-0.5 text-[10px] font-semibold",
+                          QUALITY_COLORS[qb] ?? QUALITY_COLORS.SD,
                         )}
-                        {r.internal && (
-                          <span className="rounded px-1 py-0.5 text-[9px] font-semibold bg-blue-500/15 text-blue-700 dark:text-blue-300">
-                            Internal
-                          </span>
-                        )}
-                        {r.scene && (
-                          <span className="rounded px-1 py-0.5 text-[9px] font-semibold bg-orange-500/15 text-orange-700 dark:text-orange-300">
-                            Scene
-                          </span>
+                      >
+                        {qb}
+                      </span>
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-2 text-xs tabular-nums text-muted-foreground">
+                      {typeof r.score === "number" ? Math.round(r.score) : "—"}
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-2 text-xs tabular-nums text-muted-foreground">
+                      {formatBytes(r.size_bytes)}
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-2 text-xs tabular-nums text-muted-foreground">
+                      {formatAge(r.publish_date)}
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-2 text-xs tabular-nums text-muted-foreground">
+                      {typeof r.seeders === "number" ||
+                      typeof r.leechers === "number"
+                        ? `${r.seeders ?? 0}/${r.leechers ?? 0}`
+                        : "—"}
+                    </td>
+                    <td className="max-w-[6rem] truncate px-3 py-2 text-xs text-muted-foreground">
+                      {r.indexer_id}
+                    </td>
+                    <td className="px-3 py-2">
+                      <div className="flex items-center gap-1">
+                        <GrabButton
+                          result={r}
+                          clients={enabledClients}
+                          mediaContext={mediaContext}
+                        />
+                        {r.info_url && (
+                          <a
+                            href={r.info_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent/10 hover:text-foreground"
+                            title="View details"
+                          >
+                            <ExternalLink className="h-3.5 w-3.5" />
+                          </a>
                         )}
                       </div>
-                    )}
-                  </td>
-                  <td className="px-3 py-2 whitespace-nowrap">
-                    <span className={cn("inline-block rounded px-1.5 py-0.5 text-[10px] font-semibold", QUALITY_COLORS[qb] ?? QUALITY_COLORS.SD)}>
-                      {qb}
-                    </span>
-                  </td>
-                  <td className="px-3 py-2 tabular-nums text-xs text-muted-foreground whitespace-nowrap">
-                    {typeof r.score === "number" ? Math.round(r.score) : "—"}
-                  </td>
-                  <td className="px-3 py-2 tabular-nums text-xs text-muted-foreground whitespace-nowrap">
-                    {formatBytes(r.size_bytes)}
-                  </td>
-                  <td className="px-3 py-2 tabular-nums text-xs text-muted-foreground whitespace-nowrap">
-                    {formatAge(r.publish_date)}
-                  </td>
-                  <td className="px-3 py-2 tabular-nums text-xs text-muted-foreground whitespace-nowrap">
-                    {typeof r.seeders === "number" ||
-                    typeof r.leechers === "number"
-                      ? `${r.seeders ?? 0}/${r.leechers ?? 0}`
-                      : "—"}
-                  </td>
-                  <td className="px-3 py-2 text-xs text-muted-foreground truncate max-w-[6rem]">
-                    {r.indexer_id}
-                  </td>
-                  <td className="px-3 py-2">
-                    <div className="flex items-center gap-1">
-                      <GrabButton
-                        result={r}
-                        clients={enabledClients}
-                        mediaContext={mediaContext}
-                      />
-                      {r.info_url && (
-                        <a
-                          href={r.info_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center justify-center h-7 w-7 rounded-md hover:bg-accent/10 text-muted-foreground hover:text-foreground transition-colors"
-                          title="View details"
-                        >
-                          <ExternalLink className="w-3.5 h-3.5" />
-                        </a>
-                      )}
-                    </div>
-                  </td>
-                </tr>
+                    </td>
+                  </tr>
                 );
               })}
             </tbody>
@@ -956,7 +1041,7 @@ export function ReleaseSearchDialog({
 
         {/* Result count */}
         {searched && !loading && results.length > 0 && (
-          <p className="text-xs text-muted-foreground text-right">
+          <p className="text-right text-xs text-muted-foreground">
             {filteredResults.length === results.length
               ? `${results.length} result${results.length !== 1 ? "s" : ""}`
               : `${filteredResults.length} of ${results.length} results (filtered)`}

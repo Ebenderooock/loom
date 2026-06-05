@@ -45,7 +45,7 @@ export function AuthPage() {
 
       // Refresh auth state to pick up the new session cookie
       await refreshAuth();
-      
+
       // Redirect to dashboard
       navigate({ to: "/" });
     } catch (err) {
@@ -56,14 +56,14 @@ export function AuthPage() {
   };
 
   return (
-    <div className="w-full h-screen flex items-center justify-center bg-gradient-to-br from-purple-midnight via-neutral-dark to-teal-deep">
-      <div className="w-full max-w-md mx-auto px-4">
-        <div className="bg-neutral-card rounded-lg shadow-lg p-8 space-y-6">
-          <div className="text-center space-y-4">
+    <div className="flex h-screen w-full items-center justify-center bg-gradient-to-br from-purple-midnight via-neutral-dark to-teal-deep">
+      <div className="mx-auto w-full max-w-md px-4">
+        <div className="space-y-6 rounded-lg bg-neutral-card p-8 shadow-lg">
+          <div className="space-y-4 text-center">
             <img
               src="/loom-logo.png"
               alt="Loom Logo"
-              className="h-16 mx-auto object-contain"
+              className="mx-auto h-16 object-contain"
             />
             <div className="space-y-2">
               <h1 className="text-3xl font-bold text-neutral-light">
@@ -84,7 +84,10 @@ export function AuthPage() {
 
           <form onSubmit={handleLogin} className="space-y-4">
             <div className="space-y-2">
-              <label htmlFor="username" className="text-sm font-medium text-neutral-light">
+              <label
+                htmlFor="username"
+                className="text-sm font-medium text-neutral-light"
+              >
                 Username
               </label>
               <Input
@@ -94,12 +97,15 @@ export function AuthPage() {
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 disabled={isLoading}
-                className="bg-neutral-900 border-neutral-800 text-neutral-light placeholder-neutral-muted"
+                className="border-neutral-800 bg-neutral-900 text-neutral-light placeholder-neutral-muted"
               />
             </div>
 
             <div className="space-y-2">
-              <label htmlFor="password" className="text-sm font-medium text-neutral-light">
+              <label
+                htmlFor="password"
+                className="text-sm font-medium text-neutral-light"
+              >
                 Password
               </label>
               <Input
@@ -109,14 +115,14 @@ export function AuthPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 disabled={isLoading}
-                className="bg-neutral-900 border-neutral-800 text-neutral-light placeholder-neutral-muted"
+                className="border-neutral-800 bg-neutral-900 text-neutral-light placeholder-neutral-muted"
               />
             </div>
 
             <Button
               type="submit"
               disabled={isLoading}
-              className="w-full h-10 bg-teal-500 hover:bg-teal-600 text-white"
+              className="h-10 w-full bg-teal-500 text-white hover:bg-teal-600"
             >
               {isLoading ? "Logging in..." : "Login"}
             </Button>

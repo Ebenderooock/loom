@@ -37,7 +37,11 @@ interface LogViewerProps {
   showStreamToggle?: boolean;
 }
 
-export function LogViewer({ workflowId, showConfig = true, showStreamToggle = true }: LogViewerProps) {
+export function LogViewer({
+  workflowId,
+  showConfig = true,
+  showStreamToggle = true,
+}: LogViewerProps) {
   const [mode, setMode] = useState<"stream" | "history">("stream");
   const [levelFilter, setLevelFilter] = useState("");
   const [searchText, setSearchText] = useState("");
@@ -45,7 +49,10 @@ export function LogViewer({ workflowId, showConfig = true, showStreamToggle = tr
   const [paused, setPaused] = useState(false);
 
   // Stream mode
-  const stream = useLogStream({ workflowId, enabled: mode === "stream" && !paused });
+  const stream = useLogStream({
+    workflowId,
+    enabled: mode === "stream" && !paused,
+  });
 
   // History mode
   const historyParams: LogListParams = {
@@ -55,17 +62,21 @@ export function LogViewer({ workflowId, showConfig = true, showStreamToggle = tr
     limit: 100,
     offset: page * 100,
   };
-  const history = useSystemLogs(mode === "history" ? historyParams : { limit: 0 });
+  const history = useSystemLogs(
+    mode === "history" ? historyParams : { limit: 0 },
+  );
 
-  const entries = mode === "stream" ? stream.entries : (history.data?.items ?? []);
-  const total = mode === "history" ? (history.data?.total ?? 0) : stream.entries.length;
+  const entries =
+    mode === "stream" ? stream.entries : (history.data?.items ?? []);
+  const total =
+    mode === "history" ? (history.data?.total ?? 0) : stream.entries.length;
 
   return (
     <div className="space-y-3">
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-2">
         {showStreamToggle && (
-          <div className="flex rounded-md border border-border overflow-hidden">
+          <div className="flex overflow-hidden rounded-md border border-border">
             <button
               className={`px-3 py-1.5 text-xs font-medium transition-colors ${mode === "stream" ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-accent"}`}
               onClick={() => setMode("stream")}
@@ -74,7 +85,10 @@ export function LogViewer({ workflowId, showConfig = true, showStreamToggle = tr
             </button>
             <button
               className={`px-3 py-1.5 text-xs font-medium transition-colors ${mode === "history" ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-accent"}`}
-              onClick={() => { setMode("history"); setPage(0); }}
+              onClick={() => {
+                setMode("history");
+                setPage(0);
+              }}
             >
               History
             </button>
@@ -83,12 +97,24 @@ export function LogViewer({ workflowId, showConfig = true, showStreamToggle = tr
 
         {mode === "stream" && (
           <>
-            <Button variant="ghost" size="sm" onClick={() => setPaused((p) => !p)}>
-              {paused ? <Play className="h-3.5 w-3.5 mr-1" /> : <Pause className="h-3.5 w-3.5 mr-1" />}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setPaused((p) => !p)}
+            >
+              {paused ? (
+                <Play className="mr-1 h-3.5 w-3.5" />
+              ) : (
+                <Pause className="mr-1 h-3.5 w-3.5" />
+              )}
               {paused ? "Resume" : "Pause"}
             </Button>
             <span className="flex items-center gap-1 text-xs text-muted-foreground">
-              {stream.connected ? <Wifi className="h-3 w-3 text-green-400" /> : <WifiOff className="h-3 w-3 text-red-400" />}
+              {stream.connected ? (
+                <Wifi className="h-3 w-3 text-green-400" />
+              ) : (
+                <WifiOff className="h-3 w-3 text-red-400" />
+              )}
               {stream.connected ? "Connected" : "Disconnected"}
             </span>
           </>
@@ -99,7 +125,10 @@ export function LogViewer({ workflowId, showConfig = true, showStreamToggle = tr
             <select
               className="h-8 rounded-md border border-border bg-background px-2 text-xs"
               value={levelFilter}
-              onChange={(e) => { setLevelFilter(e.target.value); setPage(0); }}
+              onChange={(e) => {
+                setLevelFilter(e.target.value);
+                setPage(0);
+              }}
             >
               <option value="">All levels</option>
               <option value="debug">Debug</option>
@@ -108,19 +137,24 @@ export function LogViewer({ workflowId, showConfig = true, showStreamToggle = tr
               <option value="error">Error</option>
             </select>
             <div className="relative">
-              <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+              <Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
               <input
                 type="text"
                 placeholder="Search messages…"
                 className="h-8 w-48 rounded-md border border-border bg-background pl-7 pr-2 text-xs"
                 value={searchText}
-                onChange={(e) => { setSearchText(e.target.value); setPage(0); }}
+                onChange={(e) => {
+                  setSearchText(e.target.value);
+                  setPage(0);
+                }}
               />
             </div>
           </>
         )}
 
-        <span className="ml-auto text-xs text-muted-foreground">{total} entries</span>
+        <span className="ml-auto text-xs text-muted-foreground">
+          {total} entries
+        </span>
       </div>
 
       {/* Log entries */}
@@ -129,13 +163,23 @@ export function LogViewer({ workflowId, showConfig = true, showStreamToggle = tr
       {/* Pagination for history mode */}
       {mode === "history" && total > 100 && (
         <div className="flex items-center justify-between">
-          <Button variant="outline" size="sm" disabled={page === 0} onClick={() => setPage((p) => p - 1)}>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={page === 0}
+            onClick={() => setPage((p) => p - 1)}
+          >
             Previous
           </Button>
           <span className="text-xs text-muted-foreground">
             Page {page + 1} of {Math.ceil(total / 100)}
           </span>
-          <Button variant="outline" size="sm" disabled={(page + 1) * 100 >= total} onClick={() => setPage((p) => p + 1)}>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={(page + 1) * 100 >= total}
+            onClick={() => setPage((p) => p + 1)}
+          >
             Next
           </Button>
         </div>
@@ -200,7 +244,7 @@ function LogTable({ entries }: { entries: LogEntry[] }) {
               className="border-b border-border/30 px-3 py-1.5 hover:bg-zinc-900/50"
             >
               <div
-                className="flex items-start gap-2 cursor-pointer"
+                className="flex cursor-pointer items-start gap-2"
                 role="button"
                 tabIndex={hasAttrs ? 0 : -1}
                 onClick={() => hasAttrs && toggleExpand(entry.id)}
@@ -211,22 +255,30 @@ function LogTable({ entries }: { entries: LogEntry[] }) {
                   }
                 }}
               >
-                {hasAttrs && (
-                  expanded
-                    ? <ChevronDown className="mt-0.5 h-3 w-3 shrink-0 text-muted-foreground" />
-                    : <ChevronRight className="mt-0.5 h-3 w-3 shrink-0 text-muted-foreground" />
-                )}
+                {hasAttrs &&
+                  (expanded ? (
+                    <ChevronDown className="mt-0.5 h-3 w-3 shrink-0 text-muted-foreground" />
+                  ) : (
+                    <ChevronRight className="mt-0.5 h-3 w-3 shrink-0 text-muted-foreground" />
+                  ))}
                 <span className="shrink-0 text-muted-foreground">{ts}</span>
-                <Badge variant="outline" className={`${style.bg} ${style.text} shrink-0 px-1.5 py-0 text-[10px] uppercase`}>
+                <Badge
+                  variant="outline"
+                  className={`${style.bg} ${style.text} shrink-0 px-1.5 py-0 text-[10px] uppercase`}
+                >
                   {entry.level}
                 </Badge>
-                <span className="flex-1 break-all text-zinc-200">{entry.message}</span>
+                <span className="flex-1 break-all text-zinc-200">
+                  {entry.message}
+                </span>
                 {entry.source && (
-                  <span className="shrink-0 text-muted-foreground text-[10px]">{entry.source.split("/").slice(-2).join("/")}</span>
+                  <span className="shrink-0 text-[10px] text-muted-foreground">
+                    {entry.source.split("/").slice(-2).join("/")}
+                  </span>
                 )}
               </div>
               {expanded && hasAttrs && (
-                <pre className="mt-1 ml-5 rounded bg-zinc-900 p-2 text-[10px] text-zinc-400 overflow-x-auto">
+                <pre className="ml-5 mt-1 overflow-x-auto rounded bg-zinc-900 p-2 text-[10px] text-zinc-400">
                   {JSON.stringify(JSON.parse(entry.attrs!), null, 2)}
                 </pre>
               )}
@@ -240,7 +292,10 @@ function LogTable({ entries }: { entries: LogEntry[] }) {
           className="absolute bottom-2 right-2 rounded-full bg-primary p-1.5 text-primary-foreground shadow-lg hover:bg-primary/90"
           onClick={() => {
             setAutoScroll(true);
-            containerRef.current?.scrollTo({ top: containerRef.current.scrollHeight, behavior: "smooth" });
+            containerRef.current?.scrollTo({
+              top: containerRef.current.scrollHeight,
+              behavior: "smooth",
+            });
           }}
         >
           <ArrowDown className="h-3.5 w-3.5" />
@@ -279,7 +334,9 @@ function LogConfigSection() {
           <Button
             variant="outline"
             size="sm"
-            disabled={captureLevel === config?.capture_level || updateMut.isPending}
+            disabled={
+              captureLevel === config?.capture_level || updateMut.isPending
+            }
             onClick={() => updateMut.mutate({ capture_level: captureLevel })}
           >
             Save

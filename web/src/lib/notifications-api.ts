@@ -163,11 +163,7 @@ export async function getConnection(
 export async function createConnection(
   body: CreateConnectionRequest,
 ): Promise<NotificationConnection> {
-  return request<NotificationConnection>(
-    "POST",
-    "/api/v1/notifications",
-    body,
-  );
+  return request<NotificationConnection>("POST", "/api/v1/notifications", body);
 }
 
 export async function updateConnection(
@@ -188,9 +184,7 @@ export async function deleteConnection(id: string): Promise<void> {
   );
 }
 
-export async function testConnection(
-  id: string,
-): Promise<{ message: string }> {
+export async function testConnection(id: string): Promise<{ message: string }> {
   return request<{ message: string }>(
     "POST",
     `/api/v1/notifications/${encodeURIComponent(id)}/test`,
@@ -264,13 +258,8 @@ export function useCreateNotification() {
 export function useUpdateNotification() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({
-      id,
-      body,
-    }: {
-      id: string;
-      body: UpdateConnectionRequest;
-    }) => updateConnection(id, body),
+    mutationFn: ({ id, body }: { id: string; body: UpdateConnectionRequest }) =>
+      updateConnection(id, body),
     onSuccess: () => qc.invalidateQueries({ queryKey: notificationKeys.all }),
   });
 }

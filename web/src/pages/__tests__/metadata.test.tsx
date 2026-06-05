@@ -62,7 +62,7 @@ function renderPage() {
     <QueryClientProvider client={queryClient}>
       <MetadataPage />
       <Toaster />
-    </QueryClientProvider>
+    </QueryClientProvider>,
   );
 }
 
@@ -76,15 +76,21 @@ describe("MetadataPage", () => {
 
     // Check that tabs are rendered
     expect(screen.getByRole("tab", { name: /Search/i })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: /Cache Stats/i })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: /Provider Status/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole("tab", { name: /Cache Stats/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("tab", { name: /Provider Status/i }),
+    ).toBeInTheDocument();
   });
 
   it("renders search form on Search tab", () => {
     renderPage();
 
     // Check search form elements
-    expect(screen.getByPlaceholderText("e.g., The Matrix, Breaking Bad")).toBeInTheDocument();
+    expect(
+      screen.getByPlaceholderText("e.g., The Matrix, Breaking Bad"),
+    ).toBeInTheDocument();
     expect(screen.getByPlaceholderText("e.g., 1999")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Search" })).toBeInTheDocument();
   });
@@ -120,7 +126,9 @@ describe("MetadataPage", () => {
     const user = userEvent.setup();
 
     // Start on Search tab
-    expect(screen.getByPlaceholderText("e.g., The Matrix, Breaking Bad")).toBeInTheDocument();
+    expect(
+      screen.getByPlaceholderText("e.g., The Matrix, Breaking Bad"),
+    ).toBeInTheDocument();
 
     // Switch to Cache Stats tab
     await user.click(screen.getByRole("tab", { name: /Cache Stats/i }));
@@ -137,7 +145,9 @@ describe("MetadataPage", () => {
     // Switch back to Search tab
     await user.click(screen.getByRole("tab", { name: /Search/i }));
     await waitFor(() => {
-      expect(screen.getByPlaceholderText("e.g., The Matrix, Breaking Bad")).toBeInTheDocument();
+      expect(
+        screen.getByPlaceholderText("e.g., The Matrix, Breaking Bad"),
+      ).toBeInTheDocument();
     });
   });
 
@@ -161,7 +171,9 @@ describe("MetadataPage", () => {
     const user = userEvent.setup();
 
     // Type in search query
-    const queryInput = screen.getByPlaceholderText("e.g., The Matrix, Breaking Bad");
+    const queryInput = screen.getByPlaceholderText(
+      "e.g., The Matrix, Breaking Bad",
+    );
     await user.type(queryInput, "Test");
 
     // Submit search - just verify it doesn't throw
@@ -169,7 +181,9 @@ describe("MetadataPage", () => {
     await user.click(searchButton);
 
     // Page should still be renderable
-    expect(screen.getByRole("heading", { name: "Metadata" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Metadata" }),
+    ).toBeInTheDocument();
   });
 
   it("displays search results when provided", async () => {
@@ -191,7 +205,9 @@ describe("MetadataPage", () => {
     renderPage();
 
     // Just verify the page renders without errors
-    expect(screen.getByRole("heading", { name: "Metadata" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Metadata" }),
+    ).toBeInTheDocument();
   });
 
   it("displays cache statistics correctly", async () => {
@@ -226,6 +242,8 @@ describe("MetadataPage", () => {
   it("loads page without errors", () => {
     // This test just ensures the page renders without crashing
     renderPage();
-    expect(screen.getByRole("heading", { name: "Metadata" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Metadata" }),
+    ).toBeInTheDocument();
   });
 });

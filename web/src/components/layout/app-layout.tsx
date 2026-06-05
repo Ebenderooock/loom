@@ -62,7 +62,11 @@ const PRIMARY_NAV: NavItem[] = [
   { to: "/downloads", label: "Downloads", Icon: Download },
 ];
 
-const SETTINGS_NAV: NavItem = { to: "/settings", label: "Settings", Icon: Settings };
+const SETTINGS_NAV: NavItem = {
+  to: "/settings",
+  label: "Settings",
+  Icon: Settings,
+};
 
 function useReviewCount() {
   const [count, setCount] = React.useState(0);
@@ -101,8 +105,8 @@ function NavLinkRow({
       className={cn(
         "flex items-center gap-2.5 rounded-md px-3 py-2 text-[13px] font-medium transition-colors",
         active
-          ? "bg-accent/15 text-accent border-l-2 border-accent shadow-sm shadow-accent/5"
-          : "text-muted-foreground hover:bg-accent/8 hover:text-foreground",
+          ? "border-l-2 border-accent bg-accent/15 text-accent shadow-sm shadow-accent/5"
+          : "hover:bg-accent/8 text-muted-foreground hover:text-foreground",
         collapsed && "justify-center px-2",
       )}
       aria-current={active ? "page" : undefined}
@@ -153,7 +157,7 @@ function SidebarNav({
   return (
     <nav
       aria-label="Primary"
-      className="flex flex-col gap-0.5 p-2 overflow-y-auto flex-1 min-h-0 scrollbar-thin"
+      className="scrollbar-thin flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto p-2"
     >
       {navItems.map((item) => (
         <NavLinkRow
@@ -182,8 +186,15 @@ function SidebarNav({
 function Brand({ collapsed }: { collapsed?: boolean }) {
   return (
     <div className="flex h-14 items-center gap-2.5 border-b border-border/50 px-4">
-      <img src="/loom-logo.png" alt="" className="h-8 w-auto" aria-hidden="true" />
-      {!collapsed && <span className="text-lg font-bold gradient-text">Loom</span>}
+      <img
+        src="/loom-logo.png"
+        alt=""
+        className="h-8 w-auto"
+        aria-hidden="true"
+      />
+      {!collapsed && (
+        <span className="gradient-text text-lg font-bold">Loom</span>
+      )}
     </div>
   );
 }
@@ -213,7 +224,7 @@ function AppLayoutInner({ children }: { children?: React.ReactNode }) {
       <aside
         aria-label="Sidebar"
         className={cn(
-          "hidden shrink-0 border-r border-border/50 bg-card/80 backdrop-blur-xl md:flex md:flex-col md:sticky md:top-0 md:h-screen md:min-h-0",
+          "hidden shrink-0 border-r border-border/50 bg-card/80 backdrop-blur-xl md:sticky md:top-0 md:flex md:h-screen md:min-h-0 md:flex-col",
           collapsed ? "md:w-16" : "md:w-56",
         )}
       >
@@ -257,16 +268,29 @@ function AppLayoutInner({ children }: { children?: React.ReactNode }) {
               </Sheet>
 
               {/* Logo + page title */}
-              <Link to="/" className="flex items-center gap-2 md:hidden" aria-label="Loom home">
-                <img src="/loom-logo.png" alt="" className="h-7 w-auto" aria-hidden="true" />
-                <span className="text-lg font-bold gradient-text">Loom</span>
+              <Link
+                to="/"
+                className="flex items-center gap-2 md:hidden"
+                aria-label="Loom home"
+              >
+                <img
+                  src="/loom-logo.png"
+                  alt=""
+                  className="h-7 w-auto"
+                  aria-hidden="true"
+                />
+                <span className="gradient-text text-lg font-bold">Loom</span>
               </Link>
 
               {header.title && (
-                <div className="hidden md:flex items-baseline gap-2 min-w-0">
-                  <span className="text-sm font-semibold whitespace-nowrap">{header.title}</span>
+                <div className="hidden min-w-0 items-baseline gap-2 md:flex">
+                  <span className="whitespace-nowrap text-sm font-semibold">
+                    {header.title}
+                  </span>
                   {header.subtitle && (
-                    <span className="text-xs text-muted-foreground whitespace-nowrap truncate">{header.subtitle}</span>
+                    <span className="truncate whitespace-nowrap text-xs text-muted-foreground">
+                      {header.subtitle}
+                    </span>
                   )}
                 </div>
               )}
@@ -314,7 +338,11 @@ function AppLayoutInner({ children }: { children?: React.ReactNode }) {
               </div>
             </>
           ) : (
-            <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} inline />
+            <CommandPalette
+              open={paletteOpen}
+              onOpenChange={setPaletteOpen}
+              inline
+            />
           )}
         </header>
 
@@ -342,7 +370,6 @@ function AppLayoutInner({ children }: { children?: React.ReactNode }) {
           </div>
         </main>
       </div>
-
     </div>
   );
 }

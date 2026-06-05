@@ -1,5 +1,12 @@
 import * as React from "react";
-import { MoreHorizontal, Plus, Send, CheckCircle2, XCircle, Loader2 } from "lucide-react";
+import {
+  MoreHorizontal,
+  Plus,
+  Send,
+  CheckCircle2,
+  XCircle,
+  Loader2,
+} from "lucide-react";
 import { toast } from "sonner";
 import { useSetPageHeader } from "@/hooks/use-page-header";
 import { Button } from "@/components/ui/button";
@@ -136,7 +143,9 @@ function ConnectionForm({
   initial?: NotificationConnection;
   onSubmit: (form: FormState) => void;
   onCancel: () => void;
-  onTest?: (form: FormState) => Promise<{ ok: boolean; message?: string; error?: string }>;
+  onTest?: (
+    form: FormState,
+  ) => Promise<{ ok: boolean; message?: string; error?: string }>;
   submitting: boolean;
   topError?: string;
 }) {
@@ -167,7 +176,9 @@ function ConnectionForm({
       const result = await onTest(form);
       setTestResult({
         ok: result.ok,
-        message: result.ok ? (result.message ?? "Test notification sent successfully") : (result.error ?? "Test failed"),
+        message: result.ok
+          ? (result.message ?? "Test notification sent successfully")
+          : (result.error ?? "Test failed"),
       });
     } catch (err) {
       setTestResult({
@@ -238,7 +249,9 @@ function ConnectionForm({
 
       {/* Dynamic settings fields */}
       <fieldset className="space-y-3 rounded-md border border-border p-3">
-        <legend className="px-1 text-sm font-medium">Connection Settings</legend>
+        <legend className="px-1 text-sm font-medium">
+          Connection Settings
+        </legend>
 
         {fields.includes("webhook_url") && (
           <div className="space-y-1">
@@ -419,7 +432,7 @@ function ConnectionForm({
           Message Template (optional)
         </legend>
         <textarea
-          className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm font-mono"
+          className="w-full rounded-md border border-border bg-background px-3 py-2 font-mono text-sm"
           rows={3}
           value={form.settings.template_override ?? ""}
           onChange={(e) => updateSettings("template_override", e.target.value)}
@@ -447,9 +460,9 @@ function ConnectionForm({
           }`}
         >
           {testResult.ok ? (
-            <CheckCircle2 className="w-4 h-4 shrink-0" />
+            <CheckCircle2 className="h-4 w-4 shrink-0" />
           ) : (
-            <XCircle className="w-4 h-4 shrink-0" />
+            <XCircle className="h-4 w-4 shrink-0" />
           )}
           <span>{testResult.message}</span>
         </div>
@@ -533,7 +546,10 @@ export function NotificationsPage() {
       await test.mutateAsync(id);
       return { ok: true, message: "Test notification sent successfully" };
     } catch (err) {
-      return { ok: false, error: err instanceof Error ? err.message : "Test failed" };
+      return {
+        ok: false,
+        error: err instanceof Error ? err.message : "Test failed",
+      };
     }
   }
 
@@ -548,7 +564,10 @@ export function NotificationsPage() {
     }
   }
 
-  async function handleUpdate(form: FormState, original: NotificationConnection) {
+  async function handleUpdate(
+    form: FormState,
+    original: NotificationConnection,
+  ) {
     setTopError(undefined);
     try {
       const body: UpdateConnectionRequest = {
@@ -607,7 +626,10 @@ export function NotificationsPage() {
             <TabsTrigger value="connections">Connections</TabsTrigger>
             <TabsTrigger value="history">History</TabsTrigger>
           </TabsList>
-          <Button onClick={() => setDialog({ kind: "create" })} className="gap-2">
+          <Button
+            onClick={() => setDialog({ kind: "create" })}
+            className="gap-2"
+          >
             <Plus className="h-4 w-4" />
             Add notification
           </Button>
@@ -629,11 +651,21 @@ export function NotificationsPage() {
               <caption className="sr-only">Notification connections</caption>
               <thead className="bg-muted/50 text-left">
                 <tr>
-                  <th scope="col" className="px-3 py-2">Name</th>
-                  <th scope="col" className="px-3 py-2">Type</th>
-                  <th scope="col" className="px-3 py-2">Enabled</th>
-                  <th scope="col" className="px-3 py-2">Events</th>
-                  <th scope="col" className="px-3 py-2 text-right">Actions</th>
+                  <th scope="col" className="px-3 py-2">
+                    Name
+                  </th>
+                  <th scope="col" className="px-3 py-2">
+                    Type
+                  </th>
+                  <th scope="col" className="px-3 py-2">
+                    Enabled
+                  </th>
+                  <th scope="col" className="px-3 py-2">
+                    Events
+                  </th>
+                  <th scope="col" className="px-3 py-2 text-right">
+                    Actions
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -665,7 +697,9 @@ export function NotificationsPage() {
                   <tr key={c.id} className="border-t border-border">
                     <td className="px-3 py-2">
                       <div className="font-medium">{c.name}</div>
-                      <div className="text-xs text-muted-foreground">{c.id}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {c.id}
+                      </div>
                     </td>
                     <td className="px-3 py-2">
                       <Badge variant="secondary">{getTypeLabel(c.type)}</Badge>
@@ -732,7 +766,10 @@ export function NotificationsPage() {
               role="alert"
               className="rounded-md border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-700 dark:text-red-300"
             >
-              {errMessage(historyQ.error, "Could not load notification history")}
+              {errMessage(
+                historyQ.error,
+                "Could not load notification history",
+              )}
             </div>
           )}
 
@@ -741,12 +778,24 @@ export function NotificationsPage() {
               <caption className="sr-only">Notification history</caption>
               <thead className="bg-muted/50 text-left">
                 <tr>
-                  <th scope="col" className="px-3 py-2">Time</th>
-                  <th scope="col" className="px-3 py-2">Connection</th>
-                  <th scope="col" className="px-3 py-2">Event</th>
-                  <th scope="col" className="px-3 py-2">Title</th>
-                  <th scope="col" className="px-3 py-2">Status</th>
-                  <th scope="col" className="px-3 py-2">Error</th>
+                  <th scope="col" className="px-3 py-2">
+                    Time
+                  </th>
+                  <th scope="col" className="px-3 py-2">
+                    Connection
+                  </th>
+                  <th scope="col" className="px-3 py-2">
+                    Event
+                  </th>
+                  <th scope="col" className="px-3 py-2">
+                    Title
+                  </th>
+                  <th scope="col" className="px-3 py-2">
+                    Status
+                  </th>
+                  <th scope="col" className="px-3 py-2">
+                    Error
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -763,25 +812,24 @@ export function NotificationsPage() {
                     ))}
                   </>
                 )}
-                {!historyQ.isLoading &&
-                  (historyQ.data?.length ?? 0) === 0 && (
-                    <tr>
-                      <td
-                        colSpan={6}
-                        className="px-3 py-6 text-center text-muted-foreground"
-                      >
-                        No notification history yet.
-                      </td>
-                    </tr>
-                  )}
+                {!historyQ.isLoading && (historyQ.data?.length ?? 0) === 0 && (
+                  <tr>
+                    <td
+                      colSpan={6}
+                      className="px-3 py-6 text-center text-muted-foreground"
+                    >
+                      No notification history yet.
+                    </td>
+                  </tr>
+                )}
                 {(historyQ.data ?? []).map((h) => (
                   <tr key={h.id} className="border-t border-border">
-                    <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">
+                    <td className="whitespace-nowrap px-3 py-2 text-muted-foreground">
                       {new Date(h.sent_at).toLocaleString()}
                     </td>
                     <td className="px-3 py-2">
                       {h.connection_id
-                        ? connMap.get(h.connection_id) ?? h.connection_id
+                        ? (connMap.get(h.connection_id) ?? h.connection_id)
                         : "—"}
                     </td>
                     <td className="px-3 py-2">
@@ -816,7 +864,7 @@ export function NotificationsPage() {
           if (!open) close();
         }}
       >
-        <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-h-[90vh] max-w-xl overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
               {dialog.kind === "edit"

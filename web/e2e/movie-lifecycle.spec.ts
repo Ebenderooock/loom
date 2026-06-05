@@ -42,7 +42,10 @@ function makeMovie(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function setupMovieMocks(page: import("@playwright/test").Page, movieOverrides: Record<string, unknown> = {}) {
+function setupMovieMocks(
+  page: import("@playwright/test").Page,
+  movieOverrides: Record<string, unknown> = {},
+) {
   const movie = makeMovie(movieOverrides);
   return Promise.all([
     mockMovies(page, [movie as any]),
@@ -57,7 +60,9 @@ test.describe("Movie Lifecycle", () => {
     await mockBaseApp(page);
   });
 
-  test("movie detail sheet opens when clicking a movie card", async ({ page }) => {
+  test("movie detail sheet opens when clicking a movie card", async ({
+    page,
+  }) => {
     await setupMovieMocks(page);
     await page.goto("/movies");
     // Wait for movie card to appear then click it
@@ -65,40 +70,64 @@ test.describe("Movie Lifecycle", () => {
     await expect(card).toBeVisible({ timeout: 10000 });
     await card.click();
     // Sheet should open with movie title
-    await expect(page.getByText("Movie details for Test Movie")).toBeAttached({ timeout: 5000 });
+    await expect(page.getByText("Movie details for Test Movie")).toBeAttached({
+      timeout: 5000,
+    });
   });
 
-  test("detail sheet shows Available badge for available_right_quality", async ({ page }) => {
+  test("detail sheet shows Available badge for available_right_quality", async ({
+    page,
+  }) => {
     await setupMovieMocks(page, { status: "available_right_quality" });
     await page.goto("/movies");
     await page.locator("main").getByText("Test Movie").first().click();
     // Wait for sheet to open by checking for the h2 title inside
-    await expect(page.locator("[role='dialog'] h2, [data-state='open'] h2").first()).toBeVisible({ timeout: 10000 });
-    await expect(page.getByText("Available").first()).toBeVisible({ timeout: 5000 });
+    await expect(
+      page.locator("[role='dialog'] h2, [data-state='open'] h2").first(),
+    ).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText("Available").first()).toBeVisible({
+      timeout: 5000,
+    });
   });
 
-  test("detail sheet shows Missing badge for missing status", async ({ page }) => {
+  test("detail sheet shows Missing badge for missing status", async ({
+    page,
+  }) => {
     await setupMovieMocks(page, { status: "missing" });
     await page.goto("/movies");
     await page.locator("main").getByText("Test Movie").first().click();
-    await expect(page.locator("[role='dialog'] h2, [data-state='open'] h2").first()).toBeVisible({ timeout: 10000 });
-    await expect(page.locator("[role='dialog']").getByText("Missing").first()).toBeVisible({ timeout: 5000 });
+    await expect(
+      page.locator("[role='dialog'] h2, [data-state='open'] h2").first(),
+    ).toBeVisible({ timeout: 10000 });
+    await expect(
+      page.locator("[role='dialog']").getByText("Missing").first(),
+    ).toBeVisible({ timeout: 5000 });
   });
 
-  test("detail sheet shows Downloading badge for downloading status", async ({ page }) => {
+  test("detail sheet shows Downloading badge for downloading status", async ({
+    page,
+  }) => {
     await setupMovieMocks(page, { status: "downloading" });
     await page.goto("/movies");
     await page.locator("main").getByText("Test Movie").first().click();
-    await expect(page.locator("[role='dialog'] h2, [data-state='open'] h2").first()).toBeVisible({ timeout: 10000 });
-    await expect(page.getByText("Downloading").first()).toBeVisible({ timeout: 5000 });
+    await expect(
+      page.locator("[role='dialog'] h2, [data-state='open'] h2").first(),
+    ).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText("Downloading").first()).toBeVisible({
+      timeout: 5000,
+    });
   });
 
   test("detail sheet shows Wrong Quality badge", async ({ page }) => {
     await setupMovieMocks(page, { status: "available_wrong_quality" });
     await page.goto("/movies");
     await page.locator("main").getByText("Test Movie").first().click();
-    await expect(page.locator("[role='dialog'] h2, [data-state='open'] h2").first()).toBeVisible({ timeout: 10000 });
-    await expect(page.getByText("Wrong Quality").first()).toBeVisible({ timeout: 5000 });
+    await expect(
+      page.locator("[role='dialog'] h2, [data-state='open'] h2").first(),
+    ).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText("Wrong Quality").first()).toBeVisible({
+      timeout: 5000,
+    });
   });
 
   test("monitoring toggle triggers PUT request", async ({ page }) => {
@@ -112,11 +141,15 @@ test.describe("Movie Lifecycle", () => {
     await page.goto("/movies");
     await page.locator("main").getByText("Test Movie").first().click();
     // Wait for sheet to open
-    await expect(page.getByText("Movie details for Test Movie")).toBeAttached({ timeout: 5000 });
+    await expect(page.getByText("Movie details for Test Movie")).toBeAttached({
+      timeout: 5000,
+    });
 
     // Set up request listener before clicking
     const monitorRequest = page.waitForRequest(
-      (req) => req.url().includes("/api/v1/movies/mov-1/monitoring") && req.method() === "PUT"
+      (req) =>
+        req.url().includes("/api/v1/movies/mov-1/monitoring") &&
+        req.method() === "PUT",
     );
 
     // Click the monitoring toggle (bookmark button)
@@ -137,13 +170,19 @@ test.describe("Movie Lifecycle", () => {
 
     await page.goto("/movies");
     await page.locator("main").getByText("Test Movie").first().click();
-    await expect(page.getByText("Movie details for Test Movie")).toBeAttached({ timeout: 5000 });
+    await expect(page.getByText("Movie details for Test Movie")).toBeAttached({
+      timeout: 5000,
+    });
 
     const searchRequest = page.waitForRequest(
-      (req) => req.url().includes("/api/v1/autosearch") && req.method() === "POST"
+      (req) =>
+        req.url().includes("/api/v1/autosearch") && req.method() === "POST",
     );
 
-    await page.getByRole("button", { name: /Search/i }).first().click();
+    await page
+      .getByRole("button", { name: /Search/i })
+      .first()
+      .click();
     await searchRequest;
   });
 
@@ -156,17 +195,23 @@ test.describe("Movie Lifecycle", () => {
 
     await page.goto("/movies");
     await page.locator("main").getByText("Test Movie").first().click();
-    await expect(page.getByText("Movie details for Test Movie")).toBeAttached({ timeout: 5000 });
+    await expect(page.getByText("Movie details for Test Movie")).toBeAttached({
+      timeout: 5000,
+    });
 
     const archiveReq = page.waitForRequest(
-      (req) => req.url().includes("/api/v1/movies/mov-1/archive") && req.method() === "POST"
+      (req) =>
+        req.url().includes("/api/v1/movies/mov-1/archive") &&
+        req.method() === "POST",
     );
 
     await page.locator("button[title='Archive']").click();
     await archiveReq;
   });
 
-  test("delete button opens confirmation and triggers DELETE", async ({ page }) => {
+  test("delete button opens confirmation and triggers DELETE", async ({
+    page,
+  }) => {
     await setupMovieMocks(page);
 
     await mockRoute(page, "DELETE", "movies/mov-1", async (route) => {
@@ -175,7 +220,9 @@ test.describe("Movie Lifecycle", () => {
 
     await page.goto("/movies");
     await page.locator("main").getByText("Test Movie").first().click();
-    await expect(page.getByText("Movie details for Test Movie")).toBeAttached({ timeout: 5000 });
+    await expect(page.getByText("Movie details for Test Movie")).toBeAttached({
+      timeout: 5000,
+    });
 
     // Click delete button
     await page.locator("button[title='Delete movie']").click();
@@ -184,7 +231,8 @@ test.describe("Movie Lifecycle", () => {
     await expect(page.getByText("Delete Movie")).toBeVisible({ timeout: 5000 });
 
     const deleteReq = page.waitForRequest(
-      (req) => req.url().includes("/api/v1/movies/mov-1") && req.method() === "DELETE"
+      (req) =>
+        req.url().includes("/api/v1/movies/mov-1") && req.method() === "DELETE",
     );
 
     // Click the destructive Delete button in the dialog
@@ -203,10 +251,14 @@ test.describe("Movie Lifecycle", () => {
 
     await page.goto("/movies");
     await page.locator("main").getByText("Test Movie").first().click();
-    await expect(page.getByText("Movie details for Test Movie")).toBeAttached({ timeout: 5000 });
+    await expect(page.getByText("Movie details for Test Movie")).toBeAttached({
+      timeout: 5000,
+    });
 
     const refreshReq = page.waitForRequest(
-      (req) => req.url().includes("/api/v1/movies/mov-1/refresh") && req.method() === "POST"
+      (req) =>
+        req.url().includes("/api/v1/movies/mov-1/refresh") &&
+        req.method() === "POST",
     );
 
     await page.locator("button[title='Refresh metadata from TMDB']").click();
@@ -226,18 +278,25 @@ test.describe("Movie Lifecycle", () => {
 
     await page.goto("/movies");
     await page.locator("main").getByText("Test Movie").first().click();
-    await expect(page.getByText("Movie details for Test Movie")).toBeAttached({ timeout: 5000 });
+    await expect(page.getByText("Movie details for Test Movie")).toBeAttached({
+      timeout: 5000,
+    });
 
     // Click Edit button
     await page.getByRole("button", { name: /Edit/i }).first().click();
     // Editing Movie label should appear
-    await expect(page.getByText("Editing Movie")).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText("Editing Movie")).toBeVisible({
+      timeout: 5000,
+    });
 
     // Save Changes button should be visible
-    await expect(page.getByRole("button", { name: /Save Changes/i })).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: /Save Changes/i }),
+    ).toBeVisible();
 
     const saveReq = page.waitForRequest(
-      (req) => req.url().includes("/api/v1/movies/mov-1") && req.method() === "PUT"
+      (req) =>
+        req.url().includes("/api/v1/movies/mov-1") && req.method() === "PUT",
     );
 
     await page.getByRole("button", { name: /Save Changes/i }).click();
@@ -251,10 +310,15 @@ test.describe("Movie Lifecycle", () => {
 
     await page.goto("/movies");
     await page.locator("main").getByText("Test Movie").first().click();
-    await expect(page.getByText("Movie details for Test Movie")).toBeAttached({ timeout: 5000 });
+    await expect(page.getByText("Movie details for Test Movie")).toBeAttached({
+      timeout: 5000,
+    });
 
     // Click Browse button to open search dialog
-    await page.getByRole("button", { name: /Browse/i }).first().click();
+    await page
+      .getByRole("button", { name: /Browse/i })
+      .first()
+      .click();
 
     // Release search dialog should open
     await expect(page.getByRole("dialog")).toBeVisible({ timeout: 5000 });

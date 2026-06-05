@@ -7,7 +7,7 @@ export class ApiError extends Error {
   constructor(
     message: string,
     public status: number,
-    public data?: unknown
+    public data?: unknown,
   ) {
     super(message);
     this.name = "ApiError";
@@ -19,13 +19,15 @@ export function useApiClient() {
 
   const request = async <T = unknown>(
     endpoint: string,
-    options: RequestInit = {}
+    options: RequestInit = {},
   ): Promise<T> => {
     if (!isAuthenticated) {
       throw new ApiError("Not authenticated", 401);
     }
 
-    const url = endpoint.startsWith("http") ? endpoint : `${API_BASE_URL}${endpoint}`;
+    const url = endpoint.startsWith("http")
+      ? endpoint
+      : `${API_BASE_URL}${endpoint}`;
 
     const headers: HeadersInit = {
       "Content-Type": "application/json",
@@ -43,7 +45,7 @@ export function useApiClient() {
         throw new ApiError(
           `API error: ${response.status} ${response.statusText}`,
           response.status,
-          data
+          data,
         );
       }
 
@@ -56,7 +58,10 @@ export function useApiClient() {
       if (err instanceof ApiError) {
         throw err;
       }
-      throw new ApiError(err instanceof Error ? err.message : "Unknown error", 0);
+      throw new ApiError(
+        err instanceof Error ? err.message : "Unknown error",
+        0,
+      );
     }
   };
 

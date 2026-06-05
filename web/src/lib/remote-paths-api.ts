@@ -30,7 +30,7 @@ export async function listRemotePathMappings(): Promise<RemotePathMapping[]> {
 }
 
 export async function createRemotePathMapping(
-  req: CreateRemotePathMappingRequest
+  req: CreateRemotePathMappingRequest,
 ): Promise<RemotePathMapping> {
   const res = await apiFetch(BASE, {
     method: "POST",

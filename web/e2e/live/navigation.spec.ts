@@ -18,12 +18,18 @@ test.describe("Live: Navigation & Page Rendering", () => {
   ];
 
   for (const route of routes) {
-    test(`${route.name} page (${route.path}) loads without errors`, async ({ page }) => {
+    test(`${route.name} page (${route.path}) loads without errors`, async ({
+      page,
+    }) => {
       await page.goto(route.path);
       await waitForPageLoad(page);
       // Should not show error boundary or crash
-      const errorBoundary = page.getByText(/Something went wrong|Unexpected error|Application error/i).first();
-      const hasError = await errorBoundary.isVisible({ timeout: 3000 }).catch(() => false);
+      const errorBoundary = page
+        .getByText(/Something went wrong|Unexpected error|Application error/i)
+        .first();
+      const hasError = await errorBoundary
+        .isVisible({ timeout: 3000 })
+        .catch(() => false);
       expect(hasError).toBeFalsy();
       // Main content should be visible
       await expect(page.locator("main")).toBeVisible({ timeout: 15000 });
@@ -36,12 +42,18 @@ test.describe("Live: Navigation & Page Rendering", () => {
 
     // Navigate to Movies via sidebar
     const sidebar = page.locator("nav, aside, [data-sidebar]").first();
-    await sidebar.getByText(/Movies/i).first().click();
+    await sidebar
+      .getByText(/Movies/i)
+      .first()
+      .click();
     await page.waitForURL("**/movies**", { timeout: 10000 });
     await expect(page.locator("main")).toBeVisible();
 
     // Navigate to Downloads
-    await sidebar.getByText(/Downloads/i).first().click();
+    await sidebar
+      .getByText(/Downloads/i)
+      .first()
+      .click();
     await page.waitForURL("**/downloads**", { timeout: 10000 });
     await expect(page.locator("main")).toBeVisible();
   });
@@ -55,7 +67,7 @@ test.describe("Live: Navigation & Page Rendering", () => {
 
     // Filter out known non-critical errors
     const critical = errors.filter(
-      (e) => !e.includes("ResizeObserver") && !e.includes("Non-Error")
+      (e) => !e.includes("ResizeObserver") && !e.includes("Non-Error"),
     );
     if (critical.length > 0) {
       console.warn("Console errors detected:", critical);

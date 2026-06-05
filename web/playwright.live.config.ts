@@ -12,10 +12,10 @@ const baseURL = process.env.LOOM_URL || "http://localhost:8080";
 
 export default defineConfig({
   testDir: "./e2e/live",
-  fullyParallel: false,       // serial — avoids hammering the live instance
+  fullyParallel: false, // serial — avoids hammering the live instance
   retries: 1,
   workers: 1,
-  timeout: 60_000,            // live calls can be slow
+  timeout: 60_000, // live calls can be slow
   expect: { timeout: 15_000 },
   reporter: "list",
   use: {

@@ -219,9 +219,7 @@ export async function deleteImportList(id: string): Promise<void> {
   );
 }
 
-export async function syncImportList(
-  id: string,
-): Promise<{ message: string }> {
+export async function syncImportList(id: string): Promise<{ message: string }> {
   return request<{ message: string }>(
     "POST",
     `/api/v1/import-lists/${encodeURIComponent(id)}/sync`,
@@ -341,13 +339,8 @@ export function useCreateImportList() {
 export function useUpdateImportList() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({
-      id,
-      body,
-    }: {
-      id: string;
-      body: UpdateImportListRequest;
-    }) => updateImportList(id, body),
+    mutationFn: ({ id, body }: { id: string; body: UpdateImportListRequest }) =>
+      updateImportList(id, body),
     onSuccess: () => qc.invalidateQueries({ queryKey: importListKeys.all }),
   });
 }

@@ -10,10 +10,7 @@ import {
 import { useApiClient } from "@/lib/api-client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-} from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   Select,
   SelectContent,
@@ -58,7 +55,7 @@ function useSearchLog(limit: number, offset: number) {
     queryKey: ["search-log", limit, offset],
     queryFn: () =>
       api.get<{ data: QueryLogEntry[] }>(
-        `/search/log?limit=${limit}&offset=${offset}`
+        `/search/log?limit=${limit}&offset=${offset}`,
       ),
     refetchInterval: 10_000,
   });
@@ -116,7 +113,7 @@ function LatencyBar({ ms, maxMs }: { ms: number; maxMs: number }) {
           style={{ width: `${pct}%` }}
         />
       </div>
-      <span className="text-xs text-muted-foreground w-16 text-right">
+      <span className="w-16 text-right text-xs text-muted-foreground">
         {ms} ms
       </span>
     </div>
@@ -146,7 +143,7 @@ function IndexerBreakdown({ queryId }: { queryId: string }) {
       {indexers.map((ix) => (
         <div
           key={ix.id}
-          className="rounded-md border border-border p-2 space-y-1"
+          className="space-y-1 rounded-md border border-border p-2"
         >
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium">{ix.indexer_name}</span>
@@ -164,7 +161,7 @@ function IndexerBreakdown({ queryId }: { queryId: string }) {
           </div>
           <LatencyBar ms={ix.latency_ms} maxMs={maxLatency} />
           {ix.error && (
-            <p className="text-xs text-red-400 break-all">{ix.error}</p>
+            <p className="break-all text-xs text-red-400">{ix.error}</p>
           )}
         </div>
       ))}
@@ -183,23 +180,20 @@ function QueryRow({ entry }: { entry: QueryLogEntry }) {
         onClick={() => setExpanded((v) => !v)}
         aria-expanded={expanded}
       >
-        <div className="flex items-center gap-2 min-w-0 flex-1">
-          <Search className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-          <span className="text-sm font-medium truncate">
+        <div className="flex min-w-0 flex-1 items-center gap-2">
+          <Search className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+          <span className="truncate text-sm font-medium">
             {entry.query || "(empty)"}
           </span>
-          <Badge variant="outline" className="text-[10px] shrink-0">
+          <Badge variant="outline" className="shrink-0 text-[10px]">
             {entry.query_type}
           </Badge>
         </div>
-        <div className="flex items-center gap-3 shrink-0">
+        <div className="flex shrink-0 items-center gap-3">
           <span className="text-xs text-muted-foreground">
             {entry.total_results} results
           </span>
-          <Badge
-            variant="outline"
-            className={statusBadgeVariant(entry.status)}
-          >
+          <Badge variant="outline" className={statusBadgeVariant(entry.status)}>
             {entry.status}
           </Badge>
           <span className="text-xs text-muted-foreground">
@@ -277,7 +271,12 @@ export function SearchDiagnostics() {
 
         <div className="flex-1" />
 
-        <Button variant="outline" size="sm" className="gap-2" onClick={() => refetch()}>
+        <Button
+          variant="outline"
+          size="sm"
+          className="gap-2"
+          onClick={() => refetch()}
+        >
           <RefreshCw className="h-3.5 w-3.5" />
           Refresh
         </Button>
@@ -318,9 +317,7 @@ export function SearchDiagnostics() {
               </CardContent>
             </Card>
           ) : (
-            entries.map((entry) => (
-              <QueryRow key={entry.id} entry={entry} />
-            ))
+            entries.map((entry) => <QueryRow key={entry.id} entry={entry} />)
           )}
         </div>
       )}

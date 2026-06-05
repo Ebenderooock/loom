@@ -20,29 +20,34 @@ export function MovieCard({
   onToggleSelect: () => void;
   onClick: () => void;
 }) {
-  const profile = profiles.find(p => p.id === movie.qualityProfileId);
+  const profile = profiles.find((p) => p.id === movie.qualityProfileId);
   const statusColor = STATUS_CONFIG[movie.status]?.border ?? "#6b7280";
 
   return (
     <div
       className={cn(
-        "group relative rounded-lg overflow-hidden shadow-lg transition-all duration-200 hover:scale-[1.02] hover:-translate-y-1 hover:shadow-xl cursor-pointer border border-transparent hover:border-accent/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+        "group relative cursor-pointer overflow-hidden rounded-lg border border-transparent shadow-lg transition-all duration-200 hover:-translate-y-1 hover:scale-[1.02] hover:border-accent/10 hover:shadow-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background",
         selected && "ring-2 ring-accent ring-offset-2 ring-offset-background",
       )}
       tabIndex={0}
       role="button"
       onClick={onClick}
-      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick(); } }}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onClick();
+        }
+      }}
     >
       {/* Status accent — thin gradient bar at top */}
       <div
-        className="absolute top-0 left-0 right-0 h-[3px] z-10"
+        className="absolute left-0 right-0 top-0 z-10 h-[3px]"
         style={{
           background: `linear-gradient(90deg, ${statusColor}, ${statusColor}cc 60%, transparent)`,
         }}
       />
       <div
-        className="absolute top-[3px] left-0 right-0 h-3 z-10 pointer-events-none"
+        className="pointer-events-none absolute left-0 right-0 top-[3px] z-10 h-3"
         style={{
           background: `linear-gradient(180deg, ${statusColor}25, transparent)`,
         }}
@@ -53,25 +58,35 @@ export function MovieCard({
           <img
             src={`${TMDB_IMG}/w300${movie.posterPath}`}
             alt={movie.title}
-            className="w-full h-full object-cover"
+            className="h-full w-full object-cover"
             loading="lazy"
           />
         ) : (
-          <div className="w-full h-full flex items-center justify-center">
-            <Film className="w-12 h-12 text-muted-foreground/30" />
+          <div className="flex h-full w-full items-center justify-center">
+            <Film className="h-12 w-12 text-muted-foreground/30" />
           </div>
         )}
       </div>
 
       {/* Checkbox */}
       {(selectMode || selected) && (
-        <div className="absolute top-2 left-2 z-10">
-          <Checkbox checked={selected} onClick={(e) => e.stopPropagation()} onCheckedChange={() => onToggleSelect()} className="h-5 w-5 border-white/60 data-[state=checked]:bg-accent data-[state=checked]:border-accent" />
+        <div className="absolute left-2 top-2 z-10">
+          <Checkbox
+            checked={selected}
+            onClick={(e) => e.stopPropagation()}
+            onCheckedChange={() => onToggleSelect()}
+            className="h-5 w-5 border-white/60 data-[state=checked]:border-accent data-[state=checked]:bg-accent"
+          />
         </div>
       )}
       {!selectMode && !selected && (
-        <div className="absolute top-2 left-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-          <Checkbox checked={false} onClick={(e) => e.stopPropagation()} onCheckedChange={() => onToggleSelect()} className="h-5 w-5 border-white/60" />
+        <div className="absolute left-2 top-2 z-10 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+          <Checkbox
+            checked={false}
+            onClick={(e) => e.stopPropagation()}
+            onCheckedChange={() => onToggleSelect()}
+            className="h-5 w-5 border-white/60"
+          />
         </div>
       )}
 
@@ -80,28 +95,38 @@ export function MovieCard({
         <div className="flex items-center justify-between gap-1">
           <StatusBadge status={movie.status} />
           {movie.monitoringStatus === "unmonitored" && (
-            <span className="text-[10px] text-gray-500 uppercase tracking-wider">Unmonitored</span>
+            <span className="text-[10px] uppercase tracking-wider text-gray-500">
+              Unmonitored
+            </span>
           )}
         </div>
-        <h3 className="text-sm font-semibold text-white truncate mt-1">{movie.title}</h3>
+        <h3 className="mt-1 truncate text-sm font-semibold text-white">
+          {movie.title}
+        </h3>
         <p className="text-xs text-gray-400">{movie.year}</p>
       </div>
 
       {/* Hover overlay with details */}
-      <div className="absolute inset-0 bg-black/80 backdrop-blur-sm p-4 flex flex-col justify-between opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none">
+      <div className="pointer-events-none absolute inset-0 flex flex-col justify-between bg-black/80 p-4 opacity-0 backdrop-blur-sm transition-opacity duration-200 group-hover:opacity-100">
         <div>
           <h3 className="text-sm font-bold text-white">{movie.title}</h3>
-          <p className="text-xs text-gray-400 mt-0.5">{movie.year} • {movie.runtime ? `${movie.runtime}m` : "—"}</p>
+          <p className="mt-0.5 text-xs text-gray-400">
+            {movie.year} • {movie.runtime ? `${movie.runtime}m` : "—"}
+          </p>
           {movie.rating > 0 && (
-            <div className="flex items-center gap-1 mt-1">
-              <Star className="w-3 h-3 text-yellow-400 fill-yellow-400" />
-              <span className="text-xs text-yellow-400">{movie.rating.toFixed(1)}</span>
+            <div className="mt-1 flex items-center gap-1">
+              <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
+              <span className="text-xs text-yellow-400">
+                {movie.rating.toFixed(1)}
+              </span>
             </div>
           )}
           {movie.genres?.length > 0 && (
-            <p className="text-[10px] text-gray-500 mt-1.5">{movie.genres.slice(0, 3).join(" • ")}</p>
+            <p className="mt-1.5 text-[10px] text-gray-500">
+              {movie.genres.slice(0, 3).join(" • ")}
+            </p>
           )}
-          <p className="text-xs text-gray-300 mt-2 line-clamp-4 leading-relaxed">
+          <p className="mt-2 line-clamp-4 text-xs leading-relaxed text-gray-300">
             {movie.overview || "No overview available."}
           </p>
         </div>

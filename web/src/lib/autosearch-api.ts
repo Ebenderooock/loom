@@ -32,7 +32,7 @@ export interface AutoSearchResult {
 }
 
 export async function autoSearch(
-  req: AutoSearchRequest
+  req: AutoSearchRequest,
 ): Promise<AutoSearchResult> {
   const res = await apiFetch("/api/v1/autosearch", {
     method: "POST",

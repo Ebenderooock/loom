@@ -21,10 +21,18 @@ test.describe("Smoke Tests", () => {
     await page.goto("/");
     // On mobile, aside is display:none so getByRole won't find links inside it.
     // Use CSS locator to verify links are in the DOM.
-    await expect(page.locator("aside a").filter({ hasText: "Movies" }).first()).toBeAttached();
-    await expect(page.locator("aside a").filter({ hasText: "TV Shows" }).first()).toBeAttached();
-    await expect(page.locator("aside a").filter({ hasText: "Workflows" }).first()).toBeAttached();
-    await expect(page.locator("aside a").filter({ hasText: "Settings" }).first()).toBeAttached();
+    await expect(
+      page.locator("aside a").filter({ hasText: "Movies" }).first(),
+    ).toBeAttached();
+    await expect(
+      page.locator("aside a").filter({ hasText: "TV Shows" }).first(),
+    ).toBeAttached();
+    await expect(
+      page.locator("aside a").filter({ hasText: "Workflows" }).first(),
+    ).toBeAttached();
+    await expect(
+      page.locator("aside a").filter({ hasText: "Settings" }).first(),
+    ).toBeAttached();
   });
 
   test("app does not crash on page navigation", async ({ page }) => {

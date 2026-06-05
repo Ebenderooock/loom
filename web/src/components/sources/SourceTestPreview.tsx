@@ -41,7 +41,9 @@ export function SourceTestPreview({
           {isLoading && (
             <div className="flex items-center justify-center py-8">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-              <span className="ml-2 text-muted-foreground">Testing source...</span>
+              <span className="ml-2 text-muted-foreground">
+                Testing source...
+              </span>
             </div>
           )}
 
@@ -65,7 +67,9 @@ export function SourceTestPreview({
             <>
               <Alert>
                 <CheckCircle2 className="h-4 w-4 text-green-600" />
-                <AlertTitle className="text-green-600">Test Successful</AlertTitle>
+                <AlertTitle className="text-green-600">
+                  Test Successful
+                </AlertTitle>
                 <AlertDescription>
                   Found {result.items?.length ?? 0} items
                 </AlertDescription>
@@ -73,21 +77,25 @@ export function SourceTestPreview({
 
               {result.items && result.items.length > 0 ? (
                 <div className="space-y-3">
-                  <p className="text-sm font-medium">Preview (first 5 items):</p>
+                  <p className="text-sm font-medium">
+                    Preview (first 5 items):
+                  </p>
                   {result.items.map((item, idx) => (
                     <div
                       key={idx}
-                      className="border rounded-lg p-4 space-y-2 bg-muted/50"
+                      className="space-y-2 rounded-lg border bg-muted/50 p-4"
                     >
                       <div className="flex items-start justify-between gap-2">
                         <div className="flex-1">
-                          <p className="font-medium text-sm break-words">{item.title}</p>
+                          <p className="break-words text-sm font-medium">
+                            {item.title}
+                          </p>
                           {item.link && (
                             <a
                               href={item.link}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="text-xs text-blue-600 hover:underline break-all"
+                              className="break-all text-xs text-blue-600 hover:underline"
                             >
                               {item.link}
                             </a>
@@ -108,8 +116,8 @@ export function SourceTestPreview({
                   <AlertCircle className="h-4 w-4" />
                   <AlertTitle>No Items Found</AlertTitle>
                   <AlertDescription>
-                    The source returned successfully but no items were extracted. Check your
-                    configuration.
+                    The source returned successfully but no items were
+                    extracted. Check your configuration.
                   </AlertDescription>
                 </Alert>
               )}

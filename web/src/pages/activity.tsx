@@ -5,7 +5,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
 } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -13,7 +18,29 @@ import { Label } from "@/components/ui/label";
 import { EmptyState } from "@/components/ui/empty-state";
 import { LoadingState } from "@/components/ui/loading-state";
 import { useSetPageHeader } from "@/hooks/use-page-header";
-import { CheckCircle2, XCircle, AlertTriangle, Clock, Ban, RefreshCw, Trash2, Download, ArrowDown, ArrowUp, Pause, Play, ChevronsUp, ChevronsDown, ChevronUp, ChevronDown, Zap, ShieldCheck, Radio, MoreHorizontal, Gauge } from "lucide-react";
+import {
+  CheckCircle2,
+  XCircle,
+  AlertTriangle,
+  Clock,
+  Ban,
+  RefreshCw,
+  Trash2,
+  Download,
+  ArrowDown,
+  ArrowUp,
+  Pause,
+  Play,
+  ChevronsUp,
+  ChevronsDown,
+  ChevronUp,
+  ChevronDown,
+  Zap,
+  ShieldCheck,
+  Radio,
+  MoreHorizontal,
+  Gauge,
+} from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -101,9 +128,13 @@ async function queueAction(
 function DownloadQueue() {
   const [items, setItems] = React.useState<DownloadItem[]>([]);
   const [loading, setLoading] = React.useState(true);
-  const [removeTarget, setRemoveTarget] = React.useState<DownloadItem | null>(null);
+  const [removeTarget, setRemoveTarget] = React.useState<DownloadItem | null>(
+    null,
+  );
   const [deleteFiles, setDeleteFiles] = React.useState(false);
-  const [speedTarget, setSpeedTarget] = React.useState<DownloadItem | null>(null);
+  const [speedTarget, setSpeedTarget] = React.useState<DownloadItem | null>(
+    null,
+  );
   const [speedLimit, setSpeedLimit] = React.useState("");
 
   const fetchQueue = React.useCallback(async () => {
@@ -127,7 +158,11 @@ function DownloadQueue() {
   }, [fetchQueue]);
 
   const doAction = React.useCallback(
-    async (item: DownloadItem, action: string, body: Record<string, unknown> = {}) => {
+    async (
+      item: DownloadItem,
+      action: string,
+      body: Record<string, unknown> = {},
+    ) => {
       if (!item.client_id) return;
       await queueAction(item.client_id, action, body);
       fetchQueue();
@@ -148,7 +183,10 @@ function DownloadQueue() {
 
   const confirmSpeedLimit = React.useCallback(async () => {
     if (!speedTarget?.client_id) return;
-    const limitBytes = Math.max(0, Math.floor(parseFloat(speedLimit || "0") * 1024));
+    const limitBytes = Math.max(
+      0,
+      Math.floor(parseFloat(speedLimit || "0") * 1024),
+    );
     await queueAction(speedTarget.client_id, "set-speed-limit", {
       ids: [speedTarget.id],
       limit_bytes_per_sec: limitBytes,
@@ -172,7 +210,11 @@ function DownloadQueue() {
     return (
       <Card>
         <CardContent className="py-8">
-          <EmptyState icon={<Download className="h-8 w-8" />} title="No active downloads" description="The download queue is empty." />
+          <EmptyState
+            icon={<Download className="h-8 w-8" />}
+            title="No active downloads"
+            description="The download queue is empty."
+          />
         </CardContent>
       </Card>
     );
@@ -183,7 +225,12 @@ function DownloadQueue() {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between pb-3">
           <CardTitle className="text-base">Download Queue</CardTitle>
-          <Button variant="ghost" size="icon" onClick={fetchQueue} className="h-8 w-8">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={fetchQueue}
+            className="h-8 w-8"
+          >
             <RefreshCw className="h-4 w-4" />
           </Button>
         </CardHeader>
@@ -206,97 +253,173 @@ function DownloadQueue() {
                 return (
                   <TableRow key={`${item.client_id}-${item.id}`}>
                     <TableCell>
-                      <div className="font-medium truncate max-w-md">{item.title}</div>
+                      <div className="max-w-md truncate font-medium">
+                        {item.title}
+                      </div>
                       {item.category && (
-                        <div className="text-xs text-muted-foreground">{item.category}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {item.category}
+                        </div>
                       )}
                     </TableCell>
                     <TableCell>
-                      <Badge variant={sc.variant} className={`text-xs ${sc.className ?? ""}`}>
-                        {item.status === "downloading" && <ArrowDown className="inline h-3 w-3 mr-0.5" />}
-                        {item.status === "seeding" && <ArrowUp className="inline h-3 w-3 mr-0.5" />}
-                        {item.status === "paused" && <Pause className="inline h-3 w-3 mr-0.5" />}
+                      <Badge
+                        variant={sc.variant}
+                        className={`text-xs ${sc.className ?? ""}`}
+                      >
+                        {item.status === "downloading" && (
+                          <ArrowDown className="mr-0.5 inline h-3 w-3" />
+                        )}
+                        {item.status === "seeding" && (
+                          <ArrowUp className="mr-0.5 inline h-3 w-3" />
+                        )}
+                        {item.status === "paused" && (
+                          <Pause className="mr-0.5 inline h-3 w-3" />
+                        )}
                         {sc.label}
                       </Badge>
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
-                        <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
+                        <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
                           <div
-                            className="h-full bg-accent rounded-full transition-all"
-                            style={{ width: `${Math.round(item.progress * 100)}%` }}
+                            className="h-full rounded-full bg-accent transition-all"
+                            style={{
+                              width: `${Math.round(item.progress * 100)}%`,
+                            }}
                           />
                         </div>
-                        <span className="text-xs tabular-nums text-muted-foreground w-8">
+                        <span className="w-8 text-xs tabular-nums text-muted-foreground">
                           {Math.round(item.progress * 100)}%
                         </span>
                       </div>
                     </TableCell>
-                    <TableCell className="text-xs text-muted-foreground tabular-nums">
+                    <TableCell className="text-xs tabular-nums text-muted-foreground">
                       {item.size_bytes ? formatBytes(item.size_bytes) : "—"}
                     </TableCell>
-                    <TableCell className="text-xs text-muted-foreground tabular-nums">
-                      {item.download_rate ? formatSpeed(item.download_rate) : "—"}
+                    <TableCell className="text-xs tabular-nums text-muted-foreground">
+                      {item.download_rate
+                        ? formatSpeed(item.download_rate)
+                        : "—"}
                     </TableCell>
-                    <TableCell className="text-xs text-muted-foreground tabular-nums">
+                    <TableCell className="text-xs tabular-nums text-muted-foreground">
                       {item.eta_seconds ? formatEta(item.eta_seconds) : "—"}
                     </TableCell>
                     <TableCell>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-7 w-7">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7"
+                          >
                             <MoreHorizontal className="h-4 w-4" />
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           {item.status === "paused" ? (
-                            <DropdownMenuItem onClick={() => doAction(item, "resume", { ids: [item.id] })}>
-                              <Play className="h-3.5 w-3.5 mr-2" /> Resume
+                            <DropdownMenuItem
+                              onClick={() =>
+                                doAction(item, "resume", { ids: [item.id] })
+                              }
+                            >
+                              <Play className="mr-2 h-3.5 w-3.5" /> Resume
                             </DropdownMenuItem>
                           ) : (
-                            <DropdownMenuItem onClick={() => doAction(item, "pause", { ids: [item.id] })}>
-                              <Pause className="h-3.5 w-3.5 mr-2" /> Pause
+                            <DropdownMenuItem
+                              onClick={() =>
+                                doAction(item, "pause", { ids: [item.id] })
+                              }
+                            >
+                              <Pause className="mr-2 h-3.5 w-3.5" /> Pause
                             </DropdownMenuItem>
                           )}
-                          <DropdownMenuItem onClick={() => doAction(item, "force-start", { ids: [item.id] })}>
-                            <Zap className="h-3.5 w-3.5 mr-2" /> Force Start
+                          <DropdownMenuItem
+                            onClick={() =>
+                              doAction(item, "force-start", { ids: [item.id] })
+                            }
+                          >
+                            <Zap className="mr-2 h-3.5 w-3.5" /> Force Start
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
                           <DropdownMenuSub>
                             <DropdownMenuSubTrigger>
-                              <ChevronsUp className="h-3.5 w-3.5 mr-2" /> Priority
+                              <ChevronsUp className="mr-2 h-3.5 w-3.5" />{" "}
+                              Priority
                             </DropdownMenuSubTrigger>
                             <DropdownMenuSubContent>
-                              <DropdownMenuItem onClick={() => doAction(item, "set-priority", { ids: [item.id], priority: "top" })}>
-                                <ChevronsUp className="h-3.5 w-3.5 mr-2" /> Move to Top
+                              <DropdownMenuItem
+                                onClick={() =>
+                                  doAction(item, "set-priority", {
+                                    ids: [item.id],
+                                    priority: "top",
+                                  })
+                                }
+                              >
+                                <ChevronsUp className="mr-2 h-3.5 w-3.5" /> Move
+                                to Top
                               </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => doAction(item, "set-priority", { ids: [item.id], priority: "up" })}>
-                                <ChevronUp className="h-3.5 w-3.5 mr-2" /> Move Up
+                              <DropdownMenuItem
+                                onClick={() =>
+                                  doAction(item, "set-priority", {
+                                    ids: [item.id],
+                                    priority: "up",
+                                  })
+                                }
+                              >
+                                <ChevronUp className="mr-2 h-3.5 w-3.5" /> Move
+                                Up
                               </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => doAction(item, "set-priority", { ids: [item.id], priority: "down" })}>
-                                <ChevronDown className="h-3.5 w-3.5 mr-2" /> Move Down
+                              <DropdownMenuItem
+                                onClick={() =>
+                                  doAction(item, "set-priority", {
+                                    ids: [item.id],
+                                    priority: "down",
+                                  })
+                                }
+                              >
+                                <ChevronDown className="mr-2 h-3.5 w-3.5" />{" "}
+                                Move Down
                               </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => doAction(item, "set-priority", { ids: [item.id], priority: "bottom" })}>
-                                <ChevronsDown className="h-3.5 w-3.5 mr-2" /> Move to Bottom
+                              <DropdownMenuItem
+                                onClick={() =>
+                                  doAction(item, "set-priority", {
+                                    ids: [item.id],
+                                    priority: "bottom",
+                                  })
+                                }
+                              >
+                                <ChevronsDown className="mr-2 h-3.5 w-3.5" />{" "}
+                                Move to Bottom
                               </DropdownMenuItem>
                             </DropdownMenuSubContent>
                           </DropdownMenuSub>
-                          <DropdownMenuItem onClick={() => setSpeedTarget(item)}>
-                            <Gauge className="h-3.5 w-3.5 mr-2" /> Speed Limit…
+                          <DropdownMenuItem
+                            onClick={() => setSpeedTarget(item)}
+                          >
+                            <Gauge className="mr-2 h-3.5 w-3.5" /> Speed Limit…
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
-                          <DropdownMenuItem onClick={() => doAction(item, "recheck", { ids: [item.id] })}>
-                            <ShieldCheck className="h-3.5 w-3.5 mr-2" /> Recheck
+                          <DropdownMenuItem
+                            onClick={() =>
+                              doAction(item, "recheck", { ids: [item.id] })
+                            }
+                          >
+                            <ShieldCheck className="mr-2 h-3.5 w-3.5" /> Recheck
                           </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => doAction(item, "reannounce", { ids: [item.id] })}>
-                            <Radio className="h-3.5 w-3.5 mr-2" /> Reannounce
+                          <DropdownMenuItem
+                            onClick={() =>
+                              doAction(item, "reannounce", { ids: [item.id] })
+                            }
+                          >
+                            <Radio className="mr-2 h-3.5 w-3.5" /> Reannounce
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem
                             className="text-red-500 focus:text-red-500"
                             onClick={() => setRemoveTarget(item)}
                           >
-                            <Trash2 className="h-3.5 w-3.5 mr-2" /> Remove…
+                            <Trash2 className="mr-2 h-3.5 w-3.5" /> Remove…
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
@@ -310,20 +433,41 @@ function DownloadQueue() {
       </Card>
 
       {/* Remove confirmation dialog */}
-      <Dialog open={!!removeTarget} onOpenChange={(open) => { if (!open) { setRemoveTarget(null); setDeleteFiles(false); } }}>
+      <Dialog
+        open={!!removeTarget}
+        onOpenChange={(open) => {
+          if (!open) {
+            setRemoveTarget(null);
+            setDeleteFiles(false);
+          }
+        }}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Remove Download</DialogTitle>
             <DialogDescription>
-              Remove <span className="font-medium">{removeTarget?.title}</span> from the queue?
+              Remove <span className="font-medium">{removeTarget?.title}</span>{" "}
+              from the queue?
             </DialogDescription>
           </DialogHeader>
           <div className="flex items-center gap-2">
-            <Checkbox id="delete-files" checked={deleteFiles} onCheckedChange={(v) => setDeleteFiles(!!v)} />
-            <Label htmlFor="delete-files" className="cursor-pointer">Also delete downloaded files</Label>
+            <Checkbox
+              id="delete-files"
+              checked={deleteFiles}
+              onCheckedChange={(v) => setDeleteFiles(!!v)}
+            />
+            <Label htmlFor="delete-files" className="cursor-pointer">
+              Also delete downloaded files
+            </Label>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setRemoveTarget(null); setDeleteFiles(false); }}>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setRemoveTarget(null);
+                setDeleteFiles(false);
+              }}
+            >
               Cancel
             </Button>
             <Button variant="destructive" onClick={confirmRemove}>
@@ -334,12 +478,22 @@ function DownloadQueue() {
       </Dialog>
 
       {/* Speed limit dialog */}
-      <Dialog open={!!speedTarget} onOpenChange={(open) => { if (!open) { setSpeedTarget(null); setSpeedLimit(""); } }}>
+      <Dialog
+        open={!!speedTarget}
+        onOpenChange={(open) => {
+          if (!open) {
+            setSpeedTarget(null);
+            setSpeedLimit("");
+          }
+        }}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Set Speed Limit</DialogTitle>
             <DialogDescription>
-              Limit download speed for <span className="font-medium">{speedTarget?.title}</span>. Enter 0 for unlimited.
+              Limit download speed for{" "}
+              <span className="font-medium">{speedTarget?.title}</span>. Enter 0
+              for unlimited.
             </DialogDescription>
           </DialogHeader>
           <div className="flex items-center gap-2">
@@ -351,10 +505,18 @@ function DownloadQueue() {
               onChange={(e) => setSpeedLimit(e.target.value)}
               placeholder="0"
             />
-            <span className="text-sm text-muted-foreground whitespace-nowrap">KB/s</span>
+            <span className="whitespace-nowrap text-sm text-muted-foreground">
+              KB/s
+            </span>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setSpeedTarget(null); setSpeedLimit(""); }}>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setSpeedTarget(null);
+                setSpeedLimit("");
+              }}
+            >
               Cancel
             </Button>
             <Button onClick={confirmSpeedLimit}>Apply</Button>
@@ -400,7 +562,11 @@ function DownloadHistory() {
     return (
       <Card>
         <CardContent className="py-8">
-          <EmptyState icon={<Clock className="h-8 w-8" />} title="No download history" description="No download history yet." />
+          <EmptyState
+            icon={<Clock className="h-8 w-8" />}
+            title="No download history"
+            description="No download history yet."
+          />
         </CardContent>
       </Card>
     );
@@ -427,13 +593,20 @@ function DownloadHistory() {
               return (
                 <TableRow key={entry.id}>
                   <TableCell>
-                    <div className="font-medium truncate max-w-xs">{entry.title}</div>
+                    <div className="max-w-xs truncate font-medium">
+                      {entry.title}
+                    </div>
                   </TableCell>
                   <TableCell className="text-xs text-muted-foreground">
                     {entry.category || "—"}
                   </TableCell>
                   <TableCell>
-                    <Badge variant={sc.variant} className={`text-xs ${sc.className ?? ""}`}>{sc.label}</Badge>
+                    <Badge
+                      variant={sc.variant}
+                      className={`text-xs ${sc.className ?? ""}`}
+                    >
+                      {sc.label}
+                    </Badge>
                   </TableCell>
                   <TableCell className="text-xs text-muted-foreground">
                     {relativeTime(entry.completed_at)}
@@ -513,7 +686,11 @@ function BlocklistViewer() {
     return (
       <Card>
         <CardContent className="py-8">
-          <EmptyState icon={<Ban className="h-8 w-8" />} title="Blocklist is empty" description="No releases have been blocklisted." />
+          <EmptyState
+            icon={<Ban className="h-8 w-8" />}
+            title="Blocklist is empty"
+            description="No releases have been blocklisted."
+          />
         </CardContent>
       </Card>
     );
@@ -524,11 +701,16 @@ function BlocklistViewer() {
       <CardHeader className="flex flex-row items-center justify-between pb-3">
         <CardTitle className="text-base">Blocklisted Releases</CardTitle>
         <div className="flex items-center gap-2">
-          <Button variant="ghost" size="icon" onClick={fetchBlocklist} className="h-8 w-8">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={fetchBlocklist}
+            className="h-8 w-8"
+          >
             <RefreshCw className="h-4 w-4" />
           </Button>
           <Button variant="destructive" size="sm" onClick={handleClearAll}>
-            <Trash2 className="h-3.5 w-3.5 mr-1" /> Clear All
+            <Trash2 className="mr-1 h-3.5 w-3.5" /> Clear All
           </Button>
         </div>
       </CardHeader>
@@ -546,7 +728,9 @@ function BlocklistViewer() {
             {entries.map((entry) => (
               <TableRow key={entry.id}>
                 <TableCell>
-                  <div className="font-medium truncate max-w-xs">{entry.title}</div>
+                  <div className="max-w-xs truncate font-medium">
+                    {entry.title}
+                  </div>
                 </TableCell>
                 <TableCell className="text-xs text-muted-foreground">
                   {entry.reason || "—"}
@@ -624,7 +808,11 @@ function ReviewQueue() {
     return (
       <Card>
         <CardContent className="py-8">
-          <EmptyState icon={<CheckCircle2 className="h-8 w-8 text-green-500" />} title="No items pending review" description="All reviews have been processed." />
+          <EmptyState
+            icon={<CheckCircle2 className="h-8 w-8 text-green-500" />}
+            title="No items pending review"
+            description="All reviews have been processed."
+          />
         </CardContent>
       </Card>
     );
@@ -634,11 +822,11 @@ function ReviewQueue() {
     <div className="space-y-3">
       {reviews.map((r) => (
         <Card key={r.id}>
-          <CardContent className="py-4 flex items-start justify-between gap-4">
+          <CardContent className="flex items-start justify-between gap-4 py-4">
             <div className="min-w-0 flex-1 space-y-1">
               <div className="flex items-center gap-2">
-                <AlertTriangle className="h-4 w-4 text-yellow-500 shrink-0" />
-                <span className="text-sm font-medium truncate">
+                <AlertTriangle className="h-4 w-4 shrink-0 text-yellow-500" />
+                <span className="truncate text-sm font-medium">
                   {r.download_path || r.media_id}
                 </span>
                 <Badge variant="secondary" className="text-xs">
@@ -650,14 +838,14 @@ function ReviewQueue() {
                 {new Date(r.created_at).toLocaleString()}
               </p>
             </div>
-            <div className="flex gap-2 shrink-0">
+            <div className="flex shrink-0 gap-2">
               <Button
                 size="sm"
                 variant="outline"
                 disabled={acting === r.id}
                 onClick={() => handleAction(r.id, "approve")}
               >
-                <CheckCircle2 className="h-4 w-4 mr-1 text-green-500" />
+                <CheckCircle2 className="mr-1 h-4 w-4 text-green-500" />
                 Approve
               </Button>
               <Button
@@ -666,7 +854,7 @@ function ReviewQueue() {
                 disabled={acting === r.id}
                 onClick={() => handleAction(r.id, "reject")}
               >
-                <XCircle className="h-4 w-4 mr-1 text-red-500" />
+                <XCircle className="mr-1 h-4 w-4 text-red-500" />
                 Reject
               </Button>
             </div>

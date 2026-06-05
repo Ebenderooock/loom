@@ -158,8 +158,7 @@ export function ProxyForm({
     name: initial?.name ?? "",
     enabled: initial?.enabled ?? true,
     url: typeof initialCfg.url === "string" ? initialCfg.url : "",
-    address:
-      typeof initialCfg.address === "string" ? initialCfg.address : "",
+    address: typeof initialCfg.address === "string" ? initialCfg.address : "",
     username:
       typeof initialCfg.username === "string" ? initialCfg.username : "",
     password:
@@ -336,10 +335,7 @@ export function ProxyForm({
               id="proxy-session-mode"
               value={values.session_mode ?? ""}
               onChange={(e) =>
-                update(
-                  "session_mode",
-                  e.target.value as "" | "none" | "shared",
-                )
+                update("session_mode", e.target.value as "" | "none" | "shared")
               }
               className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
             >

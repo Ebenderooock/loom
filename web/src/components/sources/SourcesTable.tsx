@@ -37,7 +37,9 @@ export function SourcesTable({
   if (sources.length === 0) {
     return (
       <div className="flex items-center justify-center py-8">
-        <p className="text-muted-foreground">No sources configured yet. Create one to get started.</p>
+        <p className="text-muted-foreground">
+          No sources configured yet. Create one to get started.
+        </p>
       </div>
     );
   }

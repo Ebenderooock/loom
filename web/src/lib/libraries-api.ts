@@ -129,9 +129,7 @@ async function request<T>(
 
 // ---------- API functions ----------
 
-export async function listLibraries(
-  signal?: AbortSignal,
-): Promise<Library[]> {
+export async function listLibraries(signal?: AbortSignal): Promise<Library[]> {
   const data = await request<{ data: Library[] }>(
     "GET",
     "/api/v1/libraries",
@@ -163,27 +161,15 @@ export async function updateLibrary(
   id: string,
   body: UpdateLibraryRequest,
 ): Promise<Library> {
-  return request(
-    "PUT",
-    `/api/v1/libraries/${encodeURIComponent(id)}`,
-    body,
-  );
+  return request("PUT", `/api/v1/libraries/${encodeURIComponent(id)}`, body);
 }
 
 export async function deleteLibrary(id: string): Promise<void> {
-  await request<void>(
-    "DELETE",
-    `/api/v1/libraries/${encodeURIComponent(id)}`,
-  );
+  await request<void>("DELETE", `/api/v1/libraries/${encodeURIComponent(id)}`);
 }
 
-export async function scanLibrary(
-  id: string,
-): Promise<{ message: string }> {
-  return request(
-    "POST",
-    `/api/v1/libraries/${encodeURIComponent(id)}/scan`,
-  );
+export async function scanLibrary(id: string): Promise<{ message: string }> {
+  return request("POST", `/api/v1/libraries/${encodeURIComponent(id)}/scan`);
 }
 
 export async function listUnmappedFolders(
@@ -260,13 +246,8 @@ export function useCreateLibrary() {
 export function useUpdateLibrary() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({
-      id,
-      body,
-    }: {
-      id: string;
-      body: UpdateLibraryRequest;
-    }) => updateLibrary(id, body),
+    mutationFn: ({ id, body }: { id: string; body: UpdateLibraryRequest }) =>
+      updateLibrary(id, body),
     onSuccess: () => qc.invalidateQueries({ queryKey: libraryKeys.all }),
   });
 }

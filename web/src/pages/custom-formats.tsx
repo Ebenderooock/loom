@@ -1,5 +1,11 @@
 import * as React from "react";
-import { MoreHorizontal, Plus, Trash2, FlaskConical, Download } from "lucide-react";
+import {
+  MoreHorizontal,
+  Plus,
+  Trash2,
+  FlaskConical,
+  Download,
+} from "lucide-react";
 import { toast } from "sonner";
 import { useSetPageHeader } from "@/hooks/use-page-header";
 import { Button } from "@/components/ui/button";
@@ -74,10 +80,18 @@ export function CustomFormatsPage() {
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Custom Formats</h1>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={() => setDialog({ kind: "test" })}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setDialog({ kind: "test" })}
+          >
             <FlaskConical className="mr-2 h-4 w-4" /> Test
           </Button>
-          <Button variant="outline" size="sm" onClick={() => setDialog({ kind: "presets" })}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setDialog({ kind: "presets" })}
+          >
             <Download className="mr-2 h-4 w-4" /> Import Preset
           </Button>
           <Button size="sm" onClick={() => setDialog({ kind: "create" })}>
@@ -95,16 +109,22 @@ export function CustomFormatsPage() {
       ) : !formats || formats.length === 0 ? (
         <div className="rounded-lg border border-dashed p-8 text-center text-muted-foreground">
           <p className="text-lg font-medium">No custom formats</p>
-          <p className="text-sm mt-1">Create one or import a preset to get started.</p>
+          <p className="mt-1 text-sm">
+            Create one or import a preset to get started.
+          </p>
         </div>
       ) : (
-        <div className="rounded-lg border divide-y">
+        <div className="divide-y rounded-lg border">
           {formats.map((cf) => (
-            <div key={cf.id} className="flex items-center justify-between px-4 py-3">
-              <div className="flex items-center gap-3 min-w-0">
-                <span className="font-medium truncate">{cf.name}</span>
-                <span className="text-xs text-muted-foreground shrink-0">
-                  {cf.specifications?.length ?? 0} spec{(cf.specifications?.length ?? 0) !== 1 ? "s" : ""}
+            <div
+              key={cf.id}
+              className="flex items-center justify-between px-4 py-3"
+            >
+              <div className="flex min-w-0 items-center gap-3">
+                <span className="truncate font-medium">{cf.name}</span>
+                <span className="shrink-0 text-xs text-muted-foreground">
+                  {cf.specifications?.length ?? 0} spec
+                  {(cf.specifications?.length ?? 0) !== 1 ? "s" : ""}
                 </span>
               </div>
               <DropdownMenu>
@@ -114,9 +134,16 @@ export function CustomFormatsPage() {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={() => setDialog({ kind: "edit", cf })}>Edit</DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => setDialog({ kind: "edit", cf })}
+                  >
+                    Edit
+                  </DropdownMenuItem>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem className="text-destructive" onClick={() => handleDelete(cf.id)}>
+                  <DropdownMenuItem
+                    className="text-destructive"
+                    onClick={() => handleDelete(cf.id)}
+                  >
                     Delete
                   </DropdownMenuItem>
                 </DropdownMenuContent>
@@ -132,26 +159,41 @@ export function CustomFormatsPage() {
           onClose={() => setDialog({ kind: "closed" })}
         />
       )}
-      {dialog.kind === "test" && <TestDialog onClose={() => setDialog({ kind: "closed" })} />}
-      {dialog.kind === "presets" && <PresetsDialog onClose={() => setDialog({ kind: "closed" })} />}
+      {dialog.kind === "test" && (
+        <TestDialog onClose={() => setDialog({ kind: "closed" })} />
+      )}
+      {dialog.kind === "presets" && (
+        <PresetsDialog onClose={() => setDialog({ kind: "closed" })} />
+      )}
     </div>
   );
 }
 
 // ---------- Edit/Create Dialog ----------
 
-function EditDialog({ initial, onClose }: { initial?: CustomFormat; onClose: () => void }) {
+function EditDialog({
+  initial,
+  onClose,
+}: {
+  initial?: CustomFormat;
+  onClose: () => void;
+}) {
   const createMut = useCreateCustomFormat();
   const updateMut = useUpdateCustomFormat();
   const isEdit = !!initial;
 
   const [id, setId] = React.useState(initial?.id ?? "");
   const [name, setName] = React.useState(initial?.name ?? "");
-  const [includeRename, setIncludeRename] = React.useState(initial?.include_when_renaming ?? false);
-  const [specs, setSpecs] = React.useState<Specification[]>(initial?.specifications ?? [{ ...EMPTY_SPEC }]);
+  const [includeRename, setIncludeRename] = React.useState(
+    initial?.include_when_renaming ?? false,
+  );
+  const [specs, setSpecs] = React.useState<Specification[]>(
+    initial?.specifications ?? [{ ...EMPTY_SPEC }],
+  );
 
   const addSpec = () => setSpecs((s) => [...s, { ...EMPTY_SPEC }]);
-  const removeSpec = (i: number) => setSpecs((s) => s.filter((_, idx) => idx !== i));
+  const removeSpec = (i: number) =>
+    setSpecs((s) => s.filter((_, idx) => idx !== i));
   const updateSpec = (i: number, patch: Partial<Specification>) =>
     setSpecs((s) => s.map((sp, idx) => (idx === i ? { ...sp, ...patch } : sp)));
 
@@ -163,13 +205,22 @@ function EditDialog({ initial, onClose }: { initial?: CustomFormat; onClose: () 
       specifications: specs,
     };
     if (isEdit) {
-      updateMut.mutate({ id: initial!.id, body }, {
-        onSuccess: () => { toast.success("Updated"); onClose(); },
-        onError: (e) => toast.error(e.message),
-      });
+      updateMut.mutate(
+        { id: initial!.id, body },
+        {
+          onSuccess: () => {
+            toast.success("Updated");
+            onClose();
+          },
+          onError: (e) => toast.error(e.message),
+        },
+      );
     } else {
       createMut.mutate(body, {
-        onSuccess: () => { toast.success("Created"); onClose(); },
+        onSuccess: () => {
+          toast.success("Created");
+          onClose();
+        },
         onError: (e) => toast.error(e.message),
       });
     }
@@ -177,7 +228,7 @@ function EditDialog({ initial, onClose }: { initial?: CustomFormat; onClose: () 
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+      <DialogContent className="max-h-[85vh] max-w-2xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{isEdit ? "Edit" : "Add"} Custom Format</DialogTitle>
           <DialogDescription>Define matching rules.</DialogDescription>
@@ -187,27 +238,46 @@ function EditDialog({ initial, onClose }: { initial?: CustomFormat; onClose: () 
           {!isEdit && (
             <div className="grid gap-1.5">
               <Label htmlFor="cf-id">ID (slug)</Label>
-              <Input id="cf-id" value={id} onChange={(e) => setId(e.target.value)} placeholder="prefer-hevc" />
+              <Input
+                id="cf-id"
+                value={id}
+                onChange={(e) => setId(e.target.value)}
+                placeholder="prefer-hevc"
+              />
             </div>
           )}
           <div className="grid gap-1.5">
             <Label htmlFor="cf-name">Name</Label>
-            <Input id="cf-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Prefer x265" />
+            <Input
+              id="cf-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Prefer x265"
+            />
           </div>
           <div className="flex items-center gap-2">
-            <Checkbox id="cf-rename" checked={includeRename} onCheckedChange={(v) => setIncludeRename(!!v)} />
+            <Checkbox
+              id="cf-rename"
+              checked={includeRename}
+              onCheckedChange={(v) => setIncludeRename(!!v)}
+            />
             <Label htmlFor="cf-rename">Include when renaming</Label>
           </div>
 
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <Label>Specifications</Label>
-              <Button type="button" variant="outline" size="sm" onClick={addSpec}>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={addSpec}
+              >
                 <Plus className="mr-1 h-3 w-3" /> Add Spec
               </Button>
             </div>
             {specs.map((spec, i) => (
-              <div key={i} className="rounded-md border p-3 space-y-2">
+              <div key={i} className="space-y-2 rounded-md border p-3">
                 <div className="flex items-center gap-2">
                   <Input
                     className="flex-1"
@@ -218,7 +288,10 @@ function EditDialog({ initial, onClose }: { initial?: CustomFormat; onClose: () 
                   <Select
                     value={spec.implementation}
                     onValueChange={(v) =>
-                      updateSpec(i, { implementation: v as SpecImplementation, fields: { value: "" } })
+                      updateSpec(i, {
+                        implementation: v as SpecImplementation,
+                        fields: { value: "" },
+                      })
                     }
                   >
                     <SelectTrigger className="w-48">
@@ -226,26 +299,45 @@ function EditDialog({ initial, onClose }: { initial?: CustomFormat; onClose: () 
                     </SelectTrigger>
                     <SelectContent>
                       {IMPLEMENTATIONS.map((im) => (
-                        <SelectItem key={im.value} value={im.value}>{im.label}</SelectItem>
+                        <SelectItem key={im.value} value={im.value}>
+                          {im.label}
+                        </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
-                  <Button variant="ghost" size="icon" onClick={() => removeSpec(i)} aria-label="Remove spec">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => removeSpec(i)}
+                    aria-label="Remove spec"
+                  >
                     <Trash2 className="h-4 w-4 text-destructive" />
                   </Button>
                 </div>
                 <div className="flex items-center gap-4">
                   <Input
-                    placeholder={IMPLEMENTATIONS.find((im) => im.value === spec.implementation)?.placeholder ?? "value"}
+                    placeholder={
+                      IMPLEMENTATIONS.find(
+                        (im) => im.value === spec.implementation,
+                      )?.placeholder ?? "value"
+                    }
                     value={String(spec.fields?.value ?? "")}
-                    onChange={(e) => updateSpec(i, { fields: { ...spec.fields, value: e.target.value } })}
+                    onChange={(e) =>
+                      updateSpec(i, {
+                        fields: { ...spec.fields, value: e.target.value },
+                      })
+                    }
                     className="flex-1"
                   />
                   {spec.implementation === "SizeSpec" && (
                     <Input
                       placeholder="max GB"
                       value={String(spec.fields?.max ?? "")}
-                      onChange={(e) => updateSpec(i, { fields: { ...spec.fields, max: e.target.value } })}
+                      onChange={(e) =>
+                        updateSpec(i, {
+                          fields: { ...spec.fields, max: e.target.value },
+                        })
+                      }
                       className="w-28"
                     />
                   )}
@@ -255,7 +347,9 @@ function EditDialog({ initial, onClose }: { initial?: CustomFormat; onClose: () 
                       checked={spec.negate}
                       onCheckedChange={(v) => updateSpec(i, { negate: !!v })}
                     />
-                    <Label htmlFor={`negate-${i}`} className="text-xs">Negate</Label>
+                    <Label htmlFor={`negate-${i}`} className="text-xs">
+                      Negate
+                    </Label>
                   </div>
                   <div className="flex items-center gap-2">
                     <Checkbox
@@ -263,7 +357,9 @@ function EditDialog({ initial, onClose }: { initial?: CustomFormat; onClose: () 
                       checked={spec.required}
                       onCheckedChange={(v) => updateSpec(i, { required: !!v })}
                     />
-                    <Label htmlFor={`required-${i}`} className="text-xs">Required</Label>
+                    <Label htmlFor={`required-${i}`} className="text-xs">
+                      Required
+                    </Label>
                   </div>
                 </div>
               </div>
@@ -272,8 +368,13 @@ function EditDialog({ initial, onClose }: { initial?: CustomFormat; onClose: () 
         </div>
 
         <div className="flex justify-end gap-2 pt-2">
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button onClick={handleSave} disabled={createMut.isPending || updateMut.isPending}>
+          <Button variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            onClick={handleSave}
+            disabled={createMut.isPending || updateMut.isPending}
+          >
             {isEdit ? "Save" : "Create"}
           </Button>
         </div>
@@ -301,7 +402,9 @@ function TestDialog({ onClose }: { onClose: () => void }) {
       <DialogContent className="max-w-xl">
         <DialogHeader>
           <DialogTitle>Test Release Title</DialogTitle>
-          <DialogDescription>Paste a release title to see which custom formats match.</DialogDescription>
+          <DialogDescription>
+            Paste a release title to see which custom formats match.
+          </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-2">
           <div className="flex gap-2">
@@ -312,25 +415,46 @@ function TestDialog({ onClose }: { onClose: () => void }) {
               onKeyDown={(e) => e.key === "Enter" && handleTest()}
               className="flex-1"
             />
-            <Button onClick={handleTest} disabled={testMut.isPending || !title}>Test</Button>
+            <Button onClick={handleTest} disabled={testMut.isPending || !title}>
+              Test
+            </Button>
           </div>
           {result && (
             <div className="space-y-3">
-              <div className="rounded-md border p-3 text-sm space-y-1">
-                <p><strong>Resolution:</strong> {result.release.resolution || "—"}</p>
-                <p><strong>Source:</strong> {result.release.source || "—"}</p>
-                <p><strong>Codec:</strong> {result.release.codec || "—"}</p>
-                <p><strong>Audio:</strong> {result.release.audio || "—"}</p>
-                <p><strong>Group:</strong> {result.release.group || "—"}</p>
-                <p><strong>Languages:</strong> {result.release.languages?.join(", ") || "—"}</p>
+              <div className="space-y-1 rounded-md border p-3 text-sm">
+                <p>
+                  <strong>Resolution:</strong>{" "}
+                  {result.release.resolution || "—"}
+                </p>
+                <p>
+                  <strong>Source:</strong> {result.release.source || "—"}
+                </p>
+                <p>
+                  <strong>Codec:</strong> {result.release.codec || "—"}
+                </p>
+                <p>
+                  <strong>Audio:</strong> {result.release.audio || "—"}
+                </p>
+                <p>
+                  <strong>Group:</strong> {result.release.group || "—"}
+                </p>
+                <p>
+                  <strong>Languages:</strong>{" "}
+                  {result.release.languages?.join(", ") || "—"}
+                </p>
               </div>
               {result.matches.length === 0 ? (
-                <p className="text-muted-foreground text-sm">No custom formats matched.</p>
+                <p className="text-sm text-muted-foreground">
+                  No custom formats matched.
+                </p>
               ) : (
                 <div className="space-y-1">
                   <p className="text-sm font-medium">Matches</p>
                   {result.matches.map((m) => (
-                    <div key={m.custom_format_id} className="flex items-center justify-between text-sm rounded-md border px-3 py-2">
+                    <div
+                      key={m.custom_format_id}
+                      className="flex items-center justify-between rounded-md border px-3 py-2 text-sm"
+                    >
                       <span>{m.custom_format_name}</span>
                     </div>
                   ))}
@@ -348,29 +472,87 @@ function TestDialog({ onClose }: { onClose: () => void }) {
 
 const PRESETS: CustomFormat[] = [
   {
-    id: "prefer-hevc", name: "Prefer x265/HEVC", include_when_renaming: false,
-    specifications: [{ name: "x265/HEVC", implementation: "CodecSpec", negate: false, required: false, fields: { value: "x265" } }],
-  },
-  {
-    id: "prefer-atmos-truehd", name: "Prefer Atmos/TrueHD", include_when_renaming: false,
+    id: "prefer-hevc",
+    name: "Prefer x265/HEVC",
+    include_when_renaming: false,
     specifications: [
-      { name: "Atmos", implementation: "AudioSpec", negate: false, required: false, fields: { value: "Atmos" } },
-      { name: "TrueHD", implementation: "AudioSpec", negate: false, required: false, fields: { value: "TrueHD" } },
+      {
+        name: "x265/HEVC",
+        implementation: "CodecSpec",
+        negate: false,
+        required: false,
+        fields: { value: "x265" },
+      },
     ],
   },
   {
-    id: "avoid-lq-groups", name: "Avoid LQ Groups", include_when_renaming: false,
-    specifications: [{ name: "LQ Group", implementation: "ReleaseTitleSpec", negate: false, required: false, fields: { value: "(?i)\\b(YIFY|YTS|EVO|SPARKS|RARBG|aXXo)\\b" } }],
-  },
-  {
-    id: "prefer-bluray", name: "Prefer BluRay", include_when_renaming: false,
-    specifications: [{ name: "BluRay", implementation: "SourceSpec", negate: false, required: false, fields: { value: "BluRay" } }],
-  },
-  {
-    id: "avoid-cam-ts", name: "Avoid CAM/TS", include_when_renaming: false,
+    id: "prefer-atmos-truehd",
+    name: "Prefer Atmos/TrueHD",
+    include_when_renaming: false,
     specifications: [
-      { name: "CAM", implementation: "SourceSpec", negate: false, required: false, fields: { value: "CAM" } },
-      { name: "TS", implementation: "SourceSpec", negate: false, required: false, fields: { value: "TS" } },
+      {
+        name: "Atmos",
+        implementation: "AudioSpec",
+        negate: false,
+        required: false,
+        fields: { value: "Atmos" },
+      },
+      {
+        name: "TrueHD",
+        implementation: "AudioSpec",
+        negate: false,
+        required: false,
+        fields: { value: "TrueHD" },
+      },
+    ],
+  },
+  {
+    id: "avoid-lq-groups",
+    name: "Avoid LQ Groups",
+    include_when_renaming: false,
+    specifications: [
+      {
+        name: "LQ Group",
+        implementation: "ReleaseTitleSpec",
+        negate: false,
+        required: false,
+        fields: { value: "(?i)\\b(YIFY|YTS|EVO|SPARKS|RARBG|aXXo)\\b" },
+      },
+    ],
+  },
+  {
+    id: "prefer-bluray",
+    name: "Prefer BluRay",
+    include_when_renaming: false,
+    specifications: [
+      {
+        name: "BluRay",
+        implementation: "SourceSpec",
+        negate: false,
+        required: false,
+        fields: { value: "BluRay" },
+      },
+    ],
+  },
+  {
+    id: "avoid-cam-ts",
+    name: "Avoid CAM/TS",
+    include_when_renaming: false,
+    specifications: [
+      {
+        name: "CAM",
+        implementation: "SourceSpec",
+        negate: false,
+        required: false,
+        fields: { value: "CAM" },
+      },
+      {
+        name: "TS",
+        implementation: "SourceSpec",
+        negate: false,
+        required: false,
+        fields: { value: "TS" },
+      },
     ],
   },
 ];
@@ -390,16 +572,29 @@ function PresetsDialog({ onClose }: { onClose: () => void }) {
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>Import Preset</DialogTitle>
-          <DialogDescription>One-click import common custom format profiles.</DialogDescription>
+          <DialogDescription>
+            One-click import common custom format profiles.
+          </DialogDescription>
         </DialogHeader>
         <div className="divide-y rounded-md border">
           {PRESETS.map((p) => (
-            <div key={p.id} className="flex items-center justify-between px-4 py-3">
+            <div
+              key={p.id}
+              className="flex items-center justify-between px-4 py-3"
+            >
               <div>
-                <p className="font-medium text-sm">{p.name}</p>
-                <p className="text-xs text-muted-foreground">{p.specifications.length} spec{p.specifications.length !== 1 ? "s" : ""}</p>
+                <p className="text-sm font-medium">{p.name}</p>
+                <p className="text-xs text-muted-foreground">
+                  {p.specifications.length} spec
+                  {p.specifications.length !== 1 ? "s" : ""}
+                </p>
               </div>
-              <Button size="sm" variant="outline" onClick={() => handleImport(p)} disabled={createMut.isPending}>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => handleImport(p)}
+                disabled={createMut.isPending}
+              >
                 Import
               </Button>
             </div>

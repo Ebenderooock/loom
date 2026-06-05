@@ -80,7 +80,12 @@ export class ApiError extends Error {
   status: number;
   code?: string;
   details?: unknown;
-  constructor(status: number, message: string, code?: string, details?: unknown) {
+  constructor(
+    status: number,
+    message: string,
+    code?: string,
+    details?: unknown,
+  ) {
     super(message);
     this.status = status;
     this.code = code;
@@ -120,7 +125,12 @@ async function request<T>(
       env?.error?.message ??
       (typeof parsed === "string" ? parsed : undefined) ??
       `${method} ${path} failed: ${res.status} ${res.statusText}`;
-    throw new ApiError(res.status, message, env?.error?.code, env?.error?.details);
+    throw new ApiError(
+      res.status,
+      message,
+      env?.error?.code,
+      env?.error?.details,
+    );
   }
   return parsed as T;
 }
@@ -143,7 +153,10 @@ export async function listSources(signal?: AbortSignal): Promise<UserSource[]> {
   return env.sources ?? [];
 }
 
-export async function getSource(id: string, signal?: AbortSignal): Promise<UserSource> {
+export async function getSource(
+  id: string,
+  signal?: AbortSignal,
+): Promise<UserSource> {
   return request<UserSource>(
     "GET",
     `/api/v1/rss/sources/${encodeURIComponent(id)}`,
@@ -152,7 +165,9 @@ export async function getSource(id: string, signal?: AbortSignal): Promise<UserS
   );
 }
 
-export async function createSource(body: UserSourceCreate): Promise<UserSource> {
+export async function createSource(
+  body: UserSourceCreate,
+): Promise<UserSource> {
   return request<UserSource>("POST", "/api/v1/rss/sources/", body);
 }
 
@@ -168,7 +183,10 @@ export async function updateSource(
 }
 
 export async function deleteSource(id: string): Promise<void> {
-  await request<void>("DELETE", `/api/v1/rss/sources/${encodeURIComponent(id)}`);
+  await request<void>(
+    "DELETE",
+    `/api/v1/rss/sources/${encodeURIComponent(id)}`,
+  );
 }
 
 export async function testSource(id: string): Promise<TestSourceResult> {

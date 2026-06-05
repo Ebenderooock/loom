@@ -1,8 +1,5 @@
 import { test, expect } from "@playwright/test";
-import {
-  mockBaseApp,
-  mockSettings,
-} from "./helpers/mock-api";
+import { mockBaseApp, mockSettings } from "./helpers/mock-api";
 
 test.describe("Settings Page", () => {
   test.beforeEach(async ({ page }) => {
@@ -13,9 +10,9 @@ test.describe("Settings Page", () => {
   test("renders settings page heading", async ({ page }) => {
     await page.goto("/settings");
     // useSetPageHeader("Settings") renders as <span> in header — hidden on mobile
-    await expect(
-      page.locator("header").getByText("Settings"),
-    ).toBeAttached({ timeout: 10000 });
+    await expect(page.locator("header").getByText("Settings")).toBeAttached({
+      timeout: 10000,
+    });
   });
 
   test("shows library section", async ({ page }) => {
@@ -23,12 +20,22 @@ test.describe("Settings Page", () => {
     // Libraries section is under "Media Management" tab, not "General"
     await page.getByText("Media Management").first().click();
     // Scope to main to avoid matching "Library" sidebar link
-    await expect(page.locator("main").getByText(/librar/i).first()).toBeVisible({ timeout: 10000 });
+    await expect(
+      page
+        .locator("main")
+        .getByText(/librar/i)
+        .first(),
+    ).toBeVisible({ timeout: 10000 });
   });
 
   test("shows download client section", async ({ page }) => {
     await page.goto("/settings");
-    await expect(page.locator("main").getByText(/download/i).first()).toBeVisible({ timeout: 10000 });
+    await expect(
+      page
+        .locator("main")
+        .getByText(/download/i)
+        .first(),
+    ).toBeVisible({ timeout: 10000 });
   });
 });
 
@@ -40,9 +47,9 @@ test.describe("Events Page", () => {
   test("renders events page", async ({ page }) => {
     await page.goto("/events");
     // useSetPageHeader("Events") renders as <span> in header — hidden on mobile
-    await expect(
-      page.locator("header").getByText("Events"),
-    ).toBeAttached({ timeout: 10000 });
+    await expect(page.locator("header").getByText("Events")).toBeAttached({
+      timeout: 10000,
+    });
   });
 });
 
@@ -57,15 +64,14 @@ test.describe("Calendar Page", () => {
         await route.fallback();
       }
     });
-
   });
 
   test("renders calendar page", async ({ page }) => {
     await page.goto("/calendar");
     // useSetPageHeader("Calendar") renders as <span> in header — hidden on mobile
-    await expect(
-      page.locator("header").getByText("Calendar"),
-    ).toBeAttached({ timeout: 10000 });
+    await expect(page.locator("header").getByText("Calendar")).toBeAttached({
+      timeout: 10000,
+    });
   });
 });
 
@@ -88,7 +94,6 @@ test.describe("Quality Profiles Page", () => {
         await route.fallback();
       }
     });
-
   });
 
   test("renders quality profiles page", async ({ page }) => {

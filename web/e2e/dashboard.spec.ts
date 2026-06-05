@@ -20,30 +20,38 @@ test.describe("Dashboard", () => {
     await page.goto("/");
     // useSetPageHeader("Dashboard") renders as a <span>, not a heading.
     // On mobile the title is hidden by CSS, so use toBeAttached.
-    await expect(
-      page.locator("header").getByText("Dashboard"),
-    ).toBeAttached({ timeout: 10000 });
+    await expect(page.locator("header").getByText("Dashboard")).toBeAttached({
+      timeout: 10000,
+    });
   });
 
   test("shows movie count stat card", async ({ page }) => {
     await page.goto("/");
     // Stat card label "Movies" rendered via StatCard
-    await expect(page.locator("main").getByText("Movies").first()).toBeVisible({ timeout: 10000 });
+    await expect(page.locator("main").getByText("Movies").first()).toBeVisible({
+      timeout: 10000,
+    });
   });
 
   test("shows series count stat card", async ({ page }) => {
     await page.goto("/");
-    await expect(page.locator("main").getByText("TV Shows").first()).toBeVisible({ timeout: 10000 });
+    await expect(
+      page.locator("main").getByText("TV Shows").first(),
+    ).toBeVisible({ timeout: 10000 });
   });
 
   test("shows indexer count stat card", async ({ page }) => {
     await page.goto("/");
-    await expect(page.locator("main").getByText("Indexers").first()).toBeVisible({ timeout: 10000 });
+    await expect(
+      page.locator("main").getByText("Indexers").first(),
+    ).toBeVisible({ timeout: 10000 });
   });
 
   test("shows download client count", async ({ page }) => {
     await page.goto("/");
-    await expect(page.locator("main").getByText("Download Clients")).toBeVisible({ timeout: 10000 });
+    await expect(
+      page.locator("main").getByText("Download Clients"),
+    ).toBeVisible({ timeout: 10000 });
   });
 
   test("command palette trigger is visible", async ({ page }) => {
@@ -81,8 +89,8 @@ test.describe("Dashboard", () => {
     await page.goto("/");
 
     // WelcomeSection shows "Get started in a few steps"
-    await expect(
-      page.getByText("Get started in a few steps"),
-    ).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText("Get started in a few steps")).toBeVisible({
+      timeout: 10000,
+    });
   });
 });

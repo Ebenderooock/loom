@@ -62,30 +62,35 @@ test.describe("Navigation", () => {
   });
 
   for (const item of NAV_ITEMS) {
-    test("navigates to " + item.label + " (" + item.path + ")", async ({ page }) => {
-      await page.goto("/");
+    test(
+      "navigates to " + item.label + " (" + item.path + ")",
+      async ({ page }) => {
+        await page.goto("/");
 
-      // On mobile the sidebar is hidden — open the menu first
-      const isMobile = (page.viewportSize()?.width ?? 1024) < 768;
-      if (isMobile) {
-        await page.getByRole("button", { name: "Open navigation" }).click();
-        // Wait for Sheet to animate open
-        await page.waitForTimeout(300);
-      }
+        // On mobile the sidebar is hidden — open the menu first
+        const isMobile = (page.viewportSize()?.width ?? 1024) < 768;
+        if (isMobile) {
+          await page.getByRole("button", { name: "Open navigation" }).click();
+          // Wait for Sheet to animate open
+          await page.waitForTimeout(300);
+        }
 
-      const link = page.getByRole("link", { name: item.label }).first();
-      if (isMobile) {
-        // Sheet nav has its own scroll container — use JS to click
-        await link.evaluate((el) => el.scrollIntoView({ block: "center" }));
-        await page.waitForTimeout(300);
-        await link.dispatchEvent("click");
-      } else {
-        await link.click();
-      }
+        const link = page.getByRole("link", { name: item.label }).first();
+        if (isMobile) {
+          // Sheet nav has its own scroll container — use JS to click
+          await link.evaluate((el) => el.scrollIntoView({ block: "center" }));
+          await page.waitForTimeout(300);
+          await link.dispatchEvent("click");
+        } else {
+          await link.click();
+        }
 
-      // URL should match the expected path
-      await expect(page).toHaveURL(new RegExp(item.path.replace("/", "\\/") + "$"));
-    });
+        // URL should match the expected path
+        await expect(page).toHaveURL(
+          new RegExp(item.path.replace("/", "\\/") + "$"),
+        );
+      },
+    );
   }
 
   test("command palette opens with Ctrl+K", async ({ page }) => {
@@ -105,9 +110,9 @@ test.describe("Navigation", () => {
     await page.keyboard.press("Meta+k");
 
     // Inline command palette renders a cmdk input with placeholder
-    await expect(
-      page.getByPlaceholder(/Search Loom/),
-    ).toBeVisible({ timeout: 5000 });
+    await expect(page.getByPlaceholder(/Search Loom/)).toBeVisible({
+      timeout: 5000,
+    });
   });
 
   test("mobile menu works on small viewport", async ({ page }) => {

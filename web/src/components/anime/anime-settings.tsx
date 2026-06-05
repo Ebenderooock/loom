@@ -56,7 +56,7 @@ async function savePrefs(prefs: AnimePreferences): Promise<void> {
 }
 
 async function fetchMappings(
-  seriesId: string
+  seriesId: string,
 ): Promise<{ seriesId: string; mappings: EpisodeMapping[] }> {
   const res = await apiFetch(`/api/v1/anime/mappings/${seriesId}`);
   if (!res.ok) throw new Error("Failed to load episode mappings");
@@ -190,7 +190,10 @@ export function AnimeSettings({ seriesId }: AnimeSettingsProps) {
 
       {/* Dual Audio */}
       <div className="flex items-center gap-3">
-        <label aria-label="Require Dual Audio" className="relative inline-flex cursor-pointer items-center">
+        <label
+          aria-label="Require Dual Audio"
+          className="relative inline-flex cursor-pointer items-center"
+        >
           <input
             type="checkbox"
             className="peer sr-only"
@@ -217,7 +220,7 @@ export function AnimeSettings({ seriesId }: AnimeSettingsProps) {
         </p>
 
         {prefs.preferredGroups.length === 0 && (
-          <p className="text-sm text-muted-foreground italic">
+          <p className="text-sm italic text-muted-foreground">
             No preferred groups configured — all groups treated equally
           </p>
         )}
@@ -250,8 +253,7 @@ export function AnimeSettings({ seriesId }: AnimeSettingsProps) {
               <span className="flex-1 font-medium">{g}</span>
               {knownGroups.find((kg) => kg.name === g) && (
                 <Badge variant="secondary" className="text-xs">
-                  Score:{" "}
-                  {knownGroups.find((kg) => kg.name === g)?.score ?? "?"}
+                  Score: {knownGroups.find((kg) => kg.name === g)?.score ?? "?"}
                 </Badge>
               )}
               <button
@@ -321,15 +323,16 @@ export function AnimeSettings({ seriesId }: AnimeSettingsProps) {
               </thead>
               <tbody>
                 {mappings.map((m) => (
-                  <tr
-                    key={m.absoluteNumber}
-                    className="border-b last:border-0"
-                  >
+                  <tr key={m.absoluteNumber} className="border-b last:border-0">
                     <td className="px-3 py-1.5 font-mono">
                       {m.absoluteNumber}
                     </td>
-                    <td className="px-3 py-1.5">S{String(m.seasonNumber).padStart(2, "0")}</td>
-                    <td className="px-3 py-1.5">E{String(m.episodeNumber).padStart(2, "0")}</td>
+                    <td className="px-3 py-1.5">
+                      S{String(m.seasonNumber).padStart(2, "0")}
+                    </td>
+                    <td className="px-3 py-1.5">
+                      E{String(m.episodeNumber).padStart(2, "0")}
+                    </td>
                   </tr>
                 ))}
               </tbody>

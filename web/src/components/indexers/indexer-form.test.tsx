@@ -45,9 +45,9 @@ describe("validateIndexerForm", () => {
   });
 
   it("requires an API key", () => {
-    expect(
-      validateIndexerForm(baseValues({ api_key: "" })).api_key,
-    ).toMatch(/API key/i);
+    expect(validateIndexerForm(baseValues({ api_key: "" })).api_key).toMatch(
+      /API key/i,
+    );
   });
 
   it("rejects out-of-range priority", () => {
@@ -74,7 +74,16 @@ describe("IndexerForm rendering", () => {
     const user = userEvent.setup();
     let called = false;
     render(
-      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })}>
+      <QueryClientProvider
+        client={
+          new QueryClient({
+            defaultOptions: {
+              queries: { retry: false },
+              mutations: { retry: false },
+            },
+          })
+        }
+      >
         <IndexerForm
           proxies={[]}
           onSubmit={() => {
@@ -92,9 +101,7 @@ describe("IndexerForm rendering", () => {
     expect(
       screen.getByText(/give the indexer a recognizable name/i),
     ).toBeInTheDocument();
-    expect(
-      screen.getByText(/enter the upstream url/i),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/enter the upstream url/i)).toBeInTheDocument();
     expect(screen.getByText(/api key is required/i)).toBeInTheDocument();
   });
 });

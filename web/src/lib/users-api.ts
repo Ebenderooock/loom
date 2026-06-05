@@ -57,9 +57,7 @@ async function request<T>(
   }
   if (!res.ok) {
     // Auth endpoints use {"error":"msg"}; others may use {error:{message}}.
-    const env = parsed as
-      | { error?: string | { message?: string } }
-      | undefined;
+    const env = parsed as { error?: string | { message?: string } } | undefined;
     let message = `${method} ${path} failed: ${res.status} ${res.statusText}`;
     if (typeof env?.error === "string") {
       message = env.error;
@@ -110,7 +108,9 @@ export async function resetUserPassword(
   id: number,
   password: string,
 ): Promise<void> {
-  await request<void>("POST", `/api/v1/auth/users/${id}/password`, { password });
+  await request<void>("POST", `/api/v1/auth/users/${id}/password`, {
+    password,
+  });
 }
 
 const USERS_KEY = ["auth", "users"] as const;

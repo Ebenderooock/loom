@@ -145,7 +145,9 @@ function FolderBrowserDialog({
       const params = path ? `?path=${encodeURIComponent(path)}` : "";
       const res = await apiFetch(`/api/v1/filesystem${params}`);
       if (!res.ok) {
-        const data = await res.json().catch(() => ({ error: "Failed to browse" }));
+        const data = await res
+          .json()
+          .catch(() => ({ error: "Failed to browse" }));
         throw new Error(data.error || "Failed to browse directory");
       }
       const data: BrowseResult = await res.json();
@@ -178,7 +180,7 @@ function FolderBrowserDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg max-h-[80vh] flex flex-col">
+      <DialogContent className="flex max-h-[80vh] flex-col sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Choose Folder</DialogTitle>
         </DialogHeader>
@@ -192,7 +194,7 @@ function FolderBrowserDialog({
               "flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
               mode === "browse"
                 ? "bg-background text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground"
+                : "text-muted-foreground hover:text-foreground",
             )}
           >
             Browse
@@ -204,7 +206,7 @@ function FolderBrowserDialog({
               "flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
               mode === "manual"
                 ? "bg-background text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground"
+                : "text-muted-foreground hover:text-foreground",
             )}
           >
             Enter Manually
@@ -227,17 +229,17 @@ function FolderBrowserDialog({
             />
           </div>
         ) : (
-          <div className="space-y-2 flex-1 min-h-0">
+          <div className="min-h-0 flex-1 space-y-2">
             {/* Current path breadcrumb */}
             <div className="flex items-center gap-2 rounded-md bg-muted/50 px-3 py-2">
-              <FolderOpen className="h-4 w-4 text-primary shrink-0" />
-              <span className="text-sm font-mono truncate flex-1">
+              <FolderOpen className="h-4 w-4 shrink-0 text-primary" />
+              <span className="flex-1 truncate font-mono text-sm">
                 {currentPath || "/"}
               </span>
             </div>
 
             {error && (
-              <div className="rounded-md bg-destructive/10 border border-destructive/30 px-3 py-2 text-sm text-destructive">
+              <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
                 {error}
               </div>
             )}
@@ -247,13 +249,13 @@ function FolderBrowserDialog({
                 <TableSkeleton rows={4} cols={3} />
               </div>
             ) : (
-              <div className="overflow-y-auto max-h-[40vh] rounded-md border border-border">
+              <div className="max-h-[40vh] overflow-y-auto rounded-md border border-border">
                 {/* Parent directory */}
                 {parent && (
                   <button
                     type="button"
                     onClick={() => browse(parent)}
-                    className="w-full flex items-center gap-3 px-3 py-2.5 text-sm hover:bg-accent/50 transition-colors border-b border-border"
+                    className="flex w-full items-center gap-3 border-b border-border px-3 py-2.5 text-sm transition-colors hover:bg-accent/50"
                   >
                     <ArrowUp className="h-4 w-4 text-muted-foreground" />
                     <span className="text-muted-foreground">..</span>
@@ -269,10 +271,12 @@ function FolderBrowserDialog({
                       key={dir.path}
                       type="button"
                       onClick={() => browse(dir.path)}
-                      className="w-full flex items-center gap-3 px-3 py-2.5 text-sm hover:bg-accent/50 transition-colors border-b border-border last:border-b-0"
+                      className="flex w-full items-center gap-3 border-b border-border px-3 py-2.5 text-sm transition-colors last:border-b-0 hover:bg-accent/50"
                     >
                       <Folder className="h-4 w-4 text-primary/70" />
-                      <span className="truncate flex-1 text-left">{dir.name}</span>
+                      <span className="flex-1 truncate text-left">
+                        {dir.name}
+                      </span>
                       <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/50" />
                     </button>
                   ))
@@ -283,12 +287,16 @@ function FolderBrowserDialog({
         )}
 
         {/* Footer */}
-        <div className="flex items-center justify-between pt-2 border-t border-border">
-          <p className="text-xs text-muted-foreground truncate max-w-[60%]">
+        <div className="flex items-center justify-between border-t border-border pt-2">
+          <p className="max-w-[60%] truncate text-xs text-muted-foreground">
             {mode === "browse" ? currentPath : manualPath || "No path entered"}
           </p>
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onOpenChange(false)}
+            >
               Cancel
             </Button>
             <Button
@@ -366,7 +374,9 @@ function AddLibraryDialog({
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>
-              {step === "type" ? "Add Library" : `Add ${mediaType === "movie" ? "Movies" : mediaType === "series" ? "TV Shows" : "Music"} Library`}
+              {step === "type"
+                ? "Add Library"
+                : `Add ${mediaType === "movie" ? "Movies" : mediaType === "series" ? "TV Shows" : "Music"} Library`}
             </DialogTitle>
           </DialogHeader>
 
@@ -379,14 +389,14 @@ function AddLibraryDialog({
                 <button
                   type="button"
                   onClick={() => selectType("movie")}
-                  className="flex flex-col items-center gap-3 rounded-lg border-2 border-border p-6 hover:border-primary hover:bg-primary/5 transition-all group"
+                  className="group flex flex-col items-center gap-3 rounded-lg border-2 border-border p-6 transition-all hover:border-primary hover:bg-primary/5"
                 >
-                  <div className="rounded-full bg-primary/10 p-3 group-hover:bg-primary/20 transition-colors">
+                  <div className="rounded-full bg-primary/10 p-3 transition-colors group-hover:bg-primary/20">
                     <Film className="h-8 w-8 text-primary" />
                   </div>
                   <div className="text-center">
-                    <p className="font-medium text-sm">Movies</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">
+                    <p className="text-sm font-medium">Movies</p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
                       Feature films and standalone titles
                     </p>
                   </div>
@@ -394,14 +404,14 @@ function AddLibraryDialog({
                 <button
                   type="button"
                   onClick={() => selectType("series")}
-                  className="flex flex-col items-center gap-3 rounded-lg border-2 border-border p-6 hover:border-primary hover:bg-primary/5 transition-all group"
+                  className="group flex flex-col items-center gap-3 rounded-lg border-2 border-border p-6 transition-all hover:border-primary hover:bg-primary/5"
                 >
-                  <div className="rounded-full bg-primary/10 p-3 group-hover:bg-primary/20 transition-colors">
+                  <div className="rounded-full bg-primary/10 p-3 transition-colors group-hover:bg-primary/20">
                     <Tv className="h-8 w-8 text-primary" />
                   </div>
                   <div className="text-center">
-                    <p className="font-medium text-sm">TV Shows</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">
+                    <p className="text-sm font-medium">TV Shows</p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
                       Series, seasons and episodes
                     </p>
                   </div>
@@ -411,11 +421,12 @@ function AddLibraryDialog({
           ) : (
             <div className="space-y-4 py-2">
               <p className="text-sm text-muted-foreground">
-                Give your library a name and choose where your {mediaType === "movie" ? "movies" : "TV shows"} are stored.
+                Give your library a name and choose where your{" "}
+                {mediaType === "movie" ? "movies" : "TV shows"} are stored.
               </p>
 
               {error && (
-                <div className="rounded-md bg-destructive/10 border border-destructive/30 px-3 py-2 text-sm text-destructive">
+                <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
                   {error}
                 </div>
               )}
@@ -448,7 +459,11 @@ function AddLibraryDialog({
               </div>
 
               <div className="flex justify-between">
-                <Button variant="ghost" size="sm" onClick={() => setStep("type")}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setStep("type")}
+                >
                   ← Back
                 </Button>
                 <Button
@@ -456,7 +471,11 @@ function AddLibraryDialog({
                   onClick={addLibrary}
                   disabled={adding || !name.trim() || !path.trim()}
                 >
-                  {adding ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Plus className="h-4 w-4 mr-1" />}
+                  {adding ? (
+                    <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Plus className="mr-1 h-4 w-4" />
+                  )}
                   Add Library
                 </Button>
               </div>
@@ -500,7 +519,7 @@ function LibrariesPanel() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center gap-2 text-muted-foreground py-8 justify-center">
+      <div className="flex items-center justify-center gap-2 py-8 text-muted-foreground">
         <Loader2 className="h-4 w-4 animate-spin" /> Loading libraries…
       </div>
     );
@@ -510,18 +529,20 @@ function LibrariesPanel() {
     <div className="space-y-6">
       <div className="flex items-start justify-between">
         <div>
-          <h3 className="text-sm font-medium mb-1">Libraries</h3>
+          <h3 className="mb-1 text-sm font-medium">Libraries</h3>
           <p className="text-xs text-muted-foreground">
-            Libraries are the directories where Loom stores your media files. Each movie or show is placed in a subfolder within the library you assign when adding it.
+            Libraries are the directories where Loom stores your media files.
+            Each movie or show is placed in a subfolder within the library you
+            assign when adding it.
           </p>
         </div>
         <Button size="sm" onClick={() => setDialogOpen(true)}>
-          <Plus className="h-4 w-4 mr-1" /> Add
+          <Plus className="mr-1 h-4 w-4" /> Add
         </Button>
       </div>
 
       {error && (
-        <div className="rounded-md bg-destructive/10 border border-destructive/30 px-3 py-2 text-sm text-destructive">
+        <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
           {error}
         </div>
       )}
@@ -529,9 +550,11 @@ function LibrariesPanel() {
       {/* Library list */}
       {libraries.length === 0 ? (
         <div className="rounded-lg border border-dashed border-muted-foreground/30 py-10 text-center">
-          <Folder className="h-10 w-10 mx-auto text-muted-foreground/40 mb-3" />
-          <p className="text-sm text-muted-foreground">No libraries configured</p>
-          <p className="text-xs text-muted-foreground/60 mt-1">
+          <Folder className="mx-auto mb-3 h-10 w-10 text-muted-foreground/40" />
+          <p className="text-sm text-muted-foreground">
+            No libraries configured
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground/60">
             Click <strong>Add</strong> to configure your first media library
           </p>
         </div>
@@ -540,14 +563,16 @@ function LibrariesPanel() {
           {libraries.map((lib) => (
             <div
               key={lib.id}
-              className="flex items-center justify-between rounded-lg border border-border bg-card px-4 py-3 group hover:border-primary/30 transition-colors"
+              className="group flex items-center justify-between rounded-lg border border-border bg-card px-4 py-3 transition-colors hover:border-primary/30"
             >
-              <div className="flex items-center gap-3 min-w-0">
-                <Folder className="h-5 w-5 text-primary shrink-0" />
+              <div className="flex min-w-0 items-center gap-3">
+                <Folder className="h-5 w-5 shrink-0 text-primary" />
                 <div className="min-w-0">
-                  <p className="text-sm font-medium truncate">{lib.name}</p>
-                  <p className="text-xs font-mono text-muted-foreground truncate">{lib.path}</p>
-                  <div className="flex items-center gap-3 mt-0.5">
+                  <p className="truncate text-sm font-medium">{lib.name}</p>
+                  <p className="truncate font-mono text-xs text-muted-foreground">
+                    {lib.path}
+                  </p>
+                  <div className="mt-0.5 flex items-center gap-3">
                     <Badge variant="secondary" className="text-xs capitalize">
                       {lib.media_type}
                     </Badge>
@@ -568,7 +593,7 @@ function LibrariesPanel() {
               <Button
                 variant="ghost"
                 size="icon"
-                className="opacity-0 group-hover:opacity-100 text-destructive hover:text-destructive hover:bg-destructive/10 transition-opacity"
+                className="text-destructive opacity-0 transition-opacity hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
                 onClick={() => handleDelete(lib.id)}
                 disabled={deletingId === lib.id}
               >
@@ -641,16 +666,25 @@ function ImportModePanel() {
       </CardHeader>
       <CardContent className="space-y-3">
         <p className="text-sm text-muted-foreground">
-          Controls how files are transferred from the download directory to your library.
+          Controls how files are transferred from the download directory to your
+          library.
         </p>
-        <Select value={importMode} onValueChange={handleChange} disabled={saving}>
+        <Select
+          value={importMode}
+          onValueChange={handleChange}
+          disabled={saving}
+        >
           <SelectTrigger className="w-64">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="move">Move (rename / copy+delete)</SelectItem>
-            <SelectItem value="hardlink">Hardlink (fall back to move)</SelectItem>
-            <SelectItem value="hardlink_only">Hardlink Only (fail if not possible)</SelectItem>
+            <SelectItem value="hardlink">
+              Hardlink (fall back to move)
+            </SelectItem>
+            <SelectItem value="hardlink_only">
+              Hardlink Only (fail if not possible)
+            </SelectItem>
           </SelectContent>
         </Select>
       </CardContent>
@@ -677,7 +711,9 @@ export function GeneralPanel() {
       .catch(() => {
         // endpoint may not exist — leave apiKey null
       });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const copyApiKey = async () => {
@@ -695,20 +731,29 @@ export function GeneralPanel() {
   return (
     <div className="space-y-6">
       {/* Application Info */}
-      <Card className="bg-zinc-900/50 border-zinc-800">
-        <CardContent className="p-6 space-y-4">
+      <Card className="border-zinc-800 bg-zinc-900/50">
+        <CardContent className="space-y-4 p-6">
           <div>
-            <h3 className="text-sm font-medium text-zinc-100 mb-1">Application</h3>
-            <p className="text-xs text-zinc-500">General application settings</p>
+            <h3 className="mb-1 text-sm font-medium text-zinc-100">
+              Application
+            </h3>
+            <p className="text-xs text-zinc-500">
+              General application settings
+            </p>
           </div>
 
           <div className="grid gap-4">
             <div className="flex items-center justify-between">
               <div>
                 <Label className="text-sm text-zinc-300">App Name</Label>
-                <p className="text-xs text-zinc-500 mt-0.5">Your Loom instance name</p>
+                <p className="mt-0.5 text-xs text-zinc-500">
+                  Your Loom instance name
+                </p>
               </div>
-              <Badge variant="outline" className="border-zinc-700 text-zinc-300 font-mono">
+              <Badge
+                variant="outline"
+                className="border-zinc-700 font-mono text-zinc-300"
+              >
                 Loom
               </Badge>
             </div>
@@ -718,10 +763,12 @@ export function GeneralPanel() {
             <div className="flex items-center justify-between">
               <div>
                 <Label className="text-sm text-zinc-300">Authentication</Label>
-                <p className="text-xs text-zinc-500 mt-0.5">Login is required for all API access</p>
+                <p className="mt-0.5 text-xs text-zinc-500">
+                  Login is required for all API access
+                </p>
               </div>
-              <Badge className="bg-teal-600/20 text-teal-400 border-teal-700">
-                <Shield className="h-3 w-3 mr-1" /> Enabled
+              <Badge className="border-teal-700 bg-teal-600/20 text-teal-400">
+                <Shield className="mr-1 h-3 w-3" /> Enabled
               </Badge>
             </div>
           </div>
@@ -729,17 +776,19 @@ export function GeneralPanel() {
       </Card>
 
       {/* Log Level */}
-      <Card className="bg-zinc-900/50 border-zinc-800">
-        <CardContent className="p-6 space-y-4">
+      <Card className="border-zinc-800 bg-zinc-900/50">
+        <CardContent className="space-y-4 p-6">
           <div>
-            <h3 className="text-sm font-medium text-zinc-100 mb-1">Logging</h3>
-            <p className="text-xs text-zinc-500">Control the verbosity of application logs</p>
+            <h3 className="mb-1 text-sm font-medium text-zinc-100">Logging</h3>
+            <p className="text-xs text-zinc-500">
+              Control the verbosity of application logs
+            </p>
           </div>
 
           <div className="flex items-center gap-4">
-            <Label className="text-sm text-zinc-300 w-24">Log Level</Label>
+            <Label className="w-24 text-sm text-zinc-300">Log Level</Label>
             <Select value={logLevel} onValueChange={setLogLevel}>
-              <SelectTrigger className="w-40 bg-zinc-900 border-zinc-700">
+              <SelectTrigger className="w-40 border-zinc-700 bg-zinc-900">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -754,10 +803,10 @@ export function GeneralPanel() {
       </Card>
 
       {/* API Key */}
-      <Card className="bg-zinc-900/50 border-zinc-800">
-        <CardContent className="p-6 space-y-4">
+      <Card className="border-zinc-800 bg-zinc-900/50">
+        <CardContent className="space-y-4 p-6">
           <div>
-            <h3 className="text-sm font-medium text-zinc-100 mb-1 flex items-center gap-2">
+            <h3 className="mb-1 flex items-center gap-2 text-sm font-medium text-zinc-100">
               <Key className="h-4 w-4 text-teal-400" /> API Key
             </h3>
             <p className="text-xs text-zinc-500">
@@ -770,14 +819,14 @@ export function GeneralPanel() {
               readOnly
               value={apiKey ?? ""}
               placeholder="API key will be shown here once configured"
-              className="bg-zinc-900 border-zinc-700 font-mono text-sm text-zinc-400 flex-1"
+              className="flex-1 border-zinc-700 bg-zinc-900 font-mono text-sm text-zinc-400"
             />
             <Button
               variant="outline"
               size="sm"
               onClick={copyApiKey}
               disabled={!apiKey}
-              className="border-zinc-700 text-zinc-400 shrink-0"
+              className="shrink-0 border-zinc-700 text-zinc-400"
             >
               {copied ? (
                 <Check className="h-4 w-4 text-teal-400" />
@@ -800,11 +849,13 @@ export function DownloadClientsPanel() {
   const patchClient = usePatchDownload();
   const deleteClient = useDeleteDownload();
   const [showAdd, setShowAdd] = React.useState(false);
-  const [editClient, setEditClient] = React.useState<DownloadClient | null>(null);
+  const [editClient, setEditClient] = React.useState<DownloadClient | null>(
+    null,
+  );
 
   if (isLoading) {
     return (
-      <div className="flex items-center gap-2 text-muted-foreground py-8 justify-center">
+      <div className="flex items-center justify-center gap-2 py-8 text-muted-foreground">
         <Loader2 className="h-4 w-4 animate-spin" /> Loading download clients…
       </div>
     );
@@ -814,7 +865,9 @@ export function DownloadClientsPanel() {
     <div className="space-y-6">
       <div className="flex items-start justify-between">
         <div>
-          <h3 className="text-sm font-medium text-zinc-100 mb-1">Download Clients</h3>
+          <h3 className="mb-1 text-sm font-medium text-zinc-100">
+            Download Clients
+          </h3>
           <p className="text-xs text-zinc-500">
             Configure torrent and usenet clients for automated downloading.
           </p>
@@ -825,16 +878,18 @@ export function DownloadClientsPanel() {
           className="border-zinc-700 text-zinc-300"
           onClick={() => setShowAdd(true)}
         >
-          <Plus className="h-3.5 w-3.5 mr-1.5" /> Add Client
+          <Plus className="mr-1.5 h-3.5 w-3.5" /> Add Client
         </Button>
       </div>
 
       {clients.length === 0 ? (
-        <Card className="bg-zinc-900/50 border-zinc-800 border-dashed">
+        <Card className="border-dashed border-zinc-800 bg-zinc-900/50">
           <CardContent className="py-10 text-center">
-            <Download className="h-10 w-10 mx-auto text-zinc-700 mb-3" />
-            <p className="text-sm text-zinc-500">No download clients configured</p>
-            <p className="text-xs text-zinc-600 mt-1">
+            <Download className="mx-auto mb-3 h-10 w-10 text-zinc-700" />
+            <p className="text-sm text-zinc-500">
+              No download clients configured
+            </p>
+            <p className="mt-1 text-xs text-zinc-600">
               <button
                 onClick={() => setShowAdd(true)}
                 className="text-teal-500 hover:text-teal-400"
@@ -848,10 +903,12 @@ export function DownloadClientsPanel() {
       ) : (
         <div className="grid gap-3 sm:grid-cols-2">
           {clients.map((client) => (
-            <Card key={client.id} className="bg-zinc-900/50 border-zinc-800">
+            <Card key={client.id} className="border-zinc-800 bg-zinc-900/50">
               <CardContent className="p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <h4 className="text-sm font-medium text-zinc-200 truncate">{client.name}</h4>
+                <div className="mb-2 flex items-center justify-between">
+                  <h4 className="truncate text-sm font-medium text-zinc-200">
+                    {client.name}
+                  </h4>
                   <div className="flex items-center gap-2">
                     <Badge
                       variant="outline"
@@ -859,14 +916,14 @@ export function DownloadClientsPanel() {
                         "text-xs",
                         client.enabled
                           ? "border-teal-700 text-teal-400"
-                          : "border-zinc-700 text-zinc-500"
+                          : "border-zinc-700 text-zinc-500",
                       )}
                     >
                       {client.enabled ? "Enabled" : "Disabled"}
                     </Badge>
                   </div>
                 </div>
-                <div className="flex items-center gap-3 text-xs text-zinc-500 mb-3">
+                <div className="mb-3 flex items-center gap-3 text-xs text-zinc-500">
                   <span className="flex items-center gap-1">
                     <Download className="h-3 w-3" /> {client.kind || "Unknown"}
                   </span>
@@ -918,7 +975,10 @@ export function DownloadClientsPanel() {
       </Dialog>
 
       {/* Edit Dialog */}
-      <Dialog open={!!editClient} onOpenChange={(open) => !open && setEditClient(null)}>
+      <Dialog
+        open={!!editClient}
+        onOpenChange={(open) => !open && setEditClient(null)}
+      >
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Edit Download Client</DialogTitle>
@@ -930,7 +990,7 @@ export function DownloadClientsPanel() {
               onSubmit={(values) => {
                 patchClient.mutate(
                   { id: editClient.id, patch: values },
-                  { onSuccess: () => setEditClient(null) }
+                  { onSuccess: () => setEditClient(null) },
                 );
               }}
               onCancel={() => setEditClient(null)}
@@ -940,22 +1000,24 @@ export function DownloadClientsPanel() {
       </Dialog>
 
       {/* Stall Detection Settings */}
-      <div className="pt-4 border-t border-zinc-800">
-        <h3 className="text-sm font-medium text-zinc-100 mb-1">Stall Detection</h3>
-        <p className="text-xs text-zinc-500 mb-4">
+      <div className="border-t border-zinc-800 pt-4">
+        <h3 className="mb-1 text-sm font-medium text-zinc-100">
+          Stall Detection
+        </h3>
+        <p className="mb-4 text-xs text-zinc-500">
           Automatically detect and handle stalled or failed downloads.
         </p>
 
         <div className="space-y-4">
-          <Card className="bg-zinc-900/50 border-zinc-800">
-            <CardContent className="p-4 space-y-4">
+          <Card className="border-zinc-800 bg-zinc-900/50">
+            <CardContent className="space-y-4 p-4">
               <div className="flex items-center gap-3">
-                <Checkbox
-                  id="check-for-stalled"
-                  defaultChecked={true}
-                />
+                <Checkbox id="check-for-stalled" defaultChecked={true} />
                 <div>
-                  <Label htmlFor="check-for-stalled" className="text-sm font-medium">
+                  <Label
+                    htmlFor="check-for-stalled"
+                    className="text-sm font-medium"
+                  >
                     Enable stall detection
                   </Label>
                   <p className="text-xs text-zinc-500">
@@ -964,9 +1026,12 @@ export function DownloadClientsPanel() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4 max-w-lg">
+              <div className="grid max-w-lg grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="stall-timeout" className="text-xs text-zinc-400">
+                  <Label
+                    htmlFor="stall-timeout"
+                    className="text-xs text-zinc-400"
+                  >
                     Stall Timeout (minutes)
                   </Label>
                   <Input
@@ -974,11 +1039,14 @@ export function DownloadClientsPanel() {
                     type="number"
                     defaultValue={30}
                     min={5}
-                    className="mt-1 bg-zinc-900 border-zinc-700"
+                    className="mt-1 border-zinc-700 bg-zinc-900"
                   />
                 </div>
                 <div>
-                  <Label htmlFor="max-retries" className="text-xs text-zinc-400">
+                  <Label
+                    htmlFor="max-retries"
+                    className="text-xs text-zinc-400"
+                  >
                     Max Retries
                   </Label>
                   <Input
@@ -986,7 +1054,7 @@ export function DownloadClientsPanel() {
                     type="number"
                     defaultValue={3}
                     min={0}
-                    className="mt-1 bg-zinc-900 border-zinc-700"
+                    className="mt-1 border-zinc-700 bg-zinc-900"
                   />
                 </div>
               </div>
@@ -996,13 +1064,15 @@ export function DownloadClientsPanel() {
                   Action on Stall
                 </Label>
                 <Select defaultValue="remove">
-                  <SelectTrigger className="mt-1 bg-zinc-900 border-zinc-700">
+                  <SelectTrigger className="mt-1 border-zinc-700 bg-zinc-900">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="pause">Pause</SelectItem>
                     <SelectItem value="remove">Remove</SelectItem>
-                    <SelectItem value="remove_and_blocklist">Remove &amp; Blocklist</SelectItem>
+                    <SelectItem value="remove_and_blocklist">
+                      Remove &amp; Blocklist
+                    </SelectItem>
                     <SelectItem value="retry">Retry</SelectItem>
                   </SelectContent>
                 </Select>
@@ -1024,7 +1094,9 @@ function RemotePathMappingsSection() {
   const { data: mappings = [], isLoading } = useRemotePathMappings();
   const createMapping = useCreateRemotePathMapping();
   const deleteMapping = useDeleteRemotePathMapping();
-  const [clients, setClients] = React.useState<{ id: string; name: string }[]>([]);
+  const [clients, setClients] = React.useState<{ id: string; name: string }[]>(
+    [],
+  );
   const [showForm, setShowForm] = React.useState(false);
   const [formClientId, setFormClientId] = React.useState("");
   const [formRemotePath, setFormRemotePath] = React.useState("");
@@ -1034,8 +1106,17 @@ function RemotePathMappingsSection() {
     apiFetch("/api/v1/download-clients")
       .then((r) => (r.ok ? r.json() : []))
       .then((data) => {
-        const list = Array.isArray(data?.download_clients) ? data.download_clients : Array.isArray(data) ? data : [];
-        setClients(list.map((c: { id: string; name: string }) => ({ id: c.id, name: c.name })));
+        const list = Array.isArray(data?.download_clients)
+          ? data.download_clients
+          : Array.isArray(data)
+            ? data
+            : [];
+        setClients(
+          list.map((c: { id: string; name: string }) => ({
+            id: c.id,
+            name: c.name,
+          })),
+        );
       })
       .catch(() => {});
   }, []);
@@ -1049,7 +1130,11 @@ function RemotePathMappingsSection() {
   const handleCreate = () => {
     if (!formClientId || !formRemotePath || !formLocalPath) return;
     createMapping.mutate(
-      { client_id: formClientId, remote_path: formRemotePath, local_path: formLocalPath },
+      {
+        client_id: formClientId,
+        remote_path: formRemotePath,
+        local_path: formLocalPath,
+      },
       {
         onSuccess: () => {
           setShowForm(false);
@@ -1058,18 +1143,24 @@ function RemotePathMappingsSection() {
           setFormLocalPath("");
           toast.success("Remote path mapping created");
         },
-        onError: (err) => toast.error(err instanceof Error ? err.message : "Failed to create mapping"),
-      }
+        onError: (err) =>
+          toast.error(
+            err instanceof Error ? err.message : "Failed to create mapping",
+          ),
+      },
     );
   };
 
   return (
-    <div className="pt-4 border-t border-zinc-800">
-      <div className="flex items-start justify-between mb-4">
+    <div className="border-t border-zinc-800 pt-4">
+      <div className="mb-4 flex items-start justify-between">
         <div>
-          <h3 className="text-sm font-medium text-zinc-100 mb-1">Remote Path Mappings</h3>
+          <h3 className="mb-1 text-sm font-medium text-zinc-100">
+            Remote Path Mappings
+          </h3>
           <p className="text-xs text-zinc-500">
-            Map download client paths to local paths for Docker or remote setups.
+            Map download client paths to local paths for Docker or remote
+            setups.
           </p>
         </div>
         <Button
@@ -1078,41 +1169,53 @@ function RemotePathMappingsSection() {
           className="border-zinc-700 text-zinc-300"
           onClick={() => setShowForm(true)}
         >
-          <Plus className="h-3.5 w-3.5 mr-1.5" /> Add Mapping
+          <Plus className="mr-1.5 h-3.5 w-3.5" /> Add Mapping
         </Button>
       </div>
 
       {isLoading ? (
-        <div className="flex items-center gap-2 text-muted-foreground py-4 justify-center">
+        <div className="flex items-center justify-center gap-2 py-4 text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" /> Loading…
         </div>
       ) : mappings.length === 0 && !showForm ? (
-        <Card className="bg-zinc-900/50 border-zinc-800 border-dashed">
+        <Card className="border-dashed border-zinc-800 bg-zinc-900/50">
           <CardContent className="py-6 text-center">
-            <p className="text-sm text-zinc-500">No remote path mappings configured</p>
-            <p className="text-xs text-zinc-600 mt-1">
-              Add mappings if your download client reports paths different from what Loom sees locally.
+            <p className="text-sm text-zinc-500">
+              No remote path mappings configured
+            </p>
+            <p className="mt-1 text-xs text-zinc-600">
+              Add mappings if your download client reports paths different from
+              what Loom sees locally.
             </p>
           </CardContent>
         </Card>
       ) : (
-        <Card className="bg-zinc-900/50 border-zinc-800">
+        <Card className="border-zinc-800 bg-zinc-900/50">
           <CardContent className="p-0">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-zinc-800 text-zinc-400 text-xs">
-                  <th className="text-left p-3 font-medium">Client</th>
-                  <th className="text-left p-3 font-medium">Remote Path</th>
-                  <th className="text-left p-3 font-medium">Local Path</th>
+                <tr className="border-b border-zinc-800 text-xs text-zinc-400">
+                  <th className="p-3 text-left font-medium">Client</th>
+                  <th className="p-3 text-left font-medium">Remote Path</th>
+                  <th className="p-3 text-left font-medium">Local Path</th>
                   <th className="w-10 p-3"></th>
                 </tr>
               </thead>
               <tbody>
                 {mappings.map((m: RemotePathMapping) => (
-                  <tr key={m.id} className="border-b border-zinc-800/50 last:border-0">
-                    <td className="p-3 text-zinc-200">{clientNameMap[m.client_id] || m.client_id}</td>
-                    <td className="p-3 text-zinc-400 font-mono text-xs">{m.remote_path}</td>
-                    <td className="p-3 text-zinc-400 font-mono text-xs">{m.local_path}</td>
+                  <tr
+                    key={m.id}
+                    className="border-b border-zinc-800/50 last:border-0"
+                  >
+                    <td className="p-3 text-zinc-200">
+                      {clientNameMap[m.client_id] || m.client_id}
+                    </td>
+                    <td className="p-3 font-mono text-xs text-zinc-400">
+                      {m.remote_path}
+                    </td>
+                    <td className="p-3 font-mono text-xs text-zinc-400">
+                      {m.local_path}
+                    </td>
                     <td className="p-3">
                       <Button
                         variant="ghost"
@@ -1121,7 +1224,8 @@ function RemotePathMappingsSection() {
                         onClick={() =>
                           deleteMapping.mutate(m.id, {
                             onSuccess: () => toast.success("Mapping deleted"),
-                            onError: () => toast.error("Failed to delete mapping"),
+                            onError: () =>
+                              toast.error("Failed to delete mapping"),
                           })
                         }
                       >
@@ -1148,7 +1252,10 @@ function RemotePathMappingsSection() {
                 Download Client
               </Label>
               <Select value={formClientId} onValueChange={setFormClientId}>
-                <SelectTrigger id="rpm-client" className="mt-1 bg-zinc-900 border-zinc-700">
+                <SelectTrigger
+                  id="rpm-client"
+                  className="mt-1 border-zinc-700 bg-zinc-900"
+                >
                   <SelectValue placeholder="Select a client" />
                 </SelectTrigger>
                 <SelectContent>
@@ -1169,9 +1276,9 @@ function RemotePathMappingsSection() {
                 value={formRemotePath}
                 onChange={(e) => setFormRemotePath(e.target.value)}
                 placeholder="/downloads/movies/"
-                className="mt-1 bg-zinc-900 border-zinc-700 font-mono text-sm"
+                className="mt-1 border-zinc-700 bg-zinc-900 font-mono text-sm"
               />
-              <p className="text-xs text-zinc-600 mt-1">
+              <p className="mt-1 text-xs text-zinc-600">
                 The path as reported by the download client
               </p>
             </div>
@@ -1184,9 +1291,9 @@ function RemotePathMappingsSection() {
                 value={formLocalPath}
                 onChange={(e) => setFormLocalPath(e.target.value)}
                 placeholder="/media/downloads/movies/"
-                className="mt-1 bg-zinc-900 border-zinc-700 font-mono text-sm"
+                className="mt-1 border-zinc-700 bg-zinc-900 font-mono text-sm"
               />
-              <p className="text-xs text-zinc-600 mt-1">
+              <p className="mt-1 text-xs text-zinc-600">
                 The path as seen by Loom on its filesystem
               </p>
             </div>
@@ -1196,7 +1303,12 @@ function RemotePathMappingsSection() {
               </Button>
               <Button
                 onClick={handleCreate}
-                disabled={!formClientId || !formRemotePath || !formLocalPath || createMapping.isPending}
+                disabled={
+                  !formClientId ||
+                  !formRemotePath ||
+                  !formLocalPath ||
+                  createMapping.isPending
+                }
               >
                 {createMapping.isPending ? "Saving…" : "Save Mapping"}
               </Button>
@@ -1230,19 +1342,25 @@ export function ConnectPanel() {
   const [editing, setEditing] = React.useState<ConnectConnection | null>(null);
 
   // Form state
-  const [formProvider, setFormProvider] = React.useState<ConnectProviderType>("plex");
+  const [formProvider, setFormProvider] =
+    React.useState<ConnectProviderType>("plex");
   const [formName, setFormName] = React.useState("");
   const [formHost, setFormHost] = React.useState("");
   const [formApiKey, setFormApiKey] = React.useState("");
   const [formNotifyOnImport, setFormNotifyOnImport] = React.useState(true);
   const [formEnabled, setFormEnabled] = React.useState(true);
-  const [testResult, setTestResult] = React.useState<{ ok: boolean; message: string } | null>(null);
+  const [testResult, setTestResult] = React.useState<{
+    ok: boolean;
+    message: string;
+  } | null>(null);
 
   // Trakt-specific state
   const [formClientId, setFormClientId] = React.useState("");
   const [formClientSecret, setFormClientSecret] = React.useState("");
   const [traktOAuthCode, setTraktOAuthCode] = React.useState("");
-  const [traktAuthStep, setTraktAuthStep] = React.useState<"config" | "authorize" | "code" | "connected">("config");
+  const [traktAuthStep, setTraktAuthStep] = React.useState<
+    "config" | "authorize" | "code" | "connected"
+  >("config");
 
   // Auto-populate the OAuth code when returning from Trakt redirect
   React.useEffect(() => {
@@ -1297,7 +1415,9 @@ export function ConnectPanel() {
     setTestResult(null);
     setTraktOAuthCode("");
     setTraktAuthStep(
-      c.provider === "trakt" && c.settings.access_token ? "connected" : "config",
+      c.provider === "trakt" && c.settings.access_token
+        ? "connected"
+        : "config",
     );
     setDialogOpen(true);
   };
@@ -1436,7 +1556,9 @@ export function ConnectPanel() {
           : traktSyncWatchlistMut;
     mut.mutate(connectionId, {
       onSuccess: (res) =>
-        toast.success(`Synced ${type}: ${res.movies} movies, ${res.shows} shows`),
+        toast.success(
+          `Synced ${type}: ${res.movies} movies, ${res.shows} shows`,
+        ),
       onError: (err) => toast.error(err.message),
     });
   };
@@ -1457,50 +1579,64 @@ export function ConnectPanel() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-sm font-medium text-zinc-100 mb-1">Connections</h3>
+          <h3 className="mb-1 text-sm font-medium text-zinc-100">
+            Connections
+          </h3>
           <p className="text-xs text-zinc-500">
             Connect Loom to media servers for library refresh on import.
           </p>
         </div>
         <Button size="sm" onClick={openCreate}>
-          <Plus className="h-4 w-4 mr-1" /> Add Connection
+          <Plus className="mr-1 h-4 w-4" /> Add Connection
         </Button>
       </div>
 
-      <Card className="bg-zinc-900/50 border-zinc-800">
+      <Card className="border-zinc-800 bg-zinc-900/50">
         <CardContent className="p-0">
           {isLoading ? (
             <div className="flex justify-center py-8">
               <Loader2 className="h-5 w-5 animate-spin text-zinc-500" />
             </div>
           ) : connections.length === 0 ? (
-            <div className="text-center py-8 text-sm text-zinc-500">
+            <div className="py-8 text-center text-sm text-zinc-500">
               No connections configured. Click "Add Connection" to get started.
             </div>
           ) : (
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-zinc-800 text-zinc-400 text-xs">
-                  <th className="text-left px-4 py-2 font-medium">Name</th>
-                  <th className="text-left px-4 py-2 font-medium">Provider</th>
-                  <th className="text-left px-4 py-2 font-medium">Enabled</th>
-                  <th className="text-left px-4 py-2 font-medium">Notify on Import</th>
-                  <th className="text-right px-4 py-2 font-medium">Actions</th>
+                <tr className="border-b border-zinc-800 text-xs text-zinc-400">
+                  <th className="px-4 py-2 text-left font-medium">Name</th>
+                  <th className="px-4 py-2 text-left font-medium">Provider</th>
+                  <th className="px-4 py-2 text-left font-medium">Enabled</th>
+                  <th className="px-4 py-2 text-left font-medium">
+                    Notify on Import
+                  </th>
+                  <th className="px-4 py-2 text-right font-medium">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {connections.map((conn) => (
-                  <tr key={conn.id} className="border-b border-zinc-800/50 last:border-0">
+                  <tr
+                    key={conn.id}
+                    className="border-b border-zinc-800/50 last:border-0"
+                  >
                     <td className="px-4 py-3 text-zinc-200">{conn.name}</td>
                     <td className="px-4 py-3">
-                      <Badge variant="outline" className="border-zinc-700 text-zinc-300 text-xs">
+                      <Badge
+                        variant="outline"
+                        className="border-zinc-700 text-xs text-zinc-300"
+                      >
                         {providerLabel(conn.provider)}
                       </Badge>
-                      {conn.provider === "trakt" && conn.settings.access_token && (
-                        <Badge variant="outline" className="ml-1 border-emerald-700 text-emerald-400 text-xs">
-                          Connected
-                        </Badge>
-                      )}
+                      {conn.provider === "trakt" &&
+                        conn.settings.access_token && (
+                          <Badge
+                            variant="outline"
+                            className="ml-1 border-emerald-700 text-xs text-emerald-400"
+                          >
+                            Connected
+                          </Badge>
+                        )}
                     </td>
                     <td className="px-4 py-3">
                       <Badge
@@ -1521,52 +1657,68 @@ export function ConnectPanel() {
                     <td className="px-4 py-3 text-right">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 w-8 p-0"
+                          >
                             <MoreHorizontal className="h-4 w-4" />
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem onClick={() => openEdit(conn)}>
-                            <Pencil className="h-4 w-4 mr-2" /> Edit
+                            <Pencil className="mr-2 h-4 w-4" /> Edit
                           </DropdownMenuItem>
-                          {conn.provider === "trakt" && conn.settings.access_token && (
-                            <>
-                              <DropdownMenuItem
-                                disabled={isTraktSyncing}
-                                onClick={() => handleTraktSync("watched", conn.id)}
-                              >
-                                <Download className="h-4 w-4 mr-2" /> Sync Watched
-                              </DropdownMenuItem>
-                              <DropdownMenuItem
-                                disabled={isTraktSyncing}
-                                onClick={() => handleTraktSync("collection", conn.id)}
-                              >
-                                <Download className="h-4 w-4 mr-2" /> Sync Collection
-                              </DropdownMenuItem>
-                              <DropdownMenuItem
-                                disabled={isTraktSyncing}
-                                onClick={() => handleTraktSync("watchlist", conn.id)}
-                              >
-                                <Download className="h-4 w-4 mr-2" /> Sync Watchlist
-                              </DropdownMenuItem>
-                              <DropdownMenuItem
-                                disabled={traktRefreshMut.isPending}
-                                onClick={() =>
-                                  traktRefreshMut.mutate(conn.id, {
-                                    onSuccess: () => toast.success("Token refreshed"),
-                                    onError: (err) => toast.error(err.message),
-                                  })
-                                }
-                              >
-                                <Key className="h-4 w-4 mr-2" /> Refresh Token
-                              </DropdownMenuItem>
-                            </>
-                          )}
+                          {conn.provider === "trakt" &&
+                            conn.settings.access_token && (
+                              <>
+                                <DropdownMenuItem
+                                  disabled={isTraktSyncing}
+                                  onClick={() =>
+                                    handleTraktSync("watched", conn.id)
+                                  }
+                                >
+                                  <Download className="mr-2 h-4 w-4" /> Sync
+                                  Watched
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  disabled={isTraktSyncing}
+                                  onClick={() =>
+                                    handleTraktSync("collection", conn.id)
+                                  }
+                                >
+                                  <Download className="mr-2 h-4 w-4" /> Sync
+                                  Collection
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  disabled={isTraktSyncing}
+                                  onClick={() =>
+                                    handleTraktSync("watchlist", conn.id)
+                                  }
+                                >
+                                  <Download className="mr-2 h-4 w-4" /> Sync
+                                  Watchlist
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  disabled={traktRefreshMut.isPending}
+                                  onClick={() =>
+                                    traktRefreshMut.mutate(conn.id, {
+                                      onSuccess: () =>
+                                        toast.success("Token refreshed"),
+                                      onError: (err) =>
+                                        toast.error(err.message),
+                                    })
+                                  }
+                                >
+                                  <Key className="mr-2 h-4 w-4" /> Refresh Token
+                                </DropdownMenuItem>
+                              </>
+                            )}
                           <DropdownMenuItem
                             className="text-red-400"
                             onClick={() => handleDelete(conn.id)}
                           >
-                            <Trash2 className="h-4 w-4 mr-2" /> Delete
+                            <Trash2 className="mr-2 h-4 w-4" /> Delete
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
@@ -1583,12 +1735,17 @@ export function ConnectPanel() {
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>{editing ? "Edit Connection" : "Add Connection"}</DialogTitle>
+            <DialogTitle>
+              {editing ? "Edit Connection" : "Add Connection"}
+            </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 pt-2">
             <div className="space-y-1.5">
               <Label>Provider</Label>
-              <Select value={formProvider} onValueChange={(v) => setFormProvider(v as ConnectProviderType)}>
+              <Select
+                value={formProvider}
+                onValueChange={(v) => setFormProvider(v as ConnectProviderType)}
+              >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -1601,7 +1758,10 @@ export function ConnectPanel() {
                 </SelectContent>
               </Select>
               <p className="text-xs text-zinc-500">
-                {PROVIDER_TYPES.find((p) => p.value === formProvider)?.description}
+                {
+                  PROVIDER_TYPES.find((p) => p.value === formProvider)
+                    ?.description
+                }
               </p>
             </div>
 
@@ -1638,7 +1798,8 @@ export function ConnectPanel() {
                 {traktAuthStep === "code" && (
                   <div className="space-y-2 rounded-md border border-zinc-700 bg-zinc-900 p-3">
                     <p className="text-xs text-zinc-400">
-                      A new tab was opened to Trakt. Authorize the app, then paste the code below.
+                      A new tab was opened to Trakt. Authorize the app, then
+                      paste the code below.
                     </p>
                     <Input
                       value={traktOAuthCode}
@@ -1651,7 +1812,7 @@ export function ConnectPanel() {
                       disabled={!traktOAuthCode || traktCallbackMut.isPending}
                     >
                       {traktCallbackMut.isPending && (
-                        <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                        <Loader2 className="mr-1 h-4 w-4 animate-spin" />
                       )}
                       Complete Authorization
                     </Button>
@@ -1689,7 +1850,10 @@ export function ConnectPanel() {
 
             <div className="flex items-center justify-between">
               <Label>Notify on Import</Label>
-              <Switch checked={formNotifyOnImport} onCheckedChange={setFormNotifyOnImport} />
+              <Switch
+                checked={formNotifyOnImport}
+                onCheckedChange={setFormNotifyOnImport}
+              />
             </div>
 
             <div className="flex items-center justify-between">
@@ -1702,8 +1866,8 @@ export function ConnectPanel() {
                 className={cn(
                   "rounded-md px-3 py-2 text-sm",
                   testResult.ok
-                    ? "bg-emerald-950/50 text-emerald-400 border border-emerald-800"
-                    : "bg-red-950/50 text-red-400 border border-red-800",
+                    ? "border border-emerald-800 bg-emerald-950/50 text-emerald-400"
+                    : "border border-red-800 bg-red-950/50 text-red-400",
                 )}
               >
                 {testResult.message}
@@ -1715,23 +1879,36 @@ export function ConnectPanel() {
                 <>
                   <div />
                   <div className="flex gap-2">
-                    <Button variant="ghost" onClick={() => setDialogOpen(false)}>
+                    <Button
+                      variant="ghost"
+                      onClick={() => setDialogOpen(false)}
+                    >
                       Cancel
                     </Button>
                     {traktAuthStep === "connected" ? (
-                      <Button onClick={handleSave} disabled={isSaving || !formName}>
-                        {isSaving && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}
+                      <Button
+                        onClick={handleSave}
+                        disabled={isSaving || !formName}
+                      >
+                        {isSaving && (
+                          <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                        )}
                         {editing ? "Update" : "Save"}
                       </Button>
                     ) : traktAuthStep === "config" ? (
                       <Button
                         onClick={handleSaveAndAuthorize}
-                        disabled={isTraktAuthorizing || !formName || !formClientId || !formClientSecret}
+                        disabled={
+                          isTraktAuthorizing ||
+                          !formName ||
+                          !formClientId ||
+                          !formClientSecret
+                        }
                       >
                         {isTraktAuthorizing && (
-                          <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                          <Loader2 className="mr-1 h-4 w-4 animate-spin" />
                         )}
-                        <ExternalLink className="h-4 w-4 mr-1" />
+                        <ExternalLink className="mr-1 h-4 w-4" />
                         Connect to Trakt
                       </Button>
                     ) : null}
@@ -1745,18 +1922,26 @@ export function ConnectPanel() {
                     disabled={isTesting || !formHost}
                   >
                     {isTesting ? (
-                      <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                      <Loader2 className="mr-1 h-4 w-4 animate-spin" />
                     ) : (
-                      <Plug className="h-4 w-4 mr-1" />
+                      <Plug className="mr-1 h-4 w-4" />
                     )}
                     Test
                   </Button>
                   <div className="flex gap-2">
-                    <Button variant="ghost" onClick={() => setDialogOpen(false)}>
+                    <Button
+                      variant="ghost"
+                      onClick={() => setDialogOpen(false)}
+                    >
                       Cancel
                     </Button>
-                    <Button onClick={handleSave} disabled={isSaving || !formName || !formHost}>
-                      {isSaving && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}
+                    <Button
+                      onClick={handleSave}
+                      disabled={isSaving || !formName || !formHost}
+                    >
+                      {isSaving && (
+                        <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                      )}
                       {editing ? "Update" : "Save"}
                     </Button>
                   </div>
@@ -1803,11 +1988,12 @@ export function DownloadSafetyPanel() {
   return (
     <div className="space-y-6">
       <div>
-        <h3 className="text-sm font-medium text-zinc-100 mb-1">
+        <h3 className="mb-1 text-sm font-medium text-zinc-100">
           Download Safety
         </h3>
         <p className="text-xs text-zinc-500">
-          Protect against malicious or mislabeled releases before and after download.
+          Protect against malicious or mislabeled releases before and after
+          download.
         </p>
       </div>
 
@@ -1840,7 +2026,8 @@ export function DownloadSafetyPanel() {
         </CardHeader>
         <CardContent className="space-y-3">
           <p className="text-xs text-zinc-500">
-            Release names matching any of these patterns will be flagged for manual review.
+            Release names matching any of these patterns will be flagged for
+            manual review.
           </p>
           <div className="flex flex-wrap gap-2">
             {patterns.map((p, i) => (
@@ -1853,7 +2040,7 @@ export function DownloadSafetyPanel() {
                 <button
                   type="button"
                   onClick={() => removePattern(i)}
-                  className="ml-1 rounded-full hover:bg-zinc-700 p-0.5"
+                  className="ml-1 rounded-full p-0.5 hover:bg-zinc-700"
                 >
                   <Trash2 className="h-3 w-3" />
                 </button>
@@ -1869,7 +2056,7 @@ export function DownloadSafetyPanel() {
               onKeyDown={(e) => e.key === "Enter" && addPattern()}
             />
             <Button size="sm" onClick={addPattern}>
-              <Plus className="h-4 w-4 mr-1" /> Add
+              <Plus className="mr-1 h-4 w-4" /> Add
             </Button>
           </div>
         </CardContent>
@@ -1884,7 +2071,7 @@ export function DownloadSafetyPanel() {
           <p className="text-xs text-zinc-500">
             Flag releases outside this size range (in MB) as suspicious.
           </p>
-          <div className="grid grid-cols-2 gap-4 max-w-sm">
+          <div className="grid max-w-sm grid-cols-2 gap-4">
             <div>
               <Label htmlFor="min-size" className="text-xs">
                 Minimum (MB)
@@ -1912,9 +2099,7 @@ export function DownloadSafetyPanel() {
       </Card>
 
       <div className="flex justify-end">
-        <Button
-          onClick={() => toast.success("Download safety settings saved")}
-        >
+        <Button onClick={() => toast.success("Download safety settings saved")}>
           Save
         </Button>
       </div>
@@ -1948,25 +2133,30 @@ export function UIPanel() {
   return (
     <div className="space-y-6">
       <div>
-        <h3 className="text-sm font-medium text-zinc-100 mb-1">User Interface</h3>
+        <h3 className="mb-1 text-sm font-medium text-zinc-100">
+          User Interface
+        </h3>
         <p className="text-xs text-zinc-500">
-          Customize how Loom looks and feels. These settings are stored locally in your browser.
+          Customize how Loom looks and feels. These settings are stored locally
+          in your browser.
         </p>
       </div>
 
       {/* Theme */}
-      <Card className="bg-zinc-900/50 border-zinc-800">
-        <CardContent className="p-6 space-y-4">
+      <Card className="border-zinc-800 bg-zinc-900/50">
+        <CardContent className="space-y-4 p-6">
           <div className="flex items-center gap-3">
             <Palette className="h-4 w-4 text-teal-400" />
             <div>
               <Label className="text-sm text-zinc-200">Theme</Label>
-              <p className="text-xs text-zinc-500 mt-0.5">Choose the appearance of the interface</p>
+              <p className="mt-0.5 text-xs text-zinc-500">
+                Choose the appearance of the interface
+              </p>
             </div>
           </div>
           <div className="flex items-center gap-3">
             <Select value={theme} onValueChange={setTheme}>
-              <SelectTrigger className="w-40 bg-zinc-900 border-zinc-700">
+              <SelectTrigger className="w-40 border-zinc-700 bg-zinc-900">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -1981,16 +2171,16 @@ export function UIPanel() {
       </Card>
 
       {/* Page Size */}
-      <Card className="bg-zinc-900/50 border-zinc-800">
-        <CardContent className="p-6 space-y-4">
+      <Card className="border-zinc-800 bg-zinc-900/50">
+        <CardContent className="space-y-4 p-6">
           <div>
             <Label className="text-sm text-zinc-200">Items Per Page</Label>
-            <p className="text-xs text-zinc-500 mt-0.5">
+            <p className="mt-0.5 text-xs text-zinc-500">
               Number of items to show in paginated lists
             </p>
           </div>
           <Select value={pageSize} onValueChange={handlePageSizeChange}>
-            <SelectTrigger className="w-40 bg-zinc-900 border-zinc-700">
+            <SelectTrigger className="w-40 border-zinc-700 bg-zinc-900">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -2004,11 +2194,11 @@ export function UIPanel() {
       </Card>
 
       {/* Default View */}
-      <Card className="bg-zinc-900/50 border-zinc-800">
-        <CardContent className="p-6 space-y-4">
+      <Card className="border-zinc-800 bg-zinc-900/50">
+        <CardContent className="space-y-4 p-6">
           <div>
             <Label className="text-sm text-zinc-200">Default View Mode</Label>
-            <p className="text-xs text-zinc-500 mt-0.5">
+            <p className="mt-0.5 text-xs text-zinc-500">
               Default layout for the movies page
             </p>
           </div>
@@ -2020,11 +2210,11 @@ export function UIPanel() {
               className={cn(
                 "border-zinc-700",
                 defaultView === "grid"
-                  ? "bg-teal-600/20 border-teal-700 text-teal-300"
-                  : "text-zinc-400"
+                  ? "border-teal-700 bg-teal-600/20 text-teal-300"
+                  : "text-zinc-400",
               )}
             >
-              <LayoutGrid className="h-4 w-4 mr-1.5" /> Grid
+              <LayoutGrid className="mr-1.5 h-4 w-4" /> Grid
             </Button>
             <Button
               variant="outline"
@@ -2033,11 +2223,11 @@ export function UIPanel() {
               className={cn(
                 "border-zinc-700",
                 defaultView === "list"
-                  ? "bg-teal-600/20 border-teal-700 text-teal-300"
-                  : "text-zinc-400"
+                  ? "border-teal-700 bg-teal-600/20 text-teal-300"
+                  : "text-zinc-400",
               )}
             >
-              <List className="h-4 w-4 mr-1.5" /> List
+              <List className="mr-1.5 h-4 w-4" /> List
             </Button>
           </div>
         </CardContent>
@@ -2118,7 +2308,9 @@ export function RollingSearchPanel() {
 
   const handleTrigger = async () => {
     try {
-      const res = await apiFetch("/api/v1/rolling-search/trigger", { method: "POST" });
+      const res = await apiFetch("/api/v1/rolling-search/trigger", {
+        method: "POST",
+      });
       if (!res.ok) throw new Error("trigger failed");
       toast.success("Rolling search triggered");
       triggerTimeoutRef.current = setTimeout(fetchData, 2000);
@@ -2140,7 +2332,7 @@ export function RollingSearchPanel() {
       {/* Status */}
       {status && (
         <Card className="border-zinc-800 bg-zinc-900/50">
-          <CardContent className="pt-4 space-y-2 text-sm">
+          <CardContent className="space-y-2 pt-4 text-sm">
             <div className="flex items-center justify-between">
               <span className="text-muted-foreground">Status</span>
               <Badge variant={status.running ? "default" : "secondary"}>
@@ -2152,7 +2344,9 @@ export function RollingSearchPanel() {
               <span>{status.itemsInQueue}</span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-muted-foreground">Items searched (session)</span>
+              <span className="text-muted-foreground">
+                Items searched (session)
+              </span>
               <span>{status.itemsSearched}</span>
             </div>
             {status.lastRunAt && (
@@ -2169,8 +2363,10 @@ export function RollingSearchPanel() {
             )}
             {Object.keys(status.quotaUsage).length > 0 && (
               <div className="pt-2">
-                <span className="text-muted-foreground text-xs">Quota usage (24 h)</span>
-                <div className="flex flex-wrap gap-2 mt-1">
+                <span className="text-xs text-muted-foreground">
+                  Quota usage (24 h)
+                </span>
+                <div className="mt-1 flex flex-wrap gap-2">
                   {Object.entries(status.quotaUsage).map(([id, count]) => (
                     <Badge key={id} variant="outline" className="text-xs">
                       {id}: {count}
@@ -2210,7 +2406,7 @@ export function RollingSearchPanel() {
           value={config.intervalHours}
           onChange={(e) =>
             setConfig((c) =>
-              c ? { ...c, intervalHours: Number(e.target.value) || 12 } : c
+              c ? { ...c, intervalHours: Number(e.target.value) || 12 } : c,
             )
           }
         />
@@ -2230,7 +2426,7 @@ export function RollingSearchPanel() {
           value={config.batchSize}
           onChange={(e) =>
             setConfig((c) =>
-              c ? { ...c, batchSize: Number(e.target.value) || 5 } : c
+              c ? { ...c, batchSize: Number(e.target.value) || 5 } : c,
             )
           }
         />
@@ -2250,7 +2446,7 @@ export function RollingSearchPanel() {
           value={config.minResearchDays}
           onChange={(e) =>
             setConfig((c) =>
-              c ? { ...c, minResearchDays: Number(e.target.value) || 7 } : c
+              c ? { ...c, minResearchDays: Number(e.target.value) || 7 } : c,
             )
           }
         />
@@ -2270,7 +2466,9 @@ export function RollingSearchPanel() {
           value={config.maxSearchesPerDay}
           onChange={(e) =>
             setConfig((c) =>
-              c ? { ...c, maxSearchesPerDay: Number(e.target.value) || 100 } : c
+              c
+                ? { ...c, maxSearchesPerDay: Number(e.target.value) || 100 }
+                : c,
             )
           }
         />
@@ -2282,11 +2480,11 @@ export function RollingSearchPanel() {
       {/* Actions */}
       <div className="flex gap-2 pt-2">
         <Button onClick={handleSave} disabled={saving} size="sm">
-          {saving ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : null}
+          {saving ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : null}
           Save
         </Button>
         <Button variant="outline" size="sm" onClick={handleTrigger}>
-          <Search className="h-4 w-4 mr-1.5" /> Run Now
+          <Search className="mr-1.5 h-4 w-4" /> Run Now
         </Button>
       </div>
     </div>
@@ -2298,8 +2496,18 @@ export function RollingSearchPanel() {
 // ─── Media Preferences Panel ────────────────────────────────────────────
 
 const AUDIO_CODECS = [
-  "TrueHD Atmos", "DTS-HD MA", "DTS-X", "TrueHD", "DTS-HD",
-  "FLAC", "EAC3", "DTS", "AC3", "AAC", "OPUS", "MP3",
+  "TrueHD Atmos",
+  "DTS-HD MA",
+  "DTS-X",
+  "TrueHD",
+  "DTS-HD",
+  "FLAC",
+  "EAC3",
+  "DTS",
+  "AC3",
+  "AAC",
+  "OPUS",
+  "MP3",
 ];
 
 const SUB_LANGUAGES = [
@@ -2415,12 +2623,22 @@ export function MediaPreferencesPanel() {
         <p className="text-xs text-muted-foreground">
           Used as the default when adding new movies or TV shows.
         </p>
-        <Select value={defaultProfileId || NO_PROFILE} onValueChange={(v) => { setDefaultProfileId(v === NO_PROFILE ? "" : v); setDirty(true); }}>
-          <SelectTrigger><SelectValue placeholder="None (use first available)" /></SelectTrigger>
+        <Select
+          value={defaultProfileId || NO_PROFILE}
+          onValueChange={(v) => {
+            setDefaultProfileId(v === NO_PROFILE ? "" : v);
+            setDirty(true);
+          }}
+        >
+          <SelectTrigger>
+            <SelectValue placeholder="None (use first available)" />
+          </SelectTrigger>
           <SelectContent>
             <SelectItem value={NO_PROFILE}>None</SelectItem>
-            {qualityProfiles?.map(p => (
-              <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+            {qualityProfiles?.map((p) => (
+              <SelectItem key={p.id} value={p.id}>
+                {p.name}
+              </SelectItem>
             ))}
           </SelectContent>
         </Select>
@@ -2430,7 +2648,8 @@ export function MediaPreferencesPanel() {
       <div className="space-y-3">
         <Label className="text-base font-medium">Audio Codec Priority</Label>
         <p className="text-xs text-muted-foreground">
-          Select and reorder preferred audio codecs. Higher in the list = higher priority.
+          Select and reorder preferred audio codecs. Higher in the list = higher
+          priority.
         </p>
         {audioOrder.length > 0 && (
           <div className="space-y-1">
@@ -2456,7 +2675,7 @@ export function MediaPreferencesPanel() {
                   type="button"
                   onClick={() => moveAudio(idx, 1)}
                   disabled={idx === audioOrder.length - 1}
-                  className="text-muted-foreground hover:text-foreground disabled:opacity-30 rotate-180"
+                  className="rotate-180 text-muted-foreground hover:text-foreground disabled:opacity-30"
                 >
                   <ArrowUp className="h-3.5 w-3.5" />
                 </button>
@@ -2477,7 +2696,7 @@ export function MediaPreferencesPanel() {
               key={codec}
               type="button"
               onClick={() => toggleAudio(codec)}
-              className="rounded-md border border-dashed px-2 py-1 text-xs text-muted-foreground hover:border-primary hover:text-foreground transition-colors"
+              className="rounded-md border border-dashed px-2 py-1 text-xs text-muted-foreground transition-colors hover:border-primary hover:text-foreground"
             >
               + {codec}
             </button>
@@ -2487,7 +2706,9 @@ export function MediaPreferencesPanel() {
 
       {/* Subtitle Languages */}
       <div className="space-y-3">
-        <Label className="text-base font-medium">Preferred Subtitle Languages</Label>
+        <Label className="text-base font-medium">
+          Preferred Subtitle Languages
+        </Label>
         <div className="flex flex-wrap gap-2">
           {SUB_LANGUAGES.map((lang) => (
             <label
@@ -2506,7 +2727,10 @@ export function MediaPreferencesPanel() {
 
       {/* Toggles */}
       <div className="space-y-3">
-        <label htmlFor="pref-require-subs" className="flex items-center gap-2 text-sm">
+        <label
+          htmlFor="pref-require-subs"
+          className="flex items-center gap-2 text-sm"
+        >
           <Checkbox
             id="pref-require-subs"
             checked={requireSubs}
@@ -2574,13 +2798,15 @@ export function MediaPreferencesPanel() {
           </Button>
         </div>
         {parseMut.data && (
-          <div className="rounded-md border bg-muted/50 p-3 text-sm space-y-1">
+          <div className="space-y-1 rounded-md border bg-muted/50 p-3 text-sm">
             {Object.entries(parseMut.data).map(([k, v]) => (
               <div key={k} className="flex gap-2">
-                <span className="font-medium w-32 shrink-0 text-muted-foreground">
+                <span className="w-32 shrink-0 font-medium text-muted-foreground">
                   {k}:
                 </span>
-                <span>{Array.isArray(v) ? v.join(", ") || "—" : String(v) || "—"}</span>
+                <span>
+                  {Array.isArray(v) ? v.join(", ") || "—" : String(v) || "—"}
+                </span>
               </div>
             ))}
           </div>
@@ -2621,8 +2847,7 @@ export function FeaturesPanel() {
   return (
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">
-        Enable or disable optional platform features. Changes apply
-        immediately.
+        Enable or disable optional platform features. Changes apply immediately.
       </p>
       {!canEdit && (
         <p className="text-xs text-muted-foreground">

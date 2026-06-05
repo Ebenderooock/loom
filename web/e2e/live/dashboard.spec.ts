@@ -13,7 +13,9 @@ test.describe("Live: Dashboard", () => {
     const sidebar = page.locator("nav, aside, [data-sidebar]").first();
     await expect(sidebar).toBeVisible();
     // Should have at least Movies and Series nav items
-    await expect(sidebar.getByText(/Movies/i).first()).toBeVisible({ timeout: 10000 });
+    await expect(sidebar.getByText(/Movies/i).first()).toBeVisible({
+      timeout: 10000,
+    });
   });
 
   test("system status API is healthy", async ({ request }) => {

@@ -99,19 +99,26 @@ export function LibraryPage() {
     if (!libraries || libraries.length === 0) return;
     setRescanningAll(true);
     const results = await Promise.allSettled(
-      libraries.map(lib =>
-        apiFetch(`/api/v1/libraries/${lib.id}/scan`, { method: "POST" })
-          .then(r => { if (!r.ok) throw new Error(`${r.status}`); })
-      )
+      libraries.map((lib) =>
+        apiFetch(`/api/v1/libraries/${lib.id}/scan`, { method: "POST" }).then(
+          (r) => {
+            if (!r.ok) throw new Error(`${r.status}`);
+          },
+        ),
+      ),
     );
     setRescanningAll(false);
-    const failed = results.filter(r => r.status === "rejected").length;
+    const failed = results.filter((r) => r.status === "rejected").length;
     const started = results.length - failed;
     if (failed > 0) {
-      toast.error(`${failed} ${failed === 1 ? "library" : "libraries"} failed to scan`);
+      toast.error(
+        `${failed} ${failed === 1 ? "library" : "libraries"} failed to scan`,
+      );
     }
     if (started > 0) {
-      toast.success(`Scan started for ${started} ${started === 1 ? "library" : "libraries"}`);
+      toast.success(
+        `Scan started for ${started} ${started === 1 ? "library" : "libraries"}`,
+      );
     }
   };
 
@@ -140,7 +147,7 @@ export function LibraryPage() {
 
   if (error) {
     return (
-      <div className="flex items-center gap-2 text-destructive p-4">
+      <div className="flex items-center gap-2 p-4 text-destructive">
         <AlertCircle className="h-4 w-4" />
         <span>{errMessage(error, "Failed to load libraries")}</span>
       </div>
@@ -151,8 +158,16 @@ export function LibraryPage() {
     <div className="space-y-6">
       <div className="flex justify-end gap-2">
         {libraries && libraries.length > 0 && (
-          <Button variant="outline" onClick={handleRescanAll} disabled={rescanningAll}>
-            {rescanningAll ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+          <Button
+            variant="outline"
+            onClick={handleRescanAll}
+            disabled={rescanningAll}
+          >
+            {rescanningAll ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <RefreshCw className="mr-2 h-4 w-4" />
+            )}
             {rescanningAll ? "Scanning..." : "Rescan All"}
           </Button>
         )}
@@ -167,7 +182,9 @@ export function LibraryPage() {
           <CardContent className="flex flex-col items-center justify-center py-12 text-muted-foreground">
             <FolderOpen className="mb-4 h-12 w-12" />
             <p className="text-lg font-medium">No libraries configured</p>
-            <p className="text-sm">Add a library to start managing your media.</p>
+            <p className="text-sm">
+              Add a library to start managing your media.
+            </p>
           </CardContent>
         </Card>
       )}
@@ -187,10 +204,7 @@ export function LibraryPage() {
 
       {/* Create dialog */}
       {dialog.kind === "create" && (
-        <LibraryFormDialog
-          open
-          onClose={() => setDialog({ kind: "closed" })}
-        />
+        <LibraryFormDialog open onClose={() => setDialog({ kind: "closed" })} />
       )}
 
       {/* Edit dialog */}
@@ -246,7 +260,9 @@ function LibraryCard({
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className="text-base font-semibold">{library.name}</CardTitle>
+        <CardTitle className="text-base font-semibold">
+          {library.name}
+        </CardTitle>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="icon" className="h-8 w-8">
@@ -286,7 +302,9 @@ function LibraryCard({
           <Badge variant={library.accessible ? "default" : "destructive"}>
             {library.accessible ? "Online" : "Offline"}
           </Badge>
-          <Badge variant="outline">{getMediaTypeLabel(library.media_type as MediaType)}</Badge>
+          <Badge variant="outline">
+            {getMediaTypeLabel(library.media_type as MediaType)}
+          </Badge>
         </div>
 
         {library.accessible && library.disk_space.total_bytes > 0 && (
@@ -307,7 +325,7 @@ function LibraryCard({
           {library.unmapped_count > 0 && (
             <button
               onClick={onUnmapped}
-              className="text-yellow-500 hover:underline cursor-pointer text-xs"
+              className="cursor-pointer text-xs text-yellow-500 hover:underline"
             >
               {library.unmapped_count} unmapped
             </button>
@@ -341,7 +359,7 @@ function FolderBrowser({
         <div className="max-h-40 overflow-y-auto rounded border bg-muted/50 text-sm">
           {fs.parent && (
             <button
-              className="flex w-full items-center gap-1 px-2 py-1 hover:bg-accent text-left"
+              className="flex w-full items-center gap-1 px-2 py-1 text-left hover:bg-accent"
               onClick={() => {
                 setBrowsePath(fs.parent);
                 onChange(fs.parent);
@@ -354,7 +372,7 @@ function FolderBrowser({
           {fs.directories?.map((dir) => (
             <button
               key={dir.path}
-              className="flex w-full items-center gap-1 px-2 py-1 hover:bg-accent text-left"
+              className="flex w-full items-center gap-1 px-2 py-1 text-left hover:bg-accent"
               onClick={() => {
                 setBrowsePath(dir.path);
                 onChange(dir.path);
@@ -391,16 +409,16 @@ function LibraryFormDialog({
   const [name, setName] = React.useState(library?.name ?? "");
   const [path, setPath] = React.useState(library?.path ?? "");
   const [mediaType, setMediaType] = React.useState<MediaType>(
-    (library?.media_type as MediaType) ?? "movie"
+    (library?.media_type as MediaType) ?? "movie",
   );
   const [unmonitorOnDelete, setUnmonitorOnDelete] = React.useState(
-    library?.unmonitor_on_delete ?? false
+    library?.unmonitor_on_delete ?? false,
   );
   const [autoArchiveWatched, setAutoArchiveWatched] = React.useState(
-    library?.auto_archive_watched ?? false
+    library?.auto_archive_watched ?? false,
   );
   const [autoArchiveDays, setAutoArchiveDays] = React.useState(
-    library?.auto_archive_days_after_watch ?? 0
+    library?.auto_archive_days_after_watch ?? 0,
   );
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -426,7 +444,7 @@ function LibraryFormDialog({
             onClose();
           },
           onError: (err) => toast.error(errMessage(err, "Update failed")),
-        }
+        },
       );
     } else {
       const body: CreateLibraryRequest = {
@@ -479,7 +497,10 @@ function LibraryFormDialog({
 
           <div className="space-y-2">
             <Label htmlFor="lib-media-type">Media Type</Label>
-            <Select value={mediaType} onValueChange={(v) => setMediaType(v as MediaType)}>
+            <Select
+              value={mediaType}
+              onValueChange={(v) => setMediaType(v as MediaType)}
+            >
               <SelectTrigger id="lib-media-type">
                 <SelectValue />
               </SelectTrigger>
@@ -494,7 +515,9 @@ function LibraryFormDialog({
           </div>
 
           <div className="space-y-3 border-t pt-3">
-            <p className="text-sm font-medium text-muted-foreground">Lifecycle Settings</p>
+            <p className="text-sm font-medium text-muted-foreground">
+              Lifecycle Settings
+            </p>
 
             <div className="flex items-center justify-between">
               <Label htmlFor="lib-unmonitor-delete" className="text-sm">
@@ -577,8 +600,8 @@ function DeleteDialog({
         <DialogHeader>
           <DialogTitle>Delete Library</DialogTitle>
           <DialogDescription>
-            Are you sure you want to delete &quot;{library.name}&quot;? This removes the
-            library from Loom but does not delete any files on disk.
+            Are you sure you want to delete &quot;{library.name}&quot;? This
+            removes the library from Loom but does not delete any files on disk.
           </DialogDescription>
         </DialogHeader>
         <div className="flex justify-end gap-2">
@@ -627,7 +650,7 @@ function UnmappedDialog({
             ))}
           </div>
         ) : folders && folders.length > 0 ? (
-          <div className="max-h-64 overflow-y-auto space-y-1">
+          <div className="max-h-64 space-y-1 overflow-y-auto">
             {folders.map((f: UnmappedFolder) => (
               <div
                 key={f.path}
@@ -639,7 +662,7 @@ function UnmappedDialog({
             ))}
           </div>
         ) : (
-          <p className="text-sm text-muted-foreground py-4 text-center">
+          <p className="py-4 text-center text-sm text-muted-foreground">
             All folders are mapped!
           </p>
         )}

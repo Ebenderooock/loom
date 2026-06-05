@@ -114,7 +114,8 @@ export async function listAllRequests(
   status?: RequestStatus | "all",
   signal?: AbortSignal,
 ): Promise<MediaRequest[]> {
-  const qs = status && status !== "all" ? `?status=${encodeURIComponent(status)}` : "";
+  const qs =
+    status && status !== "all" ? `?status=${encodeURIComponent(status)}` : "";
   const data = await request<{ data: MediaRequest[] }>(
     "GET",
     `/api/v1/requests${qs}`,
@@ -188,7 +189,8 @@ export async function updateQuotaConfig(
 export const requestKeys = {
   all: ["requests"] as const,
   mine: () => [...requestKeys.all, "mine"] as const,
-  list: (status?: string) => [...requestKeys.all, "list", status ?? "all"] as const,
+  list: (status?: string) =>
+    [...requestKeys.all, "list", status ?? "all"] as const,
   quota: () => [...requestKeys.all, "quota"] as const,
   quotaConfig: () => [...requestKeys.all, "quota", "config"] as const,
 };

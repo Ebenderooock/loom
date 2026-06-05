@@ -6,12 +6,27 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
-  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
 } from "@/components/ui/dialog";
 import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Plus, MoreVertical, Pencil, Trash2, Loader2, Layers } from "lucide-react";
+import {
+  Plus,
+  MoreVertical,
+  Pencil,
+  Trash2,
+  Loader2,
+  Layers,
+} from "lucide-react";
 import { ListSkeleton } from "@/components/ui/skeletons";
 import { EmptyState } from "@/components/ui/empty-state";
 import { toast } from "sonner";
@@ -44,7 +59,14 @@ interface ParsedItem {
   allowed: boolean;
 }
 
-const SOURCE_GROUP_ORDER = ["TV", "Web", "WebRip", "BluRay", "DVD", "Unknown"] as const;
+const SOURCE_GROUP_ORDER = [
+  "TV",
+  "Web",
+  "WebRip",
+  "BluRay",
+  "DVD",
+  "Unknown",
+] as const;
 const SOURCE_GROUP_LABELS: Record<string, string> = {
   TV: "HDTV",
   Web: "WEB-DL",
@@ -55,7 +77,8 @@ const SOURCE_GROUP_LABELS: Record<string, string> = {
 };
 
 function groupDefinitionsBySource(definitions: QualityDefinition[]) {
-  const groups: { source: string; label: string; defs: QualityDefinition[] }[] = [];
+  const groups: { source: string; label: string; defs: QualityDefinition[] }[] =
+    [];
   const bySource = new Map<string, QualityDefinition[]>();
 
   for (const def of definitions) {
@@ -78,7 +101,11 @@ function groupDefinitionsBySource(definitions: QualityDefinition[]) {
 
   for (const [source, defs] of bySource) {
     if (defs.length > 0) {
-      groups.push({ source, label: source, defs: defs.sort((a, b) => a.preferred_at - b.preferred_at) });
+      groups.push({
+        source,
+        label: source,
+        defs: defs.sort((a, b) => a.preferred_at - b.preferred_at),
+      });
     }
   }
 
@@ -106,7 +133,7 @@ export function QualityProfilesPage() {
   const [definitions, setDefinitions] = React.useState<QualityDefinition[]>([]);
   React.useEffect(() => {
     apiFetch("/api/v1/movies/quality-definitions")
-      .then((r) => r.ok ? r.json() : [])
+      .then((r) => (r.ok ? r.json() : []))
       .then((data) => setDefinitions(Array.isArray(data) ? data : []))
       .catch((err) => console.error("fetch failed:", err));
   }, []);
@@ -118,10 +145,12 @@ export function QualityProfilesPage() {
   }, [definitions]);
 
   return (
-    <div className="container mx-auto py-8 space-y-6 max-w-4xl">
+    <div className="container mx-auto max-w-4xl space-y-6 py-8">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Quality Profiles</h1>
+          <h1 className="text-2xl font-bold tracking-tight">
+            Quality Profiles
+          </h1>
           <p className="text-muted-foreground">
             Define quality tiers and per-profile custom format scores.
           </p>
@@ -146,38 +175,57 @@ export function QualityProfilesPage() {
             const allowedCount = items.filter((i) => i.allowed).length;
 
             return (
-              <div key={qp.id} className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4 flex items-center justify-between group">
+              <div
+                key={qp.id}
+                className="group flex items-center justify-between rounded-lg border border-zinc-800 bg-zinc-900/50 p-4"
+              >
                 <div className="min-w-0">
-                  <h4 className="text-sm font-medium text-zinc-200">{qp.name}</h4>
-                  <p className="text-xs text-zinc-500 mt-0.5">
-                    {allowedCount} {allowedCount === 1 ? "quality" : "qualities"} allowed
+                  <h4 className="text-sm font-medium text-zinc-200">
+                    {qp.name}
+                  </h4>
+                  <p className="mt-0.5 text-xs text-zinc-500">
+                    {allowedCount}{" "}
+                    {allowedCount === 1 ? "quality" : "qualities"} allowed
                   </p>
                   {allowedCount > 0 && (
-                    <div className="flex flex-wrap gap-1 mt-2">
-                      {items.filter((i) => i.allowed).slice(0, 6).map((item) => {
-                        const def = defById.get(item.id);
-                        return (
-                          <Badge key={item.id} variant="secondary" className="text-[10px] px-1.5 py-0 bg-zinc-800 text-zinc-300">
-                            {def?.title || item.name}
-                          </Badge>
-                        );
-                      })}
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      {items
+                        .filter((i) => i.allowed)
+                        .slice(0, 6)
+                        .map((item) => {
+                          const def = defById.get(item.id);
+                          return (
+                            <Badge
+                              key={item.id}
+                              variant="secondary"
+                              className="bg-zinc-800 px-1.5 py-0 text-[10px] text-zinc-300"
+                            >
+                              {def?.title || item.name}
+                            </Badge>
+                          );
+                        })}
                       {allowedCount > 6 && (
-                        <Badge variant="secondary" className="text-[10px] px-1.5 py-0 bg-zinc-800 text-zinc-400">
+                        <Badge
+                          variant="secondary"
+                          className="bg-zinc-800 px-1.5 py-0 text-[10px] text-zinc-400"
+                        >
                           +{allowedCount - 6} more
                         </Badge>
                       )}
                     </div>
                   )}
                   {qp.format_items?.length > 0 && (
-                    <p className="text-xs text-zinc-500 mt-1">
-                      {qp.format_items.length} custom format score{qp.format_items.length !== 1 ? "s" : ""}
+                    <p className="mt-1 text-xs text-zinc-500">
+                      {qp.format_items.length} custom format score
+                      {qp.format_items.length !== 1 ? "s" : ""}
                     </p>
                   )}
                 </div>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="icon"><MoreVertical className="h-4 w-4" /></Button>
+                    <Button variant="ghost" size="icon">
+                      <MoreVertical className="h-4 w-4" />
+                    </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
                     <DropdownMenuItem onClick={() => setEditing(qp)}>
@@ -206,7 +254,10 @@ export function QualityProfilesPage() {
         <ProfileDialog
           initial={editing ?? undefined}
           definitions={definitions}
-          onClose={() => { setEditing(null); setCreating(false); }}
+          onClose={() => {
+            setEditing(null);
+            setCreating(false);
+          }}
         />
       )}
     </div>
@@ -231,11 +282,17 @@ function ProfileDialog({
 
   const [name, setName] = React.useState(initial?.name ?? "");
   const [cutoff, setCutoff] = React.useState(initial?.cutoff ?? "");
-  const [upgradeAllowed, setUpgradeAllowed] = React.useState(initial?.upgrade_allowed ?? true);
-  const [formatItems, setFormatItems] = React.useState<FormatItem[]>(initial?.format_items ?? []);
+  const [upgradeAllowed, setUpgradeAllowed] = React.useState(
+    initial?.upgrade_allowed ?? true,
+  );
+  const [formatItems, setFormatItems] = React.useState<FormatItem[]>(
+    initial?.format_items ?? [],
+  );
 
   // Parse existing items into a checked-map keyed by quality definition ID
-  const [checkedItems, setCheckedItems] = React.useState<Record<string, boolean>>(() => {
+  const [checkedItems, setCheckedItems] = React.useState<
+    Record<string, boolean>
+  >(() => {
     if (!initial?.items) return {};
     const items = parseProfileItems(initial.items);
     const map: Record<string, boolean> = {};
@@ -245,7 +302,10 @@ function ProfileDialog({
     return map;
   });
 
-  const groups = React.useMemo(() => groupDefinitionsBySource(definitions), [definitions]);
+  const groups = React.useMemo(
+    () => groupDefinitionsBySource(definitions),
+    [definitions],
+  );
 
   const toggleItem = (defId: string) => {
     setCheckedItems((prev) => ({ ...prev, [defId]: !prev[defId] }));
@@ -275,7 +335,9 @@ function ProfileDialog({
     setFormatItems((prev) => {
       const existing = prev.find((fi) => fi.custom_format_id === cfId);
       if (existing) {
-        return prev.map((fi) => fi.custom_format_id === cfId ? { ...fi, score } : fi);
+        return prev.map((fi) =>
+          fi.custom_format_id === cfId ? { ...fi, score } : fi,
+        );
       }
       return [...prev, { custom_format_id: cfId, score }];
     });
@@ -303,18 +365,36 @@ function ProfileDialog({
       updateMut.mutate(
         {
           id: initial!.id,
-          body: { name: name.trim(), cutoff, items: itemsJson, upgrade_allowed: upgradeAllowed, format_items: formatItems },
+          body: {
+            name: name.trim(),
+            cutoff,
+            items: itemsJson,
+            upgrade_allowed: upgradeAllowed,
+            format_items: formatItems,
+          },
         },
         {
-          onSuccess: () => { toast.success("Updated"); onClose(); },
+          onSuccess: () => {
+            toast.success("Updated");
+            onClose();
+          },
           onError: (e) => toast.error(e.message),
         },
       );
     } else {
       createMut.mutate(
-        { name: name.trim(), cutoff, items: itemsJson, upgrade_allowed: upgradeAllowed, format_items: formatItems },
         {
-          onSuccess: () => { toast.success("Created"); onClose(); },
+          name: name.trim(),
+          cutoff,
+          items: itemsJson,
+          upgrade_allowed: upgradeAllowed,
+          format_items: formatItems,
+        },
+        {
+          onSuccess: () => {
+            toast.success("Created");
+            onClose();
+          },
           onError: (e) => toast.error(e.message),
         },
       );
@@ -323,7 +403,7 @@ function ProfileDialog({
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
+      <DialogContent className="flex max-h-[85vh] max-w-2xl flex-col">
         <DialogHeader>
           <DialogTitle>{isEdit ? "Edit" : "Add"} Quality Profile</DialogTitle>
           <DialogDescription>
@@ -331,7 +411,7 @@ function ProfileDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 flex-1 overflow-hidden">
+        <div className="flex-1 space-y-4 overflow-hidden">
           {/* Name */}
           <div className="space-y-2">
             <Label className="text-sm text-zinc-400">Profile Name</Label>
@@ -339,7 +419,7 @@ function ProfileDialog({
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="e.g. HD-1080p"
-              className="bg-zinc-900 border-zinc-700"
+              className="border-zinc-700 bg-zinc-900"
               // eslint-disable-next-line jsx-a11y/no-autofocus -- intentional: focus the name field when the form opens
               autoFocus
             />
@@ -360,57 +440,77 @@ function ProfileDialog({
             <div className="flex items-center justify-between">
               <Label className="text-sm text-zinc-400">
                 Qualities{" "}
-                <span className="text-zinc-600">({selectedCount}/{definitions.length})</span>
+                <span className="text-zinc-600">
+                  ({selectedCount}/{definitions.length})
+                </span>
               </Label>
               <Button
                 variant="ghost"
                 size="sm"
-                className="text-xs text-teal-500 hover:text-teal-400 h-6 px-2"
+                className="h-6 px-2 text-xs text-teal-500 hover:text-teal-400"
                 onClick={toggleAll}
               >
-                {definitions.every((d) => checkedItems[d.id]) ? "Deselect All" : "Select All"}
+                {definitions.every((d) => checkedItems[d.id])
+                  ? "Deselect All"
+                  : "Select All"}
               </Button>
             </div>
 
-            <div className="overflow-y-auto max-h-[30vh] rounded-md border border-zinc-800">
+            <div className="max-h-[30vh] overflow-y-auto rounded-md border border-zinc-800">
               {groups.map((group) => {
-                const groupAllChecked = group.defs.every((d) => checkedItems[d.id]);
-                const groupSomeChecked = group.defs.some((d) => checkedItems[d.id]) && !groupAllChecked;
+                const groupAllChecked = group.defs.every(
+                  (d) => checkedItems[d.id],
+                );
+                const groupSomeChecked =
+                  group.defs.some((d) => checkedItems[d.id]) &&
+                  !groupAllChecked;
 
                 return (
                   <div key={group.source}>
-                    <label
-                      className="flex items-center gap-3 px-3 py-2 bg-zinc-800/70 cursor-pointer sticky top-0 z-10 border-b border-zinc-700/50"
-                    >
+                    <label className="sticky top-0 z-10 flex cursor-pointer items-center gap-3 border-b border-zinc-700/50 bg-zinc-800/70 px-3 py-2">
                       <Checkbox
                         checked={groupAllChecked}
-                        className={groupSomeChecked ? "data-[state=unchecked]:bg-teal-900/40 data-[state=unchecked]:border-teal-600" : ""}
+                        className={
+                          groupSomeChecked
+                            ? "data-[state=unchecked]:border-teal-600 data-[state=unchecked]:bg-teal-900/40"
+                            : ""
+                        }
                         onCheckedChange={() => toggleGroup(group.defs)}
                       />
-                      <span className="text-sm font-medium text-zinc-200">{group.label}</span>
-                      <span className="text-xs text-zinc-500 ml-auto">
-                        {group.defs.filter((d) => checkedItems[d.id]).length}/{group.defs.length}
+                      <span className="text-sm font-medium text-zinc-200">
+                        {group.label}
+                      </span>
+                      <span className="ml-auto text-xs text-zinc-500">
+                        {group.defs.filter((d) => checkedItems[d.id]).length}/
+                        {group.defs.length}
                       </span>
                     </label>
 
                     {group.defs.map((def) => (
                       <label
                         key={def.id}
-                        className="flex items-center gap-3 px-3 py-2 pl-8 hover:bg-zinc-800/50 cursor-pointer border-b border-zinc-800/50 last:border-0"
+                        className="flex cursor-pointer items-center gap-3 border-b border-zinc-800/50 px-3 py-2 pl-8 last:border-0 hover:bg-zinc-800/50"
                       >
                         <Checkbox
                           checked={checkedItems[def.id] ?? false}
                           onCheckedChange={() => toggleItem(def.id)}
                         />
-                        <div className="flex-1 min-w-0 flex items-center gap-2">
-                          <span className="text-sm text-zinc-200">{def.title || def.name}</span>
+                        <div className="flex min-w-0 flex-1 items-center gap-2">
+                          <span className="text-sm text-zinc-200">
+                            {def.title || def.name}
+                          </span>
                           {def.modifier && (
-                            <Badge variant="outline" className="text-[10px] border-amber-700/50 text-amber-500 px-1 py-0">
+                            <Badge
+                              variant="outline"
+                              className="border-amber-700/50 px-1 py-0 text-[10px] text-amber-500"
+                            >
                               {def.modifier}
                             </Badge>
                           )}
                         </div>
-                        <span className="text-xs text-zinc-500 tabular-nums">{def.resolution}</span>
+                        <span className="text-xs tabular-nums text-zinc-500">
+                          {def.resolution}
+                        </span>
                       </label>
                     ))}
                   </div>
@@ -428,8 +528,9 @@ function ProfileDialog({
           {selectedCount > 0 && (
             <div className="space-y-2">
               <Label className="text-sm text-zinc-400">Cutoff</Label>
-              <p className="text-xs text-zinc-600 -mt-1">
-                Once this quality is reached, no further upgrades will be downloaded.
+              <p className="-mt-1 text-xs text-zinc-600">
+                Once this quality is reached, no further upgrades will be
+                downloaded.
               </p>
               <select
                 value={cutoff}
@@ -451,16 +552,26 @@ function ProfileDialog({
           {/* Custom format scores */}
           {customFormats.length > 0 && (
             <div className="space-y-2">
-              <Label className="text-sm text-zinc-400">Custom Format Scores</Label>
-              <div className="rounded-md border border-zinc-800 divide-y divide-zinc-800 max-h-40 overflow-y-auto">
+              <Label className="text-sm text-zinc-400">
+                Custom Format Scores
+              </Label>
+              <div className="max-h-40 divide-y divide-zinc-800 overflow-y-auto rounded-md border border-zinc-800">
                 {customFormats.map((cf) => (
-                  <div key={cf.id} className="flex items-center justify-between px-3 py-2">
+                  <div
+                    key={cf.id}
+                    className="flex items-center justify-between px-3 py-2"
+                  >
                     <span className="text-sm text-zinc-300">{cf.name}</span>
                     <Input
                       type="number"
-                      className="w-24 h-8 text-sm bg-zinc-900 border-zinc-700"
+                      className="h-8 w-24 border-zinc-700 bg-zinc-900 text-sm"
                       value={getScore(cf.id)}
-                      onChange={(e) => updateFormatScore(cf.id, parseInt(e.target.value, 10) || 0)}
+                      onChange={(e) =>
+                        updateFormatScore(
+                          cf.id,
+                          parseInt(e.target.value, 10) || 0,
+                        )
+                      }
                     />
                   </div>
                 ))}
@@ -470,12 +581,16 @@ function ProfileDialog({
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
           <Button
             onClick={handleSave}
             disabled={!name || createMut.isPending || updateMut.isPending}
           >
-            {(createMut.isPending || updateMut.isPending) && <Loader2 className="h-4 w-4 animate-spin mr-1" />}
+            {(createMut.isPending || updateMut.isPending) && (
+              <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+            )}
             {isEdit ? "Save" : "Create"}
           </Button>
         </DialogFooter>

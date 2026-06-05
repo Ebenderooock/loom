@@ -85,9 +85,10 @@ export function useActiveStreams() {
   return useQuery({
     queryKey: ["analytics", "streams"],
     queryFn: ({ signal }) =>
-      getJSON<{ streams: LiveStream[] }>("/api/v1/analytics/streams", signal).then(
-        (b) => b.streams ?? [],
-      ),
+      getJSON<{ streams: LiveStream[] }>(
+        "/api/v1/analytics/streams",
+        signal,
+      ).then((b) => b.streams ?? []),
     refetchInterval: 10_000,
   });
 }
@@ -107,7 +108,10 @@ export function useAnalyticsStats(windowDays = 30) {
   return useQuery({
     queryKey: ["analytics", "stats", windowDays],
     queryFn: ({ signal }) =>
-      getJSON<AnalyticsStats>(`/api/v1/analytics/stats?days=${windowDays}`, signal),
+      getJSON<AnalyticsStats>(
+        `/api/v1/analytics/stats?days=${windowDays}`,
+        signal,
+      ),
   });
 }
 

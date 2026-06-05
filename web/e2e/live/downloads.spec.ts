@@ -6,16 +6,24 @@ test.describe("Live: Downloads", () => {
     await liveLogin(page);
   });
 
-  test("downloads page loads with active and imports tabs", async ({ page }) => {
+  test("downloads page loads with active and imports tabs", async ({
+    page,
+  }) => {
     await page.goto("/downloads");
     await waitForPageLoad(page);
-    await expect(page.getByText(/Downloads/i).first()).toBeVisible({ timeout: 15000 });
+    await expect(page.getByText(/Downloads/i).first()).toBeVisible({
+      timeout: 15000,
+    });
     // Should have Active and Imports tabs
-    const activeTab = page.getByRole("tab", { name: /Active/i }).or(page.getByText(/Active/i).first());
+    const activeTab = page
+      .getByRole("tab", { name: /Active/i })
+      .or(page.getByText(/Active/i).first());
     await expect(activeTab).toBeVisible({ timeout: 10000 });
   });
 
-  test("download clients API returns configured clients", async ({ request }) => {
+  test("download clients API returns configured clients", async ({
+    request,
+  }) => {
     const res = await authGet(request, "/api/v1/download-clients");
     expect(res.status()).toBe(200);
     const text = await res.text();
@@ -33,7 +41,7 @@ test.describe("Live: Downloads", () => {
     const res = await authGet(request, "/api/v1/downloads/history");
     expect(res.status()).toBe(200);
     const body = await res.json();
-    const items = Array.isArray(body) ? body : body.data ?? [];
+    const items = Array.isArray(body) ? body : (body.data ?? []);
     expect(Array.isArray(items)).toBeTruthy();
   });
 

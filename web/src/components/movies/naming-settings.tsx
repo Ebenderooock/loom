@@ -31,8 +31,14 @@ interface PreviewSample {
 
 const TOKENS = [
   { token: "{Movie Title}", desc: "Full movie title" },
-  { token: "{Movie CleanTitle}", desc: "Title without articles or special chars" },
-  { token: "{Movie TitleThe}", desc: 'Title with article moved to end (e.g. "Matrix, The")' },
+  {
+    token: "{Movie CleanTitle}",
+    desc: "Title without articles or special chars",
+  },
+  {
+    token: "{Movie TitleThe}",
+    desc: 'Title with article moved to end (e.g. "Matrix, The")',
+  },
   { token: "{Release Year}", desc: "Year of release" },
   { token: "{Quality Full}", desc: "Full quality string (e.g. Bluray-1080p)" },
   { token: "{Quality Resolution}", desc: "Resolution only (e.g. 1080p)" },
@@ -97,7 +103,7 @@ export function NamingSettings() {
 
   const updateField = <K extends keyof NamingConfig>(
     key: K,
-    value: NamingConfig[K]
+    value: NamingConfig[K],
   ) => {
     const updated = { ...config, [key]: value };
     setConfig(updated);
@@ -130,16 +136,19 @@ export function NamingSettings() {
     fetchPreview(DEFAULTS);
   };
 
-  const insertToken = (field: "movie_folder_format" | "movie_file_format", token: string) => {
+  const insertToken = (
+    field: "movie_folder_format" | "movie_file_format",
+    token: string,
+  ) => {
     updateField(field, config[field] + token);
   };
 
   return (
-    <Card className="p-6 bg-zinc-900/50 border-zinc-800 space-y-6">
+    <Card className="space-y-6 border-zinc-800 bg-zinc-900/50 p-6">
       <div className="flex items-center justify-between">
         <div>
           <h3 className="text-lg font-semibold text-zinc-100">Movie Naming</h3>
-          <p className="text-sm text-zinc-500 mt-1">
+          <p className="mt-1 text-sm text-zinc-500">
             Configure how movie files and folders are named when organized.
           </p>
         </div>
@@ -150,7 +159,7 @@ export function NamingSettings() {
             onClick={handleReset}
             className="border-zinc-700 text-zinc-400"
           >
-            <RotateCcw className="h-3 w-3 mr-1" /> Reset
+            <RotateCcw className="mr-1 h-3 w-3" /> Reset
           </Button>
           <Button
             size="sm"
@@ -158,7 +167,7 @@ export function NamingSettings() {
             disabled={!dirty || saving}
             className="bg-teal-600 hover:bg-teal-700"
           >
-            <Save className="h-3 w-3 mr-1" /> Save
+            <Save className="mr-1 h-3 w-3" /> Save
           </Button>
         </div>
       </div>
@@ -184,7 +193,7 @@ export function NamingSettings() {
           value={config.colon_replacement}
           onValueChange={(v) => updateField("colon_replacement", v)}
         >
-          <SelectTrigger className="w-64 bg-zinc-900 border-zinc-700">
+          <SelectTrigger className="w-64 border-zinc-700 bg-zinc-900">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -199,13 +208,13 @@ export function NamingSettings() {
 
       {/* Folder format */}
       <div className="space-y-2">
-        <Label className="text-sm text-zinc-400 flex items-center gap-2">
+        <Label className="flex items-center gap-2 text-sm text-zinc-400">
           <FolderOpen className="h-4 w-4" /> Movie Folder Format
         </Label>
         <Input
           value={config.movie_folder_format}
           onChange={(e) => updateField("movie_folder_format", e.target.value)}
-          className="bg-zinc-900 border-zinc-700 font-mono text-sm"
+          className="border-zinc-700 bg-zinc-900 font-mono text-sm"
         />
         <div className="flex flex-wrap gap-1">
           {TOKENS.slice(0, 5).map((t) => (
@@ -213,7 +222,7 @@ export function NamingSettings() {
               key={t.token}
               variant="outline"
               size="sm"
-              className="text-xs border-zinc-700 text-zinc-400 h-6 px-2"
+              className="h-6 border-zinc-700 px-2 text-xs text-zinc-400"
               onClick={() => insertToken("movie_folder_format", t.token)}
               title={t.desc}
             >
@@ -225,13 +234,13 @@ export function NamingSettings() {
 
       {/* File format */}
       <div className="space-y-2">
-        <Label className="text-sm text-zinc-400 flex items-center gap-2">
+        <Label className="flex items-center gap-2 text-sm text-zinc-400">
           <FileText className="h-4 w-4" /> Movie File Format
         </Label>
         <Input
           value={config.movie_file_format}
           onChange={(e) => updateField("movie_file_format", e.target.value)}
-          className="bg-zinc-900 border-zinc-700 font-mono text-sm"
+          className="border-zinc-700 bg-zinc-900 font-mono text-sm"
         />
         <div className="flex flex-wrap gap-1">
           {TOKENS.map((t) => (
@@ -239,7 +248,7 @@ export function NamingSettings() {
               key={t.token}
               variant="outline"
               size="sm"
-              className="text-xs border-zinc-700 text-zinc-400 h-6 px-2"
+              className="h-6 border-zinc-700 px-2 text-xs text-zinc-400"
               onClick={() => insertToken("movie_file_format", t.token)}
               title={t.desc}
             >
@@ -251,26 +260,29 @@ export function NamingSettings() {
 
       {/* Live preview */}
       {preview && (
-        <div className="space-y-2 p-4 rounded-lg bg-zinc-950 border border-zinc-800">
-          <p className="text-xs font-medium text-zinc-500 uppercase tracking-wide">
+        <div className="space-y-2 rounded-lg border border-zinc-800 bg-zinc-950 p-4">
+          <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
             Preview (Sample: The Dark Knight, 2008)
           </p>
           <div className="space-y-1">
             <div className="flex items-center gap-2">
-              <FolderOpen className="h-3.5 w-3.5 text-teal-400 flex-shrink-0" />
-              <span className="text-sm font-mono text-zinc-300">
+              <FolderOpen className="h-3.5 w-3.5 flex-shrink-0 text-teal-400" />
+              <span className="font-mono text-sm text-zinc-300">
                 {preview.folder_example}/
               </span>
             </div>
-            <div className="flex items-center gap-2 ml-5">
-              <FileText className="h-3.5 w-3.5 text-zinc-500 flex-shrink-0" />
-              <span className="text-sm font-mono text-zinc-400">
+            <div className="ml-5 flex items-center gap-2">
+              <FileText className="h-3.5 w-3.5 flex-shrink-0 text-zinc-500" />
+              <span className="font-mono text-sm text-zinc-400">
                 {preview.file_example}
               </span>
             </div>
           </div>
-          <div className="mt-2 pt-2 border-t border-zinc-800">
-            <Badge variant="outline" className="text-xs border-zinc-700 text-zinc-500 font-mono">
+          <div className="mt-2 border-t border-zinc-800 pt-2">
+            <Badge
+              variant="outline"
+              className="border-zinc-700 font-mono text-xs text-zinc-500"
+            >
               {preview.full_path}
             </Badge>
           </div>

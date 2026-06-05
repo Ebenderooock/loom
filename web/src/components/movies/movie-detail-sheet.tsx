@@ -24,12 +24,33 @@ import {
   SheetDescription,
 } from "@/components/ui/sheet";
 import {
-  Loader2, Film, Star, Check, Calendar, Clock,
-  Eye, EyeOff, Trash2, ExternalLink, Pencil,
-  Bookmark, BookmarkCheck, RefreshCw, ChevronRight,
-  FolderOpen, HardDrive, Info, History, FileVideo,
-  Download, Search, Users, Clapperboard,
-  Archive, ArchiveRestore, HardDriveDownload,
+  Loader2,
+  Film,
+  Star,
+  Check,
+  Calendar,
+  Clock,
+  Eye,
+  EyeOff,
+  Trash2,
+  ExternalLink,
+  Pencil,
+  Bookmark,
+  BookmarkCheck,
+  RefreshCw,
+  ChevronRight,
+  FolderOpen,
+  HardDrive,
+  Info,
+  History,
+  FileVideo,
+  Download,
+  Search,
+  Users,
+  Clapperboard,
+  Archive,
+  ArchiveRestore,
+  HardDriveDownload,
 } from "lucide-react";
 import { cn, formatBytes, relativeTime } from "@/lib/utils";
 import { toast } from "sonner";
@@ -78,22 +99,35 @@ function CollapsibleSection({
   return (
     <div className="border-t border-border/40">
       <button
-        onClick={() => setOpen(v => !v)}
-        className="flex items-center gap-2 w-full py-3 text-sm font-semibold text-muted-foreground hover:text-foreground transition-colors"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center gap-2 py-3 text-sm font-semibold text-muted-foreground transition-colors hover:text-foreground"
       >
-        <Icon className="w-4 h-4" />
+        <Icon className="h-4 w-4" />
         {title}
-        <ChevronRight className={cn("w-4 h-4 ml-auto transition-transform duration-200", open && "rotate-90")} />
+        <ChevronRight
+          className={cn(
+            "ml-auto h-4 w-4 transition-transform duration-200",
+            open && "rotate-90",
+          )}
+        />
       </button>
       {open && <div className="pb-4">{children}</div>}
     </div>
   );
 }
 
-function DetailRow({ label, children }: { label: string; children: React.ReactNode }) {
+function DetailRow({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
   return (
     <div>
-      <span className="text-muted-foreground text-xs uppercase tracking-wider">{label}</span>
+      <span className="text-xs uppercase tracking-wider text-muted-foreground">
+        {label}
+      </span>
       <div className="mt-1 text-sm">{children}</div>
     </div>
   );
@@ -103,56 +137,93 @@ function DetailRow({ label, children }: { label: string; children: React.ReactNo
 
 const PROFILE_IMG = "https://image.tmdb.org/t/p/w185";
 
-function PersonCard({ person, onClick }: { person: CreditPerson; onClick?: () => void }) {
+function PersonCard({
+  person,
+  onClick,
+}: {
+  person: CreditPerson;
+  onClick?: () => void;
+}) {
   return (
     <div
-      className={cn("flex-shrink-0 w-[100px] group", onClick && "cursor-pointer")}
+      className={cn(
+        "group w-[100px] flex-shrink-0",
+        onClick && "cursor-pointer",
+      )}
       onClick={onClick}
       role={onClick ? "button" : undefined}
       tabIndex={onClick ? 0 : undefined}
-      onKeyDown={onClick ? (e) => { if (e.key === "Enter" || e.key === " ") onClick(); } : undefined}
+      onKeyDown={
+        onClick
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") onClick();
+            }
+          : undefined
+      }
     >
-      <div className="relative w-[100px] h-[150px] rounded-lg overflow-hidden bg-muted/30 mb-1.5">
+      <div className="relative mb-1.5 h-[150px] w-[100px] overflow-hidden rounded-lg bg-muted/30">
         {person.profile_path ? (
           <img
             src={`${PROFILE_IMG}${person.profile_path}`}
             alt={person.name}
-            className="w-full h-full object-cover"
+            className="h-full w-full object-cover"
             loading="lazy"
           />
         ) : (
-          <div className="w-full h-full flex items-center justify-center text-muted-foreground/30">
-            <Users className="w-8 h-8" />
+          <div className="flex h-full w-full items-center justify-center text-muted-foreground/30">
+            <Users className="h-8 w-8" />
           </div>
         )}
       </div>
-      <p className="text-xs font-medium truncate" title={person.name}>{person.name}</p>
+      <p className="truncate text-xs font-medium" title={person.name}>
+        {person.name}
+      </p>
       {person.role && (
-        <p className="text-[11px] text-muted-foreground truncate" title={person.role}>{person.role}</p>
+        <p
+          className="truncate text-[11px] text-muted-foreground"
+          title={person.role}
+        >
+          {person.role}
+        </p>
       )}
     </div>
   );
 }
 
-function PersonChip({ person, onClick }: { person: CreditPerson; onClick?: () => void }) {
+function PersonChip({
+  person,
+  onClick,
+}: {
+  person: CreditPerson;
+  onClick?: () => void;
+}) {
   return (
     <div
-      className={cn("flex items-center gap-2 bg-muted/30 rounded-full pr-3 overflow-hidden", onClick && "cursor-pointer hover:bg-muted/50 transition-colors")}
+      className={cn(
+        "flex items-center gap-2 overflow-hidden rounded-full bg-muted/30 pr-3",
+        onClick && "cursor-pointer transition-colors hover:bg-muted/50",
+      )}
       onClick={onClick}
       role={onClick ? "button" : undefined}
       tabIndex={onClick ? 0 : undefined}
-      onKeyDown={onClick ? (e) => { if (e.key === "Enter" || e.key === " ") onClick(); } : undefined}
+      onKeyDown={
+        onClick
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") onClick();
+            }
+          : undefined
+      }
     >
       {person.profile_path ? (
         <img
           src={`${PROFILE_IMG}${person.profile_path}`}
           alt={person.name}
-          className="w-8 h-8 rounded-full object-cover"
+          className="h-8 w-8 rounded-full object-cover"
           loading="lazy"
         />
       ) : (
-        <div className="w-8 h-8 rounded-full bg-muted/50 flex items-center justify-center">
-          <Users className="w-4 h-4 text-muted-foreground/40" />
+        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-muted/50">
+          <Users className="h-4 w-4 text-muted-foreground/40" />
         </div>
       )}
       <span className="text-sm font-medium">{person.name}</span>
@@ -199,7 +270,10 @@ export function MovieDetailSheet({
   const [archiving, setArchiving] = useState(false);
   const [autoSearching, setAutoSearching] = useState(false);
   const [rescanning, setRescanning] = useState(false);
-  const [discoverPerson, setDiscoverPerson] = useState<{ id: number; name: string } | null>(null);
+  const [discoverPerson, setDiscoverPerson] = useState<{
+    id: number;
+    name: string;
+  } | null>(null);
   const [movieFiles, setMovieFiles] = useState<MovieFileItem[]>([]);
   const [movieFilesLoading, setMovieFilesLoading] = useState(false);
   const [movieHistory, setMovieHistory] = useState<MovieHistoryItem[]>([]);
@@ -226,7 +300,9 @@ export function MovieDetailSheet({
       } else {
         toast.warning(`No suitable release found`, {
           id: toastId,
-          description: result.reason || `${result.considered} considered, ${result.rejected} rejected`,
+          description:
+            result.reason ||
+            `${result.considered} considered, ${result.rejected} rejected`,
         });
       }
     } catch (err) {
@@ -249,24 +325,24 @@ export function MovieDetailSheet({
       setCredits(null);
       setCreditsLoading(true);
       apiFetch(`/api/v1/movies/${movie.id}/credits`)
-        .then(r => r.ok ? r.json() : null)
-        .then(data => setCredits(data))
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data) => setCredits(data))
         .catch((err) => console.error("fetch failed:", err))
         .finally(() => setCreditsLoading(false));
       // Fetch movie files
       setMovieFiles([]);
       setMovieFilesLoading(true);
       apiFetch(`/api/v1/movies/files/${movie.id}`)
-        .then(r => r.ok ? r.json() : [])
-        .then(data => setMovieFiles(Array.isArray(data) ? data : []))
+        .then((r) => (r.ok ? r.json() : []))
+        .then((data) => setMovieFiles(Array.isArray(data) ? data : []))
         .catch(() => setMovieFiles([]))
         .finally(() => setMovieFilesLoading(false));
       // Fetch history
       setMovieHistory([]);
       setMovieHistoryLoading(true);
       apiFetch(`/api/v1/movies/${movie.id}/history`)
-        .then(r => r.ok ? r.json() : [])
-        .then(data => setMovieHistory(Array.isArray(data) ? data : []))
+        .then((r) => (r.ok ? r.json() : []))
+        .then((data) => setMovieHistory(Array.isArray(data) ? data : []))
         .catch(() => setMovieHistory([]))
         .finally(() => setMovieHistoryLoading(false));
     }
@@ -274,10 +350,12 @@ export function MovieDetailSheet({
 
   if (!movie) return null;
 
-  const profile = profiles.find(p => p.id === movie.qualityProfileId);
-  const library = libraries.find(l => l.id === movie.libraryId);
+  const profile = profiles.find((p) => p.id === movie.qualityProfileId);
+  const library = libraries.find((l) => l.id === movie.libraryId);
   const isMonitored = movie.monitoringStatus === "monitored";
-  const moviePath = library ? `${library.path}/${movie.title} (${movie.year})` : null;
+  const moviePath = library
+    ? `${library.path}/${movie.title} (${movie.year})`
+    : null;
 
   const handleSave = async () => {
     setSaving(true);
@@ -315,7 +393,9 @@ export function MovieDetailSheet({
       });
       if (res.ok) {
         onUpdated({ ...movie, monitoringStatus: newStatus });
-        toast.success(newStatus === "monitored" ? "Now monitoring" : "Unmonitored");
+        toast.success(
+          newStatus === "monitored" ? "Now monitoring" : "Unmonitored",
+        );
       }
     } catch {
       toast.error("Failed to update monitoring");
@@ -369,7 +449,9 @@ export function MovieDetailSheet({
   const handleRefresh = async () => {
     setRefreshing(true);
     try {
-      const refreshRes = await apiFetch(`/api/v1/movies/${movie.id}/refresh`, { method: "POST" });
+      const refreshRes = await apiFetch(`/api/v1/movies/${movie.id}/refresh`, {
+        method: "POST",
+      });
       if (!refreshRes.ok) {
         toast.error("Failed to refresh");
         return;
@@ -403,7 +485,9 @@ export function MovieDetailSheet({
       });
       if (res.ok) {
         const result = await res.json();
-        toast.success(`Rescan complete: ${result.matched} matched, ${result.imported} imported`);
+        toast.success(
+          `Rescan complete: ${result.matched} matched, ${result.imported} imported`,
+        );
         const updated = await apiFetch(`/api/v1/movies/${movie.id}`);
         if (updated.ok) onUpdated(await updated.json());
       } else {
@@ -421,30 +505,45 @@ export function MovieDetailSheet({
   return (
     <>
       <Sheet open={open} onOpenChange={onOpenChange}>
-        <SheetContent side="right" className="w-full sm:max-w-2xl p-0 overflow-y-auto">
+        <SheetContent
+          side="right"
+          className="w-full overflow-y-auto p-0 sm:max-w-2xl"
+        >
           <SheetHeader className="sr-only">
             <SheetTitle>{movie.title}</SheetTitle>
             <SheetDescription>Movie details for {movie.title}</SheetDescription>
           </SheetHeader>
 
           {/* ── 1. Full-width backdrop header ── */}
-          <div className="relative h-[300px] bg-muted overflow-hidden">
+          <div className="relative h-[300px] overflow-hidden bg-muted">
             {movie.backdropPath ? (
-              <img src={`${TMDB_IMG}/w780${movie.backdropPath}`} alt="" className="w-full h-full object-cover" />
+              <img
+                src={`${TMDB_IMG}/w780${movie.backdropPath}`}
+                alt=""
+                className="h-full w-full object-cover"
+              />
             ) : movie.posterPath ? (
-              <img src={`${TMDB_IMG}/w780${movie.posterPath}`} alt="" className="w-full h-full object-cover opacity-30 blur-md scale-110" />
+              <img
+                src={`${TMDB_IMG}/w780${movie.posterPath}`}
+                alt=""
+                className="h-full w-full scale-110 object-cover opacity-30 blur-md"
+              />
             ) : null}
             <div className="absolute inset-0 bg-gradient-to-t from-background via-background/70 to-black/30" />
             <div className="absolute inset-0 bg-gradient-to-r from-background/80 via-transparent to-transparent" />
 
             {/* Poster overlapping backdrop */}
             <div className="absolute bottom-[-40px] left-6 z-20">
-              <div className="w-[130px] rounded-lg overflow-hidden shadow-2xl border-4 border-background">
+              <div className="w-[130px] overflow-hidden rounded-lg border-4 border-background shadow-2xl">
                 {movie.posterPath ? (
-                  <img src={`${TMDB_IMG}/w300${movie.posterPath}`} alt={movie.title} className="w-full aspect-[2/3] object-cover" />
+                  <img
+                    src={`${TMDB_IMG}/w300${movie.posterPath}`}
+                    alt={movie.title}
+                    className="aspect-[2/3] w-full object-cover"
+                  />
                 ) : (
-                  <div className="w-full aspect-[2/3] bg-muted flex items-center justify-center">
-                    <Film className="w-10 h-10 text-muted-foreground/30" />
+                  <div className="flex aspect-[2/3] w-full items-center justify-center bg-muted">
+                    <Film className="h-10 w-10 text-muted-foreground/30" />
                   </div>
                 )}
               </div>
@@ -452,22 +551,34 @@ export function MovieDetailSheet({
 
             {/* Title overlaid on backdrop */}
             <div className="absolute bottom-4 left-[170px] right-6 z-10">
-              <h2 className="text-2xl font-bold text-white truncate drop-shadow-lg">{movie.title}</h2>
-              <p className="text-sm text-white/70 mt-0.5 drop-shadow">{movie.year > 0 && movie.year}</p>
+              <h2 className="truncate text-2xl font-bold text-white drop-shadow-lg">
+                {movie.title}
+              </h2>
+              <p className="mt-0.5 text-sm text-white/70 drop-shadow">
+                {movie.year > 0 && movie.year}
+              </p>
             </div>
 
             {/* Monitoring toggle — offset left to avoid sheet close button */}
             <button
               onClick={handleToggleMonitoring}
               className={cn(
-                "absolute top-4 right-14 z-20 p-2 rounded-full transition-all duration-200 shadow-lg",
+                "absolute right-14 top-4 z-20 rounded-full p-2 shadow-lg transition-all duration-200",
                 isMonitored
                   ? "bg-accent text-accent-foreground hover:bg-accent/90"
                   : "bg-black/50 text-white/70 hover:bg-black/70 hover:text-white",
               )}
-              title={isMonitored ? "Monitored — click to unmonitor" : "Unmonitored — click to monitor"}
+              title={
+                isMonitored
+                  ? "Monitored — click to unmonitor"
+                  : "Unmonitored — click to monitor"
+              }
             >
-              {isMonitored ? <BookmarkCheck className="w-5 h-5" /> : <Bookmark className="w-5 h-5" />}
+              {isMonitored ? (
+                <BookmarkCheck className="h-5 w-5" />
+              ) : (
+                <Bookmark className="h-5 w-5" />
+              )}
             </button>
           </div>
 
@@ -478,57 +589,158 @@ export function MovieDetailSheet({
           <div className="px-6 pb-2">
             <div className="flex items-center gap-1.5">
               {/* Primary actions with labels */}
-              <Button size="sm" variant="outline" className="gap-1.5 h-8 text-xs" onClick={handleAutoSearch} disabled={autoSearching} title="Automated search (uses quality profile to pick the best result)">
-                {autoSearching ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}{autoSearching ? "Searching..." : "Search"}
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 gap-1.5 text-xs"
+                onClick={handleAutoSearch}
+                disabled={autoSearching}
+                title="Automated search (uses quality profile to pick the best result)"
+              >
+                {autoSearching ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Search className="h-3.5 w-3.5" />
+                )}
+                {autoSearching ? "Searching..." : "Search"}
               </Button>
-              <Button size="sm" variant="outline" className="gap-1.5 h-8 text-xs" onClick={() => setSearchOpen(true)} title="Manual search — browse releases manually">
-                <Download className="w-3.5 h-3.5" />Manual Search
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 gap-1.5 text-xs"
+                onClick={() => setSearchOpen(true)}
+                title="Manual search — browse releases manually"
+              >
+                <Download className="h-3.5 w-3.5" />
+                Manual Search
               </Button>
-              <Button size="sm" variant="outline" className="gap-1.5 h-8 text-xs" onClick={() => { setEditing(true); setEditProfile(movie.qualityProfileId); setEditMonitoring(movie.monitoringStatus); }} title="Edit movie settings">
-                <Pencil className="w-3.5 h-3.5" />Edit
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 gap-1.5 text-xs"
+                onClick={() => {
+                  setEditing(true);
+                  setEditProfile(movie.qualityProfileId);
+                  setEditMonitoring(movie.monitoringStatus);
+                }}
+                title="Edit movie settings"
+              >
+                <Pencil className="h-3.5 w-3.5" />
+                Edit
               </Button>
 
               {/* Separator */}
-              <div className="w-px h-5 bg-border mx-0.5" />
+              <div className="mx-0.5 h-5 w-px bg-border" />
 
               {/* Secondary actions — icon only */}
-              <Button size="icon" variant="ghost" className="h-8 w-8" onClick={handleRefresh} disabled={refreshing} title="Refresh metadata from TMDB">
-                {refreshing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-8 w-8"
+                onClick={handleRefresh}
+                disabled={refreshing}
+                title="Refresh metadata from TMDB"
+              >
+                {refreshing ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-3.5 w-3.5" />
+                )}
               </Button>
-              <Button size="icon" variant="ghost" className="h-8 w-8" onClick={handleRescan} disabled={rescanning} title="Rescan library folder for new files">
-                {rescanning ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <HardDriveDownload className="w-3.5 h-3.5" />}
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-8 w-8"
+                onClick={handleRescan}
+                disabled={rescanning}
+                title="Rescan library folder for new files"
+              >
+                {rescanning ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <HardDriveDownload className="h-3.5 w-3.5" />
+                )}
               </Button>
-              <Button size="icon" variant="ghost" className="h-8 w-8" onClick={handleArchiveToggle} disabled={archiving} title={movie.monitoringStatus === "unmonitored" ? "Unarchive" : "Archive"}>
-                {movie.monitoringStatus === "unmonitored" ? <ArchiveRestore className="w-3.5 h-3.5" /> : <Archive className="w-3.5 h-3.5" />}
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-8 w-8"
+                onClick={handleArchiveToggle}
+                disabled={archiving}
+                title={
+                  movie.monitoringStatus === "unmonitored"
+                    ? "Unarchive"
+                    : "Archive"
+                }
+              >
+                {movie.monitoringStatus === "unmonitored" ? (
+                  <ArchiveRestore className="h-3.5 w-3.5" />
+                ) : (
+                  <Archive className="h-3.5 w-3.5" />
+                )}
               </Button>
 
               {/* Delete — pushed right */}
-              <Button size="icon" variant="ghost" className="h-8 w-8 ml-auto text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => setDeleteOpen(true)} title="Delete movie">
-                <Trash2 className="w-3.5 h-3.5" />
+              <Button
+                size="icon"
+                variant="ghost"
+                className="ml-auto h-8 w-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                onClick={() => setDeleteOpen(true)}
+                title="Delete movie"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
               </Button>
             </div>
           </div>
 
           {/* ── Edit mode bar ── */}
           {editing && (
-            <div className="mx-6 mb-3 p-4 rounded-lg border border-accent/30 bg-accent/5 space-y-4">
+            <div className="mx-6 mb-3 space-y-4 rounded-lg border border-accent/30 bg-accent/5 p-4">
               <div className="flex items-center gap-2 text-sm font-semibold text-accent">
-                <Pencil className="w-4 h-4" />Editing Movie
+                <Pencil className="h-4 w-4" />
+                Editing Movie
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <label htmlFor="movie-edit-profile" className="text-xs font-medium text-muted-foreground">Quality Profile</label>
+                  <label
+                    htmlFor="movie-edit-profile"
+                    className="text-xs font-medium text-muted-foreground"
+                  >
+                    Quality Profile
+                  </label>
                   <Select value={editProfile} onValueChange={setEditProfile}>
-                    <SelectTrigger id="movie-edit-profile" className="h-9 text-sm"><SelectValue /></SelectTrigger>
+                    <SelectTrigger
+                      id="movie-edit-profile"
+                      className="h-9 text-sm"
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
                     <SelectContent>
-                      {profiles.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+                      {profiles.map((p) => (
+                        <SelectItem key={p.id} value={p.id}>
+                          {p.name}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-1.5">
-                  <label htmlFor="movie-edit-monitoring" className="text-xs font-medium text-muted-foreground">Monitoring</label>
-                  <Select value={editMonitoring} onValueChange={setEditMonitoring}>
-                    <SelectTrigger id="movie-edit-monitoring" className="h-9 text-sm"><SelectValue /></SelectTrigger>
+                  <label
+                    htmlFor="movie-edit-monitoring"
+                    className="text-xs font-medium text-muted-foreground"
+                  >
+                    Monitoring
+                  </label>
+                  <Select
+                    value={editMonitoring}
+                    onValueChange={setEditMonitoring}
+                  >
+                    <SelectTrigger
+                      id="movie-edit-monitoring"
+                      className="h-9 text-sm"
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="monitored">Monitored</SelectItem>
                       <SelectItem value="unmonitored">Unmonitored</SelectItem>
@@ -537,61 +749,91 @@ export function MovieDetailSheet({
                 </div>
               </div>
               <div className="flex gap-2 pt-1">
-                <Button size="sm" onClick={handleSave} disabled={saving} className="gap-1.5">
-                  {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Check className="w-3.5 h-3.5" />Save Changes</>}
+                <Button
+                  size="sm"
+                  onClick={handleSave}
+                  disabled={saving}
+                  className="gap-1.5"
+                >
+                  {saving ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <>
+                      <Check className="h-3.5 w-3.5" />
+                      Save Changes
+                    </>
+                  )}
                 </Button>
-                <Button size="sm" variant="ghost" onClick={() => setEditing(false)}>Cancel</Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setEditing(false)}
+                >
+                  Cancel
+                </Button>
               </div>
             </div>
           )}
 
           {/* ── Info Bar ── */}
-          <div className="px-6 py-3 border-t border-b border-border/40 bg-muted/30">
-            <div className="flex items-center gap-3 flex-wrap text-sm text-muted-foreground">
+          <div className="border-b border-t border-border/40 bg-muted/30 px-6 py-3">
+            <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
               {movie.runtime > 0 && (
                 <span className="flex items-center gap-1">
-                  <Clock className="w-3.5 h-3.5" />{Math.floor(movie.runtime / 60)}h {movie.runtime % 60}m
+                  <Clock className="h-3.5 w-3.5" />
+                  {Math.floor(movie.runtime / 60)}h {movie.runtime % 60}m
                 </span>
               )}
               {movie.rating > 0 && (
                 <span className="flex items-center gap-1">
-                  <Star className="w-3.5 h-3.5 text-yellow-400 fill-yellow-400" />
-                  <span className="text-yellow-400 font-medium">{movie.rating.toFixed(1)}</span>
+                  <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400" />
+                  <span className="font-medium text-yellow-400">
+                    {movie.rating.toFixed(1)}
+                  </span>
                   <span className="text-muted-foreground/60">/10</span>
                 </span>
               )}
               {movie.releaseDate && (
                 <span className="flex items-center gap-1">
-                  <Calendar className="w-3.5 h-3.5" />{movie.releaseDate}
+                  <Calendar className="h-3.5 w-3.5" />
+                  {movie.releaseDate}
                 </span>
               )}
               <span className="mx-1 text-border">|</span>
               <StatusBadge status={movie.status} />
             </div>
             {movie.genres?.length > 0 && (
-              <div className="flex gap-1.5 mt-2 flex-wrap">
-                {movie.genres.map(g => (
-                  <Badge key={g} variant="secondary" className="text-[10px] cursor-default">{g}</Badge>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {movie.genres.map((g) => (
+                  <Badge
+                    key={g}
+                    variant="secondary"
+                    className="cursor-default text-[10px]"
+                  >
+                    {g}
+                  </Badge>
                 ))}
               </div>
             )}
           </div>
 
           {/* Scrollable sections */}
-          <div className="px-6 pt-4 pb-8 space-y-1">
+          <div className="space-y-1 px-6 pb-8 pt-4">
             {/* ── Overview ── */}
             <CollapsibleSection title="Overview" icon={Info} defaultOpen>
               <div className="relative">
-                <p className={cn(
-                  "text-sm text-muted-foreground leading-relaxed",
-                  !overviewExpanded && overviewIsLong && "line-clamp-3",
-                )}>
+                <p
+                  className={cn(
+                    "text-sm leading-relaxed text-muted-foreground",
+                    !overviewExpanded && overviewIsLong && "line-clamp-3",
+                  )}
+                >
                   {movie.overview || "No overview available."}
                 </p>
                 {overviewIsLong && (
                   <button
-                    onClick={() => setOverviewExpanded(v => !v)}
-                    className="text-xs text-accent hover:underline mt-1.5 font-medium"
+                    onClick={() => setOverviewExpanded((v) => !v)}
+                    className="mt-1.5 text-xs font-medium text-accent hover:underline"
                   >
                     {overviewExpanded ? "Show Less" : "Show More"}
                   </button>
@@ -607,13 +849,16 @@ export function MovieDetailSheet({
               <div className="grid grid-cols-2 gap-x-6 gap-y-4 text-sm">
                 <DetailRow label="Quality Profile">
                   <div className="flex items-center gap-1.5">
-                    <span className="inline-block w-2 h-2 rounded-full bg-accent shrink-0" />
+                    <span className="inline-block h-2 w-2 shrink-0 rounded-full bg-accent" />
                     {profile?.name ?? "—"}
                   </div>
                 </DetailRow>
                 <DetailRow label="Library">
-                  <span className="flex items-center gap-1 truncate" title={library?.name}>
-                    <FolderOpen className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                  <span
+                    className="flex items-center gap-1 truncate"
+                    title={library?.name}
+                  >
+                    <FolderOpen className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                     {library?.name ?? "—"}
                   </span>
                 </DetailRow>
@@ -621,25 +866,43 @@ export function MovieDetailSheet({
                   <StatusBadge status={movie.status} />
                 </DetailRow>
                 <DetailRow label="Monitoring">
-                  <span className={cn("flex items-center gap-1.5", isMonitored ? "text-accent" : "text-muted-foreground")}>
-                    {isMonitored ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+                  <span
+                    className={cn(
+                      "flex items-center gap-1.5",
+                      isMonitored ? "text-accent" : "text-muted-foreground",
+                    )}
+                  >
+                    {isMonitored ? (
+                      <Eye className="h-3.5 w-3.5" />
+                    ) : (
+                      <EyeOff className="h-3.5 w-3.5" />
+                    )}
                     {isMonitored ? "Monitored" : "Unmonitored"}
                   </span>
                 </DetailRow>
                 <DetailRow label="Minimum Availability">
                   <span className="flex items-center gap-1">
-                    <Calendar className="w-3.5 h-3.5 text-muted-foreground" />
+                    <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
                     {movie.releaseDate || "—"}
                   </span>
                 </DetailRow>
                 <DetailRow label="Added">
-                  {movie.createdAt ? new Date(movie.createdAt).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" }) : "—"}
+                  {movie.createdAt
+                    ? new Date(movie.createdAt).toLocaleDateString(undefined, {
+                        year: "numeric",
+                        month: "short",
+                        day: "numeric",
+                      })
+                    : "—"}
                 </DetailRow>
                 {moviePath && (
                   <div className="col-span-2">
                     <DetailRow label="Path">
-                      <span className="flex items-center gap-1 text-xs font-mono truncate" title={moviePath}>
-                        <FolderOpen className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                      <span
+                        className="flex items-center gap-1 truncate font-mono text-xs"
+                        title={moviePath}
+                      >
+                        <FolderOpen className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                         {moviePath}
                       </span>
                     </DetailRow>
@@ -653,7 +916,8 @@ export function MovieDetailSheet({
                       rel="noopener noreferrer"
                       className="flex items-center gap-1 text-accent hover:underline"
                     >
-                      {movie.tmdbId}<ExternalLink className="w-3 h-3" />
+                      {movie.tmdbId}
+                      <ExternalLink className="h-3 w-3" />
                     </a>
                   </DetailRow>
                 )}
@@ -665,7 +929,8 @@ export function MovieDetailSheet({
                       rel="noopener noreferrer"
                       className="flex items-center gap-1 text-accent hover:underline"
                     >
-                      {movie.imdbId}<ExternalLink className="w-3 h-3" />
+                      {movie.imdbId}
+                      <ExternalLink className="h-3 w-3" />
                     </a>
                   </DetailRow>
                 )}
@@ -675,15 +940,16 @@ export function MovieDetailSheet({
             {/* ── External Links ── */}
             {(movie.tmdbId || movie.imdbId) && (
               <div className="border-t border-border/40 py-3">
-                <div className="flex items-center gap-3 flex-wrap">
+                <div className="flex flex-wrap items-center gap-3">
                   {movie.tmdbId && (
                     <a
                       href={`https://www.themoviedb.org/movie/${movie.tmdbId}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-[#01b4e4]/10 text-[#01b4e4] hover:bg-[#01b4e4]/20 transition-colors"
+                      className="inline-flex items-center gap-1.5 rounded-md bg-[#01b4e4]/10 px-3 py-1.5 text-xs font-medium text-[#01b4e4] transition-colors hover:bg-[#01b4e4]/20"
                     >
-                      <ExternalLink className="w-3 h-3" />TMDB
+                      <ExternalLink className="h-3 w-3" />
+                      TMDB
                     </a>
                   )}
                   {movie.imdbId && (
@@ -691,7 +957,7 @@ export function MovieDetailSheet({
                       href={`https://www.imdb.com/title/${movie.imdbId}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-bold bg-[#f5c518]/10 text-[#f5c518] hover:bg-[#f5c518]/20 transition-colors"
+                      className="inline-flex items-center gap-1.5 rounded-md bg-[#f5c518]/10 px-3 py-1.5 text-xs font-bold text-[#f5c518] transition-colors hover:bg-[#f5c518]/20"
                     >
                       IMDb
                     </a>
@@ -701,42 +967,88 @@ export function MovieDetailSheet({
             )}
 
             {/* ── Movie Files ── */}
-            <CollapsibleSection title="Movie Files" icon={FileVideo} defaultOpen={false}>
+            <CollapsibleSection
+              title="Movie Files"
+              icon={FileVideo}
+              defaultOpen={false}
+            >
               {movieFilesLoading ? (
                 <div className="flex items-center gap-2 py-4 text-sm text-muted-foreground">
-                  <Loader2 className="w-4 h-4 animate-spin" /> Loading files…
+                  <Loader2 className="h-4 w-4 animate-spin" /> Loading files…
                 </div>
               ) : movieFiles.length > 0 ? (
                 <div className="space-y-2">
                   {movieFiles.map((f) => (
-                    <div key={f.id} className="flex items-start gap-3 p-3 rounded-lg bg-muted/20 border border-border/30">
-                      <FileVideo className="w-4 h-4 mt-0.5 text-muted-foreground shrink-0" />
+                    <div
+                      key={f.id}
+                      className="flex items-start gap-3 rounded-lg border border-border/30 bg-muted/20 p-3"
+                    >
+                      <FileVideo className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
                       <div className="min-w-0 flex-1 space-y-1">
-                        <p className="text-sm font-medium truncate" title={f.filePath}>{f.filePath?.split("/").pop() || f.filePath}</p>
+                        <p
+                          className="truncate text-sm font-medium"
+                          title={f.filePath}
+                        >
+                          {f.filePath?.split("/").pop() || f.filePath}
+                        </p>
                         <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
                           {f.size != null && <span>{formatBytes(f.size)}</span>}
-                          {f.quality && <Badge variant="outline" className="text-[10px] h-4">{f.quality}</Badge>}
+                          {f.quality && (
+                            <Badge
+                              variant="outline"
+                              className="h-4 text-[10px]"
+                            >
+                              {f.quality}
+                            </Badge>
+                          )}
                           {f.format && <span>{f.format}</span>}
-                          {f.createdAt && <span>{relativeTime(f.createdAt)}</span>}
+                          {f.createdAt && (
+                            <span>{relativeTime(f.createdAt)}</span>
+                          )}
                         </div>
-                        <p className="text-[11px] text-muted-foreground/60 truncate" title={f.filePath}>{f.filePath}</p>
+                        <p
+                          className="truncate text-[11px] text-muted-foreground/60"
+                          title={f.filePath}
+                        >
+                          {f.filePath}
+                        </p>
                       </div>
                     </div>
                   ))}
                 </div>
               ) : (
                 <div className="flex flex-col items-center justify-center py-8 text-center">
-                  <FileVideo className="w-10 h-10 text-muted-foreground/20 mb-3" />
-                  <p className="text-sm text-muted-foreground">No movie files found</p>
-                  <p className="text-xs text-muted-foreground/60 mt-1">
+                  <FileVideo className="mb-3 h-10 w-10 text-muted-foreground/20" />
+                  <p className="text-sm text-muted-foreground">
+                    No movie files found
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground/60">
                     Files will appear here once the movie is downloaded
                   </p>
-                  <div className="flex gap-2 mt-4">
-                    <Button size="sm" variant="outline" className="gap-1.5 text-xs" onClick={handleAutoSearch} disabled={autoSearching} title="Automated search">
-                      {autoSearching ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}{autoSearching ? "Searching..." : "Search"}
+                  <div className="mt-4 flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="gap-1.5 text-xs"
+                      onClick={handleAutoSearch}
+                      disabled={autoSearching}
+                      title="Automated search"
+                    >
+                      {autoSearching ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Search className="h-3.5 w-3.5" />
+                      )}
+                      {autoSearching ? "Searching..." : "Search"}
                     </Button>
-                    <Button size="sm" variant="outline" className="gap-1.5 text-xs" onClick={() => setSearchOpen(true)}>
-                      <Download className="w-3.5 h-3.5" />Manual Search
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="gap-1.5 text-xs"
+                      onClick={() => setSearchOpen(true)}
+                    >
+                      <Download className="h-3.5 w-3.5" />
+                      Manual Search
                     </Button>
                   </div>
                 </div>
@@ -744,33 +1056,67 @@ export function MovieDetailSheet({
             </CollapsibleSection>
 
             {/* ── History ── */}
-            <CollapsibleSection title="History" icon={History} defaultOpen={false}>
+            <CollapsibleSection
+              title="History"
+              icon={History}
+              defaultOpen={false}
+            >
               {movieHistoryLoading ? (
                 <div className="flex items-center gap-2 py-4 text-sm text-muted-foreground">
-                  <Loader2 className="w-4 h-4 animate-spin" /> Loading history…
+                  <Loader2 className="h-4 w-4 animate-spin" /> Loading history…
                 </div>
               ) : movieHistory.length > 0 ? (
                 <div className="space-y-2">
                   {movieHistory.map((h, i: number) => (
-                    <div key={h.id || i} className="flex items-start gap-3 p-3 rounded-lg bg-muted/20 border border-border/30">
-                      <div className={cn("w-2 h-2 mt-1.5 rounded-full shrink-0", h.status === "completed" || h.status === "success" ? "bg-green-500" : h.status === "failed" ? "bg-red-500" : "bg-yellow-500")} />
+                    <div
+                      key={h.id || i}
+                      className="flex items-start gap-3 rounded-lg border border-border/30 bg-muted/20 p-3"
+                    >
+                      <div
+                        className={cn(
+                          "mt-1.5 h-2 w-2 shrink-0 rounded-full",
+                          h.status === "completed" || h.status === "success"
+                            ? "bg-green-500"
+                            : h.status === "failed"
+                              ? "bg-red-500"
+                              : "bg-yellow-500",
+                        )}
+                      />
                       <div className="min-w-0 flex-1 space-y-1">
                         <div className="flex items-center gap-2">
-                          <Badge variant="outline" className="text-[10px] h-4 capitalize">{h.type}</Badge>
-                          <span className="text-xs text-muted-foreground">{relativeTime(h.date)}</span>
+                          <Badge
+                            variant="outline"
+                            className="h-4 text-[10px] capitalize"
+                          >
+                            {h.type}
+                          </Badge>
+                          <span className="text-xs text-muted-foreground">
+                            {relativeTime(h.date)}
+                          </span>
                         </div>
                         {h.title && <p className="text-sm">{h.title}</p>}
-                        {h.destPath && <p className="text-[11px] text-muted-foreground/60 truncate" title={h.destPath}>{h.destPath}</p>}
-                        {h.error && <p className="text-xs text-red-400">{h.error}</p>}
+                        {h.destPath && (
+                          <p
+                            className="truncate text-[11px] text-muted-foreground/60"
+                            title={h.destPath}
+                          >
+                            {h.destPath}
+                          </p>
+                        )}
+                        {h.error && (
+                          <p className="text-xs text-red-400">{h.error}</p>
+                        )}
                       </div>
                     </div>
                   ))}
                 </div>
               ) : (
                 <div className="flex flex-col items-center justify-center py-8 text-center">
-                  <History className="w-10 h-10 text-muted-foreground/20 mb-3" />
-                  <p className="text-sm text-muted-foreground">No history available</p>
-                  <p className="text-xs text-muted-foreground/60 mt-1">
+                  <History className="mb-3 h-10 w-10 text-muted-foreground/20" />
+                  <p className="text-sm text-muted-foreground">
+                    No history available
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground/60">
                     Download and import history will appear here
                   </p>
                 </div>
@@ -781,22 +1127,32 @@ export function MovieDetailSheet({
             <CollapsibleSection title="Cast & Crew" icon={Users} defaultOpen>
               {creditsLoading ? (
                 <div className="flex items-center gap-2 py-4 text-sm text-muted-foreground">
-                  <Loader2 className="w-4 h-4 animate-spin" /> Loading credits…
+                  <Loader2 className="h-4 w-4 animate-spin" /> Loading credits…
                 </div>
-              ) : credits && (credits.cast.length > 0 || credits.crew.length > 0) ? (
+              ) : credits &&
+                (credits.cast.length > 0 || credits.crew.length > 0) ? (
                 <div className="space-y-4">
                   {/* Directors */}
                   {(() => {
-                    const directors = credits.crew.filter(c => c.role === "Director");
+                    const directors = credits.crew.filter(
+                      (c) => c.role === "Director",
+                    );
                     if (directors.length === 0) return null;
                     return (
                       <div>
-                        <h4 className="text-xs uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5">
-                          <Clapperboard className="w-3.5 h-3.5" /> Director{directors.length > 1 ? "s" : ""}
+                        <h4 className="mb-2 flex items-center gap-1.5 text-xs uppercase tracking-wider text-muted-foreground">
+                          <Clapperboard className="h-3.5 w-3.5" /> Director
+                          {directors.length > 1 ? "s" : ""}
                         </h4>
-                        <div className="flex gap-3 flex-wrap">
-                          {directors.map(d => (
-                            <PersonChip key={d.id} person={d} onClick={() => setDiscoverPerson({ id: d.id, name: d.name })} />
+                        <div className="flex flex-wrap gap-3">
+                          {directors.map((d) => (
+                            <PersonChip
+                              key={d.id}
+                              person={d}
+                              onClick={() =>
+                                setDiscoverPerson({ id: d.id, name: d.name })
+                              }
+                            />
                           ))}
                         </div>
                       </div>
@@ -806,12 +1162,18 @@ export function MovieDetailSheet({
                   {/* Cast */}
                   {credits.cast.length > 0 && (
                     <div>
-                      <h4 className="text-xs uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5">
-                        <Users className="w-3.5 h-3.5" /> Cast
+                      <h4 className="mb-2 flex items-center gap-1.5 text-xs uppercase tracking-wider text-muted-foreground">
+                        <Users className="h-3.5 w-3.5" /> Cast
                       </h4>
-                      <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1 scrollbar-thin">
-                        {credits.cast.slice(0, 20).map(c => (
-                          <PersonCard key={c.id} person={c} onClick={() => setDiscoverPerson({ id: c.id, name: c.name })} />
+                      <div className="scrollbar-thin -mx-1 flex gap-3 overflow-x-auto px-1 pb-2">
+                        {credits.cast.slice(0, 20).map((c) => (
+                          <PersonCard
+                            key={c.id}
+                            person={c}
+                            onClick={() =>
+                              setDiscoverPerson({ id: c.id, name: c.name })
+                            }
+                          />
                         ))}
                       </div>
                     </div>
@@ -820,10 +1182,16 @@ export function MovieDetailSheet({
                   {/* Key Crew (Writers, Producers, Composers) */}
                   {(() => {
                     const keyCrew = credits.crew.filter(
-                      c => c.role !== "Director" && ["Writing", "Production", "Sound"].includes(c.department)
+                      (c) =>
+                        c.role !== "Director" &&
+                        ["Writing", "Production", "Sound"].includes(
+                          c.department,
+                        ),
                     );
                     if (keyCrew.length === 0) return null;
-                    const grouped = keyCrew.reduce<Record<string, typeof keyCrew>>((acc, c) => {
+                    const grouped = keyCrew.reduce<
+                      Record<string, typeof keyCrew>
+                    >((acc, c) => {
                       (acc[c.department] ??= []).push(c);
                       return acc;
                     }, {});
@@ -831,12 +1199,19 @@ export function MovieDetailSheet({
                       <div className="space-y-2">
                         {Object.entries(grouped).map(([dept, members]) => (
                           <div key={dept}>
-                            <span className="text-xs text-muted-foreground">{dept}:</span>{" "}
+                            <span className="text-xs text-muted-foreground">
+                              {dept}:
+                            </span>{" "}
                             <span className="text-sm">
                               {members.map((m, i) => (
                                 <span key={m.id}>
                                   {m.name}
-                                  {m.role !== dept ? <span className="text-muted-foreground/60"> ({m.role})</span> : null}
+                                  {m.role !== dept ? (
+                                    <span className="text-muted-foreground/60">
+                                      {" "}
+                                      ({m.role})
+                                    </span>
+                                  ) : null}
                                   {i < members.length - 1 ? ", " : ""}
                                 </span>
                               ))}
@@ -849,8 +1224,10 @@ export function MovieDetailSheet({
                 </div>
               ) : (
                 <div className="flex flex-col items-center justify-center py-8 text-center">
-                  <Users className="w-10 h-10 text-muted-foreground/20 mb-3" />
-                  <p className="text-sm text-muted-foreground">No cast or crew information</p>
+                  <Users className="mb-3 h-10 w-10 text-muted-foreground/20" />
+                  <p className="text-sm text-muted-foreground">
+                    No cast or crew information
+                  </p>
                 </div>
               )}
             </CollapsibleSection>
@@ -864,13 +1241,24 @@ export function MovieDetailSheet({
           <DialogHeader>
             <DialogTitle>Delete Movie</DialogTitle>
             <DialogDescription>
-              Are you sure you want to delete <strong>{movie.title}</strong>? This cannot be undone.
+              Are you sure you want to delete <strong>{movie.title}</strong>?
+              This cannot be undone.
             </DialogDescription>
           </DialogHeader>
-          <div className="flex justify-end gap-2 mt-4">
-            <Button variant="outline" onClick={() => setDeleteOpen(false)}>Cancel</Button>
-            <Button variant="destructive" onClick={handleDelete} disabled={deleting}>
-              {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : "Delete"}
+          <div className="mt-4 flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setDeleteOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDelete}
+              disabled={deleting}
+            >
+              {deleting ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                "Delete"
+              )}
             </Button>
           </div>
         </DialogContent>
@@ -893,7 +1281,9 @@ export function MovieDetailSheet({
       {discoverPerson && (
         <PersonDiscoverDialog
           open={!!discoverPerson}
-          onOpenChange={(o) => { if (!o) setDiscoverPerson(null); }}
+          onOpenChange={(o) => {
+            if (!o) setDiscoverPerson(null);
+          }}
           personId={discoverPerson.id}
           personName={discoverPerson.name}
           libraries={libraries}

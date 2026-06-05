@@ -65,7 +65,12 @@ export class ApiError extends Error {
   status: number;
   code?: string;
   details?: unknown;
-  constructor(status: number, message: string, code?: string, details?: unknown) {
+  constructor(
+    status: number,
+    message: string,
+    code?: string,
+    details?: unknown,
+  ) {
     super(message);
     this.status = status;
     this.code = code;
@@ -100,11 +105,15 @@ async function httpPost<T>(path: string, body: unknown): Promise<T> {
 
 export function useMetadataSearch() {
   return useMutation({
-    mutationFn: async (params: { query: string; type: string; year?: number }) => {
+    mutationFn: async (params: {
+      query: string;
+      type: string;
+      year?: number;
+    }) => {
       if (!params.query) throw new Error("Query cannot be empty");
       return httpPost<MovieMetadata[] | SeriesMetadata[]>(
         "/api/metadata/search",
-        { query: params.query, type: params.type, year: params.year }
+        { query: params.query, type: params.type, year: params.year },
       );
     },
   });
@@ -150,7 +159,7 @@ export function useProviderTest(provider: string) {
     mutationFn: async () => {
       return httpPost<TestResult>(
         `/api/metadata/providers/${provider}/test`,
-        {}
+        {},
       );
     },
   });

@@ -39,10 +39,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           if (data.user) {
             setUser(data.user);
           }
-          
+
           // If setup is complete but not authenticated, poll for auth
           // (happens when user just completed setup on this browser)
-          if (!data.setup_required && !data.is_authenticated && pollInterval === null) {
+          if (
+            !data.setup_required &&
+            !data.is_authenticated &&
+            pollInterval === null
+          ) {
             pollInterval = setInterval(checkStatus, 1000);
           } else if (pollInterval) {
             clearInterval(pollInterval);
@@ -119,7 +123,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }}
     >
       {isLoading ? (
-        <div className="w-screen h-screen bg-neutral-dark" />
+        <div className="h-screen w-screen bg-neutral-dark" />
       ) : (
         children
       )}

@@ -1,8 +1,5 @@
 import { test, expect } from "@playwright/test";
-import {
-  mockBaseApp,
-  mockGet,
-} from "./helpers/mock-api";
+import { mockBaseApp, mockGet } from "./helpers/mock-api";
 
 // Helper to build audit log entries
 function makeEntry(overrides: Record<string, unknown> = {}) {
@@ -32,7 +29,11 @@ function makeAuditResponse(entries: unknown[] = [], total?: number) {
   };
 }
 
-function mockAuditLog(page: import("@playwright/test").Page, entries: unknown[] = [], total?: number) {
+function mockAuditLog(
+  page: import("@playwright/test").Page,
+  entries: unknown[] = [],
+  total?: number,
+) {
   return page.route("**/api/v1/system/audit-log*", async (route) => {
     if (route.request().method() === "GET") {
       await route.fulfill({
@@ -54,23 +55,31 @@ test.describe("Events / History Page", () => {
     await mockAuditLog(page, [makeEntry()]);
     await page.goto("/events");
 
-    await expect(
-      page.locator("header").getByText("Events"),
-    ).toBeAttached({ timeout: 10000 });
+    await expect(page.locator("header").getByText("Events")).toBeAttached({
+      timeout: 10000,
+    });
 
     // Table should show the entry
-    await expect(page.getByText("Search completed for Test Movie")).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText("Search completed for Test Movie")).toBeVisible(
+      { timeout: 10000 },
+    );
   });
 
   test("shows empty state when no events", async ({ page }) => {
     await mockAuditLog(page, []);
     await page.goto("/events");
 
-    await expect(page.getByText("No events found")).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText("No events found")).toBeVisible({
+      timeout: 10000,
+    });
   });
 
   test("category filter changes the displayed events", async ({ page }) => {
-    const searchEntry = makeEntry({ id: "evt-1", category: "search", message: "Search completed" });
+    const searchEntry = makeEntry({
+      id: "evt-1",
+      category: "search",
+      message: "Search completed",
+    });
     const downloadEntry = makeEntry({
       id: "evt-2",
       category: "download",
@@ -82,14 +91,21 @@ test.describe("Events / History Page", () => {
     await page.goto("/events");
 
     // Both entries should be visible initially
-    await expect(page.getByText("Search completed")).toBeVisible({ timeout: 10000 });
-    await expect(page.getByText("Download started for Test Movie")).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText("Search completed")).toBeVisible({
+      timeout: 10000,
+    });
+    await expect(page.getByText("Download started for Test Movie")).toBeVisible(
+      { timeout: 10000 },
+    );
 
     // Now override with a filtered response when category changes
     // The UI sends category param to API - mock a filtered response
     await page.route("**/api/v1/system/audit-log*", async (route) => {
       const url = route.request().url();
-      if (route.request().method() === "GET" && url.includes("category=download")) {
+      if (
+        route.request().method() === "GET" &&
+        url.includes("category=download")
+      ) {
         await route.fulfill({
           status: 200,
           json: makeAuditResponse([downloadEntry]),
@@ -109,11 +125,17 @@ test.describe("Events / History Page", () => {
     await page.getByRole("option", { name: "Download" }).click();
 
     // After filter, only download entry should be visible
-    await expect(page.getByText("Download started for Test Movie")).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText("Download started for Test Movie")).toBeVisible(
+      { timeout: 10000 },
+    );
   });
 
   test("level filter works", async ({ page }) => {
-    const infoEntry = makeEntry({ id: "evt-1", level: "info", message: "Info event" });
+    const infoEntry = makeEntry({
+      id: "evt-1",
+      level: "info",
+      message: "Info event",
+    });
     const errorEntry = makeEntry({
       id: "evt-2",
       level: "error",
@@ -125,7 +147,9 @@ test.describe("Events / History Page", () => {
     await page.goto("/events");
 
     await expect(page.getByText("Info event")).toBeVisible({ timeout: 10000 });
-    await expect(page.getByText("Error event occurred")).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText("Error event occurred")).toBeVisible({
+      timeout: 10000,
+    });
 
     // Override route for filtered response
     await page.route("**/api/v1/system/audit-log*", async (route) => {
@@ -149,27 +173,39 @@ test.describe("Events / History Page", () => {
     await page.locator("button").filter({ hasText: "All Levels" }).click();
     await page.getByRole("option", { name: "Error" }).click();
 
-    await expect(page.getByText("Error event occurred")).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText("Error event occurred")).toBeVisible({
+      timeout: 10000,
+    });
   });
 
   test("expandable row shows detail JSON", async ({ page }) => {
     const entry = makeEntry({
-      detail: JSON.stringify({ query_log_id: "ql-1", results: 15, indexer: "TestIndexer" }),
+      detail: JSON.stringify({
+        query_log_id: "ql-1",
+        results: 15,
+        indexer: "TestIndexer",
+      }),
     });
     await mockAuditLog(page, [entry]);
     await page.goto("/events");
 
-    await expect(page.getByText("Search completed for Test Movie")).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText("Search completed for Test Movie")).toBeVisible(
+      { timeout: 10000 },
+    );
 
     // Click the row to expand it
     await page.getByText("Search completed for Test Movie").click();
 
     // Detail panel should show parsed JSON keys
-    await expect(page.getByText("query_log_id:")).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText("query_log_id:")).toBeVisible({
+      timeout: 5000,
+    });
     await expect(page.getByText("ql-1")).toBeVisible();
   });
 
-  test("search diagnostics section loads per-indexer breakdown", async ({ page }) => {
+  test("search diagnostics section loads per-indexer breakdown", async ({
+    page,
+  }) => {
     const entry = makeEntry({
       detail: JSON.stringify({ query_log_id: "ql-1", results: 15 }),
     });
@@ -200,7 +236,9 @@ test.describe("Events / History Page", () => {
     await page.getByText("Search completed for Test Movie").click();
 
     // Should show per-indexer breakdown
-    await expect(page.getByText("Per-Indexer Breakdown")).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText("Per-Indexer Breakdown")).toBeVisible({
+      timeout: 10000,
+    });
     await expect(page.getByText("TestIndexer")).toBeVisible();
     await expect(page.getByText("450ms")).toBeVisible();
     await expect(page.getByText("15 results")).toBeVisible();
@@ -210,15 +248,19 @@ test.describe("Events / History Page", () => {
     await mockAuditLog(page, [makeEntry()]);
     await page.goto("/events");
 
-    await expect(page.getByText("Search completed for Test Movie")).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText("Search completed for Test Movie")).toBeVisible(
+      { timeout: 10000 },
+    );
 
     // Verify refresh button exists and click it
     const refreshBtn = page.getByRole("button", { name: "Refresh" });
     await expect(refreshBtn).toBeVisible();
 
-    const auditReq = page.waitForRequest(
-      function(req) { return req.url().includes("/api/v1/system/audit-log") && req.method() === "GET"; }
-    );
+    const auditReq = page.waitForRequest(function (req) {
+      return (
+        req.url().includes("/api/v1/system/audit-log") && req.method() === "GET"
+      );
+    });
     await refreshBtn.click();
     await auditReq;
   });
@@ -227,10 +269,12 @@ test.describe("Events / History Page", () => {
     // Create 60 entries to trigger pagination (PAGE_SIZE=50)
     const entries = [];
     for (let i = 0; i < 50; i++) {
-      entries.push(makeEntry({
-        id: "evt-" + i,
-        message: "Event number " + i,
-      }));
+      entries.push(
+        makeEntry({
+          id: "evt-" + i,
+          message: "Event number " + i,
+        }),
+      );
     }
 
     // Mock first page with total > 50
@@ -269,7 +313,9 @@ test.describe("Events / History Page", () => {
     await page.goto("/events");
 
     // Wait for first page to load
-    await expect(page.getByText("Event number 0")).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText("Event number 0")).toBeVisible({
+      timeout: 10000,
+    });
 
     // Pagination should show "1-50 of 51"
     await expect(page.getByText(/1.*50 of 51/)).toBeVisible();
@@ -282,7 +328,9 @@ test.describe("Events / History Page", () => {
     await nextBtn.click();
 
     // Second page should load
-    await expect(page.getByText("Event on page 2")).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText("Event on page 2")).toBeVisible({
+      timeout: 10000,
+    });
   });
 
   test("different event types render correctly", async ({ page }) => {
@@ -323,7 +371,9 @@ test.describe("Events / History Page", () => {
     await mockAuditLog(page, entries);
     await page.goto("/events");
 
-    await expect(page.getByText("Search completed")).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText("Search completed")).toBeVisible({
+      timeout: 10000,
+    });
     await expect(page.getByText("Grabbed release")).toBeVisible();
     await expect(page.getByText("Movie imported successfully")).toBeVisible();
     await expect(page.getByText("Indexer connection failed")).toBeVisible();

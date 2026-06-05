@@ -78,7 +78,10 @@ function MediaTypeIcon({ type }: { type: string }) {
 
 function ActiveStreams() {
   const { data: streams, isLoading } = useActiveStreams();
-  const totalBandwidth = (streams ?? []).reduce((sum, s) => sum + (s.bitrate_kbps || 0), 0);
+  const totalBandwidth = (streams ?? []).reduce(
+    (sum, s) => sum + (s.bitrate_kbps || 0),
+    0,
+  );
 
   return (
     <Card>
@@ -94,7 +97,9 @@ function ActiveStreams() {
             </Badge>
           )}
         </CardTitle>
-        <CardDescription>Live playback across your media servers.</CardDescription>
+        <CardDescription>
+          Live playback across your media servers.
+        </CardDescription>
       </CardHeader>
       <CardContent>
         {isLoading ? (
@@ -122,7 +127,9 @@ function ActiveStreams() {
                       {s.user || "Unknown"}
                       {s.device ? ` · ${s.device}` : ""}
                       {` · ${s.connection_name}`}
-                      {s.bitrate_kbps > 0 ? ` · ${formatBitrate(s.bitrate_kbps)}` : ""}
+                      {s.bitrate_kbps > 0
+                        ? ` · ${formatBitrate(s.bitrate_kbps)}`
+                        : ""}
                     </p>
                   </div>
                   <div className="flex shrink-0 items-center gap-1">
@@ -165,7 +172,9 @@ function BarList({
         <div key={i} className="space-y-1">
           <div className="flex items-baseline justify-between gap-2 text-sm">
             <span className="truncate">{r.label}</span>
-            <span className="shrink-0 text-xs text-muted-foreground">{r.display}</span>
+            <span className="shrink-0 text-xs text-muted-foreground">
+              {r.display}
+            </span>
           </div>
           <div className="h-2 overflow-hidden rounded-full bg-muted">
             <div
@@ -197,20 +206,33 @@ function mediaRows(media: MediaStat[]) {
 
 function PlaysPerDay({ days }: { days: { day: string; plays: number }[] }) {
   if (days.length === 0) {
-    return <p className="py-4 text-sm text-muted-foreground">No plays in this window.</p>;
+    return (
+      <p className="py-4 text-sm text-muted-foreground">
+        No plays in this window.
+      </p>
+    );
   }
   const max = Math.max(...days.map((d) => d.plays), 1);
   return (
     <div className="flex h-32 items-end gap-1">
       {days.map((d) => (
-        <div key={d.day} className="flex flex-1 flex-col items-center gap-1" title={`${d.day}: ${d.plays}`}>
+        <div
+          key={d.day}
+          className="flex flex-1 flex-col items-center gap-1"
+          title={`${d.day}: ${d.plays}`}
+        >
           <div className="flex w-full flex-1 items-end">
             <div
               className="w-full rounded-t bg-accent/70"
-              style={{ height: `${(d.plays / max) * 100}%`, minHeight: d.plays > 0 ? 2 : 0 }}
+              style={{
+                height: `${(d.plays / max) * 100}%`,
+                minHeight: d.plays > 0 ? 2 : 0,
+              }}
             />
           </div>
-          <span className="text-[9px] text-muted-foreground">{d.day.slice(5)}</span>
+          <span className="text-[9px] text-muted-foreground">
+            {d.day.slice(5)}
+          </span>
         </div>
       ))}
     </div>
@@ -249,7 +271,10 @@ export function AnalyticsPage() {
             Aggregated playback activity over the selected window.
           </p>
         </div>
-        <Select value={String(windowDays)} onValueChange={(v) => setWindowDays(Number(v))}>
+        <Select
+          value={String(windowDays)}
+          onValueChange={(v) => setWindowDays(Number(v))}
+        >
           <SelectTrigger className="w-36">
             <SelectValue />
           </SelectTrigger>
@@ -311,7 +336,10 @@ export function AnalyticsPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <BarList rows={userRows(s?.top_users ?? [])} emptyLabel="No activity yet." />
+            <BarList
+              rows={userRows(s?.top_users ?? [])}
+              emptyLabel="No activity yet."
+            />
           </CardContent>
         </Card>
 
@@ -322,7 +350,10 @@ export function AnalyticsPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <BarList rows={mediaRows(s?.top_media ?? [])} emptyLabel="No activity yet." />
+            <BarList
+              rows={mediaRows(s?.top_media ?? [])}
+              emptyLabel="No activity yet."
+            />
           </CardContent>
         </Card>
       </div>
@@ -330,7 +361,9 @@ export function AnalyticsPage() {
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Recent history</CardTitle>
-          <CardDescription>The latest playback sessions across all servers.</CardDescription>
+          <CardDescription>
+            The latest playback sessions across all servers.
+          </CardDescription>
         </CardHeader>
         <CardContent>
           {history.isLoading ? (
@@ -361,7 +394,9 @@ export function AnalyticsPage() {
                     </TableCell>
                     <TableCell>{h.user || "—"}</TableCell>
                     <TableCell className="text-muted-foreground">
-                      {h.started_at ? new Date(h.started_at).toLocaleString() : "—"}
+                      {h.started_at
+                        ? new Date(h.started_at).toLocaleString()
+                        : "—"}
                     </TableCell>
                     <TableCell>{formatWatched(h.watched_ms)}</TableCell>
                     <TableCell>

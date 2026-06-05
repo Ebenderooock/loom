@@ -180,21 +180,28 @@ function QueueStats({ items }: { items: QueueItem[] }) {
   const paused = items.filter((i) => i.status === "paused");
 
   const totalDown = downloading.reduce((s, i) => s + (i.download_rate || 0), 0);
-  const totalUp = [...downloading, ...seeding].reduce((s, i) => s + (i.upload_rate || 0), 0);
+  const totalUp = [...downloading, ...seeding].reduce(
+    (s, i) => s + (i.upload_rate || 0),
+    0,
+  );
 
   return (
     <div className="flex flex-wrap items-center gap-4 text-xs text-zinc-400">
       {downloading.length > 0 && (
         <span className="flex items-center gap-1.5">
           <ArrowDown className="h-3.5 w-3.5 text-blue-400" />
-          <span className="font-medium text-zinc-200">{formatSpeed(totalDown)}</span>
+          <span className="font-medium text-zinc-200">
+            {formatSpeed(totalDown)}
+          </span>
           <span className="text-zinc-600">({downloading.length} active)</span>
         </span>
       )}
       {totalUp > 0 && (
         <span className="flex items-center gap-1.5">
           <ArrowUp className="h-3.5 w-3.5 text-green-400" />
-          <span className="font-medium text-zinc-200">{formatSpeed(totalUp)}</span>
+          <span className="font-medium text-zinc-200">
+            {formatSpeed(totalUp)}
+          </span>
         </span>
       )}
       {seeding.length > 0 && (
@@ -213,7 +220,15 @@ function QueueStats({ items }: { items: QueueItem[] }) {
 
 // ─── Queue Item Row ─────────────────────────────────────────────────────
 
-function QueueItemRow({ item, onRefresh, onSelect }: { item: QueueItem; onRefresh: () => void; onSelect: (item: QueueItem) => void }) {
+function QueueItemRow({
+  item,
+  onRefresh,
+  onSelect,
+}: {
+  item: QueueItem;
+  onRefresh: () => void;
+  onSelect: (item: QueueItem) => void;
+}) {
   const sc = downloadStatusConfig(item.status);
   const pct = Math.min(100, (item.progress ?? 0) * 100);
   const isActive = item.status === "downloading";
@@ -237,7 +252,7 @@ function QueueItemRow({ item, onRefresh, onSelect }: { item: QueueItem; onRefres
 
   return (
     <div
-      className="group flex items-center gap-4 px-4 py-3 border-b border-zinc-800/50 last:border-0 hover:bg-zinc-800/30 transition-colors cursor-pointer"
+      className="group flex cursor-pointer items-center gap-4 border-b border-zinc-800/50 px-4 py-3 transition-colors last:border-0 hover:bg-zinc-800/30"
       role="button"
       tabIndex={0}
       onClick={() => onSelect(item)}
@@ -249,24 +264,31 @@ function QueueItemRow({ item, onRefresh, onSelect }: { item: QueueItem; onRefres
       }}
     >
       {/* Title + message */}
-      <div className="flex-1 min-w-0">
+      <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
-          <span className="text-sm font-medium text-zinc-200 truncate">{item.title}</span>
+          <span className="truncate text-sm font-medium text-zinc-200">
+            {item.title}
+          </span>
           {item.category && (
-            <Badge variant="outline" className="text-[10px] border-zinc-700 text-zinc-500 shrink-0">
+            <Badge
+              variant="outline"
+              className="shrink-0 border-zinc-700 text-[10px] text-zinc-500"
+            >
               {item.category}
             </Badge>
           )}
         </div>
         {item.message && (
-          <p className="text-xs text-zinc-500 truncate mt-0.5">{item.message}</p>
+          <p className="mt-0.5 truncate text-xs text-zinc-500">
+            {item.message}
+          </p>
         )}
 
         {/* Progress bar (only for downloading/queued/paused) */}
         {item.status !== "seeding" && !isCompleted && (
-          <div className="flex items-center gap-2 mt-1.5">
+          <div className="mt-1.5 flex items-center gap-2">
             <Progress value={pct} className="h-1.5 flex-1 bg-zinc-800" />
-            <span className="text-[11px] text-zinc-500 tabular-nums w-10 text-right">
+            <span className="w-10 text-right text-[11px] tabular-nums text-zinc-500">
               {pct.toFixed(0)}%
             </span>
           </div>
@@ -274,21 +296,24 @@ function QueueItemRow({ item, onRefresh, onSelect }: { item: QueueItem; onRefres
       </div>
 
       {/* Status badge */}
-      <Badge variant={sc.variant} className={`text-[10px] shrink-0 ${sc.className ?? ""}`}>
+      <Badge
+        variant={sc.variant}
+        className={`shrink-0 text-[10px] ${sc.className ?? ""}`}
+      >
         {sc.label}
       </Badge>
 
       {/* Size */}
-      <div className="hidden sm:block w-28 text-right text-xs text-zinc-500 tabular-nums">
+      <div className="hidden w-28 text-right text-xs tabular-nums text-zinc-500 sm:block">
         {item.downloaded_bytes > 0 && item.size_bytes > 0
           ? `${formatBytes(item.downloaded_bytes)} / ${formatBytes(item.size_bytes)}`
           : item.size_bytes > 0
-          ? formatBytes(item.size_bytes)
-          : "—"}
+            ? formatBytes(item.size_bytes)
+            : "—"}
       </div>
 
       {/* Speeds */}
-      <div className="hidden md:flex flex-col items-end gap-0.5 w-24">
+      <div className="hidden w-24 flex-col items-end gap-0.5 md:flex">
         {item.download_rate > 0 && (
           <span className="flex items-center gap-1 text-xs text-zinc-400">
             <ArrowDown className="h-3 w-3 text-blue-400" />
@@ -307,20 +332,23 @@ function QueueItemRow({ item, onRefresh, onSelect }: { item: QueueItem; onRefres
       </div>
 
       {/* ETA */}
-      <div className="hidden lg:block w-16 text-right text-xs text-zinc-500 tabular-nums">
+      <div className="hidden w-16 text-right text-xs tabular-nums text-zinc-500 lg:block">
         {isActive ? formatEta(item.eta_seconds) : "—"}
       </div>
 
       {/* Ratio (for seeding) */}
       {item.status === "seeding" && item.ratio > 0 && (
-        <div className="hidden lg:block w-14 text-right text-xs text-zinc-500 tabular-nums">
+        <div className="hidden w-14 text-right text-xs tabular-nums text-zinc-500 lg:block">
           {item.ratio.toFixed(2)}
         </div>
       )}
 
       {/* Actions */}
       {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events -- non-interactive wrapper; only stops row activation so its child buttons work */}
-      <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+      <div
+        className="flex items-center gap-1"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Pause / Resume */}
         {canPauseResume && (
           <Button
@@ -330,13 +358,18 @@ function QueueItemRow({ item, onRefresh, onSelect }: { item: QueueItem; onRefres
             disabled={busy}
             title={isPaused ? "Resume" : "Pause"}
             onClick={() =>
-              runAction(
-                isPaused ? "Resumed" : "Paused",
-                () => activityAction(isPaused ? "resume" : "pause", item.client_id, [item.id]),
+              runAction(isPaused ? "Resumed" : "Paused", () =>
+                activityAction(isPaused ? "resume" : "pause", item.client_id, [
+                  item.id,
+                ]),
               )
             }
           >
-            {isPaused ? <Play className="h-3.5 w-3.5" /> : <Pause className="h-3.5 w-3.5" />}
+            {isPaused ? (
+              <Play className="h-3.5 w-3.5" />
+            ) : (
+              <Pause className="h-3.5 w-3.5" />
+            )}
           </Button>
         )}
 
@@ -348,7 +381,9 @@ function QueueItemRow({ item, onRefresh, onSelect }: { item: QueueItem; onRefres
             className="h-7 w-7 text-zinc-400 hover:text-emerald-400"
             disabled={busy}
             title="Force Import"
-            onClick={() => runAction("Import started", () => forceImport(item.save_path))}
+            onClick={() =>
+              runAction("Import started", () => forceImport(item.save_path))
+            }
           >
             <FolderInput className="h-3.5 w-3.5" />
           </Button>
@@ -363,7 +398,9 @@ function QueueItemRow({ item, onRefresh, onSelect }: { item: QueueItem; onRefres
           title="Stop &amp; remove (delete files)"
           onClick={() =>
             runAction("Stopped", () =>
-              activityAction("remove", item.client_id, [item.id], { delete_files: true }),
+              activityAction("remove", item.client_id, [item.id], {
+                delete_files: true,
+              }),
             )
           }
         >
@@ -417,7 +454,7 @@ function TorrentDetailPanel({ item }: { item: QueueItem }) {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-12 text-zinc-500 text-sm">
+      <div className="flex items-center justify-center py-12 text-sm text-zinc-500">
         Loading…
       </div>
     );
@@ -430,20 +467,20 @@ function TorrentDetailPanel({ item }: { item: QueueItem }) {
 
   return (
     <Tabs defaultValue="overview" className="mt-4">
-      <TabsList className="w-full grid grid-cols-4">
-        <TabsTrigger value="overview" className="text-xs gap-1">
+      <TabsList className="grid w-full grid-cols-4">
+        <TabsTrigger value="overview" className="gap-1 text-xs">
           <Info className="h-3 w-3" />
           Overview
         </TabsTrigger>
-        <TabsTrigger value="peers" className="text-xs gap-1">
+        <TabsTrigger value="peers" className="gap-1 text-xs">
           <Users className="h-3 w-3" />
           Peers
         </TabsTrigger>
-        <TabsTrigger value="files" className="text-xs gap-1">
+        <TabsTrigger value="files" className="gap-1 text-xs">
           <FileText className="h-3 w-3" />
           Files
         </TabsTrigger>
-        <TabsTrigger value="trackers" className="text-xs gap-1">
+        <TabsTrigger value="trackers" className="gap-1 text-xs">
           <Radio className="h-3 w-3" />
           Trackers
         </TabsTrigger>
@@ -465,34 +502,58 @@ function TorrentDetailPanel({ item }: { item: QueueItem }) {
   );
 }
 
-function DetailRow({ label, value }: { label: string; value: React.ReactNode }) {
+function DetailRow({
+  label,
+  value,
+}: {
+  label: string;
+  value: React.ReactNode;
+}) {
   return (
-    <div className="flex justify-between py-1.5 border-b border-zinc-800/50 last:border-0">
+    <div className="flex justify-between border-b border-zinc-800/50 py-1.5 last:border-0">
       <span className="text-xs text-zinc-500">{label}</span>
-      <span className="text-xs text-zinc-200 text-right max-w-[60%] truncate">{value}</span>
+      <span className="max-w-[60%] truncate text-right text-xs text-zinc-200">
+        {value}
+      </span>
     </div>
   );
 }
 
-function OverviewTab({ item, detail }: { item: QueueItem; detail: TorrentDetail | null }) {
+function OverviewTab({
+  item,
+  detail,
+}: {
+  item: QueueItem;
+  detail: TorrentDetail | null;
+}) {
   const sc = downloadStatusConfig(item.status);
   const pct = Math.min(100, (item.progress ?? 0) * 100);
 
   return (
-    <div className="space-y-3 mt-3">
+    <div className="mt-3 space-y-3">
       <div className="flex items-center gap-2">
-        <Badge variant={sc.variant} className={`text-[10px] ${sc.className ?? ""}`}>
+        <Badge
+          variant={sc.variant}
+          className={`text-[10px] ${sc.className ?? ""}`}
+        >
           {sc.label}
         </Badge>
-        <span className="text-xs text-zinc-500 tabular-nums">{pct.toFixed(1)}%</span>
+        <span className="text-xs tabular-nums text-zinc-500">
+          {pct.toFixed(1)}%
+        </span>
       </div>
       <Progress value={pct} className="h-2 bg-zinc-800" />
 
       <div className="space-y-0">
-        <DetailRow label="Size" value={item.size_bytes > 0 ? formatBytes(item.size_bytes) : "—"} />
+        <DetailRow
+          label="Size"
+          value={item.size_bytes > 0 ? formatBytes(item.size_bytes) : "—"}
+        />
         <DetailRow
           label="Downloaded"
-          value={item.downloaded_bytes > 0 ? formatBytes(item.downloaded_bytes) : "—"}
+          value={
+            item.downloaded_bytes > 0 ? formatBytes(item.downloaded_bytes) : "—"
+          }
         />
         {detail && (
           <DetailRow
@@ -500,7 +561,10 @@ function OverviewTab({ item, detail }: { item: QueueItem; detail: TorrentDetail 
             value={detail.Uploaded > 0 ? formatBytes(detail.Uploaded) : "—"}
           />
         )}
-        <DetailRow label="Ratio" value={item.ratio > 0 ? item.ratio.toFixed(3) : "—"} />
+        <DetailRow
+          label="Ratio"
+          value={item.ratio > 0 ? item.ratio.toFixed(3) : "—"}
+        />
         <DetailRow
           label="Download Speed"
           value={item.download_rate > 0 ? formatSpeed(item.download_rate) : "—"}
@@ -511,7 +575,9 @@ function OverviewTab({ item, detail }: { item: QueueItem; detail: TorrentDetail 
         />
         <DetailRow
           label="ETA"
-          value={item.status === "downloading" ? formatEta(item.eta_seconds) : "—"}
+          value={
+            item.status === "downloading" ? formatEta(item.eta_seconds) : "—"
+          }
         />
         {detail && (
           <>
@@ -519,14 +585,27 @@ function OverviewTab({ item, detail }: { item: QueueItem; detail: TorrentDetail 
               label="Peers"
               value={`${detail.total_seeds} seeds / ${detail.total_peers} peers`}
             />
-            <DetailRow label="Save Path" value={detail.SavePath || item.save_path || "—"} />
+            <DetailRow
+              label="Save Path"
+              value={detail.SavePath || item.save_path || "—"}
+            />
             <DetailRow
               label="Added"
-              value={detail.added_at ? new Date(detail.added_at).toLocaleString() : "—"}
+              value={
+                detail.added_at
+                  ? new Date(detail.added_at).toLocaleString()
+                  : "—"
+              }
             />
-            {detail.info_hash && <DetailRow label="Info Hash" value={detail.info_hash} />}
-            {detail.comment && <DetailRow label="Comment" value={detail.comment} />}
-            {detail.created_by && <DetailRow label="Created By" value={detail.created_by} />}
+            {detail.info_hash && (
+              <DetailRow label="Info Hash" value={detail.info_hash} />
+            )}
+            {detail.comment && (
+              <DetailRow label="Comment" value={detail.comment} />
+            )}
+            {detail.created_by && (
+              <DetailRow label="Created By" value={detail.created_by} />
+            )}
           </>
         )}
         {!detail && (
@@ -539,7 +618,11 @@ function OverviewTab({ item, detail }: { item: QueueItem; detail: TorrentDetail 
 
 function PeersTab({ detail }: { detail: TorrentDetail }) {
   if (!detail.peers || detail.peers.length === 0) {
-    return <p className="text-xs text-zinc-500 py-4 text-center">No connected peers</p>;
+    return (
+      <p className="py-4 text-center text-xs text-zinc-500">
+        No connected peers
+      </p>
+    );
   }
   return (
     <div className="mt-2 overflow-x-auto">
@@ -548,27 +631,36 @@ function PeersTab({ detail }: { detail: TorrentDetail }) {
           <TableRow className="border-zinc-800">
             <TableHead className="text-[10px] text-zinc-500">IP</TableHead>
             <TableHead className="text-[10px] text-zinc-500">Client</TableHead>
-            <TableHead className="text-[10px] text-zinc-500 text-right">Progress</TableHead>
-            <TableHead className="text-[10px] text-zinc-500 text-right">DL</TableHead>
-            <TableHead className="text-[10px] text-zinc-500 text-right">UL</TableHead>
+            <TableHead className="text-right text-[10px] text-zinc-500">
+              Progress
+            </TableHead>
+            <TableHead className="text-right text-[10px] text-zinc-500">
+              DL
+            </TableHead>
+            <TableHead className="text-right text-[10px] text-zinc-500">
+              UL
+            </TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {detail.peers.map((peer, i) => (
-            <TableRow key={`${peer.ip}-${peer.port}-${i}`} className="border-zinc-800/50">
-              <TableCell className="text-[11px] text-zinc-300 py-1.5 font-mono">
+            <TableRow
+              key={`${peer.ip}-${peer.port}-${i}`}
+              className="border-zinc-800/50"
+            >
+              <TableCell className="py-1.5 font-mono text-[11px] text-zinc-300">
                 {peer.ip}
               </TableCell>
-              <TableCell className="text-[11px] text-zinc-400 py-1.5 truncate max-w-[120px]">
+              <TableCell className="max-w-[120px] truncate py-1.5 text-[11px] text-zinc-400">
                 {peer.client || "—"}
               </TableCell>
-              <TableCell className="text-[11px] text-zinc-400 py-1.5 text-right tabular-nums">
+              <TableCell className="py-1.5 text-right text-[11px] tabular-nums text-zinc-400">
                 {(peer.progress * 100).toFixed(0)}%
               </TableCell>
-              <TableCell className="text-[11px] text-zinc-400 py-1.5 text-right tabular-nums">
+              <TableCell className="py-1.5 text-right text-[11px] tabular-nums text-zinc-400">
                 {peer.down_rate > 0 ? formatBytes(peer.down_rate) : "—"}
               </TableCell>
-              <TableCell className="text-[11px] text-zinc-400 py-1.5 text-right tabular-nums">
+              <TableCell className="py-1.5 text-right text-[11px] tabular-nums text-zinc-400">
                 {peer.up_rate > 0 ? formatBytes(peer.up_rate) : "—"}
               </TableCell>
             </TableRow>
@@ -581,7 +673,11 @@ function PeersTab({ detail }: { detail: TorrentDetail }) {
 
 function FilesTab({ detail }: { detail: TorrentDetail }) {
   if (!detail.files || detail.files.length === 0) {
-    return <p className="text-xs text-zinc-500 py-4 text-center">No file info available</p>;
+    return (
+      <p className="py-4 text-center text-xs text-zinc-500">
+        No file info available
+      </p>
+    );
   }
   return (
     <div className="mt-2 space-y-1.5">
@@ -589,21 +685,21 @@ function FilesTab({ detail }: { detail: TorrentDetail }) {
         const pct = Math.min(100, (file.progress ?? 0) * 100);
         const name = file.path.split("/").pop() || file.path;
         return (
-          <div key={i} className="rounded bg-zinc-800/40 p-2 space-y-1">
-            <div className="flex justify-between items-center">
+          <div key={i} className="space-y-1 rounded bg-zinc-800/40 p-2">
+            <div className="flex items-center justify-between">
               <span
-                className="text-[11px] text-zinc-300 truncate flex-1 mr-2"
+                className="mr-2 flex-1 truncate text-[11px] text-zinc-300"
                 title={file.path}
               >
                 {name}
               </span>
-              <span className="text-[10px] text-zinc-500 tabular-nums shrink-0">
+              <span className="shrink-0 text-[10px] tabular-nums text-zinc-500">
                 {formatBytes(file.size)}
               </span>
             </div>
             <div className="flex items-center gap-2">
               <Progress value={pct} className="h-1 flex-1 bg-zinc-800" />
-              <span className="text-[10px] text-zinc-500 tabular-nums w-9 text-right">
+              <span className="w-9 text-right text-[10px] tabular-nums text-zinc-500">
                 {pct.toFixed(0)}%
               </span>
             </div>
@@ -616,7 +712,9 @@ function FilesTab({ detail }: { detail: TorrentDetail }) {
 
 function TrackersTab({ detail }: { detail: TorrentDetail }) {
   if (!detail.trackers || detail.trackers.length === 0) {
-    return <p className="text-xs text-zinc-500 py-4 text-center">No trackers</p>;
+    return (
+      <p className="py-4 text-center text-xs text-zinc-500">No trackers</p>
+    );
   }
   return (
     <div className="mt-2 overflow-x-auto">
@@ -624,28 +722,35 @@ function TrackersTab({ detail }: { detail: TorrentDetail }) {
         <TableHeader>
           <TableRow className="border-zinc-800">
             <TableHead className="text-[10px] text-zinc-500">URL</TableHead>
-            <TableHead className="text-[10px] text-zinc-500 text-right">Tier</TableHead>
-            <TableHead className="text-[10px] text-zinc-500 text-right">Status</TableHead>
+            <TableHead className="text-right text-[10px] text-zinc-500">
+              Tier
+            </TableHead>
+            <TableHead className="text-right text-[10px] text-zinc-500">
+              Status
+            </TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {detail.trackers.map((tracker, i) => (
-            <TableRow key={`${tracker.url}-${i}`} className="border-zinc-800/50">
-              <TableCell className="text-[11px] text-zinc-300 py-1.5 truncate max-w-[280px] font-mono">
+            <TableRow
+              key={`${tracker.url}-${i}`}
+              className="border-zinc-800/50"
+            >
+              <TableCell className="max-w-[280px] truncate py-1.5 font-mono text-[11px] text-zinc-300">
                 {tracker.url}
               </TableCell>
-              <TableCell className="text-[11px] text-zinc-400 py-1.5 text-right tabular-nums">
+              <TableCell className="py-1.5 text-right text-[11px] tabular-nums text-zinc-400">
                 {tracker.tier}
               </TableCell>
-              <TableCell className="text-[11px] py-1.5 text-right">
+              <TableCell className="py-1.5 text-right text-[11px]">
                 <Badge
                   variant="outline"
                   className={`text-[9px] ${
                     tracker.status === "working"
-                      ? "text-green-400 border-green-800"
+                      ? "border-green-800 text-green-400"
                       : tracker.status === "error"
-                      ? "text-red-400 border-red-800"
-                      : "text-zinc-500 border-zinc-700"
+                        ? "border-red-800 text-red-400"
+                        : "border-zinc-700 text-zinc-500"
                   }`}
                 >
                   {tracker.status}
@@ -665,7 +770,9 @@ function ActiveDownloads() {
   const [items, setItems] = React.useState<QueueItem[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [refreshing, setRefreshing] = React.useState(false);
-  const [selectedItem, setSelectedItem] = React.useState<QueueItem | null>(null);
+  const [selectedItem, setSelectedItem] = React.useState<QueueItem | null>(
+    null,
+  );
 
   const fetchActivity = React.useCallback(async (manual = false) => {
     if (manual) setRefreshing(true);
@@ -699,12 +806,12 @@ function ActiveDownloads() {
     failed: 5,
   };
   const sorted = [...items].sort(
-    (a, b) => (statusOrder[a.status] ?? 9) - (statusOrder[b.status] ?? 9)
+    (a, b) => (statusOrder[a.status] ?? 9) - (statusOrder[b.status] ?? 9),
   );
 
   if (loading) {
     return (
-      <Card className="bg-zinc-900/50 border-zinc-800">
+      <Card className="border-zinc-800 bg-zinc-900/50">
         <CardContent>
           <LoadingState label="Connecting to download clients…" />
         </CardContent>
@@ -721,15 +828,19 @@ function ActiveDownloads() {
           size="sm"
           onClick={() => fetchActivity(true)}
           disabled={refreshing}
-          className="text-zinc-400 hover:text-zinc-200 h-8"
+          className="h-8 text-zinc-400 hover:text-zinc-200"
         >
-          {refreshing ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5 mr-1.5" />}
+          {refreshing ? (
+            <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+          )}
           Refresh
         </Button>
       </div>
 
       {items.length === 0 ? (
-        <Card className="bg-zinc-900/50 border-zinc-800 border-dashed">
+        <Card className="border-dashed border-zinc-800 bg-zinc-900/50">
           <CardContent>
             <EmptyState
               icon={<Download className="h-10 w-10" />}
@@ -739,7 +850,7 @@ function ActiveDownloads() {
           </CardContent>
         </Card>
       ) : (
-        <Card className="bg-zinc-900/50 border-zinc-800 overflow-hidden">
+        <Card className="overflow-hidden border-zinc-800 bg-zinc-900/50">
           <div className="divide-y divide-zinc-800/50">
             {sorted.map((item) => (
               <QueueItemRow
@@ -753,10 +864,16 @@ function ActiveDownloads() {
         </Card>
       )}
 
-      <Sheet open={!!selectedItem} onOpenChange={(open) => !open && setSelectedItem(null)}>
-        <SheetContent side="right" className="w-[500px] sm:max-w-[500px] overflow-y-auto">
+      <Sheet
+        open={!!selectedItem}
+        onOpenChange={(open) => !open && setSelectedItem(null)}
+      >
+        <SheetContent
+          side="right"
+          className="w-[500px] overflow-y-auto sm:max-w-[500px]"
+        >
           <SheetHeader>
-            <SheetTitle className="text-sm font-medium truncate pr-8">
+            <SheetTitle className="truncate pr-8 text-sm font-medium">
               {selectedItem?.title}
             </SheetTitle>
           </SheetHeader>
@@ -783,7 +900,7 @@ function StatPill({ label, value }: { label: string; value: React.ReactNode }) {
       <span className="text-[10px] uppercase tracking-wide text-zinc-500">
         {label}
       </span>
-      <span className="text-sm font-medium text-zinc-100 tabular-nums">
+      <span className="text-sm font-medium tabular-nums text-zinc-100">
         {value}
       </span>
     </div>
@@ -820,7 +937,8 @@ function TorrentEnginePanel() {
   if (!clientId) return null;
 
   const applyLimits = () => {
-    const down = Math.max(0, Math.round(parseFloat(downInput || "0") * MB)) || 0;
+    const down =
+      Math.max(0, Math.round(parseFloat(downInput || "0") * MB)) || 0;
     const up = Math.max(0, Math.round(parseFloat(upInput || "0") * MB)) || 0;
     setLimits.mutate(
       { clientId, download_limit: down, upload_limit: up },
@@ -832,13 +950,16 @@ function TorrentEnginePanel() {
           setDirty(false);
           toast.success("Speed limits updated");
         },
-        onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to update limits"),
+        onError: (e) =>
+          toast.error(
+            e instanceof Error ? e.message : "Failed to update limits",
+          ),
       },
     );
   };
 
   return (
-    <Card className="bg-zinc-900/50 border-zinc-800">
+    <Card className="border-zinc-800 bg-zinc-900/50">
       <CardContent className="space-y-4 pt-5">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -846,7 +967,10 @@ function TorrentEnginePanel() {
             <span className="text-sm font-medium text-zinc-100">
               Built-in Torrent Engine
             </span>
-            <Badge variant="outline" className="text-[10px] text-zinc-400 border-zinc-700">
+            <Badge
+              variant="outline"
+              className="border-zinc-700 text-[10px] text-zinc-400"
+            >
               {torrentClient?.name}
             </Badge>
           </div>
@@ -859,11 +983,14 @@ function TorrentEnginePanel() {
               onClick={() =>
                 pauseAll.mutate(clientId, {
                   onSuccess: () => toast.success("All torrents paused"),
-                  onError: (e) => toast.error(e instanceof Error ? e.message : "Pause failed"),
+                  onError: (e) =>
+                    toast.error(
+                      e instanceof Error ? e.message : "Pause failed",
+                    ),
                 })
               }
             >
-              <Pause className="h-3.5 w-3.5 mr-1.5" />
+              <Pause className="mr-1.5 h-3.5 w-3.5" />
               Pause all
             </Button>
             <Button
@@ -874,11 +1001,14 @@ function TorrentEnginePanel() {
               onClick={() =>
                 resumeAll.mutate(clientId, {
                   onSuccess: () => toast.success("All torrents resumed"),
-                  onError: (e) => toast.error(e instanceof Error ? e.message : "Resume failed"),
+                  onError: (e) =>
+                    toast.error(
+                      e instanceof Error ? e.message : "Resume failed",
+                    ),
                 })
               }
             >
-              <Play className="h-3.5 w-3.5 mr-1.5" />
+              <Play className="mr-1.5 h-3.5 w-3.5" />
               Resume all
             </Button>
           </div>
@@ -911,21 +1041,36 @@ function TorrentEnginePanel() {
 
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-zinc-500">
           <span>
-            Port <span className="text-zinc-300 tabular-nums">{summary?.listen_port ?? "—"}</span>
+            Port{" "}
+            <span className="tabular-nums text-zinc-300">
+              {summary?.listen_port ?? "—"}
+            </span>
           </span>
-          <span className={summary?.dht ? "text-zinc-300" : "text-zinc-600"}>DHT</span>
-          <span className={summary?.pex ? "text-zinc-300" : "text-zinc-600"}>PEX</span>
-          <span className={summary?.upnp ? "text-zinc-300" : "text-zinc-600"}>UPnP</span>
+          <span className={summary?.dht ? "text-zinc-300" : "text-zinc-600"}>
+            DHT
+          </span>
+          <span className={summary?.pex ? "text-zinc-300" : "text-zinc-600"}>
+            PEX
+          </span>
+          <span className={summary?.upnp ? "text-zinc-300" : "text-zinc-600"}>
+            UPnP
+          </span>
           {summary?.save_path && (
             <span className="truncate">
-              Save path <span className="font-mono text-zinc-300">{summary.save_path}</span>
+              Save path{" "}
+              <span className="font-mono text-zinc-300">
+                {summary.save_path}
+              </span>
             </span>
           )}
         </div>
 
         <div className="flex flex-wrap items-end gap-4 border-t border-zinc-800 pt-4">
           <div className="space-y-1">
-            <Label htmlFor="torrent-down-limit" className="text-[11px] text-zinc-400">
+            <Label
+              htmlFor="torrent-down-limit"
+              className="text-[11px] text-zinc-400"
+            >
               Download limit (MB/s, 0 = unlimited)
             </Label>
             <Input
@@ -942,7 +1087,10 @@ function TorrentEnginePanel() {
             />
           </div>
           <div className="space-y-1">
-            <Label htmlFor="torrent-up-limit" className="text-[11px] text-zinc-400">
+            <Label
+              htmlFor="torrent-up-limit"
+              className="text-[11px] text-zinc-400"
+            >
               Upload limit (MB/s, 0 = unlimited)
             </Label>
             <Input
@@ -965,7 +1113,7 @@ function TorrentEnginePanel() {
             onClick={applyLimits}
           >
             {setLimits.isPending ? (
-              <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+              <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
             ) : null}
             Apply limits
           </Button>
@@ -1000,13 +1148,17 @@ function OrphanRow({
   return (
     <div className="flex items-center justify-between gap-4 px-4 py-3">
       <div className="min-w-0">
-        <div className="truncate font-mono text-xs text-zinc-200">{orphan.path}</div>
+        <div className="truncate font-mono text-xs text-zinc-200">
+          {orphan.path}
+        </div>
         <div className="mt-0.5 flex items-center gap-3 text-[11px] text-zinc-500">
           <span className="tabular-nums">{formatBytes(orphan.size_bytes)}</span>
           <span>first seen {relativeAge(orphan.first_seen_at)}</span>
           {orphan.client_name && <span>{orphan.client_name}</span>}
           {orphan.status === "delete_failed" && (
-            <span className="text-red-400">delete failed{orphan.error ? `: ${orphan.error}` : ""}</span>
+            <span className="text-red-400">
+              delete failed{orphan.error ? `: ${orphan.error}` : ""}
+            </span>
           )}
         </div>
       </div>
@@ -1018,7 +1170,7 @@ function OrphanRow({
           disabled={busy}
           onClick={() => onIgnore(orphan.id)}
         >
-          <EyeOff className="h-3.5 w-3.5 mr-1.5" />
+          <EyeOff className="mr-1.5 h-3.5 w-3.5" />
           Keep
         </Button>
         <Button
@@ -1028,7 +1180,7 @@ function OrphanRow({
           disabled={busy}
           onClick={() => onApprove(orphan.id)}
         >
-          <Trash2 className="h-3.5 w-3.5 mr-1.5" />
+          <Trash2 className="mr-1.5 h-3.5 w-3.5" />
           Delete
         </Button>
       </div>
@@ -1059,7 +1211,8 @@ function CleanupTab() {
   const onApprove = (id: string) =>
     approve.mutate(id, {
       onSuccess: () => toast.success("Orphan deleted"),
-      onError: (e) => toast.error(e instanceof Error ? e.message : "Delete failed"),
+      onError: (e) =>
+        toast.error(e instanceof Error ? e.message : "Delete failed"),
     });
   const onIgnore = (id: string) =>
     ignore.mutate(id, {
@@ -1076,19 +1229,22 @@ function CleanupTab() {
           setDirty(false);
           toast.success("Cleanup settings saved");
         },
-        onError: (e) => toast.error(e instanceof Error ? e.message : "Save failed"),
+        onError: (e) =>
+          toast.error(e instanceof Error ? e.message : "Save failed"),
       },
     );
   };
 
   return (
     <div className="space-y-4">
-      <Card className="bg-zinc-900/50 border-zinc-800">
+      <Card className="border-zinc-800 bg-zinc-900/50">
         <CardContent className="space-y-4 pt-5">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Trash2 className="h-4 w-4 text-zinc-400" />
-              <span className="text-sm font-medium text-zinc-100">Cleanup settings</span>
+              <span className="text-sm font-medium text-zinc-100">
+                Cleanup settings
+              </span>
             </div>
             <Button
               variant="ghost"
@@ -1097,23 +1253,26 @@ function CleanupTab() {
               disabled={scan.isPending}
               onClick={() =>
                 scan.mutate(undefined, {
-                  onSuccess: (r) => toast.success(`Scan complete — ${r.found} orphan(s)`),
-                  onError: (e) => toast.error(e instanceof Error ? e.message : "Scan failed"),
+                  onSuccess: (r) =>
+                    toast.success(`Scan complete — ${r.found} orphan(s)`),
+                  onError: (e) =>
+                    toast.error(e instanceof Error ? e.message : "Scan failed"),
                 })
               }
             >
               {scan.isPending ? (
-                <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
               ) : (
-                <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
+                <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
               )}
               Scan now
             </Button>
           </div>
 
           <p className="text-xs text-zinc-500">
-            Files in your download folders that are no longer tied to any active download or
-            import are listed below for review. Media libraries are never touched.
+            Files in your download folders that are no longer tied to any active
+            download or import are listed below for review. Media libraries are
+            never touched.
           </p>
 
           <div className="flex flex-wrap items-end gap-6 border-t border-zinc-800 pt-4">
@@ -1126,12 +1285,18 @@ function CleanupTab() {
                   setDirty(true);
                 }}
               />
-              <Label htmlFor="cleanup-auto-delete" className="text-xs text-zinc-300">
+              <Label
+                htmlFor="cleanup-auto-delete"
+                className="text-xs text-zinc-300"
+              >
                 Auto-delete orphans
               </Label>
             </div>
             <div className="space-y-1">
-              <Label htmlFor="cleanup-retention" className="text-[11px] text-zinc-400">
+              <Label
+                htmlFor="cleanup-retention"
+                className="text-[11px] text-zinc-400"
+              >
                 Retention (days)
               </Label>
               <Input
@@ -1146,8 +1311,15 @@ function CleanupTab() {
                 className="h-8 w-28"
               />
             </div>
-            <Button size="sm" className="h-8" disabled={!dirty || saveSettings.isPending} onClick={saveCfg}>
-              {saveSettings.isPending ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : null}
+            <Button
+              size="sm"
+              className="h-8"
+              disabled={!dirty || saveSettings.isPending}
+              onClick={saveCfg}
+            >
+              {saveSettings.isPending ? (
+                <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+              ) : null}
               Save
             </Button>
           </div>
@@ -1155,13 +1327,13 @@ function CleanupTab() {
       </Card>
 
       {isLoading ? (
-        <Card className="bg-zinc-900/50 border-zinc-800">
+        <Card className="border-zinc-800 bg-zinc-900/50">
           <CardContent>
             <LoadingState label="Scanning download folders…" />
           </CardContent>
         </Card>
       ) : !orphans || orphans.length === 0 ? (
-        <Card className="bg-zinc-900/50 border-zinc-800 border-dashed">
+        <Card className="border-dashed border-zinc-800 bg-zinc-900/50">
           <CardContent>
             <EmptyState
               icon={<Trash2 className="h-10 w-10" />}
@@ -1171,10 +1343,16 @@ function CleanupTab() {
           </CardContent>
         </Card>
       ) : (
-        <Card className="bg-zinc-900/50 border-zinc-800 overflow-hidden">
+        <Card className="overflow-hidden border-zinc-800 bg-zinc-900/50">
           <div className="divide-y divide-zinc-800/50">
             {orphans.map((o) => (
-              <OrphanRow key={o.id} orphan={o} onApprove={onApprove} onIgnore={onIgnore} busy={busy} />
+              <OrphanRow
+                key={o.id}
+                orphan={o}
+                onApprove={onApprove}
+                onIgnore={onIgnore}
+                busy={busy}
+              />
             ))}
           </div>
         </Card>

@@ -3,7 +3,17 @@
 //   Step 2 — configure the selected definition (or Newznab/Torznab)
 
 import * as React from "react";
-import { ArrowLeft, CheckCircle2, Globe, Loader2, Lock, Plus, Search, ShieldCheck, XCircle } from "lucide-react";
+import {
+  ArrowLeft,
+  CheckCircle2,
+  Globe,
+  Loader2,
+  Lock,
+  Plus,
+  Search,
+  ShieldCheck,
+  XCircle,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -174,16 +184,26 @@ export function IndexerCatalogue({ proxies, onCreated, onCancel }: Props) {
       <div className="flex flex-col gap-4">
         {/* Manual options */}
         <div className="flex gap-2">
-          <Button variant="outline" className="flex-1" onClick={() => pick("newznab")}>
+          <Button
+            variant="outline"
+            className="flex-1"
+            onClick={() => pick("newznab")}
+          >
             + Newznab (manual URL)
           </Button>
-          <Button variant="outline" className="flex-1" onClick={() => pick("torznab")}>
+          <Button
+            variant="outline"
+            className="flex-1"
+            onClick={() => pick("torznab")}
+          >
             + Torznab (manual URL)
           </Button>
         </div>
 
         <div className="relative text-center text-xs text-muted-foreground">
-          <span className="bg-background px-2">or pick from bundled definitions</span>
+          <span className="bg-background px-2">
+            or pick from bundled definitions
+          </span>
           <div className="absolute inset-x-0 top-1/2 -z-10 h-px bg-border" />
         </div>
 
@@ -257,10 +277,10 @@ export function IndexerCatalogue({ proxies, onCreated, onCancel }: Props) {
               <thead className="sticky top-0 z-10 bg-muted/80 backdrop-blur">
                 <tr className="border-b text-left text-xs font-medium text-muted-foreground">
                   <th className="px-3 py-2">Name</th>
-                  <th className="px-3 py-2 hidden sm:table-cell">Type</th>
-                  <th className="px-3 py-2 hidden lg:table-cell">Categories</th>
-                  <th className="px-3 py-2 hidden md:table-cell">Language</th>
-                  <th className="px-3 py-2 text-right w-[80px]" />
+                  <th className="hidden px-3 py-2 sm:table-cell">Type</th>
+                  <th className="hidden px-3 py-2 lg:table-cell">Categories</th>
+                  <th className="hidden px-3 py-2 md:table-cell">Language</th>
+                  <th className="w-[80px] px-3 py-2 text-right" />
                 </tr>
               </thead>
               <tbody>
@@ -272,24 +292,32 @@ export function IndexerCatalogue({ proxies, onCreated, onCancel }: Props) {
                     <td className="px-3 py-2">
                       <div className="font-medium">{def.name}</div>
                       {def.description ? (
-                        <div className="text-xs text-muted-foreground line-clamp-1">{def.description}</div>
+                        <div className="line-clamp-1 text-xs text-muted-foreground">
+                          {def.description}
+                        </div>
                       ) : (
-                        <div className="text-xs text-muted-foreground">{def.id}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {def.id}
+                        </div>
                       )}
                     </td>
-                    <td className="px-3 py-2 hidden sm:table-cell">
+                    <td className="hidden px-3 py-2 sm:table-cell">
                       {typeBadge(def.type)}
                     </td>
-                    <td className="px-3 py-2 hidden lg:table-cell">
+                    <td className="hidden px-3 py-2 lg:table-cell">
                       <div className="flex flex-wrap gap-1">
                         {(def.categories ?? []).map((cat) => (
-                          <Badge key={cat} variant="secondary" className="text-[10px] px-1.5 py-0">
+                          <Badge
+                            key={cat}
+                            variant="secondary"
+                            className="px-1.5 py-0 text-[10px]"
+                          >
                             {cat}
                           </Badge>
                         ))}
                       </div>
                     </td>
-                    <td className="px-3 py-2 hidden md:table-cell text-muted-foreground">
+                    <td className="hidden px-3 py-2 text-muted-foreground md:table-cell">
                       {def.language || "—"}
                     </td>
                     <td className="px-3 py-2 text-right">
@@ -468,7 +496,12 @@ function CardigannConfigForm({
       {siteUrl ? (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <Globe className="h-4 w-4" />
-          <a href={siteUrl} target="_blank" rel="noopener noreferrer" className="underline">
+          <a
+            href={siteUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline"
+          >
             {siteUrl}
           </a>
         </div>
@@ -497,7 +530,9 @@ function CardigannConfigForm({
       ) : null}
 
       {definition.description ? (
-        <p className="text-sm text-muted-foreground">{definition.description}</p>
+        <p className="text-sm text-muted-foreground">
+          {definition.description}
+        </p>
       ) : null}
 
       {topError ? (
@@ -548,9 +583,7 @@ function CardigannConfigForm({
           <p className="text-sm font-medium">Tracker credentials</p>
           {settings.map((s) => (
             <div key={s.name} className="grid gap-1">
-              <Label htmlFor={`cardi-${s.name}`}>
-                {s.label || s.name}
-              </Label>
+              <Label htmlFor={`cardi-${s.name}`}>{s.label || s.name}</Label>
               <Input
                 id={`cardi-${s.name}`}
                 type={s.type === "password" ? "password" : "text"}

@@ -55,7 +55,11 @@ async function request<T>(
   const text = await res.text();
   let parsed: unknown;
   if (text.length > 0) {
-    try { parsed = JSON.parse(text); } catch { parsed = undefined; }
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      parsed = undefined;
+    }
   }
   if (!res.ok) {
     const env = parsed as { error?: { message?: string } } | undefined;
@@ -69,28 +73,58 @@ async function request<T>(
 
 // ---------- API functions ----------
 
-export async function listQualityProfiles(signal?: AbortSignal): Promise<QualityProfile[]> {
-  const data = await request<{ data: QualityProfile[] }>("GET", "/api/v1/quality-profiles", undefined, signal);
+export async function listQualityProfiles(
+  signal?: AbortSignal,
+): Promise<QualityProfile[]> {
+  const data = await request<{ data: QualityProfile[] }>(
+    "GET",
+    "/api/v1/quality-profiles",
+    undefined,
+    signal,
+  );
   return data?.data ?? [];
 }
 
-export async function getQualityProfile(id: string, signal?: AbortSignal): Promise<QualityProfile> {
-  return request<QualityProfile>("GET", `/api/v1/quality-profiles/${encodeURIComponent(id)}`, undefined, signal);
+export async function getQualityProfile(
+  id: string,
+  signal?: AbortSignal,
+): Promise<QualityProfile> {
+  return request<QualityProfile>(
+    "GET",
+    `/api/v1/quality-profiles/${encodeURIComponent(id)}`,
+    undefined,
+    signal,
+  );
 }
 
-export async function createQualityProfile(body: CreateQualityProfileRequest): Promise<QualityProfile> {
+export async function createQualityProfile(
+  body: CreateQualityProfileRequest,
+): Promise<QualityProfile> {
   return request<QualityProfile>("POST", "/api/v1/quality-profiles", body);
 }
 
-export async function updateQualityProfile(id: string, body: Partial<QualityProfile>): Promise<QualityProfile> {
-  return request<QualityProfile>("PUT", `/api/v1/quality-profiles/${encodeURIComponent(id)}`, body);
+export async function updateQualityProfile(
+  id: string,
+  body: Partial<QualityProfile>,
+): Promise<QualityProfile> {
+  return request<QualityProfile>(
+    "PUT",
+    `/api/v1/quality-profiles/${encodeURIComponent(id)}`,
+    body,
+  );
 }
 
 export async function deleteQualityProfile(id: string): Promise<void> {
-  return request<void>("DELETE", `/api/v1/quality-profiles/${encodeURIComponent(id)}`);
+  return request<void>(
+    "DELETE",
+    `/api/v1/quality-profiles/${encodeURIComponent(id)}`,
+  );
 }
 
-export async function getFormatScores(profileId: string, signal?: AbortSignal): Promise<FormatItem[]> {
+export async function getFormatScores(
+  profileId: string,
+  signal?: AbortSignal,
+): Promise<FormatItem[]> {
   const data = await request<{ data: FormatItem[] }>(
     "GET",
     `/api/v1/quality-profiles/${encodeURIComponent(profileId)}/format-scores`,
@@ -100,7 +134,10 @@ export async function getFormatScores(profileId: string, signal?: AbortSignal): 
   return data?.data ?? [];
 }
 
-export async function setFormatScores(profileId: string, items: FormatItem[]): Promise<FormatItem[]> {
+export async function setFormatScores(
+  profileId: string,
+  items: FormatItem[],
+): Promise<FormatItem[]> {
   const data = await request<{ data: FormatItem[] }>(
     "PUT",
     `/api/v1/quality-profiles/${encodeURIComponent(profileId)}/format-scores`,
@@ -162,8 +199,13 @@ export function useFormatScores(profileId: string) {
 export function useSetFormatScores() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ profileId, items }: { profileId: string; items: FormatItem[] }) =>
-      setFormatScores(profileId, items),
+    mutationFn: ({
+      profileId,
+      items,
+    }: {
+      profileId: string;
+      items: FormatItem[];
+    }) => setFormatScores(profileId, items),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["quality-profiles"] }),
   });
 }

@@ -5,12 +5,7 @@ import { useSetPageHeader } from "@/hooks/use-page-header";
 import { useApiClient } from "@/lib/api-client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -38,8 +33,7 @@ function useIndexerSearchHealth() {
   const api = useApiClient();
   return useQuery({
     queryKey: ["indexer-search-health"],
-    queryFn: () =>
-      api.get<{ data: IndexerSearchHealth[] }>("/indexers/health"),
+    queryFn: () => api.get<{ data: IndexerSearchHealth[] }>("/indexers/health"),
     refetchInterval: 30_000,
   });
 }
@@ -105,10 +99,26 @@ function SummaryBar({ items }: { items: IndexerSearchHealth[] }) {
   return (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-5">
       <SummaryCard label="Total" count={counts.total} color="text-foreground" />
-      <SummaryCard label="Healthy" count={counts.healthy} color="text-green-500" />
-      <SummaryCard label="Degraded" count={counts.degraded} color="text-yellow-500" />
-      <SummaryCard label="Failing" count={counts.failing} color="text-red-500" />
-      <SummaryCard label="Unknown" count={counts.unknown} color="text-gray-500" />
+      <SummaryCard
+        label="Healthy"
+        count={counts.healthy}
+        color="text-green-500"
+      />
+      <SummaryCard
+        label="Degraded"
+        count={counts.degraded}
+        color="text-yellow-500"
+      />
+      <SummaryCard
+        label="Failing"
+        count={counts.failing}
+        color="text-red-500"
+      />
+      <SummaryCard
+        label="Unknown"
+        count={counts.unknown}
+        color="text-gray-500"
+      />
     </div>
   );
 }
@@ -162,11 +172,15 @@ function HealthCard({ item }: { item: IndexerSearchHealth }) {
           </div>
           <div>
             <p className="text-muted-foreground">Total searches</p>
-            <p className="font-medium">{item.total_searches.toLocaleString()}</p>
+            <p className="font-medium">
+              {item.total_searches.toLocaleString()}
+            </p>
           </div>
           <div>
             <p className="text-muted-foreground">API calls today</p>
-            <p className="font-medium">{item.api_calls_today.toLocaleString()}</p>
+            <p className="font-medium">
+              {item.api_calls_today.toLocaleString()}
+            </p>
           </div>
           <div>
             <p className="text-muted-foreground">Failures</p>
@@ -190,7 +204,7 @@ function HealthCard({ item }: { item: IndexerSearchHealth }) {
               )}
             </button>
             <p
-              className={`mt-1 text-xs text-muted-foreground break-all ${
+              className={`mt-1 break-all text-xs text-muted-foreground ${
                 errorExpanded ? "" : "line-clamp-1"
               }`}
             >
@@ -231,7 +245,9 @@ export function IndexerHealthPage() {
   const items = data?.data ?? [];
 
   const handleReset = () => {
-    if (window.confirm("Reset all indexer health stats? This cannot be undone.")) {
+    if (
+      window.confirm("Reset all indexer health stats? This cannot be undone.")
+    ) {
       resetAll.mutate();
     }
   };

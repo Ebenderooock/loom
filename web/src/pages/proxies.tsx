@@ -127,7 +127,9 @@ export function ProxiesPage() {
           ? "Detach this proxy from any indexers using it before deleting."
           : undefined;
       toast.error(
-        detail ? `${errMessage(err, "Could not delete proxy")} ${detail}` : errMessage(err, "Could not delete proxy"),
+        detail
+          ? `${errMessage(err, "Could not delete proxy")} ${detail}`
+          : errMessage(err, "Could not delete proxy"),
       );
     }
   }

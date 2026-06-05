@@ -16,9 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Plus, Search, Loader2, Tv, Check, ArrowLeft,
-} from "lucide-react";
+import { Plus, Search, Loader2, Tv, Check, ArrowLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useMediaPreferences } from "@/lib/media-info-api";
 import type { Library } from "../../lib/libraries-api";
@@ -43,9 +41,15 @@ export function AddSeriesDialog({
   const [searchTerm, setSearchTerm] = useState("");
   const [results, setResults] = useState<TMDBSeriesResult[]>([]);
   const [searching, setSearching] = useState(false);
-  const [selectedSeries, setSelectedSeries] = useState<TMDBSeriesResult | null>(null);
-  const [selectedProfile, setSelectedProfile] = useState(qualityProfiles[0]?.id ?? "");
-  const [selectedLibrary, setSelectedLibrary] = useState(libraries[0]?.id ?? "");
+  const [selectedSeries, setSelectedSeries] = useState<TMDBSeriesResult | null>(
+    null,
+  );
+  const [selectedProfile, setSelectedProfile] = useState(
+    qualityProfiles[0]?.id ?? "",
+  );
+  const [selectedLibrary, setSelectedLibrary] = useState(
+    libraries[0]?.id ?? "",
+  );
   const [seriesType, setSeriesType] = useState("standard");
   const [seasonFolder, setSeasonFolder] = useState(true);
   const [monitoringStatus, setMonitoringStatus] = useState("all");
@@ -64,7 +68,11 @@ export function AddSeriesDialog({
       setAddError("");
       const firstLib = libraries[0];
       setSelectedLibrary(firstLib?.id ?? "");
-      setSelectedProfile(firstLib?.quality_profile_id || mediaPrefs?.default_quality_profile_id || (qualityProfiles[0]?.id ?? ""));
+      setSelectedProfile(
+        firstLib?.quality_profile_id ||
+          mediaPrefs?.default_quality_profile_id ||
+          (qualityProfiles[0]?.id ?? ""),
+      );
       setSeriesType("standard");
       setSeasonFolder(true);
       setMonitoringStatus("all");
@@ -79,25 +87,45 @@ export function AddSeriesDialog({
     if (qualityProfiles.length === 0) return;
     setSelectedProfile((prev) => {
       if (prev && qualityProfiles.some((p) => p.id === prev)) return prev;
-      return libraries[0]?.quality_profile_id || mediaPrefs?.default_quality_profile_id || qualityProfiles[0]?.id || "";
+      return (
+        libraries[0]?.quality_profile_id ||
+        mediaPrefs?.default_quality_profile_id ||
+        qualityProfiles[0]?.id ||
+        ""
+      );
     });
   }, [qualityProfiles, libraries, mediaPrefs]);
 
-  const handleLibraryChange = useCallback((libId: string) => {
-    setSelectedLibrary(libId);
-    const lib = libraries.find(l => l.id === libId);
-    if (lib?.quality_profile_id) {
-      setSelectedProfile(lib.quality_profile_id);
-    }
-  }, [libraries]);
+  const handleLibraryChange = useCallback(
+    (libId: string) => {
+      setSelectedLibrary(libId);
+      const lib = libraries.find((l) => l.id === libId);
+      if (lib?.quality_profile_id) {
+        setSelectedProfile(lib.quality_profile_id);
+      }
+    },
+    [libraries],
+  );
 
   const doSearch = useCallback(async (term: string) => {
-    if (term.length < 2) { setResults([]); return; }
+    if (term.length < 2) {
+      setResults([]);
+      return;
+    }
     setSearching(true);
     try {
-      const res = await apiFetch(`/api/v1/series/search?q=${encodeURIComponent(term)}`);
-      if (res.ok) { const data = await res.json(); setResults(Array.isArray(data) ? data : data.data ?? []); }
-    } catch { /* ignore */ } finally { setSearching(false); }
+      const res = await apiFetch(
+        `/api/v1/series/search?q=${encodeURIComponent(term)}`,
+      );
+      if (res.ok) {
+        const data = await res.json();
+        setResults(Array.isArray(data) ? data : (data.data ?? []));
+      }
+    } catch {
+      /* ignore */
+    } finally {
+      setSearching(false);
+    }
   }, []);
 
   const handleSearchChange = (val: string) => {
@@ -125,74 +153,146 @@ export function AddSeriesDialog({
           search: searchOnAdd,
         }),
       });
-      if (!res.ok) { setAddError((await res.text()) || "Failed to add series"); return; }
+      if (!res.ok) {
+        setAddError((await res.text()) || "Failed to add series");
+        return;
+      }
       onSeriesAdded();
       onOpenChange(false);
-    } catch { setAddError("Network error adding series"); } finally { setAdding(false); }
+    } catch {
+      setAddError("Network error adding series");
+    } finally {
+      setAdding(false);
+    }
   };
 
-  const isAlreadyInLibrary = (r: TMDBSeriesResult) => r.tmdbId ? existingTmdbIds.has(r.tmdbId) : false;
+  const isAlreadyInLibrary = (r: TMDBSeriesResult) =>
+    r.tmdbId ? existingTmdbIds.has(r.tmdbId) : false;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col p-0 gap-0">
-        <DialogHeader className="p-6 pb-4 border-b border-border/50">
-          <DialogTitle className="text-xl flex items-center gap-2">
-            <Tv className="w-5 h-5 text-accent" />
+      <DialogContent className="flex max-h-[85vh] max-w-3xl flex-col gap-0 p-0">
+        <DialogHeader className="border-b border-border/50 p-6 pb-4">
+          <DialogTitle className="flex items-center gap-2 text-xl">
+            <Tv className="h-5 w-5 text-accent" />
             {selectedSeries ? "Add Series" : "Search Series"}
           </DialogTitle>
         </DialogHeader>
 
         {selectedSeries ? (
           <div className="flex-1 overflow-y-auto">
-            <div className="relative h-48 bg-muted overflow-hidden">
+            <div className="relative h-48 overflow-hidden bg-muted">
               {selectedSeries.posterPath && (
-                <img src={`${TMDB_IMG}/w780${selectedSeries.posterPath}`} className="w-full h-full object-cover opacity-30 blur-sm" alt="" />
+                <img
+                  src={`${TMDB_IMG}/w780${selectedSeries.posterPath}`}
+                  className="h-full w-full object-cover opacity-30 blur-sm"
+                  alt=""
+                />
               )}
               <div className="absolute inset-0 bg-gradient-to-t from-background to-transparent" />
-              <button onClick={() => setSelectedSeries(null)} className="absolute top-4 left-4 flex items-center gap-1 text-sm text-white/80 hover:text-white bg-black/40 rounded-full px-3 py-1.5">
-                <ArrowLeft className="w-4 h-4" /> Back to results
+              <button
+                onClick={() => setSelectedSeries(null)}
+                className="absolute left-4 top-4 flex items-center gap-1 rounded-full bg-black/40 px-3 py-1.5 text-sm text-white/80 hover:text-white"
+              >
+                <ArrowLeft className="h-4 w-4" /> Back to results
               </button>
             </div>
-            <div className="p-6 -mt-16 relative z-10">
+            <div className="relative z-10 -mt-16 p-6">
               <div className="flex gap-5">
-                <div className="shrink-0 w-32 rounded-lg overflow-hidden shadow-xl border-2 border-background">
+                <div className="w-32 shrink-0 overflow-hidden rounded-lg border-2 border-background shadow-xl">
                   {selectedSeries.posterPath ? (
-                    <img src={`${TMDB_IMG}/w300${selectedSeries.posterPath}`} alt={selectedSeries.title} className="w-full aspect-[2/3] object-cover" />
+                    <img
+                      src={`${TMDB_IMG}/w300${selectedSeries.posterPath}`}
+                      alt={selectedSeries.title}
+                      className="aspect-[2/3] w-full object-cover"
+                    />
                   ) : (
-                    <div className="w-full aspect-[2/3] bg-muted flex items-center justify-center"><Tv className="w-8 h-8 text-muted-foreground/30" /></div>
+                    <div className="flex aspect-[2/3] w-full items-center justify-center bg-muted">
+                      <Tv className="h-8 w-8 text-muted-foreground/30" />
+                    </div>
                   )}
                 </div>
-                <div className="flex-1 min-w-0 pt-12">
-                  <h2 className="text-2xl font-bold truncate">{selectedSeries.title}</h2>
-                  <div className="flex items-center gap-3 mt-1 text-sm text-muted-foreground">
-                    {selectedSeries.year > 0 && <span>{selectedSeries.year}</span>}
-                    {selectedSeries.network && <span>{selectedSeries.network}</span>}
-                    {selectedSeries.status && <span className="capitalize">{selectedSeries.status}</span>}
+                <div className="min-w-0 flex-1 pt-12">
+                  <h2 className="truncate text-2xl font-bold">
+                    {selectedSeries.title}
+                  </h2>
+                  <div className="mt-1 flex items-center gap-3 text-sm text-muted-foreground">
+                    {selectedSeries.year > 0 && (
+                      <span>{selectedSeries.year}</span>
+                    )}
+                    {selectedSeries.network && (
+                      <span>{selectedSeries.network}</span>
+                    )}
+                    {selectedSeries.status && (
+                      <span className="capitalize">
+                        {selectedSeries.status}
+                      </span>
+                    )}
                   </div>
-                  <p className="text-sm text-muted-foreground mt-3 line-clamp-3 leading-relaxed">{selectedSeries.overview || "No overview available."}</p>
+                  <p className="mt-3 line-clamp-3 text-sm leading-relaxed text-muted-foreground">
+                    {selectedSeries.overview || "No overview available."}
+                  </p>
                 </div>
               </div>
 
               <div className="mt-6 grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <label htmlFor="add-series-library" className="text-sm font-medium">Library</label>
-                  <Select value={selectedLibrary} onValueChange={handleLibraryChange}>
-                    <SelectTrigger id="add-series-library"><SelectValue placeholder="Select library" /></SelectTrigger>
-                    <SelectContent>{libraries.map(lib => <SelectItem key={lib.id} value={lib.id}>{lib.name}</SelectItem>)}</SelectContent>
+                  <label
+                    htmlFor="add-series-library"
+                    className="text-sm font-medium"
+                  >
+                    Library
+                  </label>
+                  <Select
+                    value={selectedLibrary}
+                    onValueChange={handleLibraryChange}
+                  >
+                    <SelectTrigger id="add-series-library">
+                      <SelectValue placeholder="Select library" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {libraries.map((lib) => (
+                        <SelectItem key={lib.id} value={lib.id}>
+                          {lib.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-1.5">
-                  <label htmlFor="add-series-profile" className="text-sm font-medium">Quality Profile</label>
-                  <Select value={selectedProfile} onValueChange={setSelectedProfile}>
-                    <SelectTrigger id="add-series-profile"><SelectValue placeholder="Select quality profile" /></SelectTrigger>
-                    <SelectContent>{qualityProfiles.map(qp => <SelectItem key={qp.id} value={qp.id}>{qp.name}</SelectItem>)}</SelectContent>
+                  <label
+                    htmlFor="add-series-profile"
+                    className="text-sm font-medium"
+                  >
+                    Quality Profile
+                  </label>
+                  <Select
+                    value={selectedProfile}
+                    onValueChange={setSelectedProfile}
+                  >
+                    <SelectTrigger id="add-series-profile">
+                      <SelectValue placeholder="Select quality profile" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {qualityProfiles.map((qp) => (
+                        <SelectItem key={qp.id} value={qp.id}>
+                          {qp.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-1.5">
-                  <label htmlFor="add-series-type" className="text-sm font-medium">Series Type</label>
+                  <label
+                    htmlFor="add-series-type"
+                    className="text-sm font-medium"
+                  >
+                    Series Type
+                  </label>
                   <Select value={seriesType} onValueChange={setSeriesType}>
-                    <SelectTrigger id="add-series-type"><SelectValue /></SelectTrigger>
+                    <SelectTrigger id="add-series-type">
+                      <SelectValue />
+                    </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="standard">Standard</SelectItem>
                       <SelectItem value="daily">Daily</SelectItem>
@@ -202,16 +302,28 @@ export function AddSeriesDialog({
                 </div>
               </div>
 
-              <div className="flex items-center gap-6 mt-4">
+              <div className="mt-4 flex items-center gap-6">
                 <div className="flex-1">
-                  <label htmlFor="add-series-monitor" className="text-xs text-muted-foreground mb-1 block">Monitor</label>
-                  <Select value={monitoringStatus} onValueChange={setMonitoringStatus}>
-                    <SelectTrigger id="add-series-monitor"><SelectValue /></SelectTrigger>
+                  <label
+                    htmlFor="add-series-monitor"
+                    className="mb-1 block text-xs text-muted-foreground"
+                  >
+                    Monitor
+                  </label>
+                  <Select
+                    value={monitoringStatus}
+                    onValueChange={setMonitoringStatus}
+                  >
+                    <SelectTrigger id="add-series-monitor">
+                      <SelectValue />
+                    </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">All Episodes</SelectItem>
                       <SelectItem value="future">Future Episodes</SelectItem>
                       <SelectItem value="missing">Missing Episodes</SelectItem>
-                      <SelectItem value="existing">Existing Episodes</SelectItem>
+                      <SelectItem value="existing">
+                        Existing Episodes
+                      </SelectItem>
                       <SelectItem value="pilot">Pilot Only</SelectItem>
                       <SelectItem value="firstSeason">First Season</SelectItem>
                       <SelectItem value="lastSeason">Latest Season</SelectItem>
@@ -220,22 +332,57 @@ export function AddSeriesDialog({
                   </Select>
                 </div>
                 <div className="flex items-center gap-2 pt-5">
-                  <Checkbox id="seasonFolder" checked={seasonFolder} onCheckedChange={(v) => setSeasonFolder(v === true)} />
-                  <label htmlFor="seasonFolder" className="text-sm font-medium cursor-pointer">Season folders</label>
+                  <Checkbox
+                    id="seasonFolder"
+                    checked={seasonFolder}
+                    onCheckedChange={(v) => setSeasonFolder(v === true)}
+                  />
+                  <label
+                    htmlFor="seasonFolder"
+                    className="cursor-pointer text-sm font-medium"
+                  >
+                    Season folders
+                  </label>
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 mt-2">
-                <Checkbox id="searchOnAdd" checked={searchOnAdd} onCheckedChange={(v) => setSearchOnAdd(v === true)} />
-                <label htmlFor="searchOnAdd" className="text-sm font-medium cursor-pointer">Search after adding</label>
+              <div className="mt-2 flex items-center gap-2">
+                <Checkbox
+                  id="searchOnAdd"
+                  checked={searchOnAdd}
+                  onCheckedChange={(v) => setSearchOnAdd(v === true)}
+                />
+                <label
+                  htmlFor="searchOnAdd"
+                  className="cursor-pointer text-sm font-medium"
+                >
+                  Search after adding
+                </label>
               </div>
 
-              {addError && <p className="text-sm text-destructive mt-3">{addError}</p>}
+              {addError && (
+                <p className="mt-3 text-sm text-destructive">{addError}</p>
+              )}
 
-              <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-border/50">
-                <Button variant="outline" onClick={() => setSelectedSeries(null)}>Cancel</Button>
-                <Button onClick={handleAdd} disabled={adding || !selectedLibrary || !selectedProfile} className="min-w-[120px]">
-                  {adding ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Plus className="w-4 h-4 mr-1" /> Add Series</>}
+              <div className="mt-6 flex justify-end gap-3 border-t border-border/50 pt-4">
+                <Button
+                  variant="outline"
+                  onClick={() => setSelectedSeries(null)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleAdd}
+                  disabled={adding || !selectedLibrary || !selectedProfile}
+                  className="min-w-[120px]"
+                >
+                  {adding ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <>
+                      <Plus className="mr-1 h-4 w-4" /> Add Series
+                    </>
+                  )}
                 </Button>
               </div>
             </div>
@@ -244,24 +391,34 @@ export function AddSeriesDialog({
           <>
             <div className="px-6 pt-4">
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input ref={searchInputRef} placeholder="Search for a series to add..." value={searchTerm} onChange={(e) => handleSearchChange(e.target.value)} className="pl-9 h-11" />
-                {searching && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 animate-spin text-muted-foreground" />}
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  ref={searchInputRef}
+                  placeholder="Search for a series to add..."
+                  value={searchTerm}
+                  onChange={(e) => handleSearchChange(e.target.value)}
+                  className="h-11 pl-9"
+                />
+                {searching && (
+                  <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-muted-foreground" />
+                )}
               </div>
             </div>
             <div className="flex-1 overflow-y-auto px-6 pb-6">
               {results.length === 0 && searchTerm.length >= 2 && !searching ? (
                 <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
-                  <Tv className="w-12 h-12 mb-3 opacity-30" />
-                  <p className="text-sm">No series found for &ldquo;{searchTerm}&rdquo;</p>
+                  <Tv className="mb-3 h-12 w-12 opacity-30" />
+                  <p className="text-sm">
+                    No series found for &ldquo;{searchTerm}&rdquo;
+                  </p>
                 </div>
               ) : results.length === 0 && searchTerm.length < 2 ? (
                 <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
-                  <Search className="w-12 h-12 mb-3 opacity-30" />
+                  <Search className="mb-3 h-12 w-12 opacity-30" />
                   <p className="text-sm">Start typing to search TMDB</p>
                 </div>
               ) : (
-                <div className="space-y-2 mt-3">
+                <div className="mt-3 space-y-2">
                   {results.map((r, i) => {
                     const inLibrary = isAlreadyInLibrary(r);
                     return (
@@ -270,28 +427,50 @@ export function AddSeriesDialog({
                         onClick={() => !inLibrary && setSelectedSeries(r)}
                         disabled={inLibrary}
                         className={cn(
-                          "w-full flex items-start gap-4 p-3 rounded-lg border text-left transition-colors",
-                          inLibrary ? "border-border/30 opacity-50 cursor-not-allowed" : "border-border/50 hover:border-accent/50 hover:bg-accent/5 cursor-pointer",
+                          "flex w-full items-start gap-4 rounded-lg border p-3 text-left transition-colors",
+                          inLibrary
+                            ? "cursor-not-allowed border-border/30 opacity-50"
+                            : "cursor-pointer border-border/50 hover:border-accent/50 hover:bg-accent/5",
                         )}
                       >
-                        <div className="shrink-0 w-12 aspect-[2/3] rounded overflow-hidden bg-muted">
+                        <div className="aspect-[2/3] w-12 shrink-0 overflow-hidden rounded bg-muted">
                           {r.posterPath ? (
-                            <img src={`${TMDB_IMG}/w92${r.posterPath}`} alt={r.title} className="w-full h-full object-cover" />
+                            <img
+                              src={`${TMDB_IMG}/w92${r.posterPath}`}
+                              alt={r.title}
+                              className="h-full w-full object-cover"
+                            />
                           ) : (
-                            <div className="w-full h-full flex items-center justify-center"><Tv className="w-4 h-4 text-muted-foreground/30" /></div>
+                            <div className="flex h-full w-full items-center justify-center">
+                              <Tv className="h-4 w-4 text-muted-foreground/30" />
+                            </div>
                           )}
                         </div>
-                        <div className="flex-1 min-w-0">
+                        <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2">
-                            <h4 className="text-sm font-semibold truncate">{r.title}</h4>
-                            {r.year > 0 && <span className="text-xs text-muted-foreground shrink-0">({r.year})</span>}
+                            <h4 className="truncate text-sm font-semibold">
+                              {r.title}
+                            </h4>
+                            {r.year > 0 && (
+                              <span className="shrink-0 text-xs text-muted-foreground">
+                                ({r.year})
+                              </span>
+                            )}
                           </div>
-                          {r.network && <p className="text-xs text-muted-foreground mt-0.5">{r.network}</p>}
-                          <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{r.overview}</p>
+                          {r.network && (
+                            <p className="mt-0.5 text-xs text-muted-foreground">
+                              {r.network}
+                            </p>
+                          )}
+                          <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">
+                            {r.overview}
+                          </p>
                         </div>
-                        <div className="shrink-0 flex items-center">
+                        <div className="flex shrink-0 items-center">
                           {inLibrary ? (
-                            <span className="flex items-center gap-1 text-xs text-green-500"><Check className="w-3.5 h-3.5" /> In Library</span>
+                            <span className="flex items-center gap-1 text-xs text-green-500">
+                              <Check className="h-3.5 w-3.5" /> In Library
+                            </span>
                           ) : (
                             <span className="text-xs text-accent">Add →</span>
                           )}

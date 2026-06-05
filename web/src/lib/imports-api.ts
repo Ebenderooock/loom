@@ -58,7 +58,8 @@ async function fetchJSON<T>(url: string, init?: RequestInit): Promise<T> {
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     throw new Error(
-      (body as Record<string, string>).error ?? `${res.status} ${res.statusText}`,
+      (body as Record<string, string>).error ??
+        `${res.status} ${res.statusText}`,
     );
   }
   return (await res.json()) as T;
@@ -88,10 +89,13 @@ export async function reimportFile(params: {
   source_path: string;
   conflict_policy?: string;
 }): Promise<ImportRecord> {
-  const r = await fetchJSON<{ data: ImportRecord }>("/api/v1/imports/reimport", {
-    method: "POST",
-    body: JSON.stringify(params),
-  });
+  const r = await fetchJSON<{ data: ImportRecord }>(
+    "/api/v1/imports/reimport",
+    {
+      method: "POST",
+      body: JSON.stringify(params),
+    },
+  );
   return r.data;
 }
 
@@ -118,10 +122,10 @@ export async function manualMatch(params: {
   media_type: string;
   media_id: string;
 }): Promise<void> {
-  await fetchJSON<{ status: string }>(
-    "/api/v1/imports/manual-match",
-    { method: "POST", body: JSON.stringify(params) },
-  );
+  await fetchJSON<{ status: string }>("/api/v1/imports/manual-match", {
+    method: "POST",
+    body: JSON.stringify(params),
+  });
 }
 
 // Local library search helpers
@@ -156,18 +160,14 @@ export interface SeriesEpisode {
   episodeNumber: number;
 }
 
-export async function searchLocalMovies(
-  query: string,
-): Promise<LocalMovie[]> {
+export async function searchLocalMovies(query: string): Promise<LocalMovie[]> {
   const r = await fetchJSON<{ data: LocalMovie[] }>(
     `/api/v1/movies/search?q=${encodeURIComponent(query)}`,
   );
   return r.data;
 }
 
-export async function searchLocalSeries(
-  query: string,
-): Promise<LocalSeries[]> {
+export async function searchLocalSeries(query: string): Promise<LocalSeries[]> {
   const r = await fetchJSON<{ data: LocalSeries[] }>(
     `/api/v1/series?search=${encodeURIComponent(query)}`,
   );

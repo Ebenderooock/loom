@@ -314,10 +314,7 @@ export async function mockMovies(
 // Series mocks
 // ---------------------------------------------------------------------------
 
-export async function mockSeriesApi(
-  page: Page,
-  seriesList = [SAMPLE_SERIES],
-) {
+export async function mockSeriesApi(page: Page, seriesList = [SAMPLE_SERIES]) {
   await mockGet(page, "series?*", {
     data: seriesList,
     total: seriesList.length,
@@ -338,10 +335,7 @@ export async function mockSeriesApi(
 // Indexer mocks
 // ---------------------------------------------------------------------------
 
-export async function mockIndexers(
-  page: Page,
-  indexers = [SAMPLE_INDEXER],
-) {
+export async function mockIndexers(page: Page, indexers = [SAMPLE_INDEXER]) {
   await mockGet(page, "indexers", { indexers });
   await mockGet(page, "indexers/health", { data: [] });
   await mockGet(page, "indexers/definitions", [
@@ -437,7 +431,11 @@ export const SAMPLE_WORKFLOW_FAILED = {
 
 export async function mockWorkflows(
   page: Page,
-  workflows = [SAMPLE_WORKFLOW_ACTIVE, SAMPLE_WORKFLOW_COMPLETED, SAMPLE_WORKFLOW_FAILED],
+  workflows = [
+    SAMPLE_WORKFLOW_ACTIVE,
+    SAMPLE_WORKFLOW_COMPLETED,
+    SAMPLE_WORKFLOW_FAILED,
+  ],
 ) {
   await mockGet(page, "workflows", workflows);
   for (const wf of workflows) {
@@ -477,24 +475,30 @@ export async function mockSearchStream(
 ) {
   await page.route("**/api/v1/indexers/search/stream*", async (route) => {
     const lines: string[] = [];
-    lines.push("event: search-start\ndata: " + JSON.stringify({ query: "test" }) + "\n");
+    lines.push(
+      "event: search-start\ndata: " + JSON.stringify({ query: "test" }) + "\n",
+    );
 
     for (const r of results) {
       lines.push(
-        "event: indexer-result\ndata: " + JSON.stringify({
-          title: r.title,
-          size: r.size,
-          indexer: r.indexer,
-          guid: "guid-" + r.title,
-          download_url: "magnet:?xt=urn:btih:test",
-          seeders: 100,
-          leechers: 10,
-          quality: "1080p",
-        }) + "\n",
+        "event: indexer-result\ndata: " +
+          JSON.stringify({
+            title: r.title,
+            size: r.size,
+            indexer: r.indexer,
+            guid: "guid-" + r.title,
+            download_url: "magnet:?xt=urn:btih:test",
+            seeders: 100,
+            leechers: 10,
+            quality: "1080p",
+          }) +
+          "\n",
       );
     }
 
-    lines.push("event: done\ndata: " + JSON.stringify({ total: results.length }) + "\n");
+    lines.push(
+      "event: done\ndata: " + JSON.stringify({ total: results.length }) + "\n",
+    );
 
     await route.fulfill({
       status: 200,

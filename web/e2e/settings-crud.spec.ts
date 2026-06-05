@@ -18,22 +18,34 @@ test.describe("Settings CRUD", () => {
     await mockGet(page, "libraries", { data: [SAMPLE_LIBRARY] });
     // download-clients: match both with and without trailing slash
     // Two different callers: useDownloads() expects { download_clients: [...] }, path mappings expects plain array
-    await page.route(function(url) {
-      return url.pathname === "/api/v1/download-clients" || url.pathname === "/api/v1/download-clients/";
-    }, async (route) => {
-      if (route.request().method() === "GET") {
-        // Return both shapes: wrapper for useDownloads hook, but also ensure it works as array
-        // The useDownloads hook reads .download_clients; the apiFetch path treats response as array
-        const path = new URL(route.request().url()).pathname;
-        if (path.endsWith("/")) {
-          await route.fulfill({ status: 200, json: { download_clients: [SAMPLE_DOWNLOAD_CLIENT] } });
+    await page.route(
+      function (url) {
+        return (
+          url.pathname === "/api/v1/download-clients" ||
+          url.pathname === "/api/v1/download-clients/"
+        );
+      },
+      async (route) => {
+        if (route.request().method() === "GET") {
+          // Return both shapes: wrapper for useDownloads hook, but also ensure it works as array
+          // The useDownloads hook reads .download_clients; the apiFetch path treats response as array
+          const path = new URL(route.request().url()).pathname;
+          if (path.endsWith("/")) {
+            await route.fulfill({
+              status: 200,
+              json: { download_clients: [SAMPLE_DOWNLOAD_CLIENT] },
+            });
+          } else {
+            await route.fulfill({
+              status: 200,
+              json: [SAMPLE_DOWNLOAD_CLIENT],
+            });
+          }
         } else {
-          await route.fulfill({ status: 200, json: [SAMPLE_DOWNLOAD_CLIENT] });
+          await route.fallback();
         }
-      } else {
-        await route.fallback();
-      }
-    });
+      },
+    );
   });
 
   // Helper to click a settings category button in the nav
@@ -41,15 +53,19 @@ test.describe("Settings CRUD", () => {
     return page.locator("nav[aria-label='Settings sections']");
   }
 
-  test("settings page loads and shows general panel by default", async ({ page }) => {
+  test("settings page loads and shows general panel by default", async ({
+    page,
+  }) => {
     await page.goto("/settings");
 
-    await expect(
-      page.locator("header").getByText("Settings"),
-    ).toBeAttached({ timeout: 10000 });
+    await expect(page.locator("header").getByText("Settings")).toBeAttached({
+      timeout: 10000,
+    });
 
     // Default category is General — card header should show "General"
-    await expect(page.getByText("General application settings")).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText("General application settings")).toBeVisible({
+      timeout: 10000,
+    });
   });
 
   test("media management section shows libraries", async ({ page }) => {
@@ -59,13 +75,17 @@ test.describe("Settings CRUD", () => {
     await settingsNav(page).getByText("Media Management").click();
 
     // Library name should appear in the content area (path is unique)
-    await expect(page.getByText(SAMPLE_LIBRARY.path)).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText(SAMPLE_LIBRARY.path)).toBeVisible({
+      timeout: 10000,
+    });
   });
 
   test("add library dialog opens from media management", async ({ page }) => {
     await page.goto("/settings");
     await settingsNav(page).getByText("Media Management").click();
-    await expect(page.getByText(SAMPLE_LIBRARY.path)).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText(SAMPLE_LIBRARY.path)).toBeVisible({
+      timeout: 10000,
+    });
 
     // Click Add button to open add library dialog
     const addBtn = page.getByRole("button", { name: /Add/i }).first();
@@ -82,16 +102,22 @@ test.describe("Settings CRUD", () => {
     await settingsNav(page).getByText("Download Clients").click();
 
     // Client name should be visible
-    await expect(page.getByText(SAMPLE_DOWNLOAD_CLIENT.name)).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText(SAMPLE_DOWNLOAD_CLIENT.name)).toBeVisible({
+      timeout: 10000,
+    });
   });
 
   test("add download client dialog opens", async ({ page }) => {
     await page.goto("/settings");
     await settingsNav(page).getByText("Download Clients").click();
-    await expect(page.getByText(SAMPLE_DOWNLOAD_CLIENT.name)).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText(SAMPLE_DOWNLOAD_CLIENT.name)).toBeVisible({
+      timeout: 10000,
+    });
 
     // Click Add Client button
-    const addClientBtn = page.getByRole("button", { name: /Add Client|Add/i }).first();
+    const addClientBtn = page
+      .getByRole("button", { name: /Add Client|Add/i })
+      .first();
     await addClientBtn.click();
     await expect(page.getByRole("dialog")).toBeVisible({ timeout: 5000 });
   });
@@ -101,7 +127,9 @@ test.describe("Settings CRUD", () => {
     await settingsNav(page).getByText("Media Management").click();
 
     // Library path should be visible (unique text)
-    await expect(page.getByText(SAMPLE_LIBRARY.path)).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText(SAMPLE_LIBRARY.path)).toBeVisible({
+      timeout: 10000,
+    });
   });
 
   test("notifications settings render", async ({ page }) => {
@@ -131,12 +159,18 @@ test.describe("Settings CRUD", () => {
 
     // Click through categories and verify content changes
     await settingsNav(page).getByText("Media Management").click();
-    await expect(page.getByText(SAMPLE_LIBRARY.path)).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText(SAMPLE_LIBRARY.path)).toBeVisible({
+      timeout: 10000,
+    });
 
     await settingsNav(page).getByText("Download Clients").click();
-    await expect(page.getByText(SAMPLE_DOWNLOAD_CLIENT.name)).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText(SAMPLE_DOWNLOAD_CLIENT.name)).toBeVisible({
+      timeout: 10000,
+    });
 
     await settingsNav(page).getByText("General").click();
-    await expect(page.getByText("General application settings")).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText("General application settings")).toBeVisible({
+      timeout: 10000,
+    });
   });
 });

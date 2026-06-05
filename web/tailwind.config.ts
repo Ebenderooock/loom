@@ -54,33 +54,33 @@ const config: Config = {
           foreground: "hsl(var(--card-foreground))",
         },
         /* Extended color palette */
-        "purple": {
-          "midnight": "#2D1B69",
-          "rich": "#4A2C8F",
-          "soft": "#6B4BA1",
+        purple: {
+          midnight: "#2D1B69",
+          rich: "#4A2C8F",
+          soft: "#6B4BA1",
         },
-        "teal": {
-          "electric": "#00BFA6",
-          "ocean": "#00897B",
-          "deep": "#00695C",
+        teal: {
+          electric: "#00BFA6",
+          ocean: "#00897B",
+          deep: "#00695C",
         },
-        "indigo": {
-          "periwinkle": "#7986CB",
-          "soft": "#5C6BC0",
-          "deep": "#3949AB",
+        indigo: {
+          periwinkle: "#7986CB",
+          soft: "#5C6BC0",
+          deep: "#3949AB",
         },
-        "neutral": {
-          "dark": "#1A1A2E",
-          "card": "#2A2A3E",
-          "light": "#F4F4F8",
-          "white": "#FFFFFF",
-          "muted": "#9E9E9E",
+        neutral: {
+          dark: "#1A1A2E",
+          card: "#2A2A3E",
+          light: "#F4F4F8",
+          white: "#FFFFFF",
+          muted: "#9E9E9E",
         },
-        "semantic": {
-          "success": "#00C853",
-          "error": "#FF5252",
-          "warning": "#FFD740",
-          "info": "#40C4FF",
+        semantic: {
+          success: "#00C853",
+          error: "#FF5252",
+          warning: "#FFD740",
+          info: "#40C4FF",
         },
       },
       borderRadius: {
@@ -97,7 +97,7 @@ const config: Config = {
           from: { height: "var(--radix-accordion-content-height)" },
           to: { height: "0" },
         },
-        "shimmer": {
+        shimmer: {
           "0%": { backgroundPosition: "-200% 0" },
           "100%": { backgroundPosition: "200% 0" },
         },
@@ -121,7 +121,7 @@ const config: Config = {
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
-        "shimmer": "shimmer 2s infinite linear",
+        shimmer: "shimmer 2s infinite linear",
         "fade-in-up": "fade-in-up 0.3s ease-out",
         "slide-in-left": "slide-in-left 0.25s ease-out",
         "glow-pulse": "glow-pulse 2s ease-in-out infinite",

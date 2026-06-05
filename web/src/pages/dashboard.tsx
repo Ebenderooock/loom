@@ -1,9 +1,4 @@
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useSystemStatus } from "@/lib/api";
@@ -74,9 +69,9 @@ function StatCard({
   loading,
 }: StatCardProps) {
   return (
-    <Card className="relative overflow-hidden group card-glow">
+    <Card className="card-glow group relative overflow-hidden">
       {/* Subtle gradient accent line at top */}
-      <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-accent/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+      <div className="absolute left-0 right-0 top-0 h-[2px] bg-gradient-to-r from-transparent via-accent/40 to-transparent opacity-0 transition-opacity duration-500 group-hover:opacity-100" />
       <CardContent className="flex items-center gap-4 p-5">
         <div
           className={cn(
@@ -108,7 +103,8 @@ function WelcomeSection() {
     {
       number: 1,
       title: "Configure indexers",
-      description: "Add Usenet or torrent indexers so Loom can search for releases.",
+      description:
+        "Add Usenet or torrent indexers so Loom can search for releases.",
       href: "/indexers",
       icon: Radio,
     },
@@ -129,9 +125,9 @@ function WelcomeSection() {
   ];
 
   return (
-    <Card className="border-accent/20 bg-gradient-to-br from-primary/8 via-card to-accent/5 overflow-hidden relative">
-      <div className="absolute -top-20 -right-20 h-40 w-40 rounded-full bg-accent/5 blur-3xl pointer-events-none" />
-      <div className="absolute -bottom-10 -left-10 h-32 w-32 rounded-full bg-primary/5 blur-3xl pointer-events-none" />
+    <Card className="from-primary/8 relative overflow-hidden border-accent/20 bg-gradient-to-br via-card to-accent/5">
+      <div className="pointer-events-none absolute -right-20 -top-20 h-40 w-40 rounded-full bg-accent/5 blur-3xl" />
+      <div className="pointer-events-none absolute -bottom-10 -left-10 h-32 w-32 rounded-full bg-primary/5 blur-3xl" />
       <CardHeader className="pb-2">
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/15">
@@ -151,7 +147,7 @@ function WelcomeSection() {
             <Link
               key={step.number}
               to={step.href}
-              className="group flex gap-3 rounded-xl border border-border/30 bg-card/50 backdrop-blur-sm p-4 transition-all duration-300 hover:border-accent/30 hover:bg-accent/5 hover:shadow-lg hover:shadow-accent/5 hover:-translate-y-0.5"
+              className="group flex gap-3 rounded-xl border border-border/30 bg-card/50 p-4 backdrop-blur-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-accent/30 hover:bg-accent/5 hover:shadow-lg hover:shadow-accent/5"
             >
               <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-primary/20 to-accent/20 text-sm font-bold text-accent">
                 {step.number}
@@ -185,7 +181,7 @@ function QuickActionsCard() {
   ];
 
   return (
-    <Card className="flex flex-col card-glow">
+    <Card className="card-glow flex flex-col">
       <CardHeader className="pb-3">
         <CardTitle className="text-base">Quick Actions</CardTitle>
       </CardHeader>
@@ -196,7 +192,7 @@ function QuickActionsCard() {
               key={action.label}
               variant="outline"
               size="sm"
-              className="justify-start gap-2 hover:border-accent/30 transition-all duration-200"
+              className="justify-start gap-2 transition-all duration-200 hover:border-accent/30"
               asChild
             >
               <Link to={action.href}>
@@ -244,11 +240,13 @@ function SystemHealthCard() {
                     : "bg-yellow-500/10"
                 }`}
               >
-                <AlertTriangle className={`mt-0.5 h-4 w-4 shrink-0 ${
-                  issue.severity === "error"
-                    ? "text-destructive"
-                    : "text-yellow-500"
-                }`} />
+                <AlertTriangle
+                  className={`mt-0.5 h-4 w-4 shrink-0 ${
+                    issue.severity === "error"
+                      ? "text-destructive"
+                      : "text-yellow-500"
+                  }`}
+                />
                 <span>
                   <span className="font-medium">{issue.name}</span>{" "}
                   <span className="text-muted-foreground">{issue.message}</span>
@@ -260,12 +258,13 @@ function SystemHealthCard() {
                 to="/indexers/health"
                 className="text-xs text-muted-foreground hover:text-primary"
               >
-                + {issues.length - 3} more issue{issues.length - 3 > 1 ? "s" : ""}
+                + {issues.length - 3} more issue
+                {issues.length - 3 > 1 ? "s" : ""}
               </Link>
             )}
           </div>
         ) : (
-          <div className="flex items-center gap-2 rounded-md bg-emerald-500/10 border border-emerald-500/20 shadow-sm shadow-emerald-500/5 px-3 py-2 text-sm text-emerald-400">
+          <div className="flex items-center gap-2 rounded-md border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-400 shadow-sm shadow-emerald-500/5">
             <CheckCircle2 className="h-4 w-4 shrink-0" />
             All systems operational
           </div>
@@ -304,7 +303,9 @@ function SystemHealthCard() {
 function StorageCard() {
   const { data, isLoading } = useLibraries();
   const libs = data ?? [];
-  const withSpace = libs.filter((l) => l.disk_space && l.disk_space.total_bytes > 0);
+  const withSpace = libs.filter(
+    (l) => l.disk_space && l.disk_space.total_bytes > 0,
+  );
 
   if (isLoading) {
     return (
@@ -329,7 +330,9 @@ function StorageCard() {
         <CardContent>
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <FolderOpen className="h-4 w-4" />
-            {libs.length === 0 ? "No libraries configured" : "Storage info unavailable"}
+            {libs.length === 0
+              ? "No libraries configured"
+              : "Storage info unavailable"}
           </div>
         </CardContent>
       </Card>
@@ -350,8 +353,8 @@ function StorageCard() {
           return (
             <div key={lib.id} className="space-y-1.5">
               <div className="flex items-center justify-between text-sm">
-                <span className="font-medium truncate">{lib.name}</span>
-                <span className="text-xs text-muted-foreground shrink-0 ml-2">
+                <span className="truncate font-medium">{lib.name}</span>
+                <span className="ml-2 shrink-0 text-xs text-muted-foreground">
                   {formatBytes(free)} free
                 </span>
               </div>
@@ -375,7 +378,10 @@ function ActiveDownloadsCard() {
   const { data: items, isLoading } = useDashboardActivity();
 
   const active = (items ?? []).filter(
-    (i) => i.status === "downloading" || i.status === "seeding" || i.status === "queued",
+    (i) =>
+      i.status === "downloading" ||
+      i.status === "seeding" ||
+      i.status === "queued",
   );
   const totalDown = active.reduce((s, i) => s + (i.download_rate || 0), 0);
   const totalUp = active.reduce((s, i) => s + (i.upload_rate || 0), 0);
@@ -390,13 +396,17 @@ function ActiveDownloadsCard() {
               {totalDown > 0 && (
                 <span className="flex items-center gap-1">
                   <ArrowDown className="h-3 w-3 text-blue-400" />
-                  <span className="font-medium text-foreground/80">{formatSpeed(totalDown)}</span>
+                  <span className="font-medium text-foreground/80">
+                    {formatSpeed(totalDown)}
+                  </span>
                 </span>
               )}
               {totalUp > 0 && (
                 <span className="flex items-center gap-1">
                   <ArrowUp className="h-3 w-3 text-green-400" />
-                  <span className="font-medium text-foreground/80">{formatSpeed(totalUp)}</span>
+                  <span className="font-medium text-foreground/80">
+                    {formatSpeed(totalUp)}
+                  </span>
                 </span>
               )}
             </div>
@@ -411,29 +421,40 @@ function ActiveDownloadsCard() {
           </div>
         ) : active.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-8 text-center">
-            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-muted/30 border border-border/30">
+            <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-border/30 bg-muted/30">
               <Download className="h-6 w-6 text-muted-foreground/50" />
             </div>
-            <p className="mt-3 text-sm text-muted-foreground">No active downloads</p>
+            <p className="mt-3 text-sm text-muted-foreground">
+              No active downloads
+            </p>
           </div>
         ) : (
           <div className="space-y-3">
             {active.slice(0, 5).map((item) => (
-              <div key={item.id} className="space-y-1.5 rounded-lg p-2 -mx-2 transition-colors duration-200 hover:bg-accent/5">
+              <div
+                key={item.id}
+                className="-mx-2 space-y-1.5 rounded-lg p-2 transition-colors duration-200 hover:bg-accent/5"
+              >
                 <div className="flex items-center justify-between gap-2">
-                  <span className="truncate text-sm font-medium">{item.title}</span>
+                  <span className="truncate text-sm font-medium">
+                    {item.title}
+                  </span>
                   <span className="shrink-0 text-xs text-muted-foreground">
                     {item.status === "downloading" && item.download_rate > 0
                       ? formatSpeed(item.download_rate)
                       : item.status}
                   </span>
                 </div>
-                <Progress value={Math.round(item.progress * 100)} className="h-1.5" />
+                <Progress
+                  value={Math.round(item.progress * 100)}
+                  className="h-1.5"
+                />
                 <div className="flex items-center justify-between text-xs text-muted-foreground">
                   <span>{Math.round(item.progress * 100)}%</span>
                   {item.size_bytes > 0 && (
                     <span>
-                      {formatBytes(item.downloaded_bytes)} / {formatBytes(item.size_bytes)}
+                      {formatBytes(item.downloaded_bytes)} /{" "}
+                      {formatBytes(item.size_bytes)}
                     </span>
                   )}
                 </div>
@@ -482,11 +503,10 @@ export function DashboardPage() {
   const dlClientCount = dlClients.data?.download_clients?.length ?? 0;
 
   const isLoading = movies.isLoading || series.isLoading || indexers.isLoading;
-  const isFreshInstall =
-    !isLoading && movieCount === 0 && seriesCount === 0;
+  const isFreshInstall = !isLoading && movieCount === 0 && seriesCount === 0;
 
   return (
-    <div className="space-y-6 animate-fade-in-up">
+    <div className="animate-fade-in-up space-y-6">
       {/* Welcome state for fresh installs */}
       {isFreshInstall && <WelcomeSection />}
 
@@ -547,7 +567,10 @@ export function DashboardPage() {
 function DashboardAnalyticsRow() {
   const { data: streams } = useActiveStreams();
   const { data: stats } = useAnalyticsStats(7);
-  const totalBandwidth = (streams ?? []).reduce((sum, s) => sum + (s.bitrate_kbps || 0), 0);
+  const totalBandwidth = (streams ?? []).reduce(
+    (sum, s) => sum + (s.bitrate_kbps || 0),
+    0,
+  );
 
   return (
     <div className="grid gap-4 md:grid-cols-2">
@@ -582,17 +605,24 @@ function DashboardAnalyticsRow() {
                   ) : (
                     <PlayCircle className="h-4 w-4 shrink-0 text-accent" />
                   )}
-                  <span className="min-w-0 flex-1 truncate">{s.full_title || s.title}</span>
+                  <span className="min-w-0 flex-1 truncate">
+                    {s.full_title || s.title}
+                  </span>
                   <span className="shrink-0 text-xs text-muted-foreground">
                     {s.user || "Unknown"}
                   </span>
-                  {s.transcode && <Zap className="h-3 w-3 shrink-0 text-amber-400" />}
+                  {s.transcode && (
+                    <Zap className="h-3 w-3 shrink-0 text-amber-400" />
+                  )}
                 </div>
               ))}
             </div>
           )}
           <div className="mt-3 border-t pt-3 text-right">
-            <Link to="/analytics" className="text-xs text-accent hover:underline">
+            <Link
+              to="/analytics"
+              className="text-xs text-accent hover:underline"
+            >
               View analytics →
             </Link>
           </div>
@@ -604,7 +634,10 @@ function DashboardAnalyticsRow() {
           <CardTitle className="text-base">Last 7 days</CardTitle>
         </CardHeader>
         <CardContent className="grid grid-cols-3 gap-3">
-          <MiniStat label="Plays" value={stats ? String(stats.totals.plays) : "—"} />
+          <MiniStat
+            label="Plays"
+            value={stats ? String(stats.totals.plays) : "—"}
+          />
           <MiniStat
             label="Viewers"
             value={stats ? String(stats.totals.unique_users) : "—"}

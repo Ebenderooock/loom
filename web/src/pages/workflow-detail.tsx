@@ -32,7 +32,11 @@ import { useRouter, useParams } from "@tanstack/react-router";
 // Reuse state badge config from workflows page
 const STATE_CONFIG: Record<
   WorkflowState,
-  { label: string; icon: React.ElementType; variant: "default" | "secondary" | "destructive" | "outline" }
+  {
+    label: string;
+    icon: React.ElementType;
+    variant: "default" | "secondary" | "destructive" | "outline";
+  }
 > = {
   searching: { label: "Searching", icon: Search, variant: "secondary" },
   grabbed: { label: "Grabbed", icon: Download, variant: "secondary" },
@@ -43,7 +47,12 @@ const STATE_CONFIG: Record<
   cancelled: { label: "Cancelled", icon: Ban, variant: "outline" },
 };
 
-const ACTIVE_STATES: WorkflowState[] = ["searching", "grabbed", "downloading", "importing"];
+const ACTIVE_STATES: WorkflowState[] = [
+  "searching",
+  "grabbed",
+  "downloading",
+  "importing",
+];
 
 export function WorkflowDetailPage() {
   const { workflowId } = useParams({ strict: false }) as { workflowId: string };
@@ -63,7 +72,9 @@ export function WorkflowDetailPage() {
         <Card>
           <CardContent className="py-8 text-center text-red-400">
             <AlertTriangle className="mx-auto mb-2 h-6 w-6" />
-            {error ? `Failed to load workflow: ${error.message}` : "Workflow not found"}
+            {error
+              ? `Failed to load workflow: ${error.message}`
+              : "Workflow not found"}
           </CardContent>
         </Card>
       </div>
@@ -87,16 +98,19 @@ export function WorkflowDetailPage() {
         >
           <ArrowLeft className="h-4 w-4" />
         </Button>
-        <div className="flex-1 min-w-0">
-          <h2 className="text-lg font-semibold truncate">
+        <div className="min-w-0 flex-1">
+          <h2 className="truncate text-lg font-semibold">
             {workflow.grabTitle || workflow.id.slice(0, 12)}
           </h2>
           <p className="text-xs text-muted-foreground">
-            Started {relativeTime(workflow.createdAt)} · Updated {relativeTime(workflow.updatedAt)}
+            Started {relativeTime(workflow.createdAt)} · Updated{" "}
+            {relativeTime(workflow.updatedAt)}
           </p>
         </div>
         <Badge variant={config.variant} className="gap-1 capitalize">
-          <StateIcon className={`h-3 w-3 ${workflow.state === "downloading" ? "animate-spin" : ""}`} />
+          <StateIcon
+            className={`h-3 w-3 ${workflow.state === "downloading" ? "animate-spin" : ""}`}
+          />
           {config.label}
         </Badge>
       </div>
@@ -171,7 +185,11 @@ export function WorkflowDetailPage() {
             <CardTitle className="text-base">Workflow Logs</CardTitle>
           </CardHeader>
           <CardContent>
-            <LogViewer workflowId={workflowId} showConfig={false} showStreamToggle={isActive} />
+            <LogViewer
+              workflowId={workflowId}
+              showConfig={false}
+              showStreamToggle={isActive}
+            />
           </CardContent>
         </Card>
       )}

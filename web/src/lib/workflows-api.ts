@@ -128,10 +128,7 @@ export async function retryWorkflow(id: string): Promise<void> {
 }
 
 export async function deleteWorkflow(id: string): Promise<void> {
-  await request<void>(
-    "DELETE",
-    `/api/v1/workflows/${encodeURIComponent(id)}`,
-  );
+  await request<void>("DELETE", `/api/v1/workflows/${encodeURIComponent(id)}`);
 }
 
 export async function getWorkflowEvents(

@@ -125,7 +125,10 @@ export interface IndexerFormProps {
   initial?: Indexer;
   proxies: Proxy[];
   submitLabel?: string;
-  onSubmit: (values: IndexerFormValues, isEdit: boolean) => Promise<void> | void;
+  onSubmit: (
+    values: IndexerFormValues,
+    isEdit: boolean,
+  ) => Promise<void> | void;
   onCancel?: () => void;
   submitting?: boolean;
   topError?: string;
@@ -426,7 +429,7 @@ export function IndexerForm({
         <legend className="px-2 text-sm font-medium text-muted-foreground">
           Seeding
         </legend>
-        <p className="text-xs text-muted-foreground -mt-2">
+        <p className="-mt-2 text-xs text-muted-foreground">
           Override the download client&apos;s default seed policy for grabs from
           this indexer. Leave empty to use the client default.
         </p>
@@ -449,9 +452,7 @@ export function IndexerForm({
             />
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="indexer-seed-time">
-              Seed Time Limit (minutes)
-            </Label>
+            <Label htmlFor="indexer-seed-time">Seed Time Limit (minutes)</Label>
             <Input
               id="indexer-seed-time"
               type="number"
@@ -491,9 +492,9 @@ export function IndexerForm({
           }`}
         >
           {testResult.ok ? (
-            <CheckCircle2 className="w-4 h-4 shrink-0" />
+            <CheckCircle2 className="h-4 w-4 shrink-0" />
           ) : (
-            <XCircle className="w-4 h-4 shrink-0" />
+            <XCircle className="h-4 w-4 shrink-0" />
           )}
           <span>
             {testResult.ok
@@ -517,7 +518,7 @@ export function IndexerForm({
         >
           {testing ? (
             <>
-              <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
+              <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
               Testing…
             </>
           ) : (

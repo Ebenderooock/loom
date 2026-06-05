@@ -1,9 +1,5 @@
 import { test, expect } from "@playwright/test";
-import {
-  mockBaseApp,
-  mockIndexers,
-  SAMPLE_INDEXER,
-} from "./helpers/mock-api";
+import { mockBaseApp, mockIndexers, SAMPLE_INDEXER } from "./helpers/mock-api";
 
 test.describe("Indexers Page", () => {
   test.beforeEach(async ({ page }) => {
@@ -35,16 +31,18 @@ test.describe("Indexers Page", () => {
   test("renders indexers page heading", async ({ page }) => {
     await page.goto("/indexers");
     // useSetPageHeader("Indexers") renders as <span> in header — hidden on mobile
-    await expect(
-      page.locator("header").getByText("Indexers"),
-    ).toBeAttached({ timeout: 10000 });
+    await expect(page.locator("header").getByText("Indexers")).toBeAttached({
+      timeout: 10000,
+    });
   });
 
   test("displays indexer in the list", async ({ page }) => {
     await page.goto("/indexers");
 
     // Should show the mock indexer name
-    await expect(page.getByText(SAMPLE_INDEXER.name)).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText(SAMPLE_INDEXER.name)).toBeVisible({
+      timeout: 10000,
+    });
   });
 
   test("shows add indexer button", async ({ page }) => {
@@ -61,9 +59,7 @@ test.describe("Indexers Page", () => {
     await page.getByRole("button", { name: /add.*indexer/i }).click();
 
     // Should see a dialog for adding an indexer
-    await expect(
-      page.getByRole("dialog"),
-    ).toBeVisible({ timeout: 3000 });
+    await expect(page.getByRole("dialog")).toBeVisible({ timeout: 3000 });
   });
 
   test("renders empty state when no indexers", async ({ page }) => {
@@ -108,7 +104,12 @@ test.describe("Indexer Health Page", () => {
           json: {
             indexers: [
               { ...SAMPLE_INDEXER, id: "idx-1", name: "Healthy Indexer" },
-              { ...SAMPLE_INDEXER, id: "idx-2", name: "Failing Indexer", enabled: true },
+              {
+                ...SAMPLE_INDEXER,
+                id: "idx-2",
+                name: "Failing Indexer",
+                enabled: true,
+              },
             ],
           },
         });
@@ -154,7 +155,6 @@ test.describe("Indexer Health Page", () => {
         await route.fallback();
       }
     });
-
   });
 
   test("renders indexer health page", async ({ page }) => {

@@ -23,7 +23,12 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
 } from "@/components/ui/table";
 import { EmptyState } from "@/components/ui/empty-state";
 import { HealthBadge } from "@/components/indexers/health-badge";
@@ -31,9 +36,7 @@ import {
   IndexerForm,
   type IndexerFormValues,
 } from "@/components/indexers/indexer-form";
-import {
-  toPatchPayload,
-} from "@/components/indexers/indexer-form-adapter";
+import { toPatchPayload } from "@/components/indexers/indexer-form-adapter";
 import { IndexerCatalogue } from "@/components/indexers/indexer-catalogue";
 import { CardigannEditForm } from "@/components/indexers/cardigann-edit-form";
 import { SearchPanel } from "@/components/indexers/search-panel";
@@ -203,7 +206,9 @@ export function IndexersPage() {
                   <div className="font-medium">{idx.name}</div>
                   <div className="text-xs text-muted-foreground">{idx.id}</div>
                 </TableCell>
-                <TableCell className="text-muted-foreground">{idx.kind}</TableCell>
+                <TableCell className="text-muted-foreground">
+                  {idx.kind}
+                </TableCell>
                 <TableCell>{idx.enabled ? "Yes" : "No"}</TableCell>
                 <TableCell>
                   <HealthBadge health={idx.health} />

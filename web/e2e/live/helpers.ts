@@ -14,7 +14,9 @@ const LOOM_PASS = process.env.LOOM_PASS || "";
  */
 let _cachedCookie: string | null = null;
 
-export async function apiHeaders(request: APIRequestContext): Promise<Record<string, string>> {
+export async function apiHeaders(
+  request: APIRequestContext,
+): Promise<Record<string, string>> {
   if (_cachedCookie) {
     return { Cookie: "loom_session=" + _cachedCookie };
   }
@@ -23,7 +25,8 @@ export async function apiHeaders(request: APIRequestContext): Promise<Record<str
   });
   const cookies = res.headers()["set-cookie"] || "";
   const match = cookies.match(/loom_session=([^;]+)/);
-  if (!match) throw new Error("Failed to extract session cookie from login response");
+  if (!match)
+    throw new Error("Failed to extract session cookie from login response");
   _cachedCookie = match[1];
   return { Cookie: "loom_session=" + _cachedCookie };
 }
@@ -50,8 +53,12 @@ export async function liveLogin(page: Page) {
 
   // Wait for whichever appears first
   const winner = await Promise.race([
-    loginBtn.waitFor({ state: "visible", timeout: 20000 }).then(() => "login" as const),
-    sidebar.waitFor({ state: "visible", timeout: 20000 }).then(() => "sidebar" as const),
+    loginBtn
+      .waitFor({ state: "visible", timeout: 20000 })
+      .then(() => "login" as const),
+    sidebar
+      .waitFor({ state: "visible", timeout: 20000 })
+      .then(() => "sidebar" as const),
   ]);
 
   if (winner === "sidebar") {
@@ -73,6 +80,8 @@ export async function liveLogin(page: Page) {
  */
 export async function waitForPageLoad(page: Page) {
   // Wait for skeleton/spinner to disappear and real content to appear
-  await page.waitForLoadState("networkidle", { timeout: 30000 }).catch(() => {});
+  await page
+    .waitForLoadState("networkidle", { timeout: 30000 })
+    .catch(() => {});
   await page.waitForTimeout(500); // small buffer for React hydration
 }

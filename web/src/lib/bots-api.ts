@@ -84,7 +84,10 @@ async function request<T>(
   }
   if (!res.ok) {
     const env = parsed as { error?: { message?: string } } | undefined;
-    throw new ApiError(res.status, env?.error?.message ?? `${method} ${path} failed: ${res.status}`);
+    throw new ApiError(
+      res.status,
+      env?.error?.message ?? `${method} ${path} failed: ${res.status}`,
+    );
   }
   return parsed as T;
 }
@@ -94,7 +97,8 @@ async function request<T>(
 export function useBotConfig() {
   return useQuery({
     queryKey: ["bots", "config"],
-    queryFn: ({ signal }) => request<BotConfig>("GET", "/api/v1/bots/config", undefined, signal),
+    queryFn: ({ signal }) =>
+      request<BotConfig>("GET", "/api/v1/bots/config", undefined, signal),
   });
 }
 
@@ -113,7 +117,8 @@ export function useUpdateBotConfig() {
 export function useBotStatus() {
   return useQuery({
     queryKey: ["bots", "status"],
-    queryFn: ({ signal }) => request<BotStatus[]>("GET", "/api/v1/bots/status", undefined, signal),
+    queryFn: ({ signal }) =>
+      request<BotStatus[]>("GET", "/api/v1/bots/status", undefined, signal),
     refetchInterval: 15000,
   });
 }
@@ -121,14 +126,16 @@ export function useBotStatus() {
 export function useBotLinks() {
   return useQuery({
     queryKey: ["bots", "links"],
-    queryFn: ({ signal }) => request<BotLink[]>("GET", "/api/v1/bots/links", undefined, signal),
+    queryFn: ({ signal }) =>
+      request<BotLink[]>("GET", "/api/v1/bots/links", undefined, signal),
   });
 }
 
 export function useDeleteBotLink() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => request<void>("DELETE", `/api/v1/bots/links/${id}`),
+    mutationFn: (id: string) =>
+      request<void>("DELETE", `/api/v1/bots/links/${id}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["bots", "links"] }),
   });
 }

@@ -3,6 +3,7 @@
 ## Quick Reference
 
 ### Primary Colors
+
 ```
 Purple #2D1B69 → Midnight Purple (headers, nav, primary buttons)
 Teal   #00BFA6 → Electric Teal (accents, highlights, focus rings)
@@ -11,6 +12,7 @@ Teal   #00BFA6 → Electric Teal (accents, highlights, focus rings)
 ### How to Use in Components
 
 #### Light Mode (Default)
+
 ```tsx
 // Button with primary purple
 <button className="bg-primary text-primary-foreground rounded px-4 py-2">
@@ -28,10 +30,12 @@ Teal   #00BFA6 → Electric Teal (accents, highlights, focus rings)
 ```
 
 #### Dark Mode Support
+
 Colors automatically adapt when `data-theme="dark"` is set:
+
 ```tsx
 // This component looks great in both light and dark modes
-<div className="bg-card text-card-foreground p-4 border border-border">
+<div className="border border-border bg-card p-4 text-card-foreground">
   {content}
 </div>
 ```
@@ -54,15 +58,15 @@ Colors automatically adapt when `data-theme="dark"` is set:
 
 All colors are available as CSS custom properties:
 
-| Variable | Light Mode | Dark Mode | AMOLED Mode |
-|----------|-----------|-----------|------------|
-| `--primary` | Midnight Purple | Midnight Purple | Midnight Purple |
-| `--secondary` | Rich Violet | Rich Violet | Deep Teal |
-| `--accent` | Electric Teal | Electric Teal | Electric Teal |
-| `--background` | Soft White | Dark Slate | Pure Black |
-| `--foreground` | Dark Slate | Soft White | Soft White |
-| `--card` | White | Card Grey | Very Dark Grey |
-| `--destructive` | Error Red | Error Red | Error Red |
+| Variable        | Light Mode      | Dark Mode       | AMOLED Mode     |
+| --------------- | --------------- | --------------- | --------------- |
+| `--primary`     | Midnight Purple | Midnight Purple | Midnight Purple |
+| `--secondary`   | Rich Violet     | Rich Violet     | Deep Teal       |
+| `--accent`      | Electric Teal   | Electric Teal   | Electric Teal   |
+| `--background`  | Soft White      | Dark Slate      | Pure Black      |
+| `--foreground`  | Dark Slate      | Soft White      | Soft White      |
+| `--card`        | White           | Card Grey       | Very Dark Grey  |
+| `--destructive` | Error Red       | Error Red       | Error Red       |
 
 ### Using CSS Variables
 
@@ -83,6 +87,7 @@ All colors are available as CSS custom properties:
 ## Component Color Guide
 
 ### Navigation
+
 ```tsx
 // App navigation
 <nav className="bg-primary text-primary-foreground">
@@ -91,8 +96,8 @@ All colors are available as CSS custom properties:
 </nav>
 
 // Active state
-<Link 
-  to="/current" 
+<Link
+  to="/current"
   className="border-b-2 border-accent"
 >
   Current Page
@@ -100,21 +105,19 @@ All colors are available as CSS custom properties:
 ```
 
 ### Forms
+
 ```tsx
 <div>
-  <label className="block font-medium text-foreground mb-2">
-    Label
-  </label>
-  <input 
-    className="border border-input bg-background text-foreground rounded px-3 py-2
-               placeholder:text-muted-foreground
-               focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2"
+  <label className="mb-2 block font-medium text-foreground">Label</label>
+  <input
+    className="rounded border border-input bg-background px-3 py-2 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2"
     placeholder="Enter text..."
   />
 </div>
 ```
 
 ### Status Cards
+
 ```tsx
 // Success
 <div className="bg-semantic-success/10 border border-semantic-success rounded p-4">
@@ -133,6 +136,7 @@ All colors are available as CSS custom properties:
 ```
 
 ### Buttons
+
 ```tsx
 // Primary (Midnight Purple)
 <button className="bg-primary text-primary-foreground hover:bg-primary/90 rounded px-4 py-2 font-medium">
@@ -156,6 +160,7 @@ All colors are available as CSS custom properties:
 ```
 
 ### Tables
+
 ```tsx
 <table>
   <thead className="bg-primary text-primary-foreground">
@@ -172,6 +177,7 @@ All colors are available as CSS custom properties:
 ```
 
 ### Badges & Tags
+
 ```tsx
 // Type badge
 <span className="inline-flex items-center bg-indigo-deep/20 text-indigo-deep px-3 py-1 rounded-full text-sm font-medium">
@@ -185,14 +191,13 @@ All colors are available as CSS custom properties:
 ```
 
 ### Modals/Dialogs
+
 ```tsx
-<DialogContent className="bg-card text-card-foreground border border-border">
+<DialogContent className="border border-border bg-card text-card-foreground">
   <DialogHeader>
     <DialogTitle>Dialog Title</DialogTitle>
   </DialogHeader>
-  <div className="py-4">
-    Content goes here
-  </div>
+  <div className="py-4">Content goes here</div>
   <DialogFooter>
     <button className="bg-secondary text-secondary-foreground">Cancel</button>
     <button className="bg-primary text-primary-foreground">Confirm</button>
@@ -203,13 +208,15 @@ All colors are available as CSS custom properties:
 ## Responsive & Dark Mode
 
 ### Using `dark:` prefix for dark-specific styles
+
 ```tsx
-<div className="bg-white dark:bg-card text-black dark:text-foreground">
+<div className="bg-white text-black dark:bg-card dark:text-foreground">
   This adapts to dark mode
 </div>
 ```
 
 ### Using Tailwind's dark mode
+
 Since Loom uses custom theme attributes, use this pattern:
 
 ```tsx
@@ -252,6 +259,7 @@ If you need to convert between formats:
 ## Testing Colors
 
 ### Manual Testing
+
 1. **Light Mode**: Check all components with light background
 2. **Dark Mode**: Toggle with `data-theme="dark"` on body
 3. **AMOLED Mode**: Toggle with `data-theme="amoled"` on body
@@ -259,6 +267,7 @@ If you need to convert between formats:
 5. **Color Blindness**: Use WebAIM Contrast Checker or Deutan simulator
 
 ### Automated Testing
+
 ```tsx
 // Example test for contrast
 import { getContrast } from "@/lib/color-utils";
@@ -272,21 +281,26 @@ test("button has sufficient contrast", () => {
 ## Common Patterns
 
 ### Hover Effects
+
 ```tsx
-className="hover:bg-accent/10 hover:shadow-md transition-all duration-200"
+className = "hover:bg-accent/10 hover:shadow-md transition-all duration-200";
 ```
 
 ### Focus Ring
+
 ```tsx
-className="focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2"
+className =
+  "focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2";
 ```
 
 ### Disabled State
+
 ```tsx
-className="disabled:opacity-50 disabled:cursor-not-allowed"
+className = "disabled:opacity-50 disabled:cursor-not-allowed";
 ```
 
 ### Loading State
+
 ```tsx
-className="bg-accent/50 text-accent-foreground/50"
+className = "bg-accent/50 text-accent-foreground/50";
 ```

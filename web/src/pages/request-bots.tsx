@@ -1,6 +1,14 @@
 import * as React from "react";
 import { toast } from "sonner";
-import { Bot, Link2, Loader2, Send, Trash2, CheckCircle2, XCircle } from "lucide-react";
+import {
+  Bot,
+  Link2,
+  Loader2,
+  Send,
+  Trash2,
+  CheckCircle2,
+  XCircle,
+} from "lucide-react";
 import { useSetPageHeader } from "@/hooks/use-page-header";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
@@ -48,7 +56,10 @@ import { useLibraries } from "@/lib/libraries-api";
 const NONE = "__none__";
 
 export function RequestBotsPage() {
-  useSetPageHeader("Request Bots", "Let users request media from Telegram & Discord");
+  useSetPageHeader(
+    "Request Bots",
+    "Let users request media from Telegram & Discord",
+  );
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
 
@@ -89,7 +100,9 @@ function LinkAccountCard() {
   const onConfirm = async () => {
     try {
       const link = await redeemMut.mutateAsync(code.trim());
-      toast.success(`Linked ${platformLabel(link.platform)} ${link.external_username}`);
+      toast.success(
+        `Linked ${platformLabel(link.platform)} ${link.external_username}`,
+      );
       setPreview(null);
       setCode("");
     } catch (e) {
@@ -104,8 +117,9 @@ function LinkAccountCard() {
           <Link2 className="h-5 w-5" /> Link your chat account
         </CardTitle>
         <CardDescription>
-          Send <code className="rounded bg-muted px-1">/link</code> to the bot in Telegram or
-          Discord, then enter the code it gives you here to connect that chat to your Loom account.
+          Send <code className="rounded bg-muted px-1">/link</code> to the bot
+          in Telegram or Discord, then enter the code it gives you here to
+          connect that chat to your Loom account.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -128,7 +142,11 @@ function LinkAccountCard() {
             />
           </div>
           <Button type="submit" disabled={!code.trim() || previewMut.isPending}>
-            {previewMut.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Link"}
+            {previewMut.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              "Link"
+            )}
           </Button>
         </form>
       </CardContent>
@@ -141,8 +159,9 @@ function LinkAccountCard() {
               {preview && (
                 <>
                   Link {platformLabel(preview.platform)} account{" "}
-                  <strong>{preview.external_username || "(unknown)"}</strong> to your Loom account?
-                  This chat will be able to submit requests as you.
+                  <strong>{preview.external_username || "(unknown)"}</strong> to
+                  your Loom account? This chat will be able to submit requests
+                  as you.
                 </>
               )}
             </DialogDescription>
@@ -151,8 +170,15 @@ function LinkAccountCard() {
             <Button variant="outline" onClick={() => setPreview(null)}>
               Cancel
             </Button>
-            <Button onClick={() => void onConfirm()} disabled={redeemMut.isPending}>
-              {redeemMut.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Confirm link"}
+            <Button
+              onClick={() => void onConfirm()}
+              disabled={redeemMut.isPending}
+            >
+              {redeemMut.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                "Confirm link"
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -212,7 +238,9 @@ function PlatformConfigCard() {
         setDiscordEnabled(false);
         setDiscordToken("");
       }
-      toast.success(`${platform === "telegram" ? "Telegram" : "Discord"} token cleared`);
+      toast.success(
+        `${platform === "telegram" ? "Telegram" : "Discord"} token cleared`,
+      );
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Couldn't clear token");
     }
@@ -227,8 +255,9 @@ function PlatformConfigCard() {
           <Bot className="h-5 w-5" /> Bot connections
         </CardTitle>
         <CardDescription>
-          Create a bot with each platform's developer tools, paste its token here, and enable it.
-          Tokens are write-only — saved tokens are never shown again.
+          Create a bot with each platform's developer tools, paste its token
+          here, and enable it. Tokens are write-only — saved tokens are never
+          shown again.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-6">
@@ -256,7 +285,9 @@ function PlatformConfigCard() {
         />
         <div className="flex justify-end">
           <Button onClick={() => void save()} disabled={update.isPending}>
-            {update.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+            {update.isPending ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : null}
             Save
           </Button>
         </div>
@@ -370,8 +401,8 @@ function ApprovalDefaultsCard() {
       <CardHeader>
         <CardTitle>Chat-approval defaults</CardTitle>
         <CardDescription>
-          When an admin approves a request from chat, these targets are used (chat has no picker
-          like the web UI). Required to approve from chat.
+          When an admin approves a request from chat, these targets are used
+          (chat has no picker like the web UI). Required to approve from chat.
         </CardDescription>
       </CardHeader>
       <CardContent className="grid gap-4 sm:grid-cols-2">
@@ -379,7 +410,10 @@ function ApprovalDefaultsCard() {
           label="Movie quality profile"
           value={movieQP}
           onChange={setMovieQP}
-          options={(profiles ?? []).map((p) => ({ value: p.id, label: p.name }))}
+          options={(profiles ?? []).map((p) => ({
+            value: p.id,
+            label: p.name,
+          }))}
         />
         <SelectField
           label="Movie library"
@@ -391,7 +425,10 @@ function ApprovalDefaultsCard() {
           label="Series quality profile"
           value={seriesQP}
           onChange={setSeriesQP}
-          options={(profiles ?? []).map((p) => ({ value: p.id, label: p.name }))}
+          options={(profiles ?? []).map((p) => ({
+            value: p.id,
+            label: p.name,
+          }))}
         />
         <SelectField
           label="Series library"
@@ -399,9 +436,11 @@ function ApprovalDefaultsCard() {
           onChange={setSeriesLib}
           options={seriesLibs.map((l) => ({ value: l.id, label: l.name }))}
         />
-        <div className="sm:col-span-2 flex justify-end">
+        <div className="flex justify-end sm:col-span-2">
           <Button onClick={() => void save()} disabled={update.isPending}>
-            {update.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+            {update.isPending ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : null}
             Save defaults
           </Button>
         </div>
@@ -424,7 +463,10 @@ function SelectField({
   return (
     <div className="flex flex-col gap-1.5">
       <Label>{label}</Label>
-      <Select value={value || NONE} onValueChange={(v) => onChange(v === NONE ? "" : v)}>
+      <Select
+        value={value || NONE}
+        onValueChange={(v) => onChange(v === NONE ? "" : v)}
+      >
         <SelectTrigger>
           <SelectValue placeholder="Not set" />
         </SelectTrigger>
@@ -503,11 +545,16 @@ function LinkedAccountsCard() {
         {isLoading ? (
           <Skeleton className="h-16 w-full" />
         ) : (links ?? []).length === 0 ? (
-          <p className="text-sm text-muted-foreground">No linked accounts yet.</p>
+          <p className="text-sm text-muted-foreground">
+            No linked accounts yet.
+          </p>
         ) : (
           <div className="flex flex-col divide-y">
             {(links ?? []).map((l) => (
-              <div key={l.id} className="flex items-center justify-between py-2">
+              <div
+                key={l.id}
+                className="flex items-center justify-between py-2"
+              >
                 <div className="flex flex-col">
                   <span className="font-medium">
                     {l.external_username || l.external_id}{" "}

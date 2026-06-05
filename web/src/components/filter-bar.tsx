@@ -89,22 +89,22 @@ export function FilterBar({
   }
 
   return (
-    <div className="space-y-2 mb-4">
+    <div className="mb-4 space-y-2">
       <div className="flex flex-wrap items-center gap-2">
         {/* Search */}
-        <div className="relative flex-1 min-w-[200px] max-w-xs">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+        <div className="relative min-w-[200px] max-w-xs flex-1">
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={localSearch}
             onChange={(e) => handleSearchInput(e.target.value)}
             placeholder="Search..."
-            className="pl-8 h-9 text-sm"
+            className="h-9 pl-8 text-sm"
           />
         </div>
 
         {/* Status */}
         <Select value={statusFilter} onValueChange={onStatusChange}>
-          <SelectTrigger className="w-[140px] h-9 text-sm">
+          <SelectTrigger className="h-9 w-[140px] text-sm">
             <SelectValue placeholder="Status" />
           </SelectTrigger>
           <SelectContent>
@@ -121,7 +121,7 @@ export function FilterBar({
 
         {/* Monitored */}
         <Select value={monitoredFilter} onValueChange={onMonitoredChange}>
-          <SelectTrigger className="w-[150px] h-9 text-sm">
+          <SelectTrigger className="h-9 w-[150px] text-sm">
             <SelectValue placeholder="Monitored" />
           </SelectTrigger>
           <SelectContent>
@@ -135,7 +135,7 @@ export function FilterBar({
 
         {/* Sort */}
         <Select value={sortKey} onValueChange={onSortChange}>
-          <SelectTrigger className="w-[160px] h-9 text-sm">
+          <SelectTrigger className="h-9 w-[160px] text-sm">
             <SelectValue placeholder="Sort by" />
           </SelectTrigger>
           <SelectContent>
@@ -157,11 +157,11 @@ export function FilterBar({
             <Badge
               key={pill.label}
               variant="secondary"
-              className="gap-1 text-xs cursor-pointer hover:bg-destructive/10"
+              className="cursor-pointer gap-1 text-xs hover:bg-destructive/10"
               onClick={pill.onClear}
             >
               {pill.label}
-              <X className="w-3 h-3" />
+              <X className="h-3 w-3" />
             </Badge>
           ))}
         </div>

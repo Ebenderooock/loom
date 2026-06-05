@@ -45,7 +45,11 @@ async function request<T>(
   const text = await res.text();
   let parsed: unknown;
   if (text.length > 0) {
-    try { parsed = JSON.parse(text); } catch { parsed = undefined; }
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      parsed = undefined;
+    }
   }
   if (!res.ok) {
     const env = parsed as { error?: { message?: string } } | undefined;
@@ -60,7 +64,12 @@ async function request<T>(
 // ---------- API functions ----------
 
 export async function listAPIKeys(signal?: AbortSignal): Promise<APIKey[]> {
-  const data = await request<{ data: APIKey[] }>("GET", "/api/v1/api-keys", undefined, signal);
+  const data = await request<{ data: APIKey[] }>(
+    "GET",
+    "/api/v1/api-keys",
+    undefined,
+    signal,
+  );
   return data?.data ?? [];
 }
 

@@ -26,7 +26,7 @@ function RootComponent() {
   const { isSetupComplete, isAuthenticated, isLoading } = useAuth();
 
   if (isLoading) {
-    return <div className="w-screen h-screen bg-neutral-dark" />;
+    return <div className="h-screen w-screen bg-neutral-dark" />;
   }
 
   if (!isSetupComplete) {
@@ -113,7 +113,10 @@ const seriesRoute = createRoute({
 const discoverRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/discover",
-  component: lazyRouteComponent(() => import("@/pages/discover"), "DiscoverPage"),
+  component: lazyRouteComponent(
+    () => import("@/pages/discover"),
+    "DiscoverPage",
+  ),
   pendingComponent: PageLoader,
   errorComponent: ErrorFallback,
 });
@@ -121,7 +124,10 @@ const discoverRoute = createRoute({
 const requestsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/requests",
-  component: lazyRouteComponent(() => import("@/pages/requests"), "RequestsPage"),
+  component: lazyRouteComponent(
+    () => import("@/pages/requests"),
+    "RequestsPage",
+  ),
   pendingComponent: PageLoader,
   errorComponent: ErrorFallback,
 });
@@ -129,7 +135,10 @@ const requestsRoute = createRoute({
 const analyticsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/analytics",
-  component: lazyRouteComponent(() => import("@/pages/analytics"), "AnalyticsPage"),
+  component: lazyRouteComponent(
+    () => import("@/pages/analytics"),
+    "AnalyticsPage",
+  ),
   pendingComponent: PageLoader,
   errorComponent: ErrorFallback,
 });
@@ -137,7 +146,10 @@ const analyticsRoute = createRoute({
 const activityRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/activity",
-  component: lazyRouteComponent(() => import("@/pages/activity"), "ActivityPage"),
+  component: lazyRouteComponent(
+    () => import("@/pages/activity"),
+    "ActivityPage",
+  ),
   pendingComponent: PageLoader,
   errorComponent: ErrorFallback,
 });
@@ -145,7 +157,10 @@ const activityRoute = createRoute({
 const calendarRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/calendar",
-  component: lazyRouteComponent(() => import("@/pages/calendar"), "CalendarPage"),
+  component: lazyRouteComponent(
+    () => import("@/pages/calendar"),
+    "CalendarPage",
+  ),
   pendingComponent: PageLoader,
   errorComponent: ErrorFallback,
 });
@@ -290,10 +305,15 @@ const settingsPluginsRoute = settingsChild(
 const settingsConnectRoute = createRoute({
   getParentRoute: () => settingsRoute,
   path: "connect",
-  component: lazyRouteComponent(() => import("@/pages/settings"), "ConnectPanel"),
+  component: lazyRouteComponent(
+    () => import("@/pages/settings"),
+    "ConnectPanel",
+  ),
   pendingComponent: PageLoader,
   errorComponent: ErrorFallback,
-  validateSearch: (search: Record<string, unknown>): { trakt_code?: string } => ({
+  validateSearch: (
+    search: Record<string, unknown>,
+  ): { trakt_code?: string } => ({
     trakt_code: (search.trakt_code as string) ?? undefined,
   }),
 });

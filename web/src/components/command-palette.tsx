@@ -40,25 +40,105 @@ interface NavItem {
 }
 
 const navItems: NavItem[] = [
-  { label: "Dashboard", to: "/", keywords: "home overview", Icon: LayoutDashboard },
+  {
+    label: "Dashboard",
+    to: "/",
+    keywords: "home overview",
+    Icon: LayoutDashboard,
+  },
   { label: "Movies", to: "/movies", Icon: Film },
   { label: "TV Shows", to: "/series", keywords: "series shows tv", Icon: Tv },
-  { label: "Discover", to: "/discover", keywords: "browse find new", Icon: Compass },
-  { label: "Requests", to: "/requests", keywords: "request media ask", Icon: Inbox },
+  {
+    label: "Discover",
+    to: "/discover",
+    keywords: "browse find new",
+    Icon: Compass,
+  },
+  {
+    label: "Requests",
+    to: "/requests",
+    keywords: "request media ask",
+    Icon: Inbox,
+  },
   { label: "Library", to: "/library", Icon: Library },
-  { label: "Calendar", to: "/calendar", keywords: "schedule upcoming", Icon: Calendar },
-  { label: "Activity", to: "/activity", keywords: "history queue", Icon: ListTodo },
-  { label: "Downloads", to: "/downloads", keywords: "torrents clients", Icon: Download },
-  { label: "Settings", to: "/settings", keywords: "config preferences", Icon: Settings },
-  { label: "Indexers", to: "/settings/indexers", keywords: "settings trackers prowlarr", Icon: Radio },
-  { label: "RSS Feeds", to: "/settings/sources", keywords: "settings sources rss", Icon: Database },
-  { label: "Import Lists", to: "/settings/import-lists", keywords: "settings trakt lists rss", Icon: ListChecks },
-  { label: "Quality Profiles", to: "/settings/quality-profiles", keywords: "settings quality", Icon: SlidersHorizontal },
-  { label: "Custom Formats", to: "/settings/custom-formats", keywords: "settings scoring formats", Icon: SlidersHorizontal },
-  { label: "Notifications", to: "/settings/notifications", keywords: "settings discord webhook alerts", Icon: Bell },
-  { label: "Download Clients", to: "/settings/download-clients", keywords: "settings qbittorrent sabnzbd", Icon: Download },
-  { label: "Workflows", to: "/settings/workflows", keywords: "settings jobs tasks", Icon: Workflow },
-  { label: "Users", to: "/settings/users", keywords: "settings accounts admin", Icon: Settings },
+  {
+    label: "Calendar",
+    to: "/calendar",
+    keywords: "schedule upcoming",
+    Icon: Calendar,
+  },
+  {
+    label: "Activity",
+    to: "/activity",
+    keywords: "history queue",
+    Icon: ListTodo,
+  },
+  {
+    label: "Downloads",
+    to: "/downloads",
+    keywords: "torrents clients",
+    Icon: Download,
+  },
+  {
+    label: "Settings",
+    to: "/settings",
+    keywords: "config preferences",
+    Icon: Settings,
+  },
+  {
+    label: "Indexers",
+    to: "/settings/indexers",
+    keywords: "settings trackers prowlarr",
+    Icon: Radio,
+  },
+  {
+    label: "RSS Feeds",
+    to: "/settings/sources",
+    keywords: "settings sources rss",
+    Icon: Database,
+  },
+  {
+    label: "Import Lists",
+    to: "/settings/import-lists",
+    keywords: "settings trakt lists rss",
+    Icon: ListChecks,
+  },
+  {
+    label: "Quality Profiles",
+    to: "/settings/quality-profiles",
+    keywords: "settings quality",
+    Icon: SlidersHorizontal,
+  },
+  {
+    label: "Custom Formats",
+    to: "/settings/custom-formats",
+    keywords: "settings scoring formats",
+    Icon: SlidersHorizontal,
+  },
+  {
+    label: "Notifications",
+    to: "/settings/notifications",
+    keywords: "settings discord webhook alerts",
+    Icon: Bell,
+  },
+  {
+    label: "Download Clients",
+    to: "/settings/download-clients",
+    keywords: "settings qbittorrent sabnzbd",
+    Icon: Download,
+  },
+  {
+    label: "Workflows",
+    to: "/settings/workflows",
+    keywords: "settings jobs tasks",
+    Icon: Workflow,
+  },
+  {
+    label: "Users",
+    to: "/settings/users",
+    keywords: "settings accounts admin",
+    Icon: Settings,
+  },
 ];
 
 // ─── Content fetched for live search ─────────────────────────────────
@@ -140,14 +220,22 @@ function PaletteBody({
   const matchedMovies = React.useMemo(() => {
     if (!hasQuery) return [];
     return movies
-      .filter((m) => m.title.toLowerCase().includes(lower) || String(m.year ?? "").includes(lower))
+      .filter(
+        (m) =>
+          m.title.toLowerCase().includes(lower) ||
+          String(m.year ?? "").includes(lower),
+      )
       .slice(0, RESULT_LIMIT);
   }, [hasQuery, lower, movies]);
 
   const matchedSeries = React.useMemo(() => {
     if (!hasQuery) return [];
     return series
-      .filter((s) => s.title.toLowerCase().includes(lower) || String(s.year ?? "").includes(lower))
+      .filter(
+        (s) =>
+          s.title.toLowerCase().includes(lower) ||
+          String(s.year ?? "").includes(lower),
+      )
       .slice(0, RESULT_LIMIT);
   }, [hasQuery, lower, series]);
 
@@ -160,23 +248,23 @@ function PaletteBody({
   return (
     <>
       {inline ? (
-        <div className="flex items-center flex-1 gap-2">
-          <Search className="w-4 h-4 text-muted-foreground shrink-0" />
+        <div className="flex flex-1 items-center gap-2">
+          <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
           <Command.Input
             ref={inputRef}
             value={query}
             onValueChange={setQuery}
             placeholder="Search Loom — movies, series, pages…"
-            className="flex-1 h-10 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+            className="h-10 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
           />
           <kbd className="rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-[10px] font-medium text-muted-foreground">
             ESC
           </kbd>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+            className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
           >
-            <X className="w-4 h-4" />
+            <X className="h-4 w-4" />
           </button>
         </div>
       ) : (
@@ -199,14 +287,21 @@ function PaletteBody({
           )}
         </Command.Empty>
 
-        {contentLoading && (matchedMovies.length > 0 || matchedSeries.length > 0 || matchedNav.length > 0) && (
-          <div className="flex items-center gap-2 px-3 py-2 text-xs text-muted-foreground">
-            <Loader2 className="h-3.5 w-3.5 animate-spin" /> Searching your library…
-          </div>
-        )}
+        {contentLoading &&
+          (matchedMovies.length > 0 ||
+            matchedSeries.length > 0 ||
+            matchedNav.length > 0) && (
+            <div className="flex items-center gap-2 px-3 py-2 text-xs text-muted-foreground">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" /> Searching your
+              library…
+            </div>
+          )}
 
         {matchedMovies.length > 0 && (
-          <Command.Group heading="Movies" className="text-xs text-muted-foreground px-2 py-1">
+          <Command.Group
+            heading="Movies"
+            className="px-2 py-1 text-xs text-muted-foreground"
+          >
             {matchedMovies.map((m) => (
               <Command.Item
                 key={`movie-${m.id}`}
@@ -216,14 +311,19 @@ function PaletteBody({
               >
                 <Film className="h-4 w-4 shrink-0" />
                 <span className="truncate">{m.title}</span>
-                {m.year ? <span className="text-muted-foreground">({m.year})</span> : null}
+                {m.year ? (
+                  <span className="text-muted-foreground">({m.year})</span>
+                ) : null}
               </Command.Item>
             ))}
           </Command.Group>
         )}
 
         {matchedSeries.length > 0 && (
-          <Command.Group heading="TV Shows" className="text-xs text-muted-foreground px-2 py-1">
+          <Command.Group
+            heading="TV Shows"
+            className="px-2 py-1 text-xs text-muted-foreground"
+          >
             {matchedSeries.map((s) => (
               <Command.Item
                 key={`series-${s.id}`}
@@ -233,14 +333,19 @@ function PaletteBody({
               >
                 <Tv className="h-4 w-4 shrink-0" />
                 <span className="truncate">{s.title}</span>
-                {s.year ? <span className="text-muted-foreground">({s.year})</span> : null}
+                {s.year ? (
+                  <span className="text-muted-foreground">({s.year})</span>
+                ) : null}
               </Command.Item>
             ))}
           </Command.Group>
         )}
 
         {matchedNav.length > 0 && (
-          <Command.Group heading="Navigation" className="text-xs text-muted-foreground px-2 py-1">
+          <Command.Group
+            heading="Navigation"
+            className="px-2 py-1 text-xs text-muted-foreground"
+          >
             {matchedNav.map(({ label, to, Icon }) => (
               <Command.Item
                 key={to}
@@ -259,7 +364,11 @@ function PaletteBody({
   );
 }
 
-export function CommandPalette({ open, onOpenChange, inline }: CommandPaletteProps) {
+export function CommandPalette({
+  open,
+  onOpenChange,
+  inline,
+}: CommandPaletteProps) {
   const [query, setQuery] = React.useState("");
   const inputRef = React.useRef<HTMLInputElement>(null);
 
@@ -279,7 +388,11 @@ export function CommandPalette({ open, onOpenChange, inline }: CommandPalettePro
   if (inline) {
     if (!open) return null;
     return (
-      <Command label="Command Menu" shouldFilter={false} className="flex flex-col flex-1 relative">
+      <Command
+        label="Command Menu"
+        shouldFilter={false}
+        className="relative flex flex-1 flex-col"
+      >
         <PaletteBody
           query={query}
           setQuery={setQuery}
@@ -298,7 +411,11 @@ export function CommandPalette({ open, onOpenChange, inline }: CommandPalettePro
         <DialogDescription className="sr-only">
           Search Loom for movies, series, and pages.
         </DialogDescription>
-        <Command label="Command Menu" shouldFilter={false} className="flex flex-col">
+        <Command
+          label="Command Menu"
+          shouldFilter={false}
+          className="flex flex-col"
+        >
           <PaletteBody query={query} setQuery={setQuery} onClose={close} />
         </Command>
       </DialogContent>

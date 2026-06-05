@@ -1,9 +1,5 @@
 import { test, expect } from "@playwright/test";
-import {
-  mockBaseApp,
-  mockDashboard,
-  TEST_USER,
-} from "./helpers/mock-api";
+import { mockBaseApp, mockDashboard, TEST_USER } from "./helpers/mock-api";
 
 test.describe("Authentication", () => {
   test("shows login page when not authenticated", async ({ page }) => {
@@ -28,7 +24,9 @@ test.describe("Authentication", () => {
     ).toBeVisible();
   });
 
-  test("login with valid credentials redirects to dashboard", async ({ page }) => {
+  test("login with valid credentials redirects to dashboard", async ({
+    page,
+  }) => {
     await mockBaseApp(page, { authenticated: false });
     await mockDashboard(page);
 

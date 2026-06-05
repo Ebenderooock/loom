@@ -10,9 +10,9 @@ test.describe("Live: Movie Status Lifecycle", () => {
     await page.goto("/movies");
     await waitForPageLoad(page);
 
-    const statusBadges = page.locator("main").getByText(
-      /Missing|Available|Downloading|Grabbed|Wrong Quality/i
-    );
+    const statusBadges = page
+      .locator("main")
+      .getByText(/Missing|Available|Downloading|Grabbed|Wrong Quality/i);
     const count = await statusBadges.count();
     console.log("Found " + count + " status badges on movies page");
   });
@@ -23,7 +23,9 @@ test.describe("Live: Movie Status Lifecycle", () => {
 
     // Click the first movie card (poster link)
     const firstCard = page.locator("main a[href*='/movies/']").first();
-    const cardVisible = await firstCard.isVisible({ timeout: 10000 }).catch(() => false);
+    const cardVisible = await firstCard
+      .isVisible({ timeout: 10000 })
+      .catch(() => false);
     if (!cardVisible) {
       test.skip(true, "No movies available");
       return;
@@ -31,20 +33,28 @@ test.describe("Live: Movie Status Lifecycle", () => {
     await firstCard.click();
 
     // Wait for navigation to movie detail page or sheet to open
-    await page.waitForURL(/\/movies\/[a-zA-Z0-9-]+/, { timeout: 10000 }).catch(() => null);
-    const detailView = page.locator("[role=dialog], [data-state=open], main").first();
+    await page
+      .waitForURL(/\/movies\/[a-zA-Z0-9-]+/, { timeout: 10000 })
+      .catch(() => null);
+    const detailView = page
+      .locator("[role=dialog], [data-state=open], main")
+      .first();
     await expect(detailView).toBeVisible({ timeout: 10000 });
 
     // Look for status info somewhere on the detail page
-    const statusText = page.getByText(/Missing|Available|Downloading|Grabbed|Status/i).first();
+    const statusText = page
+      .getByText(/Missing|Available|Downloading|Grabbed|Status/i)
+      .first();
     await expect(statusText).toBeVisible({ timeout: 5000 });
   });
 
-  test("grabbed/downloading movies appear with correct status via API", async ({ request }) => {
+  test("grabbed/downloading movies appear with correct status via API", async ({
+    request,
+  }) => {
     const res = await authGet(request, "/api/v1/movies?limit=200");
     expect(res.status()).toBe(200);
     const body = await res.json();
-    const movies = Array.isArray(body) ? body : body.data ?? [];
+    const movies = Array.isArray(body) ? body : (body.data ?? []);
 
     const statusCounts: Record<string, number> = {};
     for (const m of movies) {
@@ -62,7 +72,9 @@ test.describe("Live: Movie Status Lifecycle", () => {
     const moviesRes = await authGet(request, "/api/v1/movies?limit=1");
     expect(moviesRes.status()).toBe(200);
     const moviesBody = await moviesRes.json();
-    const movies = Array.isArray(moviesBody) ? moviesBody : moviesBody.data ?? [];
+    const movies = Array.isArray(moviesBody)
+      ? moviesBody
+      : (moviesBody.data ?? []);
 
     if (movies.length === 0) {
       test.skip(true, "No movies to check history for");
@@ -70,14 +82,27 @@ test.describe("Live: Movie Status Lifecycle", () => {
     }
 
     const movieId = movies[0].id;
-    const historyRes = await authGet(request, "/api/v1/system/audit-log?limit=20");
+    const historyRes = await authGet(
+      request,
+      "/api/v1/system/audit-log?limit=20",
+    );
     expect(historyRes.status()).toBe(200);
     const historyBody = await historyRes.json();
     const entries = historyBody.data ?? historyBody.entries ?? [];
 
     const movieEvents = entries.filter(
-      (e: any) => e.entity_id === movieId || (e.detail && JSON.stringify(e.detail).includes(movieId))
+      (e: any) =>
+        e.entity_id === movieId ||
+        (e.detail && JSON.stringify(e.detail).includes(movieId)),
     );
-    console.log("Found " + movieEvents.length + " audit events for movie " + movies[0].title + " (" + movieId + ")");
+    console.log(
+      "Found " +
+        movieEvents.length +
+        " audit events for movie " +
+        movies[0].title +
+        " (" +
+        movieId +
+        ")",
+    );
   });
 });

@@ -7,10 +7,10 @@ import { useState, useEffect, useCallback, useRef } from "react";
 export interface LogEntry {
   id: string;
   timestamp: string;
-  level: string;  // debug, info, warn, error
+  level: string; // debug, info, warn, error
   message: string;
   source?: string;
-  attrs?: string;  // JSON string
+  attrs?: string; // JSON string
   workflow_id?: string;
 }
 
@@ -35,7 +35,10 @@ export interface LogConfig {
 
 // ─── Fetch functions ────────────────────────────────────────────────────
 
-export async function fetchSystemLogs(params: LogListParams = {}, signal?: AbortSignal): Promise<LogListResult> {
+export async function fetchSystemLogs(
+  params: LogListParams = {},
+  signal?: AbortSignal,
+): Promise<LogListResult> {
   const qs = new URLSearchParams();
   if (params.level) qs.set("level", params.level);
   if (params.search) qs.set("search", params.search);
@@ -93,7 +96,8 @@ export function useUpdateLogConfig() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: updateLogConfig,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["system", "logs", "config"] }),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["system", "logs", "config"] }),
   });
 }
 
@@ -107,7 +111,10 @@ export function useClearSystemLogs() {
 
 // ─── SSE streaming hook ─────────────────────────────────────────────────
 
-export function useLogStream(opts?: { workflowId?: string; enabled?: boolean }) {
+export function useLogStream(opts?: {
+  workflowId?: string;
+  enabled?: boolean;
+}) {
   const [entries, setEntries] = useState<LogEntry[]>([]);
   const [connected, setConnected] = useState(false);
   const esRef = useRef<EventSource | null>(null);
@@ -128,7 +135,9 @@ export function useLogStream(opts?: { workflowId?: string; enabled?: boolean }) 
       try {
         const entry = JSON.parse(e.data) as LogEntry;
         setEntries((prev) => [...prev.slice(-4999), entry]);
-      } catch { /* ignore parse errors */ }
+      } catch {
+        /* ignore parse errors */
+      }
     };
     es.onerror = () => {
       setConnected(false);

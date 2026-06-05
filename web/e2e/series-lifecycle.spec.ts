@@ -46,7 +46,10 @@ function makeSeries(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function setupSeriesMocks(page: import("@playwright/test").Page, overrides: Record<string, unknown> = {}) {
+function setupSeriesMocks(
+  page: import("@playwright/test").Page,
+  overrides: Record<string, unknown> = {},
+) {
   const series = makeSeries(overrides);
   return Promise.all([
     mockSeriesApi(page, [series as any]),
@@ -72,7 +75,9 @@ function setupSeriesMocks(page: import("@playwright/test").Page, overrides: Reco
         monitored: true,
       },
     ]),
-  ]).then(function() { return series; });
+  ]).then(function () {
+    return series;
+  });
 }
 
 test.describe("Series Lifecycle", () => {
@@ -80,14 +85,18 @@ test.describe("Series Lifecycle", () => {
     await mockBaseApp(page);
   });
 
-  test("series detail sheet opens when clicking a series card", async ({ page }) => {
+  test("series detail sheet opens when clicking a series card", async ({
+    page,
+  }) => {
     await setupSeriesMocks(page);
     await page.goto("/series");
     const card = page.locator("main").getByText("Test Series").first();
     await expect(card).toBeVisible({ timeout: 10000 });
     await card.click();
     // Sheet should show series title
-    await expect(page.getByText("Test Series").first()).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText("Test Series").first()).toBeVisible({
+      timeout: 5000,
+    });
   });
 
   test("detail sheet shows continuing status", async ({ page }) => {
@@ -119,11 +128,12 @@ test.describe("Series Lifecycle", () => {
     await page.locator("main").getByText("Test Series").first().click();
     await page.waitForTimeout(1000);
 
-    const monitorReq = page.waitForRequest(
-      function(req) {
-        return req.url().includes("/api/v1/series/ser-1/monitoring") && req.method() === "PUT";
-      }
-    );
+    const monitorReq = page.waitForRequest(function (req) {
+      return (
+        req.url().includes("/api/v1/series/ser-1/monitoring") &&
+        req.method() === "PUT"
+      );
+    });
 
     // Click the monitoring bookmark toggle
     await page.locator("button[title*='Monitored']").first().click();
@@ -144,13 +154,16 @@ test.describe("Series Lifecycle", () => {
     await page.locator("main").getByText("Test Series").first().click();
     await page.waitForTimeout(1000);
 
-    const searchReq = page.waitForRequest(
-      function(req) {
-        return req.url().includes("/api/v1/autosearch") && req.method() === "POST";
-      }
-    );
+    const searchReq = page.waitForRequest(function (req) {
+      return (
+        req.url().includes("/api/v1/autosearch") && req.method() === "POST"
+      );
+    });
 
-    await page.getByRole("button", { name: /Search/i }).first().click();
+    await page
+      .getByRole("button", { name: /Search/i })
+      .first()
+      .click();
     await searchReq;
   });
 
@@ -169,13 +182,15 @@ test.describe("Series Lifecycle", () => {
     await page.locator("button[title='Delete series']").click();
 
     // Confirmation dialog
-    await expect(page.getByText(/Delete Series/i)).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText(/Delete Series/i)).toBeVisible({
+      timeout: 5000,
+    });
 
-    const deleteReq = page.waitForRequest(
-      function(req) {
-        return req.url().includes("/api/v1/series/ser-1") && req.method() === "DELETE";
-      }
-    );
+    const deleteReq = page.waitForRequest(function (req) {
+      return (
+        req.url().includes("/api/v1/series/ser-1") && req.method() === "DELETE"
+      );
+    });
 
     await page.getByRole("button", { name: "Delete" }).click();
     await deleteReq;
@@ -193,11 +208,12 @@ test.describe("Series Lifecycle", () => {
     await page.locator("main").getByText("Test Series").first().click();
     await page.waitForTimeout(1000);
 
-    const refreshReq = page.waitForRequest(
-      function(req) {
-        return req.url().includes("/api/v1/series/ser-1/refresh") && req.method() === "POST";
-      }
-    );
+    const refreshReq = page.waitForRequest(function (req) {
+      return (
+        req.url().includes("/api/v1/series/ser-1/refresh") &&
+        req.method() === "POST"
+      );
+    });
 
     await page.locator("button[title='Refresh metadata from TMDB']").click();
     await refreshReq;
@@ -214,11 +230,12 @@ test.describe("Series Lifecycle", () => {
     await page.locator("main").getByText("Test Series").first().click();
     await page.waitForTimeout(1000);
 
-    const archiveReq = page.waitForRequest(
-      function(req) {
-        return req.url().includes("/api/v1/series/ser-1/archive") && req.method() === "POST";
-      }
-    );
+    const archiveReq = page.waitForRequest(function (req) {
+      return (
+        req.url().includes("/api/v1/series/ser-1/archive") &&
+        req.method() === "POST"
+      );
+    });
 
     await page.locator("button[title='Archive']").click();
     await archiveReq;

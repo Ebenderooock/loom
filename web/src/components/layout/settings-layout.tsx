@@ -1,5 +1,10 @@
 import * as React from "react";
-import { Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
+import {
+  Link,
+  Outlet,
+  useNavigate,
+  useRouterState,
+} from "@tanstack/react-router";
 import {
   Bell,
   Bot,
@@ -97,9 +102,24 @@ export const SETTINGS_GROUPS: SettingsNavGroup[] = [
         kind: "panel",
         description: "Defaults applied when adding new media.",
       },
-      { to: "/settings/quality-profiles", label: "Quality Profiles", Icon: Gauge, kind: "page" },
-      { to: "/settings/custom-formats", label: "Custom Formats", Icon: Tags, kind: "page" },
-      { to: "/settings/language-profiles", label: "Language Profiles", Icon: Languages, kind: "page" },
+      {
+        to: "/settings/quality-profiles",
+        label: "Quality Profiles",
+        Icon: Gauge,
+        kind: "page",
+      },
+      {
+        to: "/settings/custom-formats",
+        label: "Custom Formats",
+        Icon: Tags,
+        kind: "page",
+      },
+      {
+        to: "/settings/language-profiles",
+        label: "Language Profiles",
+        Icon: Languages,
+        kind: "page",
+      },
     ],
   },
   {
@@ -127,19 +147,50 @@ export const SETTINGS_GROUPS: SettingsNavGroup[] = [
         kind: "panel",
         description: "Automatic background search for missing media.",
       },
-      { to: "/settings/indexers", label: "Indexers", Icon: Radio, kind: "page" },
+      {
+        to: "/settings/indexers",
+        label: "Indexers",
+        Icon: Radio,
+        kind: "page",
+      },
       { to: "/settings/sources", label: "RSS Feeds", Icon: Rss, kind: "page" },
-      { to: "/settings/import-lists", label: "Import Lists", Icon: ListPlus, kind: "page" },
-      { to: "/settings/proxies", label: "Proxies", Icon: Network, kind: "page" },
-      { to: "/settings/search-queue", label: "Search Queue", Icon: Bug, kind: "page", feature: "search_log" },
+      {
+        to: "/settings/import-lists",
+        label: "Import Lists",
+        Icon: ListPlus,
+        kind: "page",
+      },
+      {
+        to: "/settings/proxies",
+        label: "Proxies",
+        Icon: Network,
+        kind: "page",
+      },
+      {
+        to: "/settings/search-queue",
+        label: "Search Queue",
+        Icon: Bug,
+        kind: "page",
+        feature: "search_log",
+      },
     ],
   },
   {
     id: "integrations",
     label: "Integrations",
     items: [
-      { to: "/settings/notifications", label: "Notifications", Icon: Bell, kind: "page" },
-      { to: "/settings/request-bots", label: "Request Bots", Icon: Bot, kind: "page" },
+      {
+        to: "/settings/notifications",
+        label: "Notifications",
+        Icon: Bell,
+        kind: "page",
+      },
+      {
+        to: "/settings/request-bots",
+        label: "Request Bots",
+        Icon: Bot,
+        kind: "page",
+      },
       {
         to: "/settings/plugins",
         label: "Plugins",
@@ -167,9 +218,24 @@ export const SETTINGS_GROUPS: SettingsNavGroup[] = [
     id: "system",
     label: "System",
     items: [
-      { to: "/settings/health", label: "Indexer Health", Icon: HeartPulse, kind: "page" },
-      { to: "/settings/events", label: "Events", Icon: ScrollText, kind: "page" },
-      { to: "/settings/workflows", label: "Workflows", Icon: Workflow, kind: "page" },
+      {
+        to: "/settings/health",
+        label: "Indexer Health",
+        Icon: HeartPulse,
+        kind: "page",
+      },
+      {
+        to: "/settings/events",
+        label: "Events",
+        Icon: ScrollText,
+        kind: "page",
+      },
+      {
+        to: "/settings/workflows",
+        label: "Workflows",
+        Icon: Workflow,
+        kind: "page",
+      },
       {
         to: "/settings/system",
         label: "System Logs",
@@ -177,7 +243,13 @@ export const SETTINGS_GROUPS: SettingsNavGroup[] = [
         kind: "panel",
         description: "Application logs and diagnostics.",
       },
-      { to: "/settings/users", label: "Users", Icon: UsersRound, kind: "page", adminOnly: true },
+      {
+        to: "/settings/users",
+        label: "Users",
+        Icon: UsersRound,
+        kind: "page",
+        adminOnly: true,
+      },
     ],
   },
 ];
@@ -204,7 +276,10 @@ export function SettingsLayout() {
     })).filter((g) => g.items.length > 0);
   }, [isAdmin, searchLogEnabled]);
 
-  const flatItems = React.useMemo(() => groups.flatMap((g) => g.items), [groups]);
+  const flatItems = React.useMemo(
+    () => groups.flatMap((g) => g.items),
+    [groups],
+  );
   const active = flatItems.find((i) => isItemActive(path, i.to));
 
   // Panel routes don't set their own header; do it here. Page routes set their own.
@@ -268,7 +343,7 @@ export function SettingsLayout() {
       <nav
         ref={navRef}
         aria-label="Settings sections"
-        className="hidden lg:block lg:sticky lg:top-20 lg:self-start lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto scrollbar-thin"
+        className="scrollbar-thin hidden lg:sticky lg:top-20 lg:block lg:max-h-[calc(100vh-6rem)] lg:self-start lg:overflow-y-auto"
       >
         <div className="flex flex-col gap-4">
           {groups.map((g) => (
@@ -287,8 +362,8 @@ export function SettingsLayout() {
                         className={cn(
                           "flex items-center gap-2.5 rounded-md px-3 py-1.5 text-[13px] font-medium transition-colors",
                           isActive
-                            ? "bg-accent/15 text-accent border-l-2 border-accent"
-                            : "text-muted-foreground hover:bg-accent/8 hover:text-foreground",
+                            ? "border-l-2 border-accent bg-accent/15 text-accent"
+                            : "hover:bg-accent/8 text-muted-foreground hover:text-foreground",
                         )}
                       >
                         <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
@@ -308,9 +383,13 @@ export function SettingsLayout() {
         <div key={active?.to ?? path} className="page-enter">
           {active?.kind === "panel" && (
             <header className="mb-5">
-              <h1 className="text-xl font-semibold tracking-tight">{active.label}</h1>
+              <h1 className="text-xl font-semibold tracking-tight">
+                {active.label}
+              </h1>
               {active.description && (
-                <p className="mt-1 text-sm text-muted-foreground">{active.description}</p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {active.description}
+                </p>
               )}
             </header>
           )}

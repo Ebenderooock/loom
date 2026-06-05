@@ -129,8 +129,8 @@ export function PluginsPage() {
           <div>
             <p className="font-medium">Security notice</p>
             <p className="text-muted-foreground">
-              Plugins run arbitrary commands as the Loom server process, with its
-              privileges and filesystem/network access. This is not an OS
+              Plugins run arbitrary commands as the Loom server process, with
+              its privileges and filesystem/network access. This is not an OS
               sandbox. Only configure scripts you fully trust, and rely on
               container/Kubernetes controls for real isolation.
             </p>
@@ -154,7 +154,9 @@ export function PluginsPage() {
         <Card>
           <CardContent className="flex flex-col items-center gap-2 py-10 text-center text-muted-foreground">
             <Puzzle className="h-8 w-8" />
-            <p>No plugins yet. Add one to run a script on grab/import/playback.</p>
+            <p>
+              No plugins yet. Add one to run a script on grab/import/playback.
+            </p>
           </CardContent>
         </Card>
       ) : (
@@ -171,7 +173,7 @@ export function PluginsPage() {
                       <Badge variant="outline">Disabled</Badge>
                     )}
                   </CardTitle>
-                  <CardDescription className="font-mono text-xs break-all">
+                  <CardDescription className="break-all font-mono text-xs">
                     {p.command.join(" ")}
                   </CardDescription>
                   <div className="flex flex-wrap gap-1 pt-1">
@@ -207,10 +209,18 @@ export function PluginsPage() {
                       <Play className="h-4 w-4" />
                     )}
                   </Button>
-                  <Button size="sm" variant="ghost" onClick={() => setRunsFor(p.id)}>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setRunsFor(p.id)}
+                  >
                     History
                   </Button>
-                  <Button size="sm" variant="ghost" onClick={() => setEditing(p)}>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setEditing(p)}
+                  >
                     <Pencil className="h-4 w-4" />
                   </Button>
                   <Button
@@ -339,10 +349,7 @@ function PluginDialog({
             <Label>Events</Label>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               {events.map((ev) => (
-                <label
-                  key={ev.key}
-                  className="flex items-center gap-2 text-sm"
-                >
+                <label key={ev.key} className="flex items-center gap-2 text-sm">
                   <Checkbox
                     checked={form.events.includes(ev.key)}
                     onCheckedChange={() => toggleEvent(ev.key)}
@@ -484,7 +491,9 @@ function RunRow({ run }: { run: PluginRun }) {
         <div className="mt-2 space-y-2">
           {run.stdout && (
             <div>
-              <p className="text-xs font-medium text-muted-foreground">stdout</p>
+              <p className="text-xs font-medium text-muted-foreground">
+                stdout
+              </p>
               <pre className="max-h-48 overflow-auto rounded bg-muted p-2 text-[11px]">
                 {run.stdout}
               </pre>
@@ -492,7 +501,9 @@ function RunRow({ run }: { run: PluginRun }) {
           )}
           {run.stderr && (
             <div>
-              <p className="text-xs font-medium text-muted-foreground">stderr</p>
+              <p className="text-xs font-medium text-muted-foreground">
+                stderr
+              </p>
               <pre className="max-h-48 overflow-auto rounded bg-muted p-2 text-[11px]">
                 {run.stderr}
               </pre>

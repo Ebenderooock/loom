@@ -4,11 +4,7 @@
 // The PATCH adapter is the interesting one: it implements the
 // "null vs unset" rule for proxy_id documented in the OpenAPI spec.
 
-import type {
-  Indexer,
-  IndexerCreate,
-  IndexerPatch,
-} from "@/lib/indexers-api";
+import type { Indexer, IndexerCreate, IndexerPatch } from "@/lib/indexers-api";
 import type { IndexerFormValues } from "@/components/indexers/indexer-form";
 
 function buildConfig(values: IndexerFormValues): Record<string, unknown> {

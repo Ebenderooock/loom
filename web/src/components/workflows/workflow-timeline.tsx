@@ -29,19 +29,59 @@ interface EventConfig {
 }
 
 const EVENT_CONFIG: Record<WorkflowEventType, EventConfig> = {
-  search_started: { icon: Search, color: "text-blue-400", dotColor: "bg-blue-400" },
+  search_started: {
+    icon: Search,
+    color: "text-blue-400",
+    dotColor: "bg-blue-400",
+  },
   grabbed: { icon: Download, color: "text-blue-400", dotColor: "bg-blue-400" },
-  downloading: { icon: Loader2, color: "text-blue-400", dotColor: "bg-blue-400" },
-  download_progress: { icon: Loader2, color: "text-blue-400", dotColor: "bg-blue-400" },
-  download_complete: { icon: CheckCircle2, color: "text-green-400", dotColor: "bg-green-400" },
-  import_started: { icon: Clock, color: "text-blue-400", dotColor: "bg-blue-400" },
-  import_success: { icon: CheckCircle2, color: "text-green-400", dotColor: "bg-green-400" },
-  import_failed: { icon: XCircle, color: "text-red-400", dotColor: "bg-red-400" },
-  stale_detected: { icon: AlertTriangle, color: "text-yellow-400", dotColor: "bg-yellow-400" },
-  retried: { icon: RefreshCw, color: "text-yellow-400", dotColor: "bg-yellow-400" },
+  downloading: {
+    icon: Loader2,
+    color: "text-blue-400",
+    dotColor: "bg-blue-400",
+  },
+  download_progress: {
+    icon: Loader2,
+    color: "text-blue-400",
+    dotColor: "bg-blue-400",
+  },
+  download_complete: {
+    icon: CheckCircle2,
+    color: "text-green-400",
+    dotColor: "bg-green-400",
+  },
+  import_started: {
+    icon: Clock,
+    color: "text-blue-400",
+    dotColor: "bg-blue-400",
+  },
+  import_success: {
+    icon: CheckCircle2,
+    color: "text-green-400",
+    dotColor: "bg-green-400",
+  },
+  import_failed: {
+    icon: XCircle,
+    color: "text-red-400",
+    dotColor: "bg-red-400",
+  },
+  stale_detected: {
+    icon: AlertTriangle,
+    color: "text-yellow-400",
+    dotColor: "bg-yellow-400",
+  },
+  retried: {
+    icon: RefreshCw,
+    color: "text-yellow-400",
+    dotColor: "bg-yellow-400",
+  },
   failed: { icon: XCircle, color: "text-red-400", dotColor: "bg-red-400" },
   cancelled: { icon: Ban, color: "text-red-400", dotColor: "bg-red-400" },
-  completed: { icon: CheckCircle2, color: "text-green-400", dotColor: "bg-green-400" },
+  completed: {
+    icon: CheckCircle2,
+    color: "text-green-400",
+    dotColor: "bg-green-400",
+  },
 };
 
 function getEventConfig(eventType: string): EventConfig {
@@ -74,7 +114,7 @@ function MetadataSection({ metadata }: { metadata: string }) {
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+        className="flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
       >
         <ChevronDown
           className={cn("h-3 w-3 transition-transform", open && "rotate-180")}
@@ -82,7 +122,7 @@ function MetadataSection({ metadata }: { metadata: string }) {
         Details
       </button>
       {open && (
-        <pre className="mt-1 rounded bg-muted/50 p-2 text-xs text-muted-foreground overflow-x-auto max-w-md">
+        <pre className="mt-1 max-w-md overflow-x-auto rounded bg-muted/50 p-2 text-xs text-muted-foreground">
           {JSON.stringify(parsed, null, 2)}
         </pre>
       )}
@@ -106,7 +146,7 @@ function TimelineItem({
     <div className="relative flex gap-3">
       {/* Vertical connector line */}
       {!isLast && (
-        <div className="absolute left-[11px] top-6 bottom-0 w-px bg-border" />
+        <div className="absolute bottom-0 left-[11px] top-6 w-px bg-border" />
       )}
 
       {/* Dot */}
@@ -129,7 +169,7 @@ function TimelineItem({
             {relativeTime(event.createdAt)}
           </span>
           <span className="text-xs text-muted-foreground/50">·</span>
-          <span className="text-xs text-muted-foreground capitalize">
+          <span className="text-xs capitalize text-muted-foreground">
             {event.eventType ? event.eventType.replace(/_/g, " ") : ""}
           </span>
         </div>

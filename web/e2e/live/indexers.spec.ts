@@ -9,14 +9,17 @@ test.describe("Live: Indexers", () => {
   test("indexers page loads", async ({ page }) => {
     await page.goto("/indexers");
     await waitForPageLoad(page);
-    await expect(page.getByText(/Indexers/i).first()).toBeVisible({ timeout: 15000 });
+    await expect(page.getByText(/Indexers/i).first()).toBeVisible({
+      timeout: 15000,
+    });
   });
 
   test("indexers API returns configured indexers", async ({ request }) => {
     const res = await authGet(request, "/api/v1/indexers");
     expect(res.status()).toBe(200);
     const body = await res.json();
-    const indexers = body.indexers ?? body.data ?? (Array.isArray(body) ? body : []);
+    const indexers =
+      body.indexers ?? body.data ?? (Array.isArray(body) ? body : []);
     expect(Array.isArray(indexers)).toBeTruthy();
     if (indexers.length > 0) {
       expect(indexers[0]).toHaveProperty("id");
@@ -30,11 +33,13 @@ test.describe("Live: Indexers", () => {
     expect(res.status()).toBe(200);
   });
 
-  test("indexer definitions API returns available definitions", async ({ request }) => {
+  test("indexer definitions API returns available definitions", async ({
+    request,
+  }) => {
     const res = await authGet(request, "/api/v1/indexers/definitions");
     expect(res.status()).toBe(200);
     const defs = await res.json();
-    const list = Array.isArray(defs) ? defs : defs.data ?? [];
+    const list = Array.isArray(defs) ? defs : (defs.data ?? []);
     expect(list.length).toBeGreaterThan(0);
   });
 });

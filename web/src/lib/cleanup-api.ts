@@ -25,7 +25,11 @@ export interface CleanupSettings {
   retention_days: number;
 }
 
-async function req<T>(method: string, path: string, body?: unknown): Promise<T> {
+async function req<T>(
+  method: string,
+  path: string,
+  body?: unknown,
+): Promise<T> {
   const init: RequestInit = { method };
   if (body !== undefined) {
     init.headers = { "Content-Type": "application/json" };
@@ -43,14 +47,21 @@ async function req<T>(method: string, path: string, body?: unknown): Promise<T> 
   }
   if (!res.ok) {
     const env = parsed as { error?: { message?: string } } | undefined;
-    throw new Error(env?.error?.message ?? `${method} ${path} failed (${res.status})`);
+    throw new Error(
+      env?.error?.message ?? `${method} ${path} failed (${res.status})`,
+    );
   }
   return parsed as T;
 }
 
-export async function listOrphans(status?: OrphanStatus | "all"): Promise<Orphan[]> {
+export async function listOrphans(
+  status?: OrphanStatus | "all",
+): Promise<Orphan[]> {
   const q = status ? `?status=${encodeURIComponent(status)}` : "";
-  const env = await req<{ data: Orphan[] }>("GET", `/api/v1/cleanup/orphans${q}`);
+  const env = await req<{ data: Orphan[] }>(
+    "GET",
+    `/api/v1/cleanup/orphans${q}`,
+  );
   return env.data ?? [];
 }
 
@@ -62,23 +73,32 @@ export async function getCleanupSettings(): Promise<CleanupSettings> {
   return req<CleanupSettings>("GET", "/api/v1/cleanup/settings");
 }
 
-export async function saveCleanupSettings(s: CleanupSettings): Promise<CleanupSettings> {
+export async function saveCleanupSettings(
+  s: CleanupSettings,
+): Promise<CleanupSettings> {
   return req<CleanupSettings>("PUT", "/api/v1/cleanup/settings", s);
 }
 
 export async function approveOrphan(id: string): Promise<void> {
-  await req<unknown>("POST", `/api/v1/cleanup/orphans/${encodeURIComponent(id)}/approve`);
+  await req<unknown>(
+    "POST",
+    `/api/v1/cleanup/orphans/${encodeURIComponent(id)}/approve`,
+  );
 }
 
 export async function ignoreOrphan(id: string): Promise<void> {
-  await req<unknown>("POST", `/api/v1/cleanup/orphans/${encodeURIComponent(id)}/ignore`);
+  await req<unknown>(
+    "POST",
+    `/api/v1/cleanup/orphans/${encodeURIComponent(id)}/ignore`,
+  );
 }
 
 // ---------- Hooks ----------
 
 export const cleanupKeys = {
   all: ["cleanup"] as const,
-  orphans: (status?: string) => [...cleanupKeys.all, "orphans", status ?? "pending"] as const,
+  orphans: (status?: string) =>
+    [...cleanupKeys.all, "orphans", status ?? "pending"] as const,
   settings: () => [...cleanupKeys.all, "settings"] as const,
 };
 

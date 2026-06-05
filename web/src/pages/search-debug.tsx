@@ -16,12 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { LoadingState } from "@/components/ui/loading-state";
 import { useSetPageHeader } from "@/hooks/use-page-header";
@@ -88,7 +83,7 @@ function outcomeBadge(outcome: string) {
   return (
     <Badge
       variant="outline"
-      className={`text-[10px] px-1.5 capitalize ${styles[outcome] ?? "bg-gray-500/10 text-gray-400 border-0"}`}
+      className={`px-1.5 text-[10px] capitalize ${styles[outcome] ?? "border-0 bg-gray-500/10 text-gray-400"}`}
     >
       {outcome.replace(/_/g, " ")}
     </Badge>
@@ -125,7 +120,7 @@ function statusBadge(status: string) {
   return (
     <Badge
       variant="outline"
-      className={`text-[10px] px-1.5 capitalize ${s.class}`}
+      className={`px-1.5 text-[10px] capitalize ${s.class}`}
     >
       <span className="flex items-center gap-1">
         {s.icon}
@@ -160,7 +155,8 @@ function seasonEpisodeLabel(entry: SearchDebugEntry) {
   if (entry.media_type === "movie") return "—";
   const parts: string[] = [];
   if (entry.season > 0) parts.push(`S${String(entry.season).padStart(2, "0")}`);
-  if (entry.episode > 0) parts.push(`E${String(entry.episode).padStart(2, "0")}`);
+  if (entry.episode > 0)
+    parts.push(`E${String(entry.episode).padStart(2, "0")}`);
   return parts.length > 0 ? parts.join("") : "—";
 }
 
@@ -171,7 +167,7 @@ function StatsSummary() {
 
   if (isLoading || !data) {
     return (
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         {Array.from({ length: 4 }).map((_, i) => (
           <Card key={i}>
             <CardContent className="p-4">
@@ -194,10 +190,10 @@ function StatsSummary() {
     (data.outcome_counts["profile_load_failed"] ?? 0);
 
   return (
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+    <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
       <Card>
-        <CardHeader className="pb-1 pt-3 px-4">
-          <CardTitle className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+        <CardHeader className="px-4 pb-1 pt-3">
+          <CardTitle className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
             <Search className="h-3.5 w-3.5" /> Total Searches
           </CardTitle>
         </CardHeader>
@@ -209,8 +205,8 @@ function StatsSummary() {
       </Card>
 
       <Card>
-        <CardHeader className="pb-1 pt-3 px-4">
-          <CardTitle className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+        <CardHeader className="px-4 pb-1 pt-3">
+          <CardTitle className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
             <CheckCircle2 className="h-3.5 w-3.5 text-green-500" /> Grabbed
           </CardTitle>
         </CardHeader>
@@ -225,8 +221,8 @@ function StatsSummary() {
       </Card>
 
       <Card>
-        <CardHeader className="pb-1 pt-3 px-4">
-          <CardTitle className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+        <CardHeader className="px-4 pb-1 pt-3">
+          <CardTitle className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
             <XCircle className="h-3.5 w-3.5 text-red-500" /> Failed
           </CardTitle>
         </CardHeader>
@@ -238,16 +234,15 @@ function StatsSummary() {
       </Card>
 
       <Card>
-        <CardHeader className="pb-1 pt-3 px-4">
-          <CardTitle className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-            <AlertTriangle className="h-3.5 w-3.5 text-yellow-500" /> Top
-            Reject
+        <CardHeader className="px-4 pb-1 pt-3">
+          <CardTitle className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+            <AlertTriangle className="h-3.5 w-3.5 text-yellow-500" /> Top Reject
           </CardTitle>
         </CardHeader>
         <CardContent className="px-4 pb-3">
           {topReject ? (
             <>
-              <span className="text-sm font-semibold truncate block">
+              <span className="block truncate text-sm font-semibold">
                 {topReject.reason}
               </span>
               <span className="text-xs text-muted-foreground">
@@ -273,29 +268,27 @@ function ActiveSearches() {
 
   return (
     <Card className="border-blue-500/30 bg-blue-500/5">
-      <CardHeader className="pb-2 pt-3 px-4">
-        <CardTitle className="text-xs font-medium text-blue-400 flex items-center gap-1.5">
-          <Loader2 className="h-3.5 w-3.5 animate-spin" /> Active Searches ({entries.length})
+      <CardHeader className="px-4 pb-2 pt-3">
+        <CardTitle className="flex items-center gap-1.5 text-xs font-medium text-blue-400">
+          <Loader2 className="h-3.5 w-3.5 animate-spin" /> Active Searches (
+          {entries.length})
         </CardTitle>
       </CardHeader>
       <CardContent className="px-4 pb-3">
         <div className="space-y-2">
           {entries.map((e) => (
-            <div
-              key={e.id}
-              className="flex items-center gap-3 text-sm"
-            >
+            <div key={e.id} className="flex items-center gap-3 text-sm">
               {statusBadge(e.status)}
-              <span className="font-medium truncate">
+              <span className="truncate font-medium">
                 {e.title}
                 {e.season > 0 && (
-                  <span className="text-xs text-muted-foreground ml-1">
+                  <span className="ml-1 text-xs text-muted-foreground">
                     S{String(e.season).padStart(2, "0")}
                     {e.episode > 0 && `E${String(e.episode).padStart(2, "0")}`}
                   </span>
                 )}
               </span>
-              <span className="text-xs text-muted-foreground capitalize">
+              <span className="text-xs capitalize text-muted-foreground">
                 {e.media_type}
               </span>
               {e.total_results > 0 && (
@@ -303,7 +296,7 @@ function ActiveSearches() {
                   {e.total_results} results
                 </span>
               )}
-              <span className="ml-auto text-xs text-muted-foreground tabular-nums flex items-center gap-1">
+              <span className="ml-auto flex items-center gap-1 text-xs tabular-nums text-muted-foreground">
                 <Clock className="h-3 w-3" />
                 {e.duration_ms > 0 ? `${e.duration_ms}ms` : "…"}
               </span>
@@ -326,7 +319,7 @@ function TierPanel({ tiers }: { tiers: TierDetail[] }) {
 
   return (
     <div className="space-y-2">
-      <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
+      <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
         Tiers
       </p>
       <Table>
@@ -351,20 +344,20 @@ function TierPanel({ tiers }: { tiers: TierDetail[] }) {
                   .map((q) => q.term || q.mode || q.imdb_id || "query")
                   .join(", ")}
               </TableCell>
-              <TableCell className="text-xs text-right tabular-nums">
+              <TableCell className="text-right text-xs tabular-nums">
                 {t.result_count}
               </TableCell>
-              <TableCell className="text-xs text-right tabular-nums text-green-500">
+              <TableCell className="text-right text-xs tabular-nums text-green-500">
                 {t.accepted_count}
               </TableCell>
-              <TableCell className="text-xs text-right tabular-nums text-red-500">
+              <TableCell className="text-right text-xs tabular-nums text-red-500">
                 {t.rejected_count}
               </TableCell>
               <TableCell>
                 {t.stopped_here && (
                   <Badge
                     variant="outline"
-                    className="text-[9px] bg-blue-500/10 text-blue-400 border-0"
+                    className="border-0 bg-blue-500/10 text-[9px] text-blue-400"
                   >
                     stopped
                   </Badge>
@@ -383,9 +376,7 @@ function TierPanel({ tiers }: { tiers: TierDetail[] }) {
 function IndexerPanel({ results }: { results: IndexerResult[] }) {
   if (results.length === 0) {
     return (
-      <p className="text-xs text-muted-foreground">
-        No indexer data recorded.
-      </p>
+      <p className="text-xs text-muted-foreground">No indexer data recorded.</p>
     );
   }
 
@@ -393,13 +384,13 @@ function IndexerPanel({ results }: { results: IndexerResult[] }) {
 
   return (
     <div className="space-y-2">
-      <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
+      <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
         Indexer Results
       </p>
       {results.map((ix) => (
         <div key={ix.indexer_id} className="flex items-center gap-2 text-xs">
           <span className="w-28 truncate font-medium">{ix.indexer_name}</span>
-          <div className="flex-1 h-1.5 rounded-full bg-muted">
+          <div className="h-1.5 flex-1 rounded-full bg-muted">
             <div
               className={`h-1.5 rounded-full ${ix.status === "completed" || ix.status === "ok" ? "bg-blue-500" : "bg-red-500"}`}
               style={{
@@ -407,26 +398,26 @@ function IndexerPanel({ results }: { results: IndexerResult[] }) {
               }}
             />
           </div>
-          <span className="text-muted-foreground w-14 text-right tabular-nums">
+          <span className="w-14 text-right tabular-nums text-muted-foreground">
             {ix.latency_ms}ms
           </span>
-          <span className="text-muted-foreground w-16 text-right tabular-nums">
+          <span className="w-16 text-right tabular-nums text-muted-foreground">
             {ix.result_count} results
           </span>
           <Badge
             variant="outline"
-            className={`text-[9px] px-1 ${
+            className={`px-1 text-[9px] ${
               ix.status === "completed" || ix.status === "ok"
-                ? "bg-green-500/10 text-green-500 border-0"
+                ? "border-0 bg-green-500/10 text-green-500"
                 : ix.status === "failed"
-                  ? "bg-red-500/10 text-red-500 border-0"
-                  : "bg-gray-500/10 text-gray-500 border-0"
+                  ? "border-0 bg-red-500/10 text-red-500"
+                  : "border-0 bg-gray-500/10 text-gray-500"
             }`}
           >
             {ix.status}
           </Badge>
           {ix.error && (
-            <span className="text-red-400 truncate max-w-[12rem]">
+            <span className="max-w-[12rem] truncate text-red-400">
               {ix.error}
             </span>
           )}
@@ -449,7 +440,7 @@ function EvaluationPanel({ evals }: { evals: EvalResult[] }) {
 
   return (
     <div className="space-y-2">
-      <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
+      <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
         Evaluation ({evals.length} results)
       </p>
       <div className="overflow-x-auto">
@@ -471,7 +462,7 @@ function EvaluationPanel({ evals }: { evals: EvalResult[] }) {
             {evals.map((ev, i) => (
               <TableRow key={i}>
                 <TableCell
-                  className="text-xs max-w-[300px] truncate"
+                  className="max-w-[300px] truncate text-xs"
                   title={ev.title}
                 >
                   {ev.title}
@@ -480,38 +471,38 @@ function EvaluationPanel({ evals }: { evals: EvalResult[] }) {
                   {ev.rejected ? (
                     <Badge
                       variant="outline"
-                      className="text-[9px] bg-red-500/10 text-red-500 border-0"
+                      className="border-0 bg-red-500/10 text-[9px] text-red-500"
                     >
                       rejected
                     </Badge>
                   ) : (
                     <Badge
                       variant="outline"
-                      className="text-[9px] bg-green-500/10 text-green-500 border-0"
+                      className="border-0 bg-green-500/10 text-[9px] text-green-500"
                     >
                       accepted
                     </Badge>
                   )}
                 </TableCell>
-                <TableCell className="text-xs text-muted-foreground truncate max-w-[200px]">
+                <TableCell className="max-w-[200px] truncate text-xs text-muted-foreground">
                   {ev.reject_reason ?? "—"}
                 </TableCell>
                 <TableCell className="text-xs">
                   {ev.quality_name ?? "—"}
                 </TableCell>
-                <TableCell className="text-xs text-right tabular-nums">
+                <TableCell className="text-right text-xs tabular-nums">
                   {ev.quality_tier}
                 </TableCell>
-                <TableCell className="text-xs text-right tabular-nums">
+                <TableCell className="text-right text-xs tabular-nums">
                   {ev.format_score}
                 </TableCell>
-                <TableCell className="text-xs text-right tabular-nums font-medium">
+                <TableCell className="text-right text-xs font-medium tabular-nums">
                   {ev.composite_score}
                 </TableCell>
-                <TableCell className="text-xs text-right tabular-nums">
+                <TableCell className="text-right text-xs tabular-nums">
                   {formatSize(ev.size)}
                 </TableCell>
-                <TableCell className="text-xs text-right tabular-nums">
+                <TableCell className="text-right text-xs tabular-nums">
                   {ev.seeders ?? "—"}
                 </TableCell>
               </TableRow>
@@ -530,7 +521,7 @@ function DetailPanel({ entryId }: { entryId: string }) {
 
   if (isLoading) {
     return (
-      <p className="text-xs text-muted-foreground animate-pulse">
+      <p className="animate-pulse text-xs text-muted-foreground">
         Loading details…
       </p>
     );
@@ -541,8 +532,8 @@ function DetailPanel({ entryId }: { entryId: string }) {
   return (
     <div className="space-y-4">
       {data.error_message && (
-        <div className="flex items-start gap-2 text-xs text-red-400 bg-red-500/5 rounded p-2">
-          <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+        <div className="flex items-start gap-2 rounded bg-red-500/5 p-2 text-xs text-red-400">
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
           <span>{data.error_message}</span>
         </div>
       )}
@@ -578,10 +569,7 @@ function SearchRow({
 
   return (
     <>
-      <TableRow
-        className="cursor-pointer hover:bg-muted/40"
-        onClick={onToggle}
-      >
+      <TableRow className="cursor-pointer hover:bg-muted/40" onClick={onToggle}>
         <TableCell className="text-xs tabular-nums text-muted-foreground">
           {formatTimestamp(entry.created_at)}
         </TableCell>
@@ -593,7 +581,7 @@ function SearchRow({
                 ({entry.year})
               </span>
             )}
-            <Chevron className="h-3 w-3 text-muted-foreground shrink-0" />
+            <Chevron className="h-3 w-3 shrink-0 text-muted-foreground" />
           </span>
         </TableCell>
         <TableCell className="text-xs capitalize">{entry.media_type}</TableCell>
@@ -602,13 +590,13 @@ function SearchRow({
         </TableCell>
         <TableCell>{statusBadge(entry.status)}</TableCell>
         <TableCell>{outcomeBadge(entry.outcome)}</TableCell>
-        <TableCell className="text-xs text-right tabular-nums">
+        <TableCell className="text-right text-xs tabular-nums">
           {entry.total_results}
         </TableCell>
-        <TableCell className="text-xs text-right tabular-nums text-red-500">
+        <TableCell className="text-right text-xs tabular-nums text-red-500">
           {entry.total_rejected}
         </TableCell>
-        <TableCell className="text-xs text-right tabular-nums text-muted-foreground">
+        <TableCell className="text-right text-xs tabular-nums text-muted-foreground">
           <span className="flex items-center justify-end gap-1">
             <Clock className="h-3 w-3" />
             {entry.duration_ms}ms
@@ -697,9 +685,7 @@ export function SearchDebugPage() {
         <Button
           variant="outline"
           size="icon"
-          onClick={() =>
-            qc.invalidateQueries({ queryKey: ["search-queue"] })
-          }
+          onClick={() => qc.invalidateQueries({ queryKey: ["search-queue"] })}
           aria-label="Refresh"
         >
           <RefreshCw className="h-4 w-4" />
@@ -738,7 +724,7 @@ export function SearchDebugPage() {
               <TableRow>
                 <TableCell
                   colSpan={9}
-                  className="text-center text-destructive py-8"
+                  className="py-8 text-center text-destructive"
                 >
                   Failed to load search queue data.
                 </TableCell>
@@ -777,7 +763,7 @@ export function SearchDebugPage() {
             disabled={!hasPrev}
             onClick={() => setOffset((o) => Math.max(0, o - PAGE_SIZE))}
           >
-            <ChevronLeft className="h-4 w-4 mr-1" /> Previous
+            <ChevronLeft className="mr-1 h-4 w-4" /> Previous
           </Button>
           <span className="text-xs text-muted-foreground">
             {offset + 1}–{Math.min(offset + PAGE_SIZE, total)} of {total}
@@ -788,7 +774,7 @@ export function SearchDebugPage() {
             disabled={!hasNext}
             onClick={() => setOffset((o) => o + PAGE_SIZE)}
           >
-            Next <ChevronRight className="h-4 w-4 ml-1" />
+            Next <ChevronRight className="ml-1 h-4 w-4" />
           </Button>
         </div>
       )}

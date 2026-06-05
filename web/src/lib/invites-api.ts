@@ -68,9 +68,7 @@ async function request<T>(
     }
   }
   if (!res.ok) {
-    const env = parsed as
-      | { error?: string | { message?: string } }
-      | undefined;
+    const env = parsed as { error?: string | { message?: string } } | undefined;
     let message = `${method} ${path} failed: ${res.status} ${res.statusText}`;
     if (typeof env?.error === "string") {
       message = env.error;

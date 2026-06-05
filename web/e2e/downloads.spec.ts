@@ -1,8 +1,5 @@
 import { test, expect } from "@playwright/test";
-import {
-  mockBaseApp,
-  mockDownloads,
-} from "./helpers/mock-api";
+import { mockBaseApp, mockDownloads } from "./helpers/mock-api";
 
 test.describe("Downloads Page", () => {
   test.beforeEach(async ({ page }) => {
@@ -22,9 +19,9 @@ test.describe("Downloads Page", () => {
   test("renders downloads page heading", async ({ page }) => {
     await page.goto("/downloads");
     // useSetPageHeader("Downloads") renders as <span> in header — hidden on mobile
-    await expect(
-      page.locator("header").getByText("Downloads"),
-    ).toBeAttached({ timeout: 10000 });
+    await expect(page.locator("header").getByText("Downloads")).toBeAttached({
+      timeout: 10000,
+    });
   });
 
   test("shows empty queue state", async ({ page }) => {

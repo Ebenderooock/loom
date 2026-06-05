@@ -81,11 +81,14 @@ export async function createEpisodeMapping(
   seriesId: string,
   mapping: CreateMappingRequest,
 ): Promise<EpisodeMapping> {
-  const res = await apiFetch(`/api/v1/episode-order/series/${seriesId}/mappings`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(mapping),
-  });
+  const res = await apiFetch(
+    `/api/v1/episode-order/series/${seriesId}/mappings`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(mapping),
+    },
+  );
   if (!res.ok) throw new Error(`create mapping: ${res.status}`);
   return (await res.json()) as EpisodeMapping;
 }

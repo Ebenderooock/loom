@@ -9,15 +9,19 @@ test.describe("Live: Settings", () => {
   test("settings page loads with sections", async ({ page }) => {
     await page.goto("/settings");
     await waitForPageLoad(page);
-    await expect(page.getByText(/Settings/i).first()).toBeVisible({ timeout: 15000 });
-    await expect(page.getByText(/Libraries|Download|General/i).first()).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText(/Settings/i).first()).toBeVisible({
+      timeout: 15000,
+    });
+    await expect(
+      page.getByText(/Libraries|Download|General/i).first(),
+    ).toBeVisible({ timeout: 10000 });
   });
 
   test("libraries API returns configured libraries", async ({ request }) => {
     const res = await authGet(request, "/api/v1/libraries");
     expect(res.status()).toBe(200);
     const body = await res.json();
-    const libs = Array.isArray(body) ? body : body.data ?? [];
+    const libs = Array.isArray(body) ? body : (body.data ?? []);
     expect(Array.isArray(libs)).toBeTruthy();
     if (libs.length > 0) {
       expect(libs[0]).toHaveProperty("id");

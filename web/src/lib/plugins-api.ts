@@ -48,7 +48,11 @@ export interface PluginInput {
 
 const BASE = "/api/v1/plugins";
 
-async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+async function request<T>(
+  method: string,
+  path: string,
+  body?: unknown,
+): Promise<T> {
   const init: RequestInit = { method };
   if (body !== undefined) {
     init.headers = { "Content-Type": "application/json" };
@@ -67,7 +71,9 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   }
   if (!res.ok) {
     const env = parsed as { error?: { message?: string } } | undefined;
-    throw new Error(env?.error?.message ?? `${method} ${path} failed: ${res.status}`);
+    throw new Error(
+      env?.error?.message ?? `${method} ${path} failed: ${res.status}`,
+    );
   }
   return parsed as T;
 }
@@ -90,7 +96,8 @@ export function usePluginEvents() {
 export function usePluginRuns(pluginId: string | null) {
   return useQuery({
     queryKey: ["plugin-runs", pluginId],
-    queryFn: () => request<PluginRun[]>("GET", `${BASE}/${pluginId}/runs?limit=50`),
+    queryFn: () =>
+      request<PluginRun[]>("GET", `${BASE}/${pluginId}/runs?limit=50`),
     enabled: !!pluginId,
   });
 }
@@ -123,7 +130,9 @@ export function useDeletePlugin() {
 export function useTestPlugin() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => request<PluginRun>("POST", `${BASE}/${id}/test`),
-    onSuccess: (_data, id) => qc.invalidateQueries({ queryKey: ["plugin-runs", id] }),
+    mutationFn: (id: string) =>
+      request<PluginRun>("POST", `${BASE}/${id}/test`),
+    onSuccess: (_data, id) =>
+      qc.invalidateQueries({ queryKey: ["plugin-runs", id] }),
   });
 }

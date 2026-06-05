@@ -141,10 +141,7 @@ export async function updateConnection(
 }
 
 export async function deleteConnection(id: string): Promise<void> {
-  await request<void>(
-    "DELETE",
-    `/api/v1/connect/${encodeURIComponent(id)}`,
-  );
+  await request<void>("DELETE", `/api/v1/connect/${encodeURIComponent(id)}`);
 }
 
 export async function testConnection(id: string): Promise<TestResult> {
@@ -188,13 +185,8 @@ export function useCreateConnection() {
 export function useUpdateConnection() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({
-      id,
-      body,
-    }: {
-      id: string;
-      body: UpdateConnectRequest;
-    }) => updateConnection(id, body),
+    mutationFn: ({ id, body }: { id: string; body: UpdateConnectRequest }) =>
+      updateConnection(id, body),
     onSuccess: () => qc.invalidateQueries({ queryKey: connectKeys.all }),
   });
 }
@@ -268,20 +260,40 @@ export async function traktCallback(body: {
   return request("POST", "/api/v1/connect/trakt/oauth/callback", body);
 }
 
-export async function traktRefreshToken(connectionId: string): Promise<ConnectConnection> {
-  return request("POST", `/api/v1/connect/trakt/oauth/refresh/${encodeURIComponent(connectionId)}`);
+export async function traktRefreshToken(
+  connectionId: string,
+): Promise<ConnectConnection> {
+  return request(
+    "POST",
+    `/api/v1/connect/trakt/oauth/refresh/${encodeURIComponent(connectionId)}`,
+  );
 }
 
-export async function traktSyncWatched(connectionId: string): Promise<{ movies: number; shows: number }> {
-  return request("POST", `/api/v1/connect/trakt/sync/watched/${encodeURIComponent(connectionId)}`);
+export async function traktSyncWatched(
+  connectionId: string,
+): Promise<{ movies: number; shows: number }> {
+  return request(
+    "POST",
+    `/api/v1/connect/trakt/sync/watched/${encodeURIComponent(connectionId)}`,
+  );
 }
 
-export async function traktSyncCollection(connectionId: string): Promise<{ movies: number; shows: number }> {
-  return request("POST", `/api/v1/connect/trakt/sync/collection/${encodeURIComponent(connectionId)}`);
+export async function traktSyncCollection(
+  connectionId: string,
+): Promise<{ movies: number; shows: number }> {
+  return request(
+    "POST",
+    `/api/v1/connect/trakt/sync/collection/${encodeURIComponent(connectionId)}`,
+  );
 }
 
-export async function traktSyncWatchlist(connectionId: string): Promise<{ movies: number; shows: number }> {
-  return request("POST", `/api/v1/connect/trakt/sync/watchlist/${encodeURIComponent(connectionId)}`);
+export async function traktSyncWatchlist(
+  connectionId: string,
+): Promise<{ movies: number; shows: number }> {
+  return request(
+    "POST",
+    `/api/v1/connect/trakt/sync/watchlist/${encodeURIComponent(connectionId)}`,
+  );
 }
 
 // ---------- Trakt React Query hooks ----------

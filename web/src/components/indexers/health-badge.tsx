@@ -31,7 +31,8 @@ export function mapHealth(
     case "ok": {
       const checkedAt = Date.parse(health.last_checked_at);
       const stale =
-        Number.isFinite(checkedAt) && now.getTime() - checkedAt > STALE_AFTER_MS;
+        Number.isFinite(checkedAt) &&
+        now.getTime() - checkedAt > STALE_AFTER_MS;
       if (stale) {
         return {
           status: "degraded",

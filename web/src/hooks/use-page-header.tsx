@@ -13,7 +13,11 @@ const PageHeaderContext = React.createContext<{
   setHeader: () => {},
 });
 
-export function PageHeaderProvider({ children }: { children: React.ReactNode }) {
+export function PageHeaderProvider({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   const [header, setHeader] = React.useState<PageHeaderState>({ title: "" });
   const value = React.useMemo(() => ({ header, setHeader }), [header]);
   return (

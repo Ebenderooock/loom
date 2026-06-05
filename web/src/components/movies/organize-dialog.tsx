@@ -125,20 +125,21 @@ export function OrganizeDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[80vh] overflow-hidden flex flex-col">
+      <DialogContent className="flex max-h-[80vh] max-w-3xl flex-col overflow-hidden">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <FolderSync className="h-5 w-5 text-teal-400" />
             Organize Files
           </DialogTitle>
           <DialogDescription>
-            Rename and organize movie files according to your naming configuration.
+            Rename and organize movie files according to your naming
+            configuration.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex-1 overflow-y-auto space-y-4">
+        <div className="flex-1 space-y-4 overflow-y-auto">
           {error && (
-            <div className="flex items-center gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
+            <div className="flex items-center gap-2 rounded-lg border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-400">
               <AlertTriangle className="h-4 w-4 flex-shrink-0" />
               {error}
             </div>
@@ -150,22 +151,33 @@ export function OrganizeDialog({
               {loading ? (
                 <div className="flex items-center justify-center py-12">
                   <Loader2 className="h-6 w-6 animate-spin text-teal-400" />
-                  <span className="ml-2 text-zinc-400">Computing renames...</span>
+                  <span className="ml-2 text-zinc-400">
+                    Computing renames...
+                  </span>
                 </div>
               ) : (
                 <>
                   {/* Summary */}
                   <div className="flex gap-3 text-sm">
-                    <Badge variant="outline" className="border-teal-500/30 text-teal-400">
+                    <Badge
+                      variant="outline"
+                      className="border-teal-500/30 text-teal-400"
+                    >
                       {changedPreviews.length} to rename
                     </Badge>
                     {unchangedCount > 0 && (
-                      <Badge variant="outline" className="border-zinc-500/30 text-zinc-400">
+                      <Badge
+                        variant="outline"
+                        className="border-zinc-500/30 text-zinc-400"
+                      >
                         {unchangedCount} already correct
                       </Badge>
                     )}
                     {collisionCount > 0 && (
-                      <Badge variant="outline" className="border-amber-500/30 text-amber-400">
+                      <Badge
+                        variant="outline"
+                        className="border-amber-500/30 text-amber-400"
+                      >
                         {collisionCount} collisions
                       </Badge>
                     )}
@@ -173,8 +185,8 @@ export function OrganizeDialog({
 
                   {/* File list */}
                   {changedPreviews.length === 0 ? (
-                    <div className="text-center py-8 text-zinc-500">
-                      <Check className="h-8 w-8 mx-auto mb-2 text-green-400" />
+                    <div className="py-8 text-center text-zinc-500">
+                      <Check className="mx-auto mb-2 h-8 w-8 text-green-400" />
                       All files are already correctly named.
                     </div>
                   ) : (
@@ -182,29 +194,41 @@ export function OrganizeDialog({
                       {changedPreviews.map((p) => (
                         <div
                           key={p.file_id}
-                          className="p-3 rounded-lg bg-zinc-900/50 border border-zinc-800 space-y-1"
+                          className="space-y-1 rounded-lg border border-zinc-800 bg-zinc-900/50 p-3"
                         >
                           <div className="flex items-center gap-2">
                             <span className="text-sm font-medium text-zinc-300">
                               {p.movie_title}
                             </span>
                             {p.collision && (
-                              <Badge variant="outline" className="border-amber-500/30 text-amber-400 text-xs">
+                              <Badge
+                                variant="outline"
+                                className="border-amber-500/30 text-xs text-amber-400"
+                              >
                                 collision
                               </Badge>
                             )}
                             {p.error && (
-                              <Badge variant="outline" className="border-red-500/30 text-red-400 text-xs">
+                              <Badge
+                                variant="outline"
+                                className="border-red-500/30 text-xs text-red-400"
+                              >
                                 error
                               </Badge>
                             )}
                           </div>
                           <div className="flex items-center gap-2 text-xs">
-                            <span className="text-red-400/70 font-mono truncate" title={p.current_path}>
+                            <span
+                              className="truncate font-mono text-red-400/70"
+                              title={p.current_path}
+                            >
                               {shortenPath(p.current_path)}
                             </span>
-                            <ArrowRight className="h-3 w-3 text-zinc-500 flex-shrink-0" />
-                            <span className="text-green-400/70 font-mono truncate" title={p.new_path}>
+                            <ArrowRight className="h-3 w-3 flex-shrink-0 text-zinc-500" />
+                            <span
+                              className="truncate font-mono text-green-400/70"
+                              title={p.new_path}
+                            >
                               {shortenPath(p.new_path)}
                             </span>
                           </div>
@@ -230,13 +254,19 @@ export function OrganizeDialog({
             <>
               <div className="flex gap-3 text-sm">
                 {successCount > 0 && (
-                  <Badge variant="outline" className="border-green-500/30 text-green-400">
-                    <Check className="h-3 w-3 mr-1" /> {successCount} renamed
+                  <Badge
+                    variant="outline"
+                    className="border-green-500/30 text-green-400"
+                  >
+                    <Check className="mr-1 h-3 w-3" /> {successCount} renamed
                   </Badge>
                 )}
                 {failCount > 0 && (
-                  <Badge variant="outline" className="border-red-500/30 text-red-400">
-                    <X className="h-3 w-3 mr-1" /> {failCount} failed
+                  <Badge
+                    variant="outline"
+                    className="border-red-500/30 text-red-400"
+                  >
+                    <X className="mr-1 h-3 w-3" /> {failCount} failed
                   </Badge>
                 )}
               </div>
@@ -245,10 +275,10 @@ export function OrganizeDialog({
                 {results.map((r) => (
                   <div
                     key={r.file_id}
-                    className={`p-3 rounded-lg border space-y-1 ${
+                    className={`space-y-1 rounded-lg border p-3 ${
                       r.success
-                        ? "bg-green-500/5 border-green-500/20"
-                        : "bg-red-500/5 border-red-500/20"
+                        ? "border-green-500/20 bg-green-500/5"
+                        : "border-red-500/20 bg-red-500/5"
                     }`}
                   >
                     <div className="flex items-center gap-2 text-xs">
@@ -257,12 +287,15 @@ export function OrganizeDialog({
                       ) : (
                         <X className="h-3 w-3 text-red-400" />
                       )}
-                      <span className="font-mono text-zinc-400 truncate" title={r.new_path}>
+                      <span
+                        className="truncate font-mono text-zinc-400"
+                        title={r.new_path}
+                      >
                         {shortenPath(r.new_path)}
                       </span>
                     </div>
                     {r.error && (
-                      <p className="text-xs text-red-400 ml-5">{r.error}</p>
+                      <p className="ml-5 text-xs text-red-400">{r.error}</p>
                     )}
                   </div>
                 ))}
@@ -272,7 +305,7 @@ export function OrganizeDialog({
         </div>
 
         {/* Footer */}
-        <div className="flex justify-end gap-2 pt-4 border-t border-zinc-800">
+        <div className="flex justify-end gap-2 border-t border-zinc-800 pt-4">
           <Button
             variant="outline"
             onClick={() => onOpenChange(false)}
@@ -286,7 +319,7 @@ export function OrganizeDialog({
               disabled={loading}
               className="bg-teal-600 hover:bg-teal-700"
             >
-              <FolderSync className="h-4 w-4 mr-2" />
+              <FolderSync className="mr-2 h-4 w-4" />
               Rename {changedPreviews.length} Files
             </Button>
           )}

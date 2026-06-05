@@ -6,8 +6,16 @@ import { apiFetch } from "@/lib/fetch";
 // ---------------------------------------------------------------------------
 
 // Minimal types for dashboard counts — full types live in domain-specific modules.
-interface IndexerSummary { id: string; name: string; enabled: boolean; }
-interface DownloadClientSummary { id: string; name: string; enabled: boolean; }
+interface IndexerSummary {
+  id: string;
+  name: string;
+  enabled: boolean;
+}
+interface DownloadClientSummary {
+  id: string;
+  name: string;
+  enabled: boolean;
+}
 
 function useDashboardQuery<T>(key: string, path: string) {
   return useQuery({
@@ -110,7 +118,8 @@ export function useDashboardIndexerHealth() {
         .map((h) => ({
           id: h.indexer_id,
           name: h.indexer_name || h.indexer_id,
-          message: h.last_error || `${h.status} — ${h.fail_count} failed searches`,
+          message:
+            h.last_error || `${h.status} — ${h.fail_count} failed searches`,
           severity: h.status === "error" ? "error" : "degraded",
         }));
       return { data: issues };

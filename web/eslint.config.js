@@ -47,11 +47,7 @@ export default tseslint.config(
   {
     // Tests legitimately use `any` for mocks/fixtures and have unused
     // parameters (e.g. Playwright's `({ page })` destructuring).
-    files: [
-      "e2e/**",
-      "**/__tests__/**",
-      "**/*.{test,spec}.{ts,tsx}",
-    ],
+    files: ["e2e/**", "**/__tests__/**", "**/*.{test,spec}.{ts,tsx}"],
     rules: {
       "@typescript-eslint/no-explicit-any": "off",
       "@typescript-eslint/no-unused-vars": "off",

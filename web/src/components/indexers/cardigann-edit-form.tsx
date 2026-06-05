@@ -49,7 +49,9 @@ export function CardigannEditForm({
   const [enabled, setEnabled] = React.useState(indexer.enabled);
   const [priority, setPriority] = React.useState(indexer.priority);
   const [proxyId, setProxyId] = React.useState(indexer.proxy_id ?? "");
-  const [selectedUrl, setSelectedUrl] = React.useState(cfg.url || definition?.links?.[0] || "");
+  const [selectedUrl, setSelectedUrl] = React.useState(
+    cfg.url || definition?.links?.[0] || "",
+  );
   const [fields, setFields] = React.useState<Record<string, string>>(() => {
     const init: Record<string, string> = {};
     // Pre-fill from the indexer's saved config
@@ -131,12 +133,18 @@ export function CardigannEditForm({
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
       <div className="flex items-center gap-2">
-        <h3 className="text-lg font-semibold">{definition?.name ?? definitionId}</h3>
+        <h3 className="text-lg font-semibold">
+          {definition?.name ?? definitionId}
+        </h3>
         {definition?.type === "public" && (
-          <span className="rounded bg-green-600/15 px-1.5 py-0.5 text-xs text-green-700 dark:text-green-400">Public</span>
+          <span className="rounded bg-green-600/15 px-1.5 py-0.5 text-xs text-green-700 dark:text-green-400">
+            Public
+          </span>
         )}
         {definition?.type === "private" && (
-          <span className="rounded bg-red-600/15 px-1.5 py-0.5 text-xs text-red-700 dark:text-red-400">Private</span>
+          <span className="rounded bg-red-600/15 px-1.5 py-0.5 text-xs text-red-700 dark:text-red-400">
+            Private
+          </span>
         )}
       </div>
 

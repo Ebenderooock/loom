@@ -46,7 +46,17 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Loader2, Plus, Trash2, KeyRound, Users, ShieldAlert, Link2, Copy, Mail } from "lucide-react";
+import {
+  Loader2,
+  Plus,
+  Trash2,
+  KeyRound,
+  Users,
+  ShieldAlert,
+  Link2,
+  Copy,
+  Mail,
+} from "lucide-react";
 import {
   useInvites,
   useCreateInvite,
@@ -89,7 +99,12 @@ function CreateUserCard() {
     e.preventDefault();
     if (!canSubmit) return;
     create.mutate(
-      { username: username.trim(), email: email.trim() || undefined, password, role },
+      {
+        username: username.trim(),
+        email: email.trim() || undefined,
+        password,
+        role,
+      },
       {
         onSuccess: () => {
           toast.success(`User "${username.trim()}" created`);
@@ -161,7 +176,9 @@ function CreateUserCard() {
             </Select>
           </div>
           <Button type="submit" disabled={!canSubmit}>
-            {create.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            {create.isPending && (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            )}
             Create
           </Button>
         </form>
@@ -226,7 +243,9 @@ function ResetPasswordDialog({
             onClick={submit}
             disabled={password.length < 8 || reset.isPending}
           >
-            {reset.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            {reset.isPending && (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            )}
             Reset password
           </Button>
         </DialogFooter>
@@ -261,8 +280,8 @@ function DeleteUserDialog({
         <DialogHeader>
           <DialogTitle>Delete user</DialogTitle>
           <DialogDescription>
-            Permanently delete {user?.username}? This cannot be undone. Their API
-            keys will also be removed.
+            Permanently delete {user?.username}? This cannot be undone. Their
+            API keys will also be removed.
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>
@@ -286,7 +305,9 @@ function DeleteUserDialog({
 function UsersTable({ currentUserId }: { currentUserId: number }) {
   const { data: users, isLoading } = useUsers();
   const setRole = useSetUserRole();
-  const [resetTarget, setResetTarget] = React.useState<ManagedUser | null>(null);
+  const [resetTarget, setResetTarget] = React.useState<ManagedUser | null>(
+    null,
+  );
   const [deleteTarget, setDeleteTarget] = React.useState<ManagedUser | null>(
     null,
   );
@@ -449,14 +470,16 @@ function InvitesCard() {
           setEmail("");
           if (inv.url) {
             void navigator.clipboard?.writeText(inv.url).then(
-              () => toast.success("Invite link created and copied to clipboard"),
+              () =>
+                toast.success("Invite link created and copied to clipboard"),
               () => toast.success("Invite link created"),
             );
           } else {
             toast.success("Invite created");
           }
         },
-        onError: (err) => toast.error(errMessage(err, "Failed to create invite")),
+        onError: (err) =>
+          toast.error(errMessage(err, "Failed to create invite")),
       },
     );
   }
@@ -526,7 +549,9 @@ function InvitesCard() {
             </Select>
           </div>
           <Button type="submit" disabled={create.isPending}>
-            {create.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            {create.isPending && (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            )}
             Create invite
           </Button>
         </form>

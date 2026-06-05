@@ -115,10 +115,30 @@ export const SERIES_STATUS_CONFIG: Record<
   string,
   { label: string; color: string; bg: string; border: string }
 > = {
-  continuing: { label: "Continuing", color: "text-emerald-400", bg: "bg-emerald-500/20", border: "#10b981" },
-  ended:      { label: "Ended",      color: "text-blue-400",    bg: "bg-blue-500/20",    border: "#3b82f6" },
-  upcoming:   { label: "Upcoming",   color: "text-amber-400",   bg: "bg-amber-500/20",   border: "#f59e0b" },
-  cancelled:  { label: "Cancelled",  color: "text-red-400",     bg: "bg-red-500/20",     border: "#ef4444" },
+  continuing: {
+    label: "Continuing",
+    color: "text-emerald-400",
+    bg: "bg-emerald-500/20",
+    border: "#10b981",
+  },
+  ended: {
+    label: "Ended",
+    color: "text-blue-400",
+    bg: "bg-blue-500/20",
+    border: "#3b82f6",
+  },
+  upcoming: {
+    label: "Upcoming",
+    color: "text-amber-400",
+    bg: "bg-amber-500/20",
+    border: "#f59e0b",
+  },
+  cancelled: {
+    label: "Cancelled",
+    color: "text-red-400",
+    bg: "bg-red-500/20",
+    border: "#ef4444",
+  },
 };
 
 export function seriesStatusLabel(s: string) {
@@ -138,12 +158,23 @@ export const SERIES_SORT_OPTIONS: { value: SeriesSortKey; label: string }[] = [
 export function sortSeries(series: Series[], key: SeriesSortKey): Series[] {
   const sorted = [...series];
   switch (key) {
-    case "title-asc":   return sorted.sort((a, b) => a.title.localeCompare(b.title));
-    case "title-desc":  return sorted.sort((a, b) => b.title.localeCompare(a.title));
-    case "year-desc":   return sorted.sort((a, b) => b.year - a.year);
-    case "year-asc":    return sorted.sort((a, b) => a.year - b.year);
-    case "added-desc":  return sorted.sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));
-    case "network-asc": return sorted.sort((a, b) => (a.network ?? "").localeCompare(b.network ?? ""));
-    case "rating-desc": return sorted.sort((a, b) => b.rating - a.rating);
+    case "title-asc":
+      return sorted.sort((a, b) => a.title.localeCompare(b.title));
+    case "title-desc":
+      return sorted.sort((a, b) => b.title.localeCompare(a.title));
+    case "year-desc":
+      return sorted.sort((a, b) => b.year - a.year);
+    case "year-asc":
+      return sorted.sort((a, b) => a.year - b.year);
+    case "added-desc":
+      return sorted.sort((a, b) =>
+        (b.createdAt ?? "").localeCompare(a.createdAt ?? ""),
+      );
+    case "network-asc":
+      return sorted.sort((a, b) =>
+        (a.network ?? "").localeCompare(b.network ?? ""),
+      );
+    case "rating-desc":
+      return sorted.sort((a, b) => b.rating - a.rating);
   }
 }

@@ -113,9 +113,8 @@ export function SearchPanel({
   const [loading, setLoading] = React.useState(false);
   const [evaluating, setEvaluating] = React.useState(false);
   const [submitError, setSubmitError] = React.useState<string | undefined>();
-  const [evaluateEnabled, setEvaluateEnabled] = React.useState(
-    !!qualityProfileId,
-  );
+  const [evaluateEnabled, setEvaluateEnabled] =
+    React.useState(!!qualityProfileId);
 
   async function runEvaluate(searchResults: SearchResult[]) {
     if (!qualityProfileId || !evaluateEnabled || searchResults.length === 0)
@@ -270,7 +269,9 @@ export function SearchPanel({
           />
           Evaluate quality
           {evaluating ? (
-            <span className="text-xs text-muted-foreground">(scoring\u2026)</span>
+            <span className="text-xs text-muted-foreground">
+              (scoring\u2026)
+            </span>
           ) : null}
         </label>
       ) : null}
@@ -345,9 +346,7 @@ export function SearchPanel({
                     <div className="font-medium">{r.title}</div>
                     <div className="text-xs text-muted-foreground">
                       via {r.indexer_id}
-                      {er?.parsed_source
-                        ? ` \u00b7 ${er.parsed_source}`
-                        : null}
+                      {er?.parsed_source ? ` \u00b7 ${er.parsed_source}` : null}
                       {er?.parsed_resolution
                         ? ` \u00b7 ${er.parsed_resolution}p`
                         : null}
@@ -355,7 +354,11 @@ export function SearchPanel({
                   </td>
                   {showQuality ? (
                     <td className="px-3 py-2">
-                      {er ? <QualityBadge result={er} /> : evaluating ? "\u2026" : null}
+                      {er ? (
+                        <QualityBadge result={er} />
+                      ) : evaluating ? (
+                        "\u2026"
+                      ) : null}
                     </td>
                   ) : null}
                   <td className="px-3 py-2 tabular-nums">

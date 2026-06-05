@@ -4,7 +4,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
 } from "@/components/ui/table";
 import { EmptyState } from "@/components/ui/empty-state";
 import { LoadingState } from "@/components/ui/loading-state";
@@ -51,7 +56,11 @@ import {
 
 const STATE_CONFIG: Record<
   WorkflowState,
-  { label: string; icon: React.ElementType; variant: "default" | "secondary" | "destructive" | "outline" }
+  {
+    label: string;
+    icon: React.ElementType;
+    variant: "default" | "secondary" | "destructive" | "outline";
+  }
 > = {
   searching: { label: "Searching", icon: Search, variant: "secondary" },
   grabbed: { label: "Grabbed", icon: Download, variant: "secondary" },
@@ -67,7 +76,9 @@ function StateBadge({ state }: { state: WorkflowState }) {
   const Icon = config.icon;
   return (
     <Badge variant={config.variant} className="gap-1 capitalize">
-      <Icon className={`h-3 w-3 ${state === "downloading" ? "animate-spin" : ""}`} />
+      <Icon
+        className={`h-3 w-3 ${state === "downloading" ? "animate-spin" : ""}`}
+      />
       {config.label}
     </Badge>
   );
@@ -90,7 +101,12 @@ function TypeLabel({ type }: { type: string }) {
 
 type Filter = "all" | "active" | "completed" | "failed";
 
-const ACTIVE_STATES: WorkflowState[] = ["searching", "grabbed", "downloading", "importing"];
+const ACTIVE_STATES: WorkflowState[] = [
+  "searching",
+  "grabbed",
+  "downloading",
+  "importing",
+];
 
 function filterWorkflows(workflows: Workflow[], filter: Filter): Workflow[] {
   switch (filter) {
@@ -99,7 +115,9 @@ function filterWorkflows(workflows: Workflow[], filter: Filter): Workflow[] {
     case "completed":
       return workflows.filter((w) => w.state === "completed");
     case "failed":
-      return workflows.filter((w) => w.state === "failed" || w.state === "cancelled");
+      return workflows.filter(
+        (w) => w.state === "failed" || w.state === "cancelled",
+      );
     default:
       return workflows;
   }
@@ -141,7 +159,8 @@ export function WorkflowsPage() {
     all: all.length,
     active: all.filter((w) => ACTIVE_STATES.includes(w.state)).length,
     completed: all.filter((w) => w.state === "completed").length,
-    failed: all.filter((w) => w.state === "failed" || w.state === "cancelled").length,
+    failed: all.filter((w) => w.state === "failed" || w.state === "cancelled")
+      .length,
   };
 
   function handleAction(action: "cancel" | "retry" | "delete", wf: Workflow) {
@@ -173,7 +192,9 @@ export function WorkflowsPage() {
             <TabsList className="mb-4">
               <TabsTrigger value="all">All ({counts.all})</TabsTrigger>
               <TabsTrigger value="active">Active ({counts.active})</TabsTrigger>
-              <TabsTrigger value="completed">Completed ({counts.completed})</TabsTrigger>
+              <TabsTrigger value="completed">
+                Completed ({counts.completed})
+              </TabsTrigger>
               <TabsTrigger value="failed">Failed ({counts.failed})</TabsTrigger>
             </TabsList>
 
@@ -220,7 +241,10 @@ export function WorkflowsPage() {
       </Card>
 
       {/* Confirm dialog */}
-      <Dialog open={!!confirmDialog} onOpenChange={() => setConfirmDialog(null)}>
+      <Dialog
+        open={!!confirmDialog}
+        onOpenChange={() => setConfirmDialog(null)}
+      >
         {confirmDialog && (
           <DialogContent>
             <DialogHeader>
@@ -240,11 +264,19 @@ export function WorkflowsPage() {
                 Cancel
               </Button>
               <Button
-                variant={confirmDialog.action === "delete" ? "destructive" : "default"}
+                variant={
+                  confirmDialog.action === "delete" ? "destructive" : "default"
+                }
                 onClick={executeAction}
-                disabled={cancelMut.isPending || retryMut.isPending || deleteMut.isPending}
+                disabled={
+                  cancelMut.isPending ||
+                  retryMut.isPending ||
+                  deleteMut.isPending
+                }
               >
-                {cancelMut.isPending || retryMut.isPending || deleteMut.isPending ? (
+                {cancelMut.isPending ||
+                retryMut.isPending ||
+                deleteMut.isPending ? (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 ) : null}
                 {actionLabels[confirmDialog.action]}
@@ -272,7 +304,10 @@ function WorkflowRow({
 
   return (
     <TableRow className={isFailed ? "bg-red-950/10" : undefined}>
-      <TableCell className="font-medium truncate max-w-[200px]" title={wf.grabTitle || wf.id}>
+      <TableCell
+        className="max-w-[200px] truncate font-medium"
+        title={wf.grabTitle || wf.id}
+      >
         <Link
           to="/workflows/$workflowId"
           params={{ workflowId: wf.id }}
@@ -281,7 +316,7 @@ function WorkflowRow({
           {wf.grabTitle || wf.id.slice(0, 8)}
         </Link>
       </TableCell>
-      <TableCell className="text-muted-foreground text-xs">
+      <TableCell className="text-xs text-muted-foreground">
         <TypeLabel type={wf.type} />
       </TableCell>
       <TableCell>
@@ -289,27 +324,31 @@ function WorkflowRow({
       </TableCell>
       <TableCell className="text-center">
         {wf.retryCount > 0 ? (
-          <span className="text-amber-400 text-xs">{wf.retryCount}/{wf.maxRetries}</span>
+          <span className="text-xs text-amber-400">
+            {wf.retryCount}/{wf.maxRetries}
+          </span>
         ) : (
-          <span className="text-muted-foreground text-xs">—</span>
+          <span className="text-xs text-muted-foreground">—</span>
         )}
       </TableCell>
-      <TableCell className="text-muted-foreground text-xs whitespace-nowrap">
+      <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
         {relativeTime(wf.createdAt)}
       </TableCell>
-      <TableCell className="text-muted-foreground text-xs whitespace-nowrap">
+      <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
         {relativeTime(wf.updatedAt)}
       </TableCell>
       <TableCell>
         {wf.lastError ? (
           <span
-            className="text-red-400 text-xs truncate block max-w-[200px] cursor-help"
+            className="block max-w-[200px] cursor-help truncate text-xs text-red-400"
             title={wf.lastError}
           >
-            {wf.lastError.length > 40 ? wf.lastError.slice(0, 40) + "…" : wf.lastError}
+            {wf.lastError.length > 40
+              ? wf.lastError.slice(0, 40) + "…"
+              : wf.lastError}
           </span>
         ) : (
-          <span className="text-muted-foreground text-xs">—</span>
+          <span className="text-xs text-muted-foreground">—</span>
         )}
       </TableCell>
       <TableCell>

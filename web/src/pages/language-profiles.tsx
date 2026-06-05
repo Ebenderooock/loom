@@ -46,7 +46,10 @@ type DialogState =
   | { kind: "edit"; profile: LanguageProfile };
 
 export function LanguageProfilesPage() {
-  useSetPageHeader("Language Profiles", "Manage language preferences for media");
+  useSetPageHeader(
+    "Language Profiles",
+    "Manage language preferences for media",
+  );
   const { data: profiles, isLoading } = useLanguageProfiles();
   const deleteMutation = useDeleteLanguageProfile();
   const [dialog, setDialog] = React.useState<DialogState>({ kind: "closed" });
@@ -100,7 +103,7 @@ export function LanguageProfilesPage() {
             >
               <div>
                 <div className="font-medium">{p.name}</div>
-                <div className="flex flex-wrap gap-1 mt-1">
+                <div className="mt-1 flex flex-wrap gap-1">
                   {p.languages
                     .filter((lp) => lp.allowed)
                     .sort((a, b) => a.priority - b.priority)
@@ -263,7 +266,7 @@ function ProfileDialog({
 
   return (
     <Dialog open={state.kind !== "closed"} onOpenChange={() => onClose()}>
-      <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+      <DialogContent className="max-h-[85vh] max-w-lg overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
             {isEdit ? "Edit Language Profile" : "New Language Profile"}
@@ -295,9 +298,7 @@ function ProfileDialog({
                   onDragOver={(e) => handleDragOver(e, idx)}
                   onDragEnd={handleDragEnd}
                   className={`flex items-center gap-2 rounded px-2 py-1.5 text-sm ${
-                    dragIdx === idx
-                      ? "bg-accent"
-                      : "hover:bg-accent/50"
+                    dragIdx === idx ? "bg-accent" : "hover:bg-accent/50"
                   } cursor-grab active:cursor-grabbing`}
                 >
                   <GripVertical className="h-4 w-4 text-muted-foreground" />

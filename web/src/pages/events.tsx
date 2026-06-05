@@ -17,11 +17,21 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useSetPageHeader } from "@/hooks/use-page-header";
-import { useAuditLog, type AuditLogParams, type AuditLogEntry } from "@/lib/audit-log-api";
+import {
+  useAuditLog,
+  type AuditLogParams,
+  type AuditLogEntry,
+} from "@/lib/audit-log-api";
 import { levelVariant } from "@/lib/status-utils";
 import { EmptyState } from "@/components/ui/empty-state";
 import { LoadingState } from "@/components/ui/loading-state";
-import { ChevronLeft, ChevronRight, ChevronDown, ChevronUp, RefreshCw } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  ChevronDown,
+  ChevronUp,
+  RefreshCw,
+} from "lucide-react";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/fetch";
 
@@ -99,38 +109,63 @@ function SearchBreakdown({ queryLogId }: { queryLogId: string }) {
   const { data, isLoading } = useSearchLogDetail(queryLogId);
 
   if (isLoading) {
-    return <p className="text-xs text-muted-foreground animate-pulse">Loading search diagnostics…</p>;
+    return (
+      <p className="animate-pulse text-xs text-muted-foreground">
+        Loading search diagnostics…
+      </p>
+    );
   }
 
   const indexers = data?.indexers ?? [];
   if (indexers.length === 0) {
-    return <p className="text-xs text-muted-foreground">No per-indexer data recorded.</p>;
+    return (
+      <p className="text-xs text-muted-foreground">
+        No per-indexer data recorded.
+      </p>
+    );
   }
 
   const maxLatency = Math.max(...indexers.map((i) => i.latency_ms), 1);
 
   return (
     <div className="mt-2 space-y-1.5">
-      <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Per-Indexer Breakdown</p>
+      <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+        Per-Indexer Breakdown
+      </p>
       {indexers.map((ix) => (
         <div key={ix.id} className="flex items-center gap-2 text-xs">
           <span className="w-28 truncate font-medium">{ix.indexer_name}</span>
-          <div className="flex-1 h-1.5 rounded-full bg-muted">
+          <div className="h-1.5 flex-1 rounded-full bg-muted">
             <div
               className={`h-1.5 rounded-full ${ix.status === "completed" ? "bg-blue-500" : "bg-red-500"}`}
-              style={{ width: `${Math.min((ix.latency_ms / maxLatency) * 100, 100)}%` }}
+              style={{
+                width: `${Math.min((ix.latency_ms / maxLatency) * 100, 100)}%`,
+              }}
             />
           </div>
-          <span className="text-muted-foreground w-14 text-right tabular-nums">{ix.latency_ms}ms</span>
-          <span className="text-muted-foreground w-16 text-right tabular-nums">{ix.result_count} results</span>
-          <Badge variant="outline" className={`text-[9px] px-1 ${
-            ix.status === "completed" ? "bg-green-500/10 text-green-500 border-0" :
-            ix.status === "failed" ? "bg-red-500/10 text-red-500 border-0" :
-            "bg-gray-500/10 text-gray-500 border-0"
-          }`}>
+          <span className="w-14 text-right tabular-nums text-muted-foreground">
+            {ix.latency_ms}ms
+          </span>
+          <span className="w-16 text-right tabular-nums text-muted-foreground">
+            {ix.result_count} results
+          </span>
+          <Badge
+            variant="outline"
+            className={`px-1 text-[9px] ${
+              ix.status === "completed"
+                ? "border-0 bg-green-500/10 text-green-500"
+                : ix.status === "failed"
+                  ? "border-0 bg-red-500/10 text-red-500"
+                  : "border-0 bg-gray-500/10 text-gray-500"
+            }`}
+          >
             {ix.status}
           </Badge>
-          {ix.error && <span className="text-red-400 truncate max-w-[12rem]">{ix.error}</span>}
+          {ix.error && (
+            <span className="max-w-[12rem] truncate text-red-400">
+              {ix.error}
+            </span>
+          )}
         </div>
       ))}
     </div>
@@ -141,27 +176,34 @@ function DetailPanel({ entry }: { entry: AuditLogEntry }) {
   const detail = tryParseJSON(entry.detail);
   if (!detail) return null;
 
-  const queryLogId = typeof detail.query_log_id === "string" ? detail.query_log_id : null;
+  const queryLogId =
+    typeof detail.query_log_id === "string" ? detail.query_log_id : null;
 
   return (
-    <div className="bg-muted/50 rounded p-3 text-xs space-y-1 max-w-2xl">
+    <div className="max-w-2xl space-y-1 rounded bg-muted/50 p-3 text-xs">
       {Object.entries(detail).map(([k, v]) => (
         <div key={k} className="flex gap-2">
-          <span className="text-muted-foreground font-medium min-w-[120px]">{k}:</span>
-          <span className="text-foreground break-all">
+          <span className="min-w-[120px] font-medium text-muted-foreground">
+            {k}:
+          </span>
+          <span className="break-all text-foreground">
             {typeof v === "object" ? JSON.stringify(v) : String(v ?? "—")}
           </span>
         </div>
       ))}
       {entry.entity_type && (
         <div className="flex gap-2">
-          <span className="text-muted-foreground font-medium min-w-[120px]">entity_type:</span>
+          <span className="min-w-[120px] font-medium text-muted-foreground">
+            entity_type:
+          </span>
           <span className="text-foreground">{entry.entity_type}</span>
         </div>
       )}
       {entry.source && (
         <div className="flex gap-2">
-          <span className="text-muted-foreground font-medium min-w-[120px]">source:</span>
+          <span className="min-w-[120px] font-medium text-muted-foreground">
+            source:
+          </span>
           <span className="text-foreground">{entry.source}</span>
         </div>
       )}
@@ -170,7 +212,15 @@ function DetailPanel({ entry }: { entry: AuditLogEntry }) {
   );
 }
 
-function EventRow({ entry, expanded, onToggle }: { entry: AuditLogEntry; expanded: boolean; onToggle: () => void }) {
+function EventRow({
+  entry,
+  expanded,
+  onToggle,
+}: {
+  entry: AuditLogEntry;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
   const hasDetail = !!entry.detail;
   const Chevron = expanded ? ChevronUp : ChevronDown;
 
@@ -184,19 +234,26 @@ function EventRow({ entry, expanded, onToggle }: { entry: AuditLogEntry; expande
           {formatTimestamp(entry.occurred_at || entry.timestamp)}
         </TableCell>
         <TableCell>
-          <Badge variant={levelVariant(entry.level)} className="capitalize text-[10px]">
+          <Badge
+            variant={levelVariant(entry.level)}
+            className="text-[10px] capitalize"
+          >
             {entry.level}
           </Badge>
         </TableCell>
         <TableCell className="text-xs capitalize">{entry.category}</TableCell>
-        <TableCell className="text-xs text-muted-foreground">{entry.event_type}</TableCell>
+        <TableCell className="text-xs text-muted-foreground">
+          {entry.event_type}
+        </TableCell>
         <TableCell className="text-sm">
           <span className="flex items-center gap-1">
             {entry.message}
-            {hasDetail && <Chevron className="h-3 w-3 text-muted-foreground shrink-0" />}
+            {hasDetail && (
+              <Chevron className="h-3 w-3 shrink-0 text-muted-foreground" />
+            )}
           </span>
         </TableCell>
-        <TableCell className="text-xs text-muted-foreground truncate max-w-[140px]">
+        <TableCell className="max-w-[140px] truncate text-xs text-muted-foreground">
           {entry.entity_name ?? "—"}
         </TableCell>
       </TableRow>
@@ -212,7 +269,10 @@ function EventRow({ entry, expanded, onToggle }: { entry: AuditLogEntry; expande
 }
 
 export function EventsPage() {
-  useSetPageHeader("Events", "Centralized audit log — all system activity in one place");
+  useSetPageHeader(
+    "Events",
+    "Centralized audit log — all system activity in one place",
+  );
 
   const [category, setCategory] = React.useState<string>("all");
   const [level, setLevel] = React.useState<string>("all");
@@ -246,7 +306,9 @@ export function EventsPage() {
           </SelectTrigger>
           <SelectContent>
             {CATEGORIES.map((c) => (
-              <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
+              <SelectItem key={c.value} value={c.value}>
+                {c.label}
+              </SelectItem>
             ))}
           </SelectContent>
         </Select>
@@ -302,7 +364,10 @@ export function EventsPage() {
             )}
             {isError && (
               <TableRow>
-                <TableCell colSpan={6} className="text-center text-destructive py-8">
+                <TableCell
+                  colSpan={6}
+                  className="py-8 text-center text-destructive"
+                >
                   Failed to load audit log.
                 </TableCell>
               </TableRow>
@@ -310,7 +375,10 @@ export function EventsPage() {
             {!isLoading && !isError && entries.length === 0 && (
               <TableRow>
                 <TableCell colSpan={6}>
-                  <EmptyState title="No events found" description="Events will appear here as the system operates." />
+                  <EmptyState
+                    title="No events found"
+                    description="Events will appear here as the system operates."
+                  />
                 </TableCell>
               </TableRow>
             )}
@@ -319,7 +387,9 @@ export function EventsPage() {
                 key={e.id}
                 entry={e}
                 expanded={expandedId === e.id}
-                onToggle={() => setExpandedId(expandedId === e.id ? null : e.id)}
+                onToggle={() =>
+                  setExpandedId(expandedId === e.id ? null : e.id)
+                }
               />
             ))}
           </TableBody>
@@ -335,7 +405,7 @@ export function EventsPage() {
             disabled={!hasPrev}
             onClick={() => setOffset((o) => Math.max(0, o - PAGE_SIZE))}
           >
-            <ChevronLeft className="h-4 w-4 mr-1" /> Previous
+            <ChevronLeft className="mr-1 h-4 w-4" /> Previous
           </Button>
           <span className="text-xs text-muted-foreground">
             {offset + 1}–{Math.min(offset + PAGE_SIZE, total)} of {total}
@@ -346,7 +416,7 @@ export function EventsPage() {
             disabled={!hasNext}
             onClick={() => setOffset((o) => o + PAGE_SIZE)}
           >
-            Next <ChevronRight className="h-4 w-4 ml-1" />
+            Next <ChevronRight className="ml-1 h-4 w-4" />
           </Button>
         </div>
       )}

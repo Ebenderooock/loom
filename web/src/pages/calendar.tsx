@@ -38,7 +38,10 @@ export function CalendarPage() {
   const [year, setYear] = useState(today.getFullYear());
   const [month, setMonth] = useState(today.getMonth());
 
-  const { start, end } = useMemo(() => getMonthRange(year, month), [year, month]);
+  const { start, end } = useMemo(
+    () => getMonthRange(year, month),
+    [year, month],
+  );
   const { data: events = [], isLoading } = useCalendarEvents(start, end);
 
   const daysInMonth = getDaysInMonth(year, month);
@@ -92,7 +95,11 @@ export function CalendarPage() {
         </CardHeader>
         <CardContent>
           {isLoading ? (
-            <div className="grid grid-cols-7 gap-px overflow-hidden rounded-md border border-border bg-border" role="status" aria-label="Loading calendar">
+            <div
+              className="grid grid-cols-7 gap-px overflow-hidden rounded-md border border-border bg-border"
+              role="status"
+              aria-label="Loading calendar"
+            >
               {Array.from({ length: 42 }).map((_, i) => (
                 <div key={i} className="min-h-[5rem] bg-card p-1.5">
                   <Skeleton className="h-4 w-4 rounded" />
@@ -121,7 +128,9 @@ export function CalendarPage() {
                   ? `${year}-${String(month + 1).padStart(2, "0")}-${String(dayNum).padStart(2, "0")}`
                   : "";
                 const isToday = dateStr === todayStr;
-                const dayEvents = isValidDay ? eventsByDate[dateStr] ?? [] : [];
+                const dayEvents = isValidDay
+                  ? (eventsByDate[dateStr] ?? [])
+                  : [];
 
                 return (
                   <div
@@ -134,7 +143,7 @@ export function CalendarPage() {
                     {isValidDay && (
                       <>
                         <span
-                          className={`inline-block mb-1 text-xs font-medium ${
+                          className={`mb-1 inline-block text-xs font-medium ${
                             isToday
                               ? "rounded-full bg-primary px-1.5 py-0.5 text-primary-foreground"
                               : "text-muted-foreground"
@@ -193,20 +202,28 @@ function EventPill({ event }: { event: CalendarEvent }) {
       : "bg-purple-600 hover:bg-purple-700 text-white",
   };
 
-  const movieColorKeys: Record<string, keyof typeof colorMap> = { theatrical: "theatrical", digital: "digital" };
+  const movieColorKeys: Record<string, keyof typeof colorMap> = {
+    theatrical: "theatrical",
+    digital: "digital",
+  };
   const colorKey = isMovie
-    ? movieColorKeys[event.releaseType ?? ""] ?? "movie"
+    ? (movieColorKeys[event.releaseType ?? ""] ?? "movie")
     : "episode";
-  const releaseLabel = event.releaseType === "theatrical" ? "🎬 " : event.releaseType === "digital" ? "💿 " : "";
+  const releaseLabel =
+    event.releaseType === "theatrical"
+      ? "🎬 "
+      : event.releaseType === "digital"
+        ? "💿 "
+        : "";
 
   return (
     <Badge
       variant={isMissing ? "outline" : "default"}
-      className={`block w-full truncate text-[10px] px-1 py-0 font-normal ${isMissing ? "border " : ""}${colorMap[colorKey]}`}
+      className={`block w-full truncate px-1 py-0 text-[10px] font-normal ${isMissing ? "border" : ""}${colorMap[colorKey]}`}
       title={tooltip}
     >
-      {releaseLabel}{label}
+      {releaseLabel}
+      {label}
     </Badge>
   );
 }
-

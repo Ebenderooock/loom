@@ -19,7 +19,15 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
-  User, Film, Tv, Star, Loader2, Plus, Check, Calendar, ArrowLeft,
+  User,
+  Film,
+  Tv,
+  Star,
+  Loader2,
+  Plus,
+  Check,
+  Calendar,
+  ArrowLeft,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Library } from "@/lib/libraries-api";
@@ -87,8 +95,12 @@ export function PersonDiscoverDialog({
   const [selectedItem, setSelectedItem] = useState<CreditItem | null>(null);
   const [adding, setAdding] = useState(false);
   const [addError, setAddError] = useState("");
-  const [selectedLibrary, setSelectedLibrary] = useState(libraries[0]?.id ?? "");
-  const [selectedProfile, setSelectedProfile] = useState(qualityProfiles[0]?.id ?? "");
+  const [selectedLibrary, setSelectedLibrary] = useState(
+    libraries[0]?.id ?? "",
+  );
+  const [selectedProfile, setSelectedProfile] = useState(
+    qualityProfiles[0]?.id ?? "",
+  );
   const [monitored, setMonitored] = useState(true);
   const [searchOnAdd, setSearchOnAdd] = useState(true);
   const [tab, setTab] = useState<"movies" | "tv">("movies");
@@ -103,9 +115,16 @@ export function PersonDiscoverDialog({
       const json: PersonFilmography = await res.json();
       setData(json);
       // Auto-select tab based on known_for
-      if (json.person.known_for === "Directing" || json.person.known_for === "Acting") {
-        const movieCount = json.credits.filter(c => c.media_type === "movie").length;
-        const tvCount = json.credits.filter(c => c.media_type === "tv").length;
+      if (
+        json.person.known_for === "Directing" ||
+        json.person.known_for === "Acting"
+      ) {
+        const movieCount = json.credits.filter(
+          (c) => c.media_type === "movie",
+        ).length;
+        const tvCount = json.credits.filter(
+          (c) => c.media_type === "tv",
+        ).length;
         setTab(movieCount >= tvCount ? "movies" : "tv");
       }
     } catch (e) {
@@ -133,8 +152,9 @@ export function PersonDiscoverDialog({
     });
   }, [qualityProfiles, libraries]);
 
-  const movieCredits = data?.credits.filter(c => c.media_type === "movie") ?? [];
-  const tvCredits = data?.credits.filter(c => c.media_type === "tv") ?? [];
+  const movieCredits =
+    data?.credits.filter((c) => c.media_type === "movie") ?? [];
+  const tvCredits = data?.credits.filter((c) => c.media_type === "tv") ?? [];
 
   const isInLibrary = (item: CreditItem) =>
     item.media_type === "movie"
@@ -165,7 +185,8 @@ export function PersonDiscoverDialog({
             search: searchOnAdd,
           }),
         });
-        if (!res.ok) throw new Error((await res.text()) || "Failed to add movie");
+        if (!res.ok)
+          throw new Error((await res.text()) || "Failed to add movie");
       } else {
         const res = await apiFetch("/api/v1/series", {
           method: "POST",
@@ -178,7 +199,8 @@ export function PersonDiscoverDialog({
             search: searchOnAdd,
           }),
         });
-        if (!res.ok) throw new Error((await res.text()) || "Failed to add series");
+        if (!res.ok)
+          throw new Error((await res.text()) || "Failed to add series");
       }
       onAdded?.();
       setSelectedItem(null);
@@ -191,17 +213,20 @@ export function PersonDiscoverDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col p-0 gap-0">
-        <DialogHeader className="p-6 pb-4 border-b border-border/50">
-          <DialogTitle className="text-xl flex items-center gap-2">
-            <User className="w-5 h-5 text-accent" />
+      <DialogContent className="flex max-h-[85vh] max-w-3xl flex-col gap-0 p-0">
+        <DialogHeader className="border-b border-border/50 p-6 pb-4">
+          <DialogTitle className="flex items-center gap-2 text-xl">
+            <User className="h-5 w-5 text-accent" />
             {selectedItem ? (
               <span className="flex items-center gap-2">
                 <button
-                  onClick={() => { setSelectedItem(null); setAddError(""); }}
-                  className="hover:text-accent transition-colors"
+                  onClick={() => {
+                    setSelectedItem(null);
+                    setAddError("");
+                  }}
+                  className="transition-colors hover:text-accent"
                 >
-                  <ArrowLeft className="w-5 h-5" />
+                  <ArrowLeft className="h-5 w-5" />
                 </button>
                 Add {selectedItem.media_type === "movie" ? "Movie" : "Series"}
               </span>
@@ -213,68 +238,111 @@ export function PersonDiscoverDialog({
 
         {selectedItem ? (
           /* ── Add-to-Library view ── */
-          <div className="flex-1 overflow-y-auto p-6 space-y-4">
+          <div className="flex-1 space-y-4 overflow-y-auto p-6">
             <div className="flex gap-4">
               {selectedItem.poster_path && (
                 <img
                   src={selectedItem.poster_path}
                   alt={selectedItem.title}
-                  className="w-24 h-36 rounded-lg object-cover"
+                  className="h-36 w-24 rounded-lg object-cover"
                 />
               )}
-              <div className="flex-1 min-w-0">
+              <div className="min-w-0 flex-1">
                 <h3 className="text-lg font-semibold">{selectedItem.title}</h3>
                 {selectedItem.year && (
-                  <p className="text-sm text-muted-foreground flex items-center gap-1">
-                    <Calendar className="w-3.5 h-3.5" /> {selectedItem.year}
+                  <p className="flex items-center gap-1 text-sm text-muted-foreground">
+                    <Calendar className="h-3.5 w-3.5" /> {selectedItem.year}
                   </p>
                 )}
                 {selectedItem.rating > 0 && (
-                  <p className="text-sm text-muted-foreground flex items-center gap-1 mt-0.5">
-                    <Star className="w-3.5 h-3.5 text-yellow-500" /> {selectedItem.rating.toFixed(1)}
+                  <p className="mt-0.5 flex items-center gap-1 text-sm text-muted-foreground">
+                    <Star className="h-3.5 w-3.5 text-yellow-500" />{" "}
+                    {selectedItem.rating.toFixed(1)}
                   </p>
                 )}
                 {selectedItem.character && (
-                  <p className="text-xs text-muted-foreground mt-1">as {selectedItem.character}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    as {selectedItem.character}
+                  </p>
                 )}
                 {selectedItem.overview && (
-                  <p className="text-sm text-muted-foreground mt-2 line-clamp-3">{selectedItem.overview}</p>
+                  <p className="mt-2 line-clamp-3 text-sm text-muted-foreground">
+                    {selectedItem.overview}
+                  </p>
                 )}
               </div>
             </div>
 
             <div className="space-y-3">
               <div>
-                <label htmlFor="person-discover-library" className="text-sm font-medium mb-1 block">Library</label>
-                <Select value={selectedLibrary} onValueChange={setSelectedLibrary}>
-                  <SelectTrigger id="person-discover-library"><SelectValue placeholder="Select library" /></SelectTrigger>
+                <label
+                  htmlFor="person-discover-library"
+                  className="mb-1 block text-sm font-medium"
+                >
+                  Library
+                </label>
+                <Select
+                  value={selectedLibrary}
+                  onValueChange={setSelectedLibrary}
+                >
+                  <SelectTrigger id="person-discover-library">
+                    <SelectValue placeholder="Select library" />
+                  </SelectTrigger>
                   <SelectContent>
-                    {libraries.map(l => (
-                      <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>
+                    {libraries.map((l) => (
+                      <SelectItem key={l.id} value={l.id}>
+                        {l.name}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
 
               <div>
-                <label htmlFor="person-discover-profile" className="text-sm font-medium mb-1 block">Quality Profile</label>
-                <Select value={selectedProfile} onValueChange={setSelectedProfile}>
-                  <SelectTrigger id="person-discover-profile"><SelectValue placeholder="Select profile" /></SelectTrigger>
+                <label
+                  htmlFor="person-discover-profile"
+                  className="mb-1 block text-sm font-medium"
+                >
+                  Quality Profile
+                </label>
+                <Select
+                  value={selectedProfile}
+                  onValueChange={setSelectedProfile}
+                >
+                  <SelectTrigger id="person-discover-profile">
+                    <SelectValue placeholder="Select profile" />
+                  </SelectTrigger>
                   <SelectContent>
-                    {qualityProfiles.map(p => (
-                      <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                    {qualityProfiles.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>
+                        {p.name}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
 
               <div className="flex items-center gap-4">
-                <label htmlFor="person-discover-monitored" className="flex items-center gap-2 text-sm cursor-pointer">
-                  <Checkbox id="person-discover-monitored" checked={monitored} onCheckedChange={(c) => setMonitored(!!c)} />
+                <label
+                  htmlFor="person-discover-monitored"
+                  className="flex cursor-pointer items-center gap-2 text-sm"
+                >
+                  <Checkbox
+                    id="person-discover-monitored"
+                    checked={monitored}
+                    onCheckedChange={(c) => setMonitored(!!c)}
+                  />
                   Monitored
                 </label>
-                <label htmlFor="person-discover-search" className="flex items-center gap-2 text-sm cursor-pointer">
-                  <Checkbox id="person-discover-search" checked={searchOnAdd} onCheckedChange={(c) => setSearchOnAdd(!!c)} />
+                <label
+                  htmlFor="person-discover-search"
+                  className="flex cursor-pointer items-center gap-2 text-sm"
+                >
+                  <Checkbox
+                    id="person-discover-search"
+                    checked={searchOnAdd}
+                    onCheckedChange={(c) => setSearchOnAdd(!!c)}
+                  />
                   Search on add
                 </label>
               </div>
@@ -287,13 +355,17 @@ export function PersonDiscoverDialog({
               disabled={adding || !selectedLibrary || !selectedProfile}
               className="w-full"
             >
-              {adding ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Plus className="w-4 h-4 mr-2" />}
+              {adding ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Plus className="mr-2 h-4 w-4" />
+              )}
               Add {selectedItem.media_type === "movie" ? "Movie" : "Series"}
             </Button>
           </div>
         ) : (
           /* ── Browse filmography ── */
-          <div className="flex-1 flex flex-col min-h-0">
+          <div className="flex min-h-0 flex-1 flex-col">
             {/* Person bio header */}
             {data?.person && (
               <div className="flex gap-4 p-6 pb-3">
@@ -301,15 +373,19 @@ export function PersonDiscoverDialog({
                   <img
                     src={data.person.profile_path}
                     alt={data.person.name}
-                    className="w-20 h-20 rounded-full object-cover flex-shrink-0"
+                    className="h-20 w-20 flex-shrink-0 rounded-full object-cover"
                   />
                 )}
                 <div className="min-w-0 flex-1">
                   {data.person.known_for && (
-                    <Badge variant="secondary" className="mb-1">{data.person.known_for}</Badge>
+                    <Badge variant="secondary" className="mb-1">
+                      {data.person.known_for}
+                    </Badge>
                   )}
                   {data.person.biography && (
-                    <p className="text-sm text-muted-foreground line-clamp-3">{data.person.biography}</p>
+                    <p className="line-clamp-3 text-sm text-muted-foreground">
+                      {data.person.biography}
+                    </p>
                   )}
                 </div>
               </div>
@@ -317,27 +393,37 @@ export function PersonDiscoverDialog({
 
             {loading ? (
               <div className="flex items-center justify-center py-12">
-                <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
               </div>
             ) : error ? (
               <div className="flex flex-col items-center py-12 text-center">
                 <p className="text-sm text-destructive">{error}</p>
-                <Button variant="ghost" size="sm" onClick={fetchFilmography} className="mt-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={fetchFilmography}
+                  className="mt-2"
+                >
                   Retry
                 </Button>
               </div>
             ) : data ? (
-              <Tabs value={tab} onValueChange={(v) => setTab(v as "movies" | "tv")} className="flex-1 flex flex-col min-h-0">
+              <Tabs
+                value={tab}
+                onValueChange={(v) => setTab(v as "movies" | "tv")}
+                className="flex min-h-0 flex-1 flex-col"
+              >
                 <TabsList className="mx-6 mb-2 w-fit">
                   <TabsTrigger value="movies" className="gap-1.5">
-                    <Film className="w-3.5 h-3.5" /> Movies ({movieCredits.length})
+                    <Film className="h-3.5 w-3.5" /> Movies (
+                    {movieCredits.length})
                   </TabsTrigger>
                   <TabsTrigger value="tv" className="gap-1.5">
-                    <Tv className="w-3.5 h-3.5" /> TV ({tvCredits.length})
+                    <Tv className="h-3.5 w-3.5" /> TV ({tvCredits.length})
                   </TabsTrigger>
                 </TabsList>
 
-                <TabsContent value="movies" className="flex-1 mt-0">
+                <TabsContent value="movies" className="mt-0 flex-1">
                   <ScrollArea className="h-[50vh]">
                     <CreditGrid
                       items={movieCredits}
@@ -347,7 +433,7 @@ export function PersonDiscoverDialog({
                   </ScrollArea>
                 </TabsContent>
 
-                <TabsContent value="tv" className="flex-1 mt-0">
+                <TabsContent value="tv" className="mt-0 flex-1">
                   <ScrollArea className="h-[50vh]">
                     <CreditGrid
                       items={tvCredits}
@@ -379,14 +465,14 @@ function CreditGrid({
   if (items.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-12 text-center">
-        <Film className="w-10 h-10 text-muted-foreground/20 mb-3" />
+        <Film className="mb-3 h-10 w-10 text-muted-foreground/20" />
         <p className="text-sm text-muted-foreground">No credits found</p>
       </div>
     );
   }
 
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 p-6 pt-2">
+    <div className="grid grid-cols-2 gap-3 p-6 pt-2 sm:grid-cols-3 md:grid-cols-4">
       {items.map((item) => {
         const inLib = isInLibrary(item);
         return (
@@ -395,9 +481,9 @@ function CreditGrid({
             onClick={() => !inLib && onSelect(item)}
             disabled={inLib}
             className={cn(
-              "group relative rounded-lg overflow-hidden text-left transition-all",
+              "group relative overflow-hidden rounded-lg text-left transition-all",
               "hover:ring-2 hover:ring-accent/50 focus-visible:ring-2 focus-visible:ring-accent",
-              inLib && "opacity-60 cursor-default"
+              inLib && "cursor-default opacity-60",
             )}
           >
             <div className="relative aspect-[2/3] bg-muted/30">
@@ -405,36 +491,38 @@ function CreditGrid({
                 <img
                   src={item.poster_path}
                   alt={item.title}
-                  className="w-full h-full object-cover"
+                  className="h-full w-full object-cover"
                   loading="lazy"
                 />
               ) : (
-                <div className="w-full h-full flex items-center justify-center text-muted-foreground/30">
-                  <Film className="w-8 h-8" />
+                <div className="flex h-full w-full items-center justify-center text-muted-foreground/30">
+                  <Film className="h-8 w-8" />
                 </div>
               )}
               {inLib && (
-                <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                <div className="absolute inset-0 flex items-center justify-center bg-black/40">
                   <Badge variant="secondary" className="gap-1">
-                    <Check className="w-3 h-3" /> In Library
+                    <Check className="h-3 w-3" /> In Library
                   </Badge>
                 </div>
               )}
               {!inLib && (
-                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
-                  <Plus className="w-8 h-8 text-white drop-shadow-lg" />
+                <div className="absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition-colors group-hover:bg-black/30 group-hover:opacity-100">
+                  <Plus className="h-8 w-8 text-white drop-shadow-lg" />
                 </div>
               )}
               {item.rating > 0 && (
-                <div className="absolute top-1.5 right-1.5 bg-black/60 text-white text-[10px] font-medium px-1.5 py-0.5 rounded flex items-center gap-0.5">
-                  <Star className="w-2.5 h-2.5 text-yellow-400" />
+                <div className="absolute right-1.5 top-1.5 flex items-center gap-0.5 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white">
+                  <Star className="h-2.5 w-2.5 text-yellow-400" />
                   {item.rating.toFixed(1)}
                 </div>
               )}
             </div>
             <div className="p-2">
-              <p className="text-xs font-medium truncate" title={item.title}>{item.title}</p>
-              <p className="text-[11px] text-muted-foreground truncate">
+              <p className="truncate text-xs font-medium" title={item.title}>
+                {item.title}
+              </p>
+              <p className="truncate text-[11px] text-muted-foreground">
                 {item.year ?? "TBA"}
                 {item.character && ` · ${item.character}`}
                 {item.job && ` · ${item.job}`}

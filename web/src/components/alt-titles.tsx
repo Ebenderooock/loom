@@ -22,7 +22,10 @@ interface AltTitlesSectionProps {
   mediaType: "movie" | "series";
 }
 
-export function AltTitlesSection({ mediaId, mediaType }: AltTitlesSectionProps) {
+export function AltTitlesSection({
+  mediaId,
+  mediaType,
+}: AltTitlesSectionProps) {
   const [open, setOpen] = useState(false);
   const [titles, setTitles] = useState<AltTitle[]>([]);
   const [loading, setLoading] = useState(false);
@@ -38,7 +41,7 @@ export function AltTitlesSection({ mediaId, mediaType }: AltTitlesSectionProps) 
       );
       if (res.ok) {
         const data = await res.json();
-        setTitles(Array.isArray(data) ? data : data.data ?? []);
+        setTitles(Array.isArray(data) ? data : (data.data ?? []));
       }
     } catch {
       /* ignore */
@@ -71,7 +74,9 @@ export function AltTitlesSection({ mediaId, mediaType }: AltTitlesSectionProps) 
       setNewLanguage("");
       fetchTitles();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to add alt title");
+      toast.error(
+        err instanceof Error ? err.message : "Failed to add alt title",
+      );
     } finally {
       setAdding(false);
     }
@@ -86,7 +91,9 @@ export function AltTitlesSection({ mediaId, mediaType }: AltTitlesSectionProps) 
       setTitles((prev) => prev.filter((t) => t.id !== id));
       toast.success("Alt title removed");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to remove alt title");
+      toast.error(
+        err instanceof Error ? err.message : "Failed to remove alt title",
+      );
     }
   };
 
@@ -94,22 +101,22 @@ export function AltTitlesSection({ mediaId, mediaType }: AltTitlesSectionProps) 
     <div className="border-t border-border/40">
       <button
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-2 w-full py-3 text-sm font-semibold text-muted-foreground hover:text-foreground transition-colors"
+        className="flex w-full items-center gap-2 py-3 text-sm font-semibold text-muted-foreground transition-colors hover:text-foreground"
       >
-        <Languages className="w-4 h-4" />
+        <Languages className="h-4 w-4" />
         Alt Titles
         <ChevronRight
           className={cn(
-            "w-4 h-4 ml-auto transition-transform duration-200",
+            "ml-auto h-4 w-4 transition-transform duration-200",
             open && "rotate-90",
           )}
         />
       </button>
       {open && (
-        <div className="pb-4 space-y-3">
+        <div className="space-y-3 pb-4">
           {loading ? (
             <div className="flex items-center justify-center py-4">
-              <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
             </div>
           ) : titles.length === 0 ? (
             <p className="text-sm text-muted-foreground">No alternate titles</p>
@@ -118,7 +125,7 @@ export function AltTitlesSection({ mediaId, mediaType }: AltTitlesSectionProps) 
               {titles.map((t) => (
                 <div
                   key={t.id}
-                  className="flex items-center gap-2 text-sm group"
+                  className="group flex items-center gap-2 text-sm"
                 >
                   <span className="flex-1 truncate">{t.title}</span>
                   {t.language && (
@@ -133,9 +140,9 @@ export function AltTitlesSection({ mediaId, mediaType }: AltTitlesSectionProps) 
                   )}
                   <button
                     onClick={() => handleDelete(t.id)}
-                    className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
+                    className="text-muted-foreground opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100"
                   >
-                    <X className="w-3.5 h-3.5" />
+                    <X className="h-3.5 w-3.5" />
                   </button>
                 </div>
               ))}
@@ -168,9 +175,9 @@ export function AltTitlesSection({ mediaId, mediaType }: AltTitlesSectionProps) 
               onClick={handleAdd}
             >
               {adding ? (
-                <Loader2 className="w-3 h-3 animate-spin" />
+                <Loader2 className="h-3 w-3 animate-spin" />
               ) : (
-                <Plus className="w-3 h-3" />
+                <Plus className="h-3 w-3" />
               )}
               Add
             </Button>
