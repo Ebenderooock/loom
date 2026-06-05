@@ -15,8 +15,6 @@ builds:
     goos:
       - linux
       - darwin
-      - windows
-      - freebsd
     goarch:
       - amd64
       - arm64
@@ -25,10 +23,6 @@ builds:
       - "7"
     ignore:
       - goos: darwin
-        goarch: arm
-      - goos: windows
-        goarch: arm
-      - goos: freebsd
         goarch: arm
     flags:
       - -trimpath
