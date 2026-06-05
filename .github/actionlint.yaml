@@ -1,0 +1,6 @@
+self-hosted-runner:
+  # Custom labels exposed by our ARC (actions-runner-controller) RunnerDeployment
+  # in the homelab Kubernetes cluster. Listed here so actionlint doesn't flag
+  # `runs-on: arc-runners` as an unknown label.
+  labels:
+    - arc-runners
