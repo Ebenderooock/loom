@@ -10,8 +10,8 @@ import (
 )
 
 const (
-	AuditPruneJobName = "system.audit-prune"
-	AuditPruneSchedule = "0 3 * * *" // daily at 03:00
+	AuditPruneJobName   = "system.audit-prune"
+	AuditPruneSchedule  = "0 3 * * *"         // daily at 03:00
 	AuditPruneRetention = 30 * 24 * time.Hour // 30 days
 )
 

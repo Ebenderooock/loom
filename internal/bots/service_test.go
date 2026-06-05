@@ -7,20 +7,21 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ebenderooock/loom/internal/requests"
 	_ "github.com/mattn/go-sqlite3"
+
+	"github.com/ebenderooock/loom/internal/requests"
 )
 
 // --- fakes ---------------------------------------------------------------
 
 type fakeRequests struct {
-	created  []requests.CreateInput
-	mine     []requests.Request
-	pending  []requests.Request
-	byID     map[string]requests.Request
+	created   []requests.CreateInput
+	mine      []requests.Request
+	pending   []requests.Request
+	byID      map[string]requests.Request
 	createErr error
-	approved []string
-	rejected []string
+	approved  []string
+	rejected  []string
 }
 
 func (f *fakeRequests) Create(_ context.Context, _, _ string, _ bool, in requests.CreateInput) (requests.Request, error) {
@@ -30,7 +31,9 @@ func (f *fakeRequests) Create(_ context.Context, _, _ string, _ bool, in request
 	f.created = append(f.created, in)
 	return requests.Request{ID: "new", Title: in.Title, Status: requests.StatusPending}, nil
 }
-func (f *fakeRequests) ListMine(context.Context, string) ([]requests.Request, error) { return f.mine, nil }
+func (f *fakeRequests) ListMine(context.Context, string) ([]requests.Request, error) {
+	return f.mine, nil
+}
 func (f *fakeRequests) ListAll(_ context.Context, st requests.Status) ([]requests.Request, error) {
 	return f.pending, nil
 }
@@ -55,8 +58,12 @@ type fakeSearch struct {
 	series []MediaResult
 }
 
-func (f *fakeSearch) SearchMovies(context.Context, string) ([]MediaResult, error) { return f.movies, nil }
-func (f *fakeSearch) SearchSeries(context.Context, string) ([]MediaResult, error) { return f.series, nil }
+func (f *fakeSearch) SearchMovies(context.Context, string) ([]MediaResult, error) {
+	return f.movies, nil
+}
+func (f *fakeSearch) SearchSeries(context.Context, string) ([]MediaResult, error) {
+	return f.series, nil
+}
 func (f *fakeSearch) GetMovie(_ context.Context, tmdb string) (*MediaResult, error) {
 	return &MediaResult{MediaType: requests.MediaMovie, TMDBID: tmdb, Title: "Movie " + tmdb, Year: 2020}, nil
 }

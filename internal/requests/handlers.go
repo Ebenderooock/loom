@@ -6,8 +6,9 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/ebenderooock/loom/internal/auth"
 	"github.com/go-chi/chi/v5"
+
+	"github.com/ebenderooock/loom/internal/auth"
 )
 
 // userIDStr renders an auth identity's numeric user id as a stable string key.

@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	SystemLogPruneJobName = "system.log-prune"
+	SystemLogPruneJobName  = "system.log-prune"
 	SystemLogPruneSchedule = "0 4 * * *" // daily at 04:00
 )
 

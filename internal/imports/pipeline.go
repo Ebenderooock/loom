@@ -27,22 +27,22 @@ import (
 
 // PipelineOptions configures the ImportPipeline.
 type PipelineOptions struct {
-	DB               *sql.DB
-	Bus              eventbus.Bus
-	DownloadSvc      *downloads.Service
-	RemotePathStore  *downloads.RemotePathStore
-	MoviesSvc        movies.Service
-	SeriesSvc        series.Service
-	LibStore         *libraries.Store
-	WorkflowEngine   *workflows.Engine
-	NotifSvc         notifications.Service
-	PostVal          *safety.PostValidator
-	ReviewStore      *safety.ReviewStore
-	Logger           *slog.Logger
-	ImportMode       ImportMode
-	RecycleBin       *RecycleBin
-	QualityProfiles  QualityProfileGetter
-	AltTitleStore    *alttitles.Store
+	DB              *sql.DB
+	Bus             eventbus.Bus
+	DownloadSvc     *downloads.Service
+	RemotePathStore *downloads.RemotePathStore
+	MoviesSvc       movies.Service
+	SeriesSvc       series.Service
+	LibStore        *libraries.Store
+	WorkflowEngine  *workflows.Engine
+	NotifSvc        notifications.Service
+	PostVal         *safety.PostValidator
+	ReviewStore     *safety.ReviewStore
+	Logger          *slog.Logger
+	ImportMode      ImportMode
+	RecycleBin      *RecycleBin
+	QualityProfiles QualityProfileGetter
+	AltTitleStore   *alttitles.Store
 }
 
 // ImportPipeline subscribes to download completion events, scans files,

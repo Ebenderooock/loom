@@ -2,64 +2,64 @@ package tmdb
 
 // MovieResponse is the JSON response from TMDb /movie/{id} endpoint.
 type MovieResponse struct {
-	ID              int    `json:"id"`
-	IMDBID          string `json:"imdb_id"`
-	Title           string `json:"title"`
-	ReleaseDate     string `json:"release_date"`
-	Overview        string `json:"overview"`
-	PosterPath      string `json:"poster_path"`
-	Runtime         int    `json:"runtime"`
-	VoteAverage     float64 `json:"vote_average"`
-	Genres          []GenreResponse `json:"genres"`
-	ExternalIDs     *ExternalIDResponse `json:"external_ids"`
+	ID          int                 `json:"id"`
+	IMDBID      string              `json:"imdb_id"`
+	Title       string              `json:"title"`
+	ReleaseDate string              `json:"release_date"`
+	Overview    string              `json:"overview"`
+	PosterPath  string              `json:"poster_path"`
+	Runtime     int                 `json:"runtime"`
+	VoteAverage float64             `json:"vote_average"`
+	Genres      []GenreResponse     `json:"genres"`
+	ExternalIDs *ExternalIDResponse `json:"external_ids"`
 }
 
 // TVResponse is the JSON response from TMDb /tv/{id} endpoint.
 type TVResponse struct {
-	ID              int    `json:"id"`
-	IMDBID          string `json:"imdb_id"`
-	Name            string `json:"name"`
-	FirstAirDate    string `json:"first_air_date"`
-	Overview        string `json:"overview"`
-	PosterPath      string `json:"poster_path"`
-	VoteAverage     float64 `json:"vote_average"`
-	NumberOfSeasons int    `json:"number_of_seasons"`
-	Genres          []GenreResponse `json:"genres"`
+	ID              int                 `json:"id"`
+	IMDBID          string              `json:"imdb_id"`
+	Name            string              `json:"name"`
+	FirstAirDate    string              `json:"first_air_date"`
+	Overview        string              `json:"overview"`
+	PosterPath      string              `json:"poster_path"`
+	VoteAverage     float64             `json:"vote_average"`
+	NumberOfSeasons int                 `json:"number_of_seasons"`
+	Genres          []GenreResponse     `json:"genres"`
 	ExternalIDs     *ExternalIDResponse `json:"external_ids"`
 }
 
 // EpisodeResponse is the JSON response from TMDb /tv/{id}/season/{season}/episode/{episode} endpoint.
 type EpisodeResponse struct {
-	ID              int    `json:"id"`
-	Name            string `json:"name"`
-	Overview        string `json:"overview"`
-	AirDate         string `json:"air_date"`
-	EpisodeNumber   int    `json:"episode_number"`
-	SeasonNumber    int    `json:"season_number"`
-	Runtime         int    `json:"runtime"`
-	VoteAverage     float64 `json:"vote_average"`
-	ExternalIDs     *ExternalIDResponse `json:"external_ids"`
+	ID            int                 `json:"id"`
+	Name          string              `json:"name"`
+	Overview      string              `json:"overview"`
+	AirDate       string              `json:"air_date"`
+	EpisodeNumber int                 `json:"episode_number"`
+	SeasonNumber  int                 `json:"season_number"`
+	Runtime       int                 `json:"runtime"`
+	VoteAverage   float64             `json:"vote_average"`
+	ExternalIDs   *ExternalIDResponse `json:"external_ids"`
 }
 
 // SearchResponse wraps the results from a TMDb search endpoint.
 type SearchResponse struct {
-	Results     []SearchResult `json:"results"`
-	TotalPages  int            `json:"total_pages"`
-	TotalResults int           `json:"total_results"`
-	Page        int            `json:"page"`
+	Results      []SearchResult `json:"results"`
+	TotalPages   int            `json:"total_pages"`
+	TotalResults int            `json:"total_results"`
+	Page         int            `json:"page"`
 }
 
 // SearchResult is a single result in a search response.
 type SearchResult struct {
-	ID              int     `json:"id"`
-	Title           string  `json:"title,omitempty"`
-	Name            string  `json:"name,omitempty"`
-	ReleaseDate     string  `json:"release_date,omitempty"`
-	FirstAirDate    string  `json:"first_air_date,omitempty"`
-	Overview        string  `json:"overview"`
-	PosterPath      string  `json:"poster_path"`
-	VoteAverage     float64 `json:"vote_average"`
-	MediaType       string  `json:"media_type"`
+	ID           int     `json:"id"`
+	Title        string  `json:"title,omitempty"`
+	Name         string  `json:"name,omitempty"`
+	ReleaseDate  string  `json:"release_date,omitempty"`
+	FirstAirDate string  `json:"first_air_date,omitempty"`
+	Overview     string  `json:"overview"`
+	PosterPath   string  `json:"poster_path"`
+	VoteAverage  float64 `json:"vote_average"`
+	MediaType    string  `json:"media_type"`
 }
 
 // GenreResponse is a genre object in TMDb responses.
@@ -77,26 +77,26 @@ type ExternalIDResponse struct {
 
 // ErrorResponse is the standard TMDb API error response.
 type ErrorResponse struct {
-	StatusCode int    `json:"status_code"`
+	StatusCode    int    `json:"status_code"`
 	StatusMessage string `json:"status_message"`
-	Success    bool   `json:"success"`
+	Success       bool   `json:"success"`
 }
 
 // CreditsResponse wraps the cast and crew from TMDb /movie/{id}/credits.
 type CreditsResponse struct {
-	ID   int          `json:"id"`
-	Cast []CastEntry  `json:"cast"`
-	Crew []CrewEntry  `json:"crew"`
+	ID   int         `json:"id"`
+	Cast []CastEntry `json:"cast"`
+	Crew []CrewEntry `json:"crew"`
 }
 
 // CastEntry is a single cast member in a credits response.
 type CastEntry struct {
-	ID          int     `json:"id"`
-	Name        string  `json:"name"`
-	Character   string  `json:"character"`
-	ProfilePath string  `json:"profile_path"`
-	Order       int     `json:"order"`
-	KnownFor    string  `json:"known_for_department"`
+	ID          int    `json:"id"`
+	Name        string `json:"name"`
+	Character   string `json:"character"`
+	ProfilePath string `json:"profile_path"`
+	Order       int    `json:"order"`
+	KnownFor    string `json:"known_for_department"`
 }
 
 // CrewEntry is a single crew member in a credits response.
@@ -130,21 +130,21 @@ type ReleaseDate struct {
 
 // PersonResponse is the JSON response from TMDb /person/{id} endpoint.
 type PersonResponse struct {
-	ID          int    `json:"id"`
-	Name        string `json:"name"`
-	Biography   string `json:"biography"`
-	ProfilePath string `json:"profile_path"`
-	Birthday    string `json:"birthday"`
-	Deathday    string `json:"deathday"`
-	KnownFor    string `json:"known_for_department"`
+	ID           int    `json:"id"`
+	Name         string `json:"name"`
+	Biography    string `json:"biography"`
+	ProfilePath  string `json:"profile_path"`
+	Birthday     string `json:"birthday"`
+	Deathday     string `json:"deathday"`
+	KnownFor     string `json:"known_for_department"`
 	PlaceOfBirth string `json:"place_of_birth"`
 }
 
 // CombinedCreditsResponse is the JSON response from TMDb /person/{id}/combined_credits.
 type CombinedCreditsResponse struct {
-	ID   int                    `json:"id"`
-	Cast []CombinedCreditEntry  `json:"cast"`
-	Crew []CombinedCreditEntry  `json:"crew"`
+	ID   int                   `json:"id"`
+	Cast []CombinedCreditEntry `json:"cast"`
+	Crew []CombinedCreditEntry `json:"crew"`
 }
 
 // CombinedCreditEntry is a single entry in a combined credits response.

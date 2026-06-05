@@ -87,7 +87,7 @@ func TestUpgradeSpec_LowerQuality_Rejects(t *testing.T) {
 	c := &ImportCandidate{
 		SourcePath:       "Movie.2024.1080p.HDTV.mkv",
 		QualityProfileID: "prof-1",
-		ExistingQuality:  "bluray-1080p", // rank 3
+		ExistingQuality:  "bluray-1080p",                                    // rank 3
 		IncomingRelease:  &parser.Release{Source: "HDTV", Resolution: 1080}, // rank 0
 	}
 	r := spec.IsSatisfiedBy(context.Background(), c)

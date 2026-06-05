@@ -31,10 +31,10 @@ func TestMatchQualityDef(t *testing.T) {
 	}
 
 	tests := []struct {
-		name       string
-		release    *parser.Release
-		wantID     string
-		wantNil    bool
+		name    string
+		release *parser.Release
+		wantID  string
+		wantNil bool
 	}{
 		{
 			name:    "bluray 1080p",
@@ -251,8 +251,8 @@ func TestBuildReleaseInfo(t *testing.T) {
 	rel := &parser.Release{
 		Source:     "BluRay",
 		Resolution: 1080,
-		Codec:     "h265",
-		Group:     "SPARKS",
+		Codec:      "h265",
+		Group:      "SPARKS",
 	}
 	res := &indexers.Result{
 		Title:     "Movie.2024.1080p.BluRay.x265-SPARKS",
@@ -376,7 +376,7 @@ func TestEvaluateResult_SizeFiltering(t *testing.T) {
 		{
 			ID: "bluray-1080", Name: "Bluray-1080p", Source: "bluray", Resolution: "1080p",
 			MinFileSize: 1 * 1024 * 1024 * 1024,  // 1GB
-			MaxFileSize: 50 * 1024 * 1024 * 1024,  // 50GB
+			MaxFileSize: 50 * 1024 * 1024 * 1024, // 50GB
 		},
 	}
 
@@ -484,15 +484,15 @@ func TestVerifyIdentity_TitleMatch(t *testing.T) {
 		wantReason   string
 	}{
 		{
-			name:        "exact match passes",
-			reqTitle:    "FROM",
-			parsedTitle: "FROM",
+			name:         "exact match passes",
+			reqTitle:     "FROM",
+			parsedTitle:  "FROM",
 			wantRejected: false,
 		},
 		{
-			name:        "case insensitive match passes",
-			reqTitle:    "Breaking Bad",
-			parsedTitle: "breaking bad",
+			name:         "case insensitive match passes",
+			reqTitle:     "Breaking Bad",
+			parsedTitle:  "breaking bad",
 			wantRejected: false,
 		},
 		{
@@ -503,16 +503,16 @@ func TestVerifyIdentity_TitleMatch(t *testing.T) {
 			wantReason:   "title_mismatch",
 		},
 		{
-			name:        "id-based skips title check entirely",
-			reqTitle:    "FROM",
-			parsedTitle: "Fringe",
-			idBased:     true,
+			name:         "id-based skips title check entirely",
+			reqTitle:     "FROM",
+			parsedTitle:  "Fringe",
+			idBased:      true,
 			wantRejected: false,
 		},
 		{
-			name:        "empty parsed title skips check",
-			reqTitle:    "FROM",
-			parsedTitle: "",
+			name:         "empty parsed title skips check",
+			reqTitle:     "FROM",
+			parsedTitle:  "",
 			wantRejected: false,
 		},
 	}
@@ -764,4 +764,3 @@ func TestBuildQueryChain_MovieCategories(t *testing.T) {
 		}
 	}
 }
-

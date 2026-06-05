@@ -193,8 +193,10 @@ func FetchTraktUserLists(ctx context.Context, clientID, accessToken string) ([]T
 	}
 
 	var raw []struct {
-		Name    string `json:"name"`
-		IDs     struct{ Slug string `json:"slug"` } `json:"ids"`
+		Name string `json:"name"`
+		IDs  struct {
+			Slug string `json:"slug"`
+		} `json:"ids"`
 		Privacy string `json:"privacy"`
 	}
 	if err := json.Unmarshal(body, &raw); err != nil {

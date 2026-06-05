@@ -13,6 +13,7 @@ import (
 	"unicode"
 
 	"github.com/google/uuid"
+
 	"github.com/ebenderooock/loom/internal/auditlog"
 	"github.com/ebenderooock/loom/internal/kernel/telemetry"
 	"github.com/ebenderooock/loom/internal/mediafiles"
@@ -54,14 +55,14 @@ type ScanResult struct {
 
 // UnmatchedFile represents a scanned file that couldn't be auto-matched.
 type UnmatchedFile struct {
-	ID         string `json:"id"`
-	ScanID     string `json:"scanId"`
-	FilePath   string `json:"filePath"`
-	Size       int64  `json:"size"`
+	ID          string `json:"id"`
+	ScanID      string `json:"scanId"`
+	FilePath    string `json:"filePath"`
+	Size        int64  `json:"size"`
 	ParsedTitle string `json:"parsedTitle"`
 	ParsedYear  int    `json:"parsedYear"`
-	Quality    string `json:"quality"`
-	Source     string `json:"source"`
+	Quality     string `json:"quality"`
+	Source      string `json:"source"`
 }
 
 // MetadataSearcher abstracts TMDB lookups for the scanner.
@@ -76,8 +77,8 @@ type Scanner struct {
 	logger   *slog.Logger
 	audit    *auditlog.Logger
 
-	mu    sync.RWMutex
-	scans map[string]*ScanResult
+	mu        sync.RWMutex
+	scans     map[string]*ScanResult
 	unmatched map[string][]*UnmatchedFile // scanID -> files
 }
 

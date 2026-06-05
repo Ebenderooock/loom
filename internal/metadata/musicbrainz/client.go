@@ -179,9 +179,9 @@ func (c *Client) doRequest(ctx context.Context, endpoint string, result interfac
 
 	// Exponential backoff parameters
 	const (
-		maxRetries = 5
+		maxRetries     = 5
 		initialBackoff = 1 * time.Second
-		maxBackoff = 60 * time.Second
+		maxBackoff     = 60 * time.Second
 	)
 
 	backoff := initialBackoff

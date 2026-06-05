@@ -5,14 +5,14 @@ const TypeMiniSeries SeriesType = "miniseries"
 
 // SeriesClassification holds the auto-detected series classification.
 type SeriesClassification struct {
-	DetectedType       SeriesType `json:"detectedType"`
-	IsMiniSeries       bool       `json:"isMiniSeries"`
-	HasSpecials        bool       `json:"hasSpecials"`
-	IsDailySeries      bool       `json:"isDailySeries"`
-	SpecialCount       int        `json:"specialCount"`
-	TotalSeasons       int        `json:"totalSeasons"`
-	TotalEpisodes      int        `json:"totalEpisodes"`
-	MonitorSpecials    bool       `json:"monitorSpecials"`
+	DetectedType    SeriesType `json:"detectedType"`
+	IsMiniSeries    bool       `json:"isMiniSeries"`
+	HasSpecials     bool       `json:"hasSpecials"`
+	IsDailySeries   bool       `json:"isDailySeries"`
+	SpecialCount    int        `json:"specialCount"`
+	TotalSeasons    int        `json:"totalSeasons"`
+	TotalEpisodes   int        `json:"totalEpisodes"`
+	MonitorSpecials bool       `json:"monitorSpecials"`
 }
 
 // ClassifySeries auto-detects series type based on metadata.

@@ -8,22 +8,22 @@ import (
 type ErrorCode string
 
 const (
-	ErrCodeNotFound       ErrorCode = "not_found"
-	ErrCodeRateLimit      ErrorCode = "rate_limit"
-	ErrCodeUnauthorized   ErrorCode = "unauthorized"
-	ErrCodeClientError    ErrorCode = "client_error"
-	ErrCodeServerError    ErrorCode = "server_error"
-	ErrCodeNetworkError   ErrorCode = "network_error"
-	ErrCodeContextError   ErrorCode = "context_error"
+	ErrCodeNotFound     ErrorCode = "not_found"
+	ErrCodeRateLimit    ErrorCode = "rate_limit"
+	ErrCodeUnauthorized ErrorCode = "unauthorized"
+	ErrCodeClientError  ErrorCode = "client_error"
+	ErrCodeServerError  ErrorCode = "server_error"
+	ErrCodeNetworkError ErrorCode = "network_error"
+	ErrCodeContextError ErrorCode = "context_error"
 )
 
 // ClientError wraps TMDb API errors with typed information.
 type ClientError struct {
-	Code      ErrorCode
+	Code       ErrorCode
 	StatusCode int
-	Message   string
+	Message    string
 	RetryAfter int // seconds (for 429)
-	Err       error
+	Err        error
 }
 
 func (e *ClientError) Error() string {

@@ -86,7 +86,7 @@ func createMapping(store *Store) http.HandlerFunc {
 			SeasonTo:     req.SeasonTo,
 			EpisodeTo:    req.EpisodeTo,
 			AbsoluteTo:   req.AbsoluteTo,
-			Source:        src,
+			Source:       src,
 		}
 
 		if err := store.CreateMapping(r.Context(), m); err != nil {

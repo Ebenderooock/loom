@@ -20,9 +20,10 @@ import (
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/antchfx/htmlquery"
+	"golang.org/x/net/html"
+
 	"github.com/ebenderooock/loom/internal/indexers"
 	"github.com/ebenderooock/loom/internal/indexers/cloudflare"
-	"golang.org/x/net/html"
 )
 
 const (
@@ -52,10 +53,10 @@ type Engine struct {
 	loggedIn bool
 
 	// resolved category mapping cache. Built once on first use.
-	catMu      sync.RWMutex
-	cats       []indexers.Category
-	siteToNzb  map[string][]indexers.Category // tracker id → newznab category ids
-	nzbToSite  map[indexers.Category][]string // newznab id → tracker ids
+	catMu     sync.RWMutex
+	cats      []indexers.Category
+	siteToNzb map[string][]indexers.Category // tracker id → newznab category ids
+	nzbToSite map[indexers.Category][]string // newznab id → tracker ids
 
 	// tmplCache caches parsed Go templates keyed by their raw string.
 	tmplCache sync.Map // string → *template.Template

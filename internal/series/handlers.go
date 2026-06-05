@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+
 	"github.com/ebenderooock/loom/internal/indexers"
 )
 
@@ -541,12 +542,12 @@ func refreshSeries(svc Service) http.HandlerFunc {
 
 func creditToResponse(c *SeriesCredit) map[string]interface{} {
 	return map[string]interface{}{
-		"id":            c.TMDBPersonID,
-		"name":          c.PersonName,
-		"character":     c.CharacterName,
-		"role":          c.Role,
-		"profile_path":  c.ProfilePath,
-		"order":         c.DisplayOrder,
+		"id":           c.TMDBPersonID,
+		"name":         c.PersonName,
+		"character":    c.CharacterName,
+		"role":         c.Role,
+		"profile_path": c.ProfilePath,
+		"order":        c.DisplayOrder,
 	}
 }
 

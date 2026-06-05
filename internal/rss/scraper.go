@@ -13,8 +13,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/antchfx/htmlquery"
 	"github.com/PuerkitoBio/goquery"
+	"github.com/antchfx/htmlquery"
 )
 
 // RateLimiter implements a token bucket rate limiter per domain.

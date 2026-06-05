@@ -11,6 +11,7 @@ import (
 	"sync"
 
 	"github.com/bwmarrin/discordgo"
+
 	"github.com/ebenderooock/loom/internal/bots"
 )
 

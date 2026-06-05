@@ -51,8 +51,8 @@ type Monitor struct {
 	checkInterval time.Duration
 
 	// Stall detection config.
-	stallTimeout     time.Duration
-	checkForStalled  bool
+	stallTimeout    time.Duration
+	checkForStalled bool
 
 	mu sync.Mutex
 	// lastCompleted tracks the item IDs we've already emitted as completed

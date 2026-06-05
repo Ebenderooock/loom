@@ -28,10 +28,10 @@ var defaultGroups = map[string]ReleaseGroup{
 	"Tsundere":   {Name: "Tsundere", Score: Tier2Score},
 
 	// Tier 3 — acceptable quick releases
-	"ASW":       {Name: "ASW", Score: Tier3Score},
-	"ToonsHub":  {Name: "ToonsHub", Score: Tier3Score},
+	"ASW":        {Name: "ASW", Score: Tier3Score},
+	"ToonsHub":   {Name: "ToonsHub", Score: Tier3Score},
 	"Anime Time": {Name: "Anime Time", Score: Tier3Score},
-	"SUGOI":     {Name: "SUGOI", Score: Tier3Score},
+	"SUGOI":      {Name: "SUGOI", Score: Tier3Score},
 }
 
 // ScoreGroup returns the quality score for a release group name.

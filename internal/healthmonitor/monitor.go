@@ -70,8 +70,8 @@ type Monitor struct {
 	cooldown    time.Duration
 	cancel      context.CancelFunc
 
-	mu         sync.Mutex
-	lastAlerts map[string]time.Time
+	mu          sync.Mutex
+	lastAlerts  map[string]time.Time
 	lastResults []CheckResult
 }
 
@@ -316,20 +316,20 @@ func (m *Monitor) checkIndexers(ctx context.Context) []CheckResult {
 	if failedCount == enabledCount {
 		return []CheckResult{{
 			Name: "indexers", Status: "critical",
-			Message: fmt.Sprintf("All %d enabled indexers are failing: %v", failedCount, failedNames),
+			Message:   fmt.Sprintf("All %d enabled indexers are failing: %v", failedCount, failedNames),
 			CheckedAt: now,
 		}}
 	}
 	if failedCount > 0 {
 		return []CheckResult{{
 			Name: "indexers", Status: "warning",
-			Message: fmt.Sprintf("%d of %d indexers failing: %v", failedCount, enabledCount, failedNames),
+			Message:   fmt.Sprintf("%d of %d indexers failing: %v", failedCount, enabledCount, failedNames),
 			CheckedAt: now,
 		}}
 	}
 	return []CheckResult{{
 		Name: "indexers", Status: "ok",
-		Message: fmt.Sprintf("All %d enabled indexers are healthy", enabledCount),
+		Message:   fmt.Sprintf("All %d enabled indexers are healthy", enabledCount),
 		CheckedAt: now,
 	}}
 }

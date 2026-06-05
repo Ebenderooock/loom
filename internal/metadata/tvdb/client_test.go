@@ -560,76 +560,76 @@ func TestFindMovie_NotSupported(t *testing.T) {
 // TestGetSeriesEpisodes_Pagination verifies multi-page aggregation and that the
 // aired-order season split is preserved.
 func TestGetSeriesEpisodes_Pagination(t *testing.T) {
-page0 := SeriesEpisodesResponse{
-Data: SeriesEpisodesData{Episodes: []EpisodeBaseRecord{
-{ID: 1, SeasonNumber: 1, Number: 1, AbsoluteNumber: 1, Name: "S1E1"},
-{ID: 2, SeasonNumber: 1, Number: 2, AbsoluteNumber: 2, Name: "S1E2"},
-}},
-Links: PageLinks{Next: "page2"},
-}
-page1 := SeriesEpisodesResponse{
-Data: SeriesEpisodesData{Episodes: []EpisodeBaseRecord{
-{ID: 13, SeasonNumber: 2, Number: 1, AbsoluteNumber: 13, Name: "S2E1"},
-}},
-Links: PageLinks{Next: ""},
-}
+	page0 := SeriesEpisodesResponse{
+		Data: SeriesEpisodesData{Episodes: []EpisodeBaseRecord{
+			{ID: 1, SeasonNumber: 1, Number: 1, AbsoluteNumber: 1, Name: "S1E1"},
+			{ID: 2, SeasonNumber: 1, Number: 2, AbsoluteNumber: 2, Name: "S1E2"},
+		}},
+		Links: PageLinks{Next: "page2"},
+	}
+	page1 := SeriesEpisodesResponse{
+		Data: SeriesEpisodesData{Episodes: []EpisodeBaseRecord{
+			{ID: 13, SeasonNumber: 2, Number: 1, AbsoluteNumber: 13, Name: "S2E1"},
+		}},
+		Links: PageLinks{Next: ""},
+	}
 
-var hits int32
-server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-if r.URL.Path == "/login" {
-json.NewEncoder(w).Encode(LoginResponse{Data: LoginData{Token: "t"}})
-return
-}
-if r.URL.Path != "/series/100/episodes/official" {
-http.Error(w, "not found", http.StatusNotFound)
-return
-}
-atomic.AddInt32(&hits, 1)
-w.Header().Set("Content-Type", "application/json")
-switch r.URL.Query().Get("page") {
-case "0":
-json.NewEncoder(w).Encode(page0)
-default:
-json.NewEncoder(w).Encode(page1)
-}
-}))
-defer server.Close()
+	var hits int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/login" {
+			json.NewEncoder(w).Encode(LoginResponse{Data: LoginData{Token: "t"}})
+			return
+		}
+		if r.URL.Path != "/series/100/episodes/official" {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
+		atomic.AddInt32(&hits, 1)
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Query().Get("page") {
+		case "0":
+			json.NewEncoder(w).Encode(page0)
+		default:
+			json.NewEncoder(w).Encode(page1)
+		}
+	}))
+	defer server.Close()
 
-client := NewClient(Config{APIKey: "k", BaseURL: server.URL})
-eps, err := client.GetSeriesEpisodes(context.Background(), 100, "official")
-if err != nil {
-t.Fatalf("unexpected error: %v", err)
-}
-if len(eps) != 3 {
-t.Fatalf("expected 3 episodes across pages, got %d", len(eps))
-}
-if eps[2].SeasonNumber != 2 || eps[2].Number != 1 {
-t.Fatalf("expected last episode to be S2E1, got S%dE%d", eps[2].SeasonNumber, eps[2].Number)
-}
-if atomic.LoadInt32(&hits) != 2 {
-t.Fatalf("expected 2 page requests, got %d", hits)
-}
+	client := NewClient(Config{APIKey: "k", BaseURL: server.URL})
+	eps, err := client.GetSeriesEpisodes(context.Background(), 100, "official")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(eps) != 3 {
+		t.Fatalf("expected 3 episodes across pages, got %d", len(eps))
+	}
+	if eps[2].SeasonNumber != 2 || eps[2].Number != 1 {
+		t.Fatalf("expected last episode to be S2E1, got S%dE%d", eps[2].SeasonNumber, eps[2].Number)
+	}
+	if atomic.LoadInt32(&hits) != 2 {
+		t.Fatalf("expected 2 page requests, got %d", hits)
+	}
 }
 
 // TestGetSeriesEpisodes_EmptyStops ensures the loop stops on an empty page.
 func TestGetSeriesEpisodes_EmptyStops(t *testing.T) {
-server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-if r.URL.Path == "/login" {
-json.NewEncoder(w).Encode(LoginResponse{Data: LoginData{Token: "t"}})
-return
-}
-// Always return empty episodes with a non-empty Next link; the empty
-// page must still terminate the loop.
-json.NewEncoder(w).Encode(SeriesEpisodesResponse{Links: PageLinks{Next: "more"}})
-}))
-defer server.Close()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/login" {
+			json.NewEncoder(w).Encode(LoginResponse{Data: LoginData{Token: "t"}})
+			return
+		}
+		// Always return empty episodes with a non-empty Next link; the empty
+		// page must still terminate the loop.
+		json.NewEncoder(w).Encode(SeriesEpisodesResponse{Links: PageLinks{Next: "more"}})
+	}))
+	defer server.Close()
 
-client := NewClient(Config{APIKey: "k", BaseURL: server.URL})
-eps, err := client.GetSeriesEpisodes(context.Background(), 7, "")
-if err != nil {
-t.Fatalf("unexpected error: %v", err)
-}
-if len(eps) != 0 {
-t.Fatalf("expected 0 episodes, got %d", len(eps))
-}
+	client := NewClient(Config{APIKey: "k", BaseURL: server.URL})
+	eps, err := client.GetSeriesEpisodes(context.Background(), 7, "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(eps) != 0 {
+		t.Fatalf("expected 0 episodes, got %d", len(eps))
+	}
 }

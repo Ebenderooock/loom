@@ -162,10 +162,10 @@ func handleSyncCollection(svc Service) http.HandlerFunc {
 		}
 
 		writeJSON(w, http.StatusOK, map[string]any{
-			"synced":         "collection",
-			"movies_count":   len(movieList),
-			"shows_count":    len(showList),
-			"connection_id":  conn.ID,
+			"synced":        "collection",
+			"movies_count":  len(movieList),
+			"shows_count":   len(showList),
+			"connection_id": conn.ID,
 		})
 	}
 }
@@ -200,10 +200,10 @@ func handleSyncWatchlist(svc Service) http.HandlerFunc {
 		}
 
 		writeJSON(w, http.StatusOK, map[string]any{
-			"synced":         "watchlist",
-			"movies_count":   len(movieList),
-			"shows_count":    len(showList),
-			"connection_id":  conn.ID,
+			"synced":        "watchlist",
+			"movies_count":  len(movieList),
+			"shows_count":   len(showList),
+			"connection_id": conn.ID,
 		})
 	}
 }

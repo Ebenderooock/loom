@@ -38,22 +38,22 @@ const (
 
 // Connection maps to the notification_connections table.
 type Connection struct {
-	ID                  string           `json:"id"`
-	Name                string           `json:"name"`
-	Type                ConnectionType   `json:"type"`
-	Enabled             bool             `json:"enabled"`
+	ID                  string             `json:"id"`
+	Name                string             `json:"name"`
+	Type                ConnectionType     `json:"type"`
+	Enabled             bool               `json:"enabled"`
 	Settings            ConnectionSettings `json:"settings"`
-	OnGrab              bool             `json:"on_grab"`
-	OnDownload          bool             `json:"on_download"`
-	OnUpgrade           bool             `json:"on_upgrade"`
-	OnRename            bool             `json:"on_rename"`
-	OnDelete            bool             `json:"on_delete"`
-	OnHealthIssue       bool             `json:"on_health_issue"`
-	OnApplicationUpdate bool             `json:"on_application_update"`
-	OnPlayback          bool             `json:"on_playback"`
-	Tags                StringSlice      `json:"tags"`
-	CreatedAt           time.Time        `json:"created_at"`
-	UpdatedAt           time.Time        `json:"updated_at"`
+	OnGrab              bool               `json:"on_grab"`
+	OnDownload          bool               `json:"on_download"`
+	OnUpgrade           bool               `json:"on_upgrade"`
+	OnRename            bool               `json:"on_rename"`
+	OnDelete            bool               `json:"on_delete"`
+	OnHealthIssue       bool               `json:"on_health_issue"`
+	OnApplicationUpdate bool               `json:"on_application_update"`
+	OnPlayback          bool               `json:"on_playback"`
+	Tags                StringSlice        `json:"tags"`
+	CreatedAt           time.Time          `json:"created_at"`
+	UpdatedAt           time.Time          `json:"updated_at"`
 }
 
 // SubscribesTo returns true if this connection is configured for the given event.
@@ -102,19 +102,19 @@ type Notification struct {
 
 // ConnectionSettings is a union type holding config for all connection types.
 type ConnectionSettings struct {
-	WebhookURL string `json:"webhook_url,omitempty"`
-	APIKey     string `json:"api_key,omitempty"`
-	Channel    string `json:"channel,omitempty"`
-	BotToken   string `json:"bot_token,omitempty"`
-	ChatID     string `json:"chat_id,omitempty"`
-	Host       string `json:"host,omitempty"`
-	Port       int    `json:"port,omitempty"`
-	Username   string `json:"username,omitempty"`
-	Password   string `json:"password,omitempty"`
-	From       string `json:"from,omitempty"`
-	To         string `json:"to,omitempty"`
-	TLS        bool   `json:"tls,omitempty"`
-	UserKey    string `json:"user_key,omitempty"`
+	WebhookURL       string `json:"webhook_url,omitempty"`
+	APIKey           string `json:"api_key,omitempty"`
+	Channel          string `json:"channel,omitempty"`
+	BotToken         string `json:"bot_token,omitempty"`
+	ChatID           string `json:"chat_id,omitempty"`
+	Host             string `json:"host,omitempty"`
+	Port             int    `json:"port,omitempty"`
+	Username         string `json:"username,omitempty"`
+	Password         string `json:"password,omitempty"`
+	From             string `json:"from,omitempty"`
+	To               string `json:"to,omitempty"`
+	TLS              bool   `json:"tls,omitempty"`
+	UserKey          string `json:"user_key,omitempty"`
 	ServerURL        string `json:"server_url,omitempty"`
 	Topic            string `json:"topic,omitempty"`
 	TemplateOverride string `json:"template_override,omitempty"`

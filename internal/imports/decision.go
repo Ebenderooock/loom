@@ -10,13 +10,13 @@ import (
 type ImportRejectionReason string
 
 const (
-	RejectionSample           ImportRejectionReason = "sample"
+	RejectionSample            ImportRejectionReason = "sample"
 	RejectionInsufficientSpace ImportRejectionReason = "insufficient_space"
-	RejectionAlreadyImported  ImportRejectionReason = "already_imported"
-	RejectionUnpacking        ImportRejectionReason = "unpacking"
-	RejectionNotUpgrade       ImportRejectionReason = "not_upgrade"
-	RejectionNoAudio          ImportRejectionReason = "no_audio"
-	RejectionDangerousFile    ImportRejectionReason = "dangerous_file"
+	RejectionAlreadyImported   ImportRejectionReason = "already_imported"
+	RejectionUnpacking         ImportRejectionReason = "unpacking"
+	RejectionNotUpgrade        ImportRejectionReason = "not_upgrade"
+	RejectionNoAudio           ImportRejectionReason = "no_audio"
+	RejectionDangerousFile     ImportRejectionReason = "dangerous_file"
 )
 
 // ImportRejection represents a single reason a file was rejected.

@@ -558,4 +558,3 @@ func TestOrchestratorSeedingWaitsForRatio(t *testing.T) {
 		return got != nil && (got.State == StateImporting || got.State == StateCompleted)
 	})
 }
-

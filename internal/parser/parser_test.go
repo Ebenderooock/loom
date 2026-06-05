@@ -255,49 +255,49 @@ func TestParseSeasonEpisode(t *testing.T) {
 // Real-world complex release names
 func TestParseComplexRealWorld(t *testing.T) {
 	tests := []struct {
-		name         string
-		release      string
-		expCodec     string
-		expBitdepth  int
-		expYear      int
+		name          string
+		release       string
+		expCodec      string
+		expBitdepth   int
+		expYear       int
 		expResolution int
-		expSource    string
+		expSource     string
 	}{
 		{
-			name:         "Inception BluRay",
-			release:      "Inception.2010.1080p.BluRay.x264-SPARKS",
-			expCodec:     "h264",
-			expBitdepth:  0,
-			expYear:      2010,
+			name:          "Inception BluRay",
+			release:       "Inception.2010.1080p.BluRay.x264-SPARKS",
+			expCodec:      "h264",
+			expBitdepth:   0,
+			expYear:       2010,
 			expResolution: 1080,
-			expSource:    "BluRay",
+			expSource:     "BluRay",
 		},
 		{
-			name:         "The Matrix with h265",
-			release:      "The.Matrix.1999.2160p.BluRay.x265.10-bit-IAMNOTBOB",
-			expCodec:     "h265",
-			expBitdepth:  10,
-			expYear:      1999,
+			name:          "The Matrix with h265",
+			release:       "The.Matrix.1999.2160p.BluRay.x265.10-bit-IAMNOTBOB",
+			expCodec:      "h265",
+			expBitdepth:   10,
+			expYear:       1999,
 			expResolution: 2160,
-			expSource:    "BluRay",
+			expSource:     "BluRay",
 		},
 		{
-			name:         "WebRip with AV1",
-			release:      "Avatar.2022.1080p.WebRip.av1.aac",
-			expCodec:     "av1",
-			expBitdepth:  0,
-			expYear:      2022,
+			name:          "WebRip with AV1",
+			release:       "Avatar.2022.1080p.WebRip.av1.aac",
+			expCodec:      "av1",
+			expBitdepth:   0,
+			expYear:       2022,
 			expResolution: 1080,
-			expSource:    "WebRip",
+			expSource:     "WebRip",
 		},
 		{
-			name:         "TV show HDTV",
-			release:      "Breaking.Bad.S05E16.720p.HDTV.x264",
-			expCodec:     "h264",
-			expBitdepth:  0,
-			expYear:      0,
+			name:          "TV show HDTV",
+			release:       "Breaking.Bad.S05E16.720p.HDTV.x264",
+			expCodec:      "h264",
+			expBitdepth:   0,
+			expYear:       0,
 			expResolution: 720,
-			expSource:    "HDTV",
+			expSource:     "HDTV",
 		},
 	}
 
@@ -417,11 +417,11 @@ func TestExtractGroup(t *testing.T) {
 
 func TestAnimePatterns(t *testing.T) {
 	tests := []struct {
-		name       string
-		release    string
-		wantRes    int
-		wantCodec  string
-		wantGroup  string
+		name      string
+		release   string
+		wantRes   int
+		wantCodec string
+		wantGroup string
 	}{
 		{
 			"bracket group with 1080p",
@@ -538,7 +538,7 @@ func TestDailyShowYearExtraction(t *testing.T) {
 
 func TestDailyDateFormats(t *testing.T) {
 	tests := []struct {
-		name string
+		name  string
 		input string
 		date  string
 	}{
@@ -560,11 +560,11 @@ func TestDailyDateFormats(t *testing.T) {
 
 func TestProperRepackFlags(t *testing.T) {
 	tests := []struct {
-		name     string
-		input    string
-		proper   bool
-		repack   bool
-		real     bool
+		name   string
+		input  string
+		proper bool
+		repack bool
+		real   bool
 	}{
 		{"proper", "Show.S01E01.PROPER.720p.HDTV.mkv", true, false, false},
 		{"repack", "Show.S01E01.REPACK.1080p.BluRay.mkv", false, true, false},
@@ -623,9 +623,9 @@ func TestAudioExtraction(t *testing.T) {
 
 func TestAbsoluteEpisode(t *testing.T) {
 	tests := []struct {
-		name    string
-		input   string
-		absEp   int
+		name  string
+		input string
+		absEp int
 	}{
 		{"anime style", "[SubGroup] Naruto Shippuuden - 142 [1080p].mkv", 142},
 		{"anime single digit", "[Fansub] One Piece - 5 [720p].mkv", 5},

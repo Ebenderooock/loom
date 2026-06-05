@@ -6,8 +6,9 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/ebenderooock/loom/internal/auth"
 	"github.com/go-chi/chi/v5"
+
+	"github.com/ebenderooock/loom/internal/auth"
 )
 
 // httpHandlers serves the bot configuration + account-linking API.

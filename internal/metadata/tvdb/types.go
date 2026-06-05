@@ -7,15 +7,15 @@ type SeriesResponse struct {
 
 // SeriesData contains the series metadata from TVDB.
 type SeriesData struct {
-	ID           int        `json:"id"`
-	Name         string     `json:"name"`
-	Overview     string     `json:"overview"`
-	Image        string     `json:"image"`
-	FirstAirDate string     `json:"firstAirDate"`
-	Status       StatusInfo `json:"status"`
-	Year         string     `json:"year"` // TVDB returns as string
-	ExternalIDs  IDsInfo    `json:"externalIds"`
-	SeriesCount  int        `json:"seriesCount,omitempty"` // Used in some responses
+	ID           int           `json:"id"`
+	Name         string        `json:"name"`
+	Overview     string        `json:"overview"`
+	Image        string        `json:"image"`
+	FirstAirDate string        `json:"firstAirDate"`
+	Status       StatusInfo    `json:"status"`
+	Year         string        `json:"year"` // TVDB returns as string
+	ExternalIDs  IDsInfo       `json:"externalIds"`
+	SeriesCount  int           `json:"seriesCount,omitempty"` // Used in some responses
 	Characters   []interface{} `json:"characters,omitempty"`
 }
 
@@ -38,16 +38,16 @@ type EpisodeResponse struct {
 
 // EpisodeData contains episode metadata.
 type EpisodeData struct {
-	ID            int    `json:"id"`
-	Name          string `json:"name"`
-	Overview      string `json:"overview"`
-	Image         string `json:"image"`
-	AirDate       string `json:"airDate"`
-	Runtime       int    `json:"runtime,omitempty"`
-	SeasonNumber  int    `json:"seasonNumber"`
-	EpisodeNumber int    `json:"episodeNumber"`
+	ID            int         `json:"id"`
+	Name          string      `json:"name"`
+	Overview      string      `json:"overview"`
+	Image         string      `json:"image"`
+	AirDate       string      `json:"airDate"`
+	Runtime       int         `json:"runtime,omitempty"`
+	SeasonNumber  int         `json:"seasonNumber"`
+	EpisodeNumber int         `json:"episodeNumber"`
 	Ratings       RatingsInfo `json:"ratings,omitempty"`
-	ExternalIDs   IDsInfo `json:"externalIds,omitempty"`
+	ExternalIDs   IDsInfo     `json:"externalIds,omitempty"`
 }
 
 // RatingsInfo contains rating data.
@@ -82,11 +82,11 @@ type EpisodeBaseRecord struct {
 
 // PageLinks contains TVDB pagination links.
 type PageLinks struct {
-	Prev      string `json:"prev"`
-	Self      string `json:"self"`
-	Next      string `json:"next"`
-	TotalItems int   `json:"total_items"`
-	PageSize  int    `json:"page_size"`
+	Prev       string `json:"prev"`
+	Self       string `json:"self"`
+	Next       string `json:"next"`
+	TotalItems int    `json:"total_items"`
+	PageSize   int    `json:"page_size"`
 }
 
 // SearchResponse wraps search results from TVDB.
@@ -97,12 +97,12 @@ type SearchResponse struct {
 
 // SearchResult is a single search result.
 type SearchResult struct {
-	ID           int    `json:"id"`
-	Name         string `json:"name"`
-	FirstAirDate string `json:"firstAirDate,omitempty"`
-	Overview     string `json:"overview,omitempty"`
-	Image        string `json:"image,omitempty"`
-	Type         string `json:"type,omitempty"` // "series", "movie", etc.
+	ID           int     `json:"id"`
+	Name         string  `json:"name"`
+	FirstAirDate string  `json:"firstAirDate,omitempty"`
+	Overview     string  `json:"overview,omitempty"`
+	Image        string  `json:"image,omitempty"`
+	Type         string  `json:"type,omitempty"` // "series", "movie", etc.
 	ExternalIDs  IDsInfo `json:"externalIds,omitempty"`
 }
 

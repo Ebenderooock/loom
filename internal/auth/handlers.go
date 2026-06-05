@@ -45,9 +45,9 @@ func (s *Service) Mount(r chi.Router) {
 }
 
 type statusResponse struct {
-	SetupRequired  bool    `json:"setup_required"`
-	IsAuthenticated bool    `json:"is_authenticated"`
-	User           *userOut `json:"user,omitempty"`
+	SetupRequired   bool     `json:"setup_required"`
+	IsAuthenticated bool     `json:"is_authenticated"`
+	User            *userOut `json:"user,omitempty"`
 }
 
 func (s *Service) handleStatus(w http.ResponseWriter, r *http.Request) {
@@ -253,12 +253,12 @@ type createAPIKeyRequest struct {
 }
 
 type apiKeyOut struct {
-	ID        int64  `json:"id"`
-	Name      string `json:"name"`
-	Prefix    string `json:"prefix"`
-	CreatedAt string `json:"created_at"`
+	ID         int64   `json:"id"`
+	Name       string  `json:"name"`
+	Prefix     string  `json:"prefix"`
+	CreatedAt  string  `json:"created_at"`
 	LastUsedAt *string `json:"last_used_at,omitempty"`
-	ExpiresAt *string `json:"expires_at,omitempty"`
+	ExpiresAt  *string `json:"expires_at,omitempty"`
 }
 
 func toAPIKeyOut(ak APIKey) apiKeyOut {

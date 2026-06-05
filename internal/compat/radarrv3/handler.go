@@ -23,10 +23,10 @@ import (
 
 // Handler exposes Radarr v3–compatible HTTP endpoints backed by Loom services.
 type Handler struct {
-	svc      movies.Service
-	libs     *libraries.Store
-	qps      *qualityprofiles.Store
-	log      *slog.Logger
+	svc  movies.Service
+	libs *libraries.Store
+	qps  *qualityprofiles.Store
+	log  *slog.Logger
 
 	// ID mappers (Radarr int ↔ Loom string).
 	movies *idMapper
@@ -34,7 +34,7 @@ type Handler struct {
 	qpIDs  *idMapper
 
 	// Cached library paths for path↔ID resolution.
-	libCacheMu  sync.RWMutex
+	libCacheMu   sync.RWMutex
 	libPathCache map[string]string // libraryID → path
 }
 

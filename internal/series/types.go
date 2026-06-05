@@ -29,17 +29,17 @@ const (
 type MonitoringStatus string
 
 const (
-	MonitoringAll          MonitoringStatus = "all"
-	MonitoringFuture       MonitoringStatus = "future"
-	MonitoringMissing      MonitoringStatus = "missing"
-	MonitoringExisting     MonitoringStatus = "existing"
-	MonitoringPilot        MonitoringStatus = "pilot"
-	MonitoringFirstSeason  MonitoringStatus = "firstSeason"
-	MonitoringLastSeason   MonitoringStatus = "lastSeason"
-	MonitoringNone         MonitoringStatus = "none"
-	MonitoringMonitored    MonitoringStatus = "monitored"
-	MonitoringUnmonitored  MonitoringStatus = "unmonitored"
-	MonitoringArchived     MonitoringStatus = "archived"
+	MonitoringAll         MonitoringStatus = "all"
+	MonitoringFuture      MonitoringStatus = "future"
+	MonitoringMissing     MonitoringStatus = "missing"
+	MonitoringExisting    MonitoringStatus = "existing"
+	MonitoringPilot       MonitoringStatus = "pilot"
+	MonitoringFirstSeason MonitoringStatus = "firstSeason"
+	MonitoringLastSeason  MonitoringStatus = "lastSeason"
+	MonitoringNone        MonitoringStatus = "none"
+	MonitoringMonitored   MonitoringStatus = "monitored"
+	MonitoringUnmonitored MonitoringStatus = "unmonitored"
+	MonitoringArchived    MonitoringStatus = "archived"
 )
 
 // Series represents a TV series in the library.
@@ -106,39 +106,39 @@ type Episode struct {
 
 // EpisodeFile represents a media file for an episode.
 type EpisodeFile struct {
-	ID         string    `json:"id"`
-	EpisodeID  string    `json:"episode_id"`
-	SeriesID   string    `json:"series_id"`
-	FilePath   string    `json:"file_path"`
-	FileSize   int64     `json:"file_size"`
-	Quality    string    `json:"quality,omitempty"`
-	Source     string    `json:"source,omitempty"`
-	Resolution string    `json:"resolution,omitempty"`
-	Codec      string    `json:"codec,omitempty"`
+	ID         string       `json:"id"`
+	EpisodeID  string       `json:"episode_id"`
+	SeriesID   string       `json:"series_id"`
+	FilePath   string       `json:"file_path"`
+	FileSize   int64        `json:"file_size"`
+	Quality    string       `json:"quality,omitempty"`
+	Source     string       `json:"source,omitempty"`
+	Resolution string       `json:"resolution,omitempty"`
+	Codec      string       `json:"codec,omitempty"`
 	MediaInfo  MediaInfoMap `json:"media_info,omitempty"`
-	CreatedAt  time.Time `json:"created_at"`
-	UpdatedAt  time.Time `json:"updated_at"`
+	CreatedAt  time.Time    `json:"created_at"`
+	UpdatedAt  time.Time    `json:"updated_at"`
 }
 
 // SeriesCredit represents a cast or crew member for a series.
 type SeriesCredit struct {
-	ID           int    `json:"id"`
-	SeriesID     string `json:"series_id"`
-	PersonName   string `json:"person_name"`
+	ID            int    `json:"id"`
+	SeriesID      string `json:"series_id"`
+	PersonName    string `json:"person_name"`
 	CharacterName string `json:"character_name,omitempty"`
-	Role         string `json:"role"`
-	ProfilePath  string `json:"profile_path,omitempty"`
-	TMDBPersonID int    `json:"tmdb_person_id,omitempty"`
-	DisplayOrder int    `json:"display_order"`
+	Role          string `json:"role"`
+	ProfilePath   string `json:"profile_path,omitempty"`
+	TMDBPersonID  int    `json:"tmdb_person_id,omitempty"`
+	DisplayOrder  int    `json:"display_order"`
 }
 
 // EpisodeStats holds episode count statistics for a series.
 type EpisodeStats struct {
-	TotalEpisodes     int `json:"totalEpisodes"`
+	TotalEpisodes      int `json:"totalEpisodes"`
 	DownloadedEpisodes int `json:"downloadedEpisodes"`
-	MonitoredEpisodes int `json:"monitoredEpisodes"`
-	MissingEpisodes   int `json:"missingEpisodes"` // monitored but not downloaded
-	AiredEpisodes     int `json:"airedEpisodes"`   // episodes with air_date <= today
+	MonitoredEpisodes  int `json:"monitoredEpisodes"`
+	MissingEpisodes    int `json:"missingEpisodes"` // monitored but not downloaded
+	AiredEpisodes      int `json:"airedEpisodes"`   // episodes with air_date <= today
 }
 
 // StringSlice is a JSON-marshaled string slice for database storage.

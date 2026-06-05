@@ -62,7 +62,7 @@ type plexSession struct {
 	Session *struct {
 		Bandwidth int64 `json:"bandwidth"`
 	} `json:"Session"`
-	User             struct {
+	User struct {
 		Title string `json:"title"`
 	} `json:"User"`
 	Player struct {

@@ -305,8 +305,8 @@ func (c *Client) exchange(ctx context.Context, method string, body []byte) ([]by
 // []byte slot exchange() returns. The encoding is deliberately a no-op
 // because session ids are ASCII; the named helpers exist so the
 // 409-path is greppable and self-documenting.
-func headerToBytes(id string) []byte   { return []byte(id) }
-func headerFromBytes(b []byte) string  { return string(b) }
+func headerToBytes(id string) []byte  { return []byte(id) }
+func headerFromBytes(b []byte) string { return string(b) }
 
 func (c *Client) getSessionID() string {
 	c.sessionMu.RLock()

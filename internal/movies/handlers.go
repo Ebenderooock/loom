@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+
 	"github.com/ebenderooock/loom/internal/indexers"
 )
 
@@ -987,219 +988,219 @@ func deleteQualityProfile(svc Service) http.HandlerFunc {
 // Custom Format Handlers
 
 func listCustomFormats(svc Service) http.HandlerFunc {
-return func(w http.ResponseWriter, r *http.Request) {
-formats, err := svc.ListCustomFormats(r.Context())
-if err != nil {
-http.Error(w, err.Error(), http.StatusInternalServerError)
-return
-}
-w.Header().Set("Content-Type", "application/json")
-json.NewEncoder(w).Encode(formats)
-}
+	return func(w http.ResponseWriter, r *http.Request) {
+		formats, err := svc.ListCustomFormats(r.Context())
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(formats)
+	}
 }
 
 func addCustomFormat(svc Service) http.HandlerFunc {
-return func(w http.ResponseWriter, r *http.Request) {
-var req CreateCustomFormatRequest
-if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-http.Error(w, err.Error(), http.StatusBadRequest)
-return
-}
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req CreateCustomFormatRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 
-// Generate ID from name (slug)
-id := slugify(req.Name)
+		// Generate ID from name (slug)
+		id := slugify(req.Name)
 
-// Convert request filters to domain filters
-var filters []CustomFormatFilter
-for i, f := range req.Filters {
-filters = append(filters, CustomFormatFilter{
-ID:             "",
-CustomFormatID: id,
-Field:          f.Field,
-Condition:      f.Condition,
-Value:          f.Value,
-Order:          i,
-CreatedAt:      time.Now(),
-UpdatedAt:      time.Now(),
-})
-}
+		// Convert request filters to domain filters
+		var filters []CustomFormatFilter
+		for i, f := range req.Filters {
+			filters = append(filters, CustomFormatFilter{
+				ID:             "",
+				CustomFormatID: id,
+				Field:          f.Field,
+				Condition:      f.Condition,
+				Value:          f.Value,
+				Order:          i,
+				CreatedAt:      time.Now(),
+				UpdatedAt:      time.Now(),
+			})
+		}
 
-cf := &CustomFormat{
-ID:          id,
-Name:        req.Name,
-Description: req.Description,
-Tags:        req.Tags,
-Filters:     filters,
-CreatedAt:   time.Now(),
-UpdatedAt:   time.Now(),
-}
+		cf := &CustomFormat{
+			ID:          id,
+			Name:        req.Name,
+			Description: req.Description,
+			Tags:        req.Tags,
+			Filters:     filters,
+			CreatedAt:   time.Now(),
+			UpdatedAt:   time.Now(),
+		}
 
-if err := svc.AddCustomFormat(r.Context(), cf); err != nil {
-http.Error(w, err.Error(), http.StatusBadRequest)
-return
-}
+		if err := svc.AddCustomFormat(r.Context(), cf); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 
-w.Header().Set("Content-Type", "application/json")
-w.WriteHeader(http.StatusCreated)
-json.NewEncoder(w).Encode(cf)
-}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		json.NewEncoder(w).Encode(cf)
+	}
 }
 
 func getCustomFormat(svc Service) http.HandlerFunc {
-return func(w http.ResponseWriter, r *http.Request) {
-id := chi.URLParam(r, "id")
-cf, err := svc.GetCustomFormat(r.Context(), id)
-if err != nil {
-http.Error(w, err.Error(), http.StatusInternalServerError)
-return
-}
-if cf == nil {
-http.Error(w, "custom format not found", http.StatusNotFound)
-return
-}
-w.Header().Set("Content-Type", "application/json")
-json.NewEncoder(w).Encode(cf)
-}
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := chi.URLParam(r, "id")
+		cf, err := svc.GetCustomFormat(r.Context(), id)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if cf == nil {
+			http.Error(w, "custom format not found", http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(cf)
+	}
 }
 
 func updateCustomFormat(svc Service) http.HandlerFunc {
-return func(w http.ResponseWriter, r *http.Request) {
-id := chi.URLParam(r, "id")
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := chi.URLParam(r, "id")
 
-var req UpdateCustomFormatRequest
-if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-http.Error(w, err.Error(), http.StatusBadRequest)
-return
-}
+		var req UpdateCustomFormatRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 
-// Retrieve existing custom format
-cf, err := svc.GetCustomFormat(r.Context(), id)
-if err != nil {
-http.Error(w, err.Error(), http.StatusInternalServerError)
-return
-}
-if cf == nil {
-http.Error(w, "custom format not found", http.StatusNotFound)
-return
-}
+		// Retrieve existing custom format
+		cf, err := svc.GetCustomFormat(r.Context(), id)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if cf == nil {
+			http.Error(w, "custom format not found", http.StatusNotFound)
+			return
+		}
 
-// Update fields
-if req.Name != nil {
-cf.Name = *req.Name
-}
-if req.Description != nil {
-cf.Description = *req.Description
-}
-if req.Tags != nil {
-cf.Tags = req.Tags
-}
-if req.Filters != nil {
-var filters []CustomFormatFilter
-for i, f := range req.Filters {
-filters = append(filters, CustomFormatFilter{
-ID:             "",
-CustomFormatID: id,
-Field:          f.Field,
-Condition:      f.Condition,
-Value:          f.Value,
-Order:          i,
-CreatedAt:      time.Now(),
-UpdatedAt:      time.Now(),
-})
-}
-cf.Filters = filters
-}
-cf.UpdatedAt = time.Now()
+		// Update fields
+		if req.Name != nil {
+			cf.Name = *req.Name
+		}
+		if req.Description != nil {
+			cf.Description = *req.Description
+		}
+		if req.Tags != nil {
+			cf.Tags = req.Tags
+		}
+		if req.Filters != nil {
+			var filters []CustomFormatFilter
+			for i, f := range req.Filters {
+				filters = append(filters, CustomFormatFilter{
+					ID:             "",
+					CustomFormatID: id,
+					Field:          f.Field,
+					Condition:      f.Condition,
+					Value:          f.Value,
+					Order:          i,
+					CreatedAt:      time.Now(),
+					UpdatedAt:      time.Now(),
+				})
+			}
+			cf.Filters = filters
+		}
+		cf.UpdatedAt = time.Now()
 
-if err := svc.UpdateCustomFormat(r.Context(), cf); err != nil {
-http.Error(w, err.Error(), http.StatusBadRequest)
-return
-}
+		if err := svc.UpdateCustomFormat(r.Context(), cf); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 
-w.Header().Set("Content-Type", "application/json")
-json.NewEncoder(w).Encode(cf)
-}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(cf)
+	}
 }
 
 func deleteCustomFormat(svc Service) http.HandlerFunc {
-return func(w http.ResponseWriter, r *http.Request) {
-id := chi.URLParam(r, "id")
-if err := svc.DeleteCustomFormat(r.Context(), id); err != nil {
-http.Error(w, err.Error(), http.StatusInternalServerError)
-return
-}
-w.WriteHeader(http.StatusNoContent)
-}
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := chi.URLParam(r, "id")
+		if err := svc.DeleteCustomFormat(r.Context(), id); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}
 }
 
 func testCustomFormat(svc Service) http.HandlerFunc {
-return func(w http.ResponseWriter, r *http.Request) {
-id := chi.URLParam(r, "id")
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := chi.URLParam(r, "id")
 
-var req struct {
-ReleaseName string `json:"release_name"`
-}
-if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-http.Error(w, err.Error(), http.StatusBadRequest)
-return
-}
+		var req struct {
+			ReleaseName string `json:"release_name"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 
-cf, err := svc.GetCustomFormat(r.Context(), id)
-if err != nil {
-http.Error(w, err.Error(), http.StatusInternalServerError)
-return
-}
-if cf == nil {
-http.Error(w, "custom format not found", http.StatusNotFound)
-return
-}
+		cf, err := svc.GetCustomFormat(r.Context(), id)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if cf == nil {
+			http.Error(w, "custom format not found", http.StatusNotFound)
+			return
+		}
 
-// Test if release name matches all filters
-matches := true
-for _, filter := range cf.Filters {
-// Simple pattern matching for testing
-if !filterMatches(filter, req.ReleaseName) {
-matches = false
-break
-}
-}
+		// Test if release name matches all filters
+		matches := true
+		for _, filter := range cf.Filters {
+			// Simple pattern matching for testing
+			if !filterMatches(filter, req.ReleaseName) {
+				matches = false
+				break
+			}
+		}
 
-w.Header().Set("Content-Type", "application/json")
-json.NewEncoder(w).Encode(map[string]interface{}{
-"custom_format_id": id,
-"release_name":     req.ReleaseName,
-"matches":          matches,
-})
-}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"custom_format_id": id,
+			"release_name":     req.ReleaseName,
+			"matches":          matches,
+		})
+	}
 }
 
 // filterMatches checks if a single filter matches the release name (copied from service for testing).
 func filterMatches(filter CustomFormatFilter, releaseName string) bool {
-switch filter.Condition {
-case ConditionEquals:
-return strings.EqualFold(releaseName, filter.Value)
-case ConditionRegex:
-re, err := regexp.Compile(filter.Value)
-if err != nil {
-return false
-}
-return re.MatchString(releaseName)
-case ConditionIn:
-values := strings.Split(filter.Value, ",")
-for _, v := range values {
-if strings.EqualFold(strings.TrimSpace(releaseName), strings.TrimSpace(v)) {
-return true
-}
-}
-return false
-default:
-return false
-}
+	switch filter.Condition {
+	case ConditionEquals:
+		return strings.EqualFold(releaseName, filter.Value)
+	case ConditionRegex:
+		re, err := regexp.Compile(filter.Value)
+		if err != nil {
+			return false
+		}
+		return re.MatchString(releaseName)
+	case ConditionIn:
+		values := strings.Split(filter.Value, ",")
+		for _, v := range values {
+			if strings.EqualFold(strings.TrimSpace(releaseName), strings.TrimSpace(v)) {
+				return true
+			}
+		}
+		return false
+	default:
+		return false
+	}
 }
 
 // slugify converts a name to a URL-safe slug (lowercase, spaces to hyphens).
 func slugify(name string) string {
-return strings.ToLower(strings.ReplaceAll(name, " ", "-"))
+	return strings.ToLower(strings.ReplaceAll(name, " ", "-"))
 }
 
 func archiveMovie(svc Service) http.HandlerFunc {

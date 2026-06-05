@@ -245,17 +245,17 @@ func (h *Handler) indexerStats(w http.ResponseWriter, _ *http.Request) {
 
 func (h *Handler) systemStatus(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, prowlarrSystemStatus{
-		AppName:           "Loom (Prowlarr compat)",
-		Version:           "1.0.0",
-		BuildTime:         startTime.UTC().Format("2006-01-02T15:04:05Z"),
-		IsProduction:      true,
-		IsDocker:          false,
-		Branch:            "main",
-		Authentication:    "none",
-		RuntimeVersion:    runtime.Version(),
-		RuntimeName:       "go",
-		StartTime:         startTime.UTC().Format("2006-01-02T15:04:05Z"),
-		OsName:            runtime.GOOS,
+		AppName:        "Loom (Prowlarr compat)",
+		Version:        "1.0.0",
+		BuildTime:      startTime.UTC().Format("2006-01-02T15:04:05Z"),
+		IsProduction:   true,
+		IsDocker:       false,
+		Branch:         "main",
+		Authentication: "none",
+		RuntimeVersion: runtime.Version(),
+		RuntimeName:    "go",
+		StartTime:      startTime.UTC().Format("2006-01-02T15:04:05Z"),
+		OsName:         runtime.GOOS,
 	})
 }
 

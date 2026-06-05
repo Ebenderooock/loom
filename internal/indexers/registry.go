@@ -156,8 +156,8 @@ type SearchDiagnostics struct {
 // out. Errors keyed by indexer ID never appear in Results — the two
 // maps are disjoint.
 type AggregatedResults struct {
-	Results     []Result          `json:"results"`
-	Errors      map[string]string `json:"errors"`
+	Results     []Result           `json:"results"`
+	Errors      map[string]string  `json:"errors"`
 	Diagnostics *SearchDiagnostics `json:"diagnostics,omitempty"`
 }
 
@@ -166,8 +166,8 @@ type AggregatedResults struct {
 type StreamEventType string
 
 const (
-	EventSearchStart  StreamEventType = "search-start"
-	EventIndexerStart StreamEventType = "indexer-start"
+	EventSearchStart   StreamEventType = "search-start"
+	EventIndexerStart  StreamEventType = "indexer-start"
 	EventIndexerResult StreamEventType = "indexer-result"
 	EventIndexerError  StreamEventType = "indexer-error"
 	EventDone          StreamEventType = "done"
@@ -175,18 +175,18 @@ const (
 
 // StreamEvent is a single SSE event emitted during a streaming search.
 type StreamEvent struct {
-	Type         StreamEventType `json:"type"`
-	IndexerID    string          `json:"indexer_id,omitempty"`
-	IndexerName  string          `json:"indexer_name,omitempty"`
-	Results      []Result        `json:"results,omitempty"`
-	ResultCount  int             `json:"result_count,omitempty"`
-	ElapsedMS    int64           `json:"elapsed_ms,omitempty"`
-	Error        string          `json:"error,omitempty"`
-	Status       string          `json:"status,omitempty"`
-	Indexers     []IndexerInfo   `json:"indexers,omitempty"`
-	TotalResults int             `json:"total_results,omitempty"`
-	TotalErrors  int             `json:"total_errors,omitempty"`
-	SearchDurationMS int64       `json:"search_duration_ms,omitempty"`
+	Type             StreamEventType `json:"type"`
+	IndexerID        string          `json:"indexer_id,omitempty"`
+	IndexerName      string          `json:"indexer_name,omitempty"`
+	Results          []Result        `json:"results,omitempty"`
+	ResultCount      int             `json:"result_count,omitempty"`
+	ElapsedMS        int64           `json:"elapsed_ms,omitempty"`
+	Error            string          `json:"error,omitempty"`
+	Status           string          `json:"status,omitempty"`
+	Indexers         []IndexerInfo   `json:"indexers,omitempty"`
+	TotalResults     int             `json:"total_results,omitempty"`
+	TotalErrors      int             `json:"total_errors,omitempty"`
+	SearchDurationMS int64           `json:"search_duration_ms,omitempty"`
 }
 
 // IndexerInfo is a lightweight summary of an indexer for the search-start event.

@@ -12,7 +12,7 @@ import (
 // Sonarr-compatible integer IDs. The integer is derived deterministically
 // from the first 8 hex chars of the UUID.
 type idCache struct {
-	mu      sync.RWMutex
+	mu       sync.RWMutex
 	strToInt map[string]int
 	intToStr map[int]string
 }

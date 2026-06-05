@@ -180,26 +180,30 @@ type fakeClientWithStatus struct {
 	items []Item
 }
 
-func (c *fakeClientWithStatus) ID() string           { return c.id }
-func (c *fakeClientWithStatus) Name() string         { return "Fake Client with Status" }
-func (c *fakeClientWithStatus) Kind() Kind           { return KindNull }
-func (c *fakeClientWithStatus) Protocol() Protocol   { return ProtocolTorrent }
+func (c *fakeClientWithStatus) ID() string         { return c.id }
+func (c *fakeClientWithStatus) Name() string       { return "Fake Client with Status" }
+func (c *fakeClientWithStatus) Kind() Kind         { return KindNull }
+func (c *fakeClientWithStatus) Protocol() Protocol { return ProtocolTorrent }
 func (c *fakeClientWithStatus) Add(ctx context.Context, req AddRequest) (AddResult, error) {
 	return AddResult{}, nil
 }
 func (c *fakeClientWithStatus) Status(ctx context.Context, ids ...string) ([]Item, error) {
 	return c.items, nil
 }
-func (c *fakeClientWithStatus) Pause(ctx context.Context, ids ...string) error { return nil }
+func (c *fakeClientWithStatus) Pause(ctx context.Context, ids ...string) error  { return nil }
 func (c *fakeClientWithStatus) Resume(ctx context.Context, ids ...string) error { return nil }
 func (c *fakeClientWithStatus) Remove(ctx context.Context, ids []string, deleteFiles bool) error {
 	return nil
 }
-func (c *fakeClientWithStatus) SetPriority(_ context.Context, _ Priority, _ ...string) error   { return nil }
-func (c *fakeClientWithStatus) SetSpeedLimit(_ context.Context, _ int64, _ ...string) error    { return nil }
-func (c *fakeClientWithStatus) ForceStart(_ context.Context, _ ...string) error                { return nil }
-func (c *fakeClientWithStatus) Recheck(_ context.Context, _ ...string) error                   { return nil }
-func (c *fakeClientWithStatus) Reannounce(_ context.Context, _ ...string) error                { return nil }
+func (c *fakeClientWithStatus) SetPriority(_ context.Context, _ Priority, _ ...string) error {
+	return nil
+}
+func (c *fakeClientWithStatus) SetSpeedLimit(_ context.Context, _ int64, _ ...string) error {
+	return nil
+}
+func (c *fakeClientWithStatus) ForceStart(_ context.Context, _ ...string) error    { return nil }
+func (c *fakeClientWithStatus) Recheck(_ context.Context, _ ...string) error       { return nil }
+func (c *fakeClientWithStatus) Reannounce(_ context.Context, _ ...string) error    { return nil }
 func (c *fakeClientWithStatus) Categories(ctx context.Context) ([]Category, error) { return nil, nil }
 func (c *fakeClientWithStatus) FreeSpace(ctx context.Context) (int64, error)       { return 0, nil }
-func (c *fakeClientWithStatus) Test(ctx context.Context) error                    { return nil }
+func (c *fakeClientWithStatus) Test(ctx context.Context) error                     { return nil }

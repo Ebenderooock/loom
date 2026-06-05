@@ -7,16 +7,16 @@
 // # Usage
 //
 //	client := musicbrainz.NewClient(musicbrainz.DefaultConfig())
-//	
+//
 //	// Get artist metadata by MBID
 //	artist, err := client.GetArtist(ctx, "12c6fc9b-c70d-45c0-8aab-75731bde6e56")
-//	
+//
 //	// Search for artists
 //	results, err := client.SearchArtist(ctx, "The Beatles", 0, 10)
-//	
+//
 //	// Get album/release metadata
 //	release, err := client.GetRelease(ctx, "9a2b12b4-1234-1234-1234-123456789abc")
-//	
+//
 //	// Get track/recording metadata
 //	recording, err := client.GetRecording(ctx, "abcd1234-abcd-1234-abcd-1234abcd1234")
 //

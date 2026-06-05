@@ -28,9 +28,9 @@ func newFake(id string) *fakeClient {
 	return &fakeClient{id: id, name: id, protocol: downloads.ProtocolTorrent, freeSpace: 1024}
 }
 
-func (f *fakeClient) ID() string                 { return f.id }
-func (f *fakeClient) Name() string               { return f.name }
-func (f *fakeClient) Kind() downloads.Kind       { return downloads.KindNull }
+func (f *fakeClient) ID() string                   { return f.id }
+func (f *fakeClient) Name() string                 { return f.name }
+func (f *fakeClient) Kind() downloads.Kind         { return downloads.KindNull }
 func (f *fakeClient) Protocol() downloads.Protocol { return f.protocol }
 
 func (f *fakeClient) Add(_ context.Context, _ downloads.AddRequest) (downloads.AddResult, error) {
@@ -44,11 +44,13 @@ func (f *fakeClient) Resume(_ context.Context, _ ...string) error { return nil }
 func (f *fakeClient) Remove(_ context.Context, _ []string, _ bool) error {
 	return nil
 }
-func (f *fakeClient) SetPriority(_ context.Context, _ downloads.Priority, _ ...string) error   { return nil }
-func (f *fakeClient) SetSpeedLimit(_ context.Context, _ int64, _ ...string) error              { return nil }
-func (f *fakeClient) ForceStart(_ context.Context, _ ...string) error                          { return nil }
-func (f *fakeClient) Recheck(_ context.Context, _ ...string) error                             { return nil }
-func (f *fakeClient) Reannounce(_ context.Context, _ ...string) error                          { return nil }
+func (f *fakeClient) SetPriority(_ context.Context, _ downloads.Priority, _ ...string) error {
+	return nil
+}
+func (f *fakeClient) SetSpeedLimit(_ context.Context, _ int64, _ ...string) error { return nil }
+func (f *fakeClient) ForceStart(_ context.Context, _ ...string) error             { return nil }
+func (f *fakeClient) Recheck(_ context.Context, _ ...string) error                { return nil }
+func (f *fakeClient) Reannounce(_ context.Context, _ ...string) error             { return nil }
 func (f *fakeClient) Categories(_ context.Context) ([]downloads.Category, error) {
 	return f.cats, nil
 }

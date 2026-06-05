@@ -9,9 +9,9 @@ import (
 type ImportMode string
 
 const (
-	ImportModeMove        ImportMode = "move"
-	ImportModeCopy        ImportMode = "copy"
-	ImportModeHardlink    ImportMode = "hardlink"
+	ImportModeMove         ImportMode = "move"
+	ImportModeCopy         ImportMode = "copy"
+	ImportModeHardlink     ImportMode = "hardlink"
 	ImportModeHardlinkOnly ImportMode = "hardlink_only"
 )
 

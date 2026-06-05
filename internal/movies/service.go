@@ -86,8 +86,8 @@ type service struct {
 
 // cacheEntry holds a cached movie with expiry time.
 type cacheEntry struct {
-	value   *Movie
-	expiry  time.Time
+	value  *Movie
+	expiry time.Time
 }
 
 // NewService creates a new Service instance with in-memory caching.
@@ -704,25 +704,25 @@ func (s *service) validateQualityProfile(qp *QualityProfile) error {
 
 // AddCustomFormat adds a new custom format using the custom format service.
 func (s *service) AddCustomFormat(ctx context.Context, cf *CustomFormat) error {
-return s.cfSvc.AddCustomFormat(ctx, cf)
+	return s.cfSvc.AddCustomFormat(ctx, cf)
 }
 
 // GetCustomFormat retrieves a custom format using the custom format service.
 func (s *service) GetCustomFormat(ctx context.Context, id string) (*CustomFormat, error) {
-return s.cfSvc.GetCustomFormat(ctx, id)
+	return s.cfSvc.GetCustomFormat(ctx, id)
 }
 
 // UpdateCustomFormat updates a custom format using the custom format service.
 func (s *service) UpdateCustomFormat(ctx context.Context, cf *CustomFormat) error {
-return s.cfSvc.UpdateCustomFormat(ctx, cf)
+	return s.cfSvc.UpdateCustomFormat(ctx, cf)
 }
 
 // DeleteCustomFormat deletes a custom format using the custom format service.
 func (s *service) DeleteCustomFormat(ctx context.Context, id string) error {
-return s.cfSvc.DeleteCustomFormat(ctx, id)
+	return s.cfSvc.DeleteCustomFormat(ctx, id)
 }
 
 // ListCustomFormats lists all custom formats using the custom format service.
 func (s *service) ListCustomFormats(ctx context.Context) ([]*CustomFormat, error) {
-return s.cfSvc.ListCustomFormats(ctx)
+	return s.cfSvc.ListCustomFormats(ctx)
 }

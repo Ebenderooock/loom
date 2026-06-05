@@ -714,12 +714,12 @@ func (s *service) fetchAndStoreEpisodes(ctx context.Context, tmdbID string, seas
 
 	var seasonData struct {
 		Episodes []struct {
-			EpisodeNumber int     `json:"episode_number"`
-			Name          string  `json:"name"`
-			Overview      string  `json:"overview"`
-			AirDate       string  `json:"air_date"`
-			Runtime       int     `json:"runtime"`
-			StillPath     string  `json:"still_path"`
+			EpisodeNumber int    `json:"episode_number"`
+			Name          string `json:"name"`
+			Overview      string `json:"overview"`
+			AirDate       string `json:"air_date"`
+			Runtime       int    `json:"runtime"`
+			StillPath     string `json:"still_path"`
 		} `json:"episodes"`
 	}
 	if err := json.Unmarshal(body, &seasonData); err != nil {

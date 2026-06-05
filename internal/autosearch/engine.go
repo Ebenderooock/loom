@@ -444,8 +444,8 @@ func (e *Engine) searchAndGrabSingle(ctx context.Context, req SearchRequest) (*S
 
 	// Build lookup: quality def ID → position in profile (tier).
 	// Lower tier = higher quality = better.
-	allowedMap := make(map[string]int)    // quality def ID → tier index
-	allowedDefs := make(map[string]bool)   // quality def ID → is allowed
+	allowedMap := make(map[string]int)   // quality def ID → tier index
+	allowedDefs := make(map[string]bool) // quality def ID → is allowed
 	for i, item := range items {
 		if item.Allowed {
 			allowedMap[item.ID] = i

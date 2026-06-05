@@ -35,17 +35,17 @@ const (
 
 // EpisodeMapping maps an episode from one ordering scheme to another.
 type EpisodeMapping struct {
-	ID           string       `json:"id"`
-	SeriesID     string       `json:"seriesId"`
-	OrderingType OrderingType `json:"orderingType"`
-	SeasonFrom   *int         `json:"seasonFrom,omitempty"`
-	EpisodeFrom  *int         `json:"episodeFrom,omitempty"`
-	AbsoluteFrom *int         `json:"absoluteFrom,omitempty"`
-	SeasonTo     *int         `json:"seasonTo,omitempty"`
-	EpisodeTo    *int         `json:"episodeTo,omitempty"`
-	AbsoluteTo   *int         `json:"absoluteTo,omitempty"`
+	ID           string        `json:"id"`
+	SeriesID     string        `json:"seriesId"`
+	OrderingType OrderingType  `json:"orderingType"`
+	SeasonFrom   *int          `json:"seasonFrom,omitempty"`
+	EpisodeFrom  *int          `json:"episodeFrom,omitempty"`
+	AbsoluteFrom *int          `json:"absoluteFrom,omitempty"`
+	SeasonTo     *int          `json:"seasonTo,omitempty"`
+	EpisodeTo    *int          `json:"episodeTo,omitempty"`
+	AbsoluteTo   *int          `json:"absoluteTo,omitempty"`
 	Source       MappingSource `json:"source"`
-	CreatedAt    time.Time    `json:"createdAt"`
+	CreatedAt    time.Time     `json:"createdAt"`
 }
 
 // CreateMappingRequest is the JSON body for creating a mapping.

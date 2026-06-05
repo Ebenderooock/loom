@@ -64,12 +64,12 @@ type StatusUpdate struct {
 
 // TierDetail captures what happened at each query tier.
 type TierDetail struct {
-	TierIndex    int           `json:"tier_index"`
-	Queries      []QueryDetail `json:"queries"`
-	ResultCount  int           `json:"result_count"`
-	AcceptedCount int          `json:"accepted_count"`
-	RejectedCount int          `json:"rejected_count"`
-	StoppedHere  bool          `json:"stopped_here"`
+	TierIndex     int           `json:"tier_index"`
+	Queries       []QueryDetail `json:"queries"`
+	ResultCount   int           `json:"result_count"`
+	AcceptedCount int           `json:"accepted_count"`
+	RejectedCount int           `json:"rejected_count"`
+	StoppedHere   bool          `json:"stopped_here"`
 }
 
 // QueryDetail is a sanitized version of an indexer query.

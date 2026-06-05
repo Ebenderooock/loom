@@ -66,8 +66,8 @@ type OrchestratorOpts struct {
 	Engine         *Engine
 	Logger         *slog.Logger
 	ImportFn       ImportFunc
-	CleanupFn      CleanupFunc      // optional; if nil, cleanup phase is skipped
-	MediaRefreshFn MediaRefreshFunc // optional; if nil, media refresh is skipped
+	CleanupFn      CleanupFunc            // optional; if nil, cleanup phase is skipped
+	MediaRefreshFn MediaRefreshFunc       // optional; if nil, media refresh is skipped
 	DownloadStatus DownloadStatusProvider // optional, for startup reconciliation
 }
 
@@ -89,7 +89,7 @@ type Orchestrator struct {
 	importSem chan struct{}
 
 	// Progress coalescing: buffered updates flushed on tick.
-	progressMu sync.Mutex
+	progressMu  sync.Mutex
 	progressBuf map[string]*CmdDownloadProgress // key: clientID:downloadID
 }
 
@@ -267,9 +267,9 @@ func (o *Orchestrator) handleSearchStarted(ctx context.Context, cmd CmdSearchSta
 	}
 
 	o.logEvent(ctx, wf.ID, EventSearchStarted, "Search initiated", map[string]any{
-		"type":              cmd.WfType,
-		"media_type":        cmd.MediaType,
-		"media_ids":         cmd.MediaIDs,
+		"type":               cmd.WfType,
+		"media_type":         cmd.MediaType,
+		"media_ids":          cmd.MediaIDs,
 		"quality_profile_id": cmd.QualityProfileID,
 	})
 
@@ -402,9 +402,9 @@ func (o *Orchestrator) handleDownloadComplete(ctx context.Context, cmd CmdDownlo
 	}
 
 	o.logEvent(ctx, wf.ID, EventPostDownloadStart, "Post-download phase started", map[string]any{
-		"settling_delay_sec":     policy.SettlingDelay,
-		"seed_ratio_limit":      policy.SeedRatioLimit,
-		"seed_time_limit_min":   policy.SeedTimeLimitMinutes,
+		"settling_delay_sec":  policy.SettlingDelay,
+		"seed_ratio_limit":    policy.SeedRatioLimit,
+		"seed_time_limit_min": policy.SeedTimeLimitMinutes,
 	})
 }
 

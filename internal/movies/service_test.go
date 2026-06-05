@@ -11,15 +11,15 @@ import (
 // ── Mock Repository ──────────────────────────────────────────────────
 
 type mockRepo struct {
-	movies            map[string]*Movie
-	movieFiles        map[string][]*MovieFile
-	qualityDefs       map[string]*QualityDefinition
-	qualityProfiles   map[string]*QualityProfile
-	customFormats     map[string]*CustomFormat
-	searchResults     []*Movie
-	addMovieErr       error
-	updateMovieErr    error
-	deleteMovieErr    error
+	movies          map[string]*Movie
+	movieFiles      map[string][]*MovieFile
+	qualityDefs     map[string]*QualityDefinition
+	qualityProfiles map[string]*QualityProfile
+	customFormats   map[string]*CustomFormat
+	searchResults   []*Movie
+	addMovieErr     error
+	updateMovieErr  error
+	deleteMovieErr  error
 }
 
 func newMockRepo() *mockRepo {
@@ -102,8 +102,8 @@ func (r *mockRepo) AddMovieFile(_ context.Context, mf *MovieFile) error {
 	return nil
 }
 func (r *mockRepo) GetMovieFile(_ context.Context, id string) (*MovieFile, error) { return nil, nil }
-func (r *mockRepo) UpdateMovieFile(_ context.Context, _ *MovieFile) error        { return nil }
-func (r *mockRepo) DeleteMovieFile(_ context.Context, _ string) error            { return nil }
+func (r *mockRepo) UpdateMovieFile(_ context.Context, _ *MovieFile) error         { return nil }
+func (r *mockRepo) DeleteMovieFile(_ context.Context, _ string) error             { return nil }
 func (r *mockRepo) ListMovieFilesByMovie(_ context.Context, movieID string) ([]*MovieFile, error) {
 	return r.movieFiles[movieID], nil
 }
@@ -248,9 +248,9 @@ func TestListMovies_ClampLimits(t *testing.T) {
 	svc := NewService(repo)
 
 	tests := []struct {
-		name       string
-		limit      int
-		wantClamp  int
+		name      string
+		limit     int
+		wantClamp int
 	}{
 		{"negative limit defaults to 25", -5, 25},
 		{"zero limit defaults to 25", 0, 25},
@@ -613,10 +613,10 @@ func TestRefreshMovie_Success(t *testing.T) {
 
 	meta := &mockMetadata{
 		tmdbResult: &metadata.MovieMetadata{
-			Title:   "Fight Club",
-			Year:    1999,
+			Title:    "Fight Club",
+			Year:     1999,
 			Overview: "Updated overview",
-			Rating:  8.4,
+			Rating:   8.4,
 		},
 	}
 	svc := NewService(repo, WithMetadata(meta))

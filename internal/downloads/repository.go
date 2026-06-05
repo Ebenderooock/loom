@@ -610,5 +610,3 @@ func decodeCategories(raw []byte) ([]Category, error) {
 	}
 	return out, nil
 }
-
-

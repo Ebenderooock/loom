@@ -6,31 +6,31 @@ import "time"
 
 // sonarrSeries is the Sonarr v3 JSON shape for a series.
 type sonarrSeries struct {
-	ID               int               `json:"id"`
-	Title            string            `json:"title"`
-	SortTitle        string            `json:"sortTitle"`
-	Year             int               `json:"year"`
-	TvdbID           int               `json:"tvdbId"`
-	ImdbID           string            `json:"imdbId"`
-	TvMazeID         int               `json:"tvMazeId"`
-	Overview         string            `json:"overview"`
-	Network          string            `json:"network,omitempty"`
-	Runtime          int               `json:"runtime"`
-	Monitored        bool              `json:"monitored"`
-	QualityProfileID int               `json:"qualityProfileId"`
+	ID                int              `json:"id"`
+	Title             string           `json:"title"`
+	SortTitle         string           `json:"sortTitle"`
+	Year              int              `json:"year"`
+	TvdbID            int              `json:"tvdbId"`
+	ImdbID            string           `json:"imdbId"`
+	TvMazeID          int              `json:"tvMazeId"`
+	Overview          string           `json:"overview"`
+	Network           string           `json:"network,omitempty"`
+	Runtime           int              `json:"runtime"`
+	Monitored         bool             `json:"monitored"`
+	QualityProfileID  int              `json:"qualityProfileId"`
 	LanguageProfileID int              `json:"languageProfileId"`
-	RootFolderPath   string            `json:"rootFolderPath"`
-	Path             string            `json:"path"`
-	Added            string            `json:"added"`
-	Status           string            `json:"status"`
-	SeriesType       string            `json:"seriesType"`
-	SeasonFolder     bool              `json:"seasonFolder"`
-	Genres           []string          `json:"genres"`
-	Tags             []int             `json:"tags"`
-	Seasons          []sonarrSeason    `json:"seasons"`
-	Images           []sonarrImage     `json:"images"`
-	Ratings          sonarrRatings     `json:"ratings"`
-	Statistics       sonarrStatistics  `json:"statistics"`
+	RootFolderPath    string           `json:"rootFolderPath"`
+	Path              string           `json:"path"`
+	Added             string           `json:"added"`
+	Status            string           `json:"status"`
+	SeriesType        string           `json:"seriesType"`
+	SeasonFolder      bool             `json:"seasonFolder"`
+	Genres            []string         `json:"genres"`
+	Tags              []int            `json:"tags"`
+	Seasons           []sonarrSeason   `json:"seasons"`
+	Images            []sonarrImage    `json:"images"`
+	Ratings           sonarrRatings    `json:"ratings"`
+	Statistics        sonarrStatistics `json:"statistics"`
 }
 
 // sonarrSeason is a season entry inside a Sonarr series response.
@@ -75,10 +75,10 @@ type sonarrEpisode struct {
 
 // sonarrRootFolder is the Sonarr v3 JSON shape for a root folder.
 type sonarrRootFolder struct {
-	ID        int    `json:"id"`
-	Path      string `json:"path"`
-	Accessible bool  `json:"accessible"`
-	FreeSpace int64  `json:"freeSpace"`
+	ID         int    `json:"id"`
+	Path       string `json:"path"`
+	Accessible bool   `json:"accessible"`
+	FreeSpace  int64  `json:"freeSpace"`
 }
 
 // sonarrQualityProfile is the Sonarr v3 JSON shape for a quality profile.
@@ -89,10 +89,10 @@ type sonarrQualityProfile struct {
 
 // sonarrCommand is the Sonarr v3 JSON shape for a command response.
 type sonarrCommand struct {
-	ID        int    `json:"id"`
-	Name      string `json:"name"`
-	Status    string `json:"status"`
-	StartedOn string `json:"startedOn"`
+	ID              int    `json:"id"`
+	Name            string `json:"name"`
+	Status          string `json:"status"`
+	StartedOn       string `json:"startedOn"`
 	StateChangeTime string `json:"stateChangeTime"`
 }
 
@@ -116,11 +116,11 @@ type sonarrSystemStatus struct {
 
 // sonarrLanguageProfile is the Sonarr v3 JSON shape for a language profile.
 type sonarrLanguageProfile struct {
-	ID              int                `json:"id"`
-	Name            string             `json:"name"`
-	UpgradeAllowed  bool               `json:"upgradeAllowed"`
-	Cutoff          sonarrLanguage     `json:"cutoff"`
-	Languages       []sonarrLangItem   `json:"languages"`
+	ID             int              `json:"id"`
+	Name           string           `json:"name"`
+	UpgradeAllowed bool             `json:"upgradeAllowed"`
+	Cutoff         sonarrLanguage   `json:"cutoff"`
+	Languages      []sonarrLangItem `json:"languages"`
 }
 
 // sonarrLangItem is a single language entry in a language profile.
@@ -137,16 +137,16 @@ type sonarrLanguage struct {
 
 // sonarrAddSeriesRequest is the expected JSON body for POST /api/v3/series.
 type sonarrAddSeriesRequest struct {
-	Title            string         `json:"title"`
-	TvdbID           int            `json:"tvdbId"`
-	QualityProfileID int            `json:"qualityProfileId"`
-	LanguageProfileID int           `json:"languageProfileId"`
-	RootFolderPath   string         `json:"rootFolderPath"`
-	Monitored        bool           `json:"monitored"`
-	SeriesType       string         `json:"seriesType"`
-	SeasonFolder     *bool          `json:"seasonFolder,omitempty"`
-	Seasons          []sonarrSeason `json:"seasons,omitempty"`
-	AddOptions       *struct {
+	Title             string         `json:"title"`
+	TvdbID            int            `json:"tvdbId"`
+	QualityProfileID  int            `json:"qualityProfileId"`
+	LanguageProfileID int            `json:"languageProfileId"`
+	RootFolderPath    string         `json:"rootFolderPath"`
+	Monitored         bool           `json:"monitored"`
+	SeriesType        string         `json:"seriesType"`
+	SeasonFolder      *bool          `json:"seasonFolder,omitempty"`
+	Seasons           []sonarrSeason `json:"seasons,omitempty"`
+	AddOptions        *struct {
 		SearchForMissingEpisodes bool `json:"searchForMissingEpisodes"`
 	} `json:"addOptions,omitempty"`
 }

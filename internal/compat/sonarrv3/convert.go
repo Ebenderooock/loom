@@ -182,15 +182,15 @@ func tmdbResultToSonarr(m map[string]interface{}) map[string]interface{} {
 	}
 
 	return map[string]interface{}{
-		"title":    title,
+		"title":     title,
 		"sortTitle": strings.ToLower(title),
-		"year":     year,
-		"tvdbId":   tvdbID,
-		"tmdbId":   tmdbID,
-		"overview": overview,
-		"images":   images,
-		"seasons":  []sonarrSeason{},
-		"ratings":  sonarrRatings{},
-		"status":   "continuing",
+		"year":      year,
+		"tvdbId":    tvdbID,
+		"tmdbId":    tmdbID,
+		"overview":  overview,
+		"images":    images,
+		"seasons":   []sonarrSeason{},
+		"ratings":   sonarrRatings{},
+		"status":    "continuing",
 	}
 }

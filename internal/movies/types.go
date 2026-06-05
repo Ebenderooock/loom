@@ -21,10 +21,10 @@ const (
 type MovieStatus string
 
 const (
-	MovieStatusMissing              MovieStatus = "missing"
-	MovieStatusUnreleased           MovieStatus = "unreleased"
-	MovieStatusDownloading          MovieStatus = "downloading"
-	MovieStatusStoring              MovieStatus = "storing"
+	MovieStatusMissing                MovieStatus = "missing"
+	MovieStatusUnreleased             MovieStatus = "unreleased"
+	MovieStatusDownloading            MovieStatus = "downloading"
+	MovieStatusStoring                MovieStatus = "storing"
 	MovieStatusAvailableWrongQuality  MovieStatus = "available_wrong_quality"
 	MovieStatusAvailableRightQuality  MovieStatus = "available_right_quality"
 	MovieStatusAvailableHigherQuality MovieStatus = "available_higher_quality"
@@ -32,44 +32,44 @@ const (
 
 // Movie represents a movie in the library.
 type Movie struct {
-	ID                 string            `json:"id"`
-	Title              string            `json:"title"`
-	Year               int               `json:"year,omitempty"`
-	IMDBID             *string           `json:"imdb_id,omitempty"`
-	TMDBID             *string           `json:"tmdb_id,omitempty"`
-	TVDBID             *string           `json:"tvdb_id,omitempty"`
-	Overview           string            `json:"overview,omitempty"`
-	Genres             []string          `json:"genres,omitempty"`
-	Runtime            int               `json:"runtime,omitempty"`
-	Rating             float64           `json:"rating,omitempty"`
-	BackdropPath       string            `json:"backdrop_path,omitempty"`
-	PosterPath         string            `json:"poster_path,omitempty"`
-	MetadataProvider   string            `json:"metadata_provider,omitempty"`
-	QualityProfileID   string            `json:"quality_profile_id,omitempty"`
-	LibraryID          string            `json:"library_id,omitempty"`
-	Status             MovieStatus       `json:"status"`
-	ReleaseDate        string            `json:"release_date,omitempty"`
-	LastSearchAt       *time.Time        `json:"last_search_at,omitempty"`
-	MonitoringStatus   MonitoringStatus  `json:"monitoring_status"`
-	CreatedAt          time.Time         `json:"created_at"`
-	UpdatedAt          time.Time         `json:"updated_at"`
-	DeletedAt          *time.Time        `json:"deleted_at,omitempty"`
+	ID               string           `json:"id"`
+	Title            string           `json:"title"`
+	Year             int              `json:"year,omitempty"`
+	IMDBID           *string          `json:"imdb_id,omitempty"`
+	TMDBID           *string          `json:"tmdb_id,omitempty"`
+	TVDBID           *string          `json:"tvdb_id,omitempty"`
+	Overview         string           `json:"overview,omitempty"`
+	Genres           []string         `json:"genres,omitempty"`
+	Runtime          int              `json:"runtime,omitempty"`
+	Rating           float64          `json:"rating,omitempty"`
+	BackdropPath     string           `json:"backdrop_path,omitempty"`
+	PosterPath       string           `json:"poster_path,omitempty"`
+	MetadataProvider string           `json:"metadata_provider,omitempty"`
+	QualityProfileID string           `json:"quality_profile_id,omitempty"`
+	LibraryID        string           `json:"library_id,omitempty"`
+	Status           MovieStatus      `json:"status"`
+	ReleaseDate      string           `json:"release_date,omitempty"`
+	LastSearchAt     *time.Time       `json:"last_search_at,omitempty"`
+	MonitoringStatus MonitoringStatus `json:"monitoring_status"`
+	CreatedAt        time.Time        `json:"created_at"`
+	UpdatedAt        time.Time        `json:"updated_at"`
+	DeletedAt        *time.Time       `json:"deleted_at,omitempty"`
 }
 
 // MovieFile represents a single file on disk associated with a movie.
 type MovieFile struct {
-	ID          string                 `json:"id"`
-	MovieID     string                 `json:"movie_id"`
-	FilePath    string                 `json:"file_path"`
-	Size        int64                  `json:"size"`
-	Quality     string                 `json:"quality,omitempty"`
-	Format      string                 `json:"format,omitempty"`
-	MediaInfo   map[string]interface{} `json:"media_info,omitempty"`
-	FileDate    *time.Time             `json:"file_date,omitempty"`
-	DateAdded   time.Time              `json:"date_added"`
-	CreatedAt   time.Time              `json:"created_at"`
-	UpdatedAt   time.Time              `json:"updated_at"`
-	DeletedAt   *time.Time             `json:"deleted_at,omitempty"`
+	ID        string                 `json:"id"`
+	MovieID   string                 `json:"movie_id"`
+	FilePath  string                 `json:"file_path"`
+	Size      int64                  `json:"size"`
+	Quality   string                 `json:"quality,omitempty"`
+	Format    string                 `json:"format,omitempty"`
+	MediaInfo map[string]interface{} `json:"media_info,omitempty"`
+	FileDate  *time.Time             `json:"file_date,omitempty"`
+	DateAdded time.Time              `json:"date_added"`
+	CreatedAt time.Time              `json:"created_at"`
+	UpdatedAt time.Time              `json:"updated_at"`
+	DeletedAt *time.Time             `json:"deleted_at,omitempty"`
 }
 
 // StringSlice is a JSON-marshaled string slice for database storage.
@@ -119,38 +119,38 @@ func (m *MediaInfoMap) Scan(value interface{}) error {
 
 // CreateMovieRequest is the payload for adding a movie.
 type CreateMovieRequest struct {
-	Title            string       `json:"title"`
-	Year             int          `json:"year,omitempty"`
-	IMDBID           *string      `json:"imdb_id,omitempty"`
-	TMDBID           *string      `json:"tmdb_id,omitempty"`
-	TVDBID           *string      `json:"tvdb_id,omitempty"`
-	Overview         string       `json:"overview,omitempty"`
-	Genres           []string     `json:"genres,omitempty"`
-	Runtime          int          `json:"runtime,omitempty"`
-	Rating           float64      `json:"rating,omitempty"`
-	BackdropPath     string       `json:"backdrop_path,omitempty"`
-	PosterPath       string       `json:"poster_path,omitempty"`
-	MetadataProvider string       `json:"metadata_provider,omitempty"`
-	QualityProfileID string       `json:"quality_profile_id"`
-	LibraryID        string       `json:"library_id"`
-	ReleaseDate      string       `json:"release_date,omitempty"`
-	MonitoringStatus *string      `json:"monitoring_status,omitempty"`
-	Search           bool         `json:"search,omitempty"`
+	Title            string   `json:"title"`
+	Year             int      `json:"year,omitempty"`
+	IMDBID           *string  `json:"imdb_id,omitempty"`
+	TMDBID           *string  `json:"tmdb_id,omitempty"`
+	TVDBID           *string  `json:"tvdb_id,omitempty"`
+	Overview         string   `json:"overview,omitempty"`
+	Genres           []string `json:"genres,omitempty"`
+	Runtime          int      `json:"runtime,omitempty"`
+	Rating           float64  `json:"rating,omitempty"`
+	BackdropPath     string   `json:"backdrop_path,omitempty"`
+	PosterPath       string   `json:"poster_path,omitempty"`
+	MetadataProvider string   `json:"metadata_provider,omitempty"`
+	QualityProfileID string   `json:"quality_profile_id"`
+	LibraryID        string   `json:"library_id"`
+	ReleaseDate      string   `json:"release_date,omitempty"`
+	MonitoringStatus *string  `json:"monitoring_status,omitempty"`
+	Search           bool     `json:"search,omitempty"`
 }
 
 // UpdateMovieRequest is the payload for updating a movie.
 type UpdateMovieRequest struct {
-	Title            *string      `json:"title,omitempty"`
-	Year             *int         `json:"year,omitempty"`
-	Overview         *string      `json:"overview,omitempty"`
-	Genres           []string     `json:"genres,omitempty"`
-	Runtime          *int         `json:"runtime,omitempty"`
-	Rating           *float64     `json:"rating,omitempty"`
-	BackdropPath     *string      `json:"backdrop_path,omitempty"`
-	PosterPath       *string      `json:"poster_path,omitempty"`
-	MonitoringStatus *string      `json:"monitoring_status,omitempty"`
-	QualityProfileID *string      `json:"quality_profile_id,omitempty"`
-	LibraryID        *string      `json:"library_id,omitempty"`
+	Title            *string  `json:"title,omitempty"`
+	Year             *int     `json:"year,omitempty"`
+	Overview         *string  `json:"overview,omitempty"`
+	Genres           []string `json:"genres,omitempty"`
+	Runtime          *int     `json:"runtime,omitempty"`
+	Rating           *float64 `json:"rating,omitempty"`
+	BackdropPath     *string  `json:"backdrop_path,omitempty"`
+	PosterPath       *string  `json:"poster_path,omitempty"`
+	MonitoringStatus *string  `json:"monitoring_status,omitempty"`
+	QualityProfileID *string  `json:"quality_profile_id,omitempty"`
+	LibraryID        *string  `json:"library_id,omitempty"`
 }
 
 // ListMoviesFilter is used to filter the movies list.
@@ -181,9 +181,9 @@ type SetMonitoringStatusRequest struct {
 
 // MovieAddedEvent is emitted when a movie is added to the library.
 type MovieAddedEvent struct {
-	MovieID   string    `json:"movie_id"`
-	Title     string    `json:"title"`
-	AddedAt   time.Time `json:"added_at"`
+	MovieID string    `json:"movie_id"`
+	Title   string    `json:"title"`
+	AddedAt time.Time `json:"added_at"`
 }
 
 // Topic returns the event topic.
@@ -191,9 +191,9 @@ func (e *MovieAddedEvent) Topic() string { return TopicMovieAdded }
 
 // MovieUpdatedEvent is emitted when a movie is updated.
 type MovieUpdatedEvent struct {
-	MovieID    string    `json:"movie_id"`
-	FieldsSet  []string  `json:"fields_set"`
-	UpdatedAt  time.Time `json:"updated_at"`
+	MovieID   string    `json:"movie_id"`
+	FieldsSet []string  `json:"fields_set"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 // Topic returns the event topic.
@@ -210,7 +210,7 @@ func (e *MovieDeletedEvent) Topic() string { return TopicMovieDeleted }
 
 // MonitoringChangedEvent is emitted when monitoring status changes.
 type MonitoringChangedEvent struct {
-	MovieID  string           `json:"movie_id"`
+	MovieID   string           `json:"movie_id"`
 	OldStatus MonitoringStatus `json:"old_status"`
 	NewStatus MonitoringStatus `json:"new_status"`
 	ChangedAt time.Time        `json:"changed_at"`
@@ -234,19 +234,19 @@ const DefaultRuntimeMinutes = 120
 
 // QualityDefinition represents a single quality tier (resolution, source, codec).
 type QualityDefinition struct {
-	ID           string    `json:"id"`
-	Name         string    `json:"name"`
-	Title        string    `json:"title,omitempty"`
-	Source       string    `json:"source"`        // e.g., "BluRay", "HDTV", "WebRip"
-	Resolution   string    `json:"resolution"`    // e.g., "1080p", "720p", "2160p"
-	Modifier     string    `json:"modifier,omitempty"` // e.g., "REMUX", "PROPER"
-	SizeMode     string    `json:"size_mode"`     // "absolute" or "per_minute"
-	MinFileSize  int64     `json:"min_file_size,omitempty"` // bytes (absolute) or MB/min (per_minute)
-	MaxFileSize  int64     `json:"max_file_size,omitempty"` // bytes (absolute) or MB/min (per_minute); 0 = unlimited
-	PreferredAt  int       `json:"preferred_at"`  // order preference (lower = better)
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
-	DeletedAt    *time.Time `json:"deleted_at,omitempty"`
+	ID          string     `json:"id"`
+	Name        string     `json:"name"`
+	Title       string     `json:"title,omitempty"`
+	Source      string     `json:"source"`                  // e.g., "BluRay", "HDTV", "WebRip"
+	Resolution  string     `json:"resolution"`              // e.g., "1080p", "720p", "2160p"
+	Modifier    string     `json:"modifier,omitempty"`      // e.g., "REMUX", "PROPER"
+	SizeMode    string     `json:"size_mode"`               // "absolute" or "per_minute"
+	MinFileSize int64      `json:"min_file_size,omitempty"` // bytes (absolute) or MB/min (per_minute)
+	MaxFileSize int64      `json:"max_file_size,omitempty"` // bytes (absolute) or MB/min (per_minute); 0 = unlimited
+	PreferredAt int        `json:"preferred_at"`            // order preference (lower = better)
+	CreatedAt   time.Time  `json:"created_at"`
+	UpdatedAt   time.Time  `json:"updated_at"`
+	DeletedAt   *time.Time `json:"deleted_at,omitempty"`
 }
 
 // EffectiveSizeLimits returns the min/max size in bytes for a given
@@ -270,39 +270,39 @@ func (qd *QualityDefinition) EffectiveSizeLimits(runtimeMinutes int) (minBytes, 
 
 // QualityProfileItem represents a quality within a quality profile.
 type QualityProfileItem struct {
-	ID       string `json:"id"`
-	Name     string `json:"name"`
+	ID        string `json:"id"`
+	Name      string `json:"name"`
 	Preferred bool   `json:"preferred"`
-	Allowed  bool   `json:"allowed"`
+	Allowed   bool   `json:"allowed"`
 }
 
 // QualityProfile represents a named collection of quality tiers with preferences.
 type QualityProfile struct {
-	ID                string                  `json:"id"`
-	Name              string                  `json:"name"`
-	UpgradeAllowed    bool                    `json:"upgrade_allowed"`
-	Cutoff            string                  `json:"cutoff"`                   // quality definition ID
-	Language          string                  `json:"language,omitempty"`        // ISO 639-1 code
-	FormatItems       []CustomFormatScore     `json:"format_items,omitempty"`   // custom format scores
-	Items             []QualityProfileItem    `json:"items"`                    // quality definitions
-	MinFormatScore    int                     `json:"min_format_score,omitempty"`
-	CutoffFormatScore int                     `json:"cutoff_format_score,omitempty"`
-	CreatedAt         time.Time               `json:"created_at"`
-	UpdatedAt         time.Time               `json:"updated_at"`
-	DeletedAt         *time.Time              `json:"deleted_at,omitempty"`
+	ID                string               `json:"id"`
+	Name              string               `json:"name"`
+	UpgradeAllowed    bool                 `json:"upgrade_allowed"`
+	Cutoff            string               `json:"cutoff"`                 // quality definition ID
+	Language          string               `json:"language,omitempty"`     // ISO 639-1 code
+	FormatItems       []CustomFormatScore  `json:"format_items,omitempty"` // custom format scores
+	Items             []QualityProfileItem `json:"items"`                  // quality definitions
+	MinFormatScore    int                  `json:"min_format_score,omitempty"`
+	CutoffFormatScore int                  `json:"cutoff_format_score,omitempty"`
+	CreatedAt         time.Time            `json:"created_at"`
+	UpdatedAt         time.Time            `json:"updated_at"`
+	DeletedAt         *time.Time           `json:"deleted_at,omitempty"`
 }
 
 // CreateQualityDefinitionRequest is the payload for adding a quality definition.
 type CreateQualityDefinitionRequest struct {
-	Name         string `json:"name"`
-	Title        string `json:"title,omitempty"`
-	Source       string `json:"source"`
-	Resolution   string `json:"resolution"`
-	Modifier     string `json:"modifier,omitempty"`
-	SizeMode     string `json:"size_mode,omitempty"`    // "absolute" (default) or "per_minute"
-	MinFileSize  int64  `json:"min_file_size,omitempty"`
-	MaxFileSize  int64  `json:"max_file_size,omitempty"`
-	PreferredAt  int    `json:"preferred_at,omitempty"`
+	Name        string `json:"name"`
+	Title       string `json:"title,omitempty"`
+	Source      string `json:"source"`
+	Resolution  string `json:"resolution"`
+	Modifier    string `json:"modifier,omitempty"`
+	SizeMode    string `json:"size_mode,omitempty"` // "absolute" (default) or "per_minute"
+	MinFileSize int64  `json:"min_file_size,omitempty"`
+	MaxFileSize int64  `json:"max_file_size,omitempty"`
+	PreferredAt int    `json:"preferred_at,omitempty"`
 }
 
 // UpdateQualityDefinitionRequest is the payload for updating a quality definition.
@@ -320,24 +320,24 @@ type UpdateQualityDefinitionRequest struct {
 
 // CreateQualityProfileRequest is the payload for adding a quality profile.
 type CreateQualityProfileRequest struct {
-	Name               string                   `json:"name"`
-	UpgradeAllowed     bool                     `json:"upgrade_allowed"`
-	Cutoff             string                   `json:"cutoff"`
-	Language           string                   `json:"language,omitempty"`
-	Items              []QualityProfileItem     `json:"items"`
-	MinFormatScore     int                      `json:"min_format_score,omitempty"`
-	CutoffFormatScore  int                      `json:"cutoff_format_score,omitempty"`
+	Name              string               `json:"name"`
+	UpgradeAllowed    bool                 `json:"upgrade_allowed"`
+	Cutoff            string               `json:"cutoff"`
+	Language          string               `json:"language,omitempty"`
+	Items             []QualityProfileItem `json:"items"`
+	MinFormatScore    int                  `json:"min_format_score,omitempty"`
+	CutoffFormatScore int                  `json:"cutoff_format_score,omitempty"`
 }
 
 // UpdateQualityProfileRequest is the payload for updating a quality profile.
 type UpdateQualityProfileRequest struct {
-	Name               *string                  `json:"name,omitempty"`
-	UpgradeAllowed     *bool                    `json:"upgrade_allowed,omitempty"`
-	Cutoff             *string                  `json:"cutoff,omitempty"`
-	Language           *string                  `json:"language,omitempty"`
-	Items              []QualityProfileItem     `json:"items,omitempty"`
-	MinFormatScore     *int                     `json:"min_format_score,omitempty"`
-	CutoffFormatScore  *int                     `json:"cutoff_format_score,omitempty"`
+	Name              *string              `json:"name,omitempty"`
+	UpgradeAllowed    *bool                `json:"upgrade_allowed,omitempty"`
+	Cutoff            *string              `json:"cutoff,omitempty"`
+	Language          *string              `json:"language,omitempty"`
+	Items             []QualityProfileItem `json:"items,omitempty"`
+	MinFormatScore    *int                 `json:"min_format_score,omitempty"`
+	CutoffFormatScore *int                 `json:"cutoff_format_score,omitempty"`
 }
 
 // CustomFormatScore represents the score assigned to a custom format within a quality profile.
@@ -359,68 +359,68 @@ const (
 	// Member of a list (value should be comma-separated)
 	ConditionIn CustomFormatFilterCondition = "in"
 	// Numeric comparison operators
-	ConditionGreaterThan CustomFormatFilterCondition = "gt"
+	ConditionGreaterThan        CustomFormatFilterCondition = "gt"
 	ConditionGreaterThanOrEqual CustomFormatFilterCondition = "gte"
-	ConditionLessThan CustomFormatFilterCondition = "lt"
-	ConditionLessThanOrEqual CustomFormatFilterCondition = "lte"
+	ConditionLessThan           CustomFormatFilterCondition = "lt"
+	ConditionLessThanOrEqual    CustomFormatFilterCondition = "lte"
 )
 
 // CustomFormatFilter represents a single filter condition within a custom format.
 type CustomFormatFilter struct {
-	ID                 string                         `json:"id"`
-	CustomFormatID     string                         `json:"custom_format_id"`
-	Field              string                         `json:"field"`           // codec, source, year, bitdepth, etc.
-	Condition          CustomFormatFilterCondition    `json:"condition"`       // equals, regex, range, in, gt, gte, lt, lte
-	Value              string                         `json:"value"`           // field-specific value
-	Order              int                            `json:"order"`           // display order
-	CreatedAt          time.Time                      `json:"created_at"`
-	UpdatedAt          time.Time                      `json:"updated_at"`
+	ID             string                      `json:"id"`
+	CustomFormatID string                      `json:"custom_format_id"`
+	Field          string                      `json:"field"`     // codec, source, year, bitdepth, etc.
+	Condition      CustomFormatFilterCondition `json:"condition"` // equals, regex, range, in, gt, gte, lt, lte
+	Value          string                      `json:"value"`     // field-specific value
+	Order          int                         `json:"order"`     // display order
+	CreatedAt      time.Time                   `json:"created_at"`
+	UpdatedAt      time.Time                   `json:"updated_at"`
 }
 
 // CustomFormat represents a named set of filters and tags for scoring releases.
 type CustomFormat struct {
-	ID          string                    `json:"id"`
-	Name        string                    `json:"name"`
-	Description string                    `json:"description,omitempty"`
-	Tags        []string                  `json:"tags,omitempty"`           // user-defined tags (e.g., "hdr", "anime", "4k")
-	Filters     []CustomFormatFilter      `json:"filters"`                  // all filters use implicit AND logic
-	CreatedAt   time.Time                 `json:"created_at"`
-	UpdatedAt   time.Time                 `json:"updated_at"`
-	DeletedAt   *time.Time                `json:"deleted_at,omitempty"`
+	ID          string               `json:"id"`
+	Name        string               `json:"name"`
+	Description string               `json:"description,omitempty"`
+	Tags        []string             `json:"tags,omitempty"` // user-defined tags (e.g., "hdr", "anime", "4k")
+	Filters     []CustomFormatFilter `json:"filters"`        // all filters use implicit AND logic
+	CreatedAt   time.Time            `json:"created_at"`
+	UpdatedAt   time.Time            `json:"updated_at"`
+	DeletedAt   *time.Time           `json:"deleted_at,omitempty"`
 }
 
 // CreateCustomFormatRequest is the payload for adding a custom format.
 type CreateCustomFormatRequest struct {
-	Name        string                   `json:"name"`
-	Description string                   `json:"description,omitempty"`
-	Tags        []string                 `json:"tags,omitempty"`
+	Name        string                            `json:"name"`
+	Description string                            `json:"description,omitempty"`
+	Tags        []string                          `json:"tags,omitempty"`
 	Filters     []CreateCustomFormatFilterRequest `json:"filters"`
 }
 
 // CreateCustomFormatFilterRequest is the payload for a filter within a custom format creation.
 type CreateCustomFormatFilterRequest struct {
-	Field     string                         `json:"field"`
-	Condition CustomFormatFilterCondition    `json:"condition"`
-	Value     string                         `json:"value"`
-	Order     int                            `json:"order,omitempty"`
+	Field     string                      `json:"field"`
+	Condition CustomFormatFilterCondition `json:"condition"`
+	Value     string                      `json:"value"`
+	Order     int                         `json:"order,omitempty"`
 }
 
 // UpdateCustomFormatRequest is the payload for updating a custom format.
 type UpdateCustomFormatRequest struct {
-	Name        *string                  `json:"name,omitempty"`
-	Description *string                  `json:"description,omitempty"`
-	Tags        []string                 `json:"tags,omitempty"`
+	Name        *string                           `json:"name,omitempty"`
+	Description *string                           `json:"description,omitempty"`
+	Tags        []string                          `json:"tags,omitempty"`
 	Filters     []CreateCustomFormatFilterRequest `json:"filters,omitempty"`
 }
 
 // HistoryEntry represents a combined import or search history record.
 type HistoryEntry struct {
-	ID        string    `json:"id"`
-	Type      string    `json:"type"` // "import" or "search"
-	Status    string    `json:"status"`
-	Title     string    `json:"title,omitempty"`
-	Error     string    `json:"error,omitempty"`
-	SourcePath string   `json:"sourcePath,omitempty"`
-	DestPath   string   `json:"destPath,omitempty"`
-	Date      time.Time `json:"date"`
+	ID         string    `json:"id"`
+	Type       string    `json:"type"` // "import" or "search"
+	Status     string    `json:"status"`
+	Title      string    `json:"title,omitempty"`
+	Error      string    `json:"error,omitempty"`
+	SourcePath string    `json:"sourcePath,omitempty"`
+	DestPath   string    `json:"destPath,omitempty"`
+	Date       time.Time `json:"date"`
 }

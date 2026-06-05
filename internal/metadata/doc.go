@@ -46,9 +46,9 @@
 // The Repository interface abstracts SQL access; concrete implementations
 // dispatch to sqlc-generated code for SQLite or Postgres. Three tables:
 //
-//	- metadata_movies(id, tmdb_id, imdb_id, tvdb_id, title, year, ...)
-//	- metadata_series(id, tmdb_id, imdb_id, tvdb_id, title, ...)
-//	- metadata_episodes(id, series_id, season, episode, tvdb_id, ...)
+//   - metadata_movies(id, tmdb_id, imdb_id, tvdb_id, title, year, ...)
+//   - metadata_series(id, tmdb_id, imdb_id, tvdb_id, title, ...)
+//   - metadata_episodes(id, series_id, season, episode, tvdb_id, ...)
 //
 // See migration 0011 for schema.
 //
@@ -64,5 +64,4 @@
 // - Bulk metadata import from providers
 // - Provider fallback strategies (e.g. try TVDB if TMDB rate-limited)
 // - Metadata scoring (pick best result from multiple providers)
-//
 package metadata

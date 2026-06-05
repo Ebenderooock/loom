@@ -450,7 +450,7 @@ type Download struct {
 
 // Ratio is the optional ratio-policy block. Loom never enforces it.
 type Ratio struct {
-	Path     string `yaml:"path,omitempty"`
-	Selector string `yaml:"selector,omitempty"`
+	Path     string   `yaml:"path,omitempty"`
+	Selector string   `yaml:"selector,omitempty"`
 	Filters  []Filter `yaml:"filters,omitempty"`
 }

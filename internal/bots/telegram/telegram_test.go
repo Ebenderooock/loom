@@ -37,9 +37,9 @@ func TestBot_ProcessMessageSendsReply(t *testing.T) {
 	h := &stubHandler{reply: bots.Reply{Text: "hello *world*", Buttons: []bots.Button{{Label: "Tap", Data: "req|movie|1"}}}}
 
 	var (
-		mu       sync.Mutex
-		sent     map[string]any
-		served   bool
+		mu     sync.Mutex
+		sent   map[string]any
+		served bool
 	)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)

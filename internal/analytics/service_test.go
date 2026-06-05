@@ -4,15 +4,15 @@ import (
 	"context"
 	"database/sql"
 	"io"
-	"sync"
 	"log/slog"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/ebenderooock/loom/internal/connect"
-	"github.com/ebenderooock/loom/internal/kernel/eventbus"
 	"github.com/ebenderooock/loom/internal/kernel/config"
+	"github.com/ebenderooock/loom/internal/kernel/eventbus"
 	"github.com/ebenderooock/loom/internal/storage"
 )
 
@@ -287,150 +287,150 @@ func TestSampleIsolatesFailedConnection(t *testing.T) {
 }
 
 func countTopic(topics []string, want string) int {
-n := 0
-for _, tp := range topics {
-if tp == want {
-n++
-}
-}
-return n
+	n := 0
+	for _, tp := range topics {
+		if tp == want {
+			n++
+		}
+	}
+	return n
 }
 
 func topicsOf(evs []*PlaybackEvent) []string {
-out := make([]string, 0, len(evs))
-for _, ev := range evs {
-out = append(out, ev.Topic())
-}
-return out
+	out := make([]string, 0, len(evs))
+	for _, ev := range evs {
+		out = append(out, ev.Topic())
+	}
+	return out
 }
 
 func TestSamplePublishesStartAndStop(t *testing.T) {
-conn := plexConn("c1", "Plex")
-svc, _, bus := newSvc(t, conn)
-ctx := context.Background()
+	conn := plexConn("c1", "Plex")
+	svc, _, bus := newSvc(t, conn)
+	ctx := context.Background()
 
-playing := false
-svc.fetch = func(_ context.Context, c *connect.Connection) ([]connect.Session, error) {
-if !playing {
-return nil, nil
-}
-return []connect.Session{{SessionKey: "1", MediaID: "m1", User: "alice",
-MediaType: "movie", FullTitle: "Movie A", State: "playing", DurationMs: 600000}}, nil
-}
+	playing := false
+	svc.fetch = func(_ context.Context, c *connect.Connection) ([]connect.Session, error) {
+		if !playing {
+			return nil, nil
+		}
+		return []connect.Session{{SessionKey: "1", MediaID: "m1", User: "alice",
+			MediaType: "movie", FullTitle: "Movie A", State: "playing", DurationMs: 600000}}, nil
+	}
 
-// Baseline sample (nothing playing) primes the service past the startup pass.
-svc.Sample(ctx, 30*time.Second)
-if got := len(bus.topics()); got != 0 {
-t.Fatalf("baseline sample must emit nothing, got %v", bus.topics())
-}
+	// Baseline sample (nothing playing) primes the service past the startup pass.
+	svc.Sample(ctx, 30*time.Second)
+	if got := len(bus.topics()); got != 0 {
+		t.Fatalf("baseline sample must emit nothing, got %v", bus.topics())
+	}
 
-// Now a session appears -> one start event.
-playing = true
-svc.Sample(ctx, 30*time.Second)
-if got := countTopic(bus.topics(), TopicPlaybackStarted); got != 1 {
-t.Fatalf("expected 1 start event, got %d (%v)", got, bus.topics())
-}
+	// Now a session appears -> one start event.
+	playing = true
+	svc.Sample(ctx, 30*time.Second)
+	if got := countTopic(bus.topics(), TopicPlaybackStarted); got != 1 {
+		t.Fatalf("expected 1 start event, got %d (%v)", got, bus.topics())
+	}
 
-// Second sample with the same session must NOT emit another start.
-svc.Sample(ctx, 30*time.Second)
-if got := countTopic(bus.topics(), TopicPlaybackStarted); got != 1 {
-t.Fatalf("expected still 1 start event after continuity, got %d", got)
-}
+	// Second sample with the same session must NOT emit another start.
+	svc.Sample(ctx, 30*time.Second)
+	if got := countTopic(bus.topics(), TopicPlaybackStarted); got != 1 {
+		t.Fatalf("expected still 1 start event after continuity, got %d", got)
+	}
 
-// Stop playing; one tick later it's within grace -> no stop yet.
-playing = false
-svc.Sample(ctx, 30*time.Second)
-if got := countTopic(bus.topics(), TopicPlaybackStopped); got != 0 {
-t.Fatalf("one-tick disappearance must not emit a stop, got %d", got)
-}
+	// Stop playing; one tick later it's within grace -> no stop yet.
+	playing = false
+	svc.Sample(ctx, 30*time.Second)
+	if got := countTopic(bus.topics(), TopicPlaybackStopped); got != 0 {
+		t.Fatalf("one-tick disappearance must not emit a stop, got %d", got)
+	}
 }
 
 func TestFirstSampleSuppressesStartEvents(t *testing.T) {
-conn := plexConn("c1", "Plex")
-svc, _, bus := newSvc(t, conn)
-ctx := context.Background()
+	conn := plexConn("c1", "Plex")
+	svc, _, bus := newSvc(t, conn)
+	ctx := context.Background()
 
-svc.fetch = func(_ context.Context, c *connect.Connection) ([]connect.Session, error) {
-return []connect.Session{{SessionKey: "1", MediaID: "m1", User: "alice",
-	MediaType: "movie", FullTitle: "Movie A", State: "playing", DurationMs: 600000}}, nil
-}
+	svc.fetch = func(_ context.Context, c *connect.Connection) ([]connect.Session, error) {
+		return []connect.Session{{SessionKey: "1", MediaID: "m1", User: "alice",
+			MediaType: "movie", FullTitle: "Movie A", State: "playing", DurationMs: 600000}}, nil
+	}
 
-// The baseline sample after startup must not emit a start event for a stream
-// that was already running before Loom started (avoids restart spam).
-svc.Sample(ctx, 30*time.Second)
-if got := countTopic(bus.topics(), TopicPlaybackStarted); got != 0 {
-t.Fatalf("baseline sample must suppress start events, got %d (%v)", got, bus.topics())
-}
+	// The baseline sample after startup must not emit a start event for a stream
+	// that was already running before Loom started (avoids restart spam).
+	svc.Sample(ctx, 30*time.Second)
+	if got := countTopic(bus.topics(), TopicPlaybackStarted); got != 0 {
+		t.Fatalf("baseline sample must suppress start events, got %d (%v)", got, bus.topics())
+	}
 }
 
 func TestPersistConnectionReturnsStartAndStopEvents(t *testing.T) {
-conn := plexConn("c1", "Plex")
-svc, _, _ := newSvc(t, conn)
-ctx := context.Background()
-grace := 60 * time.Second
-t0 := time.Date(2026, 6, 4, 20, 0, 0, 0, time.UTC)
-sess := connect.Session{SessionKey: "1", MediaID: "m1", User: "alice", MediaType: "movie",
-FullTitle: "Movie A", State: "playing", DurationMs: 600000}
+	conn := plexConn("c1", "Plex")
+	svc, _, _ := newSvc(t, conn)
+	ctx := context.Background()
+	grace := 60 * time.Second
+	t0 := time.Date(2026, 6, 4, 20, 0, 0, 0, time.UTC)
+	sess := connect.Session{SessionKey: "1", MediaID: "m1", User: "alice", MediaType: "movie",
+		FullTitle: "Movie A", State: "playing", DurationMs: 600000}
 
-// New row -> exactly one start event returned.
-_, evs := svc.persistConnection(ctx, conn, []connect.Session{sess}, t0, grace, false)
-if countTopic(topicsOf(evs), TopicPlaybackStarted) != 1 || len(evs) != 1 {
-t.Fatalf("expected 1 start event, got %v", topicsOf(evs))
-}
+	// New row -> exactly one start event returned.
+	_, evs := svc.persistConnection(ctx, conn, []connect.Session{sess}, t0, grace, false)
+	if countTopic(topicsOf(evs), TopicPlaybackStarted) != 1 || len(evs) != 1 {
+		t.Fatalf("expected 1 start event, got %v", topicsOf(evs))
+	}
 
-// Suppressed baseline -> no start event for the same continuing session.
-_, evs = svc.persistConnection(ctx, conn, []connect.Session{sess}, t0.Add(30*time.Second), grace, true)
-if len(evs) != 0 {
-t.Fatalf("continuing session must not emit events, got %v", topicsOf(evs))
-}
+	// Suppressed baseline -> no start event for the same continuing session.
+	_, evs = svc.persistConnection(ctx, conn, []connect.Session{sess}, t0.Add(30*time.Second), grace, true)
+	if len(evs) != 0 {
+		t.Fatalf("continuing session must not emit events, got %v", topicsOf(evs))
+	}
 
-// Session gone past grace -> exactly one stop event returned.
-_, evs = svc.persistConnection(ctx, conn, nil, t0.Add(2*grace+time.Second), grace, false)
-if countTopic(topicsOf(evs), TopicPlaybackStopped) != 1 || len(evs) != 1 {
-t.Fatalf("expected 1 stop event after grace, got %v", topicsOf(evs))
-}
+	// Session gone past grace -> exactly one stop event returned.
+	_, evs = svc.persistConnection(ctx, conn, nil, t0.Add(2*grace+time.Second), grace, false)
+	if countTopic(topicsOf(evs), TopicPlaybackStopped) != 1 || len(evs) != 1 {
+		t.Fatalf("expected 1 stop event after grace, got %v", topicsOf(evs))
+	}
 }
 
 func TestStartupReapEmitsNoEvents(t *testing.T) {
-conn := plexConn("c1", "Plex")
-svc, _, bus := newSvc(t, conn)
-ctx := context.Background()
-sess := connect.Session{SessionKey: "1", MediaID: "m1", State: "playing", DurationMs: 600000}
-svc.persistConnection(ctx, conn, []connect.Session{sess}, time.Now().UTC(), 60*time.Second, false)
+	conn := plexConn("c1", "Plex")
+	svc, _, bus := newSvc(t, conn)
+	ctx := context.Background()
+	sess := connect.Session{SessionKey: "1", MediaID: "m1", State: "playing", DurationMs: 600000}
+	svc.persistConnection(ctx, conn, []connect.Session{sess}, time.Now().UTC(), 60*time.Second, false)
 
-svc.ResetOrphans(ctx)
+	svc.ResetOrphans(ctx)
 
-if len(bus.topics()) != 0 {
-t.Fatalf("startup reap must not publish events, got %v", bus.topics())
-}
+	if len(bus.topics()) != 0 {
+		t.Fatalf("startup reap must not publish events, got %v", bus.topics())
+	}
 }
 
 func TestStickyTranscodeCounts(t *testing.T) {
-svc, _, _ := newSvc(t)
-conn := plexConn("c1", "Plex")
-ctx := context.Background()
-grace := 60 * time.Second
-t0 := time.Date(2026, 6, 4, 20, 0, 0, 0, time.UTC)
+	svc, _, _ := newSvc(t)
+	conn := plexConn("c1", "Plex")
+	ctx := context.Background()
+	grace := 60 * time.Second
+	t0 := time.Date(2026, 6, 4, 20, 0, 0, 0, time.UTC)
 
-// First sample: transcoding. Second sample: direct-play. The play must still
-// count as a transcode (sticky) and the bitrate must be retained.
-transcoding := connect.Session{SessionKey: "1", MediaID: "m1", User: "alice", MediaType: "movie",
-FullTitle: "Movie A", State: "playing", DurationMs: 600000, Transcode: true, BitrateKbps: 8000}
-direct := transcoding
-direct.Transcode = false
-direct.BitrateKbps = 0
+	// First sample: transcoding. Second sample: direct-play. The play must still
+	// count as a transcode (sticky) and the bitrate must be retained.
+	transcoding := connect.Session{SessionKey: "1", MediaID: "m1", User: "alice", MediaType: "movie",
+		FullTitle: "Movie A", State: "playing", DurationMs: 600000, Transcode: true, BitrateKbps: 8000}
+	direct := transcoding
+	direct.Transcode = false
+	direct.BitrateKbps = 0
 
-svc.persistConnection(ctx, conn, []connect.Session{transcoding}, t0, grace, false)
-svc.persistConnection(ctx, conn, []connect.Session{direct}, t0.Add(90*time.Second), grace, false)
+	svc.persistConnection(ctx, conn, []connect.Session{transcoding}, t0, grace, false)
+	svc.persistConnection(ctx, conn, []connect.Session{direct}, t0.Add(90*time.Second), grace, false)
 
-stats, err := svc.Stats(ctx, 30)
-if err != nil {
-t.Fatalf("stats: %v", err)
-}
-if stats.Totals.TranscodePlays != 1 || stats.Totals.DirectPlays != 0 {
-t.Fatalf("expected sticky transcode (1 transcode, 0 direct), got %+v", stats.Totals)
-}
-if stats.Totals.AvgBitrateKbps != 8000 {
-t.Fatalf("expected retained 8000 kbps avg, got %d", stats.Totals.AvgBitrateKbps)
-}
+	stats, err := svc.Stats(ctx, 30)
+	if err != nil {
+		t.Fatalf("stats: %v", err)
+	}
+	if stats.Totals.TranscodePlays != 1 || stats.Totals.DirectPlays != 0 {
+		t.Fatalf("expected sticky transcode (1 transcode, 0 direct), got %+v", stats.Totals)
+	}
+	if stats.Totals.AvgBitrateKbps != 8000 {
+		t.Fatalf("expected retained 8000 kbps avg, got %d", stats.Totals.AvgBitrateKbps)
+	}
 }

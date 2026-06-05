@@ -36,9 +36,9 @@ func TestGetArtist_Success(t *testing.T) {
 	defer server.Close()
 
 	client := &Client{
-		config: &Config{BaseURL: server.URL, Timeout: 5 * time.Second},
+		config:     &Config{BaseURL: server.URL, Timeout: 5 * time.Second},
 		httpClient: &http.Client{Timeout: 5 * time.Second},
-		throttler: NewThrottler(100 * time.Millisecond), // Faster throttle for tests
+		throttler:  NewThrottler(100 * time.Millisecond), // Faster throttle for tests
 	}
 
 	artist, err := client.GetArtist(context.Background(), "12c6fc9b-c70d-45c0-8aab-75731bde6e56")
@@ -65,9 +65,9 @@ func TestGetArtist_NotFound(t *testing.T) {
 	defer server.Close()
 
 	client := &Client{
-		config: &Config{BaseURL: server.URL, Timeout: 5 * time.Second},
+		config:     &Config{BaseURL: server.URL, Timeout: 5 * time.Second},
 		httpClient: &http.Client{Timeout: 5 * time.Second},
-		throttler: NewThrottler(100 * time.Millisecond),
+		throttler:  NewThrottler(100 * time.Millisecond),
 	}
 
 	_, err := client.GetArtist(context.Background(), "nonexistent")
@@ -96,9 +96,9 @@ func TestGetArtist_ServerError(t *testing.T) {
 	defer server.Close()
 
 	client := &Client{
-		config: &Config{BaseURL: server.URL, Timeout: 5 * time.Second},
+		config:     &Config{BaseURL: server.URL, Timeout: 5 * time.Second},
 		httpClient: &http.Client{Timeout: 5 * time.Second},
-		throttler: NewThrottler(100 * time.Millisecond),
+		throttler:  NewThrottler(100 * time.Millisecond),
 	}
 
 	_, err := client.GetArtist(context.Background(), "some-id")
@@ -138,9 +138,9 @@ func TestSearchArtist_MultipleResults(t *testing.T) {
 	defer server.Close()
 
 	client := &Client{
-		config: &Config{BaseURL: server.URL, Timeout: 5 * time.Second},
+		config:     &Config{BaseURL: server.URL, Timeout: 5 * time.Second},
 		httpClient: &http.Client{Timeout: 5 * time.Second},
-		throttler: NewThrottler(100 * time.Millisecond),
+		throttler:  NewThrottler(100 * time.Millisecond),
 	}
 
 	results, err := client.SearchArtist(context.Background(), "Beatles", 0, 10)
@@ -173,9 +173,9 @@ func TestSearchArtist_EmptyResults(t *testing.T) {
 	defer server.Close()
 
 	client := &Client{
-		config: &Config{BaseURL: server.URL, Timeout: 5 * time.Second},
+		config:     &Config{BaseURL: server.URL, Timeout: 5 * time.Second},
 		httpClient: &http.Client{Timeout: 5 * time.Second},
-		throttler: NewThrottler(100 * time.Millisecond),
+		throttler:  NewThrottler(100 * time.Millisecond),
 	}
 
 	results, err := client.SearchArtist(context.Background(), "nonexistent", 0, 10)
@@ -213,9 +213,9 @@ func TestGetRelease_Success(t *testing.T) {
 	defer server.Close()
 
 	client := &Client{
-		config: &Config{BaseURL: server.URL, Timeout: 5 * time.Second},
+		config:     &Config{BaseURL: server.URL, Timeout: 5 * time.Second},
 		httpClient: &http.Client{Timeout: 5 * time.Second},
-		throttler: NewThrottler(100 * time.Millisecond),
+		throttler:  NewThrottler(100 * time.Millisecond),
 	}
 
 	release, err := client.GetRelease(context.Background(), "release-1")
@@ -250,9 +250,9 @@ func TestGetRecording_Success(t *testing.T) {
 	defer server.Close()
 
 	client := &Client{
-		config: &Config{BaseURL: server.URL, Timeout: 5 * time.Second},
+		config:     &Config{BaseURL: server.URL, Timeout: 5 * time.Second},
 		httpClient: &http.Client{Timeout: 5 * time.Second},
-		throttler: NewThrottler(100 * time.Millisecond),
+		throttler:  NewThrottler(100 * time.Millisecond),
 	}
 
 	recording, err := client.GetRecording(context.Background(), "recording-1")
@@ -291,9 +291,9 @@ func TestRateLimitHandling(t *testing.T) {
 	defer server.Close()
 
 	client := &Client{
-		config: &Config{BaseURL: server.URL, Timeout: 5 * time.Second},
+		config:     &Config{BaseURL: server.URL, Timeout: 5 * time.Second},
 		httpClient: &http.Client{Timeout: 5 * time.Second},
-		throttler: NewThrottler(50 * time.Millisecond),
+		throttler:  NewThrottler(50 * time.Millisecond),
 	}
 
 	artist, err := client.GetArtist(context.Background(), "artist-1")
@@ -330,9 +330,9 @@ func TestThrottling_EnforcesMinimumDelay(t *testing.T) {
 
 	throttle := 100 * time.Millisecond
 	client := &Client{
-		config: &Config{BaseURL: server.URL, Timeout: 5 * time.Second},
+		config:     &Config{BaseURL: server.URL, Timeout: 5 * time.Second},
 		httpClient: &http.Client{Timeout: 5 * time.Second},
-		throttler: NewThrottler(throttle),
+		throttler:  NewThrottler(throttle),
 	}
 
 	// Make 3 consecutive requests
@@ -363,9 +363,9 @@ func TestUserAgentHeader(t *testing.T) {
 	defer server.Close()
 
 	client := &Client{
-		config: &Config{BaseURL: server.URL, Timeout: 5 * time.Second},
+		config:     &Config{BaseURL: server.URL, Timeout: 5 * time.Second},
 		httpClient: &http.Client{Timeout: 5 * time.Second},
-		throttler: NewThrottler(100 * time.Millisecond),
+		throttler:  NewThrottler(100 * time.Millisecond),
 	}
 
 	_, _ = client.GetArtist(context.Background(), "artist-1")
@@ -390,9 +390,9 @@ func TestConcurrentRequests_RaceSafe(t *testing.T) {
 	defer server.Close()
 
 	client := &Client{
-		config: &Config{BaseURL: server.URL, Timeout: 5 * time.Second},
+		config:     &Config{BaseURL: server.URL, Timeout: 5 * time.Second},
 		httpClient: &http.Client{Timeout: 5 * time.Second},
-		throttler: NewThrottler(10 * time.Millisecond),
+		throttler:  NewThrottler(10 * time.Millisecond),
 	}
 
 	// Launch 5 concurrent requests
@@ -425,9 +425,9 @@ func TestContextTimeout(t *testing.T) {
 	defer server.Close()
 
 	client := &Client{
-		config: &Config{BaseURL: server.URL, Timeout: 500 * time.Millisecond},
+		config:     &Config{BaseURL: server.URL, Timeout: 500 * time.Millisecond},
 		httpClient: &http.Client{Timeout: 500 * time.Millisecond},
-		throttler: NewThrottler(100 * time.Millisecond),
+		throttler:  NewThrottler(100 * time.Millisecond),
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
@@ -480,9 +480,9 @@ func TestSearchRelease_Pagination(t *testing.T) {
 	defer server.Close()
 
 	client := &Client{
-		config: &Config{BaseURL: server.URL, Timeout: 5 * time.Second},
+		config:     &Config{BaseURL: server.URL, Timeout: 5 * time.Second},
 		httpClient: &http.Client{Timeout: 5 * time.Second},
-		throttler: NewThrottler(100 * time.Millisecond),
+		throttler:  NewThrottler(100 * time.Millisecond),
 	}
 
 	// First page

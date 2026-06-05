@@ -170,10 +170,10 @@ func (s *SourcesService) handleListSources(w http.ResponseWriter, r *http.Reques
 // --- update ---
 
 type updateSourceRequest struct {
-	Name   string          `json:"name"`
-	Type   SourceType      `json:"type"`
-	Config json.RawMessage `json:"config"`
-	Enabled *bool          `json:"enabled,omitempty"`
+	Name    string          `json:"name"`
+	Type    SourceType      `json:"type"`
+	Config  json.RawMessage `json:"config"`
+	Enabled *bool           `json:"enabled,omitempty"`
 }
 
 func (s *SourcesService) handleUpdateSource(w http.ResponseWriter, r *http.Request) {

@@ -61,12 +61,12 @@ func (imp *Importer) importProwlarrIndexers(ctx context.Context, src *sql.DB, tx
 
 	for rows.Next() {
 		var (
-			id             int64
-			name, impl     string
-			settingsJSON   string
-			enabled        int
-			priority       int
-			protocol       int
+			id           int64
+			name, impl   string
+			settingsJSON string
+			enabled      int
+			priority     int
+			protocol     int
 		)
 		if err := rows.Scan(&id, &name, &impl, &settingsJSON, &enabled, &priority, &protocol); err != nil {
 			res.Errors = append(res.Errors, "scan indexer: "+err.Error())

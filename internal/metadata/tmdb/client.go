@@ -126,10 +126,10 @@ func (c *Client) SearchMovie(ctx context.Context, query string, year int) ([]*me
 	for _, result := range resp.Results {
 		if result.MediaType == "movie" || result.Title != "" {
 			m := &metadata.MovieMetadata{
-				Title:       result.Title,
-				Overview:    cropOverview(result.Overview),
-				PosterPath:  buildPosterURL(result.PosterPath),
-				Rating:      result.VoteAverage,
+				Title:      result.Title,
+				Overview:   cropOverview(result.Overview),
+				PosterPath: buildPosterURL(result.PosterPath),
+				Rating:     result.VoteAverage,
 			}
 			// Parse year from release date
 			if result.ReleaseDate != "" && len(result.ReleaseDate) >= 4 {

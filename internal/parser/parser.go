@@ -269,7 +269,7 @@ func extractSource(lower string) string {
 		name    string
 	}{
 		{`(?:blu[\s\-]?ray|brrip)`, "BluRay"},
-		{`(?:webdl|web[\s\-]?dl)`, "WebDL"},  // Must come before WebRip (more specific)
+		{`(?:webdl|web[\s\-]?dl)`, "WebDL"}, // Must come before WebRip (more specific)
 		{`(?:webrip|web[\s\-]?rip|web)`, "WebRip"},
 		{`(?:hdtv|hd[\s\-]?tv)`, "HDTV"},
 		{`(?:dvdrip|dvd[\s\-]?rip)`, "DVDRip"},
@@ -627,19 +627,19 @@ func extractTitle(name string, year int) string {
 
 	// Find the cutoff point: year in parentheses, year standalone, or first quality/episode marker
 	cutPatterns := []string{
-		`(?i)(?:^|[\s._-])s\d{1,2}e\d{1,3}`,             // S##E## season+episode (must come before S## only)
-		`(?i)(?:^|[\s._-])\d{1,2}x\d{1,3}`,              // ##x## season+episode
-		`(?i)[\s._-]s\d{1,2}(?:[\s._-]|$)`,              // S## only (season pack, no episode)
-		`(?i)(?:^|[\s._-])season[\s._-]*\d`,              // "Season N" word
-		`\s*[\(\[]?\d{4}[\)\]]?[\s\.\-_]`,                // year with optional parens/brackets
-		`(?i)\s*[\.\-\s_](?:720p?|1080p?|2160p?|4k|uhd)`, // resolution
-		`(?i)\s*[\.\-\s_](?:bluray|brrip|webrip|webdl|web[\-\s]dl|hdtv|dvdrip|remux)`, // source
-		`(?i)\s*[\.\-\s_](?:h\.?264|h\.?265|hevc|x\.?264|x\.?265|avc)`,               // codec
-		`(?i)\s*[\.\-\s_](?:proper|repack|rerip|internal|limited|directors|extended|open[\s._-]?matte|diamond)`,  // tags
-		`(?i)\s*[\.\-\s_](?:imax|unrated|uncut|remastered|theatrical|fan[\s._-]?edit|special[\s._-]?edition)`,  // edition tags
-		`(?i)\s*[\.\-\s_]v\d(?:$|[\s.\-_])`,                                                                    // version tag
-		`(?i)\s*[\.\-\s_]tt\d{7,8}`,                                                                            // imdb id
-		`(?i)\s*[\.\-\s_]tmdb(?:id)?[\-._\s]?\d+`,                                                              // tmdb id
+		`(?i)(?:^|[\s._-])s\d{1,2}e\d{1,3}`,                                                                     // S##E## season+episode (must come before S## only)
+		`(?i)(?:^|[\s._-])\d{1,2}x\d{1,3}`,                                                                      // ##x## season+episode
+		`(?i)[\s._-]s\d{1,2}(?:[\s._-]|$)`,                                                                      // S## only (season pack, no episode)
+		`(?i)(?:^|[\s._-])season[\s._-]*\d`,                                                                     // "Season N" word
+		`\s*[\(\[]?\d{4}[\)\]]?[\s\.\-_]`,                                                                       // year with optional parens/brackets
+		`(?i)\s*[\.\-\s_](?:720p?|1080p?|2160p?|4k|uhd)`,                                                        // resolution
+		`(?i)\s*[\.\-\s_](?:bluray|brrip|webrip|webdl|web[\-\s]dl|hdtv|dvdrip|remux)`,                           // source
+		`(?i)\s*[\.\-\s_](?:h\.?264|h\.?265|hevc|x\.?264|x\.?265|avc)`,                                          // codec
+		`(?i)\s*[\.\-\s_](?:proper|repack|rerip|internal|limited|directors|extended|open[\s._-]?matte|diamond)`, // tags
+		`(?i)\s*[\.\-\s_](?:imax|unrated|uncut|remastered|theatrical|fan[\s._-]?edit|special[\s._-]?edition)`,   // edition tags
+		`(?i)\s*[\.\-\s_]v\d(?:$|[\s.\-_])`,                                                                     // version tag
+		`(?i)\s*[\.\-\s_]tt\d{7,8}`,                                                                             // imdb id
+		`(?i)\s*[\.\-\s_]tmdb(?:id)?[\-._\s]?\d+`,                                                               // tmdb id
 	}
 
 	cutIdx := len(clean)

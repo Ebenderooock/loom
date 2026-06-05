@@ -178,10 +178,10 @@ func (o *Orchestrator) ensureSchema() error {
 
 // Stats returns statistics about search operations.
 type OrchestrationStats struct {
-	TotalMatches    int
-	PendingSearches int
+	TotalMatches      int
+	PendingSearches   int
 	CompletedSearches int
-	FailedSearches  int
+	FailedSearches    int
 }
 
 // GetStats returns current orchestration statistics.

@@ -9,8 +9,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/ebenderooock/loom/internal/workflows"
 	"github.com/go-chi/chi/v5"
+
+	"github.com/ebenderooock/loom/internal/workflows"
 )
 
 // Mount attaches every /api/v1/download-clients/* route to r. The

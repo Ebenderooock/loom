@@ -33,12 +33,12 @@ type queueSlot struct {
 	// units field is "MB" for queue, "KB" for some history rows; we
 	// always treat the *_total / *_left numbers as MB to keep the
 	// math uniform — SAB's own UI does the same.
-	Mb        string `json:"mb"`
-	MbLeft    string `json:"mbleft"`
+	Mb         string `json:"mb"`
+	MbLeft     string `json:"mbleft"`
 	Percentage string `json:"percentage"`
-	TimeLeft  string `json:"timeleft"`
-	Priority  string `json:"priority"`
-	Script    string `json:"script"`
+	TimeLeft   string `json:"timeleft"`
+	Priority   string `json:"priority"`
+	Script     string `json:"script"`
 }
 
 // historyResponse mirrors mode=history. SAB returns *_total in

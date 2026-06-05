@@ -118,8 +118,8 @@ func TestApplyCaseMap(t *testing.T) {
 // YTS-style attribute expansion (movies × torrents).
 func TestExtractRowsJSON_YTSStyle(t *testing.T) {
 	def := &Definition{
-		ID:   "test-yts",
-		Name: "Test YTS",
+		ID:    "test-yts",
+		Name:  "Test YTS",
 		Links: []string{"https://example.com"},
 		Search: Search{
 			Rows: RowsBlock{
@@ -129,12 +129,12 @@ func TestExtractRowsJSON_YTSStyle(t *testing.T) {
 				MissingAttributeEqualsNoResults: true,
 			},
 			Fields: map[string]Field{
-				"title": {Selector: "..title"},
-				"quality": {Selector: "quality"},
-				"infohash": {Selector: "hash"},
-				"seeders": {Selector: "seeds"},
-				"leechers": {Selector: "peers"},
-				"size": {Selector: "size_bytes"},
+				"title":                {Selector: "..title"},
+				"quality":              {Selector: "quality"},
+				"infohash":             {Selector: "hash"},
+				"seeders":              {Selector: "seeds"},
+				"leechers":             {Selector: "peers"},
+				"size":                 {Selector: "size_bytes"},
 				"downloadvolumefactor": {Text: "0"},
 			},
 		},
@@ -238,19 +238,19 @@ func TestExtractRowsJSON_YTSStyle(t *testing.T) {
 // array response (like The Pirate Bay).
 func TestExtractRowsJSON_FlatArray(t *testing.T) {
 	def := &Definition{
-		ID:   "test-tpb",
-		Name: "Test TPB",
+		ID:    "test-tpb",
+		Name:  "Test TPB",
 		Links: []string{"https://example.com"},
 		Search: Search{
 			Rows: RowsBlock{
 				Selector: "$",
 			},
 			Fields: map[string]Field{
-				"title":    {Selector: "name"},
-				"infohash": {Selector: "info_hash"},
-				"seeders":  {Selector: "seeders"},
-				"leechers": {Selector: "leechers"},
-				"size":     {Selector: "size"},
+				"title":                {Selector: "name"},
+				"infohash":             {Selector: "info_hash"},
+				"seeders":              {Selector: "seeders"},
+				"leechers":             {Selector: "leechers"},
+				"size":                 {Selector: "size"},
 				"downloadvolumefactor": {Text: "0"},
 			},
 		},
@@ -306,8 +306,8 @@ func TestExtractRowsJSON_FlatArray(t *testing.T) {
 // missingAttributeEqualsNoResults skips rows without the attribute.
 func TestExtractRowsJSON_MissingAttribute(t *testing.T) {
 	def := &Definition{
-		ID:   "test",
-		Name: "Test",
+		ID:    "test",
+		Name:  "Test",
 		Links: []string{"https://example.com"},
 		Search: Search{
 			Rows: RowsBlock{

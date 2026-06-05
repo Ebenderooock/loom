@@ -112,7 +112,7 @@ func TestRouterFailsOnAddError(t *testing.T) {
 
 	// Register a failing client.
 	client := &fakeClient{
-		id:    "failing-client",
+		id:     "failing-client",
 		addErr: fmt.Errorf("disk full"),
 	}
 	if err := router.svc.registry.Register(client); err != nil {
@@ -253,9 +253,9 @@ func TestBuildAddRequest(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name          string
-		result        *indexers.Result
-		wantMagnet    string
+		name           string
+		result         *indexers.Result
+		wantMagnet     string
 		wantTorrentURL string
 	}{
 		{
@@ -305,10 +305,10 @@ type fakeClient struct {
 	addErr error
 }
 
-func (c *fakeClient) ID() string           { return c.id }
-func (c *fakeClient) Name() string         { return "Fake Client" }
-func (c *fakeClient) Kind() Kind           { return KindNull }
-func (c *fakeClient) Protocol() Protocol   { return ProtocolTorrent }
+func (c *fakeClient) ID() string         { return c.id }
+func (c *fakeClient) Name() string       { return "Fake Client" }
+func (c *fakeClient) Kind() Kind         { return KindNull }
+func (c *fakeClient) Protocol() Protocol { return ProtocolTorrent }
 func (c *fakeClient) Add(ctx context.Context, req AddRequest) (AddResult, error) {
 	if c.addErr != nil {
 		return AddResult{}, c.addErr
@@ -318,19 +318,19 @@ func (c *fakeClient) Add(ctx context.Context, req AddRequest) (AddResult, error)
 func (c *fakeClient) Status(ctx context.Context, ids ...string) ([]Item, error) {
 	return nil, nil
 }
-func (c *fakeClient) Pause(ctx context.Context, ids ...string) error { return nil }
+func (c *fakeClient) Pause(ctx context.Context, ids ...string) error  { return nil }
 func (c *fakeClient) Resume(ctx context.Context, ids ...string) error { return nil }
 func (c *fakeClient) Remove(ctx context.Context, ids []string, deleteFiles bool) error {
 	return nil
 }
-func (c *fakeClient) SetPriority(_ context.Context, _ Priority, _ ...string) error   { return nil }
-func (c *fakeClient) SetSpeedLimit(_ context.Context, _ int64, _ ...string) error    { return nil }
-func (c *fakeClient) ForceStart(_ context.Context, _ ...string) error                { return nil }
-func (c *fakeClient) Recheck(_ context.Context, _ ...string) error                   { return nil }
-func (c *fakeClient) Reannounce(_ context.Context, _ ...string) error                { return nil }
-func (c *fakeClient) Categories(ctx context.Context) ([]Category, error) { return nil, nil }
-func (c *fakeClient) FreeSpace(ctx context.Context) (int64, error)       { return 0, nil }
-func (c *fakeClient) Test(ctx context.Context) error                    { return nil }
+func (c *fakeClient) SetPriority(_ context.Context, _ Priority, _ ...string) error { return nil }
+func (c *fakeClient) SetSpeedLimit(_ context.Context, _ int64, _ ...string) error  { return nil }
+func (c *fakeClient) ForceStart(_ context.Context, _ ...string) error              { return nil }
+func (c *fakeClient) Recheck(_ context.Context, _ ...string) error                 { return nil }
+func (c *fakeClient) Reannounce(_ context.Context, _ ...string) error              { return nil }
+func (c *fakeClient) Categories(ctx context.Context) ([]Category, error)           { return nil, nil }
+func (c *fakeClient) FreeSpace(ctx context.Context) (int64, error)                 { return 0, nil }
+func (c *fakeClient) Test(ctx context.Context) error                               { return nil }
 
 // testRepository is a minimal Repository for testing.
 type testRepository struct{}

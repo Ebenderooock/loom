@@ -8,13 +8,13 @@ import (
 type ErrorCode string
 
 const (
-	ErrCodeNotFound       ErrorCode = "not_found"
-	ErrCodeRateLimit      ErrorCode = "rate_limit"
-	ErrCodeUnauthorized   ErrorCode = "unauthorized"
-	ErrCodeClientError    ErrorCode = "client_error"
-	ErrCodeServerError    ErrorCode = "server_error"
-	ErrCodeNetworkError   ErrorCode = "network_error"
-	ErrCodeContextError   ErrorCode = "context_error"
+	ErrCodeNotFound     ErrorCode = "not_found"
+	ErrCodeRateLimit    ErrorCode = "rate_limit"
+	ErrCodeUnauthorized ErrorCode = "unauthorized"
+	ErrCodeClientError  ErrorCode = "client_error"
+	ErrCodeServerError  ErrorCode = "server_error"
+	ErrCodeNetworkError ErrorCode = "network_error"
+	ErrCodeContextError ErrorCode = "context_error"
 )
 
 // ClientError wraps TVDB API errors with typed information.

@@ -21,13 +21,13 @@ type WorkflowIDExtractor func(ctx context.Context) (string, bool)
 // and an optional database sink, in addition to the wrapped console handler.
 // It extracts workflow IDs from context and slog attributes for correlation.
 type CaptureHandler struct {
-	inner         slog.Handler
-	buffer        *RingBuffer
-	dbSink        chan<- LogEntry
-	captureLevel  atomic.Int64
-	extractWfID   WorkflowIDExtractor
-	groups        []string
-	presetAttrs   []slog.Attr
+	inner        slog.Handler
+	buffer       *RingBuffer
+	dbSink       chan<- LogEntry
+	captureLevel atomic.Int64
+	extractWfID  WorkflowIDExtractor
+	groups       []string
+	presetAttrs  []slog.Attr
 }
 
 // CaptureHandlerConfig configures the capture handler.

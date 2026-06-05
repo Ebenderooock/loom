@@ -124,11 +124,11 @@ func TestValidateFilterValueReDoS(t *testing.T) {
 	// This regex can cause exponential backtracking with certain inputs.
 	// We test that the validation catches it or at least compiles safely.
 	testCases := []string{
-		"(a+)+b",           // Classic ReDoS pattern
-		"(a|a)*b",          // Alternative ReDoS pattern
-		"(.*)*",            // Nested quantifier
-		".*x264.*",         // Safe pattern
-		"[0-9]+",           // Safe pattern
+		"(a+)+b",   // Classic ReDoS pattern
+		"(a|a)*b",  // Alternative ReDoS pattern
+		"(.*)*",    // Nested quantifier
+		".*x264.*", // Safe pattern
+		"[0-9]+",   // Safe pattern
 	}
 
 	for _, pattern := range testCases {
@@ -239,7 +239,6 @@ func BenchmarkFilterMatches(b *testing.B) {
 	}
 }
 
-
 // TestConditionEquality tests condition constant values.
 func TestConditionEquality(t *testing.T) {
 	if ConditionEquals != "equals" {
@@ -313,12 +312,12 @@ func TestNumericFilterConditions(t *testing.T) {
 	svc := NewCustomFormatService(nil)
 
 	tests := []struct {
-		name       string
+		name        string
 		releaseName string
-		field      string
-		condition  CustomFormatFilterCondition
-		value      string
-		wantMatch  bool
+		field       string
+		condition   CustomFormatFilterCondition
+		value       string
+		wantMatch   bool
 	}{
 		// Bitdepth tests
 		{"bitdepth 10-bit equals", "Movie.2024.1080p.10-bit.BluRay", "bitdepth", ConditionGreaterThanOrEqual, "10", true},
@@ -405,4 +404,3 @@ func TestNumericFilterRangeFormat(t *testing.T) {
 		})
 	}
 }
-

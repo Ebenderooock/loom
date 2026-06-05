@@ -33,34 +33,34 @@ type RSSSourceConfig struct {
 
 // ScraperConfig holds the configuration for web scraper sources.
 type ScraperConfig struct {
-	URL              string `json:"url"`
-	AuthType         string `json:"auth_type,omitempty"` // 'none', 'basic', 'apikey'
-	Username         string `json:"username,omitempty"`
-	Password         string `json:"password,omitempty"`
-	APIKey           string `json:"api_key,omitempty"`
-	SelectorType     string `json:"selector_type"` // 'css' or 'xpath'
-	ItemSelector     string `json:"item_selector"`
-	TitleSelector    string `json:"title_selector"`
-	LinkSelector     string `json:"link_selector,omitempty"`
+	URL               string `json:"url"`
+	AuthType          string `json:"auth_type,omitempty"` // 'none', 'basic', 'apikey'
+	Username          string `json:"username,omitempty"`
+	Password          string `json:"password,omitempty"`
+	APIKey            string `json:"api_key,omitempty"`
+	SelectorType      string `json:"selector_type"` // 'css' or 'xpath'
+	ItemSelector      string `json:"item_selector"`
+	TitleSelector     string `json:"title_selector"`
+	LinkSelector      string `json:"link_selector,omitempty"`
 	PublishedSelector string `json:"published_selector,omitempty"`
-	Pagination       struct {
-		Type       string `json:"type"` // 'none', 'page_number', 'offset'
-		PageParam  string `json:"page_param,omitempty"`  // e.g. 'page' or 'p'
+	Pagination        struct {
+		Type        string `json:"type"`                   // 'none', 'page_number', 'offset'
+		PageParam   string `json:"page_param,omitempty"`   // e.g. 'page' or 'p'
 		OffsetParam string `json:"offset_param,omitempty"` // e.g. 'offset'
-		PageSize   int    `json:"page_size,omitempty"`
+		PageSize    int    `json:"page_size,omitempty"`
 	} `json:"pagination,omitempty"`
 }
 
 // UserSource represents a user-configured RSS/scraper source.
 type UserSource struct {
-	ID          string    `json:"id"`
-	Name        string    `json:"name"`
-	Type        SourceType `json:"type"`
-	Enabled     bool      `json:"enabled"`
-	Config      json.RawMessage `json:"config"`
-	LastSyncAt  *string   `json:"last_sync_at,omitempty"`
-	CreatedAt   string    `json:"created_at"`
-	UpdatedAt   string    `json:"updated_at"`
+	ID         string          `json:"id"`
+	Name       string          `json:"name"`
+	Type       SourceType      `json:"type"`
+	Enabled    bool            `json:"enabled"`
+	Config     json.RawMessage `json:"config"`
+	LastSyncAt *string         `json:"last_sync_at,omitempty"`
+	CreatedAt  string          `json:"created_at"`
+	UpdatedAt  string          `json:"updated_at"`
 }
 
 // SourcesService manages user-configured RSS and scraper sources.

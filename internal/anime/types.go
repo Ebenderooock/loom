@@ -49,13 +49,13 @@ type AnimeRelease struct {
 	Year       int    `json:"year,omitempty"`
 
 	// Anime-specific fields.
-	AbsoluteEpisode int    `json:"absoluteEpisode"`
-	Version         int    `json:"version"`
-	ReleaseGroup    string `json:"releaseGroup"`
-	IsDualAudio     bool   `json:"isDualAudio"`
-	IsMultiAudio    bool   `json:"isMultiAudio"`
+	AbsoluteEpisode int     `json:"absoluteEpisode"`
+	Version         int     `json:"version"`
+	ReleaseGroup    string  `json:"releaseGroup"`
+	IsDualAudio     bool    `json:"isDualAudio"`
+	IsMultiAudio    bool    `json:"isMultiAudio"`
 	SubType         SubType `json:"subType"`
-	IsBatch         bool   `json:"isBatch"`
+	IsBatch         bool    `json:"isBatch"`
 }
 
 // ReleaseGroup describes a known anime release group and its quality ranking.
@@ -67,11 +67,11 @@ type ReleaseGroup struct {
 
 // AnimePreferences stores per-series anime configuration.
 type AnimePreferences struct {
-	SeriesID           string          `json:"seriesId"`
-	NumberingScheme    NumberingScheme `json:"numberingScheme"`
-	PreferredGroups    []string        `json:"preferredGroups"`
-	DualAudioRequired  bool            `json:"dualAudioRequired"`
-	ReleaseGroupScoring map[string]int `json:"releaseGroupScoring,omitempty"`
+	SeriesID            string          `json:"seriesId"`
+	NumberingScheme     NumberingScheme `json:"numberingScheme"`
+	PreferredGroups     []string        `json:"preferredGroups"`
+	DualAudioRequired   bool            `json:"dualAudioRequired"`
+	ReleaseGroupScoring map[string]int  `json:"releaseGroupScoring,omitempty"`
 }
 
 // StringSliceJSON is a helper for JSON-encoded string slices in SQLite.

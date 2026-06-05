@@ -56,8 +56,8 @@ type subscription struct {
 	h         Handler
 	ordered   bool
 	queue     chan dispatchItem // non-nil for ordered subscriptions
-	closed    atomic.Bool      // set on unsubscribe; Publish checks before send
-	closeOnce sync.Once        // ensures queue is closed exactly once
+	closed    atomic.Bool       // set on unsubscribe; Publish checks before send
+	closeOnce sync.Once         // ensures queue is closed exactly once
 }
 
 type dispatchItem struct {

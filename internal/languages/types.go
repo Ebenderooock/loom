@@ -22,13 +22,13 @@ type LanguagePriority struct {
 
 // LanguageProfile is a named, ordered set of language preferences.
 type LanguageProfile struct {
-	ID              string             `json:"id"`
-	Name            string             `json:"name"`
-	Languages       []LanguagePriority `json:"languages"`
-	CutoffLanguage  string             `json:"cutoff_language"`  // ISO 639-1 code
-	UpgradeAllowed  bool               `json:"upgrade_allowed"`
-	CreatedAt       time.Time          `json:"created_at"`
-	UpdatedAt       time.Time          `json:"updated_at"`
+	ID             string             `json:"id"`
+	Name           string             `json:"name"`
+	Languages      []LanguagePriority `json:"languages"`
+	CutoffLanguage string             `json:"cutoff_language"` // ISO 639-1 code
+	UpgradeAllowed bool               `json:"upgrade_allowed"`
+	CreatedAt      time.Time          `json:"created_at"`
+	UpdatedAt      time.Time          `json:"updated_at"`
 }
 
 // LanguageScore is the result of scoring a release against a profile.

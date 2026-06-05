@@ -7,20 +7,20 @@ import (
 
 // MovieMetadata represents metadata for a movie from any provider.
 type MovieMetadata struct {
-	TMDBID      *string   `json:"tmdb_id,omitempty"`
-	IMDBID      *string   `json:"imdb_id,omitempty"`
-	TVDBID      *string   `json:"tvdb_id,omitempty"`
-	Title       string    `json:"title"`
-	Year        int       `json:"year,omitempty"`
-	Overview    string    `json:"overview,omitempty"`
-	PosterPath  string    `json:"poster_path,omitempty"`
-	ReleaseDate string    `json:"release_date,omitempty"` // ISO 8601
-	TheatricalDate string `json:"theatrical_date,omitempty"` // ISO 8601
-	DigitalDate    string `json:"digital_date,omitempty"`    // ISO 8601
-	Runtime     int       `json:"runtime,omitempty"`
-	Genres      []string  `json:"genres,omitempty"`
-	Rating      float64   `json:"rating,omitempty"`
-	CachedAt    time.Time `json:"cached_at,omitempty"`
+	TMDBID         *string   `json:"tmdb_id,omitempty"`
+	IMDBID         *string   `json:"imdb_id,omitempty"`
+	TVDBID         *string   `json:"tvdb_id,omitempty"`
+	Title          string    `json:"title"`
+	Year           int       `json:"year,omitempty"`
+	Overview       string    `json:"overview,omitempty"`
+	PosterPath     string    `json:"poster_path,omitempty"`
+	ReleaseDate    string    `json:"release_date,omitempty"`    // ISO 8601
+	TheatricalDate string    `json:"theatrical_date,omitempty"` // ISO 8601
+	DigitalDate    string    `json:"digital_date,omitempty"`    // ISO 8601
+	Runtime        int       `json:"runtime,omitempty"`
+	Genres         []string  `json:"genres,omitempty"`
+	Rating         float64   `json:"rating,omitempty"`
+	CachedAt       time.Time `json:"cached_at,omitempty"`
 }
 
 // SeriesMetadata represents metadata for a TV series from any provider.
@@ -40,16 +40,16 @@ type SeriesMetadata struct {
 
 // EpisodeMetadata represents metadata for a single episode.
 type EpisodeMetadata struct {
-	TVDBID    *string   `json:"tvdb_id,omitempty"`
-	TMDBID    *string   `json:"tmdb_id,omitempty"`
-	Season    int       `json:"season"`
-	Episode   int       `json:"episode"`
-	Title     string    `json:"title"`
-	Overview  string    `json:"overview,omitempty"`
-	AirDate   string    `json:"air_date,omitempty"` // ISO 8601
-	Runtime   int       `json:"runtime,omitempty"`
-	Rating    float64   `json:"rating,omitempty"`
-	CachedAt  time.Time `json:"cached_at,omitempty"`
+	TVDBID   *string   `json:"tvdb_id,omitempty"`
+	TMDBID   *string   `json:"tmdb_id,omitempty"`
+	Season   int       `json:"season"`
+	Episode  int       `json:"episode"`
+	Title    string    `json:"title"`
+	Overview string    `json:"overview,omitempty"`
+	AirDate  string    `json:"air_date,omitempty"` // ISO 8601
+	Runtime  int       `json:"runtime,omitempty"`
+	Rating   float64   `json:"rating,omitempty"`
+	CachedAt time.Time `json:"cached_at,omitempty"`
 }
 
 // MetadataProvider is the interface implemented by metadata sources
@@ -71,11 +71,11 @@ type MetadataProvider interface {
 
 // SearchMovieParams carries the search criteria for FindMovie.
 type SearchMovieParams struct {
-	Title   string
-	Year    int
-	IMDBID  string
-	TMDBID  string
-	TVDBID  string
+	Title  string
+	Year   int
+	IMDBID string
+	TMDBID string
+	TVDBID string
 }
 
 // SearchSeriesParams carries the search criteria for FindSeries.

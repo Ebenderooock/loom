@@ -57,10 +57,10 @@ func (s *Store) Get(ctx context.Context, id string) (*ImportList, error) {
 
 	l := &ImportList{}
 	var (
-		enabled, searchOnAdd int
+		enabled, searchOnAdd           int
 		url, apiKey, token, rootFolder sql.NullString
-		lastSync sql.NullTime
-		mode sql.NullString
+		lastSync                       sql.NullTime
+		mode                           sql.NullString
 	)
 	err := row.Scan(
 		&l.ID, &l.Name, &l.ListType, &enabled, &url, &apiKey, &token,
@@ -259,8 +259,8 @@ func (s *Store) GetItem(ctx context.Context, id string) (*ImportListItem, error)
 
 // discoverRow pairs a discover item with its parent list context.
 type discoverRow struct {
-	Item     *ImportListItem
-	ListName string
+	Item      *ImportListItem
+	ListName  string
 	MediaType string
 }
 
@@ -414,10 +414,10 @@ type rowScanner interface {
 func scanList(row rowScanner) (*ImportList, error) {
 	l := &ImportList{}
 	var (
-		enabled, searchOnAdd int
+		enabled, searchOnAdd           int
 		url, apiKey, token, rootFolder sql.NullString
-		lastSync sql.NullTime
-		mode sql.NullString
+		lastSync                       sql.NullTime
+		mode                           sql.NullString
 	)
 	err := row.Scan(
 		&l.ID, &l.Name, &l.ListType, &enabled, &url, &apiKey, &token,

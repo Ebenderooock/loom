@@ -12,8 +12,8 @@ import (
 
 // HTTPHandlers provides HTTP endpoint handlers for metadata operations.
 type HTTPHandlers struct {
-	router *Router
-	cache  *Cache
+	router  *Router
+	cache   *Cache
 	service *Service
 }
 

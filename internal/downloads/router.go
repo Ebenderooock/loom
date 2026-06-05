@@ -286,12 +286,12 @@ func (r *Router) enrichMetadata(result *indexers.Result, downloadID string) {
 	movie, err := r.metadataRouter.ResolveMovie(ctx, result.Title, 0, map[string]string{})
 	if movie != nil {
 		if pubErr := r.bus.Publish(ctx, &metadata.MetadataEnrichedEvent{
-			OriginResultID:   result.GUID,
-			DownloadID:       downloadID,
-			Title:            result.Title,
-			MovieMetadata:    movie,
-			EnrichedAt:       r.clock.Now(),
-			SourceProvider:   "all", // Would track which provider matched if needed
+			OriginResultID: result.GUID,
+			DownloadID:     downloadID,
+			Title:          result.Title,
+			MovieMetadata:  movie,
+			EnrichedAt:     r.clock.Now(),
+			SourceProvider: "all", // Would track which provider matched if needed
 		}); pubErr != nil {
 			r.logger.Warn("router failed to publish MetadataEnriched event",
 				"origin_result_id", result.GUID, "err", pubErr)
@@ -305,12 +305,12 @@ func (r *Router) enrichMetadata(result *indexers.Result, downloadID string) {
 	series, err := r.metadataRouter.ResolveSeries(ctx, result.Title, map[string]string{})
 	if series != nil {
 		if pubErr := r.bus.Publish(ctx, &metadata.MetadataEnrichedEvent{
-			OriginResultID:   result.GUID,
-			DownloadID:       downloadID,
-			Title:            result.Title,
-			SeriesMetadata:   series,
-			EnrichedAt:       r.clock.Now(),
-			SourceProvider:   "all",
+			OriginResultID: result.GUID,
+			DownloadID:     downloadID,
+			Title:          result.Title,
+			SeriesMetadata: series,
+			EnrichedAt:     r.clock.Now(),
+			SourceProvider: "all",
 		}); pubErr != nil {
 			r.logger.Warn("router failed to publish MetadataEnriched event",
 				"origin_result_id", result.GUID, "err", pubErr)

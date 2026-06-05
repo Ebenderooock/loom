@@ -34,10 +34,10 @@ func (m *Matcher) SetAltTitleMatcher(alt *AltTitleMatcher) {
 
 // parsedRelease holds the extracted metadata from a release name.
 type parsedRelease struct {
-	Title   string
-	Year    int
-	Season  int
-	Episode int
+	Title    string
+	Year     int
+	Season   int
+	Episode  int
 	IsSeries bool
 }
 

@@ -179,7 +179,7 @@ func TestResolveSeries_ByID(t *testing.T) {
 	}
 
 	provider := &mockProvider{
-		name:             "test",
+		name:              "test",
 		findSeriesResults: []*SeriesMetadata{expected},
 	}
 
@@ -211,7 +211,7 @@ func TestResolveSeries_SearchFallback(t *testing.T) {
 	}
 
 	provider := &mockProvider{
-		name:             "test",
+		name:              "test",
 		findSeriesResults: []*SeriesMetadata{expected},
 	}
 

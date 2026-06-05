@@ -8,8 +8,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ebenderooock/loom/internal/workflows"
 	"github.com/go-chi/chi/v5"
+
+	"github.com/ebenderooock/loom/internal/workflows"
 )
 
 // Clock is the small time abstraction the package uses so tests can

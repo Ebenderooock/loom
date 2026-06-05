@@ -22,9 +22,9 @@ type fakeIndexer struct {
 	err      error
 }
 
-func (f *fakeIndexer) ID() string         { return f.id }
-func (f *fakeIndexer) Name() string       { return f.name }
-func (f *fakeIndexer) Caps() indexers.Caps { return f.caps }
+func (f *fakeIndexer) ID() string                     { return f.id }
+func (f *fakeIndexer) Name() string                   { return f.name }
+func (f *fakeIndexer) Caps() indexers.Caps            { return f.caps }
 func (f *fakeIndexer) Test(ctx context.Context) error { return f.err }
 func (f *fakeIndexer) Search(ctx context.Context, q indexers.Query) (*indexers.Results, error) {
 	f.searched = true

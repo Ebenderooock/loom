@@ -261,10 +261,10 @@ func episodeKey(seriesID string, season, episode int) string {
 
 // MockProvider implements MetadataProvider for testing
 type MockProvider struct {
-	Name_       string
-	MovieError  error
-	SeriesError error
-	MovieResult []*MovieMetadata
+	Name_        string
+	MovieError   error
+	SeriesError  error
+	MovieResult  []*MovieMetadata
 	SeriesResult []*SeriesMetadata
 }
 
@@ -423,11 +423,11 @@ func TestServiceNoResult(t *testing.T) {
 
 func TestServiceRaceCondition(t *testing.T) {
 	repo := NewMockRepository()
-	
+
 	// Create a provider that returns fresh metadata on each call
 	// to avoid shared state between concurrent goroutines
 	provider := &raceTestProvider{name: "mock"}
-	
+
 	svc := NewService(repo, []MetadataProvider{provider})
 	defer svc.Close()
 

@@ -8,27 +8,27 @@ import "time"
 
 // RollingSearchConfig controls the rolling search scheduler.
 type RollingSearchConfig struct {
-	Enabled          bool `json:"enabled"`
-	IntervalHours    int  `json:"intervalHours"`
-	BatchSize        int  `json:"batchSize"`
-	MinResearchDays  int  `json:"minResearchDays"`
-	MaxSearchesPerDay int `json:"maxSearchesPerDay"`
+	Enabled           bool `json:"enabled"`
+	IntervalHours     int  `json:"intervalHours"`
+	BatchSize         int  `json:"batchSize"`
+	MinResearchDays   int  `json:"minResearchDays"`
+	MaxSearchesPerDay int  `json:"maxSearchesPerDay"`
 }
 
 // DefaultRollingSearchConfig returns sensible defaults.
 func DefaultRollingSearchConfig() RollingSearchConfig {
 	return RollingSearchConfig{
-		Enabled:          false,
-		IntervalHours:    12,
-		BatchSize:        5,
-		MinResearchDays:  7,
+		Enabled:           false,
+		IntervalHours:     12,
+		BatchSize:         5,
+		MinResearchDays:   7,
 		MaxSearchesPerDay: 100,
 	}
 }
 
 // SearchCandidate is a media item eligible for a rolling search.
 type SearchCandidate struct {
-	MediaType      string     `json:"mediaType"`      // "movie" or "episode"
+	MediaType      string     `json:"mediaType"` // "movie" or "episode"
 	MediaID        string     `json:"mediaId"`
 	Title          string     `json:"title"`
 	Year           int        `json:"year,omitempty"`
@@ -43,10 +43,10 @@ type SearchCandidate struct {
 
 // RollingSearchStatus is the API-facing snapshot of the scheduler state.
 type RollingSearchStatus struct {
-	Running        bool       `json:"running"`
-	LastRunAt      *time.Time `json:"lastRunAt,omitempty"`
-	NextRunAt      *time.Time `json:"nextRunAt,omitempty"`
-	ItemsSearched  int        `json:"itemsSearched"`
-	ItemsInQueue   int        `json:"itemsInQueue"`
-	QuotaUsage     map[string]int `json:"quotaUsage"`
+	Running       bool           `json:"running"`
+	LastRunAt     *time.Time     `json:"lastRunAt,omitempty"`
+	NextRunAt     *time.Time     `json:"nextRunAt,omitempty"`
+	ItemsSearched int            `json:"itemsSearched"`
+	ItemsInQueue  int            `json:"itemsInQueue"`
+	QuotaUsage    map[string]int `json:"quotaUsage"`
 }

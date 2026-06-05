@@ -12,13 +12,13 @@ import (
 func TestParseReleaseName(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
-		name     string
-		input    string
-		wantTitle string
-		wantYear  int
-		wantSeason int
+		name        string
+		input       string
+		wantTitle   string
+		wantYear    int
+		wantSeason  int
 		wantEpisode int
-		wantSeries bool
+		wantSeries  bool
 	}{
 		{
 			name:       "movie with year and quality",
@@ -173,8 +173,8 @@ func TestTitleSimilarity(t *testing.T) {
 		minScore int
 	}{
 		{"the matrix", "the matrix", 100},
-		{"The Matrix", "the matrix", 100},   // case insensitive
-		{"the matrix", "matrix", 40},         // substring
+		{"The Matrix", "the matrix", 100}, // case insensitive
+		{"the matrix", "matrix", 40},      // substring
 		{"breaking bad", "breaking bad", 100},
 		{"some movie", "completely different", 0},
 		{"", "", 0},

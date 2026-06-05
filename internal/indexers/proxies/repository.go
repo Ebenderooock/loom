@@ -7,9 +7,10 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/sqlc-dev/pqtype"
+
 	dbpg "github.com/ebenderooock/loom/internal/storage/db/postgres"
 	dbsqlite "github.com/ebenderooock/loom/internal/storage/db/sqlite"
-	"github.com/sqlc-dev/pqtype"
 )
 
 // Repository is the persistence interface for proxy rows. It is

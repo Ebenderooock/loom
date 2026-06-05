@@ -11,12 +11,12 @@ import (
 // event bus for downstream consumers (e.g., releases marking items as
 // acquired when a download completes).
 const (
-	TopicDownloadQueued     = "downloads.queued"
-	TopicDownloadFailed     = "downloads.failed"
-	TopicDownloadCompleted  = "downloads.completed"
-	TopicDownloadStalled    = "downloads.stalled"
-	TopicDownloadRetry      = "downloads.retry"
-	TopicIndexerResult      = "indexers.result" // Expected from indexers; we listen for this
+	TopicDownloadQueued    = "downloads.queued"
+	TopicDownloadFailed    = "downloads.failed"
+	TopicDownloadCompleted = "downloads.completed"
+	TopicDownloadStalled   = "downloads.stalled"
+	TopicDownloadRetry     = "downloads.retry"
+	TopicIndexerResult     = "indexers.result" // Expected from indexers; we listen for this
 )
 
 // IndexerResultEvent wraps an indexers.Result for the event bus. It
@@ -153,27 +153,27 @@ func (e *DownloadRetryEvent) String() string {
 
 // ── Getter methods for audit sink interfaces ──────────────────────────
 
-func (e *DownloadQueuedEvent) GetDownloadID() string      { return e.DownloadID }
-func (e *DownloadQueuedEvent) GetClientID() string         { return e.ClientID }
-func (e *DownloadQueuedEvent) GetOriginResultID() string   { return e.OriginResultID }
-func (e *DownloadQueuedEvent) GetQueuedAt() time.Time      { return e.QueuedAt }
+func (e *DownloadQueuedEvent) GetDownloadID() string     { return e.DownloadID }
+func (e *DownloadQueuedEvent) GetClientID() string       { return e.ClientID }
+func (e *DownloadQueuedEvent) GetOriginResultID() string { return e.OriginResultID }
+func (e *DownloadQueuedEvent) GetQueuedAt() time.Time    { return e.QueuedAt }
 
-func (e *DownloadFailureEvent) GetClientID() string        { return e.ClientID }
-func (e *DownloadFailureEvent) GetOriginResultID() string  { return e.OriginResultID }
-func (e *DownloadFailureEvent) GetError() string           { return e.Error }
-func (e *DownloadFailureEvent) GetFailedAt() time.Time     { return e.FailedAt }
+func (e *DownloadFailureEvent) GetClientID() string       { return e.ClientID }
+func (e *DownloadFailureEvent) GetOriginResultID() string { return e.OriginResultID }
+func (e *DownloadFailureEvent) GetError() string          { return e.Error }
+func (e *DownloadFailureEvent) GetFailedAt() time.Time    { return e.FailedAt }
 
-func (e *DownloadCompletedEvent) GetDownloadID() string    { return e.DownloadID }
-func (e *DownloadCompletedEvent) GetClientID() string      { return e.ClientID }
-func (e *DownloadCompletedEvent) GetCategory() string      { return e.Category }
+func (e *DownloadCompletedEvent) GetDownloadID() string     { return e.DownloadID }
+func (e *DownloadCompletedEvent) GetClientID() string       { return e.ClientID }
+func (e *DownloadCompletedEvent) GetCategory() string       { return e.Category }
 func (e *DownloadCompletedEvent) GetCompletedAt() time.Time { return e.CompletedAt }
 
-func (e *DownloadStalledEvent) GetDownloadID() string      { return e.DownloadID }
-func (e *DownloadStalledEvent) GetReason() string          { return e.Reason }
-func (e *DownloadStalledEvent) GetAction() string          { return e.Action }
-func (e *DownloadStalledEvent) GetStalledAt() time.Time    { return e.StalledAt }
+func (e *DownloadStalledEvent) GetDownloadID() string   { return e.DownloadID }
+func (e *DownloadStalledEvent) GetReason() string       { return e.Reason }
+func (e *DownloadStalledEvent) GetAction() string       { return e.Action }
+func (e *DownloadStalledEvent) GetStalledAt() time.Time { return e.StalledAt }
 
-func (e *DownloadRetryEvent) GetCategory() string          { return e.Category }
-func (e *DownloadRetryEvent) GetReason() string            { return e.Reason }
-func (e *DownloadRetryEvent) GetAttempt() int              { return e.Attempt }
-func (e *DownloadRetryEvent) GetRetriedAt() time.Time      { return e.RetriedAt }
+func (e *DownloadRetryEvent) GetCategory() string     { return e.Category }
+func (e *DownloadRetryEvent) GetReason() string       { return e.Reason }
+func (e *DownloadRetryEvent) GetAttempt() int         { return e.Attempt }
+func (e *DownloadRetryEvent) GetRetriedAt() time.Time { return e.RetriedAt }

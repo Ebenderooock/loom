@@ -218,7 +218,7 @@ func (c *Client) rpcEndpoint() string {
 // rpcRequest is the JSON-RPC envelope Deluge expects. Params is
 // always a positional array — Deluge does not honour by-name params.
 type rpcRequest struct {
-	ID     int64 `json:"id"`
+	ID     int64  `json:"id"`
 	Method string `json:"method"`
 	Params []any  `json:"params"`
 }

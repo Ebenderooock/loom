@@ -72,7 +72,7 @@ func TestGetMovieNotFound(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(ErrorResponse{
-			StatusCode: 404,
+			StatusCode:    404,
 			StatusMessage: "The resource you requested could not be found.",
 		})
 	}))
@@ -99,7 +99,7 @@ func TestGetMovieUnauthorized(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
 		json.NewEncoder(w).Encode(ErrorResponse{
-			StatusCode: 401,
+			StatusCode:    401,
 			StatusMessage: "Invalid API key: You must be granted a valid key.",
 		})
 	}))
@@ -130,7 +130,7 @@ func TestGetMovieRateLimit(t *testing.T) {
 			w.WriteHeader(http.StatusTooManyRequests)
 			w.Header().Set("Retry-After", "1")
 			json.NewEncoder(w).Encode(ErrorResponse{
-				StatusCode: 429,
+				StatusCode:    429,
 				StatusMessage: "Your request count (1) is over the allowed limit of 0.",
 			})
 		} else {
@@ -175,7 +175,7 @@ func TestGetMovieServerError(t *testing.T) {
 		if callCount.Load() < 3 {
 			w.WriteHeader(http.StatusInternalServerError)
 			json.NewEncoder(w).Encode(ErrorResponse{
-				StatusCode: 500,
+				StatusCode:    500,
 				StatusMessage: "Internal Server Error",
 			})
 		} else {
@@ -214,13 +214,13 @@ func TestSearchMovie(t *testing.T) {
 		json.NewEncoder(w).Encode(SearchResponse{
 			Results: []SearchResult{
 				{
-					ID:           550,
-					Title:        "Fight Club",
-					ReleaseDate:  "1999-10-15",
-					Overview:     "An insomniac office worker and a devil-may-care soap maker form an underground fight club.",
-					PosterPath:   "/a28my1q3o1MjID6a8ynT2Yemzj.jpg",
-					VoteAverage:  8.8,
-					MediaType:    "movie",
+					ID:          550,
+					Title:       "Fight Club",
+					ReleaseDate: "1999-10-15",
+					Overview:    "An insomniac office worker and a devil-may-care soap maker form an underground fight club.",
+					PosterPath:  "/a28my1q3o1MjID6a8ynT2Yemzj.jpg",
+					VoteAverage: 8.8,
+					MediaType:   "movie",
 				},
 			},
 			TotalResults: 1,
@@ -330,13 +330,13 @@ func TestSearchTV(t *testing.T) {
 		json.NewEncoder(w).Encode(SearchResponse{
 			Results: []SearchResult{
 				{
-					ID:            1399,
-					Name:          "Game of Thrones",
-					FirstAirDate:  "2011-04-18",
-					Overview:      "Seven noble families fight for control of the mythical land of Westeros.",
-					PosterPath:    "/u3bZgnrm11QwQ5kCD7nau7Sw1qb.jpg",
-					VoteAverage:   9.2,
-					MediaType:     "tv",
+					ID:           1399,
+					Name:         "Game of Thrones",
+					FirstAirDate: "2011-04-18",
+					Overview:     "Seven noble families fight for control of the mythical land of Westeros.",
+					PosterPath:   "/u3bZgnrm11QwQ5kCD7nau7Sw1qb.jpg",
+					VoteAverage:  9.2,
+					MediaType:    "tv",
 				},
 			},
 			TotalResults: 1,
@@ -602,7 +602,7 @@ func TestRetryAfterHeader(t *testing.T) {
 			w.WriteHeader(http.StatusTooManyRequests)
 			w.Header().Set("Retry-After", "2")
 			json.NewEncoder(w).Encode(ErrorResponse{
-				StatusCode: 429,
+				StatusCode:    429,
 				StatusMessage: "Rate limit exceeded",
 			})
 		} else {

@@ -74,7 +74,9 @@ type sqlRepo struct {
 const movieColumns = `id, title, year, imdb_id, tmdb_id, tvdb_id, overview, genres, runtime, rating, backdrop_path, poster_path, metadata_provider, quality_profile_id, library_id, status, release_date, last_search_at, monitoring_status, created_at, updated_at, deleted_at`
 
 // scanMovie scans a movie row from the database.
-func scanMovie(scanner interface{ Scan(dest ...interface{}) error }) (*Movie, error) {
+func scanMovie(scanner interface {
+	Scan(dest ...interface{}) error
+}) (*Movie, error) {
 	movie := &Movie{}
 	var genreBytes []byte
 	err := scanner.Scan(&movie.ID, &movie.Title, &movie.Year, &movie.IMDBID, &movie.TMDBID, &movie.TVDBID, &movie.Overview, &genreBytes,
@@ -597,196 +599,196 @@ func (r *sqlRepo) GetQualityProfileByName(ctx context.Context, name string) (*Qu
 
 // AddCustomFormat adds a new custom format with its filters.
 func (r *sqlRepo) AddCustomFormat(ctx context.Context, cf *CustomFormat) error {
-if cf == nil || cf.ID == "" {
-return sql.ErrNoRows
-}
-
-// Serialize tags to JSON
-tagsJSON, err := json.Marshal(cf.Tags)
-if err != nil {
-return err
-}
-
-// Insert custom format
-_, err = r.db.ExecContext(ctx,
-`INSERT INTO custom_formats (id, name, description, tags, created_at, updated_at) 
- VALUES (?, ?, ?, ?, ?, ?)`,
-cf.ID, cf.Name, cf.Description, string(tagsJSON), cf.CreatedAt, cf.UpdatedAt,
-)
-if err != nil {
-return err
-}
-
-// Insert filters
-for _, filter := range cf.Filters {
-	if filter.ID == "" {
-		filter.ID = cf.ID + "_" + filter.Field + "_" + string(filter.Condition)
+	if cf == nil || cf.ID == "" {
+		return sql.ErrNoRows
 	}
-	_, err := r.db.ExecContext(ctx,
-		`INSERT INTO custom_format_filters (id, custom_format_id, field, condition, value, "order", created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-		filter.ID, cf.ID, filter.Field, filter.Condition, filter.Value, filter.Order, filter.CreatedAt, filter.UpdatedAt,
+
+	// Serialize tags to JSON
+	tagsJSON, err := json.Marshal(cf.Tags)
+	if err != nil {
+		return err
+	}
+
+	// Insert custom format
+	_, err = r.db.ExecContext(ctx,
+		`INSERT INTO custom_formats (id, name, description, tags, created_at, updated_at) 
+ VALUES (?, ?, ?, ?, ?, ?)`,
+		cf.ID, cf.Name, cf.Description, string(tagsJSON), cf.CreatedAt, cf.UpdatedAt,
 	)
 	if err != nil {
 		return err
-}
-}
+	}
 
-return nil
+	// Insert filters
+	for _, filter := range cf.Filters {
+		if filter.ID == "" {
+			filter.ID = cf.ID + "_" + filter.Field + "_" + string(filter.Condition)
+		}
+		_, err := r.db.ExecContext(ctx,
+			`INSERT INTO custom_format_filters (id, custom_format_id, field, condition, value, "order", created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+			filter.ID, cf.ID, filter.Field, filter.Condition, filter.Value, filter.Order, filter.CreatedAt, filter.UpdatedAt,
+		)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // GetCustomFormat retrieves a custom format by ID with its filters.
 func (r *sqlRepo) GetCustomFormat(ctx context.Context, id string) (*CustomFormat, error) {
-cf := &CustomFormat{}
-var tagsJSON string
+	cf := &CustomFormat{}
+	var tagsJSON string
 
-err := r.db.QueryRowContext(ctx,
-`SELECT id, name, description, tags, created_at, updated_at, deleted_at 
+	err := r.db.QueryRowContext(ctx,
+		`SELECT id, name, description, tags, created_at, updated_at, deleted_at 
  FROM custom_formats WHERE id = ?`,
-id,
-).Scan(&cf.ID, &cf.Name, &cf.Description, &tagsJSON, &cf.CreatedAt, &cf.UpdatedAt, &cf.DeletedAt)
+		id,
+	).Scan(&cf.ID, &cf.Name, &cf.Description, &tagsJSON, &cf.CreatedAt, &cf.UpdatedAt, &cf.DeletedAt)
 
-if err != nil {
-return nil, err
-}
+	if err != nil {
+		return nil, err
+	}
 
-// Deserialize tags
-if tagsJSON != "" {
-err = json.Unmarshal([]byte(tagsJSON), &cf.Tags)
-if err != nil {
-return nil, err
-}
-}
+	// Deserialize tags
+	if tagsJSON != "" {
+		err = json.Unmarshal([]byte(tagsJSON), &cf.Tags)
+		if err != nil {
+			return nil, err
+		}
+	}
 
-// Fetch filters
-rows, err := r.db.QueryContext(ctx,
-`SELECT id, custom_format_id, field, condition, value, "order", created_at, updated_at 
+	// Fetch filters
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT id, custom_format_id, field, condition, value, "order", created_at, updated_at 
  FROM custom_format_filters WHERE custom_format_id = ? ORDER BY "order"`,
-id,
-)
-if err != nil {
-return nil, err
-}
-defer rows.Close()
+		id,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
 
-for rows.Next() {
-filter := CustomFormatFilter{}
-err := rows.Scan(&filter.ID, &filter.CustomFormatID, &filter.Field, &filter.Condition, &filter.Value, &filter.Order, &filter.CreatedAt, &filter.UpdatedAt)
-if err != nil {
-return nil, err
-}
-cf.Filters = append(cf.Filters, filter)
-}
+	for rows.Next() {
+		filter := CustomFormatFilter{}
+		err := rows.Scan(&filter.ID, &filter.CustomFormatID, &filter.Field, &filter.Condition, &filter.Value, &filter.Order, &filter.CreatedAt, &filter.UpdatedAt)
+		if err != nil {
+			return nil, err
+		}
+		cf.Filters = append(cf.Filters, filter)
+	}
 
-return cf, rows.Err()
+	return cf, rows.Err()
 }
 
 // UpdateCustomFormat updates an existing custom format and its filters.
 func (r *sqlRepo) UpdateCustomFormat(ctx context.Context, cf *CustomFormat) error {
-if cf == nil || cf.ID == "" {
-return sql.ErrNoRows
-}
-
-// Serialize tags to JSON
-tagsJSON, err := json.Marshal(cf.Tags)
-if err != nil {
-return err
-}
-
-// Update custom format
-_, err = r.db.ExecContext(ctx,
-`UPDATE custom_formats SET name = ?, description = ?, tags = ?, updated_at = ? 
- WHERE id = ?`,
-cf.Name, cf.Description, string(tagsJSON), cf.UpdatedAt, cf.ID,
-)
-if err != nil {
-return err
-}
-
-// Delete existing filters
-_, err = r.db.ExecContext(ctx, `DELETE FROM custom_format_filters WHERE custom_format_id = ?`, cf.ID)
-if err != nil {
-return err
-}
-
-// Insert new filters
-for _, filter := range cf.Filters {
-	if filter.ID == "" {
-		filter.ID = cf.ID + "_" + filter.Field + "_" + string(filter.Condition)
+	if cf == nil || cf.ID == "" {
+		return sql.ErrNoRows
 	}
-	_, err := r.db.ExecContext(ctx,
-		`INSERT INTO custom_format_filters (id, custom_format_id, field, condition, value, "order", created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-		filter.ID, cf.ID, filter.Field, filter.Condition, filter.Value, filter.Order, time.Now(), time.Now(),
+
+	// Serialize tags to JSON
+	tagsJSON, err := json.Marshal(cf.Tags)
+	if err != nil {
+		return err
+	}
+
+	// Update custom format
+	_, err = r.db.ExecContext(ctx,
+		`UPDATE custom_formats SET name = ?, description = ?, tags = ?, updated_at = ? 
+ WHERE id = ?`,
+		cf.Name, cf.Description, string(tagsJSON), cf.UpdatedAt, cf.ID,
 	)
 	if err != nil {
 		return err
-}
-}
+	}
 
-return nil
+	// Delete existing filters
+	_, err = r.db.ExecContext(ctx, `DELETE FROM custom_format_filters WHERE custom_format_id = ?`, cf.ID)
+	if err != nil {
+		return err
+	}
+
+	// Insert new filters
+	for _, filter := range cf.Filters {
+		if filter.ID == "" {
+			filter.ID = cf.ID + "_" + filter.Field + "_" + string(filter.Condition)
+		}
+		_, err := r.db.ExecContext(ctx,
+			`INSERT INTO custom_format_filters (id, custom_format_id, field, condition, value, "order", created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+			filter.ID, cf.ID, filter.Field, filter.Condition, filter.Value, filter.Order, time.Now(), time.Now(),
+		)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // DeleteCustomFormat marks a custom format as deleted (soft delete).
 func (r *sqlRepo) DeleteCustomFormat(ctx context.Context, id string) error {
-_, err := r.db.ExecContext(ctx,
-`UPDATE custom_formats SET deleted_at = ? WHERE id = ?`,
-time.Now(), id,
-)
-return err
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE custom_formats SET deleted_at = ? WHERE id = ?`,
+		time.Now(), id,
+	)
+	return err
 }
 
 // ListCustomFormats retrieves all non-deleted custom formats.
 func (r *sqlRepo) ListCustomFormats(ctx context.Context) ([]*CustomFormat, error) {
-rows, err := r.db.QueryContext(ctx,
-`SELECT id FROM custom_formats WHERE deleted_at IS NULL ORDER BY name`,
-)
-if err != nil {
-return nil, err
-}
-defer rows.Close()
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT id FROM custom_formats WHERE deleted_at IS NULL ORDER BY name`,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
 
-var ids []string
-for rows.Next() {
-var id string
-if err := rows.Scan(&id); err != nil {
-return nil, err
-}
-ids = append(ids, id)
-}
-if err := rows.Err(); err != nil {
-return nil, err
-}
-rows.Close()
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	rows.Close()
 
-var formats []*CustomFormat
-for _, id := range ids {
-cf, err := r.GetCustomFormat(ctx, id)
-if err != nil {
-return nil, err
-}
-formats = append(formats, cf)
-}
+	var formats []*CustomFormat
+	for _, id := range ids {
+		cf, err := r.GetCustomFormat(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		formats = append(formats, cf)
+	}
 
-return formats, nil
+	return formats, nil
 }
 
 // GetCustomFormatByName retrieves a custom format by name.
 func (r *sqlRepo) GetCustomFormatByName(ctx context.Context, name string) (*CustomFormat, error) {
-var id string
-err := r.db.QueryRowContext(ctx,
-`SELECT id FROM custom_formats WHERE name = ? AND deleted_at IS NULL`,
-name,
-).Scan(&id)
+	var id string
+	err := r.db.QueryRowContext(ctx,
+		`SELECT id FROM custom_formats WHERE name = ? AND deleted_at IS NULL`,
+		name,
+	).Scan(&id)
 
-if err != nil {
-if err == sql.ErrNoRows {
-return nil, nil
-}
-return nil, err
-}
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
 
-return r.GetCustomFormat(ctx, id)
+	return r.GetCustomFormat(ctx, id)
 }
 
 // ListMovieHistory returns combined import and search history for a movie.

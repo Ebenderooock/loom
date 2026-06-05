@@ -82,9 +82,9 @@ var (
 
 // ParseResult holds everything detected from a release title.
 type ParseResult struct {
-	Languages        []Language `json:"languages"`
-	IsMulti          bool       `json:"is_multi"`
-	IsDualAudio      bool       `json:"is_dual_audio"`
+	Languages         []Language `json:"languages"`
+	IsMulti           bool       `json:"is_multi"`
+	IsDualAudio       bool       `json:"is_dual_audio"`
 	SubtitleLanguages []Language `json:"subtitle_languages,omitempty"`
 }
 

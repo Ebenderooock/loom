@@ -12,21 +12,21 @@ import (
 // returns only what is asked for) but reading them at the call site
 // is more disciplined when the surface stays narrow.
 type torrentStatus struct {
-	Name      string  `json:"name"`
-	Hash      string  `json:"hash"`
-	TotalSize int64   `json:"total_size"`
-	TotalDone int64   `json:"total_done"`
-	ETA       int64   `json:"eta"`
-	Ratio     float64 `json:"ratio"`
-	State     string  `json:"state"`
-	Label     string  `json:"label"`
-	SavePath  string  `json:"save_path"`
-	Message   string  `json:"message"`
-	Progress  float64 `json:"progress"` // Deluge reports 0-100
-	DLPayload int64   `json:"download_payload_rate"`
-	UPPayload int64   `json:"upload_payload_rate"`
-	Paused    bool    `json:"paused"`
-	IsFinished bool   `json:"is_finished"`
+	Name       string  `json:"name"`
+	Hash       string  `json:"hash"`
+	TotalSize  int64   `json:"total_size"`
+	TotalDone  int64   `json:"total_done"`
+	ETA        int64   `json:"eta"`
+	Ratio      float64 `json:"ratio"`
+	State      string  `json:"state"`
+	Label      string  `json:"label"`
+	SavePath   string  `json:"save_path"`
+	Message    string  `json:"message"`
+	Progress   float64 `json:"progress"` // Deluge reports 0-100
+	DLPayload  int64   `json:"download_payload_rate"`
+	UPPayload  int64   `json:"upload_payload_rate"`
+	Paused     bool    `json:"paused"`
+	IsFinished bool    `json:"is_finished"`
 }
 
 // statusFields is the field list passed to core.get_torrents_status.

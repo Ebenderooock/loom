@@ -267,49 +267,49 @@ func TestStatus_MissingHash(t *testing.T) {
 }
 
 func TestMagnetHasTrackers(t *testing.T) {
-cases := []struct {
-name   string
-magnet string
-want   bool
-}{
-{
-name:   "trackerless btih magnet",
-magnet: "magnet:?xt=urn:btih:c12fe1c06bba254a9dc9f519b335aa7c1367a88a&dn=ubuntu",
-want:   false,
-},
-{
-name:   "magnet with one tracker",
-magnet: "magnet:?xt=urn:btih:c12fe1c06bba254a9dc9f519b335aa7c1367a88a&tr=udp%3A%2F%2Ftracker.example%3A1337%2Fannounce",
-want:   true,
-},
-{
-name:   "magnet with multiple trackers",
-magnet: "magnet:?xt=urn:btih:abc&tr=udp://a:1/announce&tr=udp://b:2/announce",
-want:   true,
-},
-{
-name:   "garbage",
-magnet: "not a magnet",
-want:   false,
-},
-}
-for _, tc := range cases {
-t.Run(tc.name, func(t *testing.T) {
-if got := magnetHasTrackers(tc.magnet); got != tc.want {
-t.Fatalf("magnetHasTrackers(%q) = %v, want %v", tc.magnet, got, tc.want)
-}
-})
-}
+	cases := []struct {
+		name   string
+		magnet string
+		want   bool
+	}{
+		{
+			name:   "trackerless btih magnet",
+			magnet: "magnet:?xt=urn:btih:c12fe1c06bba254a9dc9f519b335aa7c1367a88a&dn=ubuntu",
+			want:   false,
+		},
+		{
+			name:   "magnet with one tracker",
+			magnet: "magnet:?xt=urn:btih:c12fe1c06bba254a9dc9f519b335aa7c1367a88a&tr=udp%3A%2F%2Ftracker.example%3A1337%2Fannounce",
+			want:   true,
+		},
+		{
+			name:   "magnet with multiple trackers",
+			magnet: "magnet:?xt=urn:btih:abc&tr=udp://a:1/announce&tr=udp://b:2/announce",
+			want:   true,
+		},
+		{
+			name:   "garbage",
+			magnet: "not a magnet",
+			want:   false,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := magnetHasTrackers(tc.magnet); got != tc.want {
+				t.Fatalf("magnetHasTrackers(%q) = %v, want %v", tc.magnet, got, tc.want)
+			}
+		})
+	}
 }
 
 func TestDefaultAnnounceList(t *testing.T) {
-list := defaultAnnounceList()
-if len(list) != len(defaultTrackers) {
-t.Fatalf("got %d tiers, want %d", len(list), len(defaultTrackers))
-}
-for i, tier := range list {
-if len(tier) != 1 || tier[0] != defaultTrackers[i] {
-t.Fatalf("tier %d = %v, want [%q]", i, tier, defaultTrackers[i])
-}
-}
+	list := defaultAnnounceList()
+	if len(list) != len(defaultTrackers) {
+		t.Fatalf("got %d tiers, want %d", len(list), len(defaultTrackers))
+	}
+	for i, tier := range list {
+		if len(tier) != 1 || tier[0] != defaultTrackers[i] {
+			t.Fatalf("tier %d = %v, want [%q]", i, tier, defaultTrackers[i])
+		}
+	}
 }

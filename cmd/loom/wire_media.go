@@ -13,6 +13,7 @@ import (
 	"github.com/ebenderooock/loom/internal/calendar"
 	"github.com/ebenderooock/loom/internal/discover"
 	"github.com/ebenderooock/loom/internal/importlists"
+	"github.com/ebenderooock/loom/internal/kernel/config"
 	"github.com/ebenderooock/loom/internal/languages"
 	"github.com/ebenderooock/loom/internal/libraries"
 	"github.com/ebenderooock/loom/internal/mediainfo"
@@ -21,7 +22,6 @@ import (
 	"github.com/ebenderooock/loom/internal/qualityprofiles"
 	"github.com/ebenderooock/loom/internal/scheduler"
 	"github.com/ebenderooock/loom/internal/series"
-	"github.com/ebenderooock/loom/internal/kernel/config"
 	"github.com/ebenderooock/loom/internal/server"
 	"github.com/ebenderooock/loom/internal/storage"
 )

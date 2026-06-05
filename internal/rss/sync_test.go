@@ -20,7 +20,7 @@ type TestFeedSource struct {
 }
 
 func (t *TestFeedSource) ID() string                     { return t.id }
-func (t *TestFeedSource) Name() string                  { return t.name }
+func (t *TestFeedSource) Name() string                   { return t.name }
 func (t *TestFeedSource) RefreshInterval() time.Duration { return t.interval }
 func (t *TestFeedSource) Fetch(ctx interface{}) ([]*Item, error) {
 	if t.err != nil {

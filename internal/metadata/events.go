@@ -10,8 +10,8 @@ import (
 // Event topics for metadata enrichment pipeline. These are published to the
 // event bus for downstream consumers (e.g., databases, search indexes).
 const (
-	TopicMetadataEnriched = "metadata.enriched"  // Emitted after successful lookup
-	TopicMetadataFailure  = "metadata.failure"   // Emitted after timeout/failure
+	TopicMetadataEnriched = "metadata.enriched" // Emitted after successful lookup
+	TopicMetadataFailure  = "metadata.failure"  // Emitted after timeout/failure
 )
 
 // MetadataEnrichedEvent is fired when a download result is successfully
@@ -84,10 +84,10 @@ func (e *MetadataFailureEvent) String() string {
 // IndexerResultWithMetadata carries the enrichment context: the original
 // indexer Result plus any metadata that was successfully matched.
 type IndexerResultWithMetadata struct {
-	Result             *indexers.Result
-	MovieMetadata      *MovieMetadata
-	SeriesMetadata     *SeriesMetadata
-	EpisodeMetadata    *EpisodeMetadata
-	SourceProvider     string
-	EnrichmentErr      error
+	Result          *indexers.Result
+	MovieMetadata   *MovieMetadata
+	SeriesMetadata  *SeriesMetadata
+	EpisodeMetadata *EpisodeMetadata
+	SourceProvider  string
+	EnrichmentErr   error
 }

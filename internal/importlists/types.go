@@ -62,24 +62,24 @@ const (
 
 // ImportList represents a configured external list source.
 type ImportList struct {
-	ID                  string     `json:"id"`
-	Name                string     `json:"name"`
-	ListType            ListType   `json:"list_type"`
-	Enabled             bool       `json:"enabled"`
-	URL                 string     `json:"url,omitempty"`
-	APIKey              string     `json:"api_key,omitempty"`
-	AccessToken         string     `json:"access_token,omitempty"`
-	SyncIntervalMinutes int        `json:"sync_interval_minutes"`
-	LibraryPath         string     `json:"library_path,omitempty"`
-	QualityProfileID    string     `json:"quality_profile_id"`
-	MediaType           MediaType  `json:"media_type"`
+	ID                  string      `json:"id"`
+	Name                string      `json:"name"`
+	ListType            ListType    `json:"list_type"`
+	Enabled             bool        `json:"enabled"`
+	URL                 string      `json:"url,omitempty"`
+	APIKey              string      `json:"api_key,omitempty"`
+	AccessToken         string      `json:"access_token,omitempty"`
+	SyncIntervalMinutes int         `json:"sync_interval_minutes"`
+	LibraryPath         string      `json:"library_path,omitempty"`
+	QualityProfileID    string      `json:"quality_profile_id"`
+	MediaType           MediaType   `json:"media_type"`
 	MonitorType         MonitorType `json:"monitor_type"`
-	SearchOnAdd         bool       `json:"search_on_add"`
-	Mode                ListMode   `json:"mode"`
-	LastSync            *time.Time `json:"last_sync,omitempty"`
-	Settings            string     `json:"settings"`
-	CreatedAt           time.Time  `json:"created_at"`
-	UpdatedAt           time.Time  `json:"updated_at"`
+	SearchOnAdd         bool        `json:"search_on_add"`
+	Mode                ListMode    `json:"mode"`
+	LastSync            *time.Time  `json:"last_sync,omitempty"`
+	Settings            string      `json:"settings"`
+	CreatedAt           time.Time   `json:"created_at"`
+	UpdatedAt           time.Time   `json:"updated_at"`
 }
 
 // ImportListItem represents a single item fetched from an import list.

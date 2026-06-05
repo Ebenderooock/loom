@@ -31,13 +31,13 @@ type PeriodicScanner struct {
 	libProvider   LibraryProvider
 	logger        *slog.Logger
 
-	mu        sync.Mutex
-	interval  time.Duration
-	cancel    context.CancelFunc
-	running   bool
-	scanning  bool // true while a scan cycle is in progress
-	lastRun   *time.Time
-	nextRun   *time.Time
+	mu       sync.Mutex
+	interval time.Duration
+	cancel   context.CancelFunc
+	running  bool
+	scanning bool // true while a scan cycle is in progress
+	lastRun  *time.Time
+	nextRun  *time.Time
 }
 
 // NewPeriodicScanner creates a periodic scanner that doesn't run until Start().

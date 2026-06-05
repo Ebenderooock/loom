@@ -18,11 +18,11 @@ import (
 type Bucket struct {
 	now func() time.Time
 
-	mu          sync.Mutex
-	capacity    float64
-	rate        float64 // tokens per second
-	tokens      float64
-	lastRefill  time.Time
+	mu         sync.Mutex
+	capacity   float64
+	rate       float64 // tokens per second
+	tokens     float64
+	lastRefill time.Time
 }
 
 // NewBucket returns a Bucket primed with `burst` tokens. Both

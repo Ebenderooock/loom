@@ -11,12 +11,12 @@ import (
 // ── Mock Repository ──────────────────────────────────────────────────
 
 type mockRepo struct {
-	series     map[string]*Series
-	seasons    map[string][]*Season
-	episodes   map[string][]*Episode
-	credits    map[string][]*SeriesCredit
-	stats      map[string]*EpisodeStats
-	allStats   map[string]*EpisodeStats
+	series      map[string]*Series
+	seasons     map[string][]*Season
+	episodes    map[string][]*Episode
+	credits     map[string][]*SeriesCredit
+	stats       map[string]*EpisodeStats
+	allStats    map[string]*EpisodeStats
 	seasonStats map[string]map[string]*EpisodeStats
 
 	createSeriesErr error

@@ -9,11 +9,11 @@ import (
 )
 
 type fakeTransport struct {
-	started  atomic.Int32
-	stopped  atomic.Int32
-	token    string
-	mu       sync.Mutex
-	lastErr  string
+	started atomic.Int32
+	stopped atomic.Int32
+	token   string
+	mu      sync.Mutex
+	lastErr string
 }
 
 func (f *fakeTransport) Run(ctx context.Context) error {

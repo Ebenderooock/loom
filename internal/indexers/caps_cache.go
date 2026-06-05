@@ -7,9 +7,10 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/sqlc-dev/pqtype"
+
 	dbpg "github.com/ebenderooock/loom/internal/storage/db/postgres"
 	dbsqlite "github.com/ebenderooock/loom/internal/storage/db/sqlite"
-	"github.com/sqlc-dev/pqtype"
 )
 
 // CapsCache persists the last-known Caps document for an indexer so a

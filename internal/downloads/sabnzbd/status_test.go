@@ -172,13 +172,13 @@ func TestStatusMappings(t *testing.T) {
 func TestParseTimeLeft(t *testing.T) {
 	t.Parallel()
 	cases := map[string]int64{
-		"":         0,
-		"0:00:00":  0,
-		"0:05:00":  300,
-		"1:00:00":  3600,
-		"15:30":    930,
-		"42":       42,
-		"junk":     0,
+		"":        0,
+		"0:00:00": 0,
+		"0:05:00": 300,
+		"1:00:00": 3600,
+		"15:30":   930,
+		"42":      42,
+		"junk":    0,
 	}
 	for in, want := range cases {
 		if got := parseTimeLeft(in); got != want {

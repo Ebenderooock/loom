@@ -6,9 +6,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/ebenderooock/loom/internal/connect"
 	"github.com/ebenderooock/loom/internal/kernel/eventbus"
-	"github.com/google/uuid"
 )
 
 // streamingProviders are the connection types that report playback sessions.

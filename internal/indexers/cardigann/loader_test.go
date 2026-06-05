@@ -63,8 +63,8 @@ func TestLoadFile_ParseError(t *testing.T) {
 
 func TestParseDefinition_MissingFields(t *testing.T) {
 	cases := map[string]string{
-		"no site":     `links: ["https://x"]`,
-		"no links":    `site: x`,
+		"no site":  `links: ["https://x"]`,
+		"no links": `site: x`,
 		"no rows sel": `site: x
 links: ["https://x"]
 search:

@@ -9,9 +9,9 @@ import (
 // window. The data is in-memory and resets on restart, which is
 // acceptable for a background scheduler that runs infrequently.
 type QuotaTracker struct {
-	mu       sync.Mutex
+	mu        sync.Mutex
 	maxPerDay int
-	records  map[string][]time.Time // indexerID → timestamps
+	records   map[string][]time.Time // indexerID → timestamps
 }
 
 // NewQuotaTracker returns a tracker with the given daily cap per indexer.

@@ -5,11 +5,11 @@ import "time"
 // Event topics for the movies service. These are published to the event bus
 // for downstream consumers (e.g., search indexing, dashboard updates).
 const (
-	TopicMovieAdded           = "movies.added"
-	TopicMovieUpdated         = "movies.updated"
-	TopicMovieDeleted         = "movies.deleted"
-	TopicMonitoringChanged    = "movies.monitoring_changed"
-	TopicMovieStatusChanged   = "movies.status_changed"
+	TopicMovieAdded         = "movies.added"
+	TopicMovieUpdated       = "movies.updated"
+	TopicMovieDeleted       = "movies.deleted"
+	TopicMonitoringChanged  = "movies.monitoring_changed"
+	TopicMovieStatusChanged = "movies.status_changed"
 )
 
 // MovieStatusChangedEvent is published when a movie's status transitions
@@ -26,7 +26,7 @@ type MovieStatusChangedEvent struct {
 func (e *MovieStatusChangedEvent) Topic() string { return TopicMovieStatusChanged }
 
 // Getter methods for the audit sink (interface-based matching avoids import cycles).
-func (e *MovieStatusChangedEvent) GetMovieID() string     { return e.MovieID }
+func (e *MovieStatusChangedEvent) GetMovieID() string      { return e.MovieID }
 func (e *MovieStatusChangedEvent) GetTitle() string        { return e.Title }
 func (e *MovieStatusChangedEvent) GetOldStatus() string    { return string(e.OldStatus) }
 func (e *MovieStatusChangedEvent) GetNewStatus() string    { return string(e.NewStatus) }

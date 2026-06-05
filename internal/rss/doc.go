@@ -1,11 +1,11 @@
 // Package rss provides RSS feed monitoring and sync functionality for Phase 5e-a.
 //
 // This package handles:
-//  - Fetching and parsing RSS feeds from configured sources (indexers and user sources)
-//  - Deduplication using GUID and source ID
-//  - Storage in the rss_items table
-//  - Periodic sync orchestration with configurable refresh intervals
-//  - Metrics for feed health monitoring
+//   - Fetching and parsing RSS feeds from configured sources (indexers and user sources)
+//   - Deduplication using GUID and source ID
+//   - Storage in the rss_items table
+//   - Periodic sync orchestration with configurable refresh intervals
+//   - Metrics for feed health monitoring
 //
 // RSS items are normalized into a uniform interface, enabling both RSS feeds and
 // web scraper sources to be consumed by the auto-search subsystem (Phase 5e-b).

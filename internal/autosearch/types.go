@@ -14,19 +14,19 @@ import (
 // SearchRequest describes what to search for and which quality
 // profile to evaluate results against.
 type SearchRequest struct {
-	MediaType        string   `json:"media_type"`         // "movie", "series", or "episode"
-	MediaID          string   `json:"media_id"`           // movie or series UUID
-	Title            string   `json:"title"`              // primary title (used for query building)
+	MediaType        string   `json:"media_type"`                 // "movie", "series", or "episode"
+	MediaID          string   `json:"media_id"`                   // movie or series UUID
+	Title            string   `json:"title"`                      // primary title (used for query building)
 	AlternateTitles  []string `json:"alternate_titles,omitempty"` // scene/alternate titles
-	Year             int      `json:"year,omitempty"`      // release year for movies (for ±1 verification and text query)
-	QualityProfileID string   `json:"quality_profile_id"` // profile to score against
+	Year             int      `json:"year,omitempty"`             // release year for movies (for ±1 verification and text query)
+	QualityProfileID string   `json:"quality_profile_id"`         // profile to score against
 	IMDBID           string   `json:"imdb_id,omitempty"`
 	TMDBID           string   `json:"tmdb_id,omitempty"`
 	TVDBID           string   `json:"tvdb_id,omitempty"`
 	Season           int      `json:"season,omitempty"`
 	Episode          int      `json:"episode,omitempty"`
-	DailyDate        string   `json:"daily_date,omitempty"` // "YYYY-MM-DD" for daily shows
-	Runtime          int      `json:"runtime,omitempty"`    // minutes; used for per-minute size limits
+	DailyDate        string   `json:"daily_date,omitempty"`    // "YYYY-MM-DD" for daily shows
+	Runtime          int      `json:"runtime,omitempty"`       // minutes; used for per-minute size limits
 	SearchRunID      string   `json:"search_run_id,omitempty"` // groups sub-searches (season → episodes)
 }
 
@@ -41,33 +41,33 @@ type SearchResult struct {
 
 // GrabbedRelease describes the release that was sent to a download client.
 type GrabbedRelease struct {
-	Title                string                    `json:"title"`
-	IndexerID            string                    `json:"indexer_id"`
-	Size                 int64                     `json:"size"`
-	QualityTier          int                       `json:"quality_tier"`
-	FormatScore          int                       `json:"format_score"`
-	CompositeScore       float64                   `json:"composite_score"`
+	Title                string                      `json:"title"`
+	IndexerID            string                      `json:"indexer_id"`
+	Size                 int64                       `json:"size"`
+	QualityTier          int                         `json:"quality_tier"`
+	FormatScore          int                         `json:"format_score"`
+	CompositeScore       float64                     `json:"composite_score"`
 	FormatMatches        []customformats.FormatMatch `json:"format_matches,omitempty"`
-	ClientID             string                    `json:"client_id"`
-	DownloadID           string                    `json:"download_id"`
-	ContentPath          string                    `json:"content_path,omitempty"`  // actual on-disk path; may be empty for external clients
-	SavePath             string                    `json:"save_path,omitempty"`
-	SeedRatioLimit       *float64                  `json:"seed_ratio_limit,omitempty"`
-	SeedTimeLimitMinutes *int                      `json:"seed_time_limit_minutes,omitempty"`
+	ClientID             string                      `json:"client_id"`
+	DownloadID           string                      `json:"download_id"`
+	ContentPath          string                      `json:"content_path,omitempty"` // actual on-disk path; may be empty for external clients
+	SavePath             string                      `json:"save_path,omitempty"`
+	SeedRatioLimit       *float64                    `json:"seed_ratio_limit,omitempty"`
+	SeedTimeLimitMinutes *int                        `json:"seed_time_limit_minutes,omitempty"`
 }
 
 // ScoredRelease is a search result after parsing, quality matching,
 // and scoring. Used internally for ranking and selection.
 type ScoredRelease struct {
-	Result         indexers.Result
-	Parsed         *parser.Release
-	QualityDef     *movies.QualityDefinition // matched quality definition, nil if unmatched
-	QualityTier    int                       // position in profile (lower = better)
-	FormatScore    int                       // sum of custom format scores from profile
-	FormatMatches  []customformats.FormatMatch
-	TiebreakerScore float64                  // seeders + age + size + freeleech bonuses
-	Rejected       bool
-	RejectReason   string
+	Result          indexers.Result
+	Parsed          *parser.Release
+	QualityDef      *movies.QualityDefinition // matched quality definition, nil if unmatched
+	QualityTier     int                       // position in profile (lower = better)
+	FormatScore     int                       // sum of custom format scores from profile
+	FormatMatches   []customformats.FormatMatch
+	TiebreakerScore float64 // seeders + age + size + freeleech bonuses
+	Rejected        bool
+	RejectReason    string
 }
 
 // CompositeScore returns the overall score used for ranking.
@@ -104,31 +104,31 @@ type EvaluateRequest struct {
 // EvaluatedResult is a single result scored by the evaluate endpoint.
 type EvaluatedResult struct {
 	// Original indexer result fields (echoed back).
-	IndexerID   string   `json:"indexer_id"`
-	Title       string   `json:"title"`
-	Link        string   `json:"link"`
-	SizeBytes   int64    `json:"size_bytes"`
-	Seeders     int      `json:"seeders"`
-	Leechers    int      `json:"leechers"`
-	PublishDate string   `json:"publish_date,omitempty"`
-	Categories  []int    `json:"categories,omitempty"`
-	MagnetURI   string   `json:"magnet_uri,omitempty"`
-	Infohash    string   `json:"infohash,omitempty"`
-	InfoURL     string   `json:"info_url,omitempty"`
-	Freeleech   bool     `json:"freeleech,omitempty"`
+	IndexerID   string `json:"indexer_id"`
+	Title       string `json:"title"`
+	Link        string `json:"link"`
+	SizeBytes   int64  `json:"size_bytes"`
+	Seeders     int    `json:"seeders"`
+	Leechers    int    `json:"leechers"`
+	PublishDate string `json:"publish_date,omitempty"`
+	Categories  []int  `json:"categories,omitempty"`
+	MagnetURI   string `json:"magnet_uri,omitempty"`
+	Infohash    string `json:"infohash,omitempty"`
+	InfoURL     string `json:"info_url,omitempty"`
+	Freeleech   bool   `json:"freeleech,omitempty"`
 
 	// Evaluation fields.
-	Rejected       bool                       `json:"rejected"`
-	RejectReason   string                     `json:"reject_reason,omitempty"`
-	QualityName    string                     `json:"quality_name,omitempty"`
-	QualityTier    int                        `json:"quality_tier"`
-	FormatScore    int                        `json:"format_score"`
+	Rejected       bool                        `json:"rejected"`
+	RejectReason   string                      `json:"reject_reason,omitempty"`
+	QualityName    string                      `json:"quality_name,omitempty"`
+	QualityTier    int                         `json:"quality_tier"`
+	FormatScore    int                         `json:"format_score"`
 	FormatMatches  []customformats.FormatMatch `json:"format_matches,omitempty"`
-	CompositeScore float64                    `json:"composite_score"`
-	ParsedTitle    string                     `json:"parsed_title,omitempty"`
-	ParsedYear     int                        `json:"parsed_year,omitempty"`
-	ParsedSource   string                     `json:"parsed_source,omitempty"`
-	ParsedRes      int                        `json:"parsed_resolution,omitempty"`
+	CompositeScore float64                     `json:"composite_score"`
+	ParsedTitle    string                      `json:"parsed_title,omitempty"`
+	ParsedYear     int                         `json:"parsed_year,omitempty"`
+	ParsedSource   string                      `json:"parsed_source,omitempty"`
+	ParsedRes      int                         `json:"parsed_resolution,omitempty"`
 }
 
 // EvaluateResponse is the response from the /evaluate endpoint.

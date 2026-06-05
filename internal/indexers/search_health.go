@@ -28,7 +28,7 @@ type IndexerSearchHealth struct {
 	LastSearchAt  *time.Time         `json:"last_search_at,omitempty"`
 	LastErrorAt   *time.Time         `json:"last_error_at,omitempty"`
 	LastError     string             `json:"last_error,omitempty"`
-	APICallsToday int               `json:"api_calls_today"`
+	APICallsToday int                `json:"api_calls_today"`
 	Status        SearchHealthStatus `json:"status"`
 }
 

@@ -114,7 +114,7 @@ func TestProviderFindMovieNotFound(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(ErrorResponse{
-			StatusCode: 404,
+			StatusCode:    404,
 			StatusMessage: "Not found",
 		})
 	}))
@@ -266,7 +266,7 @@ func TestProviderFindEpisodeNotFound(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(ErrorResponse{
-			StatusCode: 404,
+			StatusCode:    404,
 			StatusMessage: "Episode not found",
 		})
 	}))

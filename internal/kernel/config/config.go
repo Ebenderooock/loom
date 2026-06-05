@@ -58,13 +58,13 @@ type Config struct {
 //   - HealthCheckTimeoutSec bounds a single Test() call.
 //   - Proxies governs Phase 2e per-indexer outbound proxies.
 type IndexersConfig struct {
-	SearchTimeoutSec      int              `mapstructure:"search_timeout"`
-	ProxySearchTimeoutSec int              `mapstructure:"proxy_search_timeout"`
-	MaxParallel           int              `mapstructure:"max_parallel"`
-	HealthCheckSchedule   string           `mapstructure:"health_check_schedule"`
-	HealthCheckTimeoutSec int              `mapstructure:"health_check_timeout"`
-	Proxies               ProxiesConfig    `mapstructure:"proxies"`
-	Cardigann             CardigannConfig  `mapstructure:"cardigann"`
+	SearchTimeoutSec      int             `mapstructure:"search_timeout"`
+	ProxySearchTimeoutSec int             `mapstructure:"proxy_search_timeout"`
+	MaxParallel           int             `mapstructure:"max_parallel"`
+	HealthCheckSchedule   string          `mapstructure:"health_check_schedule"`
+	HealthCheckTimeoutSec int             `mapstructure:"health_check_timeout"`
+	Proxies               ProxiesConfig   `mapstructure:"proxies"`
+	Cardigann             CardigannConfig `mapstructure:"cardigann"`
 }
 
 // DownloadsConfig governs the download-client core (Phase 3a).
@@ -77,14 +77,14 @@ type IndexersConfig struct {
 //     to be on the same network as Loom and tolerate frequent probes.
 //   - HealthCheckTimeoutSec bounds a single Test() call.
 type DownloadsConfig struct {
-	OperationTimeoutSec   int         `mapstructure:"operation_timeout"`
-	MaxParallel           int         `mapstructure:"max_parallel"`
-	HealthCheckSchedule   string      `mapstructure:"health_check_schedule"`
-	HealthCheckTimeoutSec int         `mapstructure:"health_check_timeout"`
-	CheckForStalled       bool        `mapstructure:"check_for_stalled"`
-	StallTimeoutMin       int         `mapstructure:"stall_timeout"`
-	StallAction           string      `mapstructure:"stall_action"`
-	MaxRetries            int         `mapstructure:"max_retries"`
+	OperationTimeoutSec   int    `mapstructure:"operation_timeout"`
+	MaxParallel           int    `mapstructure:"max_parallel"`
+	HealthCheckSchedule   string `mapstructure:"health_check_schedule"`
+	HealthCheckTimeoutSec int    `mapstructure:"health_check_timeout"`
+	CheckForStalled       bool   `mapstructure:"check_for_stalled"`
+	StallTimeoutMin       int    `mapstructure:"stall_timeout"`
+	StallAction           string `mapstructure:"stall_action"`
+	MaxRetries            int    `mapstructure:"max_retries"`
 }
 
 // SafetyConfig governs download safety validation (Phase 9).
@@ -146,11 +146,11 @@ type HTTPConfig struct {
 }
 
 type LogConfig struct {
-	Level        string `mapstructure:"level"`
-	Format       string `mapstructure:"format"`
-	CaptureLevel string `mapstructure:"capture_level"`
-	RetentionDays int   `mapstructure:"retention_days"`
-	BufferSize   int    `mapstructure:"buffer_size"`
+	Level         string `mapstructure:"level"`
+	Format        string `mapstructure:"format"`
+	CaptureLevel  string `mapstructure:"capture_level"`
+	RetentionDays int    `mapstructure:"retention_days"`
+	BufferSize    int    `mapstructure:"buffer_size"`
 }
 
 type TelemetryConfig struct {

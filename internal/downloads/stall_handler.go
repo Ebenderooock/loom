@@ -13,21 +13,21 @@ import (
 type StallAction string
 
 const (
-	StallActionPause             StallAction = "pause"
-	StallActionRemove            StallAction = "remove"
+	StallActionPause              StallAction = "pause"
+	StallActionRemove             StallAction = "remove"
 	StallActionRemoveAndBlocklist StallAction = "remove_and_blocklist"
-	StallActionRetry             StallAction = "retry"
+	StallActionRetry              StallAction = "retry"
 )
 
 // StallHandlerOptions wires a StallHandler.
 type StallHandlerOptions struct {
-	Registry       *Registry
-	Blocklist      *BlocklistStore
-	Bus            eventbus.Bus
-	Logger         *slog.Logger
-	Clock          Clock
-	Action         StallAction
-	MaxRetries     int
+	Registry   *Registry
+	Blocklist  *BlocklistStore
+	Bus        eventbus.Bus
+	Logger     *slog.Logger
+	Clock      Clock
+	Action     StallAction
+	MaxRetries int
 }
 
 // StallHandler executes the configured action when a download stalls.

@@ -28,11 +28,11 @@
 //   - Case-insensitive comparison
 //
 // Confidence score is computed as:
-//   1. Levenshtein distance between normalized titles → similarity %
-//   2. Year bonus (+15%) if item year matches want year exactly
-//   3. Year bonus (+5%) if within 1 year
-//   4. Year penalty (-20%) if year mismatch > 1 year
-//   5. Final confidence = min(1.0, similarity + bonuses - penalties)
+//  1. Levenshtein distance between normalized titles → similarity %
+//  2. Year bonus (+15%) if item year matches want year exactly
+//  3. Year bonus (+5%) if within 1 year
+//  4. Year penalty (-20%) if year mismatch > 1 year
+//  5. Final confidence = min(1.0, similarity + bonuses - penalties)
 //
 // Example matches:
 //   - "Inception.2010.1080p" vs "Inception (2010)" → 1.0 confidence (exact)

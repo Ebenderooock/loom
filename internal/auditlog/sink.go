@@ -34,9 +34,9 @@ var AuditableTopics = []string{
 // into the audit_log table. It uses LogBackground so HTTP request
 // context cancellation cannot prevent the write.
 type Sink struct {
-	logger     *Logger
-	slogger    *slog.Logger
-	unsubs     []func()
+	logger  *Logger
+	slogger *slog.Logger
+	unsubs  []func()
 }
 
 // NewSink creates a Sink and subscribes to all auditable topics.

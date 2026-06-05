@@ -27,11 +27,11 @@ type Service struct {
 
 // ServiceOptions configures the Service.
 type ServiceOptions struct {
-	Repository            Repository
-	Logger                *slog.Logger
-	FlareSolverrTimeout   time.Duration
+	Repository             Repository
+	Logger                 *slog.Logger
+	FlareSolverrTimeout    time.Duration
 	FlareSolverrHTTPClient *http.Client
-	TestProbeURL          string
+	TestProbeURL           string
 }
 
 // NewService builds a Service. Repository is required.

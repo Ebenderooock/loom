@@ -64,12 +64,12 @@ var ValidTransitions = map[string][]string{
 
 // Retry behavior per failed state
 const (
-	MaxRetries     = 3
-	RetryBackoff1  = 5 * time.Minute
-	RetryBackoff2  = 15 * time.Minute
-	RetryBackoff3  = 45 * time.Minute
-	CompletedTTL   = 7 * 24 * time.Hour // prune completed after 7 days
-	SchedulerTick  = 60 * time.Second
+	MaxRetries    = 3
+	RetryBackoff1 = 5 * time.Minute
+	RetryBackoff2 = 15 * time.Minute
+	RetryBackoff3 = 45 * time.Minute
+	CompletedTTL  = 7 * 24 * time.Hour // prune completed after 7 days
+	SchedulerTick = 60 * time.Second
 )
 
 func RetryBackoff(attempt int) time.Duration {
@@ -135,23 +135,23 @@ type WorkflowEvent struct {
 
 // Event types for WorkflowEvent.EventType.
 const (
-	EventSearchStarted      = "search_started"
-	EventGrabbed            = "grabbed"
-	EventDownloading        = "downloading"
-	EventDownloadProgress   = "download_progress"
-	EventDownloadComplete   = "download_complete"
-	EventPostDownloadStart  = "post_download_started"
-	EventSeedingProgress    = "seeding_progress"
-	EventImportStarted      = "import_started"
-	EventImportSuccess      = "import_success"
-	EventImportFailed       = "import_failed"
-	EventCleanupStarted     = "cleanup_started"
-	EventCleanupCompleted   = "cleanup_completed"
-	EventStaleDetected      = "stale_detected"
-	EventRetried            = "retried"
-	EventFailed             = "failed"
-	EventCancelled          = "cancelled"
-	EventCompleted          = "completed"
+	EventSearchStarted     = "search_started"
+	EventGrabbed           = "grabbed"
+	EventDownloading       = "downloading"
+	EventDownloadProgress  = "download_progress"
+	EventDownloadComplete  = "download_complete"
+	EventPostDownloadStart = "post_download_started"
+	EventSeedingProgress   = "seeding_progress"
+	EventImportStarted     = "import_started"
+	EventImportSuccess     = "import_success"
+	EventImportFailed      = "import_failed"
+	EventCleanupStarted    = "cleanup_started"
+	EventCleanupCompleted  = "cleanup_completed"
+	EventStaleDetected     = "stale_detected"
+	EventRetried           = "retried"
+	EventFailed            = "failed"
+	EventCancelled         = "cancelled"
+	EventCompleted         = "completed"
 )
 
 // IsTerminal returns true if the workflow is in a final state.

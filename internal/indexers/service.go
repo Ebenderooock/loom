@@ -28,11 +28,11 @@ func (SystemClock) Now() time.Time { return time.Now() }
 
 // ServiceOptions wires Service dependencies.
 type ServiceOptions struct {
-	Repository         Repository
-	Registry           *Registry
-	Logger             *slog.Logger
-	Clock              Clock
-	SearchTimeout      time.Duration
+	Repository    Repository
+	Registry      *Registry
+	Logger        *slog.Logger
+	Clock         Clock
+	SearchTimeout time.Duration
 	// ProxySearchTimeout bounds a single proxied (e.g. FlareSolverr)
 	// indexer search. A real Cloudflare solve can take tens of seconds,
 	// so this is larger than SearchTimeout. Zero defaults to 65s.
@@ -74,20 +74,20 @@ type RouteMounter func(chi.Router)
 // the lifecycle that links a persisted Definition to a live Indexer
 // in the Registry.
 type Service struct {
-	repo               Repository
-	registry           *Registry
-	logger             *slog.Logger
-	clock              Clock
-	searchTimeout      time.Duration
-	proxyTimeout       time.Duration
-	maxParallel        int
-	healthCheckTimeout time.Duration
-	routeExtensions      []RouteMounter
-	definitionLister     DefinitionLister
-	searchHealthTracker  *SearchHealthTracker
-	indexerAvailability  *IndexerAvailability
-	queryLog             *QueryLog
-	auditLog             *auditlog.Logger
+	repo                Repository
+	registry            *Registry
+	logger              *slog.Logger
+	clock               Clock
+	searchTimeout       time.Duration
+	proxyTimeout        time.Duration
+	maxParallel         int
+	healthCheckTimeout  time.Duration
+	routeExtensions     []RouteMounter
+	definitionLister    DefinitionLister
+	searchHealthTracker *SearchHealthTracker
+	indexerAvailability *IndexerAvailability
+	queryLog            *QueryLog
+	auditLog            *auditlog.Logger
 
 	mu sync.Mutex // serialises CRUD against the registry
 }
@@ -303,8 +303,8 @@ func (s *Service) GetWithHealth(ctx context.Context, id string) (DefinitionWithH
 // the defaulting logic on the client.
 type DefinitionWithHealth struct {
 	Definition
-	Health    *Health         `json:"health,omitempty"`
-	RateLimit *RateLimitView  `json:"rate_limit,omitempty"`
+	Health    *Health        `json:"health,omitempty"`
+	RateLimit *RateLimitView `json:"rate_limit,omitempty"`
 }
 
 // RateLimitView is the JSON-friendly mirror of throttle.Config plus
@@ -312,12 +312,12 @@ type DefinitionWithHealth struct {
 // NULLable database columns surface as nil pointers so operators can
 // see "this field is unset" distinctly from "this field is zero".
 type RateLimitView struct {
-	PerMinute          *int `json:"per_minute,omitempty"`
-	Burst              *int `json:"burst,omitempty"`
-	MaxRetries         *int `json:"max_retries,omitempty"`
-	EffectivePerMinute int  `json:"effective_per_minute"`
-	EffectiveBurst     int  `json:"effective_burst"`
-	EffectiveMaxRetries int `json:"effective_max_retries"`
+	PerMinute           *int `json:"per_minute,omitempty"`
+	Burst               *int `json:"burst,omitempty"`
+	MaxRetries          *int `json:"max_retries,omitempty"`
+	EffectivePerMinute  int  `json:"effective_per_minute"`
+	EffectiveBurst      int  `json:"effective_burst"`
+	EffectiveMaxRetries int  `json:"effective_max_retries"`
 }
 
 func newRateLimitView(cfg throttle.Config) *RateLimitView {

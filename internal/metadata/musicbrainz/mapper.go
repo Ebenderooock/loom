@@ -54,12 +54,12 @@ func MapRelease(resp *ReleaseResponse) *ReleaseMetadata {
 	coverartURL := extractCoverartURL(resp.Relations)
 
 	return &ReleaseMetadata{
-		MBID:         resp.ID,
-		Title:        resp.Title,
-		Year:         year,
-		Artists:      artists,
-		Tracks:       tracks,
-		CoverartURL:  coverartURL,
+		MBID:        resp.ID,
+		Title:       resp.Title,
+		Year:        year,
+		Artists:     artists,
+		Tracks:      tracks,
+		CoverartURL: coverartURL,
 	}
 }
 

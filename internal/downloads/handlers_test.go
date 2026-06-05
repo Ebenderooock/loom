@@ -63,7 +63,7 @@ func TestHandlersCreateRejectsBadRequest(t *testing.T) {
 
 	cases := []string{
 		`{}`,
-		`{"name":"x","protocol":"torrent"}`,                       // missing kind
+		`{"name":"x","protocol":"torrent"}`, // missing kind
 		`{"kind":"builtin/null","protocol":"torrent"}`,            // missing name
 		`{"kind":"builtin/null","name":"x"}`,                      // missing protocol
 		`{"kind":"unknown-kind","name":"x","protocol":"torrent"}`, // unknown kind

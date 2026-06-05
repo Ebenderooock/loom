@@ -39,11 +39,11 @@ func TestScraperNewValidation(t *testing.T) {
 		{
 			name: "valid config",
 			cfg: ScraperConfig{
-				URL:            "http://example.com",
-				SelectorType:   "css",
-				ItemSelector:   ".item",
-				TitleSelector:  "h2",
-				LinkSelector:   "a",
+				URL:           "http://example.com",
+				SelectorType:  "css",
+				ItemSelector:  ".item",
+				TitleSelector: "h2",
+				LinkSelector:  "a",
 			},
 			wantErr: "",
 		},
@@ -83,11 +83,11 @@ func TestScraperCSSExtraction(t *testing.T) {
 	`
 
 	cfg := ScraperConfig{
-		URL:              "http://example.com",
-		SelectorType:     "css",
-		ItemSelector:     ".item",
-		TitleSelector:    ".title",
-		LinkSelector:     ".link",
+		URL:               "http://example.com",
+		SelectorType:      "css",
+		ItemSelector:      ".item",
+		TitleSelector:     ".title",
+		LinkSelector:      ".link",
 		PublishedSelector: ".date",
 	}
 
@@ -134,11 +134,11 @@ func TestScraperXPathExtraction(t *testing.T) {
 	`
 
 	cfg := ScraperConfig{
-		URL:              "http://example.com",
-		SelectorType:     "xpath",
-		ItemSelector:     "//item",
-		TitleSelector:    "./title",
-		LinkSelector:     "./link",
+		URL:           "http://example.com",
+		SelectorType:  "xpath",
+		ItemSelector:  "//item",
+		TitleSelector: "./title",
+		LinkSelector:  "./link",
 	}
 
 	scraper, err := NewWebScraper(quietLogger(), "test", "test", cfg)
@@ -382,12 +382,12 @@ func TestScraperAuthHeaders(t *testing.T) {
 	defer server.Close()
 
 	tests := []struct {
-		name       string
-		authType   string
-		username   string
-		password   string
-		apiKey     string
-		wantAuth   string
+		name     string
+		authType string
+		username string
+		password string
+		apiKey   string
+		wantAuth string
 	}{
 		{
 			name:     "basic auth",
@@ -408,14 +408,14 @@ func TestScraperAuthHeaders(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			capturedAuth = ""
 			cfg := ScraperConfig{
-				URL:            server.URL,
-				SelectorType:   "css",
-				ItemSelector:   ".item",
-				TitleSelector:  ".t",
-				AuthType:       tt.authType,
-				Username:       tt.username,
-				Password:       tt.password,
-				APIKey:         tt.apiKey,
+				URL:           server.URL,
+				SelectorType:  "css",
+				ItemSelector:  ".item",
+				TitleSelector: ".t",
+				AuthType:      tt.authType,
+				Username:      tt.username,
+				Password:      tt.password,
+				APIKey:        tt.apiKey,
 			}
 
 			scraper, err := NewWebScraper(quietLogger(), "test", "test", cfg)

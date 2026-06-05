@@ -50,7 +50,9 @@ type sqlRepo struct {
 
 const seriesColumns = `id, title, year, imdb_id, tmdb_id, tvdb_id, overview, genres, runtime, rating, backdrop_path, poster_path, network, status, series_type, metadata_provider, quality_profile_id, library_id, monitoring_status, season_folder, release_date, created_at, updated_at`
 
-func scanSeries(scanner interface{ Scan(dest ...interface{}) error }) (*Series, error) {
+func scanSeries(scanner interface {
+	Scan(dest ...interface{}) error
+}) (*Series, error) {
 	s := &Series{}
 	var genreBytes []byte
 	var createdStr, updatedStr string
@@ -160,7 +162,9 @@ func (r *sqlRepo) DeleteSeries(ctx context.Context, id string) error {
 
 const seasonColumns = `id, series_id, season_number, title, overview, poster_path, monitored, episode_count, created_at, updated_at`
 
-func scanSeason(scanner interface{ Scan(dest ...interface{}) error }) (*Season, error) {
+func scanSeason(scanner interface {
+	Scan(dest ...interface{}) error
+}) (*Season, error) {
 	s := &Season{}
 	var createdStr, updatedStr string
 	err := scanner.Scan(
@@ -222,7 +226,9 @@ func (r *sqlRepo) UpdateSeason(ctx context.Context, s *Season) error {
 
 const episodeColumns = `id, series_id, season_id, episode_number, title, overview, air_date, runtime, still_path, monitored, has_file, created_at, updated_at`
 
-func scanEpisode(scanner interface{ Scan(dest ...interface{}) error }) (*Episode, error) {
+func scanEpisode(scanner interface {
+	Scan(dest ...interface{}) error
+}) (*Episode, error) {
 	e := &Episode{}
 	var createdStr, updatedStr string
 	err := scanner.Scan(

@@ -45,13 +45,13 @@ func TestCaseInsensitiveMatch(t *testing.T) {
 
 func TestYearMatching(t *testing.T) {
 	tests := []struct {
-		name           string
-		wantTitle      string
-		wantYear       int
-		itemTitle      string
-		itemYear       int
-		minConfidence  float64
-		shouldMatch    bool
+		name          string
+		wantTitle     string
+		wantYear      int
+		itemTitle     string
+		itemYear      int
+		minConfidence float64
+		shouldMatch   bool
 	}{
 		{
 			name:          "exact_year_match",
@@ -123,12 +123,12 @@ func TestFuzzyMatching(t *testing.T) {
 	})
 
 	tests := []struct {
-		itemTitle string
+		itemTitle   string
 		shouldMatch bool
 	}{
 		{"The.Matrix.1999.1080p.BluRay", true},
 		{"TheMatrix.1999.1080p", true},
-		{"Matrix.1999.1080p", true}, // Missing "The" but still close
+		{"Matrix.1999.1080p", true},     // Missing "The" but still close
 		{"Matrix.Reloaded.2003", false}, // Different movie
 		{"TheMatrixx.1999.1080p", true}, // Typo (extra 'x'), should still match
 	}
@@ -255,7 +255,7 @@ func TestExtractYear(t *testing.T) {
 		{"The.Matrix.1999", 1999},
 		{"2001.A.Space.Odyssey.1968", 1968},
 		{"NoYearHere.1080p", 0},
-		{"Year2025IsAfter2020", 0}, // No word boundary match (2025 and 2020 are not separated)
+		{"Year2025IsAfter2020", 0},        // No word boundary match (2025 and 2020 are not separated)
 		{"Year 2025 Is After 2020", 2020}, // Takes last year with word boundary
 		{"1999.Inception.2010", 2010},
 	}
@@ -301,9 +301,9 @@ func TestTypoTolerance(t *testing.T) {
 		shouldMatch bool
 	}{
 		{"Inception.2010.1080p", true},
-		{"Incpetion.2010.1080p", true}, // One char swap (distance=1)
-		{"Inceptin.2010.1080p", true},  // Missing one char (distance=1)
-		{"nception.2010.1080p", true},  // Missing first char (distance=1)
+		{"Incpetion.2010.1080p", true},  // One char swap (distance=1)
+		{"Inceptin.2010.1080p", true},   // Missing one char (distance=1)
+		{"nception.2010.1080p", true},   // Missing first char (distance=1)
 		{"Inceptionn.2010.1080p", true}, // Extra char (distance=1)
 		{"Inceptoin.2010.1080p", true},  // Char transposition
 		// Note: "Matrixz.2010" won't match "Inception" as it's a completely different title

@@ -2,9 +2,9 @@ package packs
 
 // WantedEpisodes describes the episodes a user wants in a given season.
 type WantedEpisodes struct {
-	Season       int
-	EpisodeNums  []int // episode numbers the user still needs
-	TotalInSeason int  // total episodes in the season
+	Season        int
+	EpisodeNums   []int // episode numbers the user still needs
+	TotalInSeason int   // total episodes in the season
 }
 
 // DecidePack evaluates whether grabbing a pack is worthwhile compared

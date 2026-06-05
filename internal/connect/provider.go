@@ -62,8 +62,8 @@ func (p *plexProvider) Test(ctx context.Context, s ProviderSettings) error {
 
 // plexMediaContainer is used to parse the /library/sections response.
 type plexMediaContainer struct {
-	XMLName   xml.Name     `xml:"MediaContainer"`
-	Directory []plexDir    `xml:"Directory"`
+	XMLName   xml.Name  `xml:"MediaContainer"`
+	Directory []plexDir `xml:"Directory"`
 }
 
 type plexDir struct {

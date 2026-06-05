@@ -32,7 +32,7 @@ type listGroup struct {
 	// MinPostTime / ActiveDownloads are present in v21+ payloads;
 	// kept on the struct so we can extend ETA logic without another
 	// fixture pass.
-	ActiveDownloads int   `json:"ActiveDownloads"`
+	ActiveDownloads  int   `json:"ActiveDownloads"`
 	PostTotalTimeSec int64 `json:"PostTotalTimeSec"`
 }
 

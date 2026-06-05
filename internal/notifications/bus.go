@@ -9,10 +9,10 @@ import (
 
 // NotificationEvent is an event bus event that triggers notifications.
 type NotificationEvent struct {
-	Event     EventType      `json:"event"`
-	Title     string         `json:"title"`
-	Message   string         `json:"message"`
-	Data      map[string]any `json:"data,omitempty"`
+	Event   EventType      `json:"event"`
+	Title   string         `json:"title"`
+	Message string         `json:"message"`
+	Data    map[string]any `json:"data,omitempty"`
 }
 
 // Topic implements eventbus.Event.

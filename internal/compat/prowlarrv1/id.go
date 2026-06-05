@@ -1,8 +1,8 @@
 package prowlarrv1
 
 import (
-	"encoding/hex"
 	"encoding/binary"
+	"encoding/hex"
 	"fmt"
 	"strings"
 )

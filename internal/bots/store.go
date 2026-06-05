@@ -330,8 +330,8 @@ func scanLink(row scanner) (AccountLink, error) {
 
 func scanLinkCode(row scanner) (LinkCode, error) {
 	var (
-		lc                lc2
-		expires, created  string
+		lc               lc2
+		expires, created string
 	)
 	if err := row.Scan(&lc.Code, &lc.Platform, &lc.ExternalID, &lc.ExternalUsername, &expires, &created); err != nil {
 		return LinkCode{}, err

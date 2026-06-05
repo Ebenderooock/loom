@@ -29,10 +29,10 @@ type NewznabItem struct {
 
 // NewznabChannel represents the RSS channel.
 type NewznabChannel struct {
-	XMLName xml.Name       `xml:"channel"`
-	Title   string         `xml:"title"`
-	Link    string         `xml:"link"`
-	Items   []NewznabItem  `xml:"item"`
+	XMLName xml.Name      `xml:"channel"`
+	Title   string        `xml:"title"`
+	Link    string        `xml:"link"`
+	Items   []NewznabItem `xml:"item"`
 }
 
 // NewznabRSS represents the root RSS document.
@@ -43,17 +43,17 @@ type NewznabRSS struct {
 
 // NewznabFeedSource fetches and parses Newznab-compatible RSS feeds.
 type NewznabFeedSource struct {
-	id              string
-	name            string
-	url             string
-	interval        time.Duration
-	httpClient      *http.Client
-	logger          *slog.Logger
-	apiKey          string
-	lastModified    time.Time
-	lastETag        string
-	pageSize        int
-	offset          int
+	id           string
+	name         string
+	url          string
+	interval     time.Duration
+	httpClient   *http.Client
+	logger       *slog.Logger
+	apiKey       string
+	lastModified time.Time
+	lastETag     string
+	pageSize     int
+	offset       int
 }
 
 // NewNewznabFeedSource creates a new Newznab feed source.
@@ -202,14 +202,14 @@ func (n *NewznabFeedSource) parseItems(rss *NewznabRSS) []*Item {
 
 // GenericRSSFeedSource handles generic RSS feeds (non-Newznab).
 type GenericRSSFeedSource struct {
-	id              string
-	name            string
-	url             string
-	interval        time.Duration
-	httpClient      *http.Client
-	logger          *slog.Logger
-	lastModified    time.Time
-	lastETag        string
+	id           string
+	name         string
+	url          string
+	interval     time.Duration
+	httpClient   *http.Client
+	logger       *slog.Logger
+	lastModified time.Time
+	lastETag     string
 }
 
 // NewGenericRSSFeedSource creates a new generic RSS feed source.

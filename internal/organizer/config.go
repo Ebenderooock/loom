@@ -13,11 +13,11 @@ import (
 
 // NamingConfig controls how movie files and folders are named.
 type NamingConfig struct {
-	ID                   string `json:"id"`
-	MovieFolderFormat    string `json:"movie_folder_format"`
-	MovieFileFormat      string `json:"movie_file_format"`
-	ColonReplacement     string `json:"colon_replacement"`
-	RenameMovies         bool   `json:"rename_movies"`
+	ID                string `json:"id"`
+	MovieFolderFormat string `json:"movie_folder_format"`
+	MovieFileFormat   string `json:"movie_file_format"`
+	ColonReplacement  string `json:"colon_replacement"`
+	RenameMovies      bool   `json:"rename_movies"`
 }
 
 // DefaultNamingConfig returns sensible defaults matching Radarr conventions.
@@ -45,12 +45,12 @@ type RenamePreview struct {
 
 // RenameResult holds the outcome of a single file rename.
 type RenameResult struct {
-	FileID      string `json:"file_id"`
-	MovieID     string `json:"movie_id"`
-	OldPath     string `json:"old_path"`
-	NewPath     string `json:"new_path"`
-	Success     bool   `json:"success"`
-	Error       string `json:"error,omitempty"`
+	FileID  string `json:"file_id"`
+	MovieID string `json:"movie_id"`
+	OldPath string `json:"old_path"`
+	NewPath string `json:"new_path"`
+	Success bool   `json:"success"`
+	Error   string `json:"error,omitempty"`
 }
 
 // FormatFolderName renders the folder name for a movie.

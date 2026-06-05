@@ -198,11 +198,11 @@ func (imp *Importer) importSonarrEpisodes(ctx context.Context, src *sql.DB, tx *
 
 	for rows.Next() {
 		var (
-			id, seriesID           int64
-			seasonNum, episodeNum  int
-			title, overview        string
-			airDate                string
-			monitored              bool
+			id, seriesID          int64
+			seasonNum, episodeNum int
+			title, overview       string
+			airDate               string
+			monitored             bool
 		)
 		if err := rows.Scan(&id, &seriesID, &seasonNum, &episodeNum,
 			&title, &overview, &airDate, &monitored); err != nil {

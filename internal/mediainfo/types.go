@@ -15,13 +15,13 @@ type MediaInfo struct {
 
 // MediaPreferences defines user preferences for scoring releases.
 type MediaPreferences struct {
-	ID                    string   `json:"id"`
-	PreferredAudioCodecs  []string `json:"preferred_audio"`
-	PreferredSubLanguages []string `json:"preferred_sub_languages"`
-	RequireSubtitles      bool     `json:"require_subtitles"`
-	PreferHDR             bool     `json:"prefer_hdr"`
+	ID                      string   `json:"id"`
+	PreferredAudioCodecs    []string `json:"preferred_audio"`
+	PreferredSubLanguages   []string `json:"preferred_sub_languages"`
+	RequireSubtitles        bool     `json:"require_subtitles"`
+	PreferHDR               bool     `json:"prefer_hdr"`
 	PreferAtmos             bool     `json:"prefer_atmos"`
 	DefaultQualityProfileID string   `json:"default_quality_profile_id"`
 	CreatedAt               string   `json:"created_at,omitempty"`
-	UpdatedAt             string   `json:"updated_at,omitempty"`
+	UpdatedAt               string   `json:"updated_at,omitempty"`
 }

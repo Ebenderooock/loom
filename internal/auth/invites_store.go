@@ -72,11 +72,11 @@ const inviteSelectCols = `i.id, i.token, i.email, i.role, i.created_by,
 
 func scanInvite(row interface{ Scan(...any) error }) (Invite, error) {
 	var (
-		inv               Invite
-		created, expires  string
-		usedAt            sql.NullString
-		usedBy            sql.NullInt64
-		usedByName        string
+		inv              Invite
+		created, expires string
+		usedAt           sql.NullString
+		usedBy           sql.NullInt64
+		usedByName       string
 	)
 	if err := row.Scan(&inv.ID, &inv.Token, &inv.Email, &inv.Role, &inv.CreatedBy,
 		&created, &expires, &usedAt, &usedBy, &usedByName); err != nil {

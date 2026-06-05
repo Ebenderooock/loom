@@ -1,13 +1,14 @@
 package tmdb
 
 import (
-	"github.com/ebenderooock/loom/internal/metadata"
 	"strconv"
+
+	"github.com/ebenderooock/loom/internal/metadata"
 )
 
 const (
-	posterCDNURL    = "https://image.tmdb.org/t/p/w342"
-	overviewMaxLen  = 1000
+	posterCDNURL   = "https://image.tmdb.org/t/p/w342"
+	overviewMaxLen = 1000
 )
 
 // mapMovieResponse converts a TMDb MovieResponse to our MovieMetadata.

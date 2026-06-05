@@ -57,13 +57,13 @@
 // The client returns typed errors (ClientError) for distinguishing between
 // different failure modes:
 //
-//	- ErrCodeNotFound (404): Resource does not exist on TMDb
-//	- ErrCodeUnauthorized (401): Invalid or missing API key
-//	- ErrCodeRateLimit (429): Rate limit exceeded; includes Retry-After
-//	- ErrCodeServerError (5xx): TMDb server error; automatic retry with backoff
-//	- ErrCodeClientError (4xx other): Request error (bad parameters, etc.)
-//	- ErrCodeNetworkError: Network-level error (connection refused, DNS, etc.)
-//	- ErrCodeContextError: Context cancelled or deadline exceeded
+//   - ErrCodeNotFound (404): Resource does not exist on TMDb
+//   - ErrCodeUnauthorized (401): Invalid or missing API key
+//   - ErrCodeRateLimit (429): Rate limit exceeded; includes Retry-After
+//   - ErrCodeServerError (5xx): TMDb server error; automatic retry with backoff
+//   - ErrCodeClientError (4xx other): Request error (bad parameters, etc.)
+//   - ErrCodeNetworkError: Network-level error (connection refused, DNS, etc.)
+//   - ErrCodeContextError: Context cancelled or deadline exceeded
 //
 // Example:
 //

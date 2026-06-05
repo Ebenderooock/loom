@@ -8,10 +8,11 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/sqlc-dev/pqtype"
+
 	"github.com/ebenderooock/loom/internal/indexers/throttle"
 	dbpg "github.com/ebenderooock/loom/internal/storage/db/postgres"
 	dbsqlite "github.com/ebenderooock/loom/internal/storage/db/sqlite"
-	"github.com/sqlc-dev/pqtype"
 )
 
 // Repository is the persistence interface for indexer rows and their

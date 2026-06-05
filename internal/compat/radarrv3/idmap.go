@@ -10,8 +10,8 @@ import (
 // Radarr-style integer IDs. String→int uses the first 8 hex characters
 // of the UUID parsed as a uint32. Int→string is cached for reverse lookup.
 type idMapper struct {
-	mu      sync.RWMutex
-	toStr   map[int]string
+	mu    sync.RWMutex
+	toStr map[int]string
 }
 
 func newIDMapper() *idMapper {

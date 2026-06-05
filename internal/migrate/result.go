@@ -8,16 +8,16 @@ import (
 
 // ImportResult tracks statistics from a single import run.
 type ImportResult struct {
-	Source        string
-	MoviesAdded   int
-	SeriesAdded   int
-	EpisodesAdded int
-	IndexersAdded int
-	ProfilesAdded int
+	Source         string
+	MoviesAdded    int
+	SeriesAdded    int
+	EpisodesAdded  int
+	IndexersAdded  int
+	ProfilesAdded  int
 	LibrariesAdded int
-	Skipped       int
-	Errors        []string
-	Duration      time.Duration
+	Skipped        int
+	Errors         []string
+	Duration       time.Duration
 }
 
 // Summary returns a human-readable summary of the import result.
