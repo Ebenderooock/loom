@@ -13,6 +13,7 @@ import {
   ListPlus,
   Network,
   Palette,
+  Puzzle,
   Radio,
   RefreshCw,
   Repeat,
@@ -139,6 +140,13 @@ export const SETTINGS_GROUPS: SettingsNavGroup[] = [
     items: [
       { to: "/settings/notifications", label: "Notifications", Icon: Bell, kind: "page" },
       { to: "/settings/request-bots", label: "Request Bots", Icon: Bot, kind: "page" },
+      {
+        to: "/settings/plugins",
+        label: "Plugins",
+        Icon: Puzzle,
+        kind: "page",
+        adminOnly: true,
+      },
       {
         to: "/settings/connect",
         label: "Connect",

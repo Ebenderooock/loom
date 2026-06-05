@@ -1,0 +1,116 @@
+package plugins
+
+import (
+	"encoding/json"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/ebenderooock/loom/internal/kernel/eventbus"
+)
+
+// Optional interfaces an event may implement to expose structured data, mirrored
+// from the notifications dispatcher so we stay decoupled from source packages.
+type dataProvider interface{ NotificationData() map[string]any }
+type titler interface{ GetTitle() string }
+
+// buildPayload converts a bus event into the stdin payload for plugins.
+func buildPayload(def EventDef, ev eventbus.Event) Payload {
+	data := map[string]any{}
+	if dp, ok := ev.(dataProvider); ok {
+		for k, v := range dp.NotificationData() {
+			data[k] = v
+		}
+	}
+	title := ""
+	if t, ok := ev.(titler); ok {
+		title = t.GetTitle()
+		if title != "" {
+			data["title"] = title
+		}
+	}
+	if title == "" {
+		if s, ok := data["title"].(string); ok {
+			title = s
+		}
+	}
+	return Payload{
+		Version:   PayloadVersion,
+		Event:     def.Key,
+		Topic:     def.Topic,
+		Title:     title,
+		Data:      data,
+		Timestamp: time.Now().UTC(),
+	}
+}
+
+// buildEnv constructs the child process environment. The host environment is
+// intentionally NOT inherited so server secrets cannot leak into plugins. The
+// plugin's explicit env is applied first; Loom-provided LOOM_* vars are applied
+// last so they cannot be overridden.
+func buildEnv(p *Plugin, payload Payload) []string {
+	env := []string{"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"}
+	for k, v := range p.Env {
+		if strings.HasPrefix(strings.ToUpper(k), "LOOM_") {
+			continue // reserved; defended at validation time too
+		}
+		env = append(env, k+"="+v)
+	}
+	dataJSON, _ := json.Marshal(payload.Data)
+	env = append(env,
+		"LOOM_PAYLOAD_VERSION="+strconv.Itoa(payload.Version),
+		"LOOM_EVENT="+payload.Event,
+		"LOOM_TOPIC="+payload.Topic,
+		"LOOM_TITLE="+payload.Title,
+	)
+	// The full payload is always available on stdin. Only expose the data map as
+	// an env var when it is small enough to stay well under the OS per-string
+	// argument limit (Linux MAX_ARG_STRLEN ~128 KiB); otherwise read stdin.
+	if len(dataJSON) <= maxEnvJSON {
+		env = append(env, "LOOM_DATA_JSON="+string(dataJSON))
+	}
+	return env
+}
+
+func workingDir(p *Plugin) string {
+	if strings.TrimSpace(p.WorkingDir) != "" {
+		return p.WorkingDir
+	}
+	return "/"
+}
+
+// capWriter accumulates up to limit bytes and silently discards the rest, while
+// always reporting a full write so the os/exec output copier never blocks.
+type capWriter struct {
+	mu    sync.Mutex
+	buf   []byte
+	limit int
+	over  bool
+}
+
+func (w *capWriter) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if remaining := w.limit - len(w.buf); remaining > 0 {
+		if len(p) <= remaining {
+			w.buf = append(w.buf, p...)
+		} else {
+			w.buf = append(w.buf, p[:remaining]...)
+			w.over = true
+		}
+	} else if len(p) > 0 {
+		w.over = true
+	}
+	return len(p), nil
+}
+
+func (w *capWriter) String() string {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	s := string(w.buf)
+	if w.over {
+		s += "\n…(truncated)"
+	}
+	return s
+}

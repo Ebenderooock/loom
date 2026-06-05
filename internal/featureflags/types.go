@@ -16,6 +16,12 @@ const (
 	// the poller stops collecting new play history; existing history and the
 	// reports remain readable.
 	KeyMediaAnalytics = "media_analytics"
+
+	// KeyPlugins toggles custom post-processing plugins (scripts run on events).
+	// Disabled by default because plugins execute arbitrary commands as the
+	// server process; an admin must opt in. When disabled the runner does not
+	// execute any plugin, though definitions and history remain manageable.
+	KeyPlugins = "plugins"
 )
 
 // FlagDef is the static, in-code definition of a feature toggle.
@@ -49,6 +55,13 @@ var Definitions = []FlagDef{
 		Description: "Monitor active streams and record watch history from connected Plex/Emby/Jellyfin servers, shown under Analytics. Disabling stops new sampling; existing history stays viewable.",
 		Category:    "Diagnostics",
 		Default:     true,
+	},
+	{
+		Key:         KeyPlugins,
+		Label:       "Plugins (Custom Scripts)",
+		Description: "Run admin-defined custom scripts when events fire (grab, import, playback). Plugins execute arbitrary commands as the Loom server process — this is NOT a security sandbox. Disabled by default; enable only if you trust the configured scripts.",
+		Category:    "Diagnostics",
+		Default:     false,
 	},
 }
 
