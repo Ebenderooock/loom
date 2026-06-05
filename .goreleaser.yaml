@@ -32,6 +32,8 @@ builds:
         goarch: arm
     flags:
       - -trimpath
+    tags:
+      - embed
     ldflags:
       - -s -w
       - -X github.com/ebenderooock/loom/internal/buildinfo.Version={{.Version}}
@@ -107,3 +109,8 @@ release:
   github:
     owner: ebenderooock
     name: loom
+  # Curated source tarball that bundles the prebuilt web/dist so downstream
+  # packagers (e.g. SynoCommunity spksrc) can `go build -tags embed` without a
+  # Node toolchain. Built by the release workflow before GoReleaser runs.
+  extra_files:
+    - glob: ./loom-source-v*.tar.gz
