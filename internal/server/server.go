@@ -64,6 +64,7 @@ import (
 	"github.com/ebenderooock/loom/internal/notifications"
 	"github.com/ebenderooock/loom/internal/organizer"
 	"github.com/ebenderooock/loom/internal/packs"
+	"github.com/ebenderooock/loom/internal/plugins"
 	"github.com/ebenderooock/loom/internal/qualityprofiles"
 	"github.com/ebenderooock/loom/internal/requests"
 	"github.com/ebenderooock/loom/internal/rss"
@@ -100,6 +101,8 @@ type Server struct {
 	notifSvc          notifications.Service
 	connectSvc        connect.Service
 	analyticsSvc      *analytics.Service
+	pluginStore       *plugins.Store
+	pluginTester      plugins.Tester
 	reviewStore       *safety.ReviewStore
 	cleanupSvc        *cleanup.Service
 	requestsSvc       *requests.Service
@@ -291,6 +294,15 @@ func (s *Server) SetConnect(svc connect.Service) {
 // SetAnalytics installs the media-analytics service and rebuilds the handler.
 func (s *Server) SetAnalytics(svc *analytics.Service) {
 	s.analyticsSvc = svc
+	if s.httpSrv != nil {
+		s.httpSrv.Handler = s.newMux()
+	}
+}
+
+// SetPlugins installs the plugins store + runner (tester) and rebuilds the handler.
+func (s *Server) SetPlugins(store *plugins.Store, tester plugins.Tester) {
+	s.pluginStore = store
+	s.pluginTester = tester
 	if s.httpSrv != nil {
 		s.httpSrv.Handler = s.newMux()
 	}
@@ -724,6 +736,15 @@ func (s *Server) newMux() http.Handler {
 				adminMW = s.authSvc.RequireRole("admin")
 			}
 			r.Mount("/api/v1/analytics", analytics.Router(s.analyticsSvc, adminMW))
+		}
+
+		// Plugins (custom scripts) routes — admin-only; plugins run commands.
+		if s.pluginStore != nil {
+			adminMW := func(next http.Handler) http.Handler { return next }
+			if s.authSvc != nil {
+				adminMW = s.authSvc.RequireRole("admin")
+			}
+			r.Mount("/api/v1/plugins", plugins.Router(s.pluginStore, s.pluginTester, adminMW))
 		}
 
 		// Calendar routes

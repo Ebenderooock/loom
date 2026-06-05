@@ -255,6 +255,10 @@ func cmdServe(ctx context.Context, args []string) error {
 		infra.analyticsPoller.Start(ctx)
 		defer infra.analyticsPoller.Stop()
 	}
+	if infra.pluginRunner != nil {
+		infra.pluginRunner.Start(ctx)
+		defer infra.pluginRunner.Stop()
+	}
 	defer infra.auditSink.Close()
 	defer sysLogBatchWriter.Close()
 

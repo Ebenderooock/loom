@@ -19,6 +19,7 @@ import (
 	"github.com/ebenderooock/loom/internal/libraries"
 	"github.com/ebenderooock/loom/internal/movies"
 	"github.com/ebenderooock/loom/internal/notifications"
+	"github.com/ebenderooock/loom/internal/plugins"
 	"github.com/ebenderooock/loom/internal/scheduler"
 	"github.com/ebenderooock/loom/internal/server"
 	"github.com/ebenderooock/loom/internal/storage"
@@ -32,6 +33,7 @@ type infraWiring struct {
 	healthMon       *healthmonitor.Monitor
 	auditSink       *auditlog.Sink
 	analyticsPoller *analytics.Poller
+	pluginRunner    *plugins.Runner
 }
 
 // wireInfra constructs infrastructure services (connect, compat shims,
@@ -70,6 +72,17 @@ func wireInfra(
 	// and fans out to all matching notification connections.
 	notifDispatcher := notifications.NewDispatcher(srv.Bus(), media.notifSvc, logger)
 
+	// Plugins — admin-defined custom scripts run on domain events. Gated by an
+	// opt-in feature flag because they execute arbitrary commands.
+	pluginStore := plugins.NewStore(db.DB())
+	pluginRunner := plugins.NewRunner(
+		srv.Bus(),
+		pluginStore,
+		srv.Features().EnabledFunc(featureflags.KeyPlugins),
+		logger,
+	)
+	srv.SetPlugins(pluginStore, pluginRunner)
+
 	// *arr API compatibility shims
 	syncStore := syncprofiles.NewStore(db.DB())
 	srv.SetSyncProfileStore(syncStore)
@@ -105,6 +118,7 @@ func wireInfra(
 		healthMon:       healthMon,
 		auditSink:       auditSink,
 		analyticsPoller: analyticsPoller,
+		pluginRunner:    pluginRunner,
 	}, nil
 }
 
