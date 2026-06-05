@@ -117,7 +117,8 @@ docker compose up -d
 
 See [`docs/deployment.md`](docs/deployment.md) for Kubernetes
 (Phase 11), bare-metal binaries, and reverse-proxy snippets
-(Traefik / Caddy / Nginx).
+(Traefik / Caddy / Nginx). For Synology NAS, see
+[`docs/synology.md`](docs/synology.md).
 
 ## Documentation
 
@@ -126,6 +127,7 @@ The [`docs/`](docs/) directory is the source of truth.
 - [Configuration reference](docs/configuration.md)
 - [Architecture](docs/architecture.md)
 - [Deployment](docs/deployment.md)
+- [Synology (DSM) install](docs/synology.md)
 - [Observability](docs/observability.md)
 - [Storage](docs/storage.md)
 - [API](docs/api.md) (and [`api/openapi/loom.yaml`](api/openapi/loom.yaml))
