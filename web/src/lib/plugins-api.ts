@@ -7,11 +7,10 @@ export interface Plugin {
   id: string;
   name: string;
   enabled: boolean;
-  command: string[];
+  source: string;
   events: string[];
   env: Record<string, string>;
   timeout_secs: number;
-  working_dir: string;
   created_at: string;
   updated_at: string;
 }
@@ -39,11 +38,10 @@ export interface PluginRun {
 export interface PluginInput {
   name: string;
   enabled: boolean;
-  command: string[];
+  source: string;
   events: string[];
   env: Record<string, string>;
   timeout_secs: number;
-  working_dir: string;
 }
 
 const BASE = "/api/v1/plugins";

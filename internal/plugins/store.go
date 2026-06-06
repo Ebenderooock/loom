@@ -18,6 +18,7 @@ const (
 	maxRunAge        = 30 * 24 * time.Hour
 	maxTimeoutSecs   = 300
 	defaultTimeout   = 30
+	maxSourceBytes   = 256 * 1024 // JS plugin source cap
 )
 
 // Store is the persistence + validation layer for plugins and their run history.
@@ -31,7 +32,7 @@ func NewStore(db *sql.DB) *Store { return &Store{db: db} }
 // List returns all plugins ordered by name.
 func (s *Store) List(ctx context.Context) ([]*Plugin, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, name, enabled, command, events, env, timeout_secs, working_dir, created_at, updated_at
+		SELECT id, name, enabled, source, events, env, timeout_secs, created_at, updated_at
 		FROM plugins ORDER BY name ASC`)
 	if err != nil {
 		return nil, fmt.Errorf("list plugins: %w", err)
@@ -52,7 +53,7 @@ func (s *Store) List(ctx context.Context) ([]*Plugin, error) {
 // Get returns a single plugin by id.
 func (s *Store) Get(ctx context.Context, id string) (*Plugin, error) {
 	row := s.db.QueryRowContext(ctx, `
-		SELECT id, name, enabled, command, events, env, timeout_secs, working_dir, created_at, updated_at
+		SELECT id, name, enabled, source, events, env, timeout_secs, created_at, updated_at
 		FROM plugins WHERE id = ?`, id)
 	p, err := scanPlugin(row)
 	if err != nil {
@@ -94,14 +95,13 @@ func (s *Store) Create(ctx context.Context, p *Plugin) error {
 	now := time.Now().UTC()
 	p.CreatedAt, p.UpdatedAt = now, now
 
-	cmd, _ := json.Marshal(p.Command)
 	evs, _ := json.Marshal(p.Events)
 	env, _ := json.Marshal(p.Env)
 	_, err := s.db.ExecContext(ctx, `
-		INSERT INTO plugins (id, name, enabled, command, events, env, timeout_secs, working_dir, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		p.ID, p.Name, boolToInt(p.Enabled), string(cmd), string(evs), string(env),
-		p.TimeoutSecs, p.WorkingDir, p.CreatedAt.Format(time.RFC3339Nano), p.UpdatedAt.Format(time.RFC3339Nano))
+		INSERT INTO plugins (id, name, enabled, source, events, env, timeout_secs, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		p.ID, p.Name, boolToInt(p.Enabled), p.Source, string(evs), string(env),
+		p.TimeoutSecs, p.CreatedAt.Format(time.RFC3339Nano), p.UpdatedAt.Format(time.RFC3339Nano))
 	if err != nil {
 		return fmt.Errorf("create plugin: %w", err)
 	}
@@ -120,15 +120,14 @@ func (s *Store) Update(ctx context.Context, p *Plugin) error {
 	p.CreatedAt = existing.CreatedAt
 	p.UpdatedAt = time.Now().UTC()
 
-	cmd, _ := json.Marshal(p.Command)
 	evs, _ := json.Marshal(p.Events)
 	env, _ := json.Marshal(p.Env)
 	res, err := s.db.ExecContext(ctx, `
-		UPDATE plugins SET name = ?, enabled = ?, command = ?, events = ?, env = ?,
-		    timeout_secs = ?, working_dir = ?, updated_at = ?
+		UPDATE plugins SET name = ?, enabled = ?, source = ?, events = ?, env = ?,
+		    timeout_secs = ?, updated_at = ?
 		WHERE id = ?`,
-		p.Name, boolToInt(p.Enabled), string(cmd), string(evs), string(env),
-		p.TimeoutSecs, p.WorkingDir, p.UpdatedAt.Format(time.RFC3339Nano), p.ID)
+		p.Name, boolToInt(p.Enabled), p.Source, string(evs), string(env),
+		p.TimeoutSecs, p.UpdatedAt.Format(time.RFC3339Nano), p.ID)
 	if err != nil {
 		return fmt.Errorf("update plugin: %w", err)
 	}
@@ -221,12 +220,11 @@ type scanner interface {
 func scanPlugin(sc scanner) (*Plugin, error) {
 	var p Plugin
 	var enabled int
-	var cmd, evs, env, created, updated string
-	if err := sc.Scan(&p.ID, &p.Name, &enabled, &cmd, &evs, &env, &p.TimeoutSecs, &p.WorkingDir, &created, &updated); err != nil {
+	var evs, env, created, updated string
+	if err := sc.Scan(&p.ID, &p.Name, &enabled, &p.Source, &evs, &env, &p.TimeoutSecs, &created, &updated); err != nil {
 		return nil, err
 	}
 	p.Enabled = enabled != 0
-	_ = json.Unmarshal([]byte(cmd), &p.Command)
 	_ = json.Unmarshal([]byte(evs), &p.Events)
 	_ = json.Unmarshal([]byte(env), &p.Env)
 	if p.Env == nil {
@@ -243,16 +241,11 @@ func validate(p *Plugin) error {
 	if p.Name == "" {
 		return fmt.Errorf("name is required")
 	}
-	// Trim empty argv entries.
-	cmd := make([]string, 0, len(p.Command))
-	for _, a := range p.Command {
-		if strings.TrimSpace(a) != "" {
-			cmd = append(cmd, a)
-		}
+	if strings.TrimSpace(p.Source) == "" {
+		return fmt.Errorf("source is required")
 	}
-	p.Command = cmd
-	if len(p.Command) == 0 {
-		return fmt.Errorf("command is required")
+	if len(p.Source) > maxSourceBytes {
+		return fmt.Errorf("source exceeds %d bytes", maxSourceBytes)
 	}
 	if len(p.Events) == 0 {
 		return fmt.Errorf("at least one event must be selected")
@@ -270,11 +263,6 @@ func validate(p *Plugin) error {
 	}
 	if p.Env == nil {
 		p.Env = map[string]string{}
-	}
-	for k := range p.Env {
-		if strings.HasPrefix(strings.ToUpper(k), "LOOM_") {
-			return fmt.Errorf("environment variable %q is reserved (LOOM_* keys are set by Loom)", k)
-		}
 	}
 	return nil
 }

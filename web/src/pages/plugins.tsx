@@ -48,35 +48,39 @@ import {
   useTestPlugin,
 } from "@/lib/plugins-api";
 
+const JS_STARTER = `// Available globals: event, env, console, fetch
+// event = { version, event, topic, title, data, timestamp }
+console.log("Event:", event.event, "-", event.title);
+
+// Example: POST to a webhook
+// var res = fetch("https://example.com/hook", {
+//   method: "POST",
+//   headers: { "Content-Type": "application/json" },
+//   body: JSON.stringify({ title: event.title }),
+// });
+// console.log("webhook status", res.status);
+`;
+
 const emptyForm: PluginInput = {
   name: "",
   enabled: false,
-  command: [],
+  source: JS_STARTER,
   events: [],
   env: {},
   timeout_secs: 30,
-  working_dir: "",
 };
 
 function toForm(p: Plugin): PluginInput {
   return {
     name: p.name,
     enabled: p.enabled,
-    command: p.command,
+    source: p.source ?? "",
     events: p.events,
     env: p.env ?? {},
     timeout_secs: p.timeout_secs,
-    working_dir: p.working_dir,
   };
 }
 
-// argv <-> single-line string. We split on whitespace; advise quoting-free args.
-function argvToText(argv: string[]): string {
-  return argv.join(" ");
-}
-function textToArgv(text: string): string[] {
-  return text.trim().split(/\s+/).filter(Boolean);
-}
 function envToText(env: Record<string, string>): string {
   return Object.entries(env)
     .map(([k, v]) => `${k}=${v}`)
@@ -129,10 +133,12 @@ export function PluginsPage() {
           <div>
             <p className="font-medium">Security notice</p>
             <p className="text-muted-foreground">
-              Plugins run arbitrary commands as the Loom server process, with
-              its privileges and filesystem/network access. This is not an OS
-              sandbox. Only configure scripts you fully trust, and rely on
-              container/Kubernetes controls for real isolation.
+              Plugins are JavaScript that runs in-process, inside the Loom
+              server, with its privileges and network access. Execution is
+              CPU-bounded and timed out, but this is not an OS sandbox — a
+              runaway allocation can still pressure the server. Only configure
+              plugins you fully trust, and rely on container/Kubernetes controls
+              for real isolation.
             </p>
           </div>
         </CardContent>
@@ -167,6 +173,9 @@ export function PluginsPage() {
                 <div className="space-y-1">
                   <CardTitle className="flex items-center gap-2 text-base">
                     {p.name}
+                    <Badge variant="outline" className="text-[10px] uppercase">
+                      JavaScript
+                    </Badge>
                     {p.enabled ? (
                       <Badge variant="secondary">Enabled</Badge>
                     ) : (
@@ -174,7 +183,8 @@ export function PluginsPage() {
                     )}
                   </CardTitle>
                   <CardDescription className="break-all font-mono text-xs">
-                    {p.command.join(" ")}
+                    {(p.source || "").split("\n")[0]?.slice(0, 80) ||
+                      "JavaScript plugin"}
                   </CardDescription>
                   <div className="flex flex-wrap gap-1 pt-1">
                     {p.events.map((e) => (
@@ -195,7 +205,7 @@ export function PluginsPage() {
                           toast[run.success ? "success" : "error"](
                             run.success
                               ? "Test run succeeded"
-                              : `Test run failed: ${run.error_msg || "exit " + run.exit_code}`,
+                              : `Test run failed: ${run.error_msg || "error"}`,
                           );
                         },
                         onError: (e) => toast.error(String(e)),
@@ -276,9 +286,6 @@ function PluginDialog({
   const [form, setForm] = React.useState<PluginInput>(
     plugin ? toForm(plugin) : emptyForm,
   );
-  const [cmdText, setCmdText] = React.useState(
-    plugin ? argvToText(plugin.command) : "",
-  );
   const [envText, setEnvText] = React.useState(
     plugin ? envToText(plugin.env ?? {}) : "",
   );
@@ -294,7 +301,6 @@ function PluginDialog({
   const submit = () => {
     const input: PluginInput = {
       ...form,
-      command: textToArgv(cmdText),
       env: textToEnv(envText),
     };
     const opts = {
@@ -316,8 +322,9 @@ function PluginDialog({
         <DialogHeader>
           <DialogTitle>{plugin ? "Edit Plugin" : "Add Plugin"}</DialogTitle>
           <DialogDescription>
-            Loom passes the event payload as JSON on stdin and{" "}
-            <code>LOOM_*</code> environment variables. Exit 0 = success.
+            JavaScript runs when the selected events fire. Globals:{" "}
+            <code>event</code>, <code>env</code>, <code>console</code>,{" "}
+            <code>fetch</code>.
           </DialogDescription>
         </DialogHeader>
 
@@ -332,16 +339,18 @@ function PluginDialog({
           </div>
 
           <div className="space-y-1.5">
-            <Label>Command</Label>
-            <Input
-              className="font-mono"
-              value={cmdText}
-              onChange={(e) => setCmdText(e.target.value)}
-              placeholder="/scripts/post-import.sh --verbose"
+            <Label>Script (JavaScript)</Label>
+            <textarea
+              className="w-full rounded-md border border-border bg-background px-3 py-2 font-mono text-xs"
+              rows={12}
+              spellCheck={false}
+              value={form.source}
+              onChange={(e) => setForm({ ...form, source: e.target.value })}
+              placeholder={JS_STARTER}
             />
             <p className="text-xs text-muted-foreground">
-              Executed directly (no shell). Space-separated arguments. Use an
-              absolute path.
+              ES5.1+ (goja). <code>fetch</code> supports http/https with body
+              and response size caps.
             </p>
           </div>
 
@@ -360,29 +369,17 @@ function PluginDialog({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label>Timeout (seconds)</Label>
-              <Input
-                type="number"
-                min={1}
-                max={300}
-                value={form.timeout_secs}
-                onChange={(e) =>
-                  setForm({ ...form, timeout_secs: Number(e.target.value) })
-                }
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Working directory</Label>
-              <Input
-                value={form.working_dir}
-                onChange={(e) =>
-                  setForm({ ...form, working_dir: e.target.value })
-                }
-                placeholder="/"
-              />
-            </div>
+          <div className="space-y-1.5">
+            <Label>Timeout (seconds)</Label>
+            <Input
+              type="number"
+              min={1}
+              max={300}
+              value={form.timeout_secs}
+              onChange={(e) =>
+                setForm({ ...form, timeout_secs: Number(e.target.value) })
+              }
+            />
           </div>
 
           <div className="space-y-1.5">
@@ -395,8 +392,7 @@ function PluginDialog({
               placeholder={"KEY=value\nANOTHER=value"}
             />
             <p className="text-xs text-muted-foreground">
-              One per line. The host environment is not inherited.{" "}
-              <code>LOOM_*</code> keys are reserved.
+              One per line. Exposed to the script as the <code>env</code> global.
             </p>
           </div>
 
@@ -477,7 +473,7 @@ function RunRow({ run }: { run: PluginRun }) {
           )}
           <span className="font-mono text-xs">{run.topic}</span>
           <span className="text-xs text-muted-foreground">
-            exit {run.exit_code} · {run.duration_ms}ms
+            {run.duration_ms}ms
           </span>
         </span>
         <span className="text-xs text-muted-foreground">
