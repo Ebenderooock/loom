@@ -458,9 +458,7 @@ function PluginDialog({
               </div>
             )}
             <React.Suspense
-              fallback={
-                <Skeleton className="h-[360px] w-full rounded-md" />
-              }
+              fallback={<Skeleton className="h-[360px] w-full rounded-md" />}
             >
               <CodeEditor
                 value={form.source}
@@ -513,7 +511,8 @@ function PluginDialog({
               placeholder={"KEY=value\nANOTHER=value"}
             />
             <p className="text-xs text-muted-foreground">
-              One per line. Exposed to the script as the <code>env</code> global.
+              One per line. Exposed to the script as the <code>env</code>{" "}
+              global.
             </p>
           </div>
 

@@ -4,12 +4,8 @@ import { toRawGitHubUrl, GitHubUrlError } from "@/lib/github-raw";
 describe("toRawGitHubUrl", () => {
   it("converts a blob URL to raw", () => {
     expect(
-      toRawGitHubUrl(
-        "https://github.com/owner/repo/blob/main/plugins/hook.js",
-      ),
-    ).toBe(
-      "https://raw.githubusercontent.com/owner/repo/main/plugins/hook.js",
-    );
+      toRawGitHubUrl("https://github.com/owner/repo/blob/main/plugins/hook.js"),
+    ).toBe("https://raw.githubusercontent.com/owner/repo/main/plugins/hook.js");
   });
 
   it("preserves a branch name containing slashes", () => {
@@ -23,15 +19,14 @@ describe("toRawGitHubUrl", () => {
   });
 
   it("passes through an already-raw URL", () => {
-    const raw =
-      "https://raw.githubusercontent.com/owner/repo/main/hook.js";
+    const raw = "https://raw.githubusercontent.com/owner/repo/main/hook.js";
     expect(toRawGitHubUrl(raw)).toBe(raw);
   });
 
   it("trims surrounding whitespace", () => {
-    expect(
-      toRawGitHubUrl("  https://github.com/o/r/blob/main/a.js \n"),
-    ).toBe("https://raw.githubusercontent.com/o/r/main/a.js");
+    expect(toRawGitHubUrl("  https://github.com/o/r/blob/main/a.js \n")).toBe(
+      "https://raw.githubusercontent.com/o/r/main/a.js",
+    );
   });
 
   it("rejects a non-URL string", () => {
@@ -45,9 +40,9 @@ describe("toRawGitHubUrl", () => {
   });
 
   it("rejects a github.com URL without a /blob/ segment", () => {
-    expect(() =>
-      toRawGitHubUrl("https://github.com/owner/repo"),
-    ).toThrow(GitHubUrlError);
+    expect(() => toRawGitHubUrl("https://github.com/owner/repo")).toThrow(
+      GitHubUrlError,
+    );
   });
 
   it("rejects http (non-https) URLs", () => {

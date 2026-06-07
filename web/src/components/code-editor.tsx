@@ -1,10 +1,7 @@
 import * as React from "react";
 import Editor, { type OnMount } from "@monaco-editor/react";
 import { useTheme } from "@/hooks/use-theme";
-import {
-  monaco,
-  configureJsLanguage,
-} from "@/lib/monaco-setup";
+import { monaco, configureJsLanguage } from "@/lib/monaco-setup";
 
 export interface CodeEditorProps {
   value: string;
