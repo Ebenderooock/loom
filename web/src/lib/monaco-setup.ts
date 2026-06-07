@@ -7,7 +7,13 @@
 //    runtime) with low-strictness diagnostics.
 
 import { loader } from "@monaco-editor/react";
-import * as monaco from "monaco-editor";
+// Slim Monaco build: the editor API + all editor UI features, but ONLY the
+// TypeScript/JavaScript language service. Importing the full "monaco-editor"
+// entry bundles every language (abap, solidity, ...) which OOMs constrained CI
+// runners during `vite build`.
+import * as monaco from "monaco-editor/esm/vs/editor/editor.api";
+import "monaco-editor/esm/vs/editor/editor.all.js";
+import "monaco-editor/esm/vs/language/typescript/monaco.contribution";
 import editorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
 import tsWorker from "monaco-editor/esm/vs/language/typescript/ts.worker?worker";
 

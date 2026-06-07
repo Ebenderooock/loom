@@ -121,3 +121,7 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm build
+        env:
+          # Monaco's TypeScript worker is large; give V8 extra heap so the
+          # production build doesn't OOM on memory-constrained runners.
+          NODE_OPTIONS: --max-old-space-size=6144
