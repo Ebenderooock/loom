@@ -1,0 +1,76 @@
+# Continuous delivery: publish a main-branch image on every merge.
+#
+# This workflow ONLY builds and pushes an image to GHCR. It does NOT touch the
+# cluster — deployment is GitOps-owned by Flux in the dr-homelab repo, where
+# image-automation watches GHCR, selects the newest `main-*` build, and rolls it
+# out automatically.
+#
+# Tag scheme: `main-<short-sha>-<committer-unix-ts>`. The trailing timestamp is
+# monotonic across linear main history, so Flux's ImagePolicy can sort builds
+# numerically and always pick the latest. `:latest` is intentionally NOT moved
+# here — that is reserved for tagged semver releases (see release.yml).
+name: Publish main image
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+
+# Newer merges supersede in-flight builds; we only care about the latest main.
+concurrency:
+  group: publish-main
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    runs-on: arc-runners
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write # push to ghcr.io
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # full history for `git describe` build metadata
+
+      - name: Compute image tag and build metadata
+        id: meta
+        run: |
+          short_sha=$(git rev-parse --short HEAD)
+          # Committer timestamp: monotonic across linear main history.
+          ts=$(git show -s --format=%ct HEAD)
+          echo "tag=main-${short_sha}-${ts}" >> "$GITHUB_OUTPUT"
+          echo "version=$(git describe --tags --always)" >> "$GITHUB_OUTPUT"
+          echo "date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/docker/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ghcr.io/ebenderooock/loom:${{ steps.meta.outputs.tag }}
+          build-args: |
+            VERSION=${{ steps.meta.outputs.version }}
+            COMMIT=${{ github.sha }}
+            DATE=${{ steps.meta.outputs.date }}
+            TVDB_APIKEY=${{ secrets.TVDB_APIKEY }}
+            GOMAXPROCS=2
+
+      - name: Summary
+        run: |
+          echo "Published \`ghcr.io/ebenderooock/loom:${{ steps.meta.outputs.tag }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "Flux image-automation will roll it out to the media namespace." >> "$GITHUB_STEP_SUMMARY"

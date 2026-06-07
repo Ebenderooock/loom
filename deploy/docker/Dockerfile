@@ -22,7 +22,11 @@ ARG VERSION=dev
 ARG COMMIT=unknown
 ARG DATE
 ARG TVDB_APIKEY=""
-RUN CGO_ENABLED=0 go build \
+# Optional cap on Go toolchain parallelism. Left empty (full CPU) by default for
+# fast local builds; CI sets it (e.g. 2) to keep peak memory within small runner
+# nodes, since the modernc/sqlite-heavy build is memory-hungry.
+ARG GOMAXPROCS=
+RUN CGO_ENABLED=0 GOMAXPROCS=${GOMAXPROCS} go build \
     -trimpath \
     -tags embed \
     -ldflags "-s -w \

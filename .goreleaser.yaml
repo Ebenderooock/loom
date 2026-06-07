@@ -93,6 +93,10 @@ docker_manifests:
     image_templates:
       - "ghcr.io/ebenderooock/loom:{{ .Version }}-amd64"
       - "ghcr.io/ebenderooock/loom:{{ .Version }}-arm64"
+    # Never advance :latest for prereleases (e.g. v0.2.0-pre1). "auto" skips the
+    # push whenever the git tag is a semver prerelease; the versioned manifest
+    # above (…:0.2.0-pre1) is still published.
+    skip_push: "auto"
 
 sboms:
   - artifacts: archive
