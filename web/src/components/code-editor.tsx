@@ -1,7 +1,7 @@
 import * as React from "react";
-import Editor, { type OnMount } from "@monaco-editor/react";
+import Editor, { useMonaco, type Monaco } from "@monaco-editor/react";
 import { useTheme } from "@/hooks/use-theme";
-import { monaco, configureJsLanguage } from "@/lib/monaco-setup";
+import { configureJsLanguage } from "@/lib/monaco-setup";
 
 export interface CodeEditorProps {
   value: string;
@@ -14,6 +14,8 @@ export interface CodeEditorProps {
 
 const EXTRA_LIB_URI = "ts:loom-plugin-runtime.d.ts";
 
+type Disposable = { dispose: () => void };
+
 // CodeEditor is a Monaco-backed JavaScript editor wired with the Loom plugin
 // runtime type definitions. Lazy-load this component so Monaco stays out of the
 // main bundle.
@@ -25,45 +27,38 @@ export default function CodeEditor({
   readOnly = false,
 }: CodeEditorProps) {
   const { resolvedTheme } = useTheme();
+  const monaco = useMonaco();
   const monacoTheme =
     resolvedTheme === "dark" || resolvedTheme === "amoled"
       ? "vs-dark"
       : "light";
 
-  const libRef = React.useRef<monaco.IDisposable | null>(null);
-  const mountedRef = React.useRef(false);
+  const libRef = React.useRef<Disposable | null>(null);
 
-  const applyTypeDefs = React.useCallback((dts: string | undefined) => {
-    libRef.current?.dispose();
-    libRef.current = null;
-    if (dts) {
-      libRef.current =
-        monaco.languages.typescript.javascriptDefaults.addExtraLib(
+  const applyTypeDefs = React.useCallback(
+    (m: Monaco, dts: string | undefined) => {
+      libRef.current?.dispose();
+      libRef.current = null;
+      if (dts) {
+        libRef.current = m.languages.typescript.javascriptDefaults.addExtraLib(
           dts,
           EXTRA_LIB_URI,
         );
-    }
-  }, []);
-
-  const handleMount: OnMount = React.useCallback(
-    (_editor, _monaco) => {
-      configureJsLanguage();
-      mountedRef.current = true;
-      applyTypeDefs(typeDefs);
+      }
     },
-    [applyTypeDefs, typeDefs],
+    [],
   );
 
-  // Re-apply when the type defs arrive/change after the editor has mounted.
+  // Configure the JS language and (re)apply the type defs once Monaco has
+  // loaded and whenever the defs change.
   React.useEffect(() => {
-    if (mountedRef.current) {
-      applyTypeDefs(typeDefs);
-    }
-  }, [typeDefs, applyTypeDefs]);
+    if (!monaco) return;
+    configureJsLanguage(monaco);
+    applyTypeDefs(monaco, typeDefs);
+  }, [monaco, typeDefs, applyTypeDefs]);
 
   React.useEffect(
     () => () => {
-      mountedRef.current = false;
       libRef.current?.dispose();
       libRef.current = null;
     },
@@ -78,7 +73,6 @@ export default function CodeEditor({
         theme={monacoTheme}
         value={value}
         onChange={(v) => onChange(v ?? "")}
-        onMount={handleMount}
         options={{
           readOnly,
           minimap: { enabled: false },

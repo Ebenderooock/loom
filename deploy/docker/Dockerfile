@@ -8,8 +8,6 @@ COPY web/package.json web/pnpm-lock.yaml ./
 RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
     pnpm install --frozen-lockfile
 COPY web/ ./
-# Monaco's TypeScript worker is large; raise V8 heap so the build doesn't OOM.
-ENV NODE_OPTIONS=--max-old-space-size=6144
 RUN pnpm run build
 
 # ---------- backend build ----------

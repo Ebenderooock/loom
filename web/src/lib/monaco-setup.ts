@@ -1,38 +1,29 @@
-// Monaco bootstrap: must run at module load, BEFORE any <Editor/> mounts.
+// Monaco bootstrap.
 //
-// 1. Wire the language web workers via Vite "?worker" imports so Monaco never
-//    tries to fetch them from a CDN (the @monaco-editor/react default).
-// 2. Point @monaco-editor/react at our bundled monaco instance.
-// 3. Configure the JavaScript language service ONCE (ES5 to match the goja
-//    runtime) with low-strictness diagnostics.
+// Instead of bundling Monaco from source (which makes the bundler process
+// thousands of modules and OOMs constrained CI/Docker build nodes), we load
+// Monaco's prebuilt AMD assets at runtime from our own origin. The assets are
+// copied to /monaco/vs by vite-plugin-static-copy (see vite.config.ts), so this
+// stays fully offline / self-hosted — no CDN.
 
-import { loader } from "@monaco-editor/react";
-// Slim Monaco build: the editor API + all editor UI features, but ONLY the
-// TypeScript/JavaScript language service. Importing the full "monaco-editor"
-// entry bundles every language (abap, solidity, ...) which OOMs constrained CI
-// runners during `vite build`.
-import * as monaco from "monaco-editor/esm/vs/editor/editor.api";
-import "monaco-editor/esm/vs/editor/editor.all.js";
-import "monaco-editor/esm/vs/language/typescript/monaco.contribution";
-import editorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
-import tsWorker from "monaco-editor/esm/vs/language/typescript/ts.worker?worker";
+import { loader, type Monaco } from "@monaco-editor/react";
 
-self.MonacoEnvironment = {
-  getWorker(_workerId: string, label: string) {
-    if (label === "typescript" || label === "javascript") {
-      return new tsWorker();
-    }
-    return new editorWorker();
+// Use an absolute URL (with origin) so Monaco's web workers — which run from a
+// blob and therefore have no document base — can resolve the nested worker
+// scripts (e.g. language/typescript/tsWorker.js). A root-relative path breaks
+// inside the worker.
+loader.config({
+  paths: {
+    vs: new URL(`${import.meta.env.BASE_URL}monaco/vs`, window.location.origin)
+      .href,
   },
-};
-
-loader.config({ monaco });
+});
 
 let compilerConfigured = false;
 
 // configureJsLanguage sets ES5 compiler options (goja parity) and enables
 // diagnostics. Guarded so it only runs once even if multiple editors mount.
-export function configureJsLanguage() {
+export function configureJsLanguage(monaco: Monaco) {
   if (compilerConfigured) return;
   compilerConfigured = true;
 
@@ -51,5 +42,3 @@ export function configureJsLanguage() {
     noSuggestionDiagnostics: false,
   });
 }
-
-export { monaco };
