@@ -91,6 +91,15 @@ export function usePluginEvents() {
   });
 }
 
+export function usePluginTypeDefs() {
+  return useQuery({
+    queryKey: ["plugin-typedefs"],
+    queryFn: () =>
+      request<{ dts: string }>("GET", `${BASE}/typedefs`).then((r) => r.dts),
+    staleTime: 60 * 60 * 1000,
+  });
+}
+
 export function usePluginRuns(pluginId: string | null) {
   return useQuery({
     queryKey: ["plugin-runs", pluginId],

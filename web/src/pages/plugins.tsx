@@ -10,6 +10,8 @@ import {
   XCircle,
   AlertTriangle,
   Loader2,
+  Upload,
+  Github,
 } from "lucide-react";
 import { useSetPageHeader } from "@/hooks/use-page-header";
 import { useFeatureEnabled } from "@/lib/features-api";
@@ -42,11 +44,18 @@ import {
   usePlugins,
   usePluginEvents,
   usePluginRuns,
+  usePluginTypeDefs,
   useCreatePlugin,
   useUpdatePlugin,
   useDeletePlugin,
   useTestPlugin,
 } from "@/lib/plugins-api";
+import { fetchGitHubScript, GitHubUrlError } from "@/lib/github-raw";
+
+const CodeEditor = React.lazy(() => import("@/components/code-editor"));
+
+// Reject scripts large enough to bog down the editor; the backend caps source too.
+const MAX_SOURCE_BYTES = 512 * 1024;
 
 const JS_STARTER = `// Available globals: event, env, console, fetch
 // event = { version, event, topic, title, data, timestamp }
@@ -256,6 +265,7 @@ export function PluginsPage() {
 
       {(creating || editing) && (
         <PluginDialog
+          key={editing?.id ?? "create"}
           plugin={editing}
           events={events ?? []}
           onClose={() => {
@@ -283,12 +293,59 @@ function PluginDialog({
 }) {
   const create = useCreatePlugin();
   const update = useUpdatePlugin();
+  const { data: typeDefs } = usePluginTypeDefs();
   const [form, setForm] = React.useState<PluginInput>(
     plugin ? toForm(plugin) : emptyForm,
   );
   const [envText, setEnvText] = React.useState(
     plugin ? envToText(plugin.env ?? {}) : "",
   );
+
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const [githubOpen, setGithubOpen] = React.useState(false);
+  const [githubUrl, setGithubUrl] = React.useState("");
+  const [githubLoading, setGithubLoading] = React.useState(false);
+
+  const onUploadFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // allow re-selecting the same file
+    if (!file) return;
+    if (file.size > MAX_SOURCE_BYTES) {
+      toast.error("That file is too large (max 512 KB).");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      setForm((f) => ({ ...f, source: String(reader.result ?? "") }));
+      toast.success(`Loaded ${file.name}`);
+    };
+    reader.onerror = () => toast.error("Failed to read file");
+    reader.readAsText(file);
+  };
+
+  const onImportGitHub = async () => {
+    if (!githubUrl.trim()) return;
+    setGithubLoading(true);
+    try {
+      const source = await fetchGitHubScript(githubUrl);
+      if (source.length > MAX_SOURCE_BYTES) {
+        toast.error("That script is too large (max 512 KB).");
+        return;
+      }
+      setForm((f) => ({ ...f, source }));
+      setGithubOpen(false);
+      setGithubUrl("");
+      toast.success("Imported script from GitHub");
+    } catch (err) {
+      toast.error(
+        err instanceof GitHubUrlError
+          ? err.message
+          : `Import failed: ${String(err)}`,
+      );
+    } finally {
+      setGithubLoading(false);
+    }
+  };
 
   const toggleEvent = (key: string) =>
     setForm((f) => ({
@@ -318,7 +375,7 @@ function PluginDialog({
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle>{plugin ? "Edit Plugin" : "Add Plugin"}</DialogTitle>
           <DialogDescription>
@@ -339,18 +396,82 @@ function PluginDialog({
           </div>
 
           <div className="space-y-1.5">
-            <Label>Script (JavaScript)</Label>
-            <textarea
-              className="w-full rounded-md border border-border bg-background px-3 py-2 font-mono text-xs"
-              rows={12}
-              spellCheck={false}
-              value={form.source}
-              onChange={(e) => setForm({ ...form, source: e.target.value })}
-              placeholder={JS_STARTER}
-            />
+            <div className="flex items-center justify-between gap-2">
+              <Label>Script (JavaScript)</Label>
+              <div className="flex items-center gap-1.5">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".js,.mjs,text/javascript,application/javascript"
+                  className="hidden"
+                  onChange={onUploadFile}
+                />
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <Upload className="mr-1 h-3.5 w-3.5" /> Upload .js
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setGithubOpen((o) => !o)}
+                >
+                  <Github className="mr-1 h-3.5 w-3.5" /> Import from GitHub
+                </Button>
+              </div>
+            </div>
+            {githubOpen && (
+              <div className="space-y-1.5 rounded-md border border-border p-2">
+                <div className="flex items-center gap-2">
+                  <Input
+                    value={githubUrl}
+                    onChange={(e) => setGithubUrl(e.target.value)}
+                    placeholder="https://github.com/owner/repo/blob/main/plugin.js"
+                    className="h-8 text-xs"
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        void onImportGitHub();
+                      }
+                    }}
+                  />
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => void onImportGitHub()}
+                    disabled={githubLoading}
+                  >
+                    {githubLoading && (
+                      <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                    )}
+                    Import
+                  </Button>
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  Public GitHub files only. Paste a file URL (the “…/blob/…”
+                  link) or a raw.githubusercontent.com URL.
+                </p>
+              </div>
+            )}
+            <React.Suspense
+              fallback={
+                <Skeleton className="h-[360px] w-full rounded-md" />
+              }
+            >
+              <CodeEditor
+                value={form.source}
+                onChange={(source) => setForm((f) => ({ ...f, source }))}
+                typeDefs={typeDefs}
+              />
+            </React.Suspense>
             <p className="text-xs text-muted-foreground">
               ES5.1+ (goja). <code>fetch</code> supports http/https with body
-              and response size caps.
+              and response size caps. Type <code>event.</code> for available
+              fields per event.
             </p>
           </div>
 

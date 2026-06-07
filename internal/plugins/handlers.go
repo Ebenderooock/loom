@@ -21,6 +21,7 @@ func Router(store *Store, tester Tester, adminMW func(http.Handler) http.Handler
 	r.Use(adminMW)
 
 	r.Get("/events", listEvents())
+	r.Get("/typedefs", getTypeDefs())
 	r.Get("/", listPlugins(store))
 	r.Post("/", createPlugin(store))
 	r.Get("/{id}", getPlugin(store))
@@ -46,6 +47,14 @@ func writeErr(w http.ResponseWriter, status int, msg string) {
 func listEvents() http.HandlerFunc {
 	return func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, SupportedEvents)
+	}
+}
+
+// getTypeDefs serves the ambient .d.ts describing the plugin JS runtime, for the
+// editor's IntelliSense.
+func getTypeDefs() http.HandlerFunc {
+	return func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(w, http.StatusOK, map[string]string{"dts": PluginTypeDefs})
 	}
 }
 
