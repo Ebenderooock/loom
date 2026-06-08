@@ -364,7 +364,7 @@ function AppLayoutInner({ children }: { children?: React.ReactNode }) {
           />
         )}
 
-        <main id="main" className="min-w-0 flex-1 overflow-x-hidden p-4 md:p-6">
+        <main id="main" className="min-w-0 flex-1 overflow-x-clip p-4 md:p-6">
           <div key={sectionKey} className="page-enter">
             {children ?? <Outlet />}
           </div>
