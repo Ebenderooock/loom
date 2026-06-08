@@ -16,8 +16,9 @@ import (
 	"github.com/anacrolix/torrent"
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/storage"
-	"github.com/ebenderooock/loom/internal/diskspace"
 	"golang.org/x/time/rate"
+
+	"github.com/ebenderooock/loom/internal/diskspace"
 )
 
 // metadataTimeout is how long we wait for a magnet's metadata to
@@ -768,8 +769,8 @@ func (e *Engine) FreeSpace() (int64, error) {
 	if err != nil {
 		return -1, fmt.Errorf("builtin/torrent: statfs %q: %w", e.cfg.DownloadDir, err)
 	}
-	// Available bytes for unprivileged users.
-	return int64(free), nil
+	// Available bytes for unprivileged users. Disk sizes fit comfortably in int64.
+	return int64(free), nil //nolint:gosec // disk byte counts fit in int64
 }
 
 // PeerInfo describes a single connected peer.

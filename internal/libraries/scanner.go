@@ -108,8 +108,8 @@ func GetDiskSpace(path string) (DiskSpace, error) {
 	if err != nil {
 		return DiskSpace{}, err
 	}
-	t := int64(total)
-	f := int64(free)
+	t := int64(total) //nolint:gosec // disk byte counts fit in int64
+	f := int64(free)  //nolint:gosec // disk byte counts fit in int64
 	return DiskSpace{
 		TotalBytes: t,
 		FreeBytes:  f,
