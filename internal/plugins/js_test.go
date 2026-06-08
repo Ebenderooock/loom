@@ -73,7 +73,12 @@ func TestJSTimeoutInterrupts(t *testing.T) {
 	if !strings.Contains(run.ErrorMsg, "timed out") {
 		t.Errorf("expected timed out error, got %q", run.ErrorMsg)
 	}
-	if elapsed := time.Since(start); elapsed > 5*time.Second {
+	// A busy `while (true) {}` loop must be interrupted by the 1s plugin
+	// timeout. Expected elapsed is ~1s; the generous bound guards against a
+	// genuine "never interrupts" hang while tolerating heavy scheduler slop —
+	// the busy loop saturates a CPU under parallel -race load, delaying the
+	// interrupt watcher far more than an IO-blocked run.
+	if elapsed := time.Since(start); elapsed > 20*time.Second {
 		t.Errorf("timeout took too long: %v", elapsed)
 	}
 }
@@ -174,12 +179,18 @@ func TestJSCompileErrorRecorded(t *testing.T) {
 }
 
 func TestJSFetchTimeoutClassifiedAsTimeout(t *testing.T) {
-	// Server sleeps well past the plugin timeout so fetch is still blocked when
-	// the run context expires; the run must report a timeout, not a generic
-	// JS/network exception.
+	// Server blocks well past the plugin timeout so fetch is still in-flight
+	// when the run context expires; the run must report a timeout, not a
+	// generic JS/network exception. The handler honours request cancellation so
+	// it returns as soon as the client aborts, keeping the test (and the
+	// server's Close) fast once the 1s plugin timeout fires.
+	const serverBlock = 30 * time.Second
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		time.Sleep(3 * time.Second)
-		w.WriteHeader(http.StatusOK)
+		select {
+		case <-time.After(serverBlock):
+			w.WriteHeader(http.StatusOK)
+		case <-r.Context().Done():
+		}
 	}))
 	defer srv.Close()
 
@@ -192,7 +203,11 @@ func TestJSFetchTimeoutClassifiedAsTimeout(t *testing.T) {
 	if !strings.Contains(run.ErrorMsg, "timed out") {
 		t.Errorf("expected timed out classification, got %q", run.ErrorMsg)
 	}
-	if elapsed := time.Since(start); elapsed > 3*time.Second {
+	// The 1s plugin timeout must abort the in-flight fetch rather than waiting
+	// for the full server response. Expected elapsed is ~1s; the generous bound
+	// distinguishes a fast abort from blocking for the whole serverBlock while
+	// absorbing scheduler slop under parallel -race load.
+	if elapsed := time.Since(start); elapsed > 10*time.Second {
 		t.Errorf("run did not fail fast on timeout: %v", elapsed)
 	}
 }

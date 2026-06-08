@@ -39,7 +39,15 @@ jobs:
           cache: true
       - run: go mod download
       - run: go vet ./...
+      # The race detector requires cgo + a C toolchain. The self-hosted runner
+      # image sets CGO_ENABLED=0 and ships no compiler, so install gcc on Linux
+      # and force cgo on for the test step.
+      - name: Ensure C compiler (for -race)
+        if: runner.os == 'Linux'
+        run: command -v gcc >/dev/null 2>&1 || { sudo apt-get update && sudo apt-get install -y gcc; }
       - run: go test -race -count=1 -coverprofile=coverage.out ./...
+        env:
+          CGO_ENABLED: "1"
       - if: matrix.os == 'arc-runners'
         uses: actions/upload-artifact@v4
         with:
@@ -51,13 +59,42 @@ jobs:
     runs-on: arc-runners
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-go@v5
         with:
           go-version: "1.26"
           cache: true
-      - uses: golangci/golangci-lint-action@v6
-        with:
-          version: latest
+      # golangci-lint's published binaries are built with an older Go that
+      # refuses our go1.26 target ("Go language version used to build
+      # golangci-lint is lower than the targeted Go version"), so build it from
+      # source with the toolchain selected above. Only issues NEW relative to
+      # the default branch fail CI; the existing backlog is grandfathered and
+      # tracked for gradual cleanup.
+      - name: Install golangci-lint (built with go1.26)
+        run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2
+      # Grandfather the existing backlog: only issues NEW relative to the base
+      # fail CI. For PRs that's the merge-base with the target branch; for
+      # direct pushes it's the commit range that was pushed (so direct-to-main
+      # pushes still catch regressions); tag/initial pushes fall back to the
+      # default branch.
+      - name: Run golangci-lint (new issues only)
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+          BEFORE: ${{ github.event.before }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT" = "pull_request" ]; then
+            git fetch --no-tags origin "+${BASE_REF}:refs/remotes/origin/${BASE_REF}"
+            golangci-lint run --new-from-merge-base="origin/${BASE_REF}" ./...
+          elif [ -n "${BEFORE:-}" ] && [ "$BEFORE" != "0000000000000000000000000000000000000000" ]; then
+            golangci-lint run --new-from-rev="${BEFORE}" ./...
+          else
+            git fetch --no-tags origin "+${DEFAULT_BRANCH}:refs/remotes/origin/${DEFAULT_BRANCH}"
+            golangci-lint run --new-from-merge-base="origin/${DEFAULT_BRANCH}" ./...
+          fi
 
   vuln:
     name: govulncheck
