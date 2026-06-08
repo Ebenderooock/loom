@@ -343,10 +343,15 @@ func TestThrottling_EnforcesMinimumDelay(t *testing.T) {
 		_, _ = client.GetArtist(context.Background(), fmt.Sprintf("artist-%d", i))
 	}
 
-	// Verify minimum delay between requests
+	// Verify minimum delay between requests. Arrival times are recorded
+	// server-side, so per-request scheduling/network jitter can make a measured
+	// gap dip a few hundred microseconds below the interval even though the
+	// throttler slept correctly; allow a small tolerance. A broken throttler
+	// would show gaps near zero, far below this bound.
+	const tolerance = 5 * time.Millisecond
 	for i := 1; i < len(requestTimes); i++ {
 		elapsed := requestTimes[i].Sub(requestTimes[i-1])
-		if elapsed < throttle {
+		if elapsed < throttle-tolerance {
 			t.Errorf("request %d to %d: expected at least %v delay, got %v", i-1, i, throttle, elapsed)
 		}
 	}

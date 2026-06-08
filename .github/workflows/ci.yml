@@ -108,7 +108,12 @@ jobs:
           go-version: "1.26"
           cache: true
       - run: go install golang.org/x/vuln/cmd/govulncheck@latest
-      - run: govulncheck ./...
+      # Default symbol-level scan builds a whole-program call graph and peaks at
+      # ~2.8GB RSS, which OOM-kills the memory-constrained self-hosted runner.
+      # Package-level scan needs ~50MB and finishes in seconds while still
+      # flagging vulnerable imported packages; standard-library advisories are
+      # covered by tracking the latest go1.26 patch release above.
+      - run: govulncheck -scan package ./...
 
   build:
     name: Build matrix
