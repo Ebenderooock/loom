@@ -730,8 +730,9 @@ func (s *Server) newMux() http.Handler {
 			r.Mount("/api/v1/series", seriesRouter)
 		}
 
-		// Music (Artists/Albums/Tracks) routes
-		if s.musicSvc != nil {
+		// Music (Artists/Albums/Tracks) routes — gated behind the "music"
+		// feature flag (off by default while the capability is in development).
+		if s.musicSvc != nil && s.featureFlags != nil && s.featureFlags.Enabled(featureflags.KeyMusic) {
 			artistsRouter := music.ArtistRouter(s.musicSvc)
 			if s.musicScannerSvc != nil {
 				scanner.RegisterMusicRoutes(artistsRouter, s.musicScannerSvc, s.libStore)

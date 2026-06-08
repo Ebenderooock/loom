@@ -22,6 +22,12 @@ const (
 	// server process; an admin must opt in. When disabled the runner does not
 	// execute any plugin, though definitions and history remain manageable.
 	KeyPlugins = "plugins"
+
+	// KeyMusic toggles the Music capability (artists/albums/tracks, music
+	// scanning and acquisition). Disabled by default while the feature is
+	// incomplete: when off, the Music API routes are not mounted. Flip on once
+	// the Music milestones and UI are ready.
+	KeyMusic = "music"
 )
 
 // FlagDef is the static, in-code definition of a feature toggle.
@@ -61,6 +67,13 @@ var Definitions = []FlagDef{
 		Label:       "Plugins (Custom Scripts)",
 		Description: "Run admin-defined custom scripts when events fire (grab, import, playback). Plugins execute arbitrary commands as the Loom server process — this is NOT a security sandbox. Disabled by default; enable only if you trust the configured scripts.",
 		Category:    "Diagnostics",
+		Default:     false,
+	},
+	{
+		Key:         KeyMusic,
+		Label:       "Music (Beta)",
+		Description: "Enable the Music capability: manage artists, albums and tracks, scan music libraries and acquire releases. In active development and not yet feature-complete; disabled by default. When off, the Music API is not exposed.",
+		Category:    "Media",
 		Default:     false,
 	},
 }
