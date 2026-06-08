@@ -8,7 +8,7 @@ replicaCount: 1
 image:
   repository: ghcr.io/ebenderooock/loom
   pullPolicy: IfNotPresent
-  tag: "0.1.108"
+  tag: "0.1.0"
 
 # ---------- Security context (match existing containers) ----------
 podSecurityContext:
@@ -34,14 +34,14 @@ service:
 # ---------- BitTorrent peer port (built-in torrent client) ----------
 # Exposed via MetalLB so inbound peer connections + DHT work, instead of
 # the pod being an outbound-only leech. Port preserved end-to-end (6881).
-# For internet reachability, port-forward WAN:6881 -> 192.168.3.203:6881
-# on the router. listenPort must match the builtin/torrent client config.
+# For internet reachability, port-forward WAN:6881 -> <lb-ip>:6881 on the
+# router. listenPort must match the builtin/torrent client config.
 torrent:
   listenPort: 6881
   expose:
     enabled: true
     type: LoadBalancer
-    loadBalancerIP: "192.168.3.203"
+    loadBalancerIP: "192.168.1.50"  # <-- your MetalLB-assigned IP
     externalTrafficPolicy: Local
 
 # ---------- Ingress (Traefik) ----------
@@ -71,8 +71,8 @@ persistence:
     accessMode: ReadWriteOnce
     size: 1Gi
     nfs:
-      server: 192.168.3.20
-      path: /volume1/k8s-volumes/loom
+      server: 192.168.1.10  # <-- your NFS server (e.g. Synology)
+      path: /volume1/k8s/loom
     claimRef:
       namespace: media
       name: loom-pvc
