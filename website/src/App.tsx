@@ -8,6 +8,7 @@ import GettingStarted from './components/GettingStarted'
 import Roadmap from './components/Roadmap'
 import Community from './components/Community'
 import Footer from './components/Footer'
+import CookieConsent from './components/CookieConsent'
 
 export default function App() {
   return (
@@ -25,6 +26,7 @@ export default function App() {
         <Community />
         <Footer />
       </main>
+      <CookieConsent />
     </div>
   )
 }
