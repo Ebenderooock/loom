@@ -23,7 +23,7 @@ permissions:
 jobs:
   deploy:
     name: Build & Deploy to Cloudflare Pages
-    runs-on: ubuntu-latest
+    runs-on: arc-runners
     defaults:
       run:
         working-directory: website
