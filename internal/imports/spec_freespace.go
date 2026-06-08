@@ -4,7 +4,8 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
-	"syscall"
+
+	"github.com/ebenderooock/loom/internal/diskspace"
 )
 
 const minFreeSpaceBytes = 500 * 1024 * 1024 // 500MB minimum free space
@@ -21,13 +22,12 @@ func (s *FreeSpaceSpec) IsSatisfiedBy(_ context.Context, c *ImportCandidate) *Im
 
 	dir := filepath.Dir(c.DestPath)
 
-	var stat syscall.Statfs_t
-	if err := syscall.Statfs(dir, &stat); err != nil {
+	_, available, err := diskspace.Get(dir)
+	if err != nil {
 		// If we can't stat, allow the import (will fail later with a better error)
 		return nil
 	}
 
-	available := stat.Bavail * uint64(stat.Bsize)
 	needed := uint64(c.FileSize) + minFreeSpaceBytes
 
 	if available < needed {

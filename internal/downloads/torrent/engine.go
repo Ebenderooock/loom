@@ -11,12 +11,12 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/anacrolix/torrent"
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/storage"
+	"github.com/ebenderooock/loom/internal/diskspace"
 	"golang.org/x/time/rate"
 )
 
@@ -762,14 +762,14 @@ func (e *Engine) Reannounce(hashes ...string) error {
 }
 
 // FreeSpace returns the bytes available on the engine's download
-// directory using syscall.Statfs.
+// directory.
 func (e *Engine) FreeSpace() (int64, error) {
-	var stat syscall.Statfs_t
-	if err := syscall.Statfs(e.cfg.DownloadDir, &stat); err != nil {
+	_, free, err := diskspace.Get(e.cfg.DownloadDir)
+	if err != nil {
 		return -1, fmt.Errorf("builtin/torrent: statfs %q: %w", e.cfg.DownloadDir, err)
 	}
-	// Available blocks × block size gives free bytes for unprivileged users.
-	return int64(stat.Bavail) * int64(stat.Bsize), nil
+	// Available bytes for unprivileged users.
+	return int64(free), nil
 }
 
 // PeerInfo describes a single connected peer.

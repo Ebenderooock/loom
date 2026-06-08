@@ -7,10 +7,11 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"syscall"
 	"time"
 
 	"context"
+
+	"github.com/ebenderooock/loom/internal/diskspace"
 )
 
 // mediaExtensions are common video file extensions to discover.
@@ -103,16 +104,16 @@ func (sc *Scanner) ScanLibrary(ctx context.Context, lib *Library) error {
 
 // GetDiskSpace returns disk usage for the given path.
 func GetDiskSpace(path string) (DiskSpace, error) {
-	var stat syscall.Statfs_t
-	if err := syscall.Statfs(path, &stat); err != nil {
+	total, free, err := diskspace.Get(path)
+	if err != nil {
 		return DiskSpace{}, err
 	}
-	total := int64(stat.Blocks) * int64(stat.Bsize)
-	free := int64(stat.Bavail) * int64(stat.Bsize)
+	t := int64(total)
+	f := int64(free)
 	return DiskSpace{
-		TotalBytes: total,
-		FreeBytes:  free,
-		UsedBytes:  total - free,
+		TotalBytes: t,
+		FreeBytes:  f,
+		UsedBytes:  t - f,
 	}, nil
 }
 
