@@ -20,16 +20,6 @@ updates:
         patterns:
           - "*"
 
-  - package-ecosystem: npm
-    directory: /website
-    schedule:
-      interval: weekly
-    open-pull-requests-limit: 10
-    groups:
-      website-dependencies:
-        patterns:
-          - "*"
-
   - package-ecosystem: github-actions
     directory: /
     schedule:
