@@ -61,6 +61,7 @@ import (
 	"github.com/ebenderooock/loom/internal/libraries"
 	"github.com/ebenderooock/loom/internal/mediainfo"
 	"github.com/ebenderooock/loom/internal/movies"
+	"github.com/ebenderooock/loom/internal/music"
 	"github.com/ebenderooock/loom/internal/notifications"
 	"github.com/ebenderooock/loom/internal/organizer"
 	"github.com/ebenderooock/loom/internal/packs"
@@ -98,6 +99,7 @@ type Server struct {
 	seriesScannerSvc  *scanner.SeriesScanner
 	organizerSvc      *organizer.Organizer
 	seriesSvc         series.Service
+	musicSvc          music.Service
 	notifSvc          notifications.Service
 	connectSvc        connect.Service
 	analyticsSvc      *analytics.Service
@@ -270,6 +272,14 @@ func (s *Server) SetRSS(svc *rss.SourcesService) {
 // SetSeries installs the TV series service and rebuilds the HTTP handler.
 func (s *Server) SetSeries(svc series.Service) {
 	s.seriesSvc = svc
+	if s.httpSrv != nil {
+		s.httpSrv.Handler = s.newMux()
+	}
+}
+
+// SetMusic installs the music service and rebuilds the HTTP handler.
+func (s *Server) SetMusic(svc music.Service) {
+	s.musicSvc = svc
 	if s.httpSrv != nil {
 		s.httpSrv.Handler = s.newMux()
 	}
@@ -709,6 +719,13 @@ func (s *Server) newMux() http.Handler {
 				scanner.RegisterSeriesRoutes(seriesRouter, s.seriesScannerSvc, s.libStore)
 			}
 			r.Mount("/api/v1/series", seriesRouter)
+		}
+
+		// Music (Artists/Albums/Tracks) routes
+		if s.musicSvc != nil {
+			r.Mount("/api/v1/artists", music.ArtistRouter(s.musicSvc))
+			r.Mount("/api/v1/albums", music.AlbumRouter(s.musicSvc))
+			r.Mount("/api/v1/music", music.ProfileRouter(s.musicSvc))
 		}
 
 		// Notifications routes

@@ -1,0 +1,232 @@
+package music
+
+import (
+	"encoding/json"
+	"errors"
+	"net/http"
+	"strconv"
+
+	"github.com/go-chi/chi/v5"
+)
+
+// ArtistRouter mounts artist endpoints (intended at /api/v1/artists).
+func ArtistRouter(svc Service) chi.Router {
+	r := chi.NewRouter()
+	r.Get("/", handleListArtists(svc))
+	r.Post("/", handleAddArtist(svc))
+	r.Get("/lookup", handleLookupArtists(svc))
+	r.Get("/{id}", handleGetArtist(svc))
+	r.Patch("/{id}", handleUpdateArtist(svc))
+	r.Put("/{id}", handleUpdateArtist(svc))
+	r.Delete("/{id}", handleDeleteArtist(svc))
+	r.Put("/{id}/monitoring", handleSetArtistMonitoring(svc))
+	return r
+}
+
+// AlbumRouter mounts album endpoints (intended at /api/v1/albums).
+func AlbumRouter(svc Service) chi.Router {
+	r := chi.NewRouter()
+	r.Get("/{id}", handleGetAlbum(svc))
+	r.Put("/{id}/monitoring", handleSetAlbumMonitored(svc))
+	return r
+}
+
+// ProfileRouter mounts music profile/quality endpoints (intended at /api/v1/music).
+func ProfileRouter(svc Service) chi.Router {
+	r := chi.NewRouter()
+	r.Get("/audio-quality-definitions", handleListAudioQualityDefinitions(svc))
+	r.Get("/audio-quality-profiles", handleListAudioQualityProfiles(svc))
+	r.Get("/metadata-profiles", handleListMetadataProfiles(svc))
+	return r
+}
+
+func handleListArtists(svc Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		artists, err := svc.ListArtists(r.Context())
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		if artists == nil {
+			artists = []*Artist{}
+		}
+		writeJSON(w, http.StatusOK, artists)
+	}
+}
+
+func handleGetArtist(svc Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		a, err := svc.GetArtist(r.Context(), chi.URLParam(r, "id"))
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, a)
+	}
+}
+
+func handleLookupArtists(svc Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query().Get("q")
+		if q == "" {
+			q = r.URL.Query().Get("query")
+		}
+		limit := 0
+		if v := r.URL.Query().Get("limit"); v != "" {
+			limit, _ = strconv.Atoi(v)
+		}
+		results, err := svc.LookupArtists(r.Context(), q, limit)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		if results == nil {
+			results = []*ArtistLookupResult{}
+		}
+		writeJSON(w, http.StatusOK, results)
+	}
+}
+
+func handleAddArtist(svc Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req AddArtistRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "invalid request body", http.StatusBadRequest)
+			return
+		}
+		a, err := svc.AddArtist(r.Context(), req)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusCreated, a)
+	}
+}
+
+func handleUpdateArtist(svc Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req UpdateArtistRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "invalid request body", http.StatusBadRequest)
+			return
+		}
+		a, err := svc.UpdateArtist(r.Context(), chi.URLParam(r, "id"), req)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, a)
+	}
+}
+
+func handleDeleteArtist(svc Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if err := svc.DeleteArtist(r.Context(), chi.URLParam(r, "id")); err != nil {
+			writeErr(w, err)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+func handleSetArtistMonitoring(svc Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req SetMonitoringRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "invalid request body", http.StatusBadRequest)
+			return
+		}
+		a, err := svc.SetArtistMonitoring(r.Context(), chi.URLParam(r, "id"), MonitoringStatus(req.Status))
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, a)
+	}
+}
+
+func handleGetAlbum(svc Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		al, err := svc.GetAlbum(r.Context(), chi.URLParam(r, "id"))
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, al)
+	}
+}
+
+func handleSetAlbumMonitored(svc Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req SetAlbumMonitoredRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "invalid request body", http.StatusBadRequest)
+			return
+		}
+		al, err := svc.SetAlbumMonitored(r.Context(), chi.URLParam(r, "id"), req.Monitored)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, al)
+	}
+}
+
+func handleListAudioQualityDefinitions(svc Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		defs, err := svc.ListAudioQualityDefinitions(r.Context())
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		if defs == nil {
+			defs = []*AudioQualityDefinition{}
+		}
+		writeJSON(w, http.StatusOK, defs)
+	}
+}
+
+func handleListAudioQualityProfiles(svc Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		profiles, err := svc.ListAudioQualityProfiles(r.Context())
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		if profiles == nil {
+			profiles = []*AudioQualityProfile{}
+		}
+		writeJSON(w, http.StatusOK, profiles)
+	}
+}
+
+func handleListMetadataProfiles(svc Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		profiles, err := svc.ListMetadataProfiles(r.Context())
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		if profiles == nil {
+			profiles = []*MetadataProfile{}
+		}
+		writeJSON(w, http.StatusOK, profiles)
+	}
+}
+
+func writeJSON(w http.ResponseWriter, status int, v interface{}) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(v)
+}
+
+func writeErr(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, ErrNotFound):
+		http.Error(w, err.Error(), http.StatusNotFound)
+	case errors.Is(err, ErrInvalid):
+		http.Error(w, err.Error(), http.StatusBadRequest)
+	default:
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}

@@ -38,6 +38,7 @@ type MediaType string
 const (
 	MediaTypeMovie  MediaType = "movie"
 	MediaTypeSeries MediaType = "series"
+	MediaTypeMusic  MediaType = "music"
 )
 
 // MonitorType controls what gets monitored after import.

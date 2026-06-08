@@ -18,7 +18,8 @@ type ArtistResponse struct {
 type ReleaseResponse struct {
 	ID           string                `json:"id"`
 	Title        string                `json:"title"`
-	Date         string                `json:"date,omitempty"` // ISO 8601 date (YYYY-MM-DD)
+	Status       string                `json:"status,omitempty"` // Official, Promotion, Bootleg, ...
+	Date         string                `json:"date,omitempty"`   // ISO 8601 date (YYYY-MM-DD)
 	Year         int                   `json:"year,omitempty"`
 	Artists      []ArtistResponse      `json:"artist-credit,omitempty"`
 	Media        []MediaResponse       `json:"media,omitempty"`
