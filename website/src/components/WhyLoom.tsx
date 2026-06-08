@@ -35,7 +35,7 @@ const comparisons = [
   { category: 'Databases', arr: '3+ separate SQLite files', loom: '1 (SQLite or Postgres)', loomBetter: true },
   { category: 'Runtime', arr: '.NET + Python + Node.js', loom: 'Single Go binary', loomBetter: true },
   { category: 'Image size', arr: '~200MB+ each', loom: '~60MB distroless', loomBetter: true },
-  { category: 'UI', arr: '7+ separate interfaces', loom: 'Unified React 18 + mobile-first', loomBetter: true },
+  { category: 'UI', arr: '7+ separate interfaces', loom: 'Unified React 19 + mobile-first', loomBetter: true },
   { category: 'Observability', arr: 'Limited logs', loom: 'OpenTelemetry + Prometheus + pprof', loomBetter: true },
   { category: 'Migration', arr: 'N/A', loom: 'Built-in Radarr/Sonarr/Prowlarr importer', loomBetter: true },
 ]

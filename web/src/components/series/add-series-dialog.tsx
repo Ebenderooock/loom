@@ -56,7 +56,7 @@ export function AddSeriesDialog({
   const [adding, setAdding] = useState(false);
   const [addError, setAddError] = useState("");
   const [searchOnAdd, setSearchOnAdd] = useState(true);
-  const debounceRef = useRef<ReturnType<typeof setTimeout>>();
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const { data: mediaPrefs } = useMediaPreferences();
 

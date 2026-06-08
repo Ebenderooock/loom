@@ -19,7 +19,7 @@ const highlights = [
   {
     icon: Layout,
     title: 'One UI',
-    description: 'A unified React 18 interface for movies, TV, and indexers. Mobile-first, modern design.',
+    description: 'A unified React 19 interface for movies, TV, and indexers. Mobile-first, modern design.',
     gradient: 'from-brand-cyan to-brand-purple',
   },
 ]

@@ -59,7 +59,7 @@ export function SeriesLibraryImportDialog({
   const [scanResult, setScanResult] = useState<ScanResult | null>(null);
   const [unmatchedFiles, setUnmatchedFiles] = useState<UnmatchedFile[]>([]);
   const [selectedLibrary, setSelectedLibrary] = useState<string>("");
-  const pollTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
+  const pollTimeoutRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const mountedRef = useRef(true);
 
   useEffect(() => {

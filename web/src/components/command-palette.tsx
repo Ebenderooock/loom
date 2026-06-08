@@ -178,7 +178,7 @@ function PaletteBody({
   query: string;
   setQuery: (v: string) => void;
   inline?: boolean;
-  inputRef?: React.RefObject<HTMLInputElement>;
+  inputRef?: React.RefObject<HTMLInputElement | null>;
   onClose: () => void;
 }) {
   const navigate = useNavigate();

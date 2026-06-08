@@ -74,7 +74,7 @@ export function LibraryImportDialog({
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<TmdbResult[]>([]);
   const [searching, setSearching] = useState(false);
-  const pollTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
+  const pollTimeoutRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const mountedRef = useRef(true);
 
   // Clean up polling on unmount

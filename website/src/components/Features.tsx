@@ -47,7 +47,7 @@ const features = [
   {
     icon: Monitor,
     title: 'Modern UI',
-    description: 'React 18 + TypeScript. Mobile-first, responsive, fast. A unified interface for your entire library.',
+    description: 'React 19 + TypeScript. Mobile-first, responsive, fast. A unified interface for your entire library.',
   },
   {
     icon: Activity,

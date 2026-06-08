@@ -9,7 +9,7 @@ const phases = [
   { id: 4, title: 'Workflow Engine', status: 'done', description: 'Full state machine: search → grab → download → post-download → import → complete' },
   { id: 5, title: 'Smart Retry & Recovery', status: 'done', description: 'Intelligent retry from optimal point, boot reconciliation for interrupted imports' },
   { id: 6, title: 'Media Management', status: 'done', description: 'Movies & TV shows library, metadata from TMDB, file renaming, collision detection' },
-  { id: 7, title: 'Web UI', status: 'done', description: 'React 18 + TypeScript frontend — library, search, downloads, workflows, settings' },
+  { id: 7, title: 'Web UI', status: 'done', description: 'React 19 + TypeScript frontend — library, search, downloads, workflows, settings' },
   { id: 8, title: 'API Compatibility', status: 'done', description: 'Wire-compatible *arr API endpoints for Overseerr, Jellyseerr, Bazarr, and more' },
   { id: 9, title: 'Observability', status: 'done', description: 'OpenTelemetry, Prometheus /metrics, structured JSON logs, pprof profiling' },
   { id: 10, title: 'Notifications', status: 'done', description: 'Discord, Webhook, Gotify, Ntfy — grabs, downloads, imports, and health alerts' },

@@ -2260,7 +2260,7 @@ export function RollingSearchPanel() {
   const [status, setStatus] = React.useState<RollingSearchStatus | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [saving, setSaving] = React.useState(false);
-  const triggerTimeoutRef = React.useRef<ReturnType<typeof setTimeout>>();
+  const triggerTimeoutRef = React.useRef<ReturnType<typeof setTimeout>>(undefined);
 
   React.useEffect(() => {
     return () => clearTimeout(triggerTimeoutRef.current);

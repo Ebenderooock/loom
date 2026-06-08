@@ -63,7 +63,7 @@ export function AddMovieDialog({
   const [searchOnAdd, setSearchOnAdd] = useState(true);
   const [adding, setAdding] = useState(false);
   const [addError, setAddError] = useState("");
-  const debounceRef = useRef<ReturnType<typeof setTimeout>>();
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const { data: mediaPrefs } = useMediaPreferences();
 

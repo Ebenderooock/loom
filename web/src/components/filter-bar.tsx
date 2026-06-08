@@ -47,7 +47,7 @@ export function FilterBar({
   children,
 }: FilterBarProps) {
   const [localSearch, setLocalSearch] = useState(searchText);
-  const timerRef = useRef<ReturnType<typeof setTimeout>>();
+  const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   useEffect(() => {
     setLocalSearch(searchText);
