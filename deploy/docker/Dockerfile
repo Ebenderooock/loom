@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.7
 
 # ---------- frontend build ----------
-FROM node:22-alpine AS web
+FROM node:26-alpine AS web
 RUN corepack enable && corepack prepare pnpm@9 --activate
 WORKDIR /web
 COPY web/package.json web/pnpm-lock.yaml ./
