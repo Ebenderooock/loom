@@ -3,6 +3,7 @@ package music
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"time"
 )
 
@@ -31,6 +32,13 @@ type Repository interface {
 	// Tracks
 	ListTracksByAlbum(ctx context.Context, albumID string) ([]*Track, error)
 	ReplaceTracks(ctx context.Context, albumID string, tracks []*Track) error
+	MarkTrackHasFile(ctx context.Context, trackID string, hasFile bool) error
+
+	// Track files (physical audio files linked to a track)
+	CreateTrackFile(ctx context.Context, tf *TrackFile) error
+	GetTrackFileByPath(ctx context.Context, path string) (*TrackFile, error)
+	ListTrackFilesByArtist(ctx context.Context, artistID string) ([]*TrackFile, error)
+	DeleteTrackFile(ctx context.Context, id string) error
 
 	// Profiles / quality definitions (read-only in M1)
 	ListAudioQualityDefinitions(ctx context.Context) ([]*AudioQualityDefinition, error)
@@ -62,6 +70,8 @@ const albumColumns = `id, mbid, artist_id, title, album_type, secondary_types, r
 const releaseColumns = `id, mbid, album_id, title, disambiguation, status, release_date, country, label, format, media_count, track_count, created_at, updated_at`
 
 const trackColumns = `id, recording_mbid, track_mbid, album_id, release_id, title, track_number, disc_number, duration_ms, artist_name, monitored, has_file, created_at, updated_at`
+
+const trackFileColumns = `id, track_id, album_id, artist_id, file_path, size, quality, format, bitrate, media_info, file_date, date_added, created_at, updated_at`
 
 type rowScanner interface {
 	Scan(dest ...interface{}) error
@@ -431,6 +441,98 @@ func (r *sqlRepo) ReplaceTracks(ctx context.Context, albumID string, tracks []*T
 		}
 	}
 	return tx.Commit()
+}
+
+// MarkTrackHasFile updates a track's has_file flag.
+func (r *sqlRepo) MarkTrackHasFile(ctx context.Context, trackID string, hasFile bool) error {
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE tracks SET has_file = ?, updated_at = ? WHERE id = ?`,
+		hasFile, time.Now().UTC(), trackID,
+	)
+	return err
+}
+
+// --- track files ---
+
+func scanTrackFile(s rowScanner) (*TrackFile, error) {
+	var tf TrackFile
+	var trackID, albumID, artistID sql.NullString
+	var fileDate sql.NullString
+	var dateAdded, createdAt, updatedAt string
+	if err := s.Scan(
+		&tf.ID, &trackID, &albumID, &artistID, &tf.FilePath, &tf.Size,
+		&tf.Quality, &tf.Format, &tf.Bitrate, &tf.MediaInfo, &fileDate,
+		&dateAdded, &createdAt, &updatedAt,
+	); err != nil {
+		return nil, err
+	}
+	tf.TrackID = trackID.String
+	tf.AlbumID = albumID.String
+	tf.ArtistID = artistID.String
+	tf.FileDate = parseNullTime(fileDate)
+	tf.DateAdded = parseTime(dateAdded)
+	tf.CreatedAt = parseTime(createdAt)
+	tf.UpdatedAt = parseTime(updatedAt)
+	return &tf, nil
+}
+
+func (r *sqlRepo) CreateTrackFile(ctx context.Context, tf *TrackFile) error {
+	now := time.Now().UTC()
+	if tf.CreatedAt.IsZero() {
+		tf.CreatedAt = now
+	}
+	if tf.DateAdded.IsZero() {
+		tf.DateAdded = now
+	}
+	tf.UpdatedAt = now
+	if tf.MediaInfo == nil {
+		tf.MediaInfo = MediaInfoMap{}
+	}
+	_, err := r.db.ExecContext(ctx,
+		`INSERT INTO track_files (id, track_id, album_id, artist_id, file_path, size, quality, format, bitrate, media_info, file_date, date_added, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		tf.ID, nullString(tf.TrackID), nullString(tf.AlbumID), nullString(tf.ArtistID),
+		tf.FilePath, tf.Size, tf.Quality, tf.Format, tf.Bitrate, tf.MediaInfo,
+		nullTime(tf.FileDate), tf.DateAdded, tf.CreatedAt, tf.UpdatedAt,
+	)
+	return err
+}
+
+func (r *sqlRepo) GetTrackFileByPath(ctx context.Context, path string) (*TrackFile, error) {
+	row := r.db.QueryRowContext(ctx,
+		`SELECT `+trackFileColumns+` FROM track_files WHERE file_path = ? AND deleted_at IS NULL`, path)
+	tf, err := scanTrackFile(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return tf, nil
+}
+
+func (r *sqlRepo) ListTrackFilesByArtist(ctx context.Context, artistID string) ([]*TrackFile, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT `+trackFileColumns+` FROM track_files WHERE artist_id = ? AND deleted_at IS NULL ORDER BY file_path`, artistID)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	var files []*TrackFile
+	for rows.Next() {
+		tf, err := scanTrackFile(rows)
+		if err != nil {
+			return nil, err
+		}
+		files = append(files, tf)
+	}
+	return files, rows.Err()
+}
+
+func (r *sqlRepo) DeleteTrackFile(ctx context.Context, id string) error {
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE track_files SET deleted_at = ? WHERE id = ?`, time.Now().UTC(), id)
+	return err
 }
 
 // --- quality definitions / profiles ---

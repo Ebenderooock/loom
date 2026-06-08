@@ -22,6 +22,7 @@ import (
 	"github.com/ebenderooock/loom/internal/music"
 	"github.com/ebenderooock/loom/internal/notifications"
 	"github.com/ebenderooock/loom/internal/qualityprofiles"
+	"github.com/ebenderooock/loom/internal/scanner"
 	"github.com/ebenderooock/loom/internal/scheduler"
 	"github.com/ebenderooock/loom/internal/series"
 	"github.com/ebenderooock/loom/internal/server"
@@ -76,6 +77,9 @@ func wireMedia(
 	mbProvider := musicbrainz.NewProvider(musicbrainz.NewClient(musicbrainz.DefaultConfig()))
 	musicSvc := music.NewService(music.NewRepository(db.DB()), mbProvider, logger)
 	srv.SetMusic(musicSvc)
+
+	musicScannerSvc := scanner.NewMusicScanner(musicSvc, logger)
+	srv.SetMusicScanner(musicScannerSvc)
 
 	// After a refresh re-creates a series' episodes (new IDs), re-link on-disk
 	// files by triggering a per-series scan. Best-effort; never fails refresh.

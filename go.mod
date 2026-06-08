@@ -8,6 +8,7 @@ require (
 	github.com/antchfx/htmlquery v1.3.6
 	github.com/bwmarrin/discordgo v0.29.0
 	github.com/coreos/go-oidc/v3 v3.18.0
+	github.com/dhowden/tag v0.0.0-20240417053706-3d75831295e8
 	github.com/dop251/goja v0.0.0-20260603143327-1f200ca63355
 	github.com/fsnotify/fsnotify v1.10.0
 	github.com/go-chi/chi/v5 v5.2.5

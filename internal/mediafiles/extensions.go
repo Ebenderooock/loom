@@ -22,6 +22,25 @@ var VideoExtensions = map[string]bool{
 	".ogm":  true,
 }
 
+// AudioExtensions lists all recognized audio (music) file extensions.
+var AudioExtensions = map[string]bool{
+	".flac": true,
+	".mp3":  true,
+	".m4a":  true,
+	".m4b":  true,
+	".alac": true,
+	".aac":  true,
+	".ogg":  true,
+	".oga":  true,
+	".opus": true,
+	".wav":  true,
+	".wv":   true,
+	".ape":  true,
+	".aiff": true,
+	".aif":  true,
+	".wma":  true,
+}
+
 // DangerousExtensions are files that should never be imported.
 var DangerousExtensions = map[string]bool{
 	".exe": true,
@@ -49,6 +68,12 @@ var ArchiveExtensions = map[string]bool{
 // recognized video format. The comparison is case-insensitive.
 func IsVideo(ext string) bool {
 	return VideoExtensions[strings.ToLower(ext)]
+}
+
+// IsAudio returns true if the file extension (with leading dot) is a
+// recognized audio format. The comparison is case-insensitive.
+func IsAudio(ext string) bool {
+	return AudioExtensions[strings.ToLower(ext)]
 }
 
 // IsDangerous returns true if the extension should never be imported.

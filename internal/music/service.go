@@ -30,7 +30,12 @@ type Service interface {
 	SetArtistMonitoring(ctx context.Context, id string, status MonitoringStatus) (*Artist, error)
 
 	GetAlbum(ctx context.Context, id string) (*Album, error)
+	ListAlbumsByArtist(ctx context.Context, artistID string) ([]*Album, error)
 	SetAlbumMonitored(ctx context.Context, id string, monitored bool) (*Album, error)
+
+	// ImportTrackFile links a physical audio file to a track and marks the
+	// track as present. Used by the music scanner/import pipeline.
+	ImportTrackFile(ctx context.Context, tf *TrackFile) error
 
 	ListAudioQualityDefinitions(ctx context.Context) ([]*AudioQualityDefinition, error)
 	ListAudioQualityProfiles(ctx context.Context) ([]*AudioQualityProfile, error)
@@ -440,6 +445,30 @@ func (s *service) SetAlbumMonitored(ctx context.Context, id string, monitored bo
 		return nil, err
 	}
 	return s.GetAlbum(ctx, id)
+}
+
+// ListAlbumsByArtist returns the albums belonging to an artist (no lazy fetch).
+func (s *service) ListAlbumsByArtist(ctx context.Context, artistID string) ([]*Album, error) {
+	return s.repo.ListAlbumsByArtist(ctx, artistID)
+}
+
+// ImportTrackFile persists a track file and flags its track as present.
+func (s *service) ImportTrackFile(ctx context.Context, tf *TrackFile) error {
+	if tf == nil || tf.FilePath == "" {
+		return ErrInvalid
+	}
+	if existing, err := s.repo.GetTrackFileByPath(ctx, tf.FilePath); err == nil && existing != nil {
+		return nil // already imported
+	}
+	if err := s.repo.CreateTrackFile(ctx, tf); err != nil {
+		return err
+	}
+	if tf.TrackID != "" {
+		if err := s.repo.MarkTrackHasFile(ctx, tf.TrackID, true); err != nil {
+			s.logger.Warn("music: failed to mark track has_file", "track", tf.TrackID, "error", err)
+		}
+	}
+	return nil
 }
 
 func (s *service) ListAudioQualityDefinitions(ctx context.Context) ([]*AudioQualityDefinition, error) {

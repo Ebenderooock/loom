@@ -97,6 +97,7 @@ type Server struct {
 	rssSvc            *rss.SourcesService
 	scannerSvc        *scanner.Scanner
 	seriesScannerSvc  *scanner.SeriesScanner
+	musicScannerSvc   *scanner.MusicScanner
 	organizerSvc      *organizer.Organizer
 	seriesSvc         series.Service
 	musicSvc          music.Service
@@ -280,6 +281,14 @@ func (s *Server) SetSeries(svc series.Service) {
 // SetMusic installs the music service and rebuilds the HTTP handler.
 func (s *Server) SetMusic(svc music.Service) {
 	s.musicSvc = svc
+	if s.httpSrv != nil {
+		s.httpSrv.Handler = s.newMux()
+	}
+}
+
+// SetMusicScanner installs the music scanner and rebuilds the HTTP handler.
+func (s *Server) SetMusicScanner(ms *scanner.MusicScanner) {
+	s.musicScannerSvc = ms
 	if s.httpSrv != nil {
 		s.httpSrv.Handler = s.newMux()
 	}
@@ -723,7 +732,11 @@ func (s *Server) newMux() http.Handler {
 
 		// Music (Artists/Albums/Tracks) routes
 		if s.musicSvc != nil {
-			r.Mount("/api/v1/artists", music.ArtistRouter(s.musicSvc))
+			artistsRouter := music.ArtistRouter(s.musicSvc)
+			if s.musicScannerSvc != nil {
+				scanner.RegisterMusicRoutes(artistsRouter, s.musicScannerSvc, s.libStore)
+			}
+			r.Mount("/api/v1/artists", artistsRouter)
 			r.Mount("/api/v1/albums", music.AlbumRouter(s.musicSvc))
 			r.Mount("/api/v1/music", music.ProfileRouter(s.musicSvc))
 		}

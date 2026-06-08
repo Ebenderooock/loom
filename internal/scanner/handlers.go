@@ -223,6 +223,98 @@ func rescanSeries(ss *SeriesScanner, libStore *libraries.Store) http.HandlerFunc
 	}
 }
 
+// RegisterMusicRoutes registers music scanner endpoints on the given router.
+// These should be mounted under /api/v1/artists.
+func RegisterMusicRoutes(r chi.Router, ms *MusicScanner, libStore *libraries.Store) {
+	r.Route("/scan", func(r chi.Router) {
+		r.Post("/", startMusicScan(ms, libStore))
+		r.Get("/unmatched", getMusicUnmatched(ms))
+		r.Get("/{scanId}", getMusicScanStatus(ms))
+	})
+	r.Post("/{id}/rescan", rescanArtist(ms, libStore))
+}
+
+func startMusicScan(ms *MusicScanner, libStore *libraries.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req startScanRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSONError(w, "invalid request body", http.StatusBadRequest)
+			return
+		}
+		if req.LibraryID == "" {
+			writeJSONError(w, "libraryId is required", http.StatusBadRequest)
+			return
+		}
+		lib, err := libStore.Get(r.Context(), req.LibraryID)
+		if err != nil {
+			writeJSONError(w, "library not found", http.StatusNotFound)
+			return
+		}
+		scanID, err := ms.StartMusicScan(r.Context(), lib.ID, lib.Path)
+		if err != nil {
+			writeJSONError(w, "scan failed", http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusAccepted)
+		_ = json.NewEncoder(w).Encode(map[string]string{"scanId": scanID, "status": "running"})
+	}
+}
+
+func getMusicScanStatus(ms *MusicScanner) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		scanID := chi.URLParam(r, "scanId")
+		result := ms.GetMusicScanStatus(scanID)
+		if result == nil {
+			writeJSONError(w, "scan not found", http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(result)
+	}
+}
+
+func getMusicUnmatched(ms *MusicScanner) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		files := ms.GetMusicUnmatched()
+		if files == nil {
+			files = []*UnmatchedFile{}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(files)
+	}
+}
+
+func rescanArtist(ms *MusicScanner, libStore *libraries.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		artistID := chi.URLParam(r, "id")
+		if artistID == "" {
+			writeJSONError(w, "artist id required", http.StatusBadRequest)
+			return
+		}
+		var req struct {
+			LibraryID string `json:"libraryId"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		if req.LibraryID == "" {
+			writeJSONError(w, "libraryId is required", http.StatusBadRequest)
+			return
+		}
+		lib, err := libStore.Get(r.Context(), req.LibraryID)
+		if err != nil {
+			writeJSONError(w, "library not found", http.StatusNotFound)
+			return
+		}
+		result, err := ms.RescanArtist(r.Context(), artistID, lib.Path)
+		if err != nil {
+			writeJSONError(w, "rescan failed", http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(result)
+	}
+}
+
 func rescanMovie(s *Scanner, libStore *libraries.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		movieID := chi.URLParam(r, "id")
