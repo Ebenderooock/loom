@@ -4,15 +4,16 @@
 > modern, container-native, observable platform. Single Go binary,
 > SQLite by default, Postgres-ready, K8s-native.
 
-[![CI](https://img.shields.io/badge/ci-pending-lightgrey)](.github/workflows/ci.yml)
-[![Go Report](https://img.shields.io/badge/go%20report-pending-lightgrey)](https://goreportcard.com/)
+[![CI](https://github.com/ebenderooock/loom/actions/workflows/ci.yml/badge.svg)](https://github.com/ebenderooock/loom/actions/workflows/ci.yml)
+[![Go Report Card](https://goreportcard.com/badge/github.com/ebenderooock/loom)](https://goreportcard.com/report/github.com/ebenderooock/loom)
+[![Release](https://img.shields.io/github/v/release/ebenderooock/loom?include_prereleases&sort=semver)](https://github.com/ebenderooock/loom/releases)
 [![License: AGPL v3](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
-[![Discord](https://img.shields.io/badge/discord-pending-lightgrey)](https://discord.gg/)
-[![status: pre-alpha](https://img.shields.io/badge/status-pre--alpha-orange)](ROADMAP.md)
+[![status: alpha](https://img.shields.io/badge/status-alpha-yellow)](ROADMAP.md)
 
-> **Status: pre-alpha.** Active development. Not ready for production.
-> See the [roadmap](ROADMAP.md) for what's done, what's in flight, and
-> what's coming. Tracking issues welcome; PRs once Phase 1 lands.
+> **Status: alpha.** The first tagged release ([`v0.1.0`](https://github.com/ebenderooock/loom/releases))
+> is out — published binaries and container images are available. APIs and
+> schema may still change. See the [roadmap](ROADMAP.md) for what's done,
+> what's in flight, and what's next. Issues and PRs welcome.
 
 Loom is a from-scratch, like-for-like replacement of the *arr stack
 (Radarr, Sonarr, Prowlarr) with a modernised UI, first-class
@@ -42,7 +43,7 @@ Emby keep working unchanged.
 | Surface | Today (Phase 1) | Coming |
 |---|---|---|
 | HTTP server | chi router, request-ID, structured access logs, panic recovery, gzip, ETag, CORS | WebSocket events (Phase 1c) |
-| Storage | SQLite (default) + Postgres, embedded goose migrations (43), sqlc-typed queries | Backup / restore CLI (Phase 11) |
+| Storage | SQLite (default) + Postgres, embedded goose migrations (60+), sqlc-typed queries | Backup / restore CLI (Phase 11) |
 | Health probes | `/healthz`, `/livez`, `/readyz` | — |
 | Metrics | Prometheus `/metrics` (Go runtime + process collectors) | Loom-curated Grafana dashboards (Phase 11) |
 | Tracing | OpenTelemetry SDK + OTLP/HTTP exporter | Spans on every module call as modules land |
@@ -67,11 +68,12 @@ working:
 
 ## Quickstart
 
-> Pre-alpha — these flows boot the server and serve the health, metrics,
-> and `/api/v1/system/status` endpoints. Library/indexer/download
-> functionality lands in later phases.
+> Alpha — the server boots and serves health, metrics, and the
+> `/api/v1/*` endpoints (movies, series, indexers, search, downloads,
+> settings). The end-to-end search → grab → download → import pipeline
+> works today.
 
-### Docker (single container, post-Phase-1 — image not yet published)
+### Docker (single container)
 
 ```bash
 docker run --rm -p 8989:8989 \
@@ -80,13 +82,13 @@ docker run --rm -p 8989:8989 \
   ghcr.io/ebenderooock/loom:latest
 ```
 
-Open <http://localhost:8989/healthz>. The image lands publicly with
-the first tagged release (Phase 11). Until then, prefer the from-source
-path below.
+Open <http://localhost:8989/healthz>. Images are published to
+`ghcr.io/ebenderooock/loom` (`:latest` and per-release tags such as
+`:0.1.0`) on every tagged release.
 
 ### From source (works today)
 
-Requires Go 1.23+ and Make. This path produces a working binary
+Requires Go 1.26+ and Make. This path produces a working binary
 against the current `master`.
 
 ```bash
@@ -141,9 +143,10 @@ The [`docs/`](docs/) directory is the source of truth.
 
 ## Roadmap
 
-The 11-phase delivery plan lives in [ROADMAP.md](ROADMAP.md). Phases 0–2
-are complete; Phases 3–7 are substantially done; Phase 3 (import pipeline)
-is the current focus.
+The 11-phase delivery plan lives in [ROADMAP.md](ROADMAP.md). The core
+media-automation pipeline (search → grab → download → import/organize for
+movies and TV) is working and shipped in `v0.1.0`; wire-compatibility
+APIs, request portal, and the migration importer are in progress.
 
 ## Contributing
 
