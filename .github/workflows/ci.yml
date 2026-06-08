@@ -21,16 +21,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Day-to-day CI (push/PR) runs ONLY on the self-hosted Kubernetes
-        # runners — zero GitHub-hosted minutes. The macOS/Windows legs that
-        # validate the published cross-platform binaries are gated to release
-        # tags (v*), so they don't burn hosted minutes on every push.
+        # Day-to-day CI (push/PR) runs on GitHub-hosted Linux runners, which
+        # are free for public repositories. The macOS/Windows legs that validate
+        # the published cross-platform binaries are gated to release tags (v*),
+        # so the full three-OS matrix only runs on tagged releases.
         #
-        # Later, to run cross-OS tests on your OWN machines: register them as
-        # self-hosted runners and swap "macos-latest"/"windows-latest" below for
-        # your runner labels. To run them on every push too, move those labels
-        # into the base list (the `|| fromJSON('["arc-runners"]')` branch).
-        os: ${{ github.ref_type == 'tag' && fromJSON('["arc-runners", "macos-latest", "windows-latest"]') || fromJSON('["arc-runners"]') }}
+        # Self-hosted runners are intentionally NOT used here: this workflow runs
+        # on `pull_request`, so a self-hosted runner would execute untrusted code
+        # from forked PRs on private infrastructure.
+        os: ${{ github.ref_type == 'tag' && fromJSON('["ubuntu-latest", "macos-latest", "windows-latest"]') || fromJSON('["ubuntu-latest"]') }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -39,18 +38,18 @@ jobs:
           cache: true
       - run: go mod download
       - run: go vet ./...
-      # The race detector requires cgo + a C toolchain. The self-hosted runner
-      # image sets CGO_ENABLED=0 and ships no compiler, so install gcc on Linux
-      # and force cgo on for the test step. The disable_libutp tag drops the
-      # transitive go-libutp C++ dependency (which the CGO_ENABLED=0 production
-      # build excludes anyway), so only gcc — not g++ — is needed.
+      # The race detector requires cgo + a C toolchain. GitHub-hosted runners
+      # ship gcc, but the guard keeps this resilient if gcc is ever missing. The
+      # disable_libutp tag drops the transitive go-libutp C++ dependency (which
+      # the CGO_ENABLED=0 production build excludes anyway), so only gcc — not
+      # g++ — is needed.
       - name: Ensure C compiler (for -race)
         if: runner.os == 'Linux'
         run: command -v gcc >/dev/null 2>&1 || { sudo apt-get update && sudo apt-get install -y gcc; }
       - run: go test -race -tags disable_libutp -count=1 -coverprofile=coverage.out ./...
         env:
           CGO_ENABLED: "1"
-      - if: matrix.os == 'arc-runners'
+      - if: matrix.os == 'ubuntu-latest'
         uses: actions/upload-artifact@v4
         with:
           name: coverage
@@ -58,7 +57,7 @@ jobs:
 
   lint:
     name: Lint
-    runs-on: arc-runners
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
@@ -100,7 +99,7 @@ jobs:
 
   vuln:
     name: govulncheck
-    runs-on: arc-runners
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -108,16 +107,13 @@ jobs:
           go-version: "1.26"
           cache: true
       - run: go install golang.org/x/vuln/cmd/govulncheck@latest
-      # Default symbol-level scan builds a whole-program call graph and peaks at
-      # ~2.8GB RSS, which OOM-kills the memory-constrained self-hosted runner.
-      # Package-level scan needs ~50MB and finishes in seconds while still
-      # flagging vulnerable imported packages; standard-library advisories are
-      # covered by tracking the latest go1.26 patch release above.
+      # Package-level scan flags vulnerable imported packages quickly; standard
+      # library advisories are covered by tracking the latest go1.26 patch above.
       - run: govulncheck -scan package ./...
 
   build:
     name: Build matrix
-    runs-on: arc-runners
+    runs-on: ubuntu-latest
     needs: [go, lint]
     strategy:
       fail-fast: false
@@ -145,7 +141,7 @@ jobs:
 
   web:
     name: Frontend
-    runs-on: arc-runners
+    runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: web

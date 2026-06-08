@@ -11,15 +11,13 @@ permissions:
 
 jobs:
   goreleaser:
-    # GitHub-hosted runners are unavailable on this account (spending limit), so
-    # the release must run on the self-hosted ARC runners. These nodes are small
-    # (~3.5Gi RAM), and building the modernc/sqlite-heavy binary for two arches
-    # exhausted node memory and got the pod evicted mid-build. Mitigations below:
-    # serialized builds (--parallelism 1) + capped compiler parallelism
-    # (GOMAXPROCS), and the release is run against a single runner replica so the
-    # build has the whole node. No QEMU: arc has no binfmt, and the goreleaser
-    # Dockerfile is COPY-only so buildx assembles the arm64 image without it.
-    runs-on: arc-runners
+    # GitHub-hosted runners are free for public repositories, so the release
+    # runs on a standard ubuntu-latest runner (4 vCPU / 16 GB). Builds are still
+    # serialized (--parallelism 1) with capped compiler parallelism (GOMAXPROCS)
+    # to keep peak memory comfortable while compiling the modernc/sqlite-heavy
+    # binary for multiple arches. No QEMU is needed: the goreleaser Dockerfile is
+    # COPY-only, so buildx assembles the arm64 image without binfmt.
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
@@ -74,6 +72,6 @@ jobs:
           args: release --clean --parallelism 1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Cap compiler parallelism to keep peak memory within the small
-          # (~3.5Gi) ARC node budget; modernc/sqlite is large to compile.
+          # Cap compiler parallelism to keep peak memory comfortable while
+          # compiling the large modernc/sqlite codebase for multiple arches.
           GOMAXPROCS: "2"
