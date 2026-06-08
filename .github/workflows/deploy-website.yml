@@ -1,8 +1,9 @@
 name: Deploy Website
 
-# Builds the marketing site in website/ and deploys it to Cloudflare Pages.
+# Builds the marketing site in website/ and deploys it to Cloudflare
+# Workers (static assets, project "wispy-wind-1fb6" — see website/wrangler.jsonc).
 # Requires two repository secrets:
-#   - CLOUDFLARE_API_TOKEN   (Pages: Edit permission)
+#   - CLOUDFLARE_API_TOKEN   (Workers Scripts: Edit permission)
 #   - CLOUDFLARE_ACCOUNT_ID
 on:
   push:
@@ -44,10 +45,11 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Deploy to Cloudflare Pages
+      - name: Deploy to Cloudflare Workers
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: website
-          command: pages deploy dist --project-name=wispy-wind-1fb6 --branch=main --commit-dirty=true
+          wranglerVersion: "4"
+          command: deploy
