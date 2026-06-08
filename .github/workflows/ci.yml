@@ -41,11 +41,13 @@ jobs:
       - run: go vet ./...
       # The race detector requires cgo + a C toolchain. The self-hosted runner
       # image sets CGO_ENABLED=0 and ships no compiler, so install gcc on Linux
-      # and force cgo on for the test step.
+      # and force cgo on for the test step. The disable_libutp tag drops the
+      # transitive go-libutp C++ dependency (which the CGO_ENABLED=0 production
+      # build excludes anyway), so only gcc — not g++ — is needed.
       - name: Ensure C compiler (for -race)
         if: runner.os == 'Linux'
         run: command -v gcc >/dev/null 2>&1 || { sudo apt-get update && sudo apt-get install -y gcc; }
-      - run: go test -race -count=1 -coverprofile=coverage.out ./...
+      - run: go test -race -tags disable_libutp -count=1 -coverprofile=coverage.out ./...
         env:
           CGO_ENABLED: "1"
       - if: matrix.os == 'arc-runners'
