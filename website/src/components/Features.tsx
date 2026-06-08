@@ -11,6 +11,10 @@ import {
   Bell,
   HardDrive,
   RotateCcw,
+  Inbox,
+  Code2,
+  BarChart3,
+  Users,
 } from 'lucide-react'
 import GlowCard from './GlowCard'
 
@@ -22,7 +26,7 @@ const features = [
   },
   {
     icon: Search,
-    title: '542 Indexers',
+    title: '500+ Indexers',
     description: 'Cardigann YAML engine with Newznab & Torznab support. All your sources, built in from day one.',
   },
   {
@@ -43,7 +47,7 @@ const features = [
   {
     icon: Monitor,
     title: 'Modern UI',
-    description: 'React 19 + TypeScript. Mobile-first, responsive, fast. A unified interface for your entire library.',
+    description: 'React 18 + TypeScript. Mobile-first, responsive, fast. A unified interface for your entire library.',
   },
   {
     icon: Activity,
@@ -64,6 +68,26 @@ const features = [
     icon: Bell,
     title: 'Notifications',
     description: 'Discord, Webhook, Gotify, Ntfy. Get notified about grabs, downloads, and health checks.',
+  },
+  {
+    icon: Inbox,
+    title: 'Media Requests',
+    description: 'A built-in request portal plus Discord & Telegram bots. Users request, admins approve, Loom grabs — with per-user quotas.',
+  },
+  {
+    icon: Users,
+    title: 'Multi-User',
+    description: 'Admin and user roles, self-service invite links, and a request/approval workflow for friends and family.',
+  },
+  {
+    icon: BarChart3,
+    title: 'Media Analytics',
+    description: 'Tautulli-style insight into Plex, Jellyfin & Emby — active streams, watch history, bandwidth and transcode stats.',
+  },
+  {
+    icon: Code2,
+    title: 'Plugin Engine',
+    description: 'JavaScript plugins with an in-browser Monaco editor. Hook into grabs, imports, downloads, and notifications.',
   },
 ]
 

@@ -100,7 +100,7 @@ export default function Hero() {
         >
           <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium bg-brand-purple/10 border border-brand-purple/30 text-brand-purple">
             <span className="w-2 h-2 bg-brand-purple rounded-full animate-pulse" />
-            Pre-Alpha — Actively Developing
+            Alpha — Actively Developing
           </span>
         </motion.div>
 
