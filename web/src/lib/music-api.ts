@@ -143,6 +143,23 @@ export interface AlbumGrabResult {
   download_id: string;
 }
 
+export interface ReleaseCandidate {
+  guid: string;
+  title: string;
+  indexer_id: string;
+  size: number;
+  seeders?: number;
+  protocol: string;
+  quality_name: string;
+  tier: number;
+  score: number;
+  allowed: boolean;
+  meets_cutoff: boolean;
+  link?: string;
+  magnet_uri?: string;
+  infohash?: string;
+}
+
 // ---------- Query keys ----------
 
 export const musicKeys = {
@@ -241,6 +258,60 @@ export async function setAlbumMonitored(
 
 export async function searchAlbum(id: string): Promise<AlbumGrabResult> {
   const res = await apiFetch(`/api/v1/albums/${id}/search`, { method: "POST" });
+  if (!res.ok) {
+    let msg = `${res.status}`;
+    try {
+      const body = (await res.json()) as { error?: string };
+      if (body.error) msg = body.error;
+    } catch {
+      /* ignore */
+    }
+    throw new Error(msg);
+  }
+  return (await res.json()) as AlbumGrabResult;
+}
+
+export async function searchAlbumUpgrade(id: string): Promise<AlbumGrabResult> {
+  const res = await apiFetch(`/api/v1/albums/${id}/search/upgrade`, {
+    method: "POST",
+  });
+  if (!res.ok) {
+    let msg = `${res.status}`;
+    try {
+      const body = (await res.json()) as { error?: string };
+      if (body.error) msg = body.error;
+    } catch {
+      /* ignore */
+    }
+    throw new Error(msg);
+  }
+  return (await res.json()) as AlbumGrabResult;
+}
+
+export async function fetchAlbumReleases(
+  id: string,
+  signal?: AbortSignal,
+): Promise<ReleaseCandidate[]> {
+  return getJSON<ReleaseCandidate[]>(`/api/v1/albums/${id}/releases`, signal);
+}
+
+export async function grabAlbumRelease(
+  id: string,
+  release: ReleaseCandidate,
+): Promise<AlbumGrabResult> {
+  const res = await apiFetch(`/api/v1/albums/${id}/grab`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      title: release.title,
+      indexer_id: release.indexer_id,
+      link: release.link,
+      magnet_uri: release.magnet_uri,
+      infohash: release.infohash,
+      size: release.size,
+      seeders: release.seeders,
+    }),
+  });
   if (!res.ok) {
     let msg = `${res.status}`;
     try {
@@ -355,4 +426,33 @@ export function useSetAlbumMonitored() {
 
 export function useSearchAlbum() {
   return useMutation({ mutationFn: (id: string) => searchAlbum(id) });
+}
+
+export function useSearchAlbumUpgrade() {
+  return useMutation({ mutationFn: (id: string) => searchAlbumUpgrade(id) });
+}
+
+export function useAlbumReleases(id: string | undefined, enabled: boolean) {
+  return useQuery({
+    queryKey: ["music", "album-releases", id ?? ""],
+    queryFn: ({ signal }) => fetchAlbumReleases(id ?? "", signal),
+    enabled: enabled && !!id,
+    staleTime: 60_000,
+  });
+}
+
+export function useGrabAlbumRelease() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      release,
+    }: {
+      id: string;
+      release: ReleaseCandidate;
+    }) => grabAlbumRelease(id, release),
+    onSuccess: (_res, vars) => {
+      qc.invalidateQueries({ queryKey: musicKeys.album(vars.id) });
+    },
+  });
 }

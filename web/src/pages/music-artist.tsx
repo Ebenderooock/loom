@@ -15,12 +15,14 @@ import {
   ArrowLeft,
   Music,
   Search,
+  TextSearch,
   Trash2,
   Disc3,
   Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useSetPageHeader } from "@/hooks/use-page-header";
+import { AlbumSearchDialog } from "@/components/music/album-search-dialog";
 import {
   useArtist,
   useSetArtistMonitoring,
@@ -37,6 +39,7 @@ function albumYear(a: Album): string {
 function AlbumRow({ album }: { album: Album }) {
   const setMonitored = useSetAlbumMonitored();
   const search = useSearchAlbum();
+  const [searchOpen, setSearchOpen] = useState(false);
   const tracks = album.tracks ?? [];
   const present = tracks.filter((t) => t.has_file).length;
 
@@ -96,6 +99,8 @@ function AlbumRow({ album }: { album: Album }) {
         variant="ghost"
         disabled={search.isPending}
         onClick={handleSearch}
+        aria-label="Auto-search album"
+        title="Auto-search and grab best"
       >
         {search.isPending ? (
           <Loader2 className="h-4 w-4 animate-spin" />
@@ -103,6 +108,21 @@ function AlbumRow({ album }: { album: Album }) {
           <Search className="h-4 w-4" />
         )}
       </Button>
+      <Button
+        size="sm"
+        variant="ghost"
+        onClick={() => setSearchOpen(true)}
+        aria-label="Interactive search"
+        title="Interactive search"
+      >
+        <TextSearch className="h-4 w-4" />
+      </Button>
+      <AlbumSearchDialog
+        albumId={album.id}
+        albumTitle={album.title}
+        open={searchOpen}
+        onOpenChange={setSearchOpen}
+      />
     </div>
   );
 }
@@ -111,8 +131,11 @@ export function MusicArtistPage() {
   const { artistId } = useParams({ from: "/music/$artistId" });
   const { data: artist, isLoading } = useArtist(artistId);
   const setMonitoring = useSetArtistMonitoring();
+  const setAlbumMonitored = useSetAlbumMonitored();
+  const searchAlbum = useSearchAlbum();
   const deleteArtist = useDeleteArtist();
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [bulkBusy, setBulkBusy] = useState(false);
 
   useSetPageHeader(artist?.name ?? "Artist");
 
@@ -140,6 +163,48 @@ export function MusicArtistPage() {
   const albums = artist.albums ?? [];
   const monitored = artist.monitoring_status === "monitored";
   const stats = artist.stats;
+
+  const bulkMonitor = async (value: boolean) => {
+    setBulkBusy(true);
+    try {
+      await Promise.all(
+        albums
+          .filter((a) => a.monitored !== value)
+          .map((a) =>
+            setAlbumMonitored.mutateAsync({ id: a.id, monitored: value }),
+          ),
+      );
+      toast.success(value ? "Monitoring all albums" : "Unmonitored all albums");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Bulk update failed");
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
+  const searchAllMissing = async () => {
+    const missing = albums.filter((a) => {
+      const tracks = a.tracks ?? [];
+      const present = tracks.filter((t) => t.has_file).length;
+      return a.monitored && (tracks.length === 0 || present < tracks.length);
+    });
+    if (missing.length === 0) {
+      toast.info("No monitored albums are missing tracks");
+      return;
+    }
+    setBulkBusy(true);
+    let grabbed = 0;
+    for (const a of missing) {
+      try {
+        await searchAlbum.mutateAsync(a.id);
+        grabbed++;
+      } catch {
+        /* skip albums with no results */
+      }
+    }
+    setBulkBusy(false);
+    toast.success(`Searched ${missing.length} albums, grabbed ${grabbed}`);
+  };
 
   return (
     <div className="px-6 pb-6 pt-2">
@@ -211,9 +276,42 @@ export function MusicArtistPage() {
         </div>
       </div>
 
-      <h2 className="mb-2 text-sm font-semibold text-muted-foreground">
-        Albums
-      </h2>
+      <div className="mb-2 flex items-center justify-between">
+        <h2 className="text-sm font-semibold text-muted-foreground">Albums</h2>
+        {albums.length > 0 && (
+          <div className="flex items-center gap-1.5">
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={bulkBusy}
+              onClick={() => bulkMonitor(true)}
+            >
+              Monitor all
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={bulkBusy}
+              onClick={() => bulkMonitor(false)}
+            >
+              Unmonitor all
+            </Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={bulkBusy}
+              onClick={searchAllMissing}
+            >
+              {bulkBusy ? (
+                <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+              ) : (
+                <Search className="mr-1.5 h-4 w-4" />
+              )}
+              Search missing
+            </Button>
+          </div>
+        )}
+      </div>
       {albums.length === 0 ? (
         <p className="py-8 text-center text-sm text-muted-foreground">
           No albums found for this artist.
