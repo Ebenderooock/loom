@@ -221,6 +221,10 @@ func (s *service) AddArtist(ctx context.Context, req AddArtistRequest) (*Artist,
 	if err != nil {
 		s.logger.Warn("music: failed to fetch artist albums", "mbid", req.MBID, "error", err)
 	} else {
+		var metaProfile *MetadataProfile
+		if req.MetadataProfileID != "" {
+			metaProfile, _ = s.repo.GetMetadataProfile(ctx, req.MetadataProfileID)
+		}
 		monitorAlbums := monitoring == MonitoringMonitored
 		for _, am := range albums {
 			if am == nil || am.MBID == "" {
@@ -229,6 +233,9 @@ func (s *service) AddArtist(ctx context.Context, req AddArtistRequest) (*Artist,
 			if existingAl, _ := s.repo.GetAlbumByMBID(ctx, am.MBID); existingAl != nil {
 				continue
 			}
+			// Album types outside the metadata profile are still stored but left
+			// unmonitored, mirroring Lidarr's behaviour.
+			monitored := monitorAlbums && albumMatchesMetadataProfile(am.Type, am.SecondaryTypes, metaProfile)
 			al := &Album{
 				ID:             uuid.New().String(),
 				MBID:           am.MBID,
@@ -239,7 +246,7 @@ func (s *service) AddArtist(ctx context.Context, req AddArtistRequest) (*Artist,
 				ReleaseDate:    am.ReleaseDate,
 				Genres:         am.Genres,
 				CoverArtURL:    am.CoverArtURL,
-				Monitored:      monitorAlbums,
+				Monitored:      monitored,
 			}
 			if err := s.repo.CreateAlbum(ctx, al); err != nil {
 				s.logger.Warn("music: failed to create album", "mbid", am.MBID, "error", err)
@@ -481,6 +488,38 @@ func (s *service) ListAudioQualityProfiles(ctx context.Context) ([]*AudioQuality
 
 func (s *service) ListMetadataProfiles(ctx context.Context) ([]*MetadataProfile, error) {
 	return s.repo.ListMetadataProfiles(ctx)
+}
+
+// albumMatchesMetadataProfile reports whether an album's primary/secondary types
+// are permitted by the metadata profile. A nil profile permits all types (so
+// artists added before profiles were enforced keep their behaviour). The rule
+// mirrors Lidarr: the primary type must be allowed (when the profile lists any),
+// and every secondary type the album carries must also be allowed.
+func albumMatchesMetadataProfile(primaryType string, secondaryTypes []string, profile *MetadataProfile) bool {
+	if profile == nil {
+		return true
+	}
+	if len(profile.PrimaryTypes) > 0 && !containsFold(profile.PrimaryTypes, primaryType) {
+		return false
+	}
+	for _, st := range secondaryTypes {
+		if strings.TrimSpace(st) == "" {
+			continue
+		}
+		if !containsFold(profile.SecondaryTypes, st) {
+			return false
+		}
+	}
+	return true
+}
+
+func containsFold(set []string, v string) bool {
+	for _, s := range set {
+		if strings.EqualFold(strings.TrimSpace(s), strings.TrimSpace(v)) {
+			return true
+		}
+	}
+	return false
 }
 
 // pickRelease chooses a preferred edition: official status first, then the one

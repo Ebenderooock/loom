@@ -227,3 +227,31 @@ func TestLookupArtistsMarksAlreadyAdded(t *testing.T) {
 		t.Fatalf("after add: %+v", after)
 	}
 }
+
+func TestAlbumMatchesMetadataProfile(t *testing.T) {
+	profile := &MetadataProfile{
+		PrimaryTypes:   StringSlice{"Album", "EP"},
+		SecondaryTypes: StringSlice{"Live"},
+	}
+	cases := []struct {
+		name      string
+		primary   string
+		secondary []string
+		profile   *MetadataProfile
+		want      bool
+	}{
+		{"nil profile allows all", "Single", []string{"Compilation"}, nil, true},
+		{"allowed primary, no secondary", "Album", nil, profile, true},
+		{"allowed primary lowercase", "album", nil, profile, true},
+		{"disallowed primary", "Single", nil, profile, false},
+		{"allowed secondary", "Album", []string{"Live"}, profile, true},
+		{"disallowed secondary", "Album", []string{"Compilation"}, profile, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := albumMatchesMetadataProfile(c.primary, c.secondary, c.profile); got != c.want {
+				t.Errorf("albumMatchesMetadataProfile(%q,%v) = %v, want %v", c.primary, c.secondary, got, c.want)
+			}
+		})
+	}
+}
