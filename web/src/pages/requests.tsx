@@ -18,6 +18,8 @@ import {
 } from "@/lib/requests-api";
 import { useLibraries } from "@/lib/libraries-api";
 import { useQualityProfiles } from "@/lib/quality-profiles-api";
+import { useAudioQualityProfiles } from "@/lib/music-api";
+import { useFeatureEnabled } from "@/lib/features-api";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -37,10 +39,23 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Check, Loader2, Plus, Search, X, Inbox, Gauge } from "lucide-react";
+import {
+  Check,
+  Loader2,
+  Plus,
+  Search,
+  X,
+  Inbox,
+  Gauge,
+} from "lucide-react";
 import { toast } from "sonner";
 
 const TMDB_IMG = "https://image.tmdb.org/t/p";
+
+function posterSrc(path: string, size: string): string {
+  if (/^https?:\/\//.test(path)) return path;
+  return `${TMDB_IMG}/${size}${path}`;
+}
 
 interface LookupResult {
   tmdbId: string;
@@ -94,6 +109,27 @@ async function lookup(
   term: string,
   signal?: AbortSignal,
 ): Promise<LookupResult[]> {
+  if (mediaType === "artist") {
+    const res = await apiFetch(
+      `/api/v1/artists/lookup?q=${encodeURIComponent(term)}`,
+      { signal },
+    );
+    if (!res.ok) return [];
+    const data = (await res.json()) as Array<{
+      mbid?: string;
+      name: string;
+      disambiguation?: string;
+      image_url?: string;
+    }>;
+    return (data ?? [])
+      .filter((a) => a.mbid)
+      .map((a) => ({
+        tmdbId: a.mbid!,
+        title: a.name,
+        posterPath: a.image_url,
+        overview: a.disambiguation,
+      }));
+  }
   if (mediaType === "movie") {
     const res = await apiFetch(
       `/api/v1/movies/lookup?term=${encodeURIComponent(term)}`,
@@ -143,6 +179,7 @@ async function lookup(
 }
 
 function SearchAndRequest() {
+  const musicEnabled = useFeatureEnabled("music", false);
   const [mediaType, setMediaType] = React.useState<RequestMediaType>("movie");
   const [term, setTerm] = React.useState("");
   const [results, setResults] = React.useState<LookupResult[]>([]);
@@ -211,6 +248,9 @@ function SearchAndRequest() {
           <TabsList>
             <TabsTrigger value="movie">Movies</TabsTrigger>
             <TabsTrigger value="series">TV Shows</TabsTrigger>
+            {musicEnabled && (
+              <TabsTrigger value="artist">Music</TabsTrigger>
+            )}
           </TabsList>
         </Tabs>
         <div className="relative flex-1">
@@ -218,7 +258,13 @@ function SearchAndRequest() {
           <Input
             value={term}
             onChange={(e) => onTermChange(e.target.value)}
-            placeholder={`Search for a ${mediaType === "movie" ? "movie" : "TV show"} to request…`}
+            placeholder={`Search for ${
+              mediaType === "movie"
+                ? "a movie"
+                : mediaType === "series"
+                  ? "a TV show"
+                  : "an artist"
+            } to request…`}
             className="pl-9"
           />
         </div>
@@ -250,7 +296,7 @@ function SearchAndRequest() {
               <div className="aspect-[2/3] bg-muted">
                 {r.posterPath ? (
                   <img
-                    src={`${TMDB_IMG}/w300${r.posterPath}`}
+                    src={posterSrc(r.posterPath, "w300")}
                     alt={r.title}
                     className="h-full w-full object-cover"
                     loading="lazy"
@@ -313,7 +359,7 @@ function RequestRow({
       <div className="h-16 w-11 shrink-0 overflow-hidden rounded bg-muted">
         {r.poster_path ? (
           <img
-            src={`${TMDB_IMG}/w92${r.poster_path}`}
+            src={posterSrc(r.poster_path, "w92")}
             alt={r.title}
             className="h-full w-full object-cover"
             loading="lazy"
@@ -329,7 +375,11 @@ function RequestRow({
             <span className="text-xs text-muted-foreground">{r.year}</span>
           ) : null}
           <Badge variant="outline" className="text-[10px] uppercase">
-            {r.media_type === "movie" ? "Movie" : "TV"}
+            {r.media_type === "movie"
+              ? "Movie"
+              : r.media_type === "series"
+                ? "TV"
+                : "Artist"}
           </Badge>
         </div>
         <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
@@ -361,14 +411,25 @@ function ApproveDialog({
 }) {
   const { data: libraries } = useLibraries();
   const { data: profiles } = useQualityProfiles();
+  const { data: audioProfiles } = useAudioQualityProfiles();
   const approve = useApproveRequest();
   const [libraryId, setLibraryId] = React.useState("");
   const [qpId, setQpId] = React.useState("");
   const [error, setError] = React.useState("");
 
+  const isArtist = request?.media_type === "artist";
+  const libMediaType = isArtist ? "music" : request?.media_type;
+  const profileOptions = React.useMemo(
+    () =>
+      isArtist
+        ? (audioProfiles ?? []).map((p) => ({ id: p.id, name: p.name }))
+        : (profiles ?? []).map((p) => ({ id: p.id, name: p.name })),
+    [isArtist, audioProfiles, profiles],
+  );
+
   const eligibleLibraries = React.useMemo(
-    () => (libraries ?? []).filter((l) => l.media_type === request?.media_type),
-    [libraries, request],
+    () => (libraries ?? []).filter((l) => l.media_type === libMediaType),
+    [libraries, libMediaType],
   );
 
   // Default the selection whenever a new request opens.
@@ -377,7 +438,7 @@ function ApproveDialog({
     setError("");
     const lib = eligibleLibraries[0];
     setLibraryId(lib?.id ?? "");
-    setQpId(lib?.quality_profile_id || (profiles?.[0]?.id ?? ""));
+    setQpId(lib?.quality_profile_id || (profileOptions[0]?.id ?? ""));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [request?.id]);
 
@@ -435,8 +496,13 @@ function ApproveDialog({
             </Select>
             {eligibleLibraries.length === 0 && (
               <p className="text-xs text-red-500">
-                No {request?.media_type === "movie" ? "movie" : "TV"} library
-                configured.
+                No{" "}
+                {request?.media_type === "movie"
+                  ? "movie"
+                  : request?.media_type === "series"
+                    ? "TV"
+                    : "music"}{" "}
+                library configured.
               </p>
             )}
           </div>
@@ -449,7 +515,7 @@ function ApproveDialog({
                 <SelectValue placeholder="Select a quality profile" />
               </SelectTrigger>
               <SelectContent>
-                {(profiles ?? []).map((p) => (
+                {profileOptions.map((p) => (
                   <SelectItem key={p.id} value={p.id}>
                     {p.name}
                   </SelectItem>
@@ -655,14 +721,18 @@ function QuotaPill({ label, q }: { label: string; q: MediaQuota }) {
 }
 
 function QuotaBanner() {
+  const musicEnabled = useFeatureEnabled("music", false);
   const { data, isLoading } = useQuotaStatus();
   if (isLoading || !data) return null;
-  if (data.movie.unlimited && data.series.unlimited) return null;
+  const musicUnlimited = !musicEnabled || data.music.unlimited;
+  if (data.movie.unlimited && data.series.unlimited && musicUnlimited)
+    return null;
   return (
     <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border/60 bg-muted/30 px-3 py-2">
       <Gauge className="h-4 w-4 text-muted-foreground" />
       <QuotaPill label="Movies" q={data.movie} />
       <QuotaPill label="TV" q={data.series} />
+      {musicEnabled && <QuotaPill label="Music" q={data.music} />}
       <span className="text-xs text-muted-foreground">
         in the last {data.window_days} day{data.window_days === 1 ? "" : "s"}
       </span>
@@ -671,16 +741,19 @@ function QuotaBanner() {
 }
 
 function QuotaConfigCard() {
+  const musicEnabled = useFeatureEnabled("music", false);
   const { data, isLoading } = useQuotaConfig();
   const update = useUpdateQuotaConfig();
   const [movie, setMovie] = React.useState("");
   const [series, setSeries] = React.useState("");
+  const [music, setMusic] = React.useState("");
   const [windowDays, setWindowDays] = React.useState("");
 
   React.useEffect(() => {
     if (data) {
       setMovie(String(data.movie_limit));
       setSeries(String(data.series_limit));
+      setMusic(String(data.music_limit));
       setWindowDays(String(data.window_days));
     }
   }, [data]);
@@ -697,6 +770,7 @@ function QuotaConfigCard() {
       {
         movie_limit: toInt(movie),
         series_limit: toInt(series),
+        music_limit: toInt(music),
         window_days: Math.max(1, toInt(windowDays) || 7),
       },
       {
@@ -744,6 +818,23 @@ function QuotaConfigCard() {
           onChange={(e) => setSeries(e.target.value)}
         />
       </div>
+      {musicEnabled && (
+        <div className="flex-1 space-y-1">
+          <label
+            htmlFor="quota-music"
+            className="text-xs font-medium text-muted-foreground"
+          >
+            Artists per user
+          </label>
+          <Input
+            id="quota-music"
+            type="number"
+            min={0}
+            value={music}
+            onChange={(e) => setMusic(e.target.value)}
+          />
+        </div>
+      )}
       <div className="flex-1 space-y-1">
         <label
           htmlFor="quota-window"

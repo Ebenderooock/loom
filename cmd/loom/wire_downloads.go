@@ -32,6 +32,7 @@ type downloadWiring struct {
 	autoSearchEngine   *autosearch.Engine
 	musicAutoSearcher  *musicsearch.AutoSearcher
 	musicRefresher     *music.ReleaseRefresher
+	musicSearchEngine  *musicsearch.Engine
 }
 
 // wireDownloads constructs download-related services (remote paths,
@@ -96,8 +97,9 @@ func wireDownloads(
 	// reuses only the media-agnostic indexer transport and download registry.
 	var musicAutoSearcher *musicsearch.AutoSearcher
 	var musicRefresher *music.ReleaseRefresher
+	var musicSearchEngine *musicsearch.Engine
 	if media.musicRepo != nil {
-		musicSearchEngine := musicsearch.NewEngine(
+		musicSearchEngine = musicsearch.NewEngine(
 			indexerSvc, downloadSvc.Registry(), media.musicRepo, logger,
 		)
 		musicSearchEngine.SetCustomFormats(cfEngine)
@@ -227,6 +229,7 @@ func wireDownloads(
 		autoSearchEngine:   autoSearchEngine,
 		musicAutoSearcher:  musicAutoSearcher,
 		musicRefresher:     musicRefresher,
+		musicSearchEngine:  musicSearchEngine,
 	}, nil
 }
 

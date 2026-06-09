@@ -24,6 +24,11 @@ type Fulfiller interface {
 	FulfillMovie(ctx context.Context, tmdbID, qualityProfileID, libraryID string) (mediaID string, err error)
 	// FulfillSeries adds the series (monitored) and starts a search-and-grab.
 	FulfillSeries(ctx context.Context, tmdbID, qualityProfileID, libraryID string) (mediaID string, err error)
+	// ArtistExists reports an existing library artist's media id for the
+	// MusicBrainz id, or "" if none exists.
+	ArtistExists(ctx context.Context, mbid string) (string, error)
+	// FulfillArtist adds the artist (monitored) and starts album searches.
+	FulfillArtist(ctx context.Context, mbid, qualityProfileID, libraryID string) (mediaID string, err error)
 }
 
 // LibraryValidator validates that an admin-supplied quality profile and library
@@ -134,10 +139,14 @@ func (s *Service) Create(ctx context.Context, userID, username string, isAdmin b
 
 // quotaLimitFor returns the configured limit for a media type (0 = unlimited).
 func quotaLimitFor(cfg QuotaConfig, mt MediaType) int {
-	if mt == MediaMovie {
+	switch mt {
+	case MediaMovie:
 		return cfg.MovieLimit
+	case MediaArtist:
+		return cfg.MusicLimit
+	default:
+		return cfg.SeriesLimit
 	}
-	return cfg.SeriesLimit
 }
 
 // quotaSince returns the start of the rolling quota window (zero = all time).
@@ -148,11 +157,15 @@ func quotaSince(cfg QuotaConfig) time.Time {
 	return time.Now().UTC().AddDate(0, 0, -cfg.WindowDays)
 }
 
-func (s *Service) mediaExists(ctx context.Context, mt MediaType, tmdbID string) (string, error) {
-	if mt == MediaMovie {
-		return s.fulfiller.MovieExists(ctx, tmdbID)
+func (s *Service) mediaExists(ctx context.Context, mt MediaType, externalID string) (string, error) {
+	switch mt {
+	case MediaMovie:
+		return s.fulfiller.MovieExists(ctx, externalID)
+	case MediaArtist:
+		return s.fulfiller.ArtistExists(ctx, externalID)
+	default:
+		return s.fulfiller.SeriesExists(ctx, externalID)
 	}
-	return s.fulfiller.SeriesExists(ctx, tmdbID)
 }
 
 // ListAll returns requests filtered by status (empty = all).
@@ -209,10 +222,15 @@ func (s *Service) QuotaStatus(ctx context.Context, userID string, isAdmin bool) 
 	if err != nil {
 		return QuotaStatus{}, err
 	}
+	musicUsed, err := s.store.CountUserRequests(ctx, userID, MediaArtist, since)
+	if err != nil {
+		return QuotaStatus{}, err
+	}
 	return QuotaStatus{
 		WindowDays: cfg.WindowDays,
 		Movie:      mediaQuota(cfg.MovieLimit, movieUsed, isAdmin),
 		Series:     mediaQuota(cfg.SeriesLimit, seriesUsed, isAdmin),
+		Music:      mediaQuota(cfg.MusicLimit, musicUsed, isAdmin),
 	}, nil
 }
 
@@ -272,9 +290,12 @@ func (s *Service) Approve(ctx context.Context, id, qualityProfileID, libraryID, 
 	}
 
 	var fulfilledID string
-	if req.MediaType == MediaMovie {
+	switch req.MediaType {
+	case MediaMovie:
 		fulfilledID, err = s.fulfiller.FulfillMovie(ctx, req.TMDBID, qualityProfileID, libraryID)
-	} else {
+	case MediaArtist:
+		fulfilledID, err = s.fulfiller.FulfillArtist(ctx, req.TMDBID, qualityProfileID, libraryID)
+	default:
 		fulfilledID, err = s.fulfiller.FulfillSeries(ctx, req.TMDBID, qualityProfileID, libraryID)
 	}
 	if err != nil {

@@ -33,6 +33,7 @@ type MediaType string
 const (
 	MediaMovie  MediaType = "movie"
 	MediaSeries MediaType = "series"
+	MediaArtist MediaType = "artist"
 )
 
 // Request is a single user request for a piece of media.
@@ -68,7 +69,7 @@ type CreateInput struct {
 
 // validMediaType reports whether t is a supported media type.
 func validMediaType(t MediaType) bool {
-	return t == MediaMovie || t == MediaSeries
+	return t == MediaMovie || t == MediaSeries || t == MediaArtist
 }
 
 // quotaCountedStatuses are the request states that consume a user's quota slot.
@@ -89,6 +90,7 @@ const (
 type QuotaConfig struct {
 	MovieLimit  int `json:"movie_limit"`
 	SeriesLimit int `json:"series_limit"`
+	MusicLimit  int `json:"music_limit"`
 	WindowDays  int `json:"window_days"`
 }
 
@@ -105,4 +107,5 @@ type QuotaStatus struct {
 	WindowDays int        `json:"window_days"`
 	Movie      MediaQuota `json:"movie"`
 	Series     MediaQuota `json:"series"`
+	Music      MediaQuota `json:"music"`
 }

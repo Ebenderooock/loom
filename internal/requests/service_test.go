@@ -39,6 +39,7 @@ type fakeFulfiller struct {
 	mu             sync.Mutex
 	movieExists    map[string]string
 	seriesExists   map[string]string
+	artistExists   map[string]string
 	fulfillMovieN  int32
 	fulfillErr     error
 	fulfilledMedia string
@@ -65,6 +66,19 @@ func (f *fakeFulfiller) FulfillMovie(_ context.Context, _, _, _ string) (string,
 }
 
 func (f *fakeFulfiller) FulfillSeries(_ context.Context, _, _, _ string) (string, error) {
+	if f.fulfillErr != nil {
+		return "", f.fulfillErr
+	}
+	return f.fulfilledMedia, nil
+}
+
+func (f *fakeFulfiller) ArtistExists(_ context.Context, mbid string) (string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.artistExists[mbid], nil
+}
+
+func (f *fakeFulfiller) FulfillArtist(_ context.Context, _, _, _ string) (string, error) {
 	if f.fulfillErr != nil {
 		return "", f.fulfillErr
 	}

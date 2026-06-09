@@ -5,7 +5,7 @@ import { apiFetch } from "@/lib/fetch";
 
 // ---------- Types ----------
 
-export type RequestMediaType = "movie" | "series";
+export type RequestMediaType = "movie" | "series" | "artist";
 
 export type RequestStatus =
   | "pending"
@@ -158,11 +158,13 @@ export interface QuotaStatus {
   window_days: number;
   movie: MediaQuota;
   series: MediaQuota;
+  music: MediaQuota;
 }
 
 export interface QuotaConfig {
   movie_limit: number;
   series_limit: number;
+  music_limit: number;
   window_days: number;
 }
 

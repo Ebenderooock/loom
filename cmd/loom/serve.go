@@ -233,7 +233,7 @@ func cmdServe(ctx context.Context, args []string) error {
 	}
 
 	// Wire media requests (users request; admins approve → auto-add + grab).
-	requestsSvc := buildRequestsService(db, moviesSvc, media.seriesSvc, dlWiring.autoSearchEngine, media.libStore, media.qpStore, logger)
+	requestsSvc := buildRequestsService(db, moviesSvc, media.seriesSvc, media.musicSvc, dlWiring.autoSearchEngine, dlWiring.musicSearchEngine, media.libStore, media.qpStore, logger)
 	srv.SetRequests(requestsSvc)
 
 	// Wire interactive request bots (Telegram + Discord).

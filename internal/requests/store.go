@@ -252,8 +252,8 @@ func statusPlaceholders() (string, []any) {
 func (s *Store) GetQuotaConfig(ctx context.Context) (QuotaConfig, error) {
 	var c QuotaConfig
 	err := s.db.QueryRowContext(ctx,
-		`SELECT movie_limit, series_limit, window_days FROM request_quota_config WHERE id = 1`,
-	).Scan(&c.MovieLimit, &c.SeriesLimit, &c.WindowDays)
+		`SELECT movie_limit, series_limit, music_limit, window_days FROM request_quota_config WHERE id = 1`,
+	).Scan(&c.MovieLimit, &c.SeriesLimit, &c.MusicLimit, &c.WindowDays)
 	if errors.Is(err, sql.ErrNoRows) {
 		// Defensive: row should exist from migration; treat as unlimited.
 		return QuotaConfig{WindowDays: DefaultWindowDays}, nil
@@ -266,9 +266,9 @@ func (s *Store) SetQuotaConfig(ctx context.Context, c QuotaConfig) error {
 	now := time.Now().UTC().Format(tsLayout)
 	res, err := s.db.ExecContext(ctx, `
 		UPDATE request_quota_config
-		SET movie_limit = ?, series_limit = ?, window_days = ?, updated_at = ?
+		SET movie_limit = ?, series_limit = ?, music_limit = ?, window_days = ?, updated_at = ?
 		WHERE id = 1`,
-		c.MovieLimit, c.SeriesLimit, c.WindowDays, now)
+		c.MovieLimit, c.SeriesLimit, c.MusicLimit, c.WindowDays, now)
 	if err != nil {
 		return err
 	}
@@ -278,9 +278,9 @@ func (s *Store) SetQuotaConfig(ctx context.Context, c QuotaConfig) error {
 	}
 	if n == 0 {
 		_, err = s.db.ExecContext(ctx, `
-			INSERT INTO request_quota_config (id, movie_limit, series_limit, window_days, updated_at)
-			VALUES (1, ?, ?, ?, ?)`,
-			c.MovieLimit, c.SeriesLimit, c.WindowDays, now)
+			INSERT INTO request_quota_config (id, movie_limit, series_limit, music_limit, window_days, updated_at)
+			VALUES (1, ?, ?, ?, ?, ?)`,
+			c.MovieLimit, c.SeriesLimit, c.MusicLimit, c.WindowDays, now)
 	}
 	return err
 }

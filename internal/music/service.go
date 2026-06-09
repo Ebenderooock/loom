@@ -23,6 +23,7 @@ var (
 type Service interface {
 	ListArtists(ctx context.Context) ([]*Artist, error)
 	GetArtist(ctx context.Context, id string) (*Artist, error)
+	GetArtistByMBID(ctx context.Context, mbid string) (*Artist, error)
 	LookupArtists(ctx context.Context, query string, limit int) ([]*ArtistLookupResult, error)
 	AddArtist(ctx context.Context, req AddArtistRequest) (*Artist, error)
 	UpdateArtist(ctx context.Context, id string, req UpdateArtistRequest) (*Artist, error)
@@ -100,6 +101,12 @@ func (s *service) GetArtist(ctx context.Context, id string) (*Artist, error) {
 	}
 	a.Stats = st
 	return a, nil
+}
+
+// GetArtistByMBID returns the library artist with the given MusicBrainz id, or
+// nil if none exists. Used by request fulfillment to detect duplicates.
+func (s *service) GetArtistByMBID(ctx context.Context, mbid string) (*Artist, error) {
+	return s.repo.GetArtistByMBID(ctx, strings.TrimSpace(mbid))
 }
 
 func (s *service) LookupArtists(ctx context.Context, query string, limit int) ([]*ArtistLookupResult, error) {
