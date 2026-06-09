@@ -29,6 +29,7 @@ type downloadWiring struct {
 	orchestratorCancel context.CancelFunc
 	monitorCancel      context.CancelFunc
 	autoSearchEngine   *autosearch.Engine
+	musicAutoSearcher  *musicsearch.AutoSearcher
 }
 
 // wireDownloads constructs download-related services (remote paths,
@@ -91,11 +92,15 @@ func wireDownloads(
 
 	// Music acquisition engine — self-contained parallel to autosearch that
 	// reuses only the media-agnostic indexer transport and download registry.
+	var musicAutoSearcher *musicsearch.AutoSearcher
 	if media.musicRepo != nil {
 		musicSearchEngine := musicsearch.NewEngine(
 			indexerSvc, downloadSvc.Registry(), media.musicRepo, logger,
 		)
 		srv.SetMusicSearch(musicSearchEngine)
+		musicAutoSearcher = musicsearch.NewAutoSearcher(
+			musicSearchEngine, srv.Features().EnabledFunc(featureflags.KeyMusic),
+		)
 	}
 
 	// Import pipeline
@@ -210,6 +215,7 @@ func wireDownloads(
 		orchestratorCancel: orchCancel,
 		monitorCancel:      monCancel,
 		autoSearchEngine:   autoSearchEngine,
+		musicAutoSearcher:  musicAutoSearcher,
 	}, nil
 }
 

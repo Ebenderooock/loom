@@ -82,6 +82,10 @@ func (e *Engine) SearchAlbum(ctx context.Context, albumID string) (*GrabResult, 
 		return nil, ErrNotFound
 	}
 
+	// Record the search attempt regardless of outcome so the auto-searcher
+	// honours a recheck interval and does not hammer indexers.
+	defer e.touchLastSearch(ctx, album)
+
 	defs, err := e.repo.ListAudioQualityDefinitions(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list quality definitions: %w", err)

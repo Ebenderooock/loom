@@ -216,6 +216,10 @@ func cmdServe(ctx context.Context, args []string) error {
 	defer dlWiring.importPipeline.Stop()
 	defer dlWiring.monitorCancel()
 	defer dlWiring.orchestratorCancel()
+	if dlWiring.musicAutoSearcher != nil {
+		dlWiring.musicAutoSearcher.Start(ctx)
+		defer dlWiring.musicAutoSearcher.Stop()
+	}
 
 	// Wire downloads-cleanup (scan orphans in download folders + auto-delete).
 	cleanupSvc := buildCleanupService(db, downloadSvc, dlWiring.importPipeline, media.libStore, appCfg, logger)
