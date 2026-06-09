@@ -36,6 +36,7 @@ func ProfileRouter(svc Service) chi.Router {
 	r := chi.NewRouter()
 	r.Get("/audio-quality-definitions", handleListAudioQualityDefinitions(svc))
 	r.Get("/audio-quality-profiles", handleListAudioQualityProfiles(svc))
+	r.Put("/audio-quality-profiles/{id}", handleUpdateAudioQualityProfile(svc))
 	r.Get("/metadata-profiles", handleListMetadataProfiles(svc))
 	return r
 }
@@ -197,6 +198,23 @@ func handleListAudioQualityProfiles(svc Service) http.HandlerFunc {
 			profiles = []*AudioQualityProfile{}
 		}
 		writeJSON(w, http.StatusOK, profiles)
+	}
+}
+
+func handleUpdateAudioQualityProfile(svc Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := chi.URLParam(r, "id")
+		var req UpdateAudioQualityProfileRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "invalid request body", http.StatusBadRequest)
+			return
+		}
+		profile, err := svc.UpdateAudioQualityProfile(r.Context(), id, req)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, profile)
 	}
 }
 

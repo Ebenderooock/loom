@@ -13,6 +13,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/ebenderooock/loom/internal/customformats"
 	"github.com/ebenderooock/loom/internal/downloads"
 	"github.com/ebenderooock/loom/internal/indexers"
 	"github.com/ebenderooock/loom/internal/music"
@@ -33,6 +34,7 @@ type Engine struct {
 	indexerSvc *indexers.Service
 	dlRegistry *downloads.Registry
 	repo       music.Repository
+	cfEngine   *customformats.Engine
 	logger     *slog.Logger
 }
 
@@ -42,6 +44,55 @@ func NewEngine(indexerSvc *indexers.Service, dlRegistry *downloads.Registry, rep
 		logger = slog.Default()
 	}
 	return &Engine{indexerSvc: indexerSvc, dlRegistry: dlRegistry, repo: repo, logger: logger}
+}
+
+// SetCustomFormats attaches a custom-format engine so audio releases are scored
+// against the user's custom formats (per the audio quality profile's
+// FormatItems). Optional; when nil, format scoring is skipped.
+func (e *Engine) SetCustomFormats(cf *customformats.Engine) {
+	e.cfEngine = cf
+}
+
+// formatScore evaluates a release against all custom formats and returns the
+// aggregate score (per the profile's FormatItems) plus the matched formats.
+// Returns (0, nil) when no custom-format engine is attached.
+func (e *Engine) formatScore(profile *music.AudioQualityProfile, parsed *music.MusicRelease, res *indexers.Result) (int, []customformats.FormatMatch) {
+	if e.cfEngine == nil {
+		return 0, nil
+	}
+	ri := customformats.ParseReleaseName(res.Title)
+	if parsed != nil && parsed.Format != "" {
+		ri.Audio = parsed.Format
+	}
+	if parsed != nil && parsed.Media != "" && ri.Source == "" {
+		ri.Source = parsed.Media
+	}
+	ri.Size = res.Size
+	ri.Indexer = res.IndexerID
+	if res.Freeleech {
+		ri.IndexerFlags = append(ri.IndexerFlags, "freeleech")
+	}
+	if res.Internal {
+		ri.IndexerFlags = append(ri.IndexerFlags, "internal")
+	}
+	if res.Scene {
+		ri.IndexerFlags = append(ri.IndexerFlags, "scene")
+	}
+	matches := e.cfEngine.ScoreRelease(ri)
+	if profile == nil || len(profile.FormatItems) == 0 {
+		return 0, matches
+	}
+	scoreByID := make(map[string]int, len(profile.FormatItems))
+	for _, fi := range profile.FormatItems {
+		scoreByID[fi.FormatID] = fi.Score
+	}
+	total := 0
+	for _, m := range matches {
+		if s, ok := scoreByID[m.CustomFormatID]; ok {
+			total += s
+		}
+	}
+	return total, matches
 }
 
 // GrabResult describes a release that was sent to a download client.
@@ -59,9 +110,17 @@ type GrabResult struct {
 
 // Candidate is a scored, identity-matched release (used for diagnostics/tests).
 type Candidate struct {
-	Result indexers.Result
-	Parsed *music.MusicRelease
-	Score  music.AudioScore
+	Result        indexers.Result
+	Parsed        *music.MusicRelease
+	Score         music.AudioScore
+	FormatScore   int
+	FormatMatches []customformats.FormatMatch
+}
+
+// rankScore combines the audio quality composite with the custom-format score
+// so custom formats influence selection the way they do in Radarr/Sonarr.
+func (c Candidate) rankScore() float64 {
+	return c.Score.Composite() + float64(c.FormatScore)
 }
 
 // ReleaseCandidate is a scored release surfaced to the interactive search UI.
@@ -77,11 +136,14 @@ type ReleaseCandidate struct {
 	QualityName string  `json:"quality_name"`
 	Tier        int     `json:"tier"`
 	Score       float64 `json:"score"`
+	FormatScore int     `json:"format_score"`
 	Allowed     bool    `json:"allowed"`
 	MeetsCutoff bool    `json:"meets_cutoff"`
 	Link        string  `json:"link,omitempty"`
 	MagnetURI   string  `json:"magnet_uri,omitempty"`
 	Infohash    string  `json:"infohash,omitempty"`
+
+	FormatMatches []customformats.FormatMatch `json:"format_matches,omitempty"`
 }
 
 // GrabRequest identifies a specific release to grab in an interactive search.
@@ -137,6 +199,7 @@ func (e *Engine) ListReleases(ctx context.Context, albumID string) ([]ReleaseCan
 				continue
 			}
 			score := music.ScoreAudioRelease(parsed, defs, profile, seeders(res), res.Size)
+			fmtScore, fmtMatches := e.formatScore(profile, parsed, &res)
 			qn := ""
 			if score.Definition != nil {
 				qn = score.Definition.Name
@@ -150,12 +213,15 @@ func (e *Engine) ListReleases(ctx context.Context, albumID string) ([]ReleaseCan
 				Protocol:    string(inferProtocol(&res)),
 				QualityName: qn,
 				Tier:        score.Tier,
-				Score:       score.Composite(),
+				Score:       score.Composite() + float64(fmtScore),
+				FormatScore: fmtScore,
 				Allowed:     score.Allowed,
 				MeetsCutoff: score.MeetsCutoff,
 				Link:        res.Link,
 				MagnetURI:   res.MagnetURI,
 				Infohash:    res.Infohash,
+
+				FormatMatches: fmtMatches,
 			})
 		}
 	}
@@ -248,7 +314,7 @@ func (e *Engine) searchAndGrab(ctx context.Context, albumID string, upgradeOnly 
 	}
 
 	sort.SliceStable(candidates, func(i, j int) bool {
-		return candidates[i].Score.Composite() > candidates[j].Score.Composite()
+		return candidates[i].rankScore() > candidates[j].rankScore()
 	})
 	best := candidates[0]
 
@@ -315,7 +381,14 @@ func (e *Engine) gatherCandidates(ctx context.Context, artist, album string, yea
 			if !score.Allowed {
 				continue
 			}
-			candidates = append(candidates, Candidate{Result: res, Parsed: parsed, Score: score})
+			fmtScore, fmtMatches := e.formatScore(profile, parsed, &res)
+			if profile != nil && fmtScore < profile.MinFormatScore {
+				continue
+			}
+			candidates = append(candidates, Candidate{
+				Result: res, Parsed: parsed, Score: score,
+				FormatScore: fmtScore, FormatMatches: fmtMatches,
+			})
 		}
 		if len(candidates) > 0 {
 			return candidates
@@ -397,7 +470,7 @@ func (e *Engine) grab(ctx context.Context, albumID string, c *Candidate) (*GrabR
 		Size:           c.Result.Size,
 		QualityName:    qualityName,
 		Tier:           c.Score.Tier,
-		CompositeScore: c.Score.Composite(),
+		CompositeScore: c.Score.Composite() + float64(c.FormatScore),
 		ClientID:       target.ID(),
 		DownloadID:     addResult.ItemID,
 	}, nil

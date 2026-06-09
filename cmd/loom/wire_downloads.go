@@ -100,6 +100,7 @@ func wireDownloads(
 		musicSearchEngine := musicsearch.NewEngine(
 			indexerSvc, downloadSvc.Registry(), media.musicRepo, logger,
 		)
+		musicSearchEngine.SetCustomFormats(cfEngine)
 		srv.SetMusicSearch(musicSearchEngine)
 		musicAutoSearcher = musicsearch.NewAutoSearcher(
 			musicSearchEngine, srv.Features().EnabledFunc(featureflags.KeyMusic),

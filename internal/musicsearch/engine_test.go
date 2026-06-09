@@ -1,8 +1,10 @@
 package musicsearch
 
 import (
+	"log/slog"
 	"testing"
 
+	"github.com/ebenderooock/loom/internal/customformats"
 	"github.com/ebenderooock/loom/internal/downloads"
 	"github.com/ebenderooock/loom/internal/indexers"
 	"github.com/ebenderooock/loom/internal/music"
@@ -108,5 +110,49 @@ func TestBuildDownloadRequest(t *testing.T) {
 func TestNormalize(t *testing.T) {
 	if got := normalize("Pink Floyd!"); got != "pinkfloyd" {
 		t.Errorf("normalize = %q", got)
+	}
+}
+
+func TestFormatScore(t *testing.T) {
+	cf := customformats.CustomFormat{
+		ID:   "cf_flac",
+		Name: "Prefer FLAC",
+		Specifications: []customformats.Specification{
+			{Implementation: customformats.ImplAudio, Fields: map[string]any{"value": "FLAC"}},
+		},
+	}
+	eng := NewEngine(nil, nil, nil, slog.Default())
+	eng.SetCustomFormats(customformats.NewEngine([]customformats.CustomFormat{cf}))
+
+	profile := &music.AudioQualityProfile{
+		FormatItems:    []music.AudioFormatItem{{FormatID: "cf_flac", Score: 50}},
+		MinFormatScore: 10,
+	}
+
+	// FLAC release matches → score 50.
+	flac := &music.MusicRelease{Format: "FLAC"}
+	res := indexers.Result{Title: "Artist - Album 2020 FLAC", IndexerID: "x"}
+	score, matches := eng.formatScore(profile, flac, &res)
+	if score != 50 {
+		t.Fatalf("FLAC score = %d, want 50", score)
+	}
+	if len(matches) != 1 || matches[0].CustomFormatID != "cf_flac" {
+		t.Fatalf("matches = %+v, want one cf_flac match", matches)
+	}
+
+	// MP3 release does not match → score 0.
+	mp3 := &music.MusicRelease{Format: "MP3"}
+	res2 := indexers.Result{Title: "Artist - Album 2020 MP3 320", IndexerID: "x"}
+	if s, _ := eng.formatScore(profile, mp3, &res2); s != 0 {
+		t.Fatalf("MP3 score = %d, want 0", s)
+	}
+}
+
+func TestFormatScoreNoEngine(t *testing.T) {
+	eng := NewEngine(nil, nil, nil, slog.Default())
+	rel := &music.MusicRelease{Format: "FLAC"}
+	res := indexers.Result{Title: "x FLAC", IndexerID: "x"}
+	if s, m := eng.formatScore(nil, rel, &res); s != 0 || m != nil {
+		t.Fatalf("no-engine score = %d matches=%v, want 0/nil", s, m)
 	}
 }

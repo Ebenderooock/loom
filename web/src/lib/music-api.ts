@@ -115,12 +115,19 @@ export interface AudioQualityDefinition {
   tier_order: number;
 }
 
+export interface AudioFormatItem {
+  format_id: string;
+  score: number;
+}
+
 export interface AudioQualityProfile {
   id: string;
   name: string;
   items: unknown;
   cutoff?: string;
   upgrade_allowed: boolean;
+  format_items?: AudioFormatItem[];
+  min_format_score?: number;
 }
 
 export interface MetadataProfile {
@@ -153,6 +160,7 @@ export interface ReleaseCandidate {
   quality_name: string;
   tier: number;
   score: number;
+  format_score?: number;
   allowed: boolean;
   meets_cutoff: boolean;
   link?: string;
@@ -254,6 +262,27 @@ export async function setAlbumMonitored(
   });
   if (!res.ok) throw new Error(`set album monitored failed: ${res.status}`);
   return (await res.json()) as Album;
+}
+
+export interface UpdateAudioQualityProfileRequest {
+  cutoff?: string;
+  upgrade_allowed?: boolean;
+  format_items?: AudioFormatItem[];
+  min_format_score?: number;
+}
+
+export async function updateAudioQualityProfile(
+  id: string,
+  req: UpdateAudioQualityProfileRequest,
+): Promise<AudioQualityProfile> {
+  const res = await apiFetch(`/api/v1/music/audio-quality-profiles/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(req),
+  });
+  if (!res.ok)
+    throw new Error(`update audio quality profile failed: ${res.status}`);
+  return (await res.json()) as AudioQualityProfile;
 }
 
 export async function searchAlbum(id: string): Promise<AlbumGrabResult> {
@@ -372,6 +401,18 @@ export function useAudioQualityProfiles() {
         signal,
       ),
     staleTime: 60_000,
+  });
+}
+
+export function useUpdateAudioQualityProfile() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: {
+      id: string;
+      req: UpdateAudioQualityProfileRequest;
+    }) => updateAudioQualityProfile(vars.id, vars.req),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: musicKeys.audioQualityProfiles }),
   });
 }
 

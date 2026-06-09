@@ -5,7 +5,12 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import * as React from "react";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
@@ -19,8 +24,10 @@ import {
   useAudioQualityDefinitions,
   useAudioQualityProfiles,
   useMetadataProfiles,
+  useUpdateAudioQualityProfile,
   type AudioQualityProfile,
 } from "@/lib/music-api";
+import { useCustomFormats } from "@/lib/custom-formats-api";
 
 interface ProfileItem {
   definition_id: string;
@@ -38,6 +45,133 @@ function parseItems(profile: AudioQualityProfile): ProfileItem[] {
     }
   }
   return [];
+}
+
+function AudioProfileCard({
+  profile,
+  defName,
+}: {
+  profile: AudioQualityProfile;
+  defName: (id: string) => string;
+}) {
+  const items = parseItems(profile).filter((i) => i.allowed);
+  const { data: customFormats = [] } = useCustomFormats();
+  const update = useUpdateAudioQualityProfile();
+
+  const initialScores = React.useMemo(() => {
+    const m: Record<string, number> = {};
+    for (const fi of profile.format_items ?? []) m[fi.format_id] = fi.score;
+    return m;
+  }, [profile.format_items]);
+
+  const [scores, setScores] = React.useState<Record<string, number>>(
+    initialScores,
+  );
+  const [minScore, setMinScore] = React.useState<number>(
+    profile.min_format_score ?? 0,
+  );
+
+  React.useEffect(() => {
+    setScores(initialScores);
+    setMinScore(profile.min_format_score ?? 0);
+  }, [initialScores, profile.min_format_score]);
+
+  const dirty =
+    minScore !== (profile.min_format_score ?? 0) ||
+    customFormats.some((cf) => (scores[cf.id] ?? 0) !== (initialScores[cf.id] ?? 0));
+
+  const save = () => {
+    const format_items = customFormats
+      .map((cf) => ({ format_id: cf.id, score: scores[cf.id] ?? 0 }))
+      .filter((fi) => fi.score !== 0);
+    update.mutate(
+      { id: profile.id, req: { format_items, min_format_score: minScore } },
+      {
+        onSuccess: () => toast.success(`Saved scoring for ${profile.name}`),
+        onError: (e) =>
+          toast.error(e instanceof Error ? e.message : "Save failed"),
+      },
+    );
+  };
+
+  return (
+    <div className="rounded-md border p-3">
+      <div className="mb-2 flex items-center justify-between">
+        <span className="font-medium">{profile.name}</span>
+        <span className="text-xs text-muted-foreground">
+          Cutoff: {profile.cutoff ? defName(profile.cutoff) : "—"}
+          {profile.upgrade_allowed ? " · upgrades on" : " · upgrades off"}
+        </span>
+      </div>
+      <div className="mb-3 flex flex-wrap gap-1.5">
+        {items.length === 0 ? (
+          <span className="text-xs text-muted-foreground">
+            No qualities allowed.
+          </span>
+        ) : (
+          items.map((i) => (
+            <Badge key={i.definition_id} variant="secondary">
+              {defName(i.definition_id)}
+            </Badge>
+          ))
+        )}
+      </div>
+
+      <div className="mt-3 border-t pt-3">
+        <div className="mb-2 text-xs font-medium text-muted-foreground">
+          Custom format scores
+        </div>
+        {customFormats.length === 0 ? (
+          <p className="text-xs text-muted-foreground">
+            No custom formats defined.
+          </p>
+        ) : (
+          <div className="space-y-1.5">
+            {customFormats.map((cf) => (
+              <div
+                key={cf.id}
+                className="flex items-center justify-between gap-2"
+              >
+                <span className="text-sm">{cf.name}</span>
+                <Input
+                  type="number"
+                  className="h-7 w-24 text-right tabular-nums"
+                  value={scores[cf.id] ?? 0}
+                  onChange={(e) =>
+                    setScores((s) => ({
+                      ...s,
+                      [cf.id]: Number(e.target.value) || 0,
+                    }))
+                  }
+                />
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="mt-3 flex items-center justify-between gap-2">
+          <Label htmlFor={`min-${profile.id}`} className="text-sm">
+            Minimum custom format score
+          </Label>
+          <Input
+            id={`min-${profile.id}`}
+            type="number"
+            className="h-7 w-24 text-right tabular-nums"
+            value={minScore}
+            onChange={(e) => setMinScore(Number(e.target.value) || 0)}
+          />
+        </div>
+        <div className="mt-3 flex justify-end">
+          <Button
+            size="sm"
+            disabled={!dirty || update.isPending}
+            onClick={save}
+          >
+            {update.isPending ? "Saving…" : "Save scoring"}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export function MusicProfilesPage() {
@@ -76,33 +210,9 @@ export function MusicProfilesPage() {
               No quality profiles configured.
             </p>
           ) : (
-            profiles.map((p) => {
-              const items = parseItems(p).filter((i) => i.allowed);
-              return (
-                <div key={p.id} className="rounded-md border p-3">
-                  <div className="mb-2 flex items-center justify-between">
-                    <span className="font-medium">{p.name}</span>
-                    <span className="text-xs text-muted-foreground">
-                      Cutoff: {p.cutoff ? defName(p.cutoff) : "—"}
-                      {p.upgrade_allowed ? " · upgrades on" : " · upgrades off"}
-                    </span>
-                  </div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {items.length === 0 ? (
-                      <span className="text-xs text-muted-foreground">
-                        No qualities allowed.
-                      </span>
-                    ) : (
-                      items.map((i) => (
-                        <Badge key={i.definition_id} variant="secondary">
-                          {defName(i.definition_id)}
-                        </Badge>
-                      ))
-                    )}
-                  </div>
-                </div>
-              );
-            })
+            profiles.map((p) => (
+              <AudioProfileCard key={p.id} profile={p} defName={defName} />
+            ))
           )}
         </CardContent>
       </Card>

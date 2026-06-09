@@ -133,13 +133,32 @@ type AudioQualityDefinition struct {
 
 // AudioQualityProfile defines allowed/preferred audio qualities and a cutoff.
 type AudioQualityProfile struct {
-	ID             string          `json:"id"`
-	Name           string          `json:"name"`
-	Items          json.RawMessage `json:"items"`
-	Cutoff         string          `json:"cutoff,omitempty"`
-	UpgradeAllowed bool            `json:"upgrade_allowed"`
-	CreatedAt      time.Time       `json:"created_at"`
-	UpdatedAt      time.Time       `json:"updated_at"`
+	ID             string            `json:"id"`
+	Name           string            `json:"name"`
+	Items          json.RawMessage   `json:"items"`
+	Cutoff         string            `json:"cutoff,omitempty"`
+	UpgradeAllowed bool              `json:"upgrade_allowed"`
+	FormatItems    []AudioFormatItem `json:"format_items"`
+	MinFormatScore int               `json:"min_format_score"`
+	CreatedAt      time.Time         `json:"created_at"`
+	UpdatedAt      time.Time         `json:"updated_at"`
+}
+
+// AudioFormatItem ties a custom format to a score within an audio quality
+// profile. Releases accumulate the scores of every custom format they match;
+// the total contributes to ranking and is gated by MinFormatScore.
+type AudioFormatItem struct {
+	FormatID string `json:"format_id"`
+	Score    int    `json:"score"`
+}
+
+// UpdateAudioQualityProfileRequest patches an audio quality profile's
+// custom-format scoring and acquisition policy. Nil fields are left unchanged.
+type UpdateAudioQualityProfileRequest struct {
+	Cutoff         *string           `json:"cutoff,omitempty"`
+	UpgradeAllowed *bool             `json:"upgrade_allowed,omitempty"`
+	FormatItems    []AudioFormatItem `json:"format_items,omitempty"`
+	MinFormatScore *int              `json:"min_format_score,omitempty"`
 }
 
 // MetadataProfile controls which album/release types are monitored.

@@ -43,6 +43,7 @@ type Service interface {
 
 	ListAudioQualityDefinitions(ctx context.Context) ([]*AudioQualityDefinition, error)
 	ListAudioQualityProfiles(ctx context.Context) ([]*AudioQualityProfile, error)
+	UpdateAudioQualityProfile(ctx context.Context, id string, req UpdateAudioQualityProfileRequest) (*AudioQualityProfile, error)
 	ListMetadataProfiles(ctx context.Context) ([]*MetadataProfile, error)
 }
 
@@ -457,6 +458,34 @@ func (s *service) ListAudioQualityDefinitions(ctx context.Context) ([]*AudioQual
 
 func (s *service) ListAudioQualityProfiles(ctx context.Context) ([]*AudioQualityProfile, error) {
 	return s.repo.ListAudioQualityProfiles(ctx)
+}
+
+// UpdateAudioQualityProfile updates the custom-format scoring, cutoff and
+// upgrade policy of an existing audio quality profile.
+func (s *service) UpdateAudioQualityProfile(ctx context.Context, id string, req UpdateAudioQualityProfileRequest) (*AudioQualityProfile, error) {
+	p, err := s.repo.GetAudioQualityProfile(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if p == nil {
+		return nil, ErrNotFound
+	}
+	if req.Cutoff != nil {
+		p.Cutoff = *req.Cutoff
+	}
+	if req.UpgradeAllowed != nil {
+		p.UpgradeAllowed = *req.UpgradeAllowed
+	}
+	if req.FormatItems != nil {
+		p.FormatItems = req.FormatItems
+	}
+	if req.MinFormatScore != nil {
+		p.MinFormatScore = *req.MinFormatScore
+	}
+	if err := s.repo.UpdateAudioQualityProfile(ctx, p); err != nil {
+		return nil, err
+	}
+	return s.repo.GetAudioQualityProfile(ctx, id)
 }
 
 func (s *service) ListMetadataProfiles(ctx context.Context) ([]*MetadataProfile, error) {

@@ -3,6 +3,7 @@ package music
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"time"
 )
@@ -44,6 +45,7 @@ type Repository interface {
 	ListAudioQualityDefinitions(ctx context.Context) ([]*AudioQualityDefinition, error)
 	ListAudioQualityProfiles(ctx context.Context) ([]*AudioQualityProfile, error)
 	GetAudioQualityProfile(ctx context.Context, id string) (*AudioQualityProfile, error)
+	UpdateAudioQualityProfile(ctx context.Context, p *AudioQualityProfile) error
 	ListMetadataProfiles(ctx context.Context) ([]*MetadataProfile, error)
 	GetMetadataProfile(ctx context.Context, id string) (*MetadataProfile, error)
 
@@ -558,13 +560,17 @@ func (r *sqlRepo) ListAudioQualityDefinitions(ctx context.Context) ([]*AudioQual
 func scanAudioProfile(s rowScanner) (*AudioQualityProfile, error) {
 	p := &AudioQualityProfile{}
 	var items []byte
+	var formatItems []byte
 	var cutoff sql.NullString
 	var createdStr, updatedStr string
-	if err := s.Scan(&p.ID, &p.Name, &items, &cutoff, &p.UpgradeAllowed, &createdStr, &updatedStr); err != nil {
+	if err := s.Scan(&p.ID, &p.Name, &items, &cutoff, &p.UpgradeAllowed, &formatItems, &p.MinFormatScore, &createdStr, &updatedStr); err != nil {
 		return nil, err
 	}
 	p.Items = items
 	p.Cutoff = cutoff.String
+	if len(formatItems) > 0 {
+		_ = json.Unmarshal(formatItems, &p.FormatItems)
+	}
 	p.CreatedAt = parseTime(createdStr)
 	p.UpdatedAt = parseTime(updatedStr)
 	return p, nil
@@ -572,7 +578,7 @@ func scanAudioProfile(s rowScanner) (*AudioQualityProfile, error) {
 
 func (r *sqlRepo) ListAudioQualityProfiles(ctx context.Context) ([]*AudioQualityProfile, error) {
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT id, name, items, cutoff, upgrade_allowed, created_at, updated_at FROM audio_quality_profiles WHERE deleted_at IS NULL ORDER BY name`)
+		`SELECT id, name, items, cutoff, upgrade_allowed, format_items, min_format_score, created_at, updated_at FROM audio_quality_profiles WHERE deleted_at IS NULL ORDER BY name`)
 	if err != nil {
 		return nil, err
 	}
@@ -590,11 +596,34 @@ func (r *sqlRepo) ListAudioQualityProfiles(ctx context.Context) ([]*AudioQuality
 
 func (r *sqlRepo) GetAudioQualityProfile(ctx context.Context, id string) (*AudioQualityProfile, error) {
 	p, err := scanAudioProfile(r.db.QueryRowContext(ctx,
-		`SELECT id, name, items, cutoff, upgrade_allowed, created_at, updated_at FROM audio_quality_profiles WHERE id = ? AND deleted_at IS NULL`, id))
+		`SELECT id, name, items, cutoff, upgrade_allowed, format_items, min_format_score, created_at, updated_at FROM audio_quality_profiles WHERE id = ? AND deleted_at IS NULL`, id))
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
 	return p, err
+}
+
+// UpdateAudioQualityProfile persists the custom-format scoring (format_items +
+// min_format_score), cutoff and upgrade policy for an existing profile.
+func (r *sqlRepo) UpdateAudioQualityProfile(ctx context.Context, p *AudioQualityProfile) error {
+	formatItems, err := json.Marshal(p.FormatItems)
+	if err != nil {
+		return err
+	}
+	if len(p.FormatItems) == 0 {
+		formatItems = []byte("[]")
+	}
+	res, err := r.db.ExecContext(ctx,
+		`UPDATE audio_quality_profiles SET cutoff = ?, upgrade_allowed = ?, format_items = ?, min_format_score = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND deleted_at IS NULL`,
+		p.Cutoff, p.UpgradeAllowed, string(formatItems), p.MinFormatScore, p.ID)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
 }
 
 func scanMetadataProfile(s rowScanner) (*MetadataProfile, error) {

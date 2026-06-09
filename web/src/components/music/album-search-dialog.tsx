@@ -121,6 +121,14 @@ export function AlbumSearchDialog({
                       </TableCell>
                       <TableCell className="text-xs">
                         {r.quality_name || "—"}
+                        {!!r.format_score && (
+                          <Badge
+                            variant={r.format_score > 0 ? "secondary" : "destructive"}
+                            className="ml-1 text-[9px]"
+                          >
+                            {r.format_score > 0 ? `+${r.format_score}` : r.format_score}
+                          </Badge>
+                        )}
                       </TableCell>
                       <TableCell className="text-right text-xs">
                         {formatBytes(r.size)}
