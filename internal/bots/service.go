@@ -36,8 +36,10 @@ type RequestService interface {
 type SearchService interface {
 	SearchMovies(ctx context.Context, query string) ([]MediaResult, error)
 	SearchSeries(ctx context.Context, query string) ([]MediaResult, error)
+	SearchArtists(ctx context.Context, query string) ([]MediaResult, error)
 	GetMovie(ctx context.Context, tmdbID string) (*MediaResult, error)
 	GetSeries(ctx context.Context, tmdbID string) (*MediaResult, error)
+	GetArtist(ctx context.Context, mbid string) (*MediaResult, error)
 }
 
 // UserDirectory resolves a Loom user's display name and admin status.
@@ -203,7 +205,11 @@ func (s *Service) cmdSearch(ctx context.Context, cmd Command, query string) Repl
 	if err != nil {
 		s.logger.Warn("bots: series search", "err", err)
 	}
-	results := interleave(movies, series, s.maxResults)
+	artists, err := s.search.SearchArtists(ctx, query)
+	if err != nil {
+		s.logger.Warn("bots: artist search", "err", err)
+	}
+	results := interleave(movies, series, artists, s.maxResults)
 	if len(results) == 0 {
 		return Reply{Text: "No results for “" + query + "”."}
 	}
@@ -308,6 +314,8 @@ func (s *Service) callbackRequest(ctx context.Context, cmd Command, mt requests.
 		res, err = s.search.GetMovie(ctx, tmdbID)
 	case requests.MediaSeries:
 		res, err = s.search.GetSeries(ctx, tmdbID)
+	case requests.MediaArtist:
+		res, err = s.search.GetArtist(ctx, tmdbID)
 	default:
 		return Reply{Text: "Unsupported media type."}
 	}
@@ -393,6 +401,15 @@ func (s *Service) approvalTarget(ctx context.Context, mt requests.MediaType) (qp
 			return "", "", "movie library"
 		}
 		return cfg.DefaultMovieQualityProfileID, cfg.DefaultMovieLibraryID, ""
+	}
+	if mt == requests.MediaArtist {
+		if cfg.DefaultMusicQualityProfileID == "" {
+			return "", "", "music quality profile"
+		}
+		if cfg.DefaultMusicLibraryID == "" {
+			return "", "", "music library"
+		}
+		return cfg.DefaultMusicQualityProfileID, cfg.DefaultMusicLibraryID, ""
 	}
 	if cfg.DefaultSeriesQualityProfileID == "" {
 		return "", "", "series quality profile"

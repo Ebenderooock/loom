@@ -38,6 +38,8 @@ type Config struct {
 	DefaultMovieLibraryID         string `json:"default_movie_library_id"`
 	DefaultSeriesQualityProfileID string `json:"default_series_quality_profile_id"`
 	DefaultSeriesLibraryID        string `json:"default_series_library_id"`
+	DefaultMusicQualityProfileID  string `json:"default_music_quality_profile_id"`
+	DefaultMusicLibraryID         string `json:"default_music_library_id"`
 
 	UpdatedAt time.Time `json:"updated_at"`
 }

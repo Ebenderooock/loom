@@ -27,11 +27,12 @@ func decodeCallback(data string) (action, a1, a2 string) {
 	}
 }
 
-// interleave merges movie and series results, alternating types, up to max.
-func interleave(movies, series []MediaResult, max int) []MediaResult {
+// interleave merges movie, series, and artist results, alternating types, up to
+// max.
+func interleave(movies, series, artists []MediaResult, max int) []MediaResult {
 	out := make([]MediaResult, 0, max)
-	i, j := 0, 0
-	for len(out) < max && (i < len(movies) || j < len(series)) {
+	i, j, k := 0, 0, 0
+	for len(out) < max && (i < len(movies) || j < len(series) || k < len(artists)) {
 		if i < len(movies) {
 			out = append(out, movies[i])
 			i++
@@ -43,6 +44,13 @@ func interleave(movies, series []MediaResult, max int) []MediaResult {
 			out = append(out, series[j])
 			j++
 		}
+		if len(out) >= max {
+			break
+		}
+		if k < len(artists) {
+			out = append(out, artists[k])
+			k++
+		}
 	}
 	return out
 }
@@ -50,8 +58,11 @@ func interleave(movies, series []MediaResult, max int) []MediaResult {
 // resultLabel renders a concise button label for a result.
 func resultLabel(r MediaResult) string {
 	icon := "🎬"
-	if r.MediaType == requests.MediaSeries {
+	switch r.MediaType {
+	case requests.MediaSeries:
 		icon = "📺"
+	case requests.MediaArtist:
+		icon = "🎵"
 	}
 	label := icon + " " + r.Title
 	if r.Year > 0 {

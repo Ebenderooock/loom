@@ -55,8 +55,9 @@ func (f *fakeRequests) Reject(_ context.Context, id, reason, by string) (request
 }
 
 type fakeSearch struct {
-	movies []MediaResult
-	series []MediaResult
+	movies  []MediaResult
+	series  []MediaResult
+	artists []MediaResult
 }
 
 func (f *fakeSearch) SearchMovies(context.Context, string) ([]MediaResult, error) {
@@ -65,11 +66,17 @@ func (f *fakeSearch) SearchMovies(context.Context, string) ([]MediaResult, error
 func (f *fakeSearch) SearchSeries(context.Context, string) ([]MediaResult, error) {
 	return f.series, nil
 }
+func (f *fakeSearch) SearchArtists(context.Context, string) ([]MediaResult, error) {
+	return f.artists, nil
+}
 func (f *fakeSearch) GetMovie(_ context.Context, tmdb string) (*MediaResult, error) {
 	return &MediaResult{MediaType: requests.MediaMovie, TMDBID: tmdb, Title: "Movie " + tmdb, Year: 2020}, nil
 }
 func (f *fakeSearch) GetSeries(_ context.Context, tmdb string) (*MediaResult, error) {
 	return &MediaResult{MediaType: requests.MediaSeries, TMDBID: tmdb, Title: "Series " + tmdb}, nil
+}
+func (f *fakeSearch) GetArtist(_ context.Context, mbid string) (*MediaResult, error) {
+	return &MediaResult{MediaType: requests.MediaArtist, TMDBID: mbid, Title: "Artist " + mbid}, nil
 }
 
 type fakeUsers struct {
@@ -102,6 +109,8 @@ func newTestStore(t *testing.T) *Store {
 		default_movie_library_id TEXT NOT NULL DEFAULT '',
 		default_series_quality_profile_id TEXT NOT NULL DEFAULT '',
 		default_series_library_id TEXT NOT NULL DEFAULT '',
+		default_music_quality_profile_id TEXT NOT NULL DEFAULT '',
+		default_music_library_id TEXT NOT NULL DEFAULT '',
 		updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 	);
 	INSERT INTO bot_config (id) VALUES (1);

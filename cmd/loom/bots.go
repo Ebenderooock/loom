@@ -11,6 +11,7 @@ import (
 	"github.com/ebenderooock/loom/internal/bots/discord"
 	"github.com/ebenderooock/loom/internal/bots/telegram"
 	"github.com/ebenderooock/loom/internal/metadata"
+	"github.com/ebenderooock/loom/internal/music"
 	"github.com/ebenderooock/loom/internal/requests"
 	"github.com/ebenderooock/loom/internal/storage"
 )
@@ -23,6 +24,7 @@ func buildBots(
 	db storage.DB,
 	requestsSvc *requests.Service,
 	metadataSvc *metadata.Service,
+	musicSvc music.Service,
 	authStore auth.Store,
 	adminMW func(http.Handler) http.Handler,
 	logger *slog.Logger,
@@ -33,7 +35,7 @@ func buildBots(
 	brain := bots.NewService(bots.Options{
 		Store:    store,
 		Requests: requestsSvc,
-		Search:   &botSearchAdapter{meta: metadataSvc},
+		Search:   &botSearchAdapter{meta: metadataSvc, music: musicSvc},
 		Users:    users,
 		Logger:   logger,
 	})
@@ -69,7 +71,8 @@ func (d *botUserDirectory) Lookup(ctx context.Context, userID int64) (string, bo
 // botSearchAdapter adapts the metadata service to the bots SearchService,
 // performing trusted by-id re-fetches and multi-result searches.
 type botSearchAdapter struct {
-	meta *metadata.Service
+	meta  *metadata.Service
+	music music.Service
 }
 
 func (a *botSearchAdapter) SearchMovies(ctx context.Context, query string) ([]bots.MediaResult, error) {
@@ -122,6 +125,51 @@ func (a *botSearchAdapter) GetSeries(ctx context.Context, tmdbID string) (*bots.
 		return nil, nil
 	}
 	return &r, nil
+}
+
+func (a *botSearchAdapter) SearchArtists(ctx context.Context, query string) ([]bots.MediaResult, error) {
+	if a.music == nil {
+		return nil, nil
+	}
+	res, err := a.music.LookupArtists(ctx, query, 0)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]bots.MediaResult, 0, len(res))
+	for _, ar := range res {
+		if r, ok := artistToResult(ar); ok {
+			out = append(out, r)
+		}
+	}
+	return out, nil
+}
+
+func (a *botSearchAdapter) GetArtist(ctx context.Context, mbid string) (*bots.MediaResult, error) {
+	if a.music == nil {
+		return nil, nil
+	}
+	ar, err := a.music.LookupArtistByMBID(ctx, mbid)
+	if err != nil || ar == nil {
+		return nil, err
+	}
+	r, ok := artistToResult(ar)
+	if !ok {
+		return nil, nil
+	}
+	return &r, nil
+}
+
+func artistToResult(a *music.ArtistLookupResult) (bots.MediaResult, bool) {
+	if a == nil || a.MBID == "" {
+		return bots.MediaResult{}, false
+	}
+	return bots.MediaResult{
+		MediaType:  requests.MediaArtist,
+		TMDBID:     a.MBID,
+		Title:      a.Name,
+		Overview:   a.Disambiguation,
+		PosterPath: a.ImageURL,
+	}, true
 }
 
 func movieToResult(m *metadata.MovieMetadata) (bots.MediaResult, bool) {

@@ -25,6 +25,7 @@ type Service interface {
 	GetArtist(ctx context.Context, id string) (*Artist, error)
 	GetArtistByMBID(ctx context.Context, mbid string) (*Artist, error)
 	LookupArtists(ctx context.Context, query string, limit int) ([]*ArtistLookupResult, error)
+	LookupArtistByMBID(ctx context.Context, mbid string) (*ArtistLookupResult, error)
 	AddArtist(ctx context.Context, req AddArtistRequest) (*Artist, error)
 	UpdateArtist(ctx context.Context, id string, req UpdateArtistRequest) (*Artist, error)
 	DeleteArtist(ctx context.Context, id string) error
@@ -148,6 +149,41 @@ func (s *service) LookupArtists(ctx context.Context, query string, limit int) ([
 		})
 	}
 	return out, nil
+}
+
+// LookupArtistByMBID fetches a single artist's metadata by MusicBrainz ID for a
+// trusted re-fetch (e.g. chat-bot request fulfilment). Marks already-added.
+func (s *service) LookupArtistByMBID(ctx context.Context, mbid string) (*ArtistLookupResult, error) {
+	mbid = strings.TrimSpace(mbid)
+	if mbid == "" {
+		return nil, fmt.Errorf("%w: mbid is required", ErrInvalid)
+	}
+	if s.provider == nil {
+		return nil, fmt.Errorf("%w: no music metadata provider configured", ErrInvalid)
+	}
+	m, err := s.provider.GetArtist(ctx, mbid)
+	if err != nil {
+		return nil, err
+	}
+	if m == nil {
+		return nil, ErrNotFound
+	}
+	added := false
+	if existing, _ := s.repo.GetArtistByMBID(ctx, m.MBID); existing != nil && existing.MonitoringStatus != "" {
+		if a, _ := s.repo.GetArtist(ctx, existing.ID); a != nil {
+			added = true
+		}
+	}
+	return &ArtistLookupResult{
+		MBID:           m.MBID,
+		Name:           m.Name,
+		Disambiguation: m.Disambiguation,
+		Type:           m.Type,
+		Country:        m.Country,
+		Genres:         m.Genres,
+		ImageURL:       m.ImageURL,
+		AlreadyAdded:   added,
+	}, nil
 }
 
 func (s *service) AddArtist(ctx context.Context, req AddArtistRequest) (*Artist, error) {

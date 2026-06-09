@@ -24,6 +24,8 @@ export interface BotConfig {
   default_movie_library_id: string;
   default_series_quality_profile_id: string;
   default_series_library_id: string;
+  default_music_quality_profile_id: string;
+  default_music_library_id: string;
   updated_at: string;
 }
 
@@ -36,6 +38,8 @@ export interface UpdateBotConfig {
   default_movie_library_id?: string;
   default_series_quality_profile_id?: string;
   default_series_library_id?: string;
+  default_music_quality_profile_id?: string;
+  default_music_library_id?: string;
 }
 
 export interface BotStatus {

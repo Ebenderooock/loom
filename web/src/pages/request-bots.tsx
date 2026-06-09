@@ -52,6 +52,8 @@ import {
 } from "@/lib/bots-api";
 import { useQualityProfiles } from "@/lib/quality-profiles-api";
 import { useLibraries } from "@/lib/libraries-api";
+import { useAudioQualityProfiles } from "@/lib/music-api";
+import { useFeatureEnabled } from "@/lib/features-api";
 
 const NONE = "__none__";
 
@@ -360,11 +362,15 @@ function ApprovalDefaultsCard() {
   const update = useUpdateBotConfig();
   const { data: profiles } = useQualityProfiles();
   const { data: libraries } = useLibraries();
+  const { data: audioProfiles } = useAudioQualityProfiles();
+  const musicEnabled = useFeatureEnabled("music", false);
 
   const [movieQP, setMovieQP] = React.useState("");
   const [movieLib, setMovieLib] = React.useState("");
   const [seriesQP, setSeriesQP] = React.useState("");
   const [seriesLib, setSeriesLib] = React.useState("");
+  const [musicQP, setMusicQP] = React.useState("");
+  const [musicLib, setMusicLib] = React.useState("");
   const seeded = React.useRef(false);
 
   React.useEffect(() => {
@@ -373,12 +379,15 @@ function ApprovalDefaultsCard() {
       setMovieLib(cfg.default_movie_library_id);
       setSeriesQP(cfg.default_series_quality_profile_id);
       setSeriesLib(cfg.default_series_library_id);
+      setMusicQP(cfg.default_music_quality_profile_id);
+      setMusicLib(cfg.default_music_library_id);
       seeded.current = true;
     }
   }, [cfg]);
 
   const movieLibs = (libraries ?? []).filter((l) => l.media_type === "movie");
   const seriesLibs = (libraries ?? []).filter((l) => l.media_type === "series");
+  const musicLibs = (libraries ?? []).filter((l) => l.media_type === "music");
 
   const save = async () => {
     try {
@@ -387,6 +396,8 @@ function ApprovalDefaultsCard() {
         default_movie_library_id: movieLib,
         default_series_quality_profile_id: seriesQP,
         default_series_library_id: seriesLib,
+        default_music_quality_profile_id: musicQP,
+        default_music_library_id: musicLib,
       });
       toast.success("Approval defaults saved");
     } catch (e) {
@@ -436,6 +447,25 @@ function ApprovalDefaultsCard() {
           onChange={setSeriesLib}
           options={seriesLibs.map((l) => ({ value: l.id, label: l.name }))}
         />
+        {musicEnabled && (
+          <>
+            <SelectField
+              label="Music quality profile"
+              value={musicQP}
+              onChange={setMusicQP}
+              options={(audioProfiles ?? []).map((p) => ({
+                value: p.id,
+                label: p.name,
+              }))}
+            />
+            <SelectField
+              label="Music library"
+              value={musicLib}
+              onChange={setMusicLib}
+              options={musicLibs.map((l) => ({ value: l.id, label: l.name }))}
+            />
+          </>
+        )}
         <div className="flex justify-end sm:col-span-2">
           <Button onClick={() => void save()} disabled={update.isPending}>
             {update.isPending ? (

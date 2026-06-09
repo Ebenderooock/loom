@@ -241,7 +241,7 @@ func cmdServe(ctx context.Context, args []string) error {
 	if err != nil {
 		return fmt.Errorf("init bot auth store: %w", err)
 	}
-	botsRouter, botsSupervisor := buildBots(db, requestsSvc, metadataSvc, botAuthStore, authSvc.RequireRole("admin"), logger)
+	botsRouter, botsSupervisor := buildBots(db, requestsSvc, metadataSvc, media.musicSvc, botAuthStore, authSvc.RequireRole("admin"), logger)
 	srv.SetBots(botsRouter)
 	if err := botsSupervisor.Start(ctx); err != nil {
 		logger.Error("bots: initial start failed", "err", err)

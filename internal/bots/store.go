@@ -87,7 +87,8 @@ func (s *Store) GetConfig(ctx context.Context) (Config, error) {
 	row := s.db.QueryRowContext(ctx, `
 		SELECT telegram_enabled, telegram_bot_token, discord_enabled, discord_bot_token,
 		       default_movie_quality_profile_id, default_movie_library_id,
-		       default_series_quality_profile_id, default_series_library_id, updated_at
+		       default_series_quality_profile_id, default_series_library_id,
+		       default_music_quality_profile_id, default_music_library_id, updated_at
 		FROM bot_config WHERE id = 1`)
 	var (
 		c       Config
@@ -95,7 +96,8 @@ func (s *Store) GetConfig(ctx context.Context) (Config, error) {
 	)
 	err := row.Scan(&c.TelegramEnabled, &c.TelegramBotToken, &c.DiscordEnabled, &c.DiscordBotToken,
 		&c.DefaultMovieQualityProfileID, &c.DefaultMovieLibraryID,
-		&c.DefaultSeriesQualityProfileID, &c.DefaultSeriesLibraryID, &updated)
+		&c.DefaultSeriesQualityProfileID, &c.DefaultSeriesLibraryID,
+		&c.DefaultMusicQualityProfileID, &c.DefaultMusicLibraryID, &updated)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Config{}, nil
 	}
@@ -114,11 +116,13 @@ func (s *Store) SetConfig(ctx context.Context, c Config) error {
 			discord_enabled = ?, discord_bot_token = ?,
 			default_movie_quality_profile_id = ?, default_movie_library_id = ?,
 			default_series_quality_profile_id = ?, default_series_library_id = ?,
+			default_music_quality_profile_id = ?, default_music_library_id = ?,
 			updated_at = ?
 		WHERE id = 1`,
 		c.TelegramEnabled, c.TelegramBotToken, c.DiscordEnabled, c.DiscordBotToken,
 		c.DefaultMovieQualityProfileID, c.DefaultMovieLibraryID,
 		c.DefaultSeriesQualityProfileID, c.DefaultSeriesLibraryID,
+		c.DefaultMusicQualityProfileID, c.DefaultMusicLibraryID,
 		time.Now().UTC().Format(tsLayout))
 	if err != nil {
 		return fmt.Errorf("bots: set config: %w", err)
