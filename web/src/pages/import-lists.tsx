@@ -16,9 +16,12 @@ import {
   type ImportList,
   type CreateImportListRequest,
   type ListType,
+  type MediaType,
   type ImportListExclusion,
 } from "@/lib/import-lists-api";
 import { usePageHeader } from "@/hooks/use-page-header";
+import { useLibraries } from "@/lib/libraries-api";
+import { useAudioQualityProfiles } from "@/lib/music-api";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -296,6 +299,70 @@ function StatusBadge({ status }: { status: string }) {
 
 // ---- Add List Form ----
 
+function MusicListFields({
+  form,
+  setForm,
+}: {
+  form: CreateImportListRequest;
+  setForm: (f: CreateImportListRequest) => void;
+}) {
+  const { data: libraries } = useLibraries();
+  const { data: profiles } = useAudioQualityProfiles();
+  const musicLibraries = (libraries ?? []).filter(
+    (l) => l.media_type === "music",
+  );
+
+  return (
+    <>
+      <div className="space-y-2">
+        <Label htmlFor="add-music-library">Music Library</Label>
+        <Select
+          value={form.library_path ?? ""}
+          onValueChange={(val) => setForm({ ...form, library_path: val })}
+        >
+          <SelectTrigger id="add-music-library">
+            <SelectValue placeholder="Select a library…" />
+          </SelectTrigger>
+          <SelectContent>
+            {musicLibraries.length === 0 ? (
+              <SelectItem value="__none" disabled>
+                No music libraries configured
+              </SelectItem>
+            ) : (
+              musicLibraries.map((l) => (
+                <SelectItem key={l.id} value={l.id}>
+                  {l.name}
+                </SelectItem>
+              ))
+            )}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="add-music-profile">Quality Profile</Label>
+        <Select
+          value={form.quality_profile_id ?? ""}
+          onValueChange={(val) =>
+            setForm({ ...form, quality_profile_id: val })
+          }
+        >
+          <SelectTrigger id="add-music-profile">
+            <SelectValue placeholder="Select a profile…" />
+          </SelectTrigger>
+          <SelectContent>
+            {(profiles ?? []).map((p) => (
+              <SelectItem key={p.id} value={p.id}>
+                {p.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+    </>
+  );
+}
+
 function AddListForm({ onDone }: { onDone: () => void }) {
   const createMut = useCreateImportList();
   const [form, setForm] = React.useState<CreateImportListRequest>({
@@ -419,7 +486,7 @@ function AddListForm({ onDone }: { onDone: () => void }) {
                 onValueChange={(val) =>
                   setForm({
                     ...form,
-                    media_type: val as "movie" | "series",
+                    media_type: val as MediaType,
                   })
                 }
               >
@@ -429,9 +496,14 @@ function AddListForm({ onDone }: { onDone: () => void }) {
                 <SelectContent>
                   <SelectItem value="movie">Movie</SelectItem>
                   <SelectItem value="series">Series</SelectItem>
+                  <SelectItem value="music">Music</SelectItem>
                 </SelectContent>
               </Select>
             </div>
+
+            {form.media_type === "music" && (
+              <MusicListFields form={form} setForm={setForm} />
+            )}
 
             <div className="space-y-2">
               <Label htmlFor="add-mode">Mode</Label>

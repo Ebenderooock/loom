@@ -18,9 +18,10 @@ export type ListType =
   | "plex_watchlist"
   | "rss"
   | "sonarr"
-  | "radarr";
+  | "radarr"
+  | "musicbrainz_collection";
 
-export type MediaType = "movie" | "series";
+export type MediaType = "movie" | "series" | "music";
 export type MonitorType = "all" | "future" | "missing" | "none";
 export type ItemStatus = "pending" | "added" | "excluded" | "failed";
 export type ListMode = "auto" | "discover";
@@ -89,6 +90,7 @@ export interface CreateImportListRequest {
   access_token?: string;
   sync_interval_minutes?: number;
   root_folder_path?: string;
+  library_path?: string;
   quality_profile_id?: string;
   media_type?: MediaType;
   monitor_type?: MonitorType;
@@ -491,6 +493,13 @@ export const LIST_TYPES: {
     label: "Radarr",
     mediaType: "movie",
     fields: ["url", "api_key"],
+  },
+  {
+    value: "musicbrainz_collection",
+    label: "MusicBrainz Collection",
+    mediaType: "music",
+    fields: ["url"],
+    urlPlaceholder: "Collection MBID or URL",
   },
 ];
 
