@@ -220,6 +220,10 @@ func cmdServe(ctx context.Context, args []string) error {
 		dlWiring.musicAutoSearcher.Start(ctx)
 		defer dlWiring.musicAutoSearcher.Stop()
 	}
+	if dlWiring.musicRefresher != nil {
+		dlWiring.musicRefresher.Start(ctx)
+		defer dlWiring.musicRefresher.Stop()
+	}
 
 	// Wire downloads-cleanup (scan orphans in download folders + auto-delete).
 	cleanupSvc := buildCleanupService(db, downloadSvc, dlWiring.importPipeline, media.libStore, appCfg, logger)

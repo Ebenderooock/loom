@@ -29,6 +29,10 @@ type Service interface {
 	DeleteArtist(ctx context.Context, id string) error
 	SetArtistMonitoring(ctx context.Context, id string, status MonitoringStatus) (*Artist, error)
 
+	// RefreshArtistAlbums re-fetches an artist's release-groups and adds any
+	// newly released albums (new-release discovery).
+	RefreshArtistAlbums(ctx context.Context, artistID string) (int, error)
+
 	GetAlbum(ctx context.Context, id string) (*Album, error)
 	ListAlbumsByArtist(ctx context.Context, artistID string) ([]*Album, error)
 	SetAlbumMonitored(ctx context.Context, id string, monitored bool) (*Album, error)
@@ -217,41 +221,10 @@ func (s *service) AddArtist(ctx context.Context, req AddArtistRequest) (*Artist,
 
 	// Persist albums (release-groups). Tracks are fetched lazily when an album
 	// is opened/searched to respect the MusicBrainz rate limit.
-	albums, err := s.provider.GetArtistAlbums(ctx, req.MBID)
-	if err != nil {
+	if n, err := s.syncArtistAlbums(ctx, artist, req.MetadataProfileID, monitoring); err != nil {
 		s.logger.Warn("music: failed to fetch artist albums", "mbid", req.MBID, "error", err)
-	} else {
-		var metaProfile *MetadataProfile
-		if req.MetadataProfileID != "" {
-			metaProfile, _ = s.repo.GetMetadataProfile(ctx, req.MetadataProfileID)
-		}
-		monitorAlbums := monitoring == MonitoringMonitored
-		for _, am := range albums {
-			if am == nil || am.MBID == "" {
-				continue
-			}
-			if existingAl, _ := s.repo.GetAlbumByMBID(ctx, am.MBID); existingAl != nil {
-				continue
-			}
-			// Album types outside the metadata profile are still stored but left
-			// unmonitored, mirroring Lidarr's behaviour.
-			monitored := monitorAlbums && albumMatchesMetadataProfile(am.Type, am.SecondaryTypes, metaProfile)
-			al := &Album{
-				ID:             uuid.New().String(),
-				MBID:           am.MBID,
-				ArtistID:       artist.ID,
-				Title:          am.Title,
-				AlbumType:      am.Type,
-				SecondaryTypes: am.SecondaryTypes,
-				ReleaseDate:    am.ReleaseDate,
-				Genres:         am.Genres,
-				CoverArtURL:    am.CoverArtURL,
-				Monitored:      monitored,
-			}
-			if err := s.repo.CreateAlbum(ctx, al); err != nil {
-				s.logger.Warn("music: failed to create album", "mbid", am.MBID, "error", err)
-			}
-		}
+	} else if n > 0 {
+		s.logger.Info("music: added albums", "artist", artist.Name, "count", n)
 	}
 
 	if req.Search {
@@ -488,6 +461,68 @@ func (s *service) ListAudioQualityProfiles(ctx context.Context) ([]*AudioQuality
 
 func (s *service) ListMetadataProfiles(ctx context.Context) ([]*MetadataProfile, error) {
 	return s.repo.ListMetadataProfiles(ctx)
+}
+
+// syncArtistAlbums fetches the artist's release-groups from the metadata
+// provider and inserts any that are not yet stored, returning the number added.
+// New albums respect the metadata profile and overall monitoring status. It is
+// shared by AddArtist and the new-release refresher.
+func (s *service) syncArtistAlbums(ctx context.Context, artist *Artist, metadataProfileID string, monitoring MonitoringStatus) (int, error) {
+	if s.provider == nil {
+		return 0, fmt.Errorf("no music metadata provider configured")
+	}
+	albums, err := s.provider.GetArtistAlbums(ctx, artist.MBID)
+	if err != nil {
+		return 0, err
+	}
+	var metaProfile *MetadataProfile
+	if metadataProfileID != "" {
+		metaProfile, _ = s.repo.GetMetadataProfile(ctx, metadataProfileID)
+	}
+	monitorAlbums := monitoring == MonitoringMonitored
+	added := 0
+	for _, am := range albums {
+		if am == nil || am.MBID == "" {
+			continue
+		}
+		if existingAl, _ := s.repo.GetAlbumByMBID(ctx, am.MBID); existingAl != nil {
+			continue
+		}
+		// Album types outside the metadata profile are still stored but left
+		// unmonitored, mirroring Lidarr's behaviour.
+		monitored := monitorAlbums && albumMatchesMetadataProfile(am.Type, am.SecondaryTypes, metaProfile)
+		al := &Album{
+			ID:             uuid.New().String(),
+			MBID:           am.MBID,
+			ArtistID:       artist.ID,
+			Title:          am.Title,
+			AlbumType:      am.Type,
+			SecondaryTypes: am.SecondaryTypes,
+			ReleaseDate:    am.ReleaseDate,
+			Genres:         am.Genres,
+			CoverArtURL:    am.CoverArtURL,
+			Monitored:      monitored,
+		}
+		if err := s.repo.CreateAlbum(ctx, al); err != nil {
+			s.logger.Warn("music: failed to create album", "mbid", am.MBID, "error", err)
+			continue
+		}
+		added++
+	}
+	return added, nil
+}
+
+// RefreshArtistAlbums re-fetches an artist's release-groups and adds any newly
+// released albums (Lidarr-style new-release discovery). Returns the count added.
+func (s *service) RefreshArtistAlbums(ctx context.Context, artistID string) (int, error) {
+	artist, err := s.repo.GetArtist(ctx, artistID)
+	if err != nil {
+		return 0, err
+	}
+	if artist == nil {
+		return 0, ErrNotFound
+	}
+	return s.syncArtistAlbums(ctx, artist, artist.MetadataProfileID, artist.MonitoringStatus)
 }
 
 // albumMatchesMetadataProfile reports whether an album's primary/secondary types

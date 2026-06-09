@@ -15,6 +15,7 @@ import (
 	"github.com/ebenderooock/loom/internal/indexers"
 	"github.com/ebenderooock/loom/internal/kernel/config"
 	"github.com/ebenderooock/loom/internal/movies"
+	"github.com/ebenderooock/loom/internal/music"
 	"github.com/ebenderooock/loom/internal/musicsearch"
 	"github.com/ebenderooock/loom/internal/safety"
 	"github.com/ebenderooock/loom/internal/server"
@@ -30,6 +31,7 @@ type downloadWiring struct {
 	monitorCancel      context.CancelFunc
 	autoSearchEngine   *autosearch.Engine
 	musicAutoSearcher  *musicsearch.AutoSearcher
+	musicRefresher     *music.ReleaseRefresher
 }
 
 // wireDownloads constructs download-related services (remote paths,
@@ -93,6 +95,7 @@ func wireDownloads(
 	// Music acquisition engine — self-contained parallel to autosearch that
 	// reuses only the media-agnostic indexer transport and download registry.
 	var musicAutoSearcher *musicsearch.AutoSearcher
+	var musicRefresher *music.ReleaseRefresher
 	if media.musicRepo != nil {
 		musicSearchEngine := musicsearch.NewEngine(
 			indexerSvc, downloadSvc.Registry(), media.musicRepo, logger,
@@ -101,6 +104,12 @@ func wireDownloads(
 		musicAutoSearcher = musicsearch.NewAutoSearcher(
 			musicSearchEngine, srv.Features().EnabledFunc(featureflags.KeyMusic),
 		)
+		if media.musicSvc != nil {
+			musicRefresher = music.NewReleaseRefresher(
+				media.musicSvc, media.musicRepo,
+				srv.Features().EnabledFunc(featureflags.KeyMusic), logger,
+			)
+		}
 	}
 
 	// Import pipeline
@@ -216,6 +225,7 @@ func wireDownloads(
 		monitorCancel:      monCancel,
 		autoSearchEngine:   autoSearchEngine,
 		musicAutoSearcher:  musicAutoSearcher,
+		musicRefresher:     musicRefresher,
 	}, nil
 }
 

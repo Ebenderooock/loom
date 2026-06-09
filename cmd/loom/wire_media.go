@@ -38,6 +38,7 @@ type mediaWiring struct {
 	notifSvc          notifications.Service
 	importListSyncMgr *importlists.SyncManager
 	musicRepo         music.Repository
+	musicSvc          music.Service
 }
 
 // wireMedia constructs all media-related services (scanner, organizer,
@@ -172,6 +173,7 @@ func wireMedia(
 		notifSvc:          notifSvc,
 		importListSyncMgr: importListSyncMgr,
 		musicRepo:         musicRepo,
+		musicSvc:          musicSvc,
 	}, nil
 }
 
