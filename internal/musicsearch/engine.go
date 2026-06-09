@@ -64,22 +64,153 @@ type Candidate struct {
 	Score  music.AudioScore
 }
 
+// ReleaseCandidate is a scored release surfaced to the interactive search UI.
+// Unlike automated acquisition it includes profile-rejected releases (flagged
+// via Allowed) so the user can make an informed manual choice.
+type ReleaseCandidate struct {
+	GUID        string  `json:"guid"`
+	Title       string  `json:"title"`
+	IndexerID   string  `json:"indexer_id"`
+	Size        int64   `json:"size"`
+	Seeders     *int    `json:"seeders,omitempty"`
+	Protocol    string  `json:"protocol"`
+	QualityName string  `json:"quality_name"`
+	Tier        int     `json:"tier"`
+	Score       float64 `json:"score"`
+	Allowed     bool    `json:"allowed"`
+	MeetsCutoff bool    `json:"meets_cutoff"`
+	Link        string  `json:"link,omitempty"`
+	MagnetURI   string  `json:"magnet_uri,omitempty"`
+	Infohash    string  `json:"infohash,omitempty"`
+}
+
+// GrabRequest identifies a specific release to grab in an interactive search.
+// The frontend echoes back the chosen release's download coordinates.
+type GrabRequest struct {
+	Title     string `json:"title"`
+	IndexerID string `json:"indexer_id"`
+	Link      string `json:"link,omitempty"`
+	MagnetURI string `json:"magnet_uri,omitempty"`
+	Infohash  string `json:"infohash,omitempty"`
+	Size      int64  `json:"size,omitempty"`
+	Seeders   *int   `json:"seeders,omitempty"`
+}
+
+// ListReleases performs an interactive search for an album, returning all
+// identity-matched releases scored against the artist's profile (including
+// profile-rejected ones, flagged via Allowed) sorted best-first. It does not
+// grab anything.
+func (e *Engine) ListReleases(ctx context.Context, albumID string) ([]ReleaseCandidate, error) {
+	album, artist, err := e.loadAlbumArtist(ctx, albumID)
+	if err != nil {
+		return nil, err
+	}
+	defs, err := e.repo.ListAudioQualityDefinitions(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list quality definitions: %w", err)
+	}
+	var profile *music.AudioQualityProfile
+	if artist.QualityProfileID != "" {
+		profile, _ = e.repo.GetAudioQualityProfile(ctx, artist.QualityProfileID)
+	}
+
+	normArtist := normalize(artist.Name)
+	normAlbum := normalize(album.Title)
+	year := albumYear(album)
+
+	seen := make(map[string]bool)
+	var out []ReleaseCandidate
+	for _, q := range buildAudioQueries(artist.Name, album.Title, year) {
+		agg := e.indexerSvc.Search(ctx, q, nil, 0)
+		for _, res := range agg.Results {
+			key := res.GUID
+			if key == "" {
+				key = res.IndexerID + "|" + res.Title
+			}
+			if seen[key] {
+				continue
+			}
+			seen[key] = true
+
+			parsed := music.ParseMusic(res.Title)
+			if !identityMatch(res.Title, parsed, normArtist, normAlbum) {
+				continue
+			}
+			score := music.ScoreAudioRelease(parsed, defs, profile, seeders(res), res.Size)
+			qn := ""
+			if score.Definition != nil {
+				qn = score.Definition.Name
+			}
+			out = append(out, ReleaseCandidate{
+				GUID:        res.GUID,
+				Title:       res.Title,
+				IndexerID:   res.IndexerID,
+				Size:        res.Size,
+				Seeders:     res.Seeders,
+				Protocol:    string(inferProtocol(&res)),
+				QualityName: qn,
+				Tier:        score.Tier,
+				Score:       score.Composite(),
+				Allowed:     score.Allowed,
+				MeetsCutoff: score.MeetsCutoff,
+				Link:        res.Link,
+				MagnetURI:   res.MagnetURI,
+				Infohash:    res.Infohash,
+			})
+		}
+	}
+	sort.SliceStable(out, func(i, j int) bool { return out[i].Score > out[j].Score })
+	return out, nil
+}
+
+// GrabRelease grabs a specific, user-chosen release for an album (interactive
+// search). The release's quality is scored for reporting but not gated.
+func (e *Engine) GrabRelease(ctx context.Context, albumID string, req GrabRequest) (*GrabResult, error) {
+	if _, _, err := e.loadAlbumArtist(ctx, albumID); err != nil {
+		return nil, err
+	}
+	defs, err := e.repo.ListAudioQualityDefinitions(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list quality definitions: %w", err)
+	}
+	res := indexers.Result{
+		Title:     req.Title,
+		IndexerID: req.IndexerID,
+		Link:      req.Link,
+		MagnetURI: req.MagnetURI,
+		Infohash:  req.Infohash,
+		Size:      req.Size,
+		Seeders:   req.Seeders,
+	}
+	parsed := music.ParseMusic(req.Title)
+	score := music.ScoreAudioRelease(parsed, defs, nil, seeders(res), res.Size)
+	c := Candidate{Result: res, Parsed: parsed, Score: score}
+	grab, err := e.grab(ctx, albumID, &c)
+	if err != nil {
+		return nil, err
+	}
+	e.logger.Info("musicsearch: grabbed manual release", "album", albumID, "title", grab.Title)
+	return grab, nil
+}
+
 // SearchAlbum searches configured indexers for the given album and grabs the
 // best-scoring, profile-allowed release.
 func (e *Engine) SearchAlbum(ctx context.Context, albumID string) (*GrabResult, error) {
-	album, err := e.repo.GetAlbum(ctx, albumID)
+	return e.searchAndGrab(ctx, albumID, false)
+}
+
+// SearchAlbumUpgrade searches for a strictly better-quality release than the
+// album currently has on disk. It only grabs when the profile permits upgrades
+// and the best candidate beats the album's current quality tier; otherwise it
+// returns ErrNoResults.
+func (e *Engine) SearchAlbumUpgrade(ctx context.Context, albumID string) (*GrabResult, error) {
+	return e.searchAndGrab(ctx, albumID, true)
+}
+
+func (e *Engine) searchAndGrab(ctx context.Context, albumID string, upgradeOnly bool) (*GrabResult, error) {
+	album, artist, err := e.loadAlbumArtist(ctx, albumID)
 	if err != nil {
-		return nil, fmt.Errorf("get album: %w", err)
-	}
-	if album == nil {
-		return nil, ErrNotFound
-	}
-	artist, err := e.repo.GetArtist(ctx, album.ArtistID)
-	if err != nil {
-		return nil, fmt.Errorf("get artist: %w", err)
-	}
-	if artist == nil {
-		return nil, ErrNotFound
+		return nil, err
 	}
 
 	// Record the search attempt regardless of outcome so the auto-searcher
@@ -95,6 +226,20 @@ func (e *Engine) SearchAlbum(ctx context.Context, albumID string) (*GrabResult, 
 		profile, _ = e.repo.GetAudioQualityProfile(ctx, artist.QualityProfileID)
 	}
 
+	// In upgrade mode the profile must allow upgrades and the album must already
+	// have files; the grab is gated on beating the current tier.
+	minTier := -1
+	if upgradeOnly {
+		if profile == nil || !profile.UpgradeAllowed {
+			return nil, ErrNoResults
+		}
+		cur, hasFiles := e.albumCurrentTier(ctx, album, defs)
+		if !hasFiles {
+			return nil, ErrNoResults
+		}
+		minTier = cur
+	}
+
 	year := albumYear(album)
 	candidates := e.gatherCandidates(ctx, artist.Name, album.Title, year, defs, profile)
 	if len(candidates) == 0 {
@@ -107,15 +252,41 @@ func (e *Engine) SearchAlbum(ctx context.Context, albumID string) (*GrabResult, 
 	})
 	best := candidates[0]
 
+	if minTier >= 0 && best.Score.Tier <= minTier {
+		e.logger.Debug("musicsearch: no upgrade available",
+			"artist", artist.Name, "album", album.Title, "current_tier", minTier, "best_tier", best.Score.Tier)
+		return nil, ErrNoResults
+	}
+
 	grab, err := e.grab(ctx, albumID, &best)
 	if err != nil {
 		return nil, err
 	}
 	e.logger.Info("musicsearch: grabbed album release",
-		"artist", artist.Name, "album", album.Title,
+		"artist", artist.Name, "album", album.Title, "upgrade", upgradeOnly,
 		"title", grab.Title, "quality", grab.QualityName, "score", grab.CompositeScore,
 	)
 	return grab, nil
+}
+
+// loadAlbumArtist fetches an album and its artist, returning ErrNotFound if
+// either is missing.
+func (e *Engine) loadAlbumArtist(ctx context.Context, albumID string) (*music.Album, *music.Artist, error) {
+	album, err := e.repo.GetAlbum(ctx, albumID)
+	if err != nil {
+		return nil, nil, fmt.Errorf("get album: %w", err)
+	}
+	if album == nil {
+		return nil, nil, ErrNotFound
+	}
+	artist, err := e.repo.GetArtist(ctx, album.ArtistID)
+	if err != nil {
+		return nil, nil, fmt.Errorf("get artist: %w", err)
+	}
+	if artist == nil {
+		return nil, nil, ErrNotFound
+	}
+	return album, artist, nil
 }
 
 // gatherCandidates runs the tiered query chain and returns identity-matched,

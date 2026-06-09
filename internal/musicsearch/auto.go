@@ -203,6 +203,9 @@ func (a *AutoSearcher) loop(ctx context.Context) {
 			if _, err := a.engine.AutoSearchMissing(ctx, a.limit, a.minRecheck); err != nil {
 				a.engine.logger.Warn("musicsearch: auto-search run failed", "error", err)
 			}
+			if _, err := a.engine.AutoSearchUpgrades(ctx, a.limit, a.minRecheck); err != nil {
+				a.engine.logger.Warn("musicsearch: auto-upgrade run failed", "error", err)
+			}
 		}
 	}
 }
