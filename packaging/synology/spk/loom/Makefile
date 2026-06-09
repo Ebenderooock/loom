@@ -1,5 +1,5 @@
 SPK_NAME = loom
-SPK_VERS = 0.1.0
+SPK_VERS = 0.1.1
 SPK_REV = 1
 SPK_ICON = src/loom.png
 
@@ -13,9 +13,9 @@ HOMEPAGE = https://github.com/Ebenderooock/loom
 LICENSE = AGPL-3.0
 DISPLAY_NAME = Loom
 
-DESCRIPTION = Loom is a unified, self-hosted media automation server. It searches indexers, drives your download clients, imports and organizes movies and TV, and ships a built-in web UI and request portal — a single-binary replacement for the Radarr/Sonarr/Prowlarr/Overseerr stack.
+DESCRIPTION = Loom is a unified, self-hosted media automation server. It searches indexers, drives your download clients, imports and organizes movies, TV and music, and ships a built-in web UI and request portal — a single-binary replacement for the Radarr/Sonarr/Lidarr/Prowlarr/Overseerr stack.
 
-CHANGELOG = "Initial release: single-binary media automation server with embedded web UI."
+CHANGELOG = "0.1.1: Add Music capability (artists/albums/tracks, audio quality profiles, automated and interactive search, music requests via portal and chat bots)."
 
 STARTABLE = yes
 SERVICE_USER = auto

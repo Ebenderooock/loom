@@ -1,5 +1,5 @@
 PKG_NAME = loom
-PKG_VERS = 0.1.0
+PKG_VERS = 0.1.1
 PKG_EXT = tar.gz
 PKG_DIST_NAME = $(PKG_NAME)-source-v$(PKG_VERS).$(PKG_EXT)
 PKG_DIST_SITE = https://github.com/Ebenderooock/loom/releases/download/v$(PKG_VERS)
