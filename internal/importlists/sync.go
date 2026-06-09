@@ -13,6 +13,7 @@ import (
 	"github.com/ebenderooock/loom/internal/importlists/providers"
 	"github.com/ebenderooock/loom/internal/metadata/tmdb"
 	"github.com/ebenderooock/loom/internal/movies"
+	"github.com/ebenderooock/loom/internal/music"
 	"github.com/ebenderooock/loom/internal/series"
 )
 
@@ -22,6 +23,7 @@ type SyncManager struct {
 	connectSvc ConnectService
 	moviesSvc  movies.Service
 	seriesSvc  series.Service
+	musicSvc   MusicService
 	tmdbAPIKey string
 	tmdbClient *tmdb.Client
 	logger     *slog.Logger
@@ -33,6 +35,12 @@ type SyncManager struct {
 // ConnectService provides access to configured connections (e.g. Trakt OAuth).
 type ConnectService interface {
 	ListConnections(ctx context.Context) ([]*connect.Connection, error)
+}
+
+// MusicService is the subset of the music service used to add artists from
+// import lists.
+type MusicService interface {
+	AddArtist(ctx context.Context, req music.AddArtistRequest) (*music.Artist, error)
 }
 
 // NewSyncManager creates a SyncManager.
@@ -58,6 +66,11 @@ func (m *SyncManager) SetMoviesService(svc movies.Service) {
 // SetSeriesService sets the series service for adding shows from import lists.
 func (m *SyncManager) SetSeriesService(svc series.Service) {
 	m.seriesSvc = svc
+}
+
+// SetMusicService sets the music service for adding artists from import lists.
+func (m *SyncManager) SetMusicService(svc MusicService) {
+	m.musicSvc = svc
 }
 
 // SetTMDBAPIKey sets the TMDB API key for TMDb list providers.
@@ -257,6 +270,15 @@ func (m *SyncManager) enrichItem(ctx context.Context, item *ImportListItem, l *I
 	if m.tmdbClient == nil {
 		return
 	}
+	// Music items are not on TMDb; their metadata is fetched from MusicBrainz
+	// when the artist is added.
+	mt := item.MediaType
+	if mt == "" {
+		mt = string(l.MediaType)
+	}
+	if mt == string(MediaTypeMusic) {
+		return
+	}
 	// Fetch when any cacheable field is still missing.
 	if item.PosterPath != "" && len(item.Genres) > 0 {
 		return
@@ -335,6 +357,8 @@ func (m *SyncManager) providerFor(lt ListType, mediaType MediaType) providers.Li
 		return providers.NewPlexWatchlist()
 	case ListTypeRSS:
 		return providers.NewRSS()
+	case ListTypeMusicBrainzColl:
+		return providers.NewMusicBrainz()
 	default:
 		return nil
 	}
@@ -401,6 +425,8 @@ func (m *SyncManager) processPendingItems(ctx context.Context, l *ImportList) {
 		var addErr error
 		if mediaType == string(MediaTypeSeries) {
 			addErr = m.addSeriesToLibrary(ctx, l, item)
+		} else if mediaType == string(MediaTypeMusic) {
+			addErr = m.addArtistToLibrary(ctx, l, item)
 		} else {
 			addErr = m.addMovieToLibrary(ctx, l, item)
 		}
@@ -502,6 +528,41 @@ func (m *SyncManager) addSeriesToLibrary(ctx context.Context, l *ImportList, ite
 	}
 
 	m.logger.Info("import-lists: added series", "title", item.Title, "tmdb_id", item.TMDbID)
+	return nil
+}
+
+// addArtistToLibrary adds a music artist to the library via the music service.
+// The import-list item's ExternalID carries the MusicBrainz artist MBID.
+func (m *SyncManager) addArtistToLibrary(ctx context.Context, l *ImportList, item *ImportListItem) error {
+	if m.musicSvc == nil {
+		return fmt.Errorf("music service not configured")
+	}
+	mbid := strings.TrimSpace(item.ExternalID)
+	if mbid == "" {
+		return fmt.Errorf("music item %q has no MusicBrainz id", item.Title)
+	}
+
+	monitoring := string(music.MonitoringMonitored)
+	if l.MonitorType == MonitorNone {
+		monitoring = string(music.MonitoringUnmonitored)
+	}
+
+	req := music.AddArtistRequest{
+		MBID:             mbid,
+		QualityProfileID: l.QualityProfileID,
+		LibraryID:        l.LibraryPath,
+		MonitoringStatus: monitoring,
+		Search:           l.SearchOnAdd,
+	}
+
+	if _, err := m.musicSvc.AddArtist(ctx, req); err != nil {
+		if strings.Contains(err.Error(), "UNIQUE constraint") || strings.Contains(err.Error(), "already exists") {
+			return nil
+		}
+		return fmt.Errorf("add artist %q: %w", item.Title, err)
+	}
+
+	m.logger.Info("import-lists: added artist", "title", item.Title, "mbid", mbid)
 	return nil
 }
 

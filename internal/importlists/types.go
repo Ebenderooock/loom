@@ -19,6 +19,7 @@ const (
 	ListTypeRSS              ListType = "rss"
 	ListTypeSonarr           ListType = "sonarr"
 	ListTypeRadarr           ListType = "radarr"
+	ListTypeMusicBrainzColl  ListType = "musicbrainz_collection"
 )
 
 // ListMode controls whether a list auto-adds items or only surfaces them in
