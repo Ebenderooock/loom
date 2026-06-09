@@ -7,7 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-06-09
+
 ### Added
+
+- **Music capability (Lidarr parity).** A full Music media domain —
+  Artist → Album → Track — alongside Movies and TV, enabled by default. Backed by
+  MusicBrainz + Cover Art Archive metadata (no API key). Includes monitored
+  artists/albums with track-level completeness, audio quality profiles with
+  custom-format scoring, metadata-profile filtering, a music-aware
+  scanner/organizer/import pipeline, automated search/grab via the shared indexer
+  and download plumbing, per-track cutoff-unmet upgrades, RSS new-release
+  discovery, music import lists, a `/music` UI (artist grid + artist/album detail,
+  interactive search & grab, bulk monitor/search), calendar release events, and
+  artist requests through the requests portal and the Telegram/Discord chat bots
+  (with per-user music quota and chat-approval defaults). Database migrations
+  0069–0073 (sqlite + postgres).
 
 - **Stateful workflow engine** (`internal/workflows/`). Replaces the old stateless
   "grabs" package with a full state machine tracking search → grab → download →
@@ -384,4 +399,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - *(none yet)*
 
-[Unreleased]: https://github.com/ebenderooock/loom/compare/HEAD
+[Unreleased]: https://github.com/ebenderooock/loom/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/ebenderooock/loom/compare/v0.1.0...v0.1.1

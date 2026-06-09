@@ -71,10 +71,10 @@ var Definitions = []FlagDef{
 	},
 	{
 		Key:         KeyMusic,
-		Label:       "Music (Beta)",
-		Description: "Enable the Music capability: manage artists, albums and tracks, scan music libraries and acquire releases. In active development and not yet feature-complete; disabled by default. When off, the Music API is not exposed.",
+		Label:       "Music",
+		Description: "Enable the Music capability: manage artists, albums and tracks, scan music libraries, acquire releases, and request artists via the requests portal and chat bots. When off, the Music API is not exposed.",
 		Category:    "Media",
-		Default:     false,
+		Default:     true,
 	},
 }
 
