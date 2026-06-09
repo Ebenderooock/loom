@@ -62,6 +62,7 @@ import (
 	"github.com/ebenderooock/loom/internal/mediainfo"
 	"github.com/ebenderooock/loom/internal/movies"
 	"github.com/ebenderooock/loom/internal/music"
+	"github.com/ebenderooock/loom/internal/musicsearch"
 	"github.com/ebenderooock/loom/internal/notifications"
 	"github.com/ebenderooock/loom/internal/organizer"
 	"github.com/ebenderooock/loom/internal/packs"
@@ -98,6 +99,7 @@ type Server struct {
 	scannerSvc        *scanner.Scanner
 	seriesScannerSvc  *scanner.SeriesScanner
 	musicScannerSvc   *scanner.MusicScanner
+	musicSearch       *musicsearch.Engine
 	organizerSvc      *organizer.Organizer
 	seriesSvc         series.Service
 	musicSvc          music.Service
@@ -289,6 +291,15 @@ func (s *Server) SetMusic(svc music.Service) {
 // SetMusicScanner installs the music scanner and rebuilds the HTTP handler.
 func (s *Server) SetMusicScanner(ms *scanner.MusicScanner) {
 	s.musicScannerSvc = ms
+	if s.httpSrv != nil {
+		s.httpSrv.Handler = s.newMux()
+	}
+}
+
+// SetMusicSearch installs the music acquisition engine and rebuilds the HTTP
+// handler. It powers POST /api/v1/albums/{id}/search.
+func (s *Server) SetMusicSearch(engine *musicsearch.Engine) {
+	s.musicSearch = engine
 	if s.httpSrv != nil {
 		s.httpSrv.Handler = s.newMux()
 	}
@@ -738,7 +749,11 @@ func (s *Server) newMux() http.Handler {
 				scanner.RegisterMusicRoutes(artistsRouter, s.musicScannerSvc, s.libStore)
 			}
 			r.Mount("/api/v1/artists", artistsRouter)
-			r.Mount("/api/v1/albums", music.AlbumRouter(s.musicSvc))
+			albumsRouter := music.AlbumRouter(s.musicSvc)
+			if s.musicSearch != nil {
+				musicsearch.RegisterRoutes(albumsRouter, s.musicSearch)
+			}
+			r.Mount("/api/v1/albums", albumsRouter)
 			r.Mount("/api/v1/music", music.ProfileRouter(s.musicSvc))
 		}
 

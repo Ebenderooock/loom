@@ -15,6 +15,7 @@ import (
 	"github.com/ebenderooock/loom/internal/indexers"
 	"github.com/ebenderooock/loom/internal/kernel/config"
 	"github.com/ebenderooock/loom/internal/movies"
+	"github.com/ebenderooock/loom/internal/musicsearch"
 	"github.com/ebenderooock/loom/internal/safety"
 	"github.com/ebenderooock/loom/internal/server"
 	"github.com/ebenderooock/loom/internal/storage"
@@ -87,6 +88,15 @@ func wireDownloads(
 		autosearch.WithSearchLogEnabled(srv.Features().EnabledFunc(featureflags.KeySearchLog)),
 	)
 	srv.SetAutoSearchEngine(autoSearchEngine)
+
+	// Music acquisition engine — self-contained parallel to autosearch that
+	// reuses only the media-agnostic indexer transport and download registry.
+	if media.musicRepo != nil {
+		musicSearchEngine := musicsearch.NewEngine(
+			indexerSvc, downloadSvc.Registry(), media.musicRepo, logger,
+		)
+		srv.SetMusicSearch(musicSearchEngine)
+	}
 
 	// Import pipeline
 	importMode := imports.ImportMode(cfg.MediaManagement.ImportMode)

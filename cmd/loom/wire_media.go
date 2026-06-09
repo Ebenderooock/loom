@@ -37,6 +37,7 @@ type mediaWiring struct {
 	qpStore           *qualityprofiles.Store
 	notifSvc          notifications.Service
 	importListSyncMgr *importlists.SyncManager
+	musicRepo         music.Repository
 }
 
 // wireMedia constructs all media-related services (scanner, organizer,
@@ -75,7 +76,8 @@ func wireMedia(
 
 	// Music (artists/albums/tracks) — MusicBrainz metadata provider.
 	mbProvider := musicbrainz.NewProvider(musicbrainz.NewClient(musicbrainz.DefaultConfig()))
-	musicSvc := music.NewService(music.NewRepository(db.DB()), mbProvider, logger)
+	musicRepo := music.NewRepository(db.DB())
+	musicSvc := music.NewService(musicRepo, mbProvider, logger)
 	srv.SetMusic(musicSvc)
 
 	musicScannerSvc := scanner.NewMusicScanner(musicSvc, logger)
@@ -168,6 +170,7 @@ func wireMedia(
 		qpStore:           qpStore,
 		notifSvc:          notifSvc,
 		importListSyncMgr: importListSyncMgr,
+		musicRepo:         musicRepo,
 	}, nil
 }
 
