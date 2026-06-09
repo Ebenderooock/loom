@@ -176,17 +176,20 @@ export function CalendarPage() {
 
 function EventPill({ event }: { event: CalendarEvent }) {
   const isMovie = event.type === "movie";
+  const isAlbum = event.type === "album";
   const isMissing = event.status === "missing";
 
-  const label = isMovie
+  const label = isMovie || isAlbum
     ? event.title
     : `${event.seriesTitle ?? "Unknown"} — S${String(event.season).padStart(2, "0")}E${String(event.episode).padStart(2, "0")}`;
 
   const tooltip = isMovie
     ? `${event.title}${event.year ? ` (${event.year})` : ""}${event.releaseType && event.releaseType !== "release" ? ` [${event.releaseType}]` : ""}`
-    : `${event.seriesTitle ?? "Unknown"} — S${String(event.season).padStart(2, "0")}E${String(event.episode).padStart(2, "0")} — ${event.episodeTitle ?? event.title}`;
+    : isAlbum
+      ? event.title
+      : `${event.seriesTitle ?? "Unknown"} — S${String(event.season).padStart(2, "0")}E${String(event.episode).padStart(2, "0")} — ${event.episodeTitle ?? event.title}`;
 
-  // Color scheme: movies=blue, episodes=purple, theatrical=amber, digital=teal
+  // Color scheme: movies=blue, episodes=purple, theatrical=amber, digital=teal, albums=pink
   const colorMap = {
     movie: isMissing
       ? "border-blue-500/50 text-blue-400"
@@ -200,21 +203,28 @@ function EventPill({ event }: { event: CalendarEvent }) {
     episode: isMissing
       ? "border-purple-500/50 text-purple-400"
       : "bg-purple-600 hover:bg-purple-700 text-white",
+    album: isMissing
+      ? "border-pink-500/50 text-pink-400"
+      : "bg-pink-600 hover:bg-pink-700 text-white",
   };
 
   const movieColorKeys: Record<string, keyof typeof colorMap> = {
     theatrical: "theatrical",
     digital: "digital",
   };
-  const colorKey = isMovie
+  const colorKey: keyof typeof colorMap = isMovie
     ? (movieColorKeys[event.releaseType ?? ""] ?? "movie")
-    : "episode";
+    : isAlbum
+      ? "album"
+      : "episode";
   const releaseLabel =
     event.releaseType === "theatrical"
       ? "🎬 "
       : event.releaseType === "digital"
         ? "💿 "
-        : "";
+        : isAlbum
+          ? "🎵 "
+          : "";
 
   return (
     <Badge

@@ -110,6 +110,25 @@ const seriesRoute = createRoute({
   }),
 });
 
+const musicRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/music",
+  component: lazyRouteComponent(() => import("@/pages/music"), "MusicPage"),
+  pendingComponent: PageLoader,
+  errorComponent: ErrorFallback,
+});
+
+const musicArtistRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/music/$artistId",
+  component: lazyRouteComponent(
+    () => import("@/pages/music-artist"),
+    "MusicArtistPage",
+  ),
+  pendingComponent: PageLoader,
+  errorComponent: ErrorFallback,
+});
+
 const discoverRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/discover",
@@ -241,6 +260,11 @@ const settingsCustomFormatsRoute = settingsChild(
   "custom-formats",
   () => import("@/pages/custom-formats"),
   "CustomFormatsPage",
+);
+const settingsMusicRoute = settingsChild(
+  "music",
+  () => import("@/pages/music-settings"),
+  "MusicProfilesPage",
 );
 const settingsLanguageProfilesRoute = settingsChild(
   "language-profiles",
@@ -413,6 +437,8 @@ const routeTree = rootRoute.addChildren([
   libraryRoute,
   moviesRoute,
   seriesRoute,
+  musicRoute,
+  musicArtistRoute,
   discoverRoute,
   requestsRoute,
   analyticsRoute,
@@ -428,6 +454,7 @@ const routeTree = rootRoute.addChildren([
     settingsMediaPreferencesRoute,
     settingsQualityProfilesRoute,
     settingsCustomFormatsRoute,
+    settingsMusicRoute,
     settingsLanguageProfilesRoute,
     settingsDownloadClientsRoute,
     settingsDownloadSafetyRoute,

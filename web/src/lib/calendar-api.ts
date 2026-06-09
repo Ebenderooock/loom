@@ -8,7 +8,7 @@ import { apiFetch } from "@/lib/fetch";
 export interface CalendarEvent {
   id: string;
   title: string;
-  type: "movie" | "episode";
+  type: "movie" | "episode" | "album";
   date: string;
   status: "missing" | "downloaded";
   year?: number;
@@ -16,6 +16,7 @@ export interface CalendarEvent {
   season?: number;
   episode?: number;
   episodeTitle?: string;
+  artist?: string;
   releaseType?: "release" | "theatrical" | "digital";
 }
 

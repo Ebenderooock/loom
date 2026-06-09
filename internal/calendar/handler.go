@@ -23,6 +23,7 @@ type Event struct {
 	Season       int    `json:"season,omitempty"`
 	Episode      int    `json:"episode,omitempty"`
 	EpisodeTitle string `json:"episodeTitle,omitempty"`
+	Artist       string `json:"artist,omitempty"`
 }
 
 // Handler serves the calendar API.
@@ -157,6 +158,45 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 	if err := epRows.Err(); err != nil {
 		writeError(w, http.StatusInternalServerError, fmt.Sprintf("iterate episodes: %v", err))
 		return
+	}
+
+	// Query monitored albums with a release_date in range (music). The albums
+	// tables only contain rows once the music capability is used, so this is a
+	// no-op for installs that never enabled it.
+	albumRows, err := h.db.QueryContext(r.Context(),
+		`SELECT al.id, al.title, al.release_date, ar.name,
+		        EXISTS (SELECT 1 FROM track_files tf WHERE tf.album_id = al.id AND tf.deleted_at IS NULL)
+		 FROM albums al
+		 JOIN artists ar ON ar.id = al.artist_id
+		 WHERE al.deleted_at IS NULL AND al.release_date != ''
+		   AND al.release_date >= ? AND al.release_date <= ?`,
+		startStr, endStr)
+	if err == nil {
+		defer albumRows.Close()
+		for albumRows.Next() {
+			var id, title, releaseDate, artist string
+			var hasFile bool
+			if err := albumRows.Scan(&id, &title, &releaseDate, &artist, &hasFile); err != nil {
+				writeError(w, http.StatusInternalServerError, fmt.Sprintf("scan album: %v", err))
+				return
+			}
+			calStatus := "missing"
+			if hasFile {
+				calStatus = "downloaded"
+			}
+			events = append(events, Event{
+				ID:     id,
+				Title:  fmt.Sprintf("%s - %s", artist, title),
+				Type:   "album",
+				Date:   releaseDate,
+				Status: calStatus,
+				Artist: artist,
+			})
+		}
+		if err := albumRows.Err(); err != nil {
+			writeError(w, http.StatusInternalServerError, fmt.Sprintf("iterate albums: %v", err))
+			return
+		}
 	}
 
 	writeJSON(w, http.StatusOK, events)

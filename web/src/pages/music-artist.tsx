@@ -1,0 +1,267 @@
+import { useState } from "react";
+import { useParams, Link } from "@tanstack/react-router";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import {
+  ArrowLeft,
+  Music,
+  Search,
+  Trash2,
+  Disc3,
+  Loader2,
+} from "lucide-react";
+import { toast } from "sonner";
+import { useSetPageHeader } from "@/hooks/use-page-header";
+import {
+  useArtist,
+  useSetArtistMonitoring,
+  useSetAlbumMonitored,
+  useSearchAlbum,
+  useDeleteArtist,
+  type Album,
+} from "@/lib/music-api";
+
+function albumYear(a: Album): string {
+  return a.release_date ? a.release_date.slice(0, 4) : "—";
+}
+
+function AlbumRow({ album }: { album: Album }) {
+  const setMonitored = useSetAlbumMonitored();
+  const search = useSearchAlbum();
+  const tracks = album.tracks ?? [];
+  const present = tracks.filter((t) => t.has_file).length;
+
+  const handleSearch = async () => {
+    try {
+      const res = await search.mutateAsync(album.id);
+      toast.success(`Grabbed “${res.title}” (${res.quality_name || "unknown"})`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Search failed");
+    }
+  };
+
+  return (
+    <div className="flex items-center gap-3 rounded-md border border-border px-3 py-2.5">
+      <Switch
+        checked={album.monitored}
+        onCheckedChange={(v) =>
+          setMonitored.mutate({ id: album.id, monitored: v })
+        }
+        aria-label="Monitor album"
+      />
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded bg-muted">
+        {album.cover_art_url ? (
+          <img
+            src={album.cover_art_url}
+            alt=""
+            loading="lazy"
+            className="h-full w-full object-cover"
+          />
+        ) : (
+          <Disc3 className="h-5 w-5 text-muted-foreground" />
+        )}
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="truncate text-sm font-medium">{album.title}</div>
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <span>{albumYear(album)}</span>
+          {album.album_type && <span>· {album.album_type}</span>}
+          {tracks.length > 0 && (
+            <span>
+              · {present}/{tracks.length} tracks
+            </span>
+          )}
+        </div>
+      </div>
+      {tracks.length > 0 && present === tracks.length ? (
+        <Badge variant="secondary" className="text-[10px]">
+          Complete
+        </Badge>
+      ) : (
+        <Badge variant="outline" className="text-[10px]">
+          Missing
+        </Badge>
+      )}
+      <Button
+        size="sm"
+        variant="ghost"
+        disabled={search.isPending}
+        onClick={handleSearch}
+      >
+        {search.isPending ? (
+          <Loader2 className="h-4 w-4 animate-spin" />
+        ) : (
+          <Search className="h-4 w-4" />
+        )}
+      </Button>
+    </div>
+  );
+}
+
+export function MusicArtistPage() {
+  const { artistId } = useParams({ from: "/music/$artistId" });
+  const { data: artist, isLoading } = useArtist(artistId);
+  const setMonitoring = useSetArtistMonitoring();
+  const deleteArtist = useDeleteArtist();
+  const [deleteOpen, setDeleteOpen] = useState(false);
+
+  useSetPageHeader(artist?.name ?? "Artist");
+
+  if (isLoading) {
+    return (
+      <div className="space-y-4 px-6 pb-6 pt-2">
+        <Skeleton className="h-32 w-full rounded-lg" />
+        <Skeleton className="h-12 w-full" />
+        <Skeleton className="h-12 w-full" />
+      </div>
+    );
+  }
+
+  if (!artist) {
+    return (
+      <div className="px-6 py-12 text-center text-sm text-muted-foreground">
+        Artist not found.{" "}
+        <Link to="/music" className="text-accent underline">
+          Back to Music
+        </Link>
+      </div>
+    );
+  }
+
+  const albums = artist.albums ?? [];
+  const monitored = artist.monitoring_status === "monitored";
+  const stats = artist.stats;
+
+  return (
+    <div className="px-6 pb-6 pt-2">
+      <Link
+        to="/music"
+        className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
+      >
+        <ArrowLeft className="h-4 w-4" />
+        Music
+      </Link>
+
+      <div className="mb-6 flex gap-4">
+        <div className="flex h-32 w-32 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-muted">
+          {artist.image_url ? (
+            <img
+              src={artist.image_url}
+              alt={artist.name}
+              className="h-full w-full object-cover"
+            />
+          ) : (
+            <Music className="h-12 w-12 text-muted-foreground" />
+          )}
+        </div>
+        <div className="flex flex-1 flex-col">
+          <h1 className="text-2xl font-semibold">{artist.name}</h1>
+          {artist.disambiguation && (
+            <p className="text-sm text-muted-foreground">
+              {artist.disambiguation}
+            </p>
+          )}
+          <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
+            {artist.artist_type && <Badge variant="outline">{artist.artist_type}</Badge>}
+            {artist.country && <Badge variant="outline">{artist.country}</Badge>}
+            {stats && (
+              <span className="self-center">
+                {stats.albumCount} albums · {stats.trackFileCount}/
+                {stats.trackCount} tracks
+              </span>
+            )}
+          </div>
+          {artist.overview && (
+            <p className="mt-2 line-clamp-3 text-sm text-muted-foreground">
+              {artist.overview}
+            </p>
+          )}
+          <div className="mt-auto flex items-center gap-2 pt-3">
+            <Button
+              size="sm"
+              variant={monitored ? "secondary" : "outline"}
+              onClick={() =>
+                setMonitoring.mutate({
+                  id: artist.id,
+                  status: monitored ? "unmonitored" : "monitored",
+                })
+              }
+            >
+              {monitored ? "Monitored" : "Unmonitored"}
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="text-destructive"
+              onClick={() => setDeleteOpen(true)}
+            >
+              <Trash2 className="mr-1.5 h-4 w-4" />
+              Remove
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      <h2 className="mb-2 text-sm font-semibold text-muted-foreground">
+        Albums
+      </h2>
+      {albums.length === 0 ? (
+        <p className="py-8 text-center text-sm text-muted-foreground">
+          No albums found for this artist.
+        </p>
+      ) : (
+        <div className="space-y-2">
+          {albums
+            .slice()
+            .sort((a, b) => (b.release_date || "").localeCompare(a.release_date || ""))
+            .map((al) => (
+              <AlbumRow key={al.id} album={al} />
+            ))}
+        </div>
+      )}
+
+      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Remove {artist.name}</DialogTitle>
+            <DialogDescription>
+              This removes the artist from your library. Media files on disk are
+              not deleted.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="mt-4 flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setDeleteOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={deleteArtist.isPending}
+              onClick={async () => {
+                try {
+                  await deleteArtist.mutateAsync(artist.id);
+                  toast.success(`Removed ${artist.name}`);
+                  window.history.back();
+                } catch (e) {
+                  toast.error(
+                    e instanceof Error ? e.message : "Failed to remove",
+                  );
+                }
+              }}
+            >
+              Remove
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}

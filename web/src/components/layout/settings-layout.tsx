@@ -19,6 +19,7 @@ import {
   Network,
   Palette,
   Puzzle,
+  Music,
   Radio,
   RefreshCw,
   Repeat,
@@ -112,6 +113,12 @@ export const SETTINGS_GROUPS: SettingsNavGroup[] = [
         to: "/settings/custom-formats",
         label: "Custom Formats",
         Icon: Tags,
+        kind: "page",
+      },
+      {
+        to: "/settings/music",
+        label: "Music Profiles",
+        Icon: Music,
         kind: "page",
       },
       {

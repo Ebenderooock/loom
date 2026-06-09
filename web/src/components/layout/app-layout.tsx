@@ -12,6 +12,7 @@ import {
   LayoutDashboard,
   ListTodo,
   Menu,
+  Music,
   Search,
   Settings,
   Tv,
@@ -141,15 +142,26 @@ function SidebarNav({
   const reviewCount = useReviewCount();
   const { user } = useAuth();
   const analyticsEnabled = useFeatureEnabled("media_analytics");
+  const musicEnabled = useFeatureEnabled("music", false);
   const showAnalytics = analyticsEnabled && user?.role === "admin";
 
   const navItems = React.useMemo(() => {
-    if (!showAnalytics) return PRIMARY_NAV;
+    let items = PRIMARY_NAV;
+    if (musicEnabled) {
+      const seriesIdx = items.findIndex((i) => i.to === "/series");
+      const musicItem = { to: "/music", label: "Music", Icon: Music } as NavItem;
+      items = [
+        ...items.slice(0, seriesIdx + 1),
+        musicItem,
+        ...items.slice(seriesIdx + 1),
+      ];
+    }
+    if (!showAnalytics) return items;
     return [
-      ...PRIMARY_NAV,
+      ...items,
       { to: "/analytics", label: "Analytics", Icon: Activity } as NavItem,
     ];
-  }, [showAnalytics]);
+  }, [showAnalytics, musicEnabled]);
 
   const isActive = (to: string) =>
     to === "/" ? path === "/" : path === to || path.startsWith(`${to}/`);
