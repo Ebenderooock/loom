@@ -22,6 +22,8 @@ type fakeIndexer struct {
 	results   []indexers.Result
 	searchErr error
 	testErr   error
+	download  []byte
+	downErr   error
 	calls     atomic.Int32
 }
 
@@ -51,6 +53,20 @@ func (f *fakeIndexer) Test(ctx context.Context) error {
 		}
 	}
 	return f.testErr
+}
+
+func (f *fakeIndexer) FetchDownload(ctx context.Context, _ string) ([]byte, error) {
+	if f.delay > 0 {
+		select {
+		case <-time.After(f.delay):
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
+	if f.downErr != nil {
+		return nil, f.downErr
+	}
+	return append([]byte(nil), f.download...), nil
 }
 
 func TestRegistryConcurrentRegisterGet(t *testing.T) {

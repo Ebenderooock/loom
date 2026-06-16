@@ -275,6 +275,7 @@ export async function grabRelease(
 
 export interface TorrentEngineSummary {
   total_torrents: number;
+  queued: number;
   downloading: number;
   seeding: number;
   paused: number;

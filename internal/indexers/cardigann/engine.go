@@ -173,6 +173,22 @@ func (e *Engine) Test(ctx context.Context) error {
 	return nil
 }
 
+// FetchDownload implements indexers.DownloadFetcher. It reuses the
+// engine's logged-in HTTP client so tracker auth cookies, proxy routing,
+// and anti-bot headers are preserved for .torrent downloads.
+func (e *Engine) FetchDownload(ctx context.Context, rawURL string) ([]byte, error) {
+	if err := e.ensureLoggedIn(ctx); err != nil {
+		return nil, err
+	}
+	fullURL, err := e.resolveURL(rawURL)
+	if err != nil {
+		return nil, err
+	}
+	headers := http.Header{}
+	headers.Set("Accept", "application/x-bittorrent, application/octet-stream, */*")
+	return e.fetch(ctx, http.MethodGet, fullURL, nil, headers)
+}
+
 // configFieldsWithDefaults merges operator-supplied config fields with
 // default values from the YAML definition's settings block. Operator
 // values always win; defaults fill gaps so templates like

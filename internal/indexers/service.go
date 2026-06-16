@@ -247,6 +247,22 @@ func (s *Service) Get(ctx context.Context, id string) (Definition, error) {
 	return s.repo.Get(ctx, id)
 }
 
+// FetchDownload retrieves a release download URL through the live indexer
+// instance so tracker cookies, custom headers, and per-indexer proxies are
+// preserved. It returns an error when the indexer is missing or does not
+// implement DownloadFetcher.
+func (s *Service) FetchDownload(ctx context.Context, id, rawURL string) ([]byte, error) {
+	ix, ok := s.registry.Get(id)
+	if !ok {
+		return nil, fmt.Errorf("indexer %q not found", id)
+	}
+	df, ok := ix.(DownloadFetcher)
+	if !ok {
+		return nil, fmt.Errorf("indexer %q does not support authenticated downloads", id)
+	}
+	return df.FetchDownload(ctx, rawURL)
+}
+
 // List returns every persisted Definition with health and rate-limit
 // attached.
 func (s *Service) List(ctx context.Context) ([]DefinitionWithHealth, error) {

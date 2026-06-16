@@ -61,6 +61,33 @@ func TestHealthCheckerRunsAcrossRegistry(t *testing.T) {
 	}
 }
 
+func TestServiceFetchDownloadUsesLiveIndexer(t *testing.T) {
+	t.Parallel()
+
+	_, raw := openTestDB(t)
+	repo := indexers.NewSQLiteRepository(raw)
+	svc, err := indexers.NewService(indexers.ServiceOptions{
+		Repository: repo,
+		Logger:     quietLogger(),
+	})
+	if err != nil {
+		t.Fatalf("NewService: %v", err)
+	}
+
+	ix := &fakeIndexer{id: "dl", name: "dl", download: []byte("torrent-bytes")}
+	if err := svc.Registry().Replace(ix); err != nil {
+		t.Fatalf("register indexer: %v", err)
+	}
+
+	got, err := svc.FetchDownload(context.Background(), "dl", "https://tracker.example/release.torrent")
+	if err != nil {
+		t.Fatalf("FetchDownload: %v", err)
+	}
+	if string(got) != "torrent-bytes" {
+		t.Fatalf("FetchDownload bytes = %q, want %q", string(got), "torrent-bytes")
+	}
+}
+
 // failingIndexer always errors from Test() so we can verify failure
 // paths persist a "failed" status.
 type failingIndexer struct{ id string }
