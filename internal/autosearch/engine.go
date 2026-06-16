@@ -1329,7 +1329,18 @@ func buildDownloadRequest(res *indexers.Result) downloads.AddRequest {
 	if res.MagnetURI != "" {
 		req.Magnet = res.MagnetURI
 	} else if res.Infohash != "" {
-		req.Magnet = fmt.Sprintf("magnet:?xt=urn:btih:%s", res.Infohash)
+		// Construct a magnet URI with well-known public trackers so that
+		// infohash-only results (e.g. TPB via apibay.org) can find peers
+		// via tracker announces instead of relying solely on DHT.
+		req.Magnet = fmt.Sprintf(
+			"magnet:?xt=urn:btih:%s"+
+				"&tr=udp://tracker.opentrackr.org:1337/announce"+
+				"&tr=udp://open.demonii.com:1337/announce"+
+				"&tr=udp://open.tracker.cl:1337/announce"+
+				"&tr=udp://tracker.torrent.eu.org:451/announce"+
+				"&tr=udp://9.rarbg.to:2720/announce",
+			res.Infohash,
+		)
 	}
 	if res.Link != "" {
 		// Some indexers (e.g. EZTV) store the magnet URI in the Link field
