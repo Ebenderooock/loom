@@ -131,7 +131,12 @@ type Engine struct {
 	logger  *slog.Logger
 	items   map[string]*trackedTorrent // keyed by lowercase infohash hex
 	cancel  context.CancelFunc
-	dataDir string
+	// engineCtx is the lifecycle context started by Start(). It is used
+	// for metadata-resolution waits so they are tied to the engine's
+	// lifetime rather than to the caller's (e.g. HTTP request) context.
+	// nil until Start() is called; falls back to context.Background().
+	engineCtx context.Context
+	dataDir   string
 
 	// Live rate limiters shared with the anacrolix client config so the
 	// global download/upload caps can be changed at runtime.
@@ -266,6 +271,7 @@ func (e *Engine) Start(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
 	e.mu.Lock()
 	e.cancel = cancel
+	e.engineCtx = ctx
 	e.mu.Unlock()
 
 	e.logger.Info("seeding supervisor started")
@@ -301,6 +307,19 @@ func (e *Engine) Close() error {
 	return nil
 }
 
+// lifecycleCtx returns the engine's lifecycle context, falling back to
+// context.Background() when Start() has not yet been called (e.g. in
+// tests). Callers must NOT hold e.mu when calling this.
+func (e *Engine) lifecycleCtx() context.Context {
+	e.mu.RLock()
+	ctx := e.engineCtx
+	e.mu.RUnlock()
+	if ctx == nil {
+		return context.Background()
+	}
+	return ctx
+}
+
 // AddMagnet adds a torrent via magnet URI. It waits for metadata to
 // resolve (up to metadataTimeout or ctx deadline) and returns the
 // lowercase infohash as the stable item ID.
@@ -320,8 +339,12 @@ func (e *Engine) AddMagnet(ctx context.Context, magnet string, meta torrentMeta)
 		t.AddTrackers(defaultAnnounceList())
 	}
 
-	// Wait for metadata with a timeout.
-	waitCtx, waitCancel := context.WithTimeout(ctx, metadataTimeout)
+	// Wait for metadata with a timeout. Use the engine's lifecycle context
+	// rather than the caller's context so that a short-lived HTTP request
+	// context being cancelled (e.g. client disconnect, write timeout) does
+	// not abort metadata resolution mid-flight and leave the torrent in a
+	// broken state.
+	waitCtx, waitCancel := context.WithTimeout(e.lifecycleCtx(), metadataTimeout)
 	defer waitCancel()
 
 	select {
@@ -382,9 +405,11 @@ func (e *Engine) AddTorrentBytes(ctx context.Context, data []byte, meta torrentM
 		return "", fmt.Errorf("builtin/torrent: adding torrent: %w", err)
 	}
 
-	// Wait for info — for a .torrent file this should be immediate
-	// since the metainfo contains the info dict.
-	waitCtx, waitCancel := context.WithTimeout(ctx, metadataTimeout)
+	// Wait for info — for a .torrent file this should be immediate since
+	// the metainfo contains the info dict. Use the engine's lifecycle
+	// context (not the caller's) so a cancelled HTTP request context does
+	// not abort an otherwise-instant wait and return a spurious error.
+	waitCtx, waitCancel := context.WithTimeout(e.lifecycleCtx(), metadataTimeout)
 	defer waitCancel()
 
 	select {
