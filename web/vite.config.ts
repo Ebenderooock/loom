@@ -31,7 +31,7 @@ export default defineConfig({
     proxy: Object.fromEntries(
       proxyTargets.map((p) => [
         p,
-        { target: "http://localhost:8989", changeOrigin: true },
+        { target: "http://localhost:1925", changeOrigin: true },
       ]),
     ),
   },

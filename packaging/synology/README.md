@@ -63,7 +63,7 @@ The resulting `.spk` files land in `spk/loom/packages/`. Install them on DSM via
 
 - **State directory:** all config + the sqlite DB live under `${SYNOPKG_PKGVAR}`
   (`LOOM_CONFIG_DIR` and `LOOM_DATA_DIR`). DSM preserves this across upgrades.
-- **Port:** Loom serves HTTP on `SERVICE_PORT` (default `8989`). Put it behind the
+- **Port:** Loom serves HTTP on `SERVICE_PORT` (default `1925`). Put it behind the
   DSM reverse proxy (Control Panel → Login Portal → Advanced → Reverse Proxy) for
   TLS — Loom does not terminate TLS itself.
 - **Media access (important):** the package runs as an isolated DSM service user

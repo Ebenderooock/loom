@@ -386,7 +386,7 @@ func applyDefaults(v *viper.Viper) {
 	v.SetDefault("data_dir", filepath.Join(cwd, "config"))
 	v.SetDefault("hot_reload", false)
 
-	v.SetDefault("http.addr", ":8989")
+	v.SetDefault("http.addr", ":1925")
 	v.SetDefault("http.read_timeout", 30)
 	v.SetDefault("http.write_timeout", 60)
 	v.SetDefault("http.shutdown_timeout", 30)

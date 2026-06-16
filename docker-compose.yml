@@ -4,10 +4,10 @@ services:
     container_name: loom
     restart: unless-stopped
     ports:
-      - "8989:8989"
+      - "1925:1925"
     environment:
       LOOM_LOG_LEVEL: info
-      LOOM_HTTP_ADDR: ":8989"
+      LOOM_HTTP_ADDR: ":1925"
       # Switch to Postgres by uncommenting:
       # LOOM_DATABASE_URL: "postgres://loom:loom@postgres:5432/loom?sslmode=disable"
     volumes:

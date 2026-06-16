@@ -31,7 +31,7 @@ import (
 func cmdServe(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
 	configPath := fs.String("config", "", "path to loom.yaml (overrides $LOOM_CONFIG_DIR/loom.yaml)")
-	addr := fs.String("addr", "", "HTTP listen address (e.g. :8989); overrides config")
+	addr := fs.String("addr", "", "HTTP listen address (e.g. :1925); overrides config")
 	logLevel := fs.String("log-level", "", "log level: debug|info|warn|error")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -317,7 +317,7 @@ func defaultHealthURL() string {
 	if v := os.Getenv("LOOM_HEALTH_URL"); v != "" {
 		return v
 	}
-	return "http://127.0.0.1:8989"
+	return "http://127.0.0.1:1925"
 }
 
 func cmdMigrate(ctx context.Context, args []string) error {

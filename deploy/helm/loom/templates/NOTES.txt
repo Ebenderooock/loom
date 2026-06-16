@@ -13,8 +13,8 @@ Loom has been deployed!
   NOTE: It may take a few minutes for the LoadBalancer IP to be available.
   kubectl get --namespace {{ .Release.Namespace }} svc -w {{ include "loom.fullname" . }}
 {{- else }}
-  kubectl --namespace {{ .Release.Namespace }} port-forward svc/{{ include "loom.fullname" . }} 8989:{{ .Values.service.port }}
-  echo "Visit http://localhost:8989"
+  kubectl --namespace {{ .Release.Namespace }} port-forward svc/{{ include "loom.fullname" . }} 1925:{{ .Values.service.port }}
+  echo "Visit http://localhost:1925"
 {{- end }}
 
 2. On first run, Loom will prompt you to create an admin account.

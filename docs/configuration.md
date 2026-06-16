@@ -32,7 +32,7 @@ real values look like. Every key gets an `example:` line.
 | `config_dir` | `LOOM_CONFIG_DIR` | string | `$PWD/config` | no | Where the YAML file is read from. |
 | `data_dir` | `LOOM_DATA_DIR` | string | `$PWD/config` | no | Persistent state root (DB file, caches, logs). |
 | `hot_reload` | `LOOM_HOT_RELOAD` | bool | `false` | no | Enable file-watcher hot-reload for safe keys. |
-| `http.addr` | `LOOM_HTTP_ADDR` | string | `:8989` | no | HTTP listen address. |
+| `http.addr` | `LOOM_HTTP_ADDR` | string | `:1925` | no | HTTP listen address. |
 | `http.read_timeout` | `LOOM_HTTP_READ_TIMEOUT` | int (s) | `30` | no | HTTP read header timeout. |
 | `http.write_timeout` | `LOOM_HTTP_WRITE_TIMEOUT` | int (s) | `60` | no | HTTP write timeout. |
 | `http.shutdown_timeout` | `LOOM_HTTP_SHUTDOWN_TIMEOUT` | int (s) | `30` | no | Graceful shutdown deadline. |
@@ -75,7 +75,7 @@ data_dir: /config                       # example: writable state directory
 hot_reload: true                        # example: watch loom.yaml for safe-key changes
 
 http:
-  addr: ":8989"                         # example: bind all interfaces, port 8989
+  addr: ":1925"                         # example: bind all interfaces, port 1925
   read_timeout: 30                      # example: 30s for slow uploaders
   write_timeout: 60                     # example: 60s ceiling for streaming responses
   shutdown_timeout: 30                  # example: 30s grace on SIGTERM
@@ -154,7 +154,7 @@ data_dir: /config
 hot_reload: true
 
 http:
-  addr: ":8989"
+  addr: ":1925"
   url_base: ""
 
 log:

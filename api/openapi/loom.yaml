@@ -17,7 +17,7 @@ info:
     name: Loom maintainers
     url: https://github.com/ebenderooock/loom
 servers:
-  - url: http://localhost:8989
+  - url: http://localhost:1925
     description: Local dev server.
   - url: https://{host}
     description: Self-hosted instance behind a reverse proxy.

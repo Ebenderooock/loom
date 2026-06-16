@@ -23,10 +23,10 @@ mkdir -p ./run
 LOOM_CONFIG_DIR=./run \
 LOOM_DATA_DIR=./run \
 LOOM_STORAGE_SQLITE_PATH=./run/loom.db \
-  ./dist/loom serve  # starts the HTTP server on :8989
+  ./dist/loom serve  # starts the HTTP server on :1925
 ```
 
-Open <http://localhost:8989/healthz> — you should see `{"status":"ok"}`.
+Open <http://localhost:1925/healthz> — you should see `{"status":"ok"}`.
 The default `storage.sqlite.path` is `/data/loom.db` (designed for the
 container layout); the env-var overrides above make local runs work
 without root.
@@ -58,7 +58,7 @@ In another, the frontend:
 ```bash
 cd web
 pnpm install
-pnpm dev          # Vite on http://localhost:5173, proxies /api to :8989
+pnpm dev          # Vite on http://localhost:5173, proxies /api to :1925
 ```
 
 When the React build is consumed by the backend (production image), the

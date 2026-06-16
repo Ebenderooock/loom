@@ -8,10 +8,10 @@ USER nonroot:nonroot
 WORKDIR /
 COPY loom /usr/local/bin/loom
 
-EXPOSE 8989
+EXPOSE 1925
 VOLUME ["/config", "/media"]
 
-ENV LOOM_HTTP_ADDR=:8989 \
+ENV LOOM_HTTP_ADDR=:1925 \
     LOOM_CONFIG_DIR=/config \
     LOOM_DATA_DIR=/config
 

@@ -76,13 +76,13 @@ working:
 ### Docker (single container)
 
 ```bash
-docker run --rm -p 8989:8989 \
+docker run --rm -p 1925:1925 \
   -v /opt/loom/config:/config \
   -v /mnt/media:/media \
   ghcr.io/ebenderooock/loom:latest
 ```
 
-Open <http://localhost:8989/healthz>. Images are published to
+Open <http://localhost:1925/healthz>. Images are published to
 `ghcr.io/ebenderooock/loom` (`:latest` and per-release tags such as
 `:0.1.0`) on every tagged release.
 
@@ -101,7 +101,7 @@ LOOM_DATA_DIR=./run \
 LOOM_STORAGE_SQLITE_PATH=./run/loom.db \
   ./dist/loom serve
 # in another terminal:
-curl -s http://localhost:8989/api/v1/system/status
+curl -s http://localhost:1925/api/v1/system/status
 # {"buildDate":"...","commit":"...","engine":"sqlite","version":"..."}
 ```
 
@@ -111,7 +111,7 @@ curl -s http://localhost:8989/api/v1/system/status
 git clone https://github.com/ebenderooock/loom.git
 cd loom
 docker compose up -d
-# Loom        http://localhost:8989
+# Loom        http://localhost:1925
 # qBittorrent http://localhost:8080
 # Prometheus  http://localhost:9090
 # Grafana     http://localhost:3000  (admin/admin)

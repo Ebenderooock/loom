@@ -8,12 +8,12 @@ This page covers the supported deployment shapes.
 The published image lives at `ghcr.io/ebenderooock/loom:latest` (and
 `:v<semver>` once tagged releases begin). It is built `FROM
 gcr.io/distroless/static-debian12:nonroot`, runs as the unprivileged
-`nonroot` user, and exposes port 8989.
+`nonroot` user, and exposes port 1925.
 
 ### Single container
 
 ```bash
-docker run --rm -p 8989:8989 \
+docker run --rm -p 1925:1925 \
   -v /opt/loom/config:/config \
   -v /mnt/media:/media \
   ghcr.io/ebenderooock/loom:latest
@@ -34,7 +34,7 @@ commented out in the file:
 ```bash
 docker compose up -d
 # UIs:
-#  Loom        http://localhost:8989
+#  Loom        http://localhost:1925
 #  qBittorrent http://localhost:8080
 #  Prometheus  http://localhost:9090
 #  Grafana     http://localhost:3000  (admin/admin)
@@ -46,7 +46,7 @@ and setting `LOOM_DATABASE_URL=postgres://loom:loom@postgres:5432/loom?sslmode=d
 ### Health probes
 
 The image's `HEALTHCHECK` runs `loom healthcheck`, which probes
-`/healthz`. Override with `LOOM_HEALTH_URL=http://127.0.0.1:8989` if
+`/healthz`. Override with `LOOM_HEALTH_URL=http://127.0.0.1:1925` if
 you've changed the listen address.
 
 ## Kubernetes
@@ -102,7 +102,7 @@ services:
       - traefik.http.routers.loom.rule=Host(`loom.example.com`)
       - traefik.http.routers.loom.entrypoints=websecure
       - traefik.http.routers.loom.tls.certresolver=letsencrypt
-      - traefik.http.services.loom.loadbalancer.server.port=8989
+      - traefik.http.services.loom.loadbalancer.server.port=1925
 ```
 
 ### Caddy
@@ -110,7 +110,7 @@ services:
 ```caddyfile
 loom.example.com {
   encode zstd gzip
-  reverse_proxy 127.0.0.1:8989
+  reverse_proxy 127.0.0.1:1925
 }
 ```
 
@@ -125,7 +125,7 @@ server {
   ssl_certificate_key /etc/letsencrypt/live/loom.example.com/privkey.pem;
 
   location / {
-    proxy_pass http://127.0.0.1:8989;
+    proxy_pass http://127.0.0.1:1925;
     proxy_http_version 1.1;
     proxy_set_header Host              $host;
     proxy_set_header X-Real-IP         $remote_addr;

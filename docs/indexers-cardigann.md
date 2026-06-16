@@ -98,7 +98,7 @@ Drop `definitions/cardigann/exampletracker.yml` into your data dir,
 then create the indexer:
 
 ```bash
-curl -sS -X POST "http://127.0.0.1:8989/api/v1/indexers/" \
+curl -sS -X POST "http://127.0.0.1:1925/api/v1/indexers/" \
   -H "X-Api-Key: $LOOM_KEY" -H "Content-Type: application/json" \
   -d '{
     "kind": "cardigann",
@@ -115,7 +115,7 @@ Test the credentials:
 
 ```bash
 curl -sS -X POST -H "X-Api-Key: $LOOM_KEY" \
-  http://127.0.0.1:8989/api/v1/indexers/<id>/test
+  http://127.0.0.1:1925/api/v1/indexers/<id>/test
 ```
 
 Search:
@@ -123,7 +123,7 @@ Search:
 ```bash
 curl -sS -X POST -H "X-Api-Key: $LOOM_KEY" -H "Content-Type: application/json" \
   -d '{"query":"ubuntu","categories":[5040]}' \
-  http://127.0.0.1:8989/api/v1/indexers/search
+  http://127.0.0.1:1925/api/v1/indexers/search
 ```
 
 ## Debugging

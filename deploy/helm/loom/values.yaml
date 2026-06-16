@@ -38,7 +38,7 @@ securityContext:
 
 service:
   type: ClusterIP
-  port: 8989
+  port: 1925
 
 # ---------- BitTorrent peer port ----------
 # Exposes the built-in torrent client's listen port so inbound peer

@@ -47,7 +47,7 @@ The default Prometheus collectors are mounted out of the box, so a fresh
 `loom serve` already exposes hundreds of useful series. Confirm with:
 
 ```bash
-$ curl -s http://localhost:8989/metrics | head -20
+$ curl -s http://localhost:1925/metrics | head -20
 # HELP go_build_info Build information about the main Go module.
 # TYPE go_build_info gauge
 go_build_info{checksum="",path="github.com/ebenderooock/loom",version="..."} 1
@@ -77,7 +77,7 @@ scrape_configs:
   - job_name: loom
     metrics_path: /metrics
     static_configs:
-      - targets: ["loom:8989"]
+      - targets: ["loom:1925"]
 ```
 
 Drop it next to a Prometheus container and point Prometheus at it; the

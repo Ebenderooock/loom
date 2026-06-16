@@ -15,7 +15,7 @@ React + TypeScript frontend for [Loom](../README.md).
 
 ```sh
 pnpm install
-pnpm dev            # http://localhost:5173 (proxies /api/*, /healthz, /readyz, /livez, /metrics → :8989)
+pnpm dev            # http://localhost:5173 (proxies /api/*, /healthz, /readyz, /livez, /metrics → :1925)
 pnpm typecheck
 pnpm lint
 pnpm test

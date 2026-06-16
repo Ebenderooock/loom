@@ -70,13 +70,13 @@ integers and are not pre-declared on the Go side.
 
 ## Curl walkthrough
 
-The examples below assume Loom is running on `:8989` and that you have
+The examples below assume Loom is running on `:1925` and that you have
 an API key in `$LOOM_KEY`. See [auth.md](auth.md) for how to mint one.
 
 ### Create
 
 ```bash
-curl -sS -X POST "http://127.0.0.1:8989/api/v1/indexers/" \
+curl -sS -X POST "http://127.0.0.1:1925/api/v1/indexers/" \
   -H "X-Api-Key: $LOOM_KEY" -H "Content-Type: application/json" \
   -d '{
     "id": "demo",
@@ -93,7 +93,7 @@ curl -sS -X POST "http://127.0.0.1:8989/api/v1/indexers/" \
 
 ```bash
 curl -sS -H "X-Api-Key: $LOOM_KEY" \
-  http://127.0.0.1:8989/api/v1/indexers/
+  http://127.0.0.1:1925/api/v1/indexers/
 ```
 
 The list response wraps each `Definition` in a `DefinitionWithHealth`
@@ -103,14 +103,14 @@ that carries the latest `Health` row, when one exists.
 
 ```bash
 curl -sS -H "X-Api-Key: $LOOM_KEY" \
-  http://127.0.0.1:8989/api/v1/indexers/demo/caps
+  http://127.0.0.1:1925/api/v1/indexers/demo/caps
 ```
 
 ### Test (manual health check)
 
 ```bash
 curl -sS -X POST -H "X-Api-Key: $LOOM_KEY" \
-  http://127.0.0.1:8989/api/v1/indexers/demo/test
+  http://127.0.0.1:1925/api/v1/indexers/demo/test
 ```
 
 Returns `{ok, latency_ms, error?}`; the same row is persisted into
@@ -122,7 +122,7 @@ it.
 ```bash
 curl -sS -X POST -H "X-Api-Key: $LOOM_KEY" -H "Content-Type: application/json" \
   -d '{"query":"ubuntu","categories":[4000]}' \
-  http://127.0.0.1:8989/api/v1/indexers/search
+  http://127.0.0.1:1925/api/v1/indexers/search
 ```
 
 Results from every enabled indexer are merged into a single list.

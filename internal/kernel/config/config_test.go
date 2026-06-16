@@ -40,8 +40,8 @@ func TestLoadDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if cfg.HTTP.Addr != ":8989" {
-		t.Errorf("default http.addr = %q, want :8989", cfg.HTTP.Addr)
+	if cfg.HTTP.Addr != ":1925" {
+		t.Errorf("default http.addr = %q, want :1925", cfg.HTTP.Addr)
 	}
 	if cfg.Log.Level != "info" {
 		t.Errorf("default log.level = %q, want info", cfg.Log.Level)

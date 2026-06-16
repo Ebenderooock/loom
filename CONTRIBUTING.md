@@ -78,7 +78,7 @@ cd web && npm run dev
 ### Building a production binary
 
 ```bash
-# Single binary with embedded React UI (serves everything on :8989)
+# Single binary with embedded React UI (serves everything on :1925)
 make build-all
 
 # Run it
@@ -159,7 +159,7 @@ Loom auto-creates a config directory on first run (`./config/` by default).
 
 | Setting | Env var | Default |
 |---|---|---|
-| HTTP listen address | `LOOM_HTTP_ADDR` | `:8989` |
+| HTTP listen address | `LOOM_HTTP_ADDR` | `:1925` |
 | Config directory | `LOOM_CONFIG_DIR` | `./config` |
 | Data directory | `LOOM_DATA_DIR` | `./config` |
 | Log level | `LOOM_LOG_LEVEL` | `info` |

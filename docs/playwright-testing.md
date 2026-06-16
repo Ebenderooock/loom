@@ -138,7 +138,7 @@ Then send tool calls via stdin (JSON-RPC 2.0 format).
 ## Troubleshooting
 
 ### Tests fail with "net::ERR_CONNECTION_REFUSED"
-- Ensure backend is running on `localhost:8989`
+- Ensure backend is running on `localhost:1925`
 - Ensure frontend dev server is running on `localhost:5173`
 
 ### "Authorization" errors in tests

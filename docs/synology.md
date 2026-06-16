@@ -12,7 +12,7 @@ straight from the DSM **Package Center**:
    `https://packages.synocommunity.com/` (name: `SynoCommunity`).
 2. Open the **Community** tab, find **Loom**, and click **Install**.
 3. After install, open Loom from its Package Center entry or browse to
-   `http://<nas-ip>:8989`.
+   `http://<nas-ip>:1925`.
 
 The package keeps all state (config + sqlite database) under the package's
 private `var` directory, which DSM preserves across upgrades.
@@ -30,7 +30,7 @@ downloads, grant that user **read/write** access to the relevant shared folders:
 Loom serves plain HTTP. For HTTPS, put it behind DSM's built-in reverse proxy:
 
 > Control Panel → Login Portal → **Advanced → Reverse Proxy** → forward an HTTPS
-> hostname to `localhost:8989`.
+> hostname to `localhost:1925`.
 
 The packaging recipe (for contributors) lives in
 [`packaging/synology/`](../packaging/synology/) and is submitted to
@@ -46,7 +46,7 @@ services:
     image: ghcr.io/ebenderooock/loom:latest
     container_name: loom
     ports:
-      - "8989:8989"
+      - "1925:1925"
     environment:
       LOOM_CONFIG_DIR: /config
       LOOM_DATA_DIR: /config

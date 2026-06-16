@@ -56,25 +56,25 @@ Boot the binary on the default port (`make build && ./dist/loom serve`)
 or hit your container, then:
 
 ```bash
-$ curl -s http://localhost:8989/healthz
+$ curl -s http://localhost:1925/healthz
 {"status":"ok"}
 
-$ curl -s http://localhost:8989/livez
+$ curl -s http://localhost:1925/livez
 {"status":"alive"}
 
-$ curl -s http://localhost:8989/readyz
+$ curl -s http://localhost:1925/readyz
 {"status":"ready"}        # or HTTP 503 with {"status":"not ready","reason":"..."}
 
-$ curl -s http://localhost:8989/api/v1/system/status
+$ curl -s http://localhost:1925/api/v1/system/status
 {"buildDate":"2026-05-01T02:27:12Z","commit":"e561225","engine":"sqlite","version":"e561225"}
 
-$ curl -s http://localhost:8989/metrics | head -3
+$ curl -s http://localhost:1925/metrics | head -3
 # HELP go_build_info Build information about the main Go module.
 # TYPE go_build_info gauge
 go_build_info{checksum="",path="github.com/ebenderooock/loom",version="..."} 1
 
 # pprof is gated by debug.pprof: true
-$ curl -s http://localhost:8989/debug/pprof/goroutine?debug=1 | head -1
+$ curl -s http://localhost:1925/debug/pprof/goroutine?debug=1 | head -1
 goroutine profile: total 9
 ```
 
@@ -107,19 +107,19 @@ in [indexers.md](indexers.md); routes are summarised below.
 # Create
 curl -sS -X POST -H "X-Api-Key: $LOOM_KEY" -H "Content-Type: application/json" \
   -d '{"id":"demo","kind":"builtin/null","name":"Demo","enabled":true,"priority":25,"categories":[2000]}' \
-  http://localhost:8989/api/v1/indexers/
+  http://localhost:1925/api/v1/indexers/
 
 # List
-curl -sS -H "X-Api-Key: $LOOM_KEY" http://localhost:8989/api/v1/indexers/
+curl -sS -H "X-Api-Key: $LOOM_KEY" http://localhost:1925/api/v1/indexers/
 
 # Manual health check
 curl -sS -X POST -H "X-Api-Key: $LOOM_KEY" \
-  http://localhost:8989/api/v1/indexers/demo/test
+  http://localhost:1925/api/v1/indexers/demo/test
 
 # Fan-out search
 curl -sS -X POST -H "X-Api-Key: $LOOM_KEY" -H "Content-Type: application/json" \
   -d '{"query":"ubuntu","categories":[4000]}' \
-  http://localhost:8989/api/v1/indexers/search
+  http://localhost:1925/api/v1/indexers/search
 ```
 
 ### Newznab + Torznab (Phase 2c)
@@ -145,11 +145,11 @@ curl -sS -X POST -H "X-Api-Key: $LOOM_KEY" -H "Content-Type: application/json" \
     },
     "categories": [2000, 5000, 7000]
   }' \
-  http://localhost:8989/api/v1/indexers/
+  http://localhost:1925/api/v1/indexers/
 
 # Probe caps (cached to indexer_health.last_caps_json)
 curl -sS -H "X-Api-Key: $LOOM_KEY" \
-  http://localhost:8989/api/v1/indexers/hydra-news/caps
+  http://localhost:1925/api/v1/indexers/hydra-news/caps
 ```
 
 ### Proxies (Phase 2e)
@@ -164,15 +164,15 @@ curl -sS -X POST -H "X-Api-Key: $LOOM_KEY" -H "Content-Type: application/json" \
   -d '{
     "kind":"http","name":"Squid","enabled":true,
     "config":{"url":"http://squid.lan:3128","username":"u","password":"p"}
-  }' http://localhost:8989/api/v1/proxies/
+  }' http://localhost:1925/api/v1/proxies/
 
 # Pin an existing indexer to that proxy
 curl -sS -X PATCH -H "X-Api-Key: $LOOM_KEY" -H "Content-Type: application/json" \
-  -d '{"proxy_id":"http-squid"}' http://localhost:8989/api/v1/indexers/hydra-news
+  -d '{"proxy_id":"http-squid"}' http://localhost:1925/api/v1/indexers/hydra-news
 
 # Test the proxy
 curl -sS -X POST -H "X-Api-Key: $LOOM_KEY" \
-  http://localhost:8989/api/v1/proxies/http-squid/test
+  http://localhost:1925/api/v1/proxies/http-squid/test
 ```
 
 ### Error envelope

@@ -47,7 +47,7 @@ USER nonroot:nonroot
 WORKDIR /
 COPY --from=build /out/loom /usr/local/bin/loom
 
-EXPOSE 8989
+EXPOSE 1925
 VOLUME ["/config", "/media"]
 
 ENV LOOM_CONFIG_DIR=/config \
