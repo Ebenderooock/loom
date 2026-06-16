@@ -1242,6 +1242,22 @@ func (e *Engine) grabRelease(ctx context.Context, sr *ScoredRelease) (*GrabbedRe
 	// Build the download request.
 	req := buildDownloadRequest(&sr.Result)
 
+	// If the indexer exposed a direct .torrent URL, fetch it through the
+	// live indexer client first so tracker auth cookies, per-indexer
+	// proxies, and anti-bot headers are preserved.
+	if e.indexerSvc != nil && sr.Result.IndexerID != "" && req.TorrentURL != "" {
+		if data, err := e.indexerSvc.FetchDownload(ctx, sr.Result.IndexerID, req.TorrentURL); err == nil {
+			req.RawBytes = data
+		} else {
+			e.logger.Warn("autosearch: indexer-backed torrent fetch failed; falling back to direct URL/magnet",
+				"indexer_id", sr.Result.IndexerID,
+				"title", sr.Result.Title,
+				"url", req.TorrentURL,
+				"error", err,
+			)
+		}
+	}
+
 	// Apply per-indexer seed policy overrides if available.
 	if sr.Result.IndexerID != "" {
 		if def, err := e.indexerSvc.Get(ctx, sr.Result.IndexerID); err == nil {

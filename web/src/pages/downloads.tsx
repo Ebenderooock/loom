@@ -1014,8 +1014,9 @@ function TorrentEnginePanel() {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-4 lg:grid-cols-6">
+        <div className="grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-4 lg:grid-cols-7">
           <StatPill label="Torrents" value={summary?.total_torrents ?? "—"} />
+          <StatPill label="Queued" value={summary?.queued ?? "—"} />
           <StatPill label="Downloading" value={summary?.downloading ?? "—"} />
           <StatPill label="Seeding" value={summary?.seeding ?? "—"} />
           <StatPill label="Paused" value={summary?.paused ?? "—"} />

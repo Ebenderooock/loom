@@ -513,6 +513,7 @@ func (e *Engine) Status(hashes ...string) []TorrentStatus {
 // EngineSummary aggregates the engine's live state for the management UI.
 type EngineSummary struct {
 	TotalTorrents int
+	Queued        int
 	Downloading   int
 	Seeding       int
 	Paused        int
@@ -548,11 +549,13 @@ func (e *Engine) Summary() EngineSummary {
 		sum.DownloadRate += s.DownloadRate
 		sum.UploadRate += s.UploadRate
 		switch s.Status {
+		case "queued":
+			sum.Queued++
 		case "paused":
 			sum.Paused++
 		case "seeding":
 			sum.Seeding++
-		default:
+		case "downloading":
 			sum.Downloading++
 		}
 	}

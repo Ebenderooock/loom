@@ -17,6 +17,11 @@ import (
 // without importing the indexers.Service directly (avoiding cycles).
 type IndexerConfigLookup func(ctx context.Context, id string) (indexers.Definition, error)
 
+// IndexerDownloadFetch retrieves a release download URL through the live
+// indexer client so tracker auth cookies, per-indexer proxies, and
+// anti-bot headers are preserved.
+type IndexerDownloadFetch func(ctx context.Context, id, rawURL string) ([]byte, error)
+
 // Router is a service that listens for indexer search results and routes
 // them to configured download clients. It decouples the indexer intake
 // pipeline from downloads, allowing each to run independently and recover
@@ -34,6 +39,7 @@ type Router struct {
 	clock          Clock
 	metadataRouter *metadata.Router
 	indexerLookup  IndexerConfigLookup
+	indexerFetch   IndexerDownloadFetch
 
 	// unsubscribe is the function returned by Subscribe; stored so
 	// we can clean up on shutdown if needed.
@@ -42,9 +48,10 @@ type Router struct {
 
 // NewRouter wires a Router to a downloads Service, metadata Router, and event bus.
 // It immediately subscribes to indexer results but does not block.
-// The optional indexerLookup, when non-nil, enables per-indexer seed
-// policy overrides on grabs.
-func NewRouter(svc *Service, metadataRouter *metadata.Router, bus eventbus.Bus, logger *slog.Logger, clock Clock, indexerLookup IndexerConfigLookup) *Router {
+// The optional indexerLookup enables per-indexer seed policy overrides;
+// indexerFetch enables authenticated/proxied .torrent downloads through
+// the live indexer client.
+func NewRouter(svc *Service, metadataRouter *metadata.Router, bus eventbus.Bus, logger *slog.Logger, clock Clock, indexerLookup IndexerConfigLookup, indexerFetch IndexerDownloadFetch) *Router {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -58,6 +65,7 @@ func NewRouter(svc *Service, metadataRouter *metadata.Router, bus eventbus.Bus, 
 		logger:         logger.With("module", "downloads/router"),
 		clock:          clock,
 		indexerLookup:  indexerLookup,
+		indexerFetch:   indexerFetch,
 	}
 
 	// Subscribe to indexer results. The handler runs synchronously in
@@ -132,6 +140,18 @@ func (r *Router) handleIndexerResult(ctx context.Context, ev eventbus.Event) err
 	var addErr error
 	for _, client := range clients {
 		req := buildAddRequest(result)
+		if r.indexerFetch != nil && result.IndexerID != "" && req.TorrentURL != "" {
+			if data, fetchErr := r.indexerFetch(ctx, result.IndexerID, req.TorrentURL); fetchErr == nil {
+				req.RawBytes = data
+			} else {
+				r.logger.Warn("router: indexer-backed torrent fetch failed; falling back to direct URL/magnet",
+					"indexer_id", result.IndexerID,
+					"title", result.Title,
+					"url", req.TorrentURL,
+					"error", fetchErr,
+				)
+			}
+		}
 		// Apply per-indexer seed policy overrides when available.
 		if r.indexerLookup != nil && result.IndexerID != "" {
 			if def, lookupErr := r.indexerLookup(ctx, result.IndexerID); lookupErr == nil {

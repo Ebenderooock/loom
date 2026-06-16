@@ -133,6 +133,42 @@ func (c *Client) Test(ctx context.Context) error {
 	return err
 }
 
+// FetchDownload implements indexers.DownloadFetcher. It retrieves a release
+// URL through the indexer's configured HTTP client so proxy settings and
+// request headers match normal search traffic.
+func (c *Client) FetchDownload(ctx context.Context, fullURL string) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fullURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("newznab build download request: %w", err)
+	}
+	req.Header.Set("User-Agent", c.cfg.UserAgent)
+	req.Header.Set("Accept", "application/x-bittorrent, application/octet-stream, */*")
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			return nil, fmt.Errorf("%w: %s", ErrTimeout, err.Error())
+		}
+		return nil, fmt.Errorf("%w: %s", ErrUpstream, err.Error())
+	}
+	defer resp.Body.Close()
+
+	body, rerr := io.ReadAll(resp.Body)
+	if rerr != nil {
+		return nil, fmt.Errorf("%w: read download body: %s", ErrUpstream, rerr.Error())
+	}
+	if looksLikeCloudFlare(resp, body) {
+		return nil, fmt.Errorf("%w: status %d", ErrCloudFlare, resp.StatusCode)
+	}
+	if err := classifyHTTP(resp, body); err != nil {
+		return nil, err
+	}
+	if upstream := decodeUpstreamError(body); upstream != nil {
+		return nil, upstream
+	}
+	return body, nil
+}
+
 // fetchAndStoreCaps drives the caps round-trip end-to-end: HTTP GET,
 // parse, in-memory cache, optional DB persist.
 func (c *Client) fetchAndStoreCaps(ctx context.Context) (indexers.Caps, error) {

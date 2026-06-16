@@ -277,6 +277,15 @@ type Indexer interface {
 	Test(ctx context.Context) error
 }
 
+// DownloadFetcher is an optional capability implemented by indexers that
+// can fetch a release download URL (for example a .torrent link) through
+// the same authenticated/proxied HTTP client they use for Search. This
+// lets downstream consumers reuse tracker cookies, per-indexer proxies,
+// and anti-bot headers instead of making an unauthenticated direct fetch.
+type DownloadFetcher interface {
+	FetchDownload(ctx context.Context, rawURL string) ([]byte, error)
+}
+
 // Definition is the persisted shape of an indexer row. It is the
 // hand-off between Repository and the rest of the package — sqlc
 // produces engine-specific types (different column kinds for booleans
