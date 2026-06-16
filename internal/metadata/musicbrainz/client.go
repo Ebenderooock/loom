@@ -85,7 +85,7 @@ func NewClient(cfg *Config) *Client {
 
 // GetArtist fetches an artist by MBID.
 func (c *Client) GetArtist(ctx context.Context, mbid string) (*ArtistMetadata, error) {
-	url := fmt.Sprintf("%s/artist/%s?fmt=json&inc=area+genres", c.config.BaseURL, url.QueryEscape(mbid))
+	url := fmt.Sprintf("%s/artist/%s?fmt=json&inc=genres", c.config.BaseURL, url.QueryEscape(mbid))
 	resp := &ArtistResponse{}
 
 	if err := c.doRequest(ctx, url, resp); err != nil {

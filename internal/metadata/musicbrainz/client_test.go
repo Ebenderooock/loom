@@ -21,6 +21,12 @@ func TestGetArtist_Success(t *testing.T) {
 		if ua := r.Header.Get("User-Agent"); ua != "Loom/1.0 (metadata_service)" {
 			t.Errorf("expected User-Agent 'Loom/1.0 (metadata_service)', got %q", ua)
 		}
+		if got := r.URL.Query().Get("fmt"); got != "json" {
+			t.Errorf("expected fmt=json, got %q", got)
+		}
+		if got := r.URL.Query().Get("inc"); got != "genres" {
+			t.Errorf("expected inc=genres, got %q", got)
+		}
 
 		w.Header().Set("Content-Type", "application/json")
 		response := ArtistResponse{
