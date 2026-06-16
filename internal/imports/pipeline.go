@@ -264,7 +264,11 @@ func (p *ImportPipeline) resolveDownloadPath(ctx context.Context, ev *downloads.
 			// Prefer ContentPath (actual on-disk location set by the
 			// download client) over the SavePath+Title heuristic.
 			if item.ContentPath != "" {
-				return p.applyRemotePathMapping(ctx, ev.ClientID, item.ContentPath), nil
+				path := p.applyRemotePathMapping(ctx, ev.ClientID, item.ContentPath)
+				if isUnresolvedContentPath(path) {
+					return "", fmt.Errorf("download metadata not resolved yet: unresolved content path %q", path)
+				}
+				return path, nil
 			}
 			if item.SavePath != "" {
 				path := filepath.Join(item.SavePath, item.Title)
@@ -279,7 +283,11 @@ func (p *ImportPipeline) resolveDownloadPath(ctx context.Context, ev *downloads.
 	if p.wfEngine != nil {
 		if wf, err := p.wfEngine.FindByDownload(ctx, ev.ClientID, ev.DownloadID); err == nil && wf != nil {
 			if cached := metadataString(wf.Metadata, "content_path"); cached != "" {
-				return p.applyRemotePathMapping(ctx, ev.ClientID, cached), nil
+				path := p.applyRemotePathMapping(ctx, ev.ClientID, cached)
+				if isUnresolvedContentPath(path) {
+					return "", fmt.Errorf("download metadata not resolved yet: unresolved content path %q", path)
+				}
+				return path, nil
 			}
 			if sp := metadataString(wf.Metadata, "save_path"); sp != "" {
 				path := filepath.Join(sp, ev.Title)
@@ -309,6 +317,11 @@ func (p *ImportPipeline) applyRemotePathMapping(ctx context.Context, clientID, p
 		return path
 	}
 	return p.remotePathStore.MapPath(ctx, clientID, path)
+}
+
+func isUnresolvedContentPath(path string) bool {
+	p := strings.ToLower(filepath.ToSlash(strings.TrimSpace(path)))
+	return strings.Contains(p, "/infohash:")
 }
 
 // processImport runs the full import pipeline for a single download.

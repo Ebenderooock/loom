@@ -603,6 +603,7 @@ func (o *Orchestrator) classifyImportError(errMsg string) importRetryStrategy {
 		"permission denied", "access denied", "unauthorized",
 		"already been imported", "already imported",
 		"import rejected",
+		"metadata not resolved yet", "unresolved content path",
 	} {
 		if strings.Contains(lower, s) {
 			return failPermanent

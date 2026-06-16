@@ -372,6 +372,14 @@ func TestOrchestratorImportFailure(t *testing.T) {
 	}
 }
 
+func TestClassifyImportError_MetadataNotResolvedIsPermanent(t *testing.T) {
+	orch := &Orchestrator{}
+	got := orch.classifyImportError(`download metadata not resolved yet: unresolved content path "/media/downloads/infohash:abc"`)
+	if got != failPermanent {
+		t.Fatalf("expected failPermanent, got %v", got)
+	}
+}
+
 func TestOrchestratorCancel(t *testing.T) {
 	imp := &mockImporter{paths: []string{"/media/movie.mkv"}}
 	orch, store := testOrchestrator(t, imp)
