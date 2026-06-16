@@ -342,16 +342,20 @@ func (e *Engine) AddMagnet(ctx context.Context, magnet string, meta torrentMeta)
 	// Wait for metadata with a timeout. Use the engine's lifecycle context
 	// rather than the caller's context so that a short-lived HTTP request
 	// context being cancelled (e.g. client disconnect, write timeout) does
-	// not abort metadata resolution mid-flight and leave the torrent in a
-	// broken state.
+	// not abort metadata resolution mid-flight.
 	waitCtx, waitCancel := context.WithTimeout(e.lifecycleCtx(), metadataTimeout)
 	defer waitCancel()
 
 	select {
 	case <-t.GotInfo():
 	case <-waitCtx.Done():
-		t.Drop()
-		return "", fmt.Errorf("%w: %w", ErrMetadataTimeout, waitCtx.Err())
+		// Do not fail the add when metadata is slow. Keep the torrent in the
+		// engine and let metadata continue resolving asynchronously; status()
+		// reports it as queued while Info() is still nil.
+		e.logger.Warn("magnet metadata not yet available; keeping torrent queued",
+			"error", waitCtx.Err(),
+			"timeout", metadataTimeout,
+		)
 	}
 
 	hash := strings.ToLower(t.InfoHash().HexString())
@@ -371,7 +375,19 @@ func (e *Engine) AddMagnet(ctx context.Context, magnet string, meta torrentMeta)
 	}
 	e.mu.Unlock()
 
-	t.DownloadAll()
+	if t.Info() != nil {
+		t.DownloadAll()
+	} else {
+		// Metadata was not available within metadataTimeout. Start the
+		// download as soon as metainfo arrives.
+		go func(t *torrent.Torrent) {
+			select {
+			case <-t.GotInfo():
+				t.DownloadAll()
+			case <-e.lifecycleCtx().Done():
+			}
+		}(t)
+	}
 
 	e.logger.Info("magnet added",
 		"hash", hash,

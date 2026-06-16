@@ -141,8 +141,8 @@ func TestAdd_TorrentURLInfohashMismatchRejected(t *testing.T) {
 }
 
 // When the .torrent fetch fails and an explicit tracker-bearing magnet
-// is available, Add falls back to the magnet. The transformed error
-// (metadata timeout from AddMagnet, not the HTTP 404) proves fallback.
+// is available, Add falls back to the magnet. Even if metadata is not
+// yet available, the add should succeed and keep the torrent queued.
 func TestAdd_FallsBackToExplicitMagnet(t *testing.T) {
 	t.Parallel()
 	cl := newAddTestClient(t)
@@ -157,13 +157,16 @@ func TestAdd_FallsBackToExplicitMagnet(t *testing.T) {
 
 	magnet := "magnet:?xt=urn:btih:" + strings.Repeat("b", 40) +
 		"&tr=udp%3A%2F%2Ftracker.invalid%3A1337%2Fannounce"
-	_, err := cl.Add(ctx, downloads.AddRequest{
+	res, err := cl.Add(ctx, downloads.AddRequest{
 		Title:      "x",
 		Magnet:     magnet, // explicit, has trackers
 		TorrentURL: srv.URL + "/x.torrent",
 	})
-	if !errors.Is(err, ErrMetadataTimeout) {
-		t.Errorf("error = %v, want ErrMetadataTimeout (proving magnet fallback)", err)
+	if err != nil {
+		t.Fatalf("Add: %v", err)
+	}
+	if res.ItemID != strings.Repeat("b", 40) {
+		t.Errorf("ItemID = %q, want %q", res.ItemID, strings.Repeat("b", 40))
 	}
 }
 
