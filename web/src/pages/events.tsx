@@ -35,7 +35,7 @@ import {
   ChevronUp,
   RefreshCw,
 } from "lucide-react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/fetch";
 import { toast } from "sonner";
 
@@ -129,14 +129,17 @@ function SearchBreakdown({ queryLogId }: { queryLogId: string }) {
     );
   }
 
-  const maxLatency = Math.max(...indexers.map((i) => i.latency_ms), 1);
+  const maxLatency = Math.max(
+    ...indexers.map((indexer: IndexerQueryEntry) => indexer.latency_ms),
+    1,
+  );
 
   return (
     <div className="mt-2 space-y-1.5">
       <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
         Per-Indexer Breakdown
       </p>
-      {indexers.map((ix) => (
+      {indexers.map((ix: IndexerQueryEntry) => (
         <div key={ix.id} className="flex items-center gap-2 text-xs">
           <span className="w-28 truncate font-medium">{ix.indexer_name}</span>
           <div className="h-1.5 flex-1 rounded-full bg-muted">
