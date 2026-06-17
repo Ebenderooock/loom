@@ -3,6 +3,7 @@ package autosearch
 import (
 	"io"
 	"log/slog"
+	"net/url"
 	"testing"
 
 	"github.com/ebenderooock/loom/internal/customformats"
@@ -308,6 +309,42 @@ func TestInferProtocol(t *testing.T) {
 				t.Errorf("inferProtocol() = %q, want %q", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestBuildDownloadRequest_InfohashUsesTrackerRichMagnet(t *testing.T) {
+	req := buildDownloadRequest(&indexers.Result{
+		Title:    "Off Campus S01E02 The Practice 1080p AMZN WEB-DL DDP5 1 H 264-FLUX",
+		Infohash: "4ADB30F0BCB29FD663F60E7E4EBC38A3611C4CB3",
+	})
+	if req.Magnet == "" {
+		t.Fatal("expected magnet built from infohash")
+	}
+	u, err := url.Parse(req.Magnet)
+	if err != nil {
+		t.Fatalf("parse magnet: %v", err)
+	}
+	q := u.Query()
+	if got := q.Get("dn"); got != "Off Campus S01E02 The Practice 1080p AMZN WEB-DL DDP5 1 H 264-FLUX" {
+		t.Fatalf("dn = %q", got)
+	}
+	if got := len(q["tr"]); got < 10 {
+		t.Fatalf("tracker count = %d, want >= 10", got)
+	}
+}
+
+func TestTMDBExternalIDs(t *testing.T) {
+	details := map[string]interface{}{
+		"external_ids": map[string]interface{}{
+			"imdb_id": "tt33546863",
+			"tvdb_id": 455086.0,
+		},
+	}
+	if got := tmdbExternalIMDbID(details); got != "tt33546863" {
+		t.Fatalf("tmdbExternalIMDbID = %q", got)
+	}
+	if got := tmdbExternalTVDBID(details); got != "455086" {
+		t.Fatalf("tmdbExternalTVDBID = %q", got)
 	}
 }
 

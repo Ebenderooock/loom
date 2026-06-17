@@ -17,6 +17,7 @@ import (
 	"github.com/ebenderooock/loom/internal/auditlog"
 	"github.com/ebenderooock/loom/internal/customformats"
 	"github.com/ebenderooock/loom/internal/downloads"
+	torrentdl "github.com/ebenderooock/loom/internal/downloads/torrent"
 	"github.com/ebenderooock/loom/internal/indexers"
 	"github.com/ebenderooock/loom/internal/movies"
 	"github.com/ebenderooock/loom/internal/parser"
@@ -257,6 +258,7 @@ func (e *Engine) SearchAndGrab(ctx context.Context, req SearchRequest) (*SearchR
 	if req.SearchRunID == "" {
 		req.SearchRunID = searchdebug.NewID()
 	}
+	req = e.enrichSearchRequest(ctx, req)
 
 	// Sonarr-style fallback for season/series searches.
 	if (req.MediaType == "series" || req.MediaType == "episode") && e.seriesSvc != nil && req.Episode == 0 {
@@ -264,6 +266,101 @@ func (e *Engine) SearchAndGrab(ctx context.Context, req SearchRequest) (*SearchR
 	}
 
 	return e.searchAndGrabSingle(ctx, req)
+}
+
+func (e *Engine) enrichSearchRequest(ctx context.Context, req SearchRequest) SearchRequest {
+	switch req.MediaType {
+	case "movie":
+		if e.movieSvc != nil && req.MediaID != "" {
+			if m, err := e.movieSvc.GetMovie(ctx, req.MediaID); err == nil && m != nil {
+				if req.Title == "" {
+					req.Title = m.Title
+				}
+				if req.Year == 0 {
+					req.Year = m.Year
+				}
+				if req.IMDBID == "" && m.IMDBID != nil {
+					req.IMDBID = strings.TrimSpace(*m.IMDBID)
+				}
+				if req.TMDBID == "" && m.TMDBID != nil {
+					req.TMDBID = strings.TrimSpace(*m.TMDBID)
+				}
+			}
+		}
+	case "series", "episode":
+		if e.seriesSvc == nil {
+			return req
+		}
+		var tmdbForLookup string
+		if req.MediaID != "" {
+			if s, err := e.seriesSvc.GetSeries(ctx, req.MediaID); err == nil && s != nil {
+				if req.Title == "" {
+					req.Title = s.Title
+				}
+				if req.Year == 0 {
+					req.Year = s.Year
+				}
+				if req.IMDBID == "" && s.IMDBID != nil {
+					req.IMDBID = strings.TrimSpace(*s.IMDBID)
+				}
+				if req.TVDBID == "" && s.TVDBID != nil {
+					req.TVDBID = strings.TrimSpace(*s.TVDBID)
+				}
+				if req.TMDBID == "" && s.TMDBID != nil {
+					req.TMDBID = strings.TrimSpace(*s.TMDBID)
+				}
+			}
+		}
+		if req.TMDBID != "" {
+			tmdbForLookup = req.TMDBID
+		}
+		if (req.IMDBID == "" || req.TVDBID == "") && tmdbForLookup != "" {
+			if details, err := e.seriesSvc.LookupTMDB(ctx, tmdbForLookup); err == nil {
+				if req.IMDBID == "" {
+					req.IMDBID = tmdbExternalIMDbID(details)
+				}
+				if req.TVDBID == "" {
+					req.TVDBID = tmdbExternalTVDBID(details)
+				}
+			}
+		}
+	}
+	return req
+}
+
+func tmdbExternalIMDbID(details map[string]interface{}) string {
+	extIDs, ok := details["external_ids"].(map[string]interface{})
+	if !ok {
+		return ""
+	}
+	if v, ok := extIDs["imdb_id"].(string); ok {
+		return strings.TrimSpace(v)
+	}
+	return ""
+}
+
+func tmdbExternalTVDBID(details map[string]interface{}) string {
+	extIDs, ok := details["external_ids"].(map[string]interface{})
+	if !ok {
+		return ""
+	}
+	switch v := extIDs["tvdb_id"].(type) {
+	case float64:
+		if v > 0 {
+			return fmt.Sprintf("%.0f", v)
+		}
+	case int:
+		if v > 0 {
+			return fmt.Sprintf("%d", v)
+		}
+	case int64:
+		if v > 0 {
+			return fmt.Sprintf("%d", v)
+		}
+	case string:
+		return strings.TrimSpace(v)
+	}
+	return ""
 }
 
 // searchSeriesFallback implements Sonarr-style search: try season pack first,
@@ -1329,18 +1426,7 @@ func buildDownloadRequest(res *indexers.Result) downloads.AddRequest {
 	if res.MagnetURI != "" {
 		req.Magnet = res.MagnetURI
 	} else if res.Infohash != "" {
-		// Construct a magnet URI with well-known public trackers so that
-		// infohash-only results (e.g. TPB via apibay.org) can find peers
-		// via tracker announces instead of relying solely on DHT.
-		req.Magnet = fmt.Sprintf(
-			"magnet:?xt=urn:btih:%s"+
-				"&tr=udp://tracker.opentrackr.org:1337/announce"+
-				"&tr=udp://open.demonii.com:1337/announce"+
-				"&tr=udp://open.tracker.cl:1337/announce"+
-				"&tr=udp://tracker.torrent.eu.org:451/announce"+
-				"&tr=udp://9.rarbg.to:2720/announce",
-			res.Infohash,
-		)
+		req.Magnet = torrentdl.BuildPublicMagnet(res.Infohash, res.Title)
 	}
 	if res.Link != "" {
 		// Some indexers (e.g. EZTV) store the magnet URI in the Link field

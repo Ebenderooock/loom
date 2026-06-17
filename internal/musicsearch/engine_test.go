@@ -2,6 +2,7 @@ package musicsearch
 
 import (
 	"log/slog"
+	"net/url"
 	"testing"
 
 	"github.com/ebenderooock/loom/internal/customformats"
@@ -104,6 +105,13 @@ func TestBuildDownloadRequest(t *testing.T) {
 	}
 	if req.Title == "" {
 		t.Error("expected title carried through")
+	}
+	u, err := url.Parse(req.Magnet)
+	if err != nil {
+		t.Fatalf("parse magnet: %v", err)
+	}
+	if got := u.Query().Get("dn"); got != "Artist - Album [FLAC]" {
+		t.Fatalf("dn = %q", got)
 	}
 }
 
