@@ -343,9 +343,7 @@ function MusicListFields({
         <Label htmlFor="add-music-profile">Quality Profile</Label>
         <Select
           value={form.quality_profile_id ?? ""}
-          onValueChange={(val) =>
-            setForm({ ...form, quality_profile_id: val })
-          }
+          onValueChange={(val) => setForm({ ...form, quality_profile_id: val })}
         >
           <SelectTrigger id="add-music-profile">
             <SelectValue placeholder="Select a profile…" />

@@ -99,9 +99,15 @@ export function AlbumSearchDialog({
                 {releases.map((r) => {
                   const id = r.guid || r.title;
                   return (
-                    <TableRow key={id} className={r.allowed ? "" : "opacity-50"}>
+                    <TableRow
+                      key={id}
+                      className={r.allowed ? "" : "opacity-50"}
+                    >
                       <TableCell className="max-w-[320px]">
-                        <div className="truncate text-xs font-medium" title={r.title}>
+                        <div
+                          className="truncate text-xs font-medium"
+                          title={r.title}
+                        >
                           {r.title}
                         </div>
                         <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
@@ -123,10 +129,14 @@ export function AlbumSearchDialog({
                         {r.quality_name || "—"}
                         {!!r.format_score && (
                           <Badge
-                            variant={r.format_score > 0 ? "secondary" : "destructive"}
+                            variant={
+                              r.format_score > 0 ? "secondary" : "destructive"
+                            }
                             className="ml-1 text-[9px]"
                           >
-                            {r.format_score > 0 ? `+${r.format_score}` : r.format_score}
+                            {r.format_score > 0
+                              ? `+${r.format_score}`
+                              : r.format_score}
                           </Badge>
                         )}
                       </TableCell>
