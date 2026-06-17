@@ -22,6 +22,12 @@ func (m *mockMediaUpdater) SetMovieDownloading(ctx context.Context, movieID stri
 func (m *mockMediaUpdater) SetMovieMissing(ctx context.Context, movieID string) error {
 	return nil
 }
+func (m *mockMediaUpdater) SetEpisodeDownloading(ctx context.Context, episodeID string) error {
+	return nil
+}
+func (m *mockMediaUpdater) SetEpisodeMissing(ctx context.Context, episodeID string) error {
+	return nil
+}
 
 type importCall struct {
 	ClientID, DownloadID, Title, Category string

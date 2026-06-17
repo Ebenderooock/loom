@@ -169,11 +169,17 @@ function FolderBrowserDialog({
   }, []);
 
   React.useEffect(() => {
-    if (open) {
+    if (!open) return;
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
       setMode("browse");
       setError("");
-      browse("");
-    }
+      void browse("");
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [open, browse]);
 
   const handleSelect = () => {
@@ -339,13 +345,19 @@ function AddLibraryDialog({
   const [error, setError] = React.useState("");
 
   React.useEffect(() => {
-    if (open) {
+    if (!open) return;
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
       setStep("type");
       setMediaType(null);
       setName("");
       setPath("");
       setError("");
-    }
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [open]);
 
   const selectType = (type: string) => {
@@ -1566,7 +1578,10 @@ export function ConnectPanel() {
 
   // Auto-populate the OAuth code when returning from Trakt redirect
   React.useEffect(() => {
-    if (trakt_code) {
+    if (!trakt_code) return;
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
       setTraktOAuthCode(trakt_code);
       setTraktAuthStep("code");
       // Find the existing Trakt connection and open its edit dialog
@@ -1582,8 +1597,11 @@ export function ConnectPanel() {
         setDialogOpen(true);
       }
       // Clear the search param so it doesn't re-trigger
-      navigate({ to: "/settings/connect", search: {}, replace: true });
-    }
+      void navigate({ to: "/settings/connect", search: {}, replace: true });
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [trakt_code, connections, navigate]);
 
   const isTrakt = formProvider === "trakt";
@@ -2485,7 +2503,15 @@ export function RollingSearchPanel() {
   }, []);
 
   React.useEffect(() => {
-    fetchData();
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (!cancelled) {
+        void fetchData();
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [fetchData]);
 
   const handleSave = async () => {
@@ -2754,7 +2780,10 @@ export function MediaPreferencesPanel() {
   const [dirty, setDirty] = React.useState(false);
 
   React.useEffect(() => {
-    if (prefs) {
+    if (!prefs) return;
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
       setDefaultProfileId(prefs.default_quality_profile_id ?? "");
       setAudioOrder(prefs.preferred_audio ?? []);
       setSubLangs(prefs.preferred_sub_languages ?? []);
@@ -2762,7 +2791,10 @@ export function MediaPreferencesPanel() {
       setPreferHDR(prefs.prefer_hdr);
       setPreferAtmos(prefs.prefer_atmos);
       setDirty(false);
-    }
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [prefs]);
 
   const handleSave = () => {

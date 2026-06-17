@@ -943,11 +943,14 @@ func (e *Engine) Detail(hash string) (*TorrentDetail, error) {
 			fmt.Sscanf(portStr, "%d", &port)
 		}
 
-		numPieces := t.NumPieces()
-		peerPieceCount := int(pc.PeerPieces().GetCardinality())
-		progress := float64(peerPieceCount) / float64(max(1, numPieces))
-		if progress > 1 {
-			progress = 1
+		progress := 0.0
+		if t.Info() != nil {
+			numPieces := t.NumPieces()
+			peerPieceCount := int(pc.PeerPieces().GetCardinality())
+			progress = float64(peerPieceCount) / float64(max(1, numPieces))
+			if progress > 1 {
+				progress = 1
+			}
 		}
 
 		peerStats := pc.Stats()

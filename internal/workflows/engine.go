@@ -10,6 +10,8 @@ import (
 type MediaStatusUpdater interface {
 	SetMovieDownloading(ctx context.Context, movieID string) error
 	SetMovieMissing(ctx context.Context, movieID string) error
+	SetEpisodeDownloading(ctx context.Context, episodeID string) error
+	SetEpisodeMissing(ctx context.Context, episodeID string) error
 }
 
 // Engine orchestrates workflow state transitions and retry logic.
@@ -120,6 +122,10 @@ func (e *Engine) markGrabbed(ctx context.Context, workflowID, clientID, download
 		if item.MediaType == MediaTypeMovie {
 			if err := e.media.SetMovieDownloading(ctx, item.MediaID); err != nil {
 				e.logger.Warn("failed to set movie downloading", "movie_id", item.MediaID, "error", err)
+			}
+		} else if item.MediaType == MediaTypeEpisode {
+			if err := e.media.SetEpisodeDownloading(ctx, item.MediaID); err != nil {
+				e.logger.Warn("failed to set episode downloading", "episode_id", item.MediaID, "error", err)
 			}
 		}
 	}
@@ -447,6 +453,10 @@ func (e *Engine) resetMediaStatus(ctx context.Context, wf *Workflow) {
 		if item.MediaType == MediaTypeMovie {
 			if err := e.media.SetMovieMissing(ctx, item.MediaID); err != nil {
 				e.logger.Warn("failed to reset movie status", "movie_id", item.MediaID, "error", err)
+			}
+		} else if item.MediaType == MediaTypeEpisode {
+			if err := e.media.SetEpisodeMissing(ctx, item.MediaID); err != nil {
+				e.logger.Warn("failed to reset episode status", "episode_id", item.MediaID, "error", err)
 			}
 		}
 	}

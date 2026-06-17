@@ -169,7 +169,15 @@ export function SeriesPage() {
   }, [isAuthenticated]);
 
   useEffect(() => {
-    fetchAll();
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (!cancelled) {
+        void fetchAll();
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [fetchAll]);
 
   // Open the detail sheet for a deep-linked series (e.g. from the global command
@@ -181,9 +189,11 @@ export function SeriesPage() {
       void navigate({ to: "/series", search: {}, replace: true });
     const existing = seriesList.find((s) => s.id === focus);
     if (existing) {
-      setDetailSeries(existing);
-      setDetailOpen(true);
-      clear();
+      queueMicrotask(() => {
+        setDetailSeries(existing);
+        setDetailOpen(true);
+        clear();
+      });
       return;
     }
     let cancelled = false;

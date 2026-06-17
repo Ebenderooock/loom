@@ -19,6 +19,7 @@ import (
 	"github.com/ebenderooock/loom/internal/musicsearch"
 	"github.com/ebenderooock/loom/internal/safety"
 	"github.com/ebenderooock/loom/internal/server"
+	"github.com/ebenderooock/loom/internal/series"
 	"github.com/ebenderooock/loom/internal/storage"
 	"github.com/ebenderooock/loom/internal/workflows"
 )
@@ -63,7 +64,7 @@ func wireDownloads(
 	if err != nil {
 		return nil, fmt.Errorf("init workflow store: %w", err)
 	}
-	wfEngine := workflows.NewEngine(wfStore, workflowMediaAdapter{moviesSvc}, logger)
+	wfEngine := workflows.NewEngine(wfStore, workflowMediaAdapter{moviesSvc, media.seriesSvc}, logger)
 
 	downloadSvc.SetWorkflowEngine(wfEngine)
 	downloadSvc.SetMovieStatusUpdater(movieStatusAdapter{moviesSvc})
@@ -242,15 +243,30 @@ func (a movieStatusAdapter) SetMovieStatus(ctx context.Context, movieID string, 
 	return a.svc.SetMovieStatus(ctx, movieID, movies.MovieStatus(status))
 }
 
-// workflowMediaAdapter adapts movies.Service to workflows.MediaStatusUpdater.
+// workflowMediaAdapter adapts movies.Service and series.Service to workflows.MediaStatusUpdater.
 type workflowMediaAdapter struct {
-	svc movies.Service
+	moviesSvc  movies.Service
+	seriesSvc  series.Service
 }
 
 func (a workflowMediaAdapter) SetMovieDownloading(ctx context.Context, movieID string) error {
-	return a.svc.SetMovieStatus(ctx, movieID, movies.MovieStatusDownloading)
+	return a.moviesSvc.SetMovieStatus(ctx, movieID, movies.MovieStatusDownloading)
 }
 
 func (a workflowMediaAdapter) SetMovieMissing(ctx context.Context, movieID string) error {
-	return a.svc.SetMovieStatus(ctx, movieID, movies.MovieStatusMissing)
+	return a.moviesSvc.SetMovieStatus(ctx, movieID, movies.MovieStatusMissing)
+}
+
+func (a workflowMediaAdapter) SetEpisodeDownloading(ctx context.Context, episodeID string) error {
+	// Episodes don't have a status field like movies; just mark as monitored
+	// The workflow system tracks the downloading status separately
+	// For now, this is a no-op since episodes are tracked via has_file
+	return nil
+}
+
+func (a workflowMediaAdapter) SetEpisodeMissing(ctx context.Context, episodeID string) error {
+	// Episodes don't have a status field like movies; just mark as monitored
+	// When a workflow fails, the episode can be re-searched
+	// For now, this is a no-op since episodes are tracked via has_file
+	return nil
 }

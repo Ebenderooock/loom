@@ -333,3 +333,34 @@ func TestAnnounceListFromMagnet(t *testing.T) {
 		}
 	}
 }
+
+func TestDetail_QueuedMagnetWithoutMetadataDoesNotPanic(t *testing.T) {
+	t.Parallel()
+	e := newTestEngine(t)
+
+	th, err := e.client.AddMagnet("magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567&tr=udp%3A%2F%2Ftracker.invalid%3A1337%2Fannounce")
+	if err != nil {
+		t.Fatalf("adding magnet: %v", err)
+	}
+
+	hash := th.InfoHash().HexString()
+	e.mu.Lock()
+	e.items[hash] = &trackedTorrent{
+		t:            th,
+		title:        "queued",
+		announceList: [][]string{{"udp://tracker.invalid:1337/announce"}},
+		addedAt:      time.Now(),
+	}
+	e.mu.Unlock()
+
+	detail, err := e.Detail(hash)
+	if err != nil {
+		t.Fatalf("Detail: %v", err)
+	}
+	if detail.TotalPeers != 0 {
+		t.Fatalf("TotalPeers = %d, want 0", detail.TotalPeers)
+	}
+	if len(detail.Trackers) != 1 || detail.Trackers[0].Status != "queued" {
+		t.Fatalf("Trackers = %#v, want queued tracker entry", detail.Trackers)
+	}
+}
