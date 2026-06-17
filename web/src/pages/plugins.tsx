@@ -6,12 +6,12 @@ import {
   Play,
   Trash2,
   Pencil,
+  GitBranch,
   CheckCircle2,
   XCircle,
   AlertTriangle,
   Loader2,
   Upload,
-  Github,
 } from "lucide-react";
 import { useSetPageHeader } from "@/hooks/use-page-header";
 import { useFeatureEnabled } from "@/lib/features-api";
@@ -420,7 +420,7 @@ function PluginDialog({
                   variant="outline"
                   onClick={() => setGithubOpen((o) => !o)}
                 >
-                  <Github className="mr-1 h-3.5 w-3.5" /> Import from GitHub
+                  <GitBranch className="mr-1 h-3.5 w-3.5" /> Import from GitHub
                 </Button>
               </div>
             </div>
