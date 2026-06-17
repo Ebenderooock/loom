@@ -22,9 +22,16 @@ import (
 )
 
 // metadataTimeout is how long we wait for a magnet's metadata to
-// resolve before giving up. Sixty seconds tolerates slow swarms and
+// resolve during the initial Add. Sixty seconds tolerates slow swarms and
 // cold trackers while still failing in a reasonable time.
 const metadataTimeout = 60 * time.Second
+
+// queuedMetadataTimeout is the maximum time a torrent may remain queued
+// waiting for metadata to resolve asynchronously. Bare infohashes from
+// indexers like TPB have no trackers and rely on DHT; in containerized
+// environments (e.g. Kubernetes) they often never resolve. We fail them
+// after this timeout to avoid indefinite queuing.
+const queuedMetadataTimeout = 5 * time.Minute
 
 // defaultTrackers is a curated list of reliable public BitTorrent
 // trackers used to bootstrap peer discovery for magnet links. In
@@ -379,11 +386,34 @@ func (e *Engine) AddMagnet(ctx context.Context, magnet string, meta torrentMeta)
 		t.DownloadAll()
 	} else {
 		// Metadata was not available within metadataTimeout. Start the
-		// download as soon as metainfo arrives.
+		// download as soon as metainfo arrives, but give up after a longer
+		// timeout to avoid indefinitely queuing bare infohashes from indexers
+		// like TPB that have no trackers and can't find peers in NAT'd/
+		// containerized environments.
 		go func(t *torrent.Torrent) {
+			metaCtx, cancel := context.WithTimeout(e.lifecycleCtx(), queuedMetadataTimeout)
+			defer cancel()
+
 			select {
 			case <-t.GotInfo():
 				t.DownloadAll()
+			case <-metaCtx.Done():
+				// Metadata still unavailable. Drop the torrent and remove it
+				// from tracking so it won't appear as indefinitely queued.
+				hash := strings.ToLower(t.InfoHash().HexString())
+				e.mu.Lock()
+				tracked := e.items[hash]
+				delete(e.items, hash)
+				e.mu.Unlock()
+
+				t.Drop()
+				if tracked != nil {
+					e.logger.Warn("dropping queued torrent: metadata resolution timeout",
+						"hash", hash,
+						"title", tracked.title,
+						"timeout", queuedMetadataTimeout,
+					)
+				}
 			case <-e.lifecycleCtx().Done():
 			}
 		}(t)
