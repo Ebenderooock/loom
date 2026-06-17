@@ -9,6 +9,8 @@ import (
 	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/storage"
+
+	"github.com/ebenderooock/loom/internal/downloads/torrentutil"
 )
 
 // newTestEngine creates an Engine backed by a real anacrolix client
@@ -303,13 +305,14 @@ func TestMagnetHasTrackers(t *testing.T) {
 }
 
 func TestDefaultAnnounceList(t *testing.T) {
+	trackers := torrentutil.PublicTrackers()
 	list := defaultAnnounceList()
-	if len(list) != len(defaultTrackers) {
-		t.Fatalf("got %d tiers, want %d", len(list), len(defaultTrackers))
+	if len(list) != len(trackers) {
+		t.Fatalf("got %d tiers, want %d", len(list), len(trackers))
 	}
 	for i, tier := range list {
-		if len(tier) != 1 || tier[0] != defaultTrackers[i] {
-			t.Fatalf("tier %d = %v, want [%q]", i, tier, defaultTrackers[i])
+		if len(tier) != 1 || tier[0] != trackers[i] {
+			t.Fatalf("tier %d = %v, want [%q]", i, tier, trackers[i])
 		}
 	}
 }
