@@ -265,19 +265,6 @@ func NewEngine(cfg Config, logger *slog.Logger) (*Engine, error) {
 
 	tcfg.SetListenAddr(net.JoinHostPort("", fmt.Sprintf("%d", cfg.ListenPort)))
 
-	// Auto-detect external IP for NAT scenarios:
-	// 1. Check environment variable (allows explicit override)
-	// 2. Otherwise let anacrolix auto-detect via trackers/DHT
-	externalIPStr := cfg.ExternalIP
-	if externalIPStr == "" {
-		externalIPStr = os.Getenv("LOOM_EXTERNAL_IP")
-	}
-	if externalIPStr != "" {
-		if ip := net.ParseIP(externalIPStr); ip != nil {
-			tcfg.PublicIp4 = ip
-		}
-	}
-
 	// Global speed caps. anacrolix throttles using these limiters; we keep
 	// references so the caps can be changed at runtime via SetSpeedLimits.
 	downLimiter := newRateLimiter(cfg.DownloadSpeedLimit)
