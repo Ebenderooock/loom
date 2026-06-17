@@ -42,15 +42,18 @@ const queuedMetadataTimeout = 5 * time.Minute
 // in the magnet, so injecting them is safe.
 var defaultTrackers = []string{
 	"udp://tracker.opentrackr.org:1337/announce",
-	"udp://open.tracker.cl:1337/announce",
-	"udp://open.demonii.com:1337/announce",
+	"udp://open.stealth.si:80/announce",
 	"udp://exodus.desync.com:6969/announce",
 	"udp://tracker.torrent.eu.org:451/announce",
-	"udp://open.stealth.si:80/announce",
-	"https://tracker.gbitt.info:443/announce",
-	"https://tracker.tamersunion.org:443/announce",
-	"https://opentracker.i2p.rocks:443/announce",
-	"https://tracker1.520.jp:443/announce",
+	"udp://tracker.bittor.pw:1337/announce",
+	"udp://public.popcorn-tracker.org:6969/announce",
+	"udp://tracker.dler.org:6969/announce",
+	"udp://open.demonii.com:1337/announce",
+	"udp://glotorrents.pw:6969/announce",
+	"udp://tracker.coppersurfer.tk:6969",
+	"udp://torrent.gresille.org:80/announce",
+	"udp://p4p.arenabg.com:1337",
+	"udp://tracker.internetwarriors.net:1337",
 }
 
 // defaultAnnounceList wraps each tracker in its own tier so anacrolix
@@ -132,12 +135,12 @@ type trackedTorrent struct {
 // Engine wraps a single anacrolix/torrent.Client and manages its
 // lifecycle, including a seeding supervisor goroutine.
 type Engine struct {
-	mu      sync.RWMutex
-	client  *torrent.Client
-	cfg     Config
-	logger  *slog.Logger
-	items   map[string]*trackedTorrent // keyed by lowercase infohash hex
-	cancel  context.CancelFunc
+	mu     sync.RWMutex
+	client *torrent.Client
+	cfg    Config
+	logger *slog.Logger
+	items  map[string]*trackedTorrent // keyed by lowercase infohash hex
+	cancel context.CancelFunc
 	// engineCtx is the lifecycle context started by Start(). It is used
 	// for metadata-resolution waits so they are tied to the engine's
 	// lifetime rather than to the caller's (e.g. HTTP request) context.
