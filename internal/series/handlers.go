@@ -176,14 +176,14 @@ func refreshAllSeries(svc Service) http.HandlerFunc {
 			ids = append(ids, item.ID)
 		}
 
-		go func(seriesIDs []string) {
-			ctx := context.Background()
+		ctx := context.WithoutCancel(r.Context())
+		go func(ctx context.Context, seriesIDs []string) {
 			for _, id := range seriesIDs {
 				if err := svc.RefreshSeries(ctx, id); err != nil {
 					slog.Warn("series: bulk refresh failed", "series_id", id, "error", err)
 				}
 			}
-		}(ids)
+		}(ctx, ids)
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusAccepted)
@@ -216,15 +216,15 @@ func rescanAllSeriesLibraries(
 			}
 		}
 
-		go func(libs []libraries.Library) {
-			ctx := context.Background()
+		ctx := context.WithoutCancel(r.Context())
+		go func(ctx context.Context, libs []libraries.Library) {
 			for _, lib := range libs {
 				lib := lib
 				if err := scanner.ScanLibrary(ctx, &lib); err != nil {
 					slog.Warn("series: bulk rescan failed", "library_id", lib.ID, "error", err)
 				}
 			}
-		}(seriesLibraries)
+		}(ctx, seriesLibraries)
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusAccepted)

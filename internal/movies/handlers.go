@@ -223,14 +223,14 @@ func refreshAllMovies(svc Service) http.HandlerFunc {
 			}
 		}
 
-		go func(movieIDs []string) {
-			ctx := context.Background()
+		ctx := context.WithoutCancel(r.Context())
+		go func(ctx context.Context, movieIDs []string) {
 			for _, id := range movieIDs {
 				if err := svc.RefreshMovie(ctx, id); err != nil {
 					slog.Warn("movies: bulk refresh failed", "movie_id", id, "error", err)
 				}
 			}
-		}(ids)
+		}(ctx, ids)
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusAccepted)
@@ -263,15 +263,15 @@ func rescanAllMovieLibraries(
 			}
 		}
 
-		go func(libs []libraries.Library) {
-			ctx := context.Background()
+		ctx := context.WithoutCancel(r.Context())
+		go func(ctx context.Context, libs []libraries.Library) {
 			for _, lib := range libs {
 				lib := lib
 				if err := scanner.ScanLibrary(ctx, &lib); err != nil {
 					slog.Warn("movies: bulk rescan failed", "library_id", lib.ID, "error", err)
 				}
 			}
-		}(movieLibraries)
+		}(ctx, movieLibraries)
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusAccepted)

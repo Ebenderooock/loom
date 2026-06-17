@@ -45,6 +45,7 @@ type artistRouterConfig struct {
 	}
 }
 
+// ArtistRouterOption configures optional artist router dependencies.
 type ArtistRouterOption func(*artistRouterConfig)
 
 // WithLibraryRescan enables page-level rescan of all music libraries.
@@ -209,14 +210,14 @@ func handleRefreshAllArtists(svc Service) http.HandlerFunc {
 			ids = append(ids, artist.ID)
 		}
 
-		go func(artistIDs []string) {
-			ctx := context.Background()
+		ctx := context.WithoutCancel(r.Context())
+		go func(ctx context.Context, artistIDs []string) {
 			for _, id := range artistIDs {
 				if _, err := svc.RefreshArtistAlbums(ctx, id); err != nil {
 					slog.Warn("music: bulk refresh failed", "artist_id", id, "error", err)
 				}
 			}
-		}(ids)
+		}(ctx, ids)
 
 		writeJSON(w, http.StatusAccepted, map[string]any{
 			"message": "artist refresh started",
@@ -247,15 +248,15 @@ func handleRescanAllArtistLibraries(
 			}
 		}
 
-		go func(libs []libraries.Library) {
-			ctx := context.Background()
+		ctx := context.WithoutCancel(r.Context())
+		go func(ctx context.Context, libs []libraries.Library) {
 			for _, lib := range libs {
 				lib := lib
 				if err := scanner.ScanLibrary(ctx, &lib); err != nil {
 					slog.Warn("music: bulk rescan failed", "library_id", lib.ID, "error", err)
 				}
 			}
-		}(musicLibraries)
+		}(ctx, musicLibraries)
 
 		writeJSON(w, http.StatusAccepted, map[string]any{
 			"message":      "music library rescan started",
