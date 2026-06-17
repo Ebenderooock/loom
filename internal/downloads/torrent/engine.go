@@ -83,9 +83,21 @@ func announceListFromMagnet(magnet string) [][]string {
 
 func (e *Engine) nudgePeerDiscovery(t *torrent.Torrent, announceList [][]string) {
 	if len(announceList) > 0 {
+		if e.cfg.DebugPeerDiscovery {
+			e.logger.Debug("nudging peer discovery: adding trackers",
+				"hash", strings.ToLower(t.InfoHash().HexString()),
+				"num_trackers", len(announceList),
+			)
+		}
 		t.AddTrackers(announceList)
 	}
 	for _, s := range e.client.DhtServers() {
+		if e.cfg.DebugPeerDiscovery {
+			e.logger.Debug("nudging peer discovery: announcing to DHT",
+				"hash", strings.ToLower(t.InfoHash().HexString()),
+				"dht_server", s.Addr().String(),
+			)
+		}
 		_, _, _ = t.AnnounceToDht(s)
 	}
 }
@@ -428,6 +440,17 @@ func (e *Engine) AddMagnet(_ context.Context, magnet string, meta torrentMeta) (
 		"title", title,
 		"size", t.Length(),
 	)
+
+	if e.cfg.DebugPeerDiscovery {
+		e.logger.Debug("magnet details for peer discovery",
+			"hash", hash,
+			"title", title,
+			"num_trackers", len(announceList),
+			"has_metadata", t.Info() != nil,
+			"dht_enabled", e.cfg.EnableDHT,
+			"pex_enabled", e.cfg.EnablePEX,
+		)
+	}
 
 	return hash, nil
 }
@@ -976,6 +999,19 @@ func (e *Engine) Detail(hash string) (*TorrentDetail, error) {
 	detail.Peers = peers
 	detail.TotalPeers = len(conns)
 	detail.TotalSeeds = totalSeeds
+
+	if e.cfg.DebugPeerDiscovery {
+		e.logger.Debug("torrent detail peer discovery info",
+			"hash", key,
+			"title", detail.Title,
+			"status", detail.Status,
+			"total_peers", detail.TotalPeers,
+			"total_seeds", totalSeeds,
+			"has_metadata", t.Info() != nil,
+			"bytes_completed", detail.Downloaded,
+			"total_size", detail.SizeBytes,
+		)
+	}
 
 	// Files.
 	if t.Info() != nil {
