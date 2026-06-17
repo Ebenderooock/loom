@@ -40,15 +40,14 @@ function AlbumRow({ album }: { album: Album }) {
   const setMonitored = useSetAlbumMonitored();
   const search = useSearchAlbum();
   const [searchOpen, setSearchOpen] = useState(false);
+  const [imageLoadError, setImageLoadError] = useState(false);
   const tracks = album.tracks ?? [];
   const present = tracks.filter((t) => t.has_file).length;
 
   const handleSearch = async () => {
     try {
       const res = await search.mutateAsync(album.id);
-      toast.success(
-        `Grabbed “${res.title}” (${res.quality_name || "unknown"})`,
-      );
+      toast.success(`Grabbed "${res.title}" (${res.quality_name || "unknown"})`);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Search failed");
     }
@@ -64,12 +63,13 @@ function AlbumRow({ album }: { album: Album }) {
         aria-label="Monitor album"
       />
       <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded bg-muted">
-        {album.cover_art_url ? (
+        {album.cover_art_url && !imageLoadError ? (
           <img
             src={album.cover_art_url}
             alt=""
             loading="lazy"
             className="h-full w-full object-cover"
+            onError={() => setImageLoadError(true)}
           />
         ) : (
           <Disc3 className="h-5 w-5 text-muted-foreground" />
@@ -78,7 +78,7 @@ function AlbumRow({ album }: { album: Album }) {
       <div className="min-w-0 flex-1">
         <div className="truncate text-sm font-medium">{album.title}</div>
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <span>{albumYear(album)}</span>
+          {album.release_date && <span>{albumYear(album)}</span>}
           {album.album_type && <span>· {album.album_type}</span>}
           {tracks.length > 0 && (
             <span>
@@ -165,6 +165,23 @@ export function MusicArtistPage() {
   const albums = artist.albums ?? [];
   const monitored = artist.monitoring_status === "monitored";
   const stats = artist.stats;
+
+  // Group albums by type
+  const albumsByType: Record<string, typeof albums> = {};
+  for (const album of albums) {
+    const type = album.album_type || "Other";
+    if (!albumsByType[type]) {
+      albumsByType[type] = [];
+    }
+    albumsByType[type].push(album);
+  }
+
+  // Preferred order for album sections
+  const typeOrder = ["Album", "Single", "EP", "Compilation", "Mixtape"];
+  const orderedTypes = [
+    ...typeOrder.filter((t) => albumsByType[t]),
+    ...Object.keys(albumsByType).filter((t) => !typeOrder.includes(t)),
+  ];
 
   const bulkMonitor = async (value: boolean) => {
     setBulkBusy(true);
@@ -323,15 +340,22 @@ export function MusicArtistPage() {
           No albums found for this artist.
         </p>
       ) : (
-        <div className="space-y-2">
-          {albums
-            .slice()
-            .sort((a, b) =>
-              (b.release_date || "").localeCompare(a.release_date || ""),
-            )
-            .map((al) => (
-              <AlbumRow key={al.id} album={al} />
-            ))}
+        <div className="space-y-6">
+          {orderedTypes.map((type) => (
+            <div key={type}>
+              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                {type}s
+              </h3>
+              <div className="space-y-2">
+                {albumsByType[type]
+                  .slice()
+                  .sort((a, b) => (b.release_date || "").localeCompare(a.release_date || ""))
+                  .map((al) => (
+                    <AlbumRow key={al.id} album={al} />
+                  ))}
+              </div>
+            </div>
+          ))}
         </div>
       )}
 
