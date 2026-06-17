@@ -47,7 +47,9 @@ function AlbumRow({ album }: { album: Album }) {
   const handleSearch = async () => {
     try {
       const res = await search.mutateAsync(album.id);
-      toast.success(`Grabbed "${res.title}" (${res.quality_name || "unknown"})`);
+      toast.success(
+        `Grabbed "${res.title}" (${res.quality_name || "unknown"})`,
+      );
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Search failed");
     }
@@ -349,7 +351,9 @@ export function MusicArtistPage() {
               <div className="space-y-2">
                 {(albumsByType[type] ?? [])
                   .slice()
-                  .sort((a, b) => (b.release_date || "").localeCompare(a.release_date || ""))
+                  .sort((a, b) =>
+                    (b.release_date || "").localeCompare(a.release_date || ""),
+                  )
                   .map((al) => (
                     <AlbumRow key={al.id} album={al} />
                   ))}
