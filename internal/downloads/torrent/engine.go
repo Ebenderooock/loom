@@ -56,6 +56,40 @@ func magnetHasTrackers(magnet string) bool {
 	return len(u.Query()["tr"]) > 0
 }
 
+func announceListFromMagnet(magnet string) [][]string {
+	u, err := url.Parse(magnet)
+	if err != nil {
+		return nil
+	}
+	values := u.Query()["tr"]
+	if len(values) == 0 {
+		return nil
+	}
+	list := make([][]string, 0, len(values))
+	seen := make(map[string]struct{}, len(values))
+	for _, tr := range values {
+		tr = strings.TrimSpace(tr)
+		if tr == "" {
+			continue
+		}
+		if _, ok := seen[tr]; ok {
+			continue
+		}
+		seen[tr] = struct{}{}
+		list = append(list, []string{tr})
+	}
+	return list
+}
+
+func (e *Engine) nudgePeerDiscovery(t *torrent.Torrent, announceList [][]string) {
+	if len(announceList) > 0 {
+		t.AddTrackers(announceList)
+	}
+	for _, s := range e.client.DhtServers() {
+		_, _, _ = t.AnnounceToDht(s)
+	}
+}
+
 // seedCheckInterval controls how often the seeding supervisor scans
 // all tracked torrents to enforce ratio/time policies.
 const seedCheckInterval = 30 * time.Second
@@ -91,17 +125,16 @@ type torrentMeta struct {
 
 // trackedTorrent pairs the anacrolix torrent handle with Loom metadata.
 type trackedTorrent struct {
-	t           *torrent.Torrent
-	title       string
-	category    string
-	savePath    string
-	addedAt     time.Time
-	seedStartAt *time.Time
-	seedPolicy  SeedPolicy
-	paused      bool
-	movedToDest bool  // true once files have been moved from IncompleteDir → DownloadDir
-	downloaded  int64 // snapshot for ratio calculation
-	uploaded    int64
+	t            *torrent.Torrent
+	title        string
+	category     string
+	savePath     string
+	announceList [][]string
+	addedAt      time.Time
+	seedStartAt  *time.Time
+	seedPolicy   SeedPolicy
+	paused       bool
+	movedToDest  bool // true once files have been moved from IncompleteDir → DownloadDir
 
 	// Speed tracking — computed from byte deltas between Status() calls.
 	lastSpeedSampleAt time.Time
@@ -318,15 +351,14 @@ func (e *Engine) AddMagnet(ctx context.Context, magnet string, meta torrentMeta)
 		return "", fmt.Errorf("builtin/torrent: adding magnet: %w", err)
 	}
 
-	// When a magnet carries no trackers it can only find peers via DHT,
-	// which is slow or unreachable behind NAT/in containers and is the
-	// usual cause of metadata-resolution timeouts. Inject public trackers
-	// in that case. Magnets that already list trackers (including all
-	// private-tracker magnets) are left untouched so we never announce a
-	// private infohash to public trackers.
-	if !magnetHasTrackers(magnet) {
-		t.AddTrackers(defaultAnnounceList())
+	announceList := announceListFromMagnet(magnet)
+	// Feed tracker URIs into the client explicitly. This wakes the regular
+	// tracker announcers immediately for tracker-bearing magnets, and falls
+	// back to a public bootstrap set for infohash-only magnets.
+	if len(announceList) == 0 {
+		announceList = defaultAnnounceList()
 	}
+	t.AddTrackers(announceList)
 
 	// Wait for metadata with a timeout. Use the engine's lifecycle context
 	// rather than the caller's context so that a short-lived HTTP request
@@ -355,12 +387,13 @@ func (e *Engine) AddMagnet(ctx context.Context, magnet string, meta torrentMeta)
 
 	e.mu.Lock()
 	e.items[hash] = &trackedTorrent{
-		t:          t,
-		title:      title,
-		category:   meta.Category,
-		savePath:   meta.SavePath,
-		addedAt:    time.Now(),
-		seedPolicy: meta.SeedPolicy,
+		t:            t,
+		title:        title,
+		category:     meta.Category,
+		savePath:     meta.SavePath,
+		announceList: announceList,
+		addedAt:      time.Now(),
+		seedPolicy:   meta.SeedPolicy,
 	}
 	e.mu.Unlock()
 
@@ -372,33 +405,42 @@ func (e *Engine) AddMagnet(ctx context.Context, magnet string, meta torrentMeta)
 		// timeout to avoid indefinitely queuing bare infohashes from indexers
 		// like TPB that have no trackers and can't find peers in NAT'd/
 		// containerized environments.
-		go func(t *torrent.Torrent) {
+		go func(t *torrent.Torrent, announceList [][]string) {
 			metaCtx, cancel := context.WithTimeout(e.lifecycleCtx(), queuedMetadataTimeout)
 			defer cancel()
+			ticker := time.NewTicker(30 * time.Second)
+			defer ticker.Stop()
 
-			select {
-			case <-t.GotInfo():
-				t.DownloadAll()
-			case <-metaCtx.Done():
-				// Metadata still unavailable. Drop the torrent and remove it
-				// from tracking so it won't appear as indefinitely queued.
-				hash := strings.ToLower(t.InfoHash().HexString())
-				e.mu.Lock()
-				tracked := e.items[hash]
-				delete(e.items, hash)
-				e.mu.Unlock()
+			for {
+				select {
+				case <-t.GotInfo():
+					t.DownloadAll()
+					return
+				case <-metaCtx.Done():
+					// Metadata still unavailable. Drop the torrent and remove it
+					// from tracking so it won't appear as indefinitely queued.
+					hash := strings.ToLower(t.InfoHash().HexString())
+					e.mu.Lock()
+					tracked := e.items[hash]
+					delete(e.items, hash)
+					e.mu.Unlock()
 
-				t.Drop()
-				if tracked != nil {
-					e.logger.Warn("dropping queued torrent: metadata resolution timeout",
-						"hash", hash,
-						"title", tracked.title,
-						"timeout", queuedMetadataTimeout,
-					)
+					t.Drop()
+					if tracked != nil {
+						e.logger.Warn("dropping queued torrent: metadata resolution timeout",
+							"hash", hash,
+							"title", tracked.title,
+							"timeout", queuedMetadataTimeout,
+						)
+					}
+					return
+				case <-e.lifecycleCtx().Done():
+					return
+				case <-ticker.C:
+					e.nudgePeerDiscovery(t, announceList)
 				}
-			case <-e.lifecycleCtx().Done():
 			}
-		}(t)
+		}(t, announceList)
 	}
 
 	e.logger.Info("magnet added",
@@ -810,10 +852,7 @@ func (e *Engine) Reannounce(hashes ...string) error {
 		if !ok {
 			return fmt.Errorf("%w: %s", ErrTorrentNotFound, h)
 		}
-		// Announce to all DHT servers attached to the client.
-		for _, s := range e.client.DhtServers() {
-			_, _, _ = tt.t.AnnounceToDht(s)
-		}
+		e.nudgePeerDiscovery(tt.t, tt.announceList)
 	}
 	return nil
 }
