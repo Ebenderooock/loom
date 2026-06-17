@@ -16,6 +16,7 @@ import {
   SortAsc,
   Eye,
   EyeOff,
+  RefreshCw,
   Trash2,
   X,
   FolderSearch,
@@ -57,6 +58,10 @@ export function MovieToolbar({
   onAddMovie,
   onImportLibrary,
   onOrganize,
+  onRefreshAll,
+  onRescanLibraries,
+  refreshingAll,
+  rescanningLibraries,
 }: {
   filterText: string;
   onFilterTextChange: (v: string) => void;
@@ -83,6 +88,10 @@ export function MovieToolbar({
   onAddMovie: () => void;
   onImportLibrary: () => void;
   onOrganize: () => void;
+  onRefreshAll: () => void;
+  onRescanLibraries: () => void;
+  refreshingAll: boolean;
+  rescanningLibraries: boolean;
 }) {
   return (
     <div className="mb-6 space-y-3">
@@ -188,6 +197,26 @@ export function MovieToolbar({
 
         {/* Import, Organize & Add buttons */}
         <div className="ml-auto flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-9 gap-1.5"
+            onClick={onRefreshAll}
+            disabled={refreshingAll}
+          >
+            <RefreshCw className="h-4 w-4" />
+            {refreshingAll ? "Refreshing..." : "Refresh All"}
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-9 gap-1.5"
+            onClick={onRescanLibraries}
+            disabled={rescanningLibraries}
+          >
+            <FolderSync className="h-4 w-4" />
+            {rescanningLibraries ? "Rescanning..." : "Rescan Libraries"}
+          </Button>
           <Button
             size="sm"
             variant="outline"

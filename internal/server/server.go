@@ -718,7 +718,18 @@ func (s *Server) newMux() http.Handler {
 			if s.wfEngine != nil {
 				grabChk = s.wfEngine.Store()
 			}
-			moviesRouter := movies.RouterWithSearch(s.moviesSvc, s.indexerSvc, grabChk, movies.WithUnmonitorChecker(s.libStore))
+			movieOpts := []movies.RouterOption{
+				movies.WithUnmonitorChecker(s.libStore),
+			}
+			if s.libStore != nil && s.libScanner != nil {
+				movieOpts = append(movieOpts, movies.WithLibraryRescan(s.libStore, s.libScanner))
+			}
+			moviesRouter := movies.RouterWithSearch(
+				s.moviesSvc,
+				s.indexerSvc,
+				grabChk,
+				movieOpts...,
+			)
 			if s.scannerSvc != nil {
 				scanner.RegisterRoutes(moviesRouter, s.scannerSvc, s.libStore)
 			}
@@ -734,7 +745,18 @@ func (s *Server) newMux() http.Handler {
 			if s.wfEngine != nil {
 				seriesGrabChk = s.wfEngine.Store()
 			}
-			seriesRouter := series.RouterWithSearch(s.seriesSvc, s.indexerSvc, seriesGrabChk, series.WithUnmonitorChecker(s.libStore))
+			seriesOpts := []series.SeriesRouterOption{
+				series.WithUnmonitorChecker(s.libStore),
+			}
+			if s.libStore != nil && s.libScanner != nil {
+				seriesOpts = append(seriesOpts, series.WithLibraryRescan(s.libStore, s.libScanner))
+			}
+			seriesRouter := series.RouterWithSearch(
+				s.seriesSvc,
+				s.indexerSvc,
+				seriesGrabChk,
+				seriesOpts...,
+			)
 			if s.seriesScannerSvc != nil {
 				scanner.RegisterSeriesRoutes(seriesRouter, s.seriesScannerSvc, s.libStore)
 			}
@@ -744,7 +766,11 @@ func (s *Server) newMux() http.Handler {
 		// Music (Artists/Albums/Tracks) routes — gated behind the "music"
 		// feature flag (off by default while the capability is in development).
 		if s.musicSvc != nil && s.featureFlags != nil && s.featureFlags.Enabled(featureflags.KeyMusic) {
-			artistsRouter := music.ArtistRouter(s.musicSvc)
+			artistOpts := []music.ArtistRouterOption{}
+			if s.libStore != nil && s.libScanner != nil {
+				artistOpts = append(artistOpts, music.WithLibraryRescan(s.libStore, s.libScanner))
+			}
+			artistsRouter := music.ArtistRouter(s.musicSvc, artistOpts...)
 			if s.musicScannerSvc != nil {
 				scanner.RegisterMusicRoutes(artistsRouter, s.musicScannerSvc, s.libStore)
 			}

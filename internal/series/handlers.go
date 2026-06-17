@@ -14,6 +14,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/ebenderooock/loom/internal/indexers"
+	"github.com/ebenderooock/loom/internal/libraries"
 )
 
 // GrabChecker checks which media IDs have active workflows/grabs.
@@ -29,6 +30,12 @@ type UnmonitorOnDeleteChecker interface {
 // seriesRouterConfig holds optional dependencies for the series router.
 type seriesRouterConfig struct {
 	unmonitorChecker UnmonitorOnDeleteChecker
+	libraryStore     interface {
+		List(ctx context.Context) ([]libraries.Library, error)
+	}
+	libraryScanner interface {
+		ScanLibrary(ctx context.Context, lib *libraries.Library) error
+	}
 }
 
 // SeriesRouterOption configures the series router.
@@ -37,6 +44,21 @@ type SeriesRouterOption func(*seriesRouterConfig)
 // WithUnmonitorChecker provides an unmonitor-on-delete checker.
 func WithUnmonitorChecker(c UnmonitorOnDeleteChecker) SeriesRouterOption {
 	return func(cfg *seriesRouterConfig) { cfg.unmonitorChecker = c }
+}
+
+// WithLibraryRescan enables page-level rescan of all series libraries.
+func WithLibraryRescan(
+	store interface {
+		List(ctx context.Context) ([]libraries.Library, error)
+	},
+	scanner interface {
+		ScanLibrary(ctx context.Context, lib *libraries.Library) error
+	},
+) SeriesRouterOption {
+	return func(cfg *seriesRouterConfig) {
+		cfg.libraryStore = store
+		cfg.libraryScanner = scanner
+	}
 }
 
 // Router mounts series endpoints on a chi router.
@@ -63,6 +85,10 @@ func RouterWithSearch(svc Service, indexerSvc *indexers.Service, grabStore GrabC
 	r.Post("/bulk", bulkUpdateSeries(svc))
 	r.Post("/bulk-archive", bulkArchiveSeries(svc))
 	r.Post("/bulk-unarchive", bulkUnarchiveSeries(svc))
+	r.Post("/refresh", refreshAllSeries(svc))
+	if cfg.libraryStore != nil && cfg.libraryScanner != nil {
+		r.Post("/rescan", rescanAllSeriesLibraries(cfg.libraryStore, cfg.libraryScanner))
+	}
 
 	// Wildcard routes
 	r.Get("/{id}", getSeries(svc))
@@ -134,6 +160,78 @@ func seasonToResponse(s *Season) map[string]interface{} {
 		"episodeCount": s.EpisodeCount,
 		"createdAt":    s.CreatedAt.Format("2006-01-02T15:04:05Z"),
 		"updatedAt":    s.UpdatedAt.Format("2006-01-02T15:04:05Z"),
+	}
+}
+
+func refreshAllSeries(svc Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		list, err := svc.ListSeries(r.Context())
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		ids := make([]string, 0, len(list))
+		for _, item := range list {
+			ids = append(ids, item.ID)
+		}
+
+		go func(seriesIDs []string) {
+			ctx := context.Background()
+			for _, id := range seriesIDs {
+				if err := svc.RefreshSeries(ctx, id); err != nil {
+					slog.Warn("series: bulk refresh failed", "series_id", id, "error", err)
+				}
+			}
+		}(ids)
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusAccepted)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"message": "series refresh started",
+			"count":   len(ids),
+		})
+	}
+}
+
+func rescanAllSeriesLibraries(
+	store interface {
+		List(ctx context.Context) ([]libraries.Library, error)
+	},
+	scanner interface {
+		ScanLibrary(ctx context.Context, lib *libraries.Library) error
+	},
+) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		librariesList, err := store.List(r.Context())
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		seriesLibraries := make([]libraries.Library, 0, len(librariesList))
+		for _, lib := range librariesList {
+			if lib.MediaType == "series" {
+				seriesLibraries = append(seriesLibraries, lib)
+			}
+		}
+
+		go func(libs []libraries.Library) {
+			ctx := context.Background()
+			for _, lib := range libs {
+				lib := lib
+				if err := scanner.ScanLibrary(ctx, &lib); err != nil {
+					slog.Warn("series: bulk rescan failed", "library_id", lib.ID, "error", err)
+				}
+			}
+		}(seriesLibraries)
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusAccepted)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"message":      "series library rescan started",
+			"libraryCount": len(seriesLibraries),
+		})
 	}
 }
 
