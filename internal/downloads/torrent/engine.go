@@ -84,7 +84,7 @@ func announceListFromMagnet(magnet string) [][]string {
 func (e *Engine) nudgePeerDiscovery(t *torrent.Torrent, announceList [][]string) {
 	if len(announceList) > 0 {
 		if e.cfg.DebugPeerDiscovery {
-			e.logger.Info("nudging peer discovery: adding trackers",
+			e.logger.Debug("nudging peer discovery: adding trackers",
 				"hash", strings.ToLower(t.InfoHash().HexString()),
 				"num_trackers", len(announceList),
 			)
@@ -93,7 +93,7 @@ func (e *Engine) nudgePeerDiscovery(t *torrent.Torrent, announceList [][]string)
 	}
 	for _, s := range e.client.DhtServers() {
 		if e.cfg.DebugPeerDiscovery {
-			e.logger.Info("nudging peer discovery: announcing to DHT",
+			e.logger.Debug("nudging peer discovery: announcing to DHT",
 				"hash", strings.ToLower(t.InfoHash().HexString()),
 				"dht_server", s.Addr().String(),
 			)
@@ -442,7 +442,7 @@ func (e *Engine) AddMagnet(_ context.Context, magnet string, meta torrentMeta) (
 	)
 
 	if e.cfg.DebugPeerDiscovery {
-		e.logger.Info("magnet details for peer discovery",
+		e.logger.Debug("magnet details for peer discovery",
 			"hash", hash,
 			"title", title,
 			"num_trackers", len(announceList),
@@ -1001,7 +1001,7 @@ func (e *Engine) Detail(hash string) (*TorrentDetail, error) {
 	detail.TotalSeeds = totalSeeds
 
 	if e.cfg.DebugPeerDiscovery {
-		e.logger.Info("torrent detail peer discovery info",
+		e.logger.Debug("torrent detail peer discovery info",
 			"hash", key,
 			"title", detail.Title,
 			"status", detail.Status,
