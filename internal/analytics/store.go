@@ -173,6 +173,15 @@ func (s *Store) ListHistory(ctx context.Context, f HistoryFilter) ([]HistoryReco
 	return out, rows.Err()
 }
 
+// ClearHistory removes all persisted analytics play-history rows.
+func (s *Store) ClearHistory(ctx context.Context) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM play_history`)
+	if err != nil {
+		return fmt.Errorf("clear history: %w", err)
+	}
+	return nil
+}
+
 // Stats computes the analytics report over the given window. Only plays with at
 // least minWatchedMs of observed playback count toward the aggregates, to keep
 // brief previews/accidental starts out of the reports.

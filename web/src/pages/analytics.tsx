@@ -1,10 +1,12 @@
 import * as React from "react";
 import { usePageHeader } from "@/hooks/use-page-header";
 import { useAuth } from "@/hooks/use-auth";
+import { ConfirmActionButton } from "@/components/ui/confirm-action";
 import {
   useActiveStreams,
   useAnalyticsStats,
   useAnalyticsHistory,
+  useClearAnalyticsHistory,
   formatWatched,
   formatBitrate,
   type MediaStat,
@@ -46,7 +48,9 @@ import {
   Tv,
   MonitorPlay,
   Zap,
+  Trash2,
 } from "lucide-react";
+import { toast } from "sonner";
 
 function StatCard({
   icon,
@@ -248,6 +252,7 @@ export function AnalyticsPage() {
 
   const stats = useAnalyticsStats(windowDays);
   const history = useAnalyticsHistory(50);
+  const clearHistory = useClearAnalyticsHistory();
 
   if (!isAdmin) {
     return (
@@ -360,10 +365,32 @@ export function AnalyticsPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Recent history</CardTitle>
-          <CardDescription>
-            The latest playback sessions across all servers.
-          </CardDescription>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <CardTitle className="text-base">Recent history</CardTitle>
+              <CardDescription>
+                The latest playback sessions across all servers.
+              </CardDescription>
+            </div>
+            <ConfirmActionButton
+              actionLabel="Clear History"
+              title="Clear watch history?"
+              description="Remove all stored analytics playback history across every connected server."
+              confirmLabel="Clear watch history"
+              pending={clearHistory.isPending}
+              disabled={!history.data || history.data.length === 0}
+              icon={<Trash2 className="mr-1.5 h-3.5 w-3.5" />}
+              onConfirm={async () => {
+                try {
+                  await clearHistory.mutateAsync();
+                  toast.success("Watch history cleared");
+                } catch {
+                  toast.error("Failed to clear watch history");
+                  throw new Error("clear analytics history failed");
+                }
+              }}
+            />
+          </div>
         </CardHeader>
         <CardContent>
           {history.isLoading ? (

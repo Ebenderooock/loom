@@ -961,12 +961,20 @@ func (s *Server) newMux() http.Handler {
 
 		// System logs (authenticated)
 		if s.systemLogsDeps != nil {
-			r.Mount("/api/v1/system/logs", systemlogs.Router(*s.systemLogsDeps))
+			adminMW := func(next http.Handler) http.Handler { return next }
+			if s.authSvc != nil {
+				adminMW = s.authSvc.RequireRole("admin")
+			}
+			r.Mount("/api/v1/system/logs", systemlogs.Router(*s.systemLogsDeps, adminMW))
 		}
 
 		// Audit log (authenticated)
 		if s.auditLog != nil {
-			s.auditLog.Mount(r)
+			adminMW := func(next http.Handler) http.Handler { return next }
+			if s.authSvc != nil {
+				adminMW = s.authSvc.RequireRole("admin")
+			}
+			s.auditLog.Mount(r, adminMW)
 		}
 
 		// Automated search + grab (authenticated)
@@ -978,7 +986,11 @@ func (s *Server) newMux() http.Handler {
 
 		// Search debug log / search queue (authenticated)
 		if s.searchDebugStore != nil {
-			queueRouter := searchdebug.Router(s.searchDebugStore, s.searchDebugHub)
+			adminMW := func(next http.Handler) http.Handler { return next }
+			if s.authSvc != nil {
+				adminMW = s.authSvc.RequireRole("admin")
+			}
+			queueRouter := searchdebug.Router(s.searchDebugStore, s.searchDebugHub, adminMW)
 			r.Mount("/api/v1/search-debug", queueRouter)
 			r.Mount("/api/v1/search-queue", queueRouter)
 		}

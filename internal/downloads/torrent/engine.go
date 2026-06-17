@@ -22,9 +22,9 @@ import (
 	"github.com/ebenderooock/loom/internal/downloads/torrentutil"
 )
 
-// metadataTimeout is how long we wait for a magnet's metadata to
-// resolve during the initial Add. Sixty seconds tolerates slow swarms and
-// cold trackers while still failing in a reasonable time.
+// metadataTimeout is how long we wait for a .torrent's metadata to
+// resolve during the initial Add. For raw .torrent bytes this should be
+// effectively immediate because the info dict is already embedded.
 const metadataTimeout = 60 * time.Second
 
 // queuedMetadataTimeout is the maximum time a torrent may remain queued
@@ -342,10 +342,10 @@ func (e *Engine) lifecycleCtx() context.Context {
 	return ctx
 }
 
-// AddMagnet adds a torrent via magnet URI. It waits for metadata to
-// resolve (up to metadataTimeout or ctx deadline) and returns the
-// lowercase infohash as the stable item ID.
-func (e *Engine) AddMagnet(ctx context.Context, magnet string, meta torrentMeta) (string, error) {
+// AddMagnet adds a torrent via magnet URI and immediately queues it by
+// infohash. Metadata resolution continues asynchronously so proxied HTTP
+// requests do not sit blocked until the swarm responds.
+func (e *Engine) AddMagnet(_ context.Context, magnet string, meta torrentMeta) (string, error) {
 	t, err := e.client.AddMagnet(magnet)
 	if err != nil {
 		return "", fmt.Errorf("builtin/torrent: adding magnet: %w", err)
@@ -359,25 +359,6 @@ func (e *Engine) AddMagnet(ctx context.Context, magnet string, meta torrentMeta)
 		announceList = defaultAnnounceList()
 	}
 	t.AddTrackers(announceList)
-
-	// Wait for metadata with a timeout. Use the engine's lifecycle context
-	// rather than the caller's context so that a short-lived HTTP request
-	// context being cancelled (e.g. client disconnect, write timeout) does
-	// not abort metadata resolution mid-flight.
-	waitCtx, waitCancel := context.WithTimeout(e.lifecycleCtx(), metadataTimeout)
-	defer waitCancel()
-
-	select {
-	case <-t.GotInfo():
-	case <-waitCtx.Done():
-		// Do not fail the add when metadata is slow. Keep the torrent in the
-		// engine and let metadata continue resolving asynchronously; status()
-		// reports it as queued while Info() is still nil.
-		e.logger.Warn("magnet metadata not yet available; keeping torrent queued",
-			"error", waitCtx.Err(),
-			"timeout", metadataTimeout,
-		)
-	}
 
 	hash := strings.ToLower(t.InfoHash().HexString())
 	title := meta.Title
@@ -400,11 +381,10 @@ func (e *Engine) AddMagnet(ctx context.Context, magnet string, meta torrentMeta)
 	if t.Info() != nil {
 		t.DownloadAll()
 	} else {
-		// Metadata was not available within metadataTimeout. Start the
-		// download as soon as metainfo arrives, but give up after a longer
-		// timeout to avoid indefinitely queuing bare infohashes from indexers
-		// like TPB that have no trackers and can't find peers in NAT'd/
-		// containerized environments.
+		e.logger.Warn("magnet metadata not yet available; keeping torrent queued",
+			"hash", hash,
+			"title", title,
+		)
 		go func(t *torrent.Torrent, announceList [][]string) {
 			metaCtx, cancel := context.WithTimeout(e.lifecycleCtx(), queuedMetadataTimeout)
 			defer cancel()
@@ -895,6 +875,20 @@ type TrackerInfo struct {
 	Peers  int    `json:"peers"`
 }
 
+func trackerInfosFromAnnounceList(announceList [][]string, status string) []TrackerInfo {
+	trackers := make([]TrackerInfo, 0)
+	for tier, tierURLs := range announceList {
+		for _, u := range tierURLs {
+			trackers = append(trackers, TrackerInfo{
+				URL:    u,
+				Tier:   tier,
+				Status: status,
+			})
+		}
+	}
+	return trackers
+}
+
 // TorrentDetail carries full detail for a single torrent.
 type TorrentDetail struct {
 	TorrentStatus
@@ -1010,17 +1004,9 @@ func (e *Engine) Detail(hash string) (*TorrentDetail, error) {
 	if t.Info() != nil {
 		mi := t.Metainfo()
 		announces := mi.UpvertedAnnounceList()
-		trackers := make([]TrackerInfo, 0)
-		for tier, tierURLs := range announces {
-			for _, u := range tierURLs {
-				trackers = append(trackers, TrackerInfo{
-					URL:    u,
-					Tier:   tier,
-					Status: "working",
-				})
-			}
-		}
-		detail.Trackers = trackers
+		detail.Trackers = trackerInfosFromAnnounceList(announces, "working")
+	} else if len(tt.announceList) > 0 {
+		detail.Trackers = trackerInfosFromAnnounceList(tt.announceList, "queued")
 	}
 
 	return detail, nil

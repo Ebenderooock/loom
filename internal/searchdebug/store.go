@@ -249,6 +249,12 @@ func (s *Store) Prune(ctx context.Context, maxAge time.Duration) (int64, error) 
 	return res.RowsAffected()
 }
 
+// Clear removes all persisted search debug entries.
+func (s *Store) Clear(ctx context.Context) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM search_debug_log`)
+	return err
+}
+
 // Stats returns aggregate statistics about search outcomes.
 func (s *Store) Stats(ctx context.Context) (*StatsResult, error) {
 	rows, err := s.db.QueryContext(ctx, `

@@ -84,3 +84,9 @@ func (h *HistoryStore) List(ctx context.Context, limit, offset int) ([]HistoryEn
 	}
 	return entries, rows.Err()
 }
+
+// Clear removes all persisted download history entries.
+func (h *HistoryStore) Clear(ctx context.Context) error {
+	_, err := h.db.ExecContext(ctx, `DELETE FROM download_history`)
+	return err
+}

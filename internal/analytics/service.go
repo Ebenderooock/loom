@@ -86,6 +86,11 @@ func (s *Service) History(ctx context.Context, f HistoryFilter) ([]HistoryRecord
 	return s.store.ListHistory(ctx, f)
 }
 
+// ClearHistory removes all persisted analytics play history.
+func (s *Service) ClearHistory(ctx context.Context) error {
+	return s.store.ClearHistory(ctx)
+}
+
 // Stats returns the analytics report for the given window in days.
 func (s *Service) Stats(ctx context.Context, windowDays int) (*Stats, error) {
 	if windowDays <= 0 {

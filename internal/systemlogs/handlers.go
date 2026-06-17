@@ -21,13 +21,18 @@ type HandlerDeps struct {
 }
 
 // Router returns a chi router for system log endpoints.
-func Router(deps HandlerDeps) chi.Router {
+func Router(deps HandlerDeps, adminOnly func(http.Handler) http.Handler) chi.Router {
 	r := chi.NewRouter()
 	r.Get("/", handleList(deps.Store))
 	r.Get("/stream", handleStream(deps.Buffer))
 	r.Get("/config", handleGetConfig(deps.Capture))
-	r.Put("/config", handleUpdateConfig(deps.Capture))
-	r.Delete("/", handleClear(deps.Store))
+	if adminOnly != nil {
+		r.With(adminOnly).Put("/config", handleUpdateConfig(deps.Capture))
+		r.With(adminOnly).Delete("/", handleClear(deps.Store))
+	} else {
+		r.Put("/config", handleUpdateConfig(deps.Capture))
+		r.Delete("/", handleClear(deps.Store))
+	}
 	return r
 }
 

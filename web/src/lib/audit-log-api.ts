@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/fetch";
 
 // ─── Types ──────────────────────────────────────────────────────────────
@@ -58,6 +58,13 @@ export async function fetchAuditLog(
   return (await res.json()) as AuditLogResult;
 }
 
+export async function clearAuditLog(): Promise<void> {
+  const res = await apiFetch("/api/v1/system/audit-log", { method: "DELETE" });
+  if (!res.ok) {
+    throw new Error(`clear audit log: ${res.status} ${res.statusText}`);
+  }
+}
+
 // ─── Hook ───────────────────────────────────────────────────────────────
 
 export function useAuditLog(params: AuditLogParams = {}) {
@@ -66,5 +73,14 @@ export function useAuditLog(params: AuditLogParams = {}) {
     queryFn: ({ signal }) => fetchAuditLog(params, signal),
     refetchInterval: 15_000,
     staleTime: 10_000,
+  });
+}
+
+export function useClearAuditLog() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: clearAuditLog,
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["system", "audit-log"] }),
   });
 }
