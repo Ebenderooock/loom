@@ -545,6 +545,22 @@ export function DownloadForm({
                 Enable UPnP/NAT-PMP (auto port forwarding)
               </Label>
             </div>
+            <div className="flex items-center gap-2">
+              <input
+                id="debug-peer-discovery"
+                type="checkbox"
+                checked={
+                  (values.config?.debug_peer_discovery as boolean) ?? false
+                }
+                onChange={(e) =>
+                  updateConfig("debug_peer_discovery", e.target.checked)
+                }
+                className="h-4 w-4 rounded border-input"
+              />
+              <Label htmlFor="debug-peer-discovery" className="!m-0">
+                Debug Peer Discovery (logs to server)
+              </Label>
+            </div>
           </div>
         </>
       ) : (
