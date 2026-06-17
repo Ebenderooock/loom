@@ -390,6 +390,10 @@ func (e *Engine) AddMagnet(_ context.Context, magnet string, meta torrentMeta) (
 	}
 	e.mu.Unlock()
 
+	// Announce to trackers immediately for fast peer discovery.
+	// Critical for NAT/container scenarios where DHT alone is unreliable.
+	e.nudgePeerDiscovery(t, announceList)
+
 	if t.Info() != nil {
 		t.DownloadAll()
 	} else {
