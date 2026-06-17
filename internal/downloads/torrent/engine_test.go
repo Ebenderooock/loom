@@ -316,3 +316,20 @@ func TestDefaultAnnounceList(t *testing.T) {
 		}
 	}
 }
+
+func TestAnnounceListFromMagnet(t *testing.T) {
+	t.Parallel()
+	got := announceListFromMagnet("magnet:?xt=urn:btih:abc&tr=udp%3A%2F%2Ftracker.one%3A1337%2Fannounce&tr=udp%3A%2F%2Ftracker.two%3A6969%2Fannounce&tr=udp%3A%2F%2Ftracker.one%3A1337%2Fannounce")
+	want := [][]string{
+		{"udp://tracker.one:1337/announce"},
+		{"udp://tracker.two:6969/announce"},
+	}
+	if len(got) != len(want) {
+		t.Fatalf("got %d tiers, want %d", len(got), len(want))
+	}
+	for i := range want {
+		if len(got[i]) != 1 || got[i][0] != want[i][0] {
+			t.Fatalf("tier %d = %v, want %v", i, got[i], want[i])
+		}
+	}
+}
