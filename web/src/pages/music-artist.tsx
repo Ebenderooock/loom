@@ -347,7 +347,7 @@ export function MusicArtistPage() {
                 {type}s
               </h3>
               <div className="space-y-2">
-                {albumsByType[type]
+                {(albumsByType[type] ?? [])
                   .slice()
                   .sort((a, b) => (b.release_date || "").localeCompare(a.release_date || ""))
                   .map((al) => (
