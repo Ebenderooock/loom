@@ -14,6 +14,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/ebenderooock/loom/internal/indexers"
+	"github.com/ebenderooock/loom/internal/libraries"
 )
 
 // GrabChecker checks which media IDs have active workflows/grabs.
@@ -53,6 +54,12 @@ type UnmonitorOnDeleteChecker interface {
 // routerConfig holds optional dependencies for the movies router.
 type routerConfig struct {
 	unmonitorChecker UnmonitorOnDeleteChecker
+	libraryStore     interface {
+		List(ctx context.Context) ([]libraries.Library, error)
+	}
+	libraryScanner interface {
+		ScanLibrary(ctx context.Context, lib *libraries.Library) error
+	}
 }
 
 // RouterOption configures the movies router.
@@ -61,6 +68,21 @@ type RouterOption func(*routerConfig)
 // WithUnmonitorChecker provides an unmonitor-on-delete checker.
 func WithUnmonitorChecker(c UnmonitorOnDeleteChecker) RouterOption {
 	return func(cfg *routerConfig) { cfg.unmonitorChecker = c }
+}
+
+// WithLibraryRescan enables page-level rescan of all movie libraries.
+func WithLibraryRescan(
+	store interface {
+		List(ctx context.Context) ([]libraries.Library, error)
+	},
+	scanner interface {
+		ScanLibrary(ctx context.Context, lib *libraries.Library) error
+	},
+) RouterOption {
+	return func(cfg *routerConfig) {
+		cfg.libraryStore = store
+		cfg.libraryScanner = scanner
+	}
 }
 
 // Router mounts movies endpoints on the given chi router.
@@ -114,6 +136,10 @@ func RouterWithSearch(service Service, indexerSvc *indexers.Service, grabStore G
 	r.Post("/bulk", bulkUpdateMovies(service))
 	r.Post("/bulk-archive", bulkArchiveMovies(service))
 	r.Post("/bulk-unarchive", bulkUnarchiveMovies(service))
+	r.Post("/refresh", refreshAllMovies(service))
+	if cfg.libraryStore != nil && cfg.libraryScanner != nil {
+		r.Post("/rescan", rescanAllMovieLibraries(cfg.libraryStore, cfg.libraryScanner))
+	}
 
 	r.Get("/files/{movieID}", listMovieFiles(service))
 
@@ -161,6 +187,99 @@ func movieToResponse(m *Movie) map[string]interface{} {
 		resp["deletedAt"] = m.DeletedAt.Format("2006-01-02T15:04:05Z")
 	}
 	return resp
+}
+
+func refreshAllMovies(svc Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		total, err := svc.CountMovies(r.Context())
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if total == 0 {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusAccepted)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"message": "no movies to refresh",
+				"count":   0,
+			})
+			return
+		}
+
+		const batchSize = 500
+		ids := make([]string, 0, total)
+		for offset := 0; offset < total; offset += batchSize {
+			limit := batchSize
+			if remaining := total - offset; remaining < limit {
+				limit = remaining
+			}
+			movies, err := svc.ListMovies(r.Context(), limit, offset)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			for _, movie := range movies {
+				ids = append(ids, movie.ID)
+			}
+		}
+
+		go func(movieIDs []string) {
+			ctx := context.Background()
+			for _, id := range movieIDs {
+				if err := svc.RefreshMovie(ctx, id); err != nil {
+					slog.Warn("movies: bulk refresh failed", "movie_id", id, "error", err)
+				}
+			}
+		}(ids)
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusAccepted)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"message": "movie refresh started",
+			"count":   len(ids),
+		})
+	}
+}
+
+func rescanAllMovieLibraries(
+	store interface {
+		List(ctx context.Context) ([]libraries.Library, error)
+	},
+	scanner interface {
+		ScanLibrary(ctx context.Context, lib *libraries.Library) error
+	},
+) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		librariesList, err := store.List(r.Context())
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		movieLibraries := make([]libraries.Library, 0, len(librariesList))
+		for _, lib := range librariesList {
+			if lib.MediaType == "movie" {
+				movieLibraries = append(movieLibraries, lib)
+			}
+		}
+
+		go func(libs []libraries.Library) {
+			ctx := context.Background()
+			for _, lib := range libs {
+				lib := lib
+				if err := scanner.ScanLibrary(ctx, &lib); err != nil {
+					slog.Warn("movies: bulk rescan failed", "library_id", lib.ID, "error", err)
+				}
+			}
+		}(movieLibraries)
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusAccepted)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"message":      "movie library rescan started",
+			"libraryCount": len(movieLibraries),
+		})
+	}
 }
 
 // Handlers

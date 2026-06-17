@@ -16,9 +16,11 @@ import {
   SortAsc,
   Eye,
   EyeOff,
+  RefreshCw,
   Trash2,
   X,
   FolderSearch,
+  FolderSync,
   Settings2,
 } from "lucide-react";
 import {
@@ -57,6 +59,10 @@ export function SeriesToolbar({
   onBulkQualityProfile,
   onAddSeries,
   onImportLibrary,
+  onRefreshAll,
+  onRescanLibraries,
+  refreshingAll,
+  rescanningLibraries,
 }: {
   filterText: string;
   onFilterTextChange: (v: string) => void;
@@ -80,6 +86,10 @@ export function SeriesToolbar({
   onBulkQualityProfile: (profileId: string) => void;
   onAddSeries: () => void;
   onImportLibrary?: () => void;
+  onRefreshAll: () => void;
+  onRescanLibraries: () => void;
+  refreshingAll: boolean;
+  rescanningLibraries: boolean;
 }) {
   return (
     <div className="mb-6 space-y-3">
@@ -169,6 +179,26 @@ export function SeriesToolbar({
 
         {/* Add / Import buttons */}
         <div className="ml-auto flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-9 gap-1.5"
+            onClick={onRefreshAll}
+            disabled={refreshingAll}
+          >
+            <RefreshCw className="h-4 w-4" />
+            {refreshingAll ? "Refreshing..." : "Refresh All"}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-9 gap-1.5"
+            onClick={onRescanLibraries}
+            disabled={rescanningLibraries}
+          >
+            <FolderSync className="h-4 w-4" />
+            {rescanningLibraries ? "Rescanning..." : "Rescan Libraries"}
+          </Button>
           {onImportLibrary && (
             <Button
               variant="outline"

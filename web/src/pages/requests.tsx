@@ -39,15 +39,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  Check,
-  Loader2,
-  Plus,
-  Search,
-  X,
-  Inbox,
-  Gauge,
-} from "lucide-react";
+import { Check, Loader2, Plus, Search, X, Inbox, Gauge } from "lucide-react";
 import { toast } from "sonner";
 
 const TMDB_IMG = "https://image.tmdb.org/t/p";
@@ -248,9 +240,7 @@ function SearchAndRequest() {
           <TabsList>
             <TabsTrigger value="movie">Movies</TabsTrigger>
             <TabsTrigger value="series">TV Shows</TabsTrigger>
-            {musicEnabled && (
-              <TabsTrigger value="artist">Music</TabsTrigger>
-            )}
+            {musicEnabled && <TabsTrigger value="artist">Music</TabsTrigger>}
           </TabsList>
         </Tabs>
         <div className="relative flex-1">

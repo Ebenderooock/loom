@@ -125,6 +125,8 @@ export function MoviesPage() {
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [organizeDialogOpen, setOrganizeDialogOpen] = useState(false);
+  const [refreshingAll, setRefreshingAll] = useState(false);
+  const [rescanningLibraries, setRescanningLibraries] = useState(false);
 
   // Filters & sort
   const [filterText, setFilterText] = useState("");
@@ -394,6 +396,48 @@ export function MoviesPage() {
     setDetailOpen(true);
   };
 
+  const handleRefreshAll = async () => {
+    setRefreshingAll(true);
+    try {
+      const res = await apiFetch("/api/v1/movies/refresh", { method: "POST" });
+      if (!res.ok) {
+        throw new Error(await res.text());
+      }
+      const data = (await res.json()) as { count?: number };
+      toast.success(
+        `Refreshing ${data.count ?? movies.length} movie${(data.count ?? movies.length) === 1 ? "" : "s"} in the background`,
+      );
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to refresh movies",
+      );
+    } finally {
+      setRefreshingAll(false);
+    }
+  };
+
+  const handleRescanLibraries = async () => {
+    setRescanningLibraries(true);
+    try {
+      const res = await apiFetch("/api/v1/movies/rescan", { method: "POST" });
+      if (!res.ok) {
+        throw new Error(await res.text());
+      }
+      const data = (await res.json()) as { libraryCount?: number };
+      toast.success(
+        `Rescanning ${data.libraryCount ?? libraries.length} movie librar${(data.libraryCount ?? libraries.length) === 1 ? "y" : "ies"} in the background`,
+      );
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Failed to rescan movie libraries",
+      );
+    } finally {
+      setRescanningLibraries(false);
+    }
+  };
+
   // Stats
   const totalMovies = movies.length;
   const monitoredCount = movies.filter(
@@ -437,6 +481,10 @@ export function MoviesPage() {
           onAddMovie={() => setAddDialogOpen(true)}
           onImportLibrary={() => setImportDialogOpen(true)}
           onOrganize={() => setOrganizeDialogOpen(true)}
+          onRefreshAll={handleRefreshAll}
+          onRescanLibraries={handleRescanLibraries}
+          refreshingAll={refreshingAll}
+          rescanningLibraries={rescanningLibraries}
         />
       ) : null}
 
@@ -463,6 +511,15 @@ export function MoviesPage() {
             </p>
           ) : (
             <div className="flex gap-3">
+              <Button
+                variant="outline"
+                size="lg"
+                onClick={handleRescanLibraries}
+                disabled={rescanningLibraries}
+              >
+                <FolderSearch className="mr-1.5 h-4 w-4" />
+                {rescanningLibraries ? "Rescanning..." : "Rescan Libraries"}
+              </Button>
               <Button
                 variant="outline"
                 size="lg"

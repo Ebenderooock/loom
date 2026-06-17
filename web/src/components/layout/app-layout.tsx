@@ -149,7 +149,11 @@ function SidebarNav({
     let items = PRIMARY_NAV;
     if (musicEnabled) {
       const seriesIdx = items.findIndex((i) => i.to === "/series");
-      const musicItem = { to: "/music", label: "Music", Icon: Music } as NavItem;
+      const musicItem = {
+        to: "/music",
+        label: "Music",
+        Icon: Music,
+      } as NavItem;
       items = [
         ...items.slice(0, seriesIdx + 1),
         musicItem,

@@ -121,6 +121,8 @@ export function SeriesPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [refreshingAll, setRefreshingAll] = useState(false);
+  const [rescanningLibraries, setRescanningLibraries] = useState(false);
 
   // Filters & sort
   const [filterText, setFilterText] = useState("");
@@ -363,6 +365,48 @@ export function SeriesPage() {
     setDetailOpen(true);
   };
 
+  const handleRefreshAll = async () => {
+    setRefreshingAll(true);
+    try {
+      const res = await apiFetch("/api/v1/series/refresh", { method: "POST" });
+      if (!res.ok) {
+        throw new Error(await res.text());
+      }
+      const data = (await res.json()) as { count?: number };
+      toast.success(
+        `Refreshing ${data.count ?? seriesList.length} series in the background`,
+      );
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to refresh series",
+      );
+    } finally {
+      setRefreshingAll(false);
+    }
+  };
+
+  const handleRescanLibraries = async () => {
+    setRescanningLibraries(true);
+    try {
+      const res = await apiFetch("/api/v1/series/rescan", { method: "POST" });
+      if (!res.ok) {
+        throw new Error(await res.text());
+      }
+      const data = (await res.json()) as { libraryCount?: number };
+      toast.success(
+        `Rescanning ${data.libraryCount ?? libraries.length} TV librar${(data.libraryCount ?? libraries.length) === 1 ? "y" : "ies"} in the background`,
+      );
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Failed to rescan TV libraries",
+      );
+    } finally {
+      setRescanningLibraries(false);
+    }
+  };
+
   // Stats
   const totalSeries = seriesList.length;
   const monitoredCount = seriesList.filter(
@@ -405,6 +449,10 @@ export function SeriesPage() {
           onBulkQualityProfile={handleBulkQualityProfile}
           onAddSeries={() => setAddDialogOpen(true)}
           onImportLibrary={() => setImportDialogOpen(true)}
+          onRefreshAll={handleRefreshAll}
+          onRescanLibraries={handleRescanLibraries}
+          refreshingAll={refreshingAll}
+          rescanningLibraries={rescanningLibraries}
         />
       ) : null}
 
@@ -430,6 +478,15 @@ export function SeriesPage() {
             </p>
           ) : (
             <div className="flex gap-3">
+              <Button
+                variant="outline"
+                size="lg"
+                onClick={handleRescanLibraries}
+                disabled={rescanningLibraries}
+              >
+                <FolderSearch className="mr-1.5 h-4 w-4" />
+                {rescanningLibraries ? "Rescanning..." : "Rescan Libraries"}
+              </Button>
               <Button
                 variant="outline"
                 size="lg"

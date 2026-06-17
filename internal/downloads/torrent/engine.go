@@ -19,6 +19,7 @@ import (
 	"golang.org/x/time/rate"
 
 	"github.com/ebenderooock/loom/internal/diskspace"
+	"github.com/ebenderooock/loom/internal/downloads/torrentutil"
 )
 
 // metadataTimeout is how long we wait for a magnet's metadata to
@@ -33,32 +34,10 @@ const metadataTimeout = 60 * time.Second
 // after this timeout to avoid indefinite queuing.
 const queuedMetadataTimeout = 5 * time.Minute
 
-// defaultTrackers is a curated list of reliable public BitTorrent
-// trackers used to bootstrap peer discovery for magnet links. In
-// NAT'd/containerised environments (e.g. Kubernetes) inbound peer
-// connectivity and DHT responsiveness are limited, so announcing to
-// well-known trackers is the most reliable way to find peers and pull
-// metadata. anacrolix dedups these against any trackers already present
-// in the magnet, so injecting them is safe.
-var defaultTrackers = []string{
-	"udp://tracker.opentrackr.org:1337/announce",
-	"udp://open.stealth.si:80/announce",
-	"udp://exodus.desync.com:6969/announce",
-	"udp://tracker.torrent.eu.org:451/announce",
-	"udp://tracker.bittor.pw:1337/announce",
-	"udp://public.popcorn-tracker.org:6969/announce",
-	"udp://tracker.dler.org:6969/announce",
-	"udp://open.demonii.com:1337/announce",
-	"udp://glotorrents.pw:6969/announce",
-	"udp://tracker.coppersurfer.tk:6969",
-	"udp://torrent.gresille.org:80/announce",
-	"udp://p4p.arenabg.com:1337",
-	"udp://tracker.internetwarriors.net:1337",
-}
-
 // defaultAnnounceList wraps each tracker in its own tier so anacrolix
 // announces to all of them in parallel.
 func defaultAnnounceList() [][]string {
+	defaultTrackers := torrentutil.PublicTrackers()
 	list := make([][]string, len(defaultTrackers))
 	for i, tr := range defaultTrackers {
 		list[i] = []string{tr}
