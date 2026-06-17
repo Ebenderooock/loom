@@ -17,6 +17,7 @@ import (
 	"github.com/ebenderooock/loom/internal/auditlog"
 	"github.com/ebenderooock/loom/internal/customformats"
 	"github.com/ebenderooock/loom/internal/downloads"
+	torrentdl "github.com/ebenderooock/loom/internal/downloads/torrent"
 	"github.com/ebenderooock/loom/internal/indexers"
 	"github.com/ebenderooock/loom/internal/movies"
 	"github.com/ebenderooock/loom/internal/parser"
@@ -1329,18 +1330,7 @@ func buildDownloadRequest(res *indexers.Result) downloads.AddRequest {
 	if res.MagnetURI != "" {
 		req.Magnet = res.MagnetURI
 	} else if res.Infohash != "" {
-		// Construct a magnet URI with well-known public trackers so that
-		// infohash-only results (e.g. TPB via apibay.org) can find peers
-		// via tracker announces instead of relying solely on DHT.
-		req.Magnet = fmt.Sprintf(
-			"magnet:?xt=urn:btih:%s"+
-				"&tr=udp://tracker.opentrackr.org:1337/announce"+
-				"&tr=udp://open.demonii.com:1337/announce"+
-				"&tr=udp://open.tracker.cl:1337/announce"+
-				"&tr=udp://tracker.torrent.eu.org:451/announce"+
-				"&tr=udp://9.rarbg.to:2720/announce",
-			res.Infohash,
-		)
+		req.Magnet = torrentdl.BuildPublicMagnet(res.Infohash, res.Title)
 	}
 	if res.Link != "" {
 		// Some indexers (e.g. EZTV) store the magnet URI in the Link field
