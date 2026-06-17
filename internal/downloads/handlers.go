@@ -11,6 +11,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/ebenderooock/loom/internal/auth"
 	"github.com/ebenderooock/loom/internal/workflows"
 )
 
@@ -59,6 +60,7 @@ func (s *Service) Mount(r chi.Router) {
 	r.Get("/api/v1/activity/detail", s.handleActivityDetail)
 	// Download history endpoint
 	r.Get("/api/v1/downloads/history", s.handleHistory)
+	r.Delete("/api/v1/downloads/history", s.handleClearHistory)
 	for _, ext := range s.routeExtensions {
 		if ext != nil {
 			ext(r)
@@ -87,6 +89,15 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(v)
+}
+
+func requireAdminIfPresent(w http.ResponseWriter, r *http.Request) bool {
+	id := auth.IdentityFrom(r.Context())
+	if id != nil && !id.HasRole("admin") {
+		writeError(w, http.StatusForbidden, "forbidden", "admin access required")
+		return false
+	}
+	return true
 }
 
 // --- create ---------------------------------------------------------
@@ -756,6 +767,23 @@ func (s *Service) handleHistory(w http.ResponseWriter, r *http.Request) {
 		entries = []HistoryEntry{}
 	}
 	writeJSON(w, http.StatusOK, entries)
+}
+
+func (s *Service) handleClearHistory(w http.ResponseWriter, r *http.Request) {
+	if !requireAdminIfPresent(w, r) {
+		return
+	}
+	if s.historyStore == nil {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	if err := s.historyStore.Clear(r.Context()); err != nil {
+		writeJSON(w, http.StatusInternalServerError, errorBody{
+			Error: errorPayload{Message: "failed to clear download history", Code: "internal_error"},
+		})
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // recordManualGrab records grab linkage for interactive search grabs.

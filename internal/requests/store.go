@@ -148,6 +148,12 @@ func (s *Store) query(ctx context.Context, q string, args ...any) ([]Request, er
 	return out, rows.Err()
 }
 
+// Clear removes all persisted media requests.
+func (s *Store) Clear(ctx context.Context) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM media_requests`)
+	return err
+}
+
 // Get returns a single request by id.
 func (s *Store) Get(ctx context.Context, id string) (Request, error) {
 	row := s.db.QueryRowContext(ctx, `SELECT `+selectCols+` FROM media_requests WHERE id = ?`, id)

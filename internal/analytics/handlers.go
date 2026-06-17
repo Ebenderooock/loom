@@ -17,6 +17,7 @@ func Router(svc *Service, adminMW func(http.Handler) http.Handler) chi.Router {
 	}
 	r.Get("/streams", handleStreams(svc))
 	r.Get("/history", handleHistory(svc))
+	r.Delete("/history", handleClearHistory(svc))
 	r.Get("/stats", handleStats(svc))
 	return r
 }
@@ -71,5 +72,15 @@ func handleStats(svc *Service) http.HandlerFunc {
 			return
 		}
 		writeJSON(w, http.StatusOK, stats)
+	}
+}
+
+func handleClearHistory(svc *Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if err := svc.ClearHistory(r.Context()); err != nil {
+			writeErr(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
 	}
 }

@@ -211,11 +211,25 @@ func (l *Logger) Prune(ctx context.Context, age time.Duration) (int64, error) {
 	return res.RowsAffected()
 }
 
+// Clear deletes the entire audit log.
+func (l *Logger) Clear(ctx context.Context) error {
+	_, err := l.db.ExecContext(ctx, `DELETE FROM audit_log`)
+	if err != nil {
+		return fmt.Errorf("audit log clear: %w", err)
+	}
+	return nil
+}
+
 // ── HTTP handlers ──────────────────────────────────────────────────────
 
 // Mount registers audit log routes onto r.
-func (l *Logger) Mount(r chi.Router) {
+func (l *Logger) Mount(r chi.Router, adminOnly func(http.Handler) http.Handler) {
 	r.Get("/api/v1/system/audit-log", l.handleList)
+	if adminOnly != nil {
+		r.With(adminOnly).Delete("/api/v1/system/audit-log", l.handleClear)
+		return
+	}
+	r.Delete("/api/v1/system/audit-log", l.handleClear)
 }
 
 func (l *Logger) handleList(w http.ResponseWriter, r *http.Request) {
@@ -242,6 +256,15 @@ func (l *Logger) handleList(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(result)
+}
+
+func (l *Logger) handleClear(w http.ResponseWriter, r *http.Request) {
+	if err := l.Clear(r.Context()); err != nil {
+		l.logger.Error("audit log clear failed", "err", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // ── Convenience helpers ────────────────────────────────────────────────

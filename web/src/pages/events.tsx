@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ConfirmActionButton } from "@/components/ui/confirm-action";
 import {
   Select,
   SelectContent,
@@ -17,8 +18,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useSetPageHeader } from "@/hooks/use-page-header";
+import { useAuth } from "@/hooks/use-auth";
 import {
   useAuditLog,
+  useClearAuditLog,
   type AuditLogParams,
   type AuditLogEntry,
 } from "@/lib/audit-log-api";
@@ -32,8 +35,9 @@ import {
   ChevronUp,
   RefreshCw,
 } from "lucide-react";
-import { useQueryClient, useQuery } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/fetch";
+import { toast } from "sonner";
 
 const PAGE_SIZE = 50;
 
@@ -274,11 +278,14 @@ export function EventsPage() {
     "Centralized audit log — all system activity in one place",
   );
 
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
   const [category, setCategory] = React.useState<string>("all");
   const [level, setLevel] = React.useState<string>("all");
   const [offset, setOffset] = React.useState(0);
   const [expandedId, setExpandedId] = React.useState<string | null>(null);
   const qc = useQueryClient();
+  const clearAudit = useClearAuditLog();
 
   const params: AuditLogParams = {
     limit: PAGE_SIZE,
@@ -335,6 +342,28 @@ export function EventsPage() {
         >
           <RefreshCw className="h-4 w-4" />
         </Button>
+
+        {isAdmin && (
+          <ConfirmActionButton
+            actionLabel="Clear History"
+            title="Clear event history?"
+            description="Remove the stored audit log entries from the events view."
+            confirmLabel="Clear events"
+            pending={clearAudit.isPending}
+            icon={<RefreshCw className="mr-1.5 h-3.5 w-3.5" />}
+            onConfirm={async () => {
+              try {
+                await clearAudit.mutateAsync();
+                setExpandedId(null);
+                setOffset(0);
+                toast.success("Event history cleared");
+              } catch {
+                toast.error("Failed to clear event history");
+                throw new Error("clear audit history failed");
+              }
+            }}
+          />
+        )}
 
         <span className="ml-auto text-xs text-muted-foreground">
           {total} event{total !== 1 ? "s" : ""}

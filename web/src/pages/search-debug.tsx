@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ConfirmActionButton } from "@/components/ui/confirm-action";
 import {
   Select,
   SelectContent,
@@ -20,11 +21,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { LoadingState } from "@/components/ui/loading-state";
 import { useSetPageHeader } from "@/hooks/use-page-header";
+import { useAuth } from "@/hooks/use-auth";
 import {
   useSearchDebugList,
   useSearchDebugStats,
   useSearchDebugEntry,
   useActiveSearches,
+  useClearSearchDebugHistory,
   useSearchQueueSSE,
   type SearchDebugParams,
   type SearchDebugEntry,
@@ -33,6 +36,7 @@ import {
   type EvalResult,
 } from "@/lib/search-debug-api";
 import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import {
   Search,
   ChevronDown,
@@ -622,11 +626,14 @@ export function SearchDebugPage() {
   // Subscribe to SSE for real-time updates.
   useSearchQueueSSE();
 
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
   const [outcome, setOutcome] = React.useState("all");
   const [mediaType, setMediaType] = React.useState("all");
   const [offset, setOffset] = React.useState(0);
   const [expandedId, setExpandedId] = React.useState<string | null>(null);
   const qc = useQueryClient();
+  const clearHistory = useClearSearchDebugHistory();
 
   const params: SearchDebugParams = {
     limit: PAGE_SIZE,
@@ -690,6 +697,28 @@ export function SearchDebugPage() {
         >
           <RefreshCw className="h-4 w-4" />
         </Button>
+
+        {isAdmin && (
+          <ConfirmActionButton
+            actionLabel="Clear History"
+            title="Clear search queue history?"
+            description="Remove completed and past search-debug entries. Active searches are shown separately."
+            confirmLabel="Clear search history"
+            pending={clearHistory.isPending}
+            icon={<RefreshCw className="mr-1.5 h-3.5 w-3.5" />}
+            onConfirm={async () => {
+              try {
+                await clearHistory.mutateAsync();
+                setExpandedId(null);
+                setOffset(0);
+                toast.success("Search history cleared");
+              } catch {
+                toast.error("Failed to clear search history");
+                throw new Error("clear search history failed");
+              }
+            }}
+          />
+        )}
 
         <span className="ml-auto text-xs text-muted-foreground">
           {total} result{total !== 1 ? "s" : ""}

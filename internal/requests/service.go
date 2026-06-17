@@ -178,6 +178,11 @@ func (s *Service) ListMine(ctx context.Context, userID string) ([]Request, error
 	return s.store.ListByUser(ctx, userID)
 }
 
+// Clear removes all persisted request history.
+func (s *Service) Clear(ctx context.Context) error {
+	return s.store.Clear(ctx)
+}
+
 // GetQuotaConfig returns the global per-user request quota.
 func (s *Service) GetQuotaConfig(ctx context.Context) (QuotaConfig, error) {
 	return s.store.GetQuotaConfig(ctx)

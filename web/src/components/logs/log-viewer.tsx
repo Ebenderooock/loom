@@ -2,6 +2,8 @@ import { useState, useRef, useEffect } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { ConfirmActionButton } from "@/components/ui/confirm-action";
+import { useAuth } from "@/hooks/use-auth";
 import {
   useSystemLogs,
   useLogStream,
@@ -11,6 +13,7 @@ import {
   type LogEntry,
   type LogListParams,
 } from "@/lib/system-logs-api";
+import { toast } from "sonner";
 import {
   ArrowDown,
   ChevronDown,
@@ -306,6 +309,8 @@ function LogTable({ entries }: { entries: LogEntry[] }) {
 }
 
 function LogConfigSection() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
   const { data: config } = useLogConfig();
   const updateMut = useUpdateLogConfig();
   const clearMut = useClearSystemLogs();
@@ -335,7 +340,9 @@ function LogConfigSection() {
             variant="outline"
             size="sm"
             disabled={
-              captureLevel === config?.capture_level || updateMut.isPending
+              !isAdmin ||
+              captureLevel === config?.capture_level ||
+              updateMut.isPending
             }
             onClick={() => updateMut.mutate({ capture_level: captureLevel })}
           >
@@ -343,17 +350,25 @@ function LogConfigSection() {
           </Button>
         </div>
         <div className="ml-auto">
-          <Button
-            variant="destructive"
-            size="sm"
-            onClick={() => {
-              if (confirm("Clear all system logs?")) clearMut.mutate();
-            }}
-            disabled={clearMut.isPending}
-          >
-            <Trash2 className="mr-1.5 h-3.5 w-3.5" />
-            Clear Logs
-          </Button>
+          {isAdmin && (
+            <ConfirmActionButton
+              actionLabel="Clear Logs"
+              title="Clear system logs?"
+              description="Remove the stored system log history shown in this viewer."
+              confirmLabel="Clear logs"
+              pending={clearMut.isPending}
+              icon={<Trash2 className="mr-1.5 h-3.5 w-3.5" />}
+              onConfirm={async () => {
+                try {
+                  await clearMut.mutateAsync();
+                  toast.success("System logs cleared");
+                } catch {
+                  toast.error("Failed to clear system logs");
+                  throw new Error("clear system logs failed");
+                }
+              }}
+            />
+          )}
         </div>
       </CardContent>
     </Card>

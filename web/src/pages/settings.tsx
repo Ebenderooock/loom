@@ -3,6 +3,7 @@ import { apiFetch } from "@/lib/fetch";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { TableSkeleton } from "@/components/ui/skeletons";
 import { Button } from "@/components/ui/button";
+import { ConfirmActionButton } from "@/components/ui/confirm-action";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
@@ -71,6 +72,11 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { useAuth } from "@/hooks/use-auth";
 import { useFeatures, useSetFeature } from "@/lib/features-api";
+import { useClearAuditLog } from "@/lib/audit-log-api";
+import { useClearSearchDebugHistory } from "@/lib/search-debug-api";
+import { useClearAnalyticsHistory } from "@/lib/analytics-api";
+import { useClearRequests } from "@/lib/requests-api";
+import { useClearSystemLogs } from "@/lib/system-logs-api";
 import {
   useConnections as useConnectConnections,
   useCreateConnection as useCreateConnect,
@@ -837,6 +843,202 @@ export function GeneralPanel() {
           </div>
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+function DataManagementActionCard({
+  title,
+  description,
+  actionLabel,
+  confirmLabel,
+  onConfirm,
+  pending,
+}: {
+  title: string;
+  description: string;
+  actionLabel: string;
+  confirmLabel: string;
+  onConfirm: () => Promise<void>;
+  pending?: boolean;
+}) {
+  return (
+    <Card className="border-zinc-800 bg-zinc-900/50">
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base">{title}</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <p className="text-sm text-zinc-400">{description}</p>
+        <ConfirmActionButton
+          actionLabel={actionLabel}
+          title={`${actionLabel}?`}
+          description={description}
+          confirmLabel={confirmLabel}
+          pending={pending}
+          icon={<Trash2 className="mr-1.5 h-3.5 w-3.5" />}
+          onConfirm={onConfirm}
+        />
+      </CardContent>
+    </Card>
+  );
+}
+
+export function DataManagementPanel() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
+  const clearAudit = useClearAuditLog();
+  const clearSearchDebug = useClearSearchDebugHistory();
+  const clearAnalytics = useClearAnalyticsHistory();
+  const clearRequests = useClearRequests();
+  const clearSystemLogs = useClearSystemLogs();
+  const [clearingDownloads, setClearingDownloads] = React.useState(false);
+  const [clearingBlocklist, setClearingBlocklist] = React.useState(false);
+
+  if (!isAdmin) {
+    return (
+      <Card className="border-zinc-800 bg-zinc-900/50">
+        <CardContent className="py-8 text-center text-sm text-zinc-400">
+          Admin access is required to clear stored history and operational data.
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <h3 className="text-lg font-semibold">Data Management</h3>
+        <p className="text-sm text-muted-foreground">
+          Clear historical records without touching media files on disk or your
+          configured libraries.
+        </p>
+      </div>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <DataManagementActionCard
+          title="Download history"
+          description="Clear the stored completed and failed download history shown on Activity."
+          actionLabel="Clear Download History"
+          confirmLabel="Clear downloads"
+          pending={clearingDownloads}
+          onConfirm={async () => {
+            setClearingDownloads(true);
+            try {
+              const res = await apiFetch("/api/v1/downloads/history", {
+                method: "DELETE",
+              });
+              if (!res.ok) throw new Error("clear download history failed");
+              toast.success("Download history cleared");
+            } catch {
+              toast.error("Failed to clear download history");
+              throw new Error("clear download history failed");
+            } finally {
+              setClearingDownloads(false);
+            }
+          }}
+        />
+        <DataManagementActionCard
+          title="Event history"
+          description="Clear the centralized audit/event log used by the Events page."
+          actionLabel="Clear Event History"
+          confirmLabel="Clear events"
+          pending={clearAudit.isPending}
+          onConfirm={async () => {
+            try {
+              await clearAudit.mutateAsync();
+              toast.success("Event history cleared");
+            } catch {
+              toast.error("Failed to clear event history");
+              throw new Error("clear event history failed");
+            }
+          }}
+        />
+        <DataManagementActionCard
+          title="Search queue history"
+          description="Clear stored search-debug entries and completed search queue history."
+          actionLabel="Clear Search History"
+          confirmLabel="Clear search history"
+          pending={clearSearchDebug.isPending}
+          onConfirm={async () => {
+            try {
+              await clearSearchDebug.mutateAsync();
+              toast.success("Search history cleared");
+            } catch {
+              toast.error("Failed to clear search history");
+              throw new Error("clear search history failed");
+            }
+          }}
+        />
+        <DataManagementActionCard
+          title="Watch history"
+          description="Clear analytics playback history recorded from Plex, Jellyfin, Emby, and similar integrations."
+          actionLabel="Clear Watch History"
+          confirmLabel="Clear watch history"
+          pending={clearAnalytics.isPending}
+          onConfirm={async () => {
+            try {
+              await clearAnalytics.mutateAsync();
+              toast.success("Watch history cleared");
+            } catch {
+              toast.error("Failed to clear watch history");
+              throw new Error("clear watch history failed");
+            }
+          }}
+        />
+        <DataManagementActionCard
+          title="Request history"
+          description="Clear movie, TV, and music requests along with their approval and failure history."
+          actionLabel="Clear Request History"
+          confirmLabel="Clear requests"
+          pending={clearRequests.isPending}
+          onConfirm={async () => {
+            try {
+              await clearRequests.mutateAsync();
+              toast.success("Request history cleared");
+            } catch {
+              toast.error("Failed to clear request history");
+              throw new Error("clear request history failed");
+            }
+          }}
+        />
+        <DataManagementActionCard
+          title="System logs"
+          description="Clear the stored system log history used by the System Logs viewer."
+          actionLabel="Clear System Logs"
+          confirmLabel="Clear logs"
+          pending={clearSystemLogs.isPending}
+          onConfirm={async () => {
+            try {
+              await clearSystemLogs.mutateAsync();
+              toast.success("System logs cleared");
+            } catch {
+              toast.error("Failed to clear system logs");
+              throw new Error("clear system logs failed");
+            }
+          }}
+        />
+        <DataManagementActionCard
+          title="Download safety blocklist"
+          description="Clear all blocked releases from the download safety blocklist."
+          actionLabel="Clear Blocklist"
+          confirmLabel="Clear blocklist"
+          pending={clearingBlocklist}
+          onConfirm={async () => {
+            setClearingBlocklist(true);
+            try {
+              const res = await apiFetch("/api/v1/blocklist", {
+                method: "DELETE",
+              });
+              if (!res.ok) throw new Error("clear blocklist failed");
+              toast.success("Blocklist cleared");
+            } catch {
+              toast.error("Failed to clear blocklist");
+              throw new Error("clear blocklist failed");
+            } finally {
+              setClearingBlocklist(false);
+            }
+          }}
+        />
+      </div>
     </div>
   );
 }

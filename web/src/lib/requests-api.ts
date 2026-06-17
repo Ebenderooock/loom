@@ -145,6 +145,10 @@ export async function rejectRequest(
   });
 }
 
+export async function clearRequests(): Promise<void> {
+  return request("DELETE", "/api/v1/requests");
+}
+
 // ---------- Quotas ----------
 
 export interface MediaQuota {
@@ -242,6 +246,14 @@ export function useRejectRequest() {
   return useMutation({
     mutationFn: ({ id, reason }: { id: string; reason: string }) =>
       rejectRequest(id, reason),
+    onSuccess: () => qc.invalidateQueries({ queryKey: requestKeys.all }),
+  });
+}
+
+export function useClearRequests() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: clearRequests,
     onSuccess: () => qc.invalidateQueries({ queryKey: requestKeys.all }),
   });
 }

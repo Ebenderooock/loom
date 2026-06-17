@@ -30,6 +30,7 @@ import {
   SlidersHorizontal,
   Tags,
   Terminal,
+  Trash2,
   ToggleRight,
   UsersRound,
   Workflow,
@@ -249,6 +250,14 @@ export const SETTINGS_GROUPS: SettingsNavGroup[] = [
         Icon: Terminal,
         kind: "panel",
         description: "Application logs and diagnostics.",
+      },
+      {
+        to: "/settings/data-management",
+        label: "Data Management",
+        Icon: Trash2,
+        kind: "panel",
+        description: "Clear stored history and operational data.",
+        adminOnly: true,
       },
       {
         to: "/settings/users",

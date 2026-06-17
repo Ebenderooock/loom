@@ -1,4 +1,4 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/fetch";
 import { useEffect, useCallback } from "react";
 
@@ -173,6 +173,11 @@ export async function fetchActiveSearches(
   return (await res.json()) as { entries: SearchDebugEntry[] };
 }
 
+export async function clearSearchDebugHistory(): Promise<void> {
+  const res = await apiFetch("/api/v1/search-queue", { method: "DELETE" });
+  if (!res.ok) throw new Error(`clear search queue: ${res.status}`);
+}
+
 // ─── Hooks ──────────────────────────────────────────────────────────────
 
 export function useSearchDebugList(params: SearchDebugParams = {}) {
@@ -207,6 +212,16 @@ export function useActiveSearches() {
     queryFn: ({ signal }) => fetchActiveSearches(signal),
     refetchInterval: 5_000,
     staleTime: 3_000,
+  });
+}
+
+export function useClearSearchDebugHistory() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: clearSearchDebugHistory,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["search-queue"] });
+    },
   });
 }
 
