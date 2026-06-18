@@ -115,6 +115,13 @@ func (e *Engine) markGrabbed(ctx context.Context, workflowID, clientID, download
 			if err := e.store.SetDownload(ctx, workflowID, clientID, downloadID, title); err != nil {
 				return fmt.Errorf("update existing download binding: %w", err)
 			}
+			if wf.State == StatePostDownload {
+				if ok, err := e.store.Transition(ctx, workflowID, StatePostDownload, StateDownloading, "Re-grabbed release; resuming download"); err != nil {
+					return fmt.Errorf("resume downloading from post_download: %w", err)
+				} else if !ok {
+					return fmt.Errorf("workflow %s state changed while resuming download", workflowID)
+				}
+			}
 			e.logger.Info("workflow download binding updated",
 				"id", workflowID,
 				"state", wf.State,

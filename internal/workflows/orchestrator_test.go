@@ -248,6 +248,47 @@ func TestOrchestratorGrabbedUpdatesExistingDownloadingWorkflow(t *testing.T) {
 	}
 }
 
+func TestOrchestratorGrabbedResumesFromPostDownload(t *testing.T) {
+	imp := &mockImporter{paths: []string{"/media/movie.mkv"}}
+	orch, store := testOrchestrator(t, imp)
+	ctx, _ := startOrchestrator(t, orch)
+
+	wf, err := orch.StartSearch(ctx, TypeMovieSearch, MediaTypeMovie, "qp-1", []string{"movie-457"})
+	if err != nil {
+		t.Fatalf("StartSearch: %v", err)
+	}
+
+	orch.Send(CmdGrabbed{
+		WorkflowID: wf.ID,
+		ClientID:   "qbit-1",
+		DownloadID: "dl-101",
+		Title:      "Movie.2024.1080p",
+	})
+	waitForCondition(t, 2*time.Second, func() bool {
+		got, _ := store.Get(ctx, wf.ID)
+		return got != nil && got.State == StateDownloading
+	})
+
+	ok, err := store.Transition(ctx, wf.ID, StateDownloading, StatePostDownload, "test setup")
+	if err != nil {
+		t.Fatalf("transition to post_download: %v", err)
+	}
+	if !ok {
+		t.Fatal("expected transition to post_download to succeed")
+	}
+
+	orch.Send(CmdGrabbed{
+		WorkflowID: wf.ID,
+		ClientID:   "qbit-1",
+		DownloadID: "dl-102",
+		Title:      "Movie.2024.REPACK.1080p",
+	})
+	waitForCondition(t, 2*time.Second, func() bool {
+		got, _ := store.Get(ctx, wf.ID)
+		return got != nil && got.State == StateDownloading && got.DownloadID == "dl-102"
+	})
+}
+
 func TestOrchestratorDownloadComplete(t *testing.T) {
 	imp := &mockImporter{paths: []string{"/media/movie.mkv"}}
 	orch, store := testOrchestrator(t, imp)
