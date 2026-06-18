@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"time"
 )
 
 // MediaStatusUpdater abstracts movie/episode status updates.
@@ -115,7 +116,28 @@ func (e *Engine) markGrabbed(ctx context.Context, workflowID, clientID, download
 			if err := e.store.SetDownload(ctx, workflowID, clientID, downloadID, title); err != nil {
 				return fmt.Errorf("update existing download binding: %w", err)
 			}
+			if err := e.store.ResetAttempt(ctx, workflowID); err != nil {
+				return fmt.Errorf("reset workflow attempt: %w", err)
+			}
+			// Clear volatile runtime fields from the prior attempt so post-download
+			// evaluation does not use stale completion/seeding signals.
+			if err := e.store.MergeMetadata(ctx, workflowID, map[string]any{
+				"progress":     0.0,
+				"down_speed":   0,
+				"up_speed":     0,
+				"ratio":        0.0,
+				"status":       "downloading",
+				"content_path": "",
+			}); err != nil {
+				return fmt.Errorf("reset workflow metadata: %w", err)
+			}
 			if wf.State == StatePostDownload {
+				if policy := GetPostDownloadPolicy(wf.Metadata); policy != nil {
+					policy.StartedAt = time.Time{}
+					if err := e.store.SetPostDownloadPolicy(ctx, workflowID, *policy); err != nil {
+						return fmt.Errorf("reset post_download policy: %w", err)
+					}
+				}
 				if ok, err := e.store.Transition(ctx, workflowID, StatePostDownload, StateDownloading, "Re-grabbed release; resuming download"); err != nil {
 					return fmt.Errorf("resume downloading from post_download: %w", err)
 				} else if !ok {

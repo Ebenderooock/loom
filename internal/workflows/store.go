@@ -213,6 +213,17 @@ func (s *Store) SetDownload(ctx context.Context, id, clientID, downloadID, title
 	return err
 }
 
+// ResetAttempt clears retry/error/completion fields when a workflow starts a
+// fresh grab attempt (for example, redownloading the same episode).
+func (s *Store) ResetAttempt(ctx context.Context, id string) error {
+	_, err := s.db.ExecContext(ctx, `
+		UPDATE workflows
+		SET retry_count = 0, last_error = NULL, completed_at = NULL, updated_at = ?
+		WHERE id = ?`, time.Now(), id,
+	)
+	return err
+}
+
 // SetMetadata updates the workflow's metadata JSON blob.
 func (s *Store) SetMetadata(ctx context.Context, id, metadata string) error {
 	_, err := s.db.ExecContext(ctx, `

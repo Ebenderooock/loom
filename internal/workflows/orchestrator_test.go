@@ -3,6 +3,7 @@ package workflows
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -276,6 +277,16 @@ func TestOrchestratorGrabbedResumesFromPostDownload(t *testing.T) {
 	if !ok {
 		t.Fatal("expected transition to post_download to succeed")
 	}
+	if _, err := store.IncrementRetry(ctx, wf.ID, "test retry"); err != nil {
+		t.Fatalf("increment retry: %v", err)
+	}
+	if err := store.MergeMetadata(ctx, wf.ID, map[string]any{
+		"status":       "seeding",
+		"ratio":        1.75,
+		"content_path": "/media/downloads/stale",
+	}); err != nil {
+		t.Fatalf("seed stale metadata: %v", err)
+	}
 
 	orch.Send(CmdGrabbed{
 		WorkflowID: wf.ID,
@@ -285,8 +296,23 @@ func TestOrchestratorGrabbedResumesFromPostDownload(t *testing.T) {
 	})
 	waitForCondition(t, 2*time.Second, func() bool {
 		got, _ := store.Get(ctx, wf.ID)
-		return got != nil && got.State == StateDownloading && got.DownloadID == "dl-102"
+		return got != nil && got.State == StateDownloading && got.DownloadID == "dl-102" && got.RetryCount == 0
 	})
+
+	got, _ := store.Get(ctx, wf.ID)
+	if got.LastError != "" {
+		t.Fatalf("expected last_error reset on re-grab, got %q", got.LastError)
+	}
+	var meta map[string]any
+	if err := json.Unmarshal([]byte(got.Metadata), &meta); err != nil {
+		t.Fatalf("parse metadata: %v", err)
+	}
+	if status, _ := meta["status"].(string); status != "downloading" {
+		t.Fatalf("expected status metadata to reset to downloading, got %q", status)
+	}
+	if cp, _ := meta["content_path"].(string); cp != "" {
+		t.Fatalf("expected content_path to be cleared, got %q", cp)
+	}
 }
 
 func TestOrchestratorDownloadComplete(t *testing.T) {
@@ -464,6 +490,14 @@ func TestClassifyImportError_MetadataNotResolvedIsPermanent(t *testing.T) {
 	got := orch.classifyImportError(`download metadata not resolved yet: unresolved content path "/media/downloads/infohash:abc"`)
 	if got != failPermanent {
 		t.Fatalf("expected failPermanent, got %v", got)
+	}
+}
+
+func TestClassifyImportError_DownloadPathNotFoundRetriesSearch(t *testing.T) {
+	orch := &Orchestrator{}
+	got := orch.classifyImportError(`download path not found: stat /media/downloads/Some.Release: no such file or directory`)
+	if got != retrySearch {
+		t.Fatalf("expected retrySearch, got %v", got)
 	}
 }
 
