@@ -441,6 +441,9 @@ func (e *Engine) AddMagnet(_ context.Context, magnet string, meta torrentMeta) (
 	// Announce to trackers immediately for fast peer discovery.
 	// Critical for NAT/container scenarios where DHT alone is unreliable.
 	e.nudgePeerDiscovery(t, announceList)
+	// Start the torrent session immediately so the client opens peer
+	// handshakes while metadata resolution is in-flight.
+	t.DownloadAll()
 
 	waitCtx, waitCancel := context.WithTimeout(e.lifecycleCtx(), metadataTimeout)
 	defer waitCancel()
@@ -450,7 +453,6 @@ func (e *Engine) AddMagnet(_ context.Context, magnet string, meta torrentMeta) (
 	for {
 		select {
 		case <-t.GotInfo():
-			t.DownloadAll()
 			goto added
 		case <-waitCtx.Done():
 			e.mu.Lock()
