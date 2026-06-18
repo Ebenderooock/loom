@@ -131,10 +131,11 @@ func mergeAnnounceLists(primary, fallback [][]string) [][]string {
 }
 
 func (e *Engine) nudgePeerDiscovery(t *torrent.Torrent, announceList [][]string) {
+	hash := strings.ToLower(t.InfoHash().HexString())
 	if len(announceList) > 0 {
 		if e.cfg.DebugPeerDiscovery {
 			e.logger.Info("nudging peer discovery: adding trackers",
-				"hash", strings.ToLower(t.InfoHash().HexString()),
+				"hash", hash,
 				"num_trackers", len(announceList),
 			)
 		}
@@ -144,13 +145,13 @@ func (e *Engine) nudgePeerDiscovery(t *torrent.Torrent, announceList [][]string)
 		done, stop, err := t.AnnounceToDht(s)
 		if e.cfg.DebugPeerDiscovery {
 			e.logger.Info("nudging peer discovery: announcing to DHT",
-				"hash", strings.ToLower(t.InfoHash().HexString()),
+				"hash", hash,
 				"dht_server", s.Addr().String(),
 			)
 		}
 		if err != nil {
 			e.logger.Warn("dht announce failed",
-				"hash", strings.ToLower(t.InfoHash().HexString()),
+				"hash", hash,
 				"dht_server", s.Addr().String(),
 				"error", err,
 			)
@@ -160,11 +161,30 @@ func (e *Engine) nudgePeerDiscovery(t *torrent.Torrent, announceList [][]string)
 			go func(done <-chan struct{}, stop func()) {
 				select {
 				case <-done:
+					if e.cfg.DebugPeerDiscovery {
+						e.logger.Debug("dht announce completed",
+							"hash", hash,
+							"dht_server", s.Addr().String(),
+						)
+					}
 				case <-time.After(15 * time.Second):
+					e.logger.Debug("dht announce timeout (manual stop after 15s)",
+						"hash", hash,
+						"dht_server", s.Addr().String(),
+					)
 					stop()
 				}
 			}(done, stop)
 		}
+	}
+	// Log current peer count after nudging
+	if e.cfg.DebugPeerDiscovery {
+		peers := t.PeerConns()
+		e.logger.Debug("peer discovery nudge completed",
+			"hash", hash,
+			"current_peer_conns", len(peers),
+			"num_trackers", len(announceList),
+		)
 	}
 }
 
@@ -479,6 +499,9 @@ func (e *Engine) AddMagnet(_ context.Context, magnet string, meta torrentMeta) (
 	defer waitCancel()
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
+	telemetryTicker := time.NewTicker(10 * time.Second)
+	defer telemetryTicker.Stop()
+	startTime := time.Now()
 
 	for {
 		select {
@@ -490,19 +513,47 @@ func (e *Engine) AddMagnet(_ context.Context, magnet string, meta torrentMeta) (
 			delete(e.items, hash)
 			e.mu.Unlock()
 
+			peerConns := t.PeerConns()
+			peerAddrs := make([]string, 0, len(peerConns))
+			for _, pc := range peerConns {
+				if pc.RemoteAddr != nil {
+					peerAddrs = append(peerAddrs, pc.RemoteAddr.String())
+				}
+			}
+			stats := t.Stats()
+
 			t.Drop()
 			if tracked != nil {
 				e.logger.Warn("dropping magnet: metadata resolution timeout",
 					"hash", hash,
 					"title", tracked.title,
 					"timeout", magnetMetadataTimeout,
-					"peer_conns", len(t.PeerConns()),
+					"elapsed", time.Since(startTime),
+					"peer_conns", len(peerConns),
+					"peer_addrs", peerAddrs,
 					"num_trackers", len(announceList),
+					"bytes_read", stats.BytesReadUsefulData.Int64(),
+					"bytes_written", stats.BytesWrittenData.Int64(),
+					"has_info", t.Info() != nil,
 				)
 			}
 			return "", fmt.Errorf("%w: %w", ErrMetadataTimeout, waitCtx.Err())
 		case <-ticker.C:
 			e.nudgePeerDiscovery(t, announceList)
+		case <-telemetryTicker.C:
+			peerConns := t.PeerConns()
+			stats := t.Stats()
+			if e.cfg.DebugPeerDiscovery || len(peerConns) == 0 {
+				e.logger.Debug("magnet metadata resolution progress",
+					"hash", hash,
+					"title", title,
+					"elapsed", time.Since(startTime),
+					"peer_conns", len(peerConns),
+					"num_trackers", len(announceList),
+					"bytes_read", stats.BytesReadUsefulData.Int64(),
+					"has_info", t.Info() != nil,
+				)
+			}
 		}
 	}
 
