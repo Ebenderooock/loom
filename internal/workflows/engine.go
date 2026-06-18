@@ -106,7 +106,25 @@ func (e *Engine) markGrabbed(ctx context.Context, workflowID, clientID, download
 		return fmt.Errorf("transition to grabbed: %w", err)
 	}
 	if !ok {
-		return fmt.Errorf("workflow %s not in searching state", workflowID)
+		wf, err := e.store.Get(ctx, workflowID)
+		if err != nil {
+			return fmt.Errorf("load workflow state: %w", err)
+		}
+		switch wf.State {
+		case StateGrabbed, StateDownloading, StatePostDownload:
+			if err := e.store.SetDownload(ctx, workflowID, clientID, downloadID, title); err != nil {
+				return fmt.Errorf("update existing download binding: %w", err)
+			}
+			e.logger.Info("workflow download binding updated",
+				"id", workflowID,
+				"state", wf.State,
+				"client_id", clientID,
+				"download_id", downloadID,
+			)
+			return nil
+		default:
+			return fmt.Errorf("workflow %s not in searching state", workflowID)
+		}
 	}
 
 	if err := e.store.SetDownload(ctx, workflowID, clientID, downloadID, title); err != nil {

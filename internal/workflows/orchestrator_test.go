@@ -208,6 +208,46 @@ func TestOrchestratorGrabbed(t *testing.T) {
 	}
 }
 
+func TestOrchestratorGrabbedUpdatesExistingDownloadingWorkflow(t *testing.T) {
+	imp := &mockImporter{paths: []string{"/media/movie.mkv"}}
+	orch, store := testOrchestrator(t, imp)
+	ctx, _ := startOrchestrator(t, orch)
+
+	wf, err := orch.StartSearch(ctx, TypeMovieSearch, MediaTypeMovie, "qp-1", []string{"movie-456"})
+	if err != nil {
+		t.Fatalf("StartSearch: %v", err)
+	}
+
+	orch.Send(CmdGrabbed{
+		WorkflowID: wf.ID,
+		ClientID:   "qbit-1",
+		DownloadID: "dl-001",
+		Title:      "Movie.2024.1080p",
+	})
+	waitForCondition(t, 2*time.Second, func() bool {
+		got, _ := store.Get(ctx, wf.ID)
+		return got != nil && got.State == StateDownloading
+	})
+
+	// Re-grab same media with a new download ID should update the existing
+	// active workflow instead of failing on state mismatch.
+	orch.Send(CmdGrabbed{
+		WorkflowID: wf.ID,
+		ClientID:   "qbit-1",
+		DownloadID: "dl-002",
+		Title:      "Movie.2024.REPACK.1080p",
+	})
+	waitForCondition(t, 2*time.Second, func() bool {
+		got, _ := store.Get(ctx, wf.ID)
+		return got != nil && got.DownloadID == "dl-002" && got.GrabTitle == "Movie.2024.REPACK.1080p"
+	})
+
+	got, _ := store.Get(ctx, wf.ID)
+	if got.State != StateDownloading {
+		t.Fatalf("expected state to remain downloading, got %s", got.State)
+	}
+}
+
 func TestOrchestratorDownloadComplete(t *testing.T) {
 	imp := &mockImporter{paths: []string{"/media/movie.mkv"}}
 	orch, store := testOrchestrator(t, imp)

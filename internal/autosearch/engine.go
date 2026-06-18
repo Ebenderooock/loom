@@ -1681,14 +1681,42 @@ func (e *Engine) recordGrab(ctx context.Context, req SearchRequest, grabbed *Gra
 
 // recordGrabOrchestrator uses the unified orchestrator for workflow creation and state transitions.
 func (e *Engine) recordGrabOrchestrator(ctx context.Context, req SearchRequest, grabbed *GrabbedRelease) {
+	resolveWorkflow := func(wfType, mediaType string, mediaIDs []string) *workflows.Workflow {
+		if e.orchestrator == nil {
+			return nil
+		}
+
+		// Reuse an active workflow when redownloading the same media so retries
+		// don't fail on duplicate-active checks.
+		if store := e.orchestrator.Store(); store != nil {
+			for _, mediaID := range mediaIDs {
+				existing, err := store.FindActiveForMedia(ctx, mediaType, mediaID)
+				if err == nil && existing != nil {
+					return existing
+				}
+			}
+		}
+
+		wf, err := e.orchestrator.StartSearch(ctx, wfType, mediaType, req.QualityProfileID, mediaIDs)
+		if err != nil {
+			e.logger.Warn("failed to create workflow via orchestrator",
+				"workflow_type", wfType,
+				"media_type", mediaType,
+				"media_ids", mediaIDs,
+				"error", err,
+			)
+			return nil
+		}
+		return wf
+	}
+
 	switch req.MediaType {
 	case "movie":
 		if req.MediaID == "" {
 			return
 		}
-		wf, err := e.orchestrator.StartSearch(ctx, workflows.TypeMovieSearch, workflows.MediaTypeMovie, req.QualityProfileID, []string{req.MediaID})
-		if err != nil {
-			e.logger.Warn("failed to create movie workflow via orchestrator", "error", err)
+		wf := resolveWorkflow(workflows.TypeMovieSearch, workflows.MediaTypeMovie, []string{req.MediaID})
+		if wf == nil {
 			return
 		}
 		ctx = workflows.WithWorkflowID(ctx, wf.ID)
@@ -1732,9 +1760,8 @@ func (e *Engine) recordGrabOrchestrator(ctx context.Context, req SearchRequest, 
 		}
 
 		if len(episodeIDs) > 0 {
-			wf, err := e.orchestrator.StartSearch(ctx, workflows.TypeEpisodeSearch, workflows.MediaTypeEpisode, req.QualityProfileID, episodeIDs)
-			if err != nil {
-				e.logger.Warn("failed to create episode workflow via orchestrator", "error", err)
+			wf := resolveWorkflow(workflows.TypeEpisodeSearch, workflows.MediaTypeEpisode, episodeIDs)
+			if wf == nil {
 				return
 			}
 			ctx = workflows.WithWorkflowID(ctx, wf.ID)
