@@ -27,13 +27,6 @@ import (
 // effectively immediate because the info dict is already embedded.
 const metadataTimeout = 60 * time.Second
 
-// queuedMetadataTimeout is the maximum time a torrent may remain queued
-// waiting for metadata to resolve asynchronously. Bare infohashes from
-// indexers like TPB have no trackers and rely on DHT; in containerized
-// environments (e.g. Kubernetes) they often never resolve. We fail them
-// after this timeout to avoid indefinite queuing.
-const queuedMetadataTimeout = 5 * time.Minute
-
 // defaultAnnounceList wraps each tracker in its own tier so anacrolix
 // announces to all of them in parallel.
 func defaultAnnounceList() [][]string {
@@ -406,9 +399,10 @@ func (e *Engine) lifecycleCtx() context.Context {
 	return ctx
 }
 
-// AddMagnet adds a torrent via magnet URI and immediately queues it by
-// infohash. Metadata resolution continues asynchronously so proxied HTTP
-// requests do not sit blocked until the swarm responds.
+// AddMagnet adds a torrent via magnet URI. It waits for metadata to
+// resolve (up to metadataTimeout) and returns the lowercase infohash as
+// the stable item ID. If metadata does not resolve in time, the torrent
+// is dropped and the add fails instead of remaining queued indefinitely.
 func (e *Engine) AddMagnet(_ context.Context, magnet string, meta torrentMeta) (string, error) {
 	t, err := e.client.AddMagnet(magnet)
 	if err != nil {
@@ -448,51 +442,37 @@ func (e *Engine) AddMagnet(_ context.Context, magnet string, meta torrentMeta) (
 	// Critical for NAT/container scenarios where DHT alone is unreliable.
 	e.nudgePeerDiscovery(t, announceList)
 
-	if t.Info() != nil {
-		t.DownloadAll()
-	} else {
-		e.logger.Warn("magnet metadata not yet available; keeping torrent queued",
-			"hash", hash,
-			"title", title,
-		)
-		go func(t *torrent.Torrent, announceList [][]string) {
-			metaCtx, cancel := context.WithTimeout(e.lifecycleCtx(), queuedMetadataTimeout)
-			defer cancel()
-			ticker := time.NewTicker(30 * time.Second)
-			defer ticker.Stop()
+	waitCtx, waitCancel := context.WithTimeout(e.lifecycleCtx(), metadataTimeout)
+	defer waitCancel()
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
 
-			for {
-				select {
-				case <-t.GotInfo():
-					t.DownloadAll()
-					return
-				case <-metaCtx.Done():
-					// Metadata still unavailable. Drop the torrent and remove it
-					// from tracking so it won't appear as indefinitely queued.
-					hash := strings.ToLower(t.InfoHash().HexString())
-					e.mu.Lock()
-					tracked := e.items[hash]
-					delete(e.items, hash)
-					e.mu.Unlock()
+	for {
+		select {
+		case <-t.GotInfo():
+			t.DownloadAll()
+			goto added
+		case <-waitCtx.Done():
+			e.mu.Lock()
+			tracked := e.items[hash]
+			delete(e.items, hash)
+			e.mu.Unlock()
 
-					t.Drop()
-					if tracked != nil {
-						e.logger.Warn("dropping queued torrent: metadata resolution timeout",
-							"hash", hash,
-							"title", tracked.title,
-							"timeout", queuedMetadataTimeout,
-						)
-					}
-					return
-				case <-e.lifecycleCtx().Done():
-					return
-				case <-ticker.C:
-					e.nudgePeerDiscovery(t, announceList)
-				}
+			t.Drop()
+			if tracked != nil {
+				e.logger.Warn("dropping magnet: metadata resolution timeout",
+					"hash", hash,
+					"title", tracked.title,
+					"timeout", metadataTimeout,
+				)
 			}
-		}(t, announceList)
+			return "", fmt.Errorf("%w: %w", ErrMetadataTimeout, waitCtx.Err())
+		case <-ticker.C:
+			e.nudgePeerDiscovery(t, announceList)
+		}
 	}
 
+added:
 	e.logger.Info("magnet added",
 		"hash", hash,
 		"title", title,

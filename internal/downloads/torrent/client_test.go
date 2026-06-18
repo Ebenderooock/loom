@@ -141,11 +141,15 @@ func TestAdd_TorrentURLInfohashMismatchRejected(t *testing.T) {
 }
 
 // When the .torrent fetch fails and an explicit tracker-bearing magnet
-// is available, Add falls back to the magnet. Even if metadata is not
-// yet available, the add should succeed and keep the torrent queued.
+// is available, Add falls back to the magnet path.
 func TestAdd_FallsBackToExplicitMagnet(t *testing.T) {
 	t.Parallel()
 	cl := newAddTestClient(t)
+	data := buildMinimalTorrent(t)
+	ih := torrentInfohash(t, data)
+	if _, err := cl.engine.AddTorrentBytes(context.Background(), data, torrentMeta{}); err != nil {
+		t.Fatalf("preload torrent metadata: %v", err)
+	}
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
@@ -155,7 +159,7 @@ func TestAdd_FallsBackToExplicitMagnet(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
-	magnet := "magnet:?xt=urn:btih:" + strings.Repeat("b", 40) +
+	magnet := "magnet:?xt=urn:btih:" + ih +
 		"&tr=udp%3A%2F%2Ftracker.invalid%3A1337%2Fannounce"
 	res, err := cl.Add(ctx, downloads.AddRequest{
 		Title:      "x",
@@ -165,8 +169,8 @@ func TestAdd_FallsBackToExplicitMagnet(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Add: %v", err)
 	}
-	if res.ItemID != strings.Repeat("b", 40) {
-		t.Errorf("ItemID = %q, want %q", res.ItemID, strings.Repeat("b", 40))
+	if res.ItemID != ih {
+		t.Errorf("ItemID = %q, want %q", res.ItemID, ih)
 	}
 }
 
