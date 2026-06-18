@@ -607,24 +607,26 @@ func TestOrchestratorEventLogging(t *testing.T) {
 		return got != nil && got.State == StateDownloading
 	})
 
+	// Event logging is async with state transitions; wait until the expected
+	// event set is observable instead of reading immediately after state change.
+	waitForCondition(t, 2*time.Second, func() bool {
+		events, err := store.ListEvents(ctx, wf.ID)
+		if err != nil {
+			return false
+		}
+		types := make(map[string]bool)
+		for _, ev := range events {
+			types[ev.EventType] = true
+		}
+		return types[EventSearchStarted] && types[EventGrabbed] && types[EventDownloading]
+	})
+
 	events, err := store.ListEvents(ctx, wf.ID)
 	if err != nil {
 		t.Fatalf("ListEvents: %v", err)
 	}
-
 	if len(events) == 0 {
 		t.Fatal("expected events to be logged")
-	}
-
-	// Should have at least: search_started, grabbed, downloading
-	types := make(map[string]bool)
-	for _, ev := range events {
-		types[ev.EventType] = true
-	}
-	for _, expected := range []string{EventSearchStarted, EventGrabbed, EventDownloading} {
-		if !types[expected] {
-			t.Errorf("missing event type %s, got types: %v", expected, types)
-		}
 	}
 }
 
