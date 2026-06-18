@@ -329,6 +329,18 @@ func NewEngine(cfg Config, logger *slog.Logger) (*Engine, error) {
 		tcfg.EstablishedConnsPerTorrent = cfg.MaxConnections
 	}
 
+	// Aggressively attempt peer connections in parallel to maximize chances of
+	// quickly obtaining metadata in containerized/NAT environments. Default is 25;
+	// we increase to 100 to establish more simultaneous connection attempts,
+	// mirroring the approach of qBittorrent and other aggressive clients.
+	tcfg.HalfOpenConnsPerTorrent = 100
+
+	// For containerized environments, reduce nominal dial timeout from default 20s
+	// to 10s, allowing faster failover to next peer candidate. Still respect a
+	// 2s minimum to account for network latency and connection establishment time.
+	tcfg.NominalDialTimeout = 10 * time.Second
+	tcfg.MinDialTimeout = 2 * time.Second
+
 	tcfg.SetListenAddr(net.JoinHostPort("", fmt.Sprintf("%d", cfg.ListenPort)))
 
 	// Global speed caps. anacrolix throttles using these limiters; we keep
