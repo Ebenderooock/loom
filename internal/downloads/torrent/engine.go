@@ -27,6 +27,10 @@ import (
 // effectively immediate because the info dict is already embedded.
 const metadataTimeout = 60 * time.Second
 
+// magnetMetadataTimeout is how long we wait for magnet metadata before
+// failing the grab attempt.
+const magnetMetadataTimeout = 5 * time.Minute
+
 // defaultAnnounceList wraps each tracker in its own tier so anacrolix
 // announces to all of them in parallel.
 func defaultAnnounceList() [][]string {
@@ -137,13 +141,30 @@ func (e *Engine) nudgePeerDiscovery(t *torrent.Torrent, announceList [][]string)
 		t.AddTrackers(announceList)
 	}
 	for _, s := range e.client.DhtServers() {
+		done, stop, err := t.AnnounceToDht(s)
 		if e.cfg.DebugPeerDiscovery {
 			e.logger.Info("nudging peer discovery: announcing to DHT",
 				"hash", strings.ToLower(t.InfoHash().HexString()),
 				"dht_server", s.Addr().String(),
 			)
 		}
-		_, _, _ = t.AnnounceToDht(s)
+		if err != nil {
+			e.logger.Warn("dht announce failed",
+				"hash", strings.ToLower(t.InfoHash().HexString()),
+				"dht_server", s.Addr().String(),
+				"error", err,
+			)
+			continue
+		}
+		if stop != nil && done != nil {
+			go func(done <-chan struct{}, stop func()) {
+				select {
+				case <-done:
+				case <-time.After(15 * time.Second):
+					stop()
+				}
+			}(done, stop)
+		}
 	}
 }
 
@@ -442,7 +463,7 @@ func (e *Engine) AddMagnet(_ context.Context, magnet string, meta torrentMeta) (
 	// Critical for NAT/container scenarios where DHT alone is unreliable.
 	e.nudgePeerDiscovery(t, announceList)
 
-	waitCtx, waitCancel := context.WithTimeout(e.lifecycleCtx(), metadataTimeout)
+	waitCtx, waitCancel := context.WithTimeout(e.lifecycleCtx(), magnetMetadataTimeout)
 	defer waitCancel()
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
@@ -462,7 +483,9 @@ func (e *Engine) AddMagnet(_ context.Context, magnet string, meta torrentMeta) (
 				e.logger.Warn("dropping magnet: metadata resolution timeout",
 					"hash", hash,
 					"title", tracked.title,
-					"timeout", metadataTimeout,
+					"timeout", magnetMetadataTimeout,
+					"peer_conns", len(t.PeerConns()),
+					"num_trackers", len(announceList),
 				)
 			}
 			return "", fmt.Errorf("%w: %w", ErrMetadataTimeout, waitCtx.Err())
