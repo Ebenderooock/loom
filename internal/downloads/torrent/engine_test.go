@@ -334,6 +334,51 @@ func TestAnnounceListFromMagnet(t *testing.T) {
 	}
 }
 
+func TestMergeAnnounceLists(t *testing.T) {
+	t.Parallel()
+	primary := [][]string{
+		{"udp://tracker.one:1337/announce"},
+		{"udp://tracker.two:6969/announce"},
+	}
+	fallback := [][]string{
+		{"udp://tracker.two:6969/announce"},
+		{"udp://tracker.three:80/announce"},
+	}
+	got := mergeAnnounceLists(primary, fallback)
+	if len(got) != 3 {
+		t.Fatalf("got %d trackers, want 3", len(got))
+	}
+	if got[0][0] != "udp://tracker.one:1337/announce" || got[1][0] != "udp://tracker.two:6969/announce" || got[2][0] != "udp://tracker.three:80/announce" {
+		t.Fatalf("unexpected merged trackers: %v", got)
+	}
+}
+
+func TestShouldAugmentTrackers(t *testing.T) {
+	t.Parallel()
+
+	publicList := [][]string{
+		{"udp://tracker.one:1337/announce"},
+		{"udp://tracker.two:6969/announce"},
+	}
+	if !shouldAugmentTrackers(publicList) {
+		t.Fatal("expected public tracker list to be augmentable")
+	}
+
+	privateWithToken := [][]string{
+		{"https://private.example/announce?passkey=abc123"},
+	}
+	if shouldAugmentTrackers(privateWithToken) {
+		t.Fatal("expected private tracker list with passkey to not be augmentable")
+	}
+
+	privateWithUser := [][]string{
+		{"https://user:secret@private.example/announce"},
+	}
+	if shouldAugmentTrackers(privateWithUser) {
+		t.Fatal("expected tracker list with userinfo to not be augmentable")
+	}
+}
+
 func TestDetail_QueuedMagnetWithoutMetadataDoesNotPanic(t *testing.T) {
 	t.Parallel()
 	e := newTestEngine(t)

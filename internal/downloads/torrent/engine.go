@@ -81,6 +81,58 @@ func announceListFromMagnet(magnet string) [][]string {
 	return list
 }
 
+func shouldAugmentTrackers(announceList [][]string) bool {
+	if len(announceList) == 0 {
+		return false
+	}
+	for _, tier := range announceList {
+		for _, tr := range tier {
+			lower := strings.ToLower(strings.TrimSpace(tr))
+			// Private trackers commonly include passkey/auth tokens in path/query.
+			for _, marker := range []string{"passkey", "auth", "token", "apikey", "api_key"} {
+				if strings.Contains(lower, marker) {
+					return false
+				}
+			}
+
+			u, err := url.Parse(lower)
+			if err != nil {
+				continue
+			}
+			if u.User != nil {
+				return false
+			}
+			if u.RawQuery != "" {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func mergeAnnounceLists(primary, fallback [][]string) [][]string {
+	out := make([][]string, 0, len(primary)+len(fallback))
+	seen := make(map[string]struct{}, len(primary)+len(fallback))
+	add := func(list [][]string) {
+		for _, tier := range list {
+			for _, tr := range tier {
+				tr = strings.TrimSpace(tr)
+				if tr == "" {
+					continue
+				}
+				if _, ok := seen[tr]; ok {
+					continue
+				}
+				seen[tr] = struct{}{}
+				out = append(out, []string{tr})
+			}
+		}
+	}
+	add(primary)
+	add(fallback)
+	return out
+}
+
 func (e *Engine) nudgePeerDiscovery(t *torrent.Torrent, announceList [][]string) {
 	if len(announceList) > 0 {
 		if e.cfg.DebugPeerDiscovery {
@@ -369,6 +421,8 @@ func (e *Engine) AddMagnet(_ context.Context, magnet string, meta torrentMeta) (
 	// back to a public bootstrap set for infohash-only magnets.
 	if len(announceList) == 0 {
 		announceList = defaultAnnounceList()
+	} else if shouldAugmentTrackers(announceList) {
+		announceList = mergeAnnounceLists(announceList, defaultAnnounceList())
 	}
 	t.AddTrackers(announceList)
 
