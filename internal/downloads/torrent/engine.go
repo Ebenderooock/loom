@@ -27,10 +27,6 @@ import (
 // effectively immediate because the info dict is already embedded.
 const metadataTimeout = 60 * time.Second
 
-// magnetMetadataTimeout is how long we wait for magnet metadata before
-// failing the grab attempt.
-const magnetMetadataTimeout = 5 * time.Minute
-
 // defaultAnnounceList wraps each tracker in its own tier so anacrolix
 // announces to all of them in parallel.
 func defaultAnnounceList() [][]string {
@@ -133,56 +129,22 @@ func mergeAnnounceLists(primary, fallback [][]string) [][]string {
 func (e *Engine) nudgePeerDiscovery(t *torrent.Torrent, announceList [][]string) {
 	hash := strings.ToLower(t.InfoHash().HexString())
 	if len(announceList) > 0 {
-		if e.cfg.DebugPeerDiscovery {
-			e.logger.Info("nudging peer discovery: adding trackers",
-				"hash", hash,
-				"num_trackers", len(announceList),
-			)
-		}
 		t.AddTrackers(announceList)
 	}
 	for _, s := range e.client.DhtServers() {
-		done, stop, err := t.AnnounceToDht(s)
-		if e.cfg.DebugPeerDiscovery {
-			e.logger.Info("nudging peer discovery: announcing to DHT",
-				"hash", hash,
-				"dht_server", s.Addr().String(),
-			)
-		}
+		_, _, err := t.AnnounceToDht(s)
 		if err != nil {
 			e.logger.Warn("dht announce failed",
 				"hash", hash,
 				"dht_server", s.Addr().String(),
 				"error", err,
 			)
-			continue
-		}
-		if stop != nil && done != nil {
-			go func(done <-chan struct{}, stop func()) {
-				select {
-				case <-done:
-					if e.cfg.DebugPeerDiscovery {
-						e.logger.Debug("dht announce completed",
-							"hash", hash,
-							"dht_server", s.Addr().String(),
-						)
-					}
-				case <-time.After(15 * time.Second):
-					e.logger.Debug("dht announce timeout (manual stop after 15s)",
-						"hash", hash,
-						"dht_server", s.Addr().String(),
-					)
-					stop()
-				}
-			}(done, stop)
 		}
 	}
-	// Log current peer count after nudging
 	if e.cfg.DebugPeerDiscovery {
-		peers := t.PeerConns()
 		e.logger.Debug("peer discovery nudge completed",
 			"hash", hash,
-			"current_peer_conns", len(peers),
+			"current_peer_conns", len(t.PeerConns()),
 			"num_trackers", len(announceList),
 		)
 	}
@@ -452,10 +414,10 @@ func (e *Engine) lifecycleCtx() context.Context {
 	return ctx
 }
 
-// AddMagnet adds a torrent via magnet URI. It waits for metadata to
-// resolve (up to metadataTimeout) and returns the lowercase infohash as
-// the stable item ID. If metadata does not resolve in time, the torrent
-// is dropped and the add fails instead of remaining queued indefinitely.
+// AddMagnet adds a torrent via magnet URI and returns immediately with
+// the lowercase infohash as the stable item ID. Metadata resolution is
+// asynchronous: queued items stay visible while the underlying client
+// continues peer discovery.
 func (e *Engine) AddMagnet(_ context.Context, magnet string, meta torrentMeta) (string, error) {
 	t, err := e.client.AddMagnet(magnet)
 	if err != nil {
@@ -491,89 +453,23 @@ func (e *Engine) AddMagnet(_ context.Context, magnet string, meta torrentMeta) (
 	}
 	e.mu.Unlock()
 
-	// Announce to trackers immediately for fast peer discovery.
-	// Critical for NAT/container scenarios where DHT alone is unreliable.
 	e.nudgePeerDiscovery(t, announceList)
 
-	waitCtx, waitCancel := context.WithTimeout(e.lifecycleCtx(), magnetMetadataTimeout)
-	defer waitCancel()
-	ticker := time.NewTicker(30 * time.Second)
-	defer ticker.Stop()
-	telemetryTicker := time.NewTicker(10 * time.Second)
-	defer telemetryTicker.Stop()
-	startTime := time.Now()
-
-	for {
-		select {
-		case <-t.GotInfo():
-			goto added
-		case <-waitCtx.Done():
-			e.mu.Lock()
-			tracked := e.items[hash]
-			delete(e.items, hash)
-			e.mu.Unlock()
-
-			peerConns := t.PeerConns()
-			peerAddrs := make([]string, 0, len(peerConns))
-			for _, pc := range peerConns {
-				if pc.RemoteAddr != nil {
-					peerAddrs = append(peerAddrs, pc.RemoteAddr.String())
-				}
-			}
-			stats := t.Stats()
-
-			t.Drop()
-			if tracked != nil {
-				e.logger.Warn("dropping magnet: metadata resolution timeout",
-					"hash", hash,
-					"title", tracked.title,
-					"timeout", magnetMetadataTimeout,
-					"elapsed", time.Since(startTime),
-					"peer_conns", len(peerConns),
-					"peer_addrs", peerAddrs,
-					"num_trackers", len(announceList),
-					"bytes_read", stats.BytesReadUsefulData.Int64(),
-					"bytes_written", stats.BytesWrittenData.Int64(),
-					"has_info", t.Info() != nil,
-				)
-			}
-			return "", fmt.Errorf("%w: %w", ErrMetadataTimeout, waitCtx.Err())
-		case <-ticker.C:
-			e.nudgePeerDiscovery(t, announceList)
-		case <-telemetryTicker.C:
-			peerConns := t.PeerConns()
-			stats := t.Stats()
-			if e.cfg.DebugPeerDiscovery || len(peerConns) == 0 {
-				e.logger.Debug("magnet metadata resolution progress",
-					"hash", hash,
-					"title", title,
-					"elapsed", time.Since(startTime),
-					"peer_conns", len(peerConns),
-					"num_trackers", len(announceList),
-					"bytes_read", stats.BytesReadUsefulData.Int64(),
-					"has_info", t.Info() != nil,
-				)
-			}
-		}
-	}
-
-added:
-	e.logger.Info("magnet added",
-		"hash", hash,
-		"title", title,
-		"size", t.Length(),
-	)
-
-	if e.cfg.DebugPeerDiscovery {
-		e.logger.Info("magnet details for peer discovery",
+	go func(t *torrent.Torrent, hash string) {
+		<-t.GotInfo()
+		t.DownloadAll()
+		e.logger.Info("magnet metadata resolved",
 			"hash", hash,
 			"title", title,
-			"num_trackers", len(announceList),
-			"has_metadata", t.Info() != nil,
-			"dht_enabled", e.cfg.EnableDHT,
-			"pex_enabled", e.cfg.EnablePEX,
+			"size", t.Length(),
 		)
-	}
+	}(t, hash)
+
+	e.logger.Info("magnet added (awaiting metadata)",
+		"hash", hash,
+		"title", title,
+		"num_trackers", len(announceList),
+	)
 
 	return hash, nil
 }
