@@ -21,6 +21,12 @@ const DOWNLOAD_KINDS: {
   helper: string;
 }[] = [
   {
+    value: "builtin/torrent",
+    label: "Built-in Torrent",
+    protocol: "torrent",
+    helper: "Loom's built-in BitTorrent engine (pure Go, no external process).",
+  },
+  {
     value: "qbittorrent",
     label: "qBittorrent",
     protocol: "torrent",
@@ -79,7 +85,7 @@ export interface DownloadFormErrors {
   download_dir?: string;
 }
 
-const BUILTIN_KINDS = new Set<string>();
+const BUILTIN_KINDS = new Set<string>(["builtin/torrent"]);
 
 export function validateDownloadForm(
   values: DownloadFormValues,

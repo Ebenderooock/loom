@@ -10,6 +10,7 @@ import { apiFetch } from "@/lib/fetch";
 
 export type DownloadKind =
   | "builtin/null"
+  | "builtin/torrent"
   | "qbittorrent"
   | "transmission"
   | "deluge"

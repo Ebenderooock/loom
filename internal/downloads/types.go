@@ -17,6 +17,7 @@ type Kind string
 // in later phases and register themselves during their package init.
 const (
 	KindNull         Kind = "builtin/null"
+	KindBuiltinTorrent Kind = "builtin/torrent"
 	KindQBittorrent  Kind = "qbittorrent"
 	KindTransmission Kind = "transmission"
 	KindDeluge       Kind = "deluge"
@@ -288,6 +289,43 @@ var ErrUnknownKind = errors.New("unknown download client kind")
 type DetailProvider interface {
 	Detail(ctx context.Context, id string) (any, error)
 }
+
+// TorrentEngine is a backend-agnostic interface for managing torrent downloads.
+// Implementations (anacrolix-based, libtorrent-based, etc.) register themselves
+// and are instantiated per DownloadClient so they remain engine-swappable.
+type TorrentEngine interface {
+	// Lifecycle
+	Add(ctx context.Context, req AddRequest) (AddResult, error)
+	Status(ctx context.Context, ids ...string) ([]Item, error)
+	Pause(ctx context.Context, ids ...string) error
+	Resume(ctx context.Context, ids ...string) error
+	Remove(ctx context.Context, ids []string, deleteFiles bool) error
+
+	// Optional advanced per-item control (stub here; skip for MVP)
+	SetPriority(ctx context.Context, priority Priority, ids ...string) error
+	SetSpeedLimit(ctx context.Context, limitBytesPerSec int64, ids ...string) error
+	ForceStart(ctx context.Context, ids ...string) error
+	Recheck(ctx context.Context, ids ...string) error
+	Reannounce(ctx context.Context, ids ...string) error
+
+	// Capabilities
+	Categories(ctx context.Context) ([]Category, error)
+	FreeSpace(ctx context.Context) (int64, error)
+
+	// Engine-level management (optional; satisfies TorrentManager)
+	EngineSummary() TorrentEngineSummary
+	SetSpeedLimits(downBytesPerSec, upBytesPerSec int64)
+
+	// Health
+	Test(ctx context.Context) error
+}
+
+// TorrentEngineFactory builds a TorrentEngine from a Definition.
+// Similar to Factory pattern used for download clients.
+type TorrentEngineFactory func(ctx context.Context, def Definition) (TorrentEngine, error)
+
+// ErrUnsupportedTorrentEngine is returned when a TorrentEngine backend is not available.
+var ErrUnsupportedTorrentEngine = errors.New("torrent engine backend not available")
 
 // TorrentEngineSummary is an aggregate snapshot of the built-in torrent
 // engine, surfaced to the management UI.
