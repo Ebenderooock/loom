@@ -409,3 +409,34 @@ func TestDetail_QueuedMagnetWithoutMetadataDoesNotPanic(t *testing.T) {
 		t.Fatalf("Trackers = %#v, want queued tracker entry", detail.Trackers)
 	}
 }
+
+func TestEnforceSeedPolicies_ReannouncesQueuedMagnets(t *testing.T) {
+	t.Parallel()
+	e := newTestEngine(t)
+
+	th, err := e.client.AddMagnet("magnet:?xt=urn:btih:89acc626ff08c5147c94b4912eecfeb792b80700&tr=udp%3A%2F%2Ftracker.invalid%3A1337%2Fannounce")
+	if err != nil {
+		t.Fatalf("adding magnet: %v", err)
+	}
+
+	hash := th.InfoHash().HexString()
+	before := time.Now().Add(-metadataNudgeInterval - time.Second)
+	e.mu.Lock()
+	e.items[hash] = &trackedTorrent{
+		t:                    th,
+		title:                "queued",
+		announceList:         [][]string{{"udp://tracker.invalid:1337/announce"}},
+		addedAt:              time.Now(),
+		lastDiscoveryNudgeAt: before,
+	}
+	e.mu.Unlock()
+
+	e.enforceSeedPolicies()
+
+	e.mu.RLock()
+	after := e.items[hash].lastDiscoveryNudgeAt
+	e.mu.RUnlock()
+	if !after.After(before) {
+		t.Fatalf("lastDiscoveryNudgeAt not updated: before=%v after=%v", before, after)
+	}
+}

@@ -162,6 +162,10 @@ const pausedConns = 0
 // reasonable per-torrent default.
 const activeConns = 50
 
+// metadataNudgeInterval controls how often queued (metadata-unresolved)
+// magnets are re-announced to trackers/DHT.
+const metadataNudgeInterval = 30 * time.Second
+
 // SeedPolicy captures per-torrent seeding limits.
 type SeedPolicy struct {
 	RatioLimit       float64
@@ -195,6 +199,9 @@ type trackedTorrent struct {
 	seedPolicy   SeedPolicy
 	paused       bool
 	movedToDest  bool // true once files have been moved from IncompleteDir → DownloadDir
+	// lastDiscoveryNudgeAt tracks when we last nudged tracker/DHT discovery
+	// for queued magnets, so we can retry at a fixed cadence.
+	lastDiscoveryNudgeAt time.Time
 
 	// Speed tracking — computed from byte deltas between Status() calls.
 	lastSpeedSampleAt time.Time
@@ -1079,6 +1086,17 @@ func (e *Engine) enforceSeedPolicies() {
 
 	now := time.Now()
 	for hash, tt := range e.items {
+		// Keep retrying peer discovery for queued magnets so tracker/DHT
+		// announces continue while metadata is unresolved.
+		if tt.t.Info() == nil {
+			if !tt.paused && len(tt.announceList) > 0 &&
+				(tt.lastDiscoveryNudgeAt.IsZero() || now.Sub(tt.lastDiscoveryNudgeAt) >= metadataNudgeInterval) {
+				e.nudgePeerDiscovery(tt.t, tt.announceList)
+				tt.lastDiscoveryNudgeAt = now
+			}
+			continue
+		}
+
 		if tt.paused || !tt.t.Complete().Bool() {
 			continue
 		}
