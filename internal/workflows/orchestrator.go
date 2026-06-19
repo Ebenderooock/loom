@@ -390,6 +390,9 @@ func (o *Orchestrator) handleDownloadComplete(ctx context.Context, cmd CmdDownlo
 	if cmd.Category != "" {
 		patch["category"] = cmd.Category
 	}
+	if cmd.Title != "" {
+		patch["download_title"] = cmd.Title
+	}
 	// Cache the download path so the import pipeline can resolve it even if
 	// the item is later removed from the download client (e.g. after seeding).
 	if cmd.ContentPath != "" {
