@@ -317,10 +317,9 @@ func (c *Client) login(ctx context.Context, force bool) error {
 // once on a 403 response. The body is fully read and returned to the
 // caller; per-endpoint helpers handle decoding.
 func (c *Client) do(ctx context.Context, req *http.Request) ([]byte, error) {
+	var loginErr error
 	if c.hasCredentials() {
-		if err := c.ensureLoggedIn(ctx); err != nil {
-			return nil, err
-		}
+		loginErr = c.ensureLoggedIn(ctx)
 	}
 
 	body, status, err := c.roundTrip(ctx, req)
@@ -331,6 +330,12 @@ func (c *Client) do(ctx context.Context, req *http.Request) ([]byte, error) {
 		if !c.hasCredentials() {
 			return nil, fmt.Errorf("%w: request to %s returned HTTP %d and no qBittorrent credentials are configured (configure username/password or whitelist Loom's IP)",
 				ErrAuthFailed, req.URL.Path, status)
+		}
+		if loginErr != nil {
+			// We already failed to establish a session for this request.
+			// If the endpoint still requires auth, surface the original
+			// login failure instead of hammering /auth/login again.
+			return nil, loginErr
 		}
 		// Session expired. Record the moment we saw the 403 so the
 		// grace-period logic in login() can tell whether the session

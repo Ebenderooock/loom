@@ -311,6 +311,41 @@ func TestForbiddenWithoutCredentialsDoesNotAttemptLogin(t *testing.T) {
 	}
 }
 
+func TestTestProbeFallsBackWhenLoginRejectedButVersionAccessible(t *testing.T) {
+	t.Parallel()
+	f := newFakeServer("the-real-password")
+	defer f.Close()
+	f.mux.HandleFunc("/api/v2/app/version", func(w http.ResponseWriter, _ *http.Request) {
+		fmt.Fprint(w, "v5.0.0")
+	})
+
+	c := newTestClient(t, f.srv, downloads.Definition{})
+	if err := c.Test(context.Background()); err != nil {
+		t.Fatalf("Test: %v", err)
+	}
+	if got := f.loginCalls.Load(); got != 1 {
+		t.Fatalf("login calls = %d, want 1", got)
+	}
+}
+
+func TestStatusFallsBackToAnonymousWhenLoginRejected(t *testing.T) {
+	t.Parallel()
+	f := newFakeServer("the-real-password")
+	defer f.Close()
+	f.mux.HandleFunc("/api/v2/torrents/info", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, "[]")
+	})
+
+	c := newTestClient(t, f.srv, downloads.Definition{})
+	if _, err := c.Status(context.Background()); err != nil {
+		t.Fatalf("Status: %v", err)
+	}
+	if got := f.loginCalls.Load(); got != 1 {
+		t.Fatalf("login calls = %d, want 1", got)
+	}
+}
+
 func TestPartialCredentialsAreTreatedAsAnonymous(t *testing.T) {
 	t.Parallel()
 	f := newFakeServer("adminadmin")

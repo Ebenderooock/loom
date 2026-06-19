@@ -36,15 +36,6 @@ func (c *Client) Add(ctx context.Context, req downloads.AddRequest) (downloads.A
 		// item id empty; callers can still match by title.
 	}
 
-	// Login once before posting so qBittorrent associates the
-	// add with our session. /torrents/add tolerates anonymous
-	// requests on some configs but most operators require auth.
-	if c.hasCredentials() {
-		if err := c.ensureLoggedIn(ctx); err != nil {
-			return downloads.AddResult{}, err
-		}
-	}
-
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost,
 		c.endpoint("torrents/add"), bytes.NewReader(body))
 	if err != nil {
