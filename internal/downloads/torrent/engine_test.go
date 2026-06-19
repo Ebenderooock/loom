@@ -9,8 +9,6 @@ import (
 	"github.com/anacrolix/torrent/bencode"
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/storage"
-
-	"github.com/ebenderooock/loom/internal/downloads/torrentutil"
 )
 
 // newTestEngine creates an Engine backed by a real anacrolix client
@@ -304,19 +302,6 @@ func TestMagnetHasTrackers(t *testing.T) {
 	}
 }
 
-func TestDefaultAnnounceList(t *testing.T) {
-	trackers := torrentutil.PublicTrackers()
-	list := defaultAnnounceList()
-	if len(list) != len(trackers) {
-		t.Fatalf("got %d tiers, want %d", len(list), len(trackers))
-	}
-	for i, tier := range list {
-		if len(tier) != 1 || tier[0] != trackers[i] {
-			t.Fatalf("tier %d = %v, want [%q]", i, tier, trackers[i])
-		}
-	}
-}
-
 func TestAnnounceListFromMagnet(t *testing.T) {
 	t.Parallel()
 	got := announceListFromMagnet("magnet:?xt=urn:btih:abc&tr=udp%3A%2F%2Ftracker.one%3A1337%2Fannounce&tr=udp%3A%2F%2Ftracker.two%3A6969%2Fannounce&tr=udp%3A%2F%2Ftracker.one%3A1337%2Fannounce")
@@ -331,51 +316,6 @@ func TestAnnounceListFromMagnet(t *testing.T) {
 		if len(got[i]) != 1 || got[i][0] != want[i][0] {
 			t.Fatalf("tier %d = %v, want %v", i, got[i], want[i])
 		}
-	}
-}
-
-func TestMergeAnnounceLists(t *testing.T) {
-	t.Parallel()
-	primary := [][]string{
-		{"udp://tracker.one:1337/announce"},
-		{"udp://tracker.two:6969/announce"},
-	}
-	fallback := [][]string{
-		{"udp://tracker.two:6969/announce"},
-		{"udp://tracker.three:80/announce"},
-	}
-	got := mergeAnnounceLists(primary, fallback)
-	if len(got) != 3 {
-		t.Fatalf("got %d trackers, want 3", len(got))
-	}
-	if got[0][0] != "udp://tracker.one:1337/announce" || got[1][0] != "udp://tracker.two:6969/announce" || got[2][0] != "udp://tracker.three:80/announce" {
-		t.Fatalf("unexpected merged trackers: %v", got)
-	}
-}
-
-func TestShouldAugmentTrackers(t *testing.T) {
-	t.Parallel()
-
-	publicList := [][]string{
-		{"udp://tracker.one:1337/announce"},
-		{"udp://tracker.two:6969/announce"},
-	}
-	if !shouldAugmentTrackers(publicList) {
-		t.Fatal("expected public tracker list to be augmentable")
-	}
-
-	privateWithToken := [][]string{
-		{"https://private.example/announce?passkey=abc123"},
-	}
-	if shouldAugmentTrackers(privateWithToken) {
-		t.Fatal("expected private tracker list with passkey to not be augmentable")
-	}
-
-	privateWithUser := [][]string{
-		{"https://user:secret@private.example/announce"},
-	}
-	if shouldAugmentTrackers(privateWithUser) {
-		t.Fatal("expected tracker list with userinfo to not be augmentable")
 	}
 }
 
@@ -407,36 +347,5 @@ func TestDetail_QueuedMagnetWithoutMetadataDoesNotPanic(t *testing.T) {
 	}
 	if len(detail.Trackers) != 1 || detail.Trackers[0].Status != "queued" {
 		t.Fatalf("Trackers = %#v, want queued tracker entry", detail.Trackers)
-	}
-}
-
-func TestEnforceSeedPolicies_ReannouncesQueuedMagnets(t *testing.T) {
-	t.Parallel()
-	e := newTestEngine(t)
-
-	th, err := e.client.AddMagnet("magnet:?xt=urn:btih:89acc626ff08c5147c94b4912eecfeb792b80700&tr=udp%3A%2F%2Ftracker.invalid%3A1337%2Fannounce")
-	if err != nil {
-		t.Fatalf("adding magnet: %v", err)
-	}
-
-	hash := th.InfoHash().HexString()
-	before := time.Now().Add(-metadataNudgeInterval - time.Second)
-	e.mu.Lock()
-	e.items[hash] = &trackedTorrent{
-		t:                    th,
-		title:                "queued",
-		announceList:         [][]string{{"udp://tracker.invalid:1337/announce"}},
-		addedAt:              time.Now(),
-		lastDiscoveryNudgeAt: before,
-	}
-	e.mu.Unlock()
-
-	e.enforceSeedPolicies()
-
-	e.mu.RLock()
-	after := e.items[hash].lastDiscoveryNudgeAt
-	e.mu.RUnlock()
-	if !after.After(before) {
-		t.Fatalf("lastDiscoveryNudgeAt not updated: before=%v after=%v", before, after)
 	}
 }

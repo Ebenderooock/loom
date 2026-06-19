@@ -19,24 +19,12 @@ import (
 	"golang.org/x/time/rate"
 
 	"github.com/ebenderooock/loom/internal/diskspace"
-	"github.com/ebenderooock/loom/internal/downloads/torrentutil"
 )
 
 // metadataTimeout is how long we wait for a .torrent's metadata to
 // resolve during the initial Add. For raw .torrent bytes this should be
 // effectively immediate because the info dict is already embedded.
 const metadataTimeout = 60 * time.Second
-
-// defaultAnnounceList wraps each tracker in its own tier so anacrolix
-// announces to all of them in parallel.
-func defaultAnnounceList() [][]string {
-	defaultTrackers := torrentutil.PublicTrackers()
-	list := make([][]string, len(defaultTrackers))
-	for i, tr := range defaultTrackers {
-		list[i] = []string{tr}
-	}
-	return list
-}
 
 // magnetHasTrackers reports whether a magnet URI already carries one or
 // more tracker (tr) parameters. Private-tracker magnets always do, so we
@@ -74,82 +62,6 @@ func announceListFromMagnet(magnet string) [][]string {
 	return list
 }
 
-func shouldAugmentTrackers(announceList [][]string) bool {
-	if len(announceList) == 0 {
-		return false
-	}
-	for _, tier := range announceList {
-		for _, tr := range tier {
-			lower := strings.ToLower(strings.TrimSpace(tr))
-			// Private trackers commonly include passkey/auth tokens in path/query.
-			for _, marker := range []string{"passkey", "auth", "token", "apikey", "api_key"} {
-				if strings.Contains(lower, marker) {
-					return false
-				}
-			}
-
-			u, err := url.Parse(lower)
-			if err != nil {
-				continue
-			}
-			if u.User != nil {
-				return false
-			}
-			if u.RawQuery != "" {
-				return false
-			}
-		}
-	}
-	return true
-}
-
-func mergeAnnounceLists(primary, fallback [][]string) [][]string {
-	out := make([][]string, 0, len(primary)+len(fallback))
-	seen := make(map[string]struct{}, len(primary)+len(fallback))
-	add := func(list [][]string) {
-		for _, tier := range list {
-			for _, tr := range tier {
-				tr = strings.TrimSpace(tr)
-				if tr == "" {
-					continue
-				}
-				if _, ok := seen[tr]; ok {
-					continue
-				}
-				seen[tr] = struct{}{}
-				out = append(out, []string{tr})
-			}
-		}
-	}
-	add(primary)
-	add(fallback)
-	return out
-}
-
-func (e *Engine) nudgePeerDiscovery(t *torrent.Torrent, announceList [][]string) {
-	hash := strings.ToLower(t.InfoHash().HexString())
-	if len(announceList) > 0 {
-		t.AddTrackers(announceList)
-	}
-	for _, s := range e.client.DhtServers() {
-		_, _, err := t.AnnounceToDht(s)
-		if err != nil {
-			e.logger.Warn("dht announce failed",
-				"hash", hash,
-				"dht_server", s.Addr().String(),
-				"error", err,
-			)
-		}
-	}
-	if e.cfg.DebugPeerDiscovery {
-		e.logger.Debug("peer discovery nudge completed",
-			"hash", hash,
-			"current_peer_conns", len(t.PeerConns()),
-			"num_trackers", len(announceList),
-		)
-	}
-}
-
 // seedCheckInterval controls how often the seeding supervisor scans
 // all tracked torrents to enforce ratio/time policies.
 const seedCheckInterval = 30 * time.Second
@@ -161,10 +73,6 @@ const pausedConns = 0
 // activeConns is restored when a torrent is resumed. Matches a
 // reasonable per-torrent default.
 const activeConns = 50
-
-// metadataNudgeInterval controls how often queued (metadata-unresolved)
-// magnets are re-announced to trackers/DHT.
-const metadataNudgeInterval = 30 * time.Second
 
 // SeedPolicy captures per-torrent seeding limits.
 type SeedPolicy struct {
@@ -199,9 +107,6 @@ type trackedTorrent struct {
 	seedPolicy   SeedPolicy
 	paused       bool
 	movedToDest  bool // true once files have been moved from IncompleteDir → DownloadDir
-	// lastDiscoveryNudgeAt tracks when we last nudged tracker/DHT discovery
-	// for queued magnets, so we can retry at a fixed cadence.
-	lastDiscoveryNudgeAt time.Time
 
 	// Speed tracking — computed from byte deltas between Status() calls.
 	lastSpeedSampleAt time.Time
@@ -432,15 +337,6 @@ func (e *Engine) AddMagnet(_ context.Context, magnet string, meta torrentMeta) (
 	}
 
 	announceList := announceListFromMagnet(magnet)
-	// Feed tracker URIs into the client explicitly. This wakes the regular
-	// tracker announcers immediately for tracker-bearing magnets, and falls
-	// back to a public bootstrap set for infohash-only magnets.
-	if len(announceList) == 0 {
-		announceList = defaultAnnounceList()
-	} else if shouldAugmentTrackers(announceList) {
-		announceList = mergeAnnounceLists(announceList, defaultAnnounceList())
-	}
-	t.AddTrackers(announceList)
 
 	hash := strings.ToLower(t.InfoHash().HexString())
 	title := meta.Title
@@ -459,8 +355,6 @@ func (e *Engine) AddMagnet(_ context.Context, magnet string, meta torrentMeta) (
 		seedPolicy:   meta.SeedPolicy,
 	}
 	e.mu.Unlock()
-
-	e.nudgePeerDiscovery(t, announceList)
 
 	go func(t *torrent.Torrent, hash string) {
 		<-t.GotInfo()
@@ -881,7 +775,9 @@ func (e *Engine) Reannounce(hashes ...string) error {
 		if !ok {
 			return fmt.Errorf("%w: %s", ErrTorrentNotFound, h)
 		}
-		e.nudgePeerDiscovery(tt.t, tt.announceList)
+		if len(tt.announceList) > 0 {
+			tt.t.AddTrackers(tt.announceList)
+		}
 	}
 	return nil
 }
@@ -1086,17 +982,6 @@ func (e *Engine) enforceSeedPolicies() {
 
 	now := time.Now()
 	for hash, tt := range e.items {
-		// Keep retrying peer discovery for queued magnets so tracker/DHT
-		// announces continue while metadata is unresolved.
-		if tt.t.Info() == nil {
-			if !tt.paused && len(tt.announceList) > 0 &&
-				(tt.lastDiscoveryNudgeAt.IsZero() || now.Sub(tt.lastDiscoveryNudgeAt) >= metadataNudgeInterval) {
-				e.nudgePeerDiscovery(tt.t, tt.announceList)
-				tt.lastDiscoveryNudgeAt = now
-			}
-			continue
-		}
-
 		if tt.paused || !tt.t.Complete().Bool() {
 			continue
 		}
