@@ -18,8 +18,8 @@ import (
 	"github.com/ebenderooock/loom/internal/music"
 	"github.com/ebenderooock/loom/internal/musicsearch"
 	"github.com/ebenderooock/loom/internal/safety"
-	"github.com/ebenderooock/loom/internal/server"
 	"github.com/ebenderooock/loom/internal/series"
+	"github.com/ebenderooock/loom/internal/server"
 	"github.com/ebenderooock/loom/internal/storage"
 	"github.com/ebenderooock/loom/internal/workflows"
 )
@@ -175,6 +175,9 @@ func wireDownloads(
 
 	// Wire post-import media refresh.
 	orchestrator.SetMediaRefreshFn(func(ctx context.Context, mediaType string, mediaIDs []string) error {
+		if len(mediaIDs) == 0 {
+			return nil
+		}
 		for _, id := range mediaIDs {
 			switch mediaType {
 			case "movie":
@@ -182,8 +185,15 @@ func wireDownloads(
 					return fmt.Errorf("refresh movie %s: %w", id, err)
 				}
 			case "episode":
-				if err := media.seriesSvc.RefreshSeries(ctx, id); err != nil {
-					return fmt.Errorf("refresh series %s: %w", id, err)
+				ep, err := media.seriesSvc.GetEpisode(ctx, id)
+				if err != nil {
+					return fmt.Errorf("get episode %s: %w", id, err)
+				}
+				if ep == nil || ep.SeriesID == "" {
+					return fmt.Errorf("episode %s has no series_id", id)
+				}
+				if err := media.seriesSvc.RefreshSeries(ctx, ep.SeriesID); err != nil {
+					return fmt.Errorf("refresh series %s (episode %s): %w", ep.SeriesID, id, err)
 				}
 			}
 		}
@@ -245,8 +255,8 @@ func (a movieStatusAdapter) SetMovieStatus(ctx context.Context, movieID string, 
 
 // workflowMediaAdapter adapts movies.Service and series.Service to workflows.MediaStatusUpdater.
 type workflowMediaAdapter struct {
-	moviesSvc  movies.Service
-	seriesSvc  series.Service
+	moviesSvc movies.Service
+	seriesSvc series.Service
 }
 
 func (a workflowMediaAdapter) SetMovieDownloading(ctx context.Context, movieID string) error {
