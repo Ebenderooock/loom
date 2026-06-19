@@ -83,6 +83,10 @@ type Client struct {
 	lastLoginAttempt time.Time
 }
 
+func (c *Client) hasCredentials() bool {
+	return strings.TrimSpace(c.cfg.username) != "" || strings.TrimSpace(c.cfg.password) != ""
+}
+
 // New is the production constructor. It composes the Loom transport
 // stack (proxy + throttle) just like indexer kinds do. Tests should
 // prefer NewWithHTTPClient to inject a transport that points at an
@@ -313,11 +317,21 @@ func (c *Client) login(ctx context.Context, force bool) error {
 // once on a 403 response. The body is fully read and returned to the
 // caller; per-endpoint helpers handle decoding.
 func (c *Client) do(ctx context.Context, req *http.Request) ([]byte, error) {
+	if c.hasCredentials() {
+		if err := c.ensureLoggedIn(ctx); err != nil {
+			return nil, err
+		}
+	}
+
 	body, status, err := c.roundTrip(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	if status == http.StatusForbidden {
+	if status == http.StatusForbidden || status == http.StatusUnauthorized {
+		if !c.hasCredentials() {
+			return nil, fmt.Errorf("%w: request to %s returned HTTP %d and no qBittorrent credentials are configured (configure username/password or whitelist Loom's IP)",
+				ErrAuthFailed, req.URL.Path, status)
+		}
 		// Session expired. Record the moment we saw the 403 so the
 		// grace-period logic in login() can tell whether the session
 		// was invalidated after the last successful login.

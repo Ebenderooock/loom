@@ -156,6 +156,24 @@ func TestAddURL(t *testing.T) {
 	}
 }
 
+func TestAddAcceptsJSONSuccessPayload(t *testing.T) {
+	t.Parallel()
+	f := newFakeServer("adminadmin")
+	defer f.Close()
+	f.mux.HandleFunc("/api/v2/torrents/add", f.requireSID(func(w http.ResponseWriter, r *http.Request) {
+		_ = readMultipartFields(t, r)
+		fmt.Fprint(w, `{"added_torrent_ids":["10c2701e43a9d8399c4582b1c74d1471c919b957"],"failure_count":0,"pending_count":0,"success_count":1}`)
+	}))
+
+	c := newTestClient(t, f.srv, downloads.Definition{})
+	_, err := c.Add(context.Background(), downloads.AddRequest{
+		Magnet: "magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567&dn=example",
+	})
+	if err != nil {
+		t.Fatalf("Add: %v", err)
+	}
+}
+
 func TestInfohashFromMagnet(t *testing.T) {
 	t.Parallel()
 	cases := map[string]string{
