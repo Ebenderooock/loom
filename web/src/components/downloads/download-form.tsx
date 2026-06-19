@@ -21,6 +21,12 @@ const DOWNLOAD_KINDS: {
   helper: string;
 }[] = [
   {
+    value: "builtin/torrent",
+    label: "Built-in (Torrent)",
+    protocol: "torrent",
+    helper: "Loom's native BitTorrent engine — no external client needed.",
+  },
+  {
     value: "qbittorrent",
     label: "qBittorrent",
     protocol: "torrent",
@@ -79,7 +85,7 @@ export interface DownloadFormErrors {
   download_dir?: string;
 }
 
-const BUILTIN_KINDS = new Set<string>();
+const BUILTIN_KINDS = new Set<string>(["builtin/torrent"]);
 
 export function validateDownloadForm(
   values: DownloadFormValues,
@@ -99,6 +105,12 @@ export function validateDownloadForm(
       values.port > 65535
     ) {
       errors.port = "Port must be between 1 and 65535.";
+    }
+  }
+  if (values.kind === "builtin/torrent") {
+    const downloadDir = (values.config?.download_dir as string) ?? "";
+    if (!downloadDir.trim()) {
+      errors.download_dir = "Download directory is required.";
     }
   }
   if (
@@ -134,7 +146,7 @@ export function DownloadForm({
   const isEdit = Boolean(initial);
 
   const [values, setValues] = React.useState<DownloadFormValues>(() => {
-    const kind = (initial?.kind as DownloadKind) ?? "qbittorrent";
+    const kind = (initial?.kind as DownloadKind) ?? "builtin/torrent";
     const kindDef = DOWNLOAD_KINDS.find((k) => k.value === kind);
     const isBuiltin = BUILTIN_KINDS.has(kind);
     return {

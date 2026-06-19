@@ -47,7 +47,8 @@ service:
 # metadata resolution can time out. The port is preserved end-to-end so
 # DHT/tracker announces (which advertise listenPort) stay correct.
 #
-# listenPort must match the torrent client's configured listen port.
+# listenPort MUST match the port configured on the builtin/torrent
+# download client in Loom (default 6881).
 #
 # For reachability from the public internet you must also port-forward
 # WAN:listenPort -> <service IP>:listenPort on your router.

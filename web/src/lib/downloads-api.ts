@@ -10,6 +10,7 @@ import { apiFetch } from "@/lib/fetch";
 
 export type DownloadKind =
   | "builtin/null"
+  | "builtin/torrent"
   | "qbittorrent"
   | "transmission"
   | "deluge"
@@ -428,7 +429,8 @@ export const torrentEngineKeys = {
 };
 
 /**
- * Poll torrent engine status. Only enabled when a clientId is supplied.
+ * Poll the built-in torrent engine status. Only enabled when a clientId is
+ * supplied for a builtin/torrent client.
  */
 export function useTorrentStatus(
   clientId: string | undefined,

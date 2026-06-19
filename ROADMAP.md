@@ -149,9 +149,18 @@ Legend: ✅ done · 🚧 in progress · ⏳ planned
 
 ## 🚧 Phase 12 — Native torrent client
 
-- ❌ Built-in anacrolix torrent implementation removed
-- ✅ Torrent support via external clients (qBittorrent/Transmission/Deluge)
-- ⏳ Revisit native torrent support with a future backend
+- ✅ Embed [anacrolix/torrent](https://github.com/anacrolix/torrent) as built-in BitTorrent engine
+- ✅ Magnet resolution, DHT, PEX, piece verification
+- ✅ Seeding with configurable ratio/time limits (30s supervisor tick)
+- ✅ Singleton engine architecture — one `torrent.Client` per process, shared across definitions
+- ✅ Durable resume across restarts (BoltDB piece completion state)
+- ✅ Workflow engine integration (monitor treats seeding/completed as import-ready)
+- ✅ Storage management (incomplete dir support, FreeSpace via syscall.Statfs)
+- ✅ UI: download form with torrent-specific config (dirs, port, DHT/PEX/UPnP, seed limits, speed limits)
+- ✅ Active torrents visible in existing Downloads page (pause/resume/remove, progress, speeds, ratio)
+- ✅ Removes need for external torrent client entirely
+- ⏳ Per-indexer seed ratio overrides
+- ⏳ Dedicated torrent detail panel (peers, trackers, file list)
 
 ## ⏳ Phase 13 — Media requests (Requestarr/Ombi/Overseerr-equivalent)
 
