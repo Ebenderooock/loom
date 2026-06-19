@@ -911,7 +911,7 @@ func (s *Service) handleActivityDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// For clients that support detailed info (e.g. builtin/torrent).
+	// For clients that support detailed info.
 	if dp, ok := c.(DetailProvider); ok {
 		detail, err := dp.Detail(r.Context(), itemID)
 		if err != nil {

@@ -512,7 +512,6 @@ Each scanned media file is tracked with: `id`, `library_id`, `path` (unique), `s
 | `deluge` | torrent | Deluge JSON-RPC |
 | `sabnzbd` | usenet | SABnzbd API |
 | `nzbget` | usenet | NZBGet JSON-RPC |
-| `builtin/torrent` | torrent | Built-in torrent client |
 | `builtin/null` | — | No-op null client for testing |
 
 **Download client model fields:**

@@ -908,12 +908,7 @@ function StatPill({ label, value }: { label: string; value: React.ReactNode }) {
 }
 
 function TorrentEnginePanel() {
-  const { data: clients } = useDownloads();
-  const torrentClient = React.useMemo(
-    () => clients?.find((c) => c.kind === "builtin/torrent" && c.enabled),
-    [clients],
-  );
-  const clientId = torrentClient?.id;
+  const clientId = undefined;
 
   const { data: summary } = useTorrentStatus(clientId, {
     // Keep showing the last value while the engine briefly errors.

@@ -1,10 +1,10 @@
 # Phase 1: Usenet / NZB Built-in Client
 
 ### Goal
-Add a built-in NZB download engine (like the built-in torrent client) so users don't need an external SABnzbd/NZBGet instance.
+Add a built-in NZB download engine so users don't need an external SABnzbd/NZBGet instance.
 
 ### Approach
-The download client abstraction already supports Usenet — `ProtocolUsenet`, `NZBURL`, `RawBytes` are defined in `types.go`. SABnzbd and NZBGet external clients already exist as reference implementations. We need to build an embedded NZB engine similar to `internal/downloads/torrent/`.
+The download client abstraction already supports Usenet — `ProtocolUsenet`, `NZBURL`, `RawBytes` are defined in `types.go`. SABnzbd and NZBGet external clients already exist as reference implementations.
 
 ### Backend Tasks
 1. **NZB parser** — Parse `.nzb` XML files into article/segment lists (`internal/downloads/nzb/parser.go`)

@@ -31,11 +31,11 @@ service:
   type: ClusterIP
   port: 9999
 
-# ---------- BitTorrent peer port (built-in torrent client) ----------
+# ---------- BitTorrent peer port ----------
 # Exposed via MetalLB so inbound peer connections + DHT work, instead of
 # the pod being an outbound-only leech. Port preserved end-to-end (6881).
 # For internet reachability, port-forward WAN:6881 -> <lb-ip>:6881 on the
-# router. listenPort must match the builtin/torrent client config.
+# router. listenPort must match the torrent client's listen port config.
 torrent:
   listenPort: 6881
   expose:
