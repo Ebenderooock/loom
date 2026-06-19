@@ -84,7 +84,7 @@ type Client struct {
 }
 
 func (c *Client) hasCredentials() bool {
-	return strings.TrimSpace(c.cfg.username) != "" || strings.TrimSpace(c.cfg.password) != ""
+	return strings.TrimSpace(c.cfg.username) != "" && strings.TrimSpace(c.cfg.password) != ""
 }
 
 // New is the production constructor. It composes the Loom transport

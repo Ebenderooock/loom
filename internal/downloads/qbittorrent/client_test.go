@@ -311,6 +311,23 @@ func TestForbiddenWithoutCredentialsDoesNotAttemptLogin(t *testing.T) {
 	}
 }
 
+func TestPartialCredentialsAreTreatedAsAnonymous(t *testing.T) {
+	t.Parallel()
+	f := newFakeServer("adminadmin")
+	defer f.Close()
+	f.mux.HandleFunc("/api/v2/app/version", func(w http.ResponseWriter, _ *http.Request) {
+		fmt.Fprint(w, "v5.0.0")
+	})
+
+	c := newTestClientNoAuth(t, f.srv, downloads.Definition{Username: "admin"})
+	if err := c.Test(context.Background()); err != nil {
+		t.Fatalf("Test: %v", err)
+	}
+	if got := f.loginCalls.Load(); got != 0 {
+		t.Fatalf("login calls = %d, want 0", got)
+	}
+}
+
 func TestParseConfigPrefersConfigOverDefinition(t *testing.T) {
 	t.Parallel()
 	def := downloads.Definition{
