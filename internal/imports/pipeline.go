@@ -465,24 +465,32 @@ func (p *ImportPipeline) processImport(ctx context.Context, ev *downloads.Downlo
 
 // importSingleFile matches and imports a single media file.
 func (p *ImportPipeline) importSingleFile(ctx context.Context, ev *downloads.DownloadCompletedEvent, mediaFile string) error {
-	// Try exact grab-based matching first (most reliable for Loom-originated downloads)
-	match, err := p.matchByGrab(ctx, ev)
+	// For multi-episode downloads, grab-based matching is too coarse (all files would match
+	// the same episode). Try file-path-based matching first for each individual file.
+	var match *MatchResult
+	var err error
+
+	// Try matching by full file path first (includes parent directory for context).
+	// This is most reliable for multi-episode folders since it resolves each file individually.
+	match, err = p.matcher.MatchPath(ctx, mediaFile)
 	if err != nil {
-		p.logger.Warn("grab-based match failed, falling back to fuzzy", "error", err)
+		p.logger.Warn("path-based match failed", "file", mediaFile, "error", err)
 	}
 
-	// Fall back to fuzzy matching by event title
+	// Fall back to grab-based matching if path matching didn't work.
+	// This is reliable for Loom-originated single-file downloads.
+	if match == nil || !match.Matched {
+		match, err = p.matchByGrab(ctx, ev)
+		if err != nil {
+			p.logger.Warn("grab-based match failed", "error", err)
+		}
+	}
+
+	// Fall back to fuzzy matching by event title as last resort.
 	if match == nil || !match.Matched {
 		match, err = p.matcher.Match(ctx, ev.Title)
 		if err != nil {
 			return p.recordFailure(ctx, "", "", ev.Title, mediaFile, fmt.Errorf("match: %w", err))
-		}
-	}
-	if !match.Matched {
-		// Try matching by full file path (includes parent directory for context)
-		match, err = p.matcher.MatchPath(ctx, mediaFile)
-		if err != nil {
-			return p.recordFailure(ctx, "", "", ev.Title, mediaFile, fmt.Errorf("match by path: %w", err))
 		}
 	}
 	if !match.Matched {
