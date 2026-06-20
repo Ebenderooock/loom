@@ -2,10 +2,11 @@
 
 Loom Phase 3a introduces a pluggable download-client abstraction that
 mirrors the indexer subsystem. Every download client — qBittorrent,
-Transmission, Deluge, SABnzbd, NZBGet, and the built-in `builtin/null`
-no-op driver — is registered into a single in-process registry, persists
-config and last-known health to the database, and is reachable through
-the HTTP API at `/api/v1/download-clients`.
+Transmission, Deluge, SABnzbd, NZBGet, the built-in `builtin/torrent`
+in-process engine, and the built-in `builtin/null` no-op driver — is
+registered into a single in-process registry, persists config and
+last-known health to the database, and is reachable through the HTTP API
+at `/api/v1/download-clients`.
 
 This document is the operator-facing guide. For the design rationale and
 the deviations from the original phase brief, see
@@ -63,6 +64,115 @@ curl -sS -H "X-Api-Key: $LOOM_API_KEY" \
      -d '{"id":"null","name":"Null","kind":"builtin/null","protocol":"torrent","enabled":true}' \
      http://localhost:7878/api/v1/download-clients/
 ```
+
+## Built-in torrent client (`builtin/torrent`)
+
+`builtin/torrent` is an in-process BitTorrent engine backed by
+[anacrolix/torrent](https://github.com/anacrolix/torrent). It requires
+**no external process** — everything runs inside the Loom binary.
+
+### Feature parity
+
+| Feature                        | Supported |
+| ------------------------------ | --------- |
+| Magnet URIs                    | ✅        |
+| Raw `.torrent` bytes           | ⏳ planned |
+| Torrent URL (HTTP)             | ⏳ planned |
+| Pause / Resume (per item)      | ✅        |
+| Pause / Resume all             | ✅        |
+| Remove                         | ✅        |
+| Data verify (recheck)          | ✅        |
+| DHT re-announce                | ✅        |
+| Global download speed limit    | ✅        |
+| Global upload speed limit      | ✅        |
+| Per-item speed limits          | ⏳ planned |
+| Queue priority (top/bottom)    | ⏳ planned |
+| Force-start                    | ⏳ planned |
+| Seeding lifecycle detection    | ✅        |
+| `FreeSpace` reporting          | ✅        |
+| Per-item detail (peers/files)  | ⏳ planned |
+
+### Configuration
+
+The `config` JSON blob accepts the following keys:
+
+| Key                    | Type   | Default | Description                                          |
+| ---------------------- | ------ | ------- | ---------------------------------------------------- |
+| `download_dir`         | string | **required** | Where downloaded files are written.             |
+| `listen_port`          | int    | `6881`  | TCP/UDP port for incoming peer connections.          |
+| `enable_dht`           | bool   | `true`  | Enable Distributed Hash Table peer discovery.        |
+| `enable_pex`           | bool   | `true`  | Enable Peer EXchange extensions.                     |
+| `enable_upnp`          | bool   | `true`  | Enable UPnP/NAT-PMP port mapping.                    |
+| `download_speed_limit` | int64  | `0`     | Bytes per second; `0` = unlimited.                   |
+| `upload_speed_limit`   | int64  | `0`     | Bytes per second; `0` = unlimited.                   |
+
+### Example: create via API
+
+```bash
+curl -sS -X POST \
+     -H "X-Api-Key: $LOOM_API_KEY" \
+     -H "Content-Type: application/json" \
+     -d '{
+           "kind": "builtin/torrent",
+           "name": "Built-in Torrent",
+           "protocol": "torrent",
+           "enabled": true,
+           "config": {
+             "download_dir": "/data/downloads",
+             "listen_port": 6881,
+             "enable_dht": true,
+             "enable_pex": true,
+             "enable_upnp": true,
+             "download_speed_limit": 0,
+             "upload_speed_limit": 0
+           }
+         }' \
+     http://localhost:7878/api/v1/download-clients/
+```
+
+### Engine status endpoint
+
+Once a `builtin/torrent` client is created you can query the live engine
+summary:
+
+```bash
+GET /api/v1/download-clients/{id}/torrent/status
+```
+
+Returns aggregate counts (downloading, seeding, paused, queued) plus the
+current aggregate transfer rates and configured speed limits.
+
+### Speed limit endpoint
+
+```bash
+POST /api/v1/download-clients/{id}/torrent/speed-limits
+Content-Type: application/json
+
+{ "download_limit": 10485760, "upload_limit": 5242880 }
+```
+
+Sets rates immediately and persists them to the stored config so they
+survive restarts. Pass `0` for unlimited.
+
+### Pause/resume all torrents
+
+```bash
+POST /api/v1/download-clients/{id}/torrent/pause-all
+POST /api/v1/download-clients/{id}/torrent/resume-all
+```
+
+### Implementation notes
+
+- **Pause semantics**: anacrolix/torrent does not have a first-class
+  "pause" concept. Loom implements pause by calling
+  `DisallowDataDownload()` and tracking the paused state internally.
+  `Resume` calls `AllowDataDownload()` and clears the paused flag.
+- **Rate limiting**: global rate limiters are created once at startup and
+  mutated via `rate.Limiter.SetLimit()` — changes take effect
+  immediately without restarting the engine.
+- **Build note**: the project must be built with `CGO_ENABLED=0` due to a
+  pre-existing duplicate sqlite symbol conflict in the dependency tree.
+  This is unrelated to the torrent engine and affects the main branch too.
 
 ## Health checking
 
@@ -126,6 +236,7 @@ guide and design rationale.
 | Kind                  | Protocol | Status        | Docs                                                       |
 | --------------------- | -------- | ------------- | ---------------------------------------------------------- |
 | `builtin/null`        | torrent  | ✅ shipped    | (in-tree no-op; see [ADR-0014](adr/0014-download-clients-abstraction.md)) |
+| `builtin/torrent`     | torrent  | ✅ shipped    | [Built-in torrent client](#built-in-torrent-client-builtintorrent) |
 | `qbittorrent`         | torrent  | ✅ shipped    | [docs/downloads-qbittorrent.md](downloads-qbittorrent.md) |
 | `transmission`        | torrent  | ⏳ planned    |                                                            |
 | `deluge`              | torrent  | ⏳ planned    |                                                            |
