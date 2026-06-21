@@ -47,9 +47,7 @@ function AlbumRow({ album }: { album: Album }) {
   const handleSearch = async () => {
     try {
       const res = await search.mutateAsync(album.id);
-      toast.success(
-        `Grabbed "${res.title}" (${res.quality_name || "unknown"})`,
-      );
+      toast.success(`Grabbed "${res.title}" (${res.quality_name || "unknown"})`);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Search failed");
     }
@@ -257,12 +255,8 @@ export function MusicArtistPage() {
             </p>
           )}
           <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
-            {artist.artist_type && (
-              <Badge variant="outline">{artist.artist_type}</Badge>
-            )}
-            {artist.country && (
-              <Badge variant="outline">{artist.country}</Badge>
-            )}
+            {artist.artist_type && <Badge variant="outline">{artist.artist_type}</Badge>}
+            {artist.country && <Badge variant="outline">{artist.country}</Badge>}
             {stats && (
               <span className="self-center">
                 {stats.albumCount} albums · {stats.trackFileCount}/
@@ -349,11 +343,9 @@ export function MusicArtistPage() {
                 {type}s
               </h3>
               <div className="space-y-2">
-                {(albumsByType[type] ?? [])
+                {albumsByType[type]
                   .slice()
-                  .sort((a, b) =>
-                    (b.release_date || "").localeCompare(a.release_date || ""),
-                  )
+                  .sort((a, b) => (b.release_date || "").localeCompare(a.release_date || ""))
                   .map((al) => (
                     <AlbumRow key={al.id} album={al} />
                   ))}

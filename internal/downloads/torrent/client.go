@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/anacrolix/torrent/metainfo"
@@ -204,7 +205,9 @@ func fetchTorrentURL(ctx context.Context, rawURL string) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("builtin/torrent: fetching %q: %w", rawURL, err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("builtin/torrent: fetching %q: HTTP %d", rawURL, resp.StatusCode)
@@ -337,13 +340,13 @@ func (c *Client) ForceStart(ctx context.Context, ids ...string) error {
 }
 
 // Recheck implements downloads.DownloadClient.
-func (c *Client) Recheck(_ context.Context, ids ...string) error {
-	return c.engine.Recheck(ids...)
+func (c *Client) Recheck(ctx context.Context, ids ...string) error {
+	return c.engine.Recheck(ctx, ids...)
 }
 
 // Reannounce implements downloads.DownloadClient.
-func (c *Client) Reannounce(_ context.Context, ids ...string) error {
-	return c.engine.Reannounce(ids...)
+func (c *Client) Reannounce(ctx context.Context, ids ...string) error {
+	return c.engine.Reannounce(ctx, ids...)
 }
 
 // Categories implements downloads.DownloadClient. The built-in engine
@@ -373,13 +376,17 @@ func (c *Client) Test(_ context.Context) error {
 	}
 
 	// Probe write access by creating and removing a temp file.
-	probe := filepath.Join(dir, ".loom-probe-"+c.id)
-	f, err := os.Create(probe)
+	probe := filepath.Join(dir, ".loom-probe-"+filepath.Base(c.id))
+	if !strings.HasPrefix(probe, dir) {
+		return fmt.Errorf("builtin/torrent: probe path escape detected")
+	}
+	probeClean := filepath.Clean(probe)
+	f, err := os.Create(probeClean)
 	if err != nil {
 		return fmt.Errorf("builtin/torrent: download_dir %q is not writable: %w", dir, err)
 	}
 	_ = f.Close()
-	_ = os.Remove(probe)
+	_ = os.Remove(probeClean)
 
 	return nil
 }

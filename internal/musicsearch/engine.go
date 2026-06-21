@@ -15,7 +15,7 @@ import (
 
 	"github.com/ebenderooock/loom/internal/customformats"
 	"github.com/ebenderooock/loom/internal/downloads"
-	"github.com/ebenderooock/loom/internal/downloads/torrentutil"
+	torrentdl "github.com/ebenderooock/loom/internal/downloads/torrent"
 	"github.com/ebenderooock/loom/internal/indexers"
 	"github.com/ebenderooock/loom/internal/music"
 )
@@ -493,7 +493,7 @@ func buildDownloadRequest(res *indexers.Result) downloads.AddRequest {
 	if res.MagnetURI != "" {
 		req.Magnet = res.MagnetURI
 	} else if res.Infohash != "" {
-		req.Magnet = torrentutil.BuildPublicMagnet(res.Infohash, res.Title)
+		req.Magnet = torrentdl.BuildPublicMagnet(res.Infohash, res.Title)
 	}
 	if res.Link != "" {
 		switch {

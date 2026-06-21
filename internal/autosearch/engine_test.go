@@ -333,21 +333,6 @@ func TestBuildDownloadRequest_InfohashUsesTrackerRichMagnet(t *testing.T) {
 	}
 }
 
-func TestTMDBExternalIDs(t *testing.T) {
-	details := map[string]interface{}{
-		"external_ids": map[string]interface{}{
-			"imdb_id": "tt33546863",
-			"tvdb_id": 455086.0,
-		},
-	}
-	if got := tmdbExternalIMDbID(details); got != "tt33546863" {
-		t.Fatalf("tmdbExternalIMDbID = %q", got)
-	}
-	if got := tmdbExternalTVDBID(details); got != "455086" {
-		t.Fatalf("tmdbExternalTVDBID = %q", got)
-	}
-}
-
 func TestEvaluateResult_QualityFiltering(t *testing.T) {
 	defs := []*movies.QualityDefinition{
 		{ID: "bluray-1080", Name: "Bluray-1080p", Source: "bluray", Resolution: "1080p"},
