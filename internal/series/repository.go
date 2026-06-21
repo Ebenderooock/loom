@@ -308,6 +308,15 @@ func (r *sqlRepo) CreateEpisodeFile(ctx context.Context, f *EpisodeFile) error {
 		f.Quality, f.Source, f.Resolution, f.Codec, string(mediaBytes),
 		f.CreatedAt.Format(time.RFC3339), f.UpdatedAt.Format(time.RFC3339),
 	)
+	if err != nil {
+		return err
+	}
+
+	// Update episode's has_file flag to true
+	_, err = r.db.ExecContext(ctx,
+		`UPDATE episodes SET has_file = true, updated_at = ? WHERE id = ?`,
+		time.Now().UTC().Format(time.RFC3339), f.EpisodeID,
+	)
 	return err
 }
 
