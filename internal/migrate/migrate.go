@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 
-	_ "github.com/mattn/go-sqlite3"
+	_ "modernc.org/sqlite"
 )
 
 // Importer reads from external *arr databases and writes into Loom's DB.
@@ -26,8 +26,8 @@ func NewImporter(loomDB *sql.DB, logger *slog.Logger) *Importer {
 
 // openSourceDB opens a source *arr SQLite database in read-only mode.
 func openSourceDB(path string) (*sql.DB, error) {
-	dsn := fmt.Sprintf("file:%s?mode=ro", path)
-	return sql.Open("sqlite3", dsn)
+	dsn := fmt.Sprintf("file://%s?mode=ro", path)
+	return sql.Open("sqlite", dsn)
 }
 
 // loomID converts an external integer ID into a Loom-style string ID.

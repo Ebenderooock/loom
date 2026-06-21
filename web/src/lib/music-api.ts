@@ -251,6 +251,15 @@ export async function setArtistMonitoring(
   return (await res.json()) as Artist;
 }
 
+export async function rescanArtist(id: string, libraryId: string): Promise<void> {
+  const res = await apiFetch(`/api/v1/scanner/artists/${id}/rescan`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ libraryId }),
+  });
+  if (!res.ok) throw new Error(`rescan artist failed: ${res.status}`);
+}
+
 export async function setAlbumMonitored(
   id: string,
   monitored: boolean,
@@ -447,6 +456,17 @@ export function useSetArtistMonitoring() {
     onSuccess: (a) => {
       qc.invalidateQueries({ queryKey: musicKeys.artists });
       qc.invalidateQueries({ queryKey: musicKeys.artist(a.id) });
+    },
+  });
+}
+
+export function useRescanArtist() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, libraryId }: { id: string; libraryId: string }) =>
+      rescanArtist(id, libraryId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: musicKeys.artists });
     },
   });
 }

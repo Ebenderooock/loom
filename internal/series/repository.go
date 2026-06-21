@@ -308,7 +308,26 @@ func (r *sqlRepo) CreateEpisodeFile(ctx context.Context, f *EpisodeFile) error {
 		f.Quality, f.Source, f.Resolution, f.Codec, string(mediaBytes),
 		f.CreatedAt.Format(time.RFC3339), f.UpdatedAt.Format(time.RFC3339),
 	)
-	return err
+	if err != nil {
+		return err
+	}
+
+	// Update episode's has_file flag to true
+	_, err = r.db.ExecContext(ctx,
+		`UPDATE episodes SET has_file = true, updated_at = ? WHERE id = ?`,
+		time.Now().UTC().Format(time.RFC3339), f.EpisodeID,
+	)
+	if err != nil {
+		return err
+	}
+
+	// Link this file to the episode in library_files (for UI unmapped tracking).
+	// This allows the library view to correctly track which files are mapped to media.
+	_, _ = r.db.ExecContext(ctx,
+		`UPDATE library_files SET media_id = ? WHERE path = ?`,
+		f.EpisodeID, f.FilePath,
+	)
+	return nil
 }
 
 // Bulk delete operations for refresh

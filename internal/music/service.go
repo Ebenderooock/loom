@@ -400,9 +400,17 @@ func (s *service) fetchReleases(ctx context.Context, al *Album) error {
 	}
 	now := time.Now().UTC()
 	al.ReleasesFetchedAt = &now
-	if selected := pickRelease(releases); selected != nil {
+
+	// Select the preferred release; if none match criteria, pick the first one
+	selected := pickRelease(releases)
+	if selected == nil && len(releases) > 0 {
+		selected = releases[0]
+		s.logger.Warn("music: no ideal release found, using first available", "album", al.ID, "count", len(releases))
+	}
+	if selected != nil {
 		al.SelectedReleaseID = selected.ID
 	}
+
 	// Re-fetching releases invalidates any previously fetched track list.
 	al.TracksFetchedAt = nil
 	return s.repo.UpdateAlbum(ctx, al)
@@ -422,12 +430,18 @@ func (s *service) fetchTracks(ctx context.Context, al *Album) error {
 		}
 	}
 	if selectedMBID == "" {
+		s.logger.Warn("music: no selected release found, skipping track fetch", "album", al.ID)
 		return nil
 	}
 	relMeta, err := s.provider.GetAlbumRelease(ctx, selectedMBID)
 	if err != nil {
 		return err
 	}
+	if relMeta == nil {
+		s.logger.Warn("music: release metadata is nil", "album", al.ID, "release", selectedMBID)
+		return nil
+	}
+
 	tracks := make([]*Track, 0, len(relMeta.Tracks))
 	for _, tm := range relMeta.Tracks {
 		disc := tm.DiscNumber
@@ -448,6 +462,13 @@ func (s *service) fetchTracks(ctx context.Context, al *Album) error {
 			Monitored:     al.Monitored,
 		})
 	}
+
+	if len(tracks) == 0 {
+		s.logger.Warn("music: no tracks found for release", "album", al.ID, "release", selectedMBID)
+	} else {
+		s.logger.Info("music: fetched tracks", "album", al.ID, "count", len(tracks))
+	}
+
 	if err := s.repo.ReplaceTracks(ctx, al.ID, tracks); err != nil {
 		return err
 	}
