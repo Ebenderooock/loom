@@ -34,6 +34,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import { ImportManager } from "@/components/imports/import-manager";
 import {
+  useDownloads,
   useTorrentStatus,
   useSetTorrentSpeedLimits,
   useTorrentPauseAll,
@@ -909,7 +910,10 @@ function StatPill({ label, value }: { label: string; value: React.ReactNode }) {
 function TorrentEnginePanel() {
   const { data: clients } = useDownloads();
   const torrentClient = React.useMemo(
-    () => clients?.find((c) => c.kind === "builtin/torrent" && c.enabled),
+    () =>
+      clients?.find(
+        (c: (typeof clients)[0]) => c.kind === "builtin/torrent" && c.enabled,
+      ),
     [clients],
   );
   const clientId = torrentClient?.id;
