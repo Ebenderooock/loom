@@ -105,6 +105,13 @@ func (c *Client) Protocol() downloads.Protocol { return downloads.ProtocolTorren
 // torrent URLs, raw bytes, and bare infohashes. The returned ItemID
 // is the lowercase infohash hex string.
 func (c *Client) Add(ctx context.Context, req downloads.AddRequest) (downloads.AddResult, error) {
+	explicitMagnet := req.Magnet != ""
+
+	// For infohash-only grabs, build a tracker-rich public magnet to avoid
+	// relying solely on DHT in NAT'd/containerized environments.
+	if req.Magnet == "" && req.Infohash != "" {
+		req.Magnet = BuildPublicMagnet(req.Infohash, req.Title)
+	}
 	req.Normalize()
 
 	category := req.Category
@@ -164,7 +171,7 @@ func (c *Client) Add(ctx context.Context, req downloads.AddRequest) (downloads.A
 		// the indexer (it carries trackers). We never fall back to a
 		// synthesised bare-infohash magnet: it would fail the same way
 		// and could leak a private infohash to public trackers.
-		if err != nil && magnetHasTrackers(req.Magnet) {
+		if err != nil && explicitMagnet && magnetHasTrackers(req.Magnet) {
 			hash, err = c.engine.AddMagnet(ctx, req.Magnet, meta)
 		}
 

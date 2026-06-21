@@ -3,6 +3,7 @@ package torrent
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -11,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/anacrolix/torrent"
@@ -250,6 +252,15 @@ func NewEngine(cfg Config, logger *slog.Logger) (*Engine, error) {
 	tcfg.UploadRateLimiter = upLimiter
 
 	cl, err := torrent.NewClient(tcfg)
+	if err != nil && cfg.ListenPort > 0 && isAddrInUseErr(err) {
+		logger.Warn("listen port in use; retrying with ephemeral port",
+			"listen_port", cfg.ListenPort,
+			"error", err,
+		)
+		tcfg.ListenPort = 0
+		tcfg.SetListenAddr("")
+		cl, err = torrent.NewClient(tcfg)
+	}
 	if err != nil {
 		_ = pc.Close()
 		return nil, fmt.Errorf("builtin/torrent: creating client: %w", err)
@@ -274,6 +285,19 @@ func NewEngine(cfg Config, logger *slog.Logger) (*Engine, error) {
 		downLimiter: downLimiter,
 		upLimiter:   upLimiter,
 	}, nil
+}
+
+func isAddrInUseErr(err error) bool {
+	if errors.Is(err, syscall.EADDRINUSE) {
+		return true
+	}
+	var opErr *net.OpError
+	if errors.As(err, &opErr) {
+		if errors.Is(opErr.Err, syscall.EADDRINUSE) {
+			return true
+		}
+	}
+	return strings.Contains(strings.ToLower(err.Error()), "address already in use")
 }
 
 // Start launches the seeding supervisor goroutine. It blocks until
