@@ -22,7 +22,7 @@ var (
 // port, DHT, PEX, etc.); subsequent Definitions with different
 // engine-level values are tolerated silently because the engine is
 // already running.
-func getOrCreateEngine(cfg Config, logger *slog.Logger) (*Engine, error) {
+func getOrCreateEngine(_ context.Context, cfg Config, logger *slog.Logger) (*Engine, error) {
 	engineMu.Lock()
 	defer engineMu.Unlock()
 
@@ -36,6 +36,7 @@ func getOrCreateEngine(cfg Config, logger *slog.Logger) (*Engine, error) {
 	}
 
 	// Start the seeding supervisor in the background.
+	// nolint:contextcheck,gosec // Background task intentionally uses context.Background()
 	go func() { _ = e.Start(context.Background()) }()
 
 	sharedEngine = e
@@ -43,7 +44,7 @@ func getOrCreateEngine(cfg Config, logger *slog.Logger) (*Engine, error) {
 }
 
 // factory is the downloads.Factory the package registers under Kind.
-func factory(_ context.Context, def downloads.Definition) (downloads.DownloadClient, error) {
+func factory(ctx context.Context, def downloads.Definition) (downloads.DownloadClient, error) {
 	cfg, err := parseConfig(def)
 	if err != nil {
 		return nil, err
@@ -51,7 +52,7 @@ func factory(_ context.Context, def downloads.Definition) (downloads.DownloadCli
 
 	logger := slog.Default().With("kind", string(Kind), "client_id", def.ID)
 
-	engine, err := getOrCreateEngine(cfg, logger)
+	engine, err := getOrCreateEngine(ctx, cfg, logger)
 	if err != nil {
 		return nil, err
 	}

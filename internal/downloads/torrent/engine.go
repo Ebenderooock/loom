@@ -120,9 +120,10 @@ type trackedTorrent struct {
 	seedStartAt *time.Time
 	seedPolicy  SeedPolicy
 	paused      bool
-	movedToDest bool  // true once files have been moved from IncompleteDir → DownloadDir
-	downloaded  int64 // snapshot for ratio calculation
-	uploaded    int64
+	movedToDest bool // true once files have been moved from IncompleteDir → DownloadDir
+	// nolint:unused // Fields kept for future ratio calculation implementation
+	downloaded int64 // snapshot for ratio calculation
+	uploaded   int64 // nolint:unused
 
 	// Speed tracking — computed from byte deltas between Status() calls.
 	lastSpeedSampleAt time.Time
@@ -207,7 +208,7 @@ func NewEngine(cfg Config, logger *slog.Logger) (*Engine, error) {
 		if d == "" {
 			continue
 		}
-		if err := os.MkdirAll(d, 0o755); err != nil {
+		if err := os.MkdirAll(d, 0o750); err != nil {
 			return nil, fmt.Errorf("builtin/torrent: creating directory %q: %w", d, err)
 		}
 	}
@@ -215,7 +216,7 @@ func NewEngine(cfg Config, logger *slog.Logger) (*Engine, error) {
 	// Piece completion tracking. We use bolt DB for persistent state
 	// across restarts. The state directory lives alongside the data.
 	stateDir := filepath.Join(dataDir, ".torrent-state")
-	if err := os.MkdirAll(stateDir, 0o755); err != nil {
+	if err := os.MkdirAll(stateDir, 0o750); err != nil {
 		return nil, fmt.Errorf("builtin/torrent: creating state dir %q: %w", stateDir, err)
 	}
 
@@ -806,7 +807,7 @@ func (e *Engine) Remove(hashes []string, deleteFiles bool) error {
 
 // Recheck triggers a data integrity verification for the requested
 // torrents.
-func (e *Engine) Recheck(hashes ...string) error {
+func (e *Engine) Recheck(ctx context.Context, hashes ...string) error {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 
@@ -815,14 +816,16 @@ func (e *Engine) Recheck(hashes ...string) error {
 		if !ok {
 			return fmt.Errorf("%w: %s", ErrTorrentNotFound, h)
 		}
-		tt.t.VerifyData()
+		if err := tt.t.VerifyDataContext(ctx); err != nil {
+			return fmt.Errorf("builtin/torrent: verify data for %s: %w", h, err)
+		}
 	}
 	return nil
 }
 
 // Reannounce forces a tracker re-announce for the requested torrents.
 // For DHT-enabled torrents it also triggers an announce to the DHT.
-func (e *Engine) Reannounce(hashes ...string) error {
+func (e *Engine) Reannounce(_ context.Context, hashes ...string) error {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 
@@ -928,12 +931,18 @@ func (e *Engine) Detail(hash string) (*TorrentDetail, error) {
 		}
 		port := 0
 		if portStr != "" {
-			fmt.Sscanf(portStr, "%d", &port)
+			_, _ = fmt.Sscanf(portStr, "%d", &port)
 		}
 
 		numPieces := t.NumPieces()
-		peerPieceCount := int(pc.PeerPieces().GetCardinality())
-		progress := float64(peerPieceCount) / float64(max(1, numPieces))
+		//nolint:gosec // Safe: piece count is always non-negative
+		numPiecesU64 := uint64(numPieces)
+		cardinality := pc.PeerPieces().GetCardinality() // already uint64
+		peerPieceCount := cardinality
+		if peerPieceCount > numPiecesU64 {
+			peerPieceCount = numPiecesU64
+		}
+		progress := float64(peerPieceCount) / float64(max(1, int64(numPieces)))
 		if progress > 1 {
 			progress = 1
 		}
