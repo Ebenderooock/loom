@@ -256,6 +256,19 @@ func (m *Monitor) detectStalled(ctx context.Context, items []Item) {
 		if item.Status != StatusItemDownloading {
 			continue
 		}
+		// Downloads that have never transferred bytes (or reported progress)
+		// should remain queued/inactive and must not be treated as stalled.
+		// This avoids auto-removing peerless torrents before they ever start.
+		if item.DownloadedBytes <= 0 && item.Progress <= 0 {
+			m.lastProgress[key] = stalledState{
+				progress:        item.Progress,
+				downloadedBytes: item.DownloadedBytes,
+				firstSeenAt:     now,
+				lastProgressAt:  now,
+			}
+			delete(m.stalledEmitted, key)
+			continue
+		}
 
 		prev, tracked := m.lastProgress[key]
 		if !tracked {

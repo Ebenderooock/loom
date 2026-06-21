@@ -408,6 +408,7 @@ func (e *Engine) AddMagnet(ctx context.Context, magnet string, meta torrentMeta)
 	e.mu.Unlock()
 
 	if t.Info() != nil {
+		e.maybeAddPublicTrackers(t)
 		t.DownloadAll()
 	} else {
 		// Metadata was not available within metadataTimeout. Keep the
@@ -416,6 +417,7 @@ func (e *Engine) AddMagnet(ctx context.Context, magnet string, meta torrentMeta)
 		go func(t *torrent.Torrent) {
 			select {
 			case <-t.GotInfo():
+				e.maybeAddPublicTrackers(t)
 				t.DownloadAll()
 			case <-e.lifecycleCtx().Done():
 			}
@@ -453,6 +455,7 @@ func (e *Engine) AddTorrentBytes(ctx context.Context, data []byte, meta torrentM
 	if err != nil {
 		return "", fmt.Errorf("builtin/torrent: adding torrent: %w", err)
 	}
+	e.maybeAddPublicTrackers(t)
 
 	// Wait for info — for a .torrent file this should be immediate since
 	// the metainfo contains the info dict. Use the engine's lifecycle
@@ -494,6 +497,24 @@ func (e *Engine) AddTorrentBytes(ctx context.Context, data []byte, meta torrentM
 	)
 
 	return hash, nil
+}
+
+// maybeAddPublicTrackers appends the shared public tracker list for
+// non-private torrents. It never modifies private torrents.
+func (e *Engine) maybeAddPublicTrackers(t *torrent.Torrent) {
+	mi := t.Metainfo()
+	info, err := mi.UnmarshalInfo()
+	if err != nil {
+		e.logger.Debug("could not inspect torrent privacy; skipping public tracker bootstrap",
+			"hash", strings.ToLower(t.InfoHash().HexString()),
+			"error", err,
+		)
+		return
+	}
+	if info.Private != nil && *info.Private {
+		return
+	}
+	t.AddTrackers(defaultAnnounceList())
 }
 
 // TorrentStatus is the engine-level view of a tracked torrent.
