@@ -1,6 +1,7 @@
 package torrent
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"github.com/anacrolix/torrent"
+	"github.com/anacrolix/torrent/metainfo"
 	"golang.org/x/time/rate"
 
 	"github.com/ebenderooock/loom/internal/downloads"
@@ -163,6 +165,7 @@ func (c *Client) addMagnet(ctx context.Context, req downloads.AddRequest) (downl
 	c.items[item.Hash] = item
 	c.mu.Unlock()
 
+	c.startDownload(item)
 	c.logger.Debug("added torrent", "hash", item.Hash, "title", item.Title)
 	return downloads.AddResult{
 		ClientID:    c.id,
@@ -173,8 +176,60 @@ func (c *Client) addMagnet(ctx context.Context, req downloads.AddRequest) (downl
 }
 
 func (c *Client) addRaw(ctx context.Context, req downloads.AddRequest) (downloads.AddResult, error) {
-	// Stub: would parse .torrent file and add
-	return downloads.AddResult{}, fmt.Errorf("torrent: raw torrent files not yet implemented; use magnet URIs")
+	mi, err := metainfo.Load(bytes.NewReader(req.RawBytes))
+	if err != nil {
+		return downloads.AddResult{}, fmt.Errorf("torrent: parse raw bytes: %w", err)
+	}
+	t, err := c.client.AddTorrent(mi)
+	if err != nil {
+		return downloads.AddResult{}, fmt.Errorf("torrent: add raw bytes: %w", err)
+	}
+	title := req.Title
+	if title == "" {
+		title = t.Name()
+	}
+	c.mu.Lock()
+	item := &torrentItem{
+		Hash:     t.InfoHash().HexString(),
+		Title:    title,
+		Category: req.Category,
+		SavePath: req.SavePath,
+		Added:    time.Now(),
+		Torrent:  t,
+	}
+	c.items[item.Hash] = item
+	c.mu.Unlock()
+
+	c.startDownload(item)
+	c.logger.Debug("added raw torrent", "hash", item.Hash, "title", item.Title)
+	return downloads.AddResult{
+		ClientID:    c.id,
+		ItemID:      item.Hash,
+		ContentPath: "",
+		SavePath:    item.SavePath,
+	}, nil
+}
+
+func (c *Client) startDownload(item *torrentItem) {
+	start := func(t *torrent.Torrent) {
+		t.AllowDataDownload()
+		t.DownloadAll()
+	}
+
+	if item.Torrent.Info() != nil {
+		start(item.Torrent)
+		return
+	}
+
+	go func(hash string, t *torrent.Torrent) {
+		select {
+		case <-t.GotInfo():
+			start(t)
+			c.logger.Info("started torrent download after metadata", "hash", hash, "name", t.Name())
+		case <-time.After(2 * time.Minute):
+			c.logger.Warn("timed out waiting for torrent metadata", "hash", hash)
+		}
+	}(item.Hash, item.Torrent)
 }
 
 // Status implements DownloadClient.Status.

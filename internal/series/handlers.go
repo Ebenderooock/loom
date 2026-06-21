@@ -86,6 +86,7 @@ func RouterWithSearch(svc Service, indexerSvc *indexers.Service, grabStore GrabC
 	r.Post("/bulk-archive", bulkArchiveSeries(svc))
 	r.Post("/bulk-unarchive", bulkUnarchiveSeries(svc))
 	r.Post("/refresh", refreshAllSeries(svc))
+	r.Post("/organize", organizeSeries(svc, cfg.libraryStore, cfg.libraryScanner))
 	if cfg.libraryStore != nil && cfg.libraryScanner != nil {
 		r.Post("/rescan", rescanAllSeriesLibraries(cfg.libraryStore, cfg.libraryScanner))
 	}
@@ -96,6 +97,7 @@ func RouterWithSearch(svc Service, indexerSvc *indexers.Service, grabStore GrabC
 	r.Delete("/{id}", deleteSeries(svc, cfg.unmonitorChecker))
 	r.Put("/{id}/monitoring", setMonitoringStatus(svc))
 	r.Post("/{id}/refresh", refreshSeries(svc))
+	r.Post("/{id}/organize", organizeSingleSeries(svc, cfg.libraryStore, cfg.libraryScanner))
 	r.Post("/{id}/archive", archiveSeries(svc))
 	r.Post("/{id}/unarchive", unarchiveSeries(svc))
 	r.Get("/{id}/credits", getCredits(svc))
@@ -231,6 +233,143 @@ func rescanAllSeriesLibraries(
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"message":      "series library rescan started",
 			"libraryCount": len(seriesLibraries),
+		})
+	}
+}
+
+func organizeSeries(
+	svc Service,
+	store interface {
+		List(ctx context.Context) ([]libraries.Library, error)
+	},
+	scanner interface {
+		ScanLibrary(ctx context.Context, lib *libraries.Library) error
+	},
+) http.HandlerFunc {
+	type request struct {
+		SeriesIDs []string `json:"series_ids"`
+	}
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req request
+		_ = json.NewDecoder(r.Body).Decode(&req)
+
+		seriesIDs := req.SeriesIDs
+		if len(seriesIDs) == 0 {
+			list, err := svc.ListSeries(r.Context())
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			seriesIDs = make([]string, 0, len(list))
+			for _, s := range list {
+				seriesIDs = append(seriesIDs, s.ID)
+			}
+		}
+
+		if len(seriesIDs) == 0 {
+			http.Error(w, "series_ids is required", http.StatusBadRequest)
+			return
+		}
+
+		libraryIDSet := make(map[string]struct{})
+		for _, id := range seriesIDs {
+			sr, err := svc.GetSeries(r.Context(), id)
+			if err != nil || sr == nil || sr.LibraryID == "" {
+				continue
+			}
+			libraryIDSet[sr.LibraryID] = struct{}{}
+		}
+		libraryCount := len(libraryIDSet)
+
+		ctx := context.WithoutCancel(r.Context())
+		go func(ctx context.Context, ids []string, libs map[string]struct{}) {
+			for _, id := range ids {
+				if err := svc.RefreshSeries(ctx, id); err != nil {
+					slog.Warn("series: organize refresh failed", "series_id", id, "error", err)
+				}
+			}
+
+			if store == nil || scanner == nil || len(libs) == 0 {
+				return
+			}
+			allLibraries, err := store.List(ctx)
+			if err != nil {
+				slog.Warn("series: organize list libraries failed", "error", err)
+				return
+			}
+			for _, lib := range allLibraries {
+				if _, ok := libs[lib.ID]; !ok {
+					continue
+				}
+				lib := lib
+				if err := scanner.ScanLibrary(ctx, &lib); err != nil {
+					slog.Warn("series: organize scan failed", "library_id", lib.ID, "error", err)
+				}
+			}
+		}(ctx, append([]string(nil), seriesIDs...), libraryIDSet)
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusAccepted)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"message":      "series organize started",
+			"seriesCount":  len(seriesIDs),
+			"libraryCount": libraryCount,
+		})
+	}
+}
+
+func organizeSingleSeries(
+	svc Service,
+	store interface {
+		List(ctx context.Context) ([]libraries.Library, error)
+	},
+	scanner interface {
+		ScanLibrary(ctx context.Context, lib *libraries.Library) error
+	},
+) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := chi.URLParam(r, "id")
+		if id == "" {
+			http.Error(w, "series ID required", http.StatusBadRequest)
+			return
+		}
+
+		libraryID := ""
+		if sr, err := svc.GetSeries(r.Context(), id); err == nil && sr != nil {
+			libraryID = sr.LibraryID
+		}
+
+		ctx := context.WithoutCancel(r.Context())
+		go func(ctx context.Context, seriesID, libID string) {
+			if err := svc.RefreshSeries(ctx, seriesID); err != nil {
+				slog.Warn("series: organize refresh failed", "series_id", seriesID, "error", err)
+				return
+			}
+			if store == nil || scanner == nil || libID == "" {
+				return
+			}
+			allLibraries, err := store.List(ctx)
+			if err != nil {
+				slog.Warn("series: organize list libraries failed", "error", err)
+				return
+			}
+			for _, lib := range allLibraries {
+				if lib.ID != libID {
+					continue
+				}
+				lib := lib
+				if err := scanner.ScanLibrary(ctx, &lib); err != nil {
+					slog.Warn("series: organize scan failed", "library_id", lib.ID, "error", err)
+				}
+				break
+			}
+		}(ctx, id, libraryID)
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusAccepted)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"message":     "series organize started",
+			"seriesCount": 1,
 		})
 	}
 }

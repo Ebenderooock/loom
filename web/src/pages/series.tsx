@@ -121,6 +121,7 @@ export function SeriesPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [organizing, setOrganizing] = useState(false);
   const [refreshingAll, setRefreshingAll] = useState(false);
   const [rescanningLibraries, setRescanningLibraries] = useState(false);
 
@@ -417,6 +418,37 @@ export function SeriesPage() {
     }
   };
 
+  const handleOrganize = async () => {
+    const ids = selectedIds.size > 0 ? Array.from(selectedIds) : seriesList.map((s) => s.id);
+    if (ids.length === 0) {
+      toast.error("No series to organize");
+      return;
+    }
+
+    setOrganizing(true);
+    try {
+      const res = await apiFetch("/api/v1/series/organize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ series_ids: ids }),
+      });
+      if (!res.ok) {
+        throw new Error(await res.text());
+      }
+      const data = (await res.json()) as { seriesCount?: number };
+      toast.success(
+        `Organizing ${data.seriesCount ?? ids.length} TV series in the background`,
+      );
+      clearSelection();
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to start organize",
+      );
+    } finally {
+      setOrganizing(false);
+    }
+  };
+
   // Stats
   const totalSeries = seriesList.length;
   const monitoredCount = seriesList.filter(
@@ -459,8 +491,10 @@ export function SeriesPage() {
           onBulkQualityProfile={handleBulkQualityProfile}
           onAddSeries={() => setAddDialogOpen(true)}
           onImportLibrary={() => setImportDialogOpen(true)}
+          onOrganize={handleOrganize}
           onRefreshAll={handleRefreshAll}
           onRescanLibraries={handleRescanLibraries}
+          organizing={organizing}
           refreshingAll={refreshingAll}
           rescanningLibraries={rescanningLibraries}
         />

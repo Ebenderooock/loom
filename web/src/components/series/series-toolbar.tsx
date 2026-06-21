@@ -59,8 +59,10 @@ export function SeriesToolbar({
   onBulkQualityProfile,
   onAddSeries,
   onImportLibrary,
+  onOrganize,
   onRefreshAll,
   onRescanLibraries,
+  organizing,
   refreshingAll,
   rescanningLibraries,
 }: {
@@ -86,8 +88,10 @@ export function SeriesToolbar({
   onBulkQualityProfile: (profileId: string) => void;
   onAddSeries: () => void;
   onImportLibrary?: () => void;
+  onOrganize: () => void;
   onRefreshAll: () => void;
   onRescanLibraries: () => void;
+  organizing: boolean;
   refreshingAll: boolean;
   rescanningLibraries: boolean;
 }) {
@@ -209,6 +213,16 @@ export function SeriesToolbar({
               <FolderSearch className="h-4 w-4" /> Import
             </Button>
           )}
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-9 gap-1.5"
+            onClick={onOrganize}
+            disabled={organizing}
+          >
+            <FolderSync className="h-4 w-4" />
+            {organizing ? "Organizing..." : "Organize"}
+          </Button>
           <Button size="sm" className="h-9 gap-1.5" onClick={onAddSeries}>
             <Plus className="h-4 w-4" /> Add Series
           </Button>

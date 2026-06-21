@@ -275,9 +275,6 @@ func (p *ImportPipeline) resolveDownloadPath(ctx context.Context, ev *downloads.
 				return path, true
 			}
 		}
-		if len(candidates) > 0 {
-			return candidates[0], true
-		}
 		return "", false
 	}
 

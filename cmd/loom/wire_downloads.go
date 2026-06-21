@@ -158,6 +158,7 @@ func wireDownloads(
 			if contentPath == "" {
 				contentPath = items[0].SavePath
 			}
+			contentPath = remotePathStore.MapPath(ctx, clientID, contentPath)
 		}
 		// Remove from client queue (keep files; they've been moved/hardline to library).
 		if err := c.Remove(ctx, []string{downloadID}, false); err != nil {
