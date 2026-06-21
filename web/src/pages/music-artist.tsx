@@ -19,6 +19,7 @@ import {
   Trash2,
   Disc3,
   Loader2,
+  FolderSync,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useSetPageHeader } from "@/hooks/use-page-header";
@@ -29,6 +30,7 @@ import {
   useSetAlbumMonitored,
   useSearchAlbum,
   useDeleteArtist,
+  useRescanArtist,
   type Album,
 } from "@/lib/music-api";
 
@@ -138,6 +140,7 @@ export function MusicArtistPage() {
   const setAlbumMonitored = useSetAlbumMonitored();
   const searchAlbum = useSearchAlbum();
   const deleteArtist = useDeleteArtist();
+  const rescanArtist = useRescanArtist();
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [bulkBusy, setBulkBusy] = useState(false);
 
@@ -287,6 +290,37 @@ export function MusicArtistPage() {
               }
             >
               {monitored ? "Monitored" : "Unmonitored"}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={rescanArtist.isPending}
+              onClick={() => {
+                if (!artist.library_id) {
+                  toast.error("Library ID not found");
+                  return;
+                }
+                rescanArtist.mutate(
+                  { id: artist.id, libraryId: artist.library_id },
+                  {
+                    onSuccess: () => {
+                      toast.success("Artist folder rescan started");
+                    },
+                    onError: (e) => {
+                      toast.error(
+                        e instanceof Error ? e.message : "Rescan failed"
+                      );
+                    },
+                  }
+                );
+              }}
+            >
+              {rescanArtist.isPending ? (
+                <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+              ) : (
+                <FolderSync className="mr-1.5 h-4 w-4" />
+              )}
+              Rescan Folder
             </Button>
             <Button
               size="sm"
