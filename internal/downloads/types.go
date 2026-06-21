@@ -294,6 +294,7 @@ type DetailProvider interface {
 // engine, surfaced to the management UI.
 type TorrentEngineSummary struct {
 	TotalTorrents int    `json:"total_torrents"`
+	Queued        int    `json:"queued"`
 	Downloading   int    `json:"downloading"`
 	Seeding       int    `json:"seeding"`
 	Paused        int    `json:"paused"`

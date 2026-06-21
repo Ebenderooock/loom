@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
@@ -256,6 +257,7 @@ func TestBuildAddRequest(t *testing.T) {
 		name           string
 		result         *indexers.Result
 		wantMagnet     string
+		mustContain    []string
 		wantTorrentURL string
 	}{
 		{
@@ -272,7 +274,10 @@ func TestBuildAddRequest(t *testing.T) {
 				Infohash: "abc123def456",
 				Link:     "http://example.com/torrent.torrent",
 			},
-			wantMagnet: "magnet:?xt=urn:btih:abc123def456",
+			mustContain: []string{
+				"xt=urn%3Abtih%3Aabc123def456",
+				"tr=",
+			},
 		},
 		{
 			name: "fallback to link",
@@ -288,6 +293,11 @@ func TestBuildAddRequest(t *testing.T) {
 			req := buildAddRequest(tt.result)
 			if tt.wantMagnet != "" && req.Magnet != tt.wantMagnet {
 				t.Errorf("Magnet = %q, want %q", req.Magnet, tt.wantMagnet)
+			}
+			for _, needle := range tt.mustContain {
+				if !strings.Contains(req.Magnet, needle) {
+					t.Errorf("Magnet = %q, missing %q", req.Magnet, needle)
+				}
 			}
 			if tt.wantTorrentURL != "" && req.TorrentURL != tt.wantTorrentURL {
 				t.Errorf("TorrentURL = %q, want %q", req.TorrentURL, tt.wantTorrentURL)

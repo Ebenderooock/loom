@@ -69,6 +69,7 @@ func (c *Client) EngineSummary() downloads.TorrentEngineSummary {
 	s := c.engine.Summary()
 	return downloads.TorrentEngineSummary{
 		TotalTorrents: s.TotalTorrents,
+		Queued:        s.Queued,
 		Downloading:   s.Downloading,
 		Seeding:       s.Seeding,
 		Paused:        s.Paused,

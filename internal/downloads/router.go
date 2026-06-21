@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ebenderooock/loom/internal/downloads/torrentutil"
 	"github.com/ebenderooock/loom/internal/indexers"
 	"github.com/ebenderooock/loom/internal/kernel/eventbus"
 	"github.com/ebenderooock/loom/internal/metadata"
@@ -240,7 +241,7 @@ func buildAddRequest(result *indexers.Result) AddRequest {
 	if result.MagnetURI != "" {
 		req.Magnet = result.MagnetURI
 	} else if result.Infohash != "" {
-		req.Magnet = fmt.Sprintf("magnet:?xt=urn:btih:%s", result.Infohash)
+		req.Magnet = torrentutil.BuildPublicMagnet(result.Infohash, result.Title)
 	}
 	if result.Link != "" {
 		// Some indexers put magnet URIs in the Link field instead of
