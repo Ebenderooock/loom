@@ -15,6 +15,7 @@ import (
 	"syscall"
 	"time"
 
+	dht "github.com/anacrolix/dht/v2"
 	"github.com/anacrolix/torrent"
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/storage"
@@ -55,6 +56,15 @@ var defaultTrackers = []string{
 	"udp://tracker.internetwarriors.net:1337",
 }
 
+// defaultDHTBootstrapHostPorts augments the library defaults with
+// additional stable public bootstrap routers.
+var defaultDHTBootstrapHostPorts = []string{
+	"router.bittorrent.com:6881",
+	"router.utorrent.com:6881",
+	"dht.transmissionbt.com:6881",
+	"dht.libtorrent.org:25401",
+}
+
 // defaultAnnounceList wraps each tracker in its own tier so anacrolix
 // announces to all of them in parallel.
 func defaultAnnounceList() [][]string {
@@ -63,6 +73,18 @@ func defaultAnnounceList() [][]string {
 		list[i] = []string{tr}
 	}
 	return list
+}
+
+func dhtStartingNodes(network string) dht.StartingNodesGetter {
+	return func() ([]dht.Addr, error) {
+		hostPorts := append([]string{}, dht.DefaultGlobalBootstrapHostPorts...)
+		hostPorts = append(hostPorts, defaultDHTBootstrapHostPorts...)
+		addrs, err := dht.ResolveHostPorts(hostPorts)
+		if err == nil && len(addrs) > 0 {
+			return addrs, nil
+		}
+		return dht.GlobalBootstrapAddrs(network)
+	}
 }
 
 // magnetHasTrackers reports whether a magnet URI already carries one or
@@ -232,6 +254,9 @@ func NewEngine(cfg Config, logger *slog.Logger) (*Engine, error) {
 	tcfg.DataDir = dataDir
 	tcfg.DefaultStorage = storage.NewFileWithCompletion(dataDir, pc)
 	tcfg.NoDHT = !cfg.EnableDHT
+	if cfg.EnableDHT {
+		tcfg.DhtStartingNodes = dhtStartingNodes
+	}
 	tcfg.DisablePEX = !cfg.EnablePEX
 	tcfg.NoDefaultPortForwarding = !cfg.EnableUPnP
 
