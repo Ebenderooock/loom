@@ -9,7 +9,7 @@ import (
 	"github.com/ebenderooock/loom/internal/movies"
 	"github.com/ebenderooock/loom/internal/series"
 
-	_ "github.com/mattn/go-sqlite3"
+	_ "modernc.org/sqlite"
 )
 
 // stubMoviesSvc implements the subset of movies.Service needed by AltTitleMatcher.
@@ -40,7 +40,7 @@ func (s *stubSeriesSvc) GetSeries(_ context.Context, id string) (*series.Series,
 
 func setupAltTitleDB(t *testing.T) (*sql.DB, *alttitles.Store) {
 	t.Helper()
-	db, err := sql.Open("sqlite3", ":memory:")
+	db, err := sql.Open("sqlite", "file::memory:")
 	if err != nil {
 		t.Fatal(err)
 	}
