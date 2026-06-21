@@ -179,9 +179,10 @@ function EventPill({ event }: { event: CalendarEvent }) {
   const isAlbum = event.type === "album";
   const isMissing = event.status === "missing";
 
-  const label = isMovie || isAlbum
-    ? event.title
-    : `${event.seriesTitle ?? "Unknown"} — S${String(event.season).padStart(2, "0")}E${String(event.episode).padStart(2, "0")}`;
+  const label =
+    isMovie || isAlbum
+      ? event.title
+      : `${event.seriesTitle ?? "Unknown"} — S${String(event.season).padStart(2, "0")}E${String(event.episode).padStart(2, "0")}`;
 
   const tooltip = isMovie
     ? `${event.title}${event.year ? ` (${event.year})` : ""}${event.releaseType && event.releaseType !== "release" ? ` [${event.releaseType}]` : ""}`

@@ -3,6 +3,7 @@ package workflows
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -20,6 +21,12 @@ func (m *mockMediaUpdater) SetMovieDownloading(ctx context.Context, movieID stri
 	return nil
 }
 func (m *mockMediaUpdater) SetMovieMissing(ctx context.Context, movieID string) error {
+	return nil
+}
+func (m *mockMediaUpdater) SetEpisodeDownloading(ctx context.Context, episodeID string) error {
+	return nil
+}
+func (m *mockMediaUpdater) SetEpisodeMissing(ctx context.Context, episodeID string) error {
 	return nil
 }
 
@@ -202,6 +209,112 @@ func TestOrchestratorGrabbed(t *testing.T) {
 	}
 }
 
+func TestOrchestratorGrabbedUpdatesExistingDownloadingWorkflow(t *testing.T) {
+	imp := &mockImporter{paths: []string{"/media/movie.mkv"}}
+	orch, store := testOrchestrator(t, imp)
+	ctx, _ := startOrchestrator(t, orch)
+
+	wf, err := orch.StartSearch(ctx, TypeMovieSearch, MediaTypeMovie, "qp-1", []string{"movie-456"})
+	if err != nil {
+		t.Fatalf("StartSearch: %v", err)
+	}
+
+	orch.Send(CmdGrabbed{
+		WorkflowID: wf.ID,
+		ClientID:   "qbit-1",
+		DownloadID: "dl-001",
+		Title:      "Movie.2024.1080p",
+	})
+	waitForCondition(t, 2*time.Second, func() bool {
+		got, _ := store.Get(ctx, wf.ID)
+		return got != nil && got.State == StateDownloading
+	})
+
+	// Re-grab same media with a new download ID should update the existing
+	// active workflow instead of failing on state mismatch.
+	orch.Send(CmdGrabbed{
+		WorkflowID: wf.ID,
+		ClientID:   "qbit-1",
+		DownloadID: "dl-002",
+		Title:      "Movie.2024.REPACK.1080p",
+	})
+	waitForCondition(t, 2*time.Second, func() bool {
+		got, _ := store.Get(ctx, wf.ID)
+		return got != nil && got.DownloadID == "dl-002" && got.GrabTitle == "Movie.2024.REPACK.1080p"
+	})
+
+	got, _ := store.Get(ctx, wf.ID)
+	if got.State != StateDownloading {
+		t.Fatalf("expected state to remain downloading, got %s", got.State)
+	}
+}
+
+func TestOrchestratorGrabbedResumesFromPostDownload(t *testing.T) {
+	imp := &mockImporter{paths: []string{"/media/movie.mkv"}}
+	orch, store := testOrchestrator(t, imp)
+	ctx, _ := startOrchestrator(t, orch)
+
+	wf, err := orch.StartSearch(ctx, TypeMovieSearch, MediaTypeMovie, "qp-1", []string{"movie-457"})
+	if err != nil {
+		t.Fatalf("StartSearch: %v", err)
+	}
+
+	orch.Send(CmdGrabbed{
+		WorkflowID: wf.ID,
+		ClientID:   "qbit-1",
+		DownloadID: "dl-101",
+		Title:      "Movie.2024.1080p",
+	})
+	waitForCondition(t, 2*time.Second, func() bool {
+		got, _ := store.Get(ctx, wf.ID)
+		return got != nil && got.State == StateDownloading
+	})
+
+	ok, err := store.Transition(ctx, wf.ID, StateDownloading, StatePostDownload, "test setup")
+	if err != nil {
+		t.Fatalf("transition to post_download: %v", err)
+	}
+	if !ok {
+		t.Fatal("expected transition to post_download to succeed")
+	}
+	if _, err := store.IncrementRetry(ctx, wf.ID, "test retry"); err != nil {
+		t.Fatalf("increment retry: %v", err)
+	}
+	if err := store.MergeMetadata(ctx, wf.ID, map[string]any{
+		"status":       "seeding",
+		"ratio":        1.75,
+		"content_path": "/media/downloads/stale",
+	}); err != nil {
+		t.Fatalf("seed stale metadata: %v", err)
+	}
+
+	orch.Send(CmdGrabbed{
+		WorkflowID: wf.ID,
+		ClientID:   "qbit-1",
+		DownloadID: "dl-102",
+		Title:      "Movie.2024.REPACK.1080p",
+	})
+	waitForCondition(t, 2*time.Second, func() bool {
+		got, _ := store.Get(ctx, wf.ID)
+		return got != nil && got.State == StateDownloading && got.DownloadID == "dl-102" && got.RetryCount == 0
+	})
+
+	got, _ := store.Get(ctx, wf.ID)
+	if got.LastError != "" {
+		t.Fatalf("expected last_error reset on re-grab, got %q", got.LastError)
+	}
+	var meta map[string]any
+	if err := json.Unmarshal([]byte(got.Metadata), &meta); err != nil {
+		t.Fatalf("parse metadata: %v", err)
+	}
+	if status, _ := meta["status"].(string); status != "downloading" {
+		t.Fatalf("expected status metadata to reset to downloading, got %q", status)
+	}
+	if cp, _ := meta["content_path"].(string); cp != "" {
+		t.Fatalf("expected content_path to be cleared, got %q", cp)
+	}
+}
+
 func TestOrchestratorDownloadComplete(t *testing.T) {
 	imp := &mockImporter{paths: []string{"/media/movie.mkv"}}
 	orch, store := testOrchestrator(t, imp)
@@ -380,6 +493,14 @@ func TestClassifyImportError_MetadataNotResolvedIsPermanent(t *testing.T) {
 	}
 }
 
+func TestClassifyImportError_DownloadPathNotFoundRetriesSearch(t *testing.T) {
+	orch := &Orchestrator{}
+	got := orch.classifyImportError(`download path not found: stat /media/downloads/Some.Release: no such file or directory`)
+	if got != retrySearch {
+		t.Fatalf("expected retrySearch, got %v", got)
+	}
+}
+
 func TestOrchestratorCancel(t *testing.T) {
 	imp := &mockImporter{paths: []string{"/media/movie.mkv"}}
 	orch, store := testOrchestrator(t, imp)
@@ -486,24 +607,26 @@ func TestOrchestratorEventLogging(t *testing.T) {
 		return got != nil && got.State == StateDownloading
 	})
 
+	// Event logging is async with state transitions; wait until the expected
+	// event set is observable instead of reading immediately after state change.
+	waitForCondition(t, 2*time.Second, func() bool {
+		events, err := store.ListEvents(ctx, wf.ID)
+		if err != nil {
+			return false
+		}
+		types := make(map[string]bool)
+		for _, ev := range events {
+			types[ev.EventType] = true
+		}
+		return types[EventSearchStarted] && types[EventGrabbed] && types[EventDownloading]
+	})
+
 	events, err := store.ListEvents(ctx, wf.ID)
 	if err != nil {
 		t.Fatalf("ListEvents: %v", err)
 	}
-
 	if len(events) == 0 {
 		t.Fatal("expected events to be logged")
-	}
-
-	// Should have at least: search_started, grabbed, downloading
-	types := make(map[string]bool)
-	for _, ev := range events {
-		types[ev.EventType] = true
-	}
-	for _, expected := range []string{EventSearchStarted, EventGrabbed, EventDownloading} {
-		if !types[expected] {
-			t.Errorf("missing event type %s, got types: %v", expected, types)
-		}
 	}
 }
 

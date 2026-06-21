@@ -5,10 +5,20 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
-import { Plus, Search, Music, Disc3 } from "lucide-react";
+import {
+  Plus,
+  Search,
+  Music,
+  Disc3,
+  RefreshCw,
+  FolderSync,
+} from "lucide-react";
 import { useSetPageHeader } from "@/hooks/use-page-header";
+import { apiFetch } from "@/lib/fetch";
 import { useArtists, type Artist } from "@/lib/music-api";
 import { AddArtistDialog } from "@/components/music/add-artist-dialog";
+import { useLibraries } from "@/lib/libraries-api";
+import { toast } from "sonner";
 
 function ArtistCard({ artist }: { artist: Artist }) {
   const stats = artist.stats;
@@ -57,9 +67,15 @@ function ArtistCard({ artist }: { artist: Artist }) {
 }
 
 export function MusicPage() {
-  const { data: artists = [], isLoading } = useArtists();
+  const { data: artists = [], isLoading, refetch } = useArtists();
+  const { data: allLibraries = [] } = useLibraries();
+  const libraries = allLibraries.filter(
+    (library) => library.media_type === "music",
+  );
   const [filter, setFilter] = useState("");
   const [addOpen, setAddOpen] = useState(false);
+  const [refreshingAll, setRefreshingAll] = useState(false);
+  const [rescanningLibraries, setRescanningLibraries] = useState(false);
 
   const filtered = useMemo(() => {
     const q = filter.trim().toLowerCase();
@@ -76,6 +92,49 @@ export function MusicPage() {
     : undefined;
   useSetPageHeader("Music", subtitle);
 
+  const handleRefreshAll = async () => {
+    setRefreshingAll(true);
+    try {
+      const res = await apiFetch("/api/v1/artists/refresh", { method: "POST" });
+      if (!res.ok) {
+        throw new Error(await res.text());
+      }
+      const data = (await res.json()) as { count?: number };
+      toast.success(
+        `Refreshing ${data.count ?? artists.length} artist${(data.count ?? artists.length) === 1 ? "" : "s"} in the background`,
+      );
+      void refetch();
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to refresh artists",
+      );
+    } finally {
+      setRefreshingAll(false);
+    }
+  };
+
+  const handleRescanLibraries = async () => {
+    setRescanningLibraries(true);
+    try {
+      const res = await apiFetch("/api/v1/artists/rescan", { method: "POST" });
+      if (!res.ok) {
+        throw new Error(await res.text());
+      }
+      const data = (await res.json()) as { libraryCount?: number };
+      toast.success(
+        `Rescanning ${data.libraryCount ?? libraries.length} music librar${(data.libraryCount ?? libraries.length) === 1 ? "y" : "ies"} in the background`,
+      );
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Failed to rescan music libraries",
+      );
+    } finally {
+      setRescanningLibraries(false);
+    }
+  };
+
   return (
     <div className="px-6 pb-6 pt-2">
       <div className="mb-4 flex items-center gap-3">
@@ -88,7 +147,23 @@ export function MusicPage() {
             className="pl-9"
           />
         </div>
-        <div className="ml-auto">
+        <div className="ml-auto flex items-center gap-2">
+          <Button
+            variant="outline"
+            onClick={handleRefreshAll}
+            disabled={refreshingAll}
+          >
+            <RefreshCw className="mr-1.5 h-4 w-4" />
+            {refreshingAll ? "Refreshing..." : "Refresh All"}
+          </Button>
+          <Button
+            variant="outline"
+            onClick={handleRescanLibraries}
+            disabled={rescanningLibraries}
+          >
+            <FolderSync className="mr-1.5 h-4 w-4" />
+            {rescanningLibraries ? "Rescanning..." : "Rescan Libraries"}
+          </Button>
           <Button onClick={() => setAddOpen(true)}>
             <Plus className="mr-1.5 h-4 w-4" />
             Add Artist

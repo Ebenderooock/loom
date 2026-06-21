@@ -249,61 +249,114 @@ func (p *ImportPipeline) resolveDownloadPath(ctx context.Context, ev *downloads.
 		return "", fmt.Errorf("no client_id in completion event")
 	}
 
-	client, ok := p.downloadSvc.Registry().Get(ev.ClientID)
-	if !ok {
-		return "", fmt.Errorf("download client %q not found in registry", ev.ClientID)
-	}
-
-	items, err := client.Status(ctx, ev.DownloadID)
-	if err != nil {
-		return "", fmt.Errorf("query download status: %w", err)
-	}
-
-	for _, item := range items {
-		if item.ID == ev.DownloadID {
-			// Prefer ContentPath (actual on-disk location set by the
-			// download client) over the SavePath+Title heuristic.
-			if item.ContentPath != "" {
-				path := p.applyRemotePathMapping(ctx, ev.ClientID, item.ContentPath)
-				if isUnresolvedContentPath(path) {
-					return "", fmt.Errorf("download metadata not resolved yet: unresolved content path %q", path)
-				}
-				return path, nil
+	candidates := make([]string, 0, 8)
+	seen := make(map[string]struct{}, 8)
+	var unresolvedPath string
+	addCandidate := func(path string) {
+		path = strings.TrimSpace(path)
+		if path == "" {
+			return
+		}
+		if isUnresolvedContentPath(path) {
+			if unresolvedPath == "" {
+				unresolvedPath = path
 			}
-			if item.SavePath != "" {
-				path := filepath.Join(item.SavePath, item.Title)
-				return p.applyRemotePathMapping(ctx, ev.ClientID, path), nil
+			return
+		}
+		if _, ok := seen[path]; ok {
+			return
+		}
+		seen[path] = struct{}{}
+		candidates = append(candidates, path)
+	}
+	resolveFirst := func() (string, bool) {
+		for _, path := range candidates {
+			if _, err := os.Stat(path); err == nil {
+				return path, true
 			}
 		}
+		if len(candidates) > 0 {
+			return candidates[0], true
+		}
+		return "", false
+	}
+
+	var statusErr error
+	var liveItemTitle string
+	client, ok := p.downloadSvc.Registry().Get(ev.ClientID)
+	if ok {
+		if items, err := client.Status(ctx, ev.DownloadID); err == nil {
+			for _, item := range items {
+				if item.ID != ev.DownloadID {
+					continue
+				}
+				liveItemTitle = item.Title
+				// Prefer ContentPath (actual on-disk location set by the
+				// download client) over SavePath+Title heuristics.
+				addCandidate(p.applyRemotePathMapping(ctx, ev.ClientID, item.ContentPath))
+				if item.SavePath != "" {
+					addCandidate(p.applyRemotePathMapping(ctx, ev.ClientID, filepath.Join(item.SavePath, item.Title)))
+					addCandidate(p.applyRemotePathMapping(ctx, ev.ClientID, filepath.Join(item.SavePath, ev.Title)))
+				}
+			}
+		} else {
+			statusErr = err
+		}
+	}
+	if path, ok := resolveFirst(); ok {
+		return path, nil
 	}
 
 	// The item is no longer present in the download client (e.g. removed after
 	// seeding). Try the path we cached in workflow metadata when the download
 	// first completed — this survives client-side removal.
+	var metadataDownloadTitle string
 	if p.wfEngine != nil {
 		if wf, err := p.wfEngine.FindByDownload(ctx, ev.ClientID, ev.DownloadID); err == nil && wf != nil {
 			if cached := metadataString(wf.Metadata, "content_path"); cached != "" {
-				path := p.applyRemotePathMapping(ctx, ev.ClientID, cached)
-				if isUnresolvedContentPath(path) {
-					return "", fmt.Errorf("download metadata not resolved yet: unresolved content path %q", path)
-				}
-				return path, nil
+				addCandidate(p.applyRemotePathMapping(ctx, ev.ClientID, cached))
 			}
+			metadataDownloadTitle = metadataString(wf.Metadata, "download_title")
 			if sp := metadataString(wf.Metadata, "save_path"); sp != "" {
-				path := filepath.Join(sp, ev.Title)
-				return p.applyRemotePathMapping(ctx, ev.ClientID, path), nil
+				if metadataDownloadTitle != "" {
+					addCandidate(p.applyRemotePathMapping(ctx, ev.ClientID, filepath.Join(sp, metadataDownloadTitle)))
+				}
+				if liveItemTitle != "" {
+					addCandidate(p.applyRemotePathMapping(ctx, ev.ClientID, filepath.Join(sp, liveItemTitle)))
+				}
+				addCandidate(p.applyRemotePathMapping(ctx, ev.ClientID, filepath.Join(sp, ev.Title)))
 			}
 		}
+	}
+	if path, ok := resolveFirst(); ok {
+		return path, nil
 	}
 
 	// Fallback: try the client definition's default save path
 	def, err := p.downloadSvc.Get(ctx, ev.ClientID)
 	if err != nil {
+		if statusErr != nil {
+			return "", fmt.Errorf("query download status: %w", statusErr)
+		}
 		return "", fmt.Errorf("get client definition: %w", err)
 	}
 	if def.SavePathDefault != "" {
-		path := filepath.Join(def.SavePathDefault, ev.Title)
-		return p.applyRemotePathMapping(ctx, ev.ClientID, path), nil
+		if metadataDownloadTitle != "" {
+			addCandidate(p.applyRemotePathMapping(ctx, ev.ClientID, filepath.Join(def.SavePathDefault, metadataDownloadTitle)))
+		}
+		if liveItemTitle != "" {
+			addCandidate(p.applyRemotePathMapping(ctx, ev.ClientID, filepath.Join(def.SavePathDefault, liveItemTitle)))
+		}
+		addCandidate(p.applyRemotePathMapping(ctx, ev.ClientID, filepath.Join(def.SavePathDefault, ev.Title)))
+		if path, ok := resolveFirst(); ok {
+			return path, nil
+		}
+	}
+	if unresolvedPath != "" {
+		return "", fmt.Errorf("download metadata not resolved yet: unresolved content path %q", unresolvedPath)
+	}
+	if statusErr != nil {
+		return "", fmt.Errorf("query download status: %w", statusErr)
 	}
 
 	return "", fmt.Errorf("could not determine download path for %q", ev.Title)
@@ -412,24 +465,32 @@ func (p *ImportPipeline) processImport(ctx context.Context, ev *downloads.Downlo
 
 // importSingleFile matches and imports a single media file.
 func (p *ImportPipeline) importSingleFile(ctx context.Context, ev *downloads.DownloadCompletedEvent, mediaFile string) error {
-	// Try exact grab-based matching first (most reliable for Loom-originated downloads)
-	match, err := p.matchByGrab(ctx, ev)
+	// For multi-episode downloads, grab-based matching is too coarse (all files would match
+	// the same episode). Try file-path-based matching first for each individual file.
+	var match *MatchResult
+	var err error
+
+	// Try matching by full file path first (includes parent directory for context).
+	// This is most reliable for multi-episode folders since it resolves each file individually.
+	match, err = p.matcher.MatchPath(ctx, mediaFile)
 	if err != nil {
-		p.logger.Warn("grab-based match failed, falling back to fuzzy", "error", err)
+		p.logger.Warn("path-based match failed", "file", mediaFile, "error", err)
 	}
 
-	// Fall back to fuzzy matching by event title
+	// Fall back to grab-based matching if path matching didn't work.
+	// This is reliable for Loom-originated single-file downloads.
+	if match == nil || !match.Matched {
+		match, err = p.matchByGrab(ctx, ev)
+		if err != nil {
+			p.logger.Warn("grab-based match failed", "error", err)
+		}
+	}
+
+	// Fall back to fuzzy matching by event title as last resort.
 	if match == nil || !match.Matched {
 		match, err = p.matcher.Match(ctx, ev.Title)
 		if err != nil {
 			return p.recordFailure(ctx, "", "", ev.Title, mediaFile, fmt.Errorf("match: %w", err))
-		}
-	}
-	if !match.Matched {
-		// Try matching by full file path (includes parent directory for context)
-		match, err = p.matcher.MatchPath(ctx, mediaFile)
-		if err != nil {
-			return p.recordFailure(ctx, "", "", ev.Title, mediaFile, fmt.Errorf("match by path: %w", err))
 		}
 	}
 	if !match.Matched {

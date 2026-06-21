@@ -198,7 +198,15 @@ function ResetPasswordDialog({
   const [password, setPassword] = React.useState("");
 
   React.useEffect(() => {
-    setPassword("");
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (!cancelled) {
+        setPassword("");
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [user]);
 
   function submit() {

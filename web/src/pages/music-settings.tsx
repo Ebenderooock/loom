@@ -64,9 +64,8 @@ function AudioProfileCard({
     return m;
   }, [profile.format_items]);
 
-  const [scores, setScores] = React.useState<Record<string, number>>(
-    initialScores,
-  );
+  const [scores, setScores] =
+    React.useState<Record<string, number>>(initialScores);
   const [minScore, setMinScore] = React.useState<number>(
     profile.min_format_score ?? 0,
   );
@@ -78,7 +77,9 @@ function AudioProfileCard({
 
   const dirty =
     minScore !== (profile.min_format_score ?? 0) ||
-    customFormats.some((cf) => (scores[cf.id] ?? 0) !== (initialScores[cf.id] ?? 0));
+    customFormats.some(
+      (cf) => (scores[cf.id] ?? 0) !== (initialScores[cf.id] ?? 0),
+    );
 
   const save = () => {
     const format_items = customFormats
@@ -248,11 +249,7 @@ export function MusicProfilesPage() {
                         {d.format || "—"}
                       </TableCell>
                       <TableCell>
-                        {d.vbr
-                          ? "VBR"
-                          : d.bitrate
-                            ? `${d.bitrate} kbps`
-                            : "—"}
+                        {d.vbr ? "VBR" : d.bitrate ? `${d.bitrate} kbps` : "—"}
                       </TableCell>
                       <TableCell>{d.lossless ? "Yes" : "No"}</TableCell>
                       <TableCell className="text-right tabular-nums">

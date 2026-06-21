@@ -17,7 +17,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { EmptyState } from "@/components/ui/empty-state";
 import { LoadingState } from "@/components/ui/loading-state";
+import { ConfirmActionButton } from "@/components/ui/confirm-action";
 import { useSetPageHeader } from "@/hooks/use-page-header";
+import { useAuth } from "@/hooks/use-auth";
 import {
   CheckCircle2,
   XCircle,
@@ -61,6 +63,7 @@ import {
 } from "@/components/ui/dialog";
 import { formatBytes, formatEta, formatSpeed, relativeTime } from "@/lib/utils";
 import { downloadStatusConfig } from "@/lib/status-utils";
+import { toast } from "sonner";
 
 // ─── Types ──────────────────────────────────────────────────────────────
 
@@ -528,25 +531,29 @@ function DownloadQueue() {
 }
 
 function DownloadHistory() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
   const [entries, setEntries] = React.useState<HistoryEntry[]>([]);
   const [loading, setLoading] = React.useState(true);
+  const [clearing, setClearing] = React.useState(false);
+
+  const load = React.useCallback(async () => {
+    try {
+      const res = await apiFetch("/api/v1/downloads/history?limit=50");
+      if (res.ok) {
+        const body = await res.json();
+        setEntries(body ?? []);
+      }
+    } catch {
+      // silently fail
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   React.useEffect(() => {
-    async function load() {
-      try {
-        const res = await apiFetch("/api/v1/downloads/history?limit=50");
-        if (res.ok) {
-          const body = await res.json();
-          setEntries(body ?? []);
-        }
-      } catch {
-        // silently fail
-      } finally {
-        setLoading(false);
-      }
-    }
-    load();
-  }, []);
+    void load();
+  }, [load]);
 
   if (loading) {
     return (
@@ -574,8 +581,35 @@ function DownloadHistory() {
 
   return (
     <Card>
-      <CardHeader className="pb-3">
+      <CardHeader className="flex flex-row items-center justify-between pb-3">
         <CardTitle className="text-base">Download History</CardTitle>
+        {isAdmin && (
+          <ConfirmActionButton
+            actionLabel="Clear History"
+            title="Clear download history?"
+            description="Remove the stored completed and failed download history entries."
+            confirmLabel="Clear downloads"
+            pending={clearing}
+            disabled={entries.length === 0}
+            icon={<Trash2 className="mr-1.5 h-3.5 w-3.5" />}
+            onConfirm={async () => {
+              setClearing(true);
+              try {
+                const res = await apiFetch("/api/v1/downloads/history", {
+                  method: "DELETE",
+                });
+                if (!res.ok) throw new Error("clear download history failed");
+                setEntries([]);
+                toast.success("Download history cleared");
+              } catch {
+                toast.error("Failed to clear download history");
+                throw new Error("clear download history failed");
+              } finally {
+                setClearing(false);
+              }
+            }}
+          />
+        )}
       </CardHeader>
       <CardContent className="p-0">
         <Table>
@@ -633,8 +667,11 @@ interface BlocklistEntry {
 }
 
 function BlocklistViewer() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
   const [entries, setEntries] = React.useState<BlocklistEntry[]>([]);
   const [loading, setLoading] = React.useState(true);
+  const [clearing, setClearing] = React.useState(false);
 
   const fetchBlocklist = React.useCallback(async () => {
     try {
@@ -664,11 +701,17 @@ function BlocklistViewer() {
   };
 
   const handleClearAll = async () => {
+    setClearing(true);
     try {
-      await apiFetch("/api/v1/blocklist", { method: "DELETE" });
+      const res = await apiFetch("/api/v1/blocklist", { method: "DELETE" });
+      if (!res.ok) throw new Error("clear blocklist failed");
       setEntries([]);
+      toast.success("Blocklist cleared");
     } catch {
-      // silently fail
+      toast.error("Failed to clear blocklist");
+      throw new Error("clear blocklist failed");
+    } finally {
+      setClearing(false);
     }
   };
 
@@ -709,9 +752,18 @@ function BlocklistViewer() {
           >
             <RefreshCw className="h-4 w-4" />
           </Button>
-          <Button variant="destructive" size="sm" onClick={handleClearAll}>
-            <Trash2 className="mr-1 h-3.5 w-3.5" /> Clear All
-          </Button>
+          {isAdmin && (
+            <ConfirmActionButton
+              actionLabel="Clear All"
+              title="Clear download safety blocklist?"
+              description="Remove every blocked release from the download safety blocklist."
+              confirmLabel="Clear blocklist"
+              pending={clearing}
+              disabled={entries.length === 0}
+              icon={<Trash2 className="mr-1 h-3.5 w-3.5" />}
+              onConfirm={handleClearAll}
+            />
+          )}
         </div>
       </CardHeader>
       <CardContent className="p-0">

@@ -11,13 +11,16 @@ import (
 )
 
 // Router returns a chi.Router for the search debug log endpoints.
-func Router(store *Store, hub *Hub) chi.Router {
+func Router(store *Store, hub *Hub, adminOnly func(http.Handler) http.Handler) chi.Router {
 	r := chi.NewRouter()
 	r.Get("/", handleList(store))
 	r.Get("/active", handleActive(store))
 	r.Get("/stats", handleStats(store))
 	r.Get("/stream", handleStream(hub))
 	r.Get("/{id}", handleGet(store))
+	if adminOnly != nil {
+		r.With(adminOnly).Delete("/", handleClear(store))
+	}
 	r.Delete("/prune", handlePrune(store))
 	return r
 }
@@ -155,5 +158,15 @@ func handlePrune(store *Store) http.HandlerFunc {
 		json.NewEncoder(w).Encode(map[string]any{
 			"deleted": deleted,
 		})
+	}
+}
+
+func handleClear(store *Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if err := store.Clear(r.Context()); err != nil {
+			http.Error(w, `{"error":"`+err.Error()+`"}`, http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
 	}
 }

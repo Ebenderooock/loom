@@ -407,10 +407,8 @@ export function useAudioQualityProfiles() {
 export function useUpdateAudioQualityProfile() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (vars: {
-      id: string;
-      req: UpdateAudioQualityProfileRequest;
-    }) => updateAudioQualityProfile(vars.id, vars.req),
+    mutationFn: (vars: { id: string; req: UpdateAudioQualityProfileRequest }) =>
+      updateAudioQualityProfile(vars.id, vars.req),
     onSuccess: () =>
       qc.invalidateQueries({ queryKey: musicKeys.audioQualityProfiles }),
   });
@@ -485,13 +483,8 @@ export function useAlbumReleases(id: string | undefined, enabled: boolean) {
 export function useGrabAlbumRelease() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({
-      id,
-      release,
-    }: {
-      id: string;
-      release: ReleaseCandidate;
-    }) => grabAlbumRelease(id, release),
+    mutationFn: ({ id, release }: { id: string; release: ReleaseCandidate }) =>
+      grabAlbumRelease(id, release),
     onSuccess: (_res, vars) => {
       qc.invalidateQueries({ queryKey: musicKeys.album(vars.id) });
     },

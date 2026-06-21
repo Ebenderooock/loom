@@ -302,14 +302,50 @@ func TestMagnetHasTrackers(t *testing.T) {
 	}
 }
 
-func TestDefaultAnnounceList(t *testing.T) {
-	list := defaultAnnounceList()
-	if len(list) != len(defaultTrackers) {
-		t.Fatalf("got %d tiers, want %d", len(list), len(defaultTrackers))
+func TestAnnounceListFromMagnet(t *testing.T) {
+	t.Parallel()
+	got := announceListFromMagnet("magnet:?xt=urn:btih:abc&tr=udp%3A%2F%2Ftracker.one%3A1337%2Fannounce&tr=udp%3A%2F%2Ftracker.two%3A6969%2Fannounce&tr=udp%3A%2F%2Ftracker.one%3A1337%2Fannounce")
+	want := [][]string{
+		{"udp://tracker.one:1337/announce"},
+		{"udp://tracker.two:6969/announce"},
 	}
-	for i, tier := range list {
-		if len(tier) != 1 || tier[0] != defaultTrackers[i] {
-			t.Fatalf("tier %d = %v, want [%q]", i, tier, defaultTrackers[i])
+	if len(got) != len(want) {
+		t.Fatalf("got %d tiers, want %d", len(got), len(want))
+	}
+	for i := range want {
+		if len(got[i]) != 1 || got[i][0] != want[i][0] {
+			t.Fatalf("tier %d = %v, want %v", i, got[i], want[i])
 		}
+	}
+}
+
+func TestDetail_QueuedMagnetWithoutMetadataDoesNotPanic(t *testing.T) {
+	t.Parallel()
+	e := newTestEngine(t)
+
+	th, err := e.client.AddMagnet("magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567&tr=udp%3A%2F%2Ftracker.invalid%3A1337%2Fannounce")
+	if err != nil {
+		t.Fatalf("adding magnet: %v", err)
+	}
+
+	hash := th.InfoHash().HexString()
+	e.mu.Lock()
+	e.items[hash] = &trackedTorrent{
+		t:            th,
+		title:        "queued",
+		announceList: [][]string{{"udp://tracker.invalid:1337/announce"}},
+		addedAt:      time.Now(),
+	}
+	e.mu.Unlock()
+
+	detail, err := e.Detail(hash)
+	if err != nil {
+		t.Fatalf("Detail: %v", err)
+	}
+	if detail.TotalPeers != 0 {
+		t.Fatalf("TotalPeers = %d, want 0", detail.TotalPeers)
+	}
+	if len(detail.Trackers) != 1 || detail.Trackers[0].Status != "queued" {
+		t.Fatalf("Trackers = %#v, want queued tracker entry", detail.Trackers)
 	}
 }

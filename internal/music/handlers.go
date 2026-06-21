@@ -1,26 +1,66 @@
 package music
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"strconv"
 
 	"github.com/go-chi/chi/v5"
+
+	"github.com/ebenderooock/loom/internal/libraries"
 )
 
 // ArtistRouter mounts artist endpoints (intended at /api/v1/artists).
-func ArtistRouter(svc Service) chi.Router {
+func ArtistRouter(svc Service, opts ...ArtistRouterOption) chi.Router {
+	var cfg artistRouterConfig
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+
 	r := chi.NewRouter()
 	r.Get("/", handleListArtists(svc))
 	r.Post("/", handleAddArtist(svc))
 	r.Get("/lookup", handleLookupArtists(svc))
+	r.Post("/refresh", handleRefreshAllArtists(svc))
+	if cfg.libraryStore != nil && cfg.libraryScanner != nil {
+		r.Post("/rescan", handleRescanAllArtistLibraries(cfg.libraryStore, cfg.libraryScanner))
+	}
 	r.Get("/{id}", handleGetArtist(svc))
 	r.Patch("/{id}", handleUpdateArtist(svc))
 	r.Put("/{id}", handleUpdateArtist(svc))
 	r.Delete("/{id}", handleDeleteArtist(svc))
 	r.Put("/{id}/monitoring", handleSetArtistMonitoring(svc))
 	return r
+}
+
+type artistRouterConfig struct {
+	libraryStore interface {
+		List(ctx context.Context) ([]libraries.Library, error)
+	}
+	libraryScanner interface {
+		ScanLibrary(ctx context.Context, lib *libraries.Library) error
+	}
+}
+
+// ArtistRouterOption configures optional artist router dependencies.
+type ArtistRouterOption func(*artistRouterConfig)
+
+// WithLibraryRescan enables page-level rescan of all music libraries.
+func WithLibraryRescan(
+	store interface {
+		List(ctx context.Context) ([]libraries.Library, error)
+	},
+	scanner interface {
+		ScanLibrary(ctx context.Context, lib *libraries.Library) error
+	},
+) ArtistRouterOption {
+	return func(cfg *artistRouterConfig) {
+		cfg.libraryStore = store
+		cfg.libraryScanner = scanner
+	}
 }
 
 // AlbumRouter mounts album endpoints (intended at /api/v1/albums).
@@ -154,6 +194,74 @@ func handleGetAlbum(svc Service) http.HandlerFunc {
 			return
 		}
 		writeJSON(w, http.StatusOK, al)
+	}
+}
+
+func handleRefreshAllArtists(svc Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		artists, err := svc.ListArtists(r.Context())
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+
+		ids := make([]string, 0, len(artists))
+		for _, artist := range artists {
+			ids = append(ids, artist.ID)
+		}
+
+		ctx := context.WithoutCancel(r.Context())
+		go func(ctx context.Context, artistIDs []string) {
+			for _, id := range artistIDs {
+				if _, err := svc.RefreshArtistAlbums(ctx, id); err != nil {
+					slog.Warn("music: bulk refresh failed", "artist_id", id, "error", err)
+				}
+			}
+		}(ctx, ids)
+
+		writeJSON(w, http.StatusAccepted, map[string]any{
+			"message": "artist refresh started",
+			"count":   len(ids),
+		})
+	}
+}
+
+func handleRescanAllArtistLibraries(
+	store interface {
+		List(ctx context.Context) ([]libraries.Library, error)
+	},
+	scanner interface {
+		ScanLibrary(ctx context.Context, lib *libraries.Library) error
+	},
+) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		librariesList, err := store.List(r.Context())
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		musicLibraries := make([]libraries.Library, 0, len(librariesList))
+		for _, lib := range librariesList {
+			if lib.MediaType == "music" {
+				musicLibraries = append(musicLibraries, lib)
+			}
+		}
+
+		ctx := context.WithoutCancel(r.Context())
+		go func(ctx context.Context, libs []libraries.Library) {
+			for _, lib := range libs {
+				lib := lib
+				if err := scanner.ScanLibrary(ctx, &lib); err != nil {
+					slog.Warn("music: bulk rescan failed", "library_id", lib.ID, "error", err)
+				}
+			}
+		}(ctx, musicLibraries)
+
+		writeJSON(w, http.StatusAccepted, map[string]any{
+			"message":      "music library rescan started",
+			"libraryCount": len(musicLibraries),
+		})
 	}
 }
 

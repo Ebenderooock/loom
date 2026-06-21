@@ -24,6 +24,7 @@
     "eslint.config.js",
     "postcss.config.cjs",
     "tailwind.config.ts",
+    "src/vite-env.d.ts",
     ".storybook/**/*.ts"
   ]
 }

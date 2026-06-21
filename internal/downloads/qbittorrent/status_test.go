@@ -20,6 +20,7 @@ const torrentsInfoFixture = `[
     "state": "downloading",
     "category": "movies",
     "save_path": "/downloads/movies",
+    "content_path": "/downloads/movies/Big Buck Bunny",
     "eta": 600,
     "dlspeed": 1024,
     "upspeed": 0,
@@ -155,6 +156,9 @@ func TestStatusGoldenFixture(t *testing.T) {
 	}
 	if first.Category != "movies" {
 		t.Errorf("category = %q", first.Category)
+	}
+	if first.ContentPath != "/downloads/movies/Big Buck Bunny" {
+		t.Errorf("content_path = %q", first.ContentPath)
 	}
 }
 

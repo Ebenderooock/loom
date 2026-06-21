@@ -52,6 +52,36 @@ func newTestClient(t *testing.T, srv *httptest.Server, def downloads.Definition)
 	return c
 }
 
+func newTestClientNoAuth(t *testing.T, srv *httptest.Server, def downloads.Definition) *Client {
+	t.Helper()
+	if def.ID == "" {
+		def.ID = "qb-test"
+	}
+	if def.Name == "" {
+		def.Name = "QB Test"
+	}
+	u, err := url.Parse(srv.URL)
+	if err != nil {
+		t.Fatalf("parse server URL: %v", err)
+	}
+	host := u.Hostname()
+	port := 0
+	fmt.Sscanf(u.Port(), "%d", &port)
+	def.Host = host
+	def.Port = port
+	def.TLS = u.Scheme == "https"
+
+	cfg, err := parseConfig(def)
+	if err != nil {
+		t.Fatalf("parseConfig: %v", err)
+	}
+	c, err := NewWithHTTPClient(def, cfg, srv.Client())
+	if err != nil {
+		t.Fatalf("NewWithHTTPClient: %v", err)
+	}
+	return c
+}
+
 // fakeServer composes an http.ServeMux that mints a session cookie
 // on /auth/login and refuses unauthenticated requests on the other
 // endpoints. Each test wires its own handler for the endpoint under
@@ -208,6 +238,128 @@ func TestReLoginOn403(t *testing.T) {
 	}
 	if got := f.loginCalls.Load(); got != preLogin+1 {
 		t.Fatalf("login calls = %d, want %d (one re-login)", got, preLogin+1)
+	}
+}
+
+func TestAnonymousModeSkipsLoginInTestProbe(t *testing.T) {
+	t.Parallel()
+	f := newFakeServer("adminadmin")
+	defer f.Close()
+	f.mux.HandleFunc("/api/v2/app/version", func(w http.ResponseWriter, _ *http.Request) {
+		fmt.Fprint(w, "v5.0.0")
+	})
+
+	c := newTestClientNoAuth(t, f.srv, downloads.Definition{})
+	if err := c.Test(context.Background()); err != nil {
+		t.Fatalf("Test: %v", err)
+	}
+	if got := f.loginCalls.Load(); got != 0 {
+		t.Fatalf("login calls = %d, want 0", got)
+	}
+}
+
+func TestDoPreAuthsWithCredentials(t *testing.T) {
+	t.Parallel()
+	f := newFakeServer("adminadmin")
+	defer f.Close()
+
+	var unauthHits atomic.Int64
+	f.mux.HandleFunc("/api/v2/torrents/info", func(w http.ResponseWriter, r *http.Request) {
+		cookie, err := r.Cookie("SID")
+		if err != nil || cookie.Value != "test-session-cookie" {
+			unauthHits.Add(1)
+			w.WriteHeader(http.StatusForbidden)
+			fmt.Fprint(w, "Forbidden")
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, "[]")
+	})
+
+	c := newTestClient(t, f.srv, downloads.Definition{})
+	if _, err := c.Status(context.Background()); err != nil {
+		t.Fatalf("Status: %v", err)
+	}
+	if got := unauthHits.Load(); got != 0 {
+		t.Fatalf("unauthenticated info hits = %d, want 0", got)
+	}
+	if got := f.loginCalls.Load(); got != 1 {
+		t.Fatalf("login calls = %d, want 1", got)
+	}
+}
+
+func TestForbiddenWithoutCredentialsDoesNotAttemptLogin(t *testing.T) {
+	t.Parallel()
+	f := newFakeServer("adminadmin")
+	defer f.Close()
+
+	f.mux.HandleFunc("/api/v2/torrents/info", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+		fmt.Fprint(w, "Forbidden")
+	})
+
+	c := newTestClientNoAuth(t, f.srv, downloads.Definition{})
+	_, err := c.Status(context.Background())
+	if err == nil {
+		t.Fatal("Status: expected auth error, got nil")
+	}
+	if !strings.Contains(err.Error(), "no qBittorrent credentials are configured") {
+		t.Fatalf("error = %q", err)
+	}
+	if got := f.loginCalls.Load(); got != 0 {
+		t.Fatalf("login calls = %d, want 0", got)
+	}
+}
+
+func TestTestProbeFallsBackWhenLoginRejectedButVersionAccessible(t *testing.T) {
+	t.Parallel()
+	f := newFakeServer("the-real-password")
+	defer f.Close()
+	f.mux.HandleFunc("/api/v2/app/version", func(w http.ResponseWriter, _ *http.Request) {
+		fmt.Fprint(w, "v5.0.0")
+	})
+
+	c := newTestClient(t, f.srv, downloads.Definition{})
+	if err := c.Test(context.Background()); err != nil {
+		t.Fatalf("Test: %v", err)
+	}
+	if got := f.loginCalls.Load(); got != 1 {
+		t.Fatalf("login calls = %d, want 1", got)
+	}
+}
+
+func TestStatusFallsBackToAnonymousWhenLoginRejected(t *testing.T) {
+	t.Parallel()
+	f := newFakeServer("the-real-password")
+	defer f.Close()
+	f.mux.HandleFunc("/api/v2/torrents/info", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, "[]")
+	})
+
+	c := newTestClient(t, f.srv, downloads.Definition{})
+	if _, err := c.Status(context.Background()); err != nil {
+		t.Fatalf("Status: %v", err)
+	}
+	if got := f.loginCalls.Load(); got != 1 {
+		t.Fatalf("login calls = %d, want 1", got)
+	}
+}
+
+func TestPartialCredentialsAreTreatedAsAnonymous(t *testing.T) {
+	t.Parallel()
+	f := newFakeServer("adminadmin")
+	defer f.Close()
+	f.mux.HandleFunc("/api/v2/app/version", func(w http.ResponseWriter, _ *http.Request) {
+		fmt.Fprint(w, "v5.0.0")
+	})
+
+	c := newTestClientNoAuth(t, f.srv, downloads.Definition{Username: "admin"})
+	if err := c.Test(context.Background()); err != nil {
+		t.Fatalf("Test: %v", err)
+	}
+	if got := f.loginCalls.Load(); got != 0 {
+		t.Fatalf("login calls = %d, want 0", got)
 	}
 }
 

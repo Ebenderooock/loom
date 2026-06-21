@@ -60,7 +60,8 @@ const FormSchema = z.object({
   config: z.union([RSSConfigSchema, ScraperConfigSchema]),
 });
 
-type FormValues = z.infer<typeof FormSchema>;
+type FormValues = z.output<typeof FormSchema>;
+type FormInput = z.input<typeof FormSchema>;
 
 interface SourceFormProps {
   open: boolean;
@@ -83,14 +84,14 @@ export function SourceForm({
     source?.type ?? "rss",
   );
 
-  const form = useForm<FormValues>({
+  const form = useForm<FormInput, undefined, FormValues>({
     resolver: zodResolver(FormSchema),
     defaultValues: source
       ? {
           name: source.name,
           type: source.type,
           enabled: source.enabled,
-          config: source.config as FormValues["config"],
+          config: source.config as FormInput["config"],
         }
       : {
           name: "",
@@ -107,7 +108,7 @@ export function SourceForm({
         name: source.name,
         type: source.type,
         enabled: source.enabled,
-        config: source.config as FormValues["config"],
+        config: source.config as FormInput["config"],
       });
     } else {
       form.reset({

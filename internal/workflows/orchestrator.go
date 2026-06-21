@@ -390,6 +390,9 @@ func (o *Orchestrator) handleDownloadComplete(ctx context.Context, cmd CmdDownlo
 	if cmd.Category != "" {
 		patch["category"] = cmd.Category
 	}
+	if cmd.Title != "" {
+		patch["download_title"] = cmd.Title
+	}
 	// Cache the download path so the import pipeline can resolve it even if
 	// the item is later removed from the download client (e.g. after seeding).
 	if cmd.ContentPath != "" {
@@ -610,8 +613,13 @@ func (o *Orchestrator) classifyImportError(errMsg string) importRetryStrategy {
 		}
 	}
 
-	// Errors suggesting the wrong release was grabbed — re-search.
-	for _, s := range []string{"no match found", "no files found", "unmatched", "wrong series"} {
+	// Errors suggesting the wrong release was grabbed or no usable files exist
+	// at the expected path — fall back to a fresh search instead of retrying
+	// the same import payload.
+	for _, s := range []string{
+		"no match found", "no files found", "unmatched", "wrong series",
+		"download path not found", "no such file or directory",
+	} {
 		if strings.Contains(lower, s) {
 			return retrySearch
 		}

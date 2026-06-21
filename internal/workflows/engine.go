@@ -4,12 +4,15 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"time"
 )
 
 // MediaStatusUpdater abstracts movie/episode status updates.
 type MediaStatusUpdater interface {
 	SetMovieDownloading(ctx context.Context, movieID string) error
 	SetMovieMissing(ctx context.Context, movieID string) error
+	SetEpisodeDownloading(ctx context.Context, episodeID string) error
+	SetEpisodeMissing(ctx context.Context, episodeID string) error
 }
 
 // Engine orchestrates workflow state transitions and retry logic.
@@ -104,7 +107,53 @@ func (e *Engine) markGrabbed(ctx context.Context, workflowID, clientID, download
 		return fmt.Errorf("transition to grabbed: %w", err)
 	}
 	if !ok {
-		return fmt.Errorf("workflow %s not in searching state", workflowID)
+		wf, err := e.store.Get(ctx, workflowID)
+		if err != nil {
+			return fmt.Errorf("load workflow state: %w", err)
+		}
+		switch wf.State {
+		case StateGrabbed, StateDownloading, StatePostDownload:
+			if err := e.store.SetDownload(ctx, workflowID, clientID, downloadID, title); err != nil {
+				return fmt.Errorf("update existing download binding: %w", err)
+			}
+			if err := e.store.ResetAttempt(ctx, workflowID); err != nil {
+				return fmt.Errorf("reset workflow attempt: %w", err)
+			}
+			// Clear volatile runtime fields from the prior attempt so post-download
+			// evaluation does not use stale completion/seeding signals.
+			if err := e.store.MergeMetadata(ctx, workflowID, map[string]any{
+				"progress":     0.0,
+				"down_speed":   0,
+				"up_speed":     0,
+				"ratio":        0.0,
+				"status":       "downloading",
+				"content_path": "",
+			}); err != nil {
+				return fmt.Errorf("reset workflow metadata: %w", err)
+			}
+			if wf.State == StatePostDownload {
+				if policy := GetPostDownloadPolicy(wf.Metadata); policy != nil {
+					policy.StartedAt = time.Time{}
+					if err := e.store.SetPostDownloadPolicy(ctx, workflowID, *policy); err != nil {
+						return fmt.Errorf("reset post_download policy: %w", err)
+					}
+				}
+				if ok, err := e.store.Transition(ctx, workflowID, StatePostDownload, StateDownloading, "Re-grabbed release; resuming download"); err != nil {
+					return fmt.Errorf("resume downloading from post_download: %w", err)
+				} else if !ok {
+					return fmt.Errorf("workflow %s state changed while resuming download", workflowID)
+				}
+			}
+			e.logger.Info("workflow download binding updated",
+				"id", workflowID,
+				"state", wf.State,
+				"client_id", clientID,
+				"download_id", downloadID,
+			)
+			return nil
+		default:
+			return fmt.Errorf("workflow %s not in searching state", workflowID)
+		}
 	}
 
 	if err := e.store.SetDownload(ctx, workflowID, clientID, downloadID, title); err != nil {
@@ -120,6 +169,10 @@ func (e *Engine) markGrabbed(ctx context.Context, workflowID, clientID, download
 		if item.MediaType == MediaTypeMovie {
 			if err := e.media.SetMovieDownloading(ctx, item.MediaID); err != nil {
 				e.logger.Warn("failed to set movie downloading", "movie_id", item.MediaID, "error", err)
+			}
+		} else if item.MediaType == MediaTypeEpisode {
+			if err := e.media.SetEpisodeDownloading(ctx, item.MediaID); err != nil {
+				e.logger.Warn("failed to set episode downloading", "episode_id", item.MediaID, "error", err)
 			}
 		}
 	}
@@ -447,6 +500,10 @@ func (e *Engine) resetMediaStatus(ctx context.Context, wf *Workflow) {
 		if item.MediaType == MediaTypeMovie {
 			if err := e.media.SetMovieMissing(ctx, item.MediaID); err != nil {
 				e.logger.Warn("failed to reset movie status", "movie_id", item.MediaID, "error", err)
+			}
+		} else if item.MediaType == MediaTypeEpisode {
+			if err := e.media.SetEpisodeMissing(ctx, item.MediaID); err != nil {
+				e.logger.Warn("failed to reset episode status", "episode_id", item.MediaID, "error", err)
 			}
 		}
 	}

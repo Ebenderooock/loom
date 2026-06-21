@@ -24,6 +24,7 @@ type Config struct {
 	DownloadSpeedLimit   int64   `json:"download_speed_limit"`
 	UploadSpeedLimit     int64   `json:"upload_speed_limit"`
 	MaxActiveTorrents    int     `json:"max_active_torrents"`
+	DebugPeerDiscovery   bool    `json:"debug_peer_discovery"`
 }
 
 // DefaultConfig returns sensible defaults for the built-in torrent

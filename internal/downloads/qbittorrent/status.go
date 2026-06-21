@@ -24,6 +24,7 @@ type torrentInfo struct {
 	State        string  `json:"state"`
 	Category     string  `json:"category"`
 	SavePath     string  `json:"save_path"`
+	ContentPath  string  `json:"content_path"`
 	ETA          int64   `json:"eta"`
 	DLSpeed      int64   `json:"dlspeed"`
 	UpSpeed      int64   `json:"upspeed"`
@@ -80,6 +81,7 @@ func mapItem(t torrentInfo) downloads.Item {
 		Ratio:           t.Ratio,
 		Message:         "",
 		SavePath:        t.SavePath,
+		ContentPath:     t.ContentPath,
 	}
 }
 

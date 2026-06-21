@@ -5,6 +5,7 @@ import { apiFetch } from "@/lib/fetch";
 import {
   useMyRequests,
   useAllRequests,
+  useClearRequests,
   useCreateRequest,
   useApproveRequest,
   useRejectRequest,
@@ -16,6 +17,7 @@ import {
   type RequestMediaType,
   type RequestStatus,
 } from "@/lib/requests-api";
+import { ConfirmActionButton } from "@/components/ui/confirm-action";
 import { useLibraries } from "@/lib/libraries-api";
 import { useQualityProfiles } from "@/lib/quality-profiles-api";
 import { useAudioQualityProfiles } from "@/lib/music-api";
@@ -47,6 +49,7 @@ import {
   X,
   Inbox,
   Gauge,
+  Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -248,9 +251,7 @@ function SearchAndRequest() {
           <TabsList>
             <TabsTrigger value="movie">Movies</TabsTrigger>
             <TabsTrigger value="series">TV Shows</TabsTrigger>
-            {musicEnabled && (
-              <TabsTrigger value="artist">Music</TabsTrigger>
-            )}
+            {musicEnabled && <TabsTrigger value="artist">Music</TabsTrigger>}
           </TabsList>
         </Tabs>
         <div className="relative flex-1">
@@ -648,10 +649,11 @@ function ManageRequests() {
   const { data, isLoading } = useAllRequests(status);
   const [approving, setApproving] = React.useState<MediaRequest | null>(null);
   const [rejecting, setRejecting] = React.useState<MediaRequest | null>(null);
+  const clearRequests = useClearRequests();
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <span className="text-sm text-muted-foreground">Filter</span>
         <Select
           value={status}
@@ -668,6 +670,27 @@ function ManageRequests() {
             ))}
           </SelectContent>
         </Select>
+        <div className="ml-auto">
+          <ConfirmActionButton
+            actionLabel="Clear History"
+            title="Clear request history?"
+            description="Remove all stored movie, TV, and music requests and their decision history."
+            confirmLabel="Clear requests"
+            pending={clearRequests.isPending}
+            icon={<Trash2 className="mr-1.5 h-3.5 w-3.5" />}
+            onConfirm={async () => {
+              try {
+                await clearRequests.mutateAsync();
+                setApproving(null);
+                setRejecting(null);
+                toast.success("Request history cleared");
+              } catch {
+                toast.error("Failed to clear request history");
+                throw new Error("clear request history failed");
+              }
+            }}
+          />
+        </div>
       </div>
 
       {isLoading ? (

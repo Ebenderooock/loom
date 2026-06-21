@@ -1,6 +1,6 @@
 // Typed fetch wrappers + react-query hooks for media-server analytics.
 
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/fetch";
 
 export interface LiveStream {
@@ -81,6 +81,12 @@ async function getJSON<T>(path: string, signal?: AbortSignal): Promise<T> {
   return (await res.json()) as T;
 }
 
+async function clearAnalyticsHistory(): Promise<void> {
+  const res = await apiFetch("/api/v1/analytics/history", { method: "DELETE" });
+  if (!res.ok)
+    throw new Error(`/api/v1/analytics/history failed: ${res.status}`);
+}
+
 export function useActiveStreams() {
   return useQuery({
     queryKey: ["analytics", "streams"],
@@ -112,6 +118,14 @@ export function useAnalyticsStats(windowDays = 30) {
         `/api/v1/analytics/stats?days=${windowDays}`,
         signal,
       ),
+  });
+}
+
+export function useClearAnalyticsHistory() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: clearAnalyticsHistory,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["analytics"] }),
   });
 }
 

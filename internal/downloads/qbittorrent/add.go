@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha1"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
 	"mime/multipart"
@@ -33,15 +34,6 @@ func (c *Client) Add(ctx context.Context, req downloads.AddRequest) (downloads.A
 		// We could not derive the hash up-front (e.g. raw bytes
 		// path that did not parse). Fall back to leaving the
 		// item id empty; callers can still match by title.
-	}
-
-	// Login once before posting so qBittorrent associates the
-	// add with our session. /torrents/add tolerates anonymous
-	// requests on some configs but most operators require auth.
-	if c.cfg.username != "" {
-		if err := c.ensureLoggedIn(ctx); err != nil {
-			return downloads.AddResult{}, err
-		}
 	}
 
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost,
@@ -86,10 +78,29 @@ func (c *Client) ensureLoggedIn(ctx context.Context) error {
 }
 
 // addLooksOK applies qBittorrent's flexible success contract: a
-// trimmed body of "Ok." or an empty 200 are both treated as success.
+// trimmed body of "Ok." / empty 200 and the JSON add-result payload
+// used by newer qBittorrent versions are treated as success.
 func addLooksOK(body []byte) bool {
 	t := strings.TrimSpace(string(body))
-	return t == "" || strings.EqualFold(t, "Ok.")
+	if t == "" || strings.EqualFold(t, "Ok.") {
+		return true
+	}
+	var result struct {
+		AddedTorrentIDs []string `json:"added_torrent_ids"`
+		SuccessCount    int      `json:"success_count"`
+		FailureCount    int      `json:"failure_count"`
+		PendingCount    int      `json:"pending_count"`
+	}
+	if err := json.Unmarshal([]byte(t), &result); err != nil {
+		return false
+	}
+	if result.FailureCount > 0 {
+		return false
+	}
+	if result.SuccessCount > 0 || len(result.AddedTorrentIDs) > 0 {
+		return true
+	}
+	return false
 }
 
 // buildAddBody assembles the multipart payload for /torrents/add and

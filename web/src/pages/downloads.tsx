@@ -34,7 +34,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import { ImportManager } from "@/components/imports/import-manager";
 import {
-  useDownloads,
   useTorrentStatus,
   useSetTorrentSpeedLimits,
   useTorrentPauseAll,
@@ -971,7 +970,7 @@ function TorrentEnginePanel() {
               variant="outline"
               className="border-zinc-700 text-[10px] text-zinc-400"
             >
-              {torrentClient?.name}
+              Built-in
             </Badge>
           </div>
           <div className="flex items-center gap-2">

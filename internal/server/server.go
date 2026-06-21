@@ -718,7 +718,18 @@ func (s *Server) newMux() http.Handler {
 			if s.wfEngine != nil {
 				grabChk = s.wfEngine.Store()
 			}
-			moviesRouter := movies.RouterWithSearch(s.moviesSvc, s.indexerSvc, grabChk, movies.WithUnmonitorChecker(s.libStore))
+			movieOpts := []movies.RouterOption{
+				movies.WithUnmonitorChecker(s.libStore),
+			}
+			if s.libStore != nil && s.libScanner != nil {
+				movieOpts = append(movieOpts, movies.WithLibraryRescan(s.libStore, s.libScanner))
+			}
+			moviesRouter := movies.RouterWithSearch(
+				s.moviesSvc,
+				s.indexerSvc,
+				grabChk,
+				movieOpts...,
+			)
 			if s.scannerSvc != nil {
 				scanner.RegisterRoutes(moviesRouter, s.scannerSvc, s.libStore)
 			}
@@ -734,7 +745,18 @@ func (s *Server) newMux() http.Handler {
 			if s.wfEngine != nil {
 				seriesGrabChk = s.wfEngine.Store()
 			}
-			seriesRouter := series.RouterWithSearch(s.seriesSvc, s.indexerSvc, seriesGrabChk, series.WithUnmonitorChecker(s.libStore))
+			seriesOpts := []series.SeriesRouterOption{
+				series.WithUnmonitorChecker(s.libStore),
+			}
+			if s.libStore != nil && s.libScanner != nil {
+				seriesOpts = append(seriesOpts, series.WithLibraryRescan(s.libStore, s.libScanner))
+			}
+			seriesRouter := series.RouterWithSearch(
+				s.seriesSvc,
+				s.indexerSvc,
+				seriesGrabChk,
+				seriesOpts...,
+			)
 			if s.seriesScannerSvc != nil {
 				scanner.RegisterSeriesRoutes(seriesRouter, s.seriesScannerSvc, s.libStore)
 			}
@@ -744,7 +766,11 @@ func (s *Server) newMux() http.Handler {
 		// Music (Artists/Albums/Tracks) routes — gated behind the "music"
 		// feature flag (off by default while the capability is in development).
 		if s.musicSvc != nil && s.featureFlags != nil && s.featureFlags.Enabled(featureflags.KeyMusic) {
-			artistsRouter := music.ArtistRouter(s.musicSvc)
+			artistOpts := []music.ArtistRouterOption{}
+			if s.libStore != nil && s.libScanner != nil {
+				artistOpts = append(artistOpts, music.WithLibraryRescan(s.libStore, s.libScanner))
+			}
+			artistsRouter := music.ArtistRouter(s.musicSvc, artistOpts...)
 			if s.musicScannerSvc != nil {
 				scanner.RegisterMusicRoutes(artistsRouter, s.musicScannerSvc, s.libStore)
 			}
@@ -935,12 +961,20 @@ func (s *Server) newMux() http.Handler {
 
 		// System logs (authenticated)
 		if s.systemLogsDeps != nil {
-			r.Mount("/api/v1/system/logs", systemlogs.Router(*s.systemLogsDeps))
+			adminMW := func(next http.Handler) http.Handler { return next }
+			if s.authSvc != nil {
+				adminMW = s.authSvc.RequireRole("admin")
+			}
+			r.Mount("/api/v1/system/logs", systemlogs.Router(*s.systemLogsDeps, adminMW))
 		}
 
 		// Audit log (authenticated)
 		if s.auditLog != nil {
-			s.auditLog.Mount(r)
+			adminMW := func(next http.Handler) http.Handler { return next }
+			if s.authSvc != nil {
+				adminMW = s.authSvc.RequireRole("admin")
+			}
+			s.auditLog.Mount(r, adminMW)
 		}
 
 		// Automated search + grab (authenticated)
@@ -952,7 +986,11 @@ func (s *Server) newMux() http.Handler {
 
 		// Search debug log / search queue (authenticated)
 		if s.searchDebugStore != nil {
-			queueRouter := searchdebug.Router(s.searchDebugStore, s.searchDebugHub)
+			adminMW := func(next http.Handler) http.Handler { return next }
+			if s.authSvc != nil {
+				adminMW = s.authSvc.RequireRole("admin")
+			}
+			queueRouter := searchdebug.Router(s.searchDebugStore, s.searchDebugHub, adminMW)
 			r.Mount("/api/v1/search-debug", queueRouter)
 			r.Mount("/api/v1/search-queue", queueRouter)
 		}

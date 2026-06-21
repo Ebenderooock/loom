@@ -31,6 +31,7 @@ func Router(svc *Service, adminOnly func(http.Handler) http.Handler) chi.Router 
 	r.Group(func(ar chi.Router) {
 		ar.Use(adminOnly)
 		ar.Get("/", svc.handleListAll)
+		ar.Delete("/", svc.handleClear)
 		ar.Post("/{id}/approve", svc.handleApprove)
 		ar.Post("/{id}/reject", svc.handleReject)
 		ar.Get("/quota/config", svc.handleGetQuotaConfig)
@@ -153,6 +154,14 @@ func (s *Service) handleListAll(w http.ResponseWriter, r *http.Request) {
 		list = []Request{}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"data": list})
+}
+
+func (s *Service) handleClear(w http.ResponseWriter, r *http.Request) {
+	if err := s.Clear(r.Context()); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 type approveBody struct {

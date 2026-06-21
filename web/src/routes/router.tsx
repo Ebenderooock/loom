@@ -236,6 +236,11 @@ const settingsAppearanceRoute = settingsChild(
   () => import("@/pages/settings"),
   "UIPanel",
 );
+const settingsDataManagementRoute = settingsChild(
+  "data-management",
+  () => import("@/pages/settings"),
+  "DataManagementPanel",
+);
 const settingsFeaturesRoute = settingsChild(
   "features",
   () => import("@/pages/settings"),
@@ -449,6 +454,7 @@ const routeTree = rootRoute.addChildren([
     settingsIndexRoute,
     settingsGeneralRoute,
     settingsAppearanceRoute,
+    settingsDataManagementRoute,
     settingsFeaturesRoute,
     settingsMediaManagementRoute,
     settingsMediaPreferencesRoute,
