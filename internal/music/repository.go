@@ -497,7 +497,27 @@ func (r *sqlRepo) CreateTrackFile(ctx context.Context, tf *TrackFile) error {
 		tf.FilePath, tf.Size, tf.Quality, tf.Format, tf.Bitrate, tf.MediaInfo,
 		nullTime(tf.FileDate), tf.DateAdded, tf.CreatedAt, tf.UpdatedAt,
 	)
-	return err
+	if err != nil {
+		return err
+	}
+
+	// Update track's has_file flag to true
+	if tf.TrackID != "" {
+		_, err = r.db.ExecContext(ctx,
+			`UPDATE tracks SET has_file = true, updated_at = ? WHERE id = ?`,
+			now, tf.TrackID,
+		)
+		if err != nil {
+			return err
+		}
+	}
+
+	// Link this file to the track in library_files (for UI unmapped tracking).
+	_, _ = r.db.ExecContext(ctx,
+		`UPDATE library_files SET media_id = ? WHERE path = ?`,
+		tf.TrackID, tf.FilePath,
+	)
+	return nil
 }
 
 func (r *sqlRepo) GetTrackFileByPath(ctx context.Context, path string) (*TrackFile, error) {
