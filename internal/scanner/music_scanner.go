@@ -139,8 +139,17 @@ func (s *MusicScanner) runMusicScan(ctx context.Context, scanID, rootFolder stri
 	for _, af := range folders {
 		artist := artistsByName[normalizeTitle(af.Name)]
 		if artist == nil {
-			s.logger.Debug("no library artist for folder, skipping", "folder", af.Name)
-			continue
+			added, addErr := s.ensureArtistForFolder(ctx, result.LibraryID, af.Name)
+			if addErr != nil {
+				s.logger.Warn("music: failed to auto-add artist from folder", "folder", af.Name, "error", addErr)
+				continue
+			}
+			if added == nil {
+				s.logger.Debug("no library artist for folder, skipping", "folder", af.Name)
+				continue
+			}
+			artistsByName[normalizeTitle(af.Name)] = added
+			artist = added
 		}
 		s.scanArtistFolder(ctx, scanID, result, artist, af.Path)
 	}
@@ -164,6 +173,65 @@ func (s *MusicScanner) runMusicScan(ctx context.Context, scanID, rootFolder stri
 		m.ScanFilesProcessed.WithLabelValues("music", "unmatched").Add(float64(unmatched))
 		m.ScanFilesProcessed.WithLabelValues("music", "error").Add(float64(len(result.Errors)))
 	}
+}
+
+func (s *MusicScanner) ensureArtistForFolder(ctx context.Context, libraryID, folderName string) (*music.Artist, error) {
+	name := strings.TrimSpace(folderName)
+	if name == "" || libraryID == "" {
+		return nil, nil
+	}
+
+	candidates, err := s.musicSvc.LookupArtists(ctx, name, 10)
+	if err != nil {
+		return nil, fmt.Errorf("lookup artist %q: %w", name, err)
+	}
+	match := pickExactArtistLookup(name, candidates)
+	if match == nil {
+		return nil, nil
+	}
+
+	qualityProfiles, err := s.musicSvc.ListAudioQualityProfiles(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list audio quality profiles: %w", err)
+	}
+	if len(qualityProfiles) == 0 {
+		return nil, fmt.Errorf("no audio quality profiles configured")
+	}
+
+	req := music.AddArtistRequest{
+		MBID:             match.MBID,
+		LibraryID:        libraryID,
+		QualityProfileID: qualityProfiles[0].ID,
+		MonitoringStatus: string(music.MonitoringMonitored),
+		Search:           false,
+	}
+	metadataProfiles, err := s.musicSvc.ListMetadataProfiles(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list metadata profiles: %w", err)
+	}
+	if len(metadataProfiles) > 0 {
+		req.MetadataProfileID = metadataProfiles[0].ID
+	}
+
+	artist, err := s.musicSvc.AddArtist(ctx, req)
+	if err != nil {
+		return nil, fmt.Errorf("add artist %q: %w", name, err)
+	}
+	s.logger.Info("music: auto-added artist from library folder", "folder", name, "artist", artist.Name, "artist_id", artist.ID)
+	return artist, nil
+}
+
+func pickExactArtistLookup(name string, candidates []*music.ArtistLookupResult) *music.ArtistLookupResult {
+	target := normalizeTitle(name)
+	for _, c := range candidates {
+		if c == nil {
+			continue
+		}
+		if normalizeTitle(c.Name) == target {
+			return c
+		}
+	}
+	return nil
 }
 
 // scanArtistFolder walks an artist's folder, reads tags and imports matched
