@@ -40,20 +40,37 @@ const queuedMetadataTimeout = 5 * time.Minute
 // well-known trackers is the most reliable way to find peers and pull
 // metadata. anacrolix dedups these against any trackers already present
 // in the magnet, so injecting them is safe.
+//
+// HTTP/HTTPS (TCP) trackers are listed first and deliberately
+// prioritised: many container/NAT networks silently drop outbound UDP
+// (and the UDP-based DHT along with it), which leaves UDP-only tracker
+// announces timing out and magnets stuck "queued" with zero peers
+// because metadata can never be pulled. TCP-based HTTP(S) trackers
+// announce reliably over the same egress that already serves normal
+// HTTPS traffic, so they find peers even when UDP is unavailable. The
+// UDP entries are kept as a best-effort fallback for deployments where
+// UDP egress does work.
 var defaultTrackers = []string{
+	// TCP (HTTP/HTTPS) trackers — work even when outbound UDP is blocked.
+	"https://tracker.opentrackr.org:443/announce",
+	"http://tracker.opentrackr.org:1337/announce",
+	"https://tracker.bt4g.com:443/announce",
+	"https://tracker.tamersunion.org:443/announce",
+	"https://tracker1.520.jp:443/announce",
+	"https://opentracker.i2p.rocks:443/announce",
+	"https://tracker.gbitt.info:443/announce",
+	"http://tracker.gbitt.info:80/announce",
+	"http://open.acgnxtracker.com:80/announce",
+	"http://bt.okmp3.ru:2710/announce",
+
+	// UDP trackers — best-effort fallback when UDP egress is available.
 	"udp://tracker.opentrackr.org:1337/announce",
 	"udp://open.stealth.si:80/announce",
 	"udp://exodus.desync.com:6969/announce",
 	"udp://tracker.torrent.eu.org:451/announce",
-	"udp://tracker.bittor.pw:1337/announce",
-	"udp://public.popcorn-tracker.org:6969/announce",
-	"udp://tracker.dler.org:6969/announce",
 	"udp://open.demonii.com:1337/announce",
-	"udp://glotorrents.pw:6969/announce",
-	"udp://tracker.coppersurfer.tk:6969",
-	"udp://torrent.gresille.org:80/announce",
-	"udp://p4p.arenabg.com:1337",
-	"udp://tracker.internetwarriors.net:1337",
+	"udp://tracker.dler.org:6969/announce",
+	"udp://p4p.arenabg.com:1337/announce",
 }
 
 // defaultAnnounceList wraps each tracker in its own tier so anacrolix
