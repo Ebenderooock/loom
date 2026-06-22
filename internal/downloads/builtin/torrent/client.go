@@ -26,7 +26,7 @@ type Client struct {
 	logger *slog.Logger
 	mu     sync.RWMutex
 	items  map[string]*torrentItem // hash -> torrent state
-	paused map[string]bool          // hash -> paused state (anacrolix has no built-in pause)
+	paused map[string]bool         // hash -> paused state (anacrolix has no built-in pause)
 
 	// Rate limiters are created once and mutated via SetLimit so changes
 	// apply without recreating the torrent client.
@@ -490,6 +490,7 @@ func (c *Client) EngineSummary() downloads.TorrentEngineSummary {
 
 	return downloads.TorrentEngineSummary{
 		TotalTorrents: len(c.items),
+		Queued:        queued,
 		Downloading:   downloading,
 		Seeding:       seeding,
 		Paused:        paused,

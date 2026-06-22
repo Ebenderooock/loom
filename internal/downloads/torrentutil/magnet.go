@@ -6,6 +6,10 @@ import (
 )
 
 var publicTrackers = []string{
+	"http://tracker.opentrackr.org:1337/announce",
+	"http://tracker.openbittorrent.com:80/announce",
+	"http://opentracker.i2p.rocks:6969/announce",
+	"https://tracker.openwebtorrent.com/announce",
 	"udp://tracker.opentrackr.org:1337/announce",
 	"udp://open.stealth.si:80/announce",
 	"udp://exodus.desync.com:6969/announce",

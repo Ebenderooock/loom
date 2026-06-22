@@ -40,6 +40,14 @@ service:
   type: ClusterIP
   port: 1925
 
+# Pod networking options. Enable hostNetwork for troubleshooting
+# pod-network/CNI issues (for example, torrent metadata resolution).
+hostNetwork: false
+# Optional explicit pod DNS policy. Leave empty for automatic behavior:
+# - ClusterFirst when hostNetwork=false
+# - ClusterFirstWithHostNet when hostNetwork=true
+dnsPolicy: ""
+
 # ---------- BitTorrent peer port ----------
 # Exposes the built-in torrent client's listen port so inbound peer
 # connections and DHT work. Behind NAT/in-cluster the pod is otherwise a
@@ -52,8 +60,19 @@ service:
 #
 # For reachability from the public internet you must also port-forward
 # WAN:listenPort -> <service IP>:listenPort on your router.
+#
+# publicIP4: The external IPv4 address that the torrent client should
+# announce to trackers and DHT. Required in container/NAT environments
+# where the internal pod IP differs from the external address. Set to the
+# LoadBalancer service IP or your WAN IP (if port-forwarded).
 torrent:
   listenPort: 6881
+  publicIP4: ""
+  publicIP6: ""
+  # Metadata timeout for magnet URI resolution. Increased default (180s)
+  # accommodates slow DHT/tracker responses in NAT/Kubernetes environments.
+  # Can also be set via LOOM_TORRENT_METADATA_TIMEOUT_SECS env var.
+  metadataTimeoutSecs: 180
   expose:
     enabled: false
     # LoadBalancer (e.g. MetalLB) is recommended because it preserves the

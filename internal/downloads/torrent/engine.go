@@ -3,6 +3,7 @@ package torrent
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -11,8 +12,10 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
+	dht "github.com/anacrolix/dht/v2"
 	"github.com/anacrolix/torrent"
 	"github.com/anacrolix/torrent/metainfo"
 	"github.com/anacrolix/torrent/storage"
@@ -21,17 +24,11 @@ import (
 	"github.com/ebenderooock/loom/internal/diskspace"
 )
 
-// metadataTimeout is how long we wait for a magnet's metadata to
-// resolve during the initial Add. Sixty seconds tolerates slow swarms and
-// cold trackers while still failing in a reasonable time.
+// metadataTimeout is deprecated; use Config.MetadataTimeoutSecs instead.
+// This constant is kept for reference; the default is now 180 seconds
+// in DefaultConfig() to better support Kubernetes/NAT environments.
+// Can be overridden via LOOM_TORRENT_METADATA_TIMEOUT_SECS env var.
 const metadataTimeout = 60 * time.Second
-
-// queuedMetadataTimeout is the maximum time a torrent may remain queued
-// waiting for metadata to resolve asynchronously. Bare infohashes from
-// indexers like TPB have no trackers and rely on DHT; in containerized
-// environments (e.g. Kubernetes) they often never resolve. We fail them
-// after this timeout to avoid indefinite queuing.
-const queuedMetadataTimeout = 5 * time.Minute
 
 // defaultTrackers is a curated list of reliable public BitTorrent
 // trackers used to bootstrap peer discovery for magnet links. In
@@ -52,6 +49,9 @@ const queuedMetadataTimeout = 5 * time.Minute
 // UDP egress does work.
 var defaultTrackers = []string{
 	// TCP (HTTP/HTTPS) trackers — work even when outbound UDP is blocked.
+	// Verified reachable + returning live swarms from a UDP-blocked
+	// Kubernetes cluster (opentrackr 443/1337 and bt4g responded with
+	// real seeder/leecher counts).
 	"https://tracker.opentrackr.org:443/announce",
 	"http://tracker.opentrackr.org:1337/announce",
 	"https://tracker.bt4g.com:443/announce",
@@ -73,6 +73,15 @@ var defaultTrackers = []string{
 	"udp://p4p.arenabg.com:1337/announce",
 }
 
+// defaultDHTBootstrapHostPorts augments the library defaults with
+// additional stable public bootstrap routers.
+var defaultDHTBootstrapHostPorts = []string{
+	"router.bittorrent.com:6881",
+	"router.utorrent.com:6881",
+	"dht.transmissionbt.com:6881",
+	"dht.libtorrent.org:25401",
+}
+
 // defaultAnnounceList wraps each tracker in its own tier so anacrolix
 // announces to all of them in parallel.
 func defaultAnnounceList() [][]string {
@@ -81,6 +90,18 @@ func defaultAnnounceList() [][]string {
 		list[i] = []string{tr}
 	}
 	return list
+}
+
+func dhtStartingNodes(network string) dht.StartingNodesGetter {
+	return func() ([]dht.Addr, error) {
+		hostPorts := append([]string{}, dht.DefaultGlobalBootstrapHostPorts...)
+		hostPorts = append(hostPorts, defaultDHTBootstrapHostPorts...)
+		addrs, err := dht.ResolveHostPorts(hostPorts)
+		if err == nil && len(addrs) > 0 {
+			return addrs, nil
+		}
+		return dht.GlobalBootstrapAddrs(network)
+	}
 }
 
 // magnetHasTrackers reports whether a magnet URI already carries one or
@@ -92,6 +113,72 @@ func magnetHasTrackers(magnet string) bool {
 		return false
 	}
 	return len(u.Query()["tr"]) > 0
+}
+
+// credentialQueryKeys are tracker-announce query parameters that carry a
+// per-user secret. Their presence marks a tracker (and therefore the
+// torrent) as belonging to a private tracker, which must never be
+// announced to public trackers.
+var credentialQueryKeys = []string{
+	"passkey", "authkey", "auth", "token", "secret",
+	"torrent_pass", "apikey", "api_key", "pid",
+}
+
+// magnetLikelyPrivate reports whether a magnet's existing trackers
+// indicate a private tracker. It is deliberately conservative: any
+// signal of an embedded credential causes the magnet to be treated as
+// private. A false result means "safe to augment with public trackers".
+// An unparseable magnet is treated as private so we never inject blindly.
+func magnetLikelyPrivate(magnet string) bool {
+	u, err := url.Parse(magnet)
+	if err != nil {
+		return true
+	}
+	for _, tr := range u.Query()["tr"] {
+		if trackerHasCredential(tr) {
+			return true
+		}
+	}
+	return false
+}
+
+// trackerHasCredential reports whether a single tracker announce URL
+// embeds a per-user secret, either as a known credential query
+// parameter or as a passkey-like path segment. Unparseable URLs are
+// treated as credentialed (private) to stay on the safe side.
+func trackerHasCredential(tracker string) bool {
+	tu, err := url.Parse(tracker)
+	if err != nil {
+		return true
+	}
+	q := tu.Query()
+	for _, k := range credentialQueryKeys {
+		if q.Get(k) != "" {
+			return true
+		}
+	}
+	for _, seg := range strings.Split(tu.Path, "/") {
+		if looksLikePasskey(seg) {
+			return true
+		}
+	}
+	return false
+}
+
+// looksLikePasskey reports whether a URL path segment looks like an
+// embedded private-tracker passkey: a long, purely alphanumeric token.
+// Public announce paths use short words ("announce"), so a long
+// alphanumeric segment is a strong private-tracker signal.
+func looksLikePasskey(seg string) bool {
+	if len(seg) < 20 {
+		return false
+	}
+	for _, r := range seg {
+		if !((r >= '0' && r <= '9') || (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z')) {
+			return false
+		}
+	}
+	return true
 }
 
 // seedCheckInterval controls how often the seeding supervisor scans
@@ -250,8 +337,31 @@ func NewEngine(cfg Config, logger *slog.Logger) (*Engine, error) {
 	tcfg.DataDir = dataDir
 	tcfg.DefaultStorage = storage.NewFileWithCompletion(dataDir, pc)
 	tcfg.NoDHT = !cfg.EnableDHT
+	if cfg.EnableDHT {
+		tcfg.DhtStartingNodes = dhtStartingNodes
+	}
 	tcfg.DisablePEX = !cfg.EnablePEX
 	tcfg.NoDefaultPortForwarding = !cfg.EnableUPnP
+
+	// Configure external IP addresses for peer announcements. This is critical
+	// in NAT/container environments (e.g. Kubernetes LoadBalancer) where the
+	// internal pod IP differs from the external address peers should connect to.
+	if cfg.PublicIP4 != "" {
+		if ip := net.ParseIP(cfg.PublicIP4); ip != nil {
+			tcfg.PublicIp4 = ip
+			logger.Info("anacrolix public IPv4 configured", "ip", cfg.PublicIP4)
+		} else {
+			logger.Warn("invalid PublicIP4 address", "ip", cfg.PublicIP4)
+		}
+	}
+	if cfg.PublicIP6 != "" {
+		if ip := net.ParseIP(cfg.PublicIP6); ip != nil {
+			tcfg.PublicIp6 = ip
+			logger.Info("anacrolix public IPv6 configured", "ip", cfg.PublicIP6)
+		} else {
+			logger.Warn("invalid PublicIP6 address", "ip", cfg.PublicIP6)
+		}
+	}
 
 	if cfg.MaxConnections > 0 {
 		tcfg.EstablishedConnsPerTorrent = cfg.MaxConnections
@@ -267,6 +377,15 @@ func NewEngine(cfg Config, logger *slog.Logger) (*Engine, error) {
 	tcfg.UploadRateLimiter = upLimiter
 
 	cl, err := torrent.NewClient(tcfg)
+	if err != nil && cfg.ListenPort > 0 && isAddrInUseErr(err) {
+		logger.Warn("listen port in use; retrying with ephemeral port",
+			"listen_port", cfg.ListenPort,
+			"error", err,
+		)
+		tcfg.ListenPort = 0
+		tcfg.SetListenAddr("")
+		cl, err = torrent.NewClient(tcfg)
+	}
 	if err != nil {
 		_ = pc.Close()
 		return nil, fmt.Errorf("builtin/torrent: creating client: %w", err)
@@ -291,6 +410,19 @@ func NewEngine(cfg Config, logger *slog.Logger) (*Engine, error) {
 		downLimiter: downLimiter,
 		upLimiter:   upLimiter,
 	}, nil
+}
+
+func isAddrInUseErr(err error) bool {
+	if errors.Is(err, syscall.EADDRINUSE) {
+		return true
+	}
+	var opErr *net.OpError
+	if errors.As(err, &opErr) {
+		if errors.Is(opErr.Err, syscall.EADDRINUSE) {
+			return true
+		}
+	}
+	return strings.Contains(strings.ToLower(err.Error()), "address already in use")
 }
 
 // Start launches the seeding supervisor goroutine. It blocks until
@@ -349,7 +481,7 @@ func (e *Engine) lifecycleCtx() context.Context {
 }
 
 // AddMagnet adds a torrent via magnet URI. It waits for metadata to
-// resolve (up to metadataTimeout or ctx deadline) and returns the
+// resolve (up to the configured MetadataTimeoutSecs or ctx deadline) and returns the
 // lowercase infohash as the stable item ID.
 func (e *Engine) AddMagnet(ctx context.Context, magnet string, meta torrentMeta) (string, error) {
 	t, err := e.client.AddMagnet(magnet)
@@ -357,32 +489,64 @@ func (e *Engine) AddMagnet(ctx context.Context, magnet string, meta torrentMeta)
 		return "", fmt.Errorf("builtin/torrent: adding magnet: %w", err)
 	}
 
-	// When a magnet carries no trackers it can only find peers via DHT,
-	// which is slow or unreachable behind NAT/in containers and is the
-	// usual cause of metadata-resolution timeouts. Inject public trackers
-	// in that case. Magnets that already list trackers (including all
-	// private-tracker magnets) are left untouched so we never announce a
-	// private infohash to public trackers.
-	if !magnetHasTrackers(magnet) {
+	// Reliable public trackers are the difference between a magnet
+	// resolving metadata in seconds and timing out: many magnets (e.g.
+	// EZTV, YTS) ship with weak or dead bundled trackers, and DHT alone
+	// is frequently insufficient in NAT'd/containerised deployments.
+	// We therefore augment any non-private magnet with the shared public
+	// tracker list, whether or not it already lists trackers. Magnets
+	// that carry a private-tracker credential are left untouched so a
+	// private infohash is never announced to public trackers.
+	switch {
+	case !magnetHasTrackers(magnet):
+		e.logger.Info("injecting public trackers into magnet (no trackers present)",
+			"infohash", strings.ToLower(t.InfoHash().HexString()),
+		)
 		t.AddTrackers(defaultAnnounceList())
+		e.logger.Info("public trackers injected",
+			"trackerCount", len(defaultTrackers),
+			"infohash", strings.ToLower(t.InfoHash().HexString()),
+		)
+	case !magnetLikelyPrivate(magnet):
+		e.logger.Info("augmenting public magnet with reliable public trackers",
+			"infohash", strings.ToLower(t.InfoHash().HexString()),
+			"trackerCount", len(defaultTrackers),
+		)
+		t.AddTrackers(defaultAnnounceList())
+	default:
+		e.logger.Info("magnet appears private; not injecting public trackers",
+			"infohash", strings.ToLower(t.InfoHash().HexString()),
+		)
 	}
 
 	// Wait for metadata with a timeout. Use the engine's lifecycle context
 	// rather than the caller's context so that a short-lived HTTP request
 	// context being cancelled (e.g. client disconnect, write timeout) does
 	// not abort metadata resolution mid-flight.
-	waitCtx, waitCancel := context.WithTimeout(e.lifecycleCtx(), metadataTimeout)
+	timeout := time.Duration(e.cfg.MetadataTimeoutSecs) * time.Second
+	waitCtx, waitCancel := context.WithTimeout(e.lifecycleCtx(), timeout)
 	defer waitCancel()
+
+	e.logger.Info("waiting for magnet metadata",
+		"hash", strings.ToLower(t.InfoHash().HexString()),
+		"timeout", timeout.String(),
+	)
 
 	select {
 	case <-t.GotInfo():
+		e.logger.Info("magnet metadata resolved",
+			"hash", strings.ToLower(t.InfoHash().HexString()),
+			"name", t.Name(),
+			"size", t.Length(),
+		)
 	case <-waitCtx.Done():
 		// Do not fail the add when metadata is slow. Keep the torrent in the
 		// engine and let metadata continue resolving asynchronously; status()
 		// reports it as queued while Info() is still nil.
 		e.logger.Warn("magnet metadata not yet available; keeping torrent queued",
 			"error", waitCtx.Err(),
-			"timeout", metadataTimeout,
+			"timeout", timeout,
+			"hash", strings.ToLower(t.InfoHash().HexString()),
 		)
 	}
 
@@ -404,38 +568,33 @@ func (e *Engine) AddMagnet(ctx context.Context, magnet string, meta torrentMeta)
 	e.mu.Unlock()
 
 	if t.Info() != nil {
+		e.logger.Info("torrent metadata resolved immediately",
+			"hash", strings.ToLower(t.InfoHash().HexString()),
+			"name", t.Name(),
+			"size", t.Length(),
+		)
+		e.maybeAddPublicTrackers(t)
 		t.DownloadAll()
 	} else {
-		// Metadata was not available within metadataTimeout. Start the
-		// download as soon as metainfo arrives, but give up after a longer
-		// timeout to avoid indefinitely queuing bare infohashes from indexers
-		// like TPB that have no trackers and can't find peers in NAT'd/
-		// containerized environments.
+		// Metadata was not available within the configured timeout. Keep the
+		// torrent tracked and start downloading automatically once metadata
+		// eventually resolves.
+		e.logger.Info("torrent added; waiting for async metadata resolution",
+			"hash", strings.ToLower(t.InfoHash().HexString()),
+			"timeout", timeout.String(),
+		)
 		go func(t *torrent.Torrent) {
-			metaCtx, cancel := context.WithTimeout(e.lifecycleCtx(), queuedMetadataTimeout)
-			defer cancel()
-
 			select {
 			case <-t.GotInfo():
+				e.logger.Info("async metadata resolution completed",
+					"hash", strings.ToLower(t.InfoHash().HexString()),
+					"name", t.Name(),
+					"size", t.Length(),
+				)
+				e.maybeAddPublicTrackers(t)
 				t.DownloadAll()
-			case <-metaCtx.Done():
-				// Metadata still unavailable. Drop the torrent and remove it
-				// from tracking so it won't appear as indefinitely queued.
-				hash := strings.ToLower(t.InfoHash().HexString())
-				e.mu.Lock()
-				tracked := e.items[hash]
-				delete(e.items, hash)
-				e.mu.Unlock()
-
-				t.Drop()
-				if tracked != nil {
-					e.logger.Warn("dropping queued torrent: metadata resolution timeout",
-						"hash", hash,
-						"title", tracked.title,
-						"timeout", queuedMetadataTimeout,
-					)
-				}
 			case <-e.lifecycleCtx().Done():
+				e.logger.Debug("engine shutting down before async metadata resolution")
 			}
 		}(t)
 	}
@@ -471,22 +630,40 @@ func (e *Engine) AddTorrentBytes(ctx context.Context, data []byte, meta torrentM
 	if err != nil {
 		return "", fmt.Errorf("builtin/torrent: adding torrent: %w", err)
 	}
+	e.maybeAddPublicTrackers(t)
 
 	// Wait for info — for a .torrent file this should be immediate since
 	// the metainfo contains the info dict. Use the engine's lifecycle
 	// context (not the caller's) so a cancelled HTTP request context does
 	// not abort an otherwise-instant wait and return a spurious error.
-	waitCtx, waitCancel := context.WithTimeout(e.lifecycleCtx(), metadataTimeout)
+	timeout := time.Duration(e.cfg.MetadataTimeoutSecs) * time.Second
+	waitCtx, waitCancel := context.WithTimeout(e.lifecycleCtx(), timeout)
 	defer waitCancel()
+	hash := strings.ToLower(t.InfoHash().HexString())
 
+	e.logger.Info("waiting for torrent metadata",
+		"hash", hash,
+		"timeout", timeout.String(),
+	)
+
+	metadataReady := false
 	select {
 	case <-t.GotInfo():
+		metadataReady = true
+		e.logger.Info("torrent metadata resolved",
+			"hash", hash,
+			"name", t.Name(),
+			"size", t.Length(),
+		)
 	case <-waitCtx.Done():
-		t.Drop()
-		return "", fmt.Errorf("%w: %w", ErrMetadataTimeout, waitCtx.Err())
+		// Keep the torrent queued and let metadata resolve asynchronously.
+		e.logger.Warn("torrent metadata not yet available; keeping torrent queued",
+			"error", waitCtx.Err(),
+			"timeout", timeout.String(),
+			"hash", hash,
+		)
 	}
 
-	hash := strings.ToLower(t.InfoHash().HexString())
 	title := meta.Title
 	if title == "" {
 		title = t.Name()
@@ -503,7 +680,27 @@ func (e *Engine) AddTorrentBytes(ctx context.Context, data []byte, meta torrentM
 	}
 	e.mu.Unlock()
 
-	t.DownloadAll()
+	if metadataReady || t.Info() != nil {
+		t.DownloadAll()
+	} else {
+		e.logger.Info("torrent added; waiting for async metadata resolution",
+			"hash", hash,
+			"timeout", timeout.String(),
+		)
+		go func(t *torrent.Torrent) {
+			select {
+			case <-t.GotInfo():
+				e.logger.Info("async metadata resolution completed",
+					"hash", strings.ToLower(t.InfoHash().HexString()),
+					"name", t.Name(),
+					"size", t.Length(),
+				)
+				t.DownloadAll()
+			case <-e.lifecycleCtx().Done():
+				e.logger.Debug("engine shutting down before async metadata resolution")
+			}
+		}(t)
+	}
 
 	e.logger.Info("torrent added",
 		"hash", hash,
@@ -512,6 +709,24 @@ func (e *Engine) AddTorrentBytes(ctx context.Context, data []byte, meta torrentM
 	)
 
 	return hash, nil
+}
+
+// maybeAddPublicTrackers appends the shared public tracker list for
+// non-private torrents. It never modifies private torrents.
+func (e *Engine) maybeAddPublicTrackers(t *torrent.Torrent) {
+	mi := t.Metainfo()
+	info, err := mi.UnmarshalInfo()
+	if err != nil {
+		e.logger.Debug("could not inspect torrent privacy; skipping public tracker bootstrap",
+			"hash", strings.ToLower(t.InfoHash().HexString()),
+			"error", err,
+		)
+		return
+	}
+	if info.Private != nil && *info.Private {
+		return
+	}
+	t.AddTrackers(defaultAnnounceList())
 }
 
 // TorrentStatus is the engine-level view of a tracked torrent.

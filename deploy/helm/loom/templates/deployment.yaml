@@ -23,6 +23,14 @@ spec:
         {{- toYaml . | nindent 8 }}
         {{- end }}
     spec:
+      {{- if .Values.hostNetwork }}
+      hostNetwork: true
+      {{- end }}
+      {{- if .Values.dnsPolicy }}
+      dnsPolicy: {{ .Values.dnsPolicy }}
+      {{- else if .Values.hostNetwork }}
+      dnsPolicy: ClusterFirstWithHostNet
+      {{- end }}
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
@@ -59,6 +67,18 @@ spec:
               value: /config
             - name: LOOM_DATA_DIR
               value: /config
+            {{- if .Values.torrent.publicIP4 }}
+            - name: LOOM_TORRENT_PUBLIC_IP4
+              value: "{{ .Values.torrent.publicIP4 }}"
+            {{- end }}
+            {{- if .Values.torrent.publicIP6 }}
+            - name: LOOM_TORRENT_PUBLIC_IP6
+              value: "{{ .Values.torrent.publicIP6 }}"
+            {{- end }}
+            {{- if .Values.torrent.metadataTimeoutSecs }}
+            - name: LOOM_TORRENT_METADATA_TIMEOUT_SECS
+              value: "{{ .Values.torrent.metadataTimeoutSecs }}"
+            {{- end }}
             {{- with .Values.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
