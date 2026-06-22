@@ -33,15 +33,21 @@ service:
 
 # ---------- BitTorrent peer port (built-in torrent client) ----------
 # Exposed via MetalLB so inbound peer connections + DHT work, instead of
-# the pod being an outbound-only leech. Port preserved end-to-end (6881).
-# For internet reachability, port-forward WAN:6881 -> <lb-ip>:6881 on the
+# the pod being an outbound-only leech. Port preserved end-to-end (7881).
+# For internet reachability, port-forward WAN:7881 -> <lb-ip>:7881 on the
 # router. listenPort must match the builtin/torrent client config.
+#
+# publicIP4: Set to the LoadBalancer service external IP (192.168.3.203)
+# so anacrolix announces the correct address to trackers/DHT. Peers will
+# connect to this address instead of the internal pod IP.
 torrent:
-  listenPort: 6881
+  listenPort: 7881
+  publicIP4: "192.168.3.203"
+  publicIP6: ""
   expose:
     enabled: true
     type: LoadBalancer
-    loadBalancerIP: "192.168.1.50"  # <-- your MetalLB-assigned IP
+    loadBalancerIP: "192.168.3.203"
     externalTrafficPolicy: Local
 
 # ---------- Ingress (Traefik) ----------

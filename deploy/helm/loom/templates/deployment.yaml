@@ -59,6 +59,14 @@ spec:
               value: /config
             - name: LOOM_DATA_DIR
               value: /config
+            {{- if .Values.torrent.publicIP4 }}
+            - name: LOOM_TORRENT_PUBLIC_IP4
+              value: "{{ .Values.torrent.publicIP4 }}"
+            {{- end }}
+            {{- if .Values.torrent.publicIP6 }}
+            - name: LOOM_TORRENT_PUBLIC_IP6
+              value: "{{ .Values.torrent.publicIP6 }}"
+            {{- end }}
             {{- with .Values.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}

@@ -260,6 +260,26 @@ func NewEngine(cfg Config, logger *slog.Logger) (*Engine, error) {
 	tcfg.DisablePEX = !cfg.EnablePEX
 	tcfg.NoDefaultPortForwarding = !cfg.EnableUPnP
 
+	// Configure external IP addresses for peer announcements. This is critical
+	// in NAT/container environments (e.g. Kubernetes LoadBalancer) where the
+	// internal pod IP differs from the external address peers should connect to.
+	if cfg.PublicIP4 != "" {
+		if ip := net.ParseIP(cfg.PublicIP4); ip != nil {
+			tcfg.PublicIp4 = ip
+			logger.Info("anacrolix public IPv4 configured", "ip", cfg.PublicIP4)
+		} else {
+			logger.Warn("invalid PublicIP4 address", "ip", cfg.PublicIP4)
+		}
+	}
+	if cfg.PublicIP6 != "" {
+		if ip := net.ParseIP(cfg.PublicIP6); ip != nil {
+			tcfg.PublicIp6 = ip
+			logger.Info("anacrolix public IPv6 configured", "ip", cfg.PublicIP6)
+		} else {
+			logger.Warn("invalid PublicIP6 address", "ip", cfg.PublicIP6)
+		}
+	}
+
 	if cfg.MaxConnections > 0 {
 		tcfg.EstablishedConnsPerTorrent = cfg.MaxConnections
 	}

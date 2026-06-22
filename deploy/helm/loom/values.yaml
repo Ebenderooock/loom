@@ -52,8 +52,15 @@ service:
 #
 # For reachability from the public internet you must also port-forward
 # WAN:listenPort -> <service IP>:listenPort on your router.
+#
+# publicIP4: The external IPv4 address that the torrent client should
+# announce to trackers and DHT. Required in container/NAT environments
+# where the internal pod IP differs from the external address. Set to the
+# LoadBalancer service IP or your WAN IP (if port-forwarded).
 torrent:
   listenPort: 6881
+  publicIP4: ""
+  publicIP6: ""
   expose:
     enabled: false
     # LoadBalancer (e.g. MetalLB) is recommended because it preserves the

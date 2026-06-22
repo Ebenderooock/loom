@@ -3,6 +3,7 @@ package torrent
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 
 	"github.com/ebenderooock/loom/internal/downloads"
 )
@@ -25,6 +26,8 @@ type Config struct {
 	UploadSpeedLimit     int64   `json:"upload_speed_limit"`
 	MaxActiveTorrents    int     `json:"max_active_torrents"`
 	DebugPeerDiscovery   bool    `json:"debug_peer_discovery"`
+	PublicIP4            string  `json:"public_ip4"`
+	PublicIP6            string  `json:"public_ip6"`
 }
 
 // DefaultConfig returns sensible defaults for the built-in torrent
@@ -49,7 +52,9 @@ func DefaultConfig() Config {
 
 // parseConfig merges the Definition-level fields with the JSON config
 // blob. Config-blob values take precedence so that operators can drive
-// everything through the config column if they prefer.
+// everything through the config column if they prefer. Environment
+// variables (LOOM_TORRENT_PUBLIC_IP4, LOOM_TORRENT_PUBLIC_IP6) override
+// both definition and config blob for public IP settings.
 func parseConfig(def downloads.Definition) (Config, error) {
 	cfg := DefaultConfig()
 
@@ -67,6 +72,16 @@ func parseConfig(def downloads.Definition) (Config, error) {
 
 	if cfg.DownloadDir == "" {
 		return Config{}, fmt.Errorf("%w: download_dir (or save_path_default) is required", ErrNotConfigured)
+	}
+
+	// Environment variables override config blob for external IP addresses.
+	// This supports container/Kubernetes deployments where the external IP
+	// differs from the internal pod IP.
+	if ip := os.Getenv("LOOM_TORRENT_PUBLIC_IP4"); ip != "" {
+		cfg.PublicIP4 = ip
+	}
+	if ip := os.Getenv("LOOM_TORRENT_PUBLIC_IP6"); ip != "" {
+		cfg.PublicIP6 = ip
 	}
 
 	return cfg, nil
