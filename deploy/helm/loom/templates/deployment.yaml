@@ -67,6 +67,10 @@ spec:
             - name: LOOM_TORRENT_PUBLIC_IP6
               value: "{{ .Values.torrent.publicIP6 }}"
             {{- end }}
+            {{- if .Values.torrent.metadataTimeoutSecs }}
+            - name: LOOM_TORRENT_METADATA_TIMEOUT_SECS
+              value: "{{ .Values.torrent.metadataTimeoutSecs }}"
+            {{- end }}
             {{- with .Values.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}

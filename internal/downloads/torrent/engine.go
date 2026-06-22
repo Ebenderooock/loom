@@ -24,9 +24,10 @@ import (
 	"github.com/ebenderooock/loom/internal/diskspace"
 )
 
-// metadataTimeout is how long we wait for a magnet's metadata to
-// resolve during the initial Add. Sixty seconds tolerates slow swarms and
-// cold trackers while still failing in a reasonable time.
+// metadataTimeout is deprecated; use Config.MetadataTimeoutSecs instead.
+// This constant is kept for reference; the default is now 180 seconds
+// in DefaultConfig() to better support Kubernetes/NAT environments.
+// Can be overridden via LOOM_TORRENT_METADATA_TIMEOUT_SECS env var.
 const metadataTimeout = 60 * time.Second
 
 // defaultTrackers is a curated list of reliable public BitTorrent
@@ -398,7 +399,7 @@ func (e *Engine) lifecycleCtx() context.Context {
 }
 
 // AddMagnet adds a torrent via magnet URI. It waits for metadata to
-// resolve (up to metadataTimeout or ctx deadline) and returns the
+// resolve (up to the configured MetadataTimeoutSecs or ctx deadline) and returns the
 // lowercase infohash as the stable item ID.
 func (e *Engine) AddMagnet(ctx context.Context, magnet string, meta torrentMeta) (string, error) {
 	t, err := e.client.AddMagnet(magnet)
@@ -420,7 +421,8 @@ func (e *Engine) AddMagnet(ctx context.Context, magnet string, meta torrentMeta)
 	// rather than the caller's context so that a short-lived HTTP request
 	// context being cancelled (e.g. client disconnect, write timeout) does
 	// not abort metadata resolution mid-flight.
-	waitCtx, waitCancel := context.WithTimeout(e.lifecycleCtx(), metadataTimeout)
+	timeout := time.Duration(e.cfg.MetadataTimeoutSecs) * time.Second
+	waitCtx, waitCancel := context.WithTimeout(e.lifecycleCtx(), timeout)
 	defer waitCancel()
 
 	select {
@@ -431,7 +433,7 @@ func (e *Engine) AddMagnet(ctx context.Context, magnet string, meta torrentMeta)
 		// reports it as queued while Info() is still nil.
 		e.logger.Warn("magnet metadata not yet available; keeping torrent queued",
 			"error", waitCtx.Err(),
-			"timeout", metadataTimeout,
+			"timeout", timeout,
 		)
 	}
 
@@ -456,7 +458,7 @@ func (e *Engine) AddMagnet(ctx context.Context, magnet string, meta torrentMeta)
 		e.maybeAddPublicTrackers(t)
 		t.DownloadAll()
 	} else {
-		// Metadata was not available within metadataTimeout. Keep the
+		// Metadata was not available within the configured timeout. Keep the
 		// torrent tracked and start downloading automatically once metadata
 		// eventually resolves.
 		go func(t *torrent.Torrent) {
@@ -506,7 +508,8 @@ func (e *Engine) AddTorrentBytes(ctx context.Context, data []byte, meta torrentM
 	// the metainfo contains the info dict. Use the engine's lifecycle
 	// context (not the caller's) so a cancelled HTTP request context does
 	// not abort an otherwise-instant wait and return a spurious error.
-	waitCtx, waitCancel := context.WithTimeout(e.lifecycleCtx(), metadataTimeout)
+	timeout := time.Duration(e.cfg.MetadataTimeoutSecs) * time.Second
+	waitCtx, waitCancel := context.WithTimeout(e.lifecycleCtx(), timeout)
 	defer waitCancel()
 
 	select {

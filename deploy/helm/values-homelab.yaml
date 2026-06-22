@@ -44,6 +44,8 @@ torrent:
   listenPort: 7881
   publicIP4: "192.168.3.203"
   publicIP6: ""
+  # Increase metadata timeout for cluster latency and potential DHT/tracker delays
+  metadataTimeoutSecs: 300
   expose:
     enabled: true
     type: LoadBalancer

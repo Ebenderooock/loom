@@ -61,6 +61,10 @@ torrent:
   listenPort: 6881
   publicIP4: ""
   publicIP6: ""
+  # Metadata timeout for magnet URI resolution. Increased default (180s)
+  # accommodates slow DHT/tracker responses in NAT/Kubernetes environments.
+  # Can also be set via LOOM_TORRENT_METADATA_TIMEOUT_SECS env var.
+  metadataTimeoutSecs: 180
   expose:
     enabled: false
     # LoadBalancer (e.g. MetalLB) is recommended because it preserves the

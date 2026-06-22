@@ -4,9 +4,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strconv"
 
 	"github.com/ebenderooock/loom/internal/downloads"
 )
+
+// parseInt is a simple helper to parse integer environment variables.
+func parseInt(s string) (int, error) {
+	return strconv.Atoi(s)
+}
 
 // Config is the JSON shape persisted in download_clients.config for
 // builtin/torrent rows. Values here override Definition-level fields
@@ -28,12 +34,13 @@ type Config struct {
 	DebugPeerDiscovery   bool    `json:"debug_peer_discovery"`
 	PublicIP4            string  `json:"public_ip4"`
 	PublicIP6            string  `json:"public_ip6"`
+	MetadataTimeoutSecs  int     `json:"metadata_timeout_secs"`
 }
 
 // DefaultConfig returns sensible defaults for the built-in torrent
 // engine: port 6881, DHT and PEX on, UPnP off, seed ratio 1.0, no
 // time limit, 200 max connections, 50 max upload slots, unlimited
-// speed, 25 max active torrents.
+// speed, 25 max active torrents, 180s metadata timeout (for k8s NAT/high-latency envs).
 func DefaultConfig() Config {
 	return Config{
 		ListenPort:           6881,
@@ -47,14 +54,15 @@ func DefaultConfig() Config {
 		DownloadSpeedLimit:   0,
 		UploadSpeedLimit:     0,
 		MaxActiveTorrents:    25,
+		MetadataTimeoutSecs:  180,
 	}
 }
 
 // parseConfig merges the Definition-level fields with the JSON config
 // blob. Config-blob values take precedence so that operators can drive
 // everything through the config column if they prefer. Environment
-// variables (LOOM_TORRENT_PUBLIC_IP4, LOOM_TORRENT_PUBLIC_IP6) override
-// both definition and config blob for public IP settings.
+// variables (LOOM_TORRENT_PUBLIC_IP4, LOOM_TORRENT_PUBLIC_IP6, LOOM_TORRENT_METADATA_TIMEOUT_SECS)
+// override both definition and config blob for external configuration.
 func parseConfig(def downloads.Definition) (Config, error) {
 	cfg := DefaultConfig()
 
@@ -82,6 +90,13 @@ func parseConfig(def downloads.Definition) (Config, error) {
 	}
 	if ip := os.Getenv("LOOM_TORRENT_PUBLIC_IP6"); ip != "" {
 		cfg.PublicIP6 = ip
+	}
+	
+	// Environment variable can also override metadata timeout for high-latency environments.
+	if timeoutStr := os.Getenv("LOOM_TORRENT_METADATA_TIMEOUT_SECS"); timeoutStr != "" {
+		if timeout, err := parseInt(timeoutStr); err == nil && timeout > 0 {
+			cfg.MetadataTimeoutSecs = timeout
+		}
 	}
 
 	return cfg, nil
