@@ -108,12 +108,7 @@ export function validateDownloadForm(
       errors.port = "Port must be between 1 and 65535.";
     }
   }
-  if (values.kind === "builtin/torrent") {
-    const downloadDir = (values.config?.download_dir as string) ?? "";
-    if (!downloadDir.trim()) {
-      errors.download_dir = "Download directory is required.";
-    }
-  }
+  // builtin/torrent allows blank download_dir since it can be set via LOOM_TORRENT_DOWNLOAD_DIR env var
   if (
     !Number.isFinite(values.priority) ||
     values.priority < 0 ||
