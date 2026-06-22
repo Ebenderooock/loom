@@ -16,6 +16,8 @@ WORKDIR /src
 RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates && rm -rf /var/lib/apt/lists/*
 COPY go.mod go.sum* ./
 RUN go mod download
+# Build Rain torrent server (static binary, CGO_ENABLED=0)
+RUN CGO_ENABLED=0 go install github.com/cenkalti/rain/v2@v2.3.1
 COPY . .
 COPY --from=web /web/dist ./web/dist
 ARG VERSION=dev
@@ -46,6 +48,7 @@ LABEL org.opencontainers.image.description="Unified media automation — Radarr/
 USER nonroot:nonroot
 WORKDIR /
 COPY --from=build /out/loom /usr/local/bin/loom
+COPY --from=build /go/bin/rain /usr/local/bin/rain
 
 EXPOSE 1925
 VOLUME ["/config", "/media"]

@@ -8,7 +8,6 @@
 {{- $rainDownloadDir := (get $rain "downloadDir") | default "/media/downloads" -}}
 {{- $rainDHT := (get $rain "dhtEnabled") | default true -}}
 {{- $rainPEX := (get $rain "pexEnabled") | default true -}}
-{{- $rainInstallVersion := (get $rain "installVersion") | default "v2.3.1" -}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -50,25 +49,6 @@ spec:
       {{- with .Values.podSecurityContext }}
       securityContext:
         {{- toYaml . | nindent 8 }}
-      {{- end }}
-      {{- if $rainEnabled }}
-      initContainers:
-        - name: rain-install
-          image: "docker.io/golang:1.24-alpine"
-          imagePullPolicy: IfNotPresent
-          command: ["/bin/sh", "-ec"]
-          args:
-            - |
-              export GOPATH=/tmp/go
-              export GOCACHE=/tmp/gocache
-              export GOMODCACHE=/tmp/gomodcache
-              export GOBIN=/rain-bin
-              mkdir -p "$GOPATH" "$GOCACHE" "$GOMODCACHE" "$GOBIN"
-              go install github.com/cenkalti/rain/v2@{{ $rainInstallVersion }}
-              /rain-bin/rain --version || true
-          volumeMounts:
-            - name: rain-bin
-              mountPath: /rain-bin
       {{- end }}
       containers:
         - name: {{ .Chart.Name }}
@@ -140,15 +120,13 @@ spec:
             {{- end }}
         {{- if $rainEnabled }}
         - name: rain
-          image: "docker.io/alpine:3.20"
-          imagePullPolicy: IfNotPresent
-          command: ["/rain-bin/rain", "server", "--config", "/etc/rain/config.yaml"]
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["/usr/local/bin/rain", "server", "--config", "/etc/rain/config.yaml"]
           env:
             - name: HOME
               value: /config
           volumeMounts:
-            - name: rain-bin
-              mountPath: /rain-bin
             - name: config
               mountPath: /config
             - name: rain-config
@@ -179,10 +157,6 @@ spec:
         - name: rain-config
           configMap:
             name: {{ include "loom.fullname" . }}-rain-config
-        {{- end }}
-        {{- if $rainEnabled }}
-        - name: rain-bin
-          emptyDir: {}
         {{- end }}
         {{- with .Values.extraVolumes }}
         {{- toYaml . | nindent 8 }}
