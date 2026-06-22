@@ -968,13 +968,13 @@ function TorrentEnginePanel() {
           <div className="flex items-center gap-2">
             <Gauge className="h-4 w-4 text-zinc-400" />
             <span className="text-sm font-medium text-zinc-100">
-              Built-in Torrent Engine
+              Rain Torrent Engine
             </span>
             <Badge
               variant="outline"
               className="border-zinc-700 text-[10px] text-zinc-400"
             >
-              Built-in
+              Rain
             </Badge>
           </div>
           <div className="flex items-center gap-2">
@@ -1044,20 +1044,11 @@ function TorrentEnginePanel() {
         </div>
 
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-zinc-500">
-          <span>
-            Port{" "}
-            <span className="tabular-nums text-zinc-300">
-              {summary?.listen_port ?? "—"}
-            </span>
-          </span>
           <span className={summary?.dht ? "text-zinc-300" : "text-zinc-600"}>
             DHT
           </span>
           <span className={summary?.pex ? "text-zinc-300" : "text-zinc-600"}>
             PEX
-          </span>
-          <span className={summary?.upnp ? "text-zinc-300" : "text-zinc-600"}>
-            UPnP
           </span>
           {summary?.save_path && (
             <span className="truncate">

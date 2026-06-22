@@ -352,11 +352,9 @@ func (c *Client) EngineSummary() downloads.TorrentEngineSummary {
 	items, err := c.Status(context.Background())
 	if err != nil {
 		return downloads.TorrentEngineSummary{
-			ListenPort: c.cfg.PortBegin,
-			DHT:        c.cfg.EnableDHT,
-			PEX:        c.cfg.EnablePEX,
-			UPnP:       c.cfg.EnableUPnP,
-			SavePath:   c.cfg.DownloadDir,
+			DHT:      c.cfg.EnableDHT,
+			PEX:      c.cfg.EnablePEX,
+			SavePath: c.cfg.DownloadDir,
 		}
 	}
 	var summary downloads.TorrentEngineSummary
@@ -379,10 +377,8 @@ func (c *Client) EngineSummary() downloads.TorrentEngineSummary {
 	summary.DownloadLimit = c.limits.down
 	summary.UploadLimit = c.limits.up
 	c.mu.RUnlock()
-	summary.ListenPort = c.cfg.PortBegin
 	summary.DHT = c.cfg.EnableDHT
 	summary.PEX = c.cfg.EnablePEX
-	summary.UPnP = c.cfg.EnableUPnP
 	summary.SavePath = c.cfg.DownloadDir
 	return summary
 }

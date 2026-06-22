@@ -271,7 +271,7 @@ export async function grabRelease(
   );
 }
 
-// ---------- Built-in torrent engine management ----------
+// ---------- Rain torrent sidecar management ----------
 
 export interface TorrentEngineSummary {
   total_torrents: number;
@@ -283,10 +283,8 @@ export interface TorrentEngineSummary {
   upload_rate: number; // aggregate bytes/sec
   download_limit: number; // bytes/sec, 0 = unlimited
   upload_limit: number; // bytes/sec, 0 = unlimited
-  listen_port: number;
   dht: boolean;
   pex: boolean;
-  upnp: boolean;
   save_path: string;
 }
 
@@ -422,14 +420,14 @@ export function useGrabRelease() {
   });
 }
 
-// ---------- Built-in torrent engine hooks ----------
+// ---------- Rain torrent engine hooks ----------
 
 export const torrentEngineKeys = {
   status: (id: string) => [...downloadKeys.all, "torrent-status", id] as const,
 };
 
 /**
- * Poll the built-in torrent engine status. Only enabled when a clientId is
+ * Poll the Rain torrent sidecar status. Only enabled when a clientId is
  * supplied for a builtin/torrent client.
  */
 export function useTorrentStatus(

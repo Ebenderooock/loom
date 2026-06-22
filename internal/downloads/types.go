@@ -290,8 +290,8 @@ type DetailProvider interface {
 	Detail(ctx context.Context, id string) (any, error)
 }
 
-// TorrentEngineSummary is an aggregate snapshot of the built-in torrent
-// engine, surfaced to the management UI.
+// TorrentEngineSummary is an aggregate snapshot of the Rain torrent
+// sidecar, surfaced to the management UI.
 type TorrentEngineSummary struct {
 	TotalTorrents int    `json:"total_torrents"`
 	Queued        int    `json:"queued"`
@@ -302,10 +302,8 @@ type TorrentEngineSummary struct {
 	UploadRate    int64  `json:"upload_rate"`    // aggregate bytes/sec
 	DownloadLimit int64  `json:"download_limit"` // bytes/sec, 0 = unlimited
 	UploadLimit   int64  `json:"upload_limit"`   // bytes/sec, 0 = unlimited
-	ListenPort    int    `json:"listen_port"`
 	DHT           bool   `json:"dht"`
 	PEX           bool   `json:"pex"`
-	UPnP          bool   `json:"upnp"`
 	SavePath      string `json:"save_path"`
 }
 

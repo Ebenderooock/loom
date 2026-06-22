@@ -22,9 +22,10 @@ const DOWNLOAD_KINDS: {
 }[] = [
   {
     value: "builtin/torrent",
-    label: "Built-in (Torrent)",
+    label: "Rain (Sidecar)",
     protocol: "torrent",
-    helper: "Loom's native BitTorrent engine — no external client needed.",
+    helper:
+      "Rain torrent sidecar — runs alongside Loom and is managed by the Helm chart.",
   },
   {
     value: "qbittorrent",
@@ -157,7 +158,7 @@ export function DownloadForm({
       enabled: initial?.enabled ?? true,
       priority: initial?.priority ?? 25,
       host: initial?.host ?? (isBuiltin ? "" : "localhost"),
-      port: initial?.port ?? (isBuiltin ? 6881 : 8080),
+      port: initial?.port ?? (isBuiltin ? 0 : 8080),
       tls: initial?.tls ?? false,
       username: initial?.username ?? "",
       password: "",
@@ -169,19 +170,9 @@ export function DownloadForm({
         (initial?.config as Record<string, unknown>) ??
         (isBuiltin
           ? {
-              listen_port: 6881,
               download_dir: "",
-              incomplete_dir: "",
-              seed_ratio_limit: 1.0,
-              seed_time_limit_minutes: 0,
-              max_connections: 200,
-              max_upload_slots: 50,
-              enable_dht: true,
-              enable_pex: true,
-              enable_upnp: false,
               download_speed_limit: 0,
               upload_speed_limit: 0,
-              max_active_torrents: 25,
             }
           : undefined),
     };
@@ -248,19 +239,9 @@ export function DownloadForm({
     if (isBuiltin) {
       update("host", "");
       update("config", {
-        listen_port: 6881,
         download_dir: "",
-        incomplete_dir: "",
-        seed_ratio_limit: 1.0,
-        seed_time_limit_minutes: 0,
-        max_connections: 200,
-        max_upload_slots: 50,
-        enable_dht: true,
-        enable_pex: true,
-        enable_upnp: false,
         download_speed_limit: 0,
         upload_speed_limit: 0,
-        max_active_torrents: 25,
       });
     } else {
       update("host", "localhost");
@@ -344,102 +325,28 @@ export function DownloadForm({
 
       {isBuiltinKind ? (
         <>
+          <div className="rounded-md border border-zinc-800 bg-zinc-900/40 px-3 py-2 text-xs text-zinc-400">
+            Rain runs as a sidecar container alongside Loom. The download
+            directory and RPC connection are configured via the Helm chart and
+            environment variables. Only speed limits can be adjusted at runtime
+            here.
+          </div>
+
           <div className="grid gap-2">
             <Label htmlFor="download-dir">Download directory</Label>
             <Input
               id="download-dir"
               value={(values.config?.download_dir as string) ?? ""}
               onChange={(e) => updateConfig("download_dir", e.target.value)}
-              placeholder="/downloads/complete"
+              placeholder="Leave blank to use LOOM_TORRENT_DOWNLOAD_DIR env var"
             />
             {errors.download_dir ? (
               <p className="text-xs text-red-600">{errors.download_dir}</p>
             ) : null}
             <p className="text-xs text-muted-foreground">
-              Where completed downloads are stored.
+              Override where Rain saves completed downloads. Usually set via
+              Helm values.
             </p>
-          </div>
-
-          <div className="grid gap-2">
-            <Label htmlFor="incomplete-dir">
-              Incomplete directory (optional)
-            </Label>
-            <Input
-              id="incomplete-dir"
-              value={(values.config?.incomplete_dir as string) ?? ""}
-              onChange={(e) => updateConfig("incomplete_dir", e.target.value)}
-              placeholder="/downloads/incomplete"
-            />
-            <p className="text-xs text-muted-foreground">
-              Temporary directory for in-progress downloads. If empty, uses
-              download directory.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div className="grid gap-2">
-              <Label htmlFor="listen-port">Listen port</Label>
-              <Input
-                id="listen-port"
-                type="number"
-                min={1}
-                max={65535}
-                value={(values.config?.listen_port as number) ?? 6881}
-                onChange={(e) =>
-                  updateConfig("listen_port", Number(e.target.value))
-                }
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="max-active">Max active torrents</Label>
-              <Input
-                id="max-active"
-                type="number"
-                min={1}
-                max={500}
-                value={(values.config?.max_active_torrents as number) ?? 25}
-                onChange={(e) =>
-                  updateConfig("max_active_torrents", Number(e.target.value))
-                }
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div className="grid gap-2">
-              <Label htmlFor="seed-ratio">Seed ratio limit</Label>
-              <Input
-                id="seed-ratio"
-                type="number"
-                min={0}
-                step={0.1}
-                value={(values.config?.seed_ratio_limit as number) ?? 1.0}
-                onChange={(e) =>
-                  updateConfig("seed_ratio_limit", Number(e.target.value))
-                }
-              />
-              <p className="text-xs text-muted-foreground">
-                Stop seeding after reaching this ratio. 0 = seed forever.
-              </p>
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="seed-time">Seed time limit (minutes)</Label>
-              <Input
-                id="seed-time"
-                type="number"
-                min={0}
-                value={(values.config?.seed_time_limit_minutes as number) ?? 0}
-                onChange={(e) =>
-                  updateConfig(
-                    "seed_time_limit_minutes",
-                    Number(e.target.value),
-                  )
-                }
-              />
-              <p className="text-xs text-muted-foreground">
-                Stop seeding after this many minutes. 0 = no time limit.
-              </p>
-            </div>
           </div>
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -478,88 +385,6 @@ export function DownloadForm({
                 }
               />
               <p className="text-xs text-muted-foreground">0 = unlimited.</p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div className="grid gap-2">
-              <Label htmlFor="max-conns">Max connections</Label>
-              <Input
-                id="max-conns"
-                type="number"
-                min={1}
-                value={(values.config?.max_connections as number) ?? 200}
-                onChange={(e) =>
-                  updateConfig("max_connections", Number(e.target.value))
-                }
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="max-uploads">Max upload slots</Label>
-              <Input
-                id="max-uploads"
-                type="number"
-                min={1}
-                value={(values.config?.max_upload_slots as number) ?? 50}
-                onChange={(e) =>
-                  updateConfig("max_upload_slots", Number(e.target.value))
-                }
-              />
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <div className="flex items-center gap-2">
-              <input
-                id="enable-dht"
-                type="checkbox"
-                checked={(values.config?.enable_dht as boolean) ?? true}
-                onChange={(e) => updateConfig("enable_dht", e.target.checked)}
-                className="h-4 w-4 rounded border-input"
-              />
-              <Label htmlFor="enable-dht" className="!m-0">
-                Enable DHT
-              </Label>
-            </div>
-            <div className="flex items-center gap-2">
-              <input
-                id="enable-pex"
-                type="checkbox"
-                checked={(values.config?.enable_pex as boolean) ?? true}
-                onChange={(e) => updateConfig("enable_pex", e.target.checked)}
-                className="h-4 w-4 rounded border-input"
-              />
-              <Label htmlFor="enable-pex" className="!m-0">
-                Enable PEX (Peer Exchange)
-              </Label>
-            </div>
-            <div className="flex items-center gap-2">
-              <input
-                id="enable-upnp"
-                type="checkbox"
-                checked={(values.config?.enable_upnp as boolean) ?? false}
-                onChange={(e) => updateConfig("enable_upnp", e.target.checked)}
-                className="h-4 w-4 rounded border-input"
-              />
-              <Label htmlFor="enable-upnp" className="!m-0">
-                Enable UPnP/NAT-PMP (auto port forwarding)
-              </Label>
-            </div>
-            <div className="flex items-center gap-2">
-              <input
-                id="debug-peer-discovery"
-                type="checkbox"
-                checked={
-                  (values.config?.debug_peer_discovery as boolean) ?? false
-                }
-                onChange={(e) =>
-                  updateConfig("debug_peer_discovery", e.target.checked)
-                }
-                className="h-4 w-4 rounded border-input"
-              />
-              <Label htmlFor="debug-peer-discovery" className="!m-0">
-                Debug Peer Discovery (logs to server)
-              </Label>
             </div>
           </div>
         </>
