@@ -414,7 +414,14 @@ func (e *Engine) AddMagnet(ctx context.Context, magnet string, meta torrentMeta)
 	// private-tracker magnets) are left untouched so we never announce a
 	// private infohash to public trackers.
 	if !magnetHasTrackers(magnet) {
+		e.logger.Debug("injecting public trackers into magnet (no trackers present)")
 		t.AddTrackers(defaultAnnounceList())
+		e.logger.Debug("public trackers injected",
+			"trackerCount", len(defaultTrackers),
+			"infohash", strings.ToLower(t.InfoHash().HexString()),
+		)
+	} else {
+		e.logger.Debug("magnet already has trackers; skipping injection")
 	}
 
 	// Wait for metadata with a timeout. Use the engine's lifecycle context
@@ -425,8 +432,18 @@ func (e *Engine) AddMagnet(ctx context.Context, magnet string, meta torrentMeta)
 	waitCtx, waitCancel := context.WithTimeout(e.lifecycleCtx(), timeout)
 	defer waitCancel()
 
+	e.logger.Debug("waiting for magnet metadata",
+		"hash", strings.ToLower(t.InfoHash().HexString()),
+		"timeout", timeout.String(),
+	)
+
 	select {
 	case <-t.GotInfo():
+		e.logger.Debug("magnet metadata resolved",
+			"hash", strings.ToLower(t.InfoHash().HexString()),
+			"name", t.Name(),
+			"size", t.Length(),
+		)
 	case <-waitCtx.Done():
 		// Do not fail the add when metadata is slow. Keep the torrent in the
 		// engine and let metadata continue resolving asynchronously; status()
@@ -434,6 +451,7 @@ func (e *Engine) AddMagnet(ctx context.Context, magnet string, meta torrentMeta)
 		e.logger.Warn("magnet metadata not yet available; keeping torrent queued",
 			"error", waitCtx.Err(),
 			"timeout", timeout,
+			"hash", strings.ToLower(t.InfoHash().HexString()),
 		)
 	}
 
@@ -455,18 +473,33 @@ func (e *Engine) AddMagnet(ctx context.Context, magnet string, meta torrentMeta)
 	e.mu.Unlock()
 
 	if t.Info() != nil {
+		e.logger.Info("torrent metadata resolved immediately",
+			"hash", strings.ToLower(t.InfoHash().HexString()),
+			"name", t.Name(),
+			"size", t.Length(),
+		)
 		e.maybeAddPublicTrackers(t)
 		t.DownloadAll()
 	} else {
 		// Metadata was not available within the configured timeout. Keep the
 		// torrent tracked and start downloading automatically once metadata
 		// eventually resolves.
+		e.logger.Info("torrent added; waiting for async metadata resolution",
+			"hash", strings.ToLower(t.InfoHash().HexString()),
+			"timeout", timeout.String(),
+		)
 		go func(t *torrent.Torrent) {
 			select {
 			case <-t.GotInfo():
+				e.logger.Info("async metadata resolution completed",
+					"hash", strings.ToLower(t.InfoHash().HexString()),
+					"name", t.Name(),
+					"size", t.Length(),
+				)
 				e.maybeAddPublicTrackers(t)
 				t.DownloadAll()
 			case <-e.lifecycleCtx().Done():
+				e.logger.Debug("engine shutting down before async metadata resolution")
 			}
 		}(t)
 	}
