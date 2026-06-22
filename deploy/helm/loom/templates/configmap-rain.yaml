@@ -1,14 +1,16 @@
 {{- $legacyTorrentConfigured := hasKey .Values "torrent" -}}
-{{- $rainEnabled := or (default false .Values.rain.enabled) $legacyTorrentConfigured -}}
+{{- $rain := (get .Values "rain") | default (dict) -}}
+{{- $rainRPC := (get $rain "rpc") | default (dict) -}}
+{{- $rainEnabled := or ((get $rain "enabled") | default false) $legacyTorrentConfigured -}}
 {{- if $rainEnabled }}
-{{- $rainRPCHost := default "127.0.0.1" .Values.rain.rpc.host -}}
-{{- $rainRPCPort := default 7246 .Values.rain.rpc.port -}}
-{{- $rainDownloadDir := default "/media/downloads" .Values.rain.downloadDir -}}
-{{- $rainDHT := default true .Values.rain.dhtEnabled -}}
-{{- $rainPEX := default true .Values.rain.pexEnabled -}}
-{{- $rainDLKB := default 0 .Values.rain.speedLimitDownloadKBps -}}
-{{- $rainULKB := default 0 .Values.rain.speedLimitUploadKBps -}}
-{{- $rainStateDir := default "/config/rain" .Values.rain.stateDir -}}
+{{- $rainRPCHost := (get $rainRPC "host") | default "127.0.0.1" -}}
+{{- $rainRPCPort := (get $rainRPC "port") | default 7246 -}}
+{{- $rainDownloadDir := (get $rain "downloadDir") | default "/media/downloads" -}}
+{{- $rainDHT := (get $rain "dhtEnabled") | default true -}}
+{{- $rainPEX := (get $rain "pexEnabled") | default true -}}
+{{- $rainDLKB := (get $rain "speedLimitDownloadKBps") | default 0 -}}
+{{- $rainULKB := (get $rain "speedLimitUploadKBps") | default 0 -}}
+{{- $rainStateDir := (get $rain "stateDir") | default "/config/rain" -}}
 apiVersion: v1
 kind: ConfigMap
 metadata:

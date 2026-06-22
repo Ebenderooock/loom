@@ -1,15 +1,18 @@
 {{- $legacyTorrentConfigured := hasKey .Values "torrent" -}}
-{{- $rainEnabled := or (default false .Values.rain.enabled) $legacyTorrentConfigured -}}
-{{- $rainRPCHost := default "127.0.0.1" .Values.rain.rpc.host -}}
-{{- $rainRPCPort := default 7246 .Values.rain.rpc.port -}}
-{{- $rainRPCTimeout := default 10 .Values.rain.rpc.timeoutSecs -}}
-{{- $rainDownloadDir := default "/media/downloads" .Values.rain.downloadDir -}}
-{{- $rainDHT := default true .Values.rain.dhtEnabled -}}
-{{- $rainPEX := default true .Values.rain.pexEnabled -}}
-{{- $rainInstallVersion := default "v2.3.1" .Values.rain.installVersion -}}
-{{- $rainBuilderRepo := default "docker.io/golang" .Values.rain.image.repository -}}
-{{- $rainBuilderTag := default "1.24-alpine" .Values.rain.image.tag -}}
-{{- $rainBuilderPullPolicy := default "IfNotPresent" .Values.rain.image.pullPolicy -}}
+{{- $rain := (get .Values "rain") | default (dict) -}}
+{{- $rainRPC := (get $rain "rpc") | default (dict) -}}
+{{- $rainImage := (get $rain "image") | default (dict) -}}
+{{- $rainEnabled := or ((get $rain "enabled") | default false) $legacyTorrentConfigured -}}
+{{- $rainRPCHost := (get $rainRPC "host") | default "127.0.0.1" -}}
+{{- $rainRPCPort := (get $rainRPC "port") | default 7246 -}}
+{{- $rainRPCTimeout := (get $rainRPC "timeoutSecs") | default 10 -}}
+{{- $rainDownloadDir := (get $rain "downloadDir") | default "/media/downloads" -}}
+{{- $rainDHT := (get $rain "dhtEnabled") | default true -}}
+{{- $rainPEX := (get $rain "pexEnabled") | default true -}}
+{{- $rainInstallVersion := (get $rain "installVersion") | default "v2.3.1" -}}
+{{- $rainBuilderRepo := (get $rainImage "repository") | default "docker.io/golang" -}}
+{{- $rainBuilderTag := (get $rainImage "tag") | default "1.24-alpine" -}}
+{{- $rainBuilderPullPolicy := (get $rainImage "pullPolicy") | default "IfNotPresent" -}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
