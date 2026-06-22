@@ -40,6 +40,14 @@ service:
   type: ClusterIP
   port: 1925
 
+# Pod networking options. Enable hostNetwork for troubleshooting
+# pod-network/CNI issues (for example, torrent metadata resolution).
+hostNetwork: false
+# Optional explicit pod DNS policy. Leave empty for automatic behavior:
+# - ClusterFirst when hostNetwork=false
+# - ClusterFirstWithHostNet when hostNetwork=true
+dnsPolicy: ""
+
 # ---------- BitTorrent peer port ----------
 # Exposes the built-in torrent client's listen port so inbound peer
 # connections and DHT work. Behind NAT/in-cluster the pod is otherwise a
