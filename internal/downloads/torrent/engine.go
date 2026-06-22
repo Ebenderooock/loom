@@ -99,6 +99,72 @@ func magnetHasTrackers(magnet string) bool {
 	return len(u.Query()["tr"]) > 0
 }
 
+// credentialQueryKeys are tracker-announce query parameters that carry a
+// per-user secret. Their presence marks a tracker (and therefore the
+// torrent) as belonging to a private tracker, which must never be
+// announced to public trackers.
+var credentialQueryKeys = []string{
+	"passkey", "authkey", "auth", "token", "secret",
+	"torrent_pass", "apikey", "api_key", "pid",
+}
+
+// magnetLikelyPrivate reports whether a magnet's existing trackers
+// indicate a private tracker. It is deliberately conservative: any
+// signal of an embedded credential causes the magnet to be treated as
+// private. A false result means "safe to augment with public trackers".
+// An unparseable magnet is treated as private so we never inject blindly.
+func magnetLikelyPrivate(magnet string) bool {
+	u, err := url.Parse(magnet)
+	if err != nil {
+		return true
+	}
+	for _, tr := range u.Query()["tr"] {
+		if trackerHasCredential(tr) {
+			return true
+		}
+	}
+	return false
+}
+
+// trackerHasCredential reports whether a single tracker announce URL
+// embeds a per-user secret, either as a known credential query
+// parameter or as a passkey-like path segment. Unparseable URLs are
+// treated as credentialed (private) to stay on the safe side.
+func trackerHasCredential(tracker string) bool {
+	tu, err := url.Parse(tracker)
+	if err != nil {
+		return true
+	}
+	q := tu.Query()
+	for _, k := range credentialQueryKeys {
+		if q.Get(k) != "" {
+			return true
+		}
+	}
+	for _, seg := range strings.Split(tu.Path, "/") {
+		if looksLikePasskey(seg) {
+			return true
+		}
+	}
+	return false
+}
+
+// looksLikePasskey reports whether a URL path segment looks like an
+// embedded private-tracker passkey: a long, purely alphanumeric token.
+// Public announce paths use short words ("announce"), so a long
+// alphanumeric segment is a strong private-tracker signal.
+func looksLikePasskey(seg string) bool {
+	if len(seg) < 20 {
+		return false
+	}
+	for _, r := range seg {
+		if !((r >= '0' && r <= '9') || (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z')) {
+			return false
+		}
+	}
+	return true
+}
+
 // seedCheckInterval controls how often the seeding supervisor scans
 // all tracked torrents to enforce ratio/time policies.
 const seedCheckInterval = 30 * time.Second
@@ -407,13 +473,16 @@ func (e *Engine) AddMagnet(ctx context.Context, magnet string, meta torrentMeta)
 		return "", fmt.Errorf("builtin/torrent: adding magnet: %w", err)
 	}
 
-	// When a magnet carries no trackers it can only find peers via DHT,
-	// which is slow or unreachable behind NAT/in containers and is the
-	// usual cause of metadata-resolution timeouts. Inject public trackers
-	// in that case. Magnets that already list trackers (including all
-	// private-tracker magnets) are left untouched so we never announce a
-	// private infohash to public trackers.
-	if !magnetHasTrackers(magnet) {
+	// Reliable public trackers are the difference between a magnet
+	// resolving metadata in seconds and timing out: many magnets (e.g.
+	// EZTV, YTS) ship with weak or dead bundled trackers, and DHT alone
+	// is frequently insufficient in NAT'd/containerised deployments.
+	// We therefore augment any non-private magnet with the shared public
+	// tracker list, whether or not it already lists trackers. Magnets
+	// that carry a private-tracker credential are left untouched so a
+	// private infohash is never announced to public trackers.
+	switch {
+	case !magnetHasTrackers(magnet):
 		e.logger.Info("injecting public trackers into magnet (no trackers present)",
 			"infohash", strings.ToLower(t.InfoHash().HexString()),
 		)
@@ -422,8 +491,14 @@ func (e *Engine) AddMagnet(ctx context.Context, magnet string, meta torrentMeta)
 			"trackerCount", len(defaultTrackers),
 			"infohash", strings.ToLower(t.InfoHash().HexString()),
 		)
-	} else {
-		e.logger.Info("magnet already has trackers; skipping injection",
+	case !magnetLikelyPrivate(magnet):
+		e.logger.Info("augmenting public magnet with reliable public trackers",
+			"infohash", strings.ToLower(t.InfoHash().HexString()),
+			"trackerCount", len(defaultTrackers),
+		)
+		t.AddTrackers(defaultAnnounceList())
+	default:
+		e.logger.Info("magnet appears private; not injecting public trackers",
 			"infohash", strings.ToLower(t.InfoHash().HexString()),
 		)
 	}
