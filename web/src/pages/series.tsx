@@ -419,7 +419,10 @@ export function SeriesPage() {
   };
 
   const handleOrganize = async () => {
-    const ids = selectedIds.size > 0 ? Array.from(selectedIds) : seriesList.map((s) => s.id);
+    const ids =
+      selectedIds.size > 0
+        ? Array.from(selectedIds)
+        : seriesList.map((s) => s.id);
     if (ids.length === 0) {
       toast.error("No series to organize");
       return;

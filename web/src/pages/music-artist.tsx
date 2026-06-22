@@ -308,10 +308,10 @@ export function MusicArtistPage() {
                     },
                     onError: (e) => {
                       toast.error(
-                        e instanceof Error ? e.message : "Rescan failed"
+                        e instanceof Error ? e.message : "Rescan failed",
                       );
                     },
-                  }
+                  },
                 );
               }}
             >

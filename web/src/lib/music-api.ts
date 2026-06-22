@@ -251,7 +251,10 @@ export async function setArtistMonitoring(
   return (await res.json()) as Artist;
 }
 
-export async function rescanArtist(id: string, libraryId: string): Promise<void> {
+export async function rescanArtist(
+  id: string,
+  libraryId: string,
+): Promise<void> {
   const res = await apiFetch(`/api/v1/scanner/artists/${id}/rescan`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

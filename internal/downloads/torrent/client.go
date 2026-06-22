@@ -12,7 +12,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/cenkalti/rain/v2/rainrpc"
@@ -331,12 +330,8 @@ func (c *Client) Categories(_ context.Context) ([]downloads.Category, error) {
 	return []downloads.Category{}, nil
 }
 
-func (c *Client) FreeSpace(_ context.Context) (int64, error) {
-	var stat syscall.Statfs_t
-	if err := syscall.Statfs(c.cfg.DownloadDir, &stat); err != nil {
-		return -1, err
-	}
-	return int64(stat.Bavail) * int64(stat.Bsize), nil
+func (c *Client) FreeSpace(ctx context.Context) (int64, error) {
+	return diskFreeSpace(c.cfg.DownloadDir)
 }
 
 func (c *Client) Test(_ context.Context) error {

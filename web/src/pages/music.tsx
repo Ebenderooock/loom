@@ -68,7 +68,9 @@ function ArtistCard({
       <div className="flex flex-1 flex-col gap-1 p-3">
         <span className="truncate text-sm font-medium">{artist.name}</span>
         <span className="text-xs text-muted-foreground">
-          {stats ? `${stats.albumCount} album${stats.albumCount === 1 ? "" : "s"}` : "—"}
+          {stats
+            ? `${stats.albumCount} album${stats.albumCount === 1 ? "" : "s"}`
+            : "—"}
         </span>
         {missing > 0 && (
           <Badge variant="destructive" className="mt-1 w-fit text-[10px]">
@@ -292,7 +294,7 @@ export function MusicPage() {
     <div className="px-6 pb-6 pt-2">
       {/* Toolbar */}
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="relative flex-1 max-w-sm">
+        <div className="relative max-w-sm flex-1">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={filter}
