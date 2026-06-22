@@ -52,14 +52,6 @@ spec:
             - name: http
               containerPort: {{ .Values.service.port }}
               protocol: TCP
-            {{- if .Values.torrent.expose.enabled }}
-            - name: bt-tcp
-              containerPort: {{ .Values.torrent.listenPort }}
-              protocol: TCP
-            - name: bt-udp
-              containerPort: {{ .Values.torrent.listenPort }}
-              protocol: UDP
-            {{- end }}
           env:
             - name: LOOM_HTTP_ADDR
               value: ":{{ .Values.service.port }}"
@@ -67,17 +59,19 @@ spec:
               value: /config
             - name: LOOM_DATA_DIR
               value: /config
-            {{- if .Values.torrent.publicIP4 }}
-            - name: LOOM_TORRENT_PUBLIC_IP4
-              value: "{{ .Values.torrent.publicIP4 }}"
-            {{- end }}
-            {{- if .Values.torrent.publicIP6 }}
-            - name: LOOM_TORRENT_PUBLIC_IP6
-              value: "{{ .Values.torrent.publicIP6 }}"
-            {{- end }}
-            {{- if .Values.torrent.metadataTimeoutSecs }}
-            - name: LOOM_TORRENT_METADATA_TIMEOUT_SECS
-              value: "{{ .Values.torrent.metadataTimeoutSecs }}"
+            {{- if .Values.rain.enabled }}
+            - name: LOOM_RAIN_RPC_HOST
+              value: "{{ .Values.rain.rpc.host }}"
+            - name: LOOM_RAIN_RPC_PORT
+              value: "{{ .Values.rain.rpc.port }}"
+            - name: LOOM_RAIN_RPC_TIMEOUT_SECS
+              value: "{{ .Values.rain.rpc.timeoutSecs }}"
+            - name: LOOM_TORRENT_DOWNLOAD_DIR
+              value: "{{ .Values.rain.downloadDir }}"
+            - name: LOOM_TORRENT_ENABLE_DHT
+              value: "{{ .Values.rain.dhtEnabled }}"
+            - name: LOOM_TORRENT_ENABLE_PEX
+              value: "{{ .Values.rain.pexEnabled }}"
             {{- end }}
             {{- with .Values.extraEnv }}
             {{- toYaml . | nindent 12 }}
@@ -114,6 +108,28 @@ spec:
             {{- with .Values.extraVolumeMounts }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
+        {{- if .Values.rain.enabled }}
+        - name: rain
+          image: "{{ .Values.rain.image.repository }}:{{ .Values.rain.image.tag }}"
+          imagePullPolicy: {{ .Values.rain.image.pullPolicy }}
+          command: ["rain", "server", "--config", "/etc/rain/config.yaml"]
+          env:
+            - name: HOME
+              value: /config
+          volumeMounts:
+            - name: config
+              mountPath: /config
+            - name: rain-config
+              mountPath: /etc/rain
+              readOnly: true
+            {{- if .Values.persistence.media.enabled }}
+            - name: media
+              mountPath: /media
+            {{- end }}
+            {{- with .Values.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+        {{- end }}
       volumes:
         - name: config
           {{- if .Values.persistence.config.enabled }}
@@ -126,6 +142,11 @@ spec:
         - name: media
           persistentVolumeClaim:
             claimName: {{ .Values.persistence.media.existingClaim | default (printf "%s-media" (include "loom.fullname" .)) }}
+        {{- end }}
+        {{- if .Values.rain.enabled }}
+        - name: rain-config
+          configMap:
+            name: {{ include "loom.fullname" . }}-rain-config
         {{- end }}
         {{- with .Values.extraVolumes }}
         {{- toYaml . | nindent 8 }}

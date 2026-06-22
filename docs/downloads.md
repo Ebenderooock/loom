@@ -3,7 +3,7 @@
 Loom Phase 3a introduces a pluggable download-client abstraction that
 mirrors the indexer subsystem. Every download client — qBittorrent,
 Transmission, Deluge, SABnzbd, NZBGet, the built-in `builtin/torrent`
-in-process engine, and the built-in `builtin/null` no-op driver — is
+Rain-backed driver, and the built-in `builtin/null` no-op driver — is
 registered into a single in-process registry, persists config and
 last-known health to the database, and is reachable through the HTTP API
 at `/api/v1/download-clients`.
@@ -67,17 +67,17 @@ curl -sS -H "X-Api-Key: $LOOM_API_KEY" \
 
 ## Built-in torrent client (`builtin/torrent`)
 
-`builtin/torrent` is an in-process BitTorrent engine backed by
-[anacrolix/torrent](https://github.com/anacrolix/torrent). It requires
-**no external process** — everything runs inside the Loom binary.
+`builtin/torrent` now uses a local
+[Rain](https://github.com/cenkalti/rain) sidecar over JSON-RPC. Loom
+owns auth and orchestration; Rain stays internal-only in the same pod.
 
 ### Feature parity
 
 | Feature                        | Supported |
 | ------------------------------ | --------- |
 | Magnet URIs                    | ✅        |
-| Raw `.torrent` bytes           | ⏳ planned |
-| Torrent URL (HTTP)             | ⏳ planned |
+| Raw `.torrent` bytes           | ✅        |
+| Torrent URL (HTTP)             | ✅        |
 | Pause / Resume (per item)      | ✅        |
 | Pause / Resume all             | ✅        |
 | Remove                         | ✅        |
@@ -90,21 +90,23 @@ curl -sS -H "X-Api-Key: $LOOM_API_KEY" \
 | Force-start                    | ⏳ planned |
 | Seeding lifecycle detection    | ✅        |
 | `FreeSpace` reporting          | ✅        |
-| Per-item detail (peers/files)  | ⏳ planned |
+| Per-item detail (peers/files)  | ✅        |
 
 ### Configuration
 
 The `config` JSON blob accepts the following keys:
 
-| Key                    | Type   | Default | Description                                          |
-| ---------------------- | ------ | ------- | ---------------------------------------------------- |
-| `download_dir`         | string | **required** | Where downloaded files are written.             |
-| `listen_port`          | int    | `6881`  | TCP/UDP port for incoming peer connections.          |
-| `enable_dht`           | bool   | `true`  | Enable Distributed Hash Table peer discovery.        |
-| `enable_pex`           | bool   | `true`  | Enable Peer EXchange extensions.                     |
-| `enable_upnp`          | bool   | `true`  | Enable UPnP/NAT-PMP port mapping.                    |
-| `download_speed_limit` | int64  | `0`     | Bytes per second; `0` = unlimited.                   |
-| `upload_speed_limit`   | int64  | `0`     | Bytes per second; `0` = unlimited.                   |
+| Key                    | Type   | Default         | Description                                          |
+| ---------------------- | ------ | --------------- | ---------------------------------------------------- |
+| `download_dir`         | string | **required**    | Where Rain writes downloaded files.                  |
+| `rpc_host`             | string | `127.0.0.1`     | Rain RPC host.                                       |
+| `rpc_port`             | int    | `7246`          | Rain RPC port.                                       |
+| `rpc_url`              | string | derived          | Optional full Rain RPC URL override.                |
+| `request_timeout_secs` | int    | `10`            | RPC timeout per call.                                |
+| `enable_dht`           | bool   | `true`          | Reflected in engine summary metadata.                |
+| `enable_pex`           | bool   | `true`          | Reflected in engine summary metadata.                |
+| `download_speed_limit` | int64  | `0`             | UI-stored global cap intent (bytes/s).               |
+| `upload_speed_limit`   | int64  | `0`             | UI-stored global cap intent (bytes/s).               |
 
 ### Example: create via API
 
@@ -119,10 +121,11 @@ curl -sS -X POST \
            "enabled": true,
            "config": {
              "download_dir": "/data/downloads",
-             "listen_port": 6881,
+             "rpc_host": "127.0.0.1",
+             "rpc_port": 7246,
+             "request_timeout_secs": 10,
              "enable_dht": true,
              "enable_pex": true,
-             "enable_upnp": true,
              "download_speed_limit": 0,
              "upload_speed_limit": 0
            }
@@ -163,16 +166,12 @@ POST /api/v1/download-clients/{id}/torrent/resume-all
 
 ### Implementation notes
 
-- **Pause semantics**: anacrolix/torrent does not have a first-class
-  "pause" concept. Loom implements pause by calling
-  `DisallowDataDownload()` and tracking the paused state internally.
-  `Resume` calls `AllowDataDownload()` and clears the paused flag.
-- **Rate limiting**: global rate limiters are created once at startup and
-  mutated via `rate.Limiter.SetLimit()` — changes take effect
-  immediately without restarting the engine.
-- **Build note**: the project must be built with `CGO_ENABLED=0` due to a
-  pre-existing duplicate sqlite symbol conflict in the dependency tree.
-  This is unrelated to the torrent engine and affects the main branch too.
+- `builtin/torrent` is now a Rain RPC adapter; no in-process BitTorrent
+  engine is embedded in Loom.
+- For Kubernetes, deploy Rain as a sidecar and keep its RPC endpoint
+  internal to the pod.
+- `POST /torrent/speed-limits` persists UI-configured limits on the Loom
+  client definition; Rain runtime changes are driven through Rain config.
 
 ## Health checking
 
@@ -281,4 +280,3 @@ The download orchestration layer defines three new event bus topics:
 - `downloads.completed` — download item completed
 
 See [ADR-0020](adr/0020-download-routing-and-monitoring.md) for the full design rationale.
-

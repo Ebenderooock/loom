@@ -5,396 +5,584 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"sync"
+	"syscall"
 	"time"
 
-	"github.com/anacrolix/torrent/metainfo"
+	"github.com/cenkalti/rain/v2/rainrpc"
 
 	"github.com/ebenderooock/loom/internal/downloads"
 )
 
-// maxTorrentFetchSize caps the response body when downloading a
-// .torrent file via TorrentURL. 10 MiB is generous for any real
-// torrent file.
 const maxTorrentFetchSize = 10 << 20 // 10 MiB
 
-// torrentFetchTimeout bounds the HTTP request for fetching a .torrent
-// file from a URL.
-const torrentFetchTimeout = 30 * time.Second
+type clientMeta struct {
+	Category string
+	SavePath string
+	AddedAt  time.Time
+	Title    string
+}
 
-// Client implements downloads.DownloadClient for the builtin/torrent
-// kind. It wraps the singleton Engine and carries per-Definition
-// configuration (category, save path, seed policy).
+// Client implements downloads.DownloadClient by talking to a Rain sidecar
+// over JSON-RPC.
 type Client struct {
-	id        string
-	name      string
-	defConfig Config
-	engine    *Engine
+	id   string
+	name string
+	cfg  Config
+	rpc  *rainrpc.Client
+
+	mu     sync.RWMutex
+	meta   map[string]clientMeta
+	limits struct {
+		down int64
+		up   int64
+	}
 }
 
-// Compile-time guard: keep the Client honest about implementing the
-// downloads contract.
 var _ downloads.DownloadClient = (*Client)(nil)
+var _ downloads.DetailProvider = (*Client)(nil)
+var _ downloads.TorrentManager = (*Client)(nil)
 
-// New constructs a Client from a Definition and a shared Engine.
-func New(def downloads.Definition, engine *Engine) (*Client, error) {
-	cfg, err := parseConfig(def)
-	if err != nil {
-		return nil, err
+func New(def downloads.Definition, cfg Config) (*Client, error) {
+	rpcClient := rainrpc.NewClient(cfg.rpcURL())
+	rpcClient.SetTimeout(timeout(cfg))
+
+	c := &Client{
+		id:   def.ID,
+		name: def.Name,
+		cfg:  cfg,
+		rpc:  rpcClient,
+		meta: make(map[string]clientMeta),
 	}
-
-	return &Client{
-		id:        def.ID,
-		name:      def.Name,
-		defConfig: cfg,
-		engine:    engine,
-	}, nil
+	c.limits.down = cfg.DownloadSpeedLimit
+	c.limits.up = cfg.UploadSpeedLimit
+	return c, nil
 }
 
-// Engine returns the underlying torrent engine for direct access
-// to detailed torrent information.
-func (c *Client) Engine() *Engine { return c.engine }
-
-// Detail implements downloads.DetailProvider. It returns rich torrent
-// detail including peers, files, and trackers.
-func (c *Client) Detail(_ context.Context, id string) (any, error) {
-	return c.engine.Detail(id)
-}
-
-// EngineSummary implements downloads.TorrentManager.
-func (c *Client) EngineSummary() downloads.TorrentEngineSummary {
-	s := c.engine.Summary()
-	return downloads.TorrentEngineSummary{
-		TotalTorrents: s.TotalTorrents,
-		Queued:        s.Queued,
-		Downloading:   s.Downloading,
-		Seeding:       s.Seeding,
-		Paused:        s.Paused,
-		DownloadRate:  s.DownloadRate,
-		UploadRate:    s.UploadRate,
-		DownloadLimit: s.DownloadLimit,
-		UploadLimit:   s.UploadLimit,
-		ListenPort:    s.ListenPort,
-		DHT:           s.DHT,
-		PEX:           s.PEX,
-		UPnP:          s.UPnP,
-		SavePath:      s.SavePath,
-	}
-}
-
-// SetSpeedLimits implements downloads.TorrentManager.
-func (c *Client) SetSpeedLimits(downBytesPerSec, upBytesPerSec int64) {
-	c.engine.SetSpeedLimits(downBytesPerSec, upBytesPerSec)
-}
-
-// ID implements downloads.DownloadClient.
-func (c *Client) ID() string { return c.id }
-
-// Name implements downloads.DownloadClient.
-func (c *Client) Name() string { return c.name }
-
-// Kind implements downloads.DownloadClient.
-func (c *Client) Kind() downloads.Kind { return Kind }
-
-// Protocol implements downloads.DownloadClient.
+func (c *Client) ID() string                   { return c.id }
+func (c *Client) Name() string                 { return c.name }
+func (c *Client) Kind() downloads.Kind         { return Kind }
 func (c *Client) Protocol() downloads.Protocol { return downloads.ProtocolTorrent }
 
-// Add implements downloads.DownloadClient. It handles magnet URIs,
-// torrent URLs, raw bytes, and bare infohashes. The returned ItemID
-// is the lowercase infohash hex string.
 func (c *Client) Add(ctx context.Context, req downloads.AddRequest) (downloads.AddResult, error) {
-	explicitMagnet := req.Magnet != ""
-
-	// For infohash-only grabs, build a tracker-rich public magnet to avoid
-	// relying solely on DHT in NAT'd/containerized environments.
-	if req.Magnet == "" && req.Infohash != "" {
-		req.Magnet = BuildPublicMagnet(req.Infohash, req.Title)
-	}
 	req.Normalize()
-
 	category := req.Category
 	if category == "" {
-		category = c.defConfig.DownloadDir // fall back to engine dir
+		category = c.cfg.DownloadDir
 	}
-
 	savePath := req.SavePath
 	if savePath == "" {
-		savePath = c.defConfig.DownloadDir
+		savePath = c.cfg.DownloadDir
 	}
 
-	seedPolicy := SeedPolicy{
-		RatioLimit:       c.defConfig.SeedRatioLimit,
-		TimeLimitMinutes: c.defConfig.SeedTimeLimitMinutes,
-	}
-	// Per-indexer overrides take precedence over client defaults.
-	if req.SeedRatioLimit != nil {
-		seedPolicy.RatioLimit = *req.SeedRatioLimit
-	}
-	if req.SeedTimeLimitMinutes != nil {
-		seedPolicy.TimeLimitMinutes = *req.SeedTimeLimitMinutes
-	}
-
-	meta := torrentMeta{
-		Title:            req.Title,
-		Category:         category,
-		SavePath:         savePath,
-		SeedPolicy:       seedPolicy,
-		ExpectedInfohash: req.Infohash,
-	}
-
-	var hash string
-	var err error
-
+	var (
+		id    string
+		title string
+		err   error
+	)
 	switch {
 	case len(req.RawBytes) > 0:
-		hash, err = c.engine.AddTorrentBytes(ctx, req.RawBytes, meta)
-
+		id, title, err = c.addTorrentBytes(req.RawBytes)
 	case req.TorrentURL != "":
-		// Prefer fetching the .torrent file over adding a magnet. A
-		// .torrent file embeds the metainfo, so metadata resolves
-		// instantly without any peer/DHT/tracker discovery. Magnets —
-		// especially the bare infohash magnets synthesised from an
-		// indexer's hash, which carry no trackers — depend on peer
-		// discovery, and DHT is effectively dead in NAT'd/containerised
-		// deployments. Using the .torrent avoids spurious
-		// "metadata resolution timed out" grab failures.
-		data, fetchErr := fetchTorrentURL(ctx, req.TorrentURL)
-		if fetchErr == nil {
-			hash, err = c.engine.AddTorrentBytes(ctx, data, meta)
-		} else {
-			err = fetchErr
+		var data []byte
+		data, err = fetchTorrentURL(ctx, req.TorrentURL)
+		if err == nil {
+			id, title, err = c.addTorrentBytes(data)
+		} else if strings.TrimSpace(req.Magnet) != "" {
+			id, title, err = c.addURI(req.Magnet)
 		}
-		// Fall back to the magnet only when the .torrent is
-		// unreachable/invalid AND the magnet was explicitly supplied by
-		// the indexer (it carries trackers). We never fall back to a
-		// synthesised bare-infohash magnet: it would fail the same way
-		// and could leak a private infohash to public trackers.
-		if err != nil && explicitMagnet && magnetHasTrackers(req.Magnet) {
-			hash, err = c.engine.AddMagnet(ctx, req.Magnet, meta)
-		}
-
 	case req.Magnet != "":
-		hash, err = c.engine.AddMagnet(ctx, req.Magnet, meta)
-
+		id, title, err = c.addURI(req.Magnet)
 	default:
-		return downloads.AddResult{}, fmt.Errorf(
-			"%w: AddRequest has none of RawBytes, Magnet, TorrentURL, or Infohash",
-			ErrInvalidInput,
-		)
+		return downloads.AddResult{}, fmt.Errorf("%w: AddRequest has none of RawBytes, Magnet, TorrentURL, or Infohash", ErrInvalidInput)
 	}
-
 	if err != nil {
 		return downloads.AddResult{}, err
 	}
 
+	if req.Title != "" {
+		title = req.Title
+	}
+	now := time.Now()
+	c.mu.Lock()
+	c.meta[id] = clientMeta{
+		Category: category,
+		SavePath: savePath,
+		AddedAt:  now,
+		Title:    title,
+	}
+	c.mu.Unlock()
+
+	contentPath := ""
+	if title != "" {
+		contentPath = filepath.Join(savePath, title)
+	}
+
 	return downloads.AddResult{
 		ClientID:    c.id,
-		ItemID:      hash,
-		ContentPath: c.engine.ContentPathByHash(hash),
+		ItemID:      id,
+		ContentPath: contentPath,
 		SavePath:    savePath,
 	}, nil
 }
 
-// fetchTorrentURL downloads a .torrent file from a URL with size and
-// timeout limits.
-func fetchTorrentURL(ctx context.Context, rawURL string) ([]byte, error) {
-	ctx, cancel := context.WithTimeout(ctx, torrentFetchTimeout)
-	defer cancel()
+func (c *Client) addURI(uri string) (id string, title string, err error) {
+	t, err := c.rpc.AddURI(uri, nil)
+	if err != nil {
+		return "", "", fmt.Errorf("builtin/torrent(rain): add uri: %w", err)
+	}
+	return t.ID, strings.TrimSpace(t.Name), nil
+}
 
+func (c *Client) addTorrentBytes(data []byte) (id string, title string, err error) {
+	t, err := c.rpc.AddTorrent(bytes.NewReader(data), nil)
+	if err != nil {
+		return "", "", fmt.Errorf("builtin/torrent(rain): add torrent: %w", err)
+	}
+	return t.ID, strings.TrimSpace(t.Name), nil
+}
+
+func fetchTorrentURL(ctx context.Context, rawURL string) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if err != nil {
-		return nil, fmt.Errorf("builtin/torrent: building fetch request for %q: %w", rawURL, err)
+		return nil, fmt.Errorf("builtin/torrent(rain): building fetch request for %q: %w", rawURL, err)
 	}
-
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("builtin/torrent: fetching %q: %w", rawURL, err)
+		return nil, fmt.Errorf("builtin/torrent(rain): fetching %q: %w", rawURL, err)
 	}
-	defer func() {
-		_ = resp.Body.Close()
-	}()
-
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("builtin/torrent: fetching %q: HTTP %d", rawURL, resp.StatusCode)
+		return nil, fmt.Errorf("builtin/torrent(rain): fetching %q: HTTP %d", rawURL, resp.StatusCode)
 	}
-
 	data, err := io.ReadAll(io.LimitReader(resp.Body, maxTorrentFetchSize+1))
 	if err != nil {
-		return nil, fmt.Errorf("builtin/torrent: reading %q body: %w", rawURL, err)
+		return nil, fmt.Errorf("builtin/torrent(rain): reading %q body: %w", rawURL, err)
 	}
 	if int64(len(data)) > maxTorrentFetchSize {
-		return nil, fmt.Errorf("builtin/torrent: %q exceeds %d byte limit", rawURL, maxTorrentFetchSize)
+		return nil, fmt.Errorf("builtin/torrent(rain): %q exceeds %d byte limit", rawURL, maxTorrentFetchSize)
 	}
-
-	// Validate that this is actually a torrent file.
-	if _, err := metainfo.Load(bytes.NewReader(data)); err != nil {
-		return nil, fmt.Errorf("%w: URL %q did not return a valid torrent file: %w", ErrInvalidInput, rawURL, err)
-	}
-
 	return data, nil
 }
 
-// Status implements downloads.DownloadClient.
 func (c *Client) Status(ctx context.Context, ids ...string) ([]downloads.Item, error) {
-	statuses := c.engine.Status(ids...)
-	items := make([]downloads.Item, 0, len(statuses))
-	for _, s := range statuses {
+	_ = ctx
+	targetIDs := ids
+	if len(targetIDs) == 0 {
+		torrents, err := c.rpc.ListTorrents()
+		if err != nil {
+			return nil, fmt.Errorf("builtin/torrent(rain): list torrents: %w", err)
+		}
+		targetIDs = make([]string, 0, len(torrents))
+		for _, t := range torrents {
+			targetIDs = append(targetIDs, t.ID)
+		}
+	}
+
+	items := make([]downloads.Item, 0, len(targetIDs))
+	for _, id := range targetIDs {
+		st, err := c.rpc.GetTorrentStats(id)
+		if err != nil {
+			continue
+		}
+		meta := c.getMeta(id)
+		title := strings.TrimSpace(st.Name)
+		if meta.Title != "" {
+			title = meta.Title
+		}
+		if title == "" {
+			title = id
+		}
+
+		size := st.Bytes.Total
+		completed := st.Bytes.Completed
+		progress := 0.0
+		if size > 0 {
+			progress = float64(completed) / float64(size)
+		}
+		ratio := 0.0
+		if st.Bytes.Downloaded > 0 {
+			ratio = float64(st.Bytes.Uploaded) / float64(st.Bytes.Downloaded)
+		}
+		savePath := meta.SavePath
+		if savePath == "" {
+			savePath = c.cfg.DownloadDir
+		}
+		contentPath := ""
+		if strings.TrimSpace(st.Name) != "" {
+			contentPath = filepath.Join(savePath, st.Name)
+		}
+
 		items = append(items, downloads.Item{
-			ID:              s.Hash,
+			ID:              id,
 			ClientID:        c.id,
-			Title:           s.Title,
-			Category:        s.Category,
-			Status:          mapEngineStatus(s.Status),
-			Progress:        s.Progress,
-			SizeBytes:       s.SizeBytes,
-			DownloadedBytes: s.Downloaded,
-			DownloadRate:    s.DownloadRate,
-			UploadRate:      s.UploadRate,
-			Ratio:           s.Ratio,
-			SavePath:        s.SavePath,
-			ContentPath:     s.ContentPath,
+			Title:           title,
+			Category:        meta.Category,
+			Status:          mapStatus(st.Status),
+			Progress:        progress,
+			SizeBytes:       size,
+			DownloadedBytes: completed,
+			ETA:             int64(st.ETA),
+			DownloadRate:    int64(st.Speed.Download),
+			UploadRate:      int64(st.Speed.Upload),
+			Ratio:           ratio,
+			Message:         st.Error,
+			SavePath:        savePath,
+			ContentPath:     contentPath,
 		})
 	}
 	return items, nil
 }
 
-// mapEngineStatus maps the engine's status string to the downloads
-// ItemStatus enum.
-func mapEngineStatus(s string) downloads.ItemStatus {
-	switch s {
-	case "queued":
-		return downloads.StatusItemQueued
+func mapStatus(s string) downloads.ItemStatus {
+	switch strings.ToLower(strings.TrimSpace(s)) {
 	case "downloading":
 		return downloads.StatusItemDownloading
 	case "seeding":
 		return downloads.StatusItemSeeding
-	case "paused":
+	case "stopped":
 		return downloads.StatusItemPaused
-	case "completed":
-		return downloads.StatusItemCompleted
+	case "downloading metadata", "allocating", "verifying", "stopping":
+		return downloads.StatusItemQueued
 	default:
 		return downloads.StatusItemUnknown
 	}
 }
 
-// Pause implements downloads.DownloadClient.
 func (c *Client) Pause(ctx context.Context, ids ...string) error {
+	_ = ctx
 	if len(ids) == 0 {
-		return c.pauseAll()
+		return c.rpc.StopAllTorrents()
 	}
-	return c.engine.Pause(ids...)
+	for _, id := range ids {
+		if err := c.rpc.StopTorrent(id); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
-func (c *Client) pauseAll() error {
-	statuses := c.engine.Status()
-	hashes := make([]string, 0, len(statuses))
-	for _, s := range statuses {
-		hashes = append(hashes, s.Hash)
-	}
-	if len(hashes) == 0 {
-		return nil
-	}
-	return c.engine.Pause(hashes...)
-}
-
-// Resume implements downloads.DownloadClient.
 func (c *Client) Resume(ctx context.Context, ids ...string) error {
+	_ = ctx
 	if len(ids) == 0 {
-		return c.resumeAll()
+		return c.rpc.StartAllTorrents()
 	}
-	return c.engine.Resume(ids...)
+	for _, id := range ids {
+		if err := c.rpc.StartTorrent(id); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
-func (c *Client) resumeAll() error {
-	statuses := c.engine.Status()
-	hashes := make([]string, 0, len(statuses))
-	for _, s := range statuses {
-		hashes = append(hashes, s.Hash)
-	}
-	if len(hashes) == 0 {
-		return nil
-	}
-	return c.engine.Resume(hashes...)
-}
-
-// Remove implements downloads.DownloadClient.
 func (c *Client) Remove(ctx context.Context, ids []string, deleteFiles bool) error {
-	return c.engine.Remove(ids, deleteFiles)
+	_ = ctx
+	keepData := !deleteFiles
+	for _, id := range ids {
+		if err := c.rpc.RemoveTorrent(id, keepData); err != nil {
+			return err
+		}
+		c.mu.Lock()
+		delete(c.meta, id)
+		c.mu.Unlock()
+	}
+	return nil
 }
 
-// SetPriority implements downloads.DownloadClient. The built-in
-// torrent engine does not maintain a queue with position semantics,
-// so this is a no-op that returns nil.
 func (c *Client) SetPriority(_ context.Context, _ downloads.Priority, _ ...string) error {
 	return nil
 }
 
-// SetSpeedLimit implements downloads.DownloadClient. Per-torrent rate
-// limiting is not directly supported by the anacrolix engine; this is
-// a best-effort no-op. The engine-level speed limits configured in
-// Config are applied globally.
 func (c *Client) SetSpeedLimit(_ context.Context, _ int64, _ ...string) error {
 	return nil
 }
 
-// ForceStart implements downloads.DownloadClient. In the built-in
-// engine there is no queue backlog; torrents start immediately on
-// add. ForceStart is equivalent to Resume.
 func (c *Client) ForceStart(ctx context.Context, ids ...string) error {
 	return c.Resume(ctx, ids...)
 }
 
-// Recheck implements downloads.DownloadClient.
 func (c *Client) Recheck(ctx context.Context, ids ...string) error {
-	return c.engine.Recheck(ctx, ids...)
+	_ = ctx
+	for _, id := range ids {
+		if err := c.rpc.VerifyTorrent(id); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
-// Reannounce implements downloads.DownloadClient.
 func (c *Client) Reannounce(ctx context.Context, ids ...string) error {
-	return c.engine.Reannounce(ctx, ids...)
+	_ = ctx
+	for _, id := range ids {
+		if err := c.rpc.AnnounceTorrent(id); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
-// Categories implements downloads.DownloadClient. The built-in engine
-// does not have server-side categories; we return the Definition's
-// default category if set.
 func (c *Client) Categories(_ context.Context) ([]downloads.Category, error) {
-	// No server-side category management; return empty or default.
 	return []downloads.Category{}, nil
 }
 
-// FreeSpace implements downloads.DownloadClient.
 func (c *Client) FreeSpace(_ context.Context) (int64, error) {
-	return c.engine.FreeSpace()
+	var stat syscall.Statfs_t
+	if err := syscall.Statfs(c.cfg.DownloadDir, &stat); err != nil {
+		return -1, err
+	}
+	return int64(stat.Bavail) * int64(stat.Bsize), nil
 }
 
-// Test implements downloads.DownloadClient. It verifies that the
-// download directory exists and is writable.
 func (c *Client) Test(_ context.Context) error {
-	dir := c.defConfig.DownloadDir
-
-	info, err := os.Stat(dir)
+	if _, err := c.rpc.ServerVersion(); err != nil {
+		return fmt.Errorf("builtin/torrent(rain): rpc test failed: %w", err)
+	}
+	info, err := os.Stat(c.cfg.DownloadDir)
 	if err != nil {
-		return fmt.Errorf("builtin/torrent: download_dir %q: %w", dir, err)
+		return fmt.Errorf("builtin/torrent(rain): download_dir %q: %w", c.cfg.DownloadDir, err)
 	}
 	if !info.IsDir() {
-		return fmt.Errorf("builtin/torrent: download_dir %q is not a directory", dir)
+		return fmt.Errorf("builtin/torrent(rain): download_dir %q is not a directory", c.cfg.DownloadDir)
 	}
-
-	// Probe write access by creating and removing a temp file.
-	probe := filepath.Join(dir, ".loom-probe-"+filepath.Base(c.id))
-	if !strings.HasPrefix(probe, dir) {
-		return fmt.Errorf("builtin/torrent: probe path escape detected")
-	}
-	probeClean := filepath.Clean(probe)
-	f, err := os.Create(probeClean)
-	if err != nil {
-		return fmt.Errorf("builtin/torrent: download_dir %q is not writable: %w", dir, err)
-	}
-	_ = f.Close()
-	_ = os.Remove(probeClean)
-
 	return nil
+}
+
+func (c *Client) EngineSummary() downloads.TorrentEngineSummary {
+	items, err := c.Status(context.Background())
+	if err != nil {
+		return downloads.TorrentEngineSummary{
+			ListenPort: c.cfg.PortBegin,
+			DHT:        c.cfg.EnableDHT,
+			PEX:        c.cfg.EnablePEX,
+			UPnP:       c.cfg.EnableUPnP,
+			SavePath:   c.cfg.DownloadDir,
+		}
+	}
+	var summary downloads.TorrentEngineSummary
+	for _, it := range items {
+		summary.TotalTorrents++
+		summary.DownloadRate += it.DownloadRate
+		summary.UploadRate += it.UploadRate
+		switch it.Status {
+		case downloads.StatusItemQueued:
+			summary.Queued++
+		case downloads.StatusItemDownloading:
+			summary.Downloading++
+		case downloads.StatusItemSeeding:
+			summary.Seeding++
+		case downloads.StatusItemPaused:
+			summary.Paused++
+		}
+	}
+	c.mu.RLock()
+	summary.DownloadLimit = c.limits.down
+	summary.UploadLimit = c.limits.up
+	c.mu.RUnlock()
+	summary.ListenPort = c.cfg.PortBegin
+	summary.DHT = c.cfg.EnableDHT
+	summary.PEX = c.cfg.EnablePEX
+	summary.UPnP = c.cfg.EnableUPnP
+	summary.SavePath = c.cfg.DownloadDir
+	return summary
+}
+
+func (c *Client) SetSpeedLimits(downBytesPerSec, upBytesPerSec int64) {
+	if downBytesPerSec < 0 {
+		downBytesPerSec = 0
+	}
+	if upBytesPerSec < 0 {
+		upBytesPerSec = 0
+	}
+	c.mu.Lock()
+	c.limits.down = downBytesPerSec
+	c.limits.up = upBytesPerSec
+	c.mu.Unlock()
+}
+
+type PeerInfo struct {
+	IP       string  `json:"ip"`
+	Port     int     `json:"port"`
+	Client   string  `json:"client"`
+	Flags    string  `json:"flags"`
+	Progress float64 `json:"progress"`
+	DownRate int64   `json:"down_rate"`
+	UpRate   int64   `json:"up_rate"`
+}
+
+type FileInfo struct {
+	Path     string  `json:"path"`
+	Size     int64   `json:"size"`
+	Progress float64 `json:"progress"`
+	Priority string  `json:"priority"`
+}
+
+type TrackerInfo struct {
+	URL    string `json:"url"`
+	Tier   int    `json:"tier"`
+	Status string `json:"status"`
+	Peers  int    `json:"peers"`
+}
+
+type TorrentDetail struct {
+	Hash         string  `json:"Hash"`
+	Title        string  `json:"Title"`
+	Category     string  `json:"Category"`
+	SavePath     string  `json:"SavePath"`
+	ContentPath  string  `json:"ContentPath"`
+	Status       string  `json:"Status"`
+	Progress     float64 `json:"Progress"`
+	SizeBytes    int64   `json:"SizeBytes"`
+	Downloaded   int64   `json:"Downloaded"`
+	Uploaded     int64   `json:"Uploaded"`
+	DownloadRate int64   `json:"DownloadRate"`
+	UploadRate   int64   `json:"UploadRate"`
+	Ratio        float64 `json:"Ratio"`
+	Paused       bool    `json:"Paused"`
+
+	Peers      []PeerInfo    `json:"peers"`
+	Files      []FileInfo    `json:"files"`
+	Trackers   []TrackerInfo `json:"trackers"`
+	TotalPeers int           `json:"total_peers"`
+	TotalSeeds int           `json:"total_seeds"`
+	AddedAt    time.Time     `json:"added_at"`
+	Comment    string        `json:"comment"`
+	CreatedBy  string        `json:"created_by"`
+	InfoHash   string        `json:"info_hash"`
+}
+
+func (c *Client) Detail(_ context.Context, id string) (any, error) {
+	st, err := c.rpc.GetTorrentStats(id)
+	if err != nil {
+		return nil, fmt.Errorf("builtin/torrent(rain): get stats: %w", err)
+	}
+	meta := c.getMeta(id)
+
+	peersRaw, _ := c.rpc.GetTorrentPeers(id)
+	peers := make([]PeerInfo, 0, len(peersRaw))
+	totalSeeds := 0
+	for _, p := range peersRaw {
+		host, port := splitHostPort(p.Addr)
+		flags := strings.TrimSpace(p.Source)
+		if strings.EqualFold(flags, "incoming") || strings.EqualFold(flags, "outgoing") {
+			flags = strings.ToUpper(flags[:1])
+		}
+		peer := PeerInfo{
+			IP:       host,
+			Port:     port,
+			Client:   p.Client,
+			Flags:    flags,
+			Progress: 0,
+			DownRate: int64(p.DownloadSpeed),
+			UpRate:   int64(p.UploadSpeed),
+		}
+		if p.UploadSpeed > 0 && p.DownloadSpeed == 0 {
+			totalSeeds++
+		}
+		peers = append(peers, peer)
+	}
+
+	filesRaw, _ := c.rpc.GetTorrentFiles(id)
+	fileStatsRaw, _ := c.rpc.GetTorrentFileStats(id)
+	progressByPath := make(map[string]float64, len(fileStatsRaw))
+	for _, fs := range fileStatsRaw {
+		length := fs.File.Length
+		p := 0.0
+		if length > 0 {
+			p = float64(fs.BytesCompleted) / float64(length)
+		}
+		progressByPath[fs.File.Path] = p
+	}
+	files := make([]FileInfo, 0, len(filesRaw))
+	for _, f := range filesRaw {
+		files = append(files, FileInfo{
+			Path:     f.Path,
+			Size:     f.Length,
+			Progress: progressByPath[f.Path],
+			Priority: "normal",
+		})
+	}
+
+	trackersRaw, _ := c.rpc.GetTorrentTrackers(id)
+	trackers := make([]TrackerInfo, 0, len(trackersRaw))
+	for i, tr := range trackersRaw {
+		trackers = append(trackers, TrackerInfo{
+			URL:    tr.URL,
+			Tier:   i,
+			Status: tr.Status,
+			Peers:  tr.Seeders + tr.Leechers,
+		})
+	}
+
+	title := strings.TrimSpace(st.Name)
+	if meta.Title != "" {
+		title = meta.Title
+	}
+	if title == "" {
+		title = id
+	}
+	savePath := meta.SavePath
+	if savePath == "" {
+		savePath = c.cfg.DownloadDir
+	}
+
+	size := st.Bytes.Total
+	progress := 0.0
+	if size > 0 {
+		progress = float64(st.Bytes.Completed) / float64(size)
+	}
+	ratio := 0.0
+	if st.Bytes.Downloaded > 0 {
+		ratio = float64(st.Bytes.Uploaded) / float64(st.Bytes.Downloaded)
+	}
+	addedAt := meta.AddedAt
+	if addedAt.IsZero() {
+		addedAt = time.Now()
+	}
+
+	return &TorrentDetail{
+		Hash:         id,
+		Title:        title,
+		Category:     meta.Category,
+		SavePath:     savePath,
+		ContentPath:  filepath.Join(savePath, st.Name),
+		Status:       st.Status,
+		Progress:     progress,
+		SizeBytes:    size,
+		Downloaded:   st.Bytes.Completed,
+		Uploaded:     st.Bytes.Uploaded,
+		DownloadRate: int64(st.Speed.Download),
+		UploadRate:   int64(st.Speed.Upload),
+		Ratio:        ratio,
+		Paused:       mapStatus(st.Status) == downloads.StatusItemPaused,
+		Peers:        peers,
+		Files:        files,
+		Trackers:     trackers,
+		TotalPeers:   st.Peers.Total,
+		TotalSeeds:   totalSeeds,
+		AddedAt:      addedAt,
+		Comment:      "",
+		CreatedBy:    "Rain",
+		InfoHash:     st.InfoHash,
+	}, nil
+}
+
+func (c *Client) getMeta(id string) clientMeta {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.meta[id]
+}
+
+func splitHostPort(addr string) (string, int) {
+	host, portStr, err := net.SplitHostPort(strings.TrimSpace(addr))
+	if err != nil {
+		return addr, 0
+	}
+	p, _ := strconv.Atoi(portStr)
+	return host, p
 }

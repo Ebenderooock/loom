@@ -13,9 +13,8 @@ LDFLAGS := -s -w \
 	-X $(PKG)/internal/buildinfo.Commit=$(COMMIT) \
 	-X $(PKG)/internal/buildinfo.Date=$(DATE)
 
-# TAGS includes nosqlite to prevent the anacrolix/torrent sqlite piece
-# completion from linking its own embedded C sqlite3, which conflicts
-# with the mattn/go-sqlite3 used by the rest of Loom.
+# TAGS keeps nosqlite for compatibility with sqlite feature-gating in
+# mixed dependency graphs. It is safe to leave enabled by default.
 TAGS ?= nosqlite
 
 .PHONY: all build test lint fmt vet tidy run dev clean docker sync-definitions help

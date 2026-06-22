@@ -147,18 +147,13 @@ Legend: ✅ done · 🚧 in progress · ⏳ planned
 - ✅ Migration tooling: `loom migrate import --from {radarr,sonarr,prowlarr}`
 - ⏳ Performance benchmarks, public documentation site, **1.0 release**
 
-## 🚧 Phase 12 — Native torrent client
+## 🚧 Phase 12 — Built-in torrent workflow (Rain sidecar)
 
-- ✅ Embed [anacrolix/torrent](https://github.com/anacrolix/torrent) as built-in BitTorrent engine
-- ✅ Magnet resolution, DHT, PEX, piece verification
-- ✅ Seeding with configurable ratio/time limits (30s supervisor tick)
-- ✅ Singleton engine architecture — one `torrent.Client` per process, shared across definitions
-- ✅ Durable resume across restarts (BoltDB piece completion state)
+- ✅ `builtin/torrent` routed through internal Rain JSON-RPC sidecar
+- ✅ Magnet/torrent add, pause/resume/remove, reannounce/recheck integration
 - ✅ Workflow engine integration (monitor treats seeding/completed as import-ready)
-- ✅ Storage management (incomplete dir support, FreeSpace via syscall.Statfs)
-- ✅ UI: download form with torrent-specific config (dirs, port, DHT/PEX/UPnP, seed limits, speed limits)
-- ✅ Active torrents visible in existing Downloads page (pause/resume/remove, progress, speeds, ratio)
-- ✅ Removes need for external torrent client entirely
+- ✅ UI: torrent management on existing Downloads page
+- ✅ Helm support for Rain sidecar deployment
 - ⏳ Per-indexer seed ratio overrides
 - ⏳ Dedicated torrent detail panel (peers, trackers, file list)
 

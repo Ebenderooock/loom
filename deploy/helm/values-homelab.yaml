@@ -31,30 +31,23 @@ service:
   type: ClusterIP
   port: 9999
 
-# ---------- BitTorrent peer port (built-in torrent client) ----------
-# Exposed via MetalLB so inbound peer connections + DHT work, instead of
-# the pod being an outbound-only leech. Port preserved end-to-end (7881).
-# For internet reachability, port-forward WAN:7881 -> <lb-ip>:7881 on the
-# router. listenPort must match the builtin/torrent client config.
-#
-# publicIP4: Set to the LoadBalancer service external IP (192.168.3.203)
-# so anacrolix announces the correct address to trackers/DHT. Peers will
-# connect to this address instead of the internal pod IP.
-torrent:
-  listenPort: 7881
-  # Do NOT set publicIP4 - let anacrolix use the pod's internal IP.
-  # The LoadBalancer service and externalTrafficPolicy: Local handle
-  # inbound peer connections correctly without needing to announce
-  # the external IP to trackers.
-  publicIP4: ""
-  publicIP6: ""
-  # Increase metadata timeout for cluster latency and potential DHT/tracker delays
-  metadataTimeoutSecs: 300
-  expose:
-    enabled: true
-    type: LoadBalancer
-    loadBalancerIP: "192.168.3.203"
-    externalTrafficPolicy: Local
+# ---------- Rain sidecar ----------
+rain:
+  enabled: true
+  image:
+    repository: ghcr.io/cenkalti/rain
+    tag: v2.3.1
+    pullPolicy: IfNotPresent
+  rpc:
+    host: 127.0.0.1
+    port: 7246
+    timeoutSecs: 10
+  downloadDir: /media/downloads
+  dhtEnabled: true
+  pexEnabled: true
+  speedLimitDownloadKBps: 0
+  speedLimitUploadKBps: 0
+  stateDir: /config/rain
 
 # ---------- Ingress (Traefik) ----------
 ingress:
