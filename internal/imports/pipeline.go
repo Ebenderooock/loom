@@ -294,6 +294,11 @@ func (p *ImportPipeline) resolveDownloadPath(ctx context.Context, ev *downloads.
 				if item.SavePath != "" {
 					addCandidate(p.applyRemotePathMapping(ctx, ev.ClientID, filepath.Join(item.SavePath, item.Title)))
 					addCandidate(p.applyRemotePathMapping(ctx, ev.ClientID, filepath.Join(item.SavePath, ev.Title)))
+					// The SavePath itself is the torrent's storage directory
+					// (e.g. Rain's {download_dir}/{torrent_id}); scanning it
+					// directly resolves the content regardless of the internal
+					// folder/file name.
+					addCandidate(p.applyRemotePathMapping(ctx, ev.ClientID, item.SavePath))
 				}
 			}
 		} else {
@@ -334,6 +339,9 @@ func (p *ImportPipeline) resolveDownloadPath(ctx context.Context, ev *downloads.
 					addCandidate(p.applyRemotePathMapping(ctx, ev.ClientID, filepath.Join(sp, liveItemTitle)))
 				}
 				addCandidate(p.applyRemotePathMapping(ctx, ev.ClientID, filepath.Join(sp, ev.Title)))
+				// The cached save_path is the torrent's storage directory;
+				// scan it directly as a last resort.
+				addCandidate(p.applyRemotePathMapping(ctx, ev.ClientID, sp))
 			}
 		}
 	}

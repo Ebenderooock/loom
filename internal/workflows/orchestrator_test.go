@@ -689,3 +689,83 @@ func TestOrchestratorSeedingWaitsForRatio(t *testing.T) {
 		return got != nil && (got.State == StateImporting || got.State == StateCompleted)
 	})
 }
+
+func TestOrchestratorPreImportStopsAndRemovesBeforeImport(t *testing.T) {
+	imp := &mockImporter{paths: []string{"/media/movie.mkv"}}
+	orch, store := testOrchestrator(t, imp)
+
+	var (
+		mu              sync.Mutex
+		preImportCalled bool
+		preImportBefore bool
+	)
+	orch.SetPreImportFn(func(ctx context.Context, clientID, downloadID string) (string, string, error) {
+		mu.Lock()
+		preImportCalled = true
+		// Pre-import must run before the importer is invoked.
+		preImportBefore = imp.callCount() == 0
+		mu.Unlock()
+		return "/media/downloads/torrent-id/Movie", "/media/downloads/torrent-id", nil
+	})
+
+	ctx, _ := startOrchestrator(t, orch)
+
+	wf, err := orch.StartSearch(ctx, TypeMovieSearch, MediaTypeMovie, "qp-1", []string{"movie-pre1"})
+	if err != nil {
+		t.Fatalf("StartSearch: %v", err)
+	}
+
+	orch.Send(CmdGrabbed{
+		WorkflowID: wf.ID,
+		ClientID:   "qbit-1",
+		DownloadID: "dl-pre1",
+		Title:      "Pre.Movie",
+	})
+	waitForCondition(t, 2*time.Second, func() bool {
+		got, _ := store.Get(ctx, wf.ID)
+		return got != nil && got.State == StateDownloading
+	})
+
+	orch.Send(CmdDownloadComplete{
+		ClientID: "qbit-1", DownloadID: "dl-pre1",
+		Title: "Pre.Movie", Category: "movies",
+	})
+	waitForCondition(t, 2*time.Second, func() bool {
+		got, _ := store.Get(ctx, wf.ID)
+		return got != nil && got.State == StatePostDownload
+	})
+
+	// No seed policy → settling delay is the only gate. Backdate it so the
+	// workflow transitions to import on the next evaluation.
+	backdateSettling(t, store, ctx, wf.ID)
+	orch.Send(CmdDownloadProgress{
+		ClientID: "qbit-1", DownloadID: "dl-pre1",
+		Progress: 1.0, Status: "seeding",
+	})
+
+	waitForCondition(t, 3*time.Second, func() bool {
+		return imp.callCount() > 0
+	})
+
+	mu.Lock()
+	defer mu.Unlock()
+	if !preImportCalled {
+		t.Fatal("expected pre-import hook to be called before import")
+	}
+	if !preImportBefore {
+		t.Fatal("expected pre-import hook to run before the importer")
+	}
+
+	// The resolved paths must be cached in workflow metadata for the resolver.
+	got, _ := store.Get(ctx, wf.ID)
+	var meta map[string]any
+	if err := json.Unmarshal([]byte(got.Metadata), &meta); err != nil {
+		t.Fatalf("unmarshal metadata: %v", err)
+	}
+	if meta["content_path"] != "/media/downloads/torrent-id/Movie" {
+		t.Fatalf("expected cached content_path, got %v", meta["content_path"])
+	}
+	if meta["save_path"] != "/media/downloads/torrent-id" {
+		t.Fatalf("expected cached save_path, got %v", meta["save_path"])
+	}
+}

@@ -143,26 +143,60 @@ func wireDownloads(
 	srv.SetImportPipeline(importPipeline)
 	orchestrator.SetImportFn(importPipeline.RunImport)
 
-	// Wire post-import cleanup: remove download from client queue + clean source folder.
+	// Wire pre-import: stop and remove the torrent from the client BEFORE the
+	// import runs (keeping files on disk), so the importer can safely MOVE
+	// files without the client holding locks or re-seeding partial data.
+	// Returns the resolved content/save paths so the orchestrator can cache
+	// them for import resolution after the torrent is gone.
+	orchestrator.SetPreImportFn(func(ctx context.Context, clientID, downloadID string) (string, string, error) {
+		c, ok := downloadSvc.Registry().Get(clientID)
+		if !ok {
+			return "", "", fmt.Errorf("download client %q not found in registry", clientID)
+		}
+		// Resolve the on-disk paths while the torrent still exists.
+		var contentPath, savePath string
+		if items, err := c.Status(ctx, downloadID); err == nil && len(items) > 0 {
+			contentPath = remotePathStore.MapPath(ctx, clientID, items[0].ContentPath)
+			savePath = remotePathStore.MapPath(ctx, clientID, items[0].SavePath)
+		}
+		// Stop seeding/downloading, then remove from the client queue while
+		// keeping the data on disk (deleteFiles=false) so the import can read it.
+		if err := c.Pause(ctx, downloadID); err != nil {
+			logger.Debug("pre-import pause failed (non-fatal)",
+				"client_id", clientID, "download_id", downloadID, "error", err)
+		}
+		if err := c.Remove(ctx, []string{downloadID}, false); err != nil {
+			return contentPath, savePath, fmt.Errorf("remove download from client: %w", err)
+		}
+		return contentPath, savePath, nil
+	})
+
+	// Wire post-import cleanup: remove download from client queue (if still
+	// present) + clean source folder junk. After the pre-import step the
+	// torrent is usually already gone, so this primarily scrubs leftover junk
+	// using the cached source path.
 	folderCleaner := &imports.FolderCleaner{}
-	orchestrator.SetCleanupFn(func(ctx context.Context, clientID, downloadID string, _ []string) error {
+	orchestrator.SetCleanupFn(func(ctx context.Context, clientID, downloadID, sourcePath string, _ []string) error {
 		c, ok := downloadSvc.Registry().Get(clientID)
 		if !ok {
 			return fmt.Errorf("download client %q not found in registry", clientID)
 		}
-		// Get content path before removing so we can clean the folder.
-		items, err := c.Status(ctx, downloadID)
-		var contentPath string
-		if err == nil && len(items) > 0 {
-			contentPath = items[0].ContentPath
+		contentPath := remotePathStore.MapPath(ctx, clientID, sourcePath)
+		// The torrent may already have been removed during pre-import; tolerate
+		// a missing item. If still present, capture its path and remove it.
+		if items, err := c.Status(ctx, downloadID); err == nil && len(items) > 0 {
 			if contentPath == "" {
-				contentPath = items[0].SavePath
+				p := items[0].ContentPath
+				if p == "" {
+					p = items[0].SavePath
+				}
+				contentPath = remotePathStore.MapPath(ctx, clientID, p)
 			}
-			contentPath = remotePathStore.MapPath(ctx, clientID, contentPath)
-		}
-		// Remove from client queue (keep files; they've been moved/hardline to library).
-		if err := c.Remove(ctx, []string{downloadID}, false); err != nil {
-			return fmt.Errorf("remove download from client: %w", err)
+			// Remove from client queue (keep files; already imported).
+			if err := c.Remove(ctx, []string{downloadID}, false); err != nil {
+				logger.Warn("post-import remove failed (non-fatal)",
+					"client_id", clientID, "download_id", downloadID, "error", err)
+			}
 		}
 		// Clean up any leftover junk in the source folder.
 		if contentPath != "" {

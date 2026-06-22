@@ -69,6 +69,20 @@ func (c *Client) Name() string                 { return c.name }
 func (c *Client) Kind() downloads.Kind         { return Kind }
 func (c *Client) Protocol() downloads.Protocol { return downloads.ProtocolTorrent }
 
+// storageDir returns the on-disk directory where Rain stores a torrent's files.
+// Rain defaults to data-dir-includes-torrent-id=true, which nests each torrent
+// under {base}/{torrentID}/. base is the configured download directory (or a
+// per-item override); id is the Rain torrent ID.
+func (c *Client) storageDir(base, id string) string {
+	if strings.TrimSpace(base) == "" {
+		base = c.cfg.DownloadDir
+	}
+	if c.cfg.DataDirIncludesTorrentID && strings.TrimSpace(id) != "" {
+		return filepath.Join(base, id)
+	}
+	return base
+}
+
 func (c *Client) Add(ctx context.Context, req downloads.AddRequest) (downloads.AddResult, error) {
 	req.Normalize()
 	category := req.Category
@@ -120,14 +134,18 @@ func (c *Client) Add(ctx context.Context, req downloads.AddRequest) (downloads.A
 
 	contentPath := ""
 	if title != "" {
-		contentPath = filepath.Join(savePath, title)
+		// Rain stores files under {savePath}/{id}/{name}. Report the actual
+		// on-disk location so the import pipeline can resolve it.
+		contentPath = filepath.Join(c.storageDir(savePath, id), title)
+	} else {
+		contentPath = c.storageDir(savePath, id)
 	}
 
 	return downloads.AddResult{
 		ClientID:    c.id,
 		ItemID:      id,
 		ContentPath: contentPath,
-		SavePath:    savePath,
+		SavePath:    c.storageDir(savePath, id),
 	}, nil
 }
 
@@ -213,9 +231,13 @@ func (c *Client) Status(ctx context.Context, ids ...string) ([]downloads.Item, e
 		if savePath == "" {
 			savePath = c.cfg.DownloadDir
 		}
-		contentPath := ""
-		if strings.TrimSpace(st.Name) != "" {
-			contentPath = filepath.Join(savePath, st.Name)
+		// Rain stores each torrent under {savePath}/{id}/. Report that
+		// directory as the save path and the full content path inside it so
+		// the import pipeline resolves the real on-disk location.
+		storage := c.storageDir(savePath, id)
+		contentPath := storage
+		if name := strings.TrimSpace(st.Name); name != "" {
+			contentPath = filepath.Join(storage, name)
 		}
 
 		items = append(items, downloads.Item{
@@ -232,7 +254,7 @@ func (c *Client) Status(ctx context.Context, ids ...string) ([]downloads.Item, e
 			UploadRate:      int64(st.Speed.Upload),
 			Ratio:           ratio,
 			Message:         st.Error,
-			SavePath:        savePath,
+			SavePath:        storage,
 			ContentPath:     contentPath,
 		})
 	}
@@ -521,6 +543,7 @@ func (c *Client) Detail(_ context.Context, id string) (any, error) {
 	if savePath == "" {
 		savePath = c.cfg.DownloadDir
 	}
+	storage := c.storageDir(savePath, id)
 
 	size := st.Bytes.Total
 	progress := 0.0
@@ -540,8 +563,8 @@ func (c *Client) Detail(_ context.Context, id string) (any, error) {
 		Hash:         id,
 		Title:        title,
 		Category:     meta.Category,
-		SavePath:     savePath,
-		ContentPath:  filepath.Join(savePath, st.Name),
+		SavePath:     storage,
+		ContentPath:  filepath.Join(storage, st.Name),
 		Status:       st.Status,
 		Progress:     progress,
 		SizeBytes:    size,

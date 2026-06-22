@@ -35,10 +35,25 @@ const (
 type ImportFunc func(ctx context.Context, clientID, downloadID, title, category string) ([]string, error)
 
 // CleanupFunc is called after a successful import to remove the download from
-// the client queue and clean any remaining junk from the source folder.
-// clientID and downloadID identify the torrent/nzb; importedPaths are the
-// library destinations (used to locate the source folder if needed).
-type CleanupFunc func(ctx context.Context, clientID, downloadID string, importedPaths []string) error
+// the client queue (if still present) and clean any remaining junk from the
+// source folder. clientID and downloadID identify the torrent/nzb; sourcePath
+// is the cached on-disk download directory (used to locate the source folder
+// for junk cleanup even when the torrent was already removed pre-import);
+// importedPaths are the library destinations.
+type CleanupFunc func(ctx context.Context, clientID, downloadID, sourcePath string, importedPaths []string) error
+
+// PreImportFunc is called immediately before an import is dispatched. It gives
+// the download client a chance to satisfy any prerequisites for a safe import —
+// most importantly, stopping and removing the torrent from the client (while
+// keeping the downloaded files on disk) so the importer can MOVE files without
+// fighting an active seeder holding file locks.
+//
+// It returns the resolved on-disk content path and save (storage) directory so
+// the orchestrator can cache them in workflow metadata; the import pipeline
+// relies on these to locate files after the torrent is gone. Returning an error
+// is non-fatal — the orchestrator logs it and proceeds with the import using
+// whatever paths were previously cached.
+type PreImportFunc func(ctx context.Context, clientID, downloadID string) (contentPath, savePath string, err error)
 
 // MediaRefreshFunc is called after a successful import to refresh media
 // metadata and file status in the library.
@@ -66,6 +81,7 @@ type OrchestratorOpts struct {
 	Engine         *Engine
 	Logger         *slog.Logger
 	ImportFn       ImportFunc
+	PreImportFn    PreImportFunc         // optional; stops+removes torrent before import
 	CleanupFn      CleanupFunc            // optional; if nil, cleanup phase is skipped
 	MediaRefreshFn MediaRefreshFunc       // optional; if nil, media refresh is skipped
 	DownloadStatus DownloadStatusProvider // optional, for startup reconciliation
@@ -79,6 +95,7 @@ type Orchestrator struct {
 	engine         *Engine
 	logger         *slog.Logger
 	importFn       ImportFunc
+	preImportFn    PreImportFunc
 	cleanupFn      CleanupFunc
 	mediaRefreshFn MediaRefreshFunc
 	dlStatus       DownloadStatusProvider
@@ -100,6 +117,10 @@ func (o *Orchestrator) Store() *Store { return o.store }
 // SetImportFn sets the import function after construction (for wiring order flexibility).
 func (o *Orchestrator) SetImportFn(fn ImportFunc) { o.importFn = fn }
 
+// SetPreImportFn sets the pre-import hook that stops and removes the download
+// from the client (keeping files) before the import runs.
+func (o *Orchestrator) SetPreImportFn(fn PreImportFunc) { o.preImportFn = fn }
+
 // SetCleanupFn sets the post-import cleanup function.
 func (o *Orchestrator) SetCleanupFn(fn CleanupFunc) { o.cleanupFn = fn }
 
@@ -116,6 +137,7 @@ func NewOrchestrator(opts OrchestratorOpts) *Orchestrator {
 		engine:         opts.Engine,
 		logger:         opts.Logger.With("component", "workflow-orchestrator"),
 		importFn:       opts.ImportFn,
+		preImportFn:    opts.PreImportFn,
 		cleanupFn:      opts.CleanupFn,
 		mediaRefreshFn: opts.MediaRefreshFn,
 		dlStatus:       opts.DownloadStatus,
@@ -397,7 +419,8 @@ func (o *Orchestrator) handleDownloadComplete(ctx context.Context, cmd CmdDownlo
 	// the item is later removed from the download client (e.g. after seeding).
 	if cmd.ContentPath != "" {
 		patch["content_path"] = cmd.ContentPath
-	} else if cmd.SavePath != "" {
+	}
+	if cmd.SavePath != "" {
 		patch["save_path"] = cmd.SavePath
 	}
 	if len(patch) > 0 {
@@ -550,7 +573,8 @@ func (o *Orchestrator) runPostImportCleanup(ctx context.Context, wf *Workflow, i
 
 	// Step 1: remove download from client + clean folder.
 	if o.cleanupFn != nil && wf.DownloadClientID != "" && wf.DownloadID != "" {
-		if err := o.cleanupFn(ctx, wf.DownloadClientID, wf.DownloadID, importedPaths); err != nil {
+		sourcePath := metadataPathFromWorkflow(wf.Metadata)
+		if err := o.cleanupFn(ctx, wf.DownloadClientID, wf.DownloadID, sourcePath, importedPaths); err != nil {
 			// Non-fatal — log and continue to completion.
 			o.logger.Warn("post-import cleanup failed (non-fatal)",
 				"workflow_id", wfID,
@@ -641,6 +665,26 @@ func (o *Orchestrator) categoryFromMetadata(metadata string) string {
 	}
 	if cat, ok := m["category"].(string); ok {
 		return cat
+	}
+	return ""
+}
+
+// metadataPathFromWorkflow extracts the cached download source directory from a
+// workflow's metadata JSON, preferring "content_path" and falling back to
+// "save_path". Returns "" if neither is set.
+func metadataPathFromWorkflow(metadata string) string {
+	if metadata == "" {
+		return ""
+	}
+	var m map[string]any
+	if err := json.Unmarshal([]byte(metadata), &m); err != nil {
+		return ""
+	}
+	if p, ok := m["content_path"].(string); ok && p != "" {
+		return p
+	}
+	if p, ok := m["save_path"].(string); ok && p != "" {
+		return p
 	}
 	return ""
 }
@@ -1016,6 +1060,39 @@ func (o *Orchestrator) dispatchImport(ctx context.Context, workflowID, clientID,
 		}
 
 		o.logger.Info("import worker started", "workflow_id", workflowID, "title", title)
+
+		// Pre-import: stop and remove the torrent from the download client
+		// (keeping files) so the importer can safely MOVE files without the
+		// client holding locks or re-creating partial data. Cache the resolved
+		// paths in workflow metadata for the import resolver. Non-fatal.
+		if o.preImportFn != nil && clientID != "" && downloadID != "" {
+			contentPath, savePath, perr := o.preImportFn(ctx, clientID, downloadID)
+			if perr != nil {
+				o.logger.Warn("pre-import stop/remove failed (non-fatal)",
+					"workflow_id", workflowID,
+					"client_id", clientID,
+					"download_id", downloadID,
+					"error", perr,
+				)
+			} else {
+				patch := map[string]any{}
+				if contentPath != "" {
+					patch["content_path"] = contentPath
+				}
+				if savePath != "" {
+					patch["save_path"] = savePath
+				}
+				if len(patch) > 0 {
+					if err := o.store.MergeMetadata(ctx, workflowID, patch); err != nil {
+						o.logger.Warn("failed to cache pre-import paths",
+							"workflow_id", workflowID, "error", err)
+					}
+				}
+				o.logEvent(ctx, workflowID, EventImportStarted,
+					"Stopped and removed download from client before import",
+					map[string]any{"content_path": contentPath, "save_path": savePath})
+			}
+		}
 
 		paths, err := o.importFn(ctx, clientID, downloadID, title, category)
 

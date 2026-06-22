@@ -24,6 +24,12 @@ type Config struct {
 	// Download directory (shared with Rain sidecar).
 	DownloadDir string `json:"download_dir"`
 
+	// DataDirIncludesTorrentID mirrors Rain's data-dir-includes-torrent-id
+	// setting. When true (Rain's default), each torrent's files are stored
+	// under {DownloadDir}/{torrentID}/ rather than directly in {DownloadDir}.
+	// Loom must account for this when resolving on-disk content paths.
+	DataDirIncludesTorrentID bool `json:"data_dir_includes_torrent_id"`
+
 	// Optional metadata retained for compatibility with older
 	// builtin/torrent settings and UI controls.
 	SeedRatioLimit       float64 `json:"seed_ratio_limit"`
@@ -50,17 +56,18 @@ func parseBool(s string) (bool, error) {
 // DefaultConfig returns defaults that match a local Rain sidecar.
 func DefaultConfig() Config {
 	return Config{
-		RPCHost:              "127.0.0.1",
-		RPCPort:              7246,
-		SeedRatioLimit:       1.0,
-		SeedTimeLimitMinutes: 0,
-		DownloadSpeedLimit:   0,
-		UploadSpeedLimit:     0,
-		PortBegin:            6881,
-		EnableDHT:            true,
-		EnablePEX:            true,
-		EnableUPnP:           false,
-		RequestTimeoutSecs:   10,
+		RPCHost:                  "127.0.0.1",
+		RPCPort:                  7246,
+		SeedRatioLimit:           1.0,
+		SeedTimeLimitMinutes:     0,
+		DownloadSpeedLimit:       0,
+		UploadSpeedLimit:         0,
+		PortBegin:                6881,
+		EnableDHT:                true,
+		EnablePEX:                true,
+		EnableUPnP:               false,
+		DataDirIncludesTorrentID: true,
+		RequestTimeoutSecs:       10,
 	}
 }
 
@@ -122,6 +129,11 @@ func applyEnv(cfg *Config) {
 	if pex := strings.TrimSpace(os.Getenv("LOOM_TORRENT_ENABLE_PEX")); pex != "" {
 		if v, err := parseBool(pex); err == nil {
 			cfg.EnablePEX = v
+		}
+	}
+	if inc := strings.TrimSpace(os.Getenv("LOOM_TORRENT_DATA_DIR_INCLUDES_ID")); inc != "" {
+		if v, err := parseBool(inc); err == nil {
+			cfg.DataDirIncludesTorrentID = v
 		}
 	}
 }
