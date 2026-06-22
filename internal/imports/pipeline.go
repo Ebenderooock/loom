@@ -304,6 +304,18 @@ func (p *ImportPipeline) resolveDownloadPath(ctx context.Context, ev *downloads.
 		return path, nil
 	}
 
+	// Item is no longer in the client. Try the ContentPath/SavePath cached in the event
+	// (these were captured when the item completed and survive client-side removal).
+	if ev.ContentPath != "" {
+		addCandidate(p.applyRemotePathMapping(ctx, ev.ClientID, ev.ContentPath))
+	}
+	if ev.SavePath != "" {
+		addCandidate(p.applyRemotePathMapping(ctx, ev.ClientID, filepath.Join(ev.SavePath, ev.Title)))
+	}
+	if path, ok := resolveFirst(); ok {
+		return path, nil
+	}
+
 	// The item is no longer present in the download client (e.g. removed after
 	// seeding). Try the path we cached in workflow metadata when the download
 	// first completed — this survives client-side removal.

@@ -200,6 +200,8 @@ func (m *Monitor) emitCompletions(ctx context.Context, items []Item) {
 					ClientID:    item.ClientID,
 					Title:       item.Title,
 					Category:    item.Category,
+					ContentPath: item.ContentPath,
+					SavePath:    item.SavePath,
 					CompletedAt: m.clock.Now(),
 				}
 				_ = m.bus.Publish(ctx, event)

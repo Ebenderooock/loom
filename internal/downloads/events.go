@@ -86,6 +86,14 @@ type DownloadCompletedEvent struct {
 	// Category is the grouping the item was filed under.
 	Category string `json:"category,omitempty"`
 
+	// ContentPath is the full filesystem path where the completed item was saved.
+	// Cached here to allow import resolution even if the item is removed from the client.
+	ContentPath string `json:"content_path,omitempty"`
+
+	// SavePath is the directory where the completed item was saved.
+	// Cached here to allow import resolution even if the item is removed from the client.
+	SavePath string `json:"save_path,omitempty"`
+
 	// CompletedAt is when this event was emitted (not when the item
 	// actually finished; see Item.CompletedAt if per-client tracking
 	// is needed).
