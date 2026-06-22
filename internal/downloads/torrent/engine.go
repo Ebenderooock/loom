@@ -414,14 +414,18 @@ func (e *Engine) AddMagnet(ctx context.Context, magnet string, meta torrentMeta)
 	// private-tracker magnets) are left untouched so we never announce a
 	// private infohash to public trackers.
 	if !magnetHasTrackers(magnet) {
-		e.logger.Debug("injecting public trackers into magnet (no trackers present)")
+		e.logger.Info("injecting public trackers into magnet (no trackers present)",
+			"infohash", strings.ToLower(t.InfoHash().HexString()),
+		)
 		t.AddTrackers(defaultAnnounceList())
-		e.logger.Debug("public trackers injected",
+		e.logger.Info("public trackers injected",
 			"trackerCount", len(defaultTrackers),
 			"infohash", strings.ToLower(t.InfoHash().HexString()),
 		)
 	} else {
-		e.logger.Debug("magnet already has trackers; skipping injection")
+		e.logger.Info("magnet already has trackers; skipping injection",
+			"infohash", strings.ToLower(t.InfoHash().HexString()),
+		)
 	}
 
 	// Wait for metadata with a timeout. Use the engine's lifecycle context
@@ -432,14 +436,14 @@ func (e *Engine) AddMagnet(ctx context.Context, magnet string, meta torrentMeta)
 	waitCtx, waitCancel := context.WithTimeout(e.lifecycleCtx(), timeout)
 	defer waitCancel()
 
-	e.logger.Debug("waiting for magnet metadata",
+	e.logger.Info("waiting for magnet metadata",
 		"hash", strings.ToLower(t.InfoHash().HexString()),
 		"timeout", timeout.String(),
 	)
 
 	select {
 	case <-t.GotInfo():
-		e.logger.Debug("magnet metadata resolved",
+		e.logger.Info("magnet metadata resolved",
 			"hash", strings.ToLower(t.InfoHash().HexString()),
 			"name", t.Name(),
 			"size", t.Length(),
@@ -544,15 +548,31 @@ func (e *Engine) AddTorrentBytes(ctx context.Context, data []byte, meta torrentM
 	timeout := time.Duration(e.cfg.MetadataTimeoutSecs) * time.Second
 	waitCtx, waitCancel := context.WithTimeout(e.lifecycleCtx(), timeout)
 	defer waitCancel()
+	hash := strings.ToLower(t.InfoHash().HexString())
 
+	e.logger.Info("waiting for torrent metadata",
+		"hash", hash,
+		"timeout", timeout.String(),
+	)
+
+	metadataReady := false
 	select {
 	case <-t.GotInfo():
+		metadataReady = true
+		e.logger.Info("torrent metadata resolved",
+			"hash", hash,
+			"name", t.Name(),
+			"size", t.Length(),
+		)
 	case <-waitCtx.Done():
-		t.Drop()
-		return "", fmt.Errorf("%w: %w", ErrMetadataTimeout, waitCtx.Err())
+		// Keep the torrent queued and let metadata resolve asynchronously.
+		e.logger.Warn("torrent metadata not yet available; keeping torrent queued",
+			"error", waitCtx.Err(),
+			"timeout", timeout.String(),
+			"hash", hash,
+		)
 	}
 
-	hash := strings.ToLower(t.InfoHash().HexString())
 	title := meta.Title
 	if title == "" {
 		title = t.Name()
@@ -569,7 +589,27 @@ func (e *Engine) AddTorrentBytes(ctx context.Context, data []byte, meta torrentM
 	}
 	e.mu.Unlock()
 
-	t.DownloadAll()
+	if metadataReady || t.Info() != nil {
+		t.DownloadAll()
+	} else {
+		e.logger.Info("torrent added; waiting for async metadata resolution",
+			"hash", hash,
+			"timeout", timeout.String(),
+		)
+		go func(t *torrent.Torrent) {
+			select {
+			case <-t.GotInfo():
+				e.logger.Info("async metadata resolution completed",
+					"hash", strings.ToLower(t.InfoHash().HexString()),
+					"name", t.Name(),
+					"size", t.Length(),
+				)
+				t.DownloadAll()
+			case <-e.lifecycleCtx().Done():
+				e.logger.Debug("engine shutting down before async metadata resolution")
+			}
+		}(t)
+	}
 
 	e.logger.Info("torrent added",
 		"hash", hash,
