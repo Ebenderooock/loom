@@ -42,7 +42,11 @@ service:
 # connect to this address instead of the internal pod IP.
 torrent:
   listenPort: 7881
-  publicIP4: "192.168.3.203"
+  # Do NOT set publicIP4 - let anacrolix use the pod's internal IP.
+  # The LoadBalancer service and externalTrafficPolicy: Local handle
+  # inbound peer connections correctly without needing to announce
+  # the external IP to trackers.
+  publicIP4: ""
   publicIP6: ""
   # Increase metadata timeout for cluster latency and potential DHT/tracker delays
   metadataTimeoutSecs: 300
