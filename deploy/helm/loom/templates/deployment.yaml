@@ -1,3 +1,15 @@
+{{- $legacyTorrentConfigured := hasKey .Values "torrent" -}}
+{{- $rainEnabled := or (default false .Values.rain.enabled) $legacyTorrentConfigured -}}
+{{- $rainRPCHost := default "127.0.0.1" .Values.rain.rpc.host -}}
+{{- $rainRPCPort := default 7246 .Values.rain.rpc.port -}}
+{{- $rainRPCTimeout := default 10 .Values.rain.rpc.timeoutSecs -}}
+{{- $rainDownloadDir := default "/media/downloads" .Values.rain.downloadDir -}}
+{{- $rainDHT := default true .Values.rain.dhtEnabled -}}
+{{- $rainPEX := default true .Values.rain.pexEnabled -}}
+{{- $rainInstallVersion := default "v2.3.1" .Values.rain.installVersion -}}
+{{- $rainBuilderRepo := default "docker.io/golang" .Values.rain.image.repository -}}
+{{- $rainBuilderTag := default "1.24-alpine" .Values.rain.image.tag -}}
+{{- $rainBuilderPullPolicy := default "IfNotPresent" .Values.rain.image.pullPolicy -}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -40,6 +52,25 @@ spec:
       securityContext:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      {{- if $rainEnabled }}
+      initContainers:
+        - name: rain-install
+          image: "{{ $rainBuilderRepo }}:{{ $rainBuilderTag }}"
+          imagePullPolicy: {{ $rainBuilderPullPolicy }}
+          command: ["/bin/sh", "-ec"]
+          args:
+            - |
+              export GOPATH=/tmp/go
+              export GOCACHE=/tmp/gocache
+              export GOMODCACHE=/tmp/gomodcache
+              export GOBIN=/rain-bin
+              mkdir -p "$GOPATH" "$GOCACHE" "$GOMODCACHE" "$GOBIN"
+              go install github.com/cenkalti/rain/v2@{{ $rainInstallVersion }}
+              /rain-bin/rain --version || true
+          volumeMounts:
+            - name: rain-bin
+              mountPath: /rain-bin
+      {{- end }}
       containers:
         - name: {{ .Chart.Name }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
@@ -59,19 +90,19 @@ spec:
               value: /config
             - name: LOOM_DATA_DIR
               value: /config
-            {{- if .Values.rain.enabled }}
+            {{- if $rainEnabled }}
             - name: LOOM_RAIN_RPC_HOST
-              value: "{{ .Values.rain.rpc.host }}"
+              value: "{{ $rainRPCHost }}"
             - name: LOOM_RAIN_RPC_PORT
-              value: "{{ .Values.rain.rpc.port }}"
+              value: "{{ $rainRPCPort }}"
             - name: LOOM_RAIN_RPC_TIMEOUT_SECS
-              value: "{{ .Values.rain.rpc.timeoutSecs }}"
+              value: "{{ $rainRPCTimeout }}"
             - name: LOOM_TORRENT_DOWNLOAD_DIR
-              value: "{{ .Values.rain.downloadDir }}"
+              value: "{{ $rainDownloadDir }}"
             - name: LOOM_TORRENT_ENABLE_DHT
-              value: "{{ .Values.rain.dhtEnabled }}"
+              value: "{{ $rainDHT }}"
             - name: LOOM_TORRENT_ENABLE_PEX
-              value: "{{ .Values.rain.pexEnabled }}"
+              value: "{{ $rainPEX }}"
             {{- end }}
             {{- with .Values.extraEnv }}
             {{- toYaml . | nindent 12 }}
@@ -108,15 +139,17 @@ spec:
             {{- with .Values.extraVolumeMounts }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
-        {{- if .Values.rain.enabled }}
+        {{- if $rainEnabled }}
         - name: rain
-          image: "{{ .Values.rain.image.repository }}:{{ .Values.rain.image.tag }}"
-          imagePullPolicy: {{ .Values.rain.image.pullPolicy }}
-          command: ["rain", "server", "--config", "/etc/rain/config.yaml"]
+          image: "docker.io/alpine:3.20"
+          imagePullPolicy: IfNotPresent
+          command: ["/rain-bin/rain", "server", "--config", "/etc/rain/config.yaml"]
           env:
             - name: HOME
               value: /config
           volumeMounts:
+            - name: rain-bin
+              mountPath: /rain-bin
             - name: config
               mountPath: /config
             - name: rain-config
@@ -143,10 +176,14 @@ spec:
           persistentVolumeClaim:
             claimName: {{ .Values.persistence.media.existingClaim | default (printf "%s-media" (include "loom.fullname" .)) }}
         {{- end }}
-        {{- if .Values.rain.enabled }}
+        {{- if $rainEnabled }}
         - name: rain-config
           configMap:
             name: {{ include "loom.fullname" . }}-rain-config
+        {{- end }}
+        {{- if $rainEnabled }}
+        - name: rain-bin
+          emptyDir: {}
         {{- end }}
         {{- with .Values.extraVolumes }}
         {{- toYaml . | nindent 8 }}

@@ -1,4 +1,14 @@
-{{- if .Values.rain.enabled }}
+{{- $legacyTorrentConfigured := hasKey .Values "torrent" -}}
+{{- $rainEnabled := or (default false .Values.rain.enabled) $legacyTorrentConfigured -}}
+{{- if $rainEnabled }}
+{{- $rainRPCHost := default "127.0.0.1" .Values.rain.rpc.host -}}
+{{- $rainRPCPort := default 7246 .Values.rain.rpc.port -}}
+{{- $rainDownloadDir := default "/media/downloads" .Values.rain.downloadDir -}}
+{{- $rainDHT := default true .Values.rain.dhtEnabled -}}
+{{- $rainPEX := default true .Values.rain.pexEnabled -}}
+{{- $rainDLKB := default 0 .Values.rain.speedLimitDownloadKBps -}}
+{{- $rainULKB := default 0 .Values.rain.speedLimitUploadKBps -}}
+{{- $rainStateDir := default "/config/rain" .Values.rain.stateDir -}}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -7,13 +17,13 @@ metadata:
     {{- include "loom.labels" . | nindent 4 }}
 data:
   config.yaml: |
-    database: {{ printf "%s/session.db" .Values.rain.stateDir | quote }}
-    data-dir: {{ .Values.rain.downloadDir | quote }}
+    database: {{ printf "%s/session.db" $rainStateDir | quote }}
+    data-dir: {{ $rainDownloadDir | quote }}
     rpc-enabled: true
-    rpc-host: {{ .Values.rain.rpc.host | quote }}
-    rpc-port: {{ int .Values.rain.rpc.port }}
-    dht-enabled: {{ .Values.rain.dhtEnabled }}
-    pex-enabled: {{ .Values.rain.pexEnabled }}
-    speed-limit-download: {{ int64 .Values.rain.speedLimitDownloadKBps }}
-    speed-limit-upload: {{ int64 .Values.rain.speedLimitUploadKBps }}
+    rpc-host: {{ $rainRPCHost | quote }}
+    rpc-port: {{ int $rainRPCPort }}
+    dht-enabled: {{ $rainDHT }}
+    pex-enabled: {{ $rainPEX }}
+    speed-limit-download: {{ int64 $rainDLKB }}
+    speed-limit-upload: {{ int64 $rainULKB }}
 {{- end }}
