@@ -482,21 +482,33 @@ func (p *ImportPipeline) processImport(ctx context.Context, ev *downloads.Downlo
 
 // importSingleFile matches and imports a single media file.
 func (p *ImportPipeline) importSingleFile(ctx context.Context, ev *downloads.DownloadCompletedEvent, mediaFile string) error {
-	// For multi-episode downloads, grab-based matching is too coarse (all files would match
-	// the same episode). Try file-path-based matching first for each individual file.
+	// For single-item workflows, grab-based matching is authoritative and avoids
+	// parser-related season/episode drift (especially visible with anime ordering).
+	// For multi-item workflows, grab-based matching is too coarse (all files would
+	// match the same item), so path-based matching must stay first.
 	var match *MatchResult
 	var err error
+	preferGrab := p.shouldPreferGrabMatch(ctx, ev)
+
+	if preferGrab {
+		match, err = p.matchByGrab(ctx, ev)
+		if err != nil {
+			p.logger.Warn("grab-based match failed", "error", err)
+		}
+	}
 
 	// Try matching by full file path first (includes parent directory for context).
 	// This is most reliable for multi-episode folders since it resolves each file individually.
-	match, err = p.matcher.MatchPath(ctx, mediaFile)
-	if err != nil {
-		p.logger.Warn("path-based match failed", "file", mediaFile, "error", err)
+	if match == nil || !match.Matched {
+		match, err = p.matcher.MatchPath(ctx, mediaFile)
+		if err != nil {
+			p.logger.Warn("path-based match failed", "file", mediaFile, "error", err)
+		}
 	}
 
 	// Fall back to grab-based matching if path matching didn't work.
 	// This is reliable for Loom-originated single-file downloads.
-	if match == nil || !match.Matched {
+	if !preferGrab && (match == nil || !match.Matched) {
 		match, err = p.matchByGrab(ctx, ev)
 		if err != nil {
 			p.logger.Warn("grab-based match failed", "error", err)
@@ -681,6 +693,24 @@ func (p *ImportPipeline) importSingleFile(ctx context.Context, ev *downloads.Dow
 	})
 
 	return nil
+}
+
+// shouldPreferGrabMatch returns true when the download is tracked by exactly one
+// workflow item. In that case, grab-based linkage is more authoritative than
+// filename parsing for season/episode resolution.
+func (p *ImportPipeline) shouldPreferGrabMatch(ctx context.Context, ev *downloads.DownloadCompletedEvent) bool {
+	if p.wfEngine == nil || ev == nil || ev.ClientID == "" || ev.DownloadID == "" {
+		return false
+	}
+	wf, err := p.wfEngine.FindByDownload(ctx, ev.ClientID, ev.DownloadID)
+	if err != nil || wf == nil {
+		return false
+	}
+	items, err := p.wfEngine.Store().GetItems(ctx, wf.ID)
+	if err != nil {
+		return false
+	}
+	return len(items) == 1
 }
 
 // matchByGrab attempts to match using workflow linkage data recorded
