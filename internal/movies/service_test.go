@@ -364,12 +364,21 @@ func TestAddMovie_EmptyTitle(t *testing.T) {
 	}
 }
 
+func TestAddMovie_EmptyLibrary(t *testing.T) {
+	t.Parallel()
+	svc := NewService(newMockRepo())
+	err := svc.AddMovie(context.Background(), &Movie{ID: "m1", Title: "Test"})
+	if err == nil {
+		t.Fatal("expected error for empty library")
+	}
+}
+
 func TestAddMovie_Success(t *testing.T) {
 	t.Parallel()
 	repo := newMockRepo()
 	svc := NewService(repo)
 
-	m := &Movie{ID: "m1", Title: "Inception", Year: 2010}
+	m := &Movie{ID: "m1", Title: "Inception", Year: 2010, LibraryID: "lib1"}
 	if err := svc.AddMovie(context.Background(), m); err != nil {
 		t.Fatalf("AddMovie: %v", err)
 	}
@@ -387,7 +396,7 @@ func TestAddMovie_InvalidatesCache(t *testing.T) {
 	svc := NewService(repo)
 	ctx := context.Background()
 
-	m := &Movie{ID: "m1", Title: "Inception"}
+	m := &Movie{ID: "m1", Title: "Inception", LibraryID: "lib1"}
 	_ = svc.AddMovie(ctx, m)
 	// Pre-populate cache
 	_, _ = svc.GetMovie(ctx, "m1")
@@ -408,7 +417,7 @@ func TestAddMovie_RepoError(t *testing.T) {
 	repo.addMovieErr = errors.New("db error")
 	svc := NewService(repo)
 
-	err := svc.AddMovie(context.Background(), &Movie{ID: "m1", Title: "Test"})
+	err := svc.AddMovie(context.Background(), &Movie{ID: "m1", Title: "Test", LibraryID: "lib1"})
 	if err == nil {
 		t.Fatal("expected error from repo")
 	}

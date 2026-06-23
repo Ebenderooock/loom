@@ -760,7 +760,38 @@ func (p *ImportPipeline) matchByGrab(ctx context.Context, ev *downloads.Download
 		if err != nil {
 			return nil, fmt.Errorf("get movie from workflow: %w", err)
 		}
-		lib, err := p.matcher.libStore.Get(ctx, mv.LibraryID)
+		if p.matcher.libStore == nil {
+			return nil, fmt.Errorf("get library from workflow: library store not configured")
+		}
+		libraryID := strings.TrimSpace(mv.LibraryID)
+		if libraryID == "" {
+			libs, listErr := p.matcher.libStore.List(ctx)
+			if listErr != nil {
+				return nil, fmt.Errorf("get library from workflow: movie %q has no library assigned and listing libraries failed: %w", mv.Title, listErr)
+			}
+			movieLibs := make([]libraries.Library, 0, len(libs))
+			for _, lib := range libs {
+				if strings.EqualFold(lib.MediaType, "movie") {
+					movieLibs = append(movieLibs, lib)
+				}
+			}
+			switch len(movieLibs) {
+			case 0:
+				return nil, fmt.Errorf("get library from workflow: movie %q has no library assigned and no movie library is configured", mv.Title)
+			case 1:
+				libraryID = movieLibs[0].ID
+				mv.LibraryID = libraryID
+				if updateErr := p.matcher.moviesSvc.UpdateMovie(ctx, mv); updateErr != nil {
+					p.logger.Warn("failed to persist inferred library for movie",
+						"movie_id", mv.ID, "library_id", libraryID, "error", updateErr)
+				}
+				p.logger.Info("inferred missing movie library from single configured movie library",
+					"movie_id", mv.ID, "library_id", libraryID)
+			default:
+				return nil, fmt.Errorf("get library from workflow: movie %q has no library assigned and multiple movie libraries are configured", mv.Title)
+			}
+		}
+		lib, err := p.matcher.libStore.Get(ctx, libraryID)
 		if err != nil {
 			return nil, fmt.Errorf("get library from workflow: %w", err)
 		}

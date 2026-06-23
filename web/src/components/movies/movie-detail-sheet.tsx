@@ -472,8 +472,12 @@ export function MovieDetailSheet({
   };
 
   const handleRescan = async () => {
-    if (!movie.libraryId) {
-      toast.error("Movie has no library assigned");
+    const fallbackLibraryId =
+      movie.libraryId || (libraries.length === 1 ? libraries[0].id : "");
+    if (!fallbackLibraryId) {
+      toast.error(
+        "Movie has no library assigned. Assign a movie library in Edit first.",
+      );
       return;
     }
     setRescanning(true);
@@ -481,7 +485,7 @@ export function MovieDetailSheet({
       const res = await apiFetch(`/api/v1/movies/${movie.id}/rescan`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ libraryId: movie.libraryId }),
+        body: JSON.stringify({ libraryId: fallbackLibraryId }),
       });
       if (res.ok) {
         const result = await res.json();

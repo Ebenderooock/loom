@@ -261,6 +261,9 @@ func (s *service) AddMovie(ctx context.Context, movie *Movie) error {
 	if movie.Title == "" {
 		return fmt.Errorf("movies: movie title required")
 	}
+	if movie.LibraryID == "" {
+		return fmt.Errorf("movies: library required")
+	}
 
 	now := time.Now()
 	if movie.CreatedAt.IsZero() {
