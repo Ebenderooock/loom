@@ -472,8 +472,7 @@ export function MovieDetailSheet({
   };
 
   const handleRescan = async () => {
-    const fallbackLibraryId =
-      movie.libraryId || (libraries.length === 1 ? libraries[0].id : "");
+    const fallbackLibraryId = movie.libraryId || libraries[0]?.id || "";
     if (!fallbackLibraryId) {
       toast.error(
         "Movie has no library assigned. Assign a movie library in Edit first.",

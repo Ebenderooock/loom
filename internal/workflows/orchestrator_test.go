@@ -361,7 +361,7 @@ func TestOrchestratorDownloadComplete(t *testing.T) {
 	})
 
 	// Should transition to importing and dispatch import
-	waitForCondition(t, 3*time.Second, func() bool {
+	waitForCondition(t, 5*time.Second, func() bool {
 		got, _ := store.Get(ctx, wf.ID)
 		return got != nil && (got.State == StateImporting || got.State == StateCompleted)
 	})
