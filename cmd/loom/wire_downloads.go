@@ -68,6 +68,7 @@ func wireDownloads(
 
 	downloadSvc.SetWorkflowEngine(wfEngine)
 	downloadSvc.SetMovieStatusUpdater(movieStatusAdapter{moviesSvc})
+	downloadSvc.SetBuiltinTorrentEnabled(srv.Features().EnabledFunc(featureflags.KeyBuiltinTorrent))
 	srv.SetWorkflowEngine(wfEngine)
 
 	// Workflow orchestrator — unified state coordinator (created early so callers can reference it)

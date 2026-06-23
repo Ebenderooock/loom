@@ -13,6 +13,7 @@ import type {
   DownloadProtocol,
 } from "@/lib/downloads-api";
 import { useTestDownloadConfig, useTestDownload } from "@/lib/downloads-api";
+import { useFeatureEnabled } from "@/lib/features-api";
 
 const DOWNLOAD_KINDS: {
   value: DownloadKind;
@@ -141,8 +142,26 @@ export function DownloadForm({
 }: DownloadFormProps) {
   const isEdit = Boolean(initial);
 
+  // Built-in torrent (Rain) is gated behind the builtin_torrent feature flag.
+  // Fallback=true keeps current behaviour (K8s/Docker) during the initial load.
+  const builtinTorrentEnabled = useFeatureEnabled("builtin_torrent", true);
+
+  // Kinds offered for selection. The built-in torrent is removed when the flag
+  // is off, but an existing client of that kind is still shown when editing so
+  // the select renders its label instead of an empty value.
+  const availableKinds = React.useMemo(
+    () =>
+      builtinTorrentEnabled
+        ? DOWNLOAD_KINDS
+        : DOWNLOAD_KINDS.filter((k) => k.value !== "builtin/torrent"),
+    [builtinTorrentEnabled],
+  );
+  const defaultKind: DownloadKind = builtinTorrentEnabled
+    ? "builtin/torrent"
+    : availableKinds[0]?.value ?? "qbittorrent";
+
   const [values, setValues] = React.useState<DownloadFormValues>(() => {
-    const kind = (initial?.kind as DownloadKind) ?? "builtin/torrent";
+    const kind = (initial?.kind as DownloadKind) ?? defaultKind;
     const kindDef = DOWNLOAD_KINDS.find((k) => k.value === kind);
     const isBuiltin = BUILTIN_KINDS.has(kind);
     return {
@@ -253,6 +272,16 @@ export function DownloadForm({
 
   const isBuiltinKind = BUILTIN_KINDS.has(values.kind);
 
+  // If the flag resolves to off after the initial paint (e.g. single-binary
+  // builds) and we're creating a new client still defaulted to the built-in
+  // torrent, fall back to the first available kind so the form stays valid.
+  React.useEffect(() => {
+    if (!builtinTorrentEnabled && !isEdit && values.kind === "builtin/torrent") {
+      handleKindChange(availableKinds[0]?.value ?? "qbittorrent");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [builtinTorrentEnabled, isEdit]);
+
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const errs = validateDownloadForm(values);
@@ -265,6 +294,21 @@ export function DownloadForm({
 
   const kindHelper =
     DOWNLOAD_KINDS.find((k) => k.value === values.kind)?.helper ?? "";
+
+  // Options shown in the kind <select>. When editing a client whose kind is no
+  // longer selectable (e.g. a disabled built-in torrent), keep its entry so the
+  // disabled select still renders the correct label.
+  const kindOptions = React.useMemo(() => {
+    if (
+      isEdit &&
+      values.kind &&
+      !availableKinds.some((k) => k.value === values.kind)
+    ) {
+      const current = DOWNLOAD_KINDS.find((k) => k.value === values.kind);
+      if (current) return [current, ...availableKinds];
+    }
+    return availableKinds;
+  }, [availableKinds, isEdit, values.kind]);
 
   return (
     <form
@@ -291,7 +335,7 @@ export function DownloadForm({
           onChange={(e) => handleKindChange(e.target.value as DownloadKind)}
           className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {DOWNLOAD_KINDS.map((k) => (
+          {kindOptions.map((k) => (
             <option key={k.value} value={k.value}>
               {k.label}
             </option>
