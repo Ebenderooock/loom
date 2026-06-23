@@ -1,6 +1,9 @@
 package music
 
-import "testing"
+import (
+	"path/filepath"
+	"testing"
+)
 
 func TestBuildTrackPath_SingleDisc(t *testing.T) {
 	artist := &Artist{Name: "Pink Floyd"}
@@ -8,7 +11,7 @@ func TestBuildTrackPath_SingleDisc(t *testing.T) {
 	track := &Track{Title: "Money", TrackNumber: 6, DiscNumber: 1}
 
 	got := BuildTrackPath(artist, album, track, false, ".flac")
-	want := "Pink Floyd/The Dark Side of the Moon (1973)/06 - Money.flac"
+	want := filepath.FromSlash("Pink Floyd/The Dark Side of the Moon (1973)/06 - Money.flac")
 	if got != want {
 		t.Fatalf("BuildTrackPath = %q, want %q", got, want)
 	}
@@ -20,7 +23,7 @@ func TestBuildTrackPath_MultiDisc(t *testing.T) {
 	track := &Track{Title: "Helter Skelter", TrackNumber: 4, DiscNumber: 2}
 
 	got := BuildTrackPath(artist, album, track, true, ".mp3")
-	want := "The Beatles/The Beatles (1968)/2-04 - Helter Skelter.mp3"
+	want := filepath.FromSlash("The Beatles/The Beatles (1968)/2-04 - Helter Skelter.mp3")
 	if got != want {
 		t.Fatalf("BuildTrackPath = %q, want %q", got, want)
 	}
@@ -32,7 +35,7 @@ func TestBuildTrackPath_SanitizesIllegalChars(t *testing.T) {
 	track := &Track{Title: "What Do You Do for Money: Honey?", TrackNumber: 2, DiscNumber: 1}
 
 	got := BuildTrackPath(artist, album, track, false, ".flac")
-	want := "AC-DC/Back in Black/02 - What Do You Do for Money - Honey.flac"
+	want := filepath.FromSlash("AC-DC/Back in Black/02 - What Do You Do for Money - Honey.flac")
 	if got != want {
 		t.Fatalf("BuildTrackPath = %q, want %q", got, want)
 	}
@@ -40,7 +43,7 @@ func TestBuildTrackPath_SanitizesIllegalChars(t *testing.T) {
 
 func TestBuildTrackPath_MissingMetadataFallbacks(t *testing.T) {
 	got := BuildTrackPath(nil, nil, nil, false, "")
-	want := "Unknown Artist/Unknown Album/00 - Unknown Track"
+	want := filepath.FromSlash("Unknown Artist/Unknown Album/00 - Unknown Track")
 	if got != want {
 		t.Fatalf("BuildTrackPath = %q, want %q", got, want)
 	}
