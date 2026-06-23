@@ -28,6 +28,14 @@ const (
 	// incomplete: when off, the Music API routes are not mounted. Flip on once
 	// the Music milestones and UI are ready.
 	KeyMusic = "music"
+
+	// KeyBuiltinTorrent toggles the built-in torrent ("Rain sidecar") download
+	// kind. Its default comes from a build-tag-controlled value
+	// (builtinTorrentDefault): ON for normal builds (K8s/Docker) and OFF when
+	// built with -tags no_builtin_torrent (single-binary distros such as
+	// Synology that ship no Rain sidecar). When off, the builtin/torrent kind is
+	// hidden in the UI and rejected by the download-client handlers.
+	KeyBuiltinTorrent = "builtin_torrent"
 )
 
 // FlagDef is the static, in-code definition of a feature toggle.
@@ -75,6 +83,13 @@ var Definitions = []FlagDef{
 		Description: "Enable the Music capability: manage artists, albums and tracks, scan music libraries, acquire releases, and request artists via the requests portal and chat bots. When off, the Music API is not exposed.",
 		Category:    "Media",
 		Default:     true,
+	},
+	{
+		Key:         KeyBuiltinTorrent,
+		Label:       "Built-in Torrent (Rain)",
+		Description: "Offer the built-in torrent download kind, which talks to a Rain sidecar over its RPC endpoint (deployed alongside Loom by the Helm chart). When off, the built-in torrent kind is hidden in the UI and rejected by the download-client API. Default is build-dependent: on for container builds, off for single-binary distributions built without a Rain sidecar.",
+		Category:    "Downloads",
+		Default:     builtinTorrentDefault,
 	},
 }
 

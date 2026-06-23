@@ -100,6 +100,19 @@ func requireAdminIfPresent(w http.ResponseWriter, r *http.Request) bool {
 	return true
 }
 
+// rejectDisabledKind writes a 400 and returns false when kind is the built-in
+// torrent (Rain) kind but the builtin_torrent feature flag is disabled. It
+// mirrors how unknown kinds are rejected so disabled kinds never reach the
+// registry. Returns true when the kind is allowed.
+func (s *Service) rejectDisabledKind(w http.ResponseWriter, kind Kind) bool {
+	if kind == KindBuiltinTorrent && !s.builtinTorrentAllowed() {
+		writeError(w, http.StatusBadRequest, "kind_disabled",
+			"the built-in torrent (Rain) download kind is disabled on this server")
+		return false
+	}
+	return true
+}
+
 // --- create ---------------------------------------------------------
 
 type createRequest struct {
@@ -137,6 +150,9 @@ func (s *Service) handleCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	if strings.TrimSpace(req.Name) == "" {
 		writeError(w, http.StatusBadRequest, "invalid_request", "name is required")
+		return
+	}
+	if !s.rejectDisabledKind(w, req.Kind) {
 		return
 	}
 	if req.ID == "" {
@@ -237,6 +253,9 @@ func (s *Service) handleReplace(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.Kind == "" || req.Name == "" || req.Protocol == "" {
 		writeError(w, http.StatusBadRequest, "invalid_request", "kind, name, and protocol are required")
+		return
+	}
+	if !s.rejectDisabledKind(w, req.Kind) {
 		return
 	}
 	def := Definition{
@@ -374,6 +393,9 @@ func (s *Service) handleTestConfig(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.Kind == "" {
 		writeError(w, http.StatusBadRequest, "invalid_request", "kind is required")
+		return
+	}
+	if !s.rejectDisabledKind(w, req.Kind) {
 		return
 	}
 

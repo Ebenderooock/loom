@@ -49,6 +49,10 @@ type ServiceOptions struct {
 	HistoryStore       *HistoryStore
 	WorkflowEngine     *workflows.Engine
 	MovieStatusUpdater MovieStatusUpdater
+	// BuiltinTorrentEnabled reports whether the built-in torrent (Rain
+	// sidecar) download kind is available. A nil func is treated as enabled,
+	// preserving behaviour for callers that do not wire feature flags.
+	BuiltinTorrentEnabled func() bool
 }
 
 // Service is the orchestrator that the HTTP layer depends on. It owns
@@ -67,6 +71,7 @@ type Service struct {
 	wfEngine           *workflows.Engine
 	orchestrator       *workflows.Orchestrator
 	movieStatusUpdater MovieStatusUpdater
+	builtinTorrentOn   func() bool
 
 	mu sync.RWMutex
 }
@@ -106,6 +111,7 @@ func NewService(opts ServiceOptions) (*Service, error) {
 		historyStore:       opts.HistoryStore,
 		wfEngine:           opts.WorkflowEngine,
 		movieStatusUpdater: opts.MovieStatusUpdater,
+		builtinTorrentOn:   opts.BuiltinTorrentEnabled,
 	}, nil
 }
 
@@ -127,6 +133,28 @@ func (s *Service) SetOrchestrator(o *workflows.Orchestrator) {
 	s.mu.Lock()
 	s.orchestrator = o
 	s.mu.Unlock()
+}
+
+// SetBuiltinTorrentEnabled installs the predicate used to decide whether the
+// built-in torrent (Rain sidecar) download kind is currently available. A nil
+// predicate is treated as "enabled".
+func (s *Service) SetBuiltinTorrentEnabled(fn func() bool) {
+	s.mu.Lock()
+	s.builtinTorrentOn = fn
+	s.mu.Unlock()
+}
+
+// builtinTorrentAllowed reports whether the built-in torrent kind may be used.
+// It defaults to true when no predicate has been wired so that test and
+// embedding callers keep working without feature-flag plumbing.
+func (s *Service) builtinTorrentAllowed() bool {
+	s.mu.RLock()
+	fn := s.builtinTorrentOn
+	s.mu.RUnlock()
+	if fn == nil {
+		return true
+	}
+	return fn()
 }
 
 // SetMovieStatusUpdater sets the movie status updater for the service.

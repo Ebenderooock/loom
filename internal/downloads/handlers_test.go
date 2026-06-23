@@ -127,6 +127,79 @@ func TestHandlersGetNotFound(t *testing.T) {
 	}
 }
 
+// When the builtin_torrent predicate reports disabled, the create, replace and
+// test-config handlers must reject the builtin/torrent kind with HTTP 400 and a
+// kind_disabled error, while other kinds keep working.
+func TestHandlersRejectBuiltinTorrentWhenDisabled(t *testing.T) {
+	t.Parallel()
+	svc := newServiceForTest(t)
+	svc.SetBuiltinTorrentEnabled(func() bool { return false })
+	r := chi.NewMux()
+	svc.Mount(r)
+
+	decodeCode := func(t *testing.T, b []byte) string {
+		t.Helper()
+		var env struct {
+			Error struct {
+				Code string `json:"code"`
+			} `json:"error"`
+		}
+		if err := json.Unmarshal(b, &env); err != nil {
+			t.Fatalf("decode err: %v", err)
+		}
+		return env.Error.Code
+	}
+
+	post := func(t *testing.T, path, body string) *httptest.ResponseRecorder {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		rr := httptest.NewRecorder()
+		r.ServeHTTP(rr, req)
+		return rr
+	}
+
+	// create rejected
+	rr := post(t, "/api/v1/download-clients/",
+		`{"id":"t1","name":"Rain","kind":"builtin/torrent","protocol":"torrent"}`)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("create status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if got := decodeCode(t, rr.Body.Bytes()); got != "kind_disabled" {
+		t.Fatalf("create error code=%q want kind_disabled", got)
+	}
+
+	// test-config rejected
+	rr = post(t, "/api/v1/download-clients/test",
+		`{"name":"Rain","kind":"builtin/torrent","protocol":"torrent"}`)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("test-config status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if got := decodeCode(t, rr.Body.Bytes()); got != "kind_disabled" {
+		t.Fatalf("test-config error code=%q want kind_disabled", got)
+	}
+
+	// replace rejected
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/download-clients/t1",
+		strings.NewReader(`{"name":"Rain","kind":"builtin/torrent","protocol":"torrent"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rr = httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("replace status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if got := decodeCode(t, rr.Body.Bytes()); got != "kind_disabled" {
+		t.Fatalf("replace error code=%q want kind_disabled", got)
+	}
+
+	// a non-torrent kind is unaffected
+	rr = post(t, "/api/v1/download-clients/",
+		`{"id":"n1","name":"Null","kind":"builtin/null","protocol":"torrent"}`)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("create null status=%d body=%s", rr.Code, rr.Body.String())
+	}
+}
+
 func TestHandlersCategoriesAndFreeSpaceAndItems(t *testing.T) {
 	t.Parallel()
 	r, svc := newRouterForTest(t)
