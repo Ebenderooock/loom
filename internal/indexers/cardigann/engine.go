@@ -31,6 +31,10 @@ const (
 	defaultTimeout   = 120 * time.Second
 )
 
+// Compile-time assertion that *Engine satisfies indexers.Indexer, so a
+// future drift in the interface method set is caught at build time.
+var _ indexers.Indexer = (*Engine)(nil)
+
 // Engine is the live indexers.Indexer for a single Cardigann
 // definition. It owns the cookie jar (so login state survives across
 // Search calls), the parsed definition, and the operator-supplied
