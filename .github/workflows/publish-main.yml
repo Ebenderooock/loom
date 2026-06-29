@@ -32,7 +32,7 @@ jobs:
       packages: write # push to ghcr.io
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0 # full history for `git describe` build metadata
 
