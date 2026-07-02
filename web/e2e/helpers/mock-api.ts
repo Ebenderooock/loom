@@ -370,7 +370,7 @@ export async function mockSettings(page: Page) {
   });
   await mockGet(page, "indexers", { indexers: [SAMPLE_INDEXER] });
   await mockGet(page, "quality-profiles", [SAMPLE_QUALITY_PROFILE]);
-  await mockGet(page, "api-keys", []);
+  await mockGet(page, "api-keys", { data: [] });
   await mockGet(page, "notifications", []);
   await mockGet(page, "connect", []);
   await mockGet(page, "system/config", {});

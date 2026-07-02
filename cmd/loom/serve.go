@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/ebenderooock/loom/internal/apikeys"
 	"github.com/ebenderooock/loom/internal/appconfig"
 	"github.com/ebenderooock/loom/internal/auditlog"
 	"github.com/ebenderooock/loom/internal/backup"
@@ -190,6 +191,7 @@ func cmdServe(ctx context.Context, args []string) error {
 	if err != nil {
 		return fmt.Errorf("init server: %w", err)
 	}
+	srv.SetAPIKeys(apikeys.NewStore(db.DB()))
 	srv.SetDownloads(downloadSvc)
 	srv.SetRSS(rssSvc)
 	srv.SetMovies(moviesSvc)

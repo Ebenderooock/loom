@@ -13,6 +13,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/ebenderooock/loom/internal/apikeys"
 	"github.com/ebenderooock/loom/internal/appconfig"
 	"github.com/ebenderooock/loom/internal/kernel/config"
 	"github.com/ebenderooock/loom/internal/kernel/telemetry"
@@ -38,6 +39,9 @@ func newTestServer(t *testing.T) *Server {
 	}
 	db, err := storage.Open(context.Background(), cfg.Storage, logger)
 	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Migrate(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	s, err := New(cfg, &appconfig.Config{}, logger, tel, db, nil, nil, nil, nil, nil)
@@ -68,6 +72,26 @@ func TestHealthz(t *testing.T) {
 	}
 	if !strings.Contains(w.Body.String(), `"ok"`) {
 		t.Errorf("body = %s", w.Body.String())
+	}
+}
+
+func TestAPIKeysRouteMountedWhenConfigured(t *testing.T) {
+	s := newTestServer(t)
+	s.SetAPIKeys(apikeys.NewStore(s.db.DB()))
+
+	w := do(t, s.newMux(), http.MethodGet, "/api/v1/api-keys")
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
+	}
+
+	var body struct {
+		Data []any `json:"data"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatalf("unmarshal body: %v", err)
+	}
+	if body.Data == nil {
+		t.Fatal("expected data array in response")
 	}
 }
 

@@ -108,6 +108,7 @@ import {
   useDeleteDownload,
   type Download as DownloadClient,
 } from "@/lib/downloads-api";
+import { useAPIKeys, useCreateAPIKey } from "@/lib/api-keys-api";
 import { DownloadForm } from "@/components/downloads/download-form";
 
 // ─── Types ──────────────────────────────────────────────────────────────
@@ -714,30 +715,41 @@ function ImportModePanel() {
 
 export function GeneralPanel() {
   const [logLevel, setLogLevel] = React.useState("info");
-  const [apiKey, setApiKey] = React.useState<string | null>(null);
+  const [revealedApiKey, setRevealedApiKey] = React.useState<string | null>(
+    null,
+  );
   const [copied, setCopied] = React.useState(false);
+  const { data: apiKeys = [], isLoading: apiKeysLoading } = useAPIKeys();
+  const createApiKey = useCreateAPIKey();
+  const currentApiKey = apiKeys[0] ?? null;
+  const displayedApiKey = revealedApiKey ?? currentApiKey?.key ?? "";
+  const canCopyApiKey = Boolean(revealedApiKey);
 
-  React.useEffect(() => {
-    let cancelled = false;
-    apiFetch("/api/v1/auth/api-key")
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data: { apiKey?: string } | null) => {
-        if (!cancelled && data?.apiKey) {
-          setApiKey(data.apiKey);
-        }
-      })
-      .catch(() => {
-        // endpoint may not exist — leave apiKey null
+  const generateApiKey = async () => {
+    try {
+      const created = await createApiKey.mutateAsync({
+        name:
+          apiKeys.length === 0
+            ? "Default"
+            : `Integration key ${apiKeys.length + 1}`,
+        scopes: "*",
       });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+      setRevealedApiKey(created.key);
+      setCopied(false);
+      toast.success(
+        "API key generated. Copy it now — it won't be shown again.",
+      );
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Failed to generate API key";
+      toast.error(message);
+    }
+  };
 
   const copyApiKey = async () => {
-    if (!apiKey) return;
+    if (!canCopyApiKey || !displayedApiKey) return;
     try {
-      await navigator.clipboard.writeText(apiKey);
+      await navigator.clipboard.writeText(displayedApiKey);
       setCopied(true);
       toast.success("API key copied to clipboard");
       setTimeout(() => setCopied(false), 2000);
@@ -828,22 +840,27 @@ export function GeneralPanel() {
               <Key className="h-4 w-4 text-teal-400" /> API Key
             </h3>
             <p className="text-xs text-zinc-500">
-              Use this key to authenticate external API requests
+              Use this key for Loom clients like Radarr, Sonarr, Prowlarr, and
+              Newznab integrations
             </p>
           </div>
 
           <div className="flex items-center gap-2">
             <Input
               readOnly
-              value={apiKey ?? ""}
-              placeholder="API key will be shown here once configured"
+              value={displayedApiKey}
+              placeholder={
+                apiKeysLoading
+                  ? "Loading API keys..."
+                  : "No API key has been generated yet"
+              }
               className="flex-1 border-zinc-700 bg-zinc-900 font-mono text-sm text-zinc-400"
             />
             <Button
               variant="outline"
               size="sm"
               onClick={copyApiKey}
-              disabled={!apiKey}
+              disabled={!canCopyApiKey}
               className="shrink-0 border-zinc-700 text-zinc-400"
             >
               {copied ? (
@@ -852,7 +869,29 @@ export function GeneralPanel() {
                 <Copy className="h-4 w-4" />
               )}
             </Button>
+            <Button
+              size="sm"
+              onClick={generateApiKey}
+              disabled={createApiKey.isPending}
+              className="shrink-0"
+            >
+              {createApiKey.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : currentApiKey ? (
+                "Generate new"
+              ) : (
+                "Generate key"
+              )}
+            </Button>
           </div>
+
+          <p className="text-xs text-zinc-500">
+            {revealedApiKey
+              ? "Copy this key now. For security, Loom only shows the full value when it is created."
+              : currentApiKey
+                ? "Existing keys are masked after creation. Generate a new key if you need a copyable value."
+                : "Generate a key here to enable external clients to authenticate with Loom."}
+          </p>
         </CardContent>
       </Card>
     </div>
