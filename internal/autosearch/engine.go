@@ -10,7 +10,9 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
+	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -94,6 +96,9 @@ func NewEngine(
 
 // EngineOption configures optional Engine dependencies.
 type EngineOption func(*Engine)
+
+// yearRe matches a 4-digit year (1900-2099) in a release title.
+var yearRe = regexp.MustCompile(`\b(19|20)\d{2}\b`)
 
 // WithAuditLogger attaches an audit logger to the engine for search event tracking.
 func WithAuditLogger(al *auditlog.Logger) EngineOption {
@@ -949,6 +954,23 @@ func (e *Engine) verifyIdentity(req SearchRequest, parsed *parser.Release, idBas
 		}
 		if diff > 1 {
 			return "wrong_year"
+		}
+	}
+
+	// Secondary year check: when the parser didn't extract a year (e.g. the
+	// year appears before the title or in an unusual position), scan the raw
+	// release name for any 4-digit year. If one is found and differs from the
+	// requested year by more than 1, reject the release.
+	if req.MediaType == "movie" && req.Year > 0 && parsed.Year == 0 && parsed.Name != "" {
+		if m := yearRe.FindString(parsed.Name); m != "" {
+			foundYear, _ := strconv.Atoi(m)
+			diff := req.Year - foundYear
+			if diff < 0 {
+				diff = -diff
+			}
+			if diff > 1 {
+				return "wrong_year"
+			}
 		}
 	}
 

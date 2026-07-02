@@ -664,6 +664,60 @@ func TestVerifyIdentity_MovieYear(t *testing.T) {
 	}
 }
 
+// TestVerifyIdentity_MovieYearlessRelease covers the case where parsed.Year==0
+// because the year doesn't appear in a standard position, but the raw release
+// name contains a year that differs from the requested year (Bug #102).
+func TestVerifyIdentity_MovieYearlessRelease(t *testing.T) {
+	e := newEngine()
+	tests := []struct {
+		name       string
+		releaseName string
+		reqYear    int
+		wantReason string
+	}{
+		{
+			name:        "old year in raw name rejected",
+			releaseName: "Masters.of.the.Universe.1987.1080p.BluRay",
+			reqYear:     2026,
+			wantReason:  "wrong_year",
+		},
+		{
+			name:        "matching year in raw name passes",
+			releaseName: "Masters.of.the.Universe.2026.1080p.BluRay",
+			reqYear:     2026,
+			wantReason:  "",
+		},
+		{
+			name:        "off-by-1 year in raw name passes",
+			releaseName: "Masters.of.the.Universe.2025.1080p.BluRay",
+			reqYear:     2026,
+			wantReason:  "",
+		},
+		{
+			name:        "no year in raw name passes (cannot discriminate)",
+			releaseName: "Masters.of.the.Universe.1080p.BluRay",
+			reqYear:     2026,
+			wantReason:  "",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			req := SearchRequest{MediaType: "movie", Title: "Masters of the Universe", Year: tc.reqYear}
+			// Simulate a release where the parser extracted Title but Year==0
+			// (year in unusual position or parser missed it).
+			parsed := &parser.Release{
+				Name:  tc.releaseName,
+				Title: "Masters of the Universe",
+				Year:  0,
+			}
+			got := e.verifyIdentity(req, parsed, false)
+			if got != tc.wantReason {
+				t.Errorf("want %q, got %q", tc.wantReason, got)
+			}
+		})
+	}
+}
+
 // ── buildQueryChain tests ─────────────────────────────────────────────────────
 
 func TestBuildQueryChain_EpisodeWithIDs(t *testing.T) {
