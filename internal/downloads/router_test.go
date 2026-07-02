@@ -306,6 +306,32 @@ func TestBuildAddRequest(t *testing.T) {
 	}
 }
 
+func TestRouterShutdownWaitsForQueuedEnrichment(t *testing.T) {
+	t.Parallel()
+
+	bus := &capturingBus{}
+	router, _ := newTestRouter(t, bus)
+	defer router.Close()
+
+	lifecycleCtx, cancel := context.WithCancel(context.Background())
+	cancel()
+	router.SetLifecycleContext(lifecycleCtx)
+
+	router.enqueueEnrichment(&indexers.Result{GUID: "g1", Title: "t1"}, "d1")
+
+	done := make(chan struct{})
+	go func() {
+		_ = router.Shutdown()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(1 * time.Second):
+		t.Fatal("router shutdown timed out")
+	}
+}
+
 // ptrInt returns a pointer to an int.
 func ptrInt(v int) *int { return &v }
 

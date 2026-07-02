@@ -30,6 +30,7 @@ type downloadWiring struct {
 	importPipeline     *imports.ImportPipeline
 	orchestratorCancel context.CancelFunc
 	monitorCancel      context.CancelFunc
+	router             *downloads.Router
 	autoSearchEngine   *autosearch.Engine
 	musicAutoSearcher  *musicsearch.AutoSearcher
 	musicRefresher     *music.ReleaseRefresher
@@ -261,6 +262,18 @@ func wireDownloads(
 	monCtx, monCancel := context.WithCancel(ctx)
 	go downloadMonitor.RunLoop(monCtx)
 
+	// Event-bus router from indexer results to download clients.
+	router := downloads.NewRouter(
+		downloadSvc,
+		nil, // metadata router wiring is separate; router safely skips enrichment when nil
+		srv.Bus(),
+		logger,
+		downloads.SystemClock{},
+		indexerSvc.Get,
+		indexerSvc.FetchDownload,
+	)
+	router.SetLifecycleContext(ctx)
+
 	// Start orchestrator goroutine
 	orchCtx, orchCancel := context.WithCancel(ctx)
 	go orchestrator.Run(orchCtx)
@@ -273,6 +286,7 @@ func wireDownloads(
 		importPipeline:     importPipeline,
 		orchestratorCancel: orchCancel,
 		monitorCancel:      monCancel,
+		router:             router,
 		autoSearchEngine:   autoSearchEngine,
 		musicAutoSearcher:  musicAutoSearcher,
 		musicRefresher:     musicRefresher,

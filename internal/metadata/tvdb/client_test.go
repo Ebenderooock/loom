@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -72,6 +73,74 @@ func TestLogin_InvalidCredentials(t *testing.T) {
 	var e *ClientError
 	if !errors.As(err, &e) || e.Code != ErrCodeUnauthorized {
 		t.Fatalf("expected ErrCodeUnauthorized, got %v", err)
+	}
+}
+
+func TestLogin_RejectsOversizedErrorBody(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte(strings.Repeat("x", int(maxTVDBErrorBodySize+1))))
+	}))
+	defer server.Close()
+
+	cfg := Config{
+		APIKey:  "test-key",
+		BaseURL: server.URL,
+	}
+	client := NewClient(cfg)
+
+	err := client.Login(context.Background())
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	var e *ClientError
+	if !errors.As(err, &e) || e.Code != ErrCodeNetworkError {
+		t.Fatalf("expected network error for oversized body, got %v", err)
+	}
+}
+
+func TestEnsureToken_ConcurrentSingleflight(t *testing.T) {
+	var loginCalls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/login" {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
+		loginCalls.Add(1)
+		time.Sleep(150 * time.Millisecond)
+		json.NewEncoder(w).Encode(LoginResponse{
+			Data: LoginData{Token: "test-token"},
+		})
+	}))
+	defer server.Close()
+
+	client := NewClient(Config{
+		APIKey:  "test-key",
+		BaseURL: server.URL,
+	})
+
+	var wg sync.WaitGroup
+	errs := make(chan error, 2)
+	for i := 0; i < 2; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			errs <- client.ensureToken(context.Background())
+		}()
+	}
+	wg.Wait()
+	close(errs)
+
+	for err := range errs {
+		if err != nil {
+			t.Fatalf("ensureToken returned error: %v", err)
+		}
+	}
+	if got := loginCalls.Load(); got != 1 {
+		t.Fatalf("expected 1 login call, got %d", got)
+	}
+	if token := client.getToken(); token != "test-token" {
+		t.Fatalf("expected token to be populated, got %q", token)
 	}
 }
 

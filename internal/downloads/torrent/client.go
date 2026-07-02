@@ -418,6 +418,10 @@ func (c *Client) SetSpeedLimits(downBytesPerSec, upBytesPerSec int64) {
 	c.mu.Unlock()
 }
 
+func (c *Client) Close() error {
+	return nil
+}
+
 type PeerInfo struct {
 	IP       string  `json:"ip"`
 	Port     int     `json:"port"`

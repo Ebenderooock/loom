@@ -157,6 +157,7 @@ func cmdServe(ctx context.Context, args []string) error {
 	if err != nil {
 		return fmt.Errorf("init downloads: %w", err)
 	}
+	defer downloadSvc.Close()
 	if err := registerDownloadHealthJob(ctx, sched, cfg, downloadSvc); err != nil {
 		return fmt.Errorf("register download health job: %w", err)
 	}
@@ -218,6 +219,9 @@ func cmdServe(ctx context.Context, args []string) error {
 	defer dlWiring.importPipeline.Stop()
 	defer dlWiring.monitorCancel()
 	defer dlWiring.orchestratorCancel()
+	if dlWiring.router != nil {
+		defer dlWiring.router.Shutdown()
+	}
 	if dlWiring.musicAutoSearcher != nil {
 		dlWiring.musicAutoSearcher.Start(ctx)
 		defer dlWiring.musicAutoSearcher.Stop()

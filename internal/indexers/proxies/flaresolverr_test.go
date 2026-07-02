@@ -117,6 +117,23 @@ func TestFlareSolverrPing(t *testing.T) {
 	}
 }
 
+func TestFlareSolverrPingRejectsOversizedResponse(t *testing.T) {
+	t.Parallel()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(strings.Repeat("x", 21<<20)))
+	}))
+	defer srv.Close()
+	cli := proxies.NewFlareSolverrClient(nil, 30*time.Second)
+	err := cli.Ping(context.Background(), proxies.FlareSolverrConfig{URL: srv.URL})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !strings.Contains(err.Error(), "response too large") {
+		t.Fatalf("expected size limit error, got %v", err)
+	}
+}
+
 func TestBuildHTTPTransport(t *testing.T) {
 	t.Parallel()
 	p := proxies.Proxy{

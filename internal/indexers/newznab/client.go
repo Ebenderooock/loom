@@ -19,6 +19,8 @@ import (
 const (
 	defaultUserAgent = "Loom/0.1 (+https://loom.dev)"
 	defaultTimeout   = 120 * time.Second
+	maxDownloadBody  = int64(50 << 20) // 50 MiB
+	maxAPIBody       = int64(20 << 20) // 20 MiB
 )
 
 // attrFlavour distinguishes which extended-attribute namespace the
@@ -153,7 +155,7 @@ func (c *Client) FetchDownload(ctx context.Context, fullURL string) ([]byte, err
 	}
 	defer resp.Body.Close()
 
-	body, rerr := io.ReadAll(resp.Body)
+	body, rerr := readLimitedBody(resp.Body, maxDownloadBody)
 	if rerr != nil {
 		return nil, fmt.Errorf("%w: read download body: %s", ErrUpstream, rerr.Error())
 	}
@@ -225,7 +227,7 @@ func (c *Client) get(ctx context.Context, fullURL string) ([]byte, error) {
 	}
 	defer resp.Body.Close()
 
-	body, rerr := io.ReadAll(resp.Body)
+	body, rerr := readLimitedBody(resp.Body, maxAPIBody)
 	if rerr != nil {
 		return nil, fmt.Errorf("%w: read body: %s", ErrUpstream, rerr.Error())
 	}
@@ -259,6 +261,17 @@ func classifyHTTP(resp *http.Response, body []byte) error {
 			resp.StatusCode, snippet(body))
 	}
 	return nil
+}
+
+func readLimitedBody(r io.Reader, maxSize int64) ([]byte, error) {
+	body, err := io.ReadAll(io.LimitReader(r, maxSize+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(body)) > maxSize {
+		return nil, fmt.Errorf("response too large: %d > %d", len(body), maxSize)
+	}
+	return body, nil
 }
 
 // looksLikeCloudFlare detects Cloudflare JS challenge / CAPTCHA pages

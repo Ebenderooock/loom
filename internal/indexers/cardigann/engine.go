@@ -29,6 +29,8 @@ import (
 const (
 	defaultUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
 	defaultTimeout   = 120 * time.Second
+	maxLoginBodySize = int64(5 << 20)  // 5 MiB
+	maxFetchBodySize = int64(20 << 20) // 20 MiB
 )
 
 // Engine is the live indexers.Indexer for a single Cardigann
@@ -343,7 +345,10 @@ func (e *Engine) formLogin(ctx context.Context) error {
 		return fmt.Errorf("cardigann: login request: %w", err)
 	}
 	defer resp.Body.Close()
-	body, _ := io.ReadAll(resp.Body)
+	body, err := readLimitedBody(resp.Body, maxLoginBodySize)
+	if err != nil {
+		return err
+	}
 	// A login that yields a 4xx/5xx (other than the redirect chain
 	// already followed by net/http) almost certainly failed.
 	if resp.StatusCode >= 400 {
@@ -398,7 +403,10 @@ func (e *Engine) getLogin(ctx context.Context) error {
 		return fmt.Errorf("cardigann: get login request: %w", err)
 	}
 	defer resp.Body.Close()
-	body, _ := io.ReadAll(resp.Body)
+	body, err := readLimitedBody(resp.Body, maxLoginBodySize)
+	if err != nil {
+		return err
+	}
 	if resp.StatusCode >= 400 {
 		return fmt.Errorf("cardigann: get login got status %d", resp.StatusCode)
 	}
@@ -723,7 +731,7 @@ func (e *Engine) fetch(ctx context.Context, method, target string, params url.Va
 	}
 	defer resp.Body.Close()
 	slog.Debug("cardigann: fetch response", "url", full, "status", resp.StatusCode, "contentType", resp.Header.Get("Content-Type"))
-	body, rerr := io.ReadAll(resp.Body)
+	body, rerr := readLimitedBody(resp.Body, maxFetchBodySize)
 	if rerr != nil {
 		return nil, fmt.Errorf("cardigann: read body: %w", rerr)
 	}
@@ -751,6 +759,17 @@ func (e *Engine) fetch(ctx context.Context, method, target string, params url.Va
 	}
 	if resp.StatusCode >= 400 {
 		return nil, fmt.Errorf("cardigann: status %d", resp.StatusCode)
+	}
+	return body, nil
+}
+
+func readLimitedBody(r io.Reader, maxSize int64) ([]byte, error) {
+	body, err := io.ReadAll(io.LimitReader(r, maxSize+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(body)) > maxSize {
+		return nil, fmt.Errorf("cardigann: response too large: %d > %d", len(body), maxSize)
 	}
 	return body, nil
 }
