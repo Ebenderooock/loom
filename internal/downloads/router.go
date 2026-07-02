@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/ebenderooock/loom/internal/downloads/torrentutil"
@@ -41,6 +42,9 @@ type Router struct {
 	metadataRouter *metadata.Router
 	indexerLookup  IndexerConfigLookup
 	indexerFetch   IndexerDownloadFetch
+	lifecycleCtx   context.Context
+	enrichSem      chan struct{}
+	enrichWG       sync.WaitGroup
 
 	// unsubscribe is the function returned by Subscribe; stored so
 	// we can clean up on shutdown if needed.
@@ -67,6 +71,8 @@ func NewRouter(svc *Service, metadataRouter *metadata.Router, bus eventbus.Bus, 
 		clock:          clock,
 		indexerLookup:  indexerLookup,
 		indexerFetch:   indexerFetch,
+		lifecycleCtx:   context.Background(),
+		enrichSem:      make(chan struct{}, 20),
 	}
 
 	// Subscribe to indexer results. The handler runs synchronously in
@@ -188,9 +194,7 @@ func (r *Router) handleIndexerResult(ctx context.Context, ev eventbus.Event) err
 				"client_id", res.ClientID, "download_id", res.ItemID)
 
 			// Enrich with metadata (non-blocking, fire-and-forget).
-			// Use a background context to avoid blocking the event handler,
-			// but add a short timeout to prevent resource leaks.
-			go r.enrichMetadata(result, res.ItemID)
+			r.enqueueEnrichment(result, res.ItemID)
 
 			return nil
 		}
@@ -281,20 +285,51 @@ func sortClientsByPriority(clients []DownloadClient) {
 
 // Close unsubscribes from the event bus. Safe to call multiple times.
 func (r *Router) Close() error {
+	if err := r.Shutdown(); err != nil {
+		return err
+	}
 	if r.unsubscribe != nil {
 		r.unsubscribe()
 	}
 	return nil
 }
 
+// SetLifecycleContext installs the server lifecycle context used by
+// background enrichment goroutines.
+func (r *Router) SetLifecycleContext(ctx context.Context) {
+	if ctx == nil {
+		r.lifecycleCtx = context.Background()
+		return
+	}
+	r.lifecycleCtx = ctx
+}
+
+// Shutdown waits for all in-flight metadata enrichment tasks to complete.
+func (r *Router) Shutdown() error {
+	r.enrichWG.Wait()
+	return nil
+}
+
+func (r *Router) enqueueEnrichment(result *indexers.Result, downloadID string) {
+	r.enrichWG.Add(1)
+	go func() {
+		defer r.enrichWG.Done()
+		select {
+		case r.enrichSem <- struct{}{}:
+			defer func() { <-r.enrichSem }()
+		case <-r.lifecycleCtx.Done():
+			return
+		}
+		r.enrichMetadata(result, downloadID)
+	}()
+}
+
 // enrichMetadata is called in a background goroutine to enrich an indexer
 // Result with metadata from all providers. It publishes TopicMetadataEnriched
 // or TopicMetadataFailure to the event bus (non-blocking, fire-and-forget).
 func (r *Router) enrichMetadata(result *indexers.Result, downloadID string) {
-	// Use a short timeout to prevent resource leaks; metadata router
-	// itself has a 10s internal timeout, but we don't want to block
-	// the background goroutine indefinitely.
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	// Use the router lifecycle context so shutdown can cancel in-flight enrichment.
+	ctx, cancel := context.WithTimeout(r.lifecycleCtx, 15*time.Second)
 	defer cancel()
 
 	if r.metadataRouter == nil {

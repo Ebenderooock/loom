@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/ebenderooock/loom/internal/metadata"
+	"golang.org/x/sync/singleflight"
 )
 
 // Config holds TVDB API configuration.
@@ -29,10 +30,16 @@ type Config struct {
 type Client struct {
 	config     Config
 	httpClient *http.Client
+	tokenMu    sync.RWMutex
 	token      string
-	tokenMutex sync.Mutex
+	loginGroup singleflight.Group
 	logger     interface{} // placeholder for logger
 }
+
+const (
+	maxTVDBErrorBodySize = int64(5 << 20)  // 5 MiB
+	maxTVDBLoginBodySize = int64(20 << 20) // 20 MiB
+)
 
 // NewClient creates a new TVDB client with the given config.
 func NewClient(cfg Config) *Client {
@@ -55,9 +62,10 @@ func (c *Client) Name() string {
 
 // Login obtains a JWT token from TVDB API.
 func (c *Client) Login(ctx context.Context) error {
-	c.tokenMutex.Lock()
-	defer c.tokenMutex.Unlock()
+	return c.login(ctx)
+}
 
+func (c *Client) login(ctx context.Context) error {
 	loginReq := LoginRequest{
 		APIKey: c.config.APIKey,
 		PIN:    c.config.PIN,
@@ -87,16 +95,23 @@ func (c *Client) Login(ctx context.Context) error {
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
+		body, err := readLimitedBody(resp.Body, maxTVDBErrorBodySize)
+		if err != nil {
+			return NewNetworkError(err)
+		}
 		return NewClientError(resp.StatusCode, string(body))
 	}
 
+	loginBody, err := readLimitedBody(resp.Body, maxTVDBLoginBodySize)
+	if err != nil {
+		return NewNetworkError(err)
+	}
 	var loginResp LoginResponse
-	if err := json.NewDecoder(resp.Body).Decode(&loginResp); err != nil {
+	if err := json.Unmarshal(loginBody, &loginResp); err != nil {
 		return NewNetworkError(err)
 	}
 
-	c.token = loginResp.Data.Token
+	c.setToken(loginResp.Data.Token)
 	return nil
 }
 
@@ -138,9 +153,7 @@ func (c *Client) GetSeriesEpisodes(ctx context.Context, tvdbID int, seasonType s
 
 		if resp.StatusCode == http.StatusUnauthorized {
 			resp.Body.Close()
-			c.tokenMutex.Lock()
-			c.token = ""
-			c.tokenMutex.Unlock()
+			c.setToken("")
 			if err := c.ensureToken(ctx); err != nil {
 				return nil, err
 			}
@@ -155,7 +168,11 @@ func (c *Client) GetSeriesEpisodes(ctx context.Context, tvdbID int, seasonType s
 			return nil, NewNotFoundError(fmt.Sprintf("series %d not found", tvdbID))
 		}
 		if resp.StatusCode != http.StatusOK {
-			body, _ := io.ReadAll(resp.Body)
+			body, err := readLimitedBody(resp.Body, maxTVDBErrorBodySize)
+			if err != nil {
+				resp.Body.Close()
+				return nil, NewNetworkError(err)
+			}
 			resp.Body.Close()
 			if resp.StatusCode >= 500 {
 				return nil, NewServerError(resp.StatusCode, string(body))
@@ -268,9 +285,7 @@ func (c *Client) getSeriesData(ctx context.Context, tvdbID int) (*SeriesData, er
 
 	if resp.StatusCode == http.StatusUnauthorized {
 		// Try to refresh token and retry
-		c.tokenMutex.Lock()
-		c.token = ""
-		c.tokenMutex.Unlock()
+		c.setToken("")
 
 		if err := c.ensureToken(ctx); err != nil {
 			return nil, err
@@ -288,7 +303,10 @@ func (c *Client) getSeriesData(ctx context.Context, tvdbID int) (*SeriesData, er
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
+		body, err := readLimitedBody(resp.Body, maxTVDBErrorBodySize)
+		if err != nil {
+			return nil, NewNetworkError(err)
+		}
 		if resp.StatusCode >= 500 {
 			return nil, NewServerError(resp.StatusCode, string(body))
 		}
@@ -327,9 +345,7 @@ func (c *Client) searchSeries(ctx context.Context, query string, year int) ([]Se
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusUnauthorized {
-		c.tokenMutex.Lock()
-		c.token = ""
-		c.tokenMutex.Unlock()
+		c.setToken("")
 
 		if err := c.ensureToken(ctx); err != nil {
 			return nil, err
@@ -343,7 +359,10 @@ func (c *Client) searchSeries(ctx context.Context, query string, year int) ([]Se
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
+		body, err := readLimitedBody(resp.Body, maxTVDBErrorBodySize)
+		if err != nil {
+			return nil, NewNetworkError(err)
+		}
 		if resp.StatusCode >= 500 {
 			return nil, NewServerError(resp.StatusCode, string(body))
 		}
@@ -360,14 +379,16 @@ func (c *Client) searchSeries(ctx context.Context, query string, year int) ([]Se
 
 // ensureToken ensures a valid JWT token is available.
 func (c *Client) ensureToken(ctx context.Context) error {
-	c.tokenMutex.Lock()
-	if c.token != "" {
-		c.tokenMutex.Unlock()
+	if c.getToken() != "" {
 		return nil
 	}
-	c.tokenMutex.Unlock()
-
-	return c.Login(ctx)
+	_, err, _ := c.loginGroup.Do("tvdb-login", func() (any, error) {
+		if c.getToken() != "" {
+			return nil, nil
+		}
+		return nil, c.login(ctx)
+	})
+	return err
 }
 
 // doRequest performs an HTTP request with exponential backoff for rate limits.
@@ -383,8 +404,8 @@ func (c *Client) doRequest(ctx context.Context, method, url string, body []byte)
 		}
 
 		req.Header.Set("Content-Type", "application/json")
-		if c.token != "" {
-			req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.token))
+		if token := c.getToken(); token != "" {
+			req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 		}
 
 		resp, err := c.httpClient.Do(req)
@@ -429,4 +450,27 @@ func (c *Client) doRequest(ctx context.Context, method, url string, body []byte)
 	}
 
 	return nil, NewRateLimitError("max retries exceeded for rate limit", int(maxBackoff))
+}
+
+func (c *Client) getToken() string {
+	c.tokenMu.RLock()
+	defer c.tokenMu.RUnlock()
+	return c.token
+}
+
+func (c *Client) setToken(token string) {
+	c.tokenMu.Lock()
+	c.token = token
+	c.tokenMu.Unlock()
+}
+
+func readLimitedBody(r io.Reader, maxSize int64) ([]byte, error) {
+	body, err := io.ReadAll(io.LimitReader(r, maxSize+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(body)) > maxSize {
+		return nil, fmt.Errorf("response too large: %d > %d", len(body), maxSize)
+	}
+	return body, nil
 }
