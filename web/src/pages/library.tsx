@@ -147,7 +147,7 @@ export function LibraryPage() {
 
   if (error) {
     return (
-      <div className="flex items-center gap-2 p-4 text-destructive">
+      <div className="text-destructive flex items-center gap-2 p-4">
         <AlertCircle className="h-4 w-4" />
         <span>{errMessage(error, "Failed to load libraries")}</span>
       </div>
@@ -179,7 +179,7 @@ export function LibraryPage() {
 
       {libraries && libraries.length === 0 && (
         <Card>
-          <CardContent className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+          <CardContent className="text-muted-foreground flex flex-col items-center justify-center py-12">
             <FolderOpen className="mb-4 h-12 w-12" />
             <p className="text-lg font-medium">No libraries configured</p>
             <p className="text-sm">
@@ -293,7 +293,7 @@ function LibraryCard({
         </DropdownMenu>
       </CardHeader>
       <CardContent className="space-y-3">
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+        <div className="text-muted-foreground flex items-center gap-2 text-sm">
           <FolderOpen className="h-4 w-4 shrink-0" />
           <span className="truncate">{library.path}</span>
         </div>
@@ -309,7 +309,7 @@ function LibraryCard({
 
         {library.accessible && library.disk_space.total_bytes > 0 && (
           <div className="space-y-1">
-            <div className="flex justify-between text-xs text-muted-foreground">
+            <div className="text-muted-foreground flex justify-between text-xs">
               <span className="flex items-center gap-1">
                 <HardDrive className="h-3 w-3" />
                 {formatBytes(library.disk_space.free_bytes)} free
@@ -356,10 +356,10 @@ function FolderBrowser({
         placeholder="/path/to/media"
       />
       {fs && (
-        <div className="max-h-40 overflow-y-auto rounded border bg-muted/50 text-sm">
+        <div className="bg-muted/50 max-h-40 overflow-y-auto rounded border text-sm">
           {fs.parent && (
             <button
-              className="flex w-full items-center gap-1 px-2 py-1 text-left hover:bg-accent"
+              className="hover:bg-accent flex w-full items-center gap-1 px-2 py-1 text-left"
               onClick={() => {
                 setBrowsePath(fs.parent);
                 onChange(fs.parent);
@@ -372,18 +372,18 @@ function FolderBrowser({
           {fs.directories?.map((dir) => (
             <button
               key={dir.path}
-              className="flex w-full items-center gap-1 px-2 py-1 text-left hover:bg-accent"
+              className="hover:bg-accent flex w-full items-center gap-1 px-2 py-1 text-left"
               onClick={() => {
                 setBrowsePath(dir.path);
                 onChange(dir.path);
               }}
             >
-              <FolderOpen className="h-3 w-3 shrink-0 text-muted-foreground" />
+              <FolderOpen className="text-muted-foreground h-3 w-3 shrink-0" />
               <span className="truncate">{dir.name}</span>
             </button>
           ))}
           {fs.directories?.length === 0 && (
-            <p className="px-2 py-1 text-muted-foreground">No subdirectories</p>
+            <p className="text-muted-foreground px-2 py-1">No subdirectories</p>
           )}
         </div>
       )}
@@ -515,7 +515,7 @@ function LibraryFormDialog({
           </div>
 
           <div className="space-y-3 border-t pt-3">
-            <p className="text-sm font-medium text-muted-foreground">
+            <p className="text-muted-foreground text-sm font-medium">
               Lifecycle Settings
             </p>
 
@@ -654,7 +654,7 @@ function UnmappedDialog({
             {folders.map((f: UnmappedFolder) => (
               <div
                 key={f.path}
-                className="flex items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-accent"
+                className="hover:bg-accent flex items-center gap-2 rounded px-2 py-1.5 text-sm"
               >
                 <FolderOpen className="h-4 w-4 shrink-0 text-yellow-500" />
                 <span className="truncate">{f.name}</span>
@@ -662,7 +662,7 @@ function UnmappedDialog({
             ))}
           </div>
         ) : (
-          <p className="py-4 text-center text-sm text-muted-foreground">
+          <p className="text-muted-foreground py-4 text-center text-sm">
             All folders are mapped!
           </p>
         )}

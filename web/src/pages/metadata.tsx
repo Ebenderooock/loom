@@ -53,7 +53,7 @@ function SearchForm({
   return (
     <form
       onSubmit={handleSubmit}
-      className="space-y-4 rounded-md border border-border p-4"
+      className="border-border space-y-4 rounded-md border p-4"
     >
       <div className="grid gap-4 md:grid-cols-4">
         <div className="md:col-span-2">
@@ -83,7 +83,7 @@ function SearchForm({
             value={type}
             onChange={(e) => setType(e.target.value as MediaType)}
             disabled={isLoading}
-            className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+            className="border-border bg-background w-full rounded-md border px-3 py-2 text-sm"
           >
             <option value="movie">Movie</option>
             <option value="series">Series</option>
@@ -133,7 +133,7 @@ function ResultsGrid({
         {Array.from({ length: 6 }).map((_, i) => (
           <div
             key={i}
-            className="space-y-2 rounded-md border border-border p-4"
+            className="border-border space-y-2 rounded-md border p-4"
           >
             <Skeleton className="h-48 w-full" />
             <Skeleton className="h-4 w-full" />
@@ -174,7 +174,7 @@ function ResultsGrid({
               result.tvdb_id ??
               `result-${idx}`
             }
-            className="overflow-hidden rounded-md border border-border transition-shadow hover:shadow-md"
+            className="border-border overflow-hidden rounded-md border transition-shadow hover:shadow-md"
           >
             {poster && (
               <img
@@ -184,14 +184,14 @@ function ResultsGrid({
               />
             )}
             {!poster && (
-              <div className="flex h-48 w-full items-center justify-center bg-muted text-sm text-muted-foreground">
+              <div className="bg-muted text-muted-foreground flex h-48 w-full items-center justify-center text-sm">
                 No poster
               </div>
             )}
             <div className="space-y-2 p-3">
               <div>
                 <h3 className="line-clamp-2 font-medium">{title}</h3>
-                <div className="text-xs text-muted-foreground">
+                <div className="text-muted-foreground text-xs">
                   {isMovie ? "Movie" : "Series"} {year && `• ${year}`}
                 </div>
               </div>
@@ -199,7 +199,7 @@ function ResultsGrid({
                 <div className="text-sm">⭐ {rating.toFixed(1)}/10</div>
               )}
               {overview && (
-                <p className="line-clamp-2 text-xs text-muted-foreground">
+                <p className="text-muted-foreground line-clamp-2 text-xs">
                   {overview}
                 </p>
               )}
@@ -261,26 +261,26 @@ function CacheStatsTable() {
         </Button>
       </div>
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <div className="rounded-md border border-border p-4">
-          <div className="text-sm text-muted-foreground">Hit Rate</div>
+        <div className="border-border rounded-md border p-4">
+          <div className="text-muted-foreground text-sm">Hit Rate</div>
           <div className="text-2xl font-semibold">
             {stats?.hit_rate?.toFixed(1) ?? 0}%
           </div>
         </div>
-        <div className="rounded-md border border-border p-4">
-          <div className="text-sm text-muted-foreground">Miss Rate</div>
+        <div className="border-border rounded-md border p-4">
+          <div className="text-muted-foreground text-sm">Miss Rate</div>
           <div className="text-2xl font-semibold">
             {stats?.miss_rate?.toFixed(1) ?? 0}%
           </div>
         </div>
-        <div className="rounded-md border border-border p-4">
-          <div className="text-sm text-muted-foreground">Cache Size</div>
+        <div className="border-border rounded-md border p-4">
+          <div className="text-muted-foreground text-sm">Cache Size</div>
           <div className="text-2xl font-semibold">
             {stats?.cache_size ?? 0} KB
           </div>
         </div>
-        <div className="rounded-md border border-border p-4">
-          <div className="text-sm text-muted-foreground">Entries</div>
+        <div className="border-border rounded-md border p-4">
+          <div className="text-muted-foreground text-sm">Entries</div>
           <div className="text-2xl font-semibold">{stats?.entries ?? 0}</div>
         </div>
       </div>
@@ -328,14 +328,14 @@ function ProviderStatusCard({
     );
 
   return (
-    <div className="rounded-md border border-border p-4">
+    <div className="border-border rounded-md border p-4">
       <div className="mb-3 flex items-start justify-between">
         <div>
           <h3 className="font-medium capitalize">{provider}</h3>
           <div className="mt-1">{statusBadge}</div>
         </div>
       </div>
-      <div className="mb-3 space-y-1 text-xs text-muted-foreground">
+      <div className="text-muted-foreground mb-3 space-y-1 text-xs">
         <div>
           API Key:{" "}
           {status?.configured_api_key ? "✓ Configured" : "✗ Not configured"}
@@ -359,7 +359,7 @@ function ProviderStatusCard({
         {test.isPending ? "Testing..." : "Test"}
       </Button>
       {testResult && (
-        <div className="mt-2 rounded bg-muted p-2 text-xs text-muted-foreground">
+        <div className="bg-muted text-muted-foreground mt-2 rounded p-2 text-xs">
           {testResult.ok ? (
             <div>✓ Test passed ({testResult.latency_ms}ms)</div>
           ) : (
@@ -410,7 +410,7 @@ export function MetadataPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Metadata</h1>
-        <p className="text-sm text-muted-foreground">
+        <p className="text-muted-foreground text-sm">
           Search for movies and TV series metadata across all providers.
         </p>
       </div>
@@ -460,14 +460,14 @@ export function MetadataPage() {
           <div className="max-h-64 space-y-3 overflow-y-auto">
             <div>
               <div className="text-sm font-medium">Title</div>
-              <div className="text-sm text-muted-foreground">
+              <div className="text-muted-foreground text-sm">
                 {importDialog?.result.title}
               </div>
             </div>
             {importDialog?.result.overview && (
               <div>
                 <div className="text-sm font-medium">Overview</div>
-                <div className="line-clamp-3 text-sm text-muted-foreground">
+                <div className="text-muted-foreground line-clamp-3 text-sm">
                   {importDialog.result.overview}
                 </div>
               </div>
@@ -475,7 +475,7 @@ export function MetadataPage() {
             {importDialog?.result.rating && (
               <div>
                 <div className="text-sm font-medium">Rating</div>
-                <div className="text-sm text-muted-foreground">
+                <div className="text-muted-foreground text-sm">
                   ⭐ {importDialog.result.rating.toFixed(1)}/10
                 </div>
               </div>

@@ -39,7 +39,7 @@ const AlertTitle = React.forwardRef<
   // eslint-disable-next-line jsx-a11y/heading-has-content -- content is supplied by consumers via {...props} children
   <h5
     ref={ref}
-    className={cn("mb-1 font-medium leading-none tracking-tight", className)}
+    className={cn("mb-1 leading-none font-medium tracking-tight", className)}
     {...props}
   />
 ));

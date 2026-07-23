@@ -5,7 +5,7 @@ export function SystemLogsPanel() {
     <div className="space-y-4">
       <div>
         <h3 className="text-lg font-semibold">System Logs</h3>
-        <p className="text-sm text-muted-foreground">
+        <p className="text-muted-foreground text-sm">
           View real-time application logs and search historical entries. Logs
           are captured independently of the console output level.
         </p>

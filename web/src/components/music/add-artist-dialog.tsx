@@ -131,7 +131,7 @@ export function AddArtistDialog({
 
         <div className="space-y-4">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
             <Input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
@@ -148,7 +148,7 @@ export function AddArtistDialog({
               </>
             )}
             {!searching && query && results.length === 0 && (
-              <p className="py-4 text-center text-sm text-muted-foreground">
+              <p className="text-muted-foreground py-4 text-center text-sm">
                 No artists found.
               </p>
             )}
@@ -168,7 +168,7 @@ export function AddArtistDialog({
                 >
                   <span className="min-w-0">
                     <span className="block truncate font-medium">{r.name}</span>
-                    <span className="block truncate text-xs text-muted-foreground">
+                    <span className="text-muted-foreground block truncate text-xs">
                       {[r.type, r.disambiguation, r.country]
                         .filter(Boolean)
                         .join(" · ")}
@@ -177,7 +177,7 @@ export function AddArtistDialog({
                   {r.already_added ? (
                     <Badge variant="secondary">Added</Badge>
                   ) : isSelected ? (
-                    <Check className="h-4 w-4 text-accent" />
+                    <Check className="text-accent h-4 w-4" />
                   ) : null}
                 </button>
               );
@@ -260,7 +260,7 @@ export function AddArtistDialog({
                 </div>
               </div>
               {libraries.length === 0 && (
-                <p className="text-xs text-destructive">
+                <p className="text-destructive text-xs">
                   No music library configured. Add one under Settings →
                   Libraries.
                 </p>

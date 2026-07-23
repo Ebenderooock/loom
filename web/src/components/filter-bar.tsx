@@ -92,8 +92,8 @@ export function FilterBar({
     <div className="mb-4 space-y-2">
       <div className="flex flex-wrap items-center gap-2">
         {/* Search */}
-        <div className="relative min-w-[200px] max-w-xs flex-1">
-          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <div className="relative max-w-xs min-w-[200px] flex-1">
+          <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2" />
           <Input
             value={localSearch}
             onChange={(e) => handleSearchInput(e.target.value)}
@@ -157,7 +157,7 @@ export function FilterBar({
             <Badge
               key={pill.label}
               variant="secondary"
-              className="cursor-pointer gap-1 text-xs hover:bg-destructive/10"
+              className="hover:bg-destructive/10 cursor-pointer gap-1 text-xs"
               onClick={pill.onClear}
             >
               {pill.label}

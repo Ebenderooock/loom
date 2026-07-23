@@ -302,8 +302,8 @@ function IndexerStatusGrid({
   const totalResults = entries.reduce((sum, i) => sum + i.resultCount, 0);
 
   return (
-    <div className="rounded-md border border-border bg-muted/30 text-sm">
-      <div className="flex items-center gap-3 px-3 py-1.5 text-xs text-muted-foreground">
+    <div className="border-border bg-muted/30 rounded-md border text-sm">
+      <div className="text-muted-foreground flex items-center gap-3 px-3 py-1.5 text-xs">
         <Activity className="h-3.5 w-3.5 shrink-0" />
         <span>
           {searching > 0 ? (
@@ -445,7 +445,7 @@ function FilterBar({
           <Button
             variant="ghost"
             size="sm"
-            className="h-7 gap-1 text-xs text-muted-foreground"
+            className="text-muted-foreground h-7 gap-1 text-xs"
             onClick={clearAll}
           >
             <X className="h-3 w-3" />
@@ -464,17 +464,17 @@ function FilterBar({
       </div>
 
       {expanded && (
-        <div className="space-y-3 rounded-md border border-border bg-muted/30 p-3 text-xs">
+        <div className="border-border bg-muted/30 space-y-3 rounded-md border p-3 text-xs">
           {/* Row 1: Indexers + Quality */}
           <div className="flex flex-wrap gap-4">
             {/* Indexer multi-select */}
             <div className="space-y-1">
-              <span className="font-medium text-muted-foreground">Indexer</span>
+              <span className="text-muted-foreground font-medium">Indexer</span>
               <div className="flex flex-wrap gap-1.5">
                 {availableIndexers.map((id) => (
                   <label
                     key={id}
-                    className="flex cursor-pointer select-none items-center gap-1"
+                    className="flex cursor-pointer items-center gap-1 select-none"
                   >
                     <Checkbox
                       checked={filters.indexers.has(id)}
@@ -485,7 +485,7 @@ function FilterBar({
                   </label>
                 ))}
                 {availableIndexers.length === 0 && (
-                  <span className="italic text-muted-foreground">
+                  <span className="text-muted-foreground italic">
                     No indexers
                   </span>
                 )}
@@ -494,12 +494,12 @@ function FilterBar({
 
             {/* Quality checkboxes */}
             <div className="space-y-1">
-              <span className="font-medium text-muted-foreground">Quality</span>
+              <span className="text-muted-foreground font-medium">Quality</span>
               <div className="flex flex-wrap gap-1.5">
                 {QUALITY_OPTIONS.map((q) => (
                   <label
                     key={q}
-                    className="flex cursor-pointer select-none items-center gap-1"
+                    className="flex cursor-pointer items-center gap-1 select-none"
                   >
                     <Checkbox
                       checked={filters.qualities.has(q)}
@@ -523,7 +523,7 @@ function FilterBar({
           {/* Row 2: Size + Seeders + Freeleech */}
           <div className="flex flex-wrap items-end gap-4">
             <div className="space-y-1">
-              <span className="font-medium text-muted-foreground">
+              <span className="text-muted-foreground font-medium">
                 Min Size (MB)
               </span>
               <Input
@@ -539,7 +539,7 @@ function FilterBar({
               />
             </div>
             <div className="space-y-1">
-              <span className="font-medium text-muted-foreground">
+              <span className="text-muted-foreground font-medium">
                 Max Size (GB)
               </span>
               <Input
@@ -555,7 +555,7 @@ function FilterBar({
               />
             </div>
             <div className="space-y-1">
-              <span className="font-medium text-muted-foreground">
+              <span className="text-muted-foreground font-medium">
                 Min Seeders
               </span>
               <Input
@@ -572,7 +572,7 @@ function FilterBar({
             {hasFreeleech && (
               <label
                 htmlFor="freeleech-only"
-                className="flex cursor-pointer select-none items-center gap-1.5 pb-1"
+                className="flex cursor-pointer items-center gap-1.5 pb-1 select-none"
               >
                 <Checkbox
                   id="freeleech-only"
@@ -873,10 +873,10 @@ export function ReleaseSearchDialog({
         )}
 
         {/* Results table */}
-        <div className="flex-1 overflow-auto rounded-md border border-border">
+        <div className="border-border flex-1 overflow-auto rounded-md border">
           <table className="w-full text-sm">
             <caption className="sr-only">Search results</caption>
-            <thead className="sticky top-0 z-10 bg-muted/50 text-left">
+            <thead className="bg-muted/50 sticky top-0 z-10 text-left">
               <tr>
                 <th scope="col" className="px-3 py-2">
                   Title
@@ -909,7 +909,7 @@ export function ReleaseSearchDialog({
                 <tr>
                   <td
                     colSpan={8}
-                    className="px-3 py-10 text-center text-muted-foreground"
+                    className="text-muted-foreground px-3 py-10 text-center"
                   >
                     Enter a query and click Search to find releases.
                   </td>
@@ -922,7 +922,7 @@ export function ReleaseSearchDialog({
                   <tr>
                     <td
                       colSpan={8}
-                      className="px-3 py-10 text-center text-muted-foreground"
+                      className="text-muted-foreground px-3 py-10 text-center"
                     >
                       No results found.
                     </td>
@@ -935,7 +935,7 @@ export function ReleaseSearchDialog({
                   <tr>
                     <td
                       colSpan={8}
-                      className="px-3 py-10 text-center text-muted-foreground"
+                      className="text-muted-foreground px-3 py-10 text-center"
                     >
                       No results match the current filters.
                     </td>
@@ -945,7 +945,7 @@ export function ReleaseSearchDialog({
                 <tr>
                   <td
                     colSpan={8}
-                    className="px-3 py-10 text-center text-muted-foreground"
+                    className="text-muted-foreground px-3 py-10 text-center"
                   >
                     <Loader2 className="mr-2 inline-block h-5 w-5 animate-spin" />
                     Searching indexers…
@@ -957,10 +957,10 @@ export function ReleaseSearchDialog({
                 return (
                   <tr
                     key={`${r.indexer_id}-${r.link}-${idx}`}
-                    className="border-t border-border transition-colors hover:bg-accent/5"
+                    className="border-border hover:bg-accent/5 border-t transition-colors"
                   >
                     <td className="px-3 py-2">
-                      <div className="line-clamp-2 text-xs font-medium leading-snug">
+                      <div className="line-clamp-2 text-xs leading-snug font-medium">
                         {r.title}
                       </div>
                       {/* Tracker flags */}
@@ -984,7 +984,7 @@ export function ReleaseSearchDialog({
                         </div>
                       )}
                     </td>
-                    <td className="whitespace-nowrap px-3 py-2">
+                    <td className="px-3 py-2 whitespace-nowrap">
                       <span
                         className={cn(
                           "inline-block rounded px-1.5 py-0.5 text-[10px] font-semibold",
@@ -994,22 +994,22 @@ export function ReleaseSearchDialog({
                         {qb}
                       </span>
                     </td>
-                    <td className="whitespace-nowrap px-3 py-2 text-xs tabular-nums text-muted-foreground">
+                    <td className="text-muted-foreground px-3 py-2 text-xs whitespace-nowrap tabular-nums">
                       {typeof r.score === "number" ? Math.round(r.score) : "—"}
                     </td>
-                    <td className="whitespace-nowrap px-3 py-2 text-xs tabular-nums text-muted-foreground">
+                    <td className="text-muted-foreground px-3 py-2 text-xs whitespace-nowrap tabular-nums">
                       {formatBytes(r.size_bytes)}
                     </td>
-                    <td className="whitespace-nowrap px-3 py-2 text-xs tabular-nums text-muted-foreground">
+                    <td className="text-muted-foreground px-3 py-2 text-xs whitespace-nowrap tabular-nums">
                       {formatAge(r.publish_date)}
                     </td>
-                    <td className="whitespace-nowrap px-3 py-2 text-xs tabular-nums text-muted-foreground">
+                    <td className="text-muted-foreground px-3 py-2 text-xs whitespace-nowrap tabular-nums">
                       {typeof r.seeders === "number" ||
                       typeof r.leechers === "number"
                         ? `${r.seeders ?? 0}/${r.leechers ?? 0}`
                         : "—"}
                     </td>
-                    <td className="max-w-[6rem] truncate px-3 py-2 text-xs text-muted-foreground">
+                    <td className="text-muted-foreground max-w-[6rem] truncate px-3 py-2 text-xs">
                       {r.indexer_id}
                     </td>
                     <td className="px-3 py-2">
@@ -1024,7 +1024,7 @@ export function ReleaseSearchDialog({
                             href={r.info_url}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent/10 hover:text-foreground"
+                            className="text-muted-foreground hover:bg-accent/10 hover:text-foreground inline-flex h-7 w-7 items-center justify-center rounded-md transition-colors"
                             title="View details"
                           >
                             <ExternalLink className="h-3.5 w-3.5" />
@@ -1041,7 +1041,7 @@ export function ReleaseSearchDialog({
 
         {/* Result count */}
         {searched && !loading && results.length > 0 && (
-          <p className="text-right text-xs text-muted-foreground">
+          <p className="text-muted-foreground text-right text-xs">
             {filteredResults.length === results.length
               ? `${results.length} result${results.length !== 1 ? "s" : ""}`
               : `${filteredResults.length} of ${results.length} results (filtered)`}

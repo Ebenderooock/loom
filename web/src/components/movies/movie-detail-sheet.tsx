@@ -97,10 +97,10 @@ function CollapsibleSection({
 }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <div className="border-t border-border/40">
+    <div className="border-border/40 border-t">
       <button
         onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center gap-2 py-3 text-sm font-semibold text-muted-foreground transition-colors hover:text-foreground"
+        className="text-muted-foreground hover:text-foreground flex w-full items-center gap-2 py-3 text-sm font-semibold transition-colors"
       >
         <Icon className="h-4 w-4" />
         {title}
@@ -125,7 +125,7 @@ function DetailRow({
 }) {
   return (
     <div>
-      <span className="text-xs uppercase tracking-wider text-muted-foreground">
+      <span className="text-muted-foreground text-xs tracking-wider uppercase">
         {label}
       </span>
       <div className="mt-1 text-sm">{children}</div>
@@ -161,7 +161,7 @@ function PersonCard({
           : undefined
       }
     >
-      <div className="relative mb-1.5 h-[150px] w-[100px] overflow-hidden rounded-lg bg-muted/30">
+      <div className="bg-muted/30 relative mb-1.5 h-[150px] w-[100px] overflow-hidden rounded-lg">
         {person.profile_path ? (
           <img
             src={`${PROFILE_IMG}${person.profile_path}`}
@@ -170,7 +170,7 @@ function PersonCard({
             loading="lazy"
           />
         ) : (
-          <div className="flex h-full w-full items-center justify-center text-muted-foreground/30">
+          <div className="text-muted-foreground/30 flex h-full w-full items-center justify-center">
             <Users className="h-8 w-8" />
           </div>
         )}
@@ -180,7 +180,7 @@ function PersonCard({
       </p>
       {person.role && (
         <p
-          className="truncate text-[11px] text-muted-foreground"
+          className="text-muted-foreground truncate text-[11px]"
           title={person.role}
         >
           {person.role}
@@ -200,8 +200,8 @@ function PersonChip({
   return (
     <div
       className={cn(
-        "flex items-center gap-2 overflow-hidden rounded-full bg-muted/30 pr-3",
-        onClick && "cursor-pointer transition-colors hover:bg-muted/50",
+        "bg-muted/30 flex items-center gap-2 overflow-hidden rounded-full pr-3",
+        onClick && "hover:bg-muted/50 cursor-pointer transition-colors",
       )}
       onClick={onClick}
       role={onClick ? "button" : undefined}
@@ -222,8 +222,8 @@ function PersonChip({
           loading="lazy"
         />
       ) : (
-        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-muted/50">
-          <Users className="h-4 w-4 text-muted-foreground/40" />
+        <div className="bg-muted/50 flex h-8 w-8 items-center justify-center rounded-full">
+          <Users className="text-muted-foreground/40 h-4 w-4" />
         </div>
       )}
       <span className="text-sm font-medium">{person.name}</span>
@@ -518,7 +518,7 @@ export function MovieDetailSheet({
           </SheetHeader>
 
           {/* ── 1. Full-width backdrop header ── */}
-          <div className="relative h-[300px] overflow-hidden bg-muted">
+          <div className="bg-muted relative h-[300px] overflow-hidden">
             {movie.backdropPath ? (
               <img
                 src={`${TMDB_IMG}/w780${movie.backdropPath}`}
@@ -532,12 +532,12 @@ export function MovieDetailSheet({
                 className="h-full w-full scale-110 object-cover opacity-30 blur-md"
               />
             ) : null}
-            <div className="absolute inset-0 bg-gradient-to-t from-background via-background/70 to-black/30" />
-            <div className="absolute inset-0 bg-gradient-to-r from-background/80 via-transparent to-transparent" />
+            <div className="from-background via-background/70 absolute inset-0 bg-gradient-to-t to-black/30" />
+            <div className="from-background/80 absolute inset-0 bg-gradient-to-r via-transparent to-transparent" />
 
             {/* Poster overlapping backdrop */}
             <div className="absolute bottom-[-40px] left-6 z-20">
-              <div className="w-[130px] overflow-hidden rounded-lg border-4 border-background shadow-2xl">
+              <div className="border-background w-[130px] overflow-hidden rounded-lg border-4 shadow-2xl">
                 {movie.posterPath ? (
                   <img
                     src={`${TMDB_IMG}/w300${movie.posterPath}`}
@@ -545,15 +545,15 @@ export function MovieDetailSheet({
                     className="aspect-[2/3] w-full object-cover"
                   />
                 ) : (
-                  <div className="flex aspect-[2/3] w-full items-center justify-center bg-muted">
-                    <Film className="h-10 w-10 text-muted-foreground/30" />
+                  <div className="bg-muted flex aspect-[2/3] w-full items-center justify-center">
+                    <Film className="text-muted-foreground/30 h-10 w-10" />
                   </div>
                 )}
               </div>
             </div>
 
             {/* Title overlaid on backdrop */}
-            <div className="absolute bottom-4 left-[170px] right-6 z-10">
+            <div className="absolute right-6 bottom-4 left-[170px] z-10">
               <h2 className="truncate text-2xl font-bold text-white drop-shadow-lg">
                 {movie.title}
               </h2>
@@ -566,7 +566,7 @@ export function MovieDetailSheet({
             <button
               onClick={handleToggleMonitoring}
               className={cn(
-                "absolute right-14 top-4 z-20 rounded-full p-2 shadow-lg transition-all duration-200",
+                "absolute top-4 right-14 z-20 rounded-full p-2 shadow-lg transition-all duration-200",
                 isMonitored
                   ? "bg-accent text-accent-foreground hover:bg-accent/90"
                   : "bg-black/50 text-white/70 hover:bg-black/70 hover:text-white",
@@ -633,7 +633,7 @@ export function MovieDetailSheet({
               </Button>
 
               {/* Separator */}
-              <div className="mx-0.5 h-5 w-px bg-border" />
+              <div className="bg-border mx-0.5 h-5 w-px" />
 
               {/* Secondary actions — icon only */}
               <Button
@@ -687,7 +687,7 @@ export function MovieDetailSheet({
               <Button
                 size="icon"
                 variant="ghost"
-                className="ml-auto h-8 w-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                className="text-destructive hover:bg-destructive/10 hover:text-destructive ml-auto h-8 w-8"
                 onClick={() => setDeleteOpen(true)}
                 title="Delete movie"
               >
@@ -698,8 +698,8 @@ export function MovieDetailSheet({
 
           {/* ── Edit mode bar ── */}
           {editing && (
-            <div className="mx-6 mb-3 space-y-4 rounded-lg border border-accent/30 bg-accent/5 p-4">
-              <div className="flex items-center gap-2 text-sm font-semibold text-accent">
+            <div className="border-accent/30 bg-accent/5 mx-6 mb-3 space-y-4 rounded-lg border p-4">
+              <div className="text-accent flex items-center gap-2 text-sm font-semibold">
                 <Pencil className="h-4 w-4" />
                 Editing Movie
               </div>
@@ -707,7 +707,7 @@ export function MovieDetailSheet({
                 <div className="space-y-1.5">
                   <label
                     htmlFor="movie-edit-profile"
-                    className="text-xs font-medium text-muted-foreground"
+                    className="text-muted-foreground text-xs font-medium"
                   >
                     Quality Profile
                   </label>
@@ -730,7 +730,7 @@ export function MovieDetailSheet({
                 <div className="space-y-1.5">
                   <label
                     htmlFor="movie-edit-monitoring"
-                    className="text-xs font-medium text-muted-foreground"
+                    className="text-muted-foreground text-xs font-medium"
                   >
                     Monitoring
                   </label>
@@ -779,8 +779,8 @@ export function MovieDetailSheet({
           )}
 
           {/* ── Info Bar ── */}
-          <div className="border-b border-t border-border/40 bg-muted/30 px-6 py-3">
-            <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+          <div className="border-border/40 bg-muted/30 border-t border-b px-6 py-3">
+            <div className="text-muted-foreground flex flex-wrap items-center gap-3 text-sm">
               {movie.runtime > 0 && (
                 <span className="flex items-center gap-1">
                   <Clock className="h-3.5 w-3.5" />
@@ -802,7 +802,7 @@ export function MovieDetailSheet({
                   {movie.releaseDate}
                 </span>
               )}
-              <span className="mx-1 text-border">|</span>
+              <span className="text-border mx-1">|</span>
               <StatusBadge status={movie.status} />
             </div>
             {movie.genres?.length > 0 && (
@@ -821,13 +821,13 @@ export function MovieDetailSheet({
           </div>
 
           {/* Scrollable sections */}
-          <div className="space-y-1 px-6 pb-8 pt-4">
+          <div className="space-y-1 px-6 pt-4 pb-8">
             {/* ── Overview ── */}
             <CollapsibleSection title="Overview" icon={Info} defaultOpen>
               <div className="relative">
                 <p
                   className={cn(
-                    "text-sm leading-relaxed text-muted-foreground",
+                    "text-muted-foreground text-sm leading-relaxed",
                     !overviewExpanded && overviewIsLong && "line-clamp-3",
                   )}
                 >
@@ -836,7 +836,7 @@ export function MovieDetailSheet({
                 {overviewIsLong && (
                   <button
                     onClick={() => setOverviewExpanded((v) => !v)}
-                    className="mt-1.5 text-xs font-medium text-accent hover:underline"
+                    className="text-accent mt-1.5 text-xs font-medium hover:underline"
                   >
                     {overviewExpanded ? "Show Less" : "Show More"}
                   </button>
@@ -852,7 +852,7 @@ export function MovieDetailSheet({
               <div className="grid grid-cols-2 gap-x-6 gap-y-4 text-sm">
                 <DetailRow label="Quality Profile">
                   <div className="flex items-center gap-1.5">
-                    <span className="inline-block h-2 w-2 shrink-0 rounded-full bg-accent" />
+                    <span className="bg-accent inline-block h-2 w-2 shrink-0 rounded-full" />
                     {profile?.name ?? "—"}
                   </div>
                 </DetailRow>
@@ -861,7 +861,7 @@ export function MovieDetailSheet({
                     className="flex items-center gap-1 truncate"
                     title={library?.name}
                   >
-                    <FolderOpen className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                    <FolderOpen className="text-muted-foreground h-3.5 w-3.5 shrink-0" />
                     {library?.name ?? "—"}
                   </span>
                 </DetailRow>
@@ -885,7 +885,7 @@ export function MovieDetailSheet({
                 </DetailRow>
                 <DetailRow label="Minimum Availability">
                   <span className="flex items-center gap-1">
-                    <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
+                    <Calendar className="text-muted-foreground h-3.5 w-3.5" />
                     {movie.releaseDate || "—"}
                   </span>
                 </DetailRow>
@@ -905,7 +905,7 @@ export function MovieDetailSheet({
                         className="flex items-center gap-1 truncate font-mono text-xs"
                         title={moviePath}
                       >
-                        <FolderOpen className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                        <FolderOpen className="text-muted-foreground h-3.5 w-3.5 shrink-0" />
                         {moviePath}
                       </span>
                     </DetailRow>
@@ -917,7 +917,7 @@ export function MovieDetailSheet({
                       href={`https://www.themoviedb.org/movie/${movie.tmdbId}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex items-center gap-1 text-accent hover:underline"
+                      className="text-accent flex items-center gap-1 hover:underline"
                     >
                       {movie.tmdbId}
                       <ExternalLink className="h-3 w-3" />
@@ -930,7 +930,7 @@ export function MovieDetailSheet({
                       href={`https://www.imdb.com/title/${movie.imdbId}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex items-center gap-1 text-accent hover:underline"
+                      className="text-accent flex items-center gap-1 hover:underline"
                     >
                       {movie.imdbId}
                       <ExternalLink className="h-3 w-3" />
@@ -942,7 +942,7 @@ export function MovieDetailSheet({
 
             {/* ── External Links ── */}
             {(movie.tmdbId || movie.imdbId) && (
-              <div className="border-t border-border/40 py-3">
+              <div className="border-border/40 border-t py-3">
                 <div className="flex flex-wrap items-center gap-3">
                   {movie.tmdbId && (
                     <a
@@ -976,7 +976,7 @@ export function MovieDetailSheet({
               defaultOpen={false}
             >
               {movieFilesLoading ? (
-                <div className="flex items-center gap-2 py-4 text-sm text-muted-foreground">
+                <div className="text-muted-foreground flex items-center gap-2 py-4 text-sm">
                   <Loader2 className="h-4 w-4 animate-spin" /> Loading files…
                 </div>
               ) : movieFiles.length > 0 ? (
@@ -984,9 +984,9 @@ export function MovieDetailSheet({
                   {movieFiles.map((f) => (
                     <div
                       key={f.id}
-                      className="flex items-start gap-3 rounded-lg border border-border/30 bg-muted/20 p-3"
+                      className="border-border/30 bg-muted/20 flex items-start gap-3 rounded-lg border p-3"
                     >
-                      <FileVideo className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                      <FileVideo className="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
                       <div className="min-w-0 flex-1 space-y-1">
                         <p
                           className="truncate text-sm font-medium"
@@ -994,7 +994,7 @@ export function MovieDetailSheet({
                         >
                           {f.filePath?.split("/").pop() || f.filePath}
                         </p>
-                        <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                        <div className="text-muted-foreground flex flex-wrap gap-x-3 gap-y-1 text-xs">
                           {f.size != null && <span>{formatBytes(f.size)}</span>}
                           {f.quality && (
                             <Badge
@@ -1010,7 +1010,7 @@ export function MovieDetailSheet({
                           )}
                         </div>
                         <p
-                          className="truncate text-[11px] text-muted-foreground/60"
+                          className="text-muted-foreground/60 truncate text-[11px]"
                           title={f.filePath}
                         >
                           {f.filePath}
@@ -1021,11 +1021,11 @@ export function MovieDetailSheet({
                 </div>
               ) : (
                 <div className="flex flex-col items-center justify-center py-8 text-center">
-                  <FileVideo className="mb-3 h-10 w-10 text-muted-foreground/20" />
-                  <p className="text-sm text-muted-foreground">
+                  <FileVideo className="text-muted-foreground/20 mb-3 h-10 w-10" />
+                  <p className="text-muted-foreground text-sm">
                     No movie files found
                   </p>
-                  <p className="mt-1 text-xs text-muted-foreground/60">
+                  <p className="text-muted-foreground/60 mt-1 text-xs">
                     Files will appear here once the movie is downloaded
                   </p>
                   <div className="mt-4 flex gap-2">
@@ -1065,7 +1065,7 @@ export function MovieDetailSheet({
               defaultOpen={false}
             >
               {movieHistoryLoading ? (
-                <div className="flex items-center gap-2 py-4 text-sm text-muted-foreground">
+                <div className="text-muted-foreground flex items-center gap-2 py-4 text-sm">
                   <Loader2 className="h-4 w-4 animate-spin" /> Loading history…
                 </div>
               ) : movieHistory.length > 0 ? (
@@ -1073,7 +1073,7 @@ export function MovieDetailSheet({
                   {movieHistory.map((h, i: number) => (
                     <div
                       key={h.id || i}
-                      className="flex items-start gap-3 rounded-lg border border-border/30 bg-muted/20 p-3"
+                      className="border-border/30 bg-muted/20 flex items-start gap-3 rounded-lg border p-3"
                     >
                       <div
                         className={cn(
@@ -1093,14 +1093,14 @@ export function MovieDetailSheet({
                           >
                             {h.type}
                           </Badge>
-                          <span className="text-xs text-muted-foreground">
+                          <span className="text-muted-foreground text-xs">
                             {relativeTime(h.date)}
                           </span>
                         </div>
                         {h.title && <p className="text-sm">{h.title}</p>}
                         {h.destPath && (
                           <p
-                            className="truncate text-[11px] text-muted-foreground/60"
+                            className="text-muted-foreground/60 truncate text-[11px]"
                             title={h.destPath}
                           >
                             {h.destPath}
@@ -1115,11 +1115,11 @@ export function MovieDetailSheet({
                 </div>
               ) : (
                 <div className="flex flex-col items-center justify-center py-8 text-center">
-                  <History className="mb-3 h-10 w-10 text-muted-foreground/20" />
-                  <p className="text-sm text-muted-foreground">
+                  <History className="text-muted-foreground/20 mb-3 h-10 w-10" />
+                  <p className="text-muted-foreground text-sm">
                     No history available
                   </p>
-                  <p className="mt-1 text-xs text-muted-foreground/60">
+                  <p className="text-muted-foreground/60 mt-1 text-xs">
                     Download and import history will appear here
                   </p>
                 </div>
@@ -1129,7 +1129,7 @@ export function MovieDetailSheet({
             {/* ── Cast & Crew ── */}
             <CollapsibleSection title="Cast & Crew" icon={Users} defaultOpen>
               {creditsLoading ? (
-                <div className="flex items-center gap-2 py-4 text-sm text-muted-foreground">
+                <div className="text-muted-foreground flex items-center gap-2 py-4 text-sm">
                   <Loader2 className="h-4 w-4 animate-spin" /> Loading credits…
                 </div>
               ) : credits &&
@@ -1143,7 +1143,7 @@ export function MovieDetailSheet({
                     if (directors.length === 0) return null;
                     return (
                       <div>
-                        <h4 className="mb-2 flex items-center gap-1.5 text-xs uppercase tracking-wider text-muted-foreground">
+                        <h4 className="text-muted-foreground mb-2 flex items-center gap-1.5 text-xs tracking-wider uppercase">
                           <Clapperboard className="h-3.5 w-3.5" /> Director
                           {directors.length > 1 ? "s" : ""}
                         </h4>
@@ -1165,10 +1165,10 @@ export function MovieDetailSheet({
                   {/* Cast */}
                   {credits.cast.length > 0 && (
                     <div>
-                      <h4 className="mb-2 flex items-center gap-1.5 text-xs uppercase tracking-wider text-muted-foreground">
+                      <h4 className="text-muted-foreground mb-2 flex items-center gap-1.5 text-xs tracking-wider uppercase">
                         <Users className="h-3.5 w-3.5" /> Cast
                       </h4>
-                      <div className="scrollbar-thin -mx-1 flex gap-3 overflow-x-auto px-1 pb-2">
+                      <div className="-mx-1 flex scrollbar-thin gap-3 overflow-x-auto px-1 pb-2">
                         {credits.cast.slice(0, 20).map((c) => (
                           <PersonCard
                             key={c.id}
@@ -1202,7 +1202,7 @@ export function MovieDetailSheet({
                       <div className="space-y-2">
                         {Object.entries(grouped).map(([dept, members]) => (
                           <div key={dept}>
-                            <span className="text-xs text-muted-foreground">
+                            <span className="text-muted-foreground text-xs">
                               {dept}:
                             </span>{" "}
                             <span className="text-sm">
@@ -1227,8 +1227,8 @@ export function MovieDetailSheet({
                 </div>
               ) : (
                 <div className="flex flex-col items-center justify-center py-8 text-center">
-                  <Users className="mb-3 h-10 w-10 text-muted-foreground/20" />
-                  <p className="text-sm text-muted-foreground">
+                  <Users className="text-muted-foreground/20 mb-3 h-10 w-10" />
+                  <p className="text-muted-foreground text-sm">
                     No cast or crew information
                   </p>
                 </div>

@@ -114,7 +114,7 @@ function MetadataSection({ metadata }: { metadata: string }) {
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className="flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
+        className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-xs transition-colors"
       >
         <ChevronDown
           className={cn("h-3 w-3 transition-transform", open && "rotate-180")}
@@ -122,7 +122,7 @@ function MetadataSection({ metadata }: { metadata: string }) {
         Details
       </button>
       {open && (
-        <pre className="mt-1 max-w-md overflow-x-auto rounded bg-muted/50 p-2 text-xs text-muted-foreground">
+        <pre className="bg-muted/50 text-muted-foreground mt-1 max-w-md overflow-x-auto rounded p-2 text-xs">
           {JSON.stringify(parsed, null, 2)}
         </pre>
       )}
@@ -146,13 +146,13 @@ function TimelineItem({
     <div className="relative flex gap-3">
       {/* Vertical connector line */}
       {!isLast && (
-        <div className="absolute bottom-0 left-[11px] top-6 w-px bg-border" />
+        <div className="bg-border absolute top-6 bottom-0 left-[11px] w-px" />
       )}
 
       {/* Dot */}
       <div
         className={cn(
-          "relative z-10 mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-border bg-background",
+          "border-border bg-background relative z-10 mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border",
         )}
       >
         <div className={cn("h-2.5 w-2.5 rounded-full", config.dotColor)} />
@@ -165,11 +165,11 @@ function TimelineItem({
           <span className="text-sm font-medium">{event.message}</span>
         </div>
         <div className="mt-0.5 flex items-center gap-2">
-          <span className="text-xs text-muted-foreground">
+          <span className="text-muted-foreground text-xs">
             {relativeTime(event.createdAt)}
           </span>
-          <span className="text-xs text-muted-foreground/50">·</span>
-          <span className="text-xs capitalize text-muted-foreground">
+          <span className="text-muted-foreground/50 text-xs">·</span>
+          <span className="text-muted-foreground text-xs capitalize">
             {event.eventType ? event.eventType.replace(/_/g, " ") : ""}
           </span>
         </div>
@@ -201,7 +201,7 @@ export function WorkflowTimeline({ workflowId }: { workflowId: string }) {
 
   if (sorted.length === 0) {
     return (
-      <p className="text-sm text-muted-foreground">No events recorded yet.</p>
+      <p className="text-muted-foreground text-sm">No events recorded yet.</p>
     );
   }
 

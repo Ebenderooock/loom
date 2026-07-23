@@ -322,7 +322,7 @@ function UsersTable({ currentUserId }: { currentUserId: number }) {
 
   if (isLoading) {
     return (
-      <div className="flex items-center gap-2 p-6 text-sm text-muted-foreground">
+      <div className="text-muted-foreground flex items-center gap-2 p-6 text-sm">
         <Loader2 className="h-4 w-4 animate-spin" /> Loading users…
       </div>
     );
@@ -423,7 +423,7 @@ function UsersTable({ currentUserId }: { currentUserId: number }) {
               <TableRow>
                 <TableCell
                   colSpan={4}
-                  className="py-6 text-center text-sm text-muted-foreground"
+                  className="text-muted-foreground py-6 text-center text-sm"
                 >
                   No users.
                 </TableCell>
@@ -565,11 +565,11 @@ function InvitesCard() {
         </form>
 
         {invites.isLoading ? (
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <div className="text-muted-foreground flex items-center gap-2 text-sm">
             <Loader2 className="h-4 w-4 animate-spin" /> Loading invites…
           </div>
         ) : rows.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No invites yet.</p>
+          <p className="text-muted-foreground text-sm">No invites yet.</p>
         ) : (
           <Table>
             <TableHeader>
@@ -587,7 +587,7 @@ function InvitesCard() {
                   <TableCell className="flex items-center gap-1.5">
                     {inv.email ? (
                       <>
-                        <Mail className="h-3.5 w-3.5 text-muted-foreground" />
+                        <Mail className="text-muted-foreground h-3.5 w-3.5" />
                         {inv.email}
                       </>
                     ) : (
@@ -660,7 +660,7 @@ export function UsersPage() {
 
   if (!isAdmin) {
     return (
-      <div className="flex flex-col items-center justify-center gap-2 p-12 text-center text-muted-foreground">
+      <div className="text-muted-foreground flex flex-col items-center justify-center gap-2 p-12 text-center">
         <ShieldAlert className="h-8 w-8" />
         <p>You need admin access to manage users.</p>
       </div>
@@ -673,7 +673,7 @@ export function UsersPage() {
         <h2 className="flex items-center gap-2 text-lg font-semibold">
           <Users className="h-5 w-5" /> User accounts
         </h2>
-        <p className="text-sm text-muted-foreground">
+        <p className="text-muted-foreground text-sm">
           Create and manage logins. Non-admin users can submit requests; admins
           can approve them and manage the system.
         </p>

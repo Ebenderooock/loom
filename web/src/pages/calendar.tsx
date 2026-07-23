@@ -96,12 +96,12 @@ export function CalendarPage() {
         <CardContent>
           {isLoading ? (
             <div
-              className="grid grid-cols-7 gap-px overflow-hidden rounded-md border border-border bg-border"
+              className="border-border bg-border grid grid-cols-7 gap-px overflow-hidden rounded-md border"
               role="status"
               aria-label="Loading calendar"
             >
               {Array.from({ length: 42 }).map((_, i) => (
-                <div key={i} className="min-h-[5rem] bg-card p-1.5">
+                <div key={i} className="bg-card min-h-[5rem] p-1.5">
                   <Skeleton className="h-4 w-4 rounded" />
                 </div>
               ))}
@@ -110,13 +110,13 @@ export function CalendarPage() {
             <div
               role="grid"
               aria-label={`Calendar for ${monthLabel}`}
-              className="grid grid-cols-7 gap-px overflow-hidden rounded-md border border-border bg-border text-sm"
+              className="border-border bg-border grid grid-cols-7 gap-px overflow-hidden rounded-md border text-sm"
             >
               {DAYS.map((d) => (
                 <div
                   key={d}
                   role="columnheader"
-                  className="bg-muted px-2 py-1 text-center text-xs font-medium text-muted-foreground"
+                  className="bg-muted text-muted-foreground px-2 py-1 text-center text-xs font-medium"
                 >
                   {d}
                 </div>
@@ -136,8 +136,8 @@ export function CalendarPage() {
                   <div
                     key={i}
                     role="gridcell"
-                    className={`min-h-24 bg-card p-1.5 ${
-                      isToday ? "ring-2 ring-inset ring-primary" : ""
+                    className={`bg-card min-h-24 p-1.5 ${
+                      isToday ? "ring-primary ring-2 ring-inset" : ""
                     } ${!isValidDay ? "bg-muted/30" : ""}`}
                   >
                     {isValidDay && (
@@ -145,7 +145,7 @@ export function CalendarPage() {
                         <span
                           className={`mb-1 inline-block text-xs font-medium ${
                             isToday
-                              ? "rounded-full bg-primary px-1.5 py-0.5 text-primary-foreground"
+                              ? "bg-primary text-primary-foreground rounded-full px-1.5 py-0.5"
                               : "text-muted-foreground"
                           }`}
                         >
@@ -156,7 +156,7 @@ export function CalendarPage() {
                             <EventPill key={ev.id} event={ev} />
                           ))}
                           {dayEvents.length > 3 && (
-                            <span className="block text-[10px] text-muted-foreground">
+                            <span className="text-muted-foreground block text-[10px]">
                               +{dayEvents.length - 3} more
                             </span>
                           )}

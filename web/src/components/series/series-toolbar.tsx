@@ -99,8 +99,8 @@ export function SeriesToolbar({
     <div className="mb-6 space-y-3">
       <div className="flex flex-wrap items-center gap-3">
         {/* Filter */}
-        <div className="relative min-w-[200px] max-w-sm flex-1">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <div className="relative max-w-sm min-w-[200px] flex-1">
+          <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
           <Input
             placeholder="Filter series..."
             value={filterText}
@@ -162,7 +162,7 @@ export function SeriesToolbar({
         </Select>
 
         {/* View toggle */}
-        <div className="flex items-center rounded-md border border-border">
+        <div className="border-border flex items-center rounded-md border">
           <Button
             variant={viewMode === "grid" ? "secondary" : "ghost"}
             size="sm"
@@ -231,7 +231,7 @@ export function SeriesToolbar({
 
       {/* Bulk action bar */}
       {selectMode && (
-        <div className="flex items-center gap-3 rounded-lg border border-accent/20 bg-accent/10 px-3 py-2">
+        <div className="border-accent/20 bg-accent/10 flex items-center gap-3 rounded-lg border px-3 py-2">
           <Checkbox
             checked={allSelected}
             onCheckedChange={onToggleSelectAll}

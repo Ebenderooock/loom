@@ -288,7 +288,7 @@ function QueueItemRow({
         {item.status !== "seeding" && !isCompleted && (
           <div className="mt-1.5 flex items-center gap-2">
             <Progress value={pct} className="h-1.5 flex-1 bg-zinc-800" />
-            <span className="w-10 text-right text-[11px] tabular-nums text-zinc-500">
+            <span className="w-10 text-right text-[11px] text-zinc-500 tabular-nums">
               {pct.toFixed(0)}%
             </span>
           </div>
@@ -304,7 +304,7 @@ function QueueItemRow({
       </Badge>
 
       {/* Size */}
-      <div className="hidden w-28 text-right text-xs tabular-nums text-zinc-500 sm:block">
+      <div className="hidden w-28 text-right text-xs text-zinc-500 tabular-nums sm:block">
         {item.downloaded_bytes > 0 && item.size_bytes > 0
           ? `${formatBytes(item.downloaded_bytes)} / ${formatBytes(item.size_bytes)}`
           : item.size_bytes > 0
@@ -332,13 +332,13 @@ function QueueItemRow({
       </div>
 
       {/* ETA */}
-      <div className="hidden w-16 text-right text-xs tabular-nums text-zinc-500 lg:block">
+      <div className="hidden w-16 text-right text-xs text-zinc-500 tabular-nums lg:block">
         {isActive ? formatEta(item.eta_seconds) : "—"}
       </div>
 
       {/* Ratio (for seeding) */}
       {item.status === "seeding" && item.ratio > 0 && (
-        <div className="hidden w-14 text-right text-xs tabular-nums text-zinc-500 lg:block">
+        <div className="hidden w-14 text-right text-xs text-zinc-500 tabular-nums lg:block">
           {item.ratio.toFixed(2)}
         </div>
       )}
@@ -538,7 +538,7 @@ function OverviewTab({
         >
           {sc.label}
         </Badge>
-        <span className="text-xs tabular-nums text-zinc-500">
+        <span className="text-xs text-zinc-500 tabular-nums">
           {pct.toFixed(1)}%
         </span>
       </div>
@@ -654,13 +654,13 @@ function PeersTab({ detail }: { detail: TorrentDetail }) {
               <TableCell className="max-w-[120px] truncate py-1.5 text-[11px] text-zinc-400">
                 {peer.client || "—"}
               </TableCell>
-              <TableCell className="py-1.5 text-right text-[11px] tabular-nums text-zinc-400">
+              <TableCell className="py-1.5 text-right text-[11px] text-zinc-400 tabular-nums">
                 {(peer.progress * 100).toFixed(0)}%
               </TableCell>
-              <TableCell className="py-1.5 text-right text-[11px] tabular-nums text-zinc-400">
+              <TableCell className="py-1.5 text-right text-[11px] text-zinc-400 tabular-nums">
                 {peer.down_rate > 0 ? formatBytes(peer.down_rate) : "—"}
               </TableCell>
-              <TableCell className="py-1.5 text-right text-[11px] tabular-nums text-zinc-400">
+              <TableCell className="py-1.5 text-right text-[11px] text-zinc-400 tabular-nums">
                 {peer.up_rate > 0 ? formatBytes(peer.up_rate) : "—"}
               </TableCell>
             </TableRow>
@@ -693,13 +693,13 @@ function FilesTab({ detail }: { detail: TorrentDetail }) {
               >
                 {name}
               </span>
-              <span className="shrink-0 text-[10px] tabular-nums text-zinc-500">
+              <span className="shrink-0 text-[10px] text-zinc-500 tabular-nums">
                 {formatBytes(file.size)}
               </span>
             </div>
             <div className="flex items-center gap-2">
               <Progress value={pct} className="h-1 flex-1 bg-zinc-800" />
-              <span className="w-9 text-right text-[10px] tabular-nums text-zinc-500">
+              <span className="w-9 text-right text-[10px] text-zinc-500 tabular-nums">
                 {pct.toFixed(0)}%
               </span>
             </div>
@@ -739,7 +739,7 @@ function TrackersTab({ detail }: { detail: TorrentDetail }) {
               <TableCell className="max-w-[280px] truncate py-1.5 font-mono text-[11px] text-zinc-300">
                 {tracker.url}
               </TableCell>
-              <TableCell className="py-1.5 text-right text-[11px] tabular-nums text-zinc-400">
+              <TableCell className="py-1.5 text-right text-[11px] text-zinc-400 tabular-nums">
                 {tracker.tier}
               </TableCell>
               <TableCell className="py-1.5 text-right text-[11px]">
@@ -897,10 +897,10 @@ function bytesToMbInput(bytes: number): string {
 function StatPill({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="flex flex-col">
-      <span className="text-[10px] uppercase tracking-wide text-zinc-500">
+      <span className="text-[10px] tracking-wide text-zinc-500 uppercase">
         {label}
       </span>
-      <span className="text-sm font-medium tabular-nums text-zinc-100">
+      <span className="text-sm font-medium text-zinc-100 tabular-nums">
         {value}
       </span>
     </div>

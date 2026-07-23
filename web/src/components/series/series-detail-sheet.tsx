@@ -75,10 +75,10 @@ function CollapsibleSection({
 }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <div className="border-t border-border/40">
+    <div className="border-border/40 border-t">
       <button
         onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center gap-2 py-3 text-sm font-semibold text-muted-foreground transition-colors hover:text-foreground"
+        className="text-muted-foreground hover:text-foreground flex w-full items-center gap-2 py-3 text-sm font-semibold transition-colors"
       >
         <Icon className="h-4 w-4" />
         {title}
@@ -103,7 +103,7 @@ function DetailRow({
 }) {
   return (
     <div>
-      <span className="text-xs uppercase tracking-wider text-muted-foreground">
+      <span className="text-muted-foreground text-xs tracking-wider uppercase">
         {label}
       </span>
       <div className="mt-1 text-sm">{children}</div>
@@ -137,7 +137,7 @@ function PersonCard({
           : undefined
       }
     >
-      <div className="relative mb-1.5 h-[150px] w-[100px] overflow-hidden rounded-lg bg-muted/30">
+      <div className="bg-muted/30 relative mb-1.5 h-[150px] w-[100px] overflow-hidden rounded-lg">
         {person.profile_path ? (
           <img
             src={`${PROFILE_IMG}${person.profile_path}`}
@@ -146,7 +146,7 @@ function PersonCard({
             loading="lazy"
           />
         ) : (
-          <div className="flex h-full w-full items-center justify-center text-muted-foreground/30">
+          <div className="text-muted-foreground/30 flex h-full w-full items-center justify-center">
             <Users className="h-8 w-8" />
           </div>
         )}
@@ -156,7 +156,7 @@ function PersonCard({
       </p>
       {(person.character || person.role) && (
         <p
-          className="truncate text-[11px] text-muted-foreground"
+          className="text-muted-foreground truncate text-[11px]"
           title={person.character || person.role}
         >
           {person.character || person.role}
@@ -204,7 +204,7 @@ function EpisodeStatusBadge({ status }: { status: EpisodeStatus }) {
   return (
     <span
       className={cn(
-        "whitespace-nowrap rounded-sm px-2 py-0.5 text-[10px] font-semibold",
+        "rounded-sm px-2 py-0.5 text-[10px] font-semibold whitespace-nowrap",
         s.bg,
         s.text,
       )}
@@ -452,11 +452,11 @@ function SeasonAccordion({
           : "bg-blue-600";
 
   return (
-    <div className="overflow-hidden rounded-lg border border-border/40">
+    <div className="border-border/40 overflow-hidden rounded-lg border">
       {/* Season header */}
       <button
         onClick={handleToggle}
-        className="flex w-full items-center gap-3 bg-muted/10 px-4 py-3 text-sm transition-colors hover:bg-accent/5"
+        className="bg-muted/10 hover:bg-accent/5 flex w-full items-center gap-3 px-4 py-3 text-sm transition-colors"
       >
         {open ? (
           <ChevronDown className="h-4 w-4 shrink-0" />
@@ -465,7 +465,7 @@ function SeasonAccordion({
         )}
 
         {/* Season icon + title */}
-        <FileVideo className="h-4 w-4 shrink-0 text-muted-foreground" />
+        <FileVideo className="text-muted-foreground h-4 w-4 shrink-0" />
         <span className="text-sm font-semibold">
           {season.seasonNumber === 0
             ? "Specials"
@@ -476,7 +476,7 @@ function SeasonAccordion({
         {stats && (
           <span
             className={cn(
-              "rounded-sm px-2 py-0.5 text-[11px] font-bold tabular-nums text-white",
+              "rounded-sm px-2 py-0.5 text-[11px] font-bold text-white tabular-nums",
               badgeColor,
             )}
           >
@@ -494,7 +494,7 @@ function SeasonAccordion({
           onClick={(e) => e.stopPropagation()}
         >
           <button
-            className="rounded p-1 text-muted-foreground transition-colors hover:bg-accent/10 hover:text-accent"
+            className="text-muted-foreground hover:bg-accent/10 hover:text-accent rounded p-1 transition-colors"
             title="Automatic search for season"
             disabled={autoSearchingSeason}
             onClick={handleAutoSearchSeason}
@@ -506,7 +506,7 @@ function SeasonAccordion({
             )}
           </button>
           <button
-            className="rounded p-1 text-muted-foreground transition-colors hover:bg-accent/10 hover:text-accent"
+            className="text-muted-foreground hover:bg-accent/10 hover:text-accent rounded p-1 transition-colors"
             title="Manual search for season"
             onClick={() =>
               onSearchOpen({
@@ -524,18 +524,18 @@ function SeasonAccordion({
 
         {/* Monitoring toggle */}
         {season.monitored ? (
-          <Bookmark className="h-4 w-4 shrink-0 text-accent" />
+          <Bookmark className="text-accent h-4 w-4 shrink-0" />
         ) : (
-          <Bookmark className="h-4 w-4 shrink-0 text-muted-foreground/30" />
+          <Bookmark className="text-muted-foreground/30 h-4 w-4 shrink-0" />
         )}
       </button>
 
       {/* Episode table */}
       {open && (
-        <div className="border-t border-border/30">
+        <div className="border-border/30 border-t">
           {loading ? (
             <div className="flex items-center justify-center py-6">
-              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              <Loader2 className="text-muted-foreground h-5 w-5 animate-spin" />
             </div>
           ) : episodes.length === 0 ? (
             <div className="space-y-2 py-8 text-center">
@@ -545,12 +545,12 @@ function SeasonAccordion({
                     <Tv className="h-5 w-5" />
                     <span className="text-sm font-medium">Coming Soon</span>
                   </div>
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-muted-foreground text-xs">
                     No episodes have been announced yet
                   </p>
                 </>
               ) : (
-                <p className="text-sm text-muted-foreground">
+                <p className="text-muted-foreground text-sm">
                   No episodes found
                 </p>
               )}
@@ -558,7 +558,7 @@ function SeasonAccordion({
           ) : (
             <div>
               {/* Table header */}
-              <div className="flex items-center gap-3 border-b border-border/30 bg-muted/5 px-4 py-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+              <div className="border-border/30 bg-muted/5 text-muted-foreground flex items-center gap-3 border-b px-4 py-2 text-[11px] font-semibold tracking-wider uppercase">
                 <span className="w-6 shrink-0" />
                 <span className="w-10 shrink-0 text-right">#</span>
                 <span className="flex-1">Title</span>
@@ -567,7 +567,7 @@ function SeasonAccordion({
                 <span className="w-16 shrink-0 text-right">Actions</span>
               </div>
               {/* Episode rows - newest first like Sonarr */}
-              <div className="divide-y divide-border/15">
+              <div className="divide-border/15 divide-y">
                 {[...episodes]
                   .sort((a, b) => b.episodeNumber - a.episodeNumber)
                   .map((ep) => {
@@ -575,19 +575,19 @@ function SeasonAccordion({
                     return (
                       <div
                         key={ep.id}
-                        className="group flex items-center gap-3 px-4 py-2 text-sm transition-colors hover:bg-accent/5"
+                        className="group hover:bg-accent/5 flex items-center gap-3 px-4 py-2 text-sm transition-colors"
                       >
                         {/* Monitored bookmark */}
                         <span className="flex w-6 shrink-0 justify-center">
                           {ep.monitored ? (
-                            <Bookmark className="h-3.5 w-3.5 text-accent" />
+                            <Bookmark className="text-accent h-3.5 w-3.5" />
                           ) : (
-                            <Bookmark className="h-3.5 w-3.5 text-muted-foreground/25" />
+                            <Bookmark className="text-muted-foreground/25 h-3.5 w-3.5" />
                           )}
                         </span>
 
                         {/* Episode number */}
-                        <span className="w-10 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
+                        <span className="text-muted-foreground w-10 shrink-0 text-right text-xs tabular-nums">
                           {ep.episodeNumber}
                         </span>
 
@@ -599,7 +599,7 @@ function SeasonAccordion({
                         </div>
 
                         {/* Air date */}
-                        <span className="w-28 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
+                        <span className="text-muted-foreground w-28 shrink-0 text-right text-xs tabular-nums">
                           {ep.airDate ? formatAirDate(ep.airDate) : "—"}
                         </span>
 
@@ -611,7 +611,7 @@ function SeasonAccordion({
                         {/* Action icons */}
                         <div className="flex w-16 shrink-0 items-center justify-end gap-0.5">
                           <button
-                            className="rounded p-1 text-muted-foreground transition-colors hover:bg-accent/10 hover:text-accent"
+                            className="text-muted-foreground hover:bg-accent/10 hover:text-accent rounded p-1 transition-colors"
                             title="Automatic search"
                             disabled={autoSearchingEp === ep.episodeNumber}
                             onClick={() => handleAutoSearchEpisode(ep)}
@@ -623,7 +623,7 @@ function SeasonAccordion({
                             )}
                           </button>
                           <button
-                            className="rounded p-1 text-muted-foreground transition-colors hover:bg-accent/10 hover:text-accent"
+                            className="text-muted-foreground hover:bg-accent/10 hover:text-accent rounded p-1 transition-colors"
                             title="Manual search"
                             onClick={() =>
                               onSearchOpen({
@@ -955,7 +955,7 @@ export function SeriesDetailSheet({
           </SheetHeader>
 
           {/* Backdrop header */}
-          <div className="relative h-[300px] overflow-hidden bg-muted">
+          <div className="bg-muted relative h-[300px] overflow-hidden">
             {series.backdropPath ? (
               <img
                 src={`${TMDB_IMG}/w780${series.backdropPath}`}
@@ -969,12 +969,12 @@ export function SeriesDetailSheet({
                 className="h-full w-full scale-110 object-cover opacity-30 blur-md"
               />
             ) : null}
-            <div className="absolute inset-0 bg-gradient-to-t from-background via-background/70 to-black/30" />
-            <div className="absolute inset-0 bg-gradient-to-r from-background/80 via-transparent to-transparent" />
+            <div className="from-background via-background/70 absolute inset-0 bg-gradient-to-t to-black/30" />
+            <div className="from-background/80 absolute inset-0 bg-gradient-to-r via-transparent to-transparent" />
 
             {/* Poster */}
             <div className="absolute bottom-[-40px] left-6 z-20">
-              <div className="w-[130px] overflow-hidden rounded-lg border-4 border-background shadow-2xl">
+              <div className="border-background w-[130px] overflow-hidden rounded-lg border-4 shadow-2xl">
                 {series.posterPath ? (
                   <img
                     src={`${TMDB_IMG}/w300${series.posterPath}`}
@@ -982,15 +982,15 @@ export function SeriesDetailSheet({
                     className="aspect-[2/3] w-full object-cover"
                   />
                 ) : (
-                  <div className="flex aspect-[2/3] w-full items-center justify-center bg-muted">
-                    <Tv className="h-10 w-10 text-muted-foreground/30" />
+                  <div className="bg-muted flex aspect-[2/3] w-full items-center justify-center">
+                    <Tv className="text-muted-foreground/30 h-10 w-10" />
                   </div>
                 )}
               </div>
             </div>
 
             {/* Title */}
-            <div className="absolute bottom-4 left-[170px] right-6 z-10">
+            <div className="absolute right-6 bottom-4 left-[170px] z-10">
               <h2 className="truncate text-2xl font-bold text-white drop-shadow-lg">
                 {series.title}
               </h2>
@@ -1004,7 +1004,7 @@ export function SeriesDetailSheet({
             <button
               onClick={handleToggleMonitoring}
               className={cn(
-                "absolute right-14 top-4 z-20 rounded-full p-2 shadow-lg transition-all duration-200",
+                "absolute top-4 right-14 z-20 rounded-full p-2 shadow-lg transition-all duration-200",
                 isMonitored
                   ? "bg-accent text-accent-foreground hover:bg-accent/90"
                   : "bg-black/50 text-white/70 hover:bg-black/70 hover:text-white",
@@ -1078,7 +1078,7 @@ export function SeriesDetailSheet({
               </Button>
 
               {/* Separator */}
-              <div className="mx-0.5 h-5 w-px bg-border" />
+              <div className="bg-border mx-0.5 h-5 w-px" />
 
               {/* Secondary actions — icon only */}
               <Button
@@ -1132,7 +1132,7 @@ export function SeriesDetailSheet({
               <Button
                 size="icon"
                 variant="ghost"
-                className="ml-auto h-8 w-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                className="text-destructive hover:bg-destructive/10 hover:text-destructive ml-auto h-8 w-8"
                 onClick={() => setDeleteOpen(true)}
                 title="Delete series"
               >
@@ -1143,8 +1143,8 @@ export function SeriesDetailSheet({
 
           {/* Edit mode bar */}
           {editing && (
-            <div className="mx-6 mb-3 space-y-4 rounded-lg border border-accent/30 bg-accent/5 p-4">
-              <div className="flex items-center gap-2 text-sm font-semibold text-accent">
+            <div className="border-accent/30 bg-accent/5 mx-6 mb-3 space-y-4 rounded-lg border p-4">
+              <div className="text-accent flex items-center gap-2 text-sm font-semibold">
                 <Pencil className="h-4 w-4" />
                 Editing Series
               </div>
@@ -1275,7 +1275,7 @@ export function SeriesDetailSheet({
                 <div>
                   <p
                     className={cn(
-                      "text-sm leading-relaxed text-muted-foreground",
+                      "text-muted-foreground text-sm leading-relaxed",
                       !overviewExpanded && overviewIsLong && "line-clamp-4",
                     )}
                   >
@@ -1284,7 +1284,7 @@ export function SeriesDetailSheet({
                   {overviewIsLong && (
                     <button
                       onClick={() => setOverviewExpanded((v) => !v)}
-                      className="mt-1 text-xs text-accent hover:underline"
+                      className="text-accent mt-1 text-xs hover:underline"
                     >
                       {overviewExpanded ? "Show less" : "Read more"}
                     </button>
@@ -1303,10 +1303,10 @@ export function SeriesDetailSheet({
             >
               {seasonsLoading ? (
                 <div className="flex items-center justify-center py-6">
-                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                  <Loader2 className="text-muted-foreground h-5 w-5 animate-spin" />
                 </div>
               ) : seasons.length === 0 ? (
-                <p className="py-4 text-center text-sm text-muted-foreground">
+                <p className="text-muted-foreground py-4 text-center text-sm">
                   No seasons found
                 </p>
               ) : (
@@ -1340,17 +1340,17 @@ export function SeriesDetailSheet({
             >
               {creditsLoading ? (
                 <div className="flex items-center justify-center py-6">
-                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                  <Loader2 className="text-muted-foreground h-5 w-5 animate-spin" />
                 </div>
               ) : !credits ? (
-                <p className="py-4 text-center text-sm text-muted-foreground">
+                <p className="text-muted-foreground py-4 text-center text-sm">
                   No credits available
                 </p>
               ) : (
                 <div className="space-y-4">
                   {credits.cast?.length > 0 && (
                     <div>
-                      <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                      <h4 className="text-muted-foreground mb-2 text-xs font-semibold tracking-wider uppercase">
                         Cast
                       </h4>
                       <div className="flex gap-3 overflow-x-auto pb-2">
@@ -1368,7 +1368,7 @@ export function SeriesDetailSheet({
                   )}
                   {credits.crew?.length > 0 && (
                     <div>
-                      <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                      <h4 className="text-muted-foreground mb-2 text-xs font-semibold tracking-wider uppercase">
                         Crew
                       </h4>
                       <div className="flex gap-3 overflow-x-auto pb-2">
