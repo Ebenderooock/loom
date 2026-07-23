@@ -135,7 +135,7 @@ function SummaryCard({
   return (
     <Card>
       <CardContent className="p-4">
-        <p className="text-muted-foreground text-xs">{label}</p>
+        <p className="text-xs text-muted-foreground">{label}</p>
         <p className={`text-2xl font-bold ${color}`}>{count}</p>
       </CardContent>
     </Card>
@@ -157,9 +157,9 @@ function HealthCard({ item }: { item: IndexerSearchHealth }) {
       <CardContent className="space-y-3">
         {/* Success rate */}
         <div>
-          <div className="text-muted-foreground mb-1 flex items-center justify-between text-xs">
+          <div className="mb-1 flex items-center justify-between text-xs text-muted-foreground">
             <span>Success rate</span>
-            <span className="text-foreground font-medium">{pct}%</span>
+            <span className="font-medium text-foreground">{pct}%</span>
           </div>
           <Progress value={pct} />
         </div>
@@ -190,10 +190,10 @@ function HealthCard({ item }: { item: IndexerSearchHealth }) {
 
         {/* Last error (collapsible) */}
         {item.last_error && (
-          <div className="border-border rounded-md border p-2">
+          <div className="rounded-md border border-border p-2">
             <button
               type="button"
-              className="text-muted-foreground hover:text-foreground flex w-full items-center justify-between text-xs"
+              className="flex w-full items-center justify-between text-xs text-muted-foreground hover:text-foreground"
               onClick={() => setErrorExpanded((v) => !v)}
             >
               <span className="font-medium text-red-500">Last error</span>
@@ -204,7 +204,7 @@ function HealthCard({ item }: { item: IndexerSearchHealth }) {
               )}
             </button>
             <p
-              className={`text-muted-foreground mt-1 text-xs break-all ${
+              className={`mt-1 break-all text-xs text-muted-foreground ${
                 errorExpanded ? "" : "line-clamp-1"
               }`}
             >
@@ -272,7 +272,7 @@ export function IndexerHealthPage() {
       {isLoading && <LoadingSkeleton />}
 
       {isError && (
-        <p className="text-destructive text-sm">
+        <p className="text-sm text-destructive">
           Failed to load health data. Will retry automatically.
         </p>
       )}

@@ -67,7 +67,7 @@ function QualityBadge({ result }: { result: EvaluatedResult }) {
           {result.format_score}
         </span>
       ) : null}
-      <span className="text-muted-foreground text-xs tabular-nums">
+      <span className="text-xs tabular-nums text-muted-foreground">
         {result.composite_score.toFixed(0)}
       </span>
     </div>
@@ -208,7 +208,7 @@ export function SearchPanel({
           <h2 className="text-lg font-semibold">
             Search &ldquo;{indexer.name}&rdquo;
           </h2>
-          <p className="text-muted-foreground text-sm">
+          <p className="text-sm text-muted-foreground">
             Sends a fan-out search restricted to this indexer.
             {showQuality
               ? " Results are scored against your quality profile."
@@ -265,11 +265,11 @@ export function SearchPanel({
                 setEvaluated(null);
               }
             }}
-            className="border-border rounded"
+            className="rounded border-border"
           />
           Evaluate quality
           {evaluating ? (
-            <span className="text-muted-foreground text-xs">
+            <span className="text-xs text-muted-foreground">
               (scoring\u2026)
             </span>
           ) : null}
@@ -294,7 +294,7 @@ export function SearchPanel({
         </div>
       ) : null}
 
-      <div className="border-border overflow-x-auto rounded-md border">
+      <div className="overflow-x-auto rounded-md border border-border">
         <table className="w-full text-sm">
           <caption className="sr-only">Search results</caption>
           <thead className="bg-muted/50 text-left">
@@ -329,7 +329,7 @@ export function SearchPanel({
               <tr>
                 <td
                   colSpan={showQuality ? 7 : 6}
-                  className="text-muted-foreground px-3 py-6 text-center"
+                  className="px-3 py-6 text-center text-muted-foreground"
                 >
                   No results yet. Run a search to populate this table.
                 </td>
@@ -340,11 +340,11 @@ export function SearchPanel({
               return (
                 <tr
                   key={`${r.indexer_id}-${r.link}-${idx}`}
-                  className={`border-border border-t ${er?.rejected ? "opacity-50" : ""}`}
+                  className={`border-t border-border ${er?.rejected ? "opacity-50" : ""}`}
                 >
                   <td className="px-3 py-2">
                     <div className="font-medium">{r.title}</div>
-                    <div className="text-muted-foreground text-xs">
+                    <div className="text-xs text-muted-foreground">
                       via {r.indexer_id}
                       {er?.parsed_source ? ` \u00b7 ${er.parsed_source}` : null}
                       {er?.parsed_resolution
@@ -364,7 +364,7 @@ export function SearchPanel({
                   <td className="px-3 py-2 tabular-nums">
                     {formatBytes(r.size_bytes)}
                   </td>
-                  <td className="text-muted-foreground px-3 py-2 text-xs">
+                  <td className="px-3 py-2 text-xs text-muted-foreground">
                     {(r.categories ?? []).join(", ") || "\u2014"}
                   </td>
                   <td className="px-3 py-2 tabular-nums">

@@ -75,12 +75,12 @@ export function ConfirmActionButton({
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <AlertTriangle className="text-destructive h-5 w-5" />
+              <AlertTriangle className="h-5 w-5 text-destructive" />
               {title}
             </DialogTitle>
             <DialogDescription>{description}</DialogDescription>
           </DialogHeader>
-          <div className="border-destructive/20 bg-destructive/5 text-muted-foreground rounded-lg border p-3 text-sm">
+          <div className="rounded-lg border border-destructive/20 bg-destructive/5 p-3 text-sm text-muted-foreground">
             This action clears stored history immediately and cannot be undone.
           </div>
           {details}

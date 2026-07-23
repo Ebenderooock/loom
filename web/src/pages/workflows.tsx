@@ -316,7 +316,7 @@ function WorkflowRow({
           {wf.grabTitle || wf.id.slice(0, 8)}
         </Link>
       </TableCell>
-      <TableCell className="text-muted-foreground text-xs">
+      <TableCell className="text-xs text-muted-foreground">
         <TypeLabel type={wf.type} />
       </TableCell>
       <TableCell>
@@ -328,13 +328,13 @@ function WorkflowRow({
             {wf.retryCount}/{wf.maxRetries}
           </span>
         ) : (
-          <span className="text-muted-foreground text-xs">—</span>
+          <span className="text-xs text-muted-foreground">—</span>
         )}
       </TableCell>
-      <TableCell className="text-muted-foreground text-xs whitespace-nowrap">
+      <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
         {relativeTime(wf.createdAt)}
       </TableCell>
-      <TableCell className="text-muted-foreground text-xs whitespace-nowrap">
+      <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
         {relativeTime(wf.updatedAt)}
       </TableCell>
       <TableCell>
@@ -348,7 +348,7 @@ function WorkflowRow({
               : wf.lastError}
           </span>
         ) : (
-          <span className="text-muted-foreground text-xs">—</span>
+          <span className="text-xs text-muted-foreground">—</span>
         )}
       </TableCell>
       <TableCell>

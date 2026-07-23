@@ -98,10 +98,10 @@ export function AltTitlesSection({
   };
 
   return (
-    <div className="border-border/40 border-t">
+    <div className="border-t border-border/40">
       <button
         onClick={() => setOpen((v) => !v)}
-        className="text-muted-foreground hover:text-foreground flex w-full items-center gap-2 py-3 text-sm font-semibold transition-colors"
+        className="flex w-full items-center gap-2 py-3 text-sm font-semibold text-muted-foreground transition-colors hover:text-foreground"
       >
         <Languages className="h-4 w-4" />
         Alt Titles
@@ -116,10 +116,10 @@ export function AltTitlesSection({
         <div className="space-y-3 pb-4">
           {loading ? (
             <div className="flex items-center justify-center py-4">
-              <Loader2 className="text-muted-foreground h-4 w-4 animate-spin" />
+              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
             </div>
           ) : titles.length === 0 ? (
-            <p className="text-muted-foreground text-sm">No alternate titles</p>
+            <p className="text-sm text-muted-foreground">No alternate titles</p>
           ) : (
             <div className="space-y-1.5">
               {titles.map((t) => (
@@ -140,7 +140,7 @@ export function AltTitlesSection({
                   )}
                   <button
                     onClick={() => handleDelete(t.id)}
-                    className="text-muted-foreground hover:text-destructive opacity-0 transition-opacity group-hover:opacity-100"
+                    className="text-muted-foreground opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100"
                   >
                     <X className="h-3.5 w-3.5" />
                   </button>

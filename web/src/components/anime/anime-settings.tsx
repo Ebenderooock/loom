@@ -155,7 +155,7 @@ export function AnimeSettings({ seriesId }: AnimeSettingsProps) {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-8">
-        <Loader2 className="text-muted-foreground h-6 w-6 animate-spin" />
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
       </div>
     );
   }
@@ -183,7 +183,7 @@ export function AnimeSettings({ seriesId }: AnimeSettingsProps) {
             <SelectItem value="anidb">AniDB</SelectItem>
           </SelectContent>
         </Select>
-        <p className="text-muted-foreground text-xs">
+        <p className="text-xs text-muted-foreground">
           How episode numbers are matched against releases
         </p>
       </div>
@@ -202,11 +202,11 @@ export function AnimeSettings({ seriesId }: AnimeSettingsProps) {
               setPrefs((p) => ({ ...p, dualAudioRequired: e.target.checked }))
             }
           />
-          <div className="peer bg-muted peer-checked:bg-primary h-5 w-9 rounded-full after:absolute after:top-[2px] after:left-[2px] after:h-4 after:w-4 after:rounded-full after:bg-white after:transition-all peer-checked:after:translate-x-full" />
+          <div className="peer h-5 w-9 rounded-full bg-muted after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:bg-white after:transition-all peer-checked:bg-primary peer-checked:after:translate-x-full" />
         </label>
         <div>
           <Label>Require Dual Audio</Label>
-          <p className="text-muted-foreground text-xs">
+          <p className="text-xs text-muted-foreground">
             Only accept releases with dual audio tracks
           </p>
         </div>
@@ -215,12 +215,12 @@ export function AnimeSettings({ seriesId }: AnimeSettingsProps) {
       {/* Preferred Release Groups */}
       <div className="space-y-3">
         <Label>Preferred Release Groups</Label>
-        <p className="text-muted-foreground text-xs">
+        <p className="text-xs text-muted-foreground">
           Drag to reorder priority. Higher = preferred.
         </p>
 
         {prefs.preferredGroups.length === 0 && (
-          <p className="text-muted-foreground text-sm italic">
+          <p className="text-sm italic text-muted-foreground">
             No preferred groups configured — all groups treated equally
           </p>
         )}
@@ -249,7 +249,7 @@ export function AnimeSettings({ seriesId }: AnimeSettingsProps) {
                   ▼
                 </button>
               </div>
-              <GripVertical className="text-muted-foreground h-4 w-4" />
+              <GripVertical className="h-4 w-4 text-muted-foreground" />
               <span className="flex-1 font-medium">{g}</span>
               {knownGroups.find((kg) => kg.name === g) && (
                 <Badge variant="secondary" className="text-xs">
@@ -269,7 +269,7 @@ export function AnimeSettings({ seriesId }: AnimeSettingsProps) {
 
         <div className="flex gap-2">
           <input
-            className="placeholder:text-muted-foreground focus-visible:ring-ring flex h-9 w-full rounded-md border bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:ring-1 focus-visible:outline-none"
+            className="flex h-9 w-full rounded-md border bg-transparent px-3 py-1 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
             placeholder="Add group name..."
             value={newGroup}
             onChange={(e) => setNewGroup(e.target.value)}
@@ -282,7 +282,7 @@ export function AnimeSettings({ seriesId }: AnimeSettingsProps) {
 
         {knownGroups.length > 0 && (
           <details className="text-sm">
-            <summary className="text-muted-foreground hover:text-foreground cursor-pointer">
+            <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
               Known groups ({knownGroups.length})
             </summary>
             <div className="mt-2 flex flex-wrap gap-1">
@@ -290,7 +290,7 @@ export function AnimeSettings({ seriesId }: AnimeSettingsProps) {
                 <Badge
                   key={g.name}
                   variant="outline"
-                  className="hover:bg-accent cursor-pointer"
+                  className="cursor-pointer hover:bg-accent"
                   onClick={() => {
                     if (!prefs.preferredGroups.includes(g.name)) {
                       setPrefs((p) => ({
@@ -314,8 +314,8 @@ export function AnimeSettings({ seriesId }: AnimeSettingsProps) {
           <Label>Episode Mappings</Label>
           <Card className="max-h-60 overflow-auto">
             <table className="w-full text-sm">
-              <thead className="bg-card sticky top-0">
-                <tr className="text-muted-foreground border-b text-left">
+              <thead className="sticky top-0 bg-card">
+                <tr className="border-b text-left text-muted-foreground">
                   <th className="px-3 py-2">Absolute</th>
                   <th className="px-3 py-2">Season</th>
                   <th className="px-3 py-2">Episode</th>

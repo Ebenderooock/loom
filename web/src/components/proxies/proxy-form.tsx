@@ -219,7 +219,7 @@ export function ProxyForm({
           id="proxy-kind"
           value={values.kind}
           onChange={(e) => update("kind", e.target.value as ProxyKind)}
-          className="border-input focus-visible:ring-ring flex h-9 w-full rounded-md border bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:ring-1 focus-visible:outline-none"
+          className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
         >
           {PROXY_KINDS.map((k) => (
             <option key={k.value} value={k.value}>
@@ -227,7 +227,7 @@ export function ProxyForm({
             </option>
           ))}
         </select>
-        <p className="text-muted-foreground text-xs">{kindHelper}</p>
+        <p className="text-xs text-muted-foreground">{kindHelper}</p>
       </div>
 
       <div className="grid gap-2">
@@ -337,7 +337,7 @@ export function ProxyForm({
               onChange={(e) =>
                 update("session_mode", e.target.value as "" | "none" | "shared")
               }
-              className="border-input focus-visible:ring-ring flex h-9 w-full rounded-md border bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:ring-1 focus-visible:outline-none"
+              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
             >
               <option value="">Default</option>
               <option value="none">None</option>
@@ -353,7 +353,7 @@ export function ProxyForm({
           type="checkbox"
           checked={values.enabled}
           onChange={(e) => update("enabled", e.target.checked)}
-          className="border-input h-4 w-4 rounded"
+          className="h-4 w-4 rounded border-input"
         />
         <Label htmlFor="proxy-enabled" className="!m-0">
           Enabled

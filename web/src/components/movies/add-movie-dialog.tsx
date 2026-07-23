@@ -186,16 +186,16 @@ export function AddMovieDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="flex max-h-[85vh] max-w-3xl flex-col gap-0 p-0">
-        <DialogHeader className="border-border/50 border-b p-6 pb-4">
+        <DialogHeader className="border-b border-border/50 p-6 pb-4">
           <DialogTitle className="flex items-center gap-2 text-xl">
-            <Film className="text-accent h-5 w-5" />
+            <Film className="h-5 w-5 text-accent" />
             {selectedMovie ? "Add Movie" : "Search Movies"}
           </DialogTitle>
         </DialogHeader>
 
         {selectedMovie ? (
           <div className="flex-1 overflow-y-auto">
-            <div className="bg-muted relative h-48 overflow-hidden">
+            <div className="relative h-48 overflow-hidden bg-muted">
               {selectedMovie.backdrop_path ? (
                 <img
                   src={`${TMDB_IMG}/w780${selectedMovie.backdrop_path}`}
@@ -209,17 +209,17 @@ export function AddMovieDialog({
                   alt=""
                 />
               ) : null}
-              <div className="from-background absolute inset-0 bg-gradient-to-t to-transparent" />
+              <div className="absolute inset-0 bg-gradient-to-t from-background to-transparent" />
               <button
                 onClick={() => setSelectedMovie(null)}
-                className="absolute top-4 left-4 flex items-center gap-1 rounded-full bg-black/40 px-3 py-1.5 text-sm text-white/80 hover:text-white"
+                className="absolute left-4 top-4 flex items-center gap-1 rounded-full bg-black/40 px-3 py-1.5 text-sm text-white/80 hover:text-white"
               >
                 <ArrowLeft className="h-4 w-4" /> Back to results
               </button>
             </div>
             <div className="relative z-10 -mt-16 p-6">
               <div className="flex gap-5">
-                <div className="border-background w-32 shrink-0 overflow-hidden rounded-lg border-2 shadow-xl">
+                <div className="w-32 shrink-0 overflow-hidden rounded-lg border-2 border-background shadow-xl">
                   {selectedMovie.poster_path ? (
                     <img
                       src={`${TMDB_IMG}/w300${selectedMovie.poster_path}`}
@@ -227,8 +227,8 @@ export function AddMovieDialog({
                       className="aspect-[2/3] w-full object-cover"
                     />
                   ) : (
-                    <div className="bg-muted flex aspect-[2/3] w-full items-center justify-center">
-                      <Film className="text-muted-foreground/30 h-8 w-8" />
+                    <div className="flex aspect-[2/3] w-full items-center justify-center bg-muted">
+                      <Film className="h-8 w-8 text-muted-foreground/30" />
                     </div>
                   )}
                 </div>
@@ -236,7 +236,7 @@ export function AddMovieDialog({
                   <h2 className="truncate text-2xl font-bold">
                     {selectedMovie.title}
                   </h2>
-                  <div className="text-muted-foreground mt-1 flex items-center gap-3 text-sm">
+                  <div className="mt-1 flex items-center gap-3 text-sm text-muted-foreground">
                     {selectedMovie.year > 0 && (
                       <span>{selectedMovie.year}</span>
                     )}
@@ -272,7 +272,7 @@ export function AddMovieDialog({
                       ))}
                     </div>
                   )}
-                  <p className="text-muted-foreground mt-3 line-clamp-3 text-sm leading-relaxed">
+                  <p className="mt-3 line-clamp-3 text-sm leading-relaxed text-muted-foreground">
                     {selectedMovie.overview || "No overview available."}
                   </p>
                 </div>
@@ -352,9 +352,9 @@ export function AddMovieDialog({
                 </label>
               </div>
               {addError && (
-                <p className="text-destructive mt-3 text-sm">{addError}</p>
+                <p className="mt-3 text-sm text-destructive">{addError}</p>
               )}
-              <div className="border-border/50 mt-6 flex justify-end gap-3 border-t pt-4">
+              <div className="mt-6 flex justify-end gap-3 border-t border-border/50 pt-4">
                 <Button
                   variant="outline"
                   onClick={() => setSelectedMovie(null)}
@@ -381,7 +381,7 @@ export function AddMovieDialog({
           <>
             <div className="px-6 pt-4">
               <div className="relative">
-                <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   ref={searchInputRef}
                   placeholder="Search for a movie to add..."
@@ -390,20 +390,20 @@ export function AddMovieDialog({
                   className="h-11 pl-9"
                 />
                 {searching && (
-                  <Loader2 className="text-muted-foreground absolute top-1/2 right-3 h-4 w-4 -translate-y-1/2 animate-spin" />
+                  <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-muted-foreground" />
                 )}
               </div>
             </div>
             <div className="flex-1 overflow-y-auto px-6 pb-6">
               {results.length === 0 && searchTerm.length >= 2 && !searching ? (
-                <div className="text-muted-foreground flex flex-col items-center justify-center py-16">
+                <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
                   <Film className="mb-3 h-12 w-12 opacity-30" />
                   <p className="text-sm">
                     No movies found for &ldquo;{searchTerm}&rdquo;
                   </p>
                 </div>
               ) : results.length === 0 && searchTerm.length < 2 ? (
-                <div className="text-muted-foreground flex flex-col items-center justify-center py-16">
+                <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
                   <Search className="mb-3 h-12 w-12 opacity-30" />
                   <p className="text-sm">Start typing to search TMDB</p>
                 </div>
@@ -419,11 +419,11 @@ export function AddMovieDialog({
                         className={cn(
                           "flex w-full items-start gap-4 rounded-lg border p-3 text-left transition-colors",
                           inLibrary
-                            ? "border-border/30 cursor-not-allowed opacity-50"
-                            : "border-border/50 hover:border-accent/50 hover:bg-accent/5 cursor-pointer",
+                            ? "cursor-not-allowed border-border/30 opacity-50"
+                            : "cursor-pointer border-border/50 hover:border-accent/50 hover:bg-accent/5",
                         )}
                       >
-                        <div className="bg-muted aspect-[2/3] w-12 shrink-0 overflow-hidden rounded">
+                        <div className="aspect-[2/3] w-12 shrink-0 overflow-hidden rounded bg-muted">
                           {r.poster_path ? (
                             <img
                               src={`${TMDB_IMG}/w92${r.poster_path}`}
@@ -432,7 +432,7 @@ export function AddMovieDialog({
                             />
                           ) : (
                             <div className="flex h-full w-full items-center justify-center">
-                              <Film className="text-muted-foreground/30 h-4 w-4" />
+                              <Film className="h-4 w-4 text-muted-foreground/30" />
                             </div>
                           )}
                         </div>
@@ -442,12 +442,12 @@ export function AddMovieDialog({
                               {r.title}
                             </h4>
                             {r.year > 0 && (
-                              <span className="text-muted-foreground shrink-0 text-xs">
+                              <span className="shrink-0 text-xs text-muted-foreground">
                                 ({r.year})
                               </span>
                             )}
                           </div>
-                          <p className="text-muted-foreground mt-0.5 line-clamp-2 text-xs">
+                          <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">
                             {r.overview}
                           </p>
                           <div className="mt-1.5 flex items-center gap-3">
@@ -458,7 +458,7 @@ export function AddMovieDialog({
                               </span>
                             )}
                             {r.genres && r.genres.length > 0 && (
-                              <span className="text-muted-foreground text-[10px]">
+                              <span className="text-[10px] text-muted-foreground">
                                 {r.genres.slice(0, 3).join(" • ")}
                               </span>
                             )}
@@ -470,7 +470,7 @@ export function AddMovieDialog({
                               <Check className="h-3.5 w-3.5" /> In Library
                             </span>
                           ) : (
-                            <span className="text-accent text-xs">Add →</span>
+                            <span className="text-xs text-accent">Add →</span>
                           )}
                         </div>
                       </button>

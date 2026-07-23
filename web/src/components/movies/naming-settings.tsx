@@ -261,7 +261,7 @@ export function NamingSettings() {
       {/* Live preview */}
       {preview && (
         <div className="space-y-2 rounded-lg border border-zinc-800 bg-zinc-950 p-4">
-          <p className="text-xs font-medium tracking-wide text-zinc-500 uppercase">
+          <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
             Preview (Sample: The Dark Knight, 2008)
           </p>
           <div className="space-y-1">

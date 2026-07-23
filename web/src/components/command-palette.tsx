@@ -249,20 +249,20 @@ function PaletteBody({
     <>
       {inline ? (
         <div className="flex flex-1 items-center gap-2">
-          <Search className="text-muted-foreground h-4 w-4 shrink-0" />
+          <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
           <Command.Input
             ref={inputRef}
             value={query}
             onValueChange={setQuery}
             placeholder="Search Loom — movies, series, pages…"
-            className="placeholder:text-muted-foreground h-10 flex-1 bg-transparent text-sm outline-none"
+            className="h-10 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
           />
-          <kbd className="border-border bg-muted text-muted-foreground rounded border px-1.5 py-0.5 font-mono text-[10px] font-medium">
+          <kbd className="rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-[10px] font-medium text-muted-foreground">
             ESC
           </kbd>
           <button
             onClick={onClose}
-            className="text-muted-foreground hover:bg-muted hover:text-foreground rounded-md p-1.5 transition-colors"
+            className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
           >
             <X className="h-4 w-4" />
           </button>
@@ -272,12 +272,12 @@ function PaletteBody({
           value={query}
           onValueChange={setQuery}
           placeholder="Search Loom — movies, series, pages…"
-          className="border-border placeholder:text-muted-foreground h-12 border-b bg-transparent px-4 text-sm outline-none"
+          className="h-12 border-b border-border bg-transparent px-4 text-sm outline-none placeholder:text-muted-foreground"
         />
       )}
 
       <Command.List className={listClass}>
-        <Command.Empty className="text-muted-foreground py-6 text-center text-sm">
+        <Command.Empty className="py-6 text-center text-sm text-muted-foreground">
           {contentLoading ? (
             <span className="inline-flex items-center gap-2">
               <Loader2 className="h-4 w-4 animate-spin" /> Searching…
@@ -291,7 +291,7 @@ function PaletteBody({
           (matchedMovies.length > 0 ||
             matchedSeries.length > 0 ||
             matchedNav.length > 0) && (
-            <div className="text-muted-foreground flex items-center gap-2 px-3 py-2 text-xs">
+            <div className="flex items-center gap-2 px-3 py-2 text-xs text-muted-foreground">
               <Loader2 className="h-3.5 w-3.5 animate-spin" /> Searching your
               library…
             </div>
@@ -300,14 +300,14 @@ function PaletteBody({
         {matchedMovies.length > 0 && (
           <Command.Group
             heading="Movies"
-            className="text-muted-foreground px-2 py-1 text-xs"
+            className="px-2 py-1 text-xs text-muted-foreground"
           >
             {matchedMovies.map((m) => (
               <Command.Item
                 key={`movie-${m.id}`}
                 value={`movie ${m.title} ${m.year ?? ""} ${m.id}`}
                 onSelect={() => go("/movies", { focus: m.id })}
-                className="aria-selected:bg-accent aria-selected:text-accent-foreground flex cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-sm"
+                className="flex cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-sm aria-selected:bg-accent aria-selected:text-accent-foreground"
               >
                 <Film className="h-4 w-4 shrink-0" />
                 <span className="truncate">{m.title}</span>
@@ -322,14 +322,14 @@ function PaletteBody({
         {matchedSeries.length > 0 && (
           <Command.Group
             heading="TV Shows"
-            className="text-muted-foreground px-2 py-1 text-xs"
+            className="px-2 py-1 text-xs text-muted-foreground"
           >
             {matchedSeries.map((s) => (
               <Command.Item
                 key={`series-${s.id}`}
                 value={`series ${s.title} ${s.year ?? ""} ${s.id}`}
                 onSelect={() => go("/series", { focus: s.id })}
-                className="aria-selected:bg-accent aria-selected:text-accent-foreground flex cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-sm"
+                className="flex cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-sm aria-selected:bg-accent aria-selected:text-accent-foreground"
               >
                 <Tv className="h-4 w-4 shrink-0" />
                 <span className="truncate">{s.title}</span>
@@ -344,14 +344,14 @@ function PaletteBody({
         {matchedNav.length > 0 && (
           <Command.Group
             heading="Navigation"
-            className="text-muted-foreground px-2 py-1 text-xs"
+            className="px-2 py-1 text-xs text-muted-foreground"
           >
             {matchedNav.map(({ label, to, Icon }) => (
               <Command.Item
                 key={to}
                 value={`nav ${label}`}
                 onSelect={() => go(to)}
-                className="aria-selected:bg-accent aria-selected:text-accent-foreground flex cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-sm"
+                className="flex cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-sm aria-selected:bg-accent aria-selected:text-accent-foreground"
               >
                 <Icon className="h-4 w-4 shrink-0" />
                 <span>{label}</span>

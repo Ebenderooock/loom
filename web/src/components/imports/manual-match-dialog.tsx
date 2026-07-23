@@ -260,7 +260,7 @@ export function ManualMatchDialog({
           <TabsContent value="movie" className="mt-2">
             <div className="max-h-[300px] space-y-1 overflow-y-auto">
               {movies.length === 0 && !searching && (
-                <p className="text-muted-foreground py-4 text-center text-sm">
+                <p className="py-4 text-center text-sm text-muted-foreground">
                   Search for a movie in your library
                 </p>
               )}
@@ -271,20 +271,20 @@ export function ManualMatchDialog({
                   onClick={() => setSelectedMovie(m)}
                   className={`flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm transition-colors ${
                     selectedMovie?.id === m.id
-                      ? "bg-primary/10 ring-primary ring-1"
+                      ? "bg-primary/10 ring-1 ring-primary"
                       : "hover:bg-muted"
                   }`}
                 >
                   <div>
                     <span className="font-medium">{m.title}</span>
                     {m.year ? (
-                      <span className="text-muted-foreground ml-2">
+                      <span className="ml-2 text-muted-foreground">
                         ({m.year})
                       </span>
                     ) : null}
                   </div>
                   {selectedMovie?.id === m.id && (
-                    <Check className="text-primary h-4 w-4" />
+                    <Check className="h-4 w-4 text-primary" />
                   )}
                 </button>
               ))}
@@ -297,7 +297,7 @@ export function ManualMatchDialog({
             {!selectedSeries && (
               <div className="max-h-[200px] space-y-1 overflow-y-auto">
                 {seriesList.length === 0 && !searching && (
-                  <p className="text-muted-foreground py-4 text-center text-sm">
+                  <p className="py-4 text-center text-sm text-muted-foreground">
                     Search for a series in your library
                   </p>
                 )}
@@ -306,12 +306,12 @@ export function ManualMatchDialog({
                     key={s.id}
                     type="button"
                     onClick={() => void handleSelectSeries(s)}
-                    className="hover:bg-muted flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm transition-colors"
+                    className="flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm transition-colors hover:bg-muted"
                   >
                     <div>
                       <span className="font-medium">{s.title}</span>
                       {s.year ? (
-                        <span className="text-muted-foreground ml-2">
+                        <span className="ml-2 text-muted-foreground">
                           ({s.year})
                         </span>
                       ) : null}
@@ -340,7 +340,7 @@ export function ManualMatchDialog({
                     </Button>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="text-muted-foreground text-sm">
+                    <span className="text-sm text-muted-foreground">
                       Season
                     </span>
                     <Select
@@ -371,12 +371,12 @@ export function ManualMatchDialog({
 
                 {loadingEpisodes ? (
                   <div className="flex justify-center py-4">
-                    <Loader2 className="text-muted-foreground h-5 w-5 animate-spin" />
+                    <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
                   </div>
                 ) : (
                   <div className="max-h-[200px] space-y-1 overflow-y-auto">
                     {episodes.length === 0 ? (
-                      <p className="text-muted-foreground py-4 text-center text-sm">
+                      <p className="py-4 text-center text-sm text-muted-foreground">
                         No episodes found for this season
                       </p>
                     ) : (
@@ -387,18 +387,18 @@ export function ManualMatchDialog({
                           onClick={() => setSelectedEpisode(ep)}
                           className={`flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm transition-colors ${
                             selectedEpisode?.id === ep.id
-                              ? "bg-primary/10 ring-primary ring-1"
+                              ? "bg-primary/10 ring-1 ring-primary"
                               : "hover:bg-muted"
                           }`}
                         >
                           <div>
-                            <span className="text-muted-foreground font-medium">
+                            <span className="font-medium text-muted-foreground">
                               E{String(ep.episodeNumber).padStart(2, "0")}
                             </span>
                             <span className="ml-2">{ep.title}</span>
                           </div>
                           {selectedEpisode?.id === ep.id && (
-                            <Check className="text-primary h-4 w-4" />
+                            <Check className="h-4 w-4 text-primary" />
                           )}
                         </button>
                       ))
@@ -410,7 +410,7 @@ export function ManualMatchDialog({
           </TabsContent>
         </Tabs>
 
-        {error && <p className="text-destructive text-sm">{error}</p>}
+        {error && <p className="text-sm text-destructive">{error}</p>}
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>

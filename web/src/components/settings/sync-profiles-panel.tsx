@@ -176,7 +176,7 @@ function ProfileDialog({
 
         {loading ? (
           <div className="flex justify-center py-8">
-            <Loader2 className="text-muted-foreground h-6 w-6 animate-spin" />
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
         ) : (
           <div className="space-y-4">
@@ -234,14 +234,14 @@ function ProfileDialog({
               </div>
               <div className="max-h-48 space-y-1 overflow-y-auto rounded-md border p-2">
                 {indexers.length === 0 && (
-                  <p className="text-muted-foreground py-2 text-center text-sm">
+                  <p className="py-2 text-center text-sm text-muted-foreground">
                     No indexers configured
                   </p>
                 )}
                 {indexers.map((idx) => (
                   <label
                     key={idx.id}
-                    className="hover:bg-accent/50 flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm"
+                    className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-accent/50"
                   >
                     <Checkbox
                       checked={!!selectedIndexers[idx.id]}
@@ -319,10 +319,10 @@ export function SyncProfilesPanel() {
           </Button>
         </CardHeader>
         <CardContent>
-          <p className="text-muted-foreground mb-4 text-sm">
+          <p className="mb-4 text-sm text-muted-foreground">
             Control which indexers are visible to each connected Radarr/Sonarr
             instance via the compatibility API. Assign a profile by appending{" "}
-            <code className="bg-muted rounded px-1 text-xs">
+            <code className="rounded bg-muted px-1 text-xs">
               ?syncProfileId=PROFILE_ID
             </code>{" "}
             to the Prowlarr base URL.
@@ -330,10 +330,10 @@ export function SyncProfilesPanel() {
 
           {isLoading ? (
             <div className="flex justify-center py-6">
-              <Loader2 className="text-muted-foreground h-5 w-5 animate-spin" />
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
             </div>
           ) : profiles.length === 0 ? (
-            <p className="text-muted-foreground py-4 text-center text-sm">
+            <p className="py-4 text-center text-sm text-muted-foreground">
               No sync profiles yet. All indexers are visible to all connected
               apps.
             </p>
@@ -356,7 +356,7 @@ export function SyncProfilesPanel() {
                         </Badge>
                       )}
                     </div>
-                    <p className="text-muted-foreground mt-0.5 truncate text-xs">
+                    <p className="mt-0.5 truncate text-xs text-muted-foreground">
                       ID: {p.id}
                     </p>
                   </div>
@@ -373,7 +373,7 @@ export function SyncProfilesPanel() {
                       size="icon"
                       onClick={() => setDeleteTarget(p)}
                     >
-                      <Trash2 className="text-destructive h-4 w-4" />
+                      <Trash2 className="h-4 w-4 text-destructive" />
                     </Button>
                   </div>
                 </li>

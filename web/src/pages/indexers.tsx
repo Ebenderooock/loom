@@ -164,7 +164,7 @@ export function IndexersPage() {
         </div>
       ) : null}
 
-      <div className="border-border overflow-x-auto rounded-md border">
+      <div className="overflow-x-auto rounded-md border border-border">
         <Table>
           <TableHeader>
             <TableRow>
@@ -204,7 +204,7 @@ export function IndexersPage() {
               <TableRow key={idx.id}>
                 <TableCell>
                   <div className="font-medium">{idx.name}</div>
-                  <div className="text-muted-foreground text-xs">{idx.id}</div>
+                  <div className="text-xs text-muted-foreground">{idx.id}</div>
                 </TableCell>
                 <TableCell className="text-muted-foreground">
                   {idx.kind}
@@ -213,7 +213,7 @@ export function IndexersPage() {
                 <TableCell>
                   <HealthBadge health={idx.health} />
                   {idx.health?.last_error ? (
-                    <div className="text-muted-foreground mt-1 max-w-[24ch] truncate text-xs">
+                    <div className="mt-1 max-w-[24ch] truncate text-xs text-muted-foreground">
                       {idx.health.last_error}
                     </div>
                   ) : null}

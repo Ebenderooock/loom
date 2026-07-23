@@ -341,7 +341,7 @@ export function SettingsLayout() {
           id="settings-jump"
           value={active?.to ?? ""}
           onChange={(e) => navigate({ to: e.target.value })}
-          className="border-border bg-background w-full rounded-md border px-3 py-2 text-sm"
+          className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
         >
           {groups.map((g) => (
             <optgroup key={g.id} label={g.label}>
@@ -359,12 +359,12 @@ export function SettingsLayout() {
       <nav
         ref={navRef}
         aria-label="Settings sections"
-        className="hidden scrollbar-thin lg:sticky lg:top-20 lg:block lg:max-h-[calc(100vh-6rem)] lg:self-start lg:overflow-y-auto"
+        className="scrollbar-thin hidden lg:sticky lg:top-20 lg:block lg:max-h-[calc(100vh-6rem)] lg:self-start lg:overflow-y-auto"
       >
         <div className="flex flex-col gap-4">
           {groups.map((g) => (
             <div key={g.id}>
-              <p className="text-muted-foreground/60 px-3 pb-1 text-[11px] font-semibold tracking-wider uppercase">
+              <p className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/60">
                 {g.label}
               </p>
               <ul className="flex flex-col gap-0.5">
@@ -378,7 +378,7 @@ export function SettingsLayout() {
                         className={cn(
                           "flex items-center gap-2.5 rounded-md px-3 py-1.5 text-[13px] font-medium transition-colors",
                           isActive
-                            ? "border-accent bg-accent/15 text-accent border-l-2"
+                            ? "border-l-2 border-accent bg-accent/15 text-accent"
                             : "hover:bg-accent/8 text-muted-foreground hover:text-foreground",
                         )}
                       >
@@ -403,7 +403,7 @@ export function SettingsLayout() {
                 {active.label}
               </h1>
               {active.description && (
-                <p className="text-muted-foreground mt-1 text-sm">
+                <p className="mt-1 text-sm text-muted-foreground">
                   {active.description}
                 </p>
               )}

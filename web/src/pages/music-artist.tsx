@@ -58,7 +58,7 @@ function AlbumRow({ album }: { album: Album }) {
   };
 
   return (
-    <div className="border-border flex items-center gap-3 rounded-md border px-3 py-2.5">
+    <div className="flex items-center gap-3 rounded-md border border-border px-3 py-2.5">
       <Switch
         checked={album.monitored}
         onCheckedChange={(v) =>
@@ -66,7 +66,7 @@ function AlbumRow({ album }: { album: Album }) {
         }
         aria-label="Monitor album"
       />
-      <div className="bg-muted flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded">
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded bg-muted">
         {album.cover_art_url && !imageLoadError ? (
           <img
             src={album.cover_art_url}
@@ -76,12 +76,12 @@ function AlbumRow({ album }: { album: Album }) {
             onError={() => setImageLoadError(true)}
           />
         ) : (
-          <Disc3 className="text-muted-foreground h-5 w-5" />
+          <Disc3 className="h-5 w-5 text-muted-foreground" />
         )}
       </div>
       <div className="min-w-0 flex-1">
         <div className="truncate text-sm font-medium">{album.title}</div>
-        <div className="text-muted-foreground flex items-center gap-2 text-xs">
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
           {album.release_date && <span>{albumYear(album)}</span>}
           {album.album_type && <span>· {album.album_type}</span>}
           {tracks.length > 0 && (
@@ -148,7 +148,7 @@ export function MusicArtistPage() {
 
   if (isLoading) {
     return (
-      <div className="space-y-4 px-6 pt-2 pb-6">
+      <div className="space-y-4 px-6 pb-6 pt-2">
         <Skeleton className="h-32 w-full rounded-lg" />
         <Skeleton className="h-12 w-full" />
         <Skeleton className="h-12 w-full" />
@@ -158,7 +158,7 @@ export function MusicArtistPage() {
 
   if (!artist) {
     return (
-      <div className="text-muted-foreground px-6 py-12 text-center text-sm">
+      <div className="px-6 py-12 text-center text-sm text-muted-foreground">
         Artist not found.{" "}
         <Link to="/music" className="text-accent underline">
           Back to Music
@@ -231,17 +231,17 @@ export function MusicArtistPage() {
   };
 
   return (
-    <div className="px-6 pt-2 pb-6">
+    <div className="px-6 pb-6 pt-2">
       <Link
         to="/music"
-        className="text-muted-foreground hover:text-foreground mb-4 inline-flex items-center gap-1.5 text-sm"
+        className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
       >
         <ArrowLeft className="h-4 w-4" />
         Music
       </Link>
 
       <div className="mb-6 flex gap-4">
-        <div className="bg-muted flex h-32 w-32 shrink-0 items-center justify-center overflow-hidden rounded-lg">
+        <div className="flex h-32 w-32 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-muted">
           {artist.image_url ? (
             <img
               src={artist.image_url}
@@ -249,17 +249,17 @@ export function MusicArtistPage() {
               className="h-full w-full object-cover"
             />
           ) : (
-            <Music className="text-muted-foreground h-12 w-12" />
+            <Music className="h-12 w-12 text-muted-foreground" />
           )}
         </div>
         <div className="flex flex-1 flex-col">
           <h1 className="text-2xl font-semibold">{artist.name}</h1>
           {artist.disambiguation && (
-            <p className="text-muted-foreground text-sm">
+            <p className="text-sm text-muted-foreground">
               {artist.disambiguation}
             </p>
           )}
-          <div className="text-muted-foreground mt-2 flex flex-wrap gap-2 text-xs">
+          <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
             {artist.artist_type && (
               <Badge variant="outline">{artist.artist_type}</Badge>
             )}
@@ -274,7 +274,7 @@ export function MusicArtistPage() {
             )}
           </div>
           {artist.overview && (
-            <p className="text-muted-foreground mt-2 line-clamp-3 text-sm">
+            <p className="mt-2 line-clamp-3 text-sm text-muted-foreground">
               {artist.overview}
             </p>
           )}
@@ -336,7 +336,7 @@ export function MusicArtistPage() {
       </div>
 
       <div className="mb-2 flex items-center justify-between">
-        <h2 className="text-muted-foreground text-sm font-semibold">Albums</h2>
+        <h2 className="text-sm font-semibold text-muted-foreground">Albums</h2>
         {albums.length > 0 && (
           <div className="flex items-center gap-1.5">
             <Button
@@ -372,14 +372,14 @@ export function MusicArtistPage() {
         )}
       </div>
       {albums.length === 0 ? (
-        <p className="text-muted-foreground py-8 text-center text-sm">
+        <p className="py-8 text-center text-sm text-muted-foreground">
           No albums found for this artist.
         </p>
       ) : (
         <div className="space-y-6">
           {orderedTypes.map((type) => (
             <div key={type}>
-              <h3 className="text-muted-foreground mb-2 text-xs font-semibold tracking-wide uppercase">
+              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 {type}s
               </h3>
               <div className="space-y-2">

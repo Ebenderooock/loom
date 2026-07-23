@@ -262,7 +262,7 @@ export function IndexerForm({
           value={values.kind}
           disabled={isEdit}
           onChange={(e) => update("kind", e.target.value as IndexerKind)}
-          className="border-input focus-visible:ring-ring flex h-9 w-full rounded-md border bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:ring-1 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+          className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
         >
           {INDEXER_KINDS.map((k) => (
             <option key={k.value} value={k.value}>
@@ -270,7 +270,7 @@ export function IndexerForm({
             </option>
           ))}
         </select>
-        <p className="text-muted-foreground text-xs">{kindHelper}</p>
+        <p className="text-xs text-muted-foreground">{kindHelper}</p>
       </div>
 
       <div className="grid gap-2">
@@ -382,7 +382,7 @@ export function IndexerForm({
         />
         <p
           id="indexer-categories-help"
-          className="text-muted-foreground text-xs"
+          className="text-xs text-muted-foreground"
         >
           Comma-separated Newznab category IDs. Leave blank to use the
           indexer&apos;s defaults.
@@ -408,7 +408,7 @@ export function IndexerForm({
           id="indexer-proxy"
           value={values.proxy_id}
           onChange={(e) => update("proxy_id", e.target.value)}
-          className="border-input focus-visible:ring-ring flex h-9 w-full rounded-md border bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:ring-1 focus-visible:outline-none"
+          className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
         >
           <option value="">None — direct connection</option>
           {proxies.map((p) => (
@@ -417,7 +417,7 @@ export function IndexerForm({
             </option>
           ))}
         </select>
-        <p className="text-muted-foreground text-xs">
+        <p className="text-xs text-muted-foreground">
           Route this indexer&apos;s outbound HTTP traffic through a configured
           proxy. Detaching a proxy on an existing indexer sends a JSON-null on
           PATCH so the server clears the pin.
@@ -425,11 +425,11 @@ export function IndexerForm({
       </div>
 
       {/* --- Seeding overrides --- */}
-      <fieldset className="border-input grid gap-4 rounded-md border p-4">
-        <legend className="text-muted-foreground px-2 text-sm font-medium">
+      <fieldset className="grid gap-4 rounded-md border border-input p-4">
+        <legend className="px-2 text-sm font-medium text-muted-foreground">
           Seeding
         </legend>
-        <p className="text-muted-foreground -mt-2 text-xs">
+        <p className="-mt-2 text-xs text-muted-foreground">
           Override the download client&apos;s default seed policy for grabs from
           this indexer. Leave empty to use the client default.
         </p>
@@ -476,7 +476,7 @@ export function IndexerForm({
           type="checkbox"
           checked={values.enabled}
           onChange={(e) => update("enabled", e.target.checked)}
-          className="border-input h-4 w-4 rounded"
+          className="h-4 w-4 rounded border-input"
         />
         <Label htmlFor="indexer-enabled" className="!m-0">
           Enabled

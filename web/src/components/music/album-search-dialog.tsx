@@ -70,17 +70,17 @@ export function AlbumSearchDialog({
         </DialogHeader>
 
         {isLoading ? (
-          <div className="text-muted-foreground flex items-center justify-center gap-2 py-12 text-sm">
+          <div className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" />
             Searching indexers…
           </div>
         ) : isError ? (
-          <div className="text-destructive flex items-center justify-center gap-2 py-12 text-sm">
+          <div className="flex items-center justify-center gap-2 py-12 text-sm text-destructive">
             <AlertCircle className="h-4 w-4" />
             {error instanceof Error ? error.message : "Search failed"}
           </div>
         ) : releases.length === 0 ? (
-          <p className="text-muted-foreground py-12 text-center text-sm">
+          <p className="py-12 text-center text-sm text-muted-foreground">
             No matching releases found.
           </p>
         ) : (
@@ -110,7 +110,7 @@ export function AlbumSearchDialog({
                         >
                           {r.title}
                         </div>
-                        <div className="text-muted-foreground flex items-center gap-1.5 text-[10px]">
+                        <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
                           <span>{r.indexer_id}</span>
                           <span>· {r.protocol}</span>
                           {!r.allowed && (

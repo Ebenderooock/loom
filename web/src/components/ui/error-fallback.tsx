@@ -12,25 +12,25 @@ export function ErrorFallback({
   const router = useRouter();
 
   return (
-    <div className="bg-background flex min-h-screen items-center justify-center p-4">
-      <div className="animate-fade-in-up mx-auto max-w-md space-y-6 text-center">
+    <div className="flex min-h-screen items-center justify-center bg-background p-4">
+      <div className="mx-auto max-w-md animate-fade-in-up space-y-6 text-center">
         {/* Decorative background orb */}
-        <div className="bg-destructive/5 pointer-events-none absolute top-1/2 left-1/2 h-48 w-48 -translate-x-1/2 -translate-y-1/2 rounded-full blur-3xl" />
+        <div className="pointer-events-none absolute left-1/2 top-1/2 h-48 w-48 -translate-x-1/2 -translate-y-1/2 rounded-full bg-destructive/5 blur-3xl" />
         <div className="flex justify-center">
-          <div className="border-destructive/20 from-destructive/20 to-destructive/5 flex h-20 w-20 items-center justify-center rounded-2xl border bg-gradient-to-br">
-            <AlertCircle className="text-destructive h-10 w-10" />
+          <div className="flex h-20 w-20 items-center justify-center rounded-2xl border border-destructive/20 bg-gradient-to-br from-destructive/20 to-destructive/5">
+            <AlertCircle className="h-10 w-10 text-destructive" />
           </div>
         </div>
         <div className="space-y-2">
-          <h1 className="text-foreground text-2xl font-semibold tracking-tight">
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">
             Something went wrong
           </h1>
-          <p className="text-muted-foreground text-sm">
+          <p className="text-sm text-muted-foreground">
             An unexpected error occurred. You can try again or return to the
             home page.
           </p>
         </div>
-        <pre className="border-border/50 bg-card/50 text-muted-foreground max-h-40 overflow-auto rounded-lg border p-4 text-left text-xs backdrop-blur-sm">
+        <pre className="max-h-40 overflow-auto rounded-lg border border-border/50 bg-card/50 p-4 text-left text-xs text-muted-foreground backdrop-blur-sm">
           {error.message}
         </pre>
         <div className="flex items-center justify-center gap-3">

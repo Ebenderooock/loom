@@ -102,7 +102,7 @@ export function WorkflowDetailPage() {
           <h2 className="truncate text-lg font-semibold">
             {workflow.grabTitle || workflow.id.slice(0, 12)}
           </h2>
-          <p className="text-muted-foreground text-xs">
+          <p className="text-xs text-muted-foreground">
             Started {relativeTime(workflow.createdAt)} · Updated{" "}
             {relativeTime(workflow.updatedAt)}
           </p>
@@ -153,15 +153,15 @@ export function WorkflowDetailPage() {
       )}
 
       {/* Tab navigation */}
-      <div className="border-border flex border-b">
+      <div className="flex border-b border-border">
         <button
-          className={`px-4 py-2 text-sm font-medium transition-colors ${activeTab === "timeline" ? "border-primary text-foreground border-b-2" : "text-muted-foreground hover:text-foreground"}`}
+          className={`px-4 py-2 text-sm font-medium transition-colors ${activeTab === "timeline" ? "border-b-2 border-primary text-foreground" : "text-muted-foreground hover:text-foreground"}`}
           onClick={() => setActiveTab("timeline")}
         >
           Event Timeline
         </button>
         <button
-          className={`flex items-center gap-1.5 px-4 py-2 text-sm font-medium transition-colors ${activeTab === "logs" ? "border-primary text-foreground border-b-2" : "text-muted-foreground hover:text-foreground"}`}
+          className={`flex items-center gap-1.5 px-4 py-2 text-sm font-medium transition-colors ${activeTab === "logs" ? "border-b-2 border-primary text-foreground" : "text-muted-foreground hover:text-foreground"}`}
           onClick={() => setActiveTab("logs")}
         >
           <ScrollText className="h-3.5 w-3.5" />

@@ -248,7 +248,7 @@ function ConnectionForm({
       </div>
 
       {/* Dynamic settings fields */}
-      <fieldset className="border-border space-y-3 rounded-md border p-3">
+      <fieldset className="space-y-3 rounded-md border border-border p-3">
         <legend className="px-1 text-sm font-medium">
           Connection Settings
         </legend>
@@ -406,7 +406,7 @@ function ConnectionForm({
       </fieldset>
 
       {/* Event subscriptions */}
-      <fieldset className="border-border space-y-2 rounded-md border p-3">
+      <fieldset className="space-y-2 rounded-md border border-border p-3">
         <legend className="px-1 text-sm font-medium">Events</legend>
         <div className="grid grid-cols-2 gap-2">
           {EVENT_TYPES.map((ev) => (
@@ -427,23 +427,23 @@ function ConnectionForm({
       </fieldset>
 
       {/* Template override */}
-      <fieldset className="border-border space-y-2 rounded-md border p-3">
+      <fieldset className="space-y-2 rounded-md border border-border p-3">
         <legend className="px-1 text-sm font-medium">
           Message Template (optional)
         </legend>
         <textarea
-          className="border-border bg-background w-full rounded-md border px-3 py-2 font-mono text-sm"
+          className="w-full rounded-md border border-border bg-background px-3 py-2 font-mono text-sm"
           rows={3}
           value={form.settings.template_override ?? ""}
           onChange={(e) => updateSettings("template_override", e.target.value)}
           placeholder="Leave empty for default template"
         />
-        <p className="text-muted-foreground text-xs">
+        <p className="text-xs text-muted-foreground">
           Available variables:{" "}
           {TEMPLATE_VARIABLES.map((v) => (
             <code
               key={v}
-              className="bg-muted mx-0.5 rounded px-1 py-0.5 text-[11px]"
+              className="mx-0.5 rounded bg-muted px-1 py-0.5 text-[11px]"
             >
               {v}
             </code>
@@ -646,7 +646,7 @@ export function NotificationsPage() {
             </div>
           )}
 
-          <div className="border-border overflow-x-auto rounded-md border">
+          <div className="overflow-x-auto rounded-md border border-border">
             <table className="w-full text-sm">
               <caption className="sr-only">Notification connections</caption>
               <thead className="bg-muted/50 text-left">
@@ -672,7 +672,7 @@ export function NotificationsPage() {
                 {connectionsQ.isLoading && (
                   <>
                     {Array.from({ length: 2 }).map((_, i) => (
-                      <tr key={i} className="border-border border-t">
+                      <tr key={i} className="border-t border-border">
                         {Array.from({ length: 5 }).map((__, j) => (
                           <td key={j} className="px-3 py-3">
                             <Skeleton className="h-4 w-24" />
@@ -687,17 +687,17 @@ export function NotificationsPage() {
                     <tr>
                       <td
                         colSpan={5}
-                        className="text-muted-foreground px-3 py-6 text-center"
+                        className="px-3 py-6 text-center text-muted-foreground"
                       >
                         No notification channels configured.
                       </td>
                     </tr>
                   )}
                 {(connectionsQ.data ?? []).map((c) => (
-                  <tr key={c.id} className="border-border border-t">
+                  <tr key={c.id} className="border-t border-border">
                     <td className="px-3 py-2">
                       <div className="font-medium">{c.name}</div>
-                      <div className="text-muted-foreground text-xs">
+                      <div className="text-xs text-muted-foreground">
                         {c.id}
                       </div>
                     </td>
@@ -773,7 +773,7 @@ export function NotificationsPage() {
             </div>
           )}
 
-          <div className="border-border overflow-x-auto rounded-md border">
+          <div className="overflow-x-auto rounded-md border border-border">
             <table className="w-full text-sm">
               <caption className="sr-only">Notification history</caption>
               <thead className="bg-muted/50 text-left">
@@ -802,7 +802,7 @@ export function NotificationsPage() {
                 {historyQ.isLoading && (
                   <>
                     {Array.from({ length: 3 }).map((_, i) => (
-                      <tr key={i} className="border-border border-t">
+                      <tr key={i} className="border-t border-border">
                         {Array.from({ length: 6 }).map((__, j) => (
                           <td key={j} className="px-3 py-3">
                             <Skeleton className="h-4 w-20" />
@@ -816,15 +816,15 @@ export function NotificationsPage() {
                   <tr>
                     <td
                       colSpan={6}
-                      className="text-muted-foreground px-3 py-6 text-center"
+                      className="px-3 py-6 text-center text-muted-foreground"
                     >
                       No notification history yet.
                     </td>
                   </tr>
                 )}
                 {(historyQ.data ?? []).map((h) => (
-                  <tr key={h.id} className="border-border border-t">
-                    <td className="text-muted-foreground px-3 py-2 whitespace-nowrap">
+                  <tr key={h.id} className="border-t border-border">
+                    <td className="whitespace-nowrap px-3 py-2 text-muted-foreground">
                       {new Date(h.sent_at).toLocaleString()}
                     </td>
                     <td className="px-3 py-2">
@@ -846,7 +846,7 @@ export function NotificationsPage() {
                         {h.success ? "Success" : "Failed"}
                       </Badge>
                     </td>
-                    <td className="text-muted-foreground px-3 py-2">
+                    <td className="px-3 py-2 text-muted-foreground">
                       {h.error_message || "—"}
                     </td>
                   </tr>

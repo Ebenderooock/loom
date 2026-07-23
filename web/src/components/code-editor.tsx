@@ -66,7 +66,7 @@ export default function CodeEditor({
   );
 
   return (
-    <div className="border-border overflow-hidden rounded-md border">
+    <div className="overflow-hidden rounded-md border border-border">
       <Editor
         height={height}
         language="javascript"

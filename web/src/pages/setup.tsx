@@ -32,7 +32,7 @@ function StepIndicator({ current }: { current: SetupStep }) {
               i < idx
                 ? "bg-teal-electric"
                 : i === idx
-                  ? "bg-purple-rich ring-purple-rich/40 ring-2"
+                  ? "bg-purple-rich ring-2 ring-purple-rich/40"
                   : "bg-neutral-muted/30",
             )}
             title={STEP_LABELS[s]}
@@ -98,13 +98,13 @@ export function SetupPage() {
   };
 
   return (
-    <div className="from-purple-midnight via-neutral-dark to-teal-deep flex min-h-screen w-full items-center justify-center bg-gradient-to-br py-8">
+    <div className="flex min-h-screen w-full items-center justify-center bg-gradient-to-br from-purple-midnight via-neutral-dark to-teal-deep py-8">
       <div className="mx-auto w-full max-w-md px-4">
         <StepIndicator current={step} />
 
         {/* Welcome Step */}
         {step === "welcome" && (
-          <div className="bg-neutral-card space-y-6 rounded-lg p-8 shadow-lg">
+          <div className="space-y-6 rounded-lg bg-neutral-card p-8 shadow-lg">
             <div className="space-y-4 text-center">
               <img
                 src="/loom-logo.png"
@@ -112,7 +112,7 @@ export function SetupPage() {
                 className="mx-auto h-16 object-contain"
               />
               <div className="space-y-2">
-                <h1 className="text-neutral-light text-3xl font-bold">
+                <h1 className="text-3xl font-bold text-neutral-light">
                   Welcome to Loom
                 </h1>
                 <p className="text-neutral-muted">
@@ -121,7 +121,7 @@ export function SetupPage() {
               </div>
             </div>
 
-            <div className="border-purple-rich/30 bg-purple-midnight/20 space-y-3 rounded-lg border p-4">
+            <div className="space-y-3 rounded-lg border border-purple-rich/30 bg-purple-midnight/20 p-4">
               {[
                 ["Create Admin Account", "Set up your credentials for Loom"],
                 [
@@ -130,10 +130,10 @@ export function SetupPage() {
                 ],
               ].map(([title, desc]) => (
                 <div key={title} className="flex items-start gap-3">
-                  <CheckCircle2 className="text-teal-electric mt-0.5 h-5 w-5 flex-shrink-0" />
+                  <CheckCircle2 className="mt-0.5 h-5 w-5 flex-shrink-0 text-teal-electric" />
                   <div>
-                    <p className="text-neutral-light font-medium">{title}</p>
-                    <p className="text-neutral-muted text-sm">{desc}</p>
+                    <p className="font-medium text-neutral-light">{title}</p>
+                    <p className="text-sm text-neutral-muted">{desc}</p>
                   </div>
                 </div>
               ))}
@@ -141,7 +141,7 @@ export function SetupPage() {
 
             <Button
               onClick={() => goTo("credentials")}
-              className="bg-purple-rich hover:bg-purple-midnight w-full py-2 font-medium text-white"
+              className="w-full bg-purple-rich py-2 font-medium text-white hover:bg-purple-midnight"
             >
               Get Started
             </Button>
@@ -150,20 +150,20 @@ export function SetupPage() {
 
         {/* Credentials Step */}
         {step === "credentials" && (
-          <div className="bg-neutral-card space-y-6 rounded-lg p-8 shadow-lg">
+          <div className="space-y-6 rounded-lg bg-neutral-card p-8 shadow-lg">
             <div className="space-y-2 text-center">
-              <Lock className="text-teal-electric mx-auto h-8 w-8" />
-              <h2 className="text-neutral-light text-2xl font-bold">
+              <Lock className="mx-auto h-8 w-8 text-teal-electric" />
+              <h2 className="text-2xl font-bold text-neutral-light">
                 Create Your Account
               </h2>
-              <p className="text-neutral-muted text-sm">
+              <p className="text-sm text-neutral-muted">
                 Set up your admin credentials to access Loom
               </p>
             </div>
 
             {error && (
               <Alert className="border-semantic-error/30 bg-semantic-error/10">
-                <AlertCircle className="text-semantic-error h-4 w-4" />
+                <AlertCircle className="h-4 w-4 text-semantic-error" />
                 <AlertDescription className="text-semantic-error">
                   {error}
                 </AlertDescription>
@@ -174,7 +174,7 @@ export function SetupPage() {
               <div className="space-y-2">
                 <label
                   htmlFor="setup-username"
-                  className="text-neutral-light text-sm font-medium"
+                  className="text-sm font-medium text-neutral-light"
                 >
                   Username
                 </label>
@@ -192,7 +192,7 @@ export function SetupPage() {
               <div className="space-y-2">
                 <label
                   htmlFor="setup-password"
-                  className="text-neutral-light text-sm font-medium"
+                  className="text-sm font-medium text-neutral-light"
                 >
                   Password
                 </label>
@@ -207,7 +207,7 @@ export function SetupPage() {
                 />
               </div>
 
-              <p className="text-neutral-muted text-xs">
+              <p className="text-xs text-neutral-muted">
                 Your credentials are encrypted and stored securely
               </p>
             </div>
@@ -224,7 +224,7 @@ export function SetupPage() {
               <Button
                 onClick={completeSetup}
                 disabled={isLoading || !username.trim() || !password.trim()}
-                className="bg-teal-electric text-neutral-dark hover:bg-teal-ocean flex-1 font-medium"
+                className="flex-1 bg-teal-electric font-medium text-neutral-dark hover:bg-teal-ocean"
               >
                 {isLoading ? "Setting up..." : "Create Account"}
               </Button>
@@ -234,12 +234,12 @@ export function SetupPage() {
 
         {/* Complete Step */}
         {step === "complete" && (
-          <div className="bg-neutral-card space-y-6 rounded-lg p-8 shadow-lg">
+          <div className="space-y-6 rounded-lg bg-neutral-card p-8 shadow-lg">
             <div className="space-y-2 text-center">
               <div className="flex justify-center">
-                <CheckCircle2 className="text-semantic-success h-12 w-12" />
+                <CheckCircle2 className="h-12 w-12 text-semantic-success" />
               </div>
-              <h2 className="text-neutral-light text-2xl font-bold">
+              <h2 className="text-2xl font-bold text-neutral-light">
                 All Set!
               </h2>
               <p className="text-neutral-muted">
@@ -247,8 +247,8 @@ export function SetupPage() {
               </p>
             </div>
 
-            <div className="bg-neutral-dark h-1 w-full overflow-hidden rounded-full">
-              <div className="from-teal-electric to-purple-rich h-full animate-pulse bg-gradient-to-r" />
+            <div className="h-1 w-full overflow-hidden rounded-full bg-neutral-dark">
+              <div className="h-full animate-pulse bg-gradient-to-r from-teal-electric to-purple-rich" />
             </div>
           </div>
         )}

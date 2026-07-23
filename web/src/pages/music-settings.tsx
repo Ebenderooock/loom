@@ -99,14 +99,14 @@ function AudioProfileCard({
     <div className="rounded-md border p-3">
       <div className="mb-2 flex items-center justify-between">
         <span className="font-medium">{profile.name}</span>
-        <span className="text-muted-foreground text-xs">
+        <span className="text-xs text-muted-foreground">
           Cutoff: {profile.cutoff ? defName(profile.cutoff) : "—"}
           {profile.upgrade_allowed ? " · upgrades on" : " · upgrades off"}
         </span>
       </div>
       <div className="mb-3 flex flex-wrap gap-1.5">
         {items.length === 0 ? (
-          <span className="text-muted-foreground text-xs">
+          <span className="text-xs text-muted-foreground">
             No qualities allowed.
           </span>
         ) : (
@@ -119,11 +119,11 @@ function AudioProfileCard({
       </div>
 
       <div className="mt-3 border-t pt-3">
-        <div className="text-muted-foreground mb-2 text-xs font-medium">
+        <div className="mb-2 text-xs font-medium text-muted-foreground">
           Custom format scores
         </div>
         {customFormats.length === 0 ? (
-          <p className="text-muted-foreground text-xs">
+          <p className="text-xs text-muted-foreground">
             No custom formats defined.
           </p>
         ) : (
@@ -190,7 +190,7 @@ export function MusicProfilesPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-xl font-semibold">Music Profiles</h1>
-        <p className="text-muted-foreground text-sm">
+        <p className="text-sm text-muted-foreground">
           Audio quality tiers and acquisition profiles used when searching for
           music.
         </p>
@@ -207,7 +207,7 @@ export function MusicProfilesPage() {
           {profilesLoading ? (
             <Skeleton className="h-20 w-full" />
           ) : profiles.length === 0 ? (
-            <p className="text-muted-foreground text-sm">
+            <p className="text-sm text-muted-foreground">
               No quality profiles configured.
             </p>
           ) : (
@@ -274,7 +274,7 @@ export function MusicProfilesPage() {
           {metaLoading ? (
             <Skeleton className="h-16 w-full" />
           ) : metadataProfiles.length === 0 ? (
-            <p className="text-muted-foreground text-sm">
+            <p className="text-sm text-muted-foreground">
               No metadata profiles configured.
             </p>
           ) : (
