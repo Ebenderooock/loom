@@ -430,3 +430,21 @@ func (s *Service) FanOutOpts(ids []string) FanOutOptions {
 		MaxParallel:      s.maxParallel,
 	}
 }
+
+// Close gracefully stops any registered download clients that expose Close.
+func (s *Service) Close() error {
+	var errs []error
+	for _, client := range s.registry.List() {
+		closer, ok := client.(interface{ Close() error })
+		if !ok {
+			continue
+		}
+		if err := closer.Close(); err != nil {
+			errs = append(errs, fmt.Errorf("close download client %q: %w", client.ID(), err))
+		}
+	}
+	if len(errs) == 0 {
+		return nil
+	}
+	return errors.Join(errs...)
+}

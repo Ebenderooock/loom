@@ -13,6 +13,8 @@ import (
 	"time"
 )
 
+const maxFlareSolverrBodySize = int64(20 << 20) // 20 MiB
+
 // FlareSolverrClient is a thin wrapper around a FlareSolverr endpoint
 // (https://github.com/FlareSolverr/FlareSolverr). It exposes a
 // RoundTripperFor that hands out per-Proxy-row http.RoundTripper
@@ -187,7 +189,7 @@ func (c *FlareSolverrClient) do(ctx context.Context, cfg FlareSolverrConfig, bod
 		return flareEnvelope{}, fmt.Errorf("flaresolverr: do request: %w", err)
 	}
 	defer resp.Body.Close()
-	respBytes, err := io.ReadAll(resp.Body)
+	respBytes, err := readLimitedBody(resp.Body, maxFlareSolverrBodySize)
 	if err != nil {
 		return flareEnvelope{}, fmt.Errorf("flaresolverr: read response: %w", err)
 	}
@@ -264,7 +266,7 @@ func (rt *flareRoundTripper) RoundTrip(req *http.Request) (*http.Response, error
 	// PostResponse: check if CF-protected. Read body for deep inspection.
 	var body []byte
 	if resp.Body != nil {
-		body, err = io.ReadAll(resp.Body)
+		body, err = readLimitedBody(resp.Body, maxFlareSolverrBodySize)
 		resp.Body.Close()
 		if err != nil {
 			return nil, err
@@ -332,6 +334,17 @@ func (rt *flareRoundTripper) RoundTrip(req *http.Request) (*http.Response, error
 	}
 
 	return base.RoundTrip(retry)
+}
+
+func readLimitedBody(r io.Reader, maxSize int64) ([]byte, error) {
+	body, err := io.ReadAll(io.LimitReader(r, maxSize+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(body)) > maxSize {
+		return nil, fmt.Errorf("flaresolverr: response too large: %d > %d", len(body), maxSize)
+	}
+	return body, nil
 }
 
 // isCloudflareResponse checks if a response is a Cloudflare challenge.

@@ -1,6 +1,7 @@
 package cardigann
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"net/http"
@@ -10,6 +11,22 @@ import (
 
 	"github.com/ebenderooock/loom/internal/indexers"
 )
+
+func TestReadLimitedBody(t *testing.T) {
+	t.Parallel()
+
+	body, err := readLimitedBody(bytes.NewReader([]byte("ok")), 8)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if string(body) != "ok" {
+		t.Fatalf("unexpected body: %q", string(body))
+	}
+
+	if _, err := readLimitedBody(bytes.NewReader([]byte("123456789")), 8); err == nil {
+		t.Fatal("expected size limit error")
+	}
+}
 
 // engineFixtureYAML drives the test server below: form login at
 // /login, success indicator at /index (an "Logout" link), search at

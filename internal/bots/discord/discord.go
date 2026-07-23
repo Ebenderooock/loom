@@ -71,6 +71,11 @@ func (b *Bot) Run(ctx context.Context) error {
 		return err
 	}
 	b.logger.Info("discord bot: connected", "user", safeUser(session))
+	// Register commands for all guilds already in the bot's state at startup
+	// so slash commands are available immediately without waiting for guild-join events.
+	for _, g := range session.State.Guilds {
+		b.registerGuildCommands(session, g.ID)
+	}
 	// Register global commands too (covers DMs; eventual consistency).
 	b.registerGlobalCommands(session)
 	b.setErr("")

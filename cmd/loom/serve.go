@@ -157,6 +157,11 @@ func cmdServe(ctx context.Context, args []string) error {
 	if err != nil {
 		return fmt.Errorf("init downloads: %w", err)
 	}
+	defer func() {
+		if err := downloadSvc.Close(); err != nil {
+			logger.Warn("downloads close failed", "err", err)
+		}
+	}()
 	if err := registerDownloadHealthJob(ctx, sched, cfg, downloadSvc); err != nil {
 		return fmt.Errorf("register download health job: %w", err)
 	}
@@ -218,6 +223,13 @@ func cmdServe(ctx context.Context, args []string) error {
 	defer dlWiring.importPipeline.Stop()
 	defer dlWiring.monitorCancel()
 	defer dlWiring.orchestratorCancel()
+	if dlWiring.router != nil {
+		defer func() {
+			if err := dlWiring.router.Shutdown(); err != nil {
+				logger.Warn("downloads router shutdown failed", "err", err)
+			}
+		}()
+	}
 	if dlWiring.musicAutoSearcher != nil {
 		dlWiring.musicAutoSearcher.Start(ctx)
 		defer dlWiring.musicAutoSearcher.Stop()
@@ -255,6 +267,9 @@ func cmdServe(ctx context.Context, args []string) error {
 	if err != nil {
 		return fmt.Errorf("wire infra: %w", err)
 	}
+	// Connect the autosearch engine so the rolling searcher performs full
+	// search-and-grab cycles rather than discarding indexer results.
+	infra.rollingSearcher.SetGrabber(&autoSearchGrabber{engine: dlWiring.autoSearchEngine})
 	infra.notifDispatcher.Start(ctx)
 	defer infra.notifDispatcher.Stop()
 	infra.rollingSearcher.Start(ctx)
