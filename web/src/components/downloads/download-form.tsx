@@ -158,7 +158,7 @@ export function DownloadForm({
   );
   const defaultKind: DownloadKind = builtinTorrentEnabled
     ? "builtin/torrent"
-    : availableKinds[0]?.value ?? "qbittorrent";
+    : (availableKinds[0]?.value ?? "qbittorrent");
 
   const [values, setValues] = React.useState<DownloadFormValues>(() => {
     const kind = (initial?.kind as DownloadKind) ?? defaultKind;
@@ -276,7 +276,11 @@ export function DownloadForm({
   // builds) and we're creating a new client still defaulted to the built-in
   // torrent, fall back to the first available kind so the form stays valid.
   React.useEffect(() => {
-    if (!builtinTorrentEnabled && !isEdit && values.kind === "builtin/torrent") {
+    if (
+      !builtinTorrentEnabled &&
+      !isEdit &&
+      values.kind === "builtin/torrent"
+    ) {
       handleKindChange(availableKinds[0]?.value ?? "qbittorrent");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
