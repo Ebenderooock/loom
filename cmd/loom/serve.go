@@ -255,6 +255,9 @@ func cmdServe(ctx context.Context, args []string) error {
 	if err != nil {
 		return fmt.Errorf("wire infra: %w", err)
 	}
+	// Connect the autosearch engine so the rolling searcher performs full
+	// search-and-grab cycles rather than discarding indexer results.
+	infra.rollingSearcher.SetGrabber(&autoSearchGrabber{engine: dlWiring.autoSearchEngine})
 	infra.notifDispatcher.Start(ctx)
 	defer infra.notifDispatcher.Stop()
 	infra.rollingSearcher.Start(ctx)
