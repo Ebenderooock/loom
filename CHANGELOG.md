@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- qBittorrent URL grabs now treat qBittorrent's queued `pending_count` add response
+  as a successful add instead of surfacing it as an `add_failed` error.
+- Movie auto-search and the prefilled movie manual-search query now preserve the
+  movie year so same-title/remake searches stay targeted.
+
 ## [0.1.1] - 2026-06-09
 
 ### Added

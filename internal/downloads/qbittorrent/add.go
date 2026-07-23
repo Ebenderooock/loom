@@ -97,7 +97,7 @@ func addLooksOK(body []byte) bool {
 	if result.FailureCount > 0 {
 		return false
 	}
-	if result.SuccessCount > 0 || len(result.AddedTorrentIDs) > 0 {
+	if result.SuccessCount > 0 || len(result.AddedTorrentIDs) > 0 || result.PendingCount > 0 {
 		return true
 	}
 	return false

@@ -174,6 +174,24 @@ func TestAddAcceptsJSONSuccessPayload(t *testing.T) {
 	}
 }
 
+func TestAddAcceptsJSONPendingPayload(t *testing.T) {
+	t.Parallel()
+	f := newFakeServer("adminadmin")
+	defer f.Close()
+	f.mux.HandleFunc("/api/v2/torrents/add", f.requireSID(func(w http.ResponseWriter, r *http.Request) {
+		_ = readMultipartFields(t, r)
+		fmt.Fprint(w, `{"added_torrent_ids":[],"failure_count":0,"pending_count":1,"success_count":0}`)
+	}))
+
+	c := newTestClient(t, f.srv, downloads.Definition{})
+	_, err := c.Add(context.Background(), downloads.AddRequest{
+		TorrentURL: "https://example.com/release.torrent",
+	})
+	if err != nil {
+		t.Fatalf("Add: %v", err)
+	}
+}
+
 func TestInfohashFromMagnet(t *testing.T) {
 	t.Parallel()
 	cases := map[string]string{

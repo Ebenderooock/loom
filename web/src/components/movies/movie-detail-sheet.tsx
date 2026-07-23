@@ -288,6 +288,7 @@ export function MovieDetailSheet({
         media_type: "movie",
         media_id: movie.id,
         title: movie.title,
+        year: movie.year || undefined,
         quality_profile_id: movie.qualityProfileId,
         imdb_id: movie.imdbId || undefined,
         tmdb_id: movie.tmdbId || undefined,
@@ -1272,7 +1273,7 @@ export function MovieDetailSheet({
         open={searchOpen}
         onOpenChange={setSearchOpen}
         title={movie.title}
-        query={movie.title}
+        query={movie.year > 0 ? `${movie.title} ${movie.year}` : movie.title}
         tmdbId={movie.tmdbId ? Number(movie.tmdbId) : undefined}
         imdbId={movie.imdbId}
         mediaType="movie"
