@@ -26,8 +26,8 @@ export function MovieCard({
   return (
     <div
       className={cn(
-        "group hover:border-accent/10 focus-visible:ring-accent focus-visible:ring-offset-background relative cursor-pointer overflow-hidden rounded-lg border border-transparent shadow-lg transition-all duration-200 hover:-translate-y-1 hover:scale-[1.02] hover:shadow-xl focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none",
-        selected && "ring-accent ring-offset-background ring-2 ring-offset-2",
+        "group relative cursor-pointer overflow-hidden rounded-lg border border-transparent shadow-lg transition-all duration-200 hover:-translate-y-1 hover:scale-[1.02] hover:border-accent/10 hover:shadow-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+        selected && "ring-2 ring-accent ring-offset-2 ring-offset-background",
       )}
       tabIndex={0}
       role="button"
@@ -41,19 +41,19 @@ export function MovieCard({
     >
       {/* Status accent — thin gradient bar at top */}
       <div
-        className="absolute top-0 right-0 left-0 z-10 h-[3px]"
+        className="absolute left-0 right-0 top-0 z-10 h-[3px]"
         style={{
           background: `linear-gradient(90deg, ${statusColor}, ${statusColor}cc 60%, transparent)`,
         }}
       />
       <div
-        className="pointer-events-none absolute top-[3px] right-0 left-0 z-10 h-3"
+        className="pointer-events-none absolute left-0 right-0 top-[3px] z-10 h-3"
         style={{
           background: `linear-gradient(180deg, ${statusColor}25, transparent)`,
         }}
       />
       {/* Poster */}
-      <div className="bg-muted aspect-[2/3]">
+      <div className="aspect-[2/3] bg-muted">
         {movie.posterPath ? (
           <img
             src={`${TMDB_IMG}/w300${movie.posterPath}`}
@@ -63,24 +63,24 @@ export function MovieCard({
           />
         ) : (
           <div className="flex h-full w-full items-center justify-center">
-            <Film className="text-muted-foreground/30 h-12 w-12" />
+            <Film className="h-12 w-12 text-muted-foreground/30" />
           </div>
         )}
       </div>
 
       {/* Checkbox */}
       {(selectMode || selected) && (
-        <div className="absolute top-2 left-2 z-10">
+        <div className="absolute left-2 top-2 z-10">
           <Checkbox
             checked={selected}
             onClick={(e) => e.stopPropagation()}
             onCheckedChange={() => onToggleSelect()}
-            className="data-[state=checked]:border-accent data-[state=checked]:bg-accent h-5 w-5 border-white/60"
+            className="h-5 w-5 border-white/60 data-[state=checked]:border-accent data-[state=checked]:bg-accent"
           />
         </div>
       )}
       {!selectMode && !selected && (
-        <div className="absolute top-2 left-2 z-10 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+        <div className="absolute left-2 top-2 z-10 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
           <Checkbox
             checked={false}
             onClick={(e) => e.stopPropagation()}
@@ -91,11 +91,11 @@ export function MovieCard({
       )}
 
       {/* Status bar at bottom */}
-      <div className="absolute right-0 bottom-0 left-0 bg-gradient-to-t from-black/95 via-black/70 to-transparent p-3 pt-8">
+      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/95 via-black/70 to-transparent p-3 pt-8">
         <div className="flex items-center justify-between gap-1">
           <StatusBadge status={movie.status} />
           {movie.monitoringStatus === "unmonitored" && (
-            <span className="text-[10px] tracking-wider text-gray-500 uppercase">
+            <span className="text-[10px] uppercase tracking-wider text-gray-500">
               Unmonitored
             </span>
           )}

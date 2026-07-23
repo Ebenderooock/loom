@@ -202,7 +202,7 @@ function DownloadQueue() {
   if (loading) {
     return (
       <Card>
-        <CardContent className="text-muted-foreground py-8 text-center">
+        <CardContent className="py-8 text-center text-muted-foreground">
           <LoadingState label="Loading queue…" />
         </CardContent>
       </Card>
@@ -260,7 +260,7 @@ function DownloadQueue() {
                         {item.title}
                       </div>
                       {item.category && (
-                        <div className="text-muted-foreground text-xs">
+                        <div className="text-xs text-muted-foreground">
                           {item.category}
                         </div>
                       )}
@@ -284,28 +284,28 @@ function DownloadQueue() {
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
-                        <div className="bg-muted h-1.5 flex-1 overflow-hidden rounded-full">
+                        <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
                           <div
-                            className="bg-accent h-full rounded-full transition-all"
+                            className="h-full rounded-full bg-accent transition-all"
                             style={{
                               width: `${Math.round(item.progress * 100)}%`,
                             }}
                           />
                         </div>
-                        <span className="text-muted-foreground w-8 text-xs tabular-nums">
+                        <span className="w-8 text-xs tabular-nums text-muted-foreground">
                           {Math.round(item.progress * 100)}%
                         </span>
                       </div>
                     </TableCell>
-                    <TableCell className="text-muted-foreground text-xs tabular-nums">
+                    <TableCell className="text-xs tabular-nums text-muted-foreground">
                       {item.size_bytes ? formatBytes(item.size_bytes) : "—"}
                     </TableCell>
-                    <TableCell className="text-muted-foreground text-xs tabular-nums">
+                    <TableCell className="text-xs tabular-nums text-muted-foreground">
                       {item.download_rate
                         ? formatSpeed(item.download_rate)
                         : "—"}
                     </TableCell>
-                    <TableCell className="text-muted-foreground text-xs tabular-nums">
+                    <TableCell className="text-xs tabular-nums text-muted-foreground">
                       {item.eta_seconds ? formatEta(item.eta_seconds) : "—"}
                     </TableCell>
                     <TableCell>
@@ -508,7 +508,7 @@ function DownloadQueue() {
               onChange={(e) => setSpeedLimit(e.target.value)}
               placeholder="0"
             />
-            <span className="text-muted-foreground text-sm whitespace-nowrap">
+            <span className="whitespace-nowrap text-sm text-muted-foreground">
               KB/s
             </span>
           </div>
@@ -558,7 +558,7 @@ function DownloadHistory() {
   if (loading) {
     return (
       <Card>
-        <CardContent className="text-muted-foreground py-8 text-center">
+        <CardContent className="py-8 text-center text-muted-foreground">
           <LoadingState label="Loading history…" />
         </CardContent>
       </Card>
@@ -631,7 +631,7 @@ function DownloadHistory() {
                       {entry.title}
                     </div>
                   </TableCell>
-                  <TableCell className="text-muted-foreground text-xs">
+                  <TableCell className="text-xs text-muted-foreground">
                     {entry.category || "—"}
                   </TableCell>
                   <TableCell>
@@ -642,7 +642,7 @@ function DownloadHistory() {
                       {sc.label}
                     </Badge>
                   </TableCell>
-                  <TableCell className="text-muted-foreground text-xs">
+                  <TableCell className="text-xs text-muted-foreground">
                     {relativeTime(entry.completed_at)}
                   </TableCell>
                 </TableRow>
@@ -718,7 +718,7 @@ function BlocklistViewer() {
   if (loading) {
     return (
       <Card>
-        <CardContent className="text-muted-foreground py-8 text-center">
+        <CardContent className="py-8 text-center text-muted-foreground">
           <LoadingState label="Loading blocklist…" />
         </CardContent>
       </Card>
@@ -784,10 +784,10 @@ function BlocklistViewer() {
                     {entry.title}
                   </div>
                 </TableCell>
-                <TableCell className="text-muted-foreground text-xs">
+                <TableCell className="text-xs text-muted-foreground">
                   {entry.reason || "—"}
                 </TableCell>
-                <TableCell className="text-muted-foreground text-xs">
+                <TableCell className="text-xs text-muted-foreground">
                   {new Date(entry.created_at).toLocaleString()}
                 </TableCell>
                 <TableCell>
@@ -849,7 +849,7 @@ function ReviewQueue() {
   if (loading) {
     return (
       <Card>
-        <CardContent className="text-muted-foreground py-8 text-center">
+        <CardContent className="py-8 text-center text-muted-foreground">
           <LoadingState label="Loading reviews…" />
         </CardContent>
       </Card>
@@ -885,8 +885,8 @@ function ReviewQueue() {
                   {r.media_type}
                 </Badge>
               </div>
-              <p className="text-muted-foreground text-xs">{r.reason}</p>
-              <p className="text-muted-foreground text-xs">
+              <p className="text-xs text-muted-foreground">{r.reason}</p>
+              <p className="text-xs text-muted-foreground">
                 {new Date(r.created_at).toLocaleString()}
               </p>
             </div>

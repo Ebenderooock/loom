@@ -50,7 +50,7 @@ export function ThemeToggle() {
             <Icon className="h-4 w-4" />
             <span>{label}</span>
             {theme === value ? (
-              <span className="text-muted-foreground ml-auto text-xs">
+              <span className="ml-auto text-xs text-muted-foreground">
                 active
               </span>
             ) : null}

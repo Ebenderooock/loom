@@ -152,7 +152,7 @@ export function SeriesLibraryImportDialog({
           {/* Library selection */}
           {!scanResult && !scanning && (
             <div className="space-y-4">
-              <p className="text-muted-foreground text-sm">
+              <p className="text-sm text-muted-foreground">
                 Scan a library to discover TV shows. Show folders will be
                 matched against TMDB and added automatically, then episode files
                 will be linked.
@@ -161,7 +161,7 @@ export function SeriesLibraryImportDialog({
               <div className="space-y-2">
                 <span className="text-sm font-medium">Library</span>
                 {libraries.length === 0 ? (
-                  <p className="text-destructive text-sm">
+                  <p className="text-sm text-destructive">
                     No series libraries configured. Add one in Settings first.
                   </p>
                 ) : (
@@ -172,8 +172,8 @@ export function SeriesLibraryImportDialog({
                         onClick={() => setSelectedLibrary(lib.id)}
                         className={`w-full rounded-md px-3 py-2 text-left text-sm transition-colors ${
                           selectedLibrary === lib.id
-                            ? "border-primary/30 bg-primary/10 text-primary border"
-                            : "bg-muted/30 hover:bg-muted/50 border border-transparent"
+                            ? "border border-primary/30 bg-primary/10 text-primary"
+                            : "border border-transparent bg-muted/30 hover:bg-muted/50"
                         }`}
                       >
                         {lib.path}
@@ -198,16 +198,16 @@ export function SeriesLibraryImportDialog({
           {scanning && scanResult && (
             <div className="space-y-4">
               <div className="flex items-center gap-2 text-sm">
-                <Loader2 className="text-primary h-4 w-4 animate-spin" />
+                <Loader2 className="h-4 w-4 animate-spin text-primary" />
                 <span>Scanning for TV shows...</span>
               </div>
               <Progress value={progress} className="h-2" />
               <div className="grid grid-cols-3 gap-3 text-center">
-                <div className="bg-muted/30 rounded-lg p-3">
+                <div className="rounded-lg bg-muted/30 p-3">
                   <div className="text-2xl font-bold">
                     {scanResult.totalFiles}
                   </div>
-                  <div className="text-muted-foreground text-xs">
+                  <div className="text-xs text-muted-foreground">
                     Files Found
                   </div>
                 </div>
@@ -215,13 +215,13 @@ export function SeriesLibraryImportDialog({
                   <div className="text-2xl font-bold text-emerald-500">
                     {scanResult.matched}
                   </div>
-                  <div className="text-muted-foreground text-xs">Matched</div>
+                  <div className="text-xs text-muted-foreground">Matched</div>
                 </div>
                 <div className="rounded-lg bg-amber-500/10 p-3">
                   <div className="text-2xl font-bold text-amber-500">
                     {scanResult.unmatched}
                   </div>
-                  <div className="text-muted-foreground text-xs">Unmatched</div>
+                  <div className="text-xs text-muted-foreground">Unmatched</div>
                 </div>
               </div>
             </div>
@@ -234,7 +234,7 @@ export function SeriesLibraryImportDialog({
                 {scanResult.status === "completed" ? (
                   <CheckCircle2 className="h-5 w-5 text-emerald-500" />
                 ) : (
-                  <AlertCircle className="text-destructive h-5 w-5" />
+                  <AlertCircle className="h-5 w-5 text-destructive" />
                 )}
                 <span className="font-medium">
                   Scan{" "}
@@ -243,38 +243,38 @@ export function SeriesLibraryImportDialog({
               </div>
 
               <div className="grid grid-cols-4 gap-3 text-center">
-                <div className="bg-muted/30 rounded-lg p-3">
+                <div className="rounded-lg bg-muted/30 p-3">
                   <div className="text-xl font-bold">
                     {scanResult.totalFiles}
                   </div>
-                  <div className="text-muted-foreground text-xs">Total</div>
+                  <div className="text-xs text-muted-foreground">Total</div>
                 </div>
                 <div className="rounded-lg bg-emerald-500/10 p-3">
                   <div className="text-xl font-bold text-emerald-500">
                     {scanResult.imported}
                   </div>
-                  <div className="text-muted-foreground text-xs">Imported</div>
+                  <div className="text-xs text-muted-foreground">Imported</div>
                 </div>
                 <div className="rounded-lg bg-blue-500/10 p-3">
                   <div className="text-xl font-bold text-blue-500">
                     {scanResult.matched}
                   </div>
-                  <div className="text-muted-foreground text-xs">Matched</div>
+                  <div className="text-xs text-muted-foreground">Matched</div>
                 </div>
                 <div className="rounded-lg bg-amber-500/10 p-3">
                   <div className="text-xl font-bold text-amber-500">
                     {scanResult.unmatched}
                   </div>
-                  <div className="text-muted-foreground text-xs">Unmatched</div>
+                  <div className="text-xs text-muted-foreground">Unmatched</div>
                 </div>
               </div>
 
               {scanResult.errors && scanResult.errors.length > 0 && (
-                <div className="border-destructive/20 bg-destructive/10 rounded-lg border p-3">
-                  <div className="text-destructive mb-1 text-sm font-medium">
+                <div className="rounded-lg border border-destructive/20 bg-destructive/10 p-3">
+                  <div className="mb-1 text-sm font-medium text-destructive">
                     Errors
                   </div>
-                  <div className="text-destructive/80 space-y-0.5 text-xs">
+                  <div className="space-y-0.5 text-xs text-destructive/80">
                     {scanResult.errors.slice(0, 5).map((e, i) => (
                       <div key={i} className="truncate">
                         {e}
@@ -294,7 +294,7 @@ export function SeriesLibraryImportDialog({
                     <AlertCircle className="h-4 w-4 text-amber-500" />
                     Unmatched Files ({unmatchedFiles.length})
                   </h3>
-                  <p className="text-muted-foreground text-xs">
+                  <p className="text-xs text-muted-foreground">
                     These episode files couldn&apos;t be matched to any series
                     or episode.
                   </p>
@@ -303,9 +303,9 @@ export function SeriesLibraryImportDialog({
                       {unmatchedFiles.map((f) => (
                         <div
                           key={f.id}
-                          className="bg-muted/20 flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm"
+                          className="flex w-full items-center gap-2 rounded-md bg-muted/20 px-3 py-2 text-left text-sm"
                         >
-                          <FileVideo className="text-muted-foreground h-4 w-4 shrink-0" />
+                          <FileVideo className="h-4 w-4 shrink-0 text-muted-foreground" />
                           <div className="min-w-0 flex-1">
                             <div className="truncate font-mono text-xs">
                               {f.filePath.split("/").pop()}

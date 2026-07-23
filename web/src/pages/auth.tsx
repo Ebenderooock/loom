@@ -56,9 +56,9 @@ export function AuthPage() {
   };
 
   return (
-    <div className="from-purple-midnight via-neutral-dark to-teal-deep flex h-screen w-full items-center justify-center bg-gradient-to-br">
+    <div className="flex h-screen w-full items-center justify-center bg-gradient-to-br from-purple-midnight via-neutral-dark to-teal-deep">
       <div className="mx-auto w-full max-w-md px-4">
-        <div className="bg-neutral-card space-y-6 rounded-lg p-8 shadow-lg">
+        <div className="space-y-6 rounded-lg bg-neutral-card p-8 shadow-lg">
           <div className="space-y-4 text-center">
             <img
               src="/loom-logo.png"
@@ -66,7 +66,7 @@ export function AuthPage() {
               className="mx-auto h-16 object-contain"
             />
             <div className="space-y-2">
-              <h1 className="text-neutral-light text-3xl font-bold">
+              <h1 className="text-3xl font-bold text-neutral-light">
                 Welcome back to Loom
               </h1>
               <p className="text-neutral-muted">
@@ -86,7 +86,7 @@ export function AuthPage() {
             <div className="space-y-2">
               <label
                 htmlFor="username"
-                className="text-neutral-light text-sm font-medium"
+                className="text-sm font-medium text-neutral-light"
               >
                 Username
               </label>
@@ -97,14 +97,14 @@ export function AuthPage() {
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 disabled={isLoading}
-                className="text-neutral-light placeholder-neutral-muted border-neutral-800 bg-neutral-900"
+                className="border-neutral-800 bg-neutral-900 text-neutral-light placeholder-neutral-muted"
               />
             </div>
 
             <div className="space-y-2">
               <label
                 htmlFor="password"
-                className="text-neutral-light text-sm font-medium"
+                className="text-sm font-medium text-neutral-light"
               >
                 Password
               </label>
@@ -115,7 +115,7 @@ export function AuthPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 disabled={isLoading}
-                className="text-neutral-light placeholder-neutral-muted border-neutral-800 bg-neutral-900"
+                className="border-neutral-800 bg-neutral-900 text-neutral-light placeholder-neutral-muted"
               />
             </div>
 
@@ -128,7 +128,7 @@ export function AuthPage() {
             </Button>
           </form>
 
-          <p className="text-neutral-muted text-center text-sm">
+          <p className="text-center text-sm text-neutral-muted">
             Make sure you've completed the initial setup first
           </p>
         </div>

@@ -66,7 +66,7 @@ export function LanguageProfilesPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Language Profiles</h1>
-          <p className="text-muted-foreground text-sm">
+          <p className="text-sm text-muted-foreground">
             Define language priorities for release matching
           </p>
         </div>
@@ -84,9 +84,9 @@ export function LanguageProfilesPage() {
         </div>
       ) : !profiles?.length ? (
         <div className="flex flex-col items-center justify-center rounded-lg border border-dashed p-12 text-center">
-          <Languages className="text-muted-foreground mb-4 h-12 w-12" />
+          <Languages className="mb-4 h-12 w-12 text-muted-foreground" />
           <h2 className="text-lg font-semibold">No language profiles yet</h2>
-          <p className="text-muted-foreground mb-4 text-sm">
+          <p className="mb-4 text-sm text-muted-foreground">
             Create a profile to set language priorities for release matching.
           </p>
           <Button onClick={() => setDialog({ kind: "create" })}>
@@ -99,7 +99,7 @@ export function LanguageProfilesPage() {
           {profiles.map((p) => (
             <div
               key={p.id}
-              className="bg-card flex items-center justify-between rounded-lg border p-4"
+              className="flex items-center justify-between rounded-lg border bg-card p-4"
             >
               <div>
                 <div className="font-medium">{p.name}</div>
@@ -113,7 +113,7 @@ export function LanguageProfilesPage() {
                       </Badge>
                     ))}
                 </div>
-                <div className="text-muted-foreground mt-1 text-xs">
+                <div className="mt-1 text-xs text-muted-foreground">
                   Cutoff: {p.cutoff_language.toUpperCase()} &middot;{" "}
                   {p.upgrade_allowed ? "Upgrades allowed" : "No upgrades"}
                 </div>
@@ -301,18 +301,18 @@ function ProfileDialog({
                     dragIdx === idx ? "bg-accent" : "hover:bg-accent/50"
                   } cursor-grab active:cursor-grabbing`}
                 >
-                  <GripVertical className="text-muted-foreground h-4 w-4" />
+                  <GripVertical className="h-4 w-4 text-muted-foreground" />
                   <Checkbox
                     checked={lp.allowed}
                     onCheckedChange={() => toggleAllowed(lp.language.code)}
                   />
                   <span className="flex-1">
                     {lp.language.name}
-                    <span className="text-muted-foreground ml-1 text-xs">
+                    <span className="ml-1 text-xs text-muted-foreground">
                       ({lp.language.native_name})
                     </span>
                   </span>
-                  <span className="text-muted-foreground text-xs">
+                  <span className="text-xs text-muted-foreground">
                     {lp.language.code.toUpperCase()}
                   </span>
                 </div>
@@ -334,7 +334,7 @@ function ProfileDialog({
                 ))}
               </SelectContent>
             </Select>
-            <p className="text-muted-foreground text-xs">
+            <p className="text-xs text-muted-foreground">
               Stop upgrading once this language is reached.
             </p>
           </div>

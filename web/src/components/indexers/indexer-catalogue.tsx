@@ -200,17 +200,17 @@ export function IndexerCatalogue({ proxies, onCreated, onCancel }: Props) {
           </Button>
         </div>
 
-        <div className="text-muted-foreground relative text-center text-xs">
+        <div className="relative text-center text-xs text-muted-foreground">
           <span className="bg-background px-2">
             or pick from bundled definitions
           </span>
-          <div className="bg-border absolute inset-x-0 top-1/2 -z-10 h-px" />
+          <div className="absolute inset-x-0 top-1/2 -z-10 h-px bg-border" />
         </div>
 
         {/* Search + type filter */}
         <div className="flex items-center gap-3">
           <div className="relative flex-1">
-            <Search className="text-muted-foreground absolute top-2.5 left-2.5 h-4 w-4" />
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
               placeholder="Search definitions…"
               value={search}
@@ -254,7 +254,7 @@ export function IndexerCatalogue({ proxies, onCreated, onCancel }: Props) {
         )}
 
         {/* Results count */}
-        <p className="text-muted-foreground text-xs">
+        <p className="text-xs text-muted-foreground">
           {defsQ.isLoading
             ? "Loading definitions…"
             : `${filtered.length} definition${filtered.length === 1 ? "" : "s"}`}
@@ -269,13 +269,13 @@ export function IndexerCatalogue({ proxies, onCreated, onCancel }: Props) {
               ))}
             </div>
           ) : filtered.length === 0 ? (
-            <p className="text-muted-foreground py-12 text-center text-sm">
+            <p className="py-12 text-center text-sm text-muted-foreground">
               No definitions match your search.
             </p>
           ) : (
             <table className="w-full text-sm">
-              <thead className="bg-muted/80 sticky top-0 z-10 backdrop-blur">
-                <tr className="text-muted-foreground border-b text-left text-xs font-medium">
+              <thead className="sticky top-0 z-10 bg-muted/80 backdrop-blur">
+                <tr className="border-b text-left text-xs font-medium text-muted-foreground">
                   <th className="px-3 py-2">Name</th>
                   <th className="hidden px-3 py-2 sm:table-cell">Type</th>
                   <th className="hidden px-3 py-2 lg:table-cell">Categories</th>
@@ -287,16 +287,16 @@ export function IndexerCatalogue({ proxies, onCreated, onCancel }: Props) {
                 {filtered.map((def) => (
                   <tr
                     key={def.id}
-                    className="border-border/50 hover:bg-muted/40 border-b transition-colors"
+                    className="border-b border-border/50 transition-colors hover:bg-muted/40"
                   >
                     <td className="px-3 py-2">
                       <div className="font-medium">{def.name}</div>
                       {def.description ? (
-                        <div className="text-muted-foreground line-clamp-1 text-xs">
+                        <div className="line-clamp-1 text-xs text-muted-foreground">
                           {def.description}
                         </div>
                       ) : (
-                        <div className="text-muted-foreground text-xs">
+                        <div className="text-xs text-muted-foreground">
                           {def.id}
                         </div>
                       )}
@@ -317,7 +317,7 @@ export function IndexerCatalogue({ proxies, onCreated, onCancel }: Props) {
                         ))}
                       </div>
                     </td>
-                    <td className="text-muted-foreground hidden px-3 py-2 md:table-cell">
+                    <td className="hidden px-3 py-2 text-muted-foreground md:table-cell">
                       {def.language || "—"}
                     </td>
                     <td className="px-3 py-2 text-right">
@@ -494,7 +494,7 @@ function CardigannConfigForm({
       </div>
 
       {siteUrl ? (
-        <div className="text-muted-foreground flex items-center gap-2 text-sm">
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <Globe className="h-4 w-4" />
           <a
             href={siteUrl}
@@ -515,7 +515,7 @@ function CardigannConfigForm({
             id="cardi-url"
             value={selectedUrl}
             onChange={(e) => setSelectedUrl(e.target.value)}
-            className="border-input focus-visible:ring-ring flex h-9 w-full rounded-md border bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:ring-1 focus-visible:outline-none"
+            className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
           >
             {(definition.links ?? []).map((link) => (
               <option key={link} value={link}>
@@ -523,14 +523,14 @@ function CardigannConfigForm({
               </option>
             ))}
           </select>
-          <p className="text-muted-foreground text-xs">
+          <p className="text-xs text-muted-foreground">
             Select the site mirror that works in your region.
           </p>
         </div>
       ) : null}
 
       {definition.description ? (
-        <p className="text-muted-foreground text-sm">
+        <p className="text-sm text-muted-foreground">
           {definition.description}
         </p>
       ) : null}
@@ -616,7 +616,7 @@ function CardigannConfigForm({
             id="cardi-proxy"
             value={proxyId}
             onChange={(e) => setProxyId(e.target.value)}
-            className="border-input focus-visible:ring-ring flex h-9 w-full rounded-md border bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:ring-1 focus-visible:outline-none"
+            className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
           >
             <option value="">None — direct connection</option>
             {proxies.map((p) => (
@@ -634,7 +634,7 @@ function CardigannConfigForm({
           type="checkbox"
           checked={enabled}
           onChange={(e) => setEnabled(e.target.checked)}
-          className="border-input h-4 w-4 rounded"
+          className="h-4 w-4 rounded border-input"
         />
         <Label htmlFor="cardi-enabled" className="!m-0">
           Enabled

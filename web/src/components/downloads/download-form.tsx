@@ -337,7 +337,7 @@ export function DownloadForm({
           value={values.kind}
           disabled={isEdit}
           onChange={(e) => handleKindChange(e.target.value as DownloadKind)}
-          className="border-input focus-visible:ring-ring flex h-9 w-full rounded-md border bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:ring-1 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+          className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
         >
           {kindOptions.map((k) => (
             <option key={k.value} value={k.value}>
@@ -345,7 +345,7 @@ export function DownloadForm({
             </option>
           ))}
         </select>
-        <p className="text-muted-foreground text-xs">{kindHelper}</p>
+        <p className="text-xs text-muted-foreground">{kindHelper}</p>
       </div>
 
       <div className="grid gap-2">
@@ -386,7 +386,7 @@ export function DownloadForm({
             {errors.download_dir ? (
               <p className="text-xs text-red-600">{errors.download_dir}</p>
             ) : null}
-            <p className="text-muted-foreground text-xs">
+            <p className="text-xs text-muted-foreground">
               Override where Rain saves completed downloads. Usually set via
               Helm values.
             </p>
@@ -409,7 +409,7 @@ export function DownloadForm({
                   )
                 }
               />
-              <p className="text-muted-foreground text-xs">0 = unlimited.</p>
+              <p className="text-xs text-muted-foreground">0 = unlimited.</p>
             </div>
             <div className="grid gap-2">
               <Label htmlFor="ul-speed">Upload speed limit (KB/s)</Label>
@@ -427,7 +427,7 @@ export function DownloadForm({
                   )
                 }
               />
-              <p className="text-muted-foreground text-xs">0 = unlimited.</p>
+              <p className="text-xs text-muted-foreground">0 = unlimited.</p>
             </div>
           </div>
         </>
@@ -485,7 +485,7 @@ export function DownloadForm({
                 placeholder="Optional"
                 autoComplete="off"
               />
-              <p className="text-muted-foreground text-xs">
+              <p className="text-xs text-muted-foreground">
                 Leave blank if no authentication is required.
               </p>
             </div>
@@ -500,7 +500,7 @@ export function DownloadForm({
                 placeholder="Optional"
                 autoComplete="off"
               />
-              <p className="text-muted-foreground text-xs">
+              <p className="text-xs text-muted-foreground">
                 Write-only; never sent back to client.
               </p>
             </div>
@@ -512,7 +512,7 @@ export function DownloadForm({
               type="checkbox"
               checked={values.tls}
               onChange={(e) => update("tls", e.target.checked)}
-              className="border-input h-4 w-4 rounded"
+              className="h-4 w-4 rounded border-input"
             />
             <Label htmlFor="download-tls" className="!m-0">
               Enable TLS
@@ -550,7 +550,7 @@ export function DownloadForm({
           onChange={(e) => update("category_default", e.target.value)}
           placeholder="e.g., tv, movies"
         />
-        <p className="text-muted-foreground text-xs">
+        <p className="text-xs text-muted-foreground">
           Default category for downloads added to this client.
         </p>
       </div>
@@ -563,7 +563,7 @@ export function DownloadForm({
           onChange={(e) => update("save_path_default", e.target.value)}
           placeholder="e.g., /downloads, C:\downloads"
         />
-        <p className="text-muted-foreground text-xs">
+        <p className="text-xs text-muted-foreground">
           Default save path for downloads added to this client.
         </p>
       </div>
@@ -575,7 +575,7 @@ export function DownloadForm({
             type="checkbox"
             checked={values.remove_completed}
             onChange={(e) => update("remove_completed", e.target.checked)}
-            className="border-input h-4 w-4 rounded"
+            className="h-4 w-4 rounded border-input"
           />
           <Label htmlFor="download-remove-completed" className="!m-0">
             Remove completed downloads
@@ -587,7 +587,7 @@ export function DownloadForm({
             type="checkbox"
             checked={values.remove_failed}
             onChange={(e) => update("remove_failed", e.target.checked)}
-            className="border-input h-4 w-4 rounded"
+            className="h-4 w-4 rounded border-input"
           />
           <Label htmlFor="download-remove-failed" className="!m-0">
             Remove failed downloads
@@ -601,7 +601,7 @@ export function DownloadForm({
           type="checkbox"
           checked={values.enabled}
           onChange={(e) => update("enabled", e.target.checked)}
-          className="border-input h-4 w-4 rounded"
+          className="h-4 w-4 rounded border-input"
         />
         <Label htmlFor="download-enabled" className="!m-0">
           Enabled

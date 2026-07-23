@@ -199,7 +199,7 @@ function FolderBrowserDialog({
         </DialogHeader>
 
         {/* Mode toggle */}
-        <div className="bg-muted flex gap-1 rounded-lg p-1">
+        <div className="flex gap-1 rounded-lg bg-muted p-1">
           <button
             type="button"
             onClick={() => setMode("browse")}
@@ -228,7 +228,7 @@ function FolderBrowserDialog({
 
         {mode === "manual" ? (
           <div className="space-y-3 py-2">
-            <p className="text-muted-foreground text-xs">
+            <p className="text-xs text-muted-foreground">
               Enter the full path to the directory where media will be stored.
             </p>
             <Input
@@ -244,15 +244,15 @@ function FolderBrowserDialog({
         ) : (
           <div className="min-h-0 flex-1 space-y-2">
             {/* Current path breadcrumb */}
-            <div className="bg-muted/50 flex items-center gap-2 rounded-md px-3 py-2">
-              <FolderOpen className="text-primary h-4 w-4 shrink-0" />
+            <div className="flex items-center gap-2 rounded-md bg-muted/50 px-3 py-2">
+              <FolderOpen className="h-4 w-4 shrink-0 text-primary" />
               <span className="flex-1 truncate font-mono text-sm">
                 {currentPath || "/"}
               </span>
             </div>
 
             {error && (
-              <div className="border-destructive/30 bg-destructive/10 text-destructive rounded-md border px-3 py-2 text-sm">
+              <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
                 {error}
               </div>
             )}
@@ -262,20 +262,20 @@ function FolderBrowserDialog({
                 <TableSkeleton rows={4} cols={3} />
               </div>
             ) : (
-              <div className="border-border max-h-[40vh] overflow-y-auto rounded-md border">
+              <div className="max-h-[40vh] overflow-y-auto rounded-md border border-border">
                 {/* Parent directory */}
                 {parent && (
                   <button
                     type="button"
                     onClick={() => browse(parent)}
-                    className="border-border hover:bg-accent/50 flex w-full items-center gap-3 border-b px-3 py-2.5 text-sm transition-colors"
+                    className="flex w-full items-center gap-3 border-b border-border px-3 py-2.5 text-sm transition-colors hover:bg-accent/50"
                   >
-                    <ArrowUp className="text-muted-foreground h-4 w-4" />
+                    <ArrowUp className="h-4 w-4 text-muted-foreground" />
                     <span className="text-muted-foreground">..</span>
                   </button>
                 )}
                 {dirs.length === 0 ? (
-                  <div className="text-muted-foreground px-3 py-6 text-center text-sm">
+                  <div className="px-3 py-6 text-center text-sm text-muted-foreground">
                     No subdirectories
                   </div>
                 ) : (
@@ -284,13 +284,13 @@ function FolderBrowserDialog({
                       key={dir.path}
                       type="button"
                       onClick={() => browse(dir.path)}
-                      className="border-border hover:bg-accent/50 flex w-full items-center gap-3 border-b px-3 py-2.5 text-sm transition-colors last:border-b-0"
+                      className="flex w-full items-center gap-3 border-b border-border px-3 py-2.5 text-sm transition-colors last:border-b-0 hover:bg-accent/50"
                     >
-                      <Folder className="text-primary/70 h-4 w-4" />
+                      <Folder className="h-4 w-4 text-primary/70" />
                       <span className="flex-1 truncate text-left">
                         {dir.name}
                       </span>
-                      <ChevronRight className="text-muted-foreground/50 h-3.5 w-3.5" />
+                      <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/50" />
                     </button>
                   ))
                 )}
@@ -300,8 +300,8 @@ function FolderBrowserDialog({
         )}
 
         {/* Footer */}
-        <div className="border-border flex items-center justify-between border-t pt-2">
-          <p className="text-muted-foreground max-w-[60%] truncate text-xs">
+        <div className="flex items-center justify-between border-t border-border pt-2">
+          <p className="max-w-[60%] truncate text-xs text-muted-foreground">
             {mode === "browse" ? currentPath : manualPath || "No path entered"}
           </p>
           <div className="flex gap-2">
@@ -401,21 +401,21 @@ function AddLibraryDialog({
 
           {step === "type" ? (
             <div className="space-y-3 py-2">
-              <p className="text-muted-foreground text-sm">
+              <p className="text-sm text-muted-foreground">
                 What type of media will this library contain?
               </p>
               <div className="grid grid-cols-2 gap-3">
                 <button
                   type="button"
                   onClick={() => selectType("movie")}
-                  className="group border-border hover:border-primary hover:bg-primary/5 flex flex-col items-center gap-3 rounded-lg border-2 p-6 transition-all"
+                  className="group flex flex-col items-center gap-3 rounded-lg border-2 border-border p-6 transition-all hover:border-primary hover:bg-primary/5"
                 >
-                  <div className="bg-primary/10 group-hover:bg-primary/20 rounded-full p-3 transition-colors">
-                    <Film className="text-primary h-8 w-8" />
+                  <div className="rounded-full bg-primary/10 p-3 transition-colors group-hover:bg-primary/20">
+                    <Film className="h-8 w-8 text-primary" />
                   </div>
                   <div className="text-center">
                     <p className="text-sm font-medium">Movies</p>
-                    <p className="text-muted-foreground mt-0.5 text-xs">
+                    <p className="mt-0.5 text-xs text-muted-foreground">
                       Feature films and standalone titles
                     </p>
                   </div>
@@ -423,14 +423,14 @@ function AddLibraryDialog({
                 <button
                   type="button"
                   onClick={() => selectType("series")}
-                  className="group border-border hover:border-primary hover:bg-primary/5 flex flex-col items-center gap-3 rounded-lg border-2 p-6 transition-all"
+                  className="group flex flex-col items-center gap-3 rounded-lg border-2 border-border p-6 transition-all hover:border-primary hover:bg-primary/5"
                 >
-                  <div className="bg-primary/10 group-hover:bg-primary/20 rounded-full p-3 transition-colors">
-                    <Tv className="text-primary h-8 w-8" />
+                  <div className="rounded-full bg-primary/10 p-3 transition-colors group-hover:bg-primary/20">
+                    <Tv className="h-8 w-8 text-primary" />
                   </div>
                   <div className="text-center">
                     <p className="text-sm font-medium">TV Shows</p>
-                    <p className="text-muted-foreground mt-0.5 text-xs">
+                    <p className="mt-0.5 text-xs text-muted-foreground">
                       Series, seasons and episodes
                     </p>
                   </div>
@@ -439,13 +439,13 @@ function AddLibraryDialog({
             </div>
           ) : (
             <div className="space-y-4 py-2">
-              <p className="text-muted-foreground text-sm">
+              <p className="text-sm text-muted-foreground">
                 Give your library a name and choose where your{" "}
                 {mediaType === "movie" ? "movies" : "TV shows"} are stored.
               </p>
 
               {error && (
-                <div className="border-destructive/30 bg-destructive/10 text-destructive rounded-md border px-3 py-2 text-sm">
+                <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
                   {error}
                 </div>
               )}
@@ -538,7 +538,7 @@ function LibrariesPanel() {
 
   if (isLoading) {
     return (
-      <div className="text-muted-foreground flex items-center justify-center gap-2 py-8">
+      <div className="flex items-center justify-center gap-2 py-8 text-muted-foreground">
         <Loader2 className="h-4 w-4 animate-spin" /> Loading libraries…
       </div>
     );
@@ -549,7 +549,7 @@ function LibrariesPanel() {
       <div className="flex items-start justify-between">
         <div>
           <h3 className="mb-1 text-sm font-medium">Libraries</h3>
-          <p className="text-muted-foreground text-xs">
+          <p className="text-xs text-muted-foreground">
             Libraries are the directories where Loom stores your media files.
             Each movie or show is placed in a subfolder within the library you
             assign when adding it.
@@ -561,19 +561,19 @@ function LibrariesPanel() {
       </div>
 
       {error && (
-        <div className="border-destructive/30 bg-destructive/10 text-destructive rounded-md border px-3 py-2 text-sm">
+        <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
           {error}
         </div>
       )}
 
       {/* Library list */}
       {libraries.length === 0 ? (
-        <div className="border-muted-foreground/30 rounded-lg border border-dashed py-10 text-center">
-          <Folder className="text-muted-foreground/40 mx-auto mb-3 h-10 w-10" />
-          <p className="text-muted-foreground text-sm">
+        <div className="rounded-lg border border-dashed border-muted-foreground/30 py-10 text-center">
+          <Folder className="mx-auto mb-3 h-10 w-10 text-muted-foreground/40" />
+          <p className="text-sm text-muted-foreground">
             No libraries configured
           </p>
-          <p className="text-muted-foreground/60 mt-1 text-xs">
+          <p className="mt-1 text-xs text-muted-foreground/60">
             Click <strong>Add</strong> to configure your first media library
           </p>
         </div>
@@ -582,13 +582,13 @@ function LibrariesPanel() {
           {libraries.map((lib) => (
             <div
               key={lib.id}
-              className="group border-border bg-card hover:border-primary/30 flex items-center justify-between rounded-lg border px-4 py-3 transition-colors"
+              className="group flex items-center justify-between rounded-lg border border-border bg-card px-4 py-3 transition-colors hover:border-primary/30"
             >
               <div className="flex min-w-0 items-center gap-3">
-                <Folder className="text-primary h-5 w-5 shrink-0" />
+                <Folder className="h-5 w-5 shrink-0 text-primary" />
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium">{lib.name}</p>
-                  <p className="text-muted-foreground truncate font-mono text-xs">
+                  <p className="truncate font-mono text-xs text-muted-foreground">
                     {lib.path}
                   </p>
                   <div className="mt-0.5 flex items-center gap-3">
@@ -596,7 +596,7 @@ function LibrariesPanel() {
                       {lib.media_type}
                     </Badge>
                     {lib.disk_space && lib.disk_space.free_bytes > 0 && (
-                      <span className="text-muted-foreground flex items-center gap-1 text-xs">
+                      <span className="flex items-center gap-1 text-xs text-muted-foreground">
                         <HardDrive className="h-3 w-3" />
                         {formatBytes(lib.disk_space.free_bytes)} free
                       </span>
@@ -612,7 +612,7 @@ function LibrariesPanel() {
               <Button
                 variant="ghost"
                 size="icon"
-                className="text-destructive hover:bg-destructive/10 hover:text-destructive opacity-0 transition-opacity group-hover:opacity-100"
+                className="text-destructive opacity-0 transition-opacity hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
                 onClick={() => handleDelete(lib.id)}
                 disabled={deletingId === lib.id}
               >
@@ -684,7 +684,7 @@ function ImportModePanel() {
         <CardTitle className="text-base">Import Mode</CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
-        <p className="text-muted-foreground text-sm">
+        <p className="text-sm text-muted-foreground">
           Controls how files are transferred from the download directory to your
           library.
         </p>
@@ -959,7 +959,7 @@ export function DataManagementPanel() {
     <div className="space-y-4">
       <div>
         <h3 className="text-lg font-semibold">Data Management</h3>
-        <p className="text-muted-foreground text-sm">
+        <p className="text-sm text-muted-foreground">
           Clear historical records without touching media files on disk or your
           configured libraries.
         </p>
@@ -1108,7 +1108,7 @@ export function DownloadClientsPanel() {
 
   if (isLoading) {
     return (
-      <div className="text-muted-foreground flex items-center justify-center gap-2 py-8">
+      <div className="flex items-center justify-center gap-2 py-8 text-muted-foreground">
         <Loader2 className="h-4 w-4 animate-spin" /> Loading download clients…
       </div>
     );
@@ -1427,7 +1427,7 @@ function RemotePathMappingsSection() {
       </div>
 
       {isLoading ? (
-        <div className="text-muted-foreground flex items-center justify-center gap-2 py-4">
+        <div className="flex items-center justify-center gap-2 py-4 text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" /> Loading…
         </div>
       ) : mappings.length === 0 && !showForm ? (
@@ -2293,7 +2293,7 @@ export function DownloadSafetyPanel() {
               <Badge
                 key={p}
                 variant="secondary"
-                className="flex items-center gap-1 pr-1 pl-2"
+                className="flex items-center gap-1 pl-2 pr-1"
               >
                 {p}
                 <button
@@ -2589,7 +2589,7 @@ export function RollingSearchPanel() {
 
   if (loading || !config) {
     return (
-      <div className="text-muted-foreground flex items-center gap-2 py-8">
+      <div className="flex items-center gap-2 py-8 text-muted-foreground">
         <Loader2 className="h-4 w-4 animate-spin" /> Loading…
       </div>
     );
@@ -2631,7 +2631,7 @@ export function RollingSearchPanel() {
             )}
             {Object.keys(status.quotaUsage).length > 0 && (
               <div className="pt-2">
-                <span className="text-muted-foreground text-xs">
+                <span className="text-xs text-muted-foreground">
                   Quota usage (24 h)
                 </span>
                 <div className="mt-1 flex flex-wrap gap-2">
@@ -2651,7 +2651,7 @@ export function RollingSearchPanel() {
       <div className="flex items-center justify-between">
         <div>
           <Label className="text-sm font-medium">Enable Rolling Search</Label>
-          <p className="text-muted-foreground text-xs">
+          <p className="text-xs text-muted-foreground">
             Continuously search for missing movies and episodes on a schedule
           </p>
         </div>
@@ -2678,7 +2678,7 @@ export function RollingSearchPanel() {
             )
           }
         />
-        <p className="text-muted-foreground text-xs">
+        <p className="text-xs text-muted-foreground">
           How often the scheduler runs a search batch
         </p>
       </div>
@@ -2698,7 +2698,7 @@ export function RollingSearchPanel() {
             )
           }
         />
-        <p className="text-muted-foreground text-xs">
+        <p className="text-xs text-muted-foreground">
           Number of items to search per run
         </p>
       </div>
@@ -2718,7 +2718,7 @@ export function RollingSearchPanel() {
             )
           }
         />
-        <p className="text-muted-foreground text-xs">
+        <p className="text-xs text-muted-foreground">
           Don't re-search an item within this many days
         </p>
       </div>
@@ -2740,7 +2740,7 @@ export function RollingSearchPanel() {
             )
           }
         />
-        <p className="text-muted-foreground text-xs">
+        <p className="text-xs text-muted-foreground">
           Per-indexer daily quota to avoid rate-limiting
         </p>
       </div>
@@ -2884,7 +2884,7 @@ export function MediaPreferencesPanel() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <Loader2 className="text-muted-foreground h-6 w-6 animate-spin" />
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
       </div>
     );
   }
@@ -2894,7 +2894,7 @@ export function MediaPreferencesPanel() {
       {/* Default Quality Profile */}
       <div className="space-y-2">
         <Label className="text-base font-medium">Default Quality Profile</Label>
-        <p className="text-muted-foreground text-xs">
+        <p className="text-xs text-muted-foreground">
           Used as the default when adding new movies or TV shows.
         </p>
         <Select
@@ -2921,7 +2921,7 @@ export function MediaPreferencesPanel() {
       {/* Audio Codec Priority */}
       <div className="space-y-3">
         <Label className="text-base font-medium">Audio Codec Priority</Label>
-        <p className="text-muted-foreground text-xs">
+        <p className="text-xs text-muted-foreground">
           Select and reorder preferred audio codecs. Higher in the list = higher
           priority.
         </p>
@@ -2932,7 +2932,7 @@ export function MediaPreferencesPanel() {
                 key={codec}
                 className="flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm"
               >
-                <GripVertical className="text-muted-foreground h-4 w-4" />
+                <GripVertical className="h-4 w-4 text-muted-foreground" />
                 <span className="flex-1">{codec}</span>
                 <Badge variant="secondary" className="text-xs">
                   #{idx + 1}
@@ -2949,7 +2949,7 @@ export function MediaPreferencesPanel() {
                   type="button"
                   onClick={() => moveAudio(idx, 1)}
                   disabled={idx === audioOrder.length - 1}
-                  className="text-muted-foreground hover:text-foreground rotate-180 disabled:opacity-30"
+                  className="rotate-180 text-muted-foreground hover:text-foreground disabled:opacity-30"
                 >
                   <ArrowUp className="h-3.5 w-3.5" />
                 </button>
@@ -2970,7 +2970,7 @@ export function MediaPreferencesPanel() {
               key={codec}
               type="button"
               onClick={() => toggleAudio(codec)}
-              className="text-muted-foreground hover:border-primary hover:text-foreground rounded-md border border-dashed px-2 py-1 text-xs transition-colors"
+              className="rounded-md border border-dashed px-2 py-1 text-xs text-muted-foreground transition-colors hover:border-primary hover:text-foreground"
             >
               + {codec}
             </button>
@@ -3049,7 +3049,7 @@ export function MediaPreferencesPanel() {
       {/* Release name tester */}
       <div className="space-y-3 border-t pt-4">
         <Label className="text-base font-medium">Test Release Name</Label>
-        <p className="text-muted-foreground text-xs">
+        <p className="text-xs text-muted-foreground">
           Parse a release name to see detected media info.
         </p>
         <div className="flex gap-2">
@@ -3072,10 +3072,10 @@ export function MediaPreferencesPanel() {
           </Button>
         </div>
         {parseMut.data && (
-          <div className="bg-muted/50 space-y-1 rounded-md border p-3 text-sm">
+          <div className="space-y-1 rounded-md border bg-muted/50 p-3 text-sm">
             {Object.entries(parseMut.data).map(([k, v]) => (
               <div key={k} className="flex gap-2">
-                <span className="text-muted-foreground w-32 shrink-0 font-medium">
+                <span className="w-32 shrink-0 font-medium text-muted-foreground">
                   {k}:
                 </span>
                 <span>
@@ -3112,7 +3112,7 @@ export function FeaturesPanel() {
 
   if (isLoading) {
     return (
-      <div className="text-muted-foreground flex items-center gap-2 text-sm">
+      <div className="flex items-center gap-2 text-sm text-muted-foreground">
         <Loader2 className="h-4 w-4 animate-spin" /> Loading features…
       </div>
     );
@@ -3120,11 +3120,11 @@ export function FeaturesPanel() {
 
   return (
     <div className="space-y-4">
-      <p className="text-muted-foreground text-sm">
+      <p className="text-sm text-muted-foreground">
         Enable or disable optional platform features. Changes apply immediately.
       </p>
       {!canEdit && (
-        <p className="text-muted-foreground text-xs">
+        <p className="text-xs text-muted-foreground">
           Only administrators can change feature settings.
         </p>
       )}
@@ -3141,7 +3141,7 @@ export function FeaturesPanel() {
                   {f.category}
                 </Badge>
               </div>
-              <p className="text-muted-foreground text-xs">{f.description}</p>
+              <p className="text-xs text-muted-foreground">{f.description}</p>
             </div>
             <Switch
               checked={f.enabled}
@@ -3152,7 +3152,7 @@ export function FeaturesPanel() {
           </div>
         ))}
         {(features ?? []).length === 0 && (
-          <div className="text-muted-foreground p-4 text-sm">
+          <div className="p-4 text-sm text-muted-foreground">
             No configurable features.
           </div>
         )}

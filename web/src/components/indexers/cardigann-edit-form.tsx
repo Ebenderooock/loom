@@ -127,7 +127,7 @@ export function CardigannEditForm({
   const settings = definition?.settings ?? [];
 
   if (defsQ.isLoading) {
-    return <p className="text-muted-foreground text-sm">Loading definition…</p>;
+    return <p className="text-sm text-muted-foreground">Loading definition…</p>;
   }
 
   return (
@@ -198,7 +198,7 @@ export function CardigannEditForm({
             id="edit-cardi-url"
             value={selectedUrl}
             onChange={(e) => setSelectedUrl(e.target.value)}
-            className="border-input focus-visible:ring-ring flex h-9 w-full rounded-md border bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:ring-1 focus-visible:outline-none"
+            className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
           >
             {links.map((link) => (
               <option key={link} value={link}>
@@ -206,12 +206,12 @@ export function CardigannEditForm({
               </option>
             ))}
           </select>
-          <p className="text-muted-foreground text-xs">
+          <p className="text-xs text-muted-foreground">
             Select the site mirror that works in your region.
           </p>
         </div>
       ) : links.length === 1 ? (
-        <div className="text-muted-foreground flex items-center gap-2 text-sm">
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <Globe className="h-4 w-4" />
           <span>{links[0]}</span>
         </div>
@@ -258,7 +258,7 @@ export function CardigannEditForm({
             id="edit-cardi-proxy"
             value={proxyId}
             onChange={(e) => setProxyId(e.target.value)}
-            className="border-input focus-visible:ring-ring flex h-9 w-full rounded-md border bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:ring-1 focus-visible:outline-none"
+            className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
           >
             <option value="">None — direct connection</option>
             {proxies.map((p) => (
@@ -276,7 +276,7 @@ export function CardigannEditForm({
           type="checkbox"
           checked={enabled}
           onChange={(e) => setEnabled(e.target.checked)}
-          className="border-input h-4 w-4 rounded"
+          className="h-4 w-4 rounded border-input"
         />
         <Label htmlFor="edit-cardi-enabled" className="!m-0">
           Enabled

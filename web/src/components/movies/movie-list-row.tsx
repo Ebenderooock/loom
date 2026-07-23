@@ -21,7 +21,7 @@ export function MovieListRow({
   const profile = profiles.find((p) => p.id === movie.qualityProfileId);
   return (
     <TableRow
-      className="hover:bg-accent/5 cursor-pointer transition-colors"
+      className="cursor-pointer transition-colors hover:bg-accent/5"
       onClick={onClick}
     >
       <TableCell
@@ -34,7 +34,7 @@ export function MovieListRow({
         <Checkbox checked={selected} />
       </TableCell>
       <TableCell className="w-12">
-        <div className="bg-muted aspect-[2/3] w-8 shrink-0 overflow-hidden rounded">
+        <div className="aspect-[2/3] w-8 shrink-0 overflow-hidden rounded bg-muted">
           {movie.posterPath ? (
             <img
               src={`${TMDB_IMG}/w92${movie.posterPath}`}
@@ -44,7 +44,7 @@ export function MovieListRow({
             />
           ) : (
             <div className="flex h-full w-full items-center justify-center">
-              <Film className="text-muted-foreground/30 h-3 w-3" />
+              <Film className="h-3 w-3 text-muted-foreground/30" />
             </div>
           )}
         </div>
@@ -54,14 +54,14 @@ export function MovieListRow({
       <TableCell>
         <StatusBadge status={movie.status} />
       </TableCell>
-      <TableCell className="text-muted-foreground text-xs">
+      <TableCell className="text-xs text-muted-foreground">
         {profile?.name ?? "—"}
       </TableCell>
       <TableCell>
         {movie.monitoringStatus === "monitored" ? (
-          <Eye className="text-accent h-4 w-4" />
+          <Eye className="h-4 w-4 text-accent" />
         ) : (
-          <EyeOff className="text-muted-foreground/50 h-4 w-4" />
+          <EyeOff className="h-4 w-4 text-muted-foreground/50" />
         )}
       </TableCell>
       <TableCell>
@@ -74,7 +74,7 @@ export function MovieListRow({
           "—"
         )}
       </TableCell>
-      <TableCell className="text-muted-foreground text-xs">
+      <TableCell className="text-xs text-muted-foreground">
         {movie.createdAt ? new Date(movie.createdAt).toLocaleDateString() : "—"}
       </TableCell>
     </TableRow>

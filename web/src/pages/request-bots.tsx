@@ -119,7 +119,7 @@ function LinkAccountCard() {
           <Link2 className="h-5 w-5" /> Link your chat account
         </CardTitle>
         <CardDescription>
-          Send <code className="bg-muted rounded px-1">/link</code> to the bot
+          Send <code className="rounded bg-muted px-1">/link</code> to the bot
           in Telegram or Discord, then enter the code it gives you here to
           connect that chat to your Loom account.
         </CardDescription>
@@ -331,7 +331,7 @@ function PlatformRow({
                 type="button"
                 variant="ghost"
                 size="sm"
-                className="text-muted-foreground h-7 px-2 text-xs"
+                className="h-7 px-2 text-xs text-muted-foreground"
                 onClick={onClear}
                 disabled={clearing}
               >
@@ -529,7 +529,7 @@ function StatusCard() {
             <span className="font-medium">{platformLabel(s.platform)}</span>
             <div className="flex items-center gap-2">
               {s.last_error ? (
-                <span className="text-destructive text-sm">{s.last_error}</span>
+                <span className="text-sm text-destructive">{s.last_error}</span>
               ) : null}
               {s.running ? (
                 <Badge variant="secondary" className="gap-1">
@@ -575,7 +575,7 @@ function LinkedAccountsCard() {
         {isLoading ? (
           <Skeleton className="h-16 w-full" />
         ) : (links ?? []).length === 0 ? (
-          <p className="text-muted-foreground text-sm">
+          <p className="text-sm text-muted-foreground">
             No linked accounts yet.
           </p>
         ) : (
@@ -592,7 +592,7 @@ function LinkedAccountsCard() {
                       {platformLabel(l.platform)}
                     </Badge>
                   </span>
-                  <span className="text-muted-foreground text-sm">
+                  <span className="text-sm text-muted-foreground">
                     Loom user: {l.username || `#${l.user_id}`}
                   </span>
                 </div>

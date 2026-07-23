@@ -114,7 +114,7 @@ function SearchBreakdown({ queryLogId }: { queryLogId: string }) {
 
   if (isLoading) {
     return (
-      <p className="text-muted-foreground animate-pulse text-xs">
+      <p className="animate-pulse text-xs text-muted-foreground">
         Loading search diagnostics…
       </p>
     );
@@ -123,7 +123,7 @@ function SearchBreakdown({ queryLogId }: { queryLogId: string }) {
   const indexers = data?.indexers ?? [];
   if (indexers.length === 0) {
     return (
-      <p className="text-muted-foreground text-xs">
+      <p className="text-xs text-muted-foreground">
         No per-indexer data recorded.
       </p>
     );
@@ -136,13 +136,13 @@ function SearchBreakdown({ queryLogId }: { queryLogId: string }) {
 
   return (
     <div className="mt-2 space-y-1.5">
-      <p className="text-muted-foreground text-[10px] font-medium tracking-wide uppercase">
+      <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
         Per-Indexer Breakdown
       </p>
       {indexers.map((ix: IndexerQueryEntry) => (
         <div key={ix.id} className="flex items-center gap-2 text-xs">
           <span className="w-28 truncate font-medium">{ix.indexer_name}</span>
-          <div className="bg-muted h-1.5 flex-1 rounded-full">
+          <div className="h-1.5 flex-1 rounded-full bg-muted">
             <div
               className={`h-1.5 rounded-full ${ix.status === "completed" ? "bg-blue-500" : "bg-red-500"}`}
               style={{
@@ -150,10 +150,10 @@ function SearchBreakdown({ queryLogId }: { queryLogId: string }) {
               }}
             />
           </div>
-          <span className="text-muted-foreground w-14 text-right tabular-nums">
+          <span className="w-14 text-right tabular-nums text-muted-foreground">
             {ix.latency_ms}ms
           </span>
-          <span className="text-muted-foreground w-16 text-right tabular-nums">
+          <span className="w-16 text-right tabular-nums text-muted-foreground">
             {ix.result_count} results
           </span>
           <Badge
@@ -187,20 +187,20 @@ function DetailPanel({ entry }: { entry: AuditLogEntry }) {
     typeof detail.query_log_id === "string" ? detail.query_log_id : null;
 
   return (
-    <div className="bg-muted/50 max-w-2xl space-y-1 rounded p-3 text-xs">
+    <div className="max-w-2xl space-y-1 rounded bg-muted/50 p-3 text-xs">
       {Object.entries(detail).map(([k, v]) => (
         <div key={k} className="flex gap-2">
-          <span className="text-muted-foreground min-w-[120px] font-medium">
+          <span className="min-w-[120px] font-medium text-muted-foreground">
             {k}:
           </span>
-          <span className="text-foreground break-all">
+          <span className="break-all text-foreground">
             {typeof v === "object" ? JSON.stringify(v) : String(v ?? "—")}
           </span>
         </div>
       ))}
       {entry.entity_type && (
         <div className="flex gap-2">
-          <span className="text-muted-foreground min-w-[120px] font-medium">
+          <span className="min-w-[120px] font-medium text-muted-foreground">
             entity_type:
           </span>
           <span className="text-foreground">{entry.entity_type}</span>
@@ -208,7 +208,7 @@ function DetailPanel({ entry }: { entry: AuditLogEntry }) {
       )}
       {entry.source && (
         <div className="flex gap-2">
-          <span className="text-muted-foreground min-w-[120px] font-medium">
+          <span className="min-w-[120px] font-medium text-muted-foreground">
             source:
           </span>
           <span className="text-foreground">{entry.source}</span>
@@ -234,10 +234,10 @@ function EventRow({
   return (
     <>
       <TableRow
-        className={hasDetail ? "hover:bg-muted/40 cursor-pointer" : undefined}
+        className={hasDetail ? "cursor-pointer hover:bg-muted/40" : undefined}
         onClick={hasDetail ? onToggle : undefined}
       >
-        <TableCell className="text-muted-foreground text-xs tabular-nums">
+        <TableCell className="text-xs tabular-nums text-muted-foreground">
           {formatTimestamp(entry.occurred_at || entry.timestamp)}
         </TableCell>
         <TableCell>
@@ -249,18 +249,18 @@ function EventRow({
           </Badge>
         </TableCell>
         <TableCell className="text-xs capitalize">{entry.category}</TableCell>
-        <TableCell className="text-muted-foreground text-xs">
+        <TableCell className="text-xs text-muted-foreground">
           {entry.event_type}
         </TableCell>
         <TableCell className="text-sm">
           <span className="flex items-center gap-1">
             {entry.message}
             {hasDetail && (
-              <Chevron className="text-muted-foreground h-3 w-3 shrink-0" />
+              <Chevron className="h-3 w-3 shrink-0 text-muted-foreground" />
             )}
           </span>
         </TableCell>
-        <TableCell className="text-muted-foreground max-w-[140px] truncate text-xs">
+        <TableCell className="max-w-[140px] truncate text-xs text-muted-foreground">
           {entry.entity_name ?? "—"}
         </TableCell>
       </TableRow>
@@ -368,7 +368,7 @@ export function EventsPage() {
           />
         )}
 
-        <span className="text-muted-foreground ml-auto text-xs">
+        <span className="ml-auto text-xs text-muted-foreground">
           {total} event{total !== 1 ? "s" : ""}
         </span>
       </div>
@@ -398,7 +398,7 @@ export function EventsPage() {
               <TableRow>
                 <TableCell
                   colSpan={6}
-                  className="text-destructive py-8 text-center"
+                  className="py-8 text-center text-destructive"
                 >
                   Failed to load audit log.
                 </TableCell>
@@ -439,7 +439,7 @@ export function EventsPage() {
           >
             <ChevronLeft className="mr-1 h-4 w-4" /> Previous
           </Button>
-          <span className="text-muted-foreground text-xs">
+          <span className="text-xs text-muted-foreground">
             {offset + 1}–{Math.min(offset + PAGE_SIZE, total)} of {total}
           </span>
           <Button

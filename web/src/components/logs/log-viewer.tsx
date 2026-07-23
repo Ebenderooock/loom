@@ -79,7 +79,7 @@ export function LogViewer({
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-2">
         {showStreamToggle && (
-          <div className="border-border flex overflow-hidden rounded-md border">
+          <div className="flex overflow-hidden rounded-md border border-border">
             <button
               className={`px-3 py-1.5 text-xs font-medium transition-colors ${mode === "stream" ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-accent"}`}
               onClick={() => setMode("stream")}
@@ -112,7 +112,7 @@ export function LogViewer({
               )}
               {paused ? "Resume" : "Pause"}
             </Button>
-            <span className="text-muted-foreground flex items-center gap-1 text-xs">
+            <span className="flex items-center gap-1 text-xs text-muted-foreground">
               {stream.connected ? (
                 <Wifi className="h-3 w-3 text-green-400" />
               ) : (
@@ -126,7 +126,7 @@ export function LogViewer({
         {mode === "history" && (
           <>
             <select
-              className="border-border bg-background h-8 rounded-md border px-2 text-xs"
+              className="h-8 rounded-md border border-border bg-background px-2 text-xs"
               value={levelFilter}
               onChange={(e) => {
                 setLevelFilter(e.target.value);
@@ -140,11 +140,11 @@ export function LogViewer({
               <option value="error">Error</option>
             </select>
             <div className="relative">
-              <Search className="text-muted-foreground absolute top-1/2 left-2 h-3.5 w-3.5 -translate-y-1/2" />
+              <Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
               <input
                 type="text"
                 placeholder="Search messages…"
-                className="border-border bg-background h-8 w-48 rounded-md border pr-2 pl-7 text-xs"
+                className="h-8 w-48 rounded-md border border-border bg-background pl-7 pr-2 text-xs"
                 value={searchText}
                 onChange={(e) => {
                   setSearchText(e.target.value);
@@ -155,7 +155,7 @@ export function LogViewer({
           </>
         )}
 
-        <span className="text-muted-foreground ml-auto text-xs">
+        <span className="ml-auto text-xs text-muted-foreground">
           {total} entries
         </span>
       </div>
@@ -174,7 +174,7 @@ export function LogViewer({
           >
             Previous
           </Button>
-          <span className="text-muted-foreground text-xs">
+          <span className="text-xs text-muted-foreground">
             Page {page + 1} of {Math.ceil(total / 100)}
           </span>
           <Button
@@ -222,7 +222,7 @@ function LogTable({ entries }: { entries: LogEntry[] }) {
 
   if (entries.length === 0) {
     return (
-      <div className="border-border bg-muted/30 text-muted-foreground rounded-md border p-8 text-center text-sm">
+      <div className="rounded-md border border-border bg-muted/30 p-8 text-center text-sm text-muted-foreground">
         No log entries to display
       </div>
     );
@@ -233,7 +233,7 @@ function LogTable({ entries }: { entries: LogEntry[] }) {
       <div
         ref={containerRef}
         onScroll={handleScroll}
-        className="border-border max-h-[500px] overflow-y-auto rounded-md border bg-zinc-950 font-mono text-xs"
+        className="max-h-[500px] overflow-y-auto rounded-md border border-border bg-zinc-950 font-mono text-xs"
       >
         {entries.map((entry) => {
           const style = (LEVEL_STYLES[entry.level] ?? LEVEL_STYLES.info)!;
@@ -244,7 +244,7 @@ function LogTable({ entries }: { entries: LogEntry[] }) {
           return (
             <div
               key={entry.id}
-              className="border-border/30 border-b px-3 py-1.5 hover:bg-zinc-900/50"
+              className="border-b border-border/30 px-3 py-1.5 hover:bg-zinc-900/50"
             >
               <div
                 className="flex cursor-pointer items-start gap-2"
@@ -260,11 +260,11 @@ function LogTable({ entries }: { entries: LogEntry[] }) {
               >
                 {hasAttrs &&
                   (expanded ? (
-                    <ChevronDown className="text-muted-foreground mt-0.5 h-3 w-3 shrink-0" />
+                    <ChevronDown className="mt-0.5 h-3 w-3 shrink-0 text-muted-foreground" />
                   ) : (
-                    <ChevronRight className="text-muted-foreground mt-0.5 h-3 w-3 shrink-0" />
+                    <ChevronRight className="mt-0.5 h-3 w-3 shrink-0 text-muted-foreground" />
                   ))}
-                <span className="text-muted-foreground shrink-0">{ts}</span>
+                <span className="shrink-0 text-muted-foreground">{ts}</span>
                 <Badge
                   variant="outline"
                   className={`${style.bg} ${style.text} shrink-0 px-1.5 py-0 text-[10px] uppercase`}
@@ -275,13 +275,13 @@ function LogTable({ entries }: { entries: LogEntry[] }) {
                   {entry.message}
                 </span>
                 {entry.source && (
-                  <span className="text-muted-foreground shrink-0 text-[10px]">
+                  <span className="shrink-0 text-[10px] text-muted-foreground">
                     {entry.source.split("/").slice(-2).join("/")}
                   </span>
                 )}
               </div>
               {expanded && hasAttrs && (
-                <pre className="mt-1 ml-5 overflow-x-auto rounded bg-zinc-900 p-2 text-[10px] text-zinc-400">
+                <pre className="ml-5 mt-1 overflow-x-auto rounded bg-zinc-900 p-2 text-[10px] text-zinc-400">
                   {JSON.stringify(JSON.parse(entry.attrs!), null, 2)}
                 </pre>
               )}
@@ -292,7 +292,7 @@ function LogTable({ entries }: { entries: LogEntry[] }) {
 
       {!autoScroll && (
         <button
-          className="bg-primary text-primary-foreground hover:bg-primary/90 absolute right-2 bottom-2 rounded-full p-1.5 shadow-lg"
+          className="absolute bottom-2 right-2 rounded-full bg-primary p-1.5 text-primary-foreground shadow-lg hover:bg-primary/90"
           onClick={() => {
             setAutoScroll(true);
             containerRef.current?.scrollTo({
@@ -324,10 +324,10 @@ function LogConfigSection() {
     <Card>
       <CardContent className="flex flex-wrap items-center gap-4 py-3">
         <div className="flex items-center gap-2">
-          <Settings2 className="text-muted-foreground h-4 w-4" />
+          <Settings2 className="h-4 w-4 text-muted-foreground" />
           <span className="text-sm font-medium">Capture Level</span>
           <select
-            className="border-border bg-background h-8 rounded-md border px-2 text-xs"
+            className="h-8 rounded-md border border-border bg-background px-2 text-xs"
             value={captureLevel}
             onChange={(e) => setCaptureLevel(e.target.value)}
           >

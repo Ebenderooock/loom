@@ -255,7 +255,7 @@ function SearchAndRequest() {
           </TabsList>
         </Tabs>
         <div className="relative flex-1">
-          <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={term}
             onChange={(e) => onTermChange(e.target.value)}
@@ -272,7 +272,7 @@ function SearchAndRequest() {
       </div>
 
       {searching && (
-        <div className="text-muted-foreground flex items-center gap-2 text-sm">
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" /> Searching…
         </div>
       )}
@@ -292,9 +292,9 @@ function SearchAndRequest() {
           return (
             <div
               key={key}
-              className="border-border bg-card flex flex-col overflow-hidden rounded-lg border"
+              className="flex flex-col overflow-hidden rounded-lg border border-border bg-card"
             >
-              <div className="bg-muted aspect-[2/3]">
+              <div className="aspect-[2/3] bg-muted">
                 {r.posterPath ? (
                   <img
                     src={posterSrc(r.posterPath, "w300")}
@@ -303,7 +303,7 @@ function SearchAndRequest() {
                     loading="lazy"
                   />
                 ) : (
-                  <div className="text-muted-foreground flex h-full items-center justify-center text-xs">
+                  <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
                     No image
                   </div>
                 )}
@@ -314,7 +314,7 @@ function SearchAndRequest() {
                     {r.title}
                   </p>
                   {r.year ? (
-                    <p className="text-muted-foreground text-xs">{r.year}</p>
+                    <p className="text-xs text-muted-foreground">{r.year}</p>
                   ) : null}
                 </div>
                 <Button
@@ -356,8 +356,8 @@ function RequestRow({
   onReject?: (r: MediaRequest) => void;
 }) {
   return (
-    <div className="border-border bg-card flex items-center gap-3 rounded-lg border p-3">
-      <div className="bg-muted h-16 w-11 shrink-0 overflow-hidden rounded">
+    <div className="flex items-center gap-3 rounded-lg border border-border bg-card p-3">
+      <div className="h-16 w-11 shrink-0 overflow-hidden rounded bg-muted">
         {r.poster_path ? (
           <img
             src={posterSrc(r.poster_path, "w92")}
@@ -373,7 +373,7 @@ function RequestRow({
             {r.title}
           </p>
           {r.year ? (
-            <span className="text-muted-foreground text-xs">{r.year}</span>
+            <span className="text-xs text-muted-foreground">{r.year}</span>
           ) : null}
           <Badge variant="outline" className="text-[10px] uppercase">
             {r.media_type === "movie"
@@ -383,7 +383,7 @@ function RequestRow({
                 : "Artist"}
           </Badge>
         </div>
-        <div className="text-muted-foreground mt-1 flex flex-wrap items-center gap-2 text-xs">
+        <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
           <StatusBadge status={r.status} />
           {admin && <span>by {r.username || "unknown"}</span>}
           {r.reason ? <span className="text-red-500">· {r.reason}</span> : null}
@@ -617,11 +617,11 @@ function RejectDialog({
 function MyRequests() {
   const { data, isLoading } = useMyRequests();
   if (isLoading) {
-    return <p className="text-muted-foreground text-sm">Loading…</p>;
+    return <p className="text-sm text-muted-foreground">Loading…</p>;
   }
   if (!data || data.length === 0) {
     return (
-      <p className="text-muted-foreground text-sm">
+      <p className="text-sm text-muted-foreground">
         You haven&apos;t requested anything yet. Search above to make a request.
       </p>
     );
@@ -654,7 +654,7 @@ function ManageRequests() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-muted-foreground text-sm">Filter</span>
+        <span className="text-sm text-muted-foreground">Filter</span>
         <Select
           value={status}
           onValueChange={(v) => setStatus(v as RequestStatus | "all")}
@@ -694,9 +694,9 @@ function ManageRequests() {
       </div>
 
       {isLoading ? (
-        <p className="text-muted-foreground text-sm">Loading…</p>
+        <p className="text-sm text-muted-foreground">Loading…</p>
       ) : !data || data.length === 0 ? (
-        <p className="text-muted-foreground text-sm">
+        <p className="text-sm text-muted-foreground">
           No requests in this state.
         </p>
       ) : (
@@ -722,8 +722,8 @@ function ManageRequests() {
 function QuotaPill({ label, q }: { label: string; q: MediaQuota }) {
   if (q.unlimited) {
     return (
-      <span className="border-border/60 text-muted-foreground inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs">
-        <span className="text-foreground font-medium">{label}</span> unlimited
+      <span className="inline-flex items-center gap-1.5 rounded-md border border-border/60 px-2.5 py-1 text-xs text-muted-foreground">
+        <span className="font-medium text-foreground">{label}</span> unlimited
       </span>
     );
   }
@@ -737,7 +737,7 @@ function QuotaPill({ label, q }: { label: string; q: MediaQuota }) {
           : "border-border/60 text-muted-foreground")
       }
     >
-      <span className="text-foreground font-medium">{label}</span>
+      <span className="font-medium text-foreground">{label}</span>
       {q.used} of {q.limit} used
     </span>
   );
@@ -751,12 +751,12 @@ function QuotaBanner() {
   if (data.movie.unlimited && data.series.unlimited && musicUnlimited)
     return null;
   return (
-    <div className="border-border/60 bg-muted/30 flex flex-wrap items-center gap-2 rounded-lg border px-3 py-2">
-      <Gauge className="text-muted-foreground h-4 w-4" />
+    <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border/60 bg-muted/30 px-3 py-2">
+      <Gauge className="h-4 w-4 text-muted-foreground" />
       <QuotaPill label="Movies" q={data.movie} />
       <QuotaPill label="TV" q={data.series} />
       {musicEnabled && <QuotaPill label="Music" q={data.music} />}
-      <span className="text-muted-foreground text-xs">
+      <span className="text-xs text-muted-foreground">
         in the last {data.window_days} day{data.window_days === 1 ? "" : "s"}
       </span>
     </div>
@@ -782,7 +782,7 @@ function QuotaConfigCard() {
   }, [data]);
 
   if (isLoading) {
-    return <p className="text-muted-foreground text-sm">Loading quota…</p>;
+    return <p className="text-sm text-muted-foreground">Loading quota…</p>;
   }
 
   const toInt = (s: string) => Math.max(0, Math.floor(Number(s) || 0));
@@ -809,12 +809,12 @@ function QuotaConfigCard() {
   return (
     <form
       onSubmit={save}
-      className="border-border/60 flex flex-col gap-4 rounded-lg border p-4 sm:flex-row sm:items-end"
+      className="flex flex-col gap-4 rounded-lg border border-border/60 p-4 sm:flex-row sm:items-end"
     >
       <div className="flex-1 space-y-1">
         <label
           htmlFor="quota-movie"
-          className="text-muted-foreground text-xs font-medium"
+          className="text-xs font-medium text-muted-foreground"
         >
           Movies per user
         </label>
@@ -829,7 +829,7 @@ function QuotaConfigCard() {
       <div className="flex-1 space-y-1">
         <label
           htmlFor="quota-series"
-          className="text-muted-foreground text-xs font-medium"
+          className="text-xs font-medium text-muted-foreground"
         >
           TV shows per user
         </label>
@@ -845,7 +845,7 @@ function QuotaConfigCard() {
         <div className="flex-1 space-y-1">
           <label
             htmlFor="quota-music"
-            className="text-muted-foreground text-xs font-medium"
+            className="text-xs font-medium text-muted-foreground"
           >
             Artists per user
           </label>
@@ -861,7 +861,7 @@ function QuotaConfigCard() {
       <div className="flex-1 space-y-1">
         <label
           htmlFor="quota-window"
-          className="text-muted-foreground text-xs font-medium"
+          className="text-xs font-medium text-muted-foreground"
         >
           Window (days)
         </label>
@@ -877,7 +877,7 @@ function QuotaConfigCard() {
         {update.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
         Save
       </Button>
-      <p className="text-muted-foreground text-xs sm:max-w-[12rem]">
+      <p className="text-xs text-muted-foreground sm:max-w-[12rem]">
         0 = unlimited. Admins are exempt from quotas.
       </p>
     </form>
@@ -908,7 +908,7 @@ export function RequestsPage() {
       {isAdmin && (
         <section className="space-y-3">
           <h2 className="text-lg font-semibold">Request quota</h2>
-          <p className="text-muted-foreground text-sm">
+          <p className="text-sm text-muted-foreground">
             Limit how many requests each non-admin user can make in a rolling
             window.
           </p>

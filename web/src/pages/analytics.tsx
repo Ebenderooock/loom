@@ -64,10 +64,10 @@ function StatCard({
   return (
     <Card>
       <CardContent className="flex items-center gap-3 p-4">
-        <div className="bg-accent/10 text-accent rounded-md p-2">{icon}</div>
+        <div className="rounded-md bg-accent/10 p-2 text-accent">{icon}</div>
         <div>
-          <p className="text-2xl leading-none font-semibold">{value}</p>
-          <p className="text-muted-foreground mt-1 text-xs">{label}</p>
+          <p className="text-2xl font-semibold leading-none">{value}</p>
+          <p className="mt-1 text-xs text-muted-foreground">{label}</p>
         </div>
       </CardContent>
     </Card>
@@ -107,7 +107,7 @@ function ActiveStreams() {
       </CardHeader>
       <CardContent>
         {isLoading ? (
-          <p className="text-muted-foreground text-sm">Loading…</p>
+          <p className="text-sm text-muted-foreground">Loading…</p>
         ) : !streams || streams.length === 0 ? (
           <EmptyState
             icon={<MonitorPlay />}
@@ -119,7 +119,7 @@ function ActiveStreams() {
             {streams.map((s) => (
               <div
                 key={`${s.connection_id}-${s.session_key}-${s.media_id}`}
-                className="bg-card/50 rounded-lg border p-3"
+                className="rounded-lg border bg-card/50 p-3"
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
@@ -127,7 +127,7 @@ function ActiveStreams() {
                       <MediaTypeIcon type={s.media_type} />
                       {s.full_title || s.title}
                     </p>
-                    <p className="text-muted-foreground truncate text-xs">
+                    <p className="truncate text-xs text-muted-foreground">
                       {s.user || "Unknown"}
                       {s.device ? ` · ${s.device}` : ""}
                       {` · ${s.connection_name}`}
@@ -143,9 +143,9 @@ function ActiveStreams() {
                       </Badge>
                     )}
                     {s.state === "paused" ? (
-                      <PauseCircle className="text-muted-foreground h-4 w-4" />
+                      <PauseCircle className="h-4 w-4 text-muted-foreground" />
                     ) : (
-                      <PlayCircle className="text-accent h-4 w-4" />
+                      <PlayCircle className="h-4 w-4 text-accent" />
                     )}
                   </div>
                 </div>
@@ -167,7 +167,7 @@ function BarList({
   emptyLabel: string;
 }) {
   if (rows.length === 0) {
-    return <p className="text-muted-foreground py-4 text-sm">{emptyLabel}</p>;
+    return <p className="py-4 text-sm text-muted-foreground">{emptyLabel}</p>;
   }
   const max = Math.max(...rows.map((r) => r.value), 1);
   return (
@@ -176,13 +176,13 @@ function BarList({
         <div key={i} className="space-y-1">
           <div className="flex items-baseline justify-between gap-2 text-sm">
             <span className="truncate">{r.label}</span>
-            <span className="text-muted-foreground shrink-0 text-xs">
+            <span className="shrink-0 text-xs text-muted-foreground">
               {r.display}
             </span>
           </div>
-          <div className="bg-muted h-2 overflow-hidden rounded-full">
+          <div className="h-2 overflow-hidden rounded-full bg-muted">
             <div
-              className="bg-accent/70 h-full rounded-full"
+              className="h-full rounded-full bg-accent/70"
               style={{ width: `${(r.value / max) * 100}%` }}
             />
           </div>
@@ -211,7 +211,7 @@ function mediaRows(media: MediaStat[]) {
 function PlaysPerDay({ days }: { days: { day: string; plays: number }[] }) {
   if (days.length === 0) {
     return (
-      <p className="text-muted-foreground py-4 text-sm">
+      <p className="py-4 text-sm text-muted-foreground">
         No plays in this window.
       </p>
     );
@@ -227,14 +227,14 @@ function PlaysPerDay({ days }: { days: { day: string; plays: number }[] }) {
         >
           <div className="flex w-full flex-1 items-end">
             <div
-              className="bg-accent/70 w-full rounded-t"
+              className="w-full rounded-t bg-accent/70"
               style={{
                 height: `${(d.plays / max) * 100}%`,
                 minHeight: d.plays > 0 ? 2 : 0,
               }}
             />
           </div>
-          <span className="text-muted-foreground text-[9px]">
+          <span className="text-[9px] text-muted-foreground">
             {d.day.slice(5)}
           </span>
         </div>
@@ -256,7 +256,7 @@ export function AnalyticsPage() {
 
   if (!isAdmin) {
     return (
-      <div className="text-muted-foreground flex flex-col items-center justify-center gap-2 p-12 text-center">
+      <div className="flex flex-col items-center justify-center gap-2 p-12 text-center text-muted-foreground">
         <ShieldAlert className="h-8 w-8" />
         <p>You need admin access to view analytics.</p>
       </div>
@@ -272,7 +272,7 @@ export function AnalyticsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-lg font-semibold">Watch reports</h2>
-          <p className="text-muted-foreground text-sm">
+          <p className="text-sm text-muted-foreground">
             Aggregated playback activity over the selected window.
           </p>
         </div>
@@ -394,7 +394,7 @@ export function AnalyticsPage() {
         </CardHeader>
         <CardContent>
           {history.isLoading ? (
-            <p className="text-muted-foreground text-sm">Loading…</p>
+            <p className="text-sm text-muted-foreground">Loading…</p>
           ) : !history.data || history.data.length === 0 ? (
             <EmptyState
               icon={<Activity />}

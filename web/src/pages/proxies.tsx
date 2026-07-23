@@ -167,7 +167,7 @@ export function ProxiesPage() {
         </div>
       ) : null}
 
-      <div className="border-border overflow-x-auto rounded-md border">
+      <div className="overflow-x-auto rounded-md border border-border">
         <table className="w-full text-sm">
           <caption className="sr-only">Configured proxies</caption>
           <thead className="bg-muted/50 text-left">
@@ -193,7 +193,7 @@ export function ProxiesPage() {
             {proxiesQ.isLoading ? (
               <>
                 {Array.from({ length: 2 }).map((_, i) => (
-                  <tr key={i} className="border-border border-t">
+                  <tr key={i} className="border-t border-border">
                     {Array.from({ length: 5 }).map((__, j) => (
                       <td key={j} className="px-3 py-3">
                         <Skeleton className="h-4 w-24" />
@@ -207,19 +207,19 @@ export function ProxiesPage() {
               <tr>
                 <td
                   colSpan={5}
-                  className="text-muted-foreground px-3 py-6 text-center"
+                  className="px-3 py-6 text-center text-muted-foreground"
                 >
                   No proxies configured.
                 </td>
               </tr>
             ) : null}
             {(proxiesQ.data ?? []).map((p) => (
-              <tr key={p.id} className="border-border border-t">
+              <tr key={p.id} className="border-t border-border">
                 <td className="px-3 py-2">
                   <div className="font-medium">{p.name}</div>
-                  <div className="text-muted-foreground text-xs">{p.id}</div>
+                  <div className="text-xs text-muted-foreground">{p.id}</div>
                 </td>
-                <td className="text-muted-foreground px-3 py-2">{p.kind}</td>
+                <td className="px-3 py-2 text-muted-foreground">{p.kind}</td>
                 <td className="px-3 py-2 font-mono text-xs">
                   {describeProxy(p)}
                 </td>

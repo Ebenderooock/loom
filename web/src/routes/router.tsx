@@ -26,7 +26,7 @@ function RootComponent() {
   const { isSetupComplete, isAuthenticated, isLoading } = useAuth();
 
   if (isLoading) {
-    return <div className="bg-neutral-dark h-screen w-screen" />;
+    return <div className="h-screen w-screen bg-neutral-dark" />;
   }
 
   if (!isSetupComplete) {

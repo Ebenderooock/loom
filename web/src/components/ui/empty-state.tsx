@@ -14,15 +14,15 @@ export function EmptyState({
   action,
 }: EmptyStateProps) {
   return (
-    <div className="animate-fade-in-up flex flex-col items-center justify-center py-12 text-center">
+    <div className="flex animate-fade-in-up flex-col items-center justify-center py-12 text-center">
       {icon && (
-        <div className="text-muted-foreground mb-3 [&>svg]:h-10 [&>svg]:w-10">
+        <div className="mb-3 text-muted-foreground [&>svg]:h-10 [&>svg]:w-10">
           {icon}
         </div>
       )}
       <p className="text-sm font-medium">{title}</p>
       {description && (
-        <p className="text-muted-foreground mt-1 max-w-sm text-xs">
+        <p className="mt-1 max-w-sm text-xs text-muted-foreground">
           {description}
         </p>
       )}
