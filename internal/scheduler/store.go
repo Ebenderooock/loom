@@ -37,7 +37,7 @@ func (s *Store) GetCandidates(ctx context.Context, mediaType string, limit int, 
 			LEFT JOIN search_state ss ON ss.media_type = 'movie' AND ss.media_id = m.id
 			WHERE (
 			        m.status = 'missing'
-			        OR (m.status = 'unreleased' AND (m.release_date = '' OR m.release_date <= date('now')))
+			        OR (m.status = 'unreleased' AND m.release_date != '' AND m.release_date <= date('now'))
 			      )
 			  AND m.monitoring_status = 'monitored'
 			  AND (ss.last_searched_at IS NULL OR ss.last_searched_at < ?)
@@ -106,7 +106,10 @@ func (s *Store) QueueSize(ctx context.Context, minResearchDays int) (int, error)
 	row := s.db.QueryRowContext(ctx, `
 		SELECT COUNT(*) FROM movies m
 		LEFT JOIN search_state ss ON ss.media_type = 'movie' AND ss.media_id = m.id
-		WHERE m.status = 'missing'
+		WHERE (
+		        m.status = 'missing'
+		        OR (m.status = 'unreleased' AND m.release_date != '' AND m.release_date <= date('now'))
+		      )
 		  AND m.monitoring_status = 'monitored'
 		  AND (ss.last_searched_at IS NULL OR ss.last_searched_at < ?)`, cutoff)
 	if err := row.Scan(&count); err != nil {
