@@ -670,10 +670,10 @@ func TestVerifyIdentity_MovieYear(t *testing.T) {
 func TestVerifyIdentity_MovieYearlessRelease(t *testing.T) {
 	e := newEngine()
 	tests := []struct {
-		name       string
+		name        string
 		releaseName string
-		reqYear    int
-		wantReason string
+		reqYear     int
+		wantReason  string
 	}{
 		{
 			name:        "old year in raw name rejected",
