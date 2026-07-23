@@ -26,13 +26,19 @@ func (s *Store) GetCandidates(ctx context.Context, mediaType string, limit int, 
 	var query string
 	switch mediaType {
 	case "movie":
+		// Include movies that are 'missing', or that were 'unreleased' but whose
+		// release_date has now passed (so they are now available but the status
+		// was never transitioned).
 		query = `
 			SELECT m.id, m.title, m.year,
 			       COALESCE(m.imdb_id, ''), COALESCE(m.tvdb_id, ''), COALESCE(m.tmdb_id, ''),
-			       0, 0
+			       0, 0, COALESCE(m.quality_profile_id, '')
 			FROM movies m
 			LEFT JOIN search_state ss ON ss.media_type = 'movie' AND ss.media_id = m.id
-			WHERE m.status = 'missing'
+			WHERE (
+			        m.status = 'missing'
+			        OR (m.status = 'unreleased' AND m.release_date != '' AND m.release_date <= date('now'))
+			      )
 			  AND m.monitoring_status = 'monitored'
 			  AND (ss.last_searched_at IS NULL OR ss.last_searched_at < ?)
 			ORDER BY m.year DESC, m.created_at DESC
@@ -41,7 +47,7 @@ func (s *Store) GetCandidates(ctx context.Context, mediaType string, limit int, 
 		query = `
 			SELECT e.id, e.title, 0,
 			       COALESCE(s.imdb_id, ''), COALESCE(s.tvdb_id, ''), COALESCE(s.tmdb_id, ''),
-			       se.season_number, e.episode_number
+			       se.season_number, e.episode_number, COALESCE(s.quality_profile_id, '')
 			FROM episodes e
 			JOIN series s ON e.series_id = s.id
 			JOIN seasons se ON e.season_id = se.id AND se.series_id = e.series_id
@@ -69,7 +75,7 @@ func (s *Store) GetCandidates(ctx context.Context, mediaType string, limit int, 
 		var c SearchCandidate
 		c.MediaType = mediaType
 		if err := rows.Scan(&c.MediaID, &c.Title, &c.Year,
-			&c.IMDBID, &c.TVDBID, &c.TMDBID, &c.Season, &c.Episode); err != nil {
+			&c.IMDBID, &c.TVDBID, &c.TMDBID, &c.Season, &c.Episode, &c.QualityProfileID); err != nil {
 			return nil, err
 		}
 		c.Priority = pri
@@ -100,7 +106,10 @@ func (s *Store) QueueSize(ctx context.Context, minResearchDays int) (int, error)
 	row := s.db.QueryRowContext(ctx, `
 		SELECT COUNT(*) FROM movies m
 		LEFT JOIN search_state ss ON ss.media_type = 'movie' AND ss.media_id = m.id
-		WHERE m.status = 'missing'
+		WHERE (
+		        m.status = 'missing'
+		        OR (m.status = 'unreleased' AND m.release_date != '' AND m.release_date <= date('now'))
+		      )
 		  AND m.monitoring_status = 'monitored'
 		  AND (ss.last_searched_at IS NULL OR ss.last_searched_at < ?)`, cutoff)
 	if err := row.Scan(&count); err != nil {

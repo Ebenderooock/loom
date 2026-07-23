@@ -18,6 +18,7 @@ import (
 	"github.com/ebenderooock/loom/internal/music"
 	"github.com/ebenderooock/loom/internal/musicsearch"
 	"github.com/ebenderooock/loom/internal/safety"
+	"github.com/ebenderooock/loom/internal/scheduler"
 	"github.com/ebenderooock/loom/internal/series"
 	"github.com/ebenderooock/loom/internal/server"
 	"github.com/ebenderooock/loom/internal/storage"
@@ -329,4 +330,30 @@ func (a workflowMediaAdapter) SetEpisodeMissing(ctx context.Context, episodeID s
 	// When a workflow fails, the episode can be re-searched
 	// For now, this is a no-op since episodes are tracked via has_file
 	return nil
+}
+
+// autoSearchGrabber adapts autosearch.Engine to the scheduler.Grabber interface
+// so the rolling searcher can trigger full search-and-grab cycles.
+type autoSearchGrabber struct {
+	engine *autosearch.Engine
+}
+
+func (g *autoSearchGrabber) Grab(ctx context.Context, c scheduler.SearchCandidate) error {
+	if g.engine == nil {
+		return nil
+	}
+	req := autosearch.SearchRequest{
+		MediaType:        c.MediaType,
+		MediaID:          c.MediaID,
+		Title:            c.Title,
+		Year:             c.Year,
+		QualityProfileID: c.QualityProfileID,
+		IMDBID:           c.IMDBID,
+		TVDBID:           c.TVDBID,
+		TMDBID:           c.TMDBID,
+		Season:           c.Season,
+		Episode:          c.Episode,
+	}
+	_, err := g.engine.SearchAndGrab(ctx, req)
+	return err
 }
