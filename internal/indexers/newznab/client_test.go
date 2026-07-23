@@ -223,6 +223,7 @@ func TestClient_FetchDownloadBodyLimits(t *testing.T) {
 		}))
 		defer srv.Close()
 		c := newTestClient(t, "http://unused.invalid")
+		c.http.Timeout = 15 * time.Second
 		_, err := c.FetchDownload(context.Background(), srv.URL)
 		if !errors.Is(err, ErrUpstream) {
 			t.Fatalf("err = %v, want ErrUpstream", err)
