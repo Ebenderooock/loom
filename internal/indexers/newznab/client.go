@@ -27,16 +27,28 @@ const (
 type attrFlavour int
 
 const (
-	flavourNewznab attrFlavour = iota
+	// flavourUnknown is the zero value and is never a valid flavour; it
+	// exists so an unset attrFlavour fails loudly instead of silently
+	// resolving to Newznab.
+	flavourUnknown attrFlavour = iota
+	flavourNewznab
 	flavourTorznab
 )
 
 func (f attrFlavour) kind() indexers.Kind {
-	if f == flavourTorznab {
+	switch f {
+	case flavourNewznab:
+		return KindNewznab
+	case flavourTorznab:
 		return KindTorznab
+	default:
+		panic(fmt.Sprintf("newznab: invalid attrFlavour %d", f))
 	}
-	return KindNewznab
 }
+
+// Compile-time assertion that *Client satisfies indexers.Indexer, so a
+// future drift in the interface method set is caught at build time.
+var _ indexers.Indexer = (*Client)(nil)
 
 // Client is the live Indexer for a single Newznab/Torznab endpoint.
 //
