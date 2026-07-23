@@ -410,7 +410,7 @@ func TestStickyTranscodeCounts(t *testing.T) {
 	conn := plexConn("c1", "Plex")
 	ctx := context.Background()
 	grace := 60 * time.Second
-	t0 := time.Date(2026, 6, 4, 20, 0, 0, 0, time.UTC)
+	t0 := time.Now().UTC().Add(-2 * time.Minute)
 
 	// First sample: transcoding. Second sample: direct-play. The play must still
 	// count as a transcode (sticky) and the bitrate must be retained.

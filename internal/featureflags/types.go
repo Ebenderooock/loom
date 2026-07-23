@@ -73,9 +73,9 @@ var Definitions = []FlagDef{
 	{
 		Key:         KeyPlugins,
 		Label:       "Plugins (Custom Scripts)",
-		Description: "Run admin-defined custom scripts when events fire (grab, import, playback). Plugins execute arbitrary commands as the Loom server process — this is NOT a security sandbox. Disabled by default; enable only if you trust the configured scripts.",
+		Description: "Run admin-defined custom scripts when events fire (grab, import, playback). Plugins execute arbitrary commands as the Loom server process — this is NOT a security sandbox. Enable only if you trust the configured scripts.",
 		Category:    "Diagnostics",
-		Default:     false,
+		Default:     true,
 	},
 	{
 		Key:         KeyMusic,
