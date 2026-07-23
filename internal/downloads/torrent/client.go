@@ -418,6 +418,8 @@ func (c *Client) SetSpeedLimits(downBytesPerSec, upBytesPerSec int64) {
 	c.mu.Unlock()
 }
 
+// Close releases client resources. The Rain RPC client does not hold open
+// streams, so this is currently a no-op.
 func (c *Client) Close() error {
 	return nil
 }

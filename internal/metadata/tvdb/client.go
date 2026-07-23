@@ -14,8 +14,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ebenderooock/loom/internal/metadata"
 	"golang.org/x/sync/singleflight"
+
+	"github.com/ebenderooock/loom/internal/metadata"
 )
 
 // Config holds TVDB API configuration.
@@ -152,7 +153,7 @@ func (c *Client) GetSeriesEpisodes(ctx context.Context, tvdbID int, seasonType s
 		}
 
 		if resp.StatusCode == http.StatusUnauthorized {
-			resp.Body.Close()
+			_ = resp.Body.Close()
 			c.setToken("")
 			if err := c.ensureToken(ctx); err != nil {
 				return nil, err
@@ -164,16 +165,16 @@ func (c *Client) GetSeriesEpisodes(ctx context.Context, tvdbID int, seasonType s
 		}
 
 		if resp.StatusCode == http.StatusNotFound {
-			resp.Body.Close()
+			_ = resp.Body.Close()
 			return nil, NewNotFoundError(fmt.Sprintf("series %d not found", tvdbID))
 		}
 		if resp.StatusCode != http.StatusOK {
 			body, err := readLimitedBody(resp.Body, maxTVDBErrorBodySize)
 			if err != nil {
-				resp.Body.Close()
+				_ = resp.Body.Close()
 				return nil, NewNetworkError(err)
 			}
-			resp.Body.Close()
+			_ = resp.Body.Close()
 			if resp.StatusCode >= 500 {
 				return nil, NewServerError(resp.StatusCode, string(body))
 			}
@@ -182,10 +183,10 @@ func (c *Client) GetSeriesEpisodes(ctx context.Context, tvdbID int, seasonType s
 
 		var er SeriesEpisodesResponse
 		if err := json.NewDecoder(resp.Body).Decode(&er); err != nil {
-			resp.Body.Close()
+			_ = resp.Body.Close()
 			return nil, NewNetworkError(err)
 		}
-		resp.Body.Close()
+		_ = resp.Body.Close()
 
 		if len(er.Data.Episodes) == 0 {
 			break

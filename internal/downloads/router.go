@@ -194,7 +194,7 @@ func (r *Router) handleIndexerResult(ctx context.Context, ev eventbus.Event) err
 				"client_id", res.ClientID, "download_id", res.ItemID)
 
 			// Enrich with metadata (non-blocking, fire-and-forget).
-			r.enqueueEnrichment(result, res.ItemID)
+			r.enqueueEnrichment(context.WithoutCancel(ctx), result, res.ItemID)
 
 			return nil
 		}
@@ -310,7 +310,7 @@ func (r *Router) Shutdown() error {
 	return nil
 }
 
-func (r *Router) enqueueEnrichment(result *indexers.Result, downloadID string) {
+func (r *Router) enqueueEnrichment(ctx context.Context, result *indexers.Result, downloadID string) {
 	r.enrichWG.Add(1)
 	go func() {
 		defer r.enrichWG.Done()
@@ -319,17 +319,19 @@ func (r *Router) enqueueEnrichment(result *indexers.Result, downloadID string) {
 			defer func() { <-r.enrichSem }()
 		case <-r.lifecycleCtx.Done():
 			return
+		case <-ctx.Done():
+			return
 		}
-		r.enrichMetadata(result, downloadID)
+		r.enrichMetadata(ctx, result, downloadID)
 	}()
 }
 
 // enrichMetadata is called in a background goroutine to enrich an indexer
 // Result with metadata from all providers. It publishes TopicMetadataEnriched
 // or TopicMetadataFailure to the event bus (non-blocking, fire-and-forget).
-func (r *Router) enrichMetadata(result *indexers.Result, downloadID string) {
+func (r *Router) enrichMetadata(ctx context.Context, result *indexers.Result, downloadID string) {
 	// Use the router lifecycle context so shutdown can cancel in-flight enrichment.
-	ctx, cancel := context.WithTimeout(r.lifecycleCtx, 15*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 
 	if r.metadataRouter == nil {

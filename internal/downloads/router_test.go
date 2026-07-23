@@ -317,7 +317,7 @@ func TestRouterShutdownWaitsForQueuedEnrichment(t *testing.T) {
 	cancel()
 	router.SetLifecycleContext(lifecycleCtx)
 
-	router.enqueueEnrichment(&indexers.Result{GUID: "g1", Title: "t1"}, "d1")
+	router.enqueueEnrichment(context.Background(), &indexers.Result{GUID: "g1", Title: "t1"}, "d1")
 
 	done := make(chan struct{})
 	go func() {
