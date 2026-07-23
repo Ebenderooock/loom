@@ -196,6 +196,59 @@ func TestClient_ContextCancel(t *testing.T) {
 	}
 }
 
+func TestClient_RejectsOversizedAPIBody(t *testing.T) {
+	t.Parallel()
+	fs := newFixtureServer(t)
+	fs.on("caps", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/xml")
+		_, _ = w.Write([]byte(strings.Repeat("x", int(maxAPIBody+1))))
+	})
+	c := newTestClient(t, fs.url())
+	err := c.Test(context.Background())
+	if !errors.Is(err, ErrUpstream) {
+		t.Fatalf("err = %v, want ErrUpstream", err)
+	}
+	if !strings.Contains(err.Error(), "response too large") {
+		t.Fatalf("expected size limit error, got %v", err)
+	}
+}
+
+func TestClient_FetchDownloadBodyLimits(t *testing.T) {
+	t.Parallel()
+	t.Run("oversized", func(t *testing.T) {
+		t.Parallel()
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(strings.Repeat("x", int(maxDownloadBody+1))))
+		}))
+		defer srv.Close()
+		c := newTestClient(t, "http://unused.invalid")
+		_, err := c.FetchDownload(context.Background(), srv.URL)
+		if !errors.Is(err, ErrUpstream) {
+			t.Fatalf("err = %v, want ErrUpstream", err)
+		}
+		if !strings.Contains(err.Error(), "response too large") {
+			t.Fatalf("expected size limit error, got %v", err)
+		}
+	})
+	t.Run("under-limit", func(t *testing.T) {
+		t.Parallel()
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("torrent-bytes"))
+		}))
+		defer srv.Close()
+		c := newTestClient(t, "http://unused.invalid")
+		body, err := c.FetchDownload(context.Background(), srv.URL)
+		if err != nil {
+			t.Fatalf("FetchDownload: %v", err)
+		}
+		if string(body) != "torrent-bytes" {
+			t.Fatalf("unexpected body: %q", string(body))
+		}
+	})
+}
+
 // stubCapsCache is a thread-safe in-memory CapsCache for testing the
 // preload + persist hooks.
 type stubCapsCache struct {
