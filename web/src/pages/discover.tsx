@@ -105,7 +105,7 @@ function DiscoverGrid({ mediaType }: { mediaType: MediaType }) {
   }
   if (isError) {
     return (
-      <p className="text-sm text-destructive">
+      <p className="text-destructive text-sm">
         {error?.message ?? "Failed to load discover feed."}
       </p>
     );
@@ -113,9 +113,9 @@ function DiscoverGrid({ mediaType }: { mediaType: MediaType }) {
   if (!items || items.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
-        <Compass className="h-10 w-10 text-muted-foreground" />
+        <Compass className="text-muted-foreground h-10 w-10" />
         <p className="text-sm font-medium">Nothing to discover yet</p>
-        <p className="max-w-md text-xs text-muted-foreground">
+        <p className="text-muted-foreground max-w-md text-xs">
           Set an import list to <span className="font-medium">Discover</span>{" "}
           mode in Import Lists, then sync it. Its{" "}
           {mediaType === "series" ? "shows" : "movies"} will appear here for you
@@ -220,13 +220,13 @@ function DiscoverGrid({ mediaType }: { mediaType: MediaType }) {
           </Button>
         )}
 
-        <span className="ml-auto text-xs text-muted-foreground">
+        <span className="text-muted-foreground ml-auto text-xs">
           {visible.length} of {items.length}
         </span>
       </div>
 
       {visible.length === 0 ? (
-        <p className="py-12 text-center text-sm text-muted-foreground">
+        <p className="text-muted-foreground py-12 text-center text-sm">
           No items match the selected filters.
         </p>
       ) : (
@@ -251,8 +251,8 @@ function DiscoverCard({ item }: { item: DiscoverItem }) {
   };
 
   return (
-    <div className="group flex flex-col overflow-hidden rounded-lg border bg-card">
-      <div className="relative aspect-[2/3] w-full bg-muted">
+    <div className="group bg-card flex flex-col overflow-hidden rounded-lg border">
+      <div className="bg-muted relative aspect-[2/3] w-full">
         {item.poster_path ? (
           <img
             src={item.poster_path}
@@ -261,12 +261,12 @@ function DiscoverCard({ item }: { item: DiscoverItem }) {
             className="h-full w-full object-cover"
           />
         ) : (
-          <div className="flex h-full w-full items-center justify-center p-2 text-center text-xs text-muted-foreground">
+          <div className="text-muted-foreground flex h-full w-full items-center justify-center p-2 text-center text-xs">
             {item.title}
           </div>
         )}
         {inLibrary && (
-          <Badge className="absolute left-2 top-2" variant="secondary">
+          <Badge className="absolute top-2 left-2" variant="secondary">
             In Library
           </Badge>
         )}
@@ -278,7 +278,7 @@ function DiscoverCard({ item }: { item: DiscoverItem }) {
             {item.title}
           </p>
           {item.year ? (
-            <p className="text-xs text-muted-foreground">{item.year}</p>
+            <p className="text-muted-foreground text-xs">{item.year}</p>
           ) : null}
         </div>
 
@@ -304,7 +304,7 @@ function DiscoverCard({ item }: { item: DiscoverItem }) {
         )}
 
         {addMut.isError && (
-          <p className="text-xs text-destructive">
+          <p className="text-destructive text-xs">
             {(addMut.error as Error)?.message ?? "Failed to add"}
           </p>
         )}

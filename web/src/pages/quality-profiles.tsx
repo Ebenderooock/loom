@@ -508,7 +508,7 @@ function ProfileDialog({
                             </Badge>
                           )}
                         </div>
-                        <span className="text-xs tabular-nums text-zinc-500">
+                        <span className="text-xs text-zinc-500 tabular-nums">
                           {def.resolution}
                         </span>
                       </label>

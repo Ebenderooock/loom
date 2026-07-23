@@ -23,7 +23,7 @@ export function SeriesListRow({
 
   return (
     <TableRow
-      className="cursor-pointer transition-colors hover:bg-accent/5"
+      className="hover:bg-accent/5 cursor-pointer transition-colors"
       onClick={onClick}
     >
       <TableCell
@@ -36,7 +36,7 @@ export function SeriesListRow({
         <Checkbox checked={selected} />
       </TableCell>
       <TableCell className="w-12">
-        <div className="aspect-[2/3] w-8 shrink-0 overflow-hidden rounded bg-muted">
+        <div className="bg-muted aspect-[2/3] w-8 shrink-0 overflow-hidden rounded">
           {series.posterPath ? (
             <img
               src={`${TMDB_IMG}/w92${series.posterPath}`}
@@ -46,7 +46,7 @@ export function SeriesListRow({
             />
           ) : (
             <div className="flex h-full w-full items-center justify-center">
-              <Tv className="h-3 w-3 text-muted-foreground/30" />
+              <Tv className="text-muted-foreground/30 h-3 w-3" />
             </div>
           )}
         </div>
@@ -55,20 +55,20 @@ export function SeriesListRow({
       <TableCell className="text-muted-foreground">
         {series.network || "—"}
       </TableCell>
-      <TableCell className="text-xs text-muted-foreground">
+      <TableCell className="text-muted-foreground text-xs">
         {seasonCount > 0 ? `${seasonCount} seasons` : "—"}
       </TableCell>
       <TableCell>
         <SeriesStatusBadge status={series.status} />
       </TableCell>
-      <TableCell className="text-xs text-muted-foreground">
+      <TableCell className="text-muted-foreground text-xs">
         {profile?.name ?? "—"}
       </TableCell>
       <TableCell>
         {series.monitoringStatus === "monitored" ? (
-          <Eye className="h-4 w-4 text-accent" />
+          <Eye className="text-accent h-4 w-4" />
         ) : (
-          <EyeOff className="h-4 w-4 text-muted-foreground/50" />
+          <EyeOff className="text-muted-foreground/50 h-4 w-4" />
         )}
       </TableCell>
       <TableCell>
@@ -81,7 +81,7 @@ export function SeriesListRow({
           "—"
         )}
       </TableCell>
-      <TableCell className="text-xs text-muted-foreground">
+      <TableCell className="text-muted-foreground text-xs">
         {series.createdAt
           ? new Date(series.createdAt).toLocaleDateString()
           : "—"}

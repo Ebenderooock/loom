@@ -106,7 +106,7 @@ function NavLinkRow({
       className={cn(
         "flex items-center gap-2.5 rounded-md px-3 py-2 text-[13px] font-medium transition-colors",
         active
-          ? "border-l-2 border-accent bg-accent/15 text-accent shadow-sm shadow-accent/5"
+          ? "border-accent bg-accent/15 text-accent shadow-accent/5 border-l-2 shadow-sm"
           : "hover:bg-accent/8 text-muted-foreground hover:text-foreground",
         collapsed && "justify-center px-2",
       )}
@@ -173,7 +173,7 @@ function SidebarNav({
   return (
     <nav
       aria-label="Primary"
-      className="scrollbar-thin flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto p-2"
+      className="flex min-h-0 flex-1 scrollbar-thin flex-col gap-0.5 overflow-y-auto p-2"
     >
       {navItems.map((item) => (
         <NavLinkRow
@@ -186,7 +186,7 @@ function SidebarNav({
         />
       ))}
 
-      <div className="mx-2 my-2 border-t border-border/50" />
+      <div className="border-border/50 mx-2 my-2 border-t" />
 
       <NavLinkRow
         item={SETTINGS_NAV}
@@ -201,7 +201,7 @@ function SidebarNav({
 
 function Brand({ collapsed }: { collapsed?: boolean }) {
   return (
-    <div className="flex h-14 items-center gap-2.5 border-b border-border/50 px-4">
+    <div className="border-border/50 flex h-14 items-center gap-2.5 border-b px-4">
       <img
         src="/loom-logo.png"
         alt=""
@@ -236,17 +236,17 @@ function AppLayoutInner({ children }: { children?: React.ReactNode }) {
   });
 
   return (
-    <div className="flex min-h-screen w-full bg-background text-foreground">
+    <div className="bg-background text-foreground flex min-h-screen w-full">
       <aside
         aria-label="Sidebar"
         className={cn(
-          "hidden shrink-0 border-r border-border/50 bg-card/80 backdrop-blur-xl md:sticky md:top-0 md:flex md:h-screen md:min-h-0 md:flex-col",
+          "border-border/50 bg-card/80 hidden shrink-0 border-r backdrop-blur-xl md:sticky md:top-0 md:flex md:h-screen md:min-h-0 md:flex-col",
           collapsed ? "md:w-16" : "md:w-56",
         )}
       >
         <Brand collapsed={collapsed} />
         <SidebarNav collapsed={collapsed} />
-        <div className="shrink-0 border-t border-border p-2">
+        <div className="border-border shrink-0 border-t p-2">
           <Button
             variant="ghost"
             size="sm"
@@ -261,7 +261,7 @@ function AppLayoutInner({ children }: { children?: React.ReactNode }) {
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-border/50 bg-background/70 px-4 backdrop-blur-xl">
+        <header className="border-border/50 bg-background/70 sticky top-0 z-30 flex h-14 items-center gap-2 border-b px-4 backdrop-blur-xl">
           {!paletteOpen ? (
             <>
               <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
@@ -276,7 +276,7 @@ function AppLayoutInner({ children }: { children?: React.ReactNode }) {
                   </Button>
                 </SheetTrigger>
                 <SheetContent side="left" className="w-64 p-0">
-                  <SheetHeader className="border-b border-border p-4">
+                  <SheetHeader className="border-border border-b p-4">
                     <SheetTitle>Loom</SheetTitle>
                   </SheetHeader>
                   <SidebarNav onNavigate={() => setMobileOpen(false)} />
@@ -300,11 +300,11 @@ function AppLayoutInner({ children }: { children?: React.ReactNode }) {
 
               {header.title && (
                 <div className="hidden min-w-0 items-baseline gap-2 md:flex">
-                  <span className="whitespace-nowrap text-sm font-semibold">
+                  <span className="text-sm font-semibold whitespace-nowrap">
                     {header.title}
                   </span>
                   {header.subtitle && (
-                    <span className="truncate whitespace-nowrap text-xs text-muted-foreground">
+                    <span className="text-muted-foreground truncate text-xs whitespace-nowrap">
                       {header.subtitle}
                     </span>
                   )}
@@ -317,13 +317,13 @@ function AppLayoutInner({ children }: { children?: React.ReactNode }) {
                 <Button
                   variant="outline"
                   size="sm"
-                  className="gap-2 border-border/50 hover:border-accent/30 hover:shadow-sm hover:shadow-accent/10"
+                  className="border-border/50 hover:border-accent/30 hover:shadow-accent/10 gap-2 hover:shadow-sm"
                   onClick={() => setPaletteOpen(true)}
                   aria-label="Open command palette"
                 >
                   <Search className="h-4 w-4" />
                   <span className="hidden sm:inline">Quick Search</span>
-                  <kbd className="hidden rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-[10px] font-medium sm:inline-block">
+                  <kbd className="border-border bg-muted hidden rounded border px-1.5 py-0.5 font-mono text-[10px] font-medium sm:inline-block">
                     ⌘K
                   </kbd>
                 </Button>
@@ -338,7 +338,7 @@ function AppLayoutInner({ children }: { children?: React.ReactNode }) {
                     >
                       <span
                         aria-hidden="true"
-                        className="flex h-8 w-8 items-center justify-center rounded-full bg-muted text-xs font-semibold"
+                        className="bg-muted flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold"
                       >
                         LM
                       </span>

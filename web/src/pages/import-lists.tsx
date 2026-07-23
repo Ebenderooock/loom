@@ -95,12 +95,12 @@ function ListsTab() {
       {showForm && <AddListForm onDone={() => setShowForm(false)} />}
 
       {(!lists || lists.length === 0) && !showForm && (
-        <p className="text-sm text-muted-foreground">
+        <p className="text-muted-foreground text-sm">
           No import lists configured. Click "Add List" to get started.
         </p>
       )}
 
-      <div className="divide-y divide-border rounded-md border border-border">
+      <div className="divide-border border-border divide-y rounded-md border">
         {lists?.map((l) => (
           <ListRow
             key={l.id}
@@ -142,7 +142,7 @@ function ListRow({
 
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-medium">{list.name}</p>
-          <p className="text-xs text-muted-foreground">
+          <p className="text-muted-foreground text-xs">
             {typeMeta?.label ?? list.list_type} · {list.media_type} ·{" "}
             {list.item_count ?? 0} items
           </p>
@@ -157,7 +157,7 @@ function ListRow({
         </Badge>
 
         {list.last_sync && (
-          <span className="whitespace-nowrap text-xs text-muted-foreground">
+          <span className="text-muted-foreground text-xs whitespace-nowrap">
             Last sync: {new Date(list.last_sync).toLocaleString()}
           </span>
         )}
@@ -238,7 +238,7 @@ function ListItemsPanel({ listId }: { listId: string }) {
   }
   if (!data?.items?.length) {
     return (
-      <div className="px-8 py-2 text-sm text-muted-foreground">
+      <div className="text-muted-foreground px-8 py-2 text-sm">
         No items fetched yet. Try syncing the list.
       </div>
     );
@@ -248,7 +248,7 @@ function ListItemsPanel({ listId }: { listId: string }) {
     <div className="px-8 pb-3">
       <table className="w-full text-sm">
         <thead>
-          <tr className="border-b border-border text-left text-xs text-muted-foreground">
+          <tr className="border-border text-muted-foreground border-b text-left text-xs">
             <th className="py-1 pr-4">Title</th>
             <th className="py-1 pr-4">Year</th>
             <th className="py-1 pr-4">IMDb</th>
@@ -260,7 +260,7 @@ function ListItemsPanel({ listId }: { listId: string }) {
           {data.items.map((item) => (
             <tr
               key={item.id}
-              className="border-b border-border/50 last:border-0"
+              className="border-border/50 border-b last:border-0"
             >
               <td className="py-1 pr-4">{item.title}</td>
               <td className="py-1 pr-4">{item.year ?? "—"}</td>
@@ -270,7 +270,7 @@ function ListItemsPanel({ listId }: { listId: string }) {
               <td className="py-1 pr-4">
                 <StatusBadge status={item.status} />
               </td>
-              <td className="py-1 text-xs text-muted-foreground">
+              <td className="text-muted-foreground py-1 text-xs">
                 {new Date(item.last_seen).toLocaleString()}
               </td>
             </tr>
@@ -439,7 +439,7 @@ function AddListForm({ onDone }: { onDone: () => void }) {
             </div>
 
             {isTraktType && (
-              <p className="col-span-full text-xs text-muted-foreground">
+              <p className="text-muted-foreground col-span-full text-xs">
                 Credentials are automatically used from your Trakt connection in
                 Settings → Connections.
               </p>
@@ -449,11 +449,11 @@ function AddListForm({ onDone }: { onDone: () => void }) {
               <div className="col-span-full space-y-2">
                 <Label htmlFor="add-trakt-list">Trakt List</Label>
                 {traktLoading ? (
-                  <p className="text-sm text-muted-foreground">
+                  <p className="text-muted-foreground text-sm">
                     Loading your Trakt lists…
                   </p>
                 ) : traktError ? (
-                  <p className="text-sm text-destructive">
+                  <p className="text-destructive text-sm">
                     Could not load Trakt lists. Please connect Trakt in Settings
                     → Connections first.
                   </p>
@@ -519,7 +519,7 @@ function AddListForm({ onDone }: { onDone: () => void }) {
                   <SelectItem value="discover">Discover (list only)</SelectItem>
                 </SelectContent>
               </Select>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-muted-foreground text-xs">
                 {form.mode === "discover"
                   ? "Items appear in Discover for manual adding; nothing is added automatically."
                   : "Every fetched item is automatically added to your library."}
@@ -635,7 +635,7 @@ function AddListForm({ onDone }: { onDone: () => void }) {
           </div>
 
           {createMut.isError && (
-            <p className="text-sm text-destructive">
+            <p className="text-destructive text-sm">
               {(createMut.error as Error).message}
             </p>
           )}
@@ -699,16 +699,16 @@ function ExclusionsTab() {
       {isLoading ? (
         <ListSkeleton rows={3} />
       ) : !exclusions?.length ? (
-        <p className="text-sm text-muted-foreground">
+        <p className="text-muted-foreground text-sm">
           No exclusions. Items you exclude won't be re-added by any import list.
         </p>
       ) : (
-        <div className="divide-y divide-border rounded-md border border-border">
+        <div className="divide-border border-border divide-y rounded-md border">
           {exclusions.map((ex: ImportListExclusion) => (
             <div key={ex.id} className="flex items-center gap-3 px-4 py-2">
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-medium">{ex.title}</p>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-muted-foreground text-xs">
                   {[ex.imdb_id, ex.tmdb_id, ex.tvdb_id]
                     .filter(Boolean)
                     .join(" · ") || "No external IDs"}

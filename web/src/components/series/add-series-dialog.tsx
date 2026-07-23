@@ -172,16 +172,16 @@ export function AddSeriesDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="flex max-h-[85vh] max-w-3xl flex-col gap-0 p-0">
-        <DialogHeader className="border-b border-border/50 p-6 pb-4">
+        <DialogHeader className="border-border/50 border-b p-6 pb-4">
           <DialogTitle className="flex items-center gap-2 text-xl">
-            <Tv className="h-5 w-5 text-accent" />
+            <Tv className="text-accent h-5 w-5" />
             {selectedSeries ? "Add Series" : "Search Series"}
           </DialogTitle>
         </DialogHeader>
 
         {selectedSeries ? (
           <div className="flex-1 overflow-y-auto">
-            <div className="relative h-48 overflow-hidden bg-muted">
+            <div className="bg-muted relative h-48 overflow-hidden">
               {selectedSeries.posterPath && (
                 <img
                   src={`${TMDB_IMG}/w780${selectedSeries.posterPath}`}
@@ -189,17 +189,17 @@ export function AddSeriesDialog({
                   alt=""
                 />
               )}
-              <div className="absolute inset-0 bg-gradient-to-t from-background to-transparent" />
+              <div className="from-background absolute inset-0 bg-gradient-to-t to-transparent" />
               <button
                 onClick={() => setSelectedSeries(null)}
-                className="absolute left-4 top-4 flex items-center gap-1 rounded-full bg-black/40 px-3 py-1.5 text-sm text-white/80 hover:text-white"
+                className="absolute top-4 left-4 flex items-center gap-1 rounded-full bg-black/40 px-3 py-1.5 text-sm text-white/80 hover:text-white"
               >
                 <ArrowLeft className="h-4 w-4" /> Back to results
               </button>
             </div>
             <div className="relative z-10 -mt-16 p-6">
               <div className="flex gap-5">
-                <div className="w-32 shrink-0 overflow-hidden rounded-lg border-2 border-background shadow-xl">
+                <div className="border-background w-32 shrink-0 overflow-hidden rounded-lg border-2 shadow-xl">
                   {selectedSeries.posterPath ? (
                     <img
                       src={`${TMDB_IMG}/w300${selectedSeries.posterPath}`}
@@ -207,8 +207,8 @@ export function AddSeriesDialog({
                       className="aspect-[2/3] w-full object-cover"
                     />
                   ) : (
-                    <div className="flex aspect-[2/3] w-full items-center justify-center bg-muted">
-                      <Tv className="h-8 w-8 text-muted-foreground/30" />
+                    <div className="bg-muted flex aspect-[2/3] w-full items-center justify-center">
+                      <Tv className="text-muted-foreground/30 h-8 w-8" />
                     </div>
                   )}
                 </div>
@@ -216,7 +216,7 @@ export function AddSeriesDialog({
                   <h2 className="truncate text-2xl font-bold">
                     {selectedSeries.title}
                   </h2>
-                  <div className="mt-1 flex items-center gap-3 text-sm text-muted-foreground">
+                  <div className="text-muted-foreground mt-1 flex items-center gap-3 text-sm">
                     {selectedSeries.year > 0 && (
                       <span>{selectedSeries.year}</span>
                     )}
@@ -229,7 +229,7 @@ export function AddSeriesDialog({
                       </span>
                     )}
                   </div>
-                  <p className="mt-3 line-clamp-3 text-sm leading-relaxed text-muted-foreground">
+                  <p className="text-muted-foreground mt-3 line-clamp-3 text-sm leading-relaxed">
                     {selectedSeries.overview || "No overview available."}
                   </p>
                 </div>
@@ -306,7 +306,7 @@ export function AddSeriesDialog({
                 <div className="flex-1">
                   <label
                     htmlFor="add-series-monitor"
-                    className="mb-1 block text-xs text-muted-foreground"
+                    className="text-muted-foreground mb-1 block text-xs"
                   >
                     Monitor
                   </label>
@@ -361,10 +361,10 @@ export function AddSeriesDialog({
               </div>
 
               {addError && (
-                <p className="mt-3 text-sm text-destructive">{addError}</p>
+                <p className="text-destructive mt-3 text-sm">{addError}</p>
               )}
 
-              <div className="mt-6 flex justify-end gap-3 border-t border-border/50 pt-4">
+              <div className="border-border/50 mt-6 flex justify-end gap-3 border-t pt-4">
                 <Button
                   variant="outline"
                   onClick={() => setSelectedSeries(null)}
@@ -391,7 +391,7 @@ export function AddSeriesDialog({
           <>
             <div className="px-6 pt-4">
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
                 <Input
                   ref={searchInputRef}
                   placeholder="Search for a series to add..."
@@ -400,20 +400,20 @@ export function AddSeriesDialog({
                   className="h-11 pl-9"
                 />
                 {searching && (
-                  <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-muted-foreground" />
+                  <Loader2 className="text-muted-foreground absolute top-1/2 right-3 h-4 w-4 -translate-y-1/2 animate-spin" />
                 )}
               </div>
             </div>
             <div className="flex-1 overflow-y-auto px-6 pb-6">
               {results.length === 0 && searchTerm.length >= 2 && !searching ? (
-                <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
+                <div className="text-muted-foreground flex flex-col items-center justify-center py-16">
                   <Tv className="mb-3 h-12 w-12 opacity-30" />
                   <p className="text-sm">
                     No series found for &ldquo;{searchTerm}&rdquo;
                   </p>
                 </div>
               ) : results.length === 0 && searchTerm.length < 2 ? (
-                <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
+                <div className="text-muted-foreground flex flex-col items-center justify-center py-16">
                   <Search className="mb-3 h-12 w-12 opacity-30" />
                   <p className="text-sm">Start typing to search TMDB</p>
                 </div>
@@ -429,11 +429,11 @@ export function AddSeriesDialog({
                         className={cn(
                           "flex w-full items-start gap-4 rounded-lg border p-3 text-left transition-colors",
                           inLibrary
-                            ? "cursor-not-allowed border-border/30 opacity-50"
-                            : "cursor-pointer border-border/50 hover:border-accent/50 hover:bg-accent/5",
+                            ? "border-border/30 cursor-not-allowed opacity-50"
+                            : "border-border/50 hover:border-accent/50 hover:bg-accent/5 cursor-pointer",
                         )}
                       >
-                        <div className="aspect-[2/3] w-12 shrink-0 overflow-hidden rounded bg-muted">
+                        <div className="bg-muted aspect-[2/3] w-12 shrink-0 overflow-hidden rounded">
                           {r.posterPath ? (
                             <img
                               src={`${TMDB_IMG}/w92${r.posterPath}`}
@@ -442,7 +442,7 @@ export function AddSeriesDialog({
                             />
                           ) : (
                             <div className="flex h-full w-full items-center justify-center">
-                              <Tv className="h-4 w-4 text-muted-foreground/30" />
+                              <Tv className="text-muted-foreground/30 h-4 w-4" />
                             </div>
                           )}
                         </div>
@@ -452,17 +452,17 @@ export function AddSeriesDialog({
                               {r.title}
                             </h4>
                             {r.year > 0 && (
-                              <span className="shrink-0 text-xs text-muted-foreground">
+                              <span className="text-muted-foreground shrink-0 text-xs">
                                 ({r.year})
                               </span>
                             )}
                           </div>
                           {r.network && (
-                            <p className="mt-0.5 text-xs text-muted-foreground">
+                            <p className="text-muted-foreground mt-0.5 text-xs">
                               {r.network}
                             </p>
                           )}
-                          <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">
+                          <p className="text-muted-foreground mt-0.5 line-clamp-2 text-xs">
                             {r.overview}
                           </p>
                         </div>
@@ -472,7 +472,7 @@ export function AddSeriesDialog({
                               <Check className="h-3.5 w-3.5" /> In Library
                             </span>
                           ) : (
-                            <span className="text-xs text-accent">Add →</span>
+                            <span className="text-accent text-xs">Add →</span>
                           )}
                         </div>
                       </button>

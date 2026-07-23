@@ -138,7 +138,7 @@ export function PluginsPage() {
 
       <Card className="border-destructive/30 bg-destructive/5">
         <CardContent className="flex items-start gap-3 pt-6 text-sm">
-          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-destructive" />
+          <AlertTriangle className="text-destructive mt-0.5 h-5 w-5 shrink-0" />
           <div>
             <p className="font-medium">Security notice</p>
             <p className="text-muted-foreground">
@@ -154,7 +154,7 @@ export function PluginsPage() {
       </Card>
 
       <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">
+        <p className="text-muted-foreground text-sm">
           {plugins?.length ?? 0} plugin{plugins?.length === 1 ? "" : "s"}{" "}
           configured
         </p>
@@ -167,7 +167,7 @@ export function PluginsPage() {
         <Skeleton className="h-32 w-full" />
       ) : !plugins || plugins.length === 0 ? (
         <Card>
-          <CardContent className="flex flex-col items-center gap-2 py-10 text-center text-muted-foreground">
+          <CardContent className="text-muted-foreground flex flex-col items-center gap-2 py-10 text-center">
             <Puzzle className="h-8 w-8" />
             <p>
               No plugins yet. Add one to run a script on grab/import/playback.
@@ -191,7 +191,7 @@ export function PluginsPage() {
                       <Badge variant="outline">Disabled</Badge>
                     )}
                   </CardTitle>
-                  <CardDescription className="break-all font-mono text-xs">
+                  <CardDescription className="font-mono text-xs break-all">
                     {(p.source || "").split("\n")[0]?.slice(0, 80) ||
                       "JavaScript plugin"}
                   </CardDescription>
@@ -254,7 +254,7 @@ export function PluginsPage() {
                       }
                     }}
                   >
-                    <Trash2 className="h-4 w-4 text-destructive" />
+                    <Trash2 className="text-destructive h-4 w-4" />
                   </Button>
                 </div>
               </CardHeader>
@@ -425,7 +425,7 @@ function PluginDialog({
               </div>
             </div>
             {githubOpen && (
-              <div className="space-y-1.5 rounded-md border border-border p-2">
+              <div className="border-border space-y-1.5 rounded-md border p-2">
                 <div className="flex items-center gap-2">
                   <Input
                     value={githubUrl}
@@ -451,7 +451,7 @@ function PluginDialog({
                     Import
                   </Button>
                 </div>
-                <p className="text-[11px] text-muted-foreground">
+                <p className="text-muted-foreground text-[11px]">
                   Public GitHub files only. Paste a file URL (the “…/blob/…”
                   link) or a raw.githubusercontent.com URL.
                 </p>
@@ -466,7 +466,7 @@ function PluginDialog({
                 typeDefs={typeDefs}
               />
             </React.Suspense>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-muted-foreground text-xs">
               ES5.1+ (goja). <code>fetch</code> supports http/https with body
               and response size caps. Type <code>event.</code> for available
               fields per event.
@@ -504,22 +504,22 @@ function PluginDialog({
           <div className="space-y-1.5">
             <Label>Environment variables (optional)</Label>
             <textarea
-              className="w-full rounded-md border border-border bg-background px-3 py-2 font-mono text-sm"
+              className="border-border bg-background w-full rounded-md border px-3 py-2 font-mono text-sm"
               rows={3}
               value={envText}
               onChange={(e) => setEnvText(e.target.value)}
               placeholder={"KEY=value\nANOTHER=value"}
             />
-            <p className="text-xs text-muted-foreground">
+            <p className="text-muted-foreground text-xs">
               One per line. Exposed to the script as the <code>env</code>{" "}
               global.
             </p>
           </div>
 
-          <div className="flex items-center justify-between rounded-md border border-border p-3">
+          <div className="border-border flex items-center justify-between rounded-md border p-3">
             <div>
               <Label>Enabled</Label>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-muted-foreground text-xs">
                 Run this plugin when its events fire.
               </p>
             </div>
@@ -562,7 +562,7 @@ function RunsDialog({
         {isLoading ? (
           <Skeleton className="h-32 w-full" />
         ) : !runs || runs.length === 0 ? (
-          <p className="py-6 text-center text-sm text-muted-foreground">
+          <p className="text-muted-foreground py-6 text-center text-sm">
             No runs recorded yet.
           </p>
         ) : (
@@ -580,7 +580,7 @@ function RunsDialog({
 function RunRow({ run }: { run: PluginRun }) {
   const [open, setOpen] = React.useState(false);
   return (
-    <div className="rounded-md border border-border p-3 text-sm">
+    <div className="border-border rounded-md border p-3 text-sm">
       <button
         className="flex w-full items-center justify-between gap-2 text-left"
         onClick={() => setOpen((o) => !o)}
@@ -589,38 +589,38 @@ function RunRow({ run }: { run: PluginRun }) {
           {run.success ? (
             <CheckCircle2 className="h-4 w-4 text-emerald-500" />
           ) : (
-            <XCircle className="h-4 w-4 text-destructive" />
+            <XCircle className="text-destructive h-4 w-4" />
           )}
           <span className="font-mono text-xs">{run.topic}</span>
-          <span className="text-xs text-muted-foreground">
+          <span className="text-muted-foreground text-xs">
             {run.duration_ms}ms
           </span>
         </span>
-        <span className="text-xs text-muted-foreground">
+        <span className="text-muted-foreground text-xs">
           {new Date(run.started_at).toLocaleString()}
         </span>
       </button>
       {run.error_msg && (
-        <p className="mt-1 text-xs text-destructive">{run.error_msg}</p>
+        <p className="text-destructive mt-1 text-xs">{run.error_msg}</p>
       )}
       {open && (
         <div className="mt-2 space-y-2">
           {run.stdout && (
             <div>
-              <p className="text-xs font-medium text-muted-foreground">
+              <p className="text-muted-foreground text-xs font-medium">
                 stdout
               </p>
-              <pre className="max-h-48 overflow-auto rounded bg-muted p-2 text-[11px]">
+              <pre className="bg-muted max-h-48 overflow-auto rounded p-2 text-[11px]">
                 {run.stdout}
               </pre>
             </div>
           )}
           {run.stderr && (
             <div>
-              <p className="text-xs font-medium text-muted-foreground">
+              <p className="text-muted-foreground text-xs font-medium">
                 stderr
               </p>
-              <pre className="max-h-48 overflow-auto rounded bg-muted p-2 text-[11px]">
+              <pre className="bg-muted max-h-48 overflow-auto rounded p-2 text-[11px]">
                 {run.stderr}
               </pre>
             </div>

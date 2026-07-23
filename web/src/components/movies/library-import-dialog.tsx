@@ -213,7 +213,7 @@ export function LibraryImportDialog({
           {/* Folder selection */}
           {!scanResult && !scanning && (
             <div className="space-y-4">
-              <p className="text-sm text-muted-foreground">
+              <p className="text-muted-foreground text-sm">
                 Scan a library to discover and import existing movies. Files
                 will be matched against TMDB automatically.
               </p>
@@ -221,7 +221,7 @@ export function LibraryImportDialog({
               <div className="space-y-2">
                 <span className="text-sm font-medium">Library</span>
                 {libraries.length === 0 ? (
-                  <p className="text-sm text-destructive">
+                  <p className="text-destructive text-sm">
                     No libraries configured. Add one in Settings first.
                   </p>
                 ) : (
@@ -232,8 +232,8 @@ export function LibraryImportDialog({
                         onClick={() => setSelectedFolder(f.id)}
                         className={`w-full rounded-md px-3 py-2 text-left text-sm transition-colors ${
                           selectedFolder === f.id
-                            ? "border border-primary/30 bg-primary/10 text-primary"
-                            : "border border-transparent bg-muted/30 hover:bg-muted/50"
+                            ? "border-primary/30 bg-primary/10 text-primary border"
+                            : "bg-muted/30 hover:bg-muted/50 border border-transparent"
                         }`}
                       >
                         {f.path}
@@ -258,16 +258,16 @@ export function LibraryImportDialog({
           {scanning && scanResult && (
             <div className="space-y-4">
               <div className="flex items-center gap-2 text-sm">
-                <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                <Loader2 className="text-primary h-4 w-4 animate-spin" />
                 <span>Scanning {scanResult.libraryPath}...</span>
               </div>
               <Progress value={progress} className="h-2" />
               <div className="grid grid-cols-3 gap-3 text-center">
-                <div className="rounded-lg bg-muted/30 p-3">
+                <div className="bg-muted/30 rounded-lg p-3">
                   <div className="text-2xl font-bold">
                     {scanResult.totalFiles}
                   </div>
-                  <div className="text-xs text-muted-foreground">
+                  <div className="text-muted-foreground text-xs">
                     Files Found
                   </div>
                 </div>
@@ -275,13 +275,13 @@ export function LibraryImportDialog({
                   <div className="text-2xl font-bold text-emerald-500">
                     {scanResult.matched}
                   </div>
-                  <div className="text-xs text-muted-foreground">Matched</div>
+                  <div className="text-muted-foreground text-xs">Matched</div>
                 </div>
                 <div className="rounded-lg bg-amber-500/10 p-3">
                   <div className="text-2xl font-bold text-amber-500">
                     {scanResult.unmatched}
                   </div>
-                  <div className="text-xs text-muted-foreground">Unmatched</div>
+                  <div className="text-muted-foreground text-xs">Unmatched</div>
                 </div>
               </div>
             </div>
@@ -294,7 +294,7 @@ export function LibraryImportDialog({
                 {scanResult.status === "completed" ? (
                   <CheckCircle2 className="h-5 w-5 text-emerald-500" />
                 ) : (
-                  <AlertCircle className="h-5 w-5 text-destructive" />
+                  <AlertCircle className="text-destructive h-5 w-5" />
                 )}
                 <span className="font-medium">
                   Scan{" "}
@@ -303,38 +303,38 @@ export function LibraryImportDialog({
               </div>
 
               <div className="grid grid-cols-4 gap-3 text-center">
-                <div className="rounded-lg bg-muted/30 p-3">
+                <div className="bg-muted/30 rounded-lg p-3">
                   <div className="text-xl font-bold">
                     {scanResult.totalFiles}
                   </div>
-                  <div className="text-xs text-muted-foreground">Total</div>
+                  <div className="text-muted-foreground text-xs">Total</div>
                 </div>
                 <div className="rounded-lg bg-emerald-500/10 p-3">
                   <div className="text-xl font-bold text-emerald-500">
                     {scanResult.imported}
                   </div>
-                  <div className="text-xs text-muted-foreground">Imported</div>
+                  <div className="text-muted-foreground text-xs">Imported</div>
                 </div>
                 <div className="rounded-lg bg-blue-500/10 p-3">
                   <div className="text-xl font-bold text-blue-500">
                     {scanResult.matched}
                   </div>
-                  <div className="text-xs text-muted-foreground">Matched</div>
+                  <div className="text-muted-foreground text-xs">Matched</div>
                 </div>
                 <div className="rounded-lg bg-amber-500/10 p-3">
                   <div className="text-xl font-bold text-amber-500">
                     {scanResult.unmatched}
                   </div>
-                  <div className="text-xs text-muted-foreground">Unmatched</div>
+                  <div className="text-muted-foreground text-xs">Unmatched</div>
                 </div>
               </div>
 
               {scanResult.errors && scanResult.errors.length > 0 && (
-                <div className="rounded-lg border border-destructive/20 bg-destructive/10 p-3">
-                  <div className="mb-1 text-sm font-medium text-destructive">
+                <div className="border-destructive/20 bg-destructive/10 rounded-lg border p-3">
+                  <div className="text-destructive mb-1 text-sm font-medium">
                     Errors
                   </div>
-                  <div className="space-y-0.5 text-xs text-destructive/80">
+                  <div className="text-destructive/80 space-y-0.5 text-xs">
                     {scanResult.errors.slice(0, 5).map((e, i) => (
                       <div key={i} className="truncate">
                         {e}
@@ -354,7 +354,7 @@ export function LibraryImportDialog({
                     <AlertCircle className="h-4 w-4 text-amber-500" />
                     Unmatched Files ({unmatchedFiles.length})
                   </h3>
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-muted-foreground text-xs">
                     These files couldn&apos;t be auto-matched. Click to manually
                     match.
                   </p>
@@ -368,9 +368,9 @@ export function LibraryImportDialog({
                             setSearchQuery(f.parsedTitle || "");
                             if (f.parsedTitle) searchTmdb(f.parsedTitle);
                           }}
-                          className="flex w-full items-center gap-2 rounded-md bg-muted/20 px-3 py-2 text-left text-sm transition-colors hover:bg-muted/40"
+                          className="bg-muted/20 hover:bg-muted/40 flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors"
                         >
-                          <FileVideo className="h-4 w-4 shrink-0 text-muted-foreground" />
+                          <FileVideo className="text-muted-foreground h-4 w-4 shrink-0" />
                           <div className="min-w-0 flex-1">
                             <div className="truncate font-mono text-xs">
                               {f.filePath.split("/").pop()}
@@ -402,7 +402,7 @@ export function LibraryImportDialog({
                               )}
                             </div>
                           </div>
-                          <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                          <ChevronRight className="text-muted-foreground h-4 w-4" />
                         </button>
                       ))}
                     </div>
@@ -444,8 +444,8 @@ export function LibraryImportDialog({
                 ← Back to unmatched files
               </Button>
 
-              <div className="rounded-lg bg-muted/20 p-3">
-                <div className="text-xs text-muted-foreground">
+              <div className="bg-muted/20 rounded-lg p-3">
+                <div className="text-muted-foreground text-xs">
                   Matching file:
                 </div>
                 <div className="truncate font-mono text-sm">
@@ -458,7 +458,7 @@ export function LibraryImportDialog({
 
               <div className="flex gap-2">
                 <div className="relative flex-1">
-                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
                   <Input
                     placeholder="Search TMDB..."
                     value={searchQuery}
@@ -489,7 +489,7 @@ export function LibraryImportDialog({
                     <button
                       key={r.tmdb_id}
                       onClick={() => matchFile(matchingFile, r.tmdb_id)}
-                      className="flex w-full items-center gap-3 rounded-md bg-muted/20 px-3 py-2 text-left text-sm transition-colors hover:bg-muted/40"
+                      className="bg-muted/20 hover:bg-muted/40 flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm transition-colors"
                     >
                       {r.poster_path ? (
                         <img
@@ -498,20 +498,20 @@ export function LibraryImportDialog({
                           alt=""
                         />
                       ) : (
-                        <div className="flex h-14 w-10 items-center justify-center rounded bg-muted">
-                          <FileVideo className="h-4 w-4 text-muted-foreground" />
+                        <div className="bg-muted flex h-14 w-10 items-center justify-center rounded">
+                          <FileVideo className="text-muted-foreground h-4 w-4" />
                         </div>
                       )}
                       <div className="min-w-0 flex-1">
                         <div className="truncate font-medium">{r.title}</div>
-                        <div className="text-xs text-muted-foreground">
+                        <div className="text-muted-foreground text-xs">
                           {r.year > 0 && r.year} · TMDB: {r.tmdb_id}
                         </div>
                       </div>
                     </button>
                   ))}
                   {!searching && searchResults.length === 0 && searchQuery && (
-                    <div className="py-4 text-center text-sm text-muted-foreground">
+                    <div className="text-muted-foreground py-4 text-center text-sm">
                       No results found
                     </div>
                   )}

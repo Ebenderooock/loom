@@ -107,7 +107,7 @@ export function CustomFormatsPage() {
           ))}
         </div>
       ) : !formats || formats.length === 0 ? (
-        <div className="rounded-lg border border-dashed p-8 text-center text-muted-foreground">
+        <div className="text-muted-foreground rounded-lg border border-dashed p-8 text-center">
           <p className="text-lg font-medium">No custom formats</p>
           <p className="mt-1 text-sm">
             Create one or import a preset to get started.
@@ -122,7 +122,7 @@ export function CustomFormatsPage() {
             >
               <div className="flex min-w-0 items-center gap-3">
                 <span className="truncate font-medium">{cf.name}</span>
-                <span className="shrink-0 text-xs text-muted-foreground">
+                <span className="text-muted-foreground shrink-0 text-xs">
                   {cf.specifications?.length ?? 0} spec
                   {(cf.specifications?.length ?? 0) !== 1 ? "s" : ""}
                 </span>
@@ -311,7 +311,7 @@ function EditDialog({
                     onClick={() => removeSpec(i)}
                     aria-label="Remove spec"
                   >
-                    <Trash2 className="h-4 w-4 text-destructive" />
+                    <Trash2 className="text-destructive h-4 w-4" />
                   </Button>
                 </div>
                 <div className="flex items-center gap-4">
@@ -444,7 +444,7 @@ function TestDialog({ onClose }: { onClose: () => void }) {
                 </p>
               </div>
               {result.matches.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
+                <p className="text-muted-foreground text-sm">
                   No custom formats matched.
                 </p>
               ) : (
@@ -584,7 +584,7 @@ function PresetsDialog({ onClose }: { onClose: () => void }) {
             >
               <div>
                 <p className="text-sm font-medium">{p.name}</p>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-muted-foreground text-xs">
                   {p.specifications.length} spec
                   {p.specifications.length !== 1 ? "s" : ""}
                 </p>

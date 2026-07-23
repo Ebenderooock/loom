@@ -123,7 +123,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }}
     >
       {isLoading ? (
-        <div className="h-screen w-screen bg-neutral-dark" />
+        <div className="bg-neutral-dark h-screen w-screen" />
       ) : (
         children
       )}

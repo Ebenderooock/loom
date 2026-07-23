@@ -452,7 +452,7 @@ export function MoviesPage() {
   useSetPageHeader("Movies", subtitle);
 
   return (
-    <div className="px-6 pb-6 pt-2">
+    <div className="px-6 pt-2 pb-6">
       {/* Toolbar */}
       {totalMovies > 0 ? (
         <MovieToolbar
@@ -497,11 +497,11 @@ export function MoviesPage() {
         )
       ) : totalMovies === 0 ? (
         <div className="flex flex-col items-center justify-center py-24 text-center">
-          <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-accent/10">
-            <Film className="h-10 w-10 text-accent" />
+          <div className="bg-accent/10 mb-6 flex h-20 w-20 items-center justify-center rounded-full">
+            <Film className="text-accent h-10 w-10" />
           </div>
           <h2 className="mb-2 text-xl font-semibold">No movies yet</h2>
-          <p className="mb-6 max-w-sm text-sm text-muted-foreground">
+          <p className="text-muted-foreground mb-6 max-w-sm text-sm">
             Start building your library by adding movies from TMDB, or import
             existing movies from your libraries.
           </p>
@@ -554,7 +554,7 @@ export function MoviesPage() {
           ))}
         </div>
       ) : (
-        <div className="overflow-hidden overflow-x-auto rounded-lg border border-border">
+        <div className="border-border overflow-hidden overflow-x-auto rounded-lg border">
           <Table className="min-w-[700px]">
             <TableHeader>
               <TableRow>
@@ -591,7 +591,7 @@ export function MoviesPage() {
       )}
 
       {processed.length === 0 && totalMovies > 0 && !isLoading && (
-        <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
+        <div className="text-muted-foreground flex flex-col items-center justify-center py-16">
           <Search className="mb-3 h-10 w-10 opacity-30" />
           <p className="text-sm">No movies match the current filters</p>
         </div>

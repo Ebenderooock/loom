@@ -214,9 +214,9 @@ export function PersonDiscoverDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="flex max-h-[85vh] max-w-3xl flex-col gap-0 p-0">
-        <DialogHeader className="border-b border-border/50 p-6 pb-4">
+        <DialogHeader className="border-border/50 border-b p-6 pb-4">
           <DialogTitle className="flex items-center gap-2 text-xl">
-            <User className="h-5 w-5 text-accent" />
+            <User className="text-accent h-5 w-5" />
             {selectedItem ? (
               <span className="flex items-center gap-2">
                 <button
@@ -224,7 +224,7 @@ export function PersonDiscoverDialog({
                     setSelectedItem(null);
                     setAddError("");
                   }}
-                  className="transition-colors hover:text-accent"
+                  className="hover:text-accent transition-colors"
                 >
                   <ArrowLeft className="h-5 w-5" />
                 </button>
@@ -250,23 +250,23 @@ export function PersonDiscoverDialog({
               <div className="min-w-0 flex-1">
                 <h3 className="text-lg font-semibold">{selectedItem.title}</h3>
                 {selectedItem.year && (
-                  <p className="flex items-center gap-1 text-sm text-muted-foreground">
+                  <p className="text-muted-foreground flex items-center gap-1 text-sm">
                     <Calendar className="h-3.5 w-3.5" /> {selectedItem.year}
                   </p>
                 )}
                 {selectedItem.rating > 0 && (
-                  <p className="mt-0.5 flex items-center gap-1 text-sm text-muted-foreground">
+                  <p className="text-muted-foreground mt-0.5 flex items-center gap-1 text-sm">
                     <Star className="h-3.5 w-3.5 text-yellow-500" />{" "}
                     {selectedItem.rating.toFixed(1)}
                   </p>
                 )}
                 {selectedItem.character && (
-                  <p className="mt-1 text-xs text-muted-foreground">
+                  <p className="text-muted-foreground mt-1 text-xs">
                     as {selectedItem.character}
                   </p>
                 )}
                 {selectedItem.overview && (
-                  <p className="mt-2 line-clamp-3 text-sm text-muted-foreground">
+                  <p className="text-muted-foreground mt-2 line-clamp-3 text-sm">
                     {selectedItem.overview}
                   </p>
                 )}
@@ -348,7 +348,7 @@ export function PersonDiscoverDialog({
               </div>
             </div>
 
-            {addError && <p className="text-sm text-destructive">{addError}</p>}
+            {addError && <p className="text-destructive text-sm">{addError}</p>}
 
             <Button
               onClick={handleAdd}
@@ -383,7 +383,7 @@ export function PersonDiscoverDialog({
                     </Badge>
                   )}
                   {data.person.biography && (
-                    <p className="line-clamp-3 text-sm text-muted-foreground">
+                    <p className="text-muted-foreground line-clamp-3 text-sm">
                       {data.person.biography}
                     </p>
                   )}
@@ -393,11 +393,11 @@ export function PersonDiscoverDialog({
 
             {loading ? (
               <div className="flex items-center justify-center py-12">
-                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                <Loader2 className="text-muted-foreground h-6 w-6 animate-spin" />
               </div>
             ) : error ? (
               <div className="flex flex-col items-center py-12 text-center">
-                <p className="text-sm text-destructive">{error}</p>
+                <p className="text-destructive text-sm">{error}</p>
                 <Button
                   variant="ghost"
                   size="sm"
@@ -465,8 +465,8 @@ function CreditGrid({
   if (items.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-12 text-center">
-        <Film className="mb-3 h-10 w-10 text-muted-foreground/20" />
-        <p className="text-sm text-muted-foreground">No credits found</p>
+        <Film className="text-muted-foreground/20 mb-3 h-10 w-10" />
+        <p className="text-muted-foreground text-sm">No credits found</p>
       </div>
     );
   }
@@ -482,11 +482,11 @@ function CreditGrid({
             disabled={inLib}
             className={cn(
               "group relative overflow-hidden rounded-lg text-left transition-all",
-              "hover:ring-2 hover:ring-accent/50 focus-visible:ring-2 focus-visible:ring-accent",
+              "hover:ring-accent/50 focus-visible:ring-accent hover:ring-2 focus-visible:ring-2",
               inLib && "cursor-default opacity-60",
             )}
           >
-            <div className="relative aspect-[2/3] bg-muted/30">
+            <div className="bg-muted/30 relative aspect-[2/3]">
               {item.poster_path ? (
                 <img
                   src={item.poster_path}
@@ -495,7 +495,7 @@ function CreditGrid({
                   loading="lazy"
                 />
               ) : (
-                <div className="flex h-full w-full items-center justify-center text-muted-foreground/30">
+                <div className="text-muted-foreground/30 flex h-full w-full items-center justify-center">
                   <Film className="h-8 w-8" />
                 </div>
               )}
@@ -512,7 +512,7 @@ function CreditGrid({
                 </div>
               )}
               {item.rating > 0 && (
-                <div className="absolute right-1.5 top-1.5 flex items-center gap-0.5 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white">
+                <div className="absolute top-1.5 right-1.5 flex items-center gap-0.5 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white">
                   <Star className="h-2.5 w-2.5 text-yellow-400" />
                   {item.rating.toFixed(1)}
                 </div>
@@ -522,7 +522,7 @@ function CreditGrid({
               <p className="truncate text-xs font-medium" title={item.title}>
                 {item.title}
               </p>
-              <p className="truncate text-[11px] text-muted-foreground">
+              <p className="text-muted-foreground truncate text-[11px]">
                 {item.year ?? "TBA"}
                 {item.character && ` · ${item.character}`}
                 {item.job && ` · ${item.job}`}

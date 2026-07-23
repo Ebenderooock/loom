@@ -53,8 +53,8 @@ export function SeriesCard({
   return (
     <div
       className={cn(
-        "group relative cursor-pointer overflow-hidden rounded-lg shadow-lg transition-all duration-200 hover:scale-[1.03] hover:shadow-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background",
-        selected && "ring-2 ring-accent ring-offset-2 ring-offset-background",
+        "group focus-visible:ring-accent focus-visible:ring-offset-background relative cursor-pointer overflow-hidden rounded-lg shadow-lg transition-all duration-200 hover:scale-[1.03] hover:shadow-xl focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none",
+        selected && "ring-accent ring-offset-background ring-2 ring-offset-2",
       )}
       tabIndex={0}
       role="button"
@@ -67,7 +67,7 @@ export function SeriesCard({
       }}
     >
       {/* Episode progress bar at top */}
-      <div className="absolute left-0 right-0 top-0 z-10 h-[3px] bg-gray-700/50">
+      <div className="absolute top-0 right-0 left-0 z-10 h-[3px] bg-gray-700/50">
         <div
           className="h-full transition-all duration-300"
           style={{
@@ -77,14 +77,14 @@ export function SeriesCard({
         />
       </div>
       <div
-        className="pointer-events-none absolute left-0 right-0 top-[3px] z-10 h-3"
+        className="pointer-events-none absolute top-[3px] right-0 left-0 z-10 h-3"
         style={{
           background: `linear-gradient(180deg, ${progress.color}25, transparent)`,
         }}
       />
 
       {/* Poster */}
-      <div className="aspect-[2/3] bg-muted">
+      <div className="bg-muted aspect-[2/3]">
         {series.posterPath ? (
           <img
             src={`${TMDB_IMG}/w300${series.posterPath}`}
@@ -94,24 +94,24 @@ export function SeriesCard({
           />
         ) : (
           <div className="flex h-full w-full items-center justify-center">
-            <Tv className="h-12 w-12 text-muted-foreground/30" />
+            <Tv className="text-muted-foreground/30 h-12 w-12" />
           </div>
         )}
       </div>
 
       {/* Checkbox */}
       {(selectMode || selected) && (
-        <div className="absolute left-2 top-2 z-10">
+        <div className="absolute top-2 left-2 z-10">
           <Checkbox
             checked={selected}
             onClick={(e) => e.stopPropagation()}
             onCheckedChange={() => onToggleSelect()}
-            className="h-5 w-5 border-white/60 data-[state=checked]:border-accent data-[state=checked]:bg-accent"
+            className="data-[state=checked]:border-accent data-[state=checked]:bg-accent h-5 w-5 border-white/60"
           />
         </div>
       )}
       {!selectMode && !selected && (
-        <div className="absolute left-2 top-2 z-10 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+        <div className="absolute top-2 left-2 z-10 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
           <Checkbox
             checked={false}
             onClick={(e) => e.stopPropagation()}
@@ -123,13 +123,13 @@ export function SeriesCard({
 
       {/* Season count badge */}
       {seasonCount > 0 && (
-        <div className="absolute right-2 top-2 z-10 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white">
+        <div className="absolute top-2 right-2 z-10 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white">
           {seasonCount} {seasonCount === 1 ? "Season" : "Seasons"}
         </div>
       )}
 
       {/* Status bar at bottom */}
-      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/60 to-transparent p-3 pt-8">
+      <div className="absolute right-0 bottom-0 left-0 bg-gradient-to-t from-black/90 via-black/60 to-transparent p-3 pt-8">
         <div className="flex items-center justify-between gap-1">
           <span
             className="rounded px-1.5 py-0.5 text-[10px] font-medium"
@@ -141,7 +141,7 @@ export function SeriesCard({
             {progress.total > 0 ? `${progress.label} episodes` : series.status}
           </span>
           {series.monitoringStatus === "unmonitored" && (
-            <span className="text-[10px] uppercase tracking-wider text-gray-500">
+            <span className="text-[10px] tracking-wider text-gray-500 uppercase">
               Unmonitored
             </span>
           )}

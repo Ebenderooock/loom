@@ -79,9 +79,9 @@ export function InvitePage() {
   };
 
   return (
-    <div className="flex h-screen w-full items-center justify-center bg-gradient-to-br from-purple-midnight via-neutral-dark to-teal-deep">
+    <div className="from-purple-midnight via-neutral-dark to-teal-deep flex h-screen w-full items-center justify-center bg-gradient-to-br">
       <div className="mx-auto w-full max-w-md px-4">
-        <div className="space-y-6 rounded-lg bg-neutral-card p-8 shadow-lg">
+        <div className="bg-neutral-card space-y-6 rounded-lg p-8 shadow-lg">
           <div className="space-y-4 text-center">
             <img
               src="/loom-logo.png"
@@ -89,7 +89,7 @@ export function InvitePage() {
               className="mx-auto h-16 object-contain"
             />
             <div className="space-y-2">
-              <h1 className="text-3xl font-bold text-neutral-light">
+              <h1 className="text-neutral-light text-3xl font-bold">
                 Join Loom
               </h1>
               <p className="text-neutral-muted">
@@ -126,7 +126,7 @@ export function InvitePage() {
           ) : (
             <>
               {phase === "checking" && (
-                <div className="flex items-center justify-center gap-2 py-8 text-neutral-muted">
+                <div className="text-neutral-muted flex items-center justify-center gap-2 py-8">
                   <Loader2 className="h-5 w-5 animate-spin" /> Checking your
                   invite…
                 </div>
@@ -151,14 +151,14 @@ export function InvitePage() {
                     </Alert>
                   )}
                   {email && (
-                    <p className="text-sm text-neutral-muted">
+                    <p className="text-neutral-muted text-sm">
                       Invited as <span className="font-medium">{email}</span>
                     </p>
                   )}
                   <div className="space-y-1.5">
                     <label
                       htmlFor="invite-username"
-                      className="text-sm text-neutral-light"
+                      className="text-neutral-light text-sm"
                     >
                       Username
                     </label>
@@ -173,7 +173,7 @@ export function InvitePage() {
                   <div className="space-y-1.5">
                     <label
                       htmlFor="invite-password"
-                      className="text-sm text-neutral-light"
+                      className="text-neutral-light text-sm"
                     >
                       Password
                     </label>
@@ -189,7 +189,7 @@ export function InvitePage() {
                   <div className="space-y-1.5">
                     <label
                       htmlFor="invite-confirm"
-                      className="text-sm text-neutral-light"
+                      className="text-neutral-light text-sm"
                     >
                       Confirm password
                     </label>

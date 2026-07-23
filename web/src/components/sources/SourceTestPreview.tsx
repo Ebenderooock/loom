@@ -40,8 +40,8 @@ export function SourceTestPreview({
         <div className="space-y-4">
           {isLoading && (
             <div className="flex items-center justify-center py-8">
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-              <span className="ml-2 text-muted-foreground">
+              <Loader2 className="text-muted-foreground h-6 w-6 animate-spin" />
+              <span className="text-muted-foreground ml-2">
                 Testing source...
               </span>
             </div>
@@ -83,11 +83,11 @@ export function SourceTestPreview({
                   {result.items.map((item, idx) => (
                     <div
                       key={idx}
-                      className="space-y-2 rounded-lg border bg-muted/50 p-4"
+                      className="bg-muted/50 space-y-2 rounded-lg border p-4"
                     >
                       <div className="flex items-start justify-between gap-2">
                         <div className="flex-1">
-                          <p className="break-words text-sm font-medium">
+                          <p className="text-sm font-medium break-words">
                             {item.title}
                           </p>
                           {item.link && (
@@ -95,7 +95,7 @@ export function SourceTestPreview({
                               href={item.link}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="break-all text-xs text-blue-600 hover:underline"
+                              className="text-xs break-all text-blue-600 hover:underline"
                             >
                               {item.link}
                             </a>
@@ -104,7 +104,7 @@ export function SourceTestPreview({
                         <Badge variant="outline">{idx + 1}</Badge>
                       </div>
                       {item.published && (
-                        <p className="text-xs text-muted-foreground">
+                        <p className="text-muted-foreground text-xs">
                           {new Date(item.published).toLocaleString()}
                         </p>
                       )}

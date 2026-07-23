@@ -107,13 +107,13 @@ function LatencyBar({ ms, maxMs }: { ms: number; maxMs: number }) {
   const pct = maxMs > 0 ? Math.min((ms / maxMs) * 100, 100) : 0;
   return (
     <div className="flex items-center gap-2">
-      <div className="h-2 flex-1 rounded-full bg-muted">
+      <div className="bg-muted h-2 flex-1 rounded-full">
         <div
           className="h-2 rounded-full bg-blue-500"
           style={{ width: `${pct}%` }}
         />
       </div>
-      <span className="w-16 text-right text-xs text-muted-foreground">
+      <span className="text-muted-foreground w-16 text-right text-xs">
         {ms} ms
       </span>
     </div>
@@ -132,7 +132,7 @@ function IndexerBreakdown({ queryId }: { queryId: string }) {
   const indexers = data?.indexers ?? [];
   if (indexers.length === 0) {
     return (
-      <p className="text-xs text-muted-foreground">No indexer data recorded.</p>
+      <p className="text-muted-foreground text-xs">No indexer data recorded.</p>
     );
   }
 
@@ -143,12 +143,12 @@ function IndexerBreakdown({ queryId }: { queryId: string }) {
       {indexers.map((ix) => (
         <div
           key={ix.id}
-          className="space-y-1 rounded-md border border-border p-2"
+          className="border-border space-y-1 rounded-md border p-2"
         >
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium">{ix.indexer_name}</span>
             <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground">
+              <span className="text-muted-foreground text-xs">
                 {ix.result_count} results
               </span>
               <Badge
@@ -161,7 +161,7 @@ function IndexerBreakdown({ queryId }: { queryId: string }) {
           </div>
           <LatencyBar ms={ix.latency_ms} maxMs={maxLatency} />
           {ix.error && (
-            <p className="break-all text-xs text-red-400">{ix.error}</p>
+            <p className="text-xs break-all text-red-400">{ix.error}</p>
           )}
         </div>
       ))}
@@ -173,15 +173,15 @@ function QueryRow({ entry }: { entry: QueryLogEntry }) {
   const [expanded, setExpanded] = React.useState(false);
 
   return (
-    <div className="rounded-lg border border-border">
+    <div className="border-border rounded-lg border">
       <button
         type="button"
-        className="flex w-full items-center justify-between gap-2 p-3 text-left hover:bg-muted/50"
+        className="hover:bg-muted/50 flex w-full items-center justify-between gap-2 p-3 text-left"
         onClick={() => setExpanded((v) => !v)}
         aria-expanded={expanded}
       >
         <div className="flex min-w-0 flex-1 items-center gap-2">
-          <Search className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+          <Search className="text-muted-foreground h-3.5 w-3.5 shrink-0" />
           <span className="truncate text-sm font-medium">
             {entry.query || "(empty)"}
           </span>
@@ -190,24 +190,24 @@ function QueryRow({ entry }: { entry: QueryLogEntry }) {
           </Badge>
         </div>
         <div className="flex shrink-0 items-center gap-3">
-          <span className="text-xs text-muted-foreground">
+          <span className="text-muted-foreground text-xs">
             {entry.total_results} results
           </span>
           <Badge variant="outline" className={statusBadgeVariant(entry.status)}>
             {entry.status}
           </Badge>
-          <span className="text-xs text-muted-foreground">
+          <span className="text-muted-foreground text-xs">
             {formatTime(entry.started_at)}
           </span>
           {expanded ? (
-            <ChevronUp className="h-3.5 w-3.5 text-muted-foreground" />
+            <ChevronUp className="text-muted-foreground h-3.5 w-3.5" />
           ) : (
-            <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+            <ChevronDown className="text-muted-foreground h-3.5 w-3.5" />
           )}
         </div>
       </button>
       {expanded && (
-        <div className="border-t border-border p-3">
+        <div className="border-border border-t p-3">
           <IndexerBreakdown queryId={entry.id} />
         </div>
       )}
@@ -283,7 +283,7 @@ export function SearchDiagnostics() {
         <Button
           variant="outline"
           size="sm"
-          className="gap-2 text-destructive"
+          className="text-destructive gap-2"
           onClick={handlePrune}
           disabled={prune.isPending}
         >
@@ -302,7 +302,7 @@ export function SearchDiagnostics() {
       )}
 
       {isError && (
-        <p className="text-sm text-destructive">
+        <p className="text-destructive text-sm">
           Failed to load search log. Will retry automatically.
         </p>
       )}
@@ -312,7 +312,7 @@ export function SearchDiagnostics() {
         <div className="space-y-2">
           {entries.length === 0 ? (
             <Card>
-              <CardContent className="p-6 text-center text-sm text-muted-foreground">
+              <CardContent className="text-muted-foreground p-6 text-center text-sm">
                 No search queries recorded yet.
               </CardContent>
             </Card>

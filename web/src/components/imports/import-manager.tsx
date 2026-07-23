@@ -161,7 +161,7 @@ function ScanTab() {
             </Button>
           </div>
           {scanMut.isError && (
-            <p className="mt-2 text-sm text-destructive">
+            <p className="text-destructive mt-2 text-sm">
               {scanMut.error.message}
             </p>
           )}
@@ -210,7 +210,7 @@ function ScanTab() {
                   <TableRow key={r.file_path}>
                     <TableCell className="max-w-[200px] truncate font-mono text-xs">
                       <div className="flex items-center gap-1">
-                        <FileVideo className="h-4 w-4 shrink-0 text-muted-foreground" />
+                        <FileVideo className="text-muted-foreground h-4 w-4 shrink-0" />
                         <span className="truncate" title={r.file_path}>
                           {r.file_path.split("/").pop()}
                         </span>
@@ -219,12 +219,12 @@ function ScanTab() {
                     <TableCell>
                       <span className="text-sm">{r.detected_title}</span>
                       {r.detected_year ? (
-                        <span className="ml-1 text-xs text-muted-foreground">
+                        <span className="text-muted-foreground ml-1 text-xs">
                           ({r.detected_year})
                         </span>
                       ) : null}
                       {r.detected_season ? (
-                        <span className="ml-1 text-xs text-muted-foreground">
+                        <span className="text-muted-foreground ml-1 text-xs">
                           S{String(r.detected_season).padStart(2, "0")}E
                           {String(r.detected_episode).padStart(2, "0")}
                         </span>
@@ -236,12 +236,12 @@ function ScanTab() {
                           {r.matched_media}
                         </span>
                       ) : (
-                        <span className="text-sm text-muted-foreground">—</span>
+                        <span className="text-muted-foreground text-sm">—</span>
                       )}
                     </TableCell>
                     <TableCell>{confidenceBadge(r.confidence)}</TableCell>
                     <TableCell>
-                      <span className="text-xs text-muted-foreground">
+                      <span className="text-muted-foreground text-xs">
                         {r.quality || "—"}
                       </span>
                     </TableCell>
@@ -357,7 +357,7 @@ function DecisionLogTab() {
 
           {isLoading ? (
             <div className="flex items-center justify-center py-8">
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              <Loader2 className="text-muted-foreground h-6 w-6 animate-spin" />
             </div>
           ) : (
             <>
@@ -378,7 +378,7 @@ function DecisionLogTab() {
                     <TableRow>
                       <TableCell
                         colSpan={7}
-                        className="text-center text-muted-foreground"
+                        className="text-muted-foreground text-center"
                       >
                         No decisions recorded yet.
                       </TableCell>
@@ -386,7 +386,7 @@ function DecisionLogTab() {
                   ) : (
                     (decisions ?? []).map((d) => (
                       <TableRow key={d.id}>
-                        <TableCell className="whitespace-nowrap text-xs">
+                        <TableCell className="text-xs whitespace-nowrap">
                           {new Date(d.created_at).toLocaleString()}
                         </TableCell>
                         <TableCell
@@ -420,7 +420,7 @@ function DecisionLogTab() {
                             {d.conflict_policy || "—"}
                           </Badge>
                         </TableCell>
-                        <TableCell className="max-w-[200px] text-xs text-muted-foreground">
+                        <TableCell className="text-muted-foreground max-w-[200px] text-xs">
                           {d.reason}
                         </TableCell>
                       </TableRow>
@@ -438,7 +438,7 @@ function DecisionLogTab() {
                 >
                   Previous
                 </Button>
-                <span className="text-sm text-muted-foreground">
+                <span className="text-muted-foreground text-sm">
                   Page {page + 1}
                 </span>
                 <Button

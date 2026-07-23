@@ -71,7 +71,7 @@ function StatCard({
   return (
     <Card className="card-glow group relative overflow-hidden">
       {/* Subtle gradient accent line at top */}
-      <div className="absolute left-0 right-0 top-0 h-[2px] bg-gradient-to-r from-transparent via-accent/40 to-transparent opacity-0 transition-opacity duration-500 group-hover:opacity-100" />
+      <div className="via-accent/40 absolute top-0 right-0 left-0 h-[2px] bg-gradient-to-r from-transparent to-transparent opacity-0 transition-opacity duration-500 group-hover:opacity-100" />
       <CardContent className="flex items-center gap-4 p-5">
         <div
           className={cn(
@@ -87,7 +87,7 @@ function StatCard({
           ) : (
             <p className="text-3xl font-bold tracking-tight">{value}</p>
           )}
-          <p className="text-sm text-muted-foreground">{label}</p>
+          <p className="text-muted-foreground text-sm">{label}</p>
         </div>
       </CardContent>
     </Card>
@@ -125,17 +125,17 @@ function WelcomeSection() {
   ];
 
   return (
-    <Card className="from-primary/8 relative overflow-hidden border-accent/20 bg-gradient-to-br via-card to-accent/5">
-      <div className="pointer-events-none absolute -right-20 -top-20 h-40 w-40 rounded-full bg-accent/5 blur-3xl" />
-      <div className="pointer-events-none absolute -bottom-10 -left-10 h-32 w-32 rounded-full bg-primary/5 blur-3xl" />
+    <Card className="from-primary/8 border-accent/20 via-card to-accent/5 relative overflow-hidden bg-gradient-to-br">
+      <div className="bg-accent/5 pointer-events-none absolute -top-20 -right-20 h-40 w-40 rounded-full blur-3xl" />
+      <div className="bg-primary/5 pointer-events-none absolute -bottom-10 -left-10 h-32 w-32 rounded-full blur-3xl" />
       <CardHeader className="pb-2">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/15">
-            <Rocket className="h-5 w-5 text-primary" />
+          <div className="bg-primary/15 flex h-10 w-10 items-center justify-center rounded-full">
+            <Rocket className="text-primary h-5 w-5" />
           </div>
           <div>
             <CardTitle className="text-xl">Welcome to Loom</CardTitle>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-muted-foreground text-sm">
               Get started in a few steps
             </p>
           </div>
@@ -147,16 +147,16 @@ function WelcomeSection() {
             <Link
               key={step.number}
               to={step.href}
-              className="group flex gap-3 rounded-xl border border-border/30 bg-card/50 p-4 backdrop-blur-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-accent/30 hover:bg-accent/5 hover:shadow-lg hover:shadow-accent/5"
+              className="group border-border/30 bg-card/50 hover:border-accent/30 hover:bg-accent/5 hover:shadow-accent/5 flex gap-3 rounded-xl border p-4 backdrop-blur-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg"
             >
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-primary/20 to-accent/20 text-sm font-bold text-accent">
+              <div className="from-primary/20 to-accent/20 text-accent flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br text-sm font-bold">
                 {step.number}
               </div>
               <div className="min-w-0">
-                <p className="font-medium leading-tight group-hover:text-primary">
+                <p className="group-hover:text-primary leading-tight font-medium">
                   {step.title}
                 </p>
-                <p className="mt-1 text-xs text-muted-foreground">
+                <p className="text-muted-foreground mt-1 text-xs">
                   {step.description}
                 </p>
               </div>
@@ -192,7 +192,7 @@ function QuickActionsCard() {
               key={action.label}
               variant="outline"
               size="sm"
-              className="justify-start gap-2 transition-all duration-200 hover:border-accent/30"
+              className="hover:border-accent/30 justify-start gap-2 transition-all duration-200"
               asChild
             >
               <Link to={action.href}>
@@ -256,7 +256,7 @@ function SystemHealthCard() {
             {issues.length > 3 && (
               <Link
                 to="/indexers/health"
-                className="text-xs text-muted-foreground hover:text-primary"
+                className="text-muted-foreground hover:text-primary text-xs"
               >
                 + {issues.length - 3} more issue
                 {issues.length - 3 > 1 ? "s" : ""}
@@ -271,13 +271,13 @@ function SystemHealthCard() {
         )}
 
         {/* Version info */}
-        <div className="mt-auto border-t border-border/50 pt-3">
+        <div className="border-border/50 mt-auto border-t pt-3">
           {status.isLoading ? (
             <Skeleton className="h-3 w-40" />
           ) : status.data ? (
-            <p className="text-xs text-muted-foreground">
+            <p className="text-muted-foreground text-xs">
               Loom{" "}
-              <span className="font-mono font-medium text-foreground/70">
+              <span className="text-foreground/70 font-mono font-medium">
                 {status.data.version || "dev"}
               </span>
               {status.data.commit && (
@@ -328,7 +328,7 @@ function StorageCard() {
           <CardTitle className="text-base">Storage</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <div className="text-muted-foreground flex items-center gap-2 text-sm">
             <FolderOpen className="h-4 w-4" />
             {libs.length === 0
               ? "No libraries configured"
@@ -354,12 +354,12 @@ function StorageCard() {
             <div key={lib.id} className="space-y-1.5">
               <div className="flex items-center justify-between text-sm">
                 <span className="truncate font-medium">{lib.name}</span>
-                <span className="ml-2 shrink-0 text-xs text-muted-foreground">
+                <span className="text-muted-foreground ml-2 shrink-0 text-xs">
                   {formatBytes(free)} free
                 </span>
               </div>
               <Progress value={pct} className="h-2" />
-              <p className="text-xs text-muted-foreground">
+              <p className="text-muted-foreground text-xs">
                 {formatBytes(used)} / {formatBytes(total)} ({pct}%)
               </p>
             </div>
@@ -392,11 +392,11 @@ function ActiveDownloadsCard() {
         <div className="flex items-center justify-between">
           <CardTitle className="text-base">Active Downloads</CardTitle>
           {active.length > 0 && (
-            <div className="flex items-center gap-3 text-xs text-muted-foreground">
+            <div className="text-muted-foreground flex items-center gap-3 text-xs">
               {totalDown > 0 && (
                 <span className="flex items-center gap-1">
                   <ArrowDown className="h-3 w-3 text-blue-400" />
-                  <span className="font-medium text-foreground/80">
+                  <span className="text-foreground/80 font-medium">
                     {formatSpeed(totalDown)}
                   </span>
                 </span>
@@ -404,7 +404,7 @@ function ActiveDownloadsCard() {
               {totalUp > 0 && (
                 <span className="flex items-center gap-1">
                   <ArrowUp className="h-3 w-3 text-green-400" />
-                  <span className="font-medium text-foreground/80">
+                  <span className="text-foreground/80 font-medium">
                     {formatSpeed(totalUp)}
                   </span>
                 </span>
@@ -421,10 +421,10 @@ function ActiveDownloadsCard() {
           </div>
         ) : active.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-8 text-center">
-            <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-border/30 bg-muted/30">
-              <Download className="h-6 w-6 text-muted-foreground/50" />
+            <div className="border-border/30 bg-muted/30 flex h-14 w-14 items-center justify-center rounded-2xl border">
+              <Download className="text-muted-foreground/50 h-6 w-6" />
             </div>
-            <p className="mt-3 text-sm text-muted-foreground">
+            <p className="text-muted-foreground mt-3 text-sm">
               No active downloads
             </p>
           </div>
@@ -433,13 +433,13 @@ function ActiveDownloadsCard() {
             {active.slice(0, 5).map((item) => (
               <div
                 key={item.id}
-                className="-mx-2 space-y-1.5 rounded-lg p-2 transition-colors duration-200 hover:bg-accent/5"
+                className="hover:bg-accent/5 -mx-2 space-y-1.5 rounded-lg p-2 transition-colors duration-200"
               >
                 <div className="flex items-center justify-between gap-2">
                   <span className="truncate text-sm font-medium">
                     {item.title}
                   </span>
-                  <span className="shrink-0 text-xs text-muted-foreground">
+                  <span className="text-muted-foreground shrink-0 text-xs">
                     {item.status === "downloading" && item.download_rate > 0
                       ? formatSpeed(item.download_rate)
                       : item.status}
@@ -449,7 +449,7 @@ function ActiveDownloadsCard() {
                   value={Math.round(item.progress * 100)}
                   className="h-1.5"
                 />
-                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                <div className="text-muted-foreground flex items-center justify-between text-xs">
                   <span>{Math.round(item.progress * 100)}%</span>
                   {item.size_bytes > 0 && (
                     <span>
@@ -463,7 +463,7 @@ function ActiveDownloadsCard() {
             {active.length > 5 && (
               <Link
                 to="/downloads"
-                className="block text-center text-xs text-muted-foreground hover:text-primary"
+                className="text-muted-foreground hover:text-primary block text-center text-xs"
               >
                 + {active.length - 5} more
               </Link>
@@ -471,7 +471,7 @@ function ActiveDownloadsCard() {
           </div>
         )}
         {active.length > 0 && (
-          <div className="mt-3 border-t border-border/50 pt-3">
+          <div className="border-border/50 mt-3 border-t pt-3">
             <Button variant="outline" size="sm" className="w-full" asChild>
               <Link to="/downloads">View all downloads</Link>
             </Button>
@@ -577,7 +577,7 @@ function DashboardAnalyticsRow() {
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="flex items-center gap-2 text-base">
-            <Activity className="h-4 w-4 text-accent" /> Active streams
+            <Activity className="text-accent h-4 w-4" /> Active streams
             {streams && streams.length > 0 && (
               <Badge variant="secondary">{streams.length}</Badge>
             )}
@@ -590,7 +590,7 @@ function DashboardAnalyticsRow() {
         </CardHeader>
         <CardContent>
           {!streams || streams.length === 0 ? (
-            <p className="flex items-center gap-2 py-4 text-sm text-muted-foreground">
+            <p className="text-muted-foreground flex items-center gap-2 py-4 text-sm">
               <MonitorPlay className="h-4 w-4" /> Nothing playing right now.
             </p>
           ) : (
@@ -601,14 +601,14 @@ function DashboardAnalyticsRow() {
                   className="flex items-center gap-2 text-sm"
                 >
                   {s.state === "paused" ? (
-                    <PauseCircle className="h-4 w-4 shrink-0 text-muted-foreground" />
+                    <PauseCircle className="text-muted-foreground h-4 w-4 shrink-0" />
                   ) : (
-                    <PlayCircle className="h-4 w-4 shrink-0 text-accent" />
+                    <PlayCircle className="text-accent h-4 w-4 shrink-0" />
                   )}
                   <span className="min-w-0 flex-1 truncate">
                     {s.full_title || s.title}
                   </span>
-                  <span className="shrink-0 text-xs text-muted-foreground">
+                  <span className="text-muted-foreground shrink-0 text-xs">
                     {s.user || "Unknown"}
                   </span>
                   {s.transcode && (
@@ -621,7 +621,7 @@ function DashboardAnalyticsRow() {
           <div className="mt-3 border-t pt-3 text-right">
             <Link
               to="/analytics"
-              className="text-xs text-accent hover:underline"
+              className="text-accent text-xs hover:underline"
             >
               View analytics →
             </Link>
@@ -654,9 +654,9 @@ function DashboardAnalyticsRow() {
 
 function MiniStat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg border bg-card/50 p-3">
-      <p className="text-xl font-semibold leading-none">{value}</p>
-      <p className="mt-1 text-xs text-muted-foreground">{label}</p>
+    <div className="bg-card/50 rounded-lg border p-3">
+      <p className="text-xl leading-none font-semibold">{value}</p>
+      <p className="text-muted-foreground mt-1 text-xs">{label}</p>
     </div>
   );
 }

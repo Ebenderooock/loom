@@ -175,7 +175,7 @@ function StatsSummary() {
         {Array.from({ length: 4 }).map((_, i) => (
           <Card key={i}>
             <CardContent className="p-4">
-              <div className="h-8 animate-pulse rounded bg-muted" />
+              <div className="bg-muted h-8 animate-pulse rounded" />
             </CardContent>
           </Card>
         ))}
@@ -196,8 +196,8 @@ function StatsSummary() {
   return (
     <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
       <Card>
-        <CardHeader className="px-4 pb-1 pt-3">
-          <CardTitle className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+        <CardHeader className="px-4 pt-3 pb-1">
+          <CardTitle className="text-muted-foreground flex items-center gap-1.5 text-xs font-medium">
             <Search className="h-3.5 w-3.5" /> Total Searches
           </CardTitle>
         </CardHeader>
@@ -209,37 +209,37 @@ function StatsSummary() {
       </Card>
 
       <Card>
-        <CardHeader className="px-4 pb-1 pt-3">
-          <CardTitle className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+        <CardHeader className="px-4 pt-3 pb-1">
+          <CardTitle className="text-muted-foreground flex items-center gap-1.5 text-xs font-medium">
             <CheckCircle2 className="h-3.5 w-3.5 text-green-500" /> Grabbed
           </CardTitle>
         </CardHeader>
         <CardContent className="px-4 pb-3">
-          <span className="text-2xl font-bold tabular-nums text-green-500">
+          <span className="text-2xl font-bold text-green-500 tabular-nums">
             {grabbedPct}%
           </span>
-          <span className="ml-1.5 text-xs text-muted-foreground">
+          <span className="text-muted-foreground ml-1.5 text-xs">
             ({grabbedCount})
           </span>
         </CardContent>
       </Card>
 
       <Card>
-        <CardHeader className="px-4 pb-1 pt-3">
-          <CardTitle className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+        <CardHeader className="px-4 pt-3 pb-1">
+          <CardTitle className="text-muted-foreground flex items-center gap-1.5 text-xs font-medium">
             <XCircle className="h-3.5 w-3.5 text-red-500" /> Failed
           </CardTitle>
         </CardHeader>
         <CardContent className="px-4 pb-3">
-          <span className="text-2xl font-bold tabular-nums text-red-500">
+          <span className="text-2xl font-bold text-red-500 tabular-nums">
             {failedCount}
           </span>
         </CardContent>
       </Card>
 
       <Card>
-        <CardHeader className="px-4 pb-1 pt-3">
-          <CardTitle className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+        <CardHeader className="px-4 pt-3 pb-1">
+          <CardTitle className="text-muted-foreground flex items-center gap-1.5 text-xs font-medium">
             <AlertTriangle className="h-3.5 w-3.5 text-yellow-500" /> Top Reject
           </CardTitle>
         </CardHeader>
@@ -249,12 +249,12 @@ function StatsSummary() {
               <span className="block truncate text-sm font-semibold">
                 {topReject.reason}
               </span>
-              <span className="text-xs text-muted-foreground">
+              <span className="text-muted-foreground text-xs">
                 {topReject.count} times
               </span>
             </>
           ) : (
-            <span className="text-sm text-muted-foreground">None</span>
+            <span className="text-muted-foreground text-sm">None</span>
           )}
         </CardContent>
       </Card>
@@ -272,7 +272,7 @@ function ActiveSearches() {
 
   return (
     <Card className="border-blue-500/30 bg-blue-500/5">
-      <CardHeader className="px-4 pb-2 pt-3">
+      <CardHeader className="px-4 pt-3 pb-2">
         <CardTitle className="flex items-center gap-1.5 text-xs font-medium text-blue-400">
           <Loader2 className="h-3.5 w-3.5 animate-spin" /> Active Searches (
           {entries.length})
@@ -286,21 +286,21 @@ function ActiveSearches() {
               <span className="truncate font-medium">
                 {e.title}
                 {e.season > 0 && (
-                  <span className="ml-1 text-xs text-muted-foreground">
+                  <span className="text-muted-foreground ml-1 text-xs">
                     S{String(e.season).padStart(2, "0")}
                     {e.episode > 0 && `E${String(e.episode).padStart(2, "0")}`}
                   </span>
                 )}
               </span>
-              <span className="text-xs capitalize text-muted-foreground">
+              <span className="text-muted-foreground text-xs capitalize">
                 {e.media_type}
               </span>
               {e.total_results > 0 && (
-                <span className="text-xs tabular-nums text-muted-foreground">
+                <span className="text-muted-foreground text-xs tabular-nums">
                   {e.total_results} results
                 </span>
               )}
-              <span className="ml-auto flex items-center gap-1 text-xs tabular-nums text-muted-foreground">
+              <span className="text-muted-foreground ml-auto flex items-center gap-1 text-xs tabular-nums">
                 <Clock className="h-3 w-3" />
                 {e.duration_ms > 0 ? `${e.duration_ms}ms` : "…"}
               </span>
@@ -317,13 +317,13 @@ function ActiveSearches() {
 function TierPanel({ tiers }: { tiers: TierDetail[] }) {
   if (tiers.length === 0) {
     return (
-      <p className="text-xs text-muted-foreground">No tier data recorded.</p>
+      <p className="text-muted-foreground text-xs">No tier data recorded.</p>
     );
   }
 
   return (
     <div className="space-y-2">
-      <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+      <p className="text-muted-foreground text-[10px] font-medium tracking-wide uppercase">
         Tiers
       </p>
       <Table>
@@ -343,7 +343,7 @@ function TierPanel({ tiers }: { tiers: TierDetail[] }) {
               <TableCell className="text-xs font-medium tabular-nums">
                 {t.tier_index}
               </TableCell>
-              <TableCell className="text-xs text-muted-foreground">
+              <TableCell className="text-muted-foreground text-xs">
                 {t.queries
                   .map((q) => q.term || q.mode || q.imdb_id || "query")
                   .join(", ")}
@@ -351,10 +351,10 @@ function TierPanel({ tiers }: { tiers: TierDetail[] }) {
               <TableCell className="text-right text-xs tabular-nums">
                 {t.result_count}
               </TableCell>
-              <TableCell className="text-right text-xs tabular-nums text-green-500">
+              <TableCell className="text-right text-xs text-green-500 tabular-nums">
                 {t.accepted_count}
               </TableCell>
-              <TableCell className="text-right text-xs tabular-nums text-red-500">
+              <TableCell className="text-right text-xs text-red-500 tabular-nums">
                 {t.rejected_count}
               </TableCell>
               <TableCell>
@@ -380,7 +380,7 @@ function TierPanel({ tiers }: { tiers: TierDetail[] }) {
 function IndexerPanel({ results }: { results: IndexerResult[] }) {
   if (results.length === 0) {
     return (
-      <p className="text-xs text-muted-foreground">No indexer data recorded.</p>
+      <p className="text-muted-foreground text-xs">No indexer data recorded.</p>
     );
   }
 
@@ -388,13 +388,13 @@ function IndexerPanel({ results }: { results: IndexerResult[] }) {
 
   return (
     <div className="space-y-2">
-      <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+      <p className="text-muted-foreground text-[10px] font-medium tracking-wide uppercase">
         Indexer Results
       </p>
       {results.map((ix) => (
         <div key={ix.indexer_id} className="flex items-center gap-2 text-xs">
           <span className="w-28 truncate font-medium">{ix.indexer_name}</span>
-          <div className="h-1.5 flex-1 rounded-full bg-muted">
+          <div className="bg-muted h-1.5 flex-1 rounded-full">
             <div
               className={`h-1.5 rounded-full ${ix.status === "completed" || ix.status === "ok" ? "bg-blue-500" : "bg-red-500"}`}
               style={{
@@ -402,10 +402,10 @@ function IndexerPanel({ results }: { results: IndexerResult[] }) {
               }}
             />
           </div>
-          <span className="w-14 text-right tabular-nums text-muted-foreground">
+          <span className="text-muted-foreground w-14 text-right tabular-nums">
             {ix.latency_ms}ms
           </span>
-          <span className="w-16 text-right tabular-nums text-muted-foreground">
+          <span className="text-muted-foreground w-16 text-right tabular-nums">
             {ix.result_count} results
           </span>
           <Badge
@@ -436,7 +436,7 @@ function IndexerPanel({ results }: { results: IndexerResult[] }) {
 function EvaluationPanel({ evals }: { evals: EvalResult[] }) {
   if (evals.length === 0) {
     return (
-      <p className="text-xs text-muted-foreground">
+      <p className="text-muted-foreground text-xs">
         No evaluation data recorded.
       </p>
     );
@@ -444,7 +444,7 @@ function EvaluationPanel({ evals }: { evals: EvalResult[] }) {
 
   return (
     <div className="space-y-2">
-      <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+      <p className="text-muted-foreground text-[10px] font-medium tracking-wide uppercase">
         Evaluation ({evals.length} results)
       </p>
       <div className="overflow-x-auto">
@@ -488,7 +488,7 @@ function EvaluationPanel({ evals }: { evals: EvalResult[] }) {
                     </Badge>
                   )}
                 </TableCell>
-                <TableCell className="max-w-[200px] truncate text-xs text-muted-foreground">
+                <TableCell className="text-muted-foreground max-w-[200px] truncate text-xs">
                   {ev.reject_reason ?? "—"}
                 </TableCell>
                 <TableCell className="text-xs">
@@ -525,7 +525,7 @@ function DetailPanel({ entryId }: { entryId: string }) {
 
   if (isLoading) {
     return (
-      <p className="animate-pulse text-xs text-muted-foreground">
+      <p className="text-muted-foreground animate-pulse text-xs">
         Loading details…
       </p>
     );
@@ -573,19 +573,19 @@ function SearchRow({
 
   return (
     <>
-      <TableRow className="cursor-pointer hover:bg-muted/40" onClick={onToggle}>
-        <TableCell className="text-xs tabular-nums text-muted-foreground">
+      <TableRow className="hover:bg-muted/40 cursor-pointer" onClick={onToggle}>
+        <TableCell className="text-muted-foreground text-xs tabular-nums">
           {formatTimestamp(entry.created_at)}
         </TableCell>
         <TableCell className="text-sm">
           <span className="flex items-center gap-1">
             {entry.title}
             {entry.year > 0 && (
-              <span className="text-xs text-muted-foreground">
+              <span className="text-muted-foreground text-xs">
                 ({entry.year})
               </span>
             )}
-            <Chevron className="h-3 w-3 shrink-0 text-muted-foreground" />
+            <Chevron className="text-muted-foreground h-3 w-3 shrink-0" />
           </span>
         </TableCell>
         <TableCell className="text-xs capitalize">{entry.media_type}</TableCell>
@@ -597,10 +597,10 @@ function SearchRow({
         <TableCell className="text-right text-xs tabular-nums">
           {entry.total_results}
         </TableCell>
-        <TableCell className="text-right text-xs tabular-nums text-red-500">
+        <TableCell className="text-right text-xs text-red-500 tabular-nums">
           {entry.total_rejected}
         </TableCell>
-        <TableCell className="text-right text-xs tabular-nums text-muted-foreground">
+        <TableCell className="text-muted-foreground text-right text-xs tabular-nums">
           <span className="flex items-center justify-end gap-1">
             <Clock className="h-3 w-3" />
             {entry.duration_ms}ms
@@ -661,7 +661,7 @@ export function SearchDebugPage() {
 
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-3">
-        <Filter className="h-4 w-4 text-muted-foreground" />
+        <Filter className="text-muted-foreground h-4 w-4" />
 
         <Select value={outcome} onValueChange={setOutcome}>
           <SelectTrigger className="w-[160px]">
@@ -720,7 +720,7 @@ export function SearchDebugPage() {
           />
         )}
 
-        <span className="ml-auto text-xs text-muted-foreground">
+        <span className="text-muted-foreground ml-auto text-xs">
           {total} result{total !== 1 ? "s" : ""}
         </span>
       </div>
@@ -753,7 +753,7 @@ export function SearchDebugPage() {
               <TableRow>
                 <TableCell
                   colSpan={9}
-                  className="py-8 text-center text-destructive"
+                  className="text-destructive py-8 text-center"
                 >
                   Failed to load search queue data.
                 </TableCell>
@@ -794,7 +794,7 @@ export function SearchDebugPage() {
           >
             <ChevronLeft className="mr-1 h-4 w-4" /> Previous
           </Button>
-          <span className="text-xs text-muted-foreground">
+          <span className="text-muted-foreground text-xs">
             {offset + 1}–{Math.min(offset + PAGE_SIZE, total)} of {total}
           </span>
           <Button

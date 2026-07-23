@@ -21,7 +21,7 @@ export function TableSkeleton({
       role="status"
       aria-label="Loading"
     >
-      <div className="flex gap-4 border-b border-border/50 pb-2">
+      <div className="border-border/50 flex gap-4 border-b pb-2">
         {Array.from({ length: cols }).map((_, i) => (
           <Skeleton key={i} className="h-4 flex-1" />
         ))}
@@ -85,7 +85,7 @@ export function ListSkeleton({
       {Array.from({ length: rows }).map((_, i) => (
         <div
           key={i}
-          className="flex items-center gap-3 rounded-lg border border-border/50 p-3"
+          className="border-border/50 flex items-center gap-3 rounded-lg border p-3"
         >
           <Skeleton className="h-9 w-9 rounded-md" />
           <div className="flex-1 space-y-2">
@@ -115,7 +115,7 @@ export function CardsSkeleton({
       {Array.from({ length: count }).map((_, i) => (
         <div
           key={i}
-          className="space-y-3 rounded-xl border border-border/50 p-4"
+          className="border-border/50 space-y-3 rounded-xl border p-4"
         >
           <Skeleton className="h-5 w-1/2" />
           <Skeleton className="h-3 w-full" />

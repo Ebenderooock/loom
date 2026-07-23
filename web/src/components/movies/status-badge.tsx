@@ -8,7 +8,7 @@ export function StatusBadge({ status }: { status: string }) {
   };
   return (
     <span
-      className={`inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-xs font-medium ${cfg.color} ${cfg.bg} border-current/10 border shadow-sm`}
+      className={`inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-xs font-medium ${cfg.color} ${cfg.bg} border border-current/10 shadow-sm`}
     >
       <span
         className={`h-1.5 w-1.5 rounded-full ${cfg.color.replace("text-", "bg-")} animate-pulse`}

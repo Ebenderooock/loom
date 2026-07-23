@@ -40,9 +40,9 @@ function ArtistCard({
   return (
     <button
       onClick={() => onSelect(artist)}
-      className="group flex flex-col overflow-hidden rounded-lg border border-border bg-card transition-colors hover:border-accent/50 hover:shadow-md"
+      className="group border-border bg-card hover:border-accent/50 flex flex-col overflow-hidden rounded-lg border transition-colors hover:shadow-md"
     >
-      <div className="relative aspect-square overflow-hidden bg-gradient-to-br from-muted to-muted-foreground/20">
+      <div className="from-muted to-muted-foreground/20 relative aspect-square overflow-hidden bg-gradient-to-br">
         {artist.image_url ? (
           <img
             src={artist.image_url}
@@ -51,7 +51,7 @@ function ArtistCard({
             className="h-full w-full object-cover transition-transform group-hover:scale-105"
           />
         ) : (
-          <div className="flex h-full w-full flex-col items-center justify-center gap-2 text-muted-foreground">
+          <div className="text-muted-foreground flex h-full w-full flex-col items-center justify-center gap-2">
             <Music className="h-12 w-12 opacity-40" />
             <span className="text-xs font-medium opacity-60">No artwork</span>
           </div>
@@ -59,7 +59,7 @@ function ArtistCard({
         {artist.monitoring_status !== "monitored" && (
           <Badge
             variant="secondary"
-            className="absolute left-2 top-2 text-[10px]"
+            className="absolute top-2 left-2 text-[10px]"
           >
             Unmonitored
           </Badge>
@@ -67,7 +67,7 @@ function ArtistCard({
       </div>
       <div className="flex flex-1 flex-col gap-1 p-3">
         <span className="truncate text-sm font-medium">{artist.name}</span>
-        <span className="text-xs text-muted-foreground">
+        <span className="text-muted-foreground text-xs">
           {stats
             ? `${stats.albumCount} album${stats.albumCount === 1 ? "" : "s"}`
             : "—"}
@@ -117,7 +117,7 @@ function ArtistDetailSheet({
               {/* Info section */}
               <div className="space-y-3">
                 <div>
-                  <h4 className="text-xs font-semibold text-muted-foreground">
+                  <h4 className="text-muted-foreground text-xs font-semibold">
                     MONITORING
                   </h4>
                   <p className="mt-1 text-sm capitalize">
@@ -128,23 +128,23 @@ function ArtistDetailSheet({
                 {stats && (
                   <>
                     <div>
-                      <h4 className="text-xs font-semibold text-muted-foreground">
+                      <h4 className="text-muted-foreground text-xs font-semibold">
                         ALBUMS
                       </h4>
                       <p className="mt-1 text-sm">{stats.albumCount}</p>
                     </div>
                     <div>
-                      <h4 className="text-xs font-semibold text-muted-foreground">
+                      <h4 className="text-muted-foreground text-xs font-semibold">
                         TRACKS
                       </h4>
                       <p className="mt-1 text-sm">{stats.trackCount}</p>
                     </div>
                     {stats.missingTrackCount > 0 && (
                       <div>
-                        <h4 className="text-xs font-semibold text-muted-foreground">
+                        <h4 className="text-muted-foreground text-xs font-semibold">
                           MISSING
                         </h4>
-                        <p className="mt-1 text-sm text-destructive">
+                        <p className="text-destructive mt-1 text-sm">
                           {stats.missingTrackCount} track
                           {stats.missingTrackCount === 1 ? "" : "s"}
                         </p>
@@ -155,7 +155,7 @@ function ArtistDetailSheet({
 
                 {artist.country && (
                   <div>
-                    <h4 className="text-xs font-semibold text-muted-foreground">
+                    <h4 className="text-muted-foreground text-xs font-semibold">
                       COUNTRY
                     </h4>
                     <p className="mt-1 text-sm">{artist.country}</p>
@@ -164,7 +164,7 @@ function ArtistDetailSheet({
 
                 {artist.disambiguation && (
                   <div>
-                    <h4 className="text-xs font-semibold text-muted-foreground">
+                    <h4 className="text-muted-foreground text-xs font-semibold">
                       DISAMBIGUATION
                     </h4>
                     <p className="mt-1 text-sm">{artist.disambiguation}</p>
@@ -291,11 +291,11 @@ export function MusicPage() {
   };
 
   return (
-    <div className="px-6 pb-6 pt-2">
+    <div className="px-6 pt-2 pb-6">
       {/* Toolbar */}
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="relative max-w-sm flex-1">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
           <Input
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
@@ -349,7 +349,7 @@ export function MusicPage() {
           }
         />
       ) : filtered.length === 0 ? (
-        <p className="py-12 text-center text-sm text-muted-foreground">
+        <p className="text-muted-foreground py-12 text-center text-sm">
           No artists match "{filter}".
         </p>
       ) : (
