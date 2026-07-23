@@ -9,6 +9,12 @@ import (
 	"github.com/ebenderooock/loom/internal/indexers"
 )
 
+// Grabber performs a full search-and-grab for a single candidate.
+// Implemented by the autosearch engine.
+type Grabber interface {
+	Grab(ctx context.Context, c SearchCandidate) error
+}
+
 // RollingSearcher periodically searches indexers for missing library
 // items in small batches, respecting per-indexer quota limits.
 type RollingSearcher struct {
@@ -24,6 +30,9 @@ type RollingSearcher struct {
 	lastRun  *time.Time
 	nextRun  *time.Time
 	searched int // items searched since boot
+
+	grabberMu sync.RWMutex
+	grabber   Grabber
 }
 
 // NewRollingSearcher constructs a searcher but does not start it.
@@ -66,6 +75,15 @@ func (rs *RollingSearcher) Stop() {
 	}
 	rs.running = false
 	rs.nextRun = nil
+}
+
+// SetGrabber injects the search-and-grab engine. When set, the rolling
+// searcher delegates to it instead of performing a bare indexer search.
+// Safe to call after Start.
+func (rs *RollingSearcher) SetGrabber(g Grabber) {
+	rs.grabberMu.Lock()
+	rs.grabber = g
+	rs.grabberMu.Unlock()
 }
 
 // Trigger runs one search cycle immediately in the caller's goroutine.
@@ -188,6 +206,27 @@ func (rs *RollingSearcher) runOnce(ctx context.Context) {
 }
 
 func (rs *RollingSearcher) searchCandidate(ctx context.Context, c SearchCandidate) {
+	// Prefer the full search-and-grab engine when available; it evaluates
+	// results against the quality profile and sends accepted releases to a
+	// download client. Fall back to a bare indexer search if the engine has
+	// not been wired up yet (e.g. during tests or early startup).
+	rs.grabberMu.RLock()
+	g := rs.grabber
+	rs.grabberMu.RUnlock()
+
+	if g != nil {
+		if err := g.Grab(ctx, c); err != nil {
+			rs.logger.Warn("search-and-grab failed", "type", c.MediaType,
+				"id", c.MediaID, "title", c.Title, "err", err)
+		}
+		// Record quota and last-searched regardless of grab outcome.
+		if err := rs.store.RecordSearch(ctx, c.MediaType, c.MediaID); err != nil {
+			rs.logger.Warn("record search state", "err", err)
+		}
+		return
+	}
+
+	// Fallback: bare indexer search (results are not processed).
 	if rs.indexerSvc == nil {
 		return
 	}

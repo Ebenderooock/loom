@@ -28,17 +28,18 @@ func DefaultRollingSearchConfig() RollingSearchConfig {
 
 // SearchCandidate is a media item eligible for a rolling search.
 type SearchCandidate struct {
-	MediaType      string     `json:"mediaType"` // "movie" or "episode"
-	MediaID        string     `json:"mediaId"`
-	Title          string     `json:"title"`
-	Year           int        `json:"year,omitempty"`
-	IMDBID         string     `json:"imdbId,omitempty"`
-	TVDBID         string     `json:"tvdbId,omitempty"`
-	TMDBID         string     `json:"tmdbId,omitempty"`
-	Season         int        `json:"season,omitempty"`
-	Episode        int        `json:"episode,omitempty"`
-	LastSearchedAt *time.Time `json:"lastSearchedAt,omitempty"`
-	Priority       int        `json:"priority"`
+	MediaType        string     `json:"mediaType"` // "movie" or "episode"
+	MediaID          string     `json:"mediaId"`
+	Title            string     `json:"title"`
+	Year             int        `json:"year,omitempty"`
+	IMDBID           string     `json:"imdbId,omitempty"`
+	TVDBID           string     `json:"tvdbId,omitempty"`
+	TMDBID           string     `json:"tmdbId,omitempty"`
+	Season           int        `json:"season,omitempty"`
+	Episode          int        `json:"episode,omitempty"`
+	QualityProfileID string     `json:"qualityProfileId,omitempty"`
+	LastSearchedAt   *time.Time `json:"lastSearchedAt,omitempty"`
+	Priority         int        `json:"priority"`
 }
 
 // RollingSearchStatus is the API-facing snapshot of the scheduler state.
