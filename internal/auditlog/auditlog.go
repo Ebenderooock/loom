@@ -104,7 +104,7 @@ func (l *Logger) Log(ctx context.Context, e Entry) {
 		e.Detail, e.EntityType, e.EntityID, e.EntityName, e.Level, e.Source,
 	)
 	if err != nil {
-		l.logger.Error("audit log insert failed", "error", err)
+		l.logger.ErrorContext(ctx, "audit log insert failed", "error", err)
 		if m := telemetry.App(); m != nil {
 			m.InternalWriteFailures.WithLabelValues("audit_log").Inc()
 		}
@@ -254,7 +254,7 @@ func (l *Logger) handleList(w http.ResponseWriter, r *http.Request) {
 		Until:      q.Get("until"),
 	})
 	if err != nil {
-		l.logger.Error("audit log list failed", "err", err)
+		l.logger.ErrorContext(r.Context(), "audit log list failed", "error", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
@@ -265,7 +265,7 @@ func (l *Logger) handleList(w http.ResponseWriter, r *http.Request) {
 
 func (l *Logger) handleClear(w http.ResponseWriter, r *http.Request) {
 	if err := l.Clear(r.Context()); err != nil {
-		l.logger.Error("audit log clear failed", "err", err)
+		l.logger.ErrorContext(r.Context(), "audit log clear failed", "error", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}

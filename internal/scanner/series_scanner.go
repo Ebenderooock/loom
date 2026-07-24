@@ -159,7 +159,7 @@ func (s *SeriesScanner) runSeriesScan(ctx context.Context, scanID, libraryID, ro
 
 		tmdbResults, err := s.seriesSvc.SearchTMDB(ctx, title)
 		if err != nil {
-			s.logger.Warn("TMDB search failed for show folder", "title", title, "err", err)
+			s.logger.Warn("TMDB search failed for show folder", "title", title, "error", err)
 			continue
 		}
 
@@ -185,7 +185,7 @@ func (s *SeriesScanner) runSeriesScan(ctx context.Context, scanID, libraryID, ro
 			if strings.Contains(err.Error(), "UNIQUE") || strings.Contains(err.Error(), "unique") || strings.Contains(err.Error(), "already exists") {
 				s.logger.Debug("series already exists, skipping", "tmdbId", tmdbID)
 			} else {
-				s.logger.Warn("failed to add series from TMDB", "tmdbId", tmdbID, "title", title, "err", err)
+				s.logger.Warn("failed to add series from TMDB", "tmdbId", tmdbID, "title", title, "error", err)
 				s.mu.Lock()
 				result.Errors = append(result.Errors, fmt.Sprintf("add series %q: %v", title, err))
 				s.mu.Unlock()
@@ -229,7 +229,7 @@ func (s *SeriesScanner) runSeriesScan(ctx context.Context, scanID, libraryID, ro
 		// Walk this show folder for video files
 		showFiles, walkErr := walkSeriesFolder(sf.Path)
 		if walkErr != nil {
-			s.logger.Warn("error walking show folder", "path", sf.Path, "err", walkErr)
+			s.logger.Warn("error walking show folder", "path", sf.Path, "error", walkErr)
 			continue
 		}
 
@@ -239,7 +239,7 @@ func (s *SeriesScanner) runSeriesScan(ctx context.Context, scanID, libraryID, ro
 
 		for _, ef := range showFiles {
 			if err := s.processEpisodeFileForSeries(ctx, scanID, matched, ef.Path, ef.Size); err != nil {
-				s.logger.Warn("failed to process episode file", "path", ef.Path, "err", err)
+				s.logger.Warn("failed to process episode file", "path", ef.Path, "error", err)
 				s.mu.Lock()
 				result.Errors = append(result.Errors, fmt.Sprintf("%s: %v", ef.Path, err))
 				s.mu.Unlock()
@@ -469,7 +469,7 @@ func (s *SeriesScanner) importEpisodeFile(ctx context.Context, ep *series.Episod
 	ep.HasFile = true
 	ep.UpdatedAt = now
 	if err := s.seriesSvc.UpdateEpisode(ctx, ep); err != nil {
-		s.logger.Warn("failed to update episode has_file", "episodeId", ep.ID, "err", err)
+		s.logger.Warn("failed to update episode has_file", "episodeId", ep.ID, "error", err)
 	}
 
 	s.logger.Info("imported episode file",
@@ -659,7 +659,7 @@ func (s *SeriesScanner) RescanSeries(ctx context.Context, seriesID, libraryPath 
 
 	for _, ef := range files {
 		if err := s.processEpisodeFileForSeries(ctx, scanID, sr, ef.Path, ef.Size); err != nil {
-			s.logger.Warn("rescan: failed to process episode file", "path", ef.Path, "err", err)
+			s.logger.Warn("rescan: failed to process episode file", "path", ef.Path, "error", err)
 		}
 	}
 

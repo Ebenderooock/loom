@@ -512,7 +512,7 @@ func (s *Service) handleSearchStream(w http.ResponseWriter, r *http.Request) {
 			}
 			data, err := json.Marshal(evt)
 			if err != nil {
-				slog.Warn("sse: marshal error", "err", err)
+				slog.WarnContext(r.Context(), "sse: marshal error", "error", err)
 				continue
 			}
 			fmt.Fprintf(w, "event: %s\ndata: %s\n\n", evt.Type, data)

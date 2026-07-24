@@ -103,7 +103,7 @@ func (h *HealthChecker) Run(ctx context.Context) error {
 func (h *HealthChecker) checkOne(ctx context.Context, id string) {
 	health, err := h.svc.TestOne(ctx, id)
 	if err != nil {
-		h.svc.logger.Warn("health check completed", "id", id, "status", health.Status, "latency_ms", health.LatencyMS, "err", err)
+		h.svc.logger.Warn("health check completed", "id", id, "status", health.Status, "latency_ms", health.LatencyMS, "error", err)
 
 		h.mu.Lock()
 		h.consecutiveFailures[id]++

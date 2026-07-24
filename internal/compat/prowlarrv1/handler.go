@@ -78,7 +78,7 @@ func writeError(w http.ResponseWriter, status int, msg string) {
 func (h *Handler) listIndexers(w http.ResponseWriter, r *http.Request) {
 	defs, err := h.svc.List(r.Context())
 	if err != nil {
-		h.logger.Error("list indexers", "err", err)
+		h.logger.ErrorContext(r.Context(), "list indexers", "error", err)
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
@@ -108,7 +108,7 @@ func (h *Handler) getIndexer(w http.ResponseWriter, r *http.Request) {
 
 	defs, err := h.svc.List(r.Context())
 	if err != nil {
-		h.logger.Error("get indexer: list", "err", err)
+		h.logger.ErrorContext(r.Context(), "get indexer: list", "error", err)
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
@@ -166,7 +166,7 @@ func (h *Handler) search(w http.ResponseWriter, r *http.Request) {
 		// Prowlarr sends numeric IDs; translate back to string UUIDs.
 		defs, err := h.svc.List(r.Context())
 		if err != nil {
-			h.logger.Error("search: list for id mapping", "err", err)
+			h.logger.ErrorContext(r.Context(), "search: list for id mapping", "error", err)
 			writeError(w, http.StatusInternalServerError, "internal error")
 			return
 		}
@@ -326,7 +326,7 @@ func (h *Handler) allowedIndexerIDs(r *http.Request) map[string]struct{} {
 	}
 	ids, err := h.syncStore.FilteredIndexerIDs(r.Context(), profileID)
 	if err != nil {
-		h.logger.Warn("sync profile filter failed, allowing all", "profileId", profileID, "err", err)
+		h.logger.WarnContext(r.Context(), "sync profile filter failed, allowing all", "profileId", profileID, "error", err)
 		return nil
 	}
 	m := make(map[string]struct{}, len(ids))

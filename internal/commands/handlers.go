@@ -45,7 +45,7 @@ func (h *cmdHandler) create(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	h.logger.Info("command queued", "id", cmd.ID, "name", cmd.Name)
+	h.logger.InfoContext(r.Context(), "command queued", "id", cmd.ID, "name", cmd.Name)
 	writeJSON(w, http.StatusCreated, cmd)
 }
 
@@ -85,7 +85,7 @@ func (h *cmdHandler) cancel(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	h.logger.Info("command cancelled", "id", id)
+	h.logger.InfoContext(r.Context(), "command cancelled", "id", id)
 	w.WriteHeader(http.StatusNoContent)
 }
 

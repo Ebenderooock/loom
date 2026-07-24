@@ -511,7 +511,7 @@ func (s *Service) handleAdd(w http.ResponseWriter, r *http.Request) {
 	}
 	req.Normalize()
 	if req.Magnet == "" && req.TorrentURL == "" && req.NZBURL == "" && len(req.RawBytes) == 0 {
-		slog.Warn("handleAdd: empty download request after normalize",
+		slog.WarnContext(r.Context(), "handleAdd: empty download request after normalize",
 			"client_id", id, "title", req.Title,
 			"magnet", req.Magnet, "torrent_url", req.TorrentURL,
 			"infohash", req.Infohash)
@@ -828,9 +828,9 @@ func (s *Service) recordManualGrab(ctx context.Context, res AddResult, req AddRe
 		}
 	}
 	if err != nil {
-		s.logger.Warn("failed to create manual grab workflow",
+		s.logger.WarnContext(ctx, "failed to create manual grab workflow",
 			"client_id", res.ClientID, "item_id", res.ItemID,
-			"media_type", req.MediaType, "err", err)
+			"media_type", req.MediaType, "error", err)
 		return
 	}
 	if wf != nil {
@@ -844,7 +844,7 @@ func (s *Service) recordManualGrab(ctx context.Context, res AddResult, req AddRe
 			SeedRatioLimit:       req.SeedRatioLimit,
 			SeedTimeLimitMinutes: req.SeedTimeLimitMinutes,
 		})
-		s.logger.Info("recorded manual grab workflow",
+		s.logger.InfoContext(ctx, "recorded manual grab workflow",
 			"workflow_id", wf.ID, "client_id", res.ClientID, "item_id", res.ItemID,
 			"media_type", req.MediaType)
 	}
@@ -1019,7 +1019,7 @@ func (s *Service) handleTorrentSpeedLimits(w http.ResponseWriter, r *http.Reques
 	// blob so they are re-applied on a cold start. A failure here does not
 	// undo the live change.
 	if err := s.persistTorrentSpeedLimits(r.Context(), id, req.DownloadLimit, req.UploadLimit); err != nil {
-		s.logger.Warn("persisting torrent speed limits failed", "id", id, "err", err)
+		s.logger.WarnContext(r.Context(), "persisting torrent speed limits failed", "id", id, "error", err)
 	}
 
 	writeJSON(w, http.StatusOK, mgr.EngineSummary())

@@ -192,11 +192,11 @@ func (rs *RollingSearcher) runOnce(ctx context.Context) {
 	// the other queue. The target split remains a preference, not a hard cap.
 	movieCandidates, err := rs.store.GetCandidates(ctx, "movie", batchSize, cfg.MinResearchDays)
 	if err != nil {
-		rs.logger.Error("get movie candidates", "err", err)
+		rs.logger.Error("get movie candidates", "error", err)
 	}
 	epCandidates, err := rs.store.GetCandidates(ctx, "episode", batchSize, cfg.MinResearchDays)
 	if err != nil {
-		rs.logger.Error("get episode candidates", "err", err)
+		rs.logger.Error("get episode candidates", "error", err)
 	}
 
 	candidates := make([]SearchCandidate, 0, batchSize)
@@ -257,11 +257,11 @@ func (rs *RollingSearcher) searchCandidate(ctx context.Context, c SearchCandidat
 	if g != nil {
 		if err := g.Grab(ctx, c); err != nil {
 			rs.logger.Warn("search-and-grab failed", "type", c.MediaType,
-				"id", c.MediaID, "title", c.Title, "err", err)
+				"id", c.MediaID, "title", c.Title, "error", err)
 		}
 		// Record quota and last-searched regardless of grab outcome.
 		if err := rs.store.RecordSearch(ctx, c.MediaType, c.MediaID); err != nil {
-			rs.logger.Warn("record search state", "err", err)
+			rs.logger.Warn("record search state", "error", err)
 		}
 		return
 	}
@@ -293,7 +293,7 @@ func (rs *RollingSearcher) searchCandidate(ctx context.Context, c SearchCandidat
 	// Fan out across all enabled indexers, respecting quotas.
 	defs, err := rs.indexerSvc.List(ctx)
 	if err != nil {
-		rs.logger.Warn("list indexers", "err", err)
+		rs.logger.Warn("list indexers", "error", err)
 		return
 	}
 
@@ -318,6 +318,6 @@ func (rs *RollingSearcher) searchCandidate(ctx context.Context, c SearchCandidat
 
 	// Persist last-searched timestamp.
 	if err := rs.store.RecordSearch(ctx, c.MediaType, c.MediaID); err != nil {
-		rs.logger.Warn("record search state", "err", err)
+		rs.logger.Warn("record search state", "error", err)
 	}
 }

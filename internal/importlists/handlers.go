@@ -221,7 +221,7 @@ func syncList(store *Store, syncMgr *SyncManager, logger *slog.Logger) http.Hand
 		}
 
 		if err := syncMgr.SyncList(r.Context(), l); err != nil {
-			logger.Error("import-lists: manual sync failed", "id", id, "err", err)
+			logger.Error("import-lists: manual sync failed", "id", id, "error", err)
 			writeError(w, http.StatusInternalServerError, "sync failed: "+err.Error())
 			return
 		}
@@ -322,7 +322,7 @@ func addDiscover(syncMgr *SyncManager, logger *slog.Logger) http.HandlerFunc {
 		}
 		item, err := syncMgr.AddDiscoverItem(r.Context(), body.ItemID)
 		if err != nil {
-			logger.Error("import-lists: discover add failed", "item", body.ItemID, "err", err)
+			logger.Error("import-lists: discover add failed", "item", body.ItemID, "error", err)
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}

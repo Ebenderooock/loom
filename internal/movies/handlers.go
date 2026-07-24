@@ -227,7 +227,7 @@ func refreshAllMovies(svc Service) http.HandlerFunc {
 		go func(ctx context.Context, movieIDs []string) {
 			for _, id := range movieIDs {
 				if err := svc.RefreshMovie(ctx, id); err != nil {
-					slog.Warn("movies: bulk refresh failed", "movie_id", id, "error", err)
+					slog.WarnContext(ctx, "movies: bulk refresh failed", "movie_id", id, "error", err)
 				}
 			}
 		}(ctx, ids)
@@ -268,7 +268,7 @@ func rescanAllMovieLibraries(
 			for _, lib := range libs {
 				lib := lib
 				if err := scanner.ScanLibrary(ctx, &lib); err != nil {
-					slog.Warn("movies: bulk rescan failed", "library_id", lib.ID, "error", err)
+					slog.WarnContext(ctx, "movies: bulk rescan failed", "library_id", lib.ID, "error", err)
 				}
 			}
 		}(ctx, movieLibraries)
@@ -406,7 +406,7 @@ func listMovies(svc Service, grabStore GrabChecker) http.HandlerFunc {
 			// No filters — total comes from the DB.
 			tc, err := svc.CountMovies(r.Context())
 			if err != nil {
-				slog.Warn("failed to count movies", "err", err)
+				slog.WarnContext(r.Context(), "failed to count movies", "error", err)
 				tc = len(movies)
 			}
 			totalCount = tc

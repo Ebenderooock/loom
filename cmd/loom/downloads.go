@@ -42,7 +42,7 @@ func buildDownloadService(ctx context.Context, cfg *config.Config, db storage.DB
 	}
 
 	if err := svc.HydrateAll(ctx); err != nil {
-		logger.Warn("download client hydrate failed", "err", err)
+		logger.Warn("download client hydrate failed", "error", err)
 	}
 	return svc, nil
 }

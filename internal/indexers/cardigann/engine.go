@@ -530,7 +530,7 @@ func (e *Engine) Search(ctx context.Context, q indexers.Query) (*indexers.Result
 	for i, sp := range paths {
 		method, target, params, headers, err := e.buildSearchRequestForPath(sp, tctx)
 		if err != nil {
-			slog.Warn("cardigann: search path error", "indexer", e.id, "path_idx", i, "err", err)
+			slog.Warn("cardigann: search path error", "indexer", e.id, "path_idx", i, "error", err)
 			pathErrors = append(pathErrors, fmt.Errorf("path %d build: %w", i, err))
 			continue
 		}
@@ -561,7 +561,7 @@ func (e *Engine) Search(ctx context.Context, q indexers.Query) (*indexers.Result
 
 		body, err := e.fetch(ctx, method, target, params, headers)
 		if err != nil {
-			slog.Warn("cardigann: search fetch error", "indexer", e.id, "path_idx", i, "err", err)
+			slog.Warn("cardigann: search fetch error", "indexer", e.id, "path_idx", i, "error", err)
 			pathErrors = append(pathErrors, fmt.Errorf("path %d fetch: %w", i, err))
 			continue
 		}
@@ -582,7 +582,7 @@ func (e *Engine) Search(ctx context.Context, q indexers.Query) (*indexers.Result
 			rows, err = e.extractRows(body, tctx)
 		}
 		if err != nil {
-			slog.Warn("cardigann: search extract error", "indexer", e.id, "path_idx", i, "err", err)
+			slog.Warn("cardigann: search extract error", "indexer", e.id, "path_idx", i, "error", err)
 			pathErrors = append(pathErrors, fmt.Errorf("path %d extract: %w", i, err))
 			continue
 		}
@@ -752,7 +752,6 @@ func (e *Engine) fetch(ctx context.Context, method, target string, params url.Va
 	// RoundTripper's PostResponse solve either wasn't triggered
 	// (no flaresolverr proxy) or it failed. Report the error.
 	if cloudflare.IsChallenge(resp, body) {
-		slog.Warn("cardigann: cloudflare challenge detected (unsolved)", "indexer", e.id, "url", full)
 		return nil, fmt.Errorf("cardigann: %s %s: %w", method, target, indexers.ErrCloudFlareChallenge)
 	}
 	if resp.StatusCode >= 500 {
@@ -906,7 +905,7 @@ func (e *Engine) extractOne(node *goquery.Selection, tctx templateContext) (inde
 			sel, err = e.expandTemplate(sel, fieldCtx)
 			if err != nil {
 				slog.Warn("cardigann: field selector template error",
-					"indexer", e.id, "field", name, "err", err)
+					"indexer", e.id, "field", name, "error", err)
 				continue
 			}
 		}
@@ -938,7 +937,7 @@ func (e *Engine) extractOne(node *goquery.Selection, tctx templateContext) (inde
 				expanded, terr = e.expandTemplate(expanded, fieldCtx)
 				if terr != nil {
 					slog.Warn("cardigann: field text template error",
-						"indexer", e.id, "field", name, "err", terr)
+						"indexer", e.id, "field", name, "error", terr)
 					continue
 				}
 			}
@@ -995,7 +994,7 @@ func (e *Engine) extractOne(node *goquery.Selection, tctx templateContext) (inde
 			fallback, terr = e.expandTemplate(fallback, fieldCtx)
 			if terr != nil {
 				slog.Warn("cardigann: field default template error",
-					"indexer", e.id, "field", name, "err", terr)
+					"indexer", e.id, "field", name, "error", terr)
 				continue
 			}
 		}
@@ -1265,7 +1264,7 @@ var cardigannFuncs = template.FuncMap{
 			compiled, err := regexp.Compile(pattern)
 			if err != nil {
 				slog.Warn("cardigann: re_replace: bad pattern",
-					"pattern", pattern, "err", err)
+					"pattern", pattern, "error", err)
 				return s
 			}
 			cached, _ = reCache.LoadOrStore(pattern, compiled)
@@ -1335,7 +1334,7 @@ func (e *Engine) expandFilterArg(arg any, ctx templateContext) any {
 		expanded, err := e.expandTemplate(v, ctx)
 		if err != nil {
 			slog.Warn("cardigann: filter arg template error",
-				"indexer", e.id, "err", err)
+				"indexer", e.id, "error", err)
 			return v
 		}
 		return expanded

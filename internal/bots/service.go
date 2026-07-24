@@ -180,7 +180,7 @@ func (s *Service) cmdLink(ctx context.Context, cmd Command) Reply {
 	}
 	lc, err := s.store.CreateLinkCode(ctx, cmd.Platform, cmd.ExternalID, cmd.ExternalUsername)
 	if err != nil {
-		s.logger.Error("bots: create link code", "err", err)
+		s.logger.Error("bots: create link code", "error", err)
 		return Reply{Text: "Sorry, I couldn't create a link code. Try again later."}
 	}
 	return Reply{Text: "🔗 Your link code is:\n\n*" + lc.Code + "*\n\n" +
@@ -199,15 +199,15 @@ func (s *Service) cmdSearch(ctx context.Context, cmd Command, query string) Repl
 	}
 	movies, err := s.search.SearchMovies(ctx, query)
 	if err != nil {
-		s.logger.Warn("bots: movie search", "err", err)
+		s.logger.Warn("bots: movie search", "error", err)
 	}
 	series, err := s.search.SearchSeries(ctx, query)
 	if err != nil {
-		s.logger.Warn("bots: series search", "err", err)
+		s.logger.Warn("bots: series search", "error", err)
 	}
 	artists, err := s.search.SearchArtists(ctx, query)
 	if err != nil {
-		s.logger.Warn("bots: artist search", "err", err)
+		s.logger.Warn("bots: artist search", "error", err)
 	}
 	results := interleave(movies, series, artists, s.maxResults)
 	if len(results) == 0 {
@@ -230,7 +230,7 @@ func (s *Service) cmdStatus(ctx context.Context, cmd Command) Reply {
 	}
 	list, err := s.requests.ListMine(ctx, caller.userID)
 	if err != nil {
-		s.logger.Error("bots: list mine", "err", err)
+		s.logger.Error("bots: list mine", "error", err)
 		return Reply{Text: "Sorry, I couldn't load your requests."}
 	}
 	if len(list) == 0 {
@@ -258,7 +258,7 @@ func (s *Service) cmdPending(ctx context.Context, cmd Command) Reply {
 	}
 	list, err := s.requests.ListAll(ctx, requests.StatusPending)
 	if err != nil {
-		s.logger.Error("bots: list pending", "err", err)
+		s.logger.Error("bots: list pending", "error", err)
 		return Reply{Text: "Sorry, I couldn't load pending requests."}
 	}
 	if len(list) == 0 {
@@ -320,7 +320,7 @@ func (s *Service) callbackRequest(ctx context.Context, cmd Command, mt requests.
 		return Reply{Text: "Unsupported media type."}
 	}
 	if err != nil || res == nil {
-		s.logger.Warn("bots: refetch metadata", "tmdb", tmdbID, "err", err)
+		s.logger.Warn("bots: refetch metadata", "tmdb", tmdbID, "error", err)
 		return Reply{Text: "Sorry, I couldn't look that title up. Try /search again."}
 	}
 
@@ -343,7 +343,7 @@ func (s *Service) callbackRequest(ctx context.Context, cmd Command, mt requests.
 	case errors.Is(err, requests.ErrDuplicate):
 		return Reply{Text: "↻ You already have an open request for *" + res.Title + "*."}
 	default:
-		s.logger.Error("bots: create request", "err", err)
+		s.logger.Error("bots: create request", "error", err)
 		return Reply{Text: "Sorry, something went wrong submitting that request."}
 	}
 }
@@ -368,7 +368,7 @@ func (s *Service) callbackDecision(ctx context.Context, cmd Command, reqID strin
 
 	if !approve {
 		if _, err := s.requests.Reject(ctx, reqID, "rejected via chat", caller.username); err != nil {
-			s.logger.Error("bots: reject", "err", err)
+			s.logger.Error("bots: reject", "error", err)
 			return Reply{Text: "Sorry, I couldn't reject that request."}
 		}
 		return Reply{Text: "❌ Rejected *" + existing.Title + "*."}
@@ -380,7 +380,7 @@ func (s *Service) callbackDecision(ctx context.Context, cmd Command, reqID strin
 			"Set chat-approval defaults in Settings → Request Bots, or approve in the web UI."}
 	}
 	if _, err := s.requests.Approve(ctx, reqID, qp, lib, caller.username); err != nil {
-		s.logger.Error("bots: approve", "err", err)
+		s.logger.Error("bots: approve", "error", err)
 		return Reply{Text: "Sorry, I couldn't approve that request: " + err.Error()}
 	}
 	return Reply{Text: "✅ Approved *" + existing.Title + "* — searching now."}
@@ -432,7 +432,7 @@ type caller struct {
 func (s *Service) requireLinked(ctx context.Context, cmd Command) (caller, bool) {
 	link, err := s.store.GetLink(ctx, cmd.Platform, cmd.ExternalID)
 	if err != nil {
-		s.logger.Error("bots: get link", "err", err)
+		s.logger.Error("bots: get link", "error", err)
 		return caller{}, false
 	}
 	if link == nil {
@@ -440,7 +440,7 @@ func (s *Service) requireLinked(ctx context.Context, cmd Command) (caller, bool)
 	}
 	name, isAdmin, err := s.users.Lookup(ctx, link.UserID)
 	if err != nil {
-		s.logger.Warn("bots: resolve user", "user_id", link.UserID, "err", err)
+		s.logger.Warn("bots: resolve user", "user_id", link.UserID, "error", err)
 		return caller{}, false
 	}
 	return caller{

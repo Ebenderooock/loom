@@ -169,7 +169,7 @@ func (m *Monitor) processAlerts(ctx context.Context, results []CheckResult) {
 		}
 		title := fmt.Sprintf("Health %s: %s", r.Status, r.Name)
 		if err := m.notifier(ctx, title, r.Message); err != nil {
-			m.logger.Warn("failed to send health alert", "check", r.Name, "err", err)
+			m.logger.Warn("failed to send health alert", "check", r.Name, "error", err)
 		} else {
 			m.recordAlert(r.Name)
 			m.logger.Info("health alert sent", "check", r.Name, "status", r.Status)

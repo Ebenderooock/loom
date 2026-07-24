@@ -184,7 +184,7 @@ func (c *FlareSolverrClient) do(ctx context.Context, cfg FlareSolverrConfig, bod
 	}
 	start := time.Now()
 	resp, err := c.httpc.Do(req)
-	slog.Debug("flaresolverr: response received", "cmd", body.Cmd, "elapsed", time.Since(start).String(), "err", err)
+	slog.Debug("flaresolverr: response received", "cmd", body.Cmd, "elapsed", time.Since(start).String(), "error", err)
 	if err != nil {
 		return flareEnvelope{}, fmt.Errorf("flaresolverr: do request: %w", err)
 	}

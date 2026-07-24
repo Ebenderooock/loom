@@ -133,8 +133,6 @@ func (p *ImportPipeline) ReimportFile(ctx context.Context, mediaType MediaType, 
 
 	// Update library
 	if err := p.updateLibrary(ctx, match, destFile, sourcePath); err != nil {
-		p.logger.Error("library update failed after reimport, cleaning up",
-			"error", err, "dest", destFile)
 		_ = os.Remove(destFile)
 		return nil, fmt.Errorf("update library: %w", err)
 	}

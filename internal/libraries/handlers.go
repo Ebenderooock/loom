@@ -69,7 +69,7 @@ func listLibraries(store *Store, logger *slog.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		libs, err := store.List(r.Context())
 		if err != nil {
-			logger.Error("libraries: list", "err", err)
+			logger.Error("libraries: list", "error", err)
 			writeError(w, http.StatusInternalServerError, "internal error")
 			return
 		}
@@ -134,7 +134,7 @@ func createLibrary(store *Store, logger *slog.Logger) http.HandlerFunc {
 				writeError(w, http.StatusConflict, "library path already exists")
 				return
 			}
-			logger.Error("libraries: create", "err", err)
+			logger.Error("libraries: create", "error", err)
 			writeError(w, http.StatusInternalServerError, "internal error")
 			return
 		}
@@ -152,7 +152,7 @@ func getLibrary(store *Store, logger *slog.Logger) http.HandlerFunc {
 				writeError(w, http.StatusNotFound, err.Error())
 				return
 			}
-			logger.Error("libraries: get", "err", err)
+			logger.Error("libraries: get", "error", err)
 			writeError(w, http.StatusInternalServerError, "internal error")
 			return
 		}
@@ -161,7 +161,7 @@ func getLibrary(store *Store, logger *slog.Logger) http.HandlerFunc {
 		// Include files in detail view.
 		files, err := store.ListFiles(r.Context(), id)
 		if err != nil {
-			logger.Error("libraries: list files", "err", err)
+			logger.Error("libraries: list files", "error", err)
 			files = []LibraryFile{}
 		}
 		if files == nil {
@@ -184,7 +184,7 @@ func updateLibrary(store *Store, logger *slog.Logger) http.HandlerFunc {
 				writeError(w, http.StatusNotFound, err.Error())
 				return
 			}
-			logger.Error("libraries: get for update", "err", err)
+			logger.Error("libraries: get for update", "error", err)
 			writeError(w, http.StatusInternalServerError, "internal error")
 			return
 		}
@@ -212,7 +212,7 @@ func updateLibrary(store *Store, logger *slog.Logger) http.HandlerFunc {
 		}
 
 		if err := store.Update(r.Context(), lib); err != nil {
-			logger.Error("libraries: update", "err", err)
+			logger.Error("libraries: update", "error", err)
 			writeError(w, http.StatusInternalServerError, "internal error")
 			return
 		}
@@ -229,7 +229,7 @@ func deleteLibrary(store *Store, logger *slog.Logger) http.HandlerFunc {
 				writeError(w, http.StatusNotFound, err.Error())
 				return
 			}
-			logger.Error("libraries: delete", "err", err)
+			logger.Error("libraries: delete", "error", err)
 			writeError(w, http.StatusInternalServerError, "internal error")
 			return
 		}
@@ -246,7 +246,7 @@ func scanLibrary(store *Store, scanner *Scanner, logger *slog.Logger) http.Handl
 				writeError(w, http.StatusNotFound, err.Error())
 				return
 			}
-			logger.Error("libraries: get for scan", "err", err)
+			logger.Error("libraries: get for scan", "error", err)
 			writeError(w, http.StatusInternalServerError, "internal error")
 			return
 		}
@@ -256,7 +256,7 @@ func scanLibrary(store *Store, scanner *Scanner, logger *slog.Logger) http.Handl
 		scanCtx := context.WithoutCancel(r.Context())
 		go func() {
 			if err := scanner.ScanLibrary(scanCtx, lib); err != nil {
-				logger.Error("libraries: scan failed", "id", id, "err", err)
+				logger.Error("libraries: scan failed", "id", id, "error", err)
 			}
 		}()
 

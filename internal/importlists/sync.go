@@ -122,7 +122,7 @@ func (m *SyncManager) Stop() {
 func (m *SyncManager) tick(ctx context.Context) {
 	lists, err := m.store.ListAll(ctx)
 	if err != nil {
-		m.logger.Error("import-lists: failed to list", "err", err)
+		m.logger.Error("import-lists: failed to list", "error", err)
 		return
 	}
 	now := time.Now().UTC()
@@ -138,7 +138,7 @@ func (m *SyncManager) tick(ctx context.Context) {
 		}
 		if err := m.SyncList(ctx, l); err != nil {
 			m.logger.Error("import-lists: sync failed",
-				"list", l.Name, "id", l.ID, "err", err)
+				"list", l.Name, "id", l.ID, "error", err)
 		}
 	}
 }
@@ -193,13 +193,13 @@ func (m *SyncManager) SyncList(ctx context.Context, l *ImportList) error {
 		// Check exclusions
 		excluded, err := m.store.IsExcluded(ctx, fi.IMDbID, fi.TMDbID, fi.TVDbID)
 		if err != nil {
-			m.logger.Error("import-lists: exclusion check failed", "err", err)
+			m.logger.Error("import-lists: exclusion check failed", "error", err)
 			continue
 		}
 
 		existing, err := m.store.FindItemByExternalID(ctx, l.ID, fi.ExternalID)
 		if err != nil {
-			m.logger.Error("import-lists: find item failed", "err", err)
+			m.logger.Error("import-lists: find item failed", "error", err)
 			continue
 		}
 
@@ -222,7 +222,7 @@ func (m *SyncManager) SyncList(ctx context.Context, l *ImportList) error {
 			}
 			m.enrichItem(ctx, existing, l)
 			if err := m.store.UpsertItem(ctx, existing); err != nil {
-				m.logger.Error("import-lists: upsert existing failed", "err", err)
+				m.logger.Error("import-lists: upsert existing failed", "error", err)
 			}
 			continue
 		}
@@ -245,13 +245,13 @@ func (m *SyncManager) SyncList(ctx context.Context, l *ImportList) error {
 		}
 		m.enrichItem(ctx, item, l)
 		if err := m.store.UpsertItem(ctx, item); err != nil {
-			m.logger.Error("import-lists: insert failed", "err", err)
+			m.logger.Error("import-lists: insert failed", "error", err)
 		}
 	}
 
 	now := time.Now().UTC()
 	if err := m.store.UpdateLastSync(ctx, l.ID, now); err != nil {
-		m.logger.Error("import-lists: update last_sync failed", "err", err)
+		m.logger.Error("import-lists: update last_sync failed", "error", err)
 	}
 
 	// Only auto-add to the library when the list is in auto mode. In discover
@@ -302,7 +302,7 @@ func (m *SyncManager) enrichItem(ctx context.Context, item *ImportListItem, l *I
 	if mediaType == string(MediaTypeSeries) {
 		meta, err := m.tmdbClient.GetTV(ctx, tmdbID)
 		if err != nil {
-			m.logger.Debug("import-lists: tmdb tv enrich failed", "title", item.Title, "err", err)
+			m.logger.Debug("import-lists: tmdb tv enrich failed", "title", item.Title, "error", err)
 			return
 		}
 		if item.PosterPath == "" {
@@ -319,7 +319,7 @@ func (m *SyncManager) enrichItem(ctx context.Context, item *ImportListItem, l *I
 
 	meta, err := m.tmdbClient.GetMovie(ctx, tmdbID)
 	if err != nil {
-		m.logger.Debug("import-lists: tmdb movie enrich failed", "title", item.Title, "err", err)
+		m.logger.Debug("import-lists: tmdb movie enrich failed", "title", item.Title, "error", err)
 		return
 	}
 	if item.PosterPath == "" {
@@ -392,7 +392,7 @@ func (m *SyncManager) GetTraktUserLists(ctx context.Context) ([]providers.TraktU
 func (m *SyncManager) findTraktConnection(ctx context.Context) *connect.Connection {
 	conns, err := m.connectSvc.ListConnections(ctx)
 	if err != nil {
-		m.logger.Warn("import-lists: failed to list connections for Trakt credentials", "err", err)
+		m.logger.Warn("import-lists: failed to list connections for Trakt credentials", "error", err)
 		return nil
 	}
 	for _, c := range conns {
@@ -407,7 +407,7 @@ func (m *SyncManager) findTraktConnection(ctx context.Context) *connect.Connecti
 func (m *SyncManager) processPendingItems(ctx context.Context, l *ImportList) {
 	items, err := m.store.ListItems(ctx, l.ID)
 	if err != nil {
-		m.logger.Error("import-lists: list pending items failed", "err", err)
+		m.logger.Error("import-lists: list pending items failed", "error", err)
 		return
 	}
 
@@ -433,14 +433,14 @@ func (m *SyncManager) processPendingItems(ctx context.Context, l *ImportList) {
 
 		if addErr != nil {
 			m.logger.Error("import-lists: add item failed",
-				"title", item.Title, "err", addErr)
+				"title", item.Title, "error", addErr)
 			item.Status = ItemStatusFailed
 		} else {
 			item.Status = ItemStatusAdded
 		}
 
 		if err := m.store.UpsertItem(ctx, item); err != nil {
-			m.logger.Error("import-lists: update item status failed", "err", err)
+			m.logger.Error("import-lists: update item status failed", "error", err)
 		}
 	}
 }
@@ -500,7 +500,7 @@ func (m *SyncManager) addMovieToLibrary(ctx context.Context, l *ImportList, item
 	// Enrich metadata (poster, overview, genres, etc.) from TMDb.
 	if err := m.moviesSvc.RefreshMovie(ctx, movie.ID); err != nil {
 		m.logger.Warn("import-lists: metadata enrichment failed (movie added without poster)",
-			"title", item.Title, "err", err)
+			"title", item.Title, "error", err)
 	}
 
 	m.logger.Info("import-lists: added movie", "title", item.Title, "tmdb_id", tmdbID)

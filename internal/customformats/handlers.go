@@ -68,7 +68,7 @@ func (h *handler) create(w http.ResponseWriter, r *http.Request) {
 		h.writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	h.logger.Info("custom format created", "id", cf.ID, "name", cf.Name)
+	h.logger.InfoContext(r.Context(), "custom format created", "id", cf.ID, "name", cf.Name)
 	h.writeJSON(w, http.StatusCreated, cf)
 }
 
@@ -88,7 +88,7 @@ func (h *handler) update(w http.ResponseWriter, r *http.Request) {
 		h.writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	h.logger.Info("custom format updated", "id", cf.ID)
+	h.logger.InfoContext(r.Context(), "custom format updated", "id", cf.ID)
 	h.writeJSON(w, http.StatusOK, cf)
 }
 
@@ -102,7 +102,7 @@ func (h *handler) delete(w http.ResponseWriter, r *http.Request) {
 		h.writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	h.logger.Info("custom format deleted", "id", id)
+	h.logger.InfoContext(r.Context(), "custom format deleted", "id", id)
 	w.WriteHeader(http.StatusNoContent)
 }
 

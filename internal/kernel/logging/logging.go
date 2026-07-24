@@ -9,6 +9,8 @@ import (
 	"os"
 	"strings"
 
+	"go.opentelemetry.io/otel/trace"
+
 	"github.com/ebenderooock/loom/internal/kernel/config"
 )
 
@@ -81,6 +83,12 @@ func (h *redactingHandler) Handle(ctx context.Context, r slog.Record) error {
 		rr.AddAttrs(redact(a))
 		return true
 	})
+	if traceID, spanID, ok := traceAttrsFromContext(ctx); ok {
+		rr.AddAttrs(
+			slog.String("trace_id", traceID),
+			slog.String("span_id", spanID),
+		)
+	}
 	return h.inner.Handle(ctx, rr)
 }
 
@@ -109,4 +117,12 @@ func redact(a slog.Attr) slog.Attr {
 		return slog.Attr{Key: a.Key, Value: slog.GroupValue(out...)}
 	}
 	return a
+}
+
+func traceAttrsFromContext(ctx context.Context) (traceID string, spanID string, ok bool) {
+	spanCtx := trace.SpanFromContext(ctx).SpanContext()
+	if !spanCtx.IsValid() {
+		return "", "", false
+	}
+	return spanCtx.TraceID().String(), spanCtx.SpanID().String(), true
 }

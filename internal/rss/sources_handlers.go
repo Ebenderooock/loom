@@ -116,7 +116,7 @@ func (s *SourcesService) handleCreateSource(w http.ResponseWriter, r *http.Reque
 			writeError(w, http.StatusConflict, "name_exists", "source name already exists")
 			return
 		}
-		s.logger.Error("create source failed", "err", err)
+		s.logger.ErrorContext(r.Context(), "create source failed", "error", err)
 		writeError(w, http.StatusInternalServerError, "server_error", "failed to create source")
 		return
 	}
@@ -139,7 +139,7 @@ func (s *SourcesService) handleGetSource(w http.ResponseWriter, r *http.Request)
 			writeError(w, http.StatusNotFound, "not_found", "source not found")
 			return
 		}
-		s.logger.Error("get source failed", "err", err)
+		s.logger.ErrorContext(r.Context(), "get source failed", "error", err)
 		writeError(w, http.StatusInternalServerError, "server_error", "failed to get source")
 		return
 	}
@@ -152,7 +152,7 @@ func (s *SourcesService) handleGetSource(w http.ResponseWriter, r *http.Request)
 func (s *SourcesService) handleListSources(w http.ResponseWriter, r *http.Request) {
 	sources, err := s.ListSources(r.Context())
 	if err != nil {
-		s.logger.Error("list sources failed", "err", err)
+		s.logger.ErrorContext(r.Context(), "list sources failed", "error", err)
 		writeError(w, http.StatusInternalServerError, "server_error", "failed to list sources")
 		return
 	}
@@ -223,7 +223,7 @@ func (s *SourcesService) handleUpdateSource(w http.ResponseWriter, r *http.Reque
 			writeError(w, http.StatusConflict, "name_exists", "source name already exists")
 			return
 		}
-		s.logger.Error("update source failed", "err", err)
+		s.logger.ErrorContext(r.Context(), "update source failed", "error", err)
 		writeError(w, http.StatusInternalServerError, "server_error", "failed to update source")
 		return
 	}
@@ -260,7 +260,7 @@ func (s *SourcesService) handlePatchSource(w http.ResponseWriter, r *http.Reques
 			writeError(w, http.StatusNotFound, "not_found", "source not found")
 			return
 		}
-		s.logger.Error("get source failed", "err", err)
+		s.logger.ErrorContext(r.Context(), "get source failed", "error", err)
 		writeError(w, http.StatusInternalServerError, "server_error", "failed to get source")
 		return
 	}
@@ -296,7 +296,7 @@ func (s *SourcesService) handlePatchSource(w http.ResponseWriter, r *http.Reques
 
 	source, err := s.UpdateSource(r.Context(), id, name, typ, enabled, config)
 	if err != nil {
-		s.logger.Error("patch source failed", "err", err)
+		s.logger.ErrorContext(r.Context(), "patch source failed", "error", err)
 		writeError(w, http.StatusInternalServerError, "server_error", "failed to patch source")
 		return
 	}
@@ -318,7 +318,7 @@ func (s *SourcesService) handleDeleteSource(w http.ResponseWriter, r *http.Reque
 			writeError(w, http.StatusNotFound, "not_found", "source not found")
 			return
 		}
-		s.logger.Error("delete source failed", "err", err)
+		s.logger.ErrorContext(r.Context(), "delete source failed", "error", err)
 		writeError(w, http.StatusInternalServerError, "server_error", "failed to delete source")
 		return
 	}
@@ -341,7 +341,7 @@ func (s *SourcesService) handleTestSource(w http.ResponseWriter, r *http.Request
 			writeError(w, http.StatusNotFound, "not_found", "source not found")
 			return
 		}
-		s.logger.Error("get source failed", "err", err)
+		s.logger.ErrorContext(r.Context(), "get source failed", "error", err)
 		writeError(w, http.StatusInternalServerError, "server_error", "failed to get source")
 		return
 	}

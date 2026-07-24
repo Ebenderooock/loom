@@ -146,7 +146,7 @@ func (e *Engine) extractOneJSON(obj, parentObj map[string]any, tctx templateCont
 			sel, err = e.expandTemplate(sel, fieldCtx)
 			if err != nil {
 				slog.Warn("cardigann: json field selector template error",
-					"indexer", e.id, "field", name, "err", err)
+					"indexer", e.id, "field", name, "error", err)
 				continue
 			}
 		}

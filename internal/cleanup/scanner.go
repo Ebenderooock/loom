@@ -131,7 +131,7 @@ func (s *Service) scanLocked(ctx context.Context) (int, error) {
 		}
 		entries, err := os.ReadDir(rootPath)
 		if err != nil {
-			s.logger.Warn("cleanup: cannot read download root", "root", rootPath, "err", err)
+			s.logger.Warn("cleanup: cannot read download root", "root", rootPath, "error", err)
 			continue
 		}
 		for _, e := range entries {
@@ -161,13 +161,13 @@ func (s *Service) scanLocked(ctx context.Context) (int, error) {
 				Root:      rootPath,
 				SizeBytes: entrySize(full),
 			}); err != nil {
-				s.logger.Warn("cleanup: upsert orphan failed", "path", full, "err", err)
+				s.logger.Warn("cleanup: upsert orphan failed", "path", full, "error", err)
 			}
 		}
 	}
 
 	if err := s.store.ResolveStalePending(ctx, seen); err != nil {
-		s.logger.Warn("cleanup: resolving stale orphans failed", "err", err)
+		s.logger.Warn("cleanup: resolving stale orphans failed", "error", err)
 	}
 	return found, nil
 }
@@ -199,7 +199,7 @@ func (s *Service) AutoDelete(ctx context.Context) (int, error) {
 		}
 		ok, err := s.removeLocked(ctx, o)
 		if err != nil {
-			s.logger.Warn("cleanup: auto-delete failed", "path", o.Path, "err", err)
+			s.logger.Warn("cleanup: auto-delete failed", "path", o.Path, "error", err)
 			continue
 		}
 		if ok {

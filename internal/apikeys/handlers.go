@@ -72,7 +72,7 @@ func (h *handler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.logger.Info("api key created", "id", k.ID, "name", k.Name)
+	h.logger.InfoContext(r.Context(), "api key created", "id", k.ID, "name", k.Name)
 	writeJSON(w, http.StatusCreated, map[string]any{
 		"id":         k.ID,
 		"name":       k.Name,
@@ -92,7 +92,7 @@ func (h *handler) delete(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	h.logger.Info("api key revoked", "id", id)
+	h.logger.InfoContext(r.Context(), "api key revoked", "id", id)
 	w.WriteHeader(http.StatusNoContent)
 }
 

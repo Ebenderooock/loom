@@ -44,7 +44,7 @@ func (imp *Importer) ImportRadarr(ctx context.Context, radarrDBPath string) (*Im
 func (imp *Importer) importRadarrProfiles(ctx context.Context, src *sql.DB, tx *sql.Tx, res *ImportResult) {
 	rows, err := src.QueryContext(ctx, `SELECT Id, Name FROM QualityProfiles`)
 	if err != nil {
-		imp.logger.Warn("radarr: could not read QualityProfiles", "err", err)
+		imp.logger.Warn("radarr: could not read QualityProfiles", "error", err)
 		res.Errors = append(res.Errors, "read QualityProfiles: "+err.Error())
 		return
 	}
@@ -78,7 +78,7 @@ func (imp *Importer) importRadarrProfiles(ctx context.Context, src *sql.DB, tx *
 func (imp *Importer) importRadarrRootFolders(ctx context.Context, src *sql.DB, tx *sql.Tx, res *ImportResult) {
 	rows, err := src.QueryContext(ctx, `SELECT Id, Path FROM RootFolders`)
 	if err != nil {
-		imp.logger.Warn("radarr: could not read RootFolders", "err", err)
+		imp.logger.Warn("radarr: could not read RootFolders", "error", err)
 		res.Errors = append(res.Errors, "read RootFolders: "+err.Error())
 		return
 	}
@@ -117,7 +117,7 @@ func (imp *Importer) importRadarrMovies(ctx context.Context, src *sql.DB, tx *sq
 		        COALESCE(Images, '[]')
 		 FROM Movies`)
 	if err != nil {
-		imp.logger.Warn("radarr: could not read Movies", "err", err)
+		imp.logger.Warn("radarr: could not read Movies", "error", err)
 		res.Errors = append(res.Errors, "read Movies: "+err.Error())
 		return
 	}

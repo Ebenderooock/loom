@@ -239,7 +239,7 @@ func (s *Scanner) runScan(ctx context.Context, scanID string, libraryPath string
 
 	for _, sf := range scanned {
 		if err := s.processFile(ctx, scanID, sf, result.LibraryID); err != nil {
-			s.logger.Warn("failed to process file", "path", sf.Path, "err", err)
+			s.logger.Warn("failed to process file", "path", sf.Path, "error", err)
 			s.mu.Lock()
 			result.Errors = append(result.Errors, fmt.Sprintf("%s: %v", sf.Path, err))
 			s.mu.Unlock()
@@ -904,7 +904,7 @@ func (s *Scanner) RescanMovie(ctx context.Context, movieID, libraryPath string) 
 			TMDBID: movie.TMDBID,
 			IMDBID: movie.IMDBID,
 		}, movie.LibraryID, movie.QualityProfileID); err != nil {
-			s.logger.Warn("rescan: failed to import", "movie", movie.Title, "path", sf.Path, "err", err)
+			s.logger.Warn("rescan: failed to import", "movie", movie.Title, "path", sf.Path, "error", err)
 			continue
 		}
 

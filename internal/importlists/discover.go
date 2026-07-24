@@ -37,7 +37,7 @@ func (m *SyncManager) DiscoverItems(ctx context.Context, mediaType string) ([]*D
 				}
 			}
 		} else {
-			m.logger.Warn("import-lists: discover list series failed", "err", err)
+			m.logger.Warn("import-lists: discover list series failed", "error", err)
 		}
 	}
 
@@ -118,7 +118,7 @@ func (m *SyncManager) AddDiscoverItem(ctx context.Context, itemID string) (*Impo
 
 	item.Status = ItemStatusAdded
 	if uErr := m.store.UpsertItem(ctx, item); uErr != nil {
-		m.logger.Error("import-lists: discover add status update failed", "err", uErr)
+		m.logger.Error("import-lists: discover add status update failed", "error", uErr)
 	}
 	return item, nil
 }

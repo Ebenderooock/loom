@@ -72,7 +72,7 @@ func (b *Bot) Run(ctx context.Context) error {
 				return ctx.Err()
 			}
 			b.setErr(err.Error())
-			b.logger.Warn("telegram bot: getUpdates failed", "err", err)
+			b.logger.Warn("telegram bot: getUpdates failed", "error", err)
 			if !sleep(ctx, backoff) {
 				return ctx.Err()
 			}
@@ -153,7 +153,7 @@ func (b *Bot) send(ctx context.Context, chatID int64, reply bots.Reply) {
 		payload["reply_markup"] = map[string]any{"inline_keyboard": rows}
 	}
 	if err := b.call(ctx, "sendMessage", payload, nil); err != nil {
-		b.logger.Warn("telegram bot: sendMessage failed", "err", err)
+		b.logger.Warn("telegram bot: sendMessage failed", "error", err)
 	}
 }
 

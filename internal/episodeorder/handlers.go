@@ -42,7 +42,7 @@ func listMappings(store *Store) http.HandlerFunc {
 		orderingType := r.URL.Query().Get("type")
 		mappings, err := store.ListMappings(r.Context(), seriesID, orderingType)
 		if err != nil {
-			slog.Error("episodeorder: list mappings", "err", err)
+			slog.ErrorContext(r.Context(), "episodeorder: list mappings", "error", err)
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
 			return
 		}
@@ -91,7 +91,7 @@ func createMapping(store *Store) http.HandlerFunc {
 		}
 
 		if err := store.CreateMapping(r.Context(), m); err != nil {
-			slog.Error("episodeorder: create mapping", "err", err)
+			slog.ErrorContext(r.Context(), "episodeorder: create mapping", "error", err)
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
 			return
 		}
@@ -111,7 +111,7 @@ func deleteMapping(store *Store) http.HandlerFunc {
 				writeJSON(w, http.StatusNotFound, map[string]string{"error": "mapping not found"})
 				return
 			}
-			slog.Error("episodeorder: delete mapping", "err", err)
+			slog.ErrorContext(r.Context(), "episodeorder: delete mapping", "error", err)
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
 			return
 		}

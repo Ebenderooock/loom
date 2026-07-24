@@ -225,7 +225,7 @@ func (s *Service) HydrateAll(ctx context.Context) error {
 		}
 		if err := s.hydrateOne(ctx, def); err != nil {
 			s.logger.Warn("hydrate download client failed",
-				"id", def.ID, "kind", def.Kind, "err", err)
+				"id", def.ID, "kind", def.Kind, "error", err)
 		}
 	}
 	s.logger.Info("download clients hydrated",
@@ -265,7 +265,7 @@ func (s *Service) Create(ctx context.Context, def Definition) (Definition, error
 	}
 	if saved.Enabled {
 		if err := s.hydrateOne(ctx, saved); err != nil {
-			s.logger.Warn("create: hydrate failed", "id", saved.ID, "err", err)
+			s.logger.Warn("create: hydrate failed", "id", saved.ID, "error", err)
 		}
 	}
 	_ = s.repo.UpsertHealth(ctx, Health{
@@ -335,7 +335,7 @@ func (s *Service) Replace(ctx context.Context, def Definition) (Definition, erro
 	}
 	if saved.Enabled {
 		if err := s.hydrateOne(ctx, saved); err != nil {
-			s.logger.Warn("replace: hydrate failed", "id", saved.ID, "err", err)
+			s.logger.Warn("replace: hydrate failed", "id", saved.ID, "error", err)
 		}
 	} else {
 		s.registry.Remove(saved.ID)
@@ -354,7 +354,7 @@ func (s *Service) Patch(ctx context.Context, p Patch) (Definition, error) {
 	}
 	if saved.Enabled {
 		if err := s.hydrateOne(ctx, saved); err != nil {
-			s.logger.Warn("patch: hydrate failed", "id", saved.ID, "err", err)
+			s.logger.Warn("patch: hydrate failed", "id", saved.ID, "error", err)
 		}
 	} else {
 		s.registry.Remove(saved.ID)
@@ -419,7 +419,7 @@ func (s *Service) TestOne(ctx context.Context, id string) (Health, error) {
 		}
 	}
 	if perr := s.repo.UpsertHealth(ctx, h); perr != nil {
-		s.logger.Warn("persist download client health failed", "id", id, "err", perr)
+		s.logger.Warn("persist download client health failed", "id", id, "error", perr)
 	}
 	return h, err
 }

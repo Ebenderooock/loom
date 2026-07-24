@@ -161,6 +161,10 @@ func (h *CaptureHandler) recordToEntry(ctx context.Context, r slog.Record) LogEn
 		flattenAttr(attrs, "", a)
 		return true
 	})
+	if traceID, spanID, ok := traceAttrsFromContext(ctx); ok {
+		attrs["trace_id"] = traceID
+		attrs["span_id"] = spanID
+	}
 
 	// Fallback: extract workflow_id from attrs if not already set.
 	if entry.WorkflowID == "" {

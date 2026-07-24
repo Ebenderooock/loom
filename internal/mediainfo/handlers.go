@@ -29,7 +29,7 @@ func getPreferences(store *Store, logger *slog.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		prefs, err := store.GetPreferences(r.Context())
 		if err != nil {
-			logger.Error("mediainfo: get preferences", "err", err)
+			logger.Error("mediainfo: get preferences", "error", err)
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
 			return
 		}
@@ -54,7 +54,7 @@ func putPreferences(store *Store, logger *slog.Logger) http.HandlerFunc {
 		}
 
 		if err := store.UpsertPreferences(r.Context(), &prefs); err != nil {
-			logger.Error("mediainfo: upsert preferences", "err", err)
+			logger.Error("mediainfo: upsert preferences", "error", err)
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
 			return
 		}
@@ -62,7 +62,7 @@ func putPreferences(store *Store, logger *slog.Logger) http.HandlerFunc {
 		// Re-read to get timestamps
 		updated, err := store.GetPreferences(r.Context())
 		if err != nil {
-			logger.Error("mediainfo: re-read preferences", "err", err)
+			logger.Error("mediainfo: re-read preferences", "error", err)
 			writeJSON(w, http.StatusOK, prefs)
 			return
 		}

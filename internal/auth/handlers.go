@@ -135,7 +135,7 @@ func (s *Service) handleInitialize(w http.ResponseWriter, r *http.Request) {
 		s.appConfig.SetupComplete = false
 		s.appConfig.Admin.Username = ""
 		s.appConfig.Admin.PasswordHash = ""
-		s.logger.Error("failed to save app config", "err", err)
+		s.logger.ErrorContext(r.Context(), "failed to save app config", "error", err)
 		writeAuthError(w, http.StatusInternalServerError, "save config")
 		return
 	}
@@ -143,7 +143,7 @@ func (s *Service) handleInitialize(w http.ResponseWriter, r *http.Request) {
 	// Reconcile admin user in database (upsert: preserves user ID and API keys)
 	u, err := s.ReconcileAdmin(r.Context())
 	if err != nil {
-		s.logger.Error("failed to reconcile admin user", "err", err)
+		s.logger.ErrorContext(r.Context(), "failed to reconcile admin user", "error", err)
 		writeAuthError(w, http.StatusInternalServerError, "create user")
 		return
 	}
