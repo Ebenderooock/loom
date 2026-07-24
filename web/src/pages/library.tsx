@@ -49,7 +49,6 @@ import {
   useUpdateLibrary,
   useDeleteLibrary,
   useScanLibrary,
-  useUnmappedFolders,
   useFilesystem,
   MEDIA_TYPES,
   formatBytes,
@@ -58,7 +57,6 @@ import {
   type MediaType,
   type CreateLibraryRequest,
   type UpdateLibraryRequest,
-  type UnmappedFolder,
   ApiError,
 } from "@/lib/libraries-api";
 
@@ -68,8 +66,7 @@ type DialogState =
   | { kind: "closed" }
   | { kind: "create" }
   | { kind: "edit"; library: Library }
-  | { kind: "delete"; library: Library }
-  | { kind: "unmapped"; library: Library };
+  | { kind: "delete"; library: Library };
 
 function errMessage(err: unknown, fallback: string): string {
   if (err instanceof ApiError)
@@ -197,7 +194,6 @@ export function LibraryPage() {
             onScan={() => handleScan(lib)}
             onEdit={() => setDialog({ kind: "edit", library: lib })}
             onDelete={() => setDialog({ kind: "delete", library: lib })}
-            onUnmapped={() => setDialog({ kind: "unmapped", library: lib })}
           />
         ))}
       </div>
@@ -224,15 +220,6 @@ export function LibraryPage() {
           onClose={() => setDialog({ kind: "closed" })}
         />
       )}
-
-      {/* Unmapped folders dialog */}
-      {dialog.kind === "unmapped" && (
-        <UnmappedDialog
-          open
-          library={dialog.library}
-          onClose={() => setDialog({ kind: "closed" })}
-        />
-      )}
     </div>
   );
 }
@@ -244,13 +231,11 @@ function LibraryCard({
   onScan,
   onEdit,
   onDelete,
-  onUnmapped,
 }: {
   library: Library;
   onScan: () => void;
   onEdit: () => void;
   onDelete: () => void;
-  onUnmapped: () => void;
 }) {
   const usedPct =
     library.disk_space.total_bytes > 0
@@ -278,12 +263,6 @@ function LibraryCard({
               <Pencil className="mr-2 h-4 w-4" />
               Edit
             </DropdownMenuItem>
-            {library.unmapped_count > 0 && (
-              <DropdownMenuItem onClick={onUnmapped}>
-                <FolderOpen className="mr-2 h-4 w-4" />
-                Unmapped Folders ({library.unmapped_count})
-              </DropdownMenuItem>
-            )}
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={onDelete} className="text-destructive">
               <Trash2 className="mr-2 h-4 w-4" />
@@ -322,14 +301,6 @@ function LibraryCard({
 
         <div className="flex justify-between text-sm">
           <span>{library.file_count} files</span>
-          {library.unmapped_count > 0 && (
-            <button
-              onClick={onUnmapped}
-              className="cursor-pointer text-xs text-yellow-500 hover:underline"
-            >
-              {library.unmapped_count} unmapped
-            </button>
-          )}
         </div>
       </CardContent>
     </Card>
@@ -614,61 +585,6 @@ function DeleteDialog({
             disabled={deleteMut.isPending}
           >
             {deleteMut.isPending ? "Deleting..." : "Delete"}
-          </Button>
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-// ---------- Unmapped folders ----------
-
-function UnmappedDialog({
-  open,
-  library,
-  onClose,
-}: {
-  open: boolean;
-  library: Library;
-  onClose: () => void;
-}) {
-  const { data: folders, isLoading } = useUnmappedFolders(library.id);
-
-  return (
-    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-lg">
-        <DialogHeader>
-          <DialogTitle>Unmapped Folders — {library.name}</DialogTitle>
-          <DialogDescription>
-            These subfolders don&apos;t match any known media in your library.
-          </DialogDescription>
-        </DialogHeader>
-        {isLoading ? (
-          <div className="space-y-2">
-            {Array.from({ length: 3 }).map((_, i) => (
-              <Skeleton key={i} className="h-8 w-full" />
-            ))}
-          </div>
-        ) : folders && folders.length > 0 ? (
-          <div className="max-h-64 space-y-1 overflow-y-auto">
-            {folders.map((f: UnmappedFolder) => (
-              <div
-                key={f.path}
-                className="flex items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-accent"
-              >
-                <FolderOpen className="h-4 w-4 shrink-0 text-yellow-500" />
-                <span className="truncate">{f.name}</span>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <p className="py-4 text-center text-sm text-muted-foreground">
-            All folders are mapped!
-          </p>
-        )}
-        <div className="flex justify-end">
-          <Button variant="outline" onClick={onClose}>
-            Close
           </Button>
         </div>
       </DialogContent>

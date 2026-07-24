@@ -157,13 +157,6 @@ func (s *Store) FileCount(ctx context.Context, libraryID string) (int, error) {
 	return count, err
 }
 
-// UnmappedCount returns the number of files without a media_id.
-func (s *Store) UnmappedCount(ctx context.Context, libraryID string) (int, error) {
-	var count int
-	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM library_files WHERE library_id = ? AND media_id IS NULL`, libraryID).Scan(&count)
-	return count, err
-}
-
 // ListFiles returns all files for a library.
 func (s *Store) ListFiles(ctx context.Context, libraryID string) ([]LibraryFile, error) {
 	rows, err := s.db.QueryContext(ctx, `

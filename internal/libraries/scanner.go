@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io/fs"
 	"log/slog"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -115,43 +114,4 @@ func GetDiskSpace(path string) (DiskSpace, error) {
 		FreeBytes:  f,
 		UsedBytes:  t - f,
 	}, nil
-}
-
-// ListUnmappedFolders returns top-level subfolders of a library that don't have
-// any mapped files (files with a media_id set).
-func (sc *Scanner) ListUnmappedFolders(ctx context.Context, lib *Library) ([]UnmappedFolder, error) {
-	entries, err := os.ReadDir(lib.Path)
-	if err != nil {
-		return nil, err
-	}
-
-	// Collect mapped directory prefixes from library files.
-	files, err := sc.store.ListFiles(ctx, lib.ID)
-	if err != nil {
-		return nil, err
-	}
-	mappedDirs := make(map[string]bool)
-	for _, f := range files {
-		if f.MediaID != nil {
-			rel, _ := filepath.Rel(lib.Path, f.Path)
-			parts := strings.SplitN(rel, string(filepath.Separator), 2)
-			if len(parts) > 0 {
-				mappedDirs[parts[0]] = true
-			}
-		}
-	}
-
-	var unmapped []UnmappedFolder
-	for _, e := range entries {
-		if !e.IsDir() || strings.HasPrefix(e.Name(), ".") {
-			continue
-		}
-		if !mappedDirs[e.Name()] {
-			unmapped = append(unmapped, UnmappedFolder{
-				Name: e.Name(),
-				Path: filepath.Join(lib.Path, e.Name()),
-			})
-		}
-	}
-	return unmapped, nil
 }

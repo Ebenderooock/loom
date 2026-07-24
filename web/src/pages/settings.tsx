@@ -601,11 +601,6 @@ function LibrariesPanel() {
                         {formatBytes(lib.disk_space.free_bytes)} free
                       </span>
                     )}
-                    {lib.unmapped_count > 0 && (
-                      <Badge variant="secondary" className="text-xs">
-                        {lib.unmapped_count} unmapped
-                      </Badge>
-                    )}
                   </div>
                 </div>
               </div>

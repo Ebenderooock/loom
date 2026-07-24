@@ -512,7 +512,7 @@ func (r *sqlRepo) CreateTrackFile(ctx context.Context, tf *TrackFile) error {
 		}
 	}
 
-	// Link this file to the track in library_files (for UI unmapped tracking).
+	// Link this file to the track in library_files for file-to-media tracking.
 	_, _ = r.db.ExecContext(ctx,
 		`UPDATE library_files SET media_id = ? WHERE path = ?`,
 		tf.TrackID, tf.FilePath,

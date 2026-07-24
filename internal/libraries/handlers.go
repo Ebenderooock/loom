@@ -22,7 +22,6 @@ func Router(store *Store, scanner *Scanner, logger *slog.Logger) chi.Router {
 	r.Put("/{id}", updateLibrary(store, logger))
 	r.Delete("/{id}", deleteLibrary(store, logger))
 	r.Post("/{id}/scan", scanLibrary(store, scanner, logger))
-	r.Get("/{id}/unmapped", listUnmapped(store, scanner, logger))
 
 	return r
 }
@@ -63,11 +62,6 @@ func enrichLibrary(store *Store, l *Library, r *http.Request) {
 	// File count.
 	if fc, err := store.FileCount(ctx, l.ID); err == nil {
 		l.FileCount = fc
-	}
-
-	// Unmapped count.
-	if uc, err := store.UnmappedCount(ctx, l.ID); err == nil {
-		l.UnmappedCount = uc
 	}
 }
 
@@ -268,32 +262,5 @@ func scanLibrary(store *Store, scanner *Scanner, logger *slog.Logger) http.Handl
 		writeJSON(w, http.StatusAccepted, map[string]any{
 			"message": "scan started",
 		})
-	}
-}
-
-func listUnmapped(store *Store, scanner *Scanner, logger *slog.Logger) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		id := chi.URLParam(r, "id")
-		lib, err := store.Get(r.Context(), id)
-		if err != nil {
-			if strings.Contains(err.Error(), "not found") {
-				writeError(w, http.StatusNotFound, err.Error())
-				return
-			}
-			logger.Error("libraries: get for unmapped", "err", err)
-			writeError(w, http.StatusInternalServerError, "internal error")
-			return
-		}
-
-		folders, err := scanner.ListUnmappedFolders(r.Context(), lib)
-		if err != nil {
-			logger.Error("libraries: unmapped folders", "err", err)
-			writeError(w, http.StatusInternalServerError, "internal error")
-			return
-		}
-		if folders == nil {
-			folders = []UnmappedFolder{}
-		}
-		writeJSON(w, http.StatusOK, map[string]any{"data": folders})
 	}
 }

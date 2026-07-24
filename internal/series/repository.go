@@ -321,8 +321,7 @@ func (r *sqlRepo) CreateEpisodeFile(ctx context.Context, f *EpisodeFile) error {
 		return err
 	}
 
-	// Link this file to the episode in library_files (for UI unmapped tracking).
-	// This allows the library view to correctly track which files are mapped to media.
+	// Link this file to the episode in library_files for file-to-media tracking.
 	_, _ = r.db.ExecContext(ctx,
 		`UPDATE library_files SET media_id = ? WHERE path = ?`,
 		f.EpisodeID, f.FilePath,
