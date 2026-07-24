@@ -16,6 +16,7 @@ import (
 	"github.com/ebenderooock/loom/internal/auditlog"
 	"github.com/ebenderooock/loom/internal/backup"
 	"github.com/ebenderooock/loom/internal/customformats"
+	"github.com/ebenderooock/loom/internal/featureflags"
 	"github.com/ebenderooock/loom/internal/kernel/config"
 	"github.com/ebenderooock/loom/internal/kernel/eventbus"
 	"github.com/ebenderooock/loom/internal/kernel/logging"
@@ -23,6 +24,8 @@ import (
 	"github.com/ebenderooock/loom/internal/kernel/telemetry"
 	"github.com/ebenderooock/loom/internal/migrate"
 	"github.com/ebenderooock/loom/internal/rss"
+	"github.com/ebenderooock/loom/internal/safety"
+	"github.com/ebenderooock/loom/internal/searchdebug"
 	"github.com/ebenderooock/loom/internal/server"
 	"github.com/ebenderooock/loom/internal/storage"
 	"github.com/ebenderooock/loom/internal/systemlogs"
@@ -192,23 +195,34 @@ func cmdServe(ctx context.Context, args []string) error {
 		return fmt.Errorf("init aggregator: %w", err)
 	}
 
-	srv, err := server.New(cfg, appCfg, logger, tel, db, authSvc, indexerSvc, moviesSvc, aggSvc, bus)
-	if err != nil {
-		return fmt.Errorf("init server: %w", err)
+	wiring := server.Wiring{
+		AppConfig:         appCfg,
+		Logger:            logger,
+		Telemetry:         tel,
+		DB:                db,
+		Bus:               bus,
+		AuthService:       authSvc,
+		IndexerService:    indexerSvc,
+		DownloadService:   downloadSvc,
+		MoviesService:     moviesSvc,
+		RSSService:        rssSvc,
+		Aggregator:        aggSvc,
+		APIKeyStore:       apikeys.NewStore(db.DB()),
+		CustomFormatStore: customformats.NewStore(db.DB()),
+		SystemLogsDeps: &systemlogs.HandlerDeps{
+			Store:   sysLogStore,
+			Buffer:  logBuf,
+			Capture: captureHandler,
+		},
+		ReviewStore:      safety.NewReviewStore(db.DB()),
+		SearchDebugStore: searchdebug.NewStore(db.DB()),
+		SearchDebugHub:   searchdebug.NewHub(),
+		FeatureFlags:     featureflags.NewService(featureflags.NewStore(db.DB()), logger),
 	}
-	srv.SetAPIKeys(apikeys.NewStore(db.DB()))
-	srv.SetDownloads(downloadSvc)
-	srv.SetRSS(rssSvc)
-	srv.SetMovies(moviesSvc)
-	srv.SetCustomFormats(customformats.NewStore(db.DB()))
-	srv.SetSystemLogs(&systemlogs.HandlerDeps{
-		Store:   sysLogStore,
-		Buffer:  logBuf,
-		Capture: captureHandler,
-	})
+	wiring.FeatureFlags.Load(ctx)
 
 	// Wire media services (scanner, organizer, series, libraries, etc.)
-	media, err := wireMedia(ctx, cfg, db, srv, moviesSvc, auditLogger, logger)
+	media, err := wireMedia(ctx, cfg, db, &wiring, moviesSvc, auditLogger, logger)
 	if err != nil {
 		return fmt.Errorf("wire media: %w", err)
 	}
@@ -216,7 +230,7 @@ func cmdServe(ctx context.Context, args []string) error {
 	defer media.importListSyncMgr.Stop()
 
 	// Wire download services (grabs, autosearch, import pipeline, monitor)
-	dlWiring, err := wireDownloads(ctx, cfg, db, srv, downloadSvc, moviesSvc, indexerSvc, media, auditLogger, logger)
+	dlWiring, err := wireDownloads(ctx, cfg, db, &wiring, downloadSvc, moviesSvc, indexerSvc, media, auditLogger, logger)
 	if err != nil {
 		return fmt.Errorf("wire downloads: %w", err)
 	}
@@ -241,14 +255,14 @@ func cmdServe(ctx context.Context, args []string) error {
 
 	// Wire downloads-cleanup (scan orphans in download folders + auto-delete).
 	cleanupSvc := buildCleanupService(db, downloadSvc, dlWiring.importPipeline, media.libStore, appCfg, logger)
-	srv.SetCleanup(cleanupSvc)
+	wiring.CleanupService = cleanupSvc
 	if err := registerCleanupJob(ctx, sched, cleanupSvc); err != nil {
 		return fmt.Errorf("register cleanup job: %w", err)
 	}
 
 	// Wire media requests (users request; admins approve → auto-add + grab).
 	requestsSvc := buildRequestsService(db, moviesSvc, media.seriesSvc, media.musicSvc, dlWiring.autoSearchEngine, dlWiring.musicSearchEngine, media.libStore, media.qpStore, logger)
-	srv.SetRequests(requestsSvc)
+	wiring.RequestsService = requestsSvc
 
 	// Wire interactive request bots (Telegram + Discord).
 	botAuthStore, err := buildAuthStore(db)
@@ -256,14 +270,14 @@ func cmdServe(ctx context.Context, args []string) error {
 		return fmt.Errorf("init bot auth store: %w", err)
 	}
 	botsRouter, botsSupervisor := buildBots(db, requestsSvc, metadataSvc, media.musicSvc, botAuthStore, authSvc.RequireRole("admin"), logger)
-	srv.SetBots(botsRouter)
+	wiring.BotsRouter = botsRouter
 	if err := botsSupervisor.Start(ctx); err != nil {
 		logger.Error("bots: initial start failed", "err", err)
 	}
 	defer botsSupervisor.Shutdown()
 
 	// Wire infrastructure services (connect, compat, notifications, rolling search, health)
-	infra, err := wireInfra(ctx, db, srv, indexerSvc, downloadSvc, moviesSvc, media, auditLogger, logger)
+	infra, err := wireInfra(ctx, db, &wiring, indexerSvc, downloadSvc, moviesSvc, media, auditLogger, logger)
 	if err != nil {
 		return fmt.Errorf("wire infra: %w", err)
 	}
@@ -289,6 +303,11 @@ func cmdServe(ctx context.Context, args []string) error {
 	}
 	defer infra.auditSink.Close()
 	defer sysLogBatchWriter.Close()
+
+	srv, err := server.New(cfg, wiring)
+	if err != nil {
+		return fmt.Errorf("init server: %w", err)
+	}
 
 	errCh := make(chan error, 1)
 	go func() { errCh <- srv.Start() }()

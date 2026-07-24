@@ -38,10 +38,13 @@ type MovieStatusUpdater interface {
 
 // ServiceOptions wires Service dependencies.
 type ServiceOptions struct {
-	Repository         Repository
-	Registry           *Registry
-	Logger             *slog.Logger
-	Clock              Clock
+	Repository Repository
+	Registry   *Registry
+	Logger     *slog.Logger
+	Clock      Clock
+	// HTTPClientProvider, when non-nil, is used by kind factories to
+	// build outbound HTTP clients deterministically.
+	HTTPClientProvider HTTPClientProvider
 	OperationTimeout   time.Duration
 	MaxParallel        int
 	HealthTimeout      time.Duration
@@ -99,6 +102,7 @@ func NewService(opts ServiceOptions) (*Service, error) {
 	if opts.HealthTimeout <= 0 {
 		opts.HealthTimeout = 10 * time.Second
 	}
+	SetHTTPClientProvider(opts.HTTPClientProvider)
 	return &Service{
 		repo:               opts.Repository,
 		registry:           opts.Registry,

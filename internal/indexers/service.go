@@ -28,11 +28,14 @@ func (SystemClock) Now() time.Time { return time.Now() }
 
 // ServiceOptions wires Service dependencies.
 type ServiceOptions struct {
-	Repository    Repository
-	Registry      *Registry
-	Logger        *slog.Logger
-	Clock         Clock
-	SearchTimeout time.Duration
+	Repository Repository
+	Registry   *Registry
+	Logger     *slog.Logger
+	Clock      Clock
+	// HTTPClientProvider, when non-nil, is used by kind factories to
+	// build outbound HTTP clients deterministically.
+	HTTPClientProvider HTTPClientProvider
+	SearchTimeout      time.Duration
 	// ProxySearchTimeout bounds a single proxied (e.g. FlareSolverr)
 	// indexer search. A real Cloudflare solve can take tens of seconds,
 	// so this is larger than SearchTimeout. Zero defaults to 65s.
@@ -118,6 +121,7 @@ func NewService(opts ServiceOptions) (*Service, error) {
 	if opts.HealthCheckTimeout <= 0 {
 		opts.HealthCheckTimeout = 15 * time.Second
 	}
+	SetHTTPClientProvider(opts.HTTPClientProvider)
 	sht := opts.SearchHealthTracker
 	if sht == nil {
 		sht = NewSearchHealthTracker(opts.Registry)

@@ -40,12 +40,12 @@ type downloadWiring struct {
 
 // wireDownloads constructs download-related services (remote paths,
 // blocklist, workflows, autosearch, import pipeline, download monitor)
-// and mounts them on srv.
+// and records them into wiring.
 func wireDownloads(
 	ctx context.Context,
 	cfg *config.Config,
 	db storage.DB,
-	srv *server.Server,
+	wiring *server.Wiring,
 	downloadSvc *downloads.Service,
 	moviesSvc movies.Service,
 	indexerSvc *indexers.Service,
@@ -59,7 +59,7 @@ func wireDownloads(
 
 	// Blocklist
 	blocklistStore := downloads.NewBlocklistStore(db.DB())
-	srv.SetBlocklistStore(blocklistStore)
+	wiring.BlocklistStore = blocklistStore
 
 	// Workflow engine for tracking active downloads
 	wfStore, err := workflows.NewStore(db.DB())
@@ -70,8 +70,8 @@ func wireDownloads(
 
 	downloadSvc.SetWorkflowEngine(wfEngine)
 	downloadSvc.SetMovieStatusUpdater(movieStatusAdapter{moviesSvc})
-	downloadSvc.SetBuiltinTorrentEnabled(srv.Features().EnabledFunc(featureflags.KeyBuiltinTorrent))
-	srv.SetWorkflowEngine(wfEngine)
+	downloadSvc.SetBuiltinTorrentEnabled(wiring.FeatureFlags.EnabledFunc(featureflags.KeyBuiltinTorrent))
+	wiring.WorkflowEngine = wfEngine
 
 	// Workflow orchestrator — unified state coordinator (created early so callers can reference it)
 	orchestrator := workflows.NewOrchestrator(workflows.OrchestratorOpts{
@@ -91,11 +91,11 @@ func wireDownloads(
 		downloadSvc.Registry(), moviesSvc, media.seriesSvc, logger,
 		autosearch.WithAuditLogger(auditLogger),
 		autosearch.WithOrchestrator(orchestrator),
-		autosearch.WithDebugStore(srv.SearchDebugStore()),
-		autosearch.WithDebugHub(srv.SearchDebugHub()),
-		autosearch.WithSearchLogEnabled(srv.Features().EnabledFunc(featureflags.KeySearchLog)),
+		autosearch.WithDebugStore(wiring.SearchDebugStore),
+		autosearch.WithDebugHub(wiring.SearchDebugHub),
+		autosearch.WithSearchLogEnabled(wiring.FeatureFlags.EnabledFunc(featureflags.KeySearchLog)),
 	)
-	srv.SetAutoSearchEngine(autoSearchEngine)
+	wiring.AutoSearchEngine = autoSearchEngine
 
 	// Music acquisition engine — self-contained parallel to autosearch that
 	// reuses only the media-agnostic indexer transport and download registry.
@@ -107,14 +107,14 @@ func wireDownloads(
 			indexerSvc, downloadSvc.Registry(), media.musicRepo, logger,
 		)
 		musicSearchEngine.SetCustomFormats(cfEngine)
-		srv.SetMusicSearch(musicSearchEngine)
+		wiring.MusicSearch = musicSearchEngine
 		musicAutoSearcher = musicsearch.NewAutoSearcher(
-			musicSearchEngine, srv.Features().EnabledFunc(featureflags.KeyMusic),
+			musicSearchEngine, wiring.FeatureFlags.EnabledFunc(featureflags.KeyMusic),
 		)
 		if media.musicSvc != nil {
 			musicRefresher = music.NewReleaseRefresher(
 				media.musicSvc, media.musicRepo,
-				srv.Features().EnabledFunc(featureflags.KeyMusic), logger,
+				wiring.FeatureFlags.EnabledFunc(featureflags.KeyMusic), logger,
 			)
 		}
 	}
@@ -126,7 +126,7 @@ func wireDownloads(
 	}
 	importPipeline, err := imports.NewPipeline(imports.PipelineOptions{
 		DB:              db.DB(),
-		Bus:             srv.Bus(),
+		Bus:             wiring.Bus,
 		DownloadSvc:     downloadSvc,
 		RemotePathStore: remotePathStore,
 		MoviesSvc:       moviesSvc,
@@ -143,7 +143,7 @@ func wireDownloads(
 		return nil, fmt.Errorf("init import pipeline: %w", err)
 	}
 	importPipeline.Start()
-	srv.SetImportPipeline(importPipeline)
+	wiring.ImportPipeline = importPipeline
 	orchestrator.SetImportFn(importPipeline.RunImport)
 
 	// Wire pre-import: stop and remove the torrent from the client BEFORE the
@@ -243,12 +243,12 @@ func wireDownloads(
 	stallHandler := downloads.NewStallHandler(downloads.StallHandlerOptions{
 		Registry:  downloadSvc.Registry(),
 		Blocklist: blocklistStore,
-		Bus:       srv.Bus(),
+		Bus:       wiring.Bus,
 		Logger:    logger,
 	})
 	downloadMonitor, err := downloads.NewMonitor(downloads.MonitorOptions{
 		Service:         downloadSvc,
-		Bus:             srv.Bus(),
+		Bus:             wiring.Bus,
 		Logger:          logger,
 		CheckInterval:   30 * time.Second,
 		StallTimeout:    30 * time.Minute,
@@ -267,7 +267,7 @@ func wireDownloads(
 	router := downloads.NewRouter(
 		downloadSvc,
 		nil, // metadata router wiring is separate; router safely skips enrichment when nil
-		srv.Bus(),
+		wiring.Bus,
 		logger,
 		downloads.SystemClock{},
 		indexerSvc.Get,
@@ -278,7 +278,7 @@ func wireDownloads(
 	// Start orchestrator goroutine
 	orchCtx, orchCancel := context.WithCancel(ctx)
 	go orchestrator.Run(orchCtx)
-	srv.SetOrchestrator(orchestrator)
+	wiring.Orchestrator = orchestrator
 
 	// Register workflow API routes
 	// (handled in server.go newMux via wfEngine field)

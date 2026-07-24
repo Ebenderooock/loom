@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"sync"
+	"time"
 
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
@@ -43,6 +44,9 @@ var (
 
 	rateLimitMu       sync.RWMutex
 	rateLimitProvider RateLimitProvider
+
+	httpClientMu       sync.RWMutex
+	httpClientProvider HTTPClientProvider
 )
 
 // RateLimitProvider returns the per-indexer Config that should govern
@@ -52,6 +56,12 @@ var (
 // means "use throttle.Defaults()".
 type RateLimitProvider interface {
 	RateLimitFor(indexerID string) (throttle.Config, bool)
+}
+
+// HTTPClientProvider returns an outbound HTTP client for an indexer
+// definition. Returning nil lets the default transport chain apply.
+type HTTPClientProvider interface {
+	HTTPClientFor(def Definition, timeout time.Duration) *http.Client
 }
 
 // SetRateLimitProvider installs the package-global RateLimitProvider.
@@ -69,6 +79,36 @@ func CurrentRateLimitProvider() RateLimitProvider {
 	rateLimitMu.RLock()
 	defer rateLimitMu.RUnlock()
 	return rateLimitProvider
+}
+
+// SetHTTPClientProvider installs the package-global HTTPClientProvider.
+// Passing nil clears it.
+func SetHTTPClientProvider(p HTTPClientProvider) {
+	httpClientMu.Lock()
+	httpClientProvider = p
+	httpClientMu.Unlock()
+}
+
+// CurrentHTTPClientProvider returns the currently installed
+// HTTPClientProvider, or nil if none has been set.
+func CurrentHTTPClientProvider() HTTPClientProvider {
+	httpClientMu.RLock()
+	defer httpClientMu.RUnlock()
+	return httpClientProvider
+}
+
+// SwapHTTPClientProvider installs p and returns a restore function.
+// Useful in tests to avoid global cross-contamination.
+func SwapHTTPClientProvider(p HTTPClientProvider) func() {
+	httpClientMu.Lock()
+	prev := httpClientProvider
+	httpClientProvider = p
+	httpClientMu.Unlock()
+	return func() {
+		httpClientMu.Lock()
+		httpClientProvider = prev
+		httpClientMu.Unlock()
+	}
 }
 
 // SetTransportProvider installs the package-global TransportProvider.
@@ -140,6 +180,22 @@ func TransportForDefinition(def Definition) (http.RoundTripper, error) {
 	}
 	tracedBase := otelhttp.NewTransport(base)
 	return throttle.Wrap(tracedBase, def.ID, string(def.Kind), cfg, throttle.Options{}), nil
+}
+
+// HTTPClientForDefinition resolves an outbound HTTP client for def. It
+// prefers an injected HTTPClientProvider and falls back to composing
+// transport + throttle via TransportForDefinition.
+func HTTPClientForDefinition(def Definition, timeout time.Duration) *http.Client {
+	if p := CurrentHTTPClientProvider(); p != nil {
+		if c := p.HTTPClientFor(def, timeout); c != nil {
+			return c
+		}
+	}
+	rt, err := TransportForDefinition(def)
+	if err != nil || rt == nil {
+		rt = http.DefaultTransport
+	}
+	return &http.Client{Timeout: timeout, Transport: rt}
 }
 
 // RegisterKind installs f as the factory for kind. It is idempotent;

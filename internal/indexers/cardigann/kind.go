@@ -6,8 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"log/slog"
-	"net/http"
 	"sort"
 	"strings"
 	"sync"
@@ -113,31 +111,6 @@ func (l *LoaderDefinitionLister) ListDefinitions() []indexers.CardigannDefSummar
 	return out
 }
 
-// httpClientFactory mirrors the newznab pattern: tests override it to
-// hand the engine a transport that talks to httptest.NewServer. The
-// production builder honours per-indexer proxies via
-// indexers.TransportForDefinition.
-var httpClientFactory = func(cfg Config, def indexers.Definition) *http.Client {
-	rt, err := indexers.TransportForDefinition(def)
-	if err != nil || rt == nil {
-		if def.ProxyID != "" {
-			slog.Error("cardigann: proxy lookup failed, falling back to direct (FlareSolverr will NOT be used)",
-				"indexer", def.ID, "proxyID", def.ProxyID, "err", err)
-		}
-		rt = http.DefaultTransport
-	} else if def.ProxyID != "" {
-		slog.Info("cardigann: proxy transport attached", "indexer", def.ID, "proxyID", def.ProxyID)
-	}
-	return &http.Client{Timeout: cfg.Timeout.duration(), Transport: rt}
-}
-
-// SetHTTPClientFactory installs a custom HTTP client builder. Tests
-// inject a transport that points at httptest.NewServer; production
-// code never needs to call this.
-func SetHTTPClientFactory(f func(cfg Config, def indexers.Definition) *http.Client) {
-	httpClientFactory = f
-}
-
 // factory builds a live Engine for a persisted Definition.
 func factory(_ context.Context, def indexers.Definition) (indexers.Indexer, error) {
 	cfg, err := parseConfig(def.Config)
@@ -158,7 +131,7 @@ func factory(_ context.Context, def indexers.Definition) (indexers.Indexer, erro
 	if defYAML.RequestDelay > 0 && def.RequestDelay == 0 {
 		def.RequestDelay = defYAML.RequestDelay
 	}
-	return NewEngine(def.ID, def.Name, defYAML, cfg, httpClientFactory(cfg, def))
+	return NewEngine(def.ID, def.Name, defYAML, cfg, indexers.HTTPClientForDefinition(def, cfg.Timeout.duration()))
 }
 
 func init() {
