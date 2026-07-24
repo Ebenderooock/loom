@@ -22,12 +22,14 @@ podAnnotations: {}
 podLabels: {}
 
 podSecurityContext:
-  fsGroup: 65534
+  runAsUser: 999
+  runAsGroup: 1001
+  fsGroup: 1001
 
 securityContext:
   runAsNonRoot: true
-  runAsUser: 65534
-  runAsGroup: 65534
+  runAsUser: 999
+  runAsGroup: 1001
   allowPrivilegeEscalation: false
   readOnlyRootFilesystem: true
   seccompProfile:
