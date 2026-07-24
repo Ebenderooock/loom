@@ -24,7 +24,9 @@ test.describe("Series Page", () => {
 
   test("shows add series button", async ({ page }) => {
     await page.goto("/series");
-    await expect(page.getByRole("button", { name: /^Add Series$/i })).toBeVisible({
+    await expect(
+      page.getByRole("button", { name: /^Add Series$/i }),
+    ).toBeVisible({
       timeout: 10000,
     });
   });
@@ -62,9 +64,9 @@ test.describe("Series Page", () => {
         .first();
       await expect(addSeriesButton).toBeVisible({ timeout: 10000 });
       await addSeriesButton.click();
-      await expect(page.getByRole("heading", { name: "Search Series" })).toBeVisible(
-        { timeout: 10000 },
-      );
+      await expect(
+        page.getByRole("heading", { name: "Search Series" }),
+      ).toBeVisible({ timeout: 10000 });
     });
 
     test("empty library keeps Add Series reachable and opens dialog", async ({
@@ -79,9 +81,9 @@ test.describe("Series Page", () => {
         .first();
       await expect(addSeriesButton).toBeVisible({ timeout: 10000 });
       await addSeriesButton.click();
-      await expect(page.getByRole("heading", { name: "Search Series" })).toBeVisible(
-        { timeout: 10000 },
-      );
+      await expect(
+        page.getByRole("heading", { name: "Search Series" }),
+      ).toBeVisible({ timeout: 10000 });
     });
 
     test("mobile overflow menu keeps secondary actions reachable", async ({
@@ -94,7 +96,9 @@ test.describe("Series Page", () => {
       const menuButton = page.getByRole("button", { name: "More actions" });
       await expect(menuButton).toBeVisible({ timeout: 10000 });
       await menuButton.click();
-      await expect(page.getByRole("menuitem", { name: "Organize" })).toBeVisible({
+      await expect(
+        page.getByRole("menuitem", { name: "Organize" }),
+      ).toBeVisible({
         timeout: 10000,
       });
       await expect(

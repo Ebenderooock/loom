@@ -193,7 +193,11 @@ export function SeriesToolbar({
           </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button size="sm" variant="outline" className="h-9 px-3 sm:hidden">
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-9 px-3 sm:hidden"
+              >
                 <MoreHorizontal className="h-4 w-4" />
                 <span className="sr-only">More actions</span>
               </Button>
@@ -209,7 +213,9 @@ export function SeriesToolbar({
                 {rescanningLibraries ? "Rescanning..." : "Rescan Libraries"}
               </DropdownMenuItem>
               {onImportLibrary && (
-                <DropdownMenuItem onClick={onImportLibrary}>Import</DropdownMenuItem>
+                <DropdownMenuItem onClick={onImportLibrary}>
+                  Import
+                </DropdownMenuItem>
               )}
               <DropdownMenuItem onClick={onOrganize} disabled={organizing}>
                 {organizing ? "Organizing..." : "Organize"}

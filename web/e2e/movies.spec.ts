@@ -135,9 +135,9 @@ test.describe("Movies Page", () => {
         .first();
       await expect(addMovieButton).toBeVisible({ timeout: 10000 });
       await addMovieButton.click();
-      await expect(page.getByRole("heading", { name: "Search Movies" })).toBeVisible(
-        { timeout: 10000 },
-      );
+      await expect(
+        page.getByRole("heading", { name: "Search Movies" }),
+      ).toBeVisible({ timeout: 10000 });
     });
 
     test("empty library keeps Add Movie reachable and opens dialog", async ({
@@ -152,9 +152,9 @@ test.describe("Movies Page", () => {
         .first();
       await expect(addMovieButton).toBeVisible({ timeout: 10000 });
       await addMovieButton.click();
-      await expect(page.getByRole("heading", { name: "Search Movies" })).toBeVisible(
-        { timeout: 10000 },
-      );
+      await expect(
+        page.getByRole("heading", { name: "Search Movies" }),
+      ).toBeVisible({ timeout: 10000 });
     });
 
     test("mobile overflow menu keeps secondary actions reachable", async ({

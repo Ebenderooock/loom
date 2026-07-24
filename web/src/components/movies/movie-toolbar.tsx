@@ -207,7 +207,11 @@ export function MovieToolbar({
           </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button size="sm" variant="outline" className="h-9 px-3 sm:hidden">
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-9 px-3 sm:hidden"
+              >
                 <MoreHorizontal className="h-4 w-4" />
                 <span className="sr-only">More actions</span>
               </Button>
@@ -222,7 +226,9 @@ export function MovieToolbar({
               >
                 {rescanningLibraries ? "Rescanning..." : "Rescan Libraries"}
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={onImportLibrary}>Import</DropdownMenuItem>
+              <DropdownMenuItem onClick={onImportLibrary}>
+                Import
+              </DropdownMenuItem>
               <DropdownMenuItem onClick={onOrganize}>Organize</DropdownMenuItem>
               <DropdownMenuItem onClick={() => onViewModeChange("grid")}>
                 Grid View
