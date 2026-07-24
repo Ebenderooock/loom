@@ -37,7 +37,7 @@ func (s *Store) GetCandidates(ctx context.Context, mediaType string, limit int, 
 			LEFT JOIN search_state ss ON ss.media_type = 'movie' AND ss.media_id = m.id
 			WHERE (
 			        m.status = 'missing'
-			        OR (m.status = 'unreleased' AND m.release_date != '' AND m.release_date <= date('now'))
+			        OR (m.status = 'unreleased' AND m.release_date != '' AND date(m.release_date) <= date('now'))
 			      )
 			  AND m.monitoring_status = 'monitored'
 			  AND (ss.last_searched_at IS NULL OR ss.last_searched_at < ?)
@@ -55,7 +55,7 @@ func (s *Store) GetCandidates(ctx context.Context, mediaType string, limit int, 
 			WHERE e.has_file = 0
 			  AND e.monitored = 1
 			  AND s.monitoring_status NOT IN ('none', 'unmonitored', 'archived')
-			  AND (e.air_date != '' AND e.air_date <= date('now'))
+			  AND (e.air_date != '' AND date(e.air_date) <= date('now'))
 			  AND (ss.last_searched_at IS NULL OR ss.last_searched_at < ?)
 			ORDER BY e.air_date DESC, e.created_at DESC
 			LIMIT ?`
@@ -108,7 +108,7 @@ func (s *Store) QueueSize(ctx context.Context, minResearchDays int) (int, error)
 		LEFT JOIN search_state ss ON ss.media_type = 'movie' AND ss.media_id = m.id
 		WHERE (
 		        m.status = 'missing'
-		        OR (m.status = 'unreleased' AND m.release_date != '' AND m.release_date <= date('now'))
+		        OR (m.status = 'unreleased' AND m.release_date != '' AND date(m.release_date) <= date('now'))
 		      )
 		  AND m.monitoring_status = 'monitored'
 		  AND (ss.last_searched_at IS NULL OR ss.last_searched_at < ?)`, cutoff)
@@ -124,7 +124,7 @@ func (s *Store) QueueSize(ctx context.Context, minResearchDays int) (int, error)
 		WHERE e.has_file = 0
 		  AND e.monitored = 1
 		  AND s.monitoring_status NOT IN ('none', 'unmonitored', 'archived')
-		  AND (e.air_date != '' AND e.air_date <= date('now'))
+		  AND (e.air_date != '' AND date(e.air_date) <= date('now'))
 		  AND (ss.last_searched_at IS NULL OR ss.last_searched_at < ?)`, cutoff)
 	if err := row.Scan(&epCount); err != nil {
 		return count, err

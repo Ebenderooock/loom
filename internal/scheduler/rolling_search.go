@@ -61,6 +61,9 @@ func (rs *RollingSearcher) Start(ctx context.Context) {
 	next := time.Now().Add(rs.interval())
 	rs.nextRun = &next
 
+	// Kick off one run immediately on startup so newly-aired/released media
+	// is processed without waiting for the first full interval.
+	go rs.runOnce(childCtx)
 	go rs.loop(childCtx)
 	rs.logger.Info("rolling search started", "interval_h", rs.config.IntervalHours, "batch", rs.config.BatchSize)
 }
