@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"time"
 
 	"github.com/ebenderooock/loom/internal/downloads"
@@ -29,11 +30,12 @@ func buildDownloadService(ctx context.Context, cfg *config.Config, db storage.DB
 	}
 
 	svc, err := downloads.NewService(downloads.ServiceOptions{
-		Repository:       repo,
-		Logger:           logger,
-		OperationTimeout: time.Duration(cfg.Downloads.OperationTimeoutSec) * time.Second,
-		MaxParallel:      cfg.Downloads.MaxParallel,
-		HealthTimeout:    time.Duration(cfg.Downloads.HealthCheckTimeoutSec) * time.Second,
+		Repository:         repo,
+		Logger:             logger,
+		HTTPClientProvider: downloadHTTPClientProvider{},
+		OperationTimeout:   time.Duration(cfg.Downloads.OperationTimeoutSec) * time.Second,
+		MaxParallel:        cfg.Downloads.MaxParallel,
+		HealthTimeout:      time.Duration(cfg.Downloads.HealthCheckTimeoutSec) * time.Second,
 	})
 	if err != nil {
 		return nil, err
@@ -43,6 +45,16 @@ func buildDownloadService(ctx context.Context, cfg *config.Config, db storage.DB
 		logger.Warn("download client hydrate failed", "err", err)
 	}
 	return svc, nil
+}
+
+type downloadHTTPClientProvider struct{}
+
+func (downloadHTTPClientProvider) HTTPClientFor(def downloads.Definition, timeout time.Duration) *http.Client {
+	rt, err := downloads.TransportForDefinition(def)
+	if err != nil || rt == nil {
+		rt = http.DefaultTransport
+	}
+	return &http.Client{Timeout: timeout, Transport: rt}
 }
 
 // registerDownloadHealthJob hooks the periodic download-client health

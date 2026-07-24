@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"path/filepath"
 	"time"
 
@@ -85,6 +86,7 @@ func buildIndexerService(ctx context.Context, cfg *config.Config, db storage.DB,
 	svc, err := indexers.NewService(indexers.ServiceOptions{
 		Repository:         repo,
 		Logger:             logger,
+		HTTPClientProvider: indexerHTTPClientProvider{},
 		SearchTimeout:      time.Duration(cfg.Indexers.SearchTimeoutSec) * time.Second,
 		ProxySearchTimeout: time.Duration(cfg.Indexers.ProxySearchTimeoutSec) * time.Second,
 		MaxParallel:        cfg.Indexers.MaxParallel,
@@ -105,6 +107,16 @@ func buildIndexerService(ctx context.Context, cfg *config.Config, db storage.DB,
 	// throttle transport can resolve per-indexer overrides.
 	indexers.SetRateLimitProvider(svc)
 	return svc, nil
+}
+
+type indexerHTTPClientProvider struct{}
+
+func (indexerHTTPClientProvider) HTTPClientFor(def indexers.Definition, timeout time.Duration) *http.Client {
+	rt, err := indexers.TransportForDefinition(def)
+	if err != nil || rt == nil {
+		rt = http.DefaultTransport
+	}
+	return &http.Client{Timeout: timeout, Transport: rt}
 }
 
 // registerIndexerHealthJob hooks the periodic indexer health sweep

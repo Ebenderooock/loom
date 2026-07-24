@@ -38,12 +38,12 @@ type infraWiring struct {
 }
 
 // wireInfra constructs infrastructure services (connect, compat shims,
-// notification dispatcher, rolling search, health monitor) and mounts
-// them on srv.
+// notification dispatcher, rolling search, health monitor) and records
+// them into wiring.
 func wireInfra(
 	ctx context.Context,
 	db storage.DB,
-	srv *server.Server,
+	wiring *server.Wiring,
 	indexerSvc *indexers.Service,
 	downloadSvc *downloads.Service,
 	moviesSvc movies.Service,
@@ -53,17 +53,17 @@ func wireInfra(
 ) (*infraWiring, error) {
 	// Connect (media server integrations)
 	connectSvc := connect.NewService(db.DB())
-	srv.SetConnect(connectSvc)
+	wiring.ConnectService = connectSvc
 
 	// Media analytics — live stream monitoring + watch history, sampled from
 	// enabled Plex/Emby/Jellyfin connections and gated by a feature flag.
 	analyticsStore := analytics.NewStore(db.DB())
-	analyticsSvc := analytics.NewService(analyticsStore, connectSvc, srv.Bus(), logger)
-	srv.SetAnalytics(analyticsSvc)
+	analyticsSvc := analytics.NewService(analyticsStore, connectSvc, wiring.Bus, logger)
+	wiring.AnalyticsService = analyticsSvc
 	analyticsPoller := analytics.NewPoller(
 		analyticsSvc,
 		30*time.Second,
-		srv.Features().EnabledFunc(featureflags.KeyMediaAnalytics),
+		wiring.FeatureFlags.EnabledFunc(featureflags.KeyMediaAnalytics),
 		logger,
 	)
 
@@ -72,47 +72,48 @@ func wireInfra(
 
 	// Notification dispatcher — subscribes to domain events on the bus
 	// and fans out to all matching notification connections.
-	notifDispatcher := notifications.NewDispatcher(srv.Bus(), media.notifSvc, logger)
+	notifDispatcher := notifications.NewDispatcher(wiring.Bus, media.notifSvc, logger)
 
 	// Plugins — admin-defined custom scripts run on domain events. Gated by an
 	// opt-in feature flag because they execute arbitrary commands.
 	pluginStore := plugins.NewStore(db.DB())
 	pluginRunner := plugins.NewRunner(
-		srv.Bus(),
+		wiring.Bus,
 		pluginStore,
-		srv.Features().EnabledFunc(featureflags.KeyPlugins),
+		wiring.FeatureFlags.EnabledFunc(featureflags.KeyPlugins),
 		logger,
 	)
-	srv.SetPlugins(pluginStore, pluginRunner)
+	wiring.PluginStore = pluginStore
+	wiring.PluginTester = pluginRunner
 
 	// *arr API compatibility shims
 	syncStore := syncprofiles.NewStore(db.DB())
-	srv.SetSyncProfileStore(syncStore)
-	srv.SetCompatRadarr(radarrv3.NewHandler(moviesSvc, media.libStore, media.qpStore, logger))
-	srv.SetCompatSonarr(sonarrv3.NewHandler(media.seriesSvc, media.libStore, media.qpStore, logger))
-	srv.SetCompatProwlarr(prowlarrv1.NewHandler(indexerSvc, syncStore, logger))
+	wiring.SyncProfileStore = syncStore
+	wiring.CompatRadarr = radarrv3.NewHandler(moviesSvc, media.libStore, media.qpStore, logger)
+	wiring.CompatSonarr = sonarrv3.NewHandler(media.seriesSvc, media.libStore, media.qpStore, logger)
+	wiring.CompatProwlarr = prowlarrv1.NewHandler(indexerSvc, syncStore, logger)
 
 	// Rolling-search scheduler
 	rsCfg := scheduler.DefaultRollingSearchConfig()
 	rsStore := scheduler.NewStore(db.DB())
 	rollingSearcher := scheduler.NewRollingSearcher(rsStore, indexerSvc, logger, rsCfg)
-	srv.SetRollingSearch(rollingSearcher)
+	wiring.RollingSearcher = rollingSearcher
 
 	// Health monitor
 	healthMon := buildHealthMonitor(ctx, indexerSvc, downloadSvc, media.notifSvc, media.libStore, logger)
-	srv.SetHealthMonitor(healthMon)
+	wiring.HealthMonitor = healthMon
 
 	// Audit log
-	srv.SetAuditLog(auditLogger)
+	wiring.AuditLog = auditLogger
 
 	// Wire audit log to the review store for safety-review events.
-	if rs := srv.ReviewStore(); rs != nil {
-		rs.SetAuditLog(auditLogger)
+	if wiring.ReviewStore != nil {
+		wiring.ReviewStore.SetAuditLog(auditLogger)
 	}
 
 	// Audit event sink — subscribes to domain events on the bus and
 	// projects them into the centralised audit_log table.
-	auditSink := auditlog.NewSink(srv.Bus(), auditLogger, logger)
+	auditSink := auditlog.NewSink(wiring.Bus, auditLogger, logger)
 
 	return &infraWiring{
 		notifDispatcher: notifDispatcher,

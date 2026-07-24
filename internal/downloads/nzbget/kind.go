@@ -3,33 +3,9 @@ package nzbget
 import (
 	"context"
 	"fmt"
-	"net/http"
 
 	"github.com/ebenderooock/loom/internal/downloads"
 )
-
-// httpClientFactory builds the *http.Client a Client uses for all
-// outbound traffic. It composes the per-definition transport stack
-// (proxy + throttle) via downloads.TransportForDefinition; tests
-// override the factory to point at httptest.NewServer.
-//
-// The seam intentionally mirrors the indexer kind packages and the
-// SABnzbd / qBittorrent kinds so a future audit confirms one
-// convention covers both subsystems.
-var httpClientFactory = func(cfg Config, def downloads.Definition) *http.Client {
-	rt, err := downloads.TransportForDefinition(def)
-	if err != nil || rt == nil {
-		rt = http.DefaultTransport
-	}
-	return &http.Client{Timeout: cfg.timeout(), Transport: rt}
-}
-
-// SetHTTPClientFactory installs a custom builder. Production
-// callers do not need this; the test suite uses it to inject an
-// httptest transport without monkey-patching DialTLS.
-func SetHTTPClientFactory(f func(cfg Config, def downloads.Definition) *http.Client) {
-	httpClientFactory = f
-}
 
 // factory is the downloads.Factory closure registered for the
 // "nzbget" kind. It parses the config blob, falls back to the
@@ -64,7 +40,7 @@ func factory(_ context.Context, def downloads.Definition) (downloads.DownloadCli
 	if cfg.Username == "" || cfg.Password == "" {
 		return nil, fmt.Errorf("download client %q (nzbget): %w: control username and password are required", def.ID, ErrConfig)
 	}
-	return NewClient(def.ID, def.Name, cfg, httpClientFactory(cfg, def)), nil
+	return NewClient(def.ID, def.Name, cfg, downloads.HTTPClientForDefinition(def, cfg.timeout())), nil
 }
 
 func init() {

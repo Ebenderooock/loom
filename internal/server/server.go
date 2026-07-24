@@ -152,53 +152,190 @@ type Server struct {
 	ready             atomic.Bool
 }
 
+// Wiring defines all dependencies that can be mounted on Server.
+// Required fields are validated in New; optional fields can be nil.
+type Wiring struct {
+	AppConfig         *appconfig.Config
+	Logger            *slog.Logger
+	Telemetry         *telemetry.Telemetry
+	DB                storage.DB
+	Bus               eventbus.Bus
+	AuthService       *auth.Service
+	IndexerService    *indexers.Service
+	DownloadService   *downloads.Service
+	BlocklistStore    *downloads.BlocklistStore
+	MoviesService     movies.Service
+	RSSService        *rss.SourcesService
+	ScannerService    *scanner.Scanner
+	SeriesScanner     *scanner.SeriesScanner
+	MusicScanner      *scanner.MusicScanner
+	MusicSearch       *musicsearch.Engine
+	OrganizerService  *organizer.Organizer
+	SeriesService     series.Service
+	MusicService      music.Service
+	NotificationSvc   notifications.Service
+	ConnectService    connect.Service
+	AnalyticsService  *analytics.Service
+	PluginStore       *plugins.Store
+	PluginTester      plugins.Tester
+	ReviewStore       *safety.ReviewStore
+	CleanupService    *cleanup.Service
+	RequestsService   *requests.Service
+	BotsRouter        http.Handler
+	ImportPipeline    *imports.ImportPipeline
+	LanguageStore     *languages.Store
+	CustomFormatStore *customformats.Store
+	RollingSearcher   *scheduler.RollingSearcher
+	Aggregator        *newznabserver.Server
+	AltTitleStore     *alttitles.Store
+	AnimeStore        *anime.Store
+	Validator         *validation.Validator
+	IndexerRuleStore  *indexers.RuleStore
+	ImportListStore   *importlists.Store
+	ImportListSync    *importlists.SyncManager
+	MediaInfoStore    *mediainfo.Store
+	PacksStore        *packs.Store
+	EpisodeOrderStore *episodeorder.Store
+	LibraryStore      *libraries.Store
+	LibraryScanner    *libraries.Scanner
+	APIKeyStore       *apikeys.Store
+	CommandQueue      *commands.Queue
+	QualityProfile    *qualityprofiles.Store
+	CalendarHandler   http.Handler
+	CompatRadarr      *radarrv3.Handler
+	CompatSonarr      *sonarrv3.Handler
+	CompatProwlarr    *prowlarrv1.Handler
+	HealthMonitor     *healthmonitor.Monitor
+	AuditLog          *auditlog.Logger
+	AutoSearchEngine  *autosearch.Engine
+	SearchDebugStore  *searchdebug.Store
+	SearchDebugHub    *searchdebug.Hub
+	FeatureFlags      *featureflags.Service
+	SystemLogsDeps    *systemlogs.HandlerDeps
+	WorkflowEngine    *workflows.Engine
+	Orchestrator      *workflows.Orchestrator
+	PeriodicScanner   *scheduler.PeriodicScanner
+	SyncProfileStore  *syncprofiles.Store
+	DiscoverRouter    http.Handler
+	HTTPMetrics       *telemetry.HTTPMetrics
+}
+
 // New constructs a Server but does not start listening. The caller must
-// have already constructed *telemetry.Telemetry (typically via
-// telemetry.Init in serve.go) and an open storage.DB (with migrations
-// applied). The Server takes ownership of db and will Close() it on
-// Shutdown. authSvc may be nil for low-level tests; production callers
-// pass a fully wired *auth.Service. indexerSvc may be nil to disable
-// the /api/v1/indexers/* surface. moviesSvc may be nil to disable the
-// /api/v1/movies/* surface. aggSvc may be nil to disable the
-// Newznab/Torznab aggregator at /api and /api/v1/aggregate.
-// bus is the shared event bus; if nil a new in-process bus is created.
-func New(cfg *config.Config, appCfg *appconfig.Config, logger *slog.Logger, tel *telemetry.Telemetry, db storage.DB, authSvc *auth.Service, indexerSvc *indexers.Service, moviesSvc movies.Service, aggSvc *newznabserver.Server, bus eventbus.Bus) (*Server, error) {
-	if tel == nil {
+// have already constructed *telemetry.Telemetry (typically via telemetry.Init
+// in serve.go) and an open storage.DB (with migrations applied). The server
+// takes ownership of DB and closes it on Shutdown.
+//
+// Required wiring fields:
+//   - AppConfig
+//   - Logger
+//   - Telemetry
+//   - DB
+//
+// Optional services can be nil to disable their API surfaces.
+func New(cfg *config.Config, wiring Wiring) (*Server, error) {
+	if cfg == nil {
+		return nil, errors.New("server: cfg must not be nil")
+	}
+	if wiring.Telemetry == nil {
 		return nil, errors.New("server: telemetry must not be nil")
 	}
-	if db == nil {
+	if wiring.DB == nil {
 		return nil, errors.New("server: db must not be nil")
 	}
-	if appCfg == nil {
+	if wiring.AppConfig == nil {
 		return nil, errors.New("server: appCfg must not be nil")
 	}
+	if wiring.Logger == nil {
+		return nil, errors.New("server: logger must not be nil")
+	}
 
-	if bus == nil {
-		bus = eventbus.NewInProc()
+	if wiring.Bus == nil {
+		wiring.Bus = eventbus.NewInProc()
+	}
+	if wiring.ReviewStore == nil {
+		wiring.ReviewStore = safety.NewReviewStore(wiring.DB.DB())
+	}
+	if wiring.SearchDebugStore == nil {
+		wiring.SearchDebugStore = searchdebug.NewStore(wiring.DB.DB())
+	}
+	if wiring.SearchDebugHub == nil {
+		wiring.SearchDebugHub = searchdebug.NewHub()
+	}
+	if wiring.FeatureFlags == nil {
+		wiring.FeatureFlags = featureflags.NewService(featureflags.NewStore(wiring.DB.DB()), wiring.Logger)
+	}
+	if wiring.HTTPMetrics == nil {
+		wiring.HTTPMetrics = telemetry.NewHTTPMetrics(wiring.Telemetry.Registry())
 	}
 
 	s := &Server{
-		cfg:              cfg,
-		appCfg:           appCfg,
-		logger:           logger,
-		tel:              tel,
-		db:               db,
-		bus:              bus,
-		authSvc:          authSvc,
-		indexerSvc:       indexerSvc,
-		moviesSvc:        moviesSvc,
-		reviewStore:      safety.NewReviewStore(db.DB()),
-		aggSvc:           aggSvc,
-		searchDebugStore: searchdebug.NewStore(db.DB()),
-		searchDebugHub:   searchdebug.NewHub(),
-		featureFlags:     featureflags.NewService(featureflags.NewStore(db.DB()), logger),
-		httpMetrics:      telemetry.NewHTTPMetrics(tel.Registry()),
+		cfg:               cfg,
+		appCfg:            wiring.AppConfig,
+		logger:            wiring.Logger,
+		tel:               wiring.Telemetry,
+		db:                wiring.DB,
+		bus:               wiring.Bus,
+		authSvc:           wiring.AuthService,
+		indexerSvc:        wiring.IndexerService,
+		downloadSvc:       wiring.DownloadService,
+		blocklistStore:    wiring.BlocklistStore,
+		moviesSvc:         wiring.MoviesService,
+		rssSvc:            wiring.RSSService,
+		scannerSvc:        wiring.ScannerService,
+		seriesScannerSvc:  wiring.SeriesScanner,
+		musicScannerSvc:   wiring.MusicScanner,
+		musicSearch:       wiring.MusicSearch,
+		organizerSvc:      wiring.OrganizerService,
+		seriesSvc:         wiring.SeriesService,
+		musicSvc:          wiring.MusicService,
+		notifSvc:          wiring.NotificationSvc,
+		connectSvc:        wiring.ConnectService,
+		analyticsSvc:      wiring.AnalyticsService,
+		pluginStore:       wiring.PluginStore,
+		pluginTester:      wiring.PluginTester,
+		reviewStore:       wiring.ReviewStore,
+		cleanupSvc:        wiring.CleanupService,
+		requestsSvc:       wiring.RequestsService,
+		botsRouter:        wiring.BotsRouter,
+		importPipeline:    wiring.ImportPipeline,
+		langStore:         wiring.LanguageStore,
+		customFormatStore: wiring.CustomFormatStore,
+		rollingSearch:     wiring.RollingSearcher,
+		aggSvc:            wiring.Aggregator,
+		altTitleStore:     wiring.AltTitleStore,
+		animeStore:        wiring.AnimeStore,
+		validator:         wiring.Validator,
+		indexerRuleStore:  wiring.IndexerRuleStore,
+		importListStore:   wiring.ImportListStore,
+		importListSync:    wiring.ImportListSync,
+		mediaInfoStore:    wiring.MediaInfoStore,
+		packsStore:        wiring.PacksStore,
+		episodeOrderStore: wiring.EpisodeOrderStore,
+		libStore:          wiring.LibraryStore,
+		libScanner:        wiring.LibraryScanner,
+		apiKeyStore:       wiring.APIKeyStore,
+		cmdQueue:          wiring.CommandQueue,
+		qpStore:           wiring.QualityProfile,
+		calendarHandler:   wiring.CalendarHandler,
+		compatRadarr:      wiring.CompatRadarr,
+		compatSonarr:      wiring.CompatSonarr,
+		compatProwlarr:    wiring.CompatProwlarr,
+		healthMonitor:     wiring.HealthMonitor,
+		auditLog:          wiring.AuditLog,
+		autoSearchEngine:  wiring.AutoSearchEngine,
+		searchDebugStore:  wiring.SearchDebugStore,
+		searchDebugHub:    wiring.SearchDebugHub,
+		featureFlags:      wiring.FeatureFlags,
+		systemLogsDeps:    wiring.SystemLogsDeps,
+		wfEngine:          wiring.WorkflowEngine,
+		orchestrator:      wiring.Orchestrator,
+		periodicScanner:   wiring.PeriodicScanner,
+		syncProfileStore:  wiring.SyncProfileStore,
+		discoverRouter:    wiring.DiscoverRouter,
+		httpMetrics:       wiring.HTTPMetrics,
 	}
 
-	telemetry.InitAppMetrics(tel.Registry())
-
-	// Warm the feature flag cache from persisted overrides (best-effort).
-	s.featureFlags.Load(context.Background())
+	telemetry.InitAppMetrics(wiring.Telemetry.Registry())
 
 	mux := s.newMux()
 
@@ -207,7 +344,7 @@ func New(cfg *config.Config, appCfg *appconfig.Config, logger *slog.Logger, tel 
 		Handler:           mux,
 		ReadHeaderTimeout: time.Duration(cfg.HTTP.ReadTimeout) * time.Second,
 		WriteTimeout:      time.Duration(cfg.HTTP.WriteTimeout) * time.Second,
-		ErrorLog:          slog.NewLogLogger(logger.Handler(), slog.LevelError),
+		ErrorLog:          slog.NewLogLogger(wiring.Logger.Handler(), slog.LevelError),
 	}
 	return s, nil
 }

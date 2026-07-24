@@ -42,14 +42,14 @@ type mediaWiring struct {
 }
 
 // wireMedia constructs all media-related services (scanner, organizer,
-// series, libraries, languages, quality profiles, etc.) and mounts
-// them on srv. It returns shared references that other wire functions
-// depend on.
+// series, libraries, languages, quality profiles, etc.) and records
+// them into wiring. It returns shared references that other wire
+// functions depend on.
 func wireMedia(
 	ctx context.Context,
 	cfg *config.Config,
 	db storage.DB,
-	srv *server.Server,
+	wiring *server.Wiring,
 	moviesSvc movies.Service,
 	auditLogger *auditlog.Logger,
 	logger *slog.Logger,
@@ -59,30 +59,30 @@ func wireMedia(
 
 	// Library scanner
 	scannerSvc := buildScanner(moviesSvc, cfg, auditLogger, logger)
-	srv.SetScanner(scannerSvc)
+	wiring.ScannerService = scannerSvc
 
 	// File organizer
 	organizerSvc := buildOrganizer(moviesSvc, libStore, db, logger)
 	if mode := cfg.MediaManagement.ImportMode; mode != "" {
 		organizerSvc.SetImportMode(mode)
 	}
-	srv.SetOrganizer(organizerSvc)
+	wiring.OrganizerService = organizerSvc
 
 	// TV series
 	seriesSvc := buildSeriesService(db)
-	srv.SetSeries(seriesSvc)
+	wiring.SeriesService = seriesSvc
 
 	seriesScannerSvc := buildSeriesScanner(seriesSvc, logger)
-	srv.SetSeriesScanner(seriesScannerSvc)
+	wiring.SeriesScanner = seriesScannerSvc
 
 	// Music (artists/albums/tracks) — MusicBrainz metadata provider.
 	mbProvider := musicbrainz.NewProvider(musicbrainz.NewClient(musicbrainz.DefaultConfig()))
 	musicRepo := music.NewRepository(db.DB())
 	musicSvc := music.NewService(musicRepo, mbProvider, logger)
-	srv.SetMusic(musicSvc)
+	wiring.MusicService = musicSvc
 
 	musicScannerSvc := scanner.NewMusicScanner(musicSvc, logger)
-	srv.SetMusicScanner(musicScannerSvc)
+	wiring.MusicScanner = musicScannerSvc
 
 	// After a refresh re-creates a series' episodes (new IDs), re-link on-disk
 	// files by triggering a per-series scan. Best-effort; never fails refresh.
@@ -111,25 +111,25 @@ func wireMedia(
 		6*time.Hour,
 		logger,
 	)
-	srv.SetPeriodicScanner(periodicScanner)
+	wiring.PeriodicScanner = periodicScanner
 	periodicScanner.Start(ctx)
 
 	// Notifications
 	notifSvc := buildNotificationsService(db)
-	srv.SetNotifications(notifSvc)
+	wiring.NotificationSvc = notifSvc
 
 	// Calendar
-	srv.SetCalendar(calendar.Router(db.DB()))
+	wiring.CalendarHandler = calendar.Router(db.DB())
 
 	// Language profiles
 	langStore := languages.NewStore(db.DB())
 	if err := langStore.EnsureDefault(ctx); err != nil {
 		return nil, fmt.Errorf("init language profiles: %w", err)
 	}
-	srv.SetLanguages(langStore)
+	wiring.LanguageStore = langStore
 
 	// Anime
-	srv.SetAnime(anime.NewStore(db.DB(), logger))
+	wiring.AnimeStore = anime.NewStore(db.DB(), logger)
 
 	// Import lists
 	importListStore := importlists.NewStore(db.DB())
@@ -145,26 +145,28 @@ func wireMedia(
 	importListSyncMgr.SetSeriesService(seriesSvc)
 	importListSyncMgr.SetMusicService(musicSvc)
 	importListSyncMgr.SetTMDBClient(buildTMDBClient())
-	srv.SetImportLists(importListStore, importListSyncMgr)
+	wiring.ImportListStore = importListStore
+	wiring.ImportListSync = importListSyncMgr
 
 	// Libraries scanner
 	libScanner := libraries.NewScanner(libStore, logger)
-	srv.SetLibraries(libStore, libScanner)
+	wiring.LibraryStore = libStore
+	wiring.LibraryScanner = libScanner
 
 	// Media info
-	srv.SetMediaInfo(mediainfo.NewStore(db.DB(), logger))
+	wiring.MediaInfoStore = mediainfo.NewStore(db.DB(), logger)
 
 	// Alt titles
-	srv.SetAltTitles(alttitles.NewStore(db.DB()))
+	wiring.AltTitleStore = alttitles.NewStore(db.DB())
 
 	// Quality profiles
 	qpStore := qualityprofiles.NewStore(db.DB())
-	srv.SetQualityProfiles(qpStore)
+	wiring.QualityProfile = qpStore
 	qualityprofiles.SeedDefaults(ctx, qpStore, moviesSvc)
 
 	// Person discovery (TMDB-backed)
 	discoverTMDB := buildTMDBClient()
-	srv.SetDiscoverRouter(discover.Router(discoverTMDB))
+	wiring.DiscoverRouter = discover.Router(discoverTMDB)
 
 	return &mediaWiring{
 		libStore:          libStore,
