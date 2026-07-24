@@ -32,6 +32,7 @@ type infraWiring struct {
 	rollingSearcher *scheduler.RollingSearcher
 	healthMon       *healthmonitor.Monitor
 	auditSink       *auditlog.Sink
+	analyticsSvc    *analytics.Service
 	analyticsPoller *analytics.Poller
 	pluginRunner    *plugins.Runner
 }
@@ -56,7 +57,8 @@ func wireInfra(
 
 	// Media analytics — live stream monitoring + watch history, sampled from
 	// enabled Plex/Emby/Jellyfin connections and gated by a feature flag.
-	analyticsSvc := analytics.NewService(analytics.NewStore(db.DB()), connectSvc, srv.Bus(), logger)
+	analyticsStore := analytics.NewStore(db.DB())
+	analyticsSvc := analytics.NewService(analyticsStore, connectSvc, srv.Bus(), logger)
 	srv.SetAnalytics(analyticsSvc)
 	analyticsPoller := analytics.NewPoller(
 		analyticsSvc,
@@ -117,6 +119,7 @@ func wireInfra(
 		rollingSearcher: rollingSearcher,
 		healthMon:       healthMon,
 		auditSink:       auditSink,
+		analyticsSvc:    analyticsSvc,
 		analyticsPoller: analyticsPoller,
 		pluginRunner:    pluginRunner,
 	}, nil

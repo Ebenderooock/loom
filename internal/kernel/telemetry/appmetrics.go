@@ -12,9 +12,36 @@ import (
 // with the canonical Prometheus registry so they appear on /metrics AND
 // (when OTel metrics push is enabled) are also exported via OTLP.
 type AppMetrics struct {
+	MoviesTotal   prometheus.Gauge
+	SeriesTotal   prometheus.Gauge
+	EpisodesTotal prometheus.Gauge
+
+	LibrariesTotal   prometheus.Gauge
+	LibrarySizeBytes *prometheus.GaugeVec
+
+	IndexersConfigured prometheus.Gauge
+	IndexersHealthy    prometheus.Gauge
+
 	ScanTotal          *prometheus.CounterVec
 	ScanDuration       *prometheus.HistogramVec
 	ScanFilesProcessed *prometheus.CounterVec
+
+	DownloadsActive        prometheus.Gauge
+	DownloadClientsTotal   prometheus.Gauge
+	DownloadClientsHealthy prometheus.Gauge
+	DownloadQueueSize      prometheus.Gauge
+	DownloadSpeedBytes     prometheus.Gauge
+
+	QualityProfilesTotal prometheus.Gauge
+
+	SearchRequests *prometheus.CounterVec
+	ImportTotal    *prometheus.CounterVec
+	NotifSent      *prometheus.CounterVec
+
+	InternalWriteFailures            *prometheus.CounterVec
+	OrchestratorCommandDrops         *prometheus.CounterVec
+	OrchestratorCommandBufferDepth   prometheus.Gauge
+	OrchestratorCommandBufferUseRate prometheus.Gauge
 }
 
 // NewAppMetrics registers domain metrics with the given Prometheus
@@ -22,6 +49,34 @@ type AppMetrics struct {
 // update gauges/counters as state changes.
 func NewAppMetrics(reg *prometheus.Registry) *AppMetrics {
 	m := &AppMetrics{
+		MoviesTotal: prometheus.NewGauge(prometheus.GaugeOpts{
+			Name: "loom_movies_total",
+			Help: "Current number of movies in the library.",
+		}),
+		SeriesTotal: prometheus.NewGauge(prometheus.GaugeOpts{
+			Name: "loom_series_total",
+			Help: "Current number of series in the library.",
+		}),
+		EpisodesTotal: prometheus.NewGauge(prometheus.GaugeOpts{
+			Name: "loom_episodes_total",
+			Help: "Current total episodes tracked.",
+		}),
+		LibrariesTotal: prometheus.NewGauge(prometheus.GaugeOpts{
+			Name: "loom_libraries_total",
+			Help: "Number of configured libraries.",
+		}),
+		LibrarySizeBytes: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Name: "loom_library_size_bytes",
+			Help: "Size of each library in bytes.",
+		}, []string{"library_name"}),
+		IndexersConfigured: prometheus.NewGauge(prometheus.GaugeOpts{
+			Name: "loom_indexers_configured",
+			Help: "Number of configured indexers.",
+		}),
+		IndexersHealthy: prometheus.NewGauge(prometheus.GaugeOpts{
+			Name: "loom_indexers_healthy",
+			Help: "Number of indexers currently reporting healthy.",
+		}),
 		ScanTotal: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "loom_scan_total",
 			Help: "Total scan operations.",
@@ -35,9 +90,84 @@ func NewAppMetrics(reg *prometheus.Registry) *AppMetrics {
 			Name: "loom_scan_files_processed_total",
 			Help: "Files processed during scans.",
 		}, []string{"type", "result"}),
+		DownloadsActive: prometheus.NewGauge(prometheus.GaugeOpts{
+			Name: "loom_downloads_active",
+			Help: "Number of currently active downloads.",
+		}),
+		DownloadClientsTotal: prometheus.NewGauge(prometheus.GaugeOpts{
+			Name: "loom_download_clients_total",
+			Help: "Configured download clients.",
+		}),
+		DownloadClientsHealthy: prometheus.NewGauge(prometheus.GaugeOpts{
+			Name: "loom_download_clients_healthy",
+			Help: "Healthy download clients.",
+		}),
+		DownloadQueueSize: prometheus.NewGauge(prometheus.GaugeOpts{
+			Name: "loom_download_queue_size",
+			Help: "Items in download queue.",
+		}),
+		DownloadSpeedBytes: prometheus.NewGauge(prometheus.GaugeOpts{
+			Name: "loom_download_speed_bytes",
+			Help: "Current download speed in bytes/sec.",
+		}),
+		QualityProfilesTotal: prometheus.NewGauge(prometheus.GaugeOpts{
+			Name: "loom_quality_profiles_total",
+			Help: "Number of quality profiles.",
+		}),
+		SearchRequests: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "loom_search_requests_total",
+			Help: "Total search requests.",
+		}, []string{"type"}),
+		ImportTotal: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "loom_import_total",
+			Help: "Total import operations.",
+		}, []string{"status"}),
+		NotifSent: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "loom_notifications_sent_total",
+			Help: "Total notifications sent.",
+		}, []string{"provider", "status"}),
+		InternalWriteFailures: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "loom_internal_write_failures_total",
+			Help: "Total failed internal writes by subsystem.",
+		}, []string{"target"}),
+		OrchestratorCommandDrops: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "loom_workflow_orchestrator_command_drops_total",
+			Help: "Total commands dropped by the workflow orchestrator due to buffer pressure.",
+		}, []string{"command_type"}),
+		OrchestratorCommandBufferDepth: prometheus.NewGauge(prometheus.GaugeOpts{
+			Name: "loom_workflow_orchestrator_command_buffer_depth",
+			Help: "Current queued command count in the workflow orchestrator buffer.",
+		}),
+		OrchestratorCommandBufferUseRate: prometheus.NewGauge(prometheus.GaugeOpts{
+			Name: "loom_workflow_orchestrator_command_buffer_utilization_ratio",
+			Help: "Current workflow orchestrator command-buffer utilization ratio [0,1].",
+		}),
 	}
-	defer func() { _ = recover() }()
-	reg.MustRegister(m.ScanTotal, m.ScanDuration, m.ScanFilesProcessed)
+	reg.MustRegister(
+		m.MoviesTotal,
+		m.SeriesTotal,
+		m.EpisodesTotal,
+		m.LibrariesTotal,
+		m.LibrarySizeBytes,
+		m.IndexersConfigured,
+		m.IndexersHealthy,
+		m.ScanTotal,
+		m.ScanDuration,
+		m.ScanFilesProcessed,
+		m.DownloadsActive,
+		m.DownloadClientsTotal,
+		m.DownloadClientsHealthy,
+		m.DownloadQueueSize,
+		m.DownloadSpeedBytes,
+		m.QualityProfilesTotal,
+		m.SearchRequests,
+		m.ImportTotal,
+		m.NotifSent,
+		m.InternalWriteFailures,
+		m.OrchestratorCommandDrops,
+		m.OrchestratorCommandBufferDepth,
+		m.OrchestratorCommandBufferUseRate,
+	)
 	return m
 }
 

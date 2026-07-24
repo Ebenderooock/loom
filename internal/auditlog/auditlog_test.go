@@ -1,9 +1,11 @@
 package auditlog
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
@@ -99,6 +101,32 @@ func TestLogger_Prune(t *testing.T) {
 	}
 	if count != 1 {
 		t.Errorf("recent entry count = %d, want 1", count)
+	}
+}
+
+func TestLogger_LogWriteFailureIsError(t *testing.T) {
+	db := setupTestDB(t)
+	var out bytes.Buffer
+	sl := slog.New(slog.NewTextHandler(&out, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	logger := New(db, sl)
+
+	if err := db.Close(); err != nil {
+		t.Fatalf("close db: %v", err)
+	}
+
+	logger.Log(context.Background(), Entry{
+		Category:  "test",
+		EventType: "test.write-failure",
+		Message:   "fail loudly",
+		Level:     "info",
+	})
+
+	logged := out.String()
+	if !strings.Contains(logged, "level=ERROR") {
+		t.Fatalf("expected error-level log, got %q", logged)
+	}
+	if !strings.Contains(logged, "audit log insert failed") {
+		t.Fatalf("expected failure message, got %q", logged)
 	}
 }
 

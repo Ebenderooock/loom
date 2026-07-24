@@ -6,22 +6,29 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 
 	"github.com/ebenderooock/loom/internal/kernel/logging"
+	"github.com/ebenderooock/loom/internal/kernel/telemetry"
 )
 
 // Store persists log entries to the database and supports filtered queries.
 type Store struct {
-	db *sql.DB
+	db     *sql.DB
+	logger *slog.Logger
 }
 
 // NewStore creates a new log store backed by the given database.
 func NewStore(db *sql.DB) *Store {
-	return &Store{db: db}
+	logger := slog.Default()
+	return &Store{
+		db:     db,
+		logger: logger.With("module", "systemlogs"),
+	}
 }
 
 // ListFilter controls paginated retrieval of log entries.
@@ -202,7 +209,12 @@ func (bw *BatchWriter) run() {
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		for _, e := range batch {
-			_ = bw.store.Insert(ctx, e)
+			if err := bw.store.Insert(ctx, e); err != nil {
+				bw.store.logger.Error("system log insert failed", "error", err)
+				if m := telemetry.App(); m != nil {
+					m.InternalWriteFailures.WithLabelValues("system_logs").Inc()
+				}
+			}
 		}
 		cancel()
 		batch = batch[:0]

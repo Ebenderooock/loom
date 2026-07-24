@@ -14,6 +14,7 @@ import (
 
 const (
 	commandBufferSize     = 256
+	commandBufferWarnAt   = (commandBufferSize*8 + 9) / 10 // ceil(80%)
 	maxConcurrentImports  = 2
 	progressFlushInterval = 60 * time.Second
 	importRetryDelay      = 30 * time.Second
@@ -110,6 +111,9 @@ type Orchestrator struct {
 	// Progress coalescing: buffered updates flushed on tick.
 	progressMu  sync.Mutex
 	progressBuf map[string]*CmdDownloadProgress // key: clientID:downloadID
+
+	bufferPressureMu     sync.Mutex
+	bufferPressureWarned bool
 }
 
 // Store returns the underlying workflow store for read-only queries
@@ -152,12 +156,39 @@ func NewOrchestrator(opts OrchestratorOpts) *Orchestrator {
 // Send enqueues a command for the orchestrator. Non-blocking: if the buffer
 // is full, logs a warning and drops the command (callers should not block).
 func (o *Orchestrator) Send(cmd Command) {
+	cmdType := fmt.Sprintf("%T", cmd)
 	select {
 	case o.commands <- cmd:
+		o.observeCommandBuffer(len(o.commands))
 	default:
-		o.logger.Warn("orchestrator command buffer full, dropping command",
-			"type", fmt.Sprintf("%T", cmd))
+		o.logger.Error("orchestrator command buffer full, dropping command",
+			"type", cmdType, "buffer_size", commandBufferSize)
+		if m := telemetry.App(); m != nil {
+			m.OrchestratorCommandDrops.WithLabelValues(cmdType).Inc()
+			m.OrchestratorCommandBufferDepth.Set(float64(commandBufferSize))
+			m.OrchestratorCommandBufferUseRate.Set(1)
+		}
 	}
+}
+
+func (o *Orchestrator) observeCommandBuffer(depth int) {
+	if m := telemetry.App(); m != nil {
+		m.OrchestratorCommandBufferDepth.Set(float64(depth))
+		m.OrchestratorCommandBufferUseRate.Set(float64(depth) / float64(commandBufferSize))
+	}
+
+	o.bufferPressureMu.Lock()
+	defer o.bufferPressureMu.Unlock()
+
+	if depth >= commandBufferWarnAt {
+		if !o.bufferPressureWarned {
+			o.bufferPressureWarned = true
+			o.logger.Warn("orchestrator command buffer pressure high",
+				"depth", depth, "buffer_size", commandBufferSize, "threshold", commandBufferWarnAt)
+		}
+		return
+	}
+	o.bufferPressureWarned = false
 }
 
 // NotifyDownloadComplete satisfies downloads.MonitorOrchNotifier.
@@ -245,6 +276,7 @@ func (o *Orchestrator) Run(ctx context.Context) {
 			o.logger.Info("orchestrator stopped")
 			return
 		case cmd := <-o.commands:
+			o.observeCommandBuffer(len(o.commands))
 			o.handle(ctx, cmd)
 		case <-ticker.C:
 			o.handleStale(ctx)

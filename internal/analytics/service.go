@@ -91,6 +91,11 @@ func (s *Service) ClearHistory(ctx context.Context) error {
 	return s.store.ClearHistory(ctx)
 }
 
+// PruneHistory removes persisted play-history rows older than olderThan.
+func (s *Service) PruneHistory(ctx context.Context, olderThan time.Time) (int64, error) {
+	return s.store.PruneHistory(ctx, olderThan)
+}
+
 // Stats returns the analytics report for the given window in days.
 func (s *Service) Stats(ctx context.Context, windowDays int) (*Stats, error) {
 	if windowDays <= 0 {
