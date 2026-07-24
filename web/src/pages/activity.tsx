@@ -933,8 +933,8 @@ export function ActivityPage() {
     <div className="space-y-6">
       <Card className="border-dashed">
         <CardContent className="py-3 text-sm text-muted-foreground">
-          Active queue controls live on <strong>Downloads → Active</strong>. This
-          page now focuses on history and review workflows.
+          Active queue controls live on <strong>Downloads → Active</strong>.
+          This page now focuses on history and review workflows.
         </CardContent>
       </Card>
       <Tabs defaultValue="history">

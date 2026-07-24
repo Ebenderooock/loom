@@ -31,6 +31,8 @@ describe("ActivityPage consolidation", () => {
     expect(await screen.findByRole("tab", { name: /History/i })).toBeVisible();
     expect(screen.getByRole("tab", { name: /Blocklist/i })).toBeVisible();
     expect(screen.getByRole("tab", { name: /Reviews/i })).toBeVisible();
-    expect(screen.queryByRole("tab", { name: /^Queue$/i })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("tab", { name: /^Queue$/i }),
+    ).not.toBeInTheDocument();
   });
 });
