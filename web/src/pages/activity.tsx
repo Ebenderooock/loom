@@ -918,7 +918,7 @@ function ReviewQueue() {
 }
 
 export function ActivityPage() {
-  useSetPageHeader("Activity");
+  useSetPageHeader("Activity", "History, blocklist, and manual reviews");
 
   const [reviewCount, setReviewCount] = React.useState(0);
 
@@ -931,9 +931,14 @@ export function ActivityPage() {
 
   return (
     <div className="space-y-6">
-      <Tabs defaultValue="queue">
+      <Card className="border-dashed">
+        <CardContent className="py-3 text-sm text-muted-foreground">
+          Active queue controls live on <strong>Downloads → Active</strong>. This
+          page now focuses on history and review workflows.
+        </CardContent>
+      </Card>
+      <Tabs defaultValue="history">
         <TabsList>
-          <TabsTrigger value="queue">Queue</TabsTrigger>
           <TabsTrigger value="history">History</TabsTrigger>
           <TabsTrigger value="blocklist">Blocklist</TabsTrigger>
           <TabsTrigger value="reviews" className="flex items-center gap-1.5">
@@ -948,7 +953,7 @@ export function ActivityPage() {
             )}
           </TabsTrigger>
         </TabsList>
-        <TabsContent value="queue">
+        <TabsContent value="queue" className="hidden">
           <DownloadQueue />
         </TabsContent>
         <TabsContent value="history">

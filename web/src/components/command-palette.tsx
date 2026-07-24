@@ -70,13 +70,13 @@ const navItems: NavItem[] = [
   {
     label: "Activity",
     to: "/activity",
-    keywords: "history queue",
+    keywords: "history blocklist reviews",
     Icon: ListTodo,
   },
   {
     label: "Downloads",
     to: "/downloads",
-    keywords: "torrents clients",
+    keywords: "active queue imports cleanup torrents clients",
     Icon: Download,
   },
   {

@@ -30,29 +30,51 @@ func NewHistoryStore(db *sql.DB) *HistoryStore {
 	return &HistoryStore{db: db}
 }
 
-// RecordCompletion inserts a new history row from a DownloadCompletedEvent.
+// RecordCompletion inserts a new completed-history row from a DownloadCompletedEvent.
 func (h *HistoryStore) RecordCompletion(ctx context.Context, event *DownloadCompletedEvent) error {
-	id := uuid.New().String()
-	completedAt := event.CompletedAt.UTC().Format(time.RFC3339)
+	return h.record(ctx, event.DownloadID, event.ClientID, event.Title, event.Category, "completed", event.CompletedAt)
+}
 
-	_, err := h.db.ExecContext(ctx,
-		`INSERT INTO download_history (id, download_id, client_id, title, category, status, completed_at)
-		 VALUES (?, ?, ?, ?, ?, 'completed', ?)`,
-		id, event.DownloadID, event.ClientID, event.Title, event.Category, completedAt,
-	)
-	return err
+// RecordFailure inserts a new failed-history row for a failed download.
+func (h *HistoryStore) RecordFailure(
+	ctx context.Context,
+	clientID, downloadID, title, category string,
+	failedAt time.Time,
+) error {
+	return h.record(ctx, downloadID, clientID, title, category, "failed", failedAt)
 }
 
 // WasCompleted checks whether a download was already emitted as completed.
 // Used for idempotency across process restarts — prevents re-importing
 // a download that was already handled in a previous session.
 func (h *HistoryStore) WasCompleted(ctx context.Context, clientID, downloadID string) bool {
+	return h.WasRecorded(ctx, clientID, downloadID, "completed")
+}
+
+// WasRecorded checks whether a download has already been persisted with
+// the given history status.
+func (h *HistoryStore) WasRecorded(ctx context.Context, clientID, downloadID, status string) bool {
 	var count int
 	err := h.db.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM download_history WHERE client_id = ? AND download_id = ? AND status = 'completed'`,
-		clientID, downloadID,
+		`SELECT COUNT(*) FROM download_history WHERE client_id = ? AND download_id = ? AND status = ?`,
+		clientID, downloadID, status,
 	).Scan(&count)
 	return err == nil && count > 0
+}
+
+func (h *HistoryStore) record(
+	ctx context.Context,
+	downloadID, clientID, title, category, status string,
+	at time.Time,
+) error {
+	id := uuid.New().String()
+	completedAt := at.UTC().Format(time.RFC3339)
+	_, err := h.db.ExecContext(ctx,
+		`INSERT INTO download_history (id, download_id, client_id, title, category, status, completed_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		id, downloadID, clientID, title, category, status, completedAt,
+	)
+	return err
 }
 
 // List returns history entries ordered by completed_at descending.

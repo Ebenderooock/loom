@@ -245,6 +245,12 @@ func (m *Monitor) detectStalled(ctx context.Context, items []Item) {
 
 		// Handle failed items immediately.
 		if item.Status == StatusItemFailed {
+			if m.historyStore != nil && !m.historyStore.WasRecorded(ctx, item.ClientID, item.ID, "failed") {
+				if err := m.historyStore.RecordFailure(ctx, item.ClientID, item.ID, item.Title, item.Category, now); err != nil {
+					m.logger.Warn("monitor: failed to record failed history entry",
+						"item_id", item.ID, "client_id", item.ClientID, "error", err)
+				}
+			}
 			if !m.stalledEmitted[key] {
 				m.stalledEmitted[key] = true
 				if m.stallHandler != nil {
