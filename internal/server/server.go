@@ -28,6 +28,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
 	"github.com/go-chi/httprate"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
 	"github.com/ebenderooock/loom/internal/alttitles"
 	"github.com/ebenderooock/loom/internal/analytics"
@@ -1046,7 +1047,20 @@ func (s *Server) newMux() http.Handler {
 		r.NotFound(spa.ServeHTTP)
 	}
 
-	return r
+	return otelhttp.NewHandler(r, "loom.http.server",
+		otelhttp.WithFilter(func(req *http.Request) bool {
+			return shouldTraceRoute(req.URL.Path)
+		}),
+	)
+}
+
+func shouldTraceRoute(path string) bool {
+	switch path {
+	case "/healthz", "/livez", "/readyz", "/metrics":
+		return false
+	default:
+		return true
+	}
 }
 
 func (s *Server) mountPprof(r chi.Router) {

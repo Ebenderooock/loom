@@ -119,10 +119,7 @@ func (t *Telemetry) startOTel(ctx context.Context, cfg *config.Config) error {
 	if err != nil {
 		return err
 	}
-	ratio := cfg.Telemetry.TraceRatio
-	if ratio <= 0 {
-		ratio = 0
-	}
+	ratio := resolveTraceRatio(cfg.Telemetry.TraceRatio)
 	tp := sdktrace.NewTracerProvider(
 		sdktrace.WithBatcher(exp),
 		sdktrace.WithResource(res),
@@ -167,6 +164,13 @@ func (t *Telemetry) startOTel(ctx context.Context, cfg *config.Config) error {
 	}
 
 	return nil
+}
+
+func resolveTraceRatio(ratio float64) float64 {
+	if ratio <= 0 || ratio > 1 {
+		return config.DefaultTraceRatio
+	}
+	return ratio
 }
 
 // Handler returns the Prometheus /metrics http.Handler. Always non-nil.

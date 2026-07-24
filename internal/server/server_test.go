@@ -12,6 +12,10 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
+	"go.opentelemetry.io/otel"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/ebenderooock/loom/internal/apikeys"
 	"github.com/ebenderooock/loom/internal/appconfig"
@@ -19,6 +23,21 @@ import (
 	"github.com/ebenderooock/loom/internal/kernel/telemetry"
 	"github.com/ebenderooock/loom/internal/storage"
 )
+
+func installSpanRecorder(t *testing.T) *tracetest.SpanRecorder {
+	t.Helper()
+
+	recorder := tracetest.NewSpanRecorder()
+	tp := sdktrace.NewTracerProvider(sdktrace.WithSampler(sdktrace.AlwaysSample()))
+	tp.RegisterSpanProcessor(recorder)
+	prev := otel.GetTracerProvider()
+	otel.SetTracerProvider(tp)
+	t.Cleanup(func() {
+		_ = tp.Shutdown(context.Background())
+		otel.SetTracerProvider(prev)
+	})
+	return recorder
+}
 
 func newTestServer(t *testing.T) *Server {
 	t.Helper()
@@ -158,6 +177,40 @@ func TestMetricsExposesPromText(t *testing.T) {
 	}
 	if !strings.Contains(w.Body.String(), "go_goroutines") {
 		t.Errorf("metrics output should include process/go runtime collectors; got:\n%s", w.Body.String())
+	}
+}
+
+func TestOTelHTTPMiddlewareCreatesServerSpan(t *testing.T) {
+	s := newTestServer(t)
+	recorder := installSpanRecorder(t)
+
+	w := do(t, s.newMux(), http.MethodGet, "/api/v1/system/status")
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d", w.Code)
+	}
+	spans := recorder.Ended()
+	var found bool
+	for _, span := range spans {
+		if span.SpanKind() == trace.SpanKindServer {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected at least one server span, got %d spans", len(spans))
+	}
+}
+
+func TestOTelHTTPMiddlewareSkipsProbeRoutes(t *testing.T) {
+	s := newTestServer(t)
+	recorder := installSpanRecorder(t)
+
+	w := do(t, s.newMux(), http.MethodGet, "/healthz")
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d", w.Code)
+	}
+	if got := len(recorder.Ended()); got != 0 {
+		t.Fatalf("expected no spans for /healthz, got %d", got)
 	}
 }
 

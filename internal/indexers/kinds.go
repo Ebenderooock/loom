@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/ebenderooock/loom/internal/indexers/throttle"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 // Factory builds a live Indexer from a persisted Definition. Each kind
@@ -136,7 +137,8 @@ func TransportForDefinition(def Definition) (http.RoundTripper, error) {
 			cfg.Burst = maxRPM
 		}
 	}
-	return throttle.Wrap(base, def.ID, string(def.Kind), cfg, throttle.Options{}), nil
+	tracedBase := otelhttp.NewTransport(base)
+	return throttle.Wrap(tracedBase, def.ID, string(def.Kind), cfg, throttle.Options{}), nil
 }
 
 // RegisterKind installs f as the factory for kind. It is idempotent;
