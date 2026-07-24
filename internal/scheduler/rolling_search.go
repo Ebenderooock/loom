@@ -61,6 +61,9 @@ func (rs *RollingSearcher) Start(ctx context.Context) {
 	next := time.Now().Add(rs.interval())
 	rs.nextRun = &next
 
+	// Kick off one run immediately on startup so newly-aired/released media
+	// is processed without waiting for the first full interval.
+	go rs.runOnce(childCtx)
 	go rs.loop(childCtx)
 	rs.logger.Info("rolling search started", "interval_h", rs.config.IntervalHours, "batch", rs.config.BatchSize)
 }
@@ -172,22 +175,59 @@ func (rs *RollingSearcher) runOnce(ctx context.Context) {
 	rs.logger.Info("rolling search run starting")
 	now := time.Now()
 
-	half := cfg.BatchSize / 2
-	if half < 1 {
-		half = 1
+	batchSize := cfg.BatchSize
+	if batchSize <= 0 {
+		batchSize = 1
 	}
-	epHalf := cfg.BatchSize - half
+	targetMovies := batchSize / 2
+	if targetMovies < 1 {
+		targetMovies = 1
+	}
+	targetEpisodes := batchSize - targetMovies
+	if targetEpisodes < 1 {
+		targetEpisodes = 1
+	}
 
-	movieCandidates, err := rs.store.GetCandidates(ctx, "movie", half, cfg.MinResearchDays)
+	// Fetch up to the full batch for each type so we can fill unused slots from
+	// the other queue. The target split remains a preference, not a hard cap.
+	movieCandidates, err := rs.store.GetCandidates(ctx, "movie", batchSize, cfg.MinResearchDays)
 	if err != nil {
 		rs.logger.Error("get movie candidates", "err", err)
 	}
-	epCandidates, err := rs.store.GetCandidates(ctx, "episode", epHalf, cfg.MinResearchDays)
+	epCandidates, err := rs.store.GetCandidates(ctx, "episode", batchSize, cfg.MinResearchDays)
 	if err != nil {
 		rs.logger.Error("get episode candidates", "err", err)
 	}
 
-	candidates := append(movieCandidates, epCandidates...)
+	candidates := make([]SearchCandidate, 0, batchSize)
+	added := make(map[string]struct{}, batchSize)
+	add := func(c SearchCandidate) {
+		if len(candidates) >= batchSize {
+			return
+		}
+		key := c.MediaType + ":" + c.MediaID
+		if _, exists := added[key]; exists {
+			return
+		}
+		added[key] = struct{}{}
+		candidates = append(candidates, c)
+	}
+
+	// First pass: honor preferred split.
+	for i := 0; i < len(movieCandidates) && i < targetMovies; i++ {
+		add(movieCandidates[i])
+	}
+	for i := 0; i < len(epCandidates) && i < targetEpisodes; i++ {
+		add(epCandidates[i])
+	}
+	// Second pass: fill remaining slots from either queue.
+	for i := targetMovies; i < len(movieCandidates) && len(candidates) < batchSize; i++ {
+		add(movieCandidates[i])
+	}
+	for i := targetEpisodes; i < len(epCandidates) && len(candidates) < batchSize; i++ {
+		add(epCandidates[i])
+	}
+
 	count := 0
 	for _, c := range candidates {
 		if ctx.Err() != nil {
