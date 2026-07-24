@@ -169,16 +169,19 @@ func boundedLabel(value string) string {
 	return value
 }
 
+// ObserveDownloadQueued records a successful queue event for a download client.
 func ObserveDownloadQueued(clientID string) {
 	registerDomainMetrics()
 	domainMetrics.downloadLifecycle.WithLabelValues("queued", boundedLabel(clientID), "none").Inc()
 }
 
+// ObserveDownloadFailed records a failed queue/routing attempt.
 func ObserveDownloadFailed(clientID, reason string) {
 	registerDomainMetrics()
 	domainMetrics.downloadLifecycle.WithLabelValues("failed", boundedLabel(clientID), boundedLabel(reason)).Inc()
 }
 
+// ObserveDownloadCompleted records a completion event and optional latency.
 func ObserveDownloadCompleted(clientID string, durationSeconds float64) {
 	registerDomainMetrics()
 	client := boundedLabel(clientID)
@@ -188,16 +191,19 @@ func ObserveDownloadCompleted(clientID string, durationSeconds float64) {
 	}
 }
 
+// ObserveWorkflowTransition records a workflow state transition.
 func ObserveWorkflowTransition(fromState, toState string) {
 	registerDomainMetrics()
 	domainMetrics.workflowTransitions.WithLabelValues(boundedLabel(fromState), boundedLabel(toState)).Inc()
 }
 
+// ObserveWorkflowRetry records a workflow retry outcome.
 func ObserveWorkflowRetry(state, outcome string) {
 	registerDomainMetrics()
 	domainMetrics.workflowRetries.WithLabelValues(boundedLabel(state), boundedLabel(outcome)).Inc()
 }
 
+// SetWorkflowActiveByState sets active workflow gauges by state.
 func SetWorkflowActiveByState(counts map[string]int) {
 	registerDomainMetrics()
 	for _, state := range []string{"searching", "grabbed", "downloading", "post_download", "importing", "cleaning_up"} {
@@ -205,16 +211,19 @@ func SetWorkflowActiveByState(counts map[string]int) {
 	}
 }
 
+// ObserveWorkflowStale records stale workflow detection outcomes.
 func ObserveWorkflowStale(state, action string) {
 	registerDomainMetrics()
 	domainMetrics.workflowStale.WithLabelValues(boundedLabel(state), boundedLabel(action)).Inc()
 }
 
+// ObserveSchedulerStart increments the in-flight gauge for a scheduler job.
 func ObserveSchedulerStart(job string) {
 	registerDomainMetrics()
 	domainMetrics.schedulerInFlight.WithLabelValues(boundedLabel(job)).Inc()
 }
 
+// ObserveSchedulerFinish records scheduler completion status and duration.
 func ObserveSchedulerFinish(job, status string, durationSeconds float64) {
 	registerDomainMetrics()
 	jobLabel := boundedLabel(job)
@@ -226,6 +235,7 @@ func ObserveSchedulerFinish(job, status string, durationSeconds float64) {
 	}
 }
 
+// ObserveRSSSourceSync records RSS sync outcome, duration, and item counters.
 func ObserveRSSSourceSync(sourceID, outcome string, durationSeconds float64, stored, deduped int64) {
 	registerDomainMetrics()
 	source := boundedLabel(sourceID)

@@ -83,7 +83,7 @@ type OrchestratorOpts struct {
 	Engine         *Engine
 	Logger         *slog.Logger
 	ImportFn       ImportFunc
-	PreImportFn    PreImportFunc         // optional; stops+removes torrent before import
+	PreImportFn    PreImportFunc          // optional; stops+removes torrent before import
 	CleanupFn      CleanupFunc            // optional; if nil, cleanup phase is skipped
 	MediaRefreshFn MediaRefreshFunc       // optional; if nil, media refresh is skipped
 	DownloadStatus DownloadStatusProvider // optional, for startup reconciliation
