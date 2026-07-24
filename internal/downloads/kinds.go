@@ -7,8 +7,9 @@ import (
 	"net/http"
 	"sync"
 
-	"github.com/ebenderooock/loom/internal/indexers/throttle"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+
+	"github.com/ebenderooock/loom/internal/indexers/throttle"
 )
 
 // Factory builds a live DownloadClient from a persisted Definition.
