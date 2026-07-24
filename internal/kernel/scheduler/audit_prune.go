@@ -10,8 +10,11 @@ import (
 )
 
 const (
-	AuditPruneJobName          = "system.audit-prune"
-	AuditPruneSchedule         = "0 3 * * *" // daily at 03:00
+	// AuditPruneJobName is the scheduled_jobs name for audit-log retention.
+	AuditPruneJobName = "system.audit-prune"
+	// AuditPruneSchedule runs daily at 03:00.
+	AuditPruneSchedule = "0 3 * * *" // daily at 03:00
+	// AuditPruneDefaultRetention is the fallback retention in days.
 	AuditPruneDefaultRetention = 30
 )
 

@@ -8,8 +8,11 @@ import (
 )
 
 const (
-	PlayHistoryPruneJobName          = "system.play-history-prune"
-	PlayHistoryPruneSchedule         = "0 5 * * *" // daily at 05:00
+	// PlayHistoryPruneJobName is the scheduled_jobs name for analytics retention.
+	PlayHistoryPruneJobName = "system.play-history-prune"
+	// PlayHistoryPruneSchedule runs daily at 05:00.
+	PlayHistoryPruneSchedule = "0 5 * * *" // daily at 05:00
+	// PlayHistoryPruneDefaultRetention is the fallback retention in days.
 	PlayHistoryPruneDefaultRetention = 90
 )
 

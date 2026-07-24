@@ -9,8 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ebenderooock/loom/internal/kernel/logging"
 	_ "modernc.org/sqlite"
+
+	"github.com/ebenderooock/loom/internal/kernel/logging"
 )
 
 func TestBatchWriter_InsertFailureLoggedAsError(t *testing.T) {
