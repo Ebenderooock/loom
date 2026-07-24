@@ -103,7 +103,7 @@ func (b *Bot) registerGlobalCommands(s *discordgo.Session) {
 	appID := s.State.User.ID
 	for _, c := range slashCommands {
 		if _, err := s.ApplicationCommandCreate(appID, "", c); err != nil {
-			b.logger.Warn("discord bot: register global command", "cmd", c.Name, "err", err)
+			b.logger.Warn("discord bot: register global command", "cmd", c.Name, "error", err)
 		}
 	}
 }
@@ -112,7 +112,7 @@ func (b *Bot) registerGuildCommands(s *discordgo.Session, guildID string) {
 	appID := s.State.User.ID
 	for _, c := range slashCommands {
 		if _, err := s.ApplicationCommandCreate(appID, guildID, c); err != nil {
-			b.logger.Warn("discord bot: register guild command", "guild", guildID, "cmd", c.Name, "err", err)
+			b.logger.Warn("discord bot: register guild command", "guild", guildID, "cmd", c.Name, "error", err)
 		}
 	}
 }
@@ -132,7 +132,7 @@ func (b *Bot) onInteraction(ctx context.Context, s *discordgo.Session, i *discor
 		},
 	}
 	if err := s.InteractionRespond(i.Interaction, resp); err != nil {
-		b.logger.Warn("discord bot: respond failed", "err", err)
+		b.logger.Warn("discord bot: respond failed", "error", err)
 	}
 }
 

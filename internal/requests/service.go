@@ -304,7 +304,6 @@ func (s *Service) Approve(ctx context.Context, id, qualityProfileID, libraryID, 
 		fulfilledID, err = s.fulfiller.FulfillSeries(ctx, req.TMDBID, qualityProfileID, libraryID)
 	}
 	if err != nil {
-		s.logger.Warn("requests: fulfillment failed", "id", id, "tmdb", req.TMDBID, "err", err)
 		_ = s.store.MarkFailed(ctx, id, err.Error())
 		return Request{}, fmt.Errorf("requests: fulfillment failed: %w", err)
 	}

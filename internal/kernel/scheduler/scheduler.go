@@ -326,7 +326,7 @@ func (s *Scheduler) fire(ctx context.Context, j *job, now time.Time) {
 	if !j.mu.TryLock() {
 		nextRun := j.parsed.Next(now)
 		if err := s.store.SetNextRun(context.Background(), j.name, nextRun); err != nil {
-			s.logger.Error("update next_run_at after skip", "job", j.name, "err", err)
+			s.logger.Error("update next_run_at after skip", "job", j.name, "error", err)
 		}
 		s.logger.Warn("job skipped: previous run still in flight", "job", j.name, "next_run_at", nextRun)
 		return
@@ -360,7 +360,7 @@ func (s *Scheduler) executeOnce(ctx context.Context, j *job, scheduledFor time.T
 		recordCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		if err := s.store.RecordRun(recordCtx, j.name, startedAt, nextRun, status, errMsg); err != nil {
-			s.logger.Error("record job run", "job", j.name, "err", err)
+			s.logger.Error("record job run", "job", j.name, "error", err)
 		}
 	}()
 
@@ -368,7 +368,7 @@ func (s *Scheduler) executeOnce(ctx context.Context, j *job, scheduledFor time.T
 	if err := j.handler(ctx); err != nil {
 		status = StatusFailed
 		errMsg = err.Error()
-		s.logger.Error("job failed", "job", j.name, "err", err)
+		s.logger.Error("job failed", "job", j.name, "error", err)
 		return
 	}
 	s.logger.Debug("job succeeded", "job", j.name, "duration", s.clock.Now().Sub(startedAt))

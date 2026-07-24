@@ -37,7 +37,7 @@ func getPreferences(store *Store) http.HandlerFunc {
 		}
 		prefs, err := store.GetPreferences(r.Context(), seriesID)
 		if err != nil {
-			slog.Error("anime: get preferences", "err", err, "seriesId", seriesID)
+			slog.ErrorContext(r.Context(), "anime: get preferences", "error", err, "seriesId", seriesID)
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
 			return
 		}
@@ -72,7 +72,7 @@ func putPreferences(store *Store) http.HandlerFunc {
 		}
 
 		if err := store.UpsertPreferences(r.Context(), &prefs); err != nil {
-			slog.Error("anime: upsert preferences", "err", err, "seriesId", seriesID)
+			slog.ErrorContext(r.Context(), "anime: upsert preferences", "error", err, "seriesId", seriesID)
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
 			return
 		}
@@ -89,7 +89,7 @@ func getMappings(store *Store) http.HandlerFunc {
 		}
 		mappings, err := store.GetMappings(r.Context(), seriesID)
 		if err != nil {
-			slog.Error("anime: get mappings", "err", err, "seriesId", seriesID)
+			slog.ErrorContext(r.Context(), "anime: get mappings", "error", err, "seriesId", seriesID)
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
 			return
 		}
@@ -125,7 +125,7 @@ func putMappings(store *Store) http.HandlerFunc {
 		}
 
 		if err := store.ReplaceMappings(r.Context(), seriesID, req.Mappings); err != nil {
-			slog.Error("anime: replace mappings", "err", err, "seriesId", seriesID)
+			slog.ErrorContext(r.Context(), "anime: replace mappings", "error", err, "seriesId", seriesID)
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
 			return
 		}

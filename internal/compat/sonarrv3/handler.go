@@ -112,7 +112,7 @@ func (h *Handler) tvLibs(ctx context.Context) ([]libraries.Library, error) {
 func (h *Handler) listSeries(w http.ResponseWriter, r *http.Request) {
 	list, err := h.svc.ListSeries(r.Context())
 	if err != nil {
-		h.logger.Error("list series", "err", err)
+		h.logger.ErrorContext(r.Context(), "list series", "error", err)
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
@@ -149,7 +149,7 @@ func (h *Handler) getSeries(w http.ResponseWriter, r *http.Request) {
 
 	s, err := h.svc.GetSeries(r.Context(), uuid)
 	if err != nil {
-		h.logger.Error("get series", "err", err)
+		h.logger.ErrorContext(r.Context(), "get series", "error", err)
 		writeError(w, http.StatusNotFound, "series not found")
 		return
 	}
@@ -213,7 +213,7 @@ func (h *Handler) addSeries(w http.ResponseWriter, r *http.Request) {
 
 	created, err := h.svc.AddSeries(r.Context(), addReq)
 	if err != nil {
-		h.logger.Error("add series", "err", err)
+		h.logger.ErrorContext(r.Context(), "add series", "error", err)
 		writeError(w, http.StatusInternalServerError, fmt.Sprintf("failed to add series: %v", err))
 		return
 	}
@@ -266,7 +266,7 @@ func (h *Handler) updateSeries(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.svc.UpdateSeries(r.Context(), existing); err != nil {
-		h.logger.Error("update series", "err", err)
+		h.logger.ErrorContext(r.Context(), "update series", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to update series")
 		return
 	}
@@ -293,7 +293,7 @@ func (h *Handler) deleteSeries(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.svc.DeleteSeries(r.Context(), uuid); err != nil {
-		h.logger.Error("delete series", "err", err)
+		h.logger.ErrorContext(r.Context(), "delete series", "error", err)
 		writeError(w, http.StatusInternalServerError, "failed to delete series")
 		return
 	}
@@ -310,7 +310,7 @@ func (h *Handler) lookupSeries(w http.ResponseWriter, r *http.Request) {
 
 	results, err := h.svc.SearchTMDB(r.Context(), term)
 	if err != nil {
-		h.logger.Error("lookup series", "err", err)
+		h.logger.ErrorContext(r.Context(), "lookup series", "error", err)
 		writeError(w, http.StatusInternalServerError, "search failed")
 		return
 	}
@@ -349,7 +349,7 @@ func (h *Handler) listEpisodes(w http.ResponseWriter, r *http.Request) {
 
 	episodes, err := h.svc.ListEpisodes(r.Context(), uuid, nil)
 	if err != nil {
-		h.logger.Error("list episodes", "err", err)
+		h.logger.ErrorContext(r.Context(), "list episodes", "error", err)
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
@@ -408,7 +408,7 @@ func (h *Handler) getEpisode(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) listRootFolders(w http.ResponseWriter, r *http.Request) {
 	libs, err := h.tvLibs(r.Context())
 	if err != nil {
-		h.logger.Error("list root folders", "err", err)
+		h.logger.ErrorContext(r.Context(), "list root folders", "error", err)
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
@@ -423,7 +423,7 @@ func (h *Handler) listRootFolders(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) listQualityProfiles(w http.ResponseWriter, r *http.Request) {
 	profiles, err := h.qp.List(r.Context())
 	if err != nil {
-		h.logger.Error("list quality profiles", "err", err)
+		h.logger.ErrorContext(r.Context(), "list quality profiles", "error", err)
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
 	}

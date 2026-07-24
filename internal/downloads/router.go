@@ -191,7 +191,7 @@ func (r *Router) handleIndexerResult(ctx context.Context, ev eventbus.Event) err
 			})
 			if addErr != nil {
 				r.logger.Warn("router failed to publish DownloadQueued",
-					"download_id", res.ItemID, "err", addErr)
+					"download_id", res.ItemID, "error", addErr)
 			}
 			r.logger.Info("router queued result",
 				"indexer_id", result.IndexerID, "title", result.Title,
@@ -205,7 +205,7 @@ func (r *Router) handleIndexerResult(ctx context.Context, ev eventbus.Event) err
 
 		// This client failed; log and try the next.
 		r.logger.Warn("router: Add failed, trying next client",
-			"client_id", client.ID(), "err", err,
+			"client_id", client.ID(), "error", err,
 			"title", result.Title)
 		addErr = err
 	}
@@ -219,7 +219,7 @@ func (r *Router) handleIndexerResult(ctx context.Context, ev eventbus.Event) err
 	})
 	telemetry.ObserveDownloadFailed("", "all_clients_failed")
 	if failErr != nil {
-		r.logger.Warn("router failed to publish DownloadFailed", "err", failErr)
+		r.logger.Warn("router failed to publish DownloadFailed", "error", failErr)
 	}
 	return nil
 }
@@ -357,7 +357,7 @@ func (r *Router) enrichMetadata(ctx context.Context, result *indexers.Result, do
 			SourceProvider: "all", // Would track which provider matched if needed
 		}); pubErr != nil {
 			r.logger.Warn("router failed to publish MetadataEnriched event",
-				"origin_result_id", result.GUID, "err", pubErr)
+				"origin_result_id", result.GUID, "error", pubErr)
 		} else {
 			r.logger.Debug("router enriched result with movie metadata",
 				"origin_result_id", result.GUID, "title", result.Title)
@@ -376,7 +376,7 @@ func (r *Router) enrichMetadata(ctx context.Context, result *indexers.Result, do
 			SourceProvider: "all",
 		}); pubErr != nil {
 			r.logger.Warn("router failed to publish MetadataEnriched event",
-				"origin_result_id", result.GUID, "err", pubErr)
+				"origin_result_id", result.GUID, "error", pubErr)
 		} else {
 			r.logger.Debug("router enriched result with series metadata",
 				"origin_result_id", result.GUID, "title", result.Title)
@@ -397,7 +397,7 @@ func (r *Router) enrichMetadata(ctx context.Context, result *indexers.Result, do
 		FailedAt:       r.clock.Now(),
 	}); pubErr != nil {
 		r.logger.Warn("router failed to publish MetadataFailure event",
-			"origin_result_id", result.GUID, "err", pubErr)
+			"origin_result_id", result.GUID, "error", pubErr)
 	} else {
 		r.logger.Debug("router could not enrich result with metadata",
 			"origin_result_id", result.GUID, "title", result.Title, "reason", reason)

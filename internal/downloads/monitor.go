@@ -226,7 +226,7 @@ func (m *Monitor) emitCompletions(ctx context.Context, items []Item) {
 					}
 				}
 
-				m.logger.Info("monitor: emitted DownloadCompleted",
+				m.logger.Debug("monitor: emitted DownloadCompleted",
 					"item_id", item.ID, "client_id", item.ClientID,
 					"title", item.Title, "status", string(item.Status))
 			}

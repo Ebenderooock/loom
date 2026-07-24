@@ -110,7 +110,7 @@ func (f *requestsFulfiller) FulfillMovie(ctx context.Context, tmdbID, qualityPro
 	if m.TMDBID != nil {
 		req.TMDBID = *m.TMDBID
 	}
-	f.grab(req)
+	f.grab(ctx, req)
 	return m.ID, nil
 }
 
@@ -140,7 +140,7 @@ func (f *requestsFulfiller) FulfillSeries(ctx context.Context, tmdbID, qualityPr
 	if sr.TVDBID != nil {
 		req.TVDBID = *sr.TVDBID
 	}
-	f.grab(req)
+	f.grab(ctx, req)
 	return sr.ID, nil
 }
 
@@ -186,7 +186,7 @@ func (f *requestsFulfiller) grabArtist(ctx context.Context, artistID string) {
 		ctx := context.WithoutCancel(ctx)
 		albums, err := f.music.ListAlbumsByArtist(ctx, artistID)
 		if err != nil {
-			f.logger.Warn("requests: list albums for grab failed", "artist", artistID, "err", err)
+			f.logger.WarnContext(ctx, "requests: list albums for grab failed", "artist", artistID, "error", err)
 			return
 		}
 		const maxAlbums = 25
@@ -199,7 +199,7 @@ func (f *requestsFulfiller) grabArtist(ctx context.Context, artistID string) {
 				continue
 			}
 			if _, err := f.musicEngine.SearchAlbum(ctx, al.ID); err != nil {
-				f.logger.Debug("requests: album search failed", "album", al.ID, "err", err)
+				f.logger.DebugContext(ctx, "requests: album search failed", "album", al.ID, "error", err)
 			}
 			searched++
 		}
@@ -208,17 +208,17 @@ func (f *requestsFulfiller) grabArtist(ctx context.Context, artistID string) {
 
 // grab launches a detached search-and-grab; failures are logged, never block
 // the approval response.
-func (f *requestsFulfiller) grab(req autosearch.SearchRequest) {
+func (f *requestsFulfiller) grab(ctx context.Context, req autosearch.SearchRequest) {
 	if f.engine == nil {
 		return
 	}
-	go func() {
-		ctx := context.WithoutCancel(context.Background())
+	go func(ctx context.Context) {
+		ctx = context.WithoutCancel(ctx)
 		if _, err := f.engine.SearchAndGrab(ctx, req); err != nil {
-			f.logger.Warn("requests: search-and-grab failed",
-				"media_type", req.MediaType, "media_id", req.MediaID, "err", err)
+			f.logger.WarnContext(ctx, "requests: search-and-grab failed",
+				"media_type", req.MediaType, "media_id", req.MediaID, "error", err)
 		}
-	}()
+	}(ctx)
 }
 
 // requestsValidator implements requests.LibraryValidator using the quality

@@ -128,7 +128,7 @@ func (ps *PeriodicScanner) runScan(ctx context.Context) {
 
 	libs, err := ps.libProvider.ListAll(ctx)
 	if err != nil {
-		ps.logger.Error("periodic scan: failed to list libraries", "err", err)
+		ps.logger.Error("periodic scan: failed to list libraries", "error", err)
 		return
 	}
 
@@ -146,7 +146,7 @@ func (ps *PeriodicScanner) runScan(ctx context.Context) {
 		}
 		ps.logger.Info("periodic scan: scanning library", "id", lib.ID, "path", lib.Path)
 		if _, err := ps.seriesScanner.StartSeriesScan(ctx, lib.ID, lib.Path); err != nil {
-			ps.logger.Error("periodic scan: failed", "library", lib.ID, "err", err)
+			ps.logger.Error("periodic scan: failed", "library", lib.ID, "error", err)
 		}
 	}
 }

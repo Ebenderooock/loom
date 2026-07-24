@@ -182,7 +182,7 @@ func refreshAllSeries(svc Service) http.HandlerFunc {
 		go func(ctx context.Context, seriesIDs []string) {
 			for _, id := range seriesIDs {
 				if err := svc.RefreshSeries(ctx, id); err != nil {
-					slog.Warn("series: bulk refresh failed", "series_id", id, "error", err)
+					slog.WarnContext(ctx, "series: bulk refresh failed", "series_id", id, "error", err)
 				}
 			}
 		}(ctx, ids)
@@ -223,7 +223,7 @@ func rescanAllSeriesLibraries(
 			for _, lib := range libs {
 				lib := lib
 				if err := scanner.ScanLibrary(ctx, &lib); err != nil {
-					slog.Warn("series: bulk rescan failed", "library_id", lib.ID, "error", err)
+					slog.WarnContext(ctx, "series: bulk rescan failed", "library_id", lib.ID, "error", err)
 				}
 			}
 		}(ctx, seriesLibraries)
@@ -285,7 +285,7 @@ func organizeSeries(
 		go func(ctx context.Context, ids []string, libs map[string]struct{}) {
 			for _, id := range ids {
 				if err := svc.RefreshSeries(ctx, id); err != nil {
-					slog.Warn("series: organize refresh failed", "series_id", id, "error", err)
+					slog.WarnContext(ctx, "series: organize refresh failed", "series_id", id, "error", err)
 				}
 			}
 
@@ -294,7 +294,7 @@ func organizeSeries(
 			}
 			allLibraries, err := store.List(ctx)
 			if err != nil {
-				slog.Warn("series: organize list libraries failed", "error", err)
+				slog.WarnContext(ctx, "series: organize list libraries failed", "error", err)
 				return
 			}
 			for _, lib := range allLibraries {
@@ -303,7 +303,7 @@ func organizeSeries(
 				}
 				lib := lib
 				if err := scanner.ScanLibrary(ctx, &lib); err != nil {
-					slog.Warn("series: organize scan failed", "library_id", lib.ID, "error", err)
+					slog.WarnContext(ctx, "series: organize scan failed", "library_id", lib.ID, "error", err)
 				}
 			}
 		}(ctx, append([]string(nil), seriesIDs...), libraryIDSet)
@@ -342,7 +342,7 @@ func organizeSingleSeries(
 		ctx := context.WithoutCancel(r.Context())
 		go func(ctx context.Context, seriesID, libID string) {
 			if err := svc.RefreshSeries(ctx, seriesID); err != nil {
-				slog.Warn("series: organize refresh failed", "series_id", seriesID, "error", err)
+				slog.WarnContext(ctx, "series: organize refresh failed", "series_id", seriesID, "error", err)
 				return
 			}
 			if store == nil || scanner == nil || libID == "" {
@@ -350,7 +350,7 @@ func organizeSingleSeries(
 			}
 			allLibraries, err := store.List(ctx)
 			if err != nil {
-				slog.Warn("series: organize list libraries failed", "error", err)
+				slog.WarnContext(ctx, "series: organize list libraries failed", "error", err)
 				return
 			}
 			for _, lib := range allLibraries {
@@ -359,7 +359,7 @@ func organizeSingleSeries(
 				}
 				lib := lib
 				if err := scanner.ScanLibrary(ctx, &lib); err != nil {
-					slog.Warn("series: organize scan failed", "library_id", lib.ID, "error", err)
+					slog.WarnContext(ctx, "series: organize scan failed", "library_id", lib.ID, "error", err)
 				}
 				break
 			}

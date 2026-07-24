@@ -71,13 +71,13 @@ func buildIndexerService(ctx context.Context, cfg *config.Config, db storage.DB,
 	diskDefs, loadErrs := cardLoader.Reload()
 	if len(loadErrs) > 0 {
 		for _, lerr := range loadErrs {
-			logger.Warn("cardigann definition skipped", "err", lerr)
+			logger.Warn("cardigann definition skipped", "error", lerr)
 		}
 	}
 	embDefs, embErrs := cardLoader.LoadEmbedded(cardigann.BundledFS())
 	if len(embErrs) > 0 {
 		for _, lerr := range embErrs {
-			logger.Warn("bundled cardigann definition skipped", "err", lerr)
+			logger.Warn("bundled cardigann definition skipped", "error", lerr)
 		}
 	}
 	logger.Info("cardigann definitions loaded", "disk", len(diskDefs), "bundled", len(embDefs))
@@ -101,7 +101,7 @@ func buildIndexerService(ctx context.Context, cfg *config.Config, db storage.DB,
 	}
 
 	if err := svc.HydrateAll(ctx); err != nil {
-		logger.Warn("indexer hydrate failed", "err", err)
+		logger.Warn("indexer hydrate failed", "error", err)
 	}
 	// Wire the rate-limit provider after the service exists so the
 	// throttle transport can resolve per-indexer overrides.

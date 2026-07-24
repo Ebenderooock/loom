@@ -50,7 +50,7 @@ func (sc *Scanner) ScanLibrary(ctx context.Context, lib *Library) error {
 
 	err := filepath.WalkDir(lib.Path, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
-			sc.logger.Warn("walk error", "path", path, "err", err)
+			sc.logger.Warn("walk error", "path", path, "error", err)
 			return nil // skip inaccessible entries
 		}
 		if ctx.Err() != nil {
@@ -71,7 +71,7 @@ func (sc *Scanner) ScanLibrary(ctx context.Context, lib *Library) error {
 
 		info, err := d.Info()
 		if err != nil {
-			sc.logger.Warn("stat error", "path", path, "err", err)
+			sc.logger.Warn("stat error", "path", path, "error", err)
 			return nil
 		}
 
@@ -81,7 +81,7 @@ func (sc *Scanner) ScanLibrary(ctx context.Context, lib *Library) error {
 			SizeBytes: info.Size(),
 		}
 		if err := sc.store.UpsertFile(ctx, f); err != nil {
-			sc.logger.Error("upsert file", "path", path, "err", err)
+			sc.logger.Error("upsert file", "path", path, "error", err)
 		}
 		return nil
 	})
@@ -92,7 +92,7 @@ func (sc *Scanner) ScanLibrary(ctx context.Context, lib *Library) error {
 	// Clean up files that no longer exist on disk.
 	removed, err := sc.store.DeleteStaleFiles(ctx, lib.ID, scanStart)
 	if err != nil {
-		sc.logger.Error("delete stale files", "library", lib.ID, "err", err)
+		sc.logger.Error("delete stale files", "library", lib.ID, "error", err)
 	} else if removed > 0 {
 		sc.logger.Info("removed stale files", "library", lib.ID, "count", removed)
 	}

@@ -75,6 +75,6 @@ func (h *HealthChecker) Run(ctx context.Context) error {
 
 func (h *HealthChecker) checkOne(ctx context.Context, id string) {
 	if _, err := h.svc.TestOne(ctx, id); err != nil {
-		h.svc.logger.Debug("download health check failed", "id", id, "err", err)
+		h.svc.logger.Debug("download health check failed", "id", id, "error", err)
 	}
 }

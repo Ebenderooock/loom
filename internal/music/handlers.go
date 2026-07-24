@@ -214,7 +214,7 @@ func handleRefreshAllArtists(svc Service) http.HandlerFunc {
 		go func(ctx context.Context, artistIDs []string) {
 			for _, id := range artistIDs {
 				if _, err := svc.RefreshArtistAlbums(ctx, id); err != nil {
-					slog.Warn("music: bulk refresh failed", "artist_id", id, "error", err)
+					slog.WarnContext(ctx, "music: bulk refresh failed", "artist_id", id, "error", err)
 				}
 			}
 		}(ctx, ids)
@@ -253,7 +253,7 @@ func handleRescanAllArtistLibraries(
 			for _, lib := range libs {
 				lib := lib
 				if err := scanner.ScanLibrary(ctx, &lib); err != nil {
-					slog.Warn("music: bulk rescan failed", "library_id", lib.ID, "error", err)
+					slog.WarnContext(ctx, "music: bulk rescan failed", "library_id", lib.ID, "error", err)
 				}
 			}
 		}(ctx, musicLibraries)

@@ -1249,7 +1249,7 @@ func (s *Server) recoverer(next http.Handler) http.Handler {
 				}
 				stack := debug.Stack()
 				s.logger.Error("panic",
-					"err", fmt.Sprintf("%v", rv),
+					"error", fmt.Sprintf("%v", rv),
 					"path", r.URL.Path,
 					"method", r.Method,
 					"request_id", middleware.GetReqID(r.Context()),

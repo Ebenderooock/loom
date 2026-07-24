@@ -58,7 +58,6 @@ func (dl *DecisionLogger) Log(ctx context.Context, d ImportDecision) error {
 		d.ConflictPolicy, d.FileSize, d.FileQuality, d.CreatedAt,
 	)
 	if err != nil {
-		dl.logger.Error("failed to log import decision", "error", err, "action", d.Action, "source", d.SourcePath)
 		return fmt.Errorf("log import decision: %w", err)
 	}
 

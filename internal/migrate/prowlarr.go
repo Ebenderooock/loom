@@ -53,7 +53,7 @@ func (imp *Importer) importProwlarrIndexers(ctx context.Context, src *sql.DB, tx
 		        COALESCE(Enable, 1), COALESCE(Priority, 25), COALESCE(Protocol, 1)
 		 FROM Indexers`)
 	if err != nil {
-		imp.logger.Warn("prowlarr: could not read Indexers", "err", err)
+		imp.logger.Warn("prowlarr: could not read Indexers", "error", err)
 		res.Errors = append(res.Errors, "read Indexers: "+err.Error())
 		return
 	}

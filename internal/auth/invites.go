@@ -194,14 +194,14 @@ func (s *Service) AcceptInvite(ctx context.Context, token, username, password st
 	u, err := s.CreateUserAccount(ctx, username, password, inv.Email, inv.Role)
 	if err != nil {
 		if relErr := s.invites.Release(ctx, token); relErr != nil {
-			s.logger.Error("failed to release invite after signup error", "token_id", inv.ID, "err", relErr)
+			s.logger.Error("failed to release invite after signup error", "token_id", inv.ID, "error", relErr)
 		}
 		return User{}, err
 	}
 	if finErr := s.invites.Finalize(ctx, token, u.ID); finErr != nil {
 		// The account exists and the invite is consumed; only the audit link is
 		// missing. Log rather than fail the redemption.
-		s.logger.Error("failed to finalize invite used_by", "token_id", inv.ID, "user_id", u.ID, "err", finErr)
+		s.logger.Error("failed to finalize invite used_by", "token_id", inv.ID, "user_id", u.ID, "error", finErr)
 	}
 	s.logger.Info("invite redeemed", "id", inv.ID, "user_id", u.ID, "role", inv.Role)
 	return u, nil

@@ -162,7 +162,7 @@ func cmdServe(ctx context.Context, args []string) error {
 	}
 	defer func() {
 		if err := downloadSvc.Close(); err != nil {
-			logger.Warn("downloads close failed", "err", err)
+			logger.Warn("downloads close failed", "error", err)
 		}
 	}()
 	if err := registerDownloadHealthJob(ctx, sched, cfg, downloadSvc); err != nil {
@@ -240,7 +240,7 @@ func cmdServe(ctx context.Context, args []string) error {
 	if dlWiring.router != nil {
 		defer func() {
 			if err := dlWiring.router.Shutdown(); err != nil {
-				logger.Warn("downloads router shutdown failed", "err", err)
+				logger.Warn("downloads router shutdown failed", "error", err)
 			}
 		}()
 	}
@@ -272,7 +272,7 @@ func cmdServe(ctx context.Context, args []string) error {
 	botsRouter, botsSupervisor := buildBots(db, requestsSvc, metadataSvc, media.musicSvc, botAuthStore, authSvc.RequireRole("admin"), logger)
 	wiring.BotsRouter = botsRouter
 	if err := botsSupervisor.Start(ctx); err != nil {
-		logger.Error("bots: initial start failed", "err", err)
+		logger.Error("bots: initial start failed", "error", err)
 	}
 	defer botsSupervisor.Shutdown()
 
@@ -324,11 +324,10 @@ func cmdServe(ctx context.Context, args []string) error {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	if err := srv.Shutdown(shutdownCtx); err != nil {
-		logger.Error("graceful shutdown failed", "err", err)
-		return err
+		return fmt.Errorf("graceful shutdown: %w", err)
 	}
 	if err := tel.Shutdown(shutdownCtx); err != nil {
-		logger.Error("telemetry shutdown failed", "err", err)
+		logger.Error("telemetry shutdown failed", "error", err)
 	}
 	logger.Info("stopped cleanly")
 	return nil

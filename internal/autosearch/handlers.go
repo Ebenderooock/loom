@@ -48,7 +48,7 @@ func (h *Handler) HandleAutoSearch(w http.ResponseWriter, r *http.Request) {
 
 	result, err := h.engine.SearchAndGrab(r.Context(), req)
 	if err != nil {
-		h.logger.Error("autosearch failed", "error", err, "title", req.Title)
+		h.logger.ErrorContext(r.Context(), "autosearch failed", "error", err, "title", req.Title)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
@@ -76,7 +76,7 @@ func (h *Handler) HandleEvaluate(w http.ResponseWriter, r *http.Request) {
 
 	resp, err := h.engine.Evaluate(r.Context(), req)
 	if err != nil {
-		h.logger.Error("evaluate failed", "error", err)
+		h.logger.ErrorContext(r.Context(), "evaluate failed", "error", err)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})

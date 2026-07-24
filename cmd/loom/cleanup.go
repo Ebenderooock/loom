@@ -87,7 +87,7 @@ func buildCleanupService(
 					}
 				}
 			} else {
-				logger.Warn("cleanup: import history lookup failed", "err", err)
+				logger.Warn("cleanup: import history lookup failed", "error", err)
 			}
 		}
 		return paths, nil

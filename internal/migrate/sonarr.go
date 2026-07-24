@@ -45,7 +45,7 @@ func (imp *Importer) ImportSonarr(ctx context.Context, sonarrDBPath string) (*Im
 func (imp *Importer) importSonarrProfiles(ctx context.Context, src *sql.DB, tx *sql.Tx, res *ImportResult) {
 	rows, err := src.QueryContext(ctx, `SELECT Id, Name FROM QualityProfiles`)
 	if err != nil {
-		imp.logger.Warn("sonarr: could not read QualityProfiles", "err", err)
+		imp.logger.Warn("sonarr: could not read QualityProfiles", "error", err)
 		res.Errors = append(res.Errors, "read QualityProfiles: "+err.Error())
 		return
 	}
@@ -79,7 +79,7 @@ func (imp *Importer) importSonarrProfiles(ctx context.Context, src *sql.DB, tx *
 func (imp *Importer) importSonarrRootFolders(ctx context.Context, src *sql.DB, tx *sql.Tx, res *ImportResult) {
 	rows, err := src.QueryContext(ctx, `SELECT Id, Path FROM RootFolders`)
 	if err != nil {
-		imp.logger.Warn("sonarr: could not read RootFolders", "err", err)
+		imp.logger.Warn("sonarr: could not read RootFolders", "error", err)
 		res.Errors = append(res.Errors, "read RootFolders: "+err.Error())
 		return
 	}
@@ -118,7 +118,7 @@ func (imp *Importer) importSonarrSeries(ctx context.Context, src *sql.DB, tx *sq
 		        COALESCE(SeasonFolder, 1)
 		 FROM Series`)
 	if err != nil {
-		imp.logger.Warn("sonarr: could not read Series", "err", err)
+		imp.logger.Warn("sonarr: could not read Series", "error", err)
 		res.Errors = append(res.Errors, "read Series: "+err.Error())
 		return
 	}
@@ -190,7 +190,7 @@ func (imp *Importer) importSonarrEpisodes(ctx context.Context, src *sql.DB, tx *
 		        COALESCE(AirDate, ''), Monitored
 		 FROM Episodes`)
 	if err != nil {
-		imp.logger.Warn("sonarr: could not read Episodes", "err", err)
+		imp.logger.Warn("sonarr: could not read Episodes", "error", err)
 		res.Errors = append(res.Errors, "read Episodes: "+err.Error())
 		return
 	}

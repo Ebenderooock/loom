@@ -240,7 +240,7 @@ func pickExactArtistLookup(name string, candidates []*music.ArtistLookupResult) 
 func (s *MusicScanner) scanArtistFolder(ctx context.Context, scanID string, result *ScanResult, artist *music.Artist, folderPath string) {
 	albums, err := s.musicSvc.ListAlbumsByArtist(ctx, artist.ID)
 	if err != nil {
-		s.logger.Warn("music: list albums failed", "artist", artist.ID, "err", err)
+		s.logger.Warn("music: list albums failed", "artist", artist.ID, "error", err)
 		s.mu.Lock()
 		result.Errors = append(result.Errors, fmt.Sprintf("list albums %q: %v", artist.Name, err))
 		s.mu.Unlock()
@@ -256,7 +256,7 @@ func (s *MusicScanner) scanArtistFolder(ctx context.Context, scanID string, resu
 
 	files, walkErr := walkAudioFolder(folderPath)
 	if walkErr != nil {
-		s.logger.Warn("music: error walking artist folder", "path", folderPath, "err", walkErr)
+		s.logger.Warn("music: error walking artist folder", "path", folderPath, "error", walkErr)
 	}
 
 	s.mu.Lock()
@@ -266,7 +266,7 @@ func (s *MusicScanner) scanArtistFolder(ctx context.Context, scanID string, resu
 	for _, f := range files {
 		tags, err := music.ReadAudioTags(f.Path)
 		if err != nil {
-			s.logger.Debug("music: failed to read tags", "path", f.Path, "err", err)
+			s.logger.Debug("music: failed to read tags", "path", f.Path, "error", err)
 			s.addMusicUnmatched(scanID, result, f.Path, f.Size, artist.Name, "", "")
 			continue
 		}
@@ -285,7 +285,7 @@ func (s *MusicScanner) scanArtistFolder(ctx context.Context, scanID string, resu
 		if !ok {
 			full, gerr := s.musicSvc.GetAlbum(ctx, album.ID)
 			if gerr != nil || full == nil {
-				s.logger.Warn("music: get album failed", "album", album.ID, "err", gerr)
+				s.logger.Warn("music: get album failed", "album", album.ID, "error", gerr)
 				tracks = nil
 			} else {
 				tracks = full.Tracks
@@ -304,7 +304,7 @@ func (s *MusicScanner) scanArtistFolder(ctx context.Context, scanID string, resu
 		s.mu.Unlock()
 
 		if err := s.importTrackFile(ctx, artist, album, track, f.Path, f.Size, tags); err != nil {
-			s.logger.Warn("music: failed to import track file", "path", f.Path, "err", err)
+			s.logger.Warn("music: failed to import track file", "path", f.Path, "error", err)
 			s.mu.Lock()
 			result.Errors = append(result.Errors, fmt.Sprintf("%s: %v", f.Path, err))
 			s.mu.Unlock()

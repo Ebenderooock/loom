@@ -131,7 +131,7 @@ func (s *Service) identityFromAPIKey(ctx context.Context, presented string) (*Id
 		bg, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
 		if err := s.store.TouchAPIKey(bg, k.ID); err != nil && s.logger != nil {
-			s.logger.Debug("auth: touch api key failed", "err", err, "key_id", k.ID)
+			s.logger.Debug("auth: touch api key failed", "error", err, "key_id", k.ID)
 		}
 	}()
 	return &Identity{

@@ -69,7 +69,7 @@ func (h *qpHandler) create(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	h.logger.Info("quality profile created", "id", qp.ID, "name", qp.Name)
+	h.logger.InfoContext(r.Context(), "quality profile created", "id", qp.ID, "name", qp.Name)
 	writeJSON(w, http.StatusCreated, qp)
 }
 
@@ -89,7 +89,7 @@ func (h *qpHandler) update(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	h.logger.Info("quality profile updated", "id", qp.ID)
+	h.logger.InfoContext(r.Context(), "quality profile updated", "id", qp.ID)
 	writeJSON(w, http.StatusOK, qp)
 }
 
@@ -103,7 +103,7 @@ func (h *qpHandler) delete(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	h.logger.Info("quality profile deleted", "id", id)
+	h.logger.InfoContext(r.Context(), "quality profile deleted", "id", id)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -146,7 +146,7 @@ func (h *qpHandler) setFormatScores(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	h.logger.Info("format scores updated", "profile_id", id, "count", len(items))
+	h.logger.InfoContext(r.Context(), "format scores updated", "profile_id", id, "count", len(items))
 	writeJSON(w, http.StatusOK, map[string]any{"data": items})
 }
 

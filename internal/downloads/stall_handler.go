@@ -72,7 +72,7 @@ func NewStallHandler(opts StallHandlerOptions) *StallHandler {
 
 // Handle processes a stalled or failed item.
 func (h *StallHandler) Handle(ctx context.Context, item Item, reason string) {
-	h.logger.Warn("stall detected",
+	h.logger.WarnContext(ctx, "stall detected",
 		"item_id", item.ID,
 		"title", item.Title,
 		"reason", reason,
@@ -100,28 +100,28 @@ func (h *StallHandler) Handle(ctx context.Context, item Item, reason string) {
 	case StallActionRetry:
 		h.doRetry(ctx, item, reason)
 	default:
-		h.logger.Error("unknown stall action", "action", string(h.action))
+		h.logger.ErrorContext(ctx, "unknown stall action", "action", string(h.action))
 	}
 }
 
 func (h *StallHandler) doPause(ctx context.Context, item Item) {
 	for _, c := range h.registry.List() {
 		if err := c.Pause(ctx, item.ID); err == nil {
-			h.logger.Info("paused stalled download", "item_id", item.ID)
+			h.logger.DebugContext(ctx, "paused stalled download", "item_id", item.ID)
 			return
 		}
 	}
-	h.logger.Warn("could not pause stalled download on any client", "item_id", item.ID)
+	h.logger.WarnContext(ctx, "could not pause stalled download on any client", "item_id", item.ID)
 }
 
 func (h *StallHandler) doRemove(ctx context.Context, item Item, deleteFiles bool) {
 	for _, c := range h.registry.List() {
 		if err := c.Remove(ctx, []string{item.ID}, deleteFiles); err == nil {
-			h.logger.Info("removed stalled download", "item_id", item.ID, "delete_files", deleteFiles)
+			h.logger.DebugContext(ctx, "removed stalled download", "item_id", item.ID, "delete_files", deleteFiles)
 			return
 		}
 	}
-	h.logger.Warn("could not remove stalled download on any client", "item_id", item.ID)
+	h.logger.WarnContext(ctx, "could not remove stalled download on any client", "item_id", item.ID)
 }
 
 func (h *StallHandler) doRemoveAndBlocklist(ctx context.Context, item Item, reason string) {
@@ -136,9 +136,9 @@ func (h *StallHandler) doRemoveAndBlocklist(ctx context.Context, item Item, reas
 			CreatedAt:   h.clock.Now(),
 		}
 		if err := h.blocklist.Add(ctx, entry); err != nil {
-			h.logger.Error("failed to add to blocklist", "item_id", item.ID, "err", err)
+			h.logger.ErrorContext(ctx, "failed to add to blocklist", "item_id", item.ID, "error", err)
 		} else {
-			h.logger.Info("added to blocklist", "item_id", item.ID, "title", item.Title)
+			h.logger.DebugContext(ctx, "added to blocklist", "item_id", item.ID, "title", item.Title)
 		}
 	}
 }
@@ -146,14 +146,14 @@ func (h *StallHandler) doRemoveAndBlocklist(ctx context.Context, item Item, reas
 func (h *StallHandler) doRetry(ctx context.Context, item Item, reason string) {
 	h.retryCount[item.ID]++
 	if h.retryCount[item.ID] > h.maxRetries {
-		h.logger.Warn("max retries exceeded, removing and blocklisting",
+		h.logger.WarnContext(ctx, "max retries exceeded, removing and blocklisting",
 			"item_id", item.ID, "retries", h.retryCount[item.ID]-1)
 		h.doRemoveAndBlocklist(ctx, item, reason+"; max retries exceeded")
 		delete(h.retryCount, item.ID)
 		return
 	}
 
-	h.logger.Info("retrying stalled download",
+	h.logger.DebugContext(ctx, "retrying stalled download",
 		"item_id", item.ID,
 		"attempt", h.retryCount[item.ID],
 		"max_retries", h.maxRetries,

@@ -105,7 +105,7 @@ func (s *Supervisor) reconcile(cur **running, name, token string, factory Transp
 	go func() {
 		defer close(done)
 		if err := tr.Run(ctx); err != nil && ctx.Err() == nil {
-			s.logger.Warn("bots: transport exited unexpectedly", "platform", name, "err", err)
+			s.logger.Warn("bots: transport exited unexpectedly", "platform", name, "error", err)
 		}
 	}()
 	*cur = r

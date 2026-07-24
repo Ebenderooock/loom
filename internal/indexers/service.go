@@ -184,7 +184,7 @@ func (s *Service) HydrateAll(ctx context.Context) error {
 		}
 		if err := s.hydrateOne(ctx, def); err != nil {
 			s.logger.Warn("hydrate indexer failed",
-				"id", def.ID, "kind", def.Kind, "err", err)
+				"id", def.ID, "kind", def.Kind, "error", err)
 		}
 	}
 	s.logger.Info("indexers hydrated",
@@ -221,7 +221,7 @@ func (s *Service) Create(ctx context.Context, def Definition) (Definition, error
 	}
 	if saved.Enabled {
 		if err := s.hydrateOne(ctx, saved); err != nil {
-			s.logger.Warn("create: hydrate failed", "id", saved.ID, "err", err)
+			s.logger.Warn("create: hydrate failed", "id", saved.ID, "error", err)
 		}
 	}
 	// Seed a "unknown" health row so list endpoints have something
@@ -373,7 +373,7 @@ func (s *Service) RateLimitFor(indexerID string) (throttle.Config, bool) {
 	if err != nil {
 		if !errors.Is(err, ErrNotFound) {
 			s.logger.Warn("rate-limit lookup failed",
-				"id", indexerID, "err", err)
+				"id", indexerID, "error", err)
 		}
 		return throttle.Config{}, false
 	}
@@ -404,7 +404,7 @@ func (s *Service) SetRateLimit(ctx context.Context, id string, cfg throttle.Conf
 	}
 	if def.Enabled {
 		if herr := s.hydrateOne(ctx, def); herr != nil {
-			s.logger.Warn("rate-limit: hydrate failed", "id", id, "err", herr)
+			s.logger.Warn("rate-limit: hydrate failed", "id", id, "error", herr)
 		}
 	}
 	return nil
@@ -430,7 +430,7 @@ func (s *Service) Replace(ctx context.Context, def Definition) (Definition, erro
 	}
 	if saved.Enabled {
 		if err := s.hydrateOne(ctx, saved); err != nil {
-			s.logger.Warn("replace: hydrate failed", "id", saved.ID, "err", err)
+			s.logger.Warn("replace: hydrate failed", "id", saved.ID, "error", err)
 		}
 	} else {
 		s.registry.Remove(saved.ID)
@@ -461,7 +461,7 @@ func (s *Service) Patch(ctx context.Context, p Patch) (Definition, error) {
 	}
 	if saved.Enabled {
 		if err := s.hydrateOne(ctx, saved); err != nil {
-			s.logger.Warn("patch: hydrate failed", "id", saved.ID, "err", err)
+			s.logger.Warn("patch: hydrate failed", "id", saved.ID, "error", err)
 		}
 	} else {
 		s.registry.Remove(saved.ID)
@@ -551,7 +551,7 @@ func (s *Service) TestOne(ctx context.Context, id string) (Health, error) {
 		h.LastSuccessAt = &t
 	}
 	if perr := s.repo.UpsertHealth(ctx, h); perr != nil {
-		s.logger.Warn("persist health failed", "id", id, "err", perr)
+		s.logger.Warn("persist health failed", "id", id, "error", perr)
 	}
 
 	status := "passed"
@@ -589,7 +589,7 @@ func (s *Service) proxyTimeoutOverrides(ctx context.Context, ids []string) map[s
 	}
 	defs, err := s.repo.List(ctx)
 	if err != nil {
-		s.logger.Warn("proxy timeout overrides: list definitions failed", "err", err)
+		s.logger.Warn("proxy timeout overrides: list definitions failed", "error", err)
 		return nil
 	}
 	want := make(map[string]struct{}, len(ids))
@@ -626,7 +626,7 @@ func (s *Service) Search(ctx context.Context, q Query, ids []string, perTimeout 
 	if s.queryLog != nil {
 		queryLogID = NewQueryID()
 		if err := s.queryLog.StartQuery(ctx, queryLogID, q.Term, "search", "", ""); err != nil {
-			s.logger.Warn("query log: start failed", "err", err)
+			s.logger.Warn("query log: start failed", "error", err)
 		}
 	}
 
@@ -705,10 +705,10 @@ func (s *Service) Search(ctx context.Context, q Query, ids []string, perTimeout 
 			if s.queryLog != nil && queryLogID != "" {
 				iqID := NewQueryID()
 				if err := s.queryLog.StartIndexerQuery(ctx, iqID, queryLogID, indexerID, d.Name); err != nil {
-					s.logger.Warn("query log: start indexer failed", "err", err)
+					s.logger.Warn("query log: start indexer failed", "error", err)
 				}
 				if err := s.queryLog.FinishIndexerQuery(ctx, iqID, d.ResultCount, d.ResponseTimeMS, searchErr); err != nil {
-					s.logger.Warn("query log: finish indexer failed", "err", err)
+					s.logger.Warn("query log: finish indexer failed", "error", err)
 				}
 			}
 		}
@@ -717,7 +717,7 @@ func (s *Service) Search(ctx context.Context, q Query, ids []string, perTimeout 
 	// Finish query log.
 	if s.queryLog != nil && queryLogID != "" {
 		if err := s.queryLog.FinishQuery(ctx, queryLogID, len(agg.Results), nil); err != nil {
-			s.logger.Warn("query log: finish failed", "err", err)
+			s.logger.Warn("query log: finish failed", "error", err)
 		}
 	}
 
@@ -756,7 +756,7 @@ func (s *Service) SearchStream(ctx context.Context, q Query, ids []string, perTi
 	if s.queryLog != nil {
 		queryLogID = NewQueryID()
 		if err := s.queryLog.StartQuery(ctx, queryLogID, q.Term, "search-stream", "", ""); err != nil {
-			s.logger.Warn("query log: start failed", "err", err)
+			s.logger.Warn("query log: start failed", "error", err)
 		}
 	}
 
@@ -800,10 +800,10 @@ func (s *Service) SearchStream(ctx context.Context, q Query, ids []string, perTi
 			if s.queryLog != nil && queryLogID != "" {
 				iqID := NewQueryID()
 				if err := s.queryLog.StartIndexerQuery(ctx, iqID, queryLogID, indexerID, evt.IndexerName); err != nil {
-					s.logger.Warn("query log: start indexer failed", "err", err)
+					s.logger.Warn("query log: start indexer failed", "error", err)
 				}
 				if err := s.queryLog.FinishIndexerQuery(ctx, iqID, evt.ResultCount, evt.ElapsedMS, searchErr); err != nil {
-					s.logger.Warn("query log: finish indexer failed", "err", err)
+					s.logger.Warn("query log: finish indexer failed", "error", err)
 				}
 			}
 			if evt.Type == EventIndexerResult {
@@ -825,7 +825,7 @@ func (s *Service) SearchStream(ctx context.Context, q Query, ids []string, perTi
 
 	if s.queryLog != nil && queryLogID != "" {
 		if err := s.queryLog.FinishQuery(ctx, queryLogID, totalResults, nil); err != nil {
-			s.logger.Warn("query log: finish failed", "err", err)
+			s.logger.Warn("query log: finish failed", "error", err)
 		}
 	}
 
