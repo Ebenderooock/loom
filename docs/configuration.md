@@ -41,7 +41,7 @@ real values look like. Every key gets an `example:` line.
 | `log.format` | `LOOM_LOG_FORMAT` | string | `json` | **yes** | One of `json`, `text`. |
 | `telemetry.prometheus` | `LOOM_TELEMETRY_PROMETHEUS` / `LOOM_PROMETHEUS` | bool | `true` | no | Expose `/metrics`. |
 | `telemetry.profiling` | `LOOM_TELEMETRY_PROFILING` / `LOOM_PROFILING` | bool | `false` | no | Synonym kept for legacy callers; see also `debug.pprof`. |
-| `telemetry.trace_ratio` | `LOOM_TELEMETRY_TRACE_RATIO` / `LOOM_TRACE_RATIO` | float [0,1] | `0.0` | no | Sampler ratio for OTel traces. |
+| `telemetry.trace_ratio` | `LOOM_TELEMETRY_TRACE_RATIO` / `LOOM_TRACE_RATIO` | float [0,1] | `0.1` | no | Sampler ratio for OTel traces. Invalid/non-positive values fall back to `0.1`. |
 | `telemetry.otlp_endpoint` | `LOOM_TELEMETRY_OTLP_ENDPOINT` / `LOOM_OTLP_ENDPOINT` | string | `""` | no | OTLP/HTTP collector endpoint. |
 | `database.url` | `LOOM_DATABASE_URL` | string | `""` | no | Legacy-style DSN; if set and `postgres://…`, selects Postgres. |
 | `storage.engine` | `LOOM_STORAGE_ENGINE` | string | `sqlite` | no | One of `sqlite`, `postgres`. |
@@ -163,7 +163,7 @@ log:
 
 telemetry:
   prometheus: true
-  trace_ratio: 0.0
+  trace_ratio: 0.1
   otlp_endpoint: ""
 
 storage:

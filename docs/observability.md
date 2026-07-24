@@ -109,7 +109,11 @@ example PromQL queries and tuning advice.
 
 - OpenTelemetry SDK with an OTLP/HTTP exporter.
 - Gated by `otel.enabled: true` (or `telemetry.otlp_endpoint` non-empty).
-- Sampling: `telemetry.trace_ratio` ∈ [0, 1] (parent-based).
+- Sampling: `telemetry.trace_ratio` ∈ [0, 1] (parent-based), default `0.1`.
+- Inbound HTTP spans are emitted via `otelhttp` middleware on the server mux
+  (health/readiness/liveness and `/metrics` are excluded).
+- Outbound HTTP spans are emitted via `otelhttp` transport in the shared
+  indexer/download client transport stack.
 - W3C trace-context and Baggage propagators are installed globally so
   traces stitch across hops.
 
