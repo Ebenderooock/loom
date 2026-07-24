@@ -119,4 +119,60 @@ test.describe("Movies Page", () => {
       timeout: 10000,
     });
   });
+
+  test.describe("Movies Page mobile add flow", () => {
+    test.use({ viewport: { width: 393, height: 851 } });
+
+    test("populated library keeps Add Movie reachable and opens dialog", async ({
+      page,
+    }) => {
+      await mockBaseApp(page);
+      await mockMovies(page);
+      await page.goto("/movies");
+
+      const addMovieButton = page
+        .getByRole("button", { name: /^Add Movie$/i })
+        .first();
+      await expect(addMovieButton).toBeVisible({ timeout: 10000 });
+      await addMovieButton.click();
+      await expect(
+        page.getByRole("heading", { name: "Search Movies" }),
+      ).toBeVisible({ timeout: 10000 });
+    });
+
+    test("empty library keeps Add Movie reachable and opens dialog", async ({
+      page,
+    }) => {
+      await mockBaseApp(page);
+      await mockMovies(page, [], [SAMPLE_LIBRARY]);
+      await page.goto("/movies");
+
+      const addMovieButton = page
+        .getByRole("button", { name: /^Add Movie$/i })
+        .first();
+      await expect(addMovieButton).toBeVisible({ timeout: 10000 });
+      await addMovieButton.click();
+      await expect(
+        page.getByRole("heading", { name: "Search Movies" }),
+      ).toBeVisible({ timeout: 10000 });
+    });
+
+    test("mobile overflow menu keeps secondary actions reachable", async ({
+      page,
+    }) => {
+      await mockBaseApp(page);
+      await mockMovies(page);
+      await page.goto("/movies");
+
+      const menuButton = page.getByRole("button", { name: "More actions" });
+      await expect(menuButton).toBeVisible({ timeout: 10000 });
+      await menuButton.click();
+      await expect(page.getByRole("menuitem", { name: "Import" })).toBeVisible({
+        timeout: 10000,
+      });
+      await expect(
+        page.getByRole("menuitem", { name: "Rescan Libraries" }),
+      ).toBeVisible({ timeout: 10000 });
+    });
+  });
 });

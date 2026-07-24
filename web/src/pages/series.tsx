@@ -468,7 +468,7 @@ export function SeriesPage() {
   useSetPageHeader("TV Shows", subtitle);
 
   return (
-    <div className="px-6 pb-6 pt-2">
+    <div className="px-3 pb-6 pt-2 sm:px-6">
       {/* Toolbar */}
       {totalSeries > 0 ? (
         <SeriesToolbar
@@ -524,7 +524,7 @@ export function SeriesPage() {
               ⚠️ Add a library in Settings before adding series
             </p>
           ) : (
-            <div className="flex gap-3">
+            <div className="flex w-full max-w-md flex-col gap-3 sm:w-auto sm:max-w-none sm:flex-row">
               <Button
                 variant="outline"
                 size="lg"

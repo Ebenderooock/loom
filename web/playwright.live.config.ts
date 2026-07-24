@@ -29,6 +29,10 @@ export default defineConfig({
       name: "live-chromium",
       use: { ...devices["Desktop Chrome"] },
     },
+    {
+      name: "live-mobile-chrome",
+      use: { ...devices["Pixel 5"] },
+    },
   ],
   // No webServer — we connect to the remote instance directly
 });

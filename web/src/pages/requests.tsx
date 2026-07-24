@@ -670,7 +670,7 @@ function ManageRequests() {
             ))}
           </SelectContent>
         </Select>
-        <div className="ml-auto">
+        <div className="w-full sm:ml-auto sm:w-auto">
           <ConfirmActionButton
             actionLabel="Clear History"
             title="Clear request history?"

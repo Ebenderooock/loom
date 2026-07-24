@@ -24,7 +24,9 @@ test.describe("Series Page", () => {
 
   test("shows add series button", async ({ page }) => {
     await page.goto("/series");
-    await expect(page.getByRole("button", { name: /add/i })).toBeVisible({
+    await expect(
+      page.getByRole("button", { name: /^Add Series$/i }),
+    ).toBeVisible({
       timeout: 10000,
     });
   });
@@ -44,6 +46,64 @@ test.describe("Series Page", () => {
     // Empty state shows "No series yet"
     await expect(page.getByText("No series yet")).toBeVisible({
       timeout: 10000,
+    });
+  });
+
+  test.describe("Series Page mobile add flow", () => {
+    test.use({ viewport: { width: 393, height: 851 } });
+
+    test("populated library keeps Add Series reachable and opens dialog", async ({
+      page,
+    }) => {
+      await mockBaseApp(page);
+      await mockSeriesApi(page);
+      await page.goto("/series");
+
+      const addSeriesButton = page
+        .getByRole("button", { name: /^Add Series$/i })
+        .first();
+      await expect(addSeriesButton).toBeVisible({ timeout: 10000 });
+      await addSeriesButton.click();
+      await expect(
+        page.getByRole("heading", { name: "Search Series" }),
+      ).toBeVisible({ timeout: 10000 });
+    });
+
+    test("empty library keeps Add Series reachable and opens dialog", async ({
+      page,
+    }) => {
+      await mockBaseApp(page);
+      await mockSeriesApi(page, []);
+      await page.goto("/series");
+
+      const addSeriesButton = page
+        .getByRole("button", { name: /^Add Series$/i })
+        .first();
+      await expect(addSeriesButton).toBeVisible({ timeout: 10000 });
+      await addSeriesButton.click();
+      await expect(
+        page.getByRole("heading", { name: "Search Series" }),
+      ).toBeVisible({ timeout: 10000 });
+    });
+
+    test("mobile overflow menu keeps secondary actions reachable", async ({
+      page,
+    }) => {
+      await mockBaseApp(page);
+      await mockSeriesApi(page);
+      await page.goto("/series");
+
+      const menuButton = page.getByRole("button", { name: "More actions" });
+      await expect(menuButton).toBeVisible({ timeout: 10000 });
+      await menuButton.click();
+      await expect(
+        page.getByRole("menuitem", { name: "Organize" }),
+      ).toBeVisible({
+        timeout: 10000,
+      });
+      await expect(
+        page.getByRole("menuitem", { name: "Rescan Libraries" }),
+      ).toBeVisible({ timeout: 10000 });
     });
   });
 });
