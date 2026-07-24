@@ -1077,12 +1077,13 @@ func matchQualityDef(rel *parser.Release, defs []*movies.QualityDefinition) *mov
 	}
 
 	parsedRes := fmt.Sprintf("%dp", rel.Resolution)
+	lowerParsedRes := strings.ToLower(parsedRes)
 	parsedSource := normalizeSource(rel.Source)
 
 	// Build the canonical slug the parser would produce (e.g., "webdl-1080p",
 	// "bluray-2160p-remux"). Match against the quality definition's Name field
 	// which uses the same convention.
-	slug := parsedSource + "-" + strings.ToLower(parsedRes)
+	slug := parsedSource + "-" + lowerParsedRes
 	if rel.IsRemux {
 		slug += "-remux"
 	}
@@ -1102,7 +1103,7 @@ func matchQualityDef(rel *parser.Release, defs []*movies.QualityDefinition) *mov
 		defSrc := normalizeDefSource(d.Source)
 		defRemux := strings.EqualFold(d.Modifier, "REMUX")
 
-		if defRes == strings.ToLower(parsedRes) && defSrc == parsedSource && defRemux == rel.IsRemux {
+		if defRes == lowerParsedRes && defSrc == parsedSource && defRemux == rel.IsRemux {
 			return d
 		}
 	}
@@ -1111,7 +1112,7 @@ func matchQualityDef(rel *parser.Release, defs []*movies.QualityDefinition) *mov
 	for _, d := range defs {
 		defRes := strings.ToLower(d.Resolution)
 		defRemux := strings.EqualFold(d.Modifier, "REMUX")
-		if defRes == strings.ToLower(parsedRes) && defRemux == rel.IsRemux {
+		if defRes == lowerParsedRes && defRemux == rel.IsRemux {
 			return d
 		}
 	}
@@ -1119,7 +1120,7 @@ func matchQualityDef(rel *parser.Release, defs []*movies.QualityDefinition) *mov
 	// Priority 4: resolution only (unknown source and modifier).
 	for _, d := range defs {
 		defRes := strings.ToLower(d.Resolution)
-		if defRes == strings.ToLower(parsedRes) && d.Modifier == "" {
+		if defRes == lowerParsedRes && d.Modifier == "" {
 			return d
 		}
 	}

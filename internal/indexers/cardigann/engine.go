@@ -70,6 +70,10 @@ type Engine struct {
 	// Cached result of configFieldsWithDefaults, computed once per engine.
 	cachedConfigFields map[string]string
 	cachedConfigOnce   sync.Once
+
+	// sortedFieldNames caches search field names in deterministic order so
+	// per-row extraction avoids repeating map key allocation+sorting.
+	sortedFieldNames []string
 }
 
 // NewEngine builds a runnable Engine. httpClient may be nil; the
@@ -108,6 +112,11 @@ func NewEngine(id, name string, def *Definition, cfg Config, httpClient *http.Cl
 		cfg:  cfg,
 		http: httpClient,
 		jar:  jar,
+	}
+	if def.Search.Fields != nil {
+		e.sortedFieldNames = sortedFieldNames(def.Search.Fields)
+	} else {
+		e.sortedFieldNames = []string{}
 	}
 	// Pre-seed any operator-supplied raw cookie. Cardigann lets a
 	// site offer "cookie" as a login method (the operator pastes a
@@ -882,7 +891,7 @@ func (e *Engine) extractOne(node *goquery.Selection, tctx templateContext) (inde
 	fieldCtx.Result = values
 
 	// Sort field names once for deterministic iteration across all phases.
-	fieldNames := sortedFieldNames(e.def.Search.Fields)
+	fieldNames := e.sortedFieldNames
 
 	// Phase 1 — selector-based extraction (raw HTML scraping).
 	// Expand any templates in the selector itself first.
