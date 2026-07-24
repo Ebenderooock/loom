@@ -6,7 +6,6 @@ const NAV_ITEMS = [
   { label: "Movies", path: "/movies" },
   { label: "TV Shows", path: "/series" },
   { label: "Calendar", path: "/calendar" },
-  { label: "Library", path: "/library" },
   { label: "Indexers", path: "/indexers" },
   { label: "Downloads", path: "/downloads" },
   { label: "Workflows", path: "/workflows" },

@@ -18,7 +18,7 @@ type RollingSearchConfig struct {
 // DefaultRollingSearchConfig returns sensible defaults.
 func DefaultRollingSearchConfig() RollingSearchConfig {
 	return RollingSearchConfig{
-		Enabled:           false,
+		Enabled:           true,
 		IntervalHours:     12,
 		BatchSize:         5,
 		MinResearchDays:   7,

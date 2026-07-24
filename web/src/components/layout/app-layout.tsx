@@ -8,7 +8,6 @@ import {
   Inbox,
   Download,
   Film,
-  FolderOpen,
   LayoutDashboard,
   ListTodo,
   Menu,
@@ -58,7 +57,6 @@ const PRIMARY_NAV: NavItem[] = [
   { to: "/movies", label: "Movies", Icon: Film },
   { to: "/series", label: "TV Shows", Icon: Tv },
   { to: "/calendar", label: "Calendar", Icon: Calendar },
-  { to: "/library", label: "Library", Icon: FolderOpen },
   { to: "/activity", label: "Activity", Icon: ListTodo, badge: "review" },
   { to: "/downloads", label: "Downloads", Icon: Download },
 ];
