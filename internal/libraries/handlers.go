@@ -251,10 +251,11 @@ func scanLibrary(store *Store, scanner *Scanner, logger *slog.Logger) http.Handl
 			return
 		}
 
-		// Run scan in background with a detached context so it
+		// Run scan in background with a detached request context so it
 		// isn't cancelled when the HTTP handler returns 202.
+		scanCtx := context.WithoutCancel(r.Context())
 		go func() {
-			if err := scanner.ScanLibrary(context.Background(), lib); err != nil {
+			if err := scanner.ScanLibrary(scanCtx, lib); err != nil {
 				logger.Error("libraries: scan failed", "id", id, "err", err)
 			}
 		}()

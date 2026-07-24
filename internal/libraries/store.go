@@ -30,7 +30,7 @@ func (s *Store) List(ctx context.Context) ([]Library, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var libs []Library
 	for rows.Next() {
@@ -167,7 +167,7 @@ func (s *Store) ListFiles(ctx context.Context, libraryID string) ([]LibraryFile,
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var files []LibraryFile
 	for rows.Next() {
