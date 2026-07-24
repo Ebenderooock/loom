@@ -37,6 +37,16 @@ type torrentInfo struct {
 // returns every torrent the server knows about; otherwise the
 // `hashes` filter is applied server-side.
 func (c *Client) Status(ctx context.Context, ids ...string) ([]downloads.Item, error) {
+	if items, ok := c.cachedStatus(); ok {
+		if len(ids) == 0 {
+			return items, nil
+		}
+		filtered := filterItemsByID(items, ids)
+		if len(filtered) == 0 {
+			return nil, fmt.Errorf("%w: %s", ErrUnknownHash, strings.Join(ids, ","))
+		}
+		return filtered, nil
+	}
 	params := url.Values{}
 	if len(ids) > 0 {
 		params.Set("hashes", strings.Join(ids, "|"))
@@ -56,7 +66,27 @@ func (c *Client) Status(ctx context.Context, ids ...string) ([]downloads.Item, e
 	for _, t := range raw {
 		out = append(out, mapItem(t))
 	}
+	if len(ids) == 0 {
+		c.storeStatusCache(out)
+	}
 	return out, nil
+}
+
+func filterItemsByID(items []downloads.Item, ids []string) []downloads.Item {
+	if len(ids) == 0 {
+		return items
+	}
+	want := make(map[string]struct{}, len(ids))
+	for _, id := range ids {
+		want[strings.ToLower(id)] = struct{}{}
+	}
+	filtered := make([]downloads.Item, 0, len(ids))
+	for _, item := range items {
+		if _, ok := want[strings.ToLower(item.ID)]; ok {
+			filtered = append(filtered, item)
+		}
+	}
+	return filtered
 }
 
 // mapItem projects a /torrents/info row onto downloads.Item. Size

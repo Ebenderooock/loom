@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/ebenderooock/loom/internal/downloads"
 )
@@ -201,6 +203,85 @@ func TestStatusUnknownHashErrors(t *testing.T) {
 	_, err := c.Status(context.Background(), "deadbeef")
 	if err == nil {
 		t.Fatal("expected ErrUnknownHash, got nil")
+	}
+}
+
+func TestStatusCachesAllItemsForOneMinute(t *testing.T) {
+	t.Parallel()
+	f := newFakeServer("adminadmin")
+	defer f.Close()
+
+	var hits atomic.Int64
+	f.mux.HandleFunc("/api/v2/torrents/info", f.requireSID(func(w http.ResponseWriter, _ *http.Request) {
+		hits.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, torrentsInfoFixture)
+	}))
+
+	c := newTestClient(t, f.srv, downloads.Definition{})
+	now := time.Unix(1_700_000_000, 0)
+	c.now = func() time.Time { return now }
+	if err := c.login(context.Background(), true); err != nil {
+		t.Fatalf("login: %v", err)
+	}
+
+	if _, err := c.Status(context.Background()); err != nil {
+		t.Fatalf("first Status: %v", err)
+	}
+	if _, err := c.Status(context.Background()); err != nil {
+		t.Fatalf("second Status: %v", err)
+	}
+	if got := hits.Load(); got != 1 {
+		t.Fatalf("status hits = %d, want 1", got)
+	}
+
+	now = now.Add(59 * time.Second)
+	if _, err := c.Status(context.Background()); err != nil {
+		t.Fatalf("cached Status: %v", err)
+	}
+	if got := hits.Load(); got != 1 {
+		t.Fatalf("status hits after 59s = %d, want 1", got)
+	}
+
+	now = now.Add(2 * time.Second)
+	if _, err := c.Status(context.Background()); err != nil {
+		t.Fatalf("expired Status: %v", err)
+	}
+	if got := hits.Load(); got != 2 {
+		t.Fatalf("status hits after ttl = %d, want 2", got)
+	}
+}
+
+func TestStatusByHashUsesAllItemsCache(t *testing.T) {
+	t.Parallel()
+	f := newFakeServer("adminadmin")
+	defer f.Close()
+
+	var sawHashes []string
+	f.mux.HandleFunc("/api/v2/torrents/info", f.requireSID(func(w http.ResponseWriter, r *http.Request) {
+		sawHashes = append(sawHashes, r.URL.Query().Get("hashes"))
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `[{"hash":"abc","name":"x","state":"downloading"}]`)
+	}))
+
+	c := newTestClient(t, f.srv, downloads.Definition{})
+	now := time.Unix(1_700_000_000, 0)
+	c.now = func() time.Time { return now }
+	if err := c.login(context.Background(), true); err != nil {
+		t.Fatalf("login: %v", err)
+	}
+
+	if _, err := c.Status(context.Background()); err != nil {
+		t.Fatalf("all Status: %v", err)
+	}
+	if _, err := c.Status(context.Background(), "abc"); err != nil {
+		t.Fatalf("filtered Status: %v", err)
+	}
+	if len(sawHashes) != 1 {
+		t.Fatalf("info calls = %d, want 1", len(sawHashes))
+	}
+	if sawHashes[0] != "" {
+		t.Fatalf("hashes = %v, want [\"\"]", sawHashes)
 	}
 }
 

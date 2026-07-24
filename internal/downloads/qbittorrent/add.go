@@ -56,6 +56,7 @@ func (c *Client) Add(ctx context.Context, req downloads.AddRequest) (downloads.A
 		return downloads.AddResult{}, fmt.Errorf("%w: torrents/add rejected the input: %q",
 			ErrServer, strings.TrimSpace(string(respBody)))
 	}
+	c.invalidateReadCaches()
 	return downloads.AddResult{
 		ClientID: c.id,
 		ItemID:   hash,

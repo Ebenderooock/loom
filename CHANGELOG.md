@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - qBittorrent URL grabs now treat qBittorrent's queued `pending_count` add response
   as a successful add instead of surfacing it as an `add_failed` error.
+- qBittorrent status, category, and free-space reads are now cached for one
+  minute so Loom does not hammer qBittorrent when the UI polls frequently.
 - Movie auto-search and the prefilled movie manual-search query now preserve the
   movie year so same-title/remake searches stay targeted.
 

@@ -20,6 +20,9 @@ type categoryEntry struct {
 // Categories implements downloads.DownloadClient. The response is
 // alphabetised so callers can rely on stable ordering across calls.
 func (c *Client) Categories(ctx context.Context) ([]downloads.Category, error) {
+	if cats, ok := c.cachedCategories(); ok {
+		return cats, nil
+	}
 	body, err := c.get(ctx, "torrents/categories", nil)
 	if err != nil {
 		return nil, err
@@ -42,5 +45,6 @@ func (c *Client) Categories(ctx context.Context) ([]downloads.Category, error) {
 		})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	c.storeCategoriesCache(out)
 	return out, nil
 }

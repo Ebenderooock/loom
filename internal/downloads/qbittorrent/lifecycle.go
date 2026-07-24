@@ -16,16 +16,22 @@ import (
 func (c *Client) Pause(ctx context.Context, ids ...string) error {
 	form := url.Values{}
 	form.Set("hashes", joinHashesOrAll(ids))
-	_, err := c.postForm(ctx, "torrents/pause", form)
-	return err
+	if _, err := c.postForm(ctx, "torrents/pause", form); err != nil {
+		return err
+	}
+	c.invalidateReadCaches()
+	return nil
 }
 
 // Resume implements downloads.DownloadClient.
 func (c *Client) Resume(ctx context.Context, ids ...string) error {
 	form := url.Values{}
 	form.Set("hashes", joinHashesOrAll(ids))
-	_, err := c.postForm(ctx, "torrents/resume", form)
-	return err
+	if _, err := c.postForm(ctx, "torrents/resume", form); err != nil {
+		return err
+	}
+	c.invalidateReadCaches()
+	return nil
 }
 
 // Remove implements downloads.DownloadClient. When deleteFiles is
@@ -40,8 +46,11 @@ func (c *Client) Remove(ctx context.Context, ids []string, deleteFiles bool) err
 	} else {
 		form.Set("deleteFiles", "false")
 	}
-	_, err := c.postForm(ctx, "torrents/delete", form)
-	return err
+	if _, err := c.postForm(ctx, "torrents/delete", form); err != nil {
+		return err
+	}
+	c.invalidateReadCaches()
+	return nil
 }
 
 // joinHashesOrAll returns qBittorrent's pipe-delimited hash list, or
@@ -74,8 +83,11 @@ func (c *Client) SetPriority(ctx context.Context, priority downloads.Priority, i
 	}
 	form := url.Values{}
 	form.Set("hashes", joinHashesOrAll(ids))
-	_, err := c.postForm(ctx, endpoint, form)
-	return err
+	if _, err := c.postForm(ctx, endpoint, form); err != nil {
+		return err
+	}
+	c.invalidateReadCaches()
+	return nil
 }
 
 // SetSpeedLimit implements downloads.DownloadClient.
@@ -83,8 +95,11 @@ func (c *Client) SetSpeedLimit(ctx context.Context, limitBytesPerSec int64, ids 
 	form := url.Values{}
 	form.Set("hashes", joinHashesOrAll(ids))
 	form.Set("limit", strconv.FormatInt(limitBytesPerSec, 10))
-	_, err := c.postForm(ctx, "torrents/setDownloadLimit", form)
-	return err
+	if _, err := c.postForm(ctx, "torrents/setDownloadLimit", form); err != nil {
+		return err
+	}
+	c.invalidateReadCaches()
+	return nil
 }
 
 // ForceStart implements downloads.DownloadClient.
@@ -92,22 +107,31 @@ func (c *Client) ForceStart(ctx context.Context, ids ...string) error {
 	form := url.Values{}
 	form.Set("hashes", joinHashesOrAll(ids))
 	form.Set("value", "true")
-	_, err := c.postForm(ctx, "torrents/setForceStart", form)
-	return err
+	if _, err := c.postForm(ctx, "torrents/setForceStart", form); err != nil {
+		return err
+	}
+	c.invalidateReadCaches()
+	return nil
 }
 
 // Recheck implements downloads.DownloadClient.
 func (c *Client) Recheck(ctx context.Context, ids ...string) error {
 	form := url.Values{}
 	form.Set("hashes", joinHashesOrAll(ids))
-	_, err := c.postForm(ctx, "torrents/recheck", form)
-	return err
+	if _, err := c.postForm(ctx, "torrents/recheck", form); err != nil {
+		return err
+	}
+	c.invalidateReadCaches()
+	return nil
 }
 
 // Reannounce implements downloads.DownloadClient.
 func (c *Client) Reannounce(ctx context.Context, ids ...string) error {
 	form := url.Values{}
 	form.Set("hashes", joinHashesOrAll(ids))
-	_, err := c.postForm(ctx, "torrents/reannounce", form)
-	return err
+	if _, err := c.postForm(ctx, "torrents/reannounce", form); err != nil {
+		return err
+	}
+	c.invalidateReadCaches()
+	return nil
 }

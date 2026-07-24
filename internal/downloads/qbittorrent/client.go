@@ -71,6 +71,7 @@ type Client struct {
 	cfg resolved
 
 	http *http.Client
+	now  func() time.Time
 
 	// loginMu serialises authentication so a flood of concurrent
 	// 403s does not fan out into N parallel re-logins.
@@ -81,6 +82,12 @@ type Client struct {
 	// lastLoginAttempt records when the last login attempt (success or
 	// fail) was made so we can enforce a backoff. Protected by loginMu.
 	lastLoginAttempt time.Time
+
+	cacheMu sync.Mutex
+
+	statusCache     statusCache
+	categoriesCache categoriesCache
+	freeSpaceCache  freeSpaceCache
 }
 
 func (c *Client) hasCredentials() bool {
@@ -138,6 +145,7 @@ func NewWithHTTPClient(def downloads.Definition, cfg resolved, httpc *http.Clien
 		protocol: proto,
 		cfg:      cfg,
 		http:     httpc,
+		now:      time.Now,
 	}, nil
 }
 

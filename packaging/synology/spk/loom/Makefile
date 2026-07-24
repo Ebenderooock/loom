@@ -15,7 +15,7 @@ DISPLAY_NAME = Loom
 
 DESCRIPTION = Loom is a unified, self-hosted media automation server. It searches indexers, drives your download clients, imports and organizes movies, TV and music, and ships a built-in web UI and request portal — a single-binary replacement for the Radarr/Sonarr/Lidarr/Prowlarr/Overseerr stack.
 
-CHANGELOG = "0.2.3: Fix qBittorrent queued URL adds and keep movie year in auto/manual search."
+CHANGELOG = "0.2.3: Fix qBittorrent queued URL adds, reduce qBittorrent read frequency, and keep movie year in auto/manual search."
 
 STARTABLE = yes
 SERVICE_USER = auto

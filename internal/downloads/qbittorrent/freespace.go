@@ -22,6 +22,9 @@ type mainData struct {
 // downloads core treats -1 as "unknown" and elides it from health
 // rows.
 func (c *Client) FreeSpace(ctx context.Context) (int64, error) {
+	if bytes, ok := c.cachedFreeSpace(); ok {
+		return bytes, nil
+	}
 	body, err := c.get(ctx, "sync/maindata", nil)
 	if err != nil {
 		return -1, err
@@ -31,8 +34,10 @@ func (c *Client) FreeSpace(ctx context.Context) (int64, error) {
 		return -1, fmt.Errorf("qbittorrent: parsing sync/maindata: %w", err)
 	}
 	if md.ServerState.FreeSpaceOnDisk == nil {
+		c.storeFreeSpaceCache(-1)
 		return -1, nil
 	}
+	c.storeFreeSpaceCache(*md.ServerState.FreeSpaceOnDisk)
 	return *md.ServerState.FreeSpaceOnDisk, nil
 }
 

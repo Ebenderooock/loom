@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/ebenderooock/loom/internal/downloads"
 )
@@ -65,5 +67,48 @@ func TestCategoriesEmpty(t *testing.T) {
 	}
 	if len(cats) != 0 {
 		t.Fatalf("want empty, got %v", cats)
+	}
+}
+
+func TestCategoriesCacheInvalidatesAfterMutation(t *testing.T) {
+	t.Parallel()
+	f := newFakeServer("adminadmin")
+	defer f.Close()
+
+	var categoryHits atomic.Int64
+	f.mux.HandleFunc("/api/v2/torrents/categories", f.requireSID(func(w http.ResponseWriter, _ *http.Request) {
+		categoryHits.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"movies":{"name":"movies","savePath":"/downloads/movies"}}`)
+	}))
+	f.mux.HandleFunc("/api/v2/torrents/pause", f.requireSID(func(w http.ResponseWriter, _ *http.Request) {
+		fmt.Fprint(w, "Ok.")
+	}))
+
+	c := newTestClient(t, f.srv, downloads.Definition{})
+	now := time.Unix(1_700_000_000, 0)
+	c.now = func() time.Time { return now }
+	if err := c.login(context.Background(), true); err != nil {
+		t.Fatalf("login: %v", err)
+	}
+
+	if _, err := c.Categories(context.Background()); err != nil {
+		t.Fatalf("first Categories: %v", err)
+	}
+	if _, err := c.Categories(context.Background()); err != nil {
+		t.Fatalf("second Categories: %v", err)
+	}
+	if got := categoryHits.Load(); got != 1 {
+		t.Fatalf("category hits = %d, want 1", got)
+	}
+
+	if err := c.Pause(context.Background(), "abc"); err != nil {
+		t.Fatalf("Pause: %v", err)
+	}
+	if _, err := c.Categories(context.Background()); err != nil {
+		t.Fatalf("Categories after Pause: %v", err)
+	}
+	if got := categoryHits.Load(); got != 2 {
+		t.Fatalf("category hits after invalidation = %d, want 2", got)
 	}
 }
