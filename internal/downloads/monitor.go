@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/ebenderooock/loom/internal/kernel/eventbus"
+	"github.com/ebenderooock/loom/internal/kernel/telemetry"
 )
 
 // stalledState tracks the last known progress of a download item
@@ -210,6 +211,12 @@ func (m *Monitor) emitCompletions(ctx context.Context, items []Item) {
 				if m.orchNotifier != nil {
 					m.orchNotifier.NotifyDownloadComplete(item.ClientID, item.ID, item.Title, item.Category, item.ContentPath, item.SavePath)
 				}
+
+				durationSeconds := 0.0
+				if state, ok := m.lastProgress[key]; ok && !state.firstSeenAt.IsZero() {
+					durationSeconds = m.clock.Now().Sub(state.firstSeenAt).Seconds()
+				}
+				telemetry.ObserveDownloadCompleted(item.ClientID, durationSeconds)
 
 				// Persist to history store if available.
 				if m.historyStore != nil {

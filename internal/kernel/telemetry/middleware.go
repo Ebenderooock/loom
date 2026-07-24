@@ -17,6 +17,7 @@ type HTTPMetrics struct {
 	reqDuration *prometheus.HistogramVec
 	reqSize     *prometheus.HistogramVec
 	respSize    *prometheus.HistogramVec
+	reqInFlight *prometheus.GaugeVec
 }
 
 // NewHTTPMetrics creates HTTP metrics and registers them with the given
@@ -44,8 +45,16 @@ func NewHTTPMetrics(reg *prometheus.Registry) *HTTPMetrics {
 			Help:    "HTTP response body size in bytes.",
 			Buckets: prometheus.ExponentialBuckets(100, 10, 6),
 		}, []string{"method", "route"}),
+		// PromQL:
+		//   sum by(method, route) (http_requests_in_flight)
+		// Alert suggestion:
+		//   sum(http_requests_in_flight) > 200 for 5m
+		reqInFlight: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Name: "http_requests_in_flight",
+			Help: "Current number of in-flight HTTP requests.",
+		}, []string{"method", "route"}),
 	}
-	reg.MustRegister(m.reqTotal, m.reqDuration, m.reqSize, m.respSize)
+	reg.MustRegister(m.reqTotal, m.reqDuration, m.reqSize, m.respSize, m.reqInFlight)
 	return m
 }
 
@@ -56,10 +65,12 @@ func (m *HTTPMetrics) Handler(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		ww := &responseWriter{ResponseWriter: w, status: http.StatusOK}
-		next.ServeHTTP(ww, r)
-
 		route := routePattern(r)
 		method := r.Method
+		m.reqInFlight.WithLabelValues(method, route).Inc()
+		defer m.reqInFlight.WithLabelValues(method, route).Dec()
+		next.ServeHTTP(ww, r)
+
 		status := strconv.Itoa(ww.status)
 		elapsed := time.Since(start).Seconds()
 
