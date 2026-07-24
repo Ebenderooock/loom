@@ -208,7 +208,16 @@ func (r *sqlRepo) AddMovieFile(ctx context.Context, mf *MovieFile) error {
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		mf.ID, mf.MovieID, mf.FilePath, mf.Size, mf.Quality, mf.Format, string(mediaInfoBytes), mf.FileDate, mf.DateAdded, mf.CreatedAt, mf.UpdatedAt,
 	)
-	return err
+	if err != nil {
+		return err
+	}
+
+	// Link this file to the movie in library_files (for UI unmapped tracking).
+	_, _ = r.db.ExecContext(ctx,
+		`UPDATE library_files SET media_id = ? WHERE path = ?`,
+		mf.MovieID, mf.FilePath,
+	)
+	return nil
 }
 
 func (r *sqlRepo) GetMovieFile(ctx context.Context, id string) (*MovieFile, error) {
@@ -234,7 +243,16 @@ func (r *sqlRepo) UpdateMovieFile(ctx context.Context, mf *MovieFile) error {
 		`UPDATE movie_files SET file_path = ?, size = ?, quality = ?, format = ?, media_info = ?, file_date = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL`,
 		mf.FilePath, mf.Size, mf.Quality, mf.Format, string(mediaInfoBytes), mf.FileDate, mf.UpdatedAt, mf.ID,
 	)
-	return err
+	if err != nil {
+		return err
+	}
+
+	// Keep library_files linkage in sync so Movies unmapped counts stay accurate.
+	_, _ = r.db.ExecContext(ctx,
+		`UPDATE library_files SET media_id = ? WHERE path = ?`,
+		mf.MovieID, mf.FilePath,
+	)
+	return nil
 }
 
 func (r *sqlRepo) DeleteMovieFile(ctx context.Context, id string) error {
