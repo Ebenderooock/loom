@@ -30,6 +30,7 @@ func DefaultRollingSearchConfig() RollingSearchConfig {
 type SearchCandidate struct {
 	MediaType        string     `json:"mediaType"` // "movie" or "episode"
 	MediaID          string     `json:"mediaId"`
+	SeriesID         string     `json:"seriesId,omitempty"`
 	Title            string     `json:"title"`
 	Year             int        `json:"year,omitempty"`
 	IMDBID           string     `json:"imdbId,omitempty"`

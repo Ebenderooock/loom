@@ -328,9 +328,18 @@ func (g *autoSearchGrabber) Grab(ctx context.Context, c scheduler.SearchCandidat
 	if g.engine == nil {
 		return nil
 	}
+	mediaType := c.MediaType
+	mediaID := c.MediaID
+	// Align scheduler episode searches with manual/regular series searches:
+	// search as series + S/E targeting, while still tracking episode state
+	// separately in scheduler.search_state.
+	if c.MediaType == "episode" && c.SeriesID != "" {
+		mediaType = "series"
+		mediaID = c.SeriesID
+	}
 	req := autosearch.SearchRequest{
-		MediaType:        c.MediaType,
-		MediaID:          c.MediaID,
+		MediaType:        mediaType,
+		MediaID:          mediaID,
 		Title:            c.Title,
 		Year:             c.Year,
 		QualityProfileID: c.QualityProfileID,
