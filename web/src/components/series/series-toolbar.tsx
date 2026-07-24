@@ -22,6 +22,7 @@ import {
   FolderSearch,
   FolderSync,
   Settings2,
+  MoreHorizontal,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -97,9 +98,9 @@ export function SeriesToolbar({
 }) {
   return (
     <div className="mb-6 space-y-3">
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="flex flex-wrap items-center gap-2">
         {/* Filter */}
-        <div className="relative min-w-[200px] max-w-sm flex-1">
+        <div className="relative w-full sm:min-w-[220px] sm:max-w-sm sm:flex-1">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Filter series..."
@@ -111,7 +112,7 @@ export function SeriesToolbar({
 
         {/* Status filter */}
         <Select value={statusFilter} onValueChange={onStatusFilterChange}>
-          <SelectTrigger className="h-9 w-[140px] text-xs">
+          <SelectTrigger className="h-9 w-full text-xs sm:w-[140px]">
             <SelectValue placeholder="Status" />
           </SelectTrigger>
           <SelectContent>
@@ -127,7 +128,7 @@ export function SeriesToolbar({
 
         {/* Monitored filter */}
         <Select value={monitoredFilter} onValueChange={onMonitoredFilterChange}>
-          <SelectTrigger className="h-9 w-[130px] text-xs">
+          <SelectTrigger className="h-9 w-full text-xs sm:w-[130px]">
             <SelectValue placeholder="Monitored" />
           </SelectTrigger>
           <SelectContent>
@@ -148,7 +149,7 @@ export function SeriesToolbar({
           value={sortKey}
           onValueChange={(v) => onSortKeyChange(v as SeriesSortKey)}
         >
-          <SelectTrigger className="h-9 w-[140px] text-xs">
+          <SelectTrigger className="h-9 w-full text-xs sm:w-[140px]">
             <SortAsc className="mr-1 h-3.5 w-3.5" />
             <SelectValue />
           </SelectTrigger>
@@ -162,7 +163,7 @@ export function SeriesToolbar({
         </Select>
 
         {/* View toggle */}
-        <div className="flex items-center rounded-md border border-border">
+        <div className="hidden items-center rounded-md border border-border sm:flex">
           <Button
             variant={viewMode === "grid" ? "secondary" : "ghost"}
             size="sm"
@@ -181,64 +182,101 @@ export function SeriesToolbar({
           </Button>
         </div>
 
-        {/* Add / Import buttons */}
-        <div className="ml-auto flex items-center gap-2">
+        {/* Add button and actions */}
+        <div className="flex w-full items-center gap-2 sm:ml-auto sm:w-auto">
           <Button
-            variant="outline"
             size="sm"
-            className="h-9 gap-1.5"
-            onClick={onRefreshAll}
-            disabled={refreshingAll}
+            className="h-9 flex-1 gap-1.5 sm:flex-none"
+            onClick={onAddSeries}
           >
-            <RefreshCw className="h-4 w-4" />
-            {refreshingAll ? "Refreshing..." : "Refresh All"}
+            <Plus className="h-4 w-4" /> Add Series
           </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-9 gap-1.5"
-            onClick={onRescanLibraries}
-            disabled={rescanningLibraries}
-          >
-            <FolderSync className="h-4 w-4" />
-            {rescanningLibraries ? "Rescanning..." : "Rescan Libraries"}
-          </Button>
-          {onImportLibrary && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button size="sm" variant="outline" className="h-9 px-3 sm:hidden">
+                <MoreHorizontal className="h-4 w-4" />
+                <span className="sr-only">More actions</span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" sideOffset={4}>
+              <DropdownMenuItem onClick={onRefreshAll} disabled={refreshingAll}>
+                {refreshingAll ? "Refreshing..." : "Refresh All"}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={onRescanLibraries}
+                disabled={rescanningLibraries}
+              >
+                {rescanningLibraries ? "Rescanning..." : "Rescan Libraries"}
+              </DropdownMenuItem>
+              {onImportLibrary && (
+                <DropdownMenuItem onClick={onImportLibrary}>Import</DropdownMenuItem>
+              )}
+              <DropdownMenuItem onClick={onOrganize} disabled={organizing}>
+                {organizing ? "Organizing..." : "Organize"}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onViewModeChange("grid")}>
+                Grid View
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onViewModeChange("list")}>
+                List View
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <div className="hidden items-center gap-2 sm:flex">
             <Button
               variant="outline"
               size="sm"
               className="h-9 gap-1.5"
-              onClick={onImportLibrary}
+              onClick={onRefreshAll}
+              disabled={refreshingAll}
             >
-              <FolderSearch className="h-4 w-4" /> Import
+              <RefreshCw className="h-4 w-4" />
+              {refreshingAll ? "Refreshing..." : "Refresh All"}
             </Button>
-          )}
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-9 gap-1.5"
-            onClick={onOrganize}
-            disabled={organizing}
-          >
-            <FolderSync className="h-4 w-4" />
-            {organizing ? "Organizing..." : "Organize"}
-          </Button>
-          <Button size="sm" className="h-9 gap-1.5" onClick={onAddSeries}>
-            <Plus className="h-4 w-4" /> Add Series
-          </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-9 gap-1.5"
+              onClick={onRescanLibraries}
+              disabled={rescanningLibraries}
+            >
+              <FolderSync className="h-4 w-4" />
+              {rescanningLibraries ? "Rescanning..." : "Rescan Libraries"}
+            </Button>
+            {onImportLibrary && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-9 gap-1.5"
+                onClick={onImportLibrary}
+              >
+                <FolderSearch className="h-4 w-4" /> Import
+              </Button>
+            )}
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-9 gap-1.5"
+              onClick={onOrganize}
+              disabled={organizing}
+            >
+              <FolderSync className="h-4 w-4" />
+              {organizing ? "Organizing..." : "Organize"}
+            </Button>
+          </div>
         </div>
       </div>
 
       {/* Bulk action bar */}
       {selectMode && (
-        <div className="flex items-center gap-3 rounded-lg border border-accent/20 bg-accent/10 px-3 py-2">
+        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-accent/20 bg-accent/10 px-3 py-2">
           <Checkbox
             checked={allSelected}
             onCheckedChange={onToggleSelectAll}
             className="data-[state=checked]:bg-accent"
           />
           <span className="text-sm font-medium">{selectedCount} selected</span>
-          <div className="ml-auto flex gap-2">
+          <div className="flex w-full flex-wrap gap-2 sm:ml-auto sm:w-auto">
             <Button
               size="sm"
               variant="outline"

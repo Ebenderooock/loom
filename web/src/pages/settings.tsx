@@ -404,7 +404,7 @@ function AddLibraryDialog({
               <p className="text-sm text-muted-foreground">
                 What type of media will this library contain?
               </p>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <button
                   type="button"
                   onClick={() => selectType("movie")}
@@ -1274,7 +1274,7 @@ export function DownloadClientsPanel() {
                 </div>
               </div>
 
-              <div className="grid max-w-lg grid-cols-2 gap-4">
+              <div className="grid max-w-lg grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
                   <Label
                     htmlFor="stall-timeout"
@@ -2325,7 +2325,7 @@ export function DownloadSafetyPanel() {
           <p className="text-xs text-zinc-500">
             Flag releases outside this size range (in MB) as suspicious.
           </p>
-          <div className="grid max-w-sm grid-cols-2 gap-4">
+          <div className="grid max-w-sm grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <Label htmlFor="min-size" className="text-xs">
                 Minimum (MB)

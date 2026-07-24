@@ -870,7 +870,7 @@ function ActiveDownloads() {
       >
         <SheetContent
           side="right"
-          className="w-[500px] overflow-y-auto sm:max-w-[500px]"
+          className="w-full overflow-y-auto sm:max-w-[500px]"
         >
           <SheetHeader>
             <SheetTitle className="truncate pr-8 text-sm font-medium">
