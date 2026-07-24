@@ -1380,7 +1380,7 @@ Returns `{ success: true/false, items: [...], count: N }` with up to 5 preview i
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| enabled | bool | false | Whether scheduler is active |
+| enabled | bool | true | Whether scheduler is active |
 | intervalHours | int | 12 | Hours between search cycles |
 | batchSize | int | 5 | Items to search per cycle |
 | minResearchDays | int | 7 | Min days before re-searching an item |
