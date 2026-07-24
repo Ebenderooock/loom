@@ -267,6 +267,9 @@ func cmdServe(ctx context.Context, args []string) error {
 	if err != nil {
 		return fmt.Errorf("wire infra: %w", err)
 	}
+	if err := scheduler.RegisterPlayHistoryPrune(ctx, sched, infra.analyticsSvc, cfg.Scheduler.PlayHistoryRetentionDays, logger); err != nil {
+		return fmt.Errorf("register play history prune: %w", err)
+	}
 	// Connect the autosearch engine so the rolling searcher performs full
 	// search-and-grab cycles rather than discarding indexer results.
 	infra.rollingSearcher.SetGrabber(&autoSearchGrabber{engine: dlWiring.autoSearchEngine})

@@ -64,6 +64,12 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.HTTP.ReadTimeout != 30 {
 		t.Errorf("http.read_timeout = %d, want 30", cfg.HTTP.ReadTimeout)
 	}
+	if cfg.Scheduler.AuditRetentionDays != 30 {
+		t.Errorf("scheduler.audit_retention_days = %d, want 30", cfg.Scheduler.AuditRetentionDays)
+	}
+	if cfg.Scheduler.PlayHistoryRetentionDays != 90 {
+		t.Errorf("scheduler.play_history_retention_days = %d, want 90", cfg.Scheduler.PlayHistoryRetentionDays)
+	}
 }
 
 func TestEnvOverridesLegacy(t *testing.T) {
@@ -193,6 +199,8 @@ func TestValidateRejectsBadInput(t *testing.T) {
 	}{
 		{"bad log level", func(c *Config) { c.Log.Level = "trace" }},
 		{"bad log format", func(c *Config) { c.Log.Format = "xml" }},
+		{"negative audit retention", func(c *Config) { c.Scheduler.AuditRetentionDays = -1 }},
+		{"negative play history retention", func(c *Config) { c.Scheduler.PlayHistoryRetentionDays = -1 }},
 		{"empty addr", func(c *Config) { c.HTTP.Addr = "" }},
 		{"trace ratio > 1", func(c *Config) { c.Telemetry.TraceRatio = 1.5 }},
 		{"bad auth mode", func(c *Config) { c.Auth.Mode = "magic" }},

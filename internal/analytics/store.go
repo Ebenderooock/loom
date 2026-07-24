@@ -182,6 +182,19 @@ func (s *Store) ClearHistory(ctx context.Context) error {
 	return nil
 }
 
+// PruneHistory removes play-history rows older than olderThan, based on
+// their last_seen_at timestamp.
+func (s *Store) PruneHistory(ctx context.Context, olderThan time.Time) (int64, error) {
+	res, err := s.db.ExecContext(ctx,
+		`DELETE FROM play_history WHERE last_seen_at < ?`,
+		olderThan.UTC().Format(tsLayout),
+	)
+	if err != nil {
+		return 0, fmt.Errorf("prune history: %w", err)
+	}
+	return res.RowsAffected()
+}
+
 // Stats computes the analytics report over the given window. Only plays with at
 // least minWatchedMs of observed playback count toward the aggregates, to keep
 // brief previews/accidental starts out of the reports.

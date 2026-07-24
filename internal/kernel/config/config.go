@@ -256,9 +256,11 @@ type OTelConfig struct {
 //   - ShutdownGrace bounds how long a SIGTERM waits for in-flight jobs
 //     before abandoning them.
 type SchedulerConfig struct {
-	Enabled       bool   `mapstructure:"enabled"`
-	Timezone      string `mapstructure:"timezone"`
-	ShutdownGrace int    `mapstructure:"shutdown_grace"`
+	Enabled                  bool   `mapstructure:"enabled"`
+	Timezone                 string `mapstructure:"timezone"`
+	ShutdownGrace            int    `mapstructure:"shutdown_grace"`
+	AuditRetentionDays       int    `mapstructure:"audit_retention_days"`
+	PlayHistoryRetentionDays int    `mapstructure:"play_history_retention_days"`
 }
 
 var (
@@ -452,6 +454,8 @@ func applyDefaults(v *viper.Viper) {
 	v.SetDefault("scheduler.enabled", true)
 	v.SetDefault("scheduler.timezone", "Local")
 	v.SetDefault("scheduler.shutdown_grace", 30)
+	v.SetDefault("scheduler.audit_retention_days", 30)
+	v.SetDefault("scheduler.play_history_retention_days", 90)
 
 	v.SetDefault("indexers.search_timeout", 15)
 	v.SetDefault("indexers.proxy_search_timeout", 65)
@@ -525,6 +529,12 @@ func (c *Config) Validate() error {
 	}
 	if c.Log.RetentionDays < 0 {
 		return fmt.Errorf("log.retention_days must be non-negative")
+	}
+	if c.Scheduler.AuditRetentionDays < 0 {
+		return fmt.Errorf("scheduler.audit_retention_days must be non-negative")
+	}
+	if c.Scheduler.PlayHistoryRetentionDays < 0 {
+		return fmt.Errorf("scheduler.play_history_retention_days must be non-negative")
 	}
 	if c.HTTP.Addr == "" {
 		return fmt.Errorf("http.addr must not be empty")

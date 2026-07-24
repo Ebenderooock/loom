@@ -35,7 +35,7 @@ func buildScheduler(ctx context.Context, cfg *config.Config, db storage.DB, audi
 	if err := scheduler.RegisterHousekeeping(ctx, s, db.DB(), string(db.Engine())); err != nil {
 		return nil, fmt.Errorf("register housekeeping: %w", err)
 	}
-	if err := scheduler.RegisterAuditPrune(ctx, s, auditLogger, logger); err != nil {
+	if err := scheduler.RegisterAuditPrune(ctx, s, auditLogger, cfg.Scheduler.AuditRetentionDays, logger); err != nil {
 		return nil, fmt.Errorf("register audit prune: %w", err)
 	}
 	logger.Info("scheduler ready",

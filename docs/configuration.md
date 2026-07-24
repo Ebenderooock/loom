@@ -54,6 +54,8 @@ real values look like. Every key gets an `example:` line.
 | `scheduler.enabled` | `LOOM_SCHEDULER_ENABLED` | bool | `true` | no | Master switch for the in-process job scheduler. |
 | `scheduler.timezone` | `LOOM_SCHEDULER_TIMEZONE` | string | `Local` | no | IANA name (e.g. `UTC`, `Europe/Stockholm`) used to interpret cron expressions. |
 | `scheduler.shutdown_grace` | `LOOM_SCHEDULER_SHUTDOWN_GRACE` | int (s) | `30` | no | Seconds in-flight handlers may keep running after `SIGTERM`. |
+| `scheduler.audit_retention_days` | `LOOM_SCHEDULER_AUDIT_RETENTION_DAYS` | int (days) | `30` | no | Automatic retention for `audit_log` rows. |
+| `scheduler.play_history_retention_days` | `LOOM_SCHEDULER_PLAY_HISTORY_RETENTION_DAYS` | int (days) | `90` | no | Automatic retention for analytics `play_history` rows. |
 | `indexers.search_timeout` | `LOOM_INDEXERS_SEARCH_TIMEOUT` | int (s) | `15` | no | Per-indexer ceiling for fan-out search calls. |
 | `indexers.max_parallel` | `LOOM_INDEXERS_MAX_PARALLEL` | int | `8` | no | Maximum number of concurrent indexer Search calls during fan-out. |
 | `indexers.health_check_schedule` | `LOOM_INDEXERS_HEALTH_CHECK_SCHEDULE` | string (cron) | `*/10 * * * *` | no | 5-field cron expression (no seconds field) controlling the periodic health sweep. |
@@ -116,6 +118,8 @@ scheduler:
   enabled: true                         # example: run the cron scheduler
   timezone: "Europe/Stockholm"          # example: IANA name; "Local" follows host TZ
   shutdown_grace: 30                    # example: seconds to let jobs finish on SIGTERM
+  audit_retention_days: 30              # example: prune audit_log rows older than 30 days
+  play_history_retention_days: 90       # example: prune play_history rows older than 90 days
 
 indexers:
   search_timeout: 15                    # example: per-indexer fan-out ceiling, seconds

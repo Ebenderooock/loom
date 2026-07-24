@@ -37,6 +37,11 @@ type AppMetrics struct {
 	SearchRequests *prometheus.CounterVec
 	ImportTotal    *prometheus.CounterVec
 	NotifSent      *prometheus.CounterVec
+
+	InternalWriteFailures            *prometheus.CounterVec
+	OrchestratorCommandDrops         *prometheus.CounterVec
+	OrchestratorCommandBufferDepth   prometheus.Gauge
+	OrchestratorCommandBufferUseRate prometheus.Gauge
 }
 
 // NewAppMetrics registers domain metrics with the given Prometheus
@@ -121,6 +126,22 @@ func NewAppMetrics(reg *prometheus.Registry) *AppMetrics {
 			Name: "loom_notifications_sent_total",
 			Help: "Total notifications sent.",
 		}, []string{"provider", "status"}),
+		InternalWriteFailures: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "loom_internal_write_failures_total",
+			Help: "Total failed internal writes by subsystem.",
+		}, []string{"target"}),
+		OrchestratorCommandDrops: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "loom_workflow_orchestrator_command_drops_total",
+			Help: "Total commands dropped by the workflow orchestrator due to buffer pressure.",
+		}, []string{"command_type"}),
+		OrchestratorCommandBufferDepth: prometheus.NewGauge(prometheus.GaugeOpts{
+			Name: "loom_workflow_orchestrator_command_buffer_depth",
+			Help: "Current queued command count in the workflow orchestrator buffer.",
+		}),
+		OrchestratorCommandBufferUseRate: prometheus.NewGauge(prometheus.GaugeOpts{
+			Name: "loom_workflow_orchestrator_command_buffer_utilization_ratio",
+			Help: "Current workflow orchestrator command-buffer utilization ratio [0,1].",
+		}),
 	}
 	reg.MustRegister(
 		m.MoviesTotal,
@@ -142,6 +163,10 @@ func NewAppMetrics(reg *prometheus.Registry) *AppMetrics {
 		m.SearchRequests,
 		m.ImportTotal,
 		m.NotifSent,
+		m.InternalWriteFailures,
+		m.OrchestratorCommandDrops,
+		m.OrchestratorCommandBufferDepth,
+		m.OrchestratorCommandBufferUseRate,
 	)
 	return m
 }

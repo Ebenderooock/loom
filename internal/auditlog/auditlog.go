@@ -13,6 +13,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+
+	"github.com/ebenderooock/loom/internal/kernel/telemetry"
 )
 
 // TimestampFormat is the canonical ISO-8601 layout used for all audit
@@ -102,7 +104,10 @@ func (l *Logger) Log(ctx context.Context, e Entry) {
 		e.Detail, e.EntityType, e.EntityID, e.EntityName, e.Level, e.Source,
 	)
 	if err != nil {
-		l.logger.Warn("audit log insert failed", "err", err)
+		l.logger.Error("audit log insert failed", "error", err)
+		if m := telemetry.App(); m != nil {
+			m.InternalWriteFailures.WithLabelValues("audit_log").Inc()
+		}
 	}
 }
 

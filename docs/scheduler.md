@@ -158,6 +158,9 @@ guaranteed wait.
 | Name                  | Schedule       | What it does                                         |
 | --------------------- | -------------- | ---------------------------------------------------- |
 | `system.housekeeping` | `0 */6 * * *`  | Runs `PRAGMA optimize` (SQLite) or `VACUUM ANALYZE` (Postgres). |
+| `system.audit-prune` | `0 3 * * *` | Deletes `audit_log` rows older than `scheduler.audit_retention_days` (default 30). |
+| `system.log-prune` | `0 4 * * *` | Deletes `system_logs` rows older than `log.retention_days` (default 7). |
+| `system.play-history-prune` | `0 5 * * *` | Deletes analytics `play_history` rows older than `scheduler.play_history_retention_days` (default 90). |
 
 The housekeeping job exists primarily to prove the scheduler wiring
 end-to-end; you can disable it by setting `enabled = 0` on its row in

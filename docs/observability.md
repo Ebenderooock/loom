@@ -105,6 +105,15 @@ under `loom_indexer_*`:
 See [`docs/indexers-rate-limits.md`](indexers-rate-limits.md) for
 example PromQL queries and tuning advice.
 
+### Internal reliability metrics
+
+| Metric | Labels | Meaning |
+|---|---|---|
+| `loom_internal_write_failures_total` | `target` | Failed internal persistence writes (currently `audit_log`, `system_logs`). |
+| `loom_workflow_orchestrator_command_drops_total` | `command_type` | Commands dropped by the workflow orchestrator when its input buffer is full. |
+| `loom_workflow_orchestrator_command_buffer_depth` | — | Current queued command count in the orchestrator buffer. |
+| `loom_workflow_orchestrator_command_buffer_utilization_ratio` | — | Buffer utilization as a ratio in `[0,1]`; warning logs begin at ~0.8. |
+
 ## Traces
 
 - OpenTelemetry SDK with an OTLP/HTTP exporter.
