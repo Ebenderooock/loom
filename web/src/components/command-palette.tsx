@@ -12,7 +12,7 @@ import {
 import {
   Calendar,
   LayoutDashboard,
-  Library,
+  FolderOpen,
   ListTodo,
   Search,
   Settings,
@@ -60,7 +60,12 @@ const navItems: NavItem[] = [
     keywords: "request media ask",
     Icon: Inbox,
   },
-  { label: "Library", to: "/library", Icon: Library },
+  {
+    label: "Libraries & Naming",
+    to: "/settings/media-management",
+    keywords: "library folders naming media settings",
+    Icon: FolderOpen,
+  },
   {
     label: "Calendar",
     to: "/calendar",

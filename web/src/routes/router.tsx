@@ -80,14 +80,6 @@ const indexRoute = createRoute({
   errorComponent: ErrorFallback,
 });
 
-const libraryRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/library",
-  component: lazyRouteComponent(() => import("@/pages/library"), "LibraryPage"),
-  pendingComponent: PageLoader,
-  errorComponent: ErrorFallback,
-});
-
 const moviesRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/movies",
@@ -439,7 +431,6 @@ const routeTree = rootRoute.addChildren([
   setupRoute,
   indexRoute,
   inviteRoute,
-  libraryRoute,
   moviesRoute,
   seriesRoute,
   musicRoute,
