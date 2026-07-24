@@ -127,6 +127,10 @@ func pickLink(it rssItem) string {
 // today: size (when not in enclosure), grabs, files, group, and
 // usenetdate (preferred over RSS pubDate when present, per Sonarr).
 func mapNewznabAttrs(attrs []rssAttr, r *indexers.Result) {
+	seenCategories := make(map[indexers.Category]bool, len(r.Category))
+	for _, c := range r.Category {
+		seenCategories[c] = true
+	}
 	for _, a := range attrs {
 		switch strings.ToLower(a.Name) {
 		case "size":
@@ -135,7 +139,11 @@ func mapNewznabAttrs(attrs []rssAttr, r *indexers.Result) {
 			}
 		case "category":
 			if id := parseInt(a.Value); id != 0 {
-				r.Category = appendUnique(r.Category, indexers.Category(id))
+				cat := indexers.Category(id)
+				if !seenCategories[cat] {
+					seenCategories[cat] = true
+					r.Category = append(r.Category, cat)
+				}
 			}
 		case "guid":
 			if r.GUID == "" {
@@ -168,6 +176,10 @@ func mapTorznabAttrs(attrs []rssAttr, r *indexers.Result) {
 		seeders, leechers     int
 		seedersSeen, peersSet bool
 	)
+	seenCategories := make(map[indexers.Category]bool, len(r.Category))
+	for _, c := range r.Category {
+		seenCategories[c] = true
+	}
 	for _, a := range attrs {
 		switch strings.ToLower(a.Name) {
 		case "size":
@@ -189,7 +201,11 @@ func mapTorznabAttrs(attrs []rssAttr, r *indexers.Result) {
 			r.MagnetURI = strings.TrimSpace(a.Value)
 		case "category":
 			if id := parseInt(a.Value); id != 0 {
-				r.Category = appendUnique(r.Category, indexers.Category(id))
+				cat := indexers.Category(id)
+				if !seenCategories[cat] {
+					seenCategories[cat] = true
+					r.Category = append(r.Category, cat)
+				}
 			}
 		}
 	}
@@ -204,7 +220,8 @@ func mapTorznabAttrs(attrs []rssAttr, r *indexers.Result) {
 }
 
 // intPtr is a small helper for setting *int fields on Result without
-// scattering literal `&v` expressions everywhere.
+// scattering literal `&v` expressions everywhere. The tiny allocation is
+// acceptable here given per-result call volume.
 func intPtr(v int) *int { return &v }
 
 // mapCategoryStrings turns the "<category>5040</category>" list into
@@ -220,15 +237,6 @@ func mapCategoryStrings(in []string) []indexers.Category {
 		}
 	}
 	return out
-}
-
-func appendUnique(in []indexers.Category, c indexers.Category) []indexers.Category {
-	for _, existing := range in {
-		if existing == c {
-			return in
-		}
-	}
-	return append(in, c)
 }
 
 // parseRFC1123Z accepts both RFC1123Z (RFC2822 with numeric zone, the

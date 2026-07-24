@@ -48,6 +48,15 @@ var _ downloads.DownloadClient = (*Client)(nil)
 var _ downloads.DetailProvider = (*Client)(nil)
 var _ downloads.TorrentManager = (*Client)(nil)
 
+var torrentFetchClient = &http.Client{
+	Transport: &http.Transport{
+		MaxIdleConns:        100,
+		MaxIdleConnsPerHost: 10,
+		IdleConnTimeout:     90 * time.Second,
+		TLSHandshakeTimeout: 10 * time.Second,
+	},
+}
+
 func New(def downloads.Definition, cfg Config) (*Client, error) {
 	rpcClient := rainrpc.NewClient(cfg.rpcURL())
 	rpcClient.SetTimeout(timeout(cfg))
@@ -170,11 +179,14 @@ func fetchTorrentURL(ctx context.Context, rawURL string) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("builtin/torrent(rain): building fetch request for %q: %w", rawURL, err)
 	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := torrentFetchClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("builtin/torrent(rain): fetching %q: %w", rawURL, err)
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer func() {
+		_, _ = io.Copy(io.Discard, resp.Body)
+		_ = resp.Body.Close()
+	}()
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("builtin/torrent(rain): fetching %q: HTTP %d", rawURL, resp.StatusCode)
 	}

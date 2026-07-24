@@ -32,6 +32,12 @@ type Matcher struct {
 	wants []WantedMovie
 }
 
+var (
+	reReleaseMetadata = regexp.MustCompile(`(?i)\s+(1080p|720p|480p|360p|4k|2160p|1440p|10bit|8bit|HDTV|BluRay|BRRip|WebDL|WebRip|DvdRip|Remux|x264|x265|h264|h265|HEVC|AV1|VP9|aac|ac3|dts|flac).*$`)
+	reTrailingYear    = regexp.MustCompile(`(?i)\s+\b(19\d{2}|20\d{2})\b.*$`)
+	reYear            = regexp.MustCompile(`\b(19\d{2}|20\d{2})\b`)
+)
+
 // NewMatcher creates a new title matcher with a list of wanted movies.
 func NewMatcher(wants []WantedMovie) *Matcher {
 	return &Matcher{
@@ -170,20 +176,17 @@ func normalizeTitle(title string) string {
 
 	// Extract just the title part (everything before resolution or other video metadata)
 	// Common patterns: 1080p, 720p, 480p, 4K, 2160p, 10bit, HDTV, BluRay, WebDL, etc.
-	re := regexp.MustCompile(`(?i)\s+(1080p|720p|480p|360p|4k|2160p|1440p|10bit|8bit|HDTV|BluRay|BRRip|WebDL|WebRip|DvdRip|Remux|x264|x265|h264|h265|HEVC|AV1|VP9|aac|ac3|dts|flac).*$`)
-	title = re.ReplaceAllString(title, "")
+	title = reReleaseMetadata.ReplaceAllString(title, "")
 
 	// Remove year patterns too  (they'll be extracted separately)
-	re = regexp.MustCompile(`(?i)\s+\b(19\d{2}|20\d{2})\b.*$`)
-	title = re.ReplaceAllString(title, "")
+	title = reTrailingYear.ReplaceAllString(title, "")
 
 	return strings.TrimSpace(title)
 }
 
 // extractYearFromTitle attempts to find a 4-digit year (1900-2100) in the title.
 func extractYearFromTitle(title string) int {
-	re := regexp.MustCompile(`\b(19\d{2}|20\d{2})\b`)
-	matches := re.FindAllString(title, -1)
+	matches := reYear.FindAllString(title, -1)
 	if len(matches) > 0 {
 		// Take the last year found (usually the movie year, not a page number)
 		if year, err := strconv.Atoi(matches[len(matches)-1]); err == nil {
