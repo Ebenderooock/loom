@@ -11,6 +11,7 @@ import (
 	"github.com/ebenderooock/loom/internal/downloads/torrentutil"
 	"github.com/ebenderooock/loom/internal/indexers"
 	"github.com/ebenderooock/loom/internal/kernel/eventbus"
+	"github.com/ebenderooock/loom/internal/kernel/telemetry"
 	"github.com/ebenderooock/loom/internal/metadata"
 )
 
@@ -106,6 +107,7 @@ func (r *Router) handleIndexerResult(ctx context.Context, ev eventbus.Event) err
 	if r.svc.registry.Len() == 0 {
 		r.logger.Warn("router: no clients available",
 			"indexer_id", result.IndexerID)
+		telemetry.ObserveDownloadFailed("", "no_clients")
 		_ = r.bus.Publish(ctx, &DownloadFailureEvent{
 			OriginResultID: result.GUID,
 			ClientID:       "",
@@ -132,6 +134,7 @@ func (r *Router) handleIndexerResult(ctx context.Context, ev eventbus.Event) err
 	if len(clients) == 0 {
 		r.logger.Warn("router: no clients available at queue time",
 			"indexer_id", result.IndexerID)
+		telemetry.ObserveDownloadFailed("", "no_clients")
 		_ = r.bus.Publish(ctx, &DownloadFailureEvent{
 			OriginResultID: result.GUID,
 			ClientID:       "",
@@ -178,6 +181,7 @@ func (r *Router) handleIndexerResult(ctx context.Context, ev eventbus.Event) err
 		}
 		res, err := client.Add(ctx, req)
 		if err == nil {
+			telemetry.ObserveDownloadQueued(res.ClientID)
 			// Success: emit DownloadQueued and return.
 			addErr = r.bus.Publish(ctx, &DownloadQueuedEvent{
 				DownloadID:     res.ItemID,
@@ -213,6 +217,7 @@ func (r *Router) handleIndexerResult(ctx context.Context, ev eventbus.Event) err
 		Error:          fmt.Sprintf("all clients failed: %v", addErr),
 		FailedAt:       r.clock.Now(),
 	})
+	telemetry.ObserveDownloadFailed("", "all_clients_failed")
 	if failErr != nil {
 		r.logger.Warn("router failed to publish DownloadFailed", "err", failErr)
 	}

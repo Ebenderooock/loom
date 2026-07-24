@@ -125,7 +125,7 @@ Loom aims to be a **single Go binary** that replaces the trio of Radarr (movies)
 
 **What it does:** Organises media into root folders on disk. Each library has a name, path, media type (movie/series), and default settings for items added to it.
 
-**API:** `GET/POST/PUT/DELETE /api/v1/libraries`, `POST /{id}/scan`, `GET /{id}/unmapped`
+**API:** `GET/POST/PUT/DELETE /api/v1/libraries`, `POST /{id}/scan`
 
 **Key fields:**
 - `name` — human-readable label for the library
@@ -141,20 +141,18 @@ Loom aims to be a **single Go binary** that replaces the trio of Radarr (movies)
 - `accessible` — whether the path is reachable on disk
 - `disk_space` — `{ total_bytes, used_bytes, free_bytes }` for the library volume
 - `file_count` — number of indexed media files in `library_files`
-- `unmapped_count` — number of top-level folders not matched to any media record
 
 **Related table — `library_files`:**
 Each scanned media file is tracked with: `id`, `library_id`, `path` (unique), `size_bytes`, `media_id` (nullable — set when matched to a movie/series), `last_scanned`, `created_at`.
 
 **Expected outcomes:**
 - Library appears in dashboard storage stats with disk usage.
-- Scanning populates `library_files` and identifies unmapped folders.
+- Scanning populates and refreshes `library_files`.
 - Movies/series can be assigned to libraries.
 
 **Possible failures:**
 - Path doesn't exist or isn't readable → scan fails.
 - Permissions issues on `/media` mount.
-- Unmapped folders remain if media isn't matched in TMDB.
 
 ---
 
@@ -1380,7 +1378,7 @@ Returns `{ success: true/false, items: [...], count: N }` with up to 5 preview i
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| enabled | bool | false | Whether scheduler is active |
+| enabled | bool | true | Whether scheduler is active |
 | intervalHours | int | 12 | Hours between search cycles |
 | batchSize | int | 5 | Items to search per cycle |
 | minResearchDays | int | 7 | Min days before re-searching an item |
@@ -2103,7 +2101,6 @@ POST /api/v1/libraries/{id}/scan
         │
         ▼
 Library shows updated file counts
-Unmapped folders available for review
 Dashboard shows updated storage stats
 
 Note: The libraries scanner only indexes

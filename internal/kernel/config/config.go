@@ -19,6 +19,10 @@ import (
 	"github.com/spf13/viper"
 )
 
+// DefaultTraceRatio is the safe baseline sampler ratio used when
+// telemetry.trace_ratio is not explicitly configured.
+const DefaultTraceRatio = 0.1
+
 // Config is the root of all runtime configuration.
 type Config struct {
 	ConfigDir string `mapstructure:"config_dir"`
@@ -401,7 +405,7 @@ func applyDefaults(v *viper.Viper) {
 	v.SetDefault("log.buffer_size", 5000)
 
 	v.SetDefault("telemetry.prometheus", true)
-	v.SetDefault("telemetry.trace_ratio", 0.0)
+	v.SetDefault("telemetry.trace_ratio", DefaultTraceRatio)
 	v.SetDefault("telemetry.profiling", false)
 	v.SetDefault("telemetry.otlp_endpoint", "")
 

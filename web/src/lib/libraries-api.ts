@@ -28,7 +28,6 @@ export interface Library {
   accessible: boolean;
   disk_space: DiskSpace;
   file_count: number;
-  unmapped_count: number;
 }
 
 export interface LibraryFile {
@@ -39,11 +38,6 @@ export interface LibraryFile {
   media_id?: string;
   last_scanned?: string;
   created_at: string;
-}
-
-export interface UnmappedFolder {
-  name: string;
-  path: string;
 }
 
 export interface CreateLibraryRequest {
@@ -172,19 +166,6 @@ export async function scanLibrary(id: string): Promise<{ message: string }> {
   return request("POST", `/api/v1/libraries/${encodeURIComponent(id)}/scan`);
 }
 
-export async function listUnmappedFolders(
-  id: string,
-  signal?: AbortSignal,
-): Promise<UnmappedFolder[]> {
-  const data = await request<{ data: UnmappedFolder[] }>(
-    "GET",
-    `/api/v1/libraries/${encodeURIComponent(id)}/unmapped`,
-    undefined,
-    signal,
-  );
-  return data?.data ?? [];
-}
-
 export async function browseFilesystem(
   path?: string,
   signal?: AbortSignal,
@@ -199,7 +180,6 @@ export const libraryKeys = {
   all: ["libraries"] as const,
   list: () => [...libraryKeys.all, "list"] as const,
   detail: (id: string) => [...libraryKeys.all, "detail", id] as const,
-  unmapped: (id: string) => [...libraryKeys.all, "unmapped", id] as const,
   filesystem: (path?: string) => ["filesystem", path ?? ""] as const,
 };
 
@@ -216,14 +196,6 @@ export function useLibraryDetail(id: string) {
   return useQuery({
     queryKey: libraryKeys.detail(id),
     queryFn: ({ signal }) => getLibrary(id, signal),
-    enabled: !!id,
-  });
-}
-
-export function useUnmappedFolders(id: string) {
-  return useQuery({
-    queryKey: libraryKeys.unmapped(id),
-    queryFn: ({ signal }) => listUnmappedFolders(id, signal),
     enabled: !!id,
   });
 }

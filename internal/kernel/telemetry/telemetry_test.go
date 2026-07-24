@@ -79,3 +79,29 @@ func TestPackageAccessorsBeforeInit(t *testing.T) {
 		t.Errorf("Meter must return a no-op meter when uninitialized")
 	}
 }
+
+func TestResolveTraceRatio(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		in   float64
+		want float64
+	}{
+		{name: "positive ratio stays unchanged", in: 0.25, want: 0.25},
+		{name: "one stays unchanged", in: 1, want: 1},
+		{name: "zero falls back", in: 0, want: config.DefaultTraceRatio},
+		{name: "negative falls back", in: -0.1, want: config.DefaultTraceRatio},
+		{name: "above one falls back", in: 1.1, want: config.DefaultTraceRatio},
+	}
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := resolveTraceRatio(tt.in)
+			if got != tt.want {
+				t.Fatalf("resolveTraceRatio(%v) = %v, want %v", tt.in, got, tt.want)
+			}
+		})
+	}
+}

@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"sync"
 
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+
 	"github.com/ebenderooock/loom/internal/indexers/throttle"
 )
 
@@ -103,7 +105,8 @@ func TransportForDefinition(def Definition) (http.RoundTripper, error) {
 			cfg = throttle.Resolve(c)
 		}
 	}
-	wrapped := throttle.Wrap(base, def.ID, string(def.Kind), cfg, throttle.Options{})
+	tracedBase := otelhttp.NewTransport(base)
+	wrapped := throttle.Wrap(tracedBase, def.ID, string(def.Kind), cfg, throttle.Options{})
 	return wrapped, err
 }
 

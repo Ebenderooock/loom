@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log/slog"
 	"time"
+
+	"github.com/ebenderooock/loom/internal/kernel/telemetry"
 )
 
 // MediaStatusUpdater abstracts movie/episode status updates.
@@ -291,6 +293,7 @@ func (e *Engine) markFailed(ctx context.Context, workflowID, errMsg string) erro
 	}
 
 	if retryCount >= wf.MaxRetries {
+		telemetry.ObserveWorkflowRetry(wf.State, "exhausted")
 		// Exhausted retries — permanent failure
 		ok, err := e.store.Transition(ctx, workflowID, wf.State, StateFailed,
 			fmt.Sprintf("Failed after %d retries: %s", retryCount, errMsg))
@@ -307,6 +310,7 @@ func (e *Engine) markFailed(ctx context.Context, workflowID, errMsg string) erro
 
 	// Determine retry target state based on where it failed
 	retryState := e.retryTargetState(wf.State)
+	telemetry.ObserveWorkflowRetry(wf.State, "retrying")
 	ok, transErr := e.store.Transition(ctx, workflowID, wf.State, retryState,
 		fmt.Sprintf("Retry %d/%d: %s", retryCount, wf.MaxRetries, errMsg))
 	if transErr != nil {

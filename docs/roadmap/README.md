@@ -10,7 +10,7 @@ Loom is a Go + React media automation platform. Key architectural facts relevant
 - **Indexer/search pipeline** fans out across indexers in parallel, scores results (quality/seeders/age/size/freeleech), and feeds into workflows. Kinds register via `RegisterKind`.
 - **Workflow engine** manages the full lifecycle: searching → grabbed → downloading → post_download → importing → completed/failed. Uses an orchestrator with command channels and event logging.
 - **Notification system** has an event bus with pub/sub, parallel fan-out to senders (Discord, Slack, webhook, etc.), and template support.
-- **Libraries** have scanning, file tracking, unmapped folder detection, and disk space monitoring.
+- **Libraries** have scanning, file tracking, and disk space monitoring.
 - **Config** is layered (defaults < YAML < env `LOOM_*` < flags) with hot-reload support.
 - **API** uses `go-chi/chi/v5` with `Set*` dependency injection and `RouteExtensions`.
 - **Frontend** is React 18 + TanStack Router/Query + shadcn/ui + Tailwind.

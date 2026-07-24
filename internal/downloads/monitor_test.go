@@ -174,6 +174,40 @@ func TestMonitorRunSchedules(t *testing.T) {
 	}
 }
 
+func TestMonitorRecordsFailedDownloadsInHistory(t *testing.T) {
+	t.Parallel()
+
+	bus := &eventbusStub{capturingBusForMonitor: capturingBusForMonitor{events: []eventbus.Event{}}}
+	monitor := newTestMonitor(t, bus)
+	monitor.historyStore = openHistoryTestStore(t)
+
+	items := []Item{
+		{
+			ID:       "failed-1",
+			ClientID: "client-1",
+			Title:    "Failed Item",
+			Category: "movies",
+			Status:   StatusItemFailed,
+			Message:  "disk full",
+		},
+	}
+
+	monitor.detectStalled(context.Background(), items)
+	monitor.detectStalled(context.Background(), items)
+
+	if !monitor.historyStore.WasRecorded(context.Background(), "client-1", "failed-1", "failed") {
+		t.Fatalf("expected failed item to be recorded in history")
+	}
+
+	entries, err := monitor.historyStore.List(context.Background(), 50, 0)
+	if err != nil {
+		t.Fatalf("list history: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 failed history entry, got %d", len(entries))
+	}
+}
+
 // fakeClientWithStatus returns fixed status results.
 type fakeClientWithStatus struct {
 	id    string

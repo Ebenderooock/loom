@@ -17,10 +17,9 @@ type Library struct {
 	UpdatedAt                 time.Time `json:"updated_at"`
 
 	// Computed fields (not stored, populated by handlers).
-	Accessible    bool      `json:"accessible"`
-	DiskSpace     DiskSpace `json:"disk_space"`
-	FileCount     int       `json:"file_count"`
-	UnmappedCount int       `json:"unmapped_count"`
+	Accessible bool      `json:"accessible"`
+	DiskSpace  DiskSpace `json:"disk_space"`
+	FileCount  int       `json:"file_count"`
 }
 
 // LibraryFile represents a media file discovered inside a library.
@@ -39,12 +38,6 @@ type DiskSpace struct {
 	TotalBytes int64 `json:"total_bytes"`
 	FreeBytes  int64 `json:"free_bytes"`
 	UsedBytes  int64 `json:"used_bytes"`
-}
-
-// UnmappedFolder represents a subfolder with no matching media entry.
-type UnmappedFolder struct {
-	Name string `json:"name"`
-	Path string `json:"path"`
 }
 
 // CreateLibraryRequest is the API payload for adding a library.

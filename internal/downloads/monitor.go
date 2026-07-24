@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/ebenderooock/loom/internal/kernel/eventbus"
+	"github.com/ebenderooock/loom/internal/kernel/telemetry"
 )
 
 // stalledState tracks the last known progress of a download item
@@ -211,6 +212,12 @@ func (m *Monitor) emitCompletions(ctx context.Context, items []Item) {
 					m.orchNotifier.NotifyDownloadComplete(item.ClientID, item.ID, item.Title, item.Category, item.ContentPath, item.SavePath)
 				}
 
+				durationSeconds := 0.0
+				if state, ok := m.lastProgress[key]; ok && !state.firstSeenAt.IsZero() {
+					durationSeconds = m.clock.Now().Sub(state.firstSeenAt).Seconds()
+				}
+				telemetry.ObserveDownloadCompleted(item.ClientID, durationSeconds)
+
 				// Persist to history store if available.
 				if m.historyStore != nil {
 					if err := m.historyStore.RecordCompletion(ctx, event); err != nil {
@@ -245,6 +252,12 @@ func (m *Monitor) detectStalled(ctx context.Context, items []Item) {
 
 		// Handle failed items immediately.
 		if item.Status == StatusItemFailed {
+			if m.historyStore != nil && !m.historyStore.WasRecorded(ctx, item.ClientID, item.ID, "failed") {
+				if err := m.historyStore.RecordFailure(ctx, item.ClientID, item.ID, item.Title, item.Category, now); err != nil {
+					m.logger.Warn("monitor: failed to record failed history entry",
+						"item_id", item.ID, "client_id", item.ClientID, "error", err)
+				}
+			}
 			if !m.stalledEmitted[key] {
 				m.stalledEmitted[key] = true
 				if m.stallHandler != nil {

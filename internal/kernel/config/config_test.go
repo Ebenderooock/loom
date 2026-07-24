@@ -52,6 +52,9 @@ func TestLoadDefaults(t *testing.T) {
 	if !cfg.Telemetry.Prometheus {
 		t.Errorf("prometheus should default to true")
 	}
+	if cfg.Telemetry.TraceRatio != DefaultTraceRatio {
+		t.Errorf("default telemetry.trace_ratio = %v, want %v", cfg.Telemetry.TraceRatio, DefaultTraceRatio)
+	}
 	if cfg.Auth.Mode != "forms" {
 		t.Errorf("default auth.mode = %q, want forms", cfg.Auth.Mode)
 	}
