@@ -8,6 +8,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/ebenderooock/loom/internal/kernel/telemetry"
 )
 
 const (
@@ -1135,6 +1137,7 @@ func (o *Orchestrator) handleStale(ctx context.Context) {
 				key := wf.DownloadClientID + ":" + wf.DownloadID
 				if info, exists := dlStates[key]; exists {
 					if info.Status == "completed" || info.Status == "seeding" {
+						telemetry.ObserveWorkflowStale(wf.State, "recovered_completion")
 						o.logger.Info("stale recovery: download is actually complete, recovering",
 							"workflow_id", wf.ID, "state", wf.State, "dl_state", info.Status)
 						o.logEvent(ctx, wf.ID, EventStaleDetected,
@@ -1149,6 +1152,7 @@ func (o *Orchestrator) handleStale(ctx context.Context) {
 						continue
 					}
 					if info.Status == "downloading" {
+						telemetry.ObserveWorkflowStale(wf.State, "still_active")
 						// Still downloading — touch updated_at to reset stale timer
 						_ = o.store.MergeMetadata(ctx, wf.ID, map[string]any{"stale_check": "still_downloading"})
 						o.logger.Debug("stale check: download still active, resetting timer",
@@ -1183,6 +1187,7 @@ func (o *Orchestrator) handleStale(ctx context.Context) {
 		o.logEvent(ctx, wf.ID, EventStaleDetected,
 			fmt.Sprintf("Stale in %s state for %s", wf.State, age.Round(time.Second)),
 			map[string]any{"state": wf.State, "age_seconds": int(age.Seconds())})
+		telemetry.ObserveWorkflowStale(wf.State, "failed")
 
 		err := o.engine.markFailed(ctx, wf.ID,
 			fmt.Sprintf("Stale in %s state for %s", wf.State, age.Round(time.Second)))

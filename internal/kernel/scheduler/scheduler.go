@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/robfig/cron/v3"
+
+	"github.com/ebenderooock/loom/internal/kernel/telemetry"
 )
 
 // HandlerFunc is the signature every registered job implements. The
@@ -344,6 +346,7 @@ func (s *Scheduler) executeOnce(ctx context.Context, j *job, scheduledFor time.T
 	startedAt := s.clock.Now()
 	status := StatusSuccess
 	errMsg := ""
+	telemetry.ObserveSchedulerStart(j.name)
 
 	defer func() {
 		if r := recover(); r != nil {
@@ -351,6 +354,8 @@ func (s *Scheduler) executeOnce(ctx context.Context, j *job, scheduledFor time.T
 			errMsg = fmt.Sprintf("panic: %v", r)
 			s.logger.Error("job panicked", "job", j.name, "panic", r)
 		}
+		durationSeconds := s.clock.Now().Sub(startedAt).Seconds()
+		telemetry.ObserveSchedulerFinish(j.name, status, durationSeconds)
 		nextRun := j.parsed.Next(s.clock.Now().In(s.cfg.Location))
 		recordCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()

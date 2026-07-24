@@ -5,6 +5,8 @@ import (
 	"log/slog"
 	"sync"
 	"time"
+
+	"github.com/ebenderooock/loom/internal/kernel/telemetry"
 )
 
 // SyncManager orchestrates periodic RSS feed synchronization from multiple sources.
@@ -91,20 +93,24 @@ func (m *SyncManager) SyncFeeds(ctx context.Context) error {
 // syncSource fetches and stores items from a single source.
 func (m *SyncManager) syncSource(ctx context.Context, source FeedSource, totalStored, totalDeduped *int64) error {
 	m.logger.Debug("syncing source", slog.String("source_id", source.ID()), slog.String("name", source.Name()))
+	start := time.Now()
 
 	items, err := source.Fetch(ctx)
 	if err != nil {
+		telemetry.ObserveRSSSourceSync(source.ID(), "failed", time.Since(start).Seconds(), 0, 0)
 		return err
 	}
 
 	m.logger.Debug("fetched items", slog.String("source_id", source.ID()), slog.Int("count", len(items)))
 
 	if len(items) == 0 {
+		telemetry.ObserveRSSSourceSync(source.ID(), "success", time.Since(start).Seconds(), 0, 0)
 		return nil
 	}
 
 	stored, deduped, err := m.storage.StoreItems(ctx, items)
 	if err != nil {
+		telemetry.ObserveRSSSourceSync(source.ID(), "failed", time.Since(start).Seconds(), 0, 0)
 		return err
 	}
 
@@ -116,6 +122,7 @@ func (m *SyncManager) syncSource(ctx context.Context, source FeedSource, totalSt
 		slog.Int("stored", stored),
 		slog.Int("deduped", deduped),
 	)
+	telemetry.ObserveRSSSourceSync(source.ID(), "success", time.Since(start).Seconds(), int64(stored), int64(deduped))
 
 	return nil
 }

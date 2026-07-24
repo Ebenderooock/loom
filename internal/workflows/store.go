@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/ebenderooock/loom/internal/kernel/telemetry"
 )
 
 // Store provides persistence for workflows.
@@ -137,7 +139,11 @@ func (s *Store) Create(ctx context.Context, w *Workflow) error {
 		return fmt.Errorf("insert history: %w", err)
 	}
 
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	s.refreshActiveMetrics(ctx)
+	return nil
 }
 
 // Transition atomically moves a workflow to a new state (idempotent guard).
@@ -177,7 +183,12 @@ func (s *Store) Transition(ctx context.Context, id, fromState, toState, message 
 		return false, err
 	}
 
-	return true, tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return false, err
+	}
+	telemetry.ObserveWorkflowTransition(fromState, toState)
+	s.refreshActiveMetrics(ctx)
+	return true, nil
 }
 
 // SetError records an error on the workflow.
@@ -471,7 +482,11 @@ func (s *Store) Delete(ctx context.Context, id string) error {
 	if err != nil {
 		return err
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	s.refreshActiveMetrics(ctx)
+	return nil
 }
 
 // MergeItems adds items to an existing workflow, ignoring duplicates.
@@ -684,4 +699,30 @@ func (s *Store) MergeMetadata(ctx context.Context, id string, patch map[string]a
 		m[k] = v
 	}
 	return s.SetMetadata(ctx, id, MetadataFromMap(m))
+}
+
+func (s *Store) refreshActiveMetrics(ctx context.Context) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT state, COUNT(*)
+		FROM workflows
+		WHERE state NOT IN ('completed', 'failed', 'cancelled')
+		GROUP BY state`)
+	if err != nil {
+		return
+	}
+	defer rows.Close()
+
+	counts := make(map[string]int)
+	for rows.Next() {
+		var state string
+		var count int
+		if scanErr := rows.Scan(&state, &count); scanErr != nil {
+			return
+		}
+		counts[state] = count
+	}
+	if err := rows.Err(); err != nil {
+		return
+	}
+	telemetry.SetWorkflowActiveByState(counts)
 }
