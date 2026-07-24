@@ -710,7 +710,7 @@ func (s *Store) refreshActiveMetrics(ctx context.Context) {
 	if err != nil {
 		return
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	counts := make(map[string]int)
 	for rows.Next() {
