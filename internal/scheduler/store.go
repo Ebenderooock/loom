@@ -45,7 +45,7 @@ func (s *Store) GetCandidates(ctx context.Context, mediaType string, limit int, 
 			LIMIT ?`
 	case "episode":
 		query = `
-			SELECT e.id, e.title, 0,
+			SELECT e.id, COALESCE(NULLIF(s.title, ''), e.title), 0,
 			       COALESCE(s.imdb_id, ''), COALESCE(s.tvdb_id, ''), COALESCE(s.tmdb_id, ''),
 			       se.season_number, e.episode_number, COALESCE(s.quality_profile_id, '')
 			FROM episodes e
