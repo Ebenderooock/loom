@@ -11,6 +11,7 @@ import (
 
 	"github.com/ebenderooock/loom/internal/connect"
 	"github.com/ebenderooock/loom/internal/importlists/providers"
+	"github.com/ebenderooock/loom/internal/libraries"
 	"github.com/ebenderooock/loom/internal/metadata/tmdb"
 	"github.com/ebenderooock/loom/internal/movies"
 	"github.com/ebenderooock/loom/internal/music"
@@ -24,6 +25,7 @@ type SyncManager struct {
 	moviesSvc  movies.Service
 	seriesSvc  series.Service
 	musicSvc   MusicService
+	librarySvc LibraryService
 	tmdbAPIKey string
 	tmdbClient *tmdb.Client
 	logger     *slog.Logger
@@ -41,6 +43,12 @@ type ConnectService interface {
 // import lists.
 type MusicService interface {
 	AddArtist(ctx context.Context, req music.AddArtistRequest) (*music.Artist, error)
+}
+
+// LibraryService is the subset of the libraries store used to resolve a
+// library path to its row ID.
+type LibraryService interface {
+	List(ctx context.Context) ([]libraries.Library, error)
 }
 
 // NewSyncManager creates a SyncManager.
@@ -71,6 +79,12 @@ func (m *SyncManager) SetSeriesService(svc series.Service) {
 // SetMusicService sets the music service for adding artists from import lists.
 func (m *SyncManager) SetMusicService(svc MusicService) {
 	m.musicSvc = svc
+}
+
+// SetLibraryService injects the library store so the sync manager can resolve
+// a library path to its database ID when adding movies/series.
+func (m *SyncManager) SetLibraryService(svc LibraryService) {
+	m.librarySvc = svc
 }
 
 // SetTMDBAPIKey sets the TMDB API key for TMDb list providers.
@@ -445,6 +459,34 @@ func (m *SyncManager) processPendingItems(ctx context.Context, l *ImportList) {
 	}
 }
 
+// resolveLibraryID converts a library path (stored on an ImportList) to the
+// library row's UUID. It iterates over all configured libraries and matches by
+// path. If the path is already a known ID it is returned as-is. Returns an
+// error when no matching library is found.
+func (m *SyncManager) resolveLibraryID(ctx context.Context, libraryPath string) (string, error) {
+	if m.librarySvc == nil || libraryPath == "" {
+		return libraryPath, nil
+	}
+	libs, err := m.librarySvc.List(ctx)
+	if err != nil {
+		return "", fmt.Errorf("import-lists: list libraries: %w", err)
+	}
+	// Check direct path match first, then fall back to ID match (in case the
+	// import list was already configured with the library ID).
+	for _, lib := range libs {
+		if strings.EqualFold(strings.TrimRight(lib.Path, "/"), strings.TrimRight(libraryPath, "/")) {
+			return lib.ID, nil
+		}
+	}
+	for _, lib := range libs {
+		if lib.ID == libraryPath {
+			return lib.ID, nil
+		}
+	}
+	// No match — return what we have and let the downstream service report the error.
+	return libraryPath, nil
+}
+
 // addMovieToLibrary adds a movie to the library via the movies service.
 func (m *SyncManager) addMovieToLibrary(ctx context.Context, l *ImportList, item *ImportListItem) error {
 	if m.moviesSvc == nil {
@@ -465,6 +507,11 @@ func (m *SyncManager) addMovieToLibrary(ctx context.Context, l *ImportList, item
 		}
 	}
 
+	libraryID, err := m.resolveLibraryID(ctx, l.LibraryPath)
+	if err != nil {
+		return err
+	}
+
 	year := 0
 	if item.Year != nil {
 		year = *item.Year
@@ -480,7 +527,7 @@ func (m *SyncManager) addMovieToLibrary(ctx context.Context, l *ImportList, item
 		MonitoringStatus: movies.MonitoringStatusMonitored,
 		Status:           movies.MovieStatusMissing,
 		QualityProfileID: l.QualityProfileID,
-		LibraryID:        l.LibraryPath,
+		LibraryID:        libraryID,
 	}
 	if tmdbID != "" && tmdbID != "0" {
 		movie.TMDBID = &tmdbID
@@ -513,10 +560,15 @@ func (m *SyncManager) addSeriesToLibrary(ctx context.Context, l *ImportList, ite
 		return fmt.Errorf("series service not configured")
 	}
 
+	libraryID, err := m.resolveLibraryID(ctx, l.LibraryPath)
+	if err != nil {
+		return err
+	}
+
 	req := &series.AddSeriesRequest{
 		TMDBID:           item.TMDbID,
 		QualityProfileID: l.QualityProfileID,
-		LibraryID:        l.LibraryPath,
+		LibraryID:        libraryID,
 		Search:           l.SearchOnAdd,
 	}
 
@@ -547,10 +599,15 @@ func (m *SyncManager) addArtistToLibrary(ctx context.Context, l *ImportList, ite
 		monitoring = string(music.MonitoringUnmonitored)
 	}
 
+	libraryID, err := m.resolveLibraryID(ctx, l.LibraryPath)
+	if err != nil {
+		return err
+	}
+
 	req := music.AddArtistRequest{
 		MBID:             mbid,
 		QualityProfileID: l.QualityProfileID,
-		LibraryID:        l.LibraryPath,
+		LibraryID:        libraryID,
 		MonitoringStatus: monitoring,
 		Search:           l.SearchOnAdd,
 	}
