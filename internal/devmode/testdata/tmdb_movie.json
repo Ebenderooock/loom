@@ -1,0 +1,19 @@
+{
+  "id": 550,
+  "imdb_id": "tt0137523",
+  "title": "Fight Club",
+  "release_date": "1999-10-15",
+  "overview": "A ticking-time-bomb insomniac and a slippery soap salesman channel primal male aggression into a shocking new form of therapy.",
+  "poster_path": "/a26cQPRhJPX6GbWfQbvZdrrp9j9.jpg",
+  "runtime": 139,
+  "vote_average": 8.8,
+  "genres": [
+    {"id": 18, "name": "Drama"},
+    {"id": 53, "name": "Thriller"}
+  ],
+  "external_ids": {
+    "imdb_id": "tt0137523",
+    "tvdb_id": 0,
+    "id": 550
+  }
+}

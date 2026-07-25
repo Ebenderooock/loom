@@ -1,0 +1,22 @@
+services:
+  loom:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    ports:
+      - "1925:1925"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:1925/healthz"]
+      interval: 2s
+      timeout: 5s
+      retries: 15
+  test-runner:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    depends_on:
+      loom:
+        condition: service_healthy
+    environment:
+      - LOOM_TEST_URL=http://loom:1925
+    command: ["go", "test", "-v", "-tags", "integration", "./internal/integration/..."]

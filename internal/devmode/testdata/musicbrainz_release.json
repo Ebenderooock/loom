@@ -1,0 +1,32 @@
+{
+  "id": "1d022e01-4da6-387b-8658-8678046e4cef",
+  "title": "Thriller",
+  "status": "Official",
+  "date": "1982-11-30",
+  "artist-credit": [
+    {
+      "id": "f27ec8db-af05-4f36-916e-3d57f91ecf5e",
+      "name": "Michael Jackson"
+    }
+  ],
+  "media": [
+    {
+      "format": "CD",
+      "position": "1",
+      "tracks": [
+        {
+          "id": "track-001",
+          "position": "1",
+          "number": "1",
+          "title": "Wanna Be Startin' Somethin'",
+          "length": 363000
+        }
+      ]
+    }
+  ],
+  "release-group": {
+    "id": "rg-001",
+    "title": "Thriller",
+    "primary-type": "Album"
+  }
+}

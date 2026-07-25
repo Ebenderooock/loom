@@ -11,6 +11,7 @@ import (
 	"github.com/ebenderooock/loom/internal/anime"
 	"github.com/ebenderooock/loom/internal/auditlog"
 	"github.com/ebenderooock/loom/internal/calendar"
+	"github.com/ebenderooock/loom/internal/devmode"
 	"github.com/ebenderooock/loom/internal/discover"
 	"github.com/ebenderooock/loom/internal/importlists"
 	"github.com/ebenderooock/loom/internal/kernel/config"
@@ -53,12 +54,13 @@ func wireMedia(
 	moviesSvc movies.Service,
 	auditLogger *auditlog.Logger,
 	logger *slog.Logger,
+	stubs *devmode.Stubs,
 ) (*mediaWiring, error) {
 	// Libraries store — needed by scanner, organizer, imports, health monitor.
 	libStore := libraries.NewStore(db.DB())
 
 	// Library scanner
-	scannerSvc := buildScanner(moviesSvc, cfg, auditLogger, logger)
+	scannerSvc := buildScanner(moviesSvc, cfg, auditLogger, logger, stubs)
 	wiring.ScannerService = scannerSvc
 
 	// File organizer
@@ -69,14 +71,18 @@ func wireMedia(
 	wiring.OrganizerService = organizerSvc
 
 	// TV series
-	seriesSvc := buildSeriesService(db)
+	seriesSvc := buildSeriesService(db, stubs)
 	wiring.SeriesService = seriesSvc
 
 	seriesScannerSvc := buildSeriesScanner(seriesSvc, logger)
 	wiring.SeriesScanner = seriesScannerSvc
 
 	// Music (artists/albums/tracks) — MusicBrainz metadata provider.
-	mbProvider := musicbrainz.NewProvider(musicbrainz.NewClient(musicbrainz.DefaultConfig()))
+	mbCfg := musicbrainz.DefaultConfig()
+	if stubs != nil {
+		mbCfg.BaseURL = stubs.MusicBrainzURL
+	}
+	mbProvider := musicbrainz.NewProvider(musicbrainz.NewClient(mbCfg))
 	musicRepo := music.NewRepository(db.DB())
 	musicSvc := music.NewService(musicRepo, mbProvider, logger)
 	wiring.MusicService = musicSvc
@@ -145,7 +151,7 @@ func wireMedia(
 	importListSyncMgr.SetSeriesService(seriesSvc)
 	importListSyncMgr.SetMusicService(musicSvc)
 	importListSyncMgr.SetLibraryService(libStore)
-	importListSyncMgr.SetTMDBClient(buildTMDBClient())
+	importListSyncMgr.SetTMDBClient(buildTMDBClient(stubs))
 	wiring.ImportListStore = importListStore
 	wiring.ImportListSync = importListSyncMgr
 
@@ -166,7 +172,7 @@ func wireMedia(
 	qualityprofiles.SeedDefaults(ctx, qpStore, moviesSvc)
 
 	// Person discovery (TMDB-backed)
-	discoverTMDB := buildTMDBClient()
+	discoverTMDB := buildTMDBClient(stubs)
 	wiring.DiscoverRouter = discover.Router(discoverTMDB)
 
 	return &mediaWiring{

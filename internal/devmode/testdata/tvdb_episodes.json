@@ -1,0 +1,33 @@
+{
+  "data": {
+    "episodes": [
+      {
+        "id": 349232,
+        "name": "Pilot",
+        "overview": "Walter White, a struggling high school chemistry teacher diagnosed with inoperable lung cancer.",
+        "aired": "2008-01-20",
+        "runtime": 58,
+        "seasonNumber": 1,
+        "number": 1,
+        "absoluteNumber": 1
+      },
+      {
+        "id": 349233,
+        "name": "Cat's in the Bag",
+        "overview": "Walt and Jesse attempt to dispose of the bodies of two rivals they killed.",
+        "aired": "2008-01-27",
+        "runtime": 48,
+        "seasonNumber": 1,
+        "number": 2,
+        "absoluteNumber": 2
+      }
+    ]
+  },
+  "links": {
+    "prev": "",
+    "self": "/series/81189/episodes/official?page=0",
+    "next": "",
+    "total_items": 2,
+    "page_size": 100
+  }
+}

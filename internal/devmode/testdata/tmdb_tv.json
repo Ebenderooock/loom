@@ -1,0 +1,18 @@
+{
+  "id": 1396,
+  "name": "Breaking Bad",
+  "first_air_date": "2008-01-20",
+  "overview": "A high school chemistry teacher turned methamphetamine manufacturer.",
+  "poster_path": "/ggFHVNu6YYI5L9pCfOacjizRGt.jpg",
+  "vote_average": 8.9,
+  "number_of_seasons": 5,
+  "genres": [
+    {"id": 18, "name": "Drama"},
+    {"id": 80, "name": "Crime"}
+  ],
+  "external_ids": {
+    "imdb_id": "tt0903747",
+    "tvdb_id": 81189,
+    "id": 1396
+  }
+}

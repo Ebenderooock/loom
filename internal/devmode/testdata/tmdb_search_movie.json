@@ -1,0 +1,25 @@
+{
+  "results": [
+    {
+      "id": 550,
+      "title": "Fight Club",
+      "release_date": "1999-10-15",
+      "overview": "A ticking-time-bomb insomniac and a slippery soap salesman channel primal male aggression.",
+      "poster_path": "/a26cQPRhJPX6GbWfQbvZdrrp9j9.jpg",
+      "vote_average": 8.8,
+      "media_type": "movie"
+    },
+    {
+      "id": 807,
+      "title": "Se7en",
+      "release_date": "1995-09-22",
+      "overview": "Two detectives, a rookie and a veteran, hunt a serial killer who uses the seven deadly sins.",
+      "poster_path": "/69Sns8WoET6CfaYlIkHbla4l7nC.jpg",
+      "vote_average": 8.6,
+      "media_type": "movie"
+    }
+  ],
+  "total_pages": 1,
+  "total_results": 2,
+  "page": 1
+}

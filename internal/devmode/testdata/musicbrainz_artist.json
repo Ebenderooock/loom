@@ -1,0 +1,11 @@
+{
+  "id": "f27ec8db-af05-4f36-916e-3d57f91ecf5e",
+  "name": "Michael Jackson",
+  "sort-name": "Jackson, Michael",
+  "disambiguation": "King of Pop",
+  "country": "US",
+  "genres": [
+    {"count": 10, "name": "pop"},
+    {"count": 8, "name": "r&b"}
+  ]
+}

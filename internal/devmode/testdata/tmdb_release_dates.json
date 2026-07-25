@@ -1,0 +1,20 @@
+{
+  "id": 550,
+  "results": [
+    {
+      "iso_3166_1": "US",
+      "release_dates": [
+        {
+          "type": 3,
+          "release_date": "1999-10-15T00:00:00.000Z",
+          "certification": "R"
+        },
+        {
+          "type": 4,
+          "release_date": "2000-02-29T00:00:00.000Z",
+          "certification": "R"
+        }
+      ]
+    }
+  ]
+}
