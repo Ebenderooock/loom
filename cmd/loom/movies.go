@@ -35,7 +35,7 @@ var defaultTVDBKey string
 // buildMoviesService constructs the movies.Service backed by the storage
 // engine in cfg and returns the wired service together with the metadata
 // service it uses (shared with the request bots for catalog search).
-func buildMoviesService(ctx context.Context, _ *config.Config, db storage.DB, logger *slog.Logger, bus eventbus.Bus, stubs *devmode.Stubs) (movies.Service, *metadata.Service, error) {
+func buildMoviesService(ctx context.Context, _ *config.Config, db storage.DB, _ *slog.Logger, bus eventbus.Bus, stubs *devmode.Stubs) (movies.Service, *metadata.Service, error) { //nolint:unparam // error return kept for caller symmetry
 	repo := movies.NewRepository(db.DB())
 
 	// Build metadata service with TMDB provider
