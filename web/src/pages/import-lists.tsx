@@ -22,6 +22,7 @@ import {
 import { usePageHeader } from "@/hooks/use-page-header";
 import { useLibraries } from "@/lib/libraries-api";
 import { useAudioQualityProfiles } from "@/lib/music-api";
+import { useQualityProfiles } from "@/lib/quality-profiles-api";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -299,6 +300,74 @@ function StatusBadge({ status }: { status: string }) {
 
 // ---- Add List Form ----
 
+function VideoListFields({
+  form,
+  setForm,
+}: {
+  form: CreateImportListRequest;
+  setForm: (f: CreateImportListRequest) => void;
+}) {
+  const { data: libraries } = useLibraries();
+  const { data: profiles } = useQualityProfiles();
+  const videoLibraries = (libraries ?? []).filter(
+    (l) => l.media_type === form.media_type,
+  );
+
+  return (
+    <>
+      <div className="space-y-2">
+        <Label htmlFor="add-video-library">
+          {form.media_type === "series" ? "Series" : "Movie"} Library
+        </Label>
+        <Select
+          value={form.library_path ?? ""}
+          onValueChange={(val) => setForm({ ...form, library_path: val })}
+        >
+          <SelectTrigger id="add-video-library">
+            <SelectValue placeholder="Select a library…" />
+          </SelectTrigger>
+          <SelectContent>
+            {videoLibraries.length === 0 ? (
+              <SelectItem value="__none" disabled>
+                No{" "}
+                {form.media_type === "series" ? "series" : "movie"} libraries
+                configured
+              </SelectItem>
+            ) : (
+              videoLibraries.map((l) => (
+                <SelectItem key={l.id} value={l.id}>
+                  {l.name}
+                </SelectItem>
+              ))
+            )}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="add-video-profile">Quality Profile</Label>
+        <Select
+          value={form.quality_profile_id ?? ""}
+          onValueChange={(val) =>
+            setForm({ ...form, quality_profile_id: val })
+          }
+        >
+          <SelectTrigger id="add-video-profile">
+            <SelectValue placeholder="Select a profile…" />
+          </SelectTrigger>
+          <SelectContent>
+            {(profiles ?? []).map((p) => (
+              <SelectItem key={p.id} value={p.id}>
+                {p.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+    </>
+  );
+}
+
 function MusicListFields({
   form,
   setForm,
@@ -498,6 +567,10 @@ function AddListForm({ onDone }: { onDone: () => void }) {
                 </SelectContent>
               </Select>
             </div>
+
+            {(form.media_type === "movie" || form.media_type === "series") && (
+              <VideoListFields form={form} setForm={setForm} />
+            )}
 
             {form.media_type === "music" && (
               <MusicListFields form={form} setForm={setForm} />
