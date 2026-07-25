@@ -35,6 +35,7 @@ export interface ImportList {
   api_key?: string;
   access_token?: string;
   sync_interval_minutes: number;
+  library_path?: string;
   root_folder_path?: string;
   quality_profile_id: string;
   media_type: MediaType;
@@ -107,6 +108,7 @@ export interface UpdateImportListRequest {
   api_key?: string;
   access_token?: string;
   sync_interval_minutes?: number;
+  library_path?: string;
   root_folder_path?: string;
   quality_profile_id?: string;
   media_type?: MediaType;

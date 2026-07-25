@@ -15,6 +15,7 @@ import {
   SYNC_INTERVALS,
   type ImportList,
   type CreateImportListRequest,
+  type UpdateImportListRequest,
   type ListType,
   type MediaType,
   type ImportListExclusion,
@@ -127,6 +128,8 @@ function ListRow({
   const deleteMut = useDeleteImportList();
   const syncMut = useSyncImportList();
   const updateMut = useUpdateImportList();
+  const isVideoList =
+    list.media_type === "movie" || list.media_type === "series";
 
   const typeMeta = LIST_TYPES.find((t) => t.value === list.list_type);
 
@@ -222,7 +225,88 @@ function ListRow({
         </Button>
       </div>
 
-      {expanded && <ListItemsPanel listId={list.id} />}
+      {expanded && (
+        <>
+          {isVideoList && (
+            <ExistingVideoListFields
+              list={list}
+              onUpdate={(body) => updateMut.mutate({ id: list.id, body })}
+            />
+          )}
+          <ListItemsPanel listId={list.id} />
+        </>
+      )}
+    </div>
+  );
+}
+
+function ExistingVideoListFields({
+  list,
+  onUpdate,
+}: {
+  list: ImportList;
+  onUpdate: (body: UpdateImportListRequest) => void;
+}) {
+  const { data: libraries } = useLibraries();
+  const { data: profiles } = useQualityProfiles();
+  const videoLibraries = (libraries ?? []).filter(
+    (library) => library.media_type === list.media_type,
+  );
+
+  return (
+    <div className="grid gap-3 border-t border-border/60 px-8 py-3 md:grid-cols-2">
+      <div className="space-y-2">
+        <Label htmlFor={`list-library-${list.id}`}>
+          {list.media_type === "series" ? "Series" : "Movie"} Library
+        </Label>
+        <Select
+          value={list.library_path ?? ""}
+          onValueChange={(libraryPath) =>
+            onUpdate({ library_path: libraryPath })
+          }
+        >
+          <SelectTrigger id={`list-library-${list.id}`}>
+            <SelectValue placeholder="Select a library…" />
+          </SelectTrigger>
+          <SelectContent>
+            {videoLibraries.length === 0 ? (
+              <SelectItem value="__none" disabled>
+                No {list.media_type === "series" ? "series" : "movie"} libraries
+                configured
+              </SelectItem>
+            ) : (
+              videoLibraries.map((library) => (
+                <SelectItem key={library.id} value={library.id}>
+                  {library.name}
+                </SelectItem>
+              ))
+            )}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor={`list-quality-profile-${list.id}`}>
+          Quality Profile
+        </Label>
+        <Select
+          value={list.quality_profile_id ?? ""}
+          onValueChange={(profileId) =>
+            onUpdate({ quality_profile_id: profileId })
+          }
+        >
+          <SelectTrigger id={`list-quality-profile-${list.id}`}>
+            <SelectValue placeholder="Select a profile…" />
+          </SelectTrigger>
+          <SelectContent>
+            {(profiles ?? []).map((profile) => (
+              <SelectItem key={profile.id} value={profile.id}>
+                {profile.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
     </div>
   );
 }
@@ -329,8 +413,7 @@ function VideoListFields({
           <SelectContent>
             {videoLibraries.length === 0 ? (
               <SelectItem value="__none" disabled>
-                No{" "}
-                {form.media_type === "series" ? "series" : "movie"} libraries
+                No {form.media_type === "series" ? "series" : "movie"} libraries
                 configured
               </SelectItem>
             ) : (
@@ -348,9 +431,7 @@ function VideoListFields({
         <Label htmlFor="add-video-profile">Quality Profile</Label>
         <Select
           value={form.quality_profile_id ?? ""}
-          onValueChange={(val) =>
-            setForm({ ...form, quality_profile_id: val })
-          }
+          onValueChange={(val) => setForm({ ...form, quality_profile_id: val })}
         >
           <SelectTrigger id="add-video-profile">
             <SelectValue placeholder="Select a profile…" />
