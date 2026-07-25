@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
+	"github.com/ebenderooock/loom/internal/kernel/eventbus"
 	"github.com/ebenderooock/loom/internal/metadata"
 )
 
@@ -20,6 +22,7 @@ type mockRepo struct {
 	addMovieErr     error
 	updateMovieErr  error
 	deleteMovieErr  error
+	statusUpdates   int
 }
 
 func newMockRepo() *mockRepo {
@@ -55,6 +58,7 @@ func (r *mockRepo) UpdateMovieStatus(_ context.Context, id string, status MovieS
 		return errors.New("not found")
 	}
 	m.Status = status
+	r.statusUpdates++
 	return nil
 }
 func (r *mockRepo) DeleteMovie(_ context.Context, id string) error {
@@ -793,5 +797,111 @@ func TestUpdateQualityProfile_Validation(t *testing.T) {
 	}
 	if err := svc.UpdateQualityProfile(ctx, &QualityProfile{Name: "x"}); err == nil {
 		t.Fatal("expected error for empty ID")
+	}
+}
+
+func TestAddMovieByTMDBID_AppliesProfileAndSlug(t *testing.T) {
+	t.Parallel()
+	repo := newMockRepo()
+	meta := &mockMetadata{
+		tmdbResult: &metadata.MovieMetadata{
+			Title:       "The Matrix Reloaded",
+			Year:        2003,
+			ReleaseDate: "2003-05-15",
+		},
+	}
+	svc := NewService(repo, WithMetadata(meta))
+
+	got, err := svc.AddMovieByTMDBID(context.Background(), "603", "qp-1080p", "lib-a", true)
+	if err != nil {
+		t.Fatalf("AddMovieByTMDBID: %v", err)
+	}
+	if got.ID != "the-matrix-reloaded-2003" {
+		t.Fatalf("slug/id = %q", got.ID)
+	}
+	if got.QualityProfileID != "qp-1080p" || got.LibraryID != "lib-a" {
+		t.Fatalf("quality profile/library not applied: %+v", got)
+	}
+	if got.Status != MovieStatusMissing {
+		t.Fatalf("status = %q, want %q", got.Status, MovieStatusMissing)
+	}
+	if got.MonitoringStatus != MonitoringStatusMonitored {
+		t.Fatalf("monitoring = %q, want %q", got.MonitoringStatus, MonitoringStatusMonitored)
+	}
+}
+
+func TestAddMovieByTMDBID_UnreleasedAndUnmonitored(t *testing.T) {
+	t.Parallel()
+	repo := newMockRepo()
+	future := time.Now().Add(48 * time.Hour).Format("2006-01-02")
+	meta := &mockMetadata{
+		tmdbResult: &metadata.MovieMetadata{
+			Title:       "Future Film",
+			Year:        time.Now().Year() + 1,
+			ReleaseDate: future,
+		},
+	}
+	svc := NewService(repo, WithMetadata(meta))
+
+	got, err := svc.AddMovieByTMDBID(context.Background(), "999", "qp", "lib", false)
+	if err != nil {
+		t.Fatalf("AddMovieByTMDBID: %v", err)
+	}
+	if got.Status != MovieStatusUnreleased {
+		t.Fatalf("status = %q, want %q", got.Status, MovieStatusUnreleased)
+	}
+	if got.MonitoringStatus != MonitoringStatusUnmonitored {
+		t.Fatalf("monitoring = %q, want %q", got.MonitoringStatus, MonitoringStatusUnmonitored)
+	}
+}
+
+func TestSetMovieStatus_NoOpSkipsUpdate(t *testing.T) {
+	t.Parallel()
+	repo := newMockRepo()
+	repo.movies["m1"] = &Movie{ID: "m1", Title: "Movie", Status: MovieStatusMissing}
+	svc := NewService(repo)
+
+	if err := svc.SetMovieStatus(context.Background(), "m1", MovieStatusMissing); err != nil {
+		t.Fatalf("SetMovieStatus no-op: %v", err)
+	}
+	if repo.statusUpdates != 0 {
+		t.Fatalf("expected no repo status update call for no-op, got %d", repo.statusUpdates)
+	}
+}
+
+func TestSetMovieStatus_TransitionPublishesEvent(t *testing.T) {
+	t.Parallel()
+	repo := newMockRepo()
+	repo.movies["m1"] = &Movie{ID: "m1", Title: "Movie", Status: MovieStatusMissing}
+	bus := eventbus.NewInProc()
+	defer bus.Close(2 * time.Second)
+	svc := NewService(repo, WithEventBus(bus))
+
+	events := make(chan *MovieStatusChangedEvent, 1)
+	unsub := bus.Subscribe(TopicMovieStatusChanged, func(_ context.Context, ev eventbus.Event) error {
+		if e, ok := ev.(*MovieStatusChangedEvent); ok {
+			events <- e
+		}
+		return nil
+	})
+	defer unsub()
+
+	if err := svc.SetMovieStatus(context.Background(), "m1", MovieStatusAvailableRightQuality); err != nil {
+		t.Fatalf("SetMovieStatus transition: %v", err)
+	}
+	if repo.movies["m1"].Status != MovieStatusAvailableRightQuality {
+		t.Fatalf("repo status not updated: %+v", repo.movies["m1"])
+	}
+	if repo.statusUpdates != 1 {
+		t.Fatalf("expected one repo status update call, got %d", repo.statusUpdates)
+	}
+
+	select {
+	case ev := <-events:
+		if ev.MovieID != "m1" || ev.OldStatus != MovieStatusMissing || ev.NewStatus != MovieStatusAvailableRightQuality {
+			t.Fatalf("unexpected status event: %+v", ev)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for status event")
 	}
 }
