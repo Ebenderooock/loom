@@ -140,7 +140,7 @@ jobs:
           mv unit.out coverage.out
 
       - name: Print total coverage
-        run: go tool cover -func=coverage.out | grep total:
+        run: go tool cover -func=coverage.out | grep "total:"
 
       - uses: actions/upload-artifact@v7
         with:
