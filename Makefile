@@ -32,8 +32,8 @@ build-all: web-build ## Build the loom binary with embedded React UI
 web-build: ## Build the React frontend into web/dist
 	cd web && npm ci --no-audit --no-fund && npm run build
 
-test: ## Run tests
-	$(GO) test ./...
+test: ## Run unit tests with race detector and coverage
+	$(GO) test -race -count=1 -tags '$(TAGS)' -coverprofile=coverage.out ./...
 
 test-integration: ## Run integration tests
 	$(GO) test -v -tags integration ./internal/integration/...
