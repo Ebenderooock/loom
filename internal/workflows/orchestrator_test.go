@@ -108,8 +108,8 @@ func waitForCondition(t *testing.T, timeout time.Duration, check func() bool) {
 	t.Helper()
 	// Race-enabled CI can be significantly slower than local runs; ensure short
 	// waits have enough headroom so asynchronous state transitions are observed.
-	if timeout < 5*time.Second {
-		timeout = 5 * time.Second
+	if timeout < 10*time.Second {
+		timeout = 10 * time.Second
 	}
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
