@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/ebenderooock/loom/internal/auditlog"
+	"github.com/ebenderooock/loom/internal/devmode"
 	"github.com/ebenderooock/loom/internal/kernel/config"
 	"github.com/ebenderooock/loom/internal/kernel/eventbus"
 	"github.com/ebenderooock/loom/internal/libraries"
@@ -34,7 +35,7 @@ var defaultTVDBKey string
 // buildMoviesService constructs the movies.Service backed by the storage
 // engine in cfg and returns the wired service together with the metadata
 // service it uses (shared with the request bots for catalog search).
-func buildMoviesService(ctx context.Context, cfg *config.Config, db storage.DB, logger *slog.Logger, bus eventbus.Bus) (movies.Service, *metadata.Service, error) {
+func buildMoviesService(ctx context.Context, cfg *config.Config, db storage.DB, logger *slog.Logger, bus eventbus.Bus, stubs *devmode.Stubs) (movies.Service, *metadata.Service, error) {
 	repo := movies.NewRepository(db.DB())
 
 	// Build metadata service with TMDB provider
@@ -43,9 +44,11 @@ func buildMoviesService(ctx context.Context, cfg *config.Config, db storage.DB, 
 		apiKey = defaultTMDBKey
 	}
 
-	tmdbClient := tmdb.NewClient(tmdb.Config{
-		APIKey: apiKey,
-	})
+	tmdbCfg := tmdb.Config{APIKey: apiKey}
+	if stubs != nil {
+		tmdbCfg.BaseURL = stubs.TMDbURL
+	}
+	tmdbClient := tmdb.NewClient(tmdbCfg)
 	tmdbProvider := tmdb.NewProvider(tmdbClient)
 
 	metadataRepo := metadata.NewSQLiteRepository(db.DB())
@@ -60,13 +63,17 @@ func buildMoviesService(ctx context.Context, cfg *config.Config, db storage.DB, 
 }
 
 // buildScanner constructs the library scanner backed by the movies service.
-func buildScanner(moviesSvc movies.Service, cfg *config.Config, auditLogger *auditlog.Logger, logger *slog.Logger) *scanner.Scanner {
+func buildScanner(moviesSvc movies.Service, cfg *config.Config, auditLogger *auditlog.Logger, logger *slog.Logger, stubs *devmode.Stubs) *scanner.Scanner {
 	apiKey := os.Getenv("LOOM_TMDB_API_KEY")
 	if apiKey == "" {
 		apiKey = defaultTMDBKey
 	}
 
-	tmdbClient := tmdb.NewClient(tmdb.Config{APIKey: apiKey})
+	tmdbCfg := tmdb.Config{APIKey: apiKey}
+	if stubs != nil {
+		tmdbCfg.BaseURL = stubs.TMDbURL
+	}
+	tmdbClient := tmdb.NewClient(tmdbCfg)
 	tmdbProvider := tmdb.NewProvider(tmdbClient)
 
 	metaSearcher := &metadataSearcherAdapter{provider: tmdbProvider}
@@ -97,7 +104,7 @@ func buildOrganizer(moviesSvc movies.Service, libStore *libraries.Store, db stor
 }
 
 // buildSeriesService constructs the TV series service.
-func buildSeriesService(db storage.DB) series.Service {
+func buildSeriesService(db storage.DB, stubs *devmode.Stubs) series.Service {
 	apiKey := os.Getenv("LOOM_TMDB_API_KEY")
 	if apiKey == "" {
 		apiKey = defaultTMDBKey
@@ -112,11 +119,19 @@ func buildSeriesService(db storage.DB) series.Service {
 	if tvdbKey == "" {
 		tvdbKey = defaultTVDBKey
 	}
+	// In dev mode, always wire TVDB with a placeholder key so the stub is used.
+	if stubs != nil && tvdbKey == "" {
+		tvdbKey = "dev-key"
+	}
 	if tvdbKey != "" {
-		client := tvdb.NewClient(tvdb.Config{
+		tvdbCfg := tvdb.Config{
 			APIKey: tvdbKey,
 			PIN:    os.Getenv("LOOM_METADATA_TVDB_PIN"),
-		})
+		}
+		if stubs != nil {
+			tvdbCfg.BaseURL = stubs.TVDbURL
+		}
+		client := tvdb.NewClient(tvdbCfg)
 		seasonType := os.Getenv("LOOM_METADATA_TVDB_SEASON_TYPE")
 		if seasonType == "" {
 			seasonType = "official"
@@ -141,10 +156,14 @@ func buildNotificationsService(db storage.DB) notifications.Service {
 }
 
 // buildTMDBClient constructs a TMDB API client using the configured key.
-func buildTMDBClient() *tmdb.Client {
+func buildTMDBClient(stubs *devmode.Stubs) *tmdb.Client {
 	apiKey := os.Getenv("LOOM_TMDB_API_KEY")
 	if apiKey == "" {
 		apiKey = defaultTMDBKey
 	}
-	return tmdb.NewClient(tmdb.Config{APIKey: apiKey})
+	cfg := tmdb.Config{APIKey: apiKey}
+	if stubs != nil {
+		cfg.BaseURL = stubs.TMDbURL
+	}
+	return tmdb.NewClient(cfg)
 }

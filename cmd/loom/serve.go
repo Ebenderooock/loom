@@ -16,6 +16,7 @@ import (
 	"github.com/ebenderooock/loom/internal/auditlog"
 	"github.com/ebenderooock/loom/internal/backup"
 	"github.com/ebenderooock/loom/internal/customformats"
+	"github.com/ebenderooock/loom/internal/devmode"
 	"github.com/ebenderooock/loom/internal/featureflags"
 	"github.com/ebenderooock/loom/internal/kernel/config"
 	"github.com/ebenderooock/loom/internal/kernel/eventbus"
@@ -37,8 +38,18 @@ func cmdServe(ctx context.Context, args []string) error {
 	configPath := fs.String("config", "", "path to loom.yaml (overrides $LOOM_CONFIG_DIR/loom.yaml)")
 	addr := fs.String("addr", "", "HTTP listen address (e.g. :1925); overrides config")
 	logLevel := fs.String("log-level", "", "log level: debug|info|warn|error")
+	devMode := fs.Bool("dev", false, "run in dev test mode: stubs all external APIs, uses in-memory SQLite")
 	if err := fs.Parse(args); err != nil {
 		return err
+	}
+
+	// Start dev stubs before loading config so we can override storage/keys.
+	var stubs *devmode.Stubs
+	if *devMode {
+		var stopStubs func()
+		stubs, stopStubs = devmode.Start()
+		defer stopStubs()
+		fmt.Println("🧪 DEV TEST MODE ACTIVE — all external APIs are stubbed")
 	}
 
 	cfg, err := config.Load(*configPath)
@@ -50,6 +61,16 @@ func cmdServe(ctx context.Context, args []string) error {
 	}
 	if *logLevel != "" {
 		cfg.Log.Level = *logLevel
+	}
+
+	// In dev mode, force in-memory SQLite and suppress API key requirements.
+	if *devMode {
+		cfg.Storage.Engine = "sqlite"
+		cfg.Storage.SQLite.Path = ":memory:"
+		// Provide placeholder API keys so builders don't fall through to env.
+		if os.Getenv("LOOM_TMDB_API_KEY") == "" {
+			os.Setenv("LOOM_TMDB_API_KEY", "dev-key") //nolint:errcheck
+		}
 	}
 
 	logger, err := logging.New(cfg.Log)
@@ -172,7 +193,7 @@ func cmdServe(ctx context.Context, args []string) error {
 	// Create the shared event bus before server and services that need it.
 	bus := eventbus.NewInProc()
 
-	moviesSvc, metadataSvc, err := buildMoviesService(ctx, cfg, db, logger, bus)
+	moviesSvc, metadataSvc, err := buildMoviesService(ctx, cfg, db, logger, bus, stubs)
 	if err != nil {
 		return fmt.Errorf("init movies: %w", err)
 	}
@@ -222,7 +243,7 @@ func cmdServe(ctx context.Context, args []string) error {
 	wiring.FeatureFlags.Load(ctx)
 
 	// Wire media services (scanner, organizer, series, libraries, etc.)
-	media, err := wireMedia(ctx, cfg, db, &wiring, moviesSvc, auditLogger, logger)
+	media, err := wireMedia(ctx, cfg, db, &wiring, moviesSvc, auditLogger, logger, stubs)
 	if err != nil {
 		return fmt.Errorf("wire media: %w", err)
 	}

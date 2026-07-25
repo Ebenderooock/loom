@@ -1,0 +1,18 @@
+{
+  "data": {
+    "id": 81189,
+    "name": "Breaking Bad",
+    "overview": "A high school chemistry teacher turned methamphetamine manufacturer.",
+    "image": "/banners/graphical/81189-g.jpg",
+    "firstAirDate": "2008-01-20",
+    "status": {
+      "id": 1,
+      "name": "Ended"
+    },
+    "year": "2008",
+    "externalIds": {
+      "imdb": "tt0903747",
+      "tvdb": 81189
+    }
+  }
+}

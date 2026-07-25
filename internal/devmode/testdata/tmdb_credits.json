@@ -1,0 +1,30 @@
+{
+  "id": 550,
+  "cast": [
+    {
+      "id": 819,
+      "name": "Edward Norton",
+      "character": "The Narrator",
+      "profile_path": "/huCqFy6VXhQHfp5nIcjRTFRITsb.jpg",
+      "order": 0,
+      "known_for_department": "Acting"
+    },
+    {
+      "id": 287,
+      "name": "Brad Pitt",
+      "character": "Tyler Durden",
+      "profile_path": "/cckcYc2v0yh1tc9QjRelptcOBko.jpg",
+      "order": 1,
+      "known_for_department": "Acting"
+    }
+  ],
+  "crew": [
+    {
+      "id": 7467,
+      "name": "David Fincher",
+      "job": "Director",
+      "department": "Directing",
+      "profile_path": "/tpEczFclQZeKAiCeKZZ0adRvtfz.jpg"
+    }
+  ]
+}
