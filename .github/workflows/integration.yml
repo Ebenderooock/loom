@@ -1,0 +1,149 @@
+name: integration
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: integration-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ── In-process integration tests ─────────────────────────────────────────
+  # Boots the full Loom server in-process (in-memory SQLite + embedded API
+  # stubs) and exercises the HTTP API end-to-end. No real API keys or network
+  # access required.
+  integration:
+    name: Integration tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "1.26"
+          cache: true
+
+      - run: go mod download
+
+      - name: Run integration tests
+        run: go test -v -tags integration -count=1 -timeout 120s ./internal/integration/...
+        env:
+          CGO_ENABLED: "0"
+
+  # ── Docker regression run ─────────────────────────────────────────────────
+  # Builds the Dockerfile.test image (loom with -dev flag), starts it via
+  # docker-compose.test.yml, waits for the health probe, then runs the
+  # integration suite against the live container. This validates that the
+  # binary itself (not just the in-process wiring) works end-to-end.
+  docker-regression:
+    name: Docker regression
+    runs-on: ubuntu-latest
+    # Only run on pushes to main and on PRs that touch the server, cmd, or
+    # Docker-related files to keep PR feedback fast.
+    if: |
+      github.event_name == 'push' ||
+      contains(github.event.pull_request.labels.*.name, 'regression')
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "1.26"
+          cache: true
+
+      - run: go mod download
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build test image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.test
+          load: true
+          tags: loom-test:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Start Loom in dev mode
+        run: |
+          docker run -d \
+            --name loom-dev \
+            -p 1925:1925 \
+            loom-test:ci
+          # Wait for health probe (up to 30s)
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:1925/api/v1/health > /dev/null 2>&1 || \
+               curl -sf http://localhost:1925/healthz > /dev/null 2>&1; then
+              echo "Loom is healthy after ${i}s"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Loom failed to become healthy"
+          docker logs loom-dev
+          exit 1
+
+      - name: Run integration tests against container
+        run: go test -v -tags integration -count=1 -timeout 120s ./internal/integration/...
+        env:
+          LOOM_TEST_URL: "http://localhost:1925"
+          CGO_ENABLED: "0"
+
+      - name: Dump container logs on failure
+        if: failure()
+        run: docker logs loom-dev
+
+      - name: Stop container
+        if: always()
+        run: docker rm -f loom-dev || true
+
+  # ── Coverage report ───────────────────────────────────────────────────────
+  # Combines unit + integration coverage into a single report uploaded as an
+  # artifact. Runs on every push to main so coverage trends are visible.
+  coverage:
+    name: Coverage report
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [integration]
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "1.26"
+          cache: true
+
+      - run: go mod download
+
+      - name: Unit test coverage
+        run: go test -count=1 -coverprofile=unit.out ./...
+        env:
+          CGO_ENABLED: "0"
+
+      - name: Integration test coverage
+        run: go test -tags integration -count=1 -coverprofile=integration.out ./internal/integration/...
+        env:
+          CGO_ENABLED: "0"
+
+      - name: Merge coverage profiles
+        run: |
+          # Strip the mode line from integration.out and append to unit.out
+          grep -v "^mode:" integration.out >> unit.out || true
+          mv unit.out coverage.out
+
+      - name: Print total coverage
+        run: go tool cover -func=coverage.out | grep total:
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: coverage-combined
+          path: coverage.out
+          retention-days: 30
