@@ -17,7 +17,7 @@ LDFLAGS := -s -w \
 # mixed dependency graphs. It is safe to leave enabled by default.
 TAGS ?= nosqlite
 
-.PHONY: all build test lint fmt vet tidy run dev clean docker sync-definitions help
+.PHONY: all build test test-integration test-all coverage lint fmt vet tidy run dev clean docker sync-definitions help
 
 all: lint test build ## Lint, test, and build
 
@@ -34,6 +34,16 @@ web-build: ## Build the React frontend into web/dist
 
 test: ## Run unit tests with race detector and coverage
 	$(GO) test -race -count=1 -tags '$(TAGS)' -coverprofile=coverage.out ./...
+
+test-integration: ## Run integration tests
+	$(GO) test -v -tags integration ./internal/integration/...
+
+test-all: ## Run unit and integration tests
+	$(GO) test ./... && $(GO) test -v -tags integration ./internal/integration/...
+
+coverage: ## Generate coverage report
+	$(GO) test -coverprofile=coverage.out ./...
+	$(GO) tool cover -html=coverage.out -o coverage.html
 
 test-short: ## Run only short tests
 	$(GO) test -short -count=1 -tags '$(TAGS)' ./...
