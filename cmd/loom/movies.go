@@ -35,7 +35,7 @@ var defaultTVDBKey string
 // buildMoviesService constructs the movies.Service backed by the storage
 // engine in cfg and returns the wired service together with the metadata
 // service it uses (shared with the request bots for catalog search).
-func buildMoviesService(ctx context.Context, cfg *config.Config, db storage.DB, logger *slog.Logger, bus eventbus.Bus, stubs *devmode.Stubs) (movies.Service, *metadata.Service, error) {
+func buildMoviesService(ctx context.Context, _ *config.Config, db storage.DB, logger *slog.Logger, bus eventbus.Bus, stubs *devmode.Stubs) (movies.Service, *metadata.Service, error) {
 	repo := movies.NewRepository(db.DB())
 
 	// Build metadata service with TMDB provider
@@ -63,7 +63,7 @@ func buildMoviesService(ctx context.Context, cfg *config.Config, db storage.DB, 
 }
 
 // buildScanner constructs the library scanner backed by the movies service.
-func buildScanner(moviesSvc movies.Service, cfg *config.Config, auditLogger *auditlog.Logger, logger *slog.Logger, stubs *devmode.Stubs) *scanner.Scanner {
+func buildScanner(moviesSvc movies.Service, _ *config.Config, auditLogger *auditlog.Logger, logger *slog.Logger, stubs *devmode.Stubs) *scanner.Scanner {
 	apiKey := os.Getenv("LOOM_TMDB_API_KEY")
 	if apiKey == "" {
 		apiKey = defaultTMDBKey

@@ -159,8 +159,9 @@ func TestStopClosesServers(t *testing.T) {
 	client := &http.Client{Timeout: 1 * time.Second}
 	ctx := context.Background()
 	req, _ := http.NewRequestWithContext(ctx, "GET", tmdbURL+"/movie/1", nil)
-	_, err := client.Do(req)
+	resp, err := client.Do(req)
 	if err == nil {
+		resp.Body.Close()
 		t.Error("expected error after stop, got nil")
 	}
 }

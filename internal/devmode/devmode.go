@@ -95,11 +95,11 @@ func newTMDbServer() *httptest.Server {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		_ = json.NewEncoder(w).Encode(map[string]interface{}{
-			"id":                    1,
-			"name":                  "Dev Person",
-			"biography":             "",
-			"profile_path":          "",
-			"known_for_department":  "Acting",
+			"id":                   1,
+			"name":                 "Dev Person",
+			"biography":            "",
+			"profile_path":         "",
+			"known_for_department": "Acting",
 		})
 	})
 
