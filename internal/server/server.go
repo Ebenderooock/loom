@@ -792,6 +792,10 @@ func (s *Server) newMux() http.Handler {
 	r.Get("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
+	// Backward-compatible API health alias used by some deploy probes.
+	r.Get("/api/v1/health", func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	})
 	r.Get("/livez", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "alive"})
 	})
@@ -1329,6 +1333,14 @@ func (s *Server) Start() error {
 		return err
 	}
 	return nil
+}
+
+// Handler exposes the fully wired HTTP handler for in-process integration tests.
+func (s *Server) Handler() http.Handler {
+	if s == nil || s.httpSrv == nil {
+		return nil
+	}
+	return s.httpSrv.Handler
 }
 
 // Shutdown stops the listener. The DB and Telemetry are owned by the
