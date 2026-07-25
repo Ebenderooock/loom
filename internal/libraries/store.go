@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -202,6 +203,29 @@ func (s *Store) UpsertFile(ctx context.Context, f *LibraryFile) error {
 	return err
 }
 
+// StaleFilePaths returns the paths of library files that were not touched since the given time.
+// Call this before DeleteStaleFiles to capture paths for reconciliation.
+func (s *Store) StaleFilePaths(ctx context.Context, libraryID string, since time.Time) ([]string, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT path FROM library_files
+		WHERE library_id = ? AND (last_scanned IS NULL OR last_scanned < ?)`,
+		libraryID, since)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	var paths []string
+	for rows.Next() {
+		var p string
+		if err := rows.Scan(&p); err != nil {
+			return nil, err
+		}
+		paths = append(paths, p)
+	}
+	return paths, rows.Err()
+}
+
 // DeleteStaleFiles removes files for a library that were not scanned since the given time.
 func (s *Store) DeleteStaleFiles(ctx context.Context, libraryID string, since time.Time) (int64, error) {
 	res, err := s.db.ExecContext(ctx, `
@@ -211,6 +235,108 @@ func (s *Store) DeleteStaleFiles(ctx context.Context, libraryID string, since ti
 		return 0, err
 	}
 	return res.RowsAffected()
+}
+
+// ReconcileRemovedPaths updates movie and episode state for paths that were
+// removed from disk (i.e. no longer present in library_files).
+//
+// For movies: soft-deletes movie_files rows and sets the movie status to
+// "missing" when no valid file remains.
+// For episodes: deletes episode_files rows and sets has_file=false when no
+// valid file remains for that episode.
+//
+// The operation is idempotent — repeated calls with the same paths are safe.
+func (s *Store) ReconcileRemovedPaths(ctx context.Context, paths []string) error {
+	if len(paths) == 0 {
+		return nil
+	}
+
+	// Build (?,?,…) placeholder for IN clauses.
+	ph := strings.Repeat("?,", len(paths))
+	ph = "(" + ph[:len(ph)-1] + ")"
+	args := make([]any, len(paths))
+	for i, p := range paths {
+		args[i] = p
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin reconcile tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	now := time.Now().UTC()
+
+	// 1. Soft-delete movie_files for the removed paths.
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE movie_files SET deleted_at = ?, updated_at = ? WHERE file_path IN `+ph+` AND deleted_at IS NULL`,
+		append([]any{now, now}, args...)...); err != nil {
+		return fmt.Errorf("soft-delete movie_files: %w", err)
+	}
+
+	// 2. Set movies to "missing" where no valid file remains after the deletion
+	//    above, but only for movies that were associated with one of the removed paths.
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE movies SET status = 'missing', updated_at = ?
+		 WHERE deleted_at IS NULL
+		   AND id IN (SELECT movie_id FROM movie_files WHERE file_path IN `+ph+`)
+		   AND NOT EXISTS (
+		       SELECT 1 FROM movie_files mf
+		       WHERE mf.movie_id = movies.id AND mf.deleted_at IS NULL
+		   )`,
+		append([]any{now}, args...)...); err != nil {
+		return fmt.Errorf("update movie status: %w", err)
+	}
+
+	// 3. Capture affected episode IDs before deleting episode_files, so we
+	//    can reset has_file on episodes that now have zero remaining files.
+	epRows, err := tx.QueryContext(ctx,
+		`SELECT DISTINCT episode_id FROM episode_files WHERE file_path IN `+ph,
+		args...)
+	if err != nil {
+		return fmt.Errorf("query affected episodes: %w", err)
+	}
+	var affectedEpisodeIDs []string
+	for epRows.Next() {
+		var id string
+		if scanErr := epRows.Scan(&id); scanErr != nil {
+			_ = epRows.Close()
+			return fmt.Errorf("scan episode id: %w", scanErr)
+		}
+		affectedEpisodeIDs = append(affectedEpisodeIDs, id)
+	}
+	_ = epRows.Close()
+	if err := epRows.Err(); err != nil {
+		return fmt.Errorf("iterate affected episodes: %w", err)
+	}
+
+	// 4. Delete episode_files for the removed paths.
+	if _, err := tx.ExecContext(ctx,
+		`DELETE FROM episode_files WHERE file_path IN `+ph,
+		args...); err != nil {
+		return fmt.Errorf("delete episode_files: %w", err)
+	}
+
+	// 5. Reset has_file=false for episodes with no remaining files.
+	if len(affectedEpisodeIDs) > 0 {
+		epPH := strings.Repeat("?,", len(affectedEpisodeIDs))
+		epPH = "(" + epPH[:len(epPH)-1] + ")"
+		epArgs := make([]any, len(affectedEpisodeIDs))
+		for i, id := range affectedEpisodeIDs {
+			epArgs[i] = id
+		}
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE episodes SET has_file = false, updated_at = ?
+			 WHERE id IN `+epPH+`
+			   AND NOT EXISTS (
+			       SELECT 1 FROM episode_files ef WHERE ef.episode_id = episodes.id
+			   )`,
+			append([]any{now.Format(time.RFC3339)}, epArgs...)...); err != nil {
+			return fmt.Errorf("reset episode has_file: %w", err)
+		}
+	}
+
+	return tx.Commit()
 }
 
 // ShouldUnmonitorOnDelete returns true if the library has unmonitor-on-delete enabled.

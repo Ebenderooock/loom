@@ -90,11 +90,24 @@ func (sc *Scanner) ScanLibrary(ctx context.Context, lib *Library) error {
 	}
 
 	// Clean up files that no longer exist on disk.
+	stalePaths, staleErr := sc.store.StaleFilePaths(ctx, lib.ID, scanStart)
+	if staleErr != nil {
+		sc.logger.Error("fetch stale file paths", "library", lib.ID, "error", staleErr)
+	}
+
 	removed, err := sc.store.DeleteStaleFiles(ctx, lib.ID, scanStart)
 	if err != nil {
 		sc.logger.Error("delete stale files", "library", lib.ID, "error", err)
 	} else if removed > 0 {
 		sc.logger.Info("removed stale files", "library", lib.ID, "count", removed)
+	}
+
+	if len(stalePaths) > 0 {
+		if err := sc.store.ReconcileRemovedPaths(ctx, stalePaths); err != nil {
+			sc.logger.Error("reconcile removed paths", "library", lib.ID, "error", err)
+		} else {
+			sc.logger.Info("reconciled removed paths", "library", lib.ID, "count", len(stalePaths))
+		}
 	}
 
 	sc.logger.Info("scan complete", "id", lib.ID, "elapsed", time.Since(scanStart).String())
