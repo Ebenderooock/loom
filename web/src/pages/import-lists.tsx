@@ -15,6 +15,7 @@ import {
   SYNC_INTERVALS,
   type ImportList,
   type CreateImportListRequest,
+  type UpdateImportListRequest,
   type ListType,
   type MediaType,
   type ImportListExclusion,
@@ -22,6 +23,7 @@ import {
 import { usePageHeader } from "@/hooks/use-page-header";
 import { useLibraries } from "@/lib/libraries-api";
 import { useAudioQualityProfiles } from "@/lib/music-api";
+import { useQualityProfiles } from "@/lib/quality-profiles-api";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -126,6 +128,8 @@ function ListRow({
   const deleteMut = useDeleteImportList();
   const syncMut = useSyncImportList();
   const updateMut = useUpdateImportList();
+  const isVideoList =
+    list.media_type === "movie" || list.media_type === "series";
 
   const typeMeta = LIST_TYPES.find((t) => t.value === list.list_type);
 
@@ -221,7 +225,88 @@ function ListRow({
         </Button>
       </div>
 
-      {expanded && <ListItemsPanel listId={list.id} />}
+      {expanded && (
+        <>
+          {isVideoList && (
+            <ExistingVideoListFields
+              list={list}
+              onUpdate={(body) => updateMut.mutate({ id: list.id, body })}
+            />
+          )}
+          <ListItemsPanel listId={list.id} />
+        </>
+      )}
+    </div>
+  );
+}
+
+function ExistingVideoListFields({
+  list,
+  onUpdate,
+}: {
+  list: ImportList;
+  onUpdate: (body: UpdateImportListRequest) => void;
+}) {
+  const { data: libraries } = useLibraries();
+  const { data: profiles } = useQualityProfiles();
+  const videoLibraries = (libraries ?? []).filter(
+    (library) => library.media_type === list.media_type,
+  );
+
+  return (
+    <div className="grid gap-3 border-t border-border/60 px-8 py-3 md:grid-cols-2">
+      <div className="space-y-2">
+        <Label htmlFor={`list-library-${list.id}`}>
+          {list.media_type === "series" ? "Series" : "Movie"} Library
+        </Label>
+        <Select
+          value={list.library_path ?? ""}
+          onValueChange={(libraryPath) =>
+            onUpdate({ library_path: libraryPath })
+          }
+        >
+          <SelectTrigger id={`list-library-${list.id}`}>
+            <SelectValue placeholder="Select a library…" />
+          </SelectTrigger>
+          <SelectContent>
+            {videoLibraries.length === 0 ? (
+              <SelectItem value="__none" disabled>
+                No {list.media_type === "series" ? "series" : "movie"} libraries
+                configured
+              </SelectItem>
+            ) : (
+              videoLibraries.map((library) => (
+                <SelectItem key={library.id} value={library.id}>
+                  {library.name}
+                </SelectItem>
+              ))
+            )}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor={`list-quality-profile-${list.id}`}>
+          Quality Profile
+        </Label>
+        <Select
+          value={list.quality_profile_id ?? ""}
+          onValueChange={(profileId) =>
+            onUpdate({ quality_profile_id: profileId })
+          }
+        >
+          <SelectTrigger id={`list-quality-profile-${list.id}`}>
+            <SelectValue placeholder="Select a profile…" />
+          </SelectTrigger>
+          <SelectContent>
+            {(profiles ?? []).map((profile) => (
+              <SelectItem key={profile.id} value={profile.id}>
+                {profile.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
     </div>
   );
 }
@@ -298,6 +383,71 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 // ---- Add List Form ----
+
+function VideoListFields({
+  form,
+  setForm,
+}: {
+  form: CreateImportListRequest;
+  setForm: (f: CreateImportListRequest) => void;
+}) {
+  const { data: libraries } = useLibraries();
+  const { data: profiles } = useQualityProfiles();
+  const videoLibraries = (libraries ?? []).filter(
+    (l) => l.media_type === form.media_type,
+  );
+
+  return (
+    <>
+      <div className="space-y-2">
+        <Label htmlFor="add-video-library">
+          {form.media_type === "series" ? "Series" : "Movie"} Library
+        </Label>
+        <Select
+          value={form.library_path ?? ""}
+          onValueChange={(val) => setForm({ ...form, library_path: val })}
+        >
+          <SelectTrigger id="add-video-library">
+            <SelectValue placeholder="Select a library…" />
+          </SelectTrigger>
+          <SelectContent>
+            {videoLibraries.length === 0 ? (
+              <SelectItem value="__none" disabled>
+                No {form.media_type === "series" ? "series" : "movie"} libraries
+                configured
+              </SelectItem>
+            ) : (
+              videoLibraries.map((l) => (
+                <SelectItem key={l.id} value={l.id}>
+                  {l.name}
+                </SelectItem>
+              ))
+            )}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="add-video-profile">Quality Profile</Label>
+        <Select
+          value={form.quality_profile_id ?? ""}
+          onValueChange={(val) => setForm({ ...form, quality_profile_id: val })}
+        >
+          <SelectTrigger id="add-video-profile">
+            <SelectValue placeholder="Select a profile…" />
+          </SelectTrigger>
+          <SelectContent>
+            {(profiles ?? []).map((p) => (
+              <SelectItem key={p.id} value={p.id}>
+                {p.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+    </>
+  );
+}
 
 function MusicListFields({
   form,
@@ -498,6 +648,10 @@ function AddListForm({ onDone }: { onDone: () => void }) {
                 </SelectContent>
               </Select>
             </div>
+
+            {(form.media_type === "movie" || form.media_type === "series") && (
+              <VideoListFields form={form} setForm={setForm} />
+            )}
 
             {form.media_type === "music" && (
               <MusicListFields form={form} setForm={setForm} />
