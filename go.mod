@@ -2,6 +2,7 @@ module github.com/ebenderooock/loom
 
 go 1.26
 
+toolchain go1.26.6
 require (
 	github.com/PuerkitoBio/goquery v1.12.0
 	github.com/antchfx/htmlquery v1.3.6
