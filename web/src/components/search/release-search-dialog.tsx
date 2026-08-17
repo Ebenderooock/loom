@@ -329,10 +329,7 @@ function IndexerStatusGrid({
             </span>
           )}
           {skipped > 0 && (
-            <span className="text-muted-foreground">
-              {" "}
-              · {skipped} skipped
-            </span>
+            <span className="text-muted-foreground"> · {skipped} skipped</span>
           )}
         </span>
       </div>
