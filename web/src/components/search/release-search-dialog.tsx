@@ -29,6 +29,7 @@ import {
   CheckCircle2,
   XCircle,
   Clock,
+  MinusCircle,
 } from "lucide-react";
 import { cn, formatBytes } from "@/lib/utils";
 import { toast } from "sonner";
@@ -299,6 +300,7 @@ function IndexerStatusGrid({
   const failed = entries.filter(
     (i) => i.status === "error" || i.status === "timeout",
   ).length;
+  const skipped = entries.filter((i) => i.status === "skipped").length;
   const totalResults = entries.reduce((sum, i) => sum + i.resultCount, 0);
 
   return (
@@ -326,6 +328,9 @@ function IndexerStatusGrid({
               · {failed} failed
             </span>
           )}
+          {skipped > 0 && (
+            <span className="text-muted-foreground"> · {skipped} skipped</span>
+          )}
         </span>
       </div>
       <div className="flex flex-wrap gap-1.5 px-3 pb-2">
@@ -343,6 +348,8 @@ function IndexerStatusGrid({
                 "bg-red-500/10 text-red-700 dark:text-red-300",
               ix.status === "timeout" &&
                 "bg-yellow-500/10 text-yellow-700 dark:text-yellow-300",
+              ix.status === "skipped" &&
+                "bg-muted text-muted-foreground opacity-60",
             )}
             title={ix.error ? `${ix.name}: ${ix.error}` : ix.name}
           >
@@ -353,6 +360,7 @@ function IndexerStatusGrid({
             {ix.status === "done" && <CheckCircle2 className="h-3 w-3" />}
             {ix.status === "error" && <XCircle className="h-3 w-3" />}
             {ix.status === "timeout" && <AlertTriangle className="h-3 w-3" />}
+            {ix.status === "skipped" && <MinusCircle className="h-3 w-3" />}
             <span className="max-w-[8rem] truncate">{ix.name}</span>
             {ix.status === "done" && ix.resultCount > 0 && (
               <span className="tabular-nums opacity-70">{ix.resultCount}</span>
@@ -740,7 +748,11 @@ export function ReleaseSearchDialog({
             });
           },
           onIndexerError: (id, name, error, status, elapsedMs) => {
-            setErrors((prev) => ({ ...prev, [name]: error }));
+            // Skipped indexers (e.g. wrong category) are not real errors —
+            // don't surface them in the error banner.
+            if (status !== "skipped") {
+              setErrors((prev) => ({ ...prev, [name]: error }));
+            }
             setIndexerStates((prev) => {
               const next = new Map(prev);
               next.set(id, {
@@ -748,7 +760,9 @@ export function ReleaseSearchDialog({
                 name: next.get(id)?.name ?? name,
                 status: (status === "timeout"
                   ? "timeout"
-                  : "error") as IndexerStatus,
+                  : status === "skipped"
+                    ? "skipped"
+                    : "error") as IndexerStatus,
                 resultCount: 0,
                 elapsedMs,
                 error,

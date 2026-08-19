@@ -451,7 +451,8 @@ export type IndexerStatus =
   | "searching"
   | "done"
   | "error"
-  | "timeout";
+  | "timeout"
+  | "skipped";
 
 export interface IndexerStreamState {
   id: string;
