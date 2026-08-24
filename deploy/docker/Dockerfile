@@ -11,7 +11,7 @@ COPY web/ ./
 RUN pnpm run build
 
 # ---------- backend build ----------
-FROM golang:1.26 AS build
+FROM golang:1.27 AS build
 WORKDIR /src
 RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates && rm -rf /var/lib/apt/lists/*
 COPY go.mod go.sum* ./
