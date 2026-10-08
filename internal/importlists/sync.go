@@ -460,31 +460,52 @@ func (m *SyncManager) processPendingItems(ctx context.Context, l *ImportList) {
 }
 
 // resolveLibraryID converts a library path (stored on an ImportList) to the
-// library row's UUID. It iterates over all configured libraries and matches by
-// path. If the path is already a known ID it is returned as-is. Returns an
-// error when no matching library is found.
-func (m *SyncManager) resolveLibraryID(ctx context.Context, libraryPath string) (string, error) {
-	if m.librarySvc == nil || libraryPath == "" {
+// library row's UUID. When no library is selected, it uses the sole library
+// configured for the media type.
+func (m *SyncManager) resolveLibraryID(ctx context.Context, libraryPath, mediaType string) (string, error) {
+	if m.librarySvc == nil {
+		if libraryPath == "" {
+			return "", fmt.Errorf("import-lists: library store not configured")
+		}
 		return libraryPath, nil
 	}
 	libs, err := m.librarySvc.List(ctx)
 	if err != nil {
 		return "", fmt.Errorf("import-lists: list libraries: %w", err)
 	}
-	// Check direct path match first, then fall back to ID match (in case the
-	// import list was already configured with the library ID).
-	for _, lib := range libs {
-		if strings.EqualFold(strings.TrimRight(lib.Path, "/"), strings.TrimRight(libraryPath, "/")) {
-			return lib.ID, nil
+	if libraryPath != "" {
+		// Check direct path match first, then fall back to ID match (in case the
+		// import list was already configured with the library ID).
+		for _, lib := range libs {
+			if strings.EqualFold(strings.TrimRight(lib.Path, "/"), strings.TrimRight(libraryPath, "/")) {
+				return lib.ID, nil
+			}
+		}
+		for _, lib := range libs {
+			if lib.ID == libraryPath {
+				return lib.ID, nil
+			}
 		}
 	}
+	if libraryPath != "" {
+		// No match — return what we have and let the downstream service report the error.
+		return libraryPath, nil
+	}
+
+	var matching []libraries.Library
 	for _, lib := range libs {
-		if lib.ID == libraryPath {
-			return lib.ID, nil
+		if lib.MediaType == mediaType {
+			matching = append(matching, lib)
 		}
 	}
-	// No match — return what we have and let the downstream service report the error.
-	return libraryPath, nil
+	switch len(matching) {
+	case 1:
+		return matching[0].ID, nil
+	case 0:
+		return "", fmt.Errorf("import-lists: no %s library configured", mediaType)
+	default:
+		return "", fmt.Errorf("import-lists: multiple %s libraries configured; select one in Import Lists", mediaType)
+	}
 }
 
 // addMovieToLibrary adds a movie to the library via the movies service.
@@ -507,7 +528,7 @@ func (m *SyncManager) addMovieToLibrary(ctx context.Context, l *ImportList, item
 		}
 	}
 
-	libraryID, err := m.resolveLibraryID(ctx, l.LibraryPath)
+	libraryID, err := m.resolveLibraryID(ctx, l.LibraryPath, string(MediaTypeMovie))
 	if err != nil {
 		return err
 	}
@@ -560,7 +581,7 @@ func (m *SyncManager) addSeriesToLibrary(ctx context.Context, l *ImportList, ite
 		return fmt.Errorf("series service not configured")
 	}
 
-	libraryID, err := m.resolveLibraryID(ctx, l.LibraryPath)
+	libraryID, err := m.resolveLibraryID(ctx, l.LibraryPath, string(MediaTypeSeries))
 	if err != nil {
 		return err
 	}
@@ -599,7 +620,7 @@ func (m *SyncManager) addArtistToLibrary(ctx context.Context, l *ImportList, ite
 		monitoring = string(music.MonitoringUnmonitored)
 	}
 
-	libraryID, err := m.resolveLibraryID(ctx, l.LibraryPath)
+	libraryID, err := m.resolveLibraryID(ctx, l.LibraryPath, string(MediaTypeMusic))
 	if err != nil {
 		return err
 	}
