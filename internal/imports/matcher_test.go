@@ -264,6 +264,26 @@ func TestFuzzyMatchMovie_EmptyCandidates(t *testing.T) {
 	}
 }
 
+func TestFuzzyMatchMovie_ConflictingYear(t *testing.T) {
+	candidates := make([]*movies.Movie, 0, 2)
+	candidates = append(candidates, &movies.Movie{ID: "remake", Title: "Street Fighter", Year: 2026})
+	for _, tc := range []struct {
+		year int
+		want bool
+	}{
+		{1994, false}, {2024, false}, {2025, true}, {2026, true}, {2027, true}, {2028, false}, {0, true},
+	} {
+		got := fuzzyMatchMovie(candidates, parsedRelease{Title: "Street Fighter", Year: tc.year})
+		if (got != nil) != tc.want {
+			t.Fatalf("year %d: want match %v, got %+v", tc.year, tc.want, got)
+		}
+	}
+	candidates = append(candidates, &movies.Movie{ID: "original", Title: "Street Fighter", Year: 1994})
+	if got := fuzzyMatchMovie(candidates, parsedRelease{Title: "Street Fighter", Year: 1994}); got == nil || got.ID != "original" {
+		t.Fatalf("should match original rather than remake: %+v", got)
+	}
+}
+
 func TestFuzzyMatchMovie_ExactMatch(t *testing.T) {
 	t.Parallel()
 	candidates := []*movies.Movie{

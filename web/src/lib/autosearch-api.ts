@@ -4,6 +4,7 @@ export interface AutoSearchRequest {
   media_type: "movie" | "series";
   media_id: string;
   title: string;
+  year?: number;
   quality_profile_id: string;
   imdb_id?: string;
   tmdb_id?: string;

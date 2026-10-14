@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Updated vulnerable Go dependencies and pinned CI to Go 1.26.9 to clear
+  advisories reported by `govulncheck`.
+- Movie searches now send the library year and resolve identity from library metadata
+  server-side, preventing older same-title releases from bypassing year validation.
+  Movie imports reject conflicting release years even when a workflow links the
+  download to a library item, while retaining the existing one-year tolerance.
+
 ## [0.1.1] - 2026-06-09
 
 ### Added
