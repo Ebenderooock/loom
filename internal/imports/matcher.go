@@ -381,6 +381,9 @@ func fuzzyMatchMovie(candidates []*movies.Movie, p parsedRelease) *movies.Movie 
 	bestScore := -1
 
 	for _, m := range candidates {
+		if !movieYearsMatch(p.Year, m.Year) {
+			continue
+		}
 		score := titleSimilarity(m.Title, p.Title)
 		if p.Year > 0 && m.Year == p.Year {
 			score += 50
@@ -396,6 +399,11 @@ func fuzzyMatchMovie(candidates []*movies.Movie, p parsedRelease) *movies.Movie 
 		return nil
 	}
 	return best
+}
+
+func movieYearsMatch(releaseYear, movieYear int) bool {
+	return releaseYear <= 0 || movieYear <= 0 ||
+		(releaseYear >= movieYear-1 && releaseYear <= movieYear+1)
 }
 
 // fuzzyMatchSeries picks the best series match by title similarity.

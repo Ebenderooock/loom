@@ -526,6 +526,10 @@ func (p *ImportPipeline) importSingleFile(ctx context.Context, ev *downloads.Dow
 		return p.recordFailure(ctx, "", "", ev.Title, mediaFile, fmt.Errorf("no match found for %q", ev.Title))
 	}
 
+	if err := verifyMovieImportYear(match, ev.Title, mediaFile); err != nil {
+		return p.recordFailure(ctx, string(match.MediaType), match.MediaID, ev.Title, mediaFile, err)
+	}
+
 	// Build destination path with proper naming
 	destFile := filepath.Join(match.DestPath, buildDestFilename(match, mediaFile))
 
@@ -711,6 +715,20 @@ func (p *ImportPipeline) shouldPreferGrabMatch(ctx context.Context, ev *download
 		return false
 	}
 	return len(items) == 1
+}
+
+func verifyMovieImportYear(match *MatchResult, releaseTitle, mediaFile string) error {
+	if match.MediaType != MediaTypeMovie || match.Year <= 0 {
+		return nil
+	}
+	for _, name := range []string{releaseTitle, filepath.Base(mediaFile), filepath.Base(filepath.Dir(mediaFile))} {
+		year := parser.Parse(name).Year
+		if !movieYearsMatch(year, match.Year) {
+			return fmt.Errorf("import rejected: release year %d in %q does not match %s (%d)",
+				year, name, match.Title, match.Year)
+		}
+	}
+	return nil
 }
 
 // matchByGrab attempts to match using workflow linkage data recorded

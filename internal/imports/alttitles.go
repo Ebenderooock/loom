@@ -49,6 +49,9 @@ func (m *AltTitleMatcher) MatchMovieByAltTitle(ctx context.Context, title string
 		if err != nil {
 			continue
 		}
+		if !movieYearsMatch(year, movie.Year) {
+			continue
+		}
 
 		score := 50 // base score for alt-title match
 		if year > 0 && movie.Year == year {
