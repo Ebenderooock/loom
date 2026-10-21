@@ -69,6 +69,7 @@ type sonarrEpisode struct {
 	Title         string `json:"title"`
 	Overview      string `json:"overview"`
 	AirDate       string `json:"airDate"`
+	AirDateUTC    string `json:"airDateUtc,omitempty"`
 	Monitored     bool   `json:"monitored"`
 	HasFile       bool   `json:"hasFile"`
 }

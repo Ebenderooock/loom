@@ -10,7 +10,8 @@ export interface CalendarEvent {
   title: string;
   type: "movie" | "episode" | "album";
   date: string;
-  status: "missing" | "downloaded";
+  airDateUtc?: string;
+  status: "missing" | "downloaded" | "unaired";
   year?: number;
   seriesTitle?: string;
   season?: number;
@@ -37,7 +38,11 @@ export async function fetchCalendarEvents(
   end: string,
   signal?: AbortSignal,
 ): Promise<CalendarEvent[]> {
-  const params = new URLSearchParams({ start, end });
+  const params = new URLSearchParams({
+    start,
+    end,
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+  });
   const data = await request<CalendarEvent[]>(
     `/api/v1/calendar?${params.toString()}`,
     signal,
@@ -49,7 +54,12 @@ export async function fetchCalendarEvents(
 
 export function useCalendarEvents(start: string, end: string) {
   return useQuery({
-    queryKey: ["calendar", start, end],
+    queryKey: [
+      "calendar",
+      start,
+      end,
+      Intl.DateTimeFormat().resolvedOptions().timeZone,
+    ],
     queryFn: ({ signal }) => fetchCalendarEvents(start, end, signal),
     enabled: !!start && !!end,
   });

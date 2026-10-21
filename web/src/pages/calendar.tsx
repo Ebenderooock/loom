@@ -6,6 +6,12 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useSetPageHeader } from "@/hooks/use-page-header";
 import { useCalendarEvents, type CalendarEvent } from "@/lib/calendar-api";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import {
+  episodeReleaseDay,
+  formatEpisodeAirDate,
+  hasEpisodeAired,
+} from "@/lib/episode-airing";
+import { useAiringNow } from "@/hooks/use-airing-now";
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
@@ -43,6 +49,7 @@ export function CalendarPage() {
     [year, month],
   );
   const { data: events = [], isLoading } = useCalendarEvents(start, end);
+  const airingNow = useAiringNow(events);
 
   const daysInMonth = getDaysInMonth(year, month);
   const startOffset = getStartDayOffset(year, month);
@@ -51,8 +58,12 @@ export function CalendarPage() {
   const eventsByDate = useMemo(() => {
     const map: Record<string, CalendarEvent[]> = {};
     for (const ev of events) {
-      if (!map[ev.date]) map[ev.date] = [];
-      map[ev.date]!.push(ev);
+      const day = episodeReleaseDay({
+        airDate: ev.date,
+        airDateUtc: ev.airDateUtc,
+      });
+      if (!map[day]) map[day] = [];
+      map[day]!.push(ev);
     }
     return map;
   }, [events]);
@@ -153,7 +164,7 @@ export function CalendarPage() {
                         </span>
                         <div className="space-y-0.5">
                           {dayEvents.slice(0, 3).map((ev) => (
-                            <EventPill key={ev.id} event={ev} />
+                            <EventPill key={ev.id} event={ev} now={airingNow} />
                           ))}
                           {dayEvents.length > 3 && (
                             <span className="block text-[10px] text-muted-foreground">
@@ -174,10 +185,19 @@ export function CalendarPage() {
   );
 }
 
-function EventPill({ event }: { event: CalendarEvent }) {
+function EventPill({ event, now }: { event: CalendarEvent; now: Date }) {
   const isMovie = event.type === "movie";
   const isAlbum = event.type === "album";
-  const isMissing = event.status === "missing";
+  const isMissing = event.status !== "downloaded";
+  const status =
+    event.type === "episode" && isMissing
+      ? hasEpisodeAired(
+          { airDate: event.date, airDateUtc: event.airDateUtc },
+          now,
+        )
+        ? "missing"
+        : "unaired"
+      : event.status;
 
   const label =
     isMovie || isAlbum
@@ -231,7 +251,7 @@ function EventPill({ event }: { event: CalendarEvent }) {
     <Badge
       variant={isMissing ? "outline" : "default"}
       className={`block w-full truncate px-1 py-0 text-[10px] font-normal ${isMissing ? "border" : ""}${colorMap[colorKey]}`}
-      title={tooltip}
+      title={`${tooltip} — ${status}${event.airDateUtc ? ` — ${formatEpisodeAirDate({ airDateUtc: event.airDateUtc })} (TVmaze)` : ""}`}
     >
       {releaseLabel}
       {label}

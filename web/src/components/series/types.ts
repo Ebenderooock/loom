@@ -58,6 +58,7 @@ export interface Episode {
   title: string;
   overview: string;
   airDate?: string;
+  airDateUtc?: string;
   runtime: number;
   stillPath?: string;
   monitored: boolean;

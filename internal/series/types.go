@@ -95,7 +95,8 @@ type Episode struct {
 	EpisodeNumber int       `json:"episode_number"`
 	Title         string    `json:"title,omitempty"`
 	Overview      string    `json:"overview,omitempty"`
-	AirDate       string    `json:"air_date,omitempty"`
+	AirDate       string    `json:"air_date,omitempty"`     // Original provider date, also used for daily release matching.
+	AirDateUTC    string    `json:"air_date_utc,omitempty"` // Verified airing instant, normalized to UTC RFC3339; empty when unknown.
 	Runtime       int       `json:"runtime,omitempty"`
 	StillPath     string    `json:"still_path,omitempty"`
 	Monitored     bool      `json:"monitored"`
@@ -137,8 +138,8 @@ type EpisodeStats struct {
 	TotalEpisodes      int `json:"totalEpisodes"`
 	DownloadedEpisodes int `json:"downloadedEpisodes"`
 	MonitoredEpisodes  int `json:"monitoredEpisodes"`
-	MissingEpisodes    int `json:"missingEpisodes"` // monitored but not downloaded
-	AiredEpisodes      int `json:"airedEpisodes"`   // episodes with air_date <= today
+	MissingEpisodes    int `json:"missingEpisodes"` // aired, monitored, not downloaded, excluding specials
+	AiredEpisodes      int `json:"airedEpisodes"`   // actual instant passed, or legacy date-only UTC day fallback
 }
 
 // StringSlice is a JSON-marshaled string slice for database storage.

@@ -1,5 +1,12 @@
 import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/fetch";
+import {
+  getEpisodeStatus,
+  getSeasonStats,
+  formatEpisodeAirDate,
+  type EpisodeStatus,
+} from "@/lib/episode-airing";
+import { useAiringNow } from "@/hooks/use-airing-now";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -168,22 +175,6 @@ function PersonCard({
 
 // ─── Episode Status (Sonarr-style) ────────────────────────────────────
 
-type EpisodeStatus =
-  | "downloaded"
-  | "grabbed"
-  | "missing"
-  | "unaired"
-  | "unmonitored";
-
-function getEpisodeStatus(ep: Episode): EpisodeStatus {
-  if (!ep.monitored) return "unmonitored";
-  if (ep.hasFile) return "downloaded";
-  if (ep.grabbed) return "grabbed";
-  const today = new Date().toISOString().slice(0, 10);
-  if (!ep.airDate || ep.airDate > today) return "unaired";
-  return "missing";
-}
-
 const EPISODE_STATUS_STYLE: Record<
   EpisodeStatus,
   { bg: string; label: string; text: string }
@@ -212,64 +203,6 @@ function EpisodeStatusBadge({ status }: { status: EpisodeStatus }) {
       {s.label}
     </span>
   );
-}
-
-function formatAirDate(dateStr: string): string {
-  try {
-    const d = new Date(dateStr + "T00:00:00");
-    return d.toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    });
-  } catch {
-    return dateStr;
-  }
-}
-
-function getSeasonStats(episodes: Episode[]) {
-  let downloaded = 0,
-    grabbed = 0,
-    missing = 0,
-    unaired = 0,
-    unmonitored = 0;
-  const today = new Date().toISOString().slice(0, 10);
-  for (const ep of episodes) {
-    if (!ep.monitored) {
-      unmonitored++;
-      continue;
-    }
-    if (ep.hasFile) {
-      downloaded++;
-      continue;
-    }
-    if (ep.grabbed) {
-      grabbed++;
-      continue;
-    }
-    if (!ep.airDate || ep.airDate > today) {
-      unaired++;
-      continue;
-    }
-    missing++;
-  }
-  const aired = downloaded + grabbed + missing;
-  const percent =
-    aired > 0
-      ? Math.round((downloaded / aired) * 100)
-      : episodes.length > 0
-        ? 100
-        : 0;
-  return {
-    downloaded,
-    grabbed,
-    missing,
-    unaired,
-    unmonitored,
-    aired,
-    total: episodes.length,
-    percent,
-  };
 }
 
 // ─── Season/Episode Accordion ─────────────────────────────────────────
@@ -302,6 +235,7 @@ function SeasonAccordion({
 }) {
   const [open, setOpen] = useState(false);
   const [episodes, setEpisodes] = useState<Episode[]>([]);
+  const airingNow = useAiringNow(episodes);
   const [loading, setLoading] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [autoSearchingEp, setAutoSearchingEp] = useState<number | null>(null);
@@ -413,7 +347,7 @@ function SeasonAccordion({
   };
 
   // Use backend stats initially, switch to computed stats once episodes are loaded
-  const computedStats = loaded ? getSeasonStats(episodes) : null;
+  const computedStats = loaded ? getSeasonStats(episodes, airingNow) : null;
   const stats =
     computedStats ??
     (season.episodeStats
@@ -571,7 +505,7 @@ function SeasonAccordion({
                 {[...episodes]
                   .sort((a, b) => b.episodeNumber - a.episodeNumber)
                   .map((ep) => {
-                    const status = getEpisodeStatus(ep);
+                    const status = getEpisodeStatus(ep, airingNow);
                     return (
                       <div
                         key={ep.id}
@@ -600,7 +534,20 @@ function SeasonAccordion({
 
                         {/* Air date */}
                         <span className="w-28 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
-                          {ep.airDate ? formatAirDate(ep.airDate) : "—"}
+                          <time dateTime={ep.airDateUtc || ep.airDate}>
+                            {formatEpisodeAirDate(ep)}
+                          </time>
+                          {ep.airDateUtc && (
+                            <a
+                              href="https://www.tvmaze.com"
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="ml-1 underline"
+                              aria-label="Airing time source: TVmaze"
+                            >
+                              TVmaze
+                            </a>
+                          )}
                         </span>
 
                         {/* Status badge */}

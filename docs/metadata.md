@@ -2,6 +2,40 @@
 
 The metadata service (`internal/metadata`) provides a unified abstraction layer for movie, series, and episode metadata sourced from external providers (TMDB, TVDB, MusicBrainz).
 
+## Episode airing times and timezones
+
+On series add or refresh, Loom optionally enriches episode dates with actual
+broadcast timestamps from [TVmaze](https://www.tvmaze.com), using its
+[public API](https://www.tvmaze.com/api). No API key is required. Only known TVDB
+(preferred) or IMDb IDs are looked up; Loom does not match shows by title.
+One lookup and one batch episode-list operation are used per series, with a
+15-second total deadline (10 seconds per HTTP request). HTTP errors, including
+rate limiting, are logged and retried on a later refresh; they do not fail the
+primary metadata operation. No episode-by-episode network requests are made.
+
+An episode must agree on season, episode number, original date and normalized
+title, uniquely. Specials, numbering disagreements (including anime), unknown
+airtimes and invalid timestamps are skipped rather than guessed.
+The provider's original `airDate` remains unchanged for daily release matching.
+The separate optional `airDateUtc` is a UTC RFC3339 instant, also exposed on the
+Sonarr-compatible episode response. Refresh preserves previously verified
+instants for unchanged episode identities when enrichment is unavailable.
+Existing libraries gain timestamps on their next series metadata refresh.
+
+Episode dates/times display in the browser's timezone. Availability, missing
+counts and rolling episode searches compare the actual instant when present.
+Calendar requests accept `timezone=<IANA name>` (for example,
+`Pacific/Auckland`), defaulting to UTC for older clients; start/end are inclusive
+local dates, including DST and month-boundary shifts. Invalid zones return 400.
+Without a verified timestamp, the original date stays unshifted and availability
+retains the legacy UTC-day fallback. Movie and album date-only metadata is
+unchanged. Broadcast time is not a guarantee of release-indexer or regional
+streaming availability.
+
+TVmaze data is licensed under
+[CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/); TVmaze attribution
+is displayed alongside enriched episode dates and in calendar tooltips.
+
 ## Architecture
 
 The service implements a three-tier lookup strategy:
