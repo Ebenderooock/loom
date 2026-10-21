@@ -169,7 +169,9 @@ func TestParseSource(t *testing.T) {
 		{"web-rip", "movie.web-rip.mkv", "WebRip"},
 		{"WebDL", "movie.WebDL.mkv", "WebDL"},
 		{"web-dl", "movie.web-dl.mkv", "WebDL"},
-		{"web suffix", "movie.web.mkv", "WebRip"},
+		{"bracketed WebDL", "[GROUP] Movie [WEB-DL 1080p]", "WebDL"},
+		{"bare web is ambiguous", "movie.web.mkv", ""},
+		{"web in title is not a source", "The.Web.Of.Death.1978.1080p.mkv", ""},
 
 		// HDTV
 		{"HDTV", "movie.HDTV.mkv", "HDTV"},
@@ -184,6 +186,15 @@ func TestParseSource(t *testing.T) {
 
 		// Remux
 		{"Remux", "movie.Remux.mkv", "Remux"},
+
+		// Low-quality sources must be identified rather than treated as unknown.
+		{"CAM", "movie.1080p.CAM.mkv", "CAM"},
+		{"CAMRip", "movie.1080p.CAMRip.mkv", "CAM"},
+		{"HDCAM", "movie.1080p.HDCAM.mkv", "CAM"},
+		{"telesync", "movie.1080p.Telesync.mkv", "CAM"},
+		{"telecine", "movie.1080p.Telecine.mkv", "CAM"},
+		{"screener", "movie.1080p.DVDSCR.mkv", "Screener"},
+		{"Screener", "movie.1080p.Screener.mkv", "Screener"},
 
 		// Unknown
 		{"unknown source", "movie.mkv", ""},

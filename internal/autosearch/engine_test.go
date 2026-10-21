@@ -68,6 +68,11 @@ func TestMatchQualityDef(t *testing.T) {
 			wantID:  "bluray-1080-remux",
 		},
 		{
+			name:    "remux marker without a source can use fallback",
+			release: &parser.Release{Source: "Remux", Resolution: 1080, IsRemux: true},
+			wantID:  "bluray-1080-remux",
+		},
+		{
 			name:    "bluray 2160p remux",
 			release: &parser.Release{Source: "BluRay", Resolution: 2160, IsRemux: true},
 			wantID:  "bluray-2160-remux",
@@ -86,6 +91,16 @@ func TestMatchQualityDef(t *testing.T) {
 			name:    "resolution-only fallback (unknown source, 720p)",
 			release: &parser.Release{Source: "", Resolution: 720},
 			wantID:  "hdtv-720",
+		},
+		{
+			name:    "known source without a definition is not relabeled",
+			release: &parser.Release{Source: "CAM", Resolution: 1080},
+			wantNil: true,
+		},
+		{
+			name:    "parsed CAM source is not relabeled as HDTV",
+			release: parser.Parse("Movie.2024.1080p.CAM"),
+			wantNil: true,
 		},
 		{
 			name:    "no match (480p not in definitions)",
@@ -221,29 +236,26 @@ func TestComputeTiebreaker(t *testing.T) {
 
 func TestScoredReleaseCompositeScore(t *testing.T) {
 	t.Run("quality tier dominates", func(t *testing.T) {
-		better := ScoredRelease{QualityTier: 0, FormatScore: 0, TiebreakerScore: 0}
-		worse := ScoredRelease{QualityTier: 5, FormatScore: 100, TiebreakerScore: 100}
-		if better.CompositeScore() <= worse.CompositeScore() {
-			t.Errorf("better quality tier (%f) should beat worse (%f)",
-				better.CompositeScore(), worse.CompositeScore())
+		better := ScoredRelease{QualityTier: 0, FormatScore: 0}
+		worse := ScoredRelease{QualityTier: 5, FormatScore: 1000000, TiebreakerScore: 100}
+		if !betterScoredRelease(better, worse) {
+			t.Error("better quality tier should beat any format or tiebreaker score")
 		}
 	})
 
 	t.Run("format score breaks quality tie", func(t *testing.T) {
 		a := ScoredRelease{QualityTier: 3, FormatScore: 500, TiebreakerScore: 0}
 		b := ScoredRelease{QualityTier: 3, FormatScore: 100, TiebreakerScore: 100}
-		if a.CompositeScore() <= b.CompositeScore() {
-			t.Errorf("higher format score (%f) should beat lower (%f)",
-				a.CompositeScore(), b.CompositeScore())
+		if !betterScoredRelease(a, b) {
+			t.Error("higher format score should beat lower tiebreaker")
 		}
 	})
 
 	t.Run("tiebreaker breaks everything-else tie", func(t *testing.T) {
 		a := ScoredRelease{QualityTier: 3, FormatScore: 100, TiebreakerScore: 80}
 		b := ScoredRelease{QualityTier: 3, FormatScore: 100, TiebreakerScore: 20}
-		if a.CompositeScore() <= b.CompositeScore() {
-			t.Errorf("higher tiebreaker (%f) should beat lower (%f)",
-				a.CompositeScore(), b.CompositeScore())
+		if !betterScoredRelease(a, b) {
+			t.Error("higher tiebreaker should win when quality and format scores tie")
 		}
 	})
 }
@@ -525,17 +537,19 @@ func TestVerifyIdentity_TitleMatch(t *testing.T) {
 			wantReason:   "title_mismatch",
 		},
 		{
-			name:         "id-based skips title check entirely",
+			name:         "ID-based result still needs corroborating identity",
 			reqTitle:     "FROM",
 			parsedTitle:  "Fringe",
 			idBased:      true,
-			wantRejected: false,
+			wantRejected: true,
+			wantReason:   "identity_unverified",
 		},
 		{
-			name:         "empty parsed title skips check",
+			name:         "empty parsed title rejected",
 			reqTitle:     "FROM",
 			parsedTitle:  "",
-			wantRejected: false,
+			wantRejected: true,
+			wantReason:   "unverifiable_title",
 		},
 	}
 	for _, tc := range tests {
@@ -548,6 +562,49 @@ func TestVerifyIdentity_TitleMatch(t *testing.T) {
 			}
 			if !tc.wantRejected && got != "" {
 				t.Errorf("expected pass, got %q", got)
+			}
+		})
+	}
+}
+
+func TestVerifyIdentity_IDBasedCorroboration(t *testing.T) {
+	e := newEngine()
+	tests := []struct {
+		name       string
+		req        SearchRequest
+		parsed     *parser.Release
+		wantReason string
+	}{
+		{
+			name:       "alternate title corroborates ID query",
+			req:        SearchRequest{MediaType: "movie", Title: "Primary", AlternateTitles: []string{"Localized"}, TMDBID: "98765"},
+			parsed:     &parser.Release{Title: "Localized"},
+			wantReason: "",
+		},
+		{
+			name:       "matching embedded IMDb ID corroborates different title",
+			req:        SearchRequest{MediaType: "movie", Title: "Primary", IMDBID: "tt1234567"},
+			parsed:     &parser.Release{Title: "Localized", ImdbID: "tt1234567"},
+			wantReason: "",
+		},
+		{
+			name:       "embedded mismatched ID does not corroborate",
+			req:        SearchRequest{MediaType: "movie", Title: "Primary", IMDBID: "tt1234567"},
+			parsed:     &parser.Release{Title: "Localized", ImdbID: "tt7654321"},
+			wantReason: "identity_unverified",
+		},
+		{
+			name:       "matching embedded TMDB ID corroborates empty title",
+			req:        SearchRequest{MediaType: "movie", TMDBID: "98765"},
+			parsed:     &parser.Release{TmdbID: "98765"},
+			wantReason: "",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := e.verifyIdentity(tc.req, tc.parsed, true)
+			if got != tc.wantReason {
+				t.Errorf("want reason %q, got %q", tc.wantReason, got)
 			}
 		})
 	}
@@ -595,6 +652,18 @@ func TestVerifyIdentity_EpisodeChecks(t *testing.T) {
 			req:        SearchRequest{MediaType: "episode", Title: "FROM", Season: 4, Episode: 1},
 			parsed:     &parser.Release{Title: "FROM", Season: 3, Episode: 1},
 			wantReason: "wrong_season",
+		},
+		{
+			name:       "missing season rejected for season-scoped search",
+			req:        SearchRequest{MediaType: "episode", Title: "FROM", Season: 4, Episode: 1},
+			parsed:     &parser.Release{Title: "FROM", Episode: 1},
+			wantReason: "unverifiable_season",
+		},
+		{
+			name:       "missing season rejected for season pack search",
+			req:        SearchRequest{MediaType: "series", Title: "FROM", Season: 4},
+			parsed:     &parser.Release{Title: "FROM", IsSeasonPack: true},
+			wantReason: "unverifiable_season",
 		},
 		{
 			name:   "season pack for season search passes",
