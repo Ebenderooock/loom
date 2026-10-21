@@ -89,6 +89,27 @@ goroutine profile: total 9
 
 ## Authentication (incoming, Phase 1c)
 
+### TV device pairing
+
+The `/pair` browser page explicitly approves a TV request after sign-in.
+Device requests use JSON POST bodies; device secrets and API keys never
+appear in approval links. All pairing responses use `Cache-Control: no-store`.
+
+| Method | Path | Auth | Response / purpose |
+|---|---|---|---|
+| `POST` | `/api/v1/auth/pairing/start` | none | `201`: device secret, human code, verification path, expiry and polling interval. |
+| `POST` | `/api/v1/auth/pairing/poll` | device secret in JSON | `200`: pending, denied, or a one-time approved API key. |
+| `POST` | `/api/v1/auth/pairing/cancel` | device secret in JSON | `204`: cancel an outstanding request. |
+| `GET` | `/api/v1/auth/pairing/request?code=XXXX-XXXX` | browser session or trusted proxy user | Review device name, code, status and remaining lifetime; no mutation. |
+| `POST` | `/api/v1/auth/pairing/decision` | browser session or trusted proxy user | Explicit approve/deny with JSON and `X-Loom-Pairing: 1`. |
+
+API-key/default identities cannot authorize devices. Pairing is unavailable
+with authentication disabled or setup incomplete. Requests expire after ten
+minutes; poll at most every five seconds. Rate limits return `429` and
+`Retry-After`; expired/consumed requests return `410`. See
+[device pairing](device-pairing.md) for deployment, transport, revocation,
+and single-process/sticky-routing constraints.
+
 The OpenAPI spec defines three security schemes ahead of the handlers:
 
 - `apiKey` — header `X-Api-Key`.
