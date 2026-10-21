@@ -13,6 +13,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   OpenTelemetry, gRPC, Gorilla WebSocket, and Go networking/text dependencies
   (including required transitive updates) to address known vulnerabilities.
 
+### Fixed
+
+- Movie searches now send the library year and resolve identity from library metadata
+  server-side, preventing older same-title releases from bypassing year validation.
+  Movie imports reject conflicting release years even when a workflow links the
+  download to a library item, while retaining the existing one-year tolerance.
+
 ## [0.1.1] - 2026-06-09
 
 ### Added

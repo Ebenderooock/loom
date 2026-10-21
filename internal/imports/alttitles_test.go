@@ -99,6 +99,10 @@ func TestAltTitleMatcher_MatchMovieByAltTitle(t *testing.T) {
 	if got.ID != "movie-123" {
 		t.Fatalf("expected movie-123, got %s", got.ID)
 	}
+	got, err = matcher.MatchMovieByAltTitle(ctx, "Die Hard: With a Vengeance", 2026)
+	if err != nil || got != nil {
+		t.Fatalf("conflicting year should not match alternate title: %+v, %v", got, err)
+	}
 }
 
 func TestAltTitleMatcher_MatchSeriesByAltTitle(t *testing.T) {
