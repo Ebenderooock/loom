@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Security
+
+- Upgrade the Go toolchain to 1.26.10 across CI and container builds, and update
+  OpenTelemetry, gRPC, Gorilla WebSocket, and Go networking/text dependencies
+  (including required transitive updates) to address known vulnerabilities.
+
 ## [0.1.1] - 2026-06-09
 
 ### Added
