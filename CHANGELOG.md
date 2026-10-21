@@ -20,6 +20,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   Movie imports reject conflicting release years even when a workflow links the
   download to a library item, while retaining the existing one-year tolerance.
 
+### Added
+
+- Experimental native Android TV home companion with Loom movie/series
+  catalogs, TV apps, settings, and input switching with OEM fallbacks.
+- Expiring TV pairing with signed-in browser approval, one-time delivery of
+  a dedicated revocable API key, and retained manual API-key setup.
+- Isolated `prelease/<semver>` CI and container publishing, starting with
+  `prelease/0.2.5`, without advancing stable or main image tags.
+
 ## [0.1.1] - 2026-06-09
 
 ### Added

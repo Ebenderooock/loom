@@ -18,6 +18,11 @@ func (s *Service) Mount(r chi.Router) {
 		r.Post("/initialize", s.handleInitialize)
 		r.Post("/login", s.handleLogin)
 		r.Post("/logout", s.handleLogout)
+		r.Post("/pairing/start", s.handlePairingStart)
+		r.Post("/pairing/poll", s.handlePairingPoll)
+		r.Post("/pairing/cancel", s.handlePairingCancel)
+		r.Get("/pairing/request", s.handlePairingRequest)
+		r.Post("/pairing/decision", s.handlePairingDecision)
 		r.Get("/oidc/login", s.handleOIDCLogin)
 		r.Get("/oidc/callback", s.handleOIDCCallback)
 		// Public invite redemption (token holder self-registers).

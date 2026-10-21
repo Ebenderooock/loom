@@ -773,6 +773,7 @@ func (s *Server) newMux() http.Handler {
 	r.Use(s.httpMetrics.Handler)
 
 	r.Use(middleware.RequestID)
+	r.Use(auth.PairingPeer)
 	r.Use(middleware.RealIP)
 	r.Use(s.accessLog)
 	r.Use(s.recoverer)

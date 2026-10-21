@@ -5,6 +5,45 @@ This page covers the supported deployment shapes.
 
 ## Docker
 
+### Prerelease stream
+
+Experimental work lands through PRs into `prelease/0.2.5`, not `main`.
+CI runs on PRs and pushes to `prelease/**`. After a code change is merged,
+the separate prerelease publisher builds Linux amd64 images under:
+
+- `ghcr.io/ebenderooock/loom:prelease-0.2.5` (moving opt-in channel).
+- `ghcr.io/ebenderooock/loom:prelease-0.2.5-<sha>-<run>-<attempt>`
+  (unique build tag for pinning/rollback).
+
+The branch spelling is deliberately `prelease`, matching the channel name.
+Publication can also be retried using **Publish prerelease image → Run
+workflow**, selecting that branch. It only runs on `prelease/<semver>`
+branches. Documentation-only pushes do not publish images.
+
+This workflow never writes `latest`, `main-*`, or stable version tags,
+creates a GitHub release, or changes a deployment. Existing stable/main
+consumers stay on their selected channel; test deployments must explicitly
+opt in. CI results should be checked before deploying a candidate.
+
+Run a **separate** instance with its own database/config directory, port,
+and test media/download locations. Never share a live SQLite database,
+Postgres schema, or writable media/download paths with production; a
+prerelease may migrate data or trigger automation, and switching images
+back does not undo a migration. Back up before promoting any candidate.
+
+```bash
+docker run --rm -p 1926:1925 \
+  -v /opt/loom-prelease/config:/config \
+  ghcr.io/ebenderooock/loom:prelease-0.2.5
+```
+
+The usual release-tag workflow already supports tags such as
+`v0.2.5-pre.1`: these produce GitHub prereleases and versioned images
+without advancing `latest`. Creating/pushing a release tag is a separate,
+explicit maintainer action, not an automatic consequence of this branch.
+
+### Stable images
+
 The published image lives at `ghcr.io/ebenderooock/loom:latest` (and
 `:v<semver>` once tagged releases begin). It is built `FROM
 gcr.io/distroless/static-debian12:nonroot`, runs as the unprivileged
