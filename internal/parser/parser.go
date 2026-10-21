@@ -268,16 +268,19 @@ func extractSource(lower string) string {
 		pattern string
 		name    string
 	}{
-		{`(?:blu[\s\-]?ray|brrip)`, "BluRay"},
-		{`(?:webdl|web[\s\-]?dl)`, "WebDL"}, // Must come before WebRip (more specific)
-		{`(?:webrip|web[\s\-]?rip|web)`, "WebRip"},
-		{`(?:hdtv|hd[\s\-]?tv)`, "HDTV"},
-		{`(?:dvdrip|dvd[\s\-]?rip)`, "DVDRip"},
-		{`(?:dvd)`, "DVD"},
-		{`(?:bdrip|bd[\s\-]?rip)`, "BluRay"},
-		{`(?:uhd)`, "UHD"},
-		{`(?:remux)`, "Remux"},
-		{`(?:tvrip|tv[\s\-]?rip)`, "TVRip"},
+		{`(?:^|[^a-z0-9])(?:blu[\s-]?ray|brrip)(?:$|[^a-z0-9])`, "BluRay"},
+		{`(?:^|[^a-z0-9])(?:webdl|web[\s-]?dl)(?:$|[^a-z0-9])`, "WebDL"}, // Must come before WebRip (more specific)
+		{`(?:^|[^a-z0-9])(?:webrip|web[\s-]?rip)(?:$|[^a-z0-9])`, "WebRip"},
+		{`(?:^|[^a-z0-9])(?:hdtv|hd[\s-]?tv)(?:$|[^a-z0-9])`, "HDTV"},
+		{`(?:^|[^a-z0-9])dvdscr(?:$|[^a-z0-9])`, "Screener"},
+		{`(?:^|[^a-z0-9])(?:dvdrip|dvd[\s-]?rip)(?:$|[^a-z0-9])`, "DVDRip"},
+		{`(?:^|[^a-z0-9])dvd(?:$|[^a-z0-9])`, "DVD"},
+		{`(?:^|[^a-z0-9])screener(?:$|[^a-z0-9])`, "Screener"},
+		{`(?:^|[^a-z0-9])(?:bdrip|bd[\s-]?rip)(?:$|[^a-z0-9])`, "BluRay"},
+		{`(?:^|[^a-z0-9])uhd(?:$|[^a-z0-9])`, "UHD"},
+		{`(?:^|[^a-z0-9])remux(?:$|[^a-z0-9])`, "Remux"},
+		{`(?:^|[^a-z0-9])(?:tvrip|tv[\s-]?rip)(?:$|[^a-z0-9])`, "TVRip"},
+		{`(?:^|[^a-z0-9])(?:cam(?:rip)?|hdcam|hdts|hdtc|telesync|telecine|tc|ts)(?:$|[^a-z0-9])`, "CAM"},
 	}
 
 	for _, src := range sources {

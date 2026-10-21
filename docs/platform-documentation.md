@@ -614,10 +614,14 @@ Each scanned media file is tracked with: `id`, `library_id`, `path` (unique), `s
 10. Tiebreaker computation.
 
 **Scoring formula (ScoredRelease.CompositeScore):**
-- `qualityWeight = (20 - qualityTier) × 1000` — quality tier dominates
+- `CompositeScore` is a display value; selection is lexicographic so configured scores cannot override quality tiers:
+  1. Lower quality-tier index (better quality).
+  2. Higher custom format score.
+  3. Higher tiebreaker score.
+- `qualityWeight = (20 - qualityTier) × 1000` — nominal quality weight
 - `formatWeight = formatScore` — custom format score
 - `tiebreakerScore = seeders + age + size + freeleech`
-- `compositeScore = qualityWeight + formatWeight + tiebreakerScore`
+- `compositeScore = qualityWeight + formatWeight + tiebreakerScore` (informational; not the sole selection key)
 
 **Integration points:**
 - **Indexers:** `indexerSvc.Search()` for fan-out search across healthy indexers.
@@ -865,22 +869,22 @@ searching → grabbed → downloading → post_download → importing → comple
 | `allowed` | bool | Whether releases of this quality are acceptable |
 
 **Quality name derivation (from releases):**
-Source is normalised to: `bluray`, `webdl`, `webrip`, `hdtv`, `dvd`, `sdtv`.
+Recognised source markers include `bluray`, `webdl`, `webrip`, `hdtv`, `dvd`, `cam`, and `screener`. Ambiguous bare `web` is not treated as a source. Known sources without a matching quality definition are rejected rather than being relabelled as another source.
 Resolution is normalised to: `2160p`, `1080p`, `720p`, `480p`.
 Combined as `{source}-{resolution}`, with `-remux` appended when applicable.
 
-**Available quality tiers (from seed data):**
-`sdtv`, `webdl-480p`, `dvd`, `hdtv-720p`, `webdl-720p`, `webrip-720p`, `bluray-720p`, `hdtv-1080p`, `webdl-1080p`, `webrip-1080p`, `bluray-1080p`, `bluray-1080p-remux`, `hdtv-2160p`, `webdl-2160p`, `webrip-2160p`, `bluray-2160p`, `bluray-2160p-remux`.
+**Available quality tiers (from the `Any` seed profile, best-to-worst):**
+`bluray-2160p-remux`, `bluray-2160p`, `webrip-2160p`, `webdl-2160p`, `hdtv-2160p`, `bluray-1080p-remux`, `bluray-1080p`, `webrip-1080p`, `webdl-1080p`, `hdtv-1080p`, `bluray-720p`, `webrip-720p`, `webdl-720p`, `hdtv-720p`, `dvd`, `webdl-480p`, `sdtv`.
 
 **Ranking logic:**
 - `Rank(qualityName)` — case-insensitive lookup against allowed items; returns 0-based index or -1 if not found/not allowed.
 - `IsAllowed(qualityName)` — returns `Rank() >= 0`.
 - `CutoffRank()` — returns the rank of the cutoff quality item.
-- Higher rank = better quality. Upgrades happen when a release has a higher rank than the current file, up to cutoff.
+- Lower rank = better quality. Upgrades require a lower item index than the current file, and stop once the existing quality reaches the cutoff.
 
 **Default profiles (seeded on first run):**
 `Any`, `HD-720p/1080p`, `HD-1080p`, `Ultra-HD`, `Ultra-HD Remux`, `HD-720p`.
-Seeding only runs when no profiles exist in the database. Quality definitions are fetched from the movie service.
+Defaults are seeded when no profiles exist. On startup, only built-in profiles whose fields and item order still match the previous defaults are migrated; customized profiles are preserved.
 
 **V1 fallback:** `Get()` falls back to the legacy `quality_profiles` table if the ID is not found in `quality_profiles_v2`, converting to the v2 shape transparently.
 

@@ -70,10 +70,8 @@ type ScoredRelease struct {
 	RejectReason    string
 }
 
-// CompositeScore returns the overall score used for ranking.
-// Ranking is hierarchical: quality tier dominates, then format score,
-// then tiebreaker. We use weighted buckets so that a higher quality
-// tier always beats a lower one regardless of format/tiebreaker scores.
+// CompositeScore returns a display score. Search ranking is lexicographic,
+// using quality tier, format score, and tiebreaker separately.
 func (sr *ScoredRelease) CompositeScore() float64 {
 	// Quality tier: higher tier number = worse quality, so invert.
 	// Max reasonable tier depth is ~20, so 1000 * (20 - tier) gives
@@ -86,6 +84,16 @@ func (sr *ScoredRelease) CompositeScore() float64 {
 
 	// Tiebreaker is 0–100 range from seeders/age/size/freeleech.
 	return qualityWeight + formatWeight + sr.TiebreakerScore
+}
+
+func betterScoredRelease(a, b ScoredRelease) bool {
+	if a.QualityTier != b.QualityTier {
+		return a.QualityTier < b.QualityTier
+	}
+	if a.FormatScore != b.FormatScore {
+		return a.FormatScore > b.FormatScore
+	}
+	return a.TiebreakerScore > b.TiebreakerScore
 }
 
 // RejectStat aggregates rejection reasons for the response.

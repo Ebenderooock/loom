@@ -28,7 +28,7 @@ func (qp *QualityProfile) ParseItems() ([]QualityItem, error) {
 	return items, nil
 }
 
-// Rank returns the positional rank (0-based, lower is worse) of a quality
+// Rank returns the positional rank (0-based, lower is better) of a quality
 // name within this profile's allowed items. Returns -1 if the quality is
 // not in the profile.
 func (qp *QualityProfile) Rank(qualityName string) int {
@@ -51,7 +51,8 @@ func (qp *QualityProfile) IsAllowed(qualityName string) bool {
 }
 
 // CutoffRank returns the rank of the profile's cutoff quality.
-// Qualities at or above this rank need no further upgrading.
+// Qualities at or above this quality level need no further upgrading (their
+// item index is less than or equal to the cutoff index).
 func (qp *QualityProfile) CutoffRank() int {
 	items, err := qp.ParseItems()
 	if err != nil || len(items) == 0 {

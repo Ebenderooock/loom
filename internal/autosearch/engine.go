@@ -241,10 +241,16 @@ func (e *Engine) Evaluate(ctx context.Context, req EvaluateRequest) (*EvaluateRe
 		resp.Results = append(resp.Results, er)
 	}
 
-	// Sort by composite score descending (accepted first, then rejected).
+	// Rank accepted results by quality tier, format score, then tiebreaker.
 	sort.SliceStable(resp.Results, func(i, j int) bool {
 		if resp.Results[i].Rejected != resp.Results[j].Rejected {
 			return !resp.Results[i].Rejected
+		}
+		if resp.Results[i].QualityTier != resp.Results[j].QualityTier {
+			return resp.Results[i].QualityTier < resp.Results[j].QualityTier
+		}
+		if resp.Results[i].FormatScore != resp.Results[j].FormatScore {
+			return resp.Results[i].FormatScore > resp.Results[j].FormatScore
 		}
 		return resp.Results[i].CompositeScore > resp.Results[j].CompositeScore
 	})
@@ -731,9 +737,10 @@ func (e *Engine) searchAndGrabSingle(ctx context.Context, req SearchRequest) (*S
 		return result, nil
 	}
 
-	// Sort by composite score (highest first).
+	// Sort lexicographically so configured format scores cannot override
+	// the profile's quality ordering.
 	sort.Slice(scored, func(i, j int) bool {
-		return scored[i].CompositeScore() > scored[j].CompositeScore()
+		return betterScoredRelease(scored[i], scored[j])
 	})
 
 	// Grab the best result.
@@ -1016,27 +1023,32 @@ func (e *Engine) verifyIdentity(req SearchRequest, parsed *parser.Release, idBas
 		}
 	}
 
-	// Title matching: verify the parsed title matches the requested title.
-	//
-	// For ID-based queries (TVDB/IMDB/TMDB), the indexer pre-filtered by
-	// external ID — trust the indexer and skip title comparison entirely.
-	// This mirrors Sonarr's SeriesSpecification which compares DB IDs,
-	// not titles.
-	//
-	// For title-based queries, use exact equality after CleanSeriesTitle
-	// normalization (strips articles, punctuation, diacritics). Sonarr
-	// does not use fuzzy/Levenshtein matching.
-	if !idBasedQuery && req.Title != "" {
+	// A title match or a matching embedded external ID must independently
+	// corroborate ID-filtered indexer results.
+	hasRequestedTitle := strings.TrimSpace(req.Title) != ""
+	for _, title := range req.AlternateTitles {
+		hasRequestedTitle = hasRequestedTitle || strings.TrimSpace(title) != ""
+	}
+	if hasRequestedTitle {
 		parsedTitle := parser.CleanSeriesTitle(parsed.Title)
-		wantTitle := parser.CleanSeriesTitle(req.Title)
-
-		if parsedTitle != "" && wantTitle != "" && parsedTitle != wantTitle {
-			e.logger.Debug("autosearch: title mismatch",
-				"want", wantTitle,
-				"got", parsedTitle,
-			)
-			return "title_mismatch"
+		if parsedTitle == "" {
+			if !idBasedQuery || !matchesRequestedID(req, parsed) {
+				return "unverifiable_title"
+			}
+		} else if !matchesRequestedTitle(req, parsedTitle) {
+			if !idBasedQuery || !matchesRequestedID(req, parsed) {
+				e.logger.Debug("autosearch: title mismatch",
+					"want", req.Title,
+					"got", parsedTitle,
+				)
+				if idBasedQuery {
+					return "identity_unverified"
+				}
+				return "title_mismatch"
+			}
 		}
+	} else if idBasedQuery && !matchesRequestedID(req, parsed) {
+		return "identity_unverified"
 	}
 
 	// Series-specific checks.
@@ -1058,9 +1070,14 @@ func (e *Engine) verifyIdentity(req SearchRequest, parsed *parser.Release, idBas
 			return "season_pack_for_episode_search"
 		}
 
-		// Season verification.
-		if req.Season > 0 && parsed.Season > 0 && parsed.Season != req.Season {
-			return "wrong_season"
+		// Season-scoped searches require a positively parsed matching season.
+		if req.Season > 0 {
+			if parsed.Season <= 0 {
+				return "unverifiable_season"
+			}
+			if parsed.Season != req.Season {
+				return "wrong_season"
+			}
 		}
 
 		// Episode verification (only for single-episode searches).
@@ -1111,6 +1128,25 @@ func (e *Engine) verifyIdentity(req SearchRequest, parsed *parser.Release, idBas
 	return ""
 }
 
+func matchesRequestedTitle(req SearchRequest, parsedTitle string) bool {
+	titles := append([]string{req.Title}, req.AlternateTitles...)
+	for _, title := range titles {
+		normalized := parser.CleanSeriesTitle(title)
+		if normalized != "" && normalized == parsedTitle {
+			return true
+		}
+	}
+	return false
+}
+
+func matchesRequestedID(req SearchRequest, parsed *parser.Release) bool {
+	if parsed == nil {
+		return false
+	}
+	return (req.IMDBID != "" && strings.EqualFold(req.IMDBID, parsed.ImdbID)) ||
+		(req.TMDBID != "" && req.TMDBID == parsed.TmdbID)
+}
+
 // matchQualityDef maps a parsed release to a quality definition by
 // matching source and resolution.
 func matchQualityDef(rel *parser.Release, defs []*movies.QualityDefinition) *movies.QualityDefinition {
@@ -1148,6 +1184,15 @@ func matchQualityDef(rel *parser.Release, defs []*movies.QualityDefinition) *mov
 		if defRes == lowerParsedRes && defSrc == parsedSource && defRemux == rel.IsRemux {
 			return d
 		}
+	}
+
+	// Only unknown sources and non-source tags may use a resolution-based
+	// fallback. Falling back from a real source (for example CAM) could
+	// mislabel it as HDTV or BluRay.
+	switch parsedSource {
+	case "", "unknown", "uhd", "remux":
+	default:
+		return nil
 	}
 
 	// Priority 3: resolution + modifier only (unknown source).
