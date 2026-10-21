@@ -25,7 +25,7 @@ issued, revocable user API key, then stores it encrypted with Android
 Keystore. Retain manual key setup. Do not put credentials in browser links.
 
 Keep pending pairing state bounded and process-local. Publish this
-experimental surface through the isolated `prelease/0.2.5` branch/image
+experimental surface through the isolated `prelease/0.2.9` branch/image
 channel; stable/main consumers do not opt in automatically.
 
 ## Consequences

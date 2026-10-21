@@ -27,7 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Expiring TV pairing with signed-in browser approval, one-time delivery of
   a dedicated revocable API key, and retained manual API-key setup.
 - Isolated `prelease/<semver>` CI and container publishing, starting with
-  `prelease/0.2.5`, without advancing stable or main image tags.
+  `prelease/0.2.9`, without advancing stable or main image tags.
 
 ## [0.1.1] - 2026-06-09
 

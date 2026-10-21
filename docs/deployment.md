@@ -7,12 +7,12 @@ This page covers the supported deployment shapes.
 
 ### Prerelease stream
 
-Experimental work lands through PRs into `prelease/0.2.5`, not `main`.
+Experimental work lands through PRs into `prelease/0.2.9`, not `main`.
 CI runs on PRs and pushes to `prelease/**`. After a code change is merged,
 the separate prerelease publisher builds Linux amd64 images under:
 
-- `ghcr.io/ebenderooock/loom:prelease-0.2.5` (moving opt-in channel).
-- `ghcr.io/ebenderooock/loom:prelease-0.2.5-<sha>-<run>-<attempt>`
+- `ghcr.io/ebenderooock/loom:prelease-0.2.9` (moving opt-in channel).
+- `ghcr.io/ebenderooock/loom:prelease-0.2.9-<sha>-<run>-<attempt>`
   (unique build tag for pinning/rollback).
 
 The branch spelling is deliberately `prelease`, matching the channel name.
@@ -34,11 +34,11 @@ back does not undo a migration. Back up before promoting any candidate.
 ```bash
 docker run --rm -p 1926:1925 \
   -v /opt/loom-prelease/config:/config \
-  ghcr.io/ebenderooock/loom:prelease-0.2.5
+  ghcr.io/ebenderooock/loom:prelease-0.2.9
 ```
 
 The usual release-tag workflow already supports tags such as
-`v0.2.5-pre.1`: these produce GitHub prereleases and versioned images
+`v0.2.9-pre.1`: these produce GitHub prereleases and versioned images
 without advancing `latest`. Creating/pushing a release tag is a separate,
 explicit maintainer action, not an automatic consequence of this branch.
 
