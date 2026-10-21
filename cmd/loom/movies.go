@@ -13,6 +13,7 @@ import (
 	"github.com/ebenderooock/loom/internal/metadata"
 	"github.com/ebenderooock/loom/internal/metadata/tmdb"
 	"github.com/ebenderooock/loom/internal/metadata/tvdb"
+	"github.com/ebenderooock/loom/internal/metadata/tvmaze"
 	"github.com/ebenderooock/loom/internal/movies"
 	"github.com/ebenderooock/loom/internal/notifications"
 	"github.com/ebenderooock/loom/internal/organizer"
@@ -112,6 +113,9 @@ func buildSeriesService(db storage.DB, stubs *devmode.Stubs) series.Service {
 	repo := series.NewRepository(db.DB())
 
 	var opts []series.Option
+	if stubs == nil {
+		opts = append(opts, series.WithAiringProvider(tvmaze.NewClient()))
+	}
 	// Optional TVDB episode provider: enables correct multi-cour anime season
 	// segmentation so releases numbered with the TVDB/scene S01/S02 split match.
 	// Key resolution: LOOM_METADATA_TVDB_APIKEY env > build-time bundled key.

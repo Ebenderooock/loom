@@ -383,6 +383,7 @@ func episodeToResponse(e *Episode) map[string]interface{} {
 		"title":         e.Title,
 		"overview":      e.Overview,
 		"airDate":       e.AirDate,
+		"airDateUtc":    e.AirDateUTC,
 		"runtime":       e.Runtime,
 		"stillPath":     e.StillPath,
 		"monitored":     e.Monitored,

@@ -129,6 +129,7 @@ func episodeToSonarr(ep *series.Episode, seasonNum int, ids *idCache) sonarrEpis
 		Title:         ep.Title,
 		Overview:      ep.Overview,
 		AirDate:       ep.AirDate,
+		AirDateUTC:    ep.AirDateUTC,
 		Monitored:     ep.Monitored,
 		HasFile:       ep.HasFile,
 	}

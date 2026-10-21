@@ -46,6 +46,7 @@ type service struct {
 	httpClient      *http.Client
 	episodeProvider EpisodeProvider
 	postRefreshHook PostRefreshHook
+	airingProvider  AiringProvider
 }
 
 // SetPostRefreshHook installs the post-refresh re-link hook. It exists in
@@ -243,6 +244,7 @@ func (s *service) AddSeries(ctx context.Context, req *AddSeriesRequest) (*Series
 		s.createSeasonsFromTMDB(ctx, details, sr.ID, req.TMDBID, nowt)
 	}
 
+	s.enrichAiringTimes(ctx, sr, nil)
 	// Save credits
 	s.fetchAndStoreCredits(ctx, details, sr.ID)
 
@@ -396,6 +398,8 @@ func (s *service) RefreshSeries(ctx context.Context, id string) error {
 		return fmt.Errorf("series: update: %w", err)
 	}
 
+	savedAiringTimes := s.savedAiringTimes(ctx, sr.ID)
+
 	// Delete existing children, then re-create from fresh data
 	if err := s.repo.DeleteEpisodesBySeriesID(ctx, sr.ID); err != nil {
 		return fmt.Errorf("series: delete episodes: %w", err)
@@ -418,6 +422,7 @@ func (s *service) RefreshSeries(ctx context.Context, id string) error {
 		s.createSeasonsFromTMDB(ctx, details, sr.ID, *sr.TMDBID, nowt)
 	}
 
+	s.enrichAiringTimes(ctx, sr, savedAiringTimes)
 	// Re-create credits
 	s.fetchAndStoreCredits(ctx, details, sr.ID)
 
