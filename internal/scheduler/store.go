@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"time"
+
+	"github.com/ebenderooock/loom/internal/airing"
 )
 
 // Store persists rolling-search state (last-searched timestamps) so the
@@ -55,7 +57,7 @@ func (s *Store) GetCandidates(ctx context.Context, mediaType string, limit int, 
 			WHERE e.has_file = 0
 			  AND e.monitored = 1
 			  AND s.monitoring_status NOT IN ('none', 'unmonitored', 'archived')
-			  AND (e.air_date != '' AND date(e.air_date) <= date('now'))
+			  AND ` + airing.SQLAired + `
 			  AND (ss.last_searched_at IS NULL OR ss.last_searched_at < ?)
 			ORDER BY e.air_date DESC, e.created_at DESC
 			LIMIT ?`
@@ -124,7 +126,7 @@ func (s *Store) QueueSize(ctx context.Context, minResearchDays int) (int, error)
 		WHERE e.has_file = 0
 		  AND e.monitored = 1
 		  AND s.monitoring_status NOT IN ('none', 'unmonitored', 'archived')
-		  AND (e.air_date != '' AND date(e.air_date) <= date('now'))
+		  AND `+airing.SQLAired+`
 		  AND (ss.last_searched_at IS NULL OR ss.last_searched_at < ?)`, cutoff)
 	if err := row.Scan(&epCount); err != nil {
 		return count, err

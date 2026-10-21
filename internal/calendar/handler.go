@@ -6,8 +6,11 @@ import (
 	"fmt"
 	"net/http"
 	"time"
+	_ "time/tzdata" // Static/NAS builds must recognize browser IANA timezones too.
 
 	"github.com/go-chi/chi/v5"
+
+	"github.com/ebenderooock/loom/internal/airing"
 )
 
 // Event represents a unified calendar event (movie release or episode air date).
@@ -17,6 +20,7 @@ type Event struct {
 	Type         string `json:"type"`
 	ReleaseType  string `json:"releaseType,omitempty"`
 	Date         string `json:"date"`
+	AirDateUTC   string `json:"airDateUtc,omitempty"`
 	Status       string `json:"status"`
 	Year         int    `json:"year,omitempty"`
 	SeriesTitle  string `json:"seriesTitle,omitempty"`
@@ -46,6 +50,17 @@ func Router(db *sql.DB) chi.Router {
 
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 	now := time.Now()
+	// The browser supplies its IANA timezone; never infer it from the server.
+	loc := time.UTC
+	if zone := r.URL.Query().Get("timezone"); zone != "" {
+		var err error
+		loc, err = time.LoadLocation(zone)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid timezone")
+			return
+		}
+	}
+	now = now.In(loc)
 	startStr := r.URL.Query().Get("start")
 	endStr := r.URL.Query().Get("end")
 
@@ -63,6 +78,10 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 	}
 	if _, err := time.Parse("2006-01-02", endStr); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid end date format, expected YYYY-MM-DD")
+		return
+	}
+	if startStr > endStr {
+		writeError(w, http.StatusBadRequest, "start date must not be after end date")
 		return
 	}
 
@@ -112,15 +131,23 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Query episodes with air_date in range
+	// Expand to UTC instants of the requested local days, including DST.
+	startDay, _ := time.ParseInLocation("2006-01-02", startStr, loc)
+	endDay, _ := time.ParseInLocation("2006-01-02", endStr, loc)
+	rangeStart := startDay.UTC().Format(time.RFC3339)
+	rangeEnd := endDay.AddDate(0, 0, 1).UTC().Format(time.RFC3339)
+
+	// Date-only rows retain their original calendar date, without conversion.
 	epRows, err := h.db.QueryContext(r.Context(),
-		`SELECT e.id, e.title, e.air_date, e.episode_number, e.has_file,
+		`SELECT e.id, e.title, e.air_date, e.episode_number, e.has_file, e.air_date_utc,
 		        s.title, s.id, sea.season_number
 		 FROM episodes e
 		 JOIN series s ON s.id = e.series_id
 		 JOIN seasons sea ON sea.id = e.season_id
-		 WHERE e.air_date >= ? AND e.air_date <= ?`,
-		startStr, endStr)
+		 WHERE (e.air_date_utc = '' AND e.air_date >= ? AND e.air_date <= ?)
+		    OR (e.air_date_utc != '' AND julianday(e.air_date_utc) >= julianday(?)
+		        AND julianday(e.air_date_utc) < julianday(?))`,
+		startStr, endStr, rangeStart, rangeEnd)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, fmt.Sprintf("query episodes: %v", err))
 		return
@@ -128,16 +155,21 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 	defer epRows.Close()
 
 	for epRows.Next() {
-		var epID, epTitle, airDate, seriesTitle, seriesID string
+		var epID, epTitle, airDate, airDateUTC, seriesTitle, seriesID string
 		var epNum, seasonNum int
 		var hasFile bool
-		if err := epRows.Scan(&epID, &epTitle, &airDate, &epNum, &hasFile, &seriesTitle, &seriesID, &seasonNum); err != nil {
+		if err := epRows.Scan(&epID, &epTitle, &airDate, &epNum, &hasFile, &airDateUTC, &seriesTitle, &seriesID, &seasonNum); err != nil {
 			writeError(w, http.StatusInternalServerError, fmt.Sprintf("scan episode: %v", err))
 			return
 		}
 		calStatus := "missing"
 		if hasFile {
 			calStatus = "downloaded"
+		} else if !airing.HasAired(airDate, airDateUTC, now) {
+			calStatus = "unaired"
+		}
+		if t, err := time.Parse(time.RFC3339, airDateUTC); err == nil {
+			airDate = t.In(loc).Format("2006-01-02")
 		}
 		displayTitle := fmt.Sprintf("%s - S%02dE%02d", seriesTitle, seasonNum, epNum)
 		if epTitle != "" {
@@ -148,6 +180,7 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 			Title:        displayTitle,
 			Type:         "episode",
 			Date:         airDate,
+			AirDateUTC:   airDateUTC,
 			Status:       calStatus,
 			SeriesTitle:  seriesTitle,
 			Season:       seasonNum,

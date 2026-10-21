@@ -288,6 +288,7 @@ export function MovieDetailSheet({
         media_type: "movie",
         media_id: movie.id,
         title: movie.title,
+        year: movie.year,
         quality_profile_id: movie.qualityProfileId,
         imdb_id: movie.imdbId || undefined,
         tmdb_id: movie.tmdbId || undefined,

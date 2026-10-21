@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"encoding/json"
 	"time"
+
+	"github.com/ebenderooock/loom/internal/airing"
 )
 
 // Repository defines data access operations for series, seasons, episodes, and credits.
@@ -25,6 +27,7 @@ type Repository interface {
 	GetEpisode(ctx context.Context, id string) (*Episode, error)
 	CreateEpisode(ctx context.Context, e *Episode) error
 	UpdateEpisode(ctx context.Context, e *Episode) error
+	UpdateEpisodeAiringTime(ctx context.Context, e *Episode) error
 
 	CreateEpisodeFile(ctx context.Context, f *EpisodeFile) error
 
@@ -224,7 +227,7 @@ func (r *sqlRepo) UpdateSeason(ctx context.Context, s *Season) error {
 
 // Episode operations
 
-const episodeColumns = `id, series_id, season_id, episode_number, title, overview, air_date, runtime, still_path, monitored, has_file, created_at, updated_at`
+const episodeColumns = `id, series_id, season_id, episode_number, title, overview, air_date, runtime, still_path, monitored, has_file, created_at, updated_at, air_date_utc`
 
 func scanEpisode(scanner interface {
 	Scan(dest ...interface{}) error
@@ -233,7 +236,7 @@ func scanEpisode(scanner interface {
 	var createdStr, updatedStr string
 	err := scanner.Scan(
 		&e.ID, &e.SeriesID, &e.SeasonID, &e.EpisodeNumber, &e.Title, &e.Overview,
-		&e.AirDate, &e.Runtime, &e.StillPath, &e.Monitored, &e.HasFile, &createdStr, &updatedStr,
+		&e.AirDate, &e.Runtime, &e.StillPath, &e.Monitored, &e.HasFile, &createdStr, &updatedStr, &e.AirDateUTC,
 	)
 	if err != nil {
 		return nil, err
@@ -249,7 +252,7 @@ func (r *sqlRepo) ListEpisodes(ctx context.Context, seriesID string, seasonNum *
 
 	if seasonNum != nil {
 		rows, err = r.db.QueryContext(ctx,
-			`SELECT e.id, e.series_id, e.season_id, e.episode_number, e.title, e.overview, e.air_date, e.runtime, e.still_path, e.monitored, e.has_file, e.created_at, e.updated_at FROM episodes e
+			`SELECT e.id, e.series_id, e.season_id, e.episode_number, e.title, e.overview, e.air_date, e.runtime, e.still_path, e.monitored, e.has_file, e.created_at, e.updated_at, e.air_date_utc FROM episodes e
 			 JOIN seasons s ON e.season_id = s.id
 			 WHERE e.series_id = ? AND s.season_number = ?
 			 ORDER BY e.episode_number ASC`, seriesID, *seasonNum)
@@ -280,20 +283,29 @@ func (r *sqlRepo) GetEpisode(ctx context.Context, id string) (*Episode, error) {
 
 func (r *sqlRepo) CreateEpisode(ctx context.Context, e *Episode) error {
 	_, err := r.db.ExecContext(ctx,
-		`INSERT INTO episodes (id, series_id, season_id, episode_number, title, overview, air_date, runtime, still_path, monitored, has_file, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO episodes (id, series_id, season_id, episode_number, title, overview, air_date, runtime, still_path, monitored, has_file, created_at, updated_at, air_date_utc)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		e.ID, e.SeriesID, e.SeasonID, e.EpisodeNumber, e.Title, e.Overview,
-		e.AirDate, e.Runtime, e.StillPath, e.Monitored, e.HasFile, e.CreatedAt.Format(time.RFC3339), e.UpdatedAt.Format(time.RFC3339),
+		e.AirDate, e.Runtime, e.StillPath, e.Monitored, e.HasFile, e.CreatedAt.Format(time.RFC3339), e.UpdatedAt.Format(time.RFC3339), e.AirDateUTC,
 	)
 	return err
 }
 
 func (r *sqlRepo) UpdateEpisode(ctx context.Context, e *Episode) error {
 	_, err := r.db.ExecContext(ctx,
-		`UPDATE episodes SET title = ?, overview = ?, air_date = ?, runtime = ?, still_path = ?, monitored = ?, has_file = ?, updated_at = ?
+		`UPDATE episodes SET title = ?, overview = ?, air_date = ?, runtime = ?, still_path = ?, monitored = ?, has_file = ?, updated_at = ?, air_date_utc = ?
 		 WHERE id = ?`,
-		e.Title, e.Overview, e.AirDate, e.Runtime, e.StillPath, e.Monitored, e.HasFile, e.UpdatedAt.Format(time.RFC3339), e.ID,
+		e.Title, e.Overview, e.AirDate, e.Runtime, e.StillPath, e.Monitored, e.HasFile, e.UpdatedAt.Format(time.RFC3339), e.AirDateUTC, e.ID,
 	)
+	return err
+}
+
+// UpdateEpisodeAiringTime does not overwrite concurrent file/monitoring changes.
+func (r *sqlRepo) UpdateEpisodeAiringTime(ctx context.Context, e *Episode) error {
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE episodes SET air_date_utc = ?, updated_at = ?
+		 WHERE id = ? AND air_date = ? AND title = ?`,
+		e.AirDateUTC, e.UpdatedAt.Format(time.RFC3339), e.ID, e.AirDate, e.Title)
 	return err
 }
 
@@ -394,9 +406,9 @@ func (r *sqlRepo) GetEpisodeStats(ctx context.Context, seriesID string) (*Episod
 			COUNT(*) as total,
 			SUM(CASE WHEN has_file = 1 THEN 1 ELSE 0 END) as downloaded,
 			SUM(CASE WHEN e.monitored = 1 THEN 1 ELSE 0 END) as monitored,
-			SUM(CASE WHEN e.monitored = 1 AND has_file = 0 AND (air_date != '' AND air_date <= date('now'))
+			SUM(CASE WHEN e.monitored = 1 AND has_file = 0 AND `+airing.SQLAired+`
 				AND s.season_number != 0 THEN 1 ELSE 0 END) as missing,
-			SUM(CASE WHEN air_date != '' AND air_date <= date('now') THEN 1 ELSE 0 END) as aired
+			SUM(CASE WHEN `+airing.SQLAired+` THEN 1 ELSE 0 END) as aired
 		 FROM episodes e
 		 JOIN seasons s ON e.season_id = s.id
 		 WHERE e.series_id = ?`, seriesID,
@@ -411,9 +423,9 @@ func (r *sqlRepo) GetAllEpisodeStats(ctx context.Context) (map[string]*EpisodeSt
 			COUNT(*) as total,
 			SUM(CASE WHEN has_file = 1 THEN 1 ELSE 0 END) as downloaded,
 			SUM(CASE WHEN e.monitored = 1 THEN 1 ELSE 0 END) as monitored,
-			SUM(CASE WHEN e.monitored = 1 AND has_file = 0 AND (air_date != '' AND air_date <= date('now'))
+			SUM(CASE WHEN e.monitored = 1 AND has_file = 0 AND `+airing.SQLAired+`
 				AND s.season_number != 0 THEN 1 ELSE 0 END) as missing,
-			SUM(CASE WHEN air_date != '' AND air_date <= date('now') THEN 1 ELSE 0 END) as aired
+			SUM(CASE WHEN `+airing.SQLAired+` THEN 1 ELSE 0 END) as aired
 		 FROM episodes e
 		 JOIN seasons s ON e.season_id = s.id
 		 GROUP BY e.series_id`)
@@ -441,9 +453,9 @@ func (r *sqlRepo) GetSeasonEpisodeStats(ctx context.Context, seriesID string) (m
 			COUNT(*) as total,
 			SUM(CASE WHEN has_file = 1 THEN 1 ELSE 0 END) as downloaded,
 			SUM(CASE WHEN e.monitored = 1 THEN 1 ELSE 0 END) as monitored,
-			SUM(CASE WHEN e.monitored = 1 AND has_file = 0 AND (air_date != '' AND air_date <= date('now'))
+			SUM(CASE WHEN e.monitored = 1 AND has_file = 0 AND `+airing.SQLAired+`
 				AND s.season_number != 0 THEN 1 ELSE 0 END) as missing,
-			SUM(CASE WHEN air_date != '' AND air_date <= date('now') THEN 1 ELSE 0 END) as aired
+			SUM(CASE WHEN `+airing.SQLAired+` THEN 1 ELSE 0 END) as aired
 		 FROM episodes e
 		 JOIN seasons s ON e.season_id = s.id
 		 WHERE e.series_id = ? GROUP BY e.season_id`, seriesID)

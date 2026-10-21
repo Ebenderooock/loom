@@ -122,6 +122,14 @@ func (r *mockRepo) UpdateEpisode(_ context.Context, e *Episode) error {
 	}
 	return nil
 }
+func (r *mockRepo) UpdateEpisodeAiringTime(_ context.Context, e *Episode) error {
+	for _, ep := range r.episodes[e.SeriesID] {
+		if ep.ID == e.ID && ep.AirDate == e.AirDate && ep.Title == e.Title {
+			ep.AirDateUTC, ep.UpdatedAt = e.AirDateUTC, e.UpdatedAt
+		}
+	}
+	return nil
+}
 func (r *mockRepo) CreateEpisodeFile(_ context.Context, _ *EpisodeFile) error { return nil }
 func (r *mockRepo) DeleteSeasonsBySeriesID(_ context.Context, seriesID string) error {
 	delete(r.seasons, seriesID)
