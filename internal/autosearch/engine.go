@@ -133,6 +133,12 @@ func WithSearchLogEnabled(fn func() bool) EngineOption {
 // SearchAndGrab, used by the manual search UI to display quality
 // badges, scores, and rejection reasons.
 func (e *Engine) Evaluate(ctx context.Context, req EvaluateRequest) (*EvaluateResponse, error) {
+	resolved, err := e.resolveMovieIdentity(ctx, req.SearchRequest)
+	if err != nil {
+		return nil, err
+	}
+	req.SearchRequest = resolved
+
 	if req.QualityProfileID == "" {
 		return &EvaluateResponse{Results: make([]EvaluatedResult, 0), Total: len(req.Results)}, nil
 	}
@@ -259,6 +265,12 @@ func (e *Engine) Evaluate(ctx context.Context, req EvaluateRequest) (*EvaluateRe
 //   - Season search (Season > 0, Episode == 0): try season pack first, then individual episodes
 //   - Series search (Season == 0, Episode == 0): iterate seasons, trying pack then episodes for each
 func (e *Engine) SearchAndGrab(ctx context.Context, req SearchRequest) (*SearchResult, error) {
+	resolved, err := e.resolveMovieIdentity(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	req = resolved
+
 	// Assign a search run ID for grouping sub-searches.
 	if req.SearchRunID == "" {
 		req.SearchRunID = searchdebug.NewID()
@@ -270,6 +282,36 @@ func (e *Engine) SearchAndGrab(ctx context.Context, req SearchRequest) (*SearchR
 	}
 
 	return e.searchAndGrabSingle(ctx, req)
+}
+
+// Library metadata is authoritative even when a caller omits or supplies stale identity fields.
+func (e *Engine) resolveMovieIdentity(ctx context.Context, req SearchRequest) (SearchRequest, error) {
+	if req.MediaType != "movie" || req.MediaID == "" {
+		return req, nil
+	}
+	if e.movieSvc == nil {
+		return req, fmt.Errorf("resolve movie identity: movie service unavailable")
+	}
+	movie, err := e.movieSvc.GetMovie(ctx, req.MediaID)
+	if err != nil {
+		return req, fmt.Errorf("resolve movie identity %s: %w", req.MediaID, err)
+	}
+	if movie == nil {
+		return req, fmt.Errorf("resolve movie identity %s: movie not found", req.MediaID)
+	}
+	req.Title = movie.Title
+	req.Year = movie.Year
+	req.IMDBID, req.TMDBID, req.TVDBID = "", "", ""
+	if movie.IMDBID != nil {
+		req.IMDBID = *movie.IMDBID
+	}
+	if movie.TMDBID != nil {
+		req.TMDBID = *movie.TMDBID
+	}
+	if movie.TVDBID != nil {
+		req.TVDBID = *movie.TVDBID
+	}
+	return req, nil
 }
 
 // searchSeriesFallback implements Sonarr-style search: try season pack first,

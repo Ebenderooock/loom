@@ -1,9 +1,12 @@
 package autosearch
 
 import (
+	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/ebenderooock/loom/internal/customformats"
@@ -12,6 +15,86 @@ import (
 	"github.com/ebenderooock/loom/internal/parser"
 	"github.com/ebenderooock/loom/internal/qualityprofiles"
 )
+
+type identityMovieService struct {
+	movies.Service
+	movie *movies.Movie
+	err   error
+}
+
+func (s *identityMovieService) GetMovie(context.Context, string) (*movies.Movie, error) {
+	return s.movie, s.err
+}
+
+func TestResolveMovieIdentity_StreetFighter(t *testing.T) {
+	imdbID, tmdbID := "tt-library", "library-tmdb"
+	e := newEngine()
+	e.movieSvc = &identityMovieService{movie: &movies.Movie{
+		ID: "movie-2026", Title: "Street Fighter", Year: 2026,
+		IMDBID: &imdbID, TMDBID: &tmdbID,
+	}}
+	for _, year := range []int{0, 1994, 2026} {
+		req, err := e.resolveMovieIdentity(context.Background(), SearchRequest{
+			MediaType: "movie", MediaID: "movie-2026", Title: "Stale title",
+			Year: year, IMDBID: "tt-stale", TVDBID: "stale-tvdb",
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if req.Title != "Street Fighter" || req.Year != 2026 ||
+			req.IMDBID != imdbID || req.TMDBID != tmdbID || req.TVDBID != "" {
+			t.Fatalf("incorrect library identity: %+v", req)
+		}
+		for _, idBased := range []bool{false, true} {
+			for _, tc := range []struct {
+				title string
+				want  string
+			}{
+				{"Street Fighter 1994 Open Matte 1080p WEB-DL HEVC x265 5.1 BONE", "wrong_year"},
+				{"Street Fighter 2026 1080p WEB-DL HEVC x265 5.1 BONE", ""},
+				{"Street Fighter 2025 1080p WEB-DL HEVC x265 5.1 BONE", ""},
+			} {
+				sr := e.evaluateResult(req, indexers.Result{Title: tc.title}, nil, nil, nil, nil,
+					&qualityprofiles.QualityProfile{}, existingQuality{}, -1, idBased)
+				if tc.want != "" && sr.RejectReason != tc.want {
+					t.Fatalf("%q: want %q, got %q", tc.title, tc.want, sr.RejectReason)
+				}
+				if tc.want == "" && e.verifyIdentity(req, parser.Parse(tc.title), idBased) != "" {
+					t.Fatalf("matching release rejected: %q", tc.title)
+				}
+			}
+		}
+	}
+}
+
+func TestMovieIdentityLookupFailureStopsSearchAndEvaluation(t *testing.T) {
+	for _, lookupErr := range []error{errors.New("lookup failed"), nil} {
+		e := newEngine()
+		e.movieSvc = &identityMovieService{err: lookupErr}
+		req := SearchRequest{MediaType: "movie", MediaID: "missing"}
+		if _, err := e.SearchAndGrab(context.Background(), req); err == nil ||
+			!strings.Contains(err.Error(), "resolve movie identity") {
+			t.Fatalf("search should stop on failed identity lookup, got %v", err)
+		}
+		if _, err := e.Evaluate(context.Background(), EvaluateRequest{SearchRequest: req}); err == nil ||
+			!strings.Contains(err.Error(), "resolve movie identity") {
+			t.Fatalf("evaluation should stop on failed identity lookup, got %v", err)
+		}
+	}
+}
+
+func TestResolveMovieIdentity_UnlinkedSearch(t *testing.T) {
+	e := newEngine()
+	for _, req := range []SearchRequest{
+		{MediaType: "movie", Title: "Street Fighter", Year: 2026},
+		{MediaType: "series", MediaID: "series", Title: "Lanterns"},
+	} {
+		got, err := e.resolveMovieIdentity(context.Background(), req)
+		if err != nil || got.Title != req.Title || got.Year != req.Year {
+			t.Fatalf("unlinked/non-movie identity changed: %+v, %v", got, err)
+		}
+	}
+}
 
 func intPtr(v int) *int { return &v }
 
