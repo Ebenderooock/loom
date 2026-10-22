@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { mockBaseApp, mockGet } from "./helpers/mock-api";
+import { mockBaseApp, mockGet, mockPost } from "./helpers/mock-api";
 
 // Build a date string for the 15th of the current month
 function currentMonthDate(day: number) {
@@ -16,6 +16,7 @@ function makeCalendarEvent(overrides: Record<string, unknown> = {}) {
     type: "movie",
     date: currentMonthDate(15),
     status: "missing",
+    monitored: true,
     year: 2024,
     ...overrides,
   };
@@ -216,5 +217,183 @@ test.describe("Calendar Page", () => {
     // URL should have start and end query params
     expect(url).toContain("start=");
     expect(url).toContain("end=");
+  });
+
+  test("movie entries open the full drawer without leaving the calendar", async ({
+    page,
+  }) => {
+    await mockCalendar(page, [makeCalendarEvent()]);
+    await mockGet(page, "libraries", []);
+    await mockGet(page, "quality-profiles", []);
+    await mockGet(page, "movies/cal-1", {
+      id: "cal-1",
+      title: "Test Movie",
+      year: 2024,
+      overview: "Movie overview",
+      genres: ["Drama"],
+      status: "missing",
+      monitoringStatus: "monitored",
+      qualityProfileId: "",
+      libraryId: "",
+      runtime: 120,
+      rating: 8,
+    });
+    await mockGet(page, "movies/cal-1/credits", { cast: [], crew: [] });
+    await mockGet(page, "movies/files/cal-1", []);
+    await mockGet(page, "movies/cal-1/history", []);
+    await mockGet(page, "alt-titles*", []);
+    await mockPost(page, "autosearch", {
+      considered: 0,
+      rejected: 0,
+      reason: "No releases found",
+    });
+    await page.goto("/calendar");
+    const entry = page.getByRole("button", {
+      name: /Test Movie.*Missing.*Monitored/,
+    });
+    await entry.focus();
+    await page.keyboard.press("Enter");
+    const drawer = page.getByRole("dialog");
+    await expect(
+      drawer.getByRole("heading", { name: "Test Movie", exact: true }).last(),
+    ).toBeVisible();
+    await expect(drawer.getByText("Movie overview")).toBeVisible();
+    await expect(
+      drawer.getByRole("button", { name: "Search", exact: true }),
+    ).toBeVisible();
+    const searchRequest = page.waitForRequest(
+      (request) =>
+        request.url().endsWith("/api/v1/autosearch") &&
+        request.method() === "POST",
+    );
+    await drawer.getByRole("button", { name: "Search", exact: true }).click();
+    expect((await searchRequest).postDataJSON()).toMatchObject({
+      media_type: "movie",
+      media_id: "cal-1",
+    });
+    await expect(page).toHaveURL(/\/calendar$/);
+    await page.keyboard.press("Escape");
+    await expect(drawer).not.toBeVisible();
+    await expect(entry).toBeFocused();
+  });
+
+  test("episode entries resolve the parent show and expose episode actions", async ({
+    page,
+  }) => {
+    await mockCalendar(page, [
+      makeCalendarEvent({
+        id: "ep-1",
+        type: "episode",
+        seriesId: "show-1",
+        seriesTitle: "Test Show",
+        season: 1,
+        episode: 1,
+        status: "grabbed",
+      }),
+    ]);
+    await mockGet(page, "libraries", []);
+    await mockGet(page, "quality-profiles", []);
+    await mockGet(page, "series/show-1", {
+      id: "show-1",
+      title: "Test Show",
+      year: 2024,
+      overview: "Show overview",
+      genres: ["Drama"],
+      status: "continuing",
+      monitoringStatus: "all",
+      qualityProfileId: "",
+      libraryId: "",
+      seriesType: "standard",
+      rating: 8,
+    });
+    await mockGet(page, "series/show-1/credits", { cast: [], crew: [] });
+    await mockGet(page, "series/show-1/seasons", { data: [] });
+    await mockGet(page, "alt-titles*", []);
+    await page.goto("/calendar");
+    await page.getByRole("button", { name: /Test Show.*Grabbed/ }).click();
+    const drawer = page.getByRole("dialog");
+    await expect(
+      drawer.getByRole("heading", { name: "Test Show", exact: true }).last(),
+    ).toBeVisible();
+    await expect(
+      drawer.getByRole("button", { name: "Search", exact: true }),
+    ).toBeVisible();
+    await expect(page).toHaveURL(/\/calendar$/);
+  });
+
+  test("shows labeled statuses and expands busy days", async ({
+    page,
+  }, testInfo) => {
+    const statuses = [
+      "missing",
+      "downloaded",
+      "grabbed",
+      "downloading",
+      "importing",
+      "unaired",
+    ];
+    await mockCalendar(
+      page,
+      statuses.map((status, i) =>
+        makeCalendarEvent({
+          id: `status-${i}`,
+          title: `Movie ${i}`,
+          status,
+          monitored: i !== 0,
+        }),
+      ),
+    );
+    await page.goto("/calendar");
+    await expect(
+      page.getByRole("button", { name: /Movie 0.*Missing.*Unmonitored/ }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: /Movie 1.*Available/ }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: /Movie 2.*Grabbed/ }),
+    ).toBeVisible();
+    await page.getByRole("button", { name: "+3 more" }).click();
+    await expect(
+      page.getByRole("button", { name: /Movie 3.*Downloading/ }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: /Movie 4.*Importing/ }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: /Movie 5.*Unaired/ }),
+    ).toBeVisible();
+    const downloading = page.getByRole("button", {
+      name: /Movie 3.*Downloading/,
+    });
+    await downloading.scrollIntoViewIfNeeded();
+    expect(
+      await downloading.evaluate((button) => {
+        const label = Array.from(button.querySelectorAll("span")).find(
+          (span) => span.textContent === "Downloading",
+        );
+        if (!label) return false;
+        const text = label.getBoundingClientRect();
+        const bounds = button.getBoundingClientRect();
+        return (
+          bounds.height >= 44 &&
+          text.left >= bounds.left &&
+          text.right <= bounds.right
+        );
+      }),
+    ).toBe(true);
+    await page.screenshot({
+      path: testInfo.outputPath("calendar-statuses.png"),
+      fullPage: true,
+    });
+    await page.getByRole("button", { name: "Show less" }).click();
+    await expect(
+      page.getByRole("button", { name: /Movie 3/ }),
+    ).not.toBeVisible();
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth,
+      ),
+    ).toBe(true);
   });
 });

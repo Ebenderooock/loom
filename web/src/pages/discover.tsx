@@ -16,8 +16,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Check, Loader2, Plus, Compass } from "lucide-react";
+import { Check, Loader2, Plus, Compass, Info } from "lucide-react";
 import { CardGridSkeleton } from "@/components/ui/skeletons";
+import { DiscoverDetailSheet } from "@/components/discover-detail-sheet";
 
 export function DiscoverPage() {
   const { setHeader } = usePageHeader();
@@ -232,7 +233,7 @@ function DiscoverGrid({ mediaType }: { mediaType: MediaType }) {
       ) : (
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
           {visible.map((item) => (
-            <DiscoverCard key={item.id} item={item} />
+            <DiscoverCard key={item.id} item={item} mediaType={mediaType} />
           ))}
         </div>
       )}
@@ -240,9 +241,17 @@ function DiscoverGrid({ mediaType }: { mediaType: MediaType }) {
   );
 }
 
-function DiscoverCard({ item }: { item: DiscoverItem }) {
+function DiscoverCard({
+  item,
+  mediaType,
+}: {
+  item: DiscoverItem;
+  mediaType: MediaType;
+}) {
   const addMut = useAddDiscoverItem();
   const [added, setAdded] = React.useState(false);
+  const [detailsOpen, setDetailsOpen] = React.useState(false);
+  const detailsButton = React.useRef<HTMLButtonElement>(null);
 
   const inLibrary = item.in_library || added;
 
@@ -282,33 +291,64 @@ function DiscoverCard({ item }: { item: DiscoverItem }) {
           ) : null}
         </div>
 
-        {inLibrary ? (
-          <Button size="sm" variant="ghost" disabled className="w-full">
-            <Check className="mr-1 h-4 w-4" />
-            Added
-          </Button>
-        ) : (
+        <div className="mt-auto flex w-full">
+          {inLibrary ? (
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled
+              className="min-h-11 min-w-0 flex-1 rounded-r-none"
+            >
+              <Check className="mr-1 h-4 w-4" />
+              Added
+            </Button>
+          ) : (
+            <Button
+              size="sm"
+              className="min-h-11 min-w-0 flex-1 rounded-r-none"
+              aria-label={`Quick add ${item.title}`}
+              disabled={addMut.isPending}
+              onClick={handleAdd}
+            >
+              {addMut.isPending ? (
+                <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+              ) : (
+                <Plus className="mr-1 h-4 w-4" />
+              )}
+              {addMut.isPending ? "Adding…" : "Add"}
+            </Button>
+          )}
           <Button
-            size="sm"
-            className="w-full"
-            disabled={addMut.isPending}
-            onClick={handleAdd}
+            size="icon"
+            variant="outline"
+            className="h-11 w-11 shrink-0 rounded-l-none"
+            aria-label={`View details for ${item.title}`}
+            title="View details"
+            ref={detailsButton}
+            onClick={() => setDetailsOpen(true)}
           >
-            {addMut.isPending ? (
-              <Loader2 className="mr-1 h-4 w-4 animate-spin" />
-            ) : (
-              <Plus className="mr-1 h-4 w-4" />
-            )}
-            {addMut.isPending ? "Adding…" : "Add"}
+            <Info className="h-4 w-4" />
           </Button>
-        )}
+        </div>
 
         {addMut.isError && (
-          <p className="text-xs text-destructive">
-            {(addMut.error as Error)?.message ?? "Failed to add"}
+          <p role="alert" className="text-xs text-destructive">
+            {addMut.error?.message ?? "Failed to add"}
           </p>
         )}
       </div>
+      {detailsOpen && (
+        <DiscoverDetailSheet
+          item={item}
+          mediaType={mediaType}
+          inLibrary={inLibrary}
+          adding={addMut.isPending}
+          addError={addMut.error?.message}
+          onAdd={handleAdd}
+          onClose={() => setDetailsOpen(false)}
+          onRestoreFocus={() => detailsButton.current?.focus()}
+        />
+      )}
     </div>
   );
 }

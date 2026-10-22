@@ -11,7 +11,17 @@ export interface CalendarEvent {
   type: "movie" | "episode" | "album";
   date: string;
   airDateUtc?: string;
-  status: "missing" | "downloaded" | "unaired";
+  status:
+    | "missing"
+    | "downloaded"
+    | "unaired"
+    | "unreleased"
+    | "searching"
+    | "grabbed"
+    | "downloading"
+    | "importing";
+  monitored?: boolean;
+  seriesId?: string;
   year?: number;
   seriesTitle?: string;
   season?: number;
@@ -62,5 +72,6 @@ export function useCalendarEvents(start: string, end: string) {
     ],
     queryFn: ({ signal }) => fetchCalendarEvents(start, end, signal),
     enabled: !!start && !!end,
+    refetchInterval: 30_000,
   });
 }

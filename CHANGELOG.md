@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Interactive calendar entries open movie and show detail drawers with search
+  actions, labeled acquisition and monitoring states, and expandable busy days.
+- Discover cards have separate quick-add and full-details controls, with an
+  add-to-library action in the detail drawer using the import list's settings.
+- Experimental native Android TV home companion with Loom movie/series
+  catalogs, TV apps, settings, and input switching with OEM fallbacks.
+- Expiring TV pairing with signed-in browser approval, one-time delivery of
+  a dedicated revocable API key, and retained manual API-key setup.
+- Isolated `prelease/<semver>` CI and container publishing, starting with
+  `prelease/0.2.9`, without advancing stable or main image tags.
+
 ### Security
 
 - Upgrade the Go toolchain to 1.26.10 across CI and container builds, and update
@@ -19,15 +32,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   server-side, preventing older same-title releases from bypassing year validation.
   Movie imports reject conflicting release years even when a workflow links the
   download to a library item, while retaining the existing one-year tolerance.
-
-### Added
-
-- Experimental native Android TV home companion with Loom movie/series
-  catalogs, TV apps, settings, and input switching with OEM fallbacks.
-- Expiring TV pairing with signed-in browser approval, one-time delivery of
-  a dedicated revocable API key, and retained manual API-key setup.
-- Isolated `prelease/<semver>` CI and container publishing, starting with
-  `prelease/0.2.9`, without advancing stable or main image tags.
+- Calendar movies that are downloading or importing are no longer shown as available.
+  Calendar episode entries now include their parent series ID.
 
 ## [0.1.1] - 2026-06-09
 
