@@ -26,6 +26,8 @@ servers:
         default: loom.example.com
 
 tags:
+  - name: pairing
+    description: Expiring TV authorization with explicit browser approval.
   - name: health
     description: Liveness, readiness and metrics probes.
   - name: system
@@ -178,6 +180,207 @@ paths:
           description: Invalid TMDB ID.
         "502":
           description: Metadata provider failed.
+
+  /api/v1/auth/pairing/start:
+    post:
+      tags: [pairing]
+      operationId: startDevicePairing
+      summary: Start a ten-minute device authorization request.
+      security: []
+      description: |
+        Rate-limited public endpoint; unavailable with auth disabled or setup
+        incomplete. Responses use Cache-Control no-store. Never log the device
+        secret. See docs/device-pairing.md for deployment constraints.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                device_name:
+                  type: string
+                  description: Human-readable device label shown during approval.
+      responses:
+        "201":
+          description: Pairing created; the verification path contains no device secret.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [device_secret, user_code, verification_path, expires_in, interval]
+                properties:
+                  device_secret:
+                    type: string
+                    description: High-entropy credential for polling and cancellation.
+                  user_code:
+                    type: string
+                    description: Exact case-sensitive code for browser approval.
+                  verification_path:
+                    type: string
+                    description: Approval path relative to the configured server base prefix.
+                  expires_in:
+                    type: integer
+                    const: 600
+                  interval:
+                    type: integer
+                    const: 5
+        "429":
+          description: Start rate limit reached; honor Retry-After.
+        "503":
+          description: Pairing unavailable or pending capacity exhausted.
+
+  /api/v1/auth/pairing/poll:
+    post:
+      tags: [pairing]
+      operationId: pollDevicePairing
+      summary: Poll for approval and consume a credential exactly once.
+      security: []
+      description: |
+        Send at most once every five seconds. Approval issues a new revocable
+        API key for the approving user, not a copy of an existing key. After
+        successful delivery the request cannot be polled again.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [device_secret]
+              properties:
+                device_secret:
+                  type: string
+                  writeOnly: true
+      responses:
+        "200":
+          description: Pending, denied, or one-time approved credential; no-store.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - type: object
+                    required: [status]
+                    properties:
+                      status:
+                        type: string
+                        enum: [pending, denied]
+                  - type: object
+                    required: [status, api_key]
+                    properties:
+                      status:
+                        type: string
+                        const: approved
+                      api_key:
+                        type: string
+                        description: Store securely; this value is returned only once.
+        "410":
+          description: Invalid, expired, cancelled, or consumed pairing.
+        "429":
+          description: Polling too fast; honor Retry-After.
+
+  /api/v1/auth/pairing/cancel:
+    post:
+      tags: [pairing]
+      operationId: cancelDevicePairing
+      summary: Cancel an outstanding pairing without revoking delivered keys.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [device_secret]
+              properties:
+                device_secret:
+                  type: string
+                  writeOnly: true
+      responses:
+        "204":
+          description: Pairing cancelled.
+        "410":
+          description: Invalid, expired, or already consumed pairing.
+        "429":
+          description: Rate limit reached; honor Retry-After.
+
+  /api/v1/auth/pairing/request:
+    get:
+      tags: [pairing]
+      operationId: reviewDevicePairing
+      summary: Review a request without authorizing it.
+      security:
+        - cookieAuth: []
+      description: |
+        Requires a real database-backed browser session or trusted proxy user.
+        API keys and synthetic/default users cannot approve. This GET has no
+        authorization side effects.
+      parameters:
+        - in: query
+          name: code
+          required: true
+          schema:
+            type: string
+          description: Exact human-readable pairing code from the TV.
+      responses:
+        "200":
+          description: Device label, code, status and remaining lifetime; no secrets.
+          content:
+            application/json:
+              schema:
+                type: object
+        "401":
+          description: Sign-in required.
+        "403":
+          description: Identity cannot authorize devices.
+        "410":
+          description: Invalid, expired, or consumed request.
+        "429":
+          description: Review rate limit reached; honor Retry-After.
+
+  /api/v1/auth/pairing/decision:
+    post:
+      tags: [pairing]
+      operationId: decideDevicePairing
+      summary: Explicitly approve or deny a device after matching its code.
+      security:
+        - cookieAuth: []
+      description: |
+        Requires a real browser session or trusted proxy user, JSON content,
+        the confirmation header, and a same-origin request. Approval records
+        the user but never returns an API key to the browser.
+      parameters:
+        - in: header
+          name: X-Loom-Pairing
+          required: true
+          schema:
+            type: string
+            const: "1"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [user_code, decision]
+              properties:
+                user_code:
+                  type: string
+                decision:
+                  type: string
+                  enum: [approve, deny]
+      responses:
+        "2XX":
+          description: Decision recorded; no credentials returned.
+        "401":
+          description: Sign-in required.
+        "403":
+          description: Identity, origin, or confirmation header rejected.
+        "409":
+          description: A decision was already recorded.
+        "410":
+          description: Invalid, expired, or consumed request.
+        "429":
+          description: Decision rate limit reached; honor Retry-After.
 
   /healthz:
     get:

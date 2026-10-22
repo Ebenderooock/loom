@@ -1,0 +1,30 @@
+#!/bin/sh
+# Small, checksum-pinned bootstrap. No global Gradle installation is used.
+set -eu
+cd "$(dirname "$0")"
+java -version
+version=8.10.2
+checksum=31c55713e40233a8303827ceb42ca48a47267a0ad4bab9177123121e71524c26
+cache="${GRADLE_USER_HOME:-$HOME/.gradle}/loom-bootstrap"
+distribution="$cache/gradle-$version"
+if [ ! -x "$distribution/bin/gradle" ]; then
+    mkdir -p "$cache"
+    temp=$(mktemp -d "$cache/download.XXXXXXXX")
+    trap 'rm -rf "$temp"' EXIT HUP INT TERM
+    curl --fail --location --proto '=https' --tlsv1.2 \
+        "https://services.gradle.org/distributions/gradle-$version-bin.zip" -o "$temp/gradle.zip"
+    if command -v sha256sum >/dev/null 2>&1; then
+        actual=$(sha256sum "$temp/gradle.zip" | cut -d ' ' -f 1)
+    else
+        actual=$(shasum -a 256 "$temp/gradle.zip" | cut -d ' ' -f 1)
+    fi
+    [ "$actual" = "$checksum" ] || { echo "Gradle checksum mismatch" >&2; exit 1; }
+    unzip -q "$temp/gradle.zip" -d "$temp"
+    # Concurrent invocations may have completed the same verified download.
+    if [ ! -d "$distribution" ]; then
+        mv "$temp/gradle-$version" "$distribution"
+    fi
+    rm -rf "$temp"
+    trap - EXIT HUP INT TERM
+fi
+exec "$distribution/bin/gradle" "$@"
