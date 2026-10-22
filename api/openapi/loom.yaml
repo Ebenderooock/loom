@@ -52,6 +52,133 @@ tags:
       and Radarr compatibility rationale.
 
 paths:
+  /api/v1/calendar:
+    get:
+      summary: List movie releases, episode airings, and album releases.
+      operationId: getCalendarEvents
+      security:
+        - apiKey: []
+        - bearerAuth: []
+        - cookieAuth: []
+      parameters:
+        - name: start
+          in: query
+          schema: { type: string, format: date }
+        - name: end
+          in: query
+          schema: { type: string, format: date }
+        - name: timezone
+          in: query
+          description: Browser IANA timezone; defaults to UTC.
+          schema: { type: string }
+      responses:
+        "200":
+          description: Events in the inclusive local date range.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  required: [id, title, type, date, status, monitored]
+                  properties:
+                    id: { type: string }
+                    title: { type: string }
+                    type: { type: string, enum: [movie, episode, album] }
+                    date: { type: string, format: date }
+                    airDateUtc: { type: string, format: date-time }
+                    releaseType: { type: string, enum: [release, theatrical, digital] }
+                    status:
+                      type: string
+                      enum: [missing, downloaded, unaired, unreleased, searching, grabbed, downloading, importing]
+                    monitored: { type: boolean }
+                    year: { type: integer }
+                    seriesId: { type: string }
+                    seriesTitle: { type: string }
+                    season: { type: integer }
+                    episode: { type: integer }
+                    episodeTitle: { type: string }
+                    artist: { type: string }
+        "400":
+          description: Invalid date, range, or timezone.
+        "500":
+          description: Failed to query events or acquisition states.
+
+  /api/v1/discover/movie/{id}:
+    get:
+      summary: Fetch movie metadata for a discovery detail drawer.
+      operationId: getDiscoverMovieDetails
+      security:
+        - apiKey: []
+        - bearerAuth: []
+        - cookieAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: TMDB movie ID.
+          schema: { type: integer, minimum: 1 }
+      responses:
+        "200":
+          description: Movie metadata using snake_case fields; does not add to the library.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tmdb_id: { type: string }
+                  imdb_id: { type: string }
+                  tvdb_id: { type: string }
+                  title: { type: string }
+                  overview: { type: string }
+                  poster_path: { type: string }
+                  year: { type: integer }
+                  release_date: { type: string, format: date }
+                  runtime: { type: integer }
+                  rating: { type: number }
+                  genres: { type: array, items: { type: string } }
+        "400":
+          description: Invalid TMDB ID.
+        "502":
+          description: Metadata provider failed.
+
+  /api/v1/discover/series/{id}:
+    get:
+      summary: Fetch show metadata for a discovery detail drawer.
+      operationId: getDiscoverSeriesDetails
+      security:
+        - apiKey: []
+        - bearerAuth: []
+        - cookieAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: TMDB show ID.
+          schema: { type: integer, minimum: 1 }
+      responses:
+        "200":
+          description: Show metadata using snake_case fields; does not add to the library.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tmdb_id: { type: string }
+                  imdb_id: { type: string }
+                  tvdb_id: { type: string }
+                  title: { type: string }
+                  overview: { type: string }
+                  poster_path: { type: string }
+                  first_air_date: { type: string, format: date }
+                  seasons: { type: integer }
+                  rating: { type: number }
+                  genres: { type: array, items: { type: string } }
+        "400":
+          description: Invalid TMDB ID.
+        "502":
+          description: Metadata provider failed.
+
   /healthz:
     get:
       tags: [health]

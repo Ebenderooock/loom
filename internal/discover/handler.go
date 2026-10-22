@@ -57,7 +57,31 @@ const (
 func Router(client *tmdb.Client) chi.Router {
 	r := chi.NewRouter()
 	r.Get("/people/{id}", getPersonFilmography(client))
+	r.Get("/movie/{id}", getMediaDetails(client, "movie"))
+	r.Get("/series/{id}", getMediaDetails(client, "series"))
 	return r
+}
+
+func getMediaDetails(client *tmdb.Client, mediaType string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id, err := strconv.Atoi(chi.URLParam(r, "id"))
+		if err != nil || id <= 0 {
+			http.Error(w, "invalid TMDB ID", http.StatusBadRequest)
+			return
+		}
+		var detail any
+		if mediaType == "movie" {
+			detail, err = client.GetMovie(r.Context(), id)
+		} else {
+			detail, err = client.GetTV(r.Context(), id)
+		}
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadGateway)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(detail)
+	}
 }
 
 func getPersonFilmography(client *tmdb.Client) http.HandlerFunc {

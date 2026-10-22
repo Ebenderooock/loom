@@ -605,6 +605,7 @@ export function SeriesDetailSheet({
   series,
   open,
   onOpenChange,
+  onCloseAutoFocus,
   profiles,
   libraries,
   onUpdated,
@@ -616,6 +617,7 @@ export function SeriesDetailSheet({
   series: Series | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onCloseAutoFocus?: (event: Event) => void;
   profiles: QualityProfile[];
   libraries: Library[];
   onUpdated: (updated: Series) => void;
@@ -892,6 +894,7 @@ export function SeriesDetailSheet({
       <Sheet open={open} onOpenChange={onOpenChange}>
         <SheetContent
           side="right"
+          onCloseAutoFocus={onCloseAutoFocus}
           className="w-full overflow-y-auto p-0 sm:max-w-2xl"
         >
           <SheetHeader className="sr-only">
@@ -975,7 +978,7 @@ export function SeriesDetailSheet({
 
           {/* Action buttons */}
           <div className="px-6 pb-2">
-            <div className="flex items-center gap-1.5">
+            <div className="flex flex-wrap items-center gap-1.5">
               {/* Primary actions with labels */}
               <Button
                 size="sm"
