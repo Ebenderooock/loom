@@ -1,0 +1,10 @@
+[
+  {"name":"wrong embedded ID even with matching title","request":{"media_type":"movie","title":"Movie","imdb_id":"tt1234567"},"title":"Movie.2024.1080p.BluRay.tt7654321","reason":"wrong_embedded_id","category":"incorrect_identity"},
+  {"name":"matching alternate title","request":{"media_type":"movie","title":"Primary","alternate_titles":["Localized"]},"title":"Localized.2024.1080p.BluRay","reason":"","category":"accepted"},
+  {"name":"ID query is not identity evidence","request":{"media_type":"movie","title":"Primary","tmdb_id":"98765"},"title":"Unrelated.2024.1080p.BluRay","reason":"identity_unverified","category":"ambiguous_identity"},
+  {"name":"anime absolute not converted to relative","request":{"media_type":"episode","title":"Naruto","season":2,"episode":5,"tmdb_id":"98765"},"title":"[SubsPlease] Naruto - 017 [1080p] WEB-DL tmdb-98765","reason":"unverifiable_season","category":"unsupported_naming","absolute":17},
+  {"name":"anime relative episode","request":{"media_type":"episode","title":"Naruto","season":2,"episode":5},"title":"Naruto.S02E05.1080p.BluRay","reason":"","category":"accepted"},
+  {"name":"ambiguous unscoped complete pack","request":{"media_type":"series","title":"Naruto","season":2,"tmdb_id":"98765"},"title":"Naruto.Complete.Series.1080p.BluRay.tmdb-98765","reason":"ambiguous_pack","category":"ambiguous_identity"},
+  {"name":"multi-season pack cannot claim single-season identity","request":{"media_type":"series","title":"Naruto","season":1,"tmdb_id":"98765"},"title":"Naruto.S01-S03.1080p.BluRay.tmdb-98765","reason":"ambiguous_pack","category":"ambiguous_identity"},
+  {"name":"unambiguous season pack","request":{"media_type":"series","title":"Naruto","season":2},"title":"Naruto.S02.Complete.1080p.BluRay","reason":"","category":"accepted"}
+]

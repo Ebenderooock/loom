@@ -2,6 +2,7 @@ package autosearch
 
 import (
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 )
@@ -69,13 +70,27 @@ func (h *Handler) HandleEvaluate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if len(req.Results) == 0 {
+		if req.PolicyPreview != nil {
+			if err := validatePolicyPreview(req.PolicyPreview); err != nil {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusBadRequest)
+				json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+				return
+			}
+		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(&EvaluateResponse{Results: []EvaluatedResult{}})
+		json.NewEncoder(w).Encode(&EvaluateResponse{Results: []EvaluatedResult{}, Preview: req.PolicyPreview != nil})
 		return
 	}
 
 	resp, err := h.engine.Evaluate(r.Context(), req)
 	if err != nil {
+		if errors.Is(err, ErrInvalidPolicyPreview) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+			return
+		}
 		h.logger.ErrorContext(r.Context(), "evaluate failed", "error", err)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
