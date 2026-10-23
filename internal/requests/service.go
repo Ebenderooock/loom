@@ -195,7 +195,7 @@ var ErrInvalidQuota = errors.New("requests: invalid quota configuration")
 // Limits must be non-negative; the window is clamped to [1, MaxWindowDays] and
 // defaults to DefaultWindowDays when limits are set without an explicit window.
 func (s *Service) SetQuotaConfig(ctx context.Context, c QuotaConfig) (QuotaConfig, error) {
-	if c.MovieLimit < 0 || c.SeriesLimit < 0 {
+	if c.MovieLimit < 0 || c.SeriesLimit < 0 || c.MusicLimit < 0 {
 		return QuotaConfig{}, fmt.Errorf("%w: limits must be non-negative", ErrInvalidQuota)
 	}
 	if c.WindowDays <= 0 {
@@ -253,7 +253,8 @@ func mediaQuota(limit, used int, isAdmin bool) MediaQuota {
 // Approve fulfills a pending request: it validates the admin-chosen target,
 // atomically claims the request, adds the media, and triggers a grab. On
 // fulfillment failure the request is marked failed (re-requestable). If the
-// media already exists the request is marked available without re-adding.
+// media already exists it is linked without re-adding. Only imported files
+// make the request available; a catalog entry alone remains approved.
 func (s *Service) Approve(ctx context.Context, id, qualityProfileID, libraryID, decidedBy string) (Request, error) {
 	req, err := s.store.Get(ctx, id)
 	if err != nil {
@@ -273,18 +274,10 @@ func (s *Service) Approve(ctx context.Context, id, qualityProfileID, libraryID, 
 		}
 	}
 
-	// Already in the library? Short-circuit to available.
 	mediaID, err := s.mediaExists(ctx, req.MediaType, req.TMDBID)
 	if err != nil {
 		return Request{}, fmt.Errorf("requests: checking existing media: %w", err)
 	}
-	if mediaID != "" {
-		if err := s.store.MarkAvailable(ctx, id, mediaID); err != nil {
-			return Request{}, err
-		}
-		return s.store.Get(ctx, id)
-	}
-
 	// Atomically claim so the request is fulfilled at most once.
 	won, err := s.store.ClaimForApproval(ctx, id, decidedBy)
 	if err != nil {
@@ -294,14 +287,16 @@ func (s *Service) Approve(ctx context.Context, id, qualityProfileID, libraryID, 
 		return Request{}, errors.New("requests: request was already being processed")
 	}
 
-	var fulfilledID string
-	switch req.MediaType {
-	case MediaMovie:
-		fulfilledID, err = s.fulfiller.FulfillMovie(ctx, req.TMDBID, qualityProfileID, libraryID)
-	case MediaArtist:
-		fulfilledID, err = s.fulfiller.FulfillArtist(ctx, req.TMDBID, qualityProfileID, libraryID)
-	default:
-		fulfilledID, err = s.fulfiller.FulfillSeries(ctx, req.TMDBID, qualityProfileID, libraryID)
+	fulfilledID := mediaID
+	if fulfilledID == "" {
+		switch req.MediaType {
+		case MediaMovie:
+			fulfilledID, err = s.fulfiller.FulfillMovie(ctx, req.TMDBID, qualityProfileID, libraryID)
+		case MediaArtist:
+			fulfilledID, err = s.fulfiller.FulfillArtist(ctx, req.TMDBID, qualityProfileID, libraryID)
+		default:
+			fulfilledID, err = s.fulfiller.FulfillSeries(ctx, req.TMDBID, qualityProfileID, libraryID)
+		}
 	}
 	if err != nil {
 		_ = s.store.MarkFailed(ctx, id, err.Error())
@@ -311,11 +306,24 @@ func (s *Service) Approve(ctx context.Context, id, qualityProfileID, libraryID, 
 	if err := s.store.MarkApproved(ctx, id, fulfilledID); err != nil {
 		return Request{}, err
 	}
+	if err := s.ReconcileAvailability(ctx); err != nil {
+		return Request{}, err
+	}
 	out, err := s.store.Get(ctx, id)
 	if err == nil && s.notify != nil {
 		go s.notify(context.WithoutCancel(ctx), out, "approved")
 	}
+
 	return out, err
+}
+
+// ReconcileAvailability catches successful imports, rescans and imports that
+// finished before approval or while Loom was stopped. It is safe to repeat.
+func (s *Service) ReconcileAvailability(ctx context.Context) error {
+	if err := s.store.ReconcileAvailability(ctx, time.Now().UTC()); err != nil {
+		return fmt.Errorf("requests: reconcile availability: %w", err)
+	}
+	return nil
 }
 
 // Reject declines a pending or failed request with a reason. Requests that are

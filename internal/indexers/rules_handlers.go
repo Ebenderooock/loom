@@ -33,6 +33,9 @@ func handleListRules(store *RuleStore) http.HandlerFunc {
 
 func handleCreateRule(store *RuleStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		if !requireAdminIfPresent(w, r) {
+			return
+		}
 		var rule IndexerRule
 		if err := json.NewDecoder(r.Body).Decode(&rule); err != nil {
 			writeError(w, http.StatusBadRequest, "invalid_body", err.Error())
@@ -60,6 +63,9 @@ func handleCreateRule(store *RuleStore) http.HandlerFunc {
 
 func handleDeleteRule(store *RuleStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		if !requireAdminIfPresent(w, r) {
+			return
+		}
 		id := chi.URLParam(r, "ruleID")
 		if err := store.Delete(r.Context(), id); err != nil {
 			writeError(w, http.StatusInternalServerError, "delete_rule_failed", err.Error())
@@ -75,6 +81,9 @@ func handleImportJackett(svc *Service) http.HandlerFunc {
 		APIKey     string `json:"api_key"`
 	}
 	return func(w http.ResponseWriter, r *http.Request) {
+		if !requireAdminIfPresent(w, r) {
+			return
+		}
 		var req request
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			writeError(w, http.StatusBadRequest, "invalid_body", err.Error())

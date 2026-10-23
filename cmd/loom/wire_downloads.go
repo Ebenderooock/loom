@@ -352,6 +352,8 @@ func (g *autoSearchGrabber) Grab(ctx context.Context, c scheduler.SearchCandidat
 		mediaID = c.SeriesID
 	}
 	req := autosearch.SearchRequest{
+		RequireSuccessfulSearch: true,
+
 		MediaType:        mediaType,
 		MediaID:          mediaID,
 		Title:            c.Title,

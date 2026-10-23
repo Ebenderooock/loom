@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/ebenderooock/loom/internal/indexers"
@@ -233,8 +234,9 @@ func (rs *RollingSearcher) runOnce(ctx context.Context) {
 		if ctx.Err() != nil {
 			break
 		}
-		rs.searchCandidate(ctx, c)
-		count++
+		if rs.searchCandidate(ctx, c) {
+			count++
+		}
 	}
 
 	rs.mu.Lock()
@@ -245,7 +247,17 @@ func (rs *RollingSearcher) runOnce(ctx context.Context) {
 	rs.logger.Info("rolling search run complete", "searched", count)
 }
 
-func (rs *RollingSearcher) searchCandidate(ctx context.Context, c SearchCandidate) {
+func (rs *RollingSearcher) searchCandidate(ctx context.Context, c SearchCandidate) bool {
+	// Carry admission through the grabber and every ID/title/alternate-title
+	// fallback. Count provider attempts, not candidates or enabled indexers.
+	var attempts atomic.Int64
+	ctx = indexers.WithSearchAdmission(ctx, func(id string) bool {
+		if !rs.quota.TryReserve(id) {
+			return false
+		}
+		attempts.Add(1)
+		return true
+	})
 	// Prefer the full search-and-grab engine when available; it evaluates
 	// results against the quality profile and sends accepted releases to a
 	// download client. Fall back to a bare indexer search if the engine has
@@ -258,17 +270,17 @@ func (rs *RollingSearcher) searchCandidate(ctx context.Context, c SearchCandidat
 		if err := g.Grab(ctx, c); err != nil {
 			rs.logger.Warn("search-and-grab failed", "type", c.MediaType,
 				"id", c.MediaID, "title", c.Title, "error", err)
+			return false
 		}
-		// Record quota and last-searched regardless of grab outcome.
-		if err := rs.store.RecordSearch(ctx, c.MediaType, c.MediaID); err != nil {
-			rs.logger.Warn("record search state", "error", err)
+		if ctx.Err() != nil || attempts.Load() == 0 {
+			return false
 		}
-		return
+		return rs.recordSuccessfulSearch(ctx, c)
 	}
 
 	// Fallback: bare indexer search (results are not processed).
 	if rs.indexerSvc == nil {
-		return
+		return false
 	}
 
 	// Build query with explicit mode and year, matching Arr stack behavior.
@@ -290,34 +302,24 @@ func (rs *RollingSearcher) searchCandidate(ctx context.Context, c SearchCandidat
 		q.Episode = c.Episode
 	}
 
-	// Fan out across all enabled indexers, respecting quotas.
-	defs, err := rs.indexerSvc.List(ctx)
-	if err != nil {
-		rs.logger.Warn("list indexers", "error", err)
-		return
+	agg := rs.indexerSvc.Search(ctx, q, nil, 0)
+	if ctx.Err() != nil {
+		return false
 	}
-
-	var ids []string
-	for _, dh := range defs {
-		if dh.Enabled && rs.quota.CanSearch(dh.ID) {
-			ids = append(ids, dh.ID)
+	if agg.Diagnostics != nil {
+		for _, d := range agg.Diagnostics.Indexers {
+			if d.Status == "ok" {
+				return rs.recordSuccessfulSearch(ctx, c)
+			}
 		}
 	}
-	if len(ids) == 0 {
-		rs.logger.Debug("no indexers available (all quota-exhausted or disabled)", "item", c.MediaID)
-		return
-	}
+	return false
+}
 
-	rs.logger.Debug("searching", "type", c.MediaType, "id", c.MediaID, "title", c.Title, "indexers", len(ids))
-	_ = rs.indexerSvc.Search(ctx, q, ids, 0)
-
-	// Record quota usage.
-	for _, id := range ids {
-		rs.quota.RecordSearch(id)
-	}
-
-	// Persist last-searched timestamp.
+func (rs *RollingSearcher) recordSuccessfulSearch(ctx context.Context, c SearchCandidate) bool {
 	if err := rs.store.RecordSearch(ctx, c.MediaType, c.MediaID); err != nil {
 		rs.logger.Warn("record search state", "error", err)
+		return false
 	}
+	return true
 }

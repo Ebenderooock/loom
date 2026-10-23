@@ -6,10 +6,12 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/ebenderooock/loom/internal/auth"
 	"github.com/ebenderooock/loom/internal/indexers"
 )
 
@@ -142,5 +144,99 @@ func TestHTTPSearchEndpoint(t *testing.T) {
 	}
 	if out.Errors == nil {
 		t.Fatal("Errors map should be present even when empty")
+	}
+}
+
+func TestHTTPConfigRoutesRequireAdminButSearchRemainsAvailable(t *testing.T) {
+	t.Parallel()
+	svc := newServiceForHTTP(t)
+	r := chi.NewRouter()
+	svc.Mount(r)
+
+	nonAdmin := auth.WithIdentity(context.Background(), &auth.Identity{Roles: []string{"user"}})
+	request := func(method, path, body string, ctx context.Context) *httptest.ResponseRecorder {
+		t.Helper()
+		req := httptest.NewRequest(method, path, strings.NewReader(body)).WithContext(ctx)
+		req.Header.Set("Content-Type", "application/json")
+		rr := httptest.NewRecorder()
+		r.ServeHTTP(rr, req)
+		return rr
+	}
+
+	for _, test := range []struct {
+		method, path, body string
+	}{
+		{http.MethodPost, "/api/v1/indexers/", `{"id":"new","kind":"builtin/null","name":"New"}`},
+		{http.MethodPut, "/api/v1/indexers/one", `{"kind":"builtin/null","name":"One"}`},
+		{http.MethodPatch, "/api/v1/indexers/one", `{"enabled":false}`},
+		{http.MethodDelete, "/api/v1/indexers/one", ""},
+		{http.MethodPost, "/api/v1/indexers/test", `{"kind":"builtin/null"}`},
+		{http.MethodPost, "/api/v1/indexers/one/test", ""},
+	} {
+		if rr := request(test.method, test.path, test.body, nonAdmin); rr.Code != http.StatusForbidden {
+			t.Errorf("%s %s status=%d body=%s; want 403", test.method, test.path, rr.Code, rr.Body.String())
+		}
+	}
+
+	// Ordinary authenticated users retain the indexer search surface.
+	if rr := request(http.MethodPost, "/api/v1/indexers/search", `{"query":"test"}`, nonAdmin); rr.Code != http.StatusOK {
+		t.Fatalf("non-admin search status=%d body=%s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestHTTPResponsesRedactSecretsAndPatchPreservesOmittedSecrets(t *testing.T) {
+	t.Parallel()
+	svc := newServiceForHTTP(t)
+	r := chi.NewRouter()
+	svc.Mount(r)
+	if _, err := svc.Create(context.Background(), indexers.Definition{
+		ID: "one", Kind: indexers.KindNull, Name: "One", Enabled: true,
+		Config: json.RawMessage(`{"url":"https://example.test/api","api_key":"stored-api-key","auth":{"cookie":"stored-cookie","mode":"session"}}`),
+	}); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	request := func(method, path, body string, role string) *httptest.ResponseRecorder {
+		t.Helper()
+		ctx := auth.WithIdentity(context.Background(), &auth.Identity{Roles: []string{role}})
+		req := httptest.NewRequest(method, path, strings.NewReader(body)).WithContext(ctx)
+		req.Header.Set("Content-Type", "application/json")
+		rr := httptest.NewRecorder()
+		r.ServeHTTP(rr, req)
+		return rr
+	}
+	for _, path := range []string{"/api/v1/indexers/", "/api/v1/indexers/one"} {
+		rr := request(http.MethodGet, path, "", "user")
+		if rr.Code != http.StatusOK {
+			t.Fatalf("GET %s status=%d body=%s", path, rr.Code, rr.Body.String())
+		}
+		for _, secret := range []string{"stored-api-key", "stored-cookie"} {
+			if strings.Contains(rr.Body.String(), secret) {
+				t.Fatalf("GET %s leaked %q: %s", path, secret, rr.Body.String())
+			}
+		}
+		if !strings.Contains(rr.Body.String(), "https://example.test/api") {
+			t.Fatalf("ordinary config field missing: %s", rr.Body.String())
+		}
+	}
+
+	rr := request(http.MethodPatch, "/api/v1/indexers/one",
+		`{"config":{"url":"https://example.test/updated","auth":{"mode":"session"}}}`, "admin")
+	if rr.Code != http.StatusOK {
+		t.Fatalf("PATCH status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	for _, secret := range []string{"stored-api-key", "stored-cookie"} {
+		if strings.Contains(rr.Body.String(), secret) {
+			t.Fatalf("PATCH response leaked %q: %s", secret, rr.Body.String())
+		}
+	}
+	stored, err := svc.Get(context.Background(), "one")
+	if err != nil {
+		t.Fatalf("Get stored: %v", err)
+	}
+	for _, secret := range []string{"stored-api-key", "stored-cookie"} {
+		if !strings.Contains(string(stored.Config), secret) {
+			t.Fatalf("PATCH lost secret %q: %s", secret, stored.Config)
+		}
 	}
 }

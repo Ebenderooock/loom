@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
@@ -7,6 +7,8 @@ import {
   validateIndexerForm,
   type IndexerFormValues,
 } from "@/components/indexers/indexer-form";
+
+afterEach(() => vi.restoreAllMocks());
 
 function baseValues(over: Partial<IndexerFormValues> = {}): IndexerFormValues {
   return {
@@ -50,6 +52,10 @@ describe("validateIndexerForm", () => {
     );
   });
 
+  it("allows a blank API key when editing an existing indexer", () => {
+    expect(validateIndexerForm(baseValues({ api_key: "" }), true)).toEqual({});
+  });
+
   it("rejects out-of-range priority", () => {
     expect(validateIndexerForm(baseValues({ priority: -1 })).priority).toBe(
       "Priority must be between 0 and 100.",
@@ -70,6 +76,57 @@ describe("validateIndexerForm", () => {
 });
 
 describe("IndexerForm rendering", () => {
+  it("tests unsaved edits with the saved ID and allows an unchanged blank key", async () => {
+    const user = userEvent.setup();
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(
+        new Response(JSON.stringify({ ok: true, latency_ms: 1 })),
+      );
+    const onSubmit = vi.fn();
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <IndexerForm
+          initial={{
+            id: "saved",
+            kind: "newznab",
+            name: "Hydra",
+            enabled: true,
+            priority: 25,
+            config: { url: "https://example.test/api" },
+            categories: [],
+            tags: [],
+          }}
+          proxies={[]}
+          onSubmit={onSubmit}
+        />
+      </QueryClientProvider>,
+    );
+    await user.clear(screen.getByLabelText(/^url$/i));
+    await user.type(
+      screen.getByLabelText(/^url$/i),
+      "https://example.test/edited",
+    );
+    await user.click(screen.getByRole("button", { name: /^test$/i }));
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalledOnce());
+    const call = fetchSpy.mock.calls[0];
+    if (!call) throw new Error("Expected a connectivity test request");
+    const [url, init] = call;
+    expect(url).toBe("/api/v1/indexers/test");
+    expect(JSON.parse(init?.body as string)).toMatchObject({
+      id: "saved",
+      config: { url: "https://example.test/edited", api_key: "" },
+    });
+    await user.click(screen.getByRole("button", { name: /save changes/i }));
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        api_key: "",
+        url: "https://example.test/edited",
+      }),
+      true,
+    );
+  });
+
   it("surfaces validation errors before calling onSubmit", async () => {
     const user = userEvent.setup();
     let called = false;

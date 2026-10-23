@@ -320,6 +320,7 @@ export async function testIndexer(id: string): Promise<TestResult> {
 }
 
 export interface TestConfigPayload {
+  id?: string;
   kind: string;
   name: string;
   config: Record<string, unknown>;

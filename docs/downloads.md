@@ -30,6 +30,21 @@ the deviations from the original phase brief, see
 | POST   | `/api/v1/download-clients/{id}/pause`                   | Pause items (empty body = all).          |
 | POST   | `/api/v1/download-clients/{id}/resume`                  | Resume items (empty body = all).         |
 
+Creating, updating, deleting, or testing a download-client configuration
+requires an administrator role. List/detail responses omit usernames,
+passwords, and credential-like values inside `config`; submitting blank or
+omitting those fields during an edit keeps the stored credentials unchanged.
+Download-use routes such as listing items and submitting a grab remain
+available to authenticated users.
+Edit-form tests include the saved client `id` so blank/masked credentials
+can be restored for the test without persisting unsaved changes.
+
+Imports never silently overwrite an existing file or merge into an existing
+destination folder. Collisions return an explicit error and preserve both
+files. Automatic replacements require an enabled, configured recycle bin;
+if preservation fails, the import stops. A library-update failure leaves the
+imported file at its destination for recovery rather than deleting it.
+
 The full schema is in [`api/openapi/loom.yaml`](../api/openapi/loom.yaml)
 under the `download-clients` tag.
 

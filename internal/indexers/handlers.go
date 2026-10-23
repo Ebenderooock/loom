@@ -94,6 +94,9 @@ type createRequest struct {
 }
 
 func (s *Service) handleCreate(w http.ResponseWriter, r *http.Request) {
+	if !requireAdminIfPresent(w, r) {
+		return
+	}
 	var req createRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_body", err.Error())
@@ -147,7 +150,7 @@ func (s *Service) handleCreate(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	dh, _ := s.GetWithHealth(r.Context(), saved.ID)
-	writeJSON(w, http.StatusCreated, dh)
+	writeJSON(w, http.StatusCreated, redactDefinitionWithHealth(dh))
 }
 
 // --- list / get -----------------------------------------------------
@@ -157,6 +160,9 @@ func (s *Service) handleList(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "list_failed", err.Error())
 		return
+	}
+	for i := range defs {
+		defs[i] = redactDefinitionWithHealth(defs[i])
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"indexers": defs})
 }
@@ -172,7 +178,7 @@ func (s *Service) handleGet(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "get_failed", err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, dh)
+	writeJSON(w, http.StatusOK, redactDefinitionWithHealth(dh))
 }
 
 // --- replace --------------------------------------------------------
@@ -195,6 +201,9 @@ type replaceRequest struct {
 }
 
 func (s *Service) handleReplace(w http.ResponseWriter, r *http.Request) {
+	if !requireAdminIfPresent(w, r) {
+		return
+	}
 	id := chi.URLParam(r, "id")
 	var req replaceRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -205,13 +214,28 @@ func (s *Service) handleReplace(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid_request", "kind and name are required")
 		return
 	}
+	current, err := s.Get(r.Context(), id)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			writeError(w, http.StatusNotFound, "not_found", "indexer not found")
+		} else {
+			writeError(w, http.StatusInternalServerError, "get_failed", err.Error())
+		}
+		return
+	}
+	config := req.Config
+	if len(config) == 0 {
+		config = current.Config
+	} else {
+		config = preserveConfigSecrets(current.Config, config)
+	}
 	def := Definition{
 		ID:         id,
 		Kind:       req.Kind,
 		Name:       req.Name,
 		Enabled:    req.Enabled,
 		Priority:   req.Priority,
-		Config:     req.Config,
+		Config:     config,
 		Categories: req.Categories,
 		Tags:       req.Tags,
 		ProxyID:    req.ProxyID,
@@ -236,16 +260,17 @@ func (s *Service) handleReplace(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	dh, _ := s.GetWithHealth(r.Context(), saved.ID)
-	writeJSON(w, http.StatusOK, dh)
+	writeJSON(w, http.StatusOK, redactDefinitionWithHealth(dh))
 }
 
 // --- patch ----------------------------------------------------------
 
 type patchRequest struct {
-	Name     *string   `json:"name,omitempty"`
-	Enabled  *bool     `json:"enabled,omitempty"`
-	Priority *int      `json:"priority,omitempty"`
-	Tags     *[]string `json:"tags,omitempty"`
+	Name     *string         `json:"name,omitempty"`
+	Enabled  *bool           `json:"enabled,omitempty"`
+	Priority *int            `json:"priority,omitempty"`
+	Tags     *[]string       `json:"tags,omitempty"`
+	Config   json.RawMessage `json:"config,omitempty"`
 	// ProxyID is tri-state on the wire: omitted = unchanged, null or
 	// "" = clear, "id" = set. nullableString captures all three.
 	ProxyID nullableString `json:"proxy_id,omitempty"`
@@ -276,24 +301,58 @@ func (n *nullableString) UnmarshalJSON(b []byte) error {
 }
 
 func (s *Service) handlePatch(w http.ResponseWriter, r *http.Request) {
+	if !requireAdminIfPresent(w, r) {
+		return
+	}
 	id := chi.URLParam(r, "id")
 	var req patchRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_body", err.Error())
 		return
 	}
-	patch := Patch{
-		ID:       id,
-		Name:     req.Name,
-		Enabled:  req.Enabled,
-		Priority: req.Priority,
-		Tags:     req.Tags,
+	var saved Definition
+	var err error
+	if len(req.Config) > 0 {
+		current, getErr := s.Get(r.Context(), id)
+		if getErr != nil {
+			if errors.Is(getErr, ErrNotFound) {
+				writeError(w, http.StatusNotFound, "not_found", "indexer not found")
+			} else {
+				writeError(w, http.StatusInternalServerError, "get_failed", getErr.Error())
+			}
+			return
+		}
+		if req.Name != nil {
+			current.Name = *req.Name
+		}
+		if req.Enabled != nil {
+			current.Enabled = *req.Enabled
+		}
+		if req.Priority != nil {
+			current.Priority = *req.Priority
+		}
+		if req.Tags != nil {
+			current.Tags = *req.Tags
+		}
+		if req.ProxyID.Set {
+			current.ProxyID = req.ProxyID.Value
+		}
+		current.Config = preserveConfigSecrets(current.Config, req.Config)
+		saved, err = s.Replace(r.Context(), current)
+	} else {
+		patch := Patch{
+			ID:       id,
+			Name:     req.Name,
+			Enabled:  req.Enabled,
+			Priority: req.Priority,
+			Tags:     req.Tags,
+		}
+		if req.ProxyID.Set {
+			v := req.ProxyID.Value
+			patch.ProxyID = &v
+		}
+		saved, err = s.Patch(r.Context(), patch)
 	}
-	if req.ProxyID.Set {
-		v := req.ProxyID.Value
-		patch.ProxyID = &v
-	}
-	saved, err := s.Patch(r.Context(), patch)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", "indexer not found")
@@ -317,12 +376,15 @@ func (s *Service) handlePatch(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	dh, _ := s.GetWithHealth(r.Context(), saved.ID)
-	writeJSON(w, http.StatusOK, dh)
+	writeJSON(w, http.StatusOK, redactDefinitionWithHealth(dh))
 }
 
 // --- delete ---------------------------------------------------------
 
 func (s *Service) handleDelete(w http.ResponseWriter, r *http.Request) {
+	if !requireAdminIfPresent(w, r) {
+		return
+	}
 	id := chi.URLParam(r, "id")
 	if err := s.Delete(r.Context(), id); err != nil {
 		writeError(w, http.StatusInternalServerError, "delete_failed", err.Error())
@@ -340,6 +402,9 @@ type testResponse struct {
 }
 
 func (s *Service) handleTest(w http.ResponseWriter, r *http.Request) {
+	if !requireAdminIfPresent(w, r) {
+		return
+	}
 	id := chi.URLParam(r, "id")
 	h, err := s.TestOne(r.Context(), id)
 	if errors.Is(err, ErrNotFound) {
@@ -349,6 +414,9 @@ func (s *Service) handleTest(w http.ResponseWriter, r *http.Request) {
 	out := testResponse{OK: err == nil, LatencyMS: h.LatencyMS}
 	if err != nil {
 		out.Error = err.Error()
+		if current, getErr := s.Get(r.Context(), id); getErr == nil {
+			out.Error = redactSecretText(out.Error, configSecretValues(current.Config))
+		}
 	}
 	writeJSON(w, http.StatusOK, out)
 }
@@ -356,6 +424,9 @@ func (s *Service) handleTest(w http.ResponseWriter, r *http.Request) {
 // handleTestConfig tests an indexer configuration without saving it.
 // POST /api/v1/indexers/test  (no {id} param — uses request body)
 func (s *Service) handleTestConfig(w http.ResponseWriter, r *http.Request) {
+	if !requireAdminIfPresent(w, r) {
+		return
+	}
 	var req createRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_body", err.Error())
@@ -365,6 +436,25 @@ func (s *Service) handleTestConfig(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid_request", "kind is required")
 		return
 	}
+
+	// Editing clients send the stored ID and their redacted form values.
+	// Merge credentials only for the same implementation and never persist
+	// the temporary configuration used for this test.
+	if req.ID != "" {
+		current, err := s.Get(r.Context(), req.ID)
+		if err != nil {
+			if errors.Is(err, ErrNotFound) {
+				writeError(w, http.StatusNotFound, "not_found", "indexer not found")
+			} else {
+				writeError(w, http.StatusInternalServerError, "get_failed", "failed to load indexer")
+			}
+			return
+		}
+		if current.Kind == req.Kind {
+			req.Config = preserveConfigSecrets(current.Config, req.Config)
+		}
+	}
+	secrets := configSecretValues(req.Config)
 
 	def := Definition{
 		ID:      "_test_ephemeral",
@@ -377,7 +467,7 @@ func (s *Service) handleTestConfig(w http.ResponseWriter, r *http.Request) {
 
 	ix, err := build(r.Context(), def)
 	if err != nil {
-		writeJSON(w, http.StatusOK, testResponse{OK: false, Error: err.Error()})
+		writeJSON(w, http.StatusOK, testResponse{OK: false, Error: redactSecretText(err.Error(), secrets)})
 		return
 	}
 
@@ -395,7 +485,7 @@ func (s *Service) handleTestConfig(w http.ResponseWriter, r *http.Request) {
 
 	out := testResponse{OK: testErr == nil, LatencyMS: elapsed.Milliseconds()}
 	if testErr != nil {
-		out.Error = testErr.Error()
+		out.Error = redactSecretText(testErr.Error(), secrets)
 	}
 	writeJSON(w, http.StatusOK, out)
 }

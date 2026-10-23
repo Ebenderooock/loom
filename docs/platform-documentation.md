@@ -41,6 +41,7 @@
    - 3.29 [System / Health / Diagnostics](#329-system--health--diagnostics)
    - 3.30 [Compatibility Shims (arr-compat)](#330-compatibility-shims-arr-compat)
    - 3.31 [System Logs](#331-system-logs)
+   - 3.32 [Media Requests](#332-media-requests)
 4. [Process Flows](#4-process-flows)
    - 4.1 [Manual Search & Grab Flow](#41-manual-search--grab-flow)
    - 4.2 [Automated Search & Grab Flow](#42-automated-search--grab-flow)
@@ -1397,14 +1398,20 @@ Returns `{ success: true/false, items: [...], count: N }` with up to 5 preview i
 | nextRunAt | datetime | Next scheduled run timestamp |
 | itemsSearched | int | Total items searched since boot |
 | itemsInQueue | int | Items eligible for search |
-| quotaUsage | map | Per-indexer search count today |
+| quotaUsage | map | Per-indexer search attempts in the last 24 hours |
 
 **Search Logic:**
 1. Each cycle splits batch 50/50 between movies and episodes
 2. `GetCandidates` returns items not searched within `minResearchDays`
-3. For each candidate, queries all enabled indexers that haven't hit quota
-4. Records search timestamp in `search_state` table to prevent re-searching too soon
-5. Per-indexer quota resets daily
+3. For each candidate, runs the full search-and-grab engine against eligible
+   indexers. Every admitted indexer query consumes quota, including ID/title
+   fallbacks and alternate-title queries; failed provider attempts still count.
+4. Records a timestamp in `search_state` only after a successful search outcome,
+   including a successful search with no acceptable results. Failed, cancelled,
+   or quota-blocked candidates stay eligible for retry.
+5. Quota admission is atomic per indexer over a rolling 24-hour window. Usage is
+   in memory and resets on restart. This rolling-search budget does not limit
+   manual searches or share a budget across definitions of the same provider.
 
 **Expected outcomes:**
 - Missing media eventually discovered without manual intervention.
@@ -1856,6 +1863,37 @@ slog.Logger
 - Ring buffer overflow: oldest entries silently dropped (by design).
 - DB write failure: logged to console but does not block the application.
 - SSE disconnection: browser EventSource auto-reconnects.
+
+---
+
+### 3.32 Media Requests
+
+Authenticated users can request movies, series, and artists; admins approve or
+reject them. Approval adds or links a monitored library entry and starts
+acquisition for newly added media. Merely adding a catalog entry does not mean
+its files are available.
+
+Requests progress through `pending`, `approving`, and `approved`, or terminate
+as `rejected` or `failed`. Approved requests become `available` after imported
+file records demonstrate fulfillment. Reconciliation runs at startup, after
+approval, and once per minute, covering automatic imports, manual imports,
+library scans, and missed transitions across restarts.
+
+- Movies need a non-deleted movie and file record.
+- Series need an episode file and no missing currently aired monitored episodes
+  in monitored seasons. Future airing timestamps do not block completion;
+  unknown dates are treated as due.
+- Artists need imported monitored tracks on selected releases and no incomplete
+  currently released monitored albums. Missing selected-release track metadata
+  prevents completion; future albums do not block it.
+
+`available` records fulfillment; it does not promise continued availability
+after file removal, quality cutoff, or visibility on an external media server.
+Global per-user movie, series, and music limits must all be non-negative;
+zero means unlimited. Admins bypass request quotas.
+
+See [the request roadmap](./roadmap/phase-2-media-requests.md) for the distinction
+between implemented behavior and expanded request-management proposals.
 
 ---
 

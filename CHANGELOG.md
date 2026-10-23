@@ -9,12 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Security
 
+- Require administrator access for integration configuration changes and tests,
+  redact stored credentials in responses, and preserve unchanged secrets on edit.
 - Upgrade the Go toolchain to 1.26.10 across CI and container builds, and update
   OpenTelemetry, gRPC, Gorilla WebSocket, and Go networking/text dependencies
   (including required transitive updates) to address known vulnerabilities.
 
 ### Fixed
 
+- Enforce rolling-search quotas per admitted indexer query and retain retry
+  eligibility after failed, cancelled or fully skipped searches.
+- Mark requests fulfilled only after imported files satisfy availability checks,
+  reconcile fulfillment periodically, and reject negative music request quotas.
+- Prevent imports from overwriting existing destinations or following symlinks,
+  and preserve moved files when a library update fails.
 - Movie searches now send the library year and resolve identity from library metadata
   server-side, preventing older same-title releases from bypassing year validation.
   Movie imports reject conflicting release years even when a workflow links the

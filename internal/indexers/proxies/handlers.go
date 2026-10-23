@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
+
+	"github.com/ebenderooock/loom/internal/auth"
 )
 
 // Mount registers /api/v1/proxies/* on r. Designed to be passed as
@@ -62,6 +64,9 @@ func (s *Service) handleList(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "internal", err.Error())
 		return
 	}
+	for i := range rows {
+		rows[i] = redactProxy(rows[i])
+	}
 	writeJSON(w, http.StatusOK, map[string]any{"proxies": rows})
 }
 
@@ -76,7 +81,7 @@ func (s *Service) handleGet(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "internal", err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, row)
+	writeJSON(w, http.StatusOK, redactProxy(row))
 }
 
 // --- create -------------------------------------------------------
@@ -90,6 +95,9 @@ type createRequest struct {
 }
 
 func (s *Service) handleCreate(w http.ResponseWriter, r *http.Request) {
+	if !requireAdminIfPresent(w, r) {
+		return
+	}
 	var req createRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_body", err.Error())
@@ -118,7 +126,7 @@ func (s *Service) handleCreate(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "internal", err.Error())
 		return
 	}
-	writeJSON(w, http.StatusCreated, out)
+	writeJSON(w, http.StatusCreated, redactProxy(out))
 }
 
 // --- replace ------------------------------------------------------
@@ -131,11 +139,28 @@ type replaceRequest struct {
 }
 
 func (s *Service) handleReplace(w http.ResponseWriter, r *http.Request) {
+	if !requireAdminIfPresent(w, r) {
+		return
+	}
 	id := chi.URLParam(r, "id")
 	var req replaceRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_body", err.Error())
 		return
+	}
+	current, err := s.Get(r.Context(), id)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			writeError(w, http.StatusNotFound, "not_found", err.Error())
+		} else {
+			writeError(w, http.StatusInternalServerError, "internal", err.Error())
+		}
+		return
+	}
+	if len(req.Config) == 0 {
+		req.Config = current.Config
+	} else {
+		req.Config = preserveConfigSecrets(current.Config, req.Config)
 	}
 	enabled := true
 	if req.Enabled != nil {
@@ -156,7 +181,7 @@ func (s *Service) handleReplace(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "internal", err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, out)
+	writeJSON(w, http.StatusOK, redactProxy(out))
 }
 
 // --- patch --------------------------------------------------------
@@ -169,11 +194,27 @@ type patchRequest struct {
 }
 
 func (s *Service) handlePatch(w http.ResponseWriter, r *http.Request) {
+	if !requireAdminIfPresent(w, r) {
+		return
+	}
 	id := chi.URLParam(r, "id")
 	var req patchRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_body", err.Error())
 		return
+	}
+	if req.Config != nil {
+		current, err := s.Get(r.Context(), id)
+		if err != nil {
+			if errors.Is(err, ErrNotFound) {
+				writeError(w, http.StatusNotFound, "not_found", err.Error())
+			} else {
+				writeError(w, http.StatusInternalServerError, "internal", err.Error())
+			}
+			return
+		}
+		merged := preserveConfigSecrets(current.Config, *req.Config)
+		req.Config = &merged
 	}
 	patch := Patch{
 		ID:      id,
@@ -196,12 +237,15 @@ func (s *Service) handlePatch(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "internal", err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, out)
+	writeJSON(w, http.StatusOK, redactProxy(out))
 }
 
 // --- delete -------------------------------------------------------
 
 func (s *Service) handleDelete(w http.ResponseWriter, r *http.Request) {
+	if !requireAdminIfPresent(w, r) {
+		return
+	}
 	id := chi.URLParam(r, "id")
 	err := s.Delete(r.Context(), id)
 	if err != nil {
@@ -225,6 +269,9 @@ func (s *Service) handleDelete(w http.ResponseWriter, r *http.Request) {
 // --- test ---------------------------------------------------------
 
 func (s *Service) handleTest(w http.ResponseWriter, r *http.Request) {
+	if !requireAdminIfPresent(w, r) {
+		return
+	}
 	id := chi.URLParam(r, "id")
 	res, err := s.TestProxy(r.Context(), id)
 	if err != nil {
@@ -235,5 +282,18 @@ func (s *Service) handleTest(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "test_failed", err.Error())
 		return
 	}
+	// Transport errors can embed the proxy URL or authorization material.
+	if res.Error != "" {
+		res.Error = "proxy connectivity test failed"
+	}
 	writeJSON(w, http.StatusOK, res)
+}
+
+func requireAdminIfPresent(w http.ResponseWriter, r *http.Request) bool {
+	id := auth.IdentityFrom(r.Context())
+	if id != nil && !id.HasRole("admin") {
+		writeError(w, http.StatusForbidden, "forbidden", "admin access required")
+		return false
+	}
+	return true
 }

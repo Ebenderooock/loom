@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -571,21 +572,21 @@ func (p *ImportPipeline) importSingleFile(ctx context.Context, ev *downloads.Dow
 			fmt.Errorf("import rejected: %s", strings.Join(reasons, "; ")))
 	}
 
-	// Collision handling: if the destination already exists, check if it's the same file
-	if destInfo, err := os.Stat(destFile); err == nil {
-		srcInfo, srcErr := os.Stat(mediaFile)
-
-		// If source is gone (already moved on a prior attempt) OR sizes match, treat as already imported.
-		alreadyMoved := srcErr != nil
-		sameSizeMatch := srcErr == nil && destInfo.Size() == srcInfo.Size()
-		if alreadyMoved || sameSizeMatch {
-			if alreadyMoved {
-				p.logger.Info("source file gone and destination exists, treating prior import as successful",
-					"dest", destFile, "src", mediaFile)
-			} else {
-				p.logger.Info("destination file already exists with same size, treating as imported",
-					"dest", destFile, "src", mediaFile)
-			}
+	// A destination is only considered an already-completed move when the
+	// source is gone (or both paths are the same file). A same-size collision
+	// is not proof of identity and must never silently discard the source.
+	destInfo, destErr := os.Lstat(destFile)
+	if destErr == nil {
+		if destInfo.Mode()&os.ModeSymlink != 0 || !destInfo.Mode().IsRegular() {
+			return p.recordFailure(ctx, string(match.MediaType), match.MediaID, ev.Title, mediaFile,
+				fmt.Errorf("import destination is not a regular file: %s", destFile))
+		}
+		srcInfo, srcErr := os.Lstat(mediaFile)
+		alreadyMoved := os.IsNotExist(srcErr)
+		sameFile := srcErr == nil && os.SameFile(srcInfo, destInfo)
+		if alreadyMoved || sameFile {
+			p.logger.Info("source already present at import destination",
+				"dest", destFile, "src", mediaFile)
 			if err := p.updateLibrary(ctx, match, destFile, mediaFile); err != nil {
 				p.logger.Warn("library update for existing file failed", "error", err)
 			}
@@ -607,16 +608,25 @@ func (p *ImportPipeline) importSingleFile(ctx context.Context, ev *downloads.Dow
 			})
 			return nil
 		}
-
-		// Destination exists with different size — upgrade scenario.
-		// Recycle the old file instead of overwriting it.
-		if p.recycler != nil {
-			libraryRoot := filepath.Dir(match.DestPath)
-			if err := p.recycler.Recycle(destFile, libraryRoot); err != nil {
-				p.logger.Warn("failed to recycle existing file, will overwrite",
-					"dest", destFile, "error", err)
-			}
+		if srcErr != nil {
+			return p.recordFailure(ctx, string(match.MediaType), match.MediaID, ev.Title, mediaFile,
+				fmt.Errorf("inspect import source: %w", srcErr))
 		}
+
+		// Only an explicit recycle succeeds as an upgrade path; never fall
+		// through to an overwrite if the recycle bin is unavailable or fails.
+		if p.recycler == nil || !p.recycler.Enabled || p.recycler.Path == "" {
+			return p.recordFailure(ctx, string(match.MediaType), match.MediaID, ev.Title, mediaFile,
+				fmt.Errorf("%w: %s", ErrDestinationExists, destFile))
+		}
+		libraryRoot := filepath.Dir(match.DestPath)
+		if err := p.recycler.Recycle(destFile, libraryRoot); err != nil {
+			return p.recordFailure(ctx, string(match.MediaType), match.MediaID, ev.Title, mediaFile,
+				fmt.Errorf("preserve existing destination before upgrade: %w", err))
+		}
+	} else if !os.IsNotExist(destErr) {
+		return p.recordFailure(ctx, string(match.MediaType), match.MediaID, ev.Title, mediaFile,
+			fmt.Errorf("inspect import destination: %w", destErr))
 	}
 
 	// Import the file
@@ -630,9 +640,8 @@ func (p *ImportPipeline) importSingleFile(ctx context.Context, ev *downloads.Dow
 		if !vr.OK {
 			p.logger.Error("import verification failed",
 				"dest", destFile, "reason", vr.Reason)
-			_ = os.Remove(destFile)
 			return p.recordFailure(ctx, string(match.MediaType), match.MediaID, ev.Title, mediaFile,
-				fmt.Errorf("verification failed: %s", vr.Reason))
+				fmt.Errorf("verification failed (file preserved at %s): %s", destFile, vr.Reason))
 		}
 	}
 
@@ -664,11 +673,10 @@ func (p *ImportPipeline) importSingleFile(ctx context.Context, ev *downloads.Dow
 
 	// Update database
 	if err := p.updateLibrary(ctx, match, destFile, mediaFile); err != nil {
-		p.logger.Error("library update failed after import, cleaning up",
+		p.logger.Error("library update failed after import, preserving file",
 			"error", err, "dest", destFile)
-		// Try to clean up the imported file
-		_ = os.Remove(destFile)
-		return p.recordFailure(ctx, string(match.MediaType), match.MediaID, ev.Title, mediaFile, err)
+		return p.recordFailure(ctx, string(match.MediaType), match.MediaID, ev.Title, mediaFile,
+			fmt.Errorf("library update failed (file preserved at %s): %w", destFile, err))
 	}
 
 	// Record success
@@ -1163,9 +1171,12 @@ func (p *ImportPipeline) SubmitReimport(mediaType MediaType, mediaID, sourcePath
 
 // ImportManual triggers an import for an arbitrary filesystem path.
 func (p *ImportPipeline) ImportManual(ctx context.Context, path string) error {
-	info, err := os.Stat(path)
+	info, err := os.Lstat(path)
 	if err != nil {
 		return fmt.Errorf("path not found: %w", err)
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("refusing symlink import path: %s", path)
 	}
 
 	var mediaFiles []string
@@ -1204,9 +1215,12 @@ func (p *ImportPipeline) ImportManual(ctx context.Context, path string) error {
 // specific media item, bypassing fuzzy matching. The user explicitly
 // provides the media_type and media_id, so no guessing is needed.
 func (p *ImportPipeline) ImportManualMatch(ctx context.Context, path string, mediaType MediaType, mediaID string) (*ImportRecord, error) {
-	info, err := os.Stat(path)
+	info, err := os.Lstat(path)
 	if err != nil {
 		return nil, fmt.Errorf("path not found: %w", err)
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return nil, fmt.Errorf("refusing symlink import path: %s", path)
 	}
 
 	var mediaFiles []string
@@ -1232,17 +1246,15 @@ func (p *ImportPipeline) ImportManualMatch(ctx context.Context, path string, med
 		return nil, fmt.Errorf("resolve media: %w", err)
 	}
 
-	// For directory-based imports in move mode, rename the source folder to
+	// For directory-based imports in move mode, move the source folder to
 	// the destination folder path, preserving subtitles, NFOs, images, etc.
+	preserveLayout := info.IsDir() && filepath.Clean(path) == filepath.Clean(match.DestPath)
 	if info.IsDir() && p.importMode == ImportModeMove && path != match.DestPath {
 		if err := importFolder(path, match.DestPath); err != nil {
-			p.logger.Warn("folder rename failed, falling back to per-file import",
-				"src", path, "dest", match.DestPath, "error", err)
-			// Ensure destination directory exists for per-file fallback
-			if err := os.MkdirAll(match.DestPath, 0755); err != nil {
-				return nil, fmt.Errorf("create destination directory: %w", err)
-			}
+			_ = p.recordFailure(ctx, string(match.MediaType), match.MediaID, filepath.Base(path), path, err)
+			return nil, fmt.Errorf("import folder %q to %q: %w", path, match.DestPath, err)
 		} else {
+			preserveLayout = true
 			p.logger.Info("renamed source folder to library folder",
 				"src", path, "dest", match.DestPath)
 			// Update media file paths to reflect the renamed folder
@@ -1259,21 +1271,26 @@ func (p *ImportPipeline) ImportManualMatch(ctx context.Context, path string, med
 	}
 
 	var lastRecord *ImportRecord
+	var importErrors []error
 	for _, mf := range mediaFiles {
 		destFile := filepath.Join(match.DestPath, filepath.Base(mf))
+		if preserveLayout {
+			destFile = mf
+		}
 
 		// If source and dest are the same (folder was already renamed), skip the move
 		if mf != destFile {
 			if err := importFile(mf, destFile, p.importMode); err != nil {
 				_ = p.recordFailure(ctx, string(match.MediaType), match.MediaID, filepath.Base(mf), mf, err)
+				importErrors = append(importErrors, fmt.Errorf("import %q to %q: %w", mf, destFile, err))
 				continue
 			}
 		}
 
 		if err := p.updateLibrary(ctx, match, destFile, mf); err != nil {
 			p.logger.Error("library update failed after manual match import", "error", err)
-			_ = os.Remove(destFile)
 			_ = p.recordFailure(ctx, string(match.MediaType), match.MediaID, filepath.Base(mf), mf, err)
+			importErrors = append(importErrors, fmt.Errorf("library update failed (file preserved at %s): %w", destFile, err))
 			continue
 		}
 
@@ -1297,6 +1314,9 @@ func (p *ImportPipeline) ImportManualMatch(ctx context.Context, path string, med
 		}
 	}
 
+	if len(importErrors) > 0 {
+		return lastRecord, errors.Join(importErrors...)
+	}
 	if lastRecord == nil {
 		return nil, fmt.Errorf("all files failed to import from %s", path)
 	}

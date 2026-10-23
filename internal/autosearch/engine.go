@@ -337,6 +337,7 @@ func (e *Engine) searchSeriesFallback(ctx context.Context, req SearchRequest) (*
 	}
 
 	combined := &SearchResult{}
+	successfulSeasons := 0
 	for _, season := range seasons {
 		if ctx.Err() != nil {
 			break
@@ -351,6 +352,7 @@ func (e *Engine) searchSeriesFallback(ctx context.Context, req SearchRequest) (*
 			e.logger.Warn("season search failed", "season", season.SeasonNumber, "error", err)
 			continue
 		}
+		successfulSeasons++
 		combined.Considered += result.Considered
 		combined.Rejected += result.Rejected
 		if result.Grabbed != nil && combined.Grabbed == nil {
@@ -359,6 +361,14 @@ func (e *Engine) searchSeriesFallback(ctx context.Context, req SearchRequest) (*
 	}
 	if combined.Grabbed == nil && combined.Considered == 0 {
 		combined.Reason = "no results from any season"
+	}
+	if req.RequireSuccessfulSearch {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		if successfulSeasons == 0 {
+			return nil, fmt.Errorf("no season search completed successfully")
+		}
 	}
 	return combined, nil
 }
@@ -555,6 +565,7 @@ func (e *Engine) searchAndGrabSingle(ctx context.Context, req SearchRequest) (*S
 	var scored []ScoredRelease
 	rejectCounts := make(map[string]int)
 	totalConsidered := 0
+	successfulQueries := 0
 
 	for tierIdx, tier := range tiers {
 		var tierResults []indexers.Result
@@ -585,6 +596,13 @@ func (e *Engine) searchAndGrabSingle(ctx context.Context, req SearchRequest) (*S
 			// fail-fast per-indexer timeout (15s direct, 65s for
 			// FlareSolverr-proxied indexers) instead of a flat 120s.
 			agg := e.indexerSvc.Search(ctx, q, nil, 0)
+			if agg.Diagnostics != nil {
+				for _, d := range agg.Diagnostics.Indexers {
+					if d.Status == "ok" {
+						successfulQueries++
+					}
+				}
+			}
 			tierResults = append(tierResults, agg.Results...)
 			if q.IMDBID != "" || q.TVDBID != "" || q.TMDBID != "" {
 				tierIDsBased = true
@@ -693,6 +711,21 @@ func (e *Engine) searchAndGrabSingle(ctx context.Context, req SearchRequest) (*S
 		}
 	}
 
+	if req.RequireSuccessfulSearch {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		if successfulQueries == 0 {
+			e.logSearchFailed(ctx, req, "no indexer query completed successfully")
+			if dbg != nil {
+				dbg.Status = searchdebug.StatusFailed
+				dbg.Outcome = "search_failed"
+				dbg.ErrorMessage = "no indexer query completed successfully"
+			}
+			return nil, fmt.Errorf("no indexer query completed successfully")
+		}
+	}
+
 	result := &SearchResult{
 		Considered: totalConsidered,
 	}
@@ -773,6 +806,9 @@ func (e *Engine) searchAndGrabSingle(ctx context.Context, req SearchRequest) (*S
 				dbg.Status = searchdebug.StatusFailed
 			}
 			e.logSearchFailed(ctx, req, result.Reason)
+			if req.RequireSuccessfulSearch {
+				return result, fmt.Errorf("grab failed for all %d candidates: %w", len(scored), err)
+			}
 			return result, nil
 		}
 	}

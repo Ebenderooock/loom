@@ -253,6 +253,15 @@ func (r *Registry) Search(ctx context.Context, q Query, opts SearchOptions) Aggr
 		go func() {
 			defer wg.Done()
 			defer func() { <-sem }()
+			if err := ctx.Err(); err != nil {
+				ch <- partial{id: ix.ID(), name: ix.Name(), err: err}
+				return
+			}
+			if !admitSearch(ctx, ix.ID()) {
+				ch <- partial{id: ix.ID(), name: ix.Name(), skipped: true,
+					skipReason: "search quota exhausted"}
+				return
+			}
 			start := time.Now()
 			res, err := runOne(ctx, ix, q, opts.timeoutFor(ix.ID()))
 			ch <- partial{id: ix.ID(), name: ix.Name(), out: res, err: err, elapsed: time.Since(start)}

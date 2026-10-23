@@ -225,7 +225,7 @@ func TestApproveAlreadyExistingShortCircuits(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Approve: %v", err)
 	}
-	if out.Status != StatusAvailable || out.MediaID != "movie-7" {
+	if out.Status != StatusApproved || out.MediaID != "movie-7" {
 		t.Fatalf("out = %+v", out)
 	}
 	if got := atomic.LoadInt32(&f.fulfillMovieN); got != 0 {
@@ -391,6 +391,12 @@ func TestSetQuotaConfigValidation(t *testing.T) {
 	ctx := context.Background()
 	if _, err := svc.SetQuotaConfig(ctx, QuotaConfig{MovieLimit: -1}); !errors.Is(err, ErrInvalidQuota) {
 		t.Fatalf("negative limit: got %v", err)
+	}
+	if _, err := svc.SetQuotaConfig(ctx, QuotaConfig{MusicLimit: -1}); !errors.Is(err, ErrInvalidQuota) {
+		t.Fatalf("negative music limit: got %v", err)
+	}
+	if _, err := svc.SetQuotaConfig(ctx, QuotaConfig{SeriesLimit: -1}); !errors.Is(err, ErrInvalidQuota) {
+		t.Fatalf("negative series limit: got %v", err)
 	}
 	if _, err := svc.SetQuotaConfig(ctx, QuotaConfig{MovieLimit: 3, WindowDays: 99999}); !errors.Is(err, ErrInvalidQuota) {
 		t.Fatalf("huge window: got %v", err)

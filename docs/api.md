@@ -29,22 +29,23 @@ in `api/openapi/loom.yaml`.
 | `GET` | `/metrics` | none | `200 text/plain; version=0.0.4` | Prometheus exposition. |
 | `GET` | `/api/v1/system/status` | none (today) | `200 application/json` (`SystemStatus`) | Build metadata. |
 | `GET\|POST` | `/debug/pprof/*` | gated by `debug.pprof` | varies | Standard `net/http/pprof` handlers. |
-| `GET` | `/api/v1/indexers/` | apiKey/bearer/cookie | `200 application/json` (`[]DefinitionWithHealth`) | List configured indexers with the latest health row. |
-| `POST` | `/api/v1/indexers/` | apiKey/bearer/cookie | `201 application/json` (`Definition`) | Create an indexer. |
-| `GET` | `/api/v1/indexers/{id}` | apiKey/bearer/cookie | `200 application/json` (`DefinitionWithHealth`) | Fetch a single indexer + its latest health row. |
-| `PUT` | `/api/v1/indexers/{id}` | apiKey/bearer/cookie | `200 application/json` (`Definition`) | Replace an existing indexer's full definition. |
-| `PATCH` | `/api/v1/indexers/{id}` | apiKey/bearer/cookie | `200 application/json` (`Definition`) | Partially update an existing indexer. |
-| `DELETE` | `/api/v1/indexers/{id}` | apiKey/bearer/cookie | `204` | Remove an indexer. |
+| `GET` | `/api/v1/indexers/` | apiKey/bearer/cookie | `200 application/json` (`[]DefinitionWithHealth`) | List configured indexers with health; credential fields are omitted. |
+| `POST` | `/api/v1/indexers/` | admin | `201 application/json` (`Definition`) | Create an indexer. |
+| `GET` | `/api/v1/indexers/{id}` | apiKey/bearer/cookie | `200 application/json` (`DefinitionWithHealth`) | Fetch one indexer + health; credential fields are omitted. |
+| `PUT` | `/api/v1/indexers/{id}` | admin | `200 application/json` (`Definition`) | Replace an existing indexer's full definition. |
+| `PATCH` | `/api/v1/indexers/{id}` | admin | `200 application/json` (`Definition`) | Partially update an existing indexer. |
+| `DELETE` | `/api/v1/indexers/{id}` | admin | `204` | Remove an indexer. |
 | `GET` | `/api/v1/indexers/{id}/caps` | apiKey/bearer/cookie | `200 application/json` (`Caps`) | Per-indexer capability descriptor. |
-| `POST` | `/api/v1/indexers/{id}/test` | apiKey/bearer/cookie | `200 application/json` (`Health`) | Run an immediate health check; persists the result. |
+| `POST` | `/api/v1/indexers/{id}/test` | admin | `200 application/json` (`Health`) | Run an immediate health check; persists the result. |
+| `POST` | `/api/v1/indexers/test` | admin | `200 application/json` (`TestResult`) | Test an unsaved indexer configuration. |
 | `POST` | `/api/v1/indexers/search` | apiKey/bearer/cookie | `200 application/json` (`AggregatedResults`) | Fan-out search across all (or a subset of) enabled indexers. |
 | `GET` | `/api/v1/proxies/` | apiKey/bearer/cookie | `200 application/json` (`{"proxies":[Proxy]}`) | List configured outbound proxies. |
-| `POST` | `/api/v1/proxies/` | apiKey/bearer/cookie | `201 application/json` (`Proxy`) | Create a proxy (HTTP/HTTPS/SOCKS5/FlareSolverr). |
+| `POST` | `/api/v1/proxies/` | admin | `201 application/json` (`Proxy`) | Create a proxy (HTTP/HTTPS/SOCKS5/FlareSolverr). |
 | `GET` | `/api/v1/proxies/{id}` | apiKey/bearer/cookie | `200 application/json` (`Proxy`) | Fetch one proxy. |
-| `PUT` | `/api/v1/proxies/{id}` | apiKey/bearer/cookie | `200 application/json` (`Proxy`) | Replace an existing proxy's full definition. |
-| `PATCH` | `/api/v1/proxies/{id}` | apiKey/bearer/cookie | `200 application/json` (`Proxy`) | Partially update a proxy. |
-| `DELETE` | `/api/v1/proxies/{id}` | apiKey/bearer/cookie | `204` or `409 application/json` | Remove a proxy. Returns 409 `proxy_in_use` (with `details.indexer_ids`) when any indexer still references it. |
-| `POST` | `/api/v1/proxies/{id}/test` | apiKey/bearer/cookie | `200 application/json` (`ProxyTestResult`) | Probe the proxy: HTTP/SOCKS5 fetch the configured probe URL; FlareSolverr issues `sessions.list`. |
+| `PUT` | `/api/v1/proxies/{id}` | admin | `200 application/json` (`Proxy`) | Replace an existing proxy's full definition. |
+| `PATCH` | `/api/v1/proxies/{id}` | admin | `200 application/json` (`Proxy`) | Partially update a proxy. |
+| `DELETE` | `/api/v1/proxies/{id}` | admin | `204` or `409 application/json` | Remove a proxy. Returns 409 `proxy_in_use` (with `details.indexer_ids`) when any indexer still references it. |
+| `POST` | `/api/v1/proxies/{id}/test` | admin | `200 application/json` (`ProxyTestResult`) | Probe the proxy: HTTP/SOCKS5 fetch the configured probe URL; FlareSolverr issues `sessions.list`. |
 
 `SystemStatus` is `{ version, commit, buildDate, engine }` — the database
 engine name is included so readiness tooling can confirm what backend
@@ -97,6 +98,18 @@ The OpenAPI spec defines three security schemes ahead of the handlers:
 
 The endpoints that consume them land with the Phase 1c auth PR. See
 ADR-0004 and [auth.md](auth.md).
+
+Indexer and download-client configuration mutations and connectivity tests
+require an administrator role. Authenticated non-admin users retain the
+indexer search and download-use surfaces. Config/list/detail and
+write responses redact credential-like fields (including API keys, passwords,
+cookies, tokens, and usernames). When editing, leave a credential blank or
+omit it to preserve the stored value; send a non-empty value to replace it.
+Proxy mutations/tests, Jackett imports, indexer-rule mutations, and sensitive
+search diagnostics (health/reset and query logs) are administrator-only too.
+The server's explicitly disabled-auth mode retains its existing behavior.
+Edit-form connectivity tests send the saved `id` plus unsaved settings to
+the test-config endpoint, which restores unchanged credentials without saving.
 
 ## Indexers (Phase 2a)
 
