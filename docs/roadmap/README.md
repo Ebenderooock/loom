@@ -22,7 +22,7 @@ not verified against original post bodies and do not drive implementation priori
 | 1 | P1 | [Durable acquisition failures](https://github.com/Ebenderooock/loom/issues/174) | Extend history/blocklist mechanisms; bounded retries and restart recovery, including pre-workflow failures. |
 | 2 | P1 | [Explainable matching and policy](https://github.com/Ebenderooock/loom/issues/171) | Actual-engine identity/ranking explanations, configuration guidance and regression fixtures; investigate safe pack-mapping previews. |
 | 3 | P1 | [Request history versus availability](https://github.com/Ebenderooock/loom/issues/172) | Preserve fulfillment history, support re-requesting missing media and protect against disconnected mounts. |
-| Design alongside 1-3 | P1 | [Independent version tracks](https://github.com/Ebenderooock/loom/issues/169) | Design 1080p/4K isolation and migration before splitting implementation; single-track defaults unchanged. |
+| Design alongside 1-3 | P1 | [Independent version tracks](https://github.com/Ebenderooock/loom/issues/169) | [Proposed ADR-0027](../adr/0027-independent-version-tracks.md) defines 1080p/4K isolation, migration and implementation gates; not implemented. |
 | Later | P2 | [Provider-aware API budgets](https://github.com/Ebenderooock/loom/issues/173) | Persistent allowances, explicit shared-account groups and provider reset signals. |
 | Later | P2 | [Read-only library health](https://github.com/Ebenderooock/loom/issues/170) | Safe first slice of Phase 3, with evidence and previews; no automatic deletion. |
 
