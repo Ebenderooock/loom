@@ -63,6 +63,11 @@ A 4K release is not a better replacement for a permanent 1080p track. The
 default track retains unrestricted legacy membership until explicitly configured.
 Adding a constrained track requires constraining the default too when their
 acceptance sets overlap. Reject overlapping enabled-track policies in the MVP.
+Preview both edits as one revision-checked transaction: intermediate overlapping
+policies cannot be enabled. A retained default file outside the new membership
+stays owned and playable (`available`, `below_cutoff`, reason `policy_mismatch`);
+it cannot satisfy membership or be reassigned/deleted automatically. The preview
+requires acknowledgment of this state before activation.
 
 Language/edition tracks fit the same identity, with future normalized language
 requirements and edition selectors. The parser already extracts languages and
@@ -116,7 +121,7 @@ existing defaulting semantics, not silently rewrite all tracks.
    episode targets and search state without moving, renaming or deleting files.
    Preserve media IDs, profiles, monitoring and historical search timestamps.
    For multiple files choose a deterministic current candidate from verified
-   live files (existing quality ranking, then stable file ID); retain every row.
+   live files (existing quality ranking, then ascending file ID); retain every row.
    Unknown quality/presence is reported, not guessed into cutoff completion.
 3. Drain active imports before switching writers. Backfill legacy workflow items
    to the default target and validate claims before resuming; conflicting active
@@ -169,11 +174,16 @@ cross-track fulfillment; it does not create a second request-history project.
 
 ### Monitoring, search and upgrade isolation
 
-Effective acquisition monitoring is parent media eligibility AND track monitoring
-AND applicable season/episode selection AND per-target monitor override. Parent
-archive/unmonitor remains a master stop. Legacy monitor writes only change the
-default-track selection where the old interface permits; native whole-title
-controls say explicitly that they stop all tracks. Unmonitor preserves files.
+Effective acquisition monitoring is owner lifecycle eligibility AND track
+monitoring AND the target's episode selection. Owner archival/deletion and an
+explicit native whole-title stop are master stops. Episode selection starts from
+season/episode monitoring; a nullable per-target override inherits when null,
+includes when true and excludes when false. Inclusion cannot bypass owner/track
+stops or airing eligibility. Existing series monitor modes initialize selection
+as today. Legacy monitor writes update only the default track/target selection
+after migration, not a sibling's master stop; scalar monitor reads project that
+default. Native whole-title controls explicitly say they stop all tracks.
+Unmonitor preserves files.
 
 Manual and automatic searches resolve identity from the catalog, then select the
 track policy. Rolling missing/cutoff-unmet candidates, cooldown, RSS matching,
@@ -222,12 +232,22 @@ candidate and policy revision; execute revalidates that plan.
 
 An import may replace/recycle only the selected same-track file after verification
 of the new file and durable ownership update. Filesystem and database writes
-cannot be one transaction: stage a uniquely named new file, verify it, record an
-operation manifest, commit ownership, then recycle the old owned path. Recovery
+cannot be one transaction: record an operation manifest, stage a uniquely named
+new file, verify it, commit ownership, then recycle the old owned path. Recovery
 must preserve at least one usable copy and resume idempotently after every crash
 boundary. Never overwrite or recycle an unowned/foreign destination. Preserve
 baseline exclusive-create, symlink rejection and failed-move recovery. Rename
 must update ownership/inventory references without changing the track.
+
+The import slice defines a durable manifest with `planned`, `staged`, `verified`,
+`ownership_committed`, `old_recycled`, `complete` and explicit `needs_review`
+states. It records target/track/revision, old and new file IDs/paths and observed
+file identities before side effects. The import service's startup recovery owns
+resumption before accepting imports: verify staged content, reconcile committed
+ownership, then recycle only a still-owned old path. Pre-commit recovery keeps
+the old selection; post-commit recovery keeps the new selection. An ambiguous
+identity or inaccessible root pauses that operation in review without deleting
+either copy. One target claim covers execution and recovery.
 
 Respect existing move/copy/hardlink/hardlink-only modes. Hardlink upgrades create
 new directory entries; never edit a shared inode in place or truncate a seeding
@@ -319,17 +339,19 @@ documentation PR**. Test the real engine, repository and filesystem paths.
 
 ### Delivery plan and approval gates
 
-Implementation issues are linked below after creation. Each is a separate
+Implementation issues are linked below. Each is a separate
 reviewable branch/PR; this design PR never implements them. Dependencies are
 contract prerequisites, not priority ordering. #169 closes the design scope,
 not delivery of concurrent tracks.
 
-1. **Ownership migration:** schema/backfill/repository/default projections.
-2. **API and compatibility:** track policy validation, DTOs, default-only adapters.
-3. **Acquisition:** target claims, search/RSS/rolling/upgrade/retry isolation.
-4. **Import and naming:** owned destination plans, hardlink safety, pack outcomes.
-5. **Lifecycle:** scanner/delete/recycle/archive/cleanup ownership boundaries.
-6. **UI and release gate:** coherent per-track UX and end-to-end activation matrix.
+| Slice | Issue | Blocks on |
+|---|---|---|
+| Ownership migration: schema/backfill/repository/default projections | [#176](https://github.com/Ebenderooock/loom/issues/176) | ADR acceptance |
+| API and compatibility: policy validation, DTOs, default-only adapters | [#178](https://github.com/Ebenderooock/loom/issues/178) | #176 |
+| Acquisition: claims, search/RSS/rolling/upgrade/retry isolation | [#180](https://github.com/Ebenderooock/loom/issues/180) | #176, #178 |
+| Import and naming: owned plans, hardlink safety, pack outcomes | [#179](https://github.com/Ebenderooock/loom/issues/179) | #176, #178 |
+| Lifecycle: scanner/delete/recycle/archive/cleanup boundaries | [#181](https://github.com/Ebenderooock/loom/issues/181) | #179 |
+| UI and release gate: per-track UX and activation matrix | [#182](https://github.com/Ebenderooock/loom/issues/182) | #178, #180, #179, #181 |
 
 Ownership precedes API. Acquisition and import each require ownership and API.
 Lifecycle requires import ownership. UI/release integration requires API,

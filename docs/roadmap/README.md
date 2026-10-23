@@ -27,10 +27,29 @@ not verified against original post bodies and do not drive implementation priori
 | Later | P2 | [Read-only library health](https://github.com/Ebenderooock/loom/issues/170) | Safe first slice of Phase 3, with evidence and previews; no automatic deletion. |
 
 The ordering above is a delivery recommendation, not a claim that all items
-depend on one another. These issues are not marked implemented. The current
-uncommitted review-fix batch covers quota admission/retry eligibility,
+depend on one another. These issues are not marked implemented. The baseline
+review-fix batch in [PR #175](https://github.com/Ebenderooock/loom/pull/175) covers quota admission/retry eligibility,
 file-derived request fulfillment and import collision safety, not these complete
 follow-on capabilities.
+
+### Independent version-track implementation slices
+
+[ADR-0027](../adr/0027-independent-version-tracks.md) is proposed, not an
+implemented capability. Maintainer acceptance precedes coding; each slice uses a
+separate branch/PR. Additional tracks remain gated until the whole chain passes.
+
+| Slice | Issue | Prerequisites |
+|-------|-------|---------------|
+| Ownership and migration | [#176](https://github.com/Ebenderooock/loom/issues/176) | ADR acceptance |
+| API and compatibility | [#178](https://github.com/Ebenderooock/loom/issues/178) | #176 |
+| Acquisition isolation | [#180](https://github.com/Ebenderooock/loom/issues/180) | #176, #178 |
+| Import, naming and packs | [#179](https://github.com/Ebenderooock/loom/issues/179) | #176, #178 |
+| Deletion and reconciliation | [#181](https://github.com/Ebenderooock/loom/issues/181) | #179 |
+| UI and activation gate | [#182](https://github.com/Ebenderooock/loom/issues/182) | #178, #180, #179, #181 |
+
+These are child implementation slices of #169, not replacements for the other
+five intake items. Language/edition activation, shared files, temporary-copy
+automation and general retention remain outside the resolution-track MVP.
 
 ### Discovery and Deferred Work
 
