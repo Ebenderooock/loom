@@ -23,7 +23,8 @@ const (
 	StatusRejected Status = "rejected"
 	// StatusFailed — fulfillment (add) errored; the request is re-requestable.
 	StatusFailed Status = "failed"
-	// StatusAvailable — reserved for a future "downloaded & imported" transition.
+	// StatusAvailable — imported movie, or complete currently released monitored
+	// episodes/albums. Future releases do not block fulfillment.
 	StatusAvailable Status = "available"
 )
 

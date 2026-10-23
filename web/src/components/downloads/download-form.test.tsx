@@ -1,8 +1,54 @@
-import { describe, it, expect } from "vitest";
+import { afterEach, describe, it, expect, vi } from "vitest";
+import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
+  DownloadForm,
   validateDownloadForm,
   type DownloadFormValues,
 } from "@/components/downloads/download-form";
+
+afterEach(() => vi.restoreAllMocks());
+
+it("tests unsaved download edits with the stored ID and blank unchanged credentials", async () => {
+  const user = userEvent.setup();
+  const fetchSpy = vi
+    .spyOn(globalThis, "fetch")
+    .mockResolvedValue(new Response(JSON.stringify({ ok: true })));
+  const client = new QueryClient();
+  client.setQueryData(["features"], []);
+  render(
+    <QueryClientProvider client={client}>
+      <DownloadForm
+        initial={{
+          id: "saved",
+          kind: "qbittorrent",
+          name: "Downloads",
+          protocol: "torrent",
+          enabled: true,
+          priority: 25,
+          host: "example.test",
+          port: 8080,
+        }}
+        onSubmit={vi.fn()}
+      />
+    </QueryClientProvider>,
+  );
+  await user.clear(screen.getByLabelText(/^your host$/i));
+  await user.type(screen.getByLabelText(/^your host$/i), "edited.example.test");
+  await user.click(screen.getByRole("button", { name: /^test$/i }));
+  await waitFor(() => expect(fetchSpy).toHaveBeenCalledOnce());
+  const call = fetchSpy.mock.calls[0];
+  if (!call) throw new Error("Expected a connectivity test request");
+  const [url, init] = call;
+  expect(url).toBe("/api/v1/download-clients/test");
+  expect(JSON.parse(init?.body as string)).toMatchObject({
+    id: "saved",
+    host: "edited.example.test",
+    username: "",
+    password: "",
+  });
+});
 
 describe("DownloadForm validation", () => {
   const baseValues: DownloadFormValues = {

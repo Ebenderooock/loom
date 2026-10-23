@@ -3,6 +3,20 @@
 ## Status
 Accepted
 
+## Implementation update
+
+The original design below is historical where it differs from the current
+engine. Specifications are grouped by implementation type: alternatives within
+a group use OR, every required specification must pass, and all groups must
+pass. Negation applies before the required/group checks. Scores belong to
+quality-profile format items.
+
+Search ranks releases lexicographically by quality tier (lower index is
+better), then profile format score, then tiebreaker. The scalar display score
+is not the ranking rule, and a format bonus cannot override a better quality
+tier. Release parsing and grouped specification evaluation already exist in
+`internal/parser` and `internal/customformats`; they are not future work.
+
 ## Context
 Loom's Movies module requires a custom formats subsystem to match Radarr's functionality. Custom formats are flexible scoring rules that allow users to prioritize release attributes (codec, resolution, source, audio, etc.) beyond the rigid quality definitions. They are critical for matching user preferences (e.g., "prefer H.265 + 10-bit + TrueHD audio").
 

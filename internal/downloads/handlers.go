@@ -135,6 +135,9 @@ type createRequest struct {
 }
 
 func (s *Service) handleCreate(w http.ResponseWriter, r *http.Request) {
+	if !requireAdminIfPresent(w, r) {
+		return
+	}
 	var req createRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_body", err.Error())
@@ -196,7 +199,7 @@ func (s *Service) handleCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	dh, _ := s.GetWithHealth(r.Context(), saved.ID)
-	writeJSON(w, http.StatusCreated, dh)
+	writeJSON(w, http.StatusCreated, redactDefinitionWithHealth(dh))
 }
 
 // --- list / get -----------------------------------------------------
@@ -206,6 +209,9 @@ func (s *Service) handleList(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "list_failed", err.Error())
 		return
+	}
+	for i := range defs {
+		defs[i] = redactDefinitionWithHealth(defs[i])
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"download_clients": defs})
 }
@@ -221,7 +227,7 @@ func (s *Service) handleGet(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "get_failed", err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, dh)
+	writeJSON(w, http.StatusOK, redactDefinitionWithHealth(dh))
 }
 
 // --- replace --------------------------------------------------------
@@ -245,6 +251,9 @@ type replaceRequest struct {
 }
 
 func (s *Service) handleReplace(w http.ResponseWriter, r *http.Request) {
+	if !requireAdminIfPresent(w, r) {
+		return
+	}
 	id := chi.URLParam(r, "id")
 	var req replaceRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -258,6 +267,27 @@ func (s *Service) handleReplace(w http.ResponseWriter, r *http.Request) {
 	if !s.rejectDisabledKind(w, req.Kind) {
 		return
 	}
+	current, err := s.Get(r.Context(), id)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			writeError(w, http.StatusNotFound, "not_found", "download client not found")
+		} else {
+			writeError(w, http.StatusInternalServerError, "get_failed", err.Error())
+		}
+		return
+	}
+	if isEmptyOrMaskedSecret(req.Username) {
+		req.Username = current.Username
+	}
+	if isEmptyOrMaskedSecret(req.Password) {
+		req.Password = current.Password
+	}
+	if len(req.Config) == 0 {
+		req.Config = current.Config
+	} else {
+		req.Config = preserveConfigSecrets(current.Config, req.Config)
+	}
+	req.Host = preserveSecretURL(current.Host, req.Host)
 	def := Definition{
 		ID:              id,
 		Name:            req.Name,
@@ -290,7 +320,7 @@ func (s *Service) handleReplace(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	dh, _ := s.GetWithHealth(r.Context(), saved.ID)
-	writeJSON(w, http.StatusOK, dh)
+	writeJSON(w, http.StatusOK, redactDefinitionWithHealth(dh))
 }
 
 // --- patch ----------------------------------------------------------
@@ -312,11 +342,36 @@ type patchRequest struct {
 }
 
 func (s *Service) handlePatch(w http.ResponseWriter, r *http.Request) {
+	if !requireAdminIfPresent(w, r) {
+		return
+	}
 	id := chi.URLParam(r, "id")
 	var req patchRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_body", err.Error())
 		return
+	}
+	current, err := s.Get(r.Context(), id)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			writeError(w, http.StatusNotFound, "not_found", "download client not found")
+		} else {
+			writeError(w, http.StatusInternalServerError, "get_failed", err.Error())
+		}
+		return
+	}
+	if req.Username != nil && isEmptyOrMaskedSecret(*req.Username) {
+		req.Username = nil
+	}
+	if req.Password != nil && isEmptyOrMaskedSecret(*req.Password) {
+		req.Password = nil
+	}
+	if len(req.Config) > 0 {
+		req.Config = preserveConfigSecrets(current.Config, req.Config)
+	}
+	if req.Host != nil {
+		host := preserveSecretURL(current.Host, *req.Host)
+		req.Host = &host
 	}
 	patch := Patch{
 		ID:              id,
@@ -344,12 +399,15 @@ func (s *Service) handlePatch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	dh, _ := s.GetWithHealth(r.Context(), saved.ID)
-	writeJSON(w, http.StatusOK, dh)
+	writeJSON(w, http.StatusOK, redactDefinitionWithHealth(dh))
 }
 
 // --- delete ---------------------------------------------------------
 
 func (s *Service) handleDelete(w http.ResponseWriter, r *http.Request) {
+	if !requireAdminIfPresent(w, r) {
+		return
+	}
 	id := chi.URLParam(r, "id")
 	if err := s.Delete(r.Context(), id); err != nil {
 		if errors.Is(err, ErrNotFound) {
@@ -370,6 +428,9 @@ type testResponse struct {
 }
 
 func (s *Service) handleTest(w http.ResponseWriter, r *http.Request) {
+	if !requireAdminIfPresent(w, r) {
+		return
+	}
 	id := chi.URLParam(r, "id")
 	_, err := s.TestOne(r.Context(), id)
 	if errors.Is(err, ErrNotFound) {
@@ -379,6 +440,9 @@ func (s *Service) handleTest(w http.ResponseWriter, r *http.Request) {
 	out := testResponse{OK: err == nil}
 	if err != nil {
 		out.Error = err.Error()
+		if current, getErr := s.Get(r.Context(), id); getErr == nil {
+			out.Error = redactSecretText(out.Error, definitionSecretValues(current))
+		}
 	}
 	writeJSON(w, http.StatusOK, out)
 }
@@ -386,6 +450,9 @@ func (s *Service) handleTest(w http.ResponseWriter, r *http.Request) {
 // handleTestConfig tests a download client configuration without saving it.
 // POST /api/v1/download-clients/test  (no {id} param — uses request body)
 func (s *Service) handleTestConfig(w http.ResponseWriter, r *http.Request) {
+	if !requireAdminIfPresent(w, r) {
+		return
+	}
 	var req createRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_body", err.Error())
@@ -397,6 +464,28 @@ func (s *Service) handleTestConfig(w http.ResponseWriter, r *http.Request) {
 	}
 	if !s.rejectDisabledKind(w, req.Kind) {
 		return
+	}
+
+	if req.ID != "" {
+		current, err := s.Get(r.Context(), req.ID)
+		if err != nil {
+			if errors.Is(err, ErrNotFound) {
+				writeError(w, http.StatusNotFound, "not_found", "download client not found")
+			} else {
+				writeError(w, http.StatusInternalServerError, "get_failed", "failed to load download client")
+			}
+			return
+		}
+		if current.Kind == req.Kind {
+			req.Config = preserveConfigSecrets(current.Config, req.Config)
+			if isEmptyOrMaskedSecret(req.Username) {
+				req.Username = current.Username
+			}
+			if isEmptyOrMaskedSecret(req.Password) {
+				req.Password = current.Password
+			}
+			req.Host = preserveSecretURL(current.Host, req.Host)
+		}
 	}
 
 	def := Definition{
@@ -413,10 +502,11 @@ func (s *Service) handleTestConfig(w http.ResponseWriter, r *http.Request) {
 		Config:          req.Config,
 		SavePathDefault: req.SavePathDefault,
 	}
+	secrets := definitionSecretValues(def)
 
 	c, err := build(r.Context(), def)
 	if err != nil {
-		writeJSON(w, http.StatusOK, testResponse{OK: false, Error: err.Error()})
+		writeJSON(w, http.StatusOK, testResponse{OK: false, Error: redactSecretText(err.Error(), secrets)})
 		return
 	}
 
@@ -430,7 +520,7 @@ func (s *Service) handleTestConfig(w http.ResponseWriter, r *http.Request) {
 	testErr := c.Test(ctx)
 	out := testResponse{OK: testErr == nil}
 	if testErr != nil {
-		out.Error = testErr.Error()
+		out.Error = redactSecretText(testErr.Error(), secrets)
 	}
 	writeJSON(w, http.StatusOK, out)
 }
@@ -996,6 +1086,9 @@ type speedLimitsRequest struct {
 // running engine and persists them to the client config so they survive a
 // restart.
 func (s *Service) handleTorrentSpeedLimits(w http.ResponseWriter, r *http.Request) {
+	if !requireAdminIfPresent(w, r) {
+		return
+	}
 	id := chi.URLParam(r, "id")
 	mgr, ok := s.torrentManagerFor(w, id)
 	if !ok {
@@ -1050,6 +1143,9 @@ func (s *Service) persistTorrentSpeedLimits(ctx context.Context, id string, down
 
 // handleTorrentPauseAll pauses every torrent in the built-in engine.
 func (s *Service) handleTorrentPauseAll(w http.ResponseWriter, r *http.Request) {
+	if !requireAdminIfPresent(w, r) {
+		return
+	}
 	id := chi.URLParam(r, "id")
 	c, ok := s.registry.Get(id)
 	if !ok {
@@ -1069,6 +1165,9 @@ func (s *Service) handleTorrentPauseAll(w http.ResponseWriter, r *http.Request) 
 
 // handleTorrentResumeAll resumes every torrent in the built-in engine.
 func (s *Service) handleTorrentResumeAll(w http.ResponseWriter, r *http.Request) {
+	if !requireAdminIfPresent(w, r) {
+		return
+	}
 	id := chi.URLParam(r, "id")
 	c, ok := s.registry.Get(id)
 	if !ok {

@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   useDefinitions,
-  useTestIndexer,
+  useTestIndexerConfig,
   type Indexer,
   type IndexerDefinition,
   type IndexerPatch,
@@ -34,7 +34,7 @@ export function CardigannEditForm({
   onCancel,
 }: Props) {
   const defsQ = useDefinitions();
-  const testIndexer = useTestIndexer();
+  const testIndexer = useTestIndexerConfig();
 
   const cfg = (indexer.config ?? {}) as Record<string, string>;
   const definitionId = cfg.definition_id || cfg.definition || "";
@@ -112,7 +112,17 @@ export function CardigannEditForm({
   async function handleTest() {
     setTestResult(null);
     try {
-      const res = await testIndexer.mutateAsync(indexer.id);
+      const res = await testIndexer.mutateAsync({
+        id: indexer.id,
+        kind: indexer.kind,
+        name,
+        config: {
+          definition_id: definitionId,
+          ...fields,
+          url: selectedUrl,
+        },
+        ...(proxyId ? { proxy_id: proxyId } : {}),
+      });
       setTestResult(res);
     } catch (err) {
       setTestResult({
@@ -231,9 +241,19 @@ export function CardigannEditForm({
                 type={s.type === "password" ? "password" : "text"}
                 value={fields[s.name] ?? ""}
                 onChange={(e) => updateField(s.name, e.target.value)}
-                placeholder={s.default || undefined}
+                placeholder={
+                  s.type === "password"
+                    ? "Leave blank to keep current"
+                    : s.default || undefined
+                }
                 autoComplete="off"
               />
+              {s.type === "password" ? (
+                <p className="text-xs text-muted-foreground">
+                  Leave blank to keep the saved credential; enter a value to
+                  replace it.
+                </p>
+              ) : null}
             </div>
           ))}
         </div>

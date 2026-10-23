@@ -12,7 +12,7 @@ import type {
   DownloadKind,
   DownloadProtocol,
 } from "@/lib/downloads-api";
-import { useTestDownloadConfig, useTestDownload } from "@/lib/downloads-api";
+import { useTestDownloadConfig } from "@/lib/downloads-api";
 import { useFeatureEnabled } from "@/lib/features-api";
 
 const DOWNLOAD_KINDS: {
@@ -199,7 +199,6 @@ export function DownloadForm({
   } | null>(null);
 
   const testConfig = useTestDownloadConfig();
-  const testSaved = useTestDownload();
 
   async function handleTest() {
     setTestResult(null);
@@ -208,23 +207,19 @@ export function DownloadForm({
     if (Object.keys(errs).length > 0) return;
 
     try {
-      let res;
-      if (isEdit && values.id) {
-        res = await testSaved.mutateAsync(values.id);
-      } else {
-        res = await testConfig.mutateAsync({
-          kind: values.kind,
-          name: values.name || "test",
-          protocol: values.protocol,
-          host: values.host,
-          port: values.port,
-          tls: values.tls,
-          username: values.username,
-          password: values.password,
-          config: values.config,
-          save_path_default: values.save_path_default,
-        });
-      }
+      const res = await testConfig.mutateAsync({
+        ...(isEdit && values.id ? { id: values.id } : {}),
+        kind: values.kind,
+        name: values.name || "test",
+        protocol: values.protocol,
+        host: values.host,
+        port: values.port,
+        tls: values.tls,
+        username: values.username,
+        password: values.password,
+        config: values.config,
+        save_path_default: values.save_path_default,
+      });
       setTestResult(res);
     } catch (err) {
       setTestResult({
@@ -234,7 +229,7 @@ export function DownloadForm({
     }
   }
 
-  const testing = testConfig.isPending || testSaved.isPending;
+  const testing = testConfig.isPending;
 
   function update<K extends keyof DownloadFormValues>(
     key: K,
@@ -482,11 +477,15 @@ export function DownloadForm({
                 id="download-username"
                 value={values.username}
                 onChange={(e) => update("username", e.target.value)}
-                placeholder="Optional"
+                placeholder={
+                  isEdit ? "Leave blank to keep current" : "Optional"
+                }
                 autoComplete="off"
               />
               <p className="text-xs text-muted-foreground">
-                Leave blank if no authentication is required.
+                {isEdit
+                  ? "Leave blank to keep the saved username."
+                  : "Leave blank if no authentication is required."}
               </p>
             </div>
 
@@ -497,11 +496,15 @@ export function DownloadForm({
                 type="password"
                 value={values.password}
                 onChange={(e) => update("password", e.target.value)}
-                placeholder="Optional"
+                placeholder={
+                  isEdit ? "Leave blank to keep current" : "Optional"
+                }
                 autoComplete="off"
               />
               <p className="text-xs text-muted-foreground">
-                Write-only; never sent back to client.
+                {isEdit
+                  ? "Leave blank to keep the saved password; enter a value to replace it."
+                  : "Write-only; never sent back to client."}
               </p>
             </div>
           </div>

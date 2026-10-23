@@ -18,7 +18,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { CheckCircle2, XCircle, Loader2 } from "lucide-react";
 import type { Indexer, IndexerKind, Proxy } from "@/lib/indexers-api";
-import { useTestIndexerConfig, useTestIndexer } from "@/lib/indexers-api";
+import { useTestIndexerConfig } from "@/lib/indexers-api";
 
 const INDEXER_KINDS: { value: IndexerKind; label: string; helper: string }[] = [
   {
@@ -65,6 +65,7 @@ export interface IndexerFormErrors {
 
 export function validateIndexerForm(
   values: IndexerFormValues,
+  allowBlankAPIKey = false,
 ): IndexerFormErrors {
   const errors: IndexerFormErrors = {};
   if (!values.name.trim()) {
@@ -82,7 +83,7 @@ export function validateIndexerForm(
       errors.url = "URL is not valid.";
     }
   }
-  if (!values.api_key.trim()) {
+  if (!allowBlankAPIKey && !values.api_key.trim()) {
     errors.api_key = "An API key is required to authenticate to the feed.";
   }
   if (
@@ -182,31 +183,26 @@ export function IndexerForm({
   } | null>(null);
 
   const testConfig = useTestIndexerConfig();
-  const testSaved = useTestIndexer();
 
   async function handleTest() {
     setTestResult(null);
-    const errs = validateIndexerForm(values);
+    const errs = validateIndexerForm(values, isEdit);
     setErrors(errs);
     if (Object.keys(errs).length > 0) return;
 
     try {
-      let res;
-      if (isEdit && values.id) {
-        res = await testSaved.mutateAsync(values.id);
-      } else {
-        res = await testConfig.mutateAsync({
-          kind: values.kind,
-          name: values.name || "test",
-          config: {
-            url: values.url,
-            api_key: values.api_key,
-            ...(values.user_agent ? { user_agent: values.user_agent } : {}),
-            ...(values.timeout ? { timeout: values.timeout } : {}),
-          },
-          ...(values.proxy_id ? { proxy_id: values.proxy_id } : {}),
-        });
-      }
+      const res = await testConfig.mutateAsync({
+        ...(isEdit && values.id ? { id: values.id } : {}),
+        kind: values.kind,
+        name: values.name || "test",
+        config: {
+          url: values.url,
+          api_key: values.api_key,
+          ...(values.user_agent ? { user_agent: values.user_agent } : {}),
+          ...(values.timeout ? { timeout: values.timeout } : {}),
+        },
+        ...(values.proxy_id ? { proxy_id: values.proxy_id } : {}),
+      });
       setTestResult(res);
     } catch (err) {
       setTestResult({
@@ -217,7 +213,7 @@ export function IndexerForm({
     }
   }
 
-  const testing = testConfig.isPending || testSaved.isPending;
+  const testing = testConfig.isPending;
 
   function update<K extends keyof IndexerFormValues>(
     key: K,
@@ -228,7 +224,7 @@ export function IndexerForm({
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    const errs = validateIndexerForm(values);
+    const errs = validateIndexerForm(values, isEdit);
     setErrors(errs);
     if (Object.keys(errs).length > 0) {
       return;
@@ -316,11 +312,17 @@ export function IndexerForm({
           autoComplete="off"
           value={values.api_key}
           onChange={(e) => update("api_key", e.target.value)}
+          placeholder={isEdit ? "Leave blank to keep the current key" : ""}
           aria-invalid={Boolean(errors.api_key)}
           aria-describedby={
             errors.api_key ? "indexer-api-key-error" : undefined
           }
         />
+        {isEdit ? (
+          <p className="text-xs text-muted-foreground">
+            Leave blank to keep the saved API key; enter a value to replace it.
+          </p>
+        ) : null}
         {errors.api_key ? (
           <p id="indexer-api-key-error" className="text-xs text-red-600">
             {errors.api_key}

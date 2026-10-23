@@ -631,18 +631,31 @@ func (s *Service) Search(ctx context.Context, q Query, ids []string, perTimeout 
 	}
 
 	// Filter out indexers that are in a circuit-breaker cooldown.
+	// Resolve the default selection before filtering: nil means all to the
+	// registry, but it contains no IDs for the availability tracker to inspect.
+	if len(ids) == 0 {
+		for _, ix := range s.registry.List() {
+			ids = append(ids, ix.ID())
+		}
+	}
 	availableIDs, skippedIDs := s.indexerAvailability.FilterAvailable(ids)
 	if len(skippedIDs) > 0 {
 		s.logger.Info("search: skipping indexers in cooldown",
 			"skipped", skippedIDs, "available", len(availableIDs))
 	}
 
-	agg := s.registry.Search(ctx, q, SearchOptions{
-		IndexerIDs:        availableIDs,
-		PerIndexerTimeout: perTimeout,
-		TimeoutOverrides:  s.proxyTimeoutOverrides(ctx, availableIDs),
-		MaxParallel:       s.maxParallel,
-	})
+	// An empty post-filter selection must not become "all indexers" again.
+	agg := AggregatedResults{
+		Results: []Result{}, Errors: map[string]string{}, Diagnostics: &SearchDiagnostics{},
+	}
+	if len(availableIDs) > 0 {
+		agg = s.registry.Search(ctx, q, SearchOptions{
+			IndexerIDs:        availableIDs,
+			PerIndexerTimeout: perTimeout,
+			TimeoutOverrides:  s.proxyTimeoutOverrides(ctx, availableIDs),
+			MaxParallel:       s.maxParallel,
+		})
+	}
 
 	// Record availability: clear on success, record failure on error.
 	// A "skipped" status (indexer can't service this query's IDs) is

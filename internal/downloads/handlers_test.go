@@ -11,6 +11,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/ebenderooock/loom/internal/auth"
 	"github.com/ebenderooock/loom/internal/downloads"
 )
 
@@ -216,7 +217,130 @@ func TestHandlersCategoriesAndFreeSpaceAndItems(t *testing.T) {
 			t.Fatalf("%s status=%d body=%s", path, rr.Code, rr.Body.String())
 		}
 	}
+}
 
+func TestDownloadClientConfigRequiresAdminButUseRoutesRemainAvailable(t *testing.T) {
+	t.Parallel()
+	r, svc := newRouterForTest(t)
+	if _, err := svc.Create(context.Background(), downloads.Definition{
+		ID: "one", Name: "One", Kind: downloads.KindNull,
+		Protocol: downloads.ProtocolTorrent, Enabled: true,
+	}); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	userCtx := auth.WithIdentity(context.Background(), &auth.Identity{Roles: []string{"user"}})
+	request := func(method, path, body string) *httptest.ResponseRecorder {
+		t.Helper()
+		req := httptest.NewRequest(method, path, strings.NewReader(body)).WithContext(userCtx)
+		req.Header.Set("Content-Type", "application/json")
+		rr := httptest.NewRecorder()
+		r.ServeHTTP(rr, req)
+		return rr
+	}
+	for _, test := range []struct {
+		method, path, body string
+	}{
+		{http.MethodPost, "/api/v1/download-clients/", `{"id":"new","name":"New","kind":"builtin/null","protocol":"torrent"}`},
+		{http.MethodPut, "/api/v1/download-clients/one", `{"name":"One","kind":"builtin/null","protocol":"torrent"}`},
+		{http.MethodPatch, "/api/v1/download-clients/one", `{"enabled":false}`},
+		{http.MethodDelete, "/api/v1/download-clients/one", ""},
+		{http.MethodPost, "/api/v1/download-clients/test", `{"kind":"builtin/null","protocol":"torrent"}`},
+		{http.MethodPost, "/api/v1/download-clients/one/test", ""},
+		{http.MethodPost, "/api/v1/download-clients/one/torrent/pause-all", ""},
+	} {
+		if rr := request(test.method, test.path, test.body); rr.Code != http.StatusForbidden {
+			t.Errorf("%s %s status=%d body=%s; want 403", test.method, test.path, rr.Code, rr.Body.String())
+		}
+	}
+	if rr := request(http.MethodGet, "/api/v1/download-clients/one/items", ""); rr.Code != http.StatusOK {
+		t.Fatalf("non-admin download status surface status=%d body=%s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestDownloadClientResponsesRedactSecretsAndUpdatesPreserveThem(t *testing.T) {
+	t.Parallel()
+	r, svc := newRouterForTest(t)
+	if _, err := svc.Create(context.Background(), downloads.Definition{
+		ID: "one", Name: "One", Kind: downloads.KindNull,
+		Protocol: downloads.ProtocolTorrent, Enabled: true,
+		Username: "stored-user", Password: "stored-password",
+		Config: json.RawMessage(`{"download_dir":"/data","api_key":"stored-api-key","auth":{"cookie":"stored-cookie","mode":"session"}}`),
+	}); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	request := func(method, path, body, role string) *httptest.ResponseRecorder {
+		t.Helper()
+		ctx := auth.WithIdentity(context.Background(), &auth.Identity{Roles: []string{role}})
+		req := httptest.NewRequest(method, path, strings.NewReader(body)).WithContext(ctx)
+		req.Header.Set("Content-Type", "application/json")
+		rr := httptest.NewRecorder()
+		r.ServeHTTP(rr, req)
+		return rr
+	}
+	for _, path := range []string{"/api/v1/download-clients/", "/api/v1/download-clients/one"} {
+		rr := request(http.MethodGet, path, "", "user")
+		if rr.Code != http.StatusOK {
+			t.Fatalf("GET %s status=%d body=%s", path, rr.Code, rr.Body.String())
+		}
+		for _, secret := range []string{"stored-user", "stored-password", "stored-api-key", "stored-cookie"} {
+			if strings.Contains(rr.Body.String(), secret) {
+				t.Fatalf("GET %s leaked %q: %s", path, secret, rr.Body.String())
+			}
+		}
+		if !strings.Contains(rr.Body.String(), "/data") {
+			t.Fatalf("non-secret config field missing: %s", rr.Body.String())
+		}
+	}
+
+	rr := request(http.MethodPatch, "/api/v1/download-clients/one",
+		`{"username":"","password":"","config":{"download_dir":"/changed","auth":{"mode":"session"}}}`, "admin")
+	if rr.Code != http.StatusOK {
+		t.Fatalf("PATCH status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	for _, secret := range []string{"stored-user", "stored-password", "stored-api-key", "stored-cookie"} {
+		if strings.Contains(rr.Body.String(), secret) {
+			t.Fatalf("PATCH response leaked %q: %s", secret, rr.Body.String())
+		}
+	}
+	stored, err := svc.Get(context.Background(), "one")
+	if err != nil {
+		t.Fatalf("Get stored: %v", err)
+	}
+	if stored.Username != "stored-user" || stored.Password != "stored-password" {
+		t.Fatalf("PATCH lost top-level credentials: username=%q password=%q", stored.Username, stored.Password)
+	}
+	for _, secret := range []string{"stored-api-key", "stored-cookie"} {
+		if !strings.Contains(string(stored.Config), secret) {
+			t.Fatalf("PATCH lost config secret %q: %s", secret, stored.Config)
+		}
+	}
+
+	// A full PUT omitting credential fields and Config preserves all stored
+	// secrets while changing ordinary settings.
+	rr = request(http.MethodPut, "/api/v1/download-clients/one",
+		`{"name":"Renamed","kind":"builtin/null","protocol":"torrent","enabled":true,"priority":25}`, "admin")
+	if rr.Code != http.StatusOK {
+		t.Fatalf("PUT status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	stored, err = svc.Get(context.Background(), "one")
+	if err != nil {
+		t.Fatalf("Get after PUT: %v", err)
+	}
+	if stored.Username != "stored-user" || stored.Password != "stored-password" ||
+		!strings.Contains(string(stored.Config), "stored-api-key") ||
+		!strings.Contains(string(stored.Config), "stored-cookie") {
+		t.Fatalf("PUT lost credentials: %#v", stored)
+	}
+}
+
+func TestHandlersPauseResume(t *testing.T) {
+	t.Parallel()
+	r, svc := newRouterForTest(t)
+	if _, err := svc.Create(context.Background(), downloads.Definition{
+		ID: "n1", Name: "Null", Kind: downloads.KindNull, Protocol: downloads.ProtocolTorrent, Enabled: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
 	// Pause/resume with empty body.
 	for _, op := range []string{"pause", "resume"} {
 		rr := httptest.NewRecorder()
