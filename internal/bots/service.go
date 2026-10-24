@@ -245,7 +245,11 @@ func (s *Service) cmdStatus(ctx context.Context, cmd Command) Reply {
 		}
 		if r.Status == requests.StatusAvailable {
 			b.WriteString(" — fulfilled (historical)")
-			b.WriteString(" · current availability may differ")
+			availability := r.Availability
+			if availability == "" {
+				availability = requests.AvailabilityUnknown
+			}
+			b.WriteString(" · current: " + string(availability))
 			continue
 		}
 		b.WriteString(" — " + string(r.Status))

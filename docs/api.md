@@ -46,6 +46,25 @@ in `api/openapi/loom.yaml`.
 | `PATCH` | `/api/v1/proxies/{id}` | admin | `200 application/json` (`Proxy`) | Partially update a proxy. |
 | `DELETE` | `/api/v1/proxies/{id}` | admin | `204` or `409 application/json` | Remove a proxy. Returns 409 `proxy_in_use` (with `details.indexer_ids`) when any indexer still references it. |
 | `POST` | `/api/v1/proxies/{id}/test` | admin | `200 application/json` (`ProxyTestResult`) | Probe the proxy: HTTP/SOCKS5 fetch the configured probe URL; FlareSolverr issues `sessions.list`. |
+| `POST` | `/api/v1/requests` | authenticated | `201 MediaRequest` | New request, or explicit owner/admin re-request with `re_request_of`. Active duplicates and unverified absence return 409; quotas return 429. |
+| `GET` | `/api/v1/requests` | admin | `200 {"data":[MediaRequest]}` | All request history; optional `status` filter. |
+| `GET` | `/api/v1/requests/mine` | authenticated | `200 {"data":[MediaRequest]}` | Own history with independent current file presence and monitoring. |
+| `POST` | `/api/v1/requests/reconcile` | admin | `200 RequestReconciliation` | Required `{"dry_run":true}` previews; `false` applies. Both are audited with per-item outcomes. |
+| `GET` | `/api/v1/requests/reconciliation` | admin | `200 {"data":[RequestReconciliation]}` | Latest 50 batch audits, including previews. |
+
+Request `status: "available"` means **historically fulfilled**, never a guarantee
+of current availability. `fulfilled_at` is preserved across file/catalog
+deletion and recovery. `availability` is independently `present`, `missing` or
+`unknown`, with a reason and observation time; observations older than five
+minutes are returned as `unknown`. `monitored` describes the linked catalog entry.
+`media_server_availability` remains `unknown` until a server-observation source
+is implemented; local file presence does not imply Plex/Jellyfin/Emby playback.
+
+Re-requests create new pending rows linked to their history, require freshly
+verified missing files and retain normal rolling quota accounting. Administrators
+bypass quotas, not duplicate or storage checks. Reconciliation never deletes
+media/import records. See [the request lifecycle guide](requests.md) for storage
+markers, conservative unknown states, and operator recovery.
 
 `SystemStatus` is `{ version, commit, buildDate, engine }` — the database
 engine name is included so readiness tooling can confirm what backend

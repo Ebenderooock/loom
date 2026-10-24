@@ -23,8 +23,8 @@ const (
 	StatusRejected Status = "rejected"
 	// StatusFailed — fulfillment (add) errored; the request is re-requestable.
 	StatusFailed Status = "failed"
-	// StatusAvailable — imported movie, or complete currently released monitored
-	// episodes/albums. Future releases do not block fulfillment.
+	// StatusAvailable records historical fulfillment. Current file presence is
+	// independent; deletion never resets this state or its fulfillment timestamp.
 	StatusAvailable Status = "available"
 )
 
@@ -61,6 +61,7 @@ type Request struct {
 	AvailabilityCheckedAt   *time.Time   `json:"availability_checked_at,omitempty"`
 	AvailabilityLibraryID   string       `json:"-"`
 	AvailabilityFiles       string       `json:"-"`
+	missingFileIDs          []string
 	ReRequestOf             string       `json:"re_request_of,omitempty"`
 	Monitored               *bool        `json:"monitored,omitempty"`
 	MediaServerAvailability Availability `json:"media_server_availability"`
@@ -69,6 +70,7 @@ type Request struct {
 // Availability describes current file presence, never historical fulfillment.
 type Availability string
 
+// File-presence observations are independent of request lifecycle status.
 const (
 	AvailabilityPresent Availability = "present"
 	AvailabilityMissing Availability = "missing"

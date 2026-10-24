@@ -65,6 +65,150 @@ tags:
       and Radarr compatibility rationale.
 
 paths:
+  /api/v1/requests:
+    post:
+      tags: [requests]
+      operationId: createMediaRequest
+      summary: Submit a new request or an explicit confirmed-missing re-request.
+      description: |
+        Requires authentication. With re_request_of, the caller must own the
+        fulfilled request or be an administrator; media_type and tmdb_id must
+        match its history. Storage is rechecked before admitting the request.
+        Only confirmed missing media can be re-requested; unknown and present
+        observations block admission. One global active request is allowed per
+        media identity. Each re-request consumes a new rolling quota slot;
+        historical fulfillment still counts in its original window. Admins
+        bypass quotas, not duplicates or storage checks.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [media_type, tmdb_id]
+              properties:
+                media_type: { type: string, enum: [movie, series, artist] }
+                tmdb_id: { type: string, description: "TMDB ID, or MusicBrainz ID for artists." }
+                title: { type: string }
+                year: { type: integer }
+                poster_path: { type: string }
+                overview: { type: string }
+                re_request_of: { type: string, description: "Original fulfilled request ID; never resets that history." }
+      responses:
+        "201":
+          description: Pending request created.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MediaRequest" }
+        "400": { description: Invalid request. }
+        "401": { description: Authentication required. }
+        "403": { description: Re-request targets another user's history. }
+        "409": { description: Active duplicate, present or unknown availability, or invalid history link. }
+        "429": { description: Rolling per-user quota exceeded. }
+    get:
+      tags: [requests]
+      operationId: listMediaRequests
+      summary: List all request history (administrator only).
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      parameters:
+        - in: query
+          name: status
+          schema: { type: string }
+      responses:
+        "200":
+          description: Request history with independent current observations.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/MediaRequest" }
+        "403": { description: Administrator access required. }
+  /api/v1/requests/mine:
+    get:
+      tags: [requests]
+      operationId: listMyMediaRequests
+      summary: List the authenticated user's request history.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "200":
+          description: Own requests; observations older than five minutes are unknown.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/MediaRequest" }
+        "401": { description: Authentication required. }
+  /api/v1/requests/reconcile:
+    post:
+      tags: [requests]
+      operationId: reconcileRequestAvailability
+      summary: Preview or apply audited, non-destructive availability reconciliation.
+      description: |
+        Administrator only. Each approved/fulfilled request receives an
+        independent outcome. No media or import records are deleted. Dry runs
+        persist an audit but do not modify requests, storage anchors or files.
+        Applied runs may register a storage marker only after physically
+        verifying an imported file on that volume. Missing/wrong markers,
+        inaccessible volumes, nested mounts and incomplete scan evidence yield
+        unknown, never bulk deletion. Applying the same observation preserves
+        fulfilled_at and updated_at; availability_checked_at is refreshed.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [dry_run]
+              properties:
+                dry_run: { type: boolean }
+      responses:
+        "200":
+          description: Batch audit with per-item observations and errors.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RequestReconciliation" }
+        "400": { description: Explicit dry_run boolean required. }
+        "403": { description: Administrator access required. }
+        "500": { description: Batch persistence failed; request updates rolled back. }
+  /api/v1/requests/reconciliation:
+    get:
+      tags: [requests]
+      operationId: listRequestReconciliations
+      summary: Return the latest 50 reconciliation audits (administrator only).
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "200":
+          description: Latest batches including previews and automatic state changes.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/RequestReconciliation" }
+        "403": { description: Administrator access required. }
   /healthz:
     get:
       tags: [health]
@@ -1307,6 +1451,65 @@ paths:
 
 components:
   schemas:
+    RequestAvailability:
+      type: string
+      enum: [present, missing, unknown]
+      description: "Current verified file presence, independent of historical fulfillment."
+    MediaRequest:
+      type: object
+      required: [id, user_id, username, media_type, tmdb_id, title, year, status, availability, availability_reason, media_server_availability, created_at, updated_at]
+      properties:
+        id: { type: string }
+        user_id: { type: string }
+        username: { type: string }
+        media_type: { type: string, enum: [movie, series, artist] }
+        tmdb_id: { type: string }
+        title: { type: string }
+        year: { type: integer }
+        poster_path: { type: string }
+        overview: { type: string }
+        status:
+          type: string
+          enum: [pending, approving, approved, available, rejected, failed]
+          description: "available is historical fulfillment (UI label Fulfilled), not current presence."
+        reason: { type: string }
+        media_id: { type: string }
+        decided_by: { type: string }
+        decided_at: { type: string, format: date-time }
+        fulfilled_at:
+          type: string
+          format: date-time
+          description: "First verified fulfillment. Legacy fulfilled rows use their prior updated_at."
+        availability: { $ref: "#/components/schemas/RequestAvailability" }
+        availability_reason: { type: string }
+        availability_checked_at: { type: string, format: date-time }
+        re_request_of: { type: string }
+        monitored: { type: boolean, description: "Current catalog monitoring; omitted if no linked entry remains." }
+        media_server_availability:
+          $ref: "#/components/schemas/RequestAvailability"
+          description: "Currently always unknown; external server observations are not inferred from local files."
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    RequestReconciliation:
+      type: object
+      required: [id, actor, dry_run, created_at, outcomes]
+      properties:
+        id: { type: string }
+        actor: { type: string }
+        dry_run: { type: boolean }
+        created_at: { type: string, format: date-time }
+        outcomes:
+          type: array
+          items:
+            type: object
+            required: [request_id, before, after, reason, changed]
+            properties:
+              request_id: { type: string }
+              before: { $ref: "#/components/schemas/RequestAvailability" }
+              after: { $ref: "#/components/schemas/RequestAvailability" }
+              reason: { type: string }
+              changed: { type: boolean }
+              error: { type: string }
     HealthStatus:
       type: object
       required: [status]

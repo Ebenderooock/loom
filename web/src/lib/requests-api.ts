@@ -33,6 +33,7 @@ export interface MediaRequest {
   availability_reason?: string;
   availability_checked_at?: string;
   fulfilled_at?: string;
+  re_request_of?: string;
   media_server_availability?: RequestAvailability;
   monitored?: boolean | null;
   decided_by?: string;

@@ -327,8 +327,8 @@ func TestHandle_StatusListsRequests(t *testing.T) {
 	if !strings.Contains(r.Text, "fulfilled (historical)") {
 		t.Fatalf("expected fulfilled-history wording, got %q", r.Text)
 	}
-	if !strings.Contains(r.Text, "current availability may differ") {
-		t.Fatalf("expected current-availability disclaimer, got %q", r.Text)
+	if !strings.Contains(r.Text, "current: unknown") {
+		t.Fatalf("expected independent current availability, got %q", r.Text)
 	}
 }
 

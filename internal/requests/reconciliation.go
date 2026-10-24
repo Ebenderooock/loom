@@ -119,7 +119,7 @@ func (s *Store) ReconciliationHistory(ctx context.Context) ([]ReconciliationRun,
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	out := []ReconciliationRun{}
 	for rows.Next() {
 		var r ReconciliationRun
@@ -192,7 +192,7 @@ func (s *Store) fileGroups(ctx context.Context, r Request, now time.Time) (map[s
 	if err != nil {
 		return nil, false, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	groups := map[string][]string{}
 	for rows.Next() {
 		var id, path string
@@ -229,6 +229,10 @@ func (s *Store) observe(ctx context.Context, r *Request, now time.Time, establis
 	if err != nil {
 		return AvailabilityUnknown, "Storage root is inaccessible", libraryID, err
 	}
+	rootInfo, err := os.Stat(root)
+	if err != nil || !rootInfo.IsDir() {
+		return AvailabilityUnknown, "Storage root is not an accessible directory", libraryID, err
+	}
 	groups, complete, err := s.fileGroups(ctx, *r, now)
 	if err != nil {
 		return AvailabilityUnknown, "Cannot read file evidence", libraryID, err
@@ -250,16 +254,11 @@ func (s *Store) observe(ctx context.Context, r *Request, now time.Time, establis
 			}
 		}
 	}
-	if len(groups) > 0 {
-		payload, err := json.Marshal(groups)
-		if err != nil {
-			return AvailabilityUnknown, "Cannot record file evidence", libraryID, err
-		}
-		r.AvailabilityFiles = string(payload)
-	}
 	allPresent, anyPresent, knownMissing := len(groups) > 0, false, false
-	for _, paths := range groups {
+	verified := map[string][]string{}
+	for id, paths := range groups {
 		present := false
+		missingVerified := false
 		for _, path := range paths {
 			resolved, exists, err := resolveEvidencePath(path)
 			if err != nil {
@@ -269,6 +268,9 @@ func (s *Store) observe(ctx context.Context, r *Request, now time.Time, establis
 				return AvailabilityUnknown, "File is outside its library storage root", libraryID, nil
 			}
 			if !exists {
+				for _, old := range previous[id] {
+					missingVerified = missingVerified || old == path
+				}
 				continue
 			}
 			info, err := os.Stat(resolved)
@@ -278,11 +280,20 @@ func (s *Store) observe(ctx context.Context, r *Request, now time.Time, establis
 			if err != nil {
 				return AvailabilityUnknown, "File cannot be inspected", libraryID, err
 			}
+			if !sameStorageDevice(root, resolved, rootInfo, info) {
+				return AvailabilityUnknown, "Nested or unverifiable storage volume; configure its own library root", libraryID, nil
+			}
 			present = present || info.Mode().IsRegular()
+			if info.Mode().IsRegular() {
+				verified[id] = append(verified[id], path)
+			}
 		}
 		allPresent = allPresent && present
 		anyPresent = anyPresent || present
-		knownMissing = knownMissing || (len(paths) > 0 && !present)
+		knownMissing = knownMissing || (missingVerified && !present)
+		if missingVerified && !present {
+			r.missingFileIDs = append(r.missingFileIDs, id)
+		}
 	}
 	ok, err := s.storageConnected(ctx, libraryID, root, anyPresent, establish)
 	if err != nil {
@@ -291,6 +302,16 @@ func (s *Store) observe(ctx context.Context, r *Request, now time.Time, establis
 	if !ok {
 		return AvailabilityUnknown, "Storage identity unverified or disconnected; no deletion inferred", libraryID, nil
 	}
+	for id, paths := range previous {
+		if _, exists := verified[id]; !exists {
+			verified[id] = paths
+		}
+	}
+	payload, err := json.Marshal(verified)
+	if err != nil {
+		return AvailabilityUnknown, "Cannot record file evidence", libraryID, err
+	}
+	r.AvailabilityFiles = string(payload)
 	if complete && allPresent {
 		return AvailabilityPresent, "All currently due requested files verified on connected storage", libraryID, nil
 	}
@@ -351,7 +372,7 @@ func (s *Store) storageConnected(ctx context.Context, libraryID, root string, an
 		// Never recreate it after loss: an empty unmounted directory must not
 		// become evidence that every title was deleted.
 		token = uuid.NewString()
-		f, err := os.OpenFile(marker, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+		f, err := os.OpenFile(marker, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600) // #nosec G304 -- fixed marker in the verified library root.
 		if errors.Is(err, os.ErrExist) {
 			return false, fmt.Errorf("unregistered storage marker at %s; administrator inspection required", marker)
 		}
@@ -369,7 +390,7 @@ func (s *Store) storageConnected(ctx context.Context, libraryID, root string, an
 	if root != savedRoot {
 		return false, nil
 	}
-	actual, err := os.ReadFile(marker)
+	actual, err := os.ReadFile(marker) // #nosec G304 -- fixed marker in the verified library root.
 	if errors.Is(err, os.ErrNotExist) {
 		return false, nil
 	}

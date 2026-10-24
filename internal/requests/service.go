@@ -306,6 +306,26 @@ func (s *Service) Approve(ctx context.Context, id, qualityProfileID, libraryID, 
 	if err != nil {
 		return Request{}, fmt.Errorf("requests: checking existing media: %w", err)
 	}
+	reacquire := false
+	var missingIDs []string
+	if req.ReRequestOf != "" {
+		if err := s.ReconcileAvailability(ctx); err != nil {
+			return Request{}, err
+		}
+		original, err := s.store.Get(ctx, req.ReRequestOf)
+		if err != nil {
+			return Request{}, err
+		}
+		current, reason, _, err := s.store.observe(ctx, &original, time.Now().UTC(), false)
+		if err != nil {
+			return Request{}, fmt.Errorf("requests: verify re-acquisition scope: %w", err)
+		}
+		if current == AvailabilityUnknown {
+			return Request{}, fmt.Errorf("%w: %s", ErrConflict, reason)
+		}
+		reacquire = current == AvailabilityMissing
+		missingIDs = original.missingFileIDs
+	}
 	// Atomically claim so the request is fulfilled at most once.
 	won, err := s.store.ClaimForApproval(ctx, id, decidedBy)
 	if err != nil {
@@ -316,14 +336,14 @@ func (s *Service) Approve(ctx context.Context, id, qualityProfileID, libraryID, 
 	}
 
 	fulfilledID := mediaID
-	if fulfilledID != "" && req.ReRequestOf != "" {
+	if fulfilledID != "" && reacquire {
 		reacquirer, ok := s.fulfiller.(interface {
-			Reacquire(context.Context, MediaType, string) error
+			Reacquire(context.Context, MediaType, string, []string) error
 		})
 		if !ok {
 			err = errors.New("re-acquisition is not configured")
 		} else {
-			err = reacquirer.Reacquire(ctx, req.MediaType, fulfilledID)
+			err = reacquirer.Reacquire(ctx, req.MediaType, fulfilledID, missingIDs)
 		}
 	} else if fulfilledID == "" {
 		switch req.MediaType {

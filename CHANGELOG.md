@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Separate immutable request fulfillment history from current file availability,
+  monitoring and media-server observations. Add explicit owner/admin re-requests
+  with global active deduplication and normal rolling quotas, mount-identity
+  guarded reconciliation, dry-run audits and per-item outcomes. Requests and chat
+  status now distinguish historical fulfillment from present/missing/unknown
+  files. Migration 0080 preserves legacy fulfillment timestamps.
+
 ### Security
 
 - Require administrator access for integration configuration changes and tests,

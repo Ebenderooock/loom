@@ -37,7 +37,7 @@ func approvedRequest(t *testing.T, store *Store, mediaType MediaType, mediaID st
 
 func assertAvailability(t *testing.T, store *Store, id string, want Status) {
 	t.Helper()
-	prepareAvailabilityFiles(t, store.db)
+	prepareAvailabilityFiles(context.Background(), t, store.db)
 	ctx := context.Background()
 	if err := store.ReconcileAvailability(ctx, time.Date(2026, 10, 22, 12, 0, 0, 0, time.UTC)); err != nil {
 		t.Fatal(err)
@@ -53,21 +53,27 @@ func assertAvailability(t *testing.T, store *Store, id string, want Status) {
 
 // Older reconciliation fixtures describe recorded imports; materialize them
 // inside an actual connected library rather than trusting fictional paths.
-func prepareAvailabilityFiles(t *testing.T, db *sql.DB) {
+func prepareAvailabilityFiles(ctx context.Context, t *testing.T, db *sql.DB) {
 	t.Helper()
+	exec := func(query string, args ...any) {
+		t.Helper()
+		if _, err := db.ExecContext(ctx, query, args...); err != nil {
+			t.Fatal(err)
+		}
+	}
 	var root string
-	err := db.QueryRow(`SELECT path FROM libraries WHERE id='availability-test'`).Scan(&root)
+	err := db.QueryRowContext(ctx, `SELECT path FROM libraries WHERE id='availability-test'`).Scan(&root)
 	if errors.Is(err, sql.ErrNoRows) {
 		root = t.TempDir()
-		execAvailabilitySQL(t, db, `INSERT INTO libraries(id,name,path) VALUES('availability-test','Files',?)`, root)
+		exec(`INSERT INTO libraries(id,name,path) VALUES('availability-test','Files',?)`, root)
 	} else if err != nil {
 		t.Fatal(err)
 	}
 	for _, table := range []string{"movies", "series", "artists"} {
-		execAvailabilitySQL(t, db, `UPDATE `+table+` SET library_id='availability-test' WHERE COALESCE(library_id,'')=''`)
+		exec(`UPDATE ` + table + ` SET library_id='availability-test' WHERE COALESCE(library_id,'')=''`)
 	}
 	for _, table := range []string{"movie_files", "episode_files", "track_files"} {
-		rows, err := db.Query(`SELECT id,file_path FROM ` + table)
+		rows, err := db.QueryContext(ctx, `SELECT id,file_path FROM `+table)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -91,7 +97,7 @@ func prepareAvailabilityFiles(t *testing.T, db *sql.DB) {
 			if err := os.WriteFile(path, []byte("media"), 0600); err != nil {
 				t.Fatal(err)
 			}
-			execAvailabilitySQL(t, db, `UPDATE `+table+` SET file_path=? WHERE id=?`, path, id)
+			exec(`UPDATE `+table+` SET file_path=? WHERE id=?`, path, id)
 		}
 	}
 }
@@ -200,7 +206,7 @@ func TestApproveAlreadyImportedBecomesAvailable(t *testing.T) {
 
 	execAvailabilitySQL(t, svc.store.db, `INSERT INTO movies(id,title) VALUES ('movie','Movie')`)
 	execAvailabilitySQL(t, svc.store.db, `INSERT INTO movie_files(id,movie_id,file_path) VALUES ('file','movie','/movie.mkv')`)
-	prepareAvailabilityFiles(t, svc.store.db)
+	prepareAvailabilityFiles(ctx, t, svc.store.db)
 	f.movieExists = map[string]string{"603": "movie"}
 	out, err := svc.Approve(ctx, r.ID, "qp", "lib", "admin")
 	if err != nil {
@@ -223,7 +229,7 @@ func (f *importingFulfiller) FulfillMovie(ctx context.Context, _, _, _ string) (
 	}
 	_, err := f.db.ExecContext(ctx, `INSERT INTO movie_files(id,movie_id,file_path) VALUES ('file','movie','/movie.mkv')`)
 	if err == nil {
-		prepareAvailabilityFiles(f.t, f.db)
+		prepareAvailabilityFiles(ctx, f.t, f.db)
 	}
 	return "movie", err
 }
