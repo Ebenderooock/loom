@@ -23,6 +23,7 @@ in `api/openapi/loom.yaml`.
 
 | Method | Path | Auth | Response | Description |
 |---|---|---|---|---|
+| `POST` | `/api/v1/autosearch/evaluate` | apiKey/bearer/cookie | `200 application/json` | Production-engine dry run with decision evidence; optional unsaved policy preview. |
 | `GET` | `/healthz` | none | `200 application/json` | Liveness probe. |
 | `GET` | `/livez` | none | `200 application/json` | Same shape; conventional alias. |
 | `GET` | `/readyz` | none | `200` or `503 application/json` | DB ping + ready-flag check. |
@@ -50,6 +51,45 @@ in `api/openapi/loom.yaml`.
 `SystemStatus` is `{ version, commit, buildDate, engine }` — the database
 engine name is included so readiness tooling can confirm what backend
 this instance is running against.
+
+### Release evaluation and policy previews
+
+`POST /api/v1/autosearch/evaluate` accepts the existing search identity context
+(`media_type`, `media_id`, `title`, `alternate_titles`, year/IDs, season/episode,
+`daily_date`, `runtime` in minutes), a `quality_profile_id`, and indexer `results`.
+Results use the native indexer shape (`size` in bytes, `pub_date`, optional
+`seeders`); no search or grab is performed. Linked movie identity is loaded from
+the library as for automatic acquisition.
+
+Omit `policy_preview` to use the saved profile. Supply it to replace only that
+profile during this evaluation; its `items` is a JSON-encoded quality array,
+`format_items` contains `{format_id, score}`, and `min_format_score`, `cutoff`,
+`upgrade_allowed` have their native meanings. Quality definitions and
+custom-format rules are not replaced. Invalid preview quality arrays and empty
+or duplicate quality IDs return HTTP 400; evaluation failures return HTTP 500.
+The response includes `preview`, `total`, `passed`, and `results`, ordered by the
+same comparator as automatic acquisition (accepted results before rejected).
+
+This example is available after this change ships; substitute local IDs/titles:
+
+```bash
+curl -sS -X POST http://localhost:1925/api/v1/autosearch/evaluate \
+  -H 'Content-Type: application/json' \
+  -d '{"media_type":"movie","title":"Example","quality_profile_id":"profile-id",
+       "results":[{"title":"Example.2024.1080p.BluRay","size":2000000000}],
+       "policy_preview":{"items":"[{\"id\":\"quality-definition-id\",\"allowed\":true}]",
+                         "min_format_score":100,"upgrade_allowed":true,
+                         "format_items":[{"format_id":"format-id","score":50}]}}'
+```
+
+Each result adds optional `explanation`: `category`, `summary`, `identity` and
+`checks` evidence arrays (`field`, `expected`, `actual`, `unit`, `passed`);
+`numbering` (season/episode/multi-episode/absolute/date/pack interpretation);
+profile-specific `contributions`; and, for accepted results, `rank` and
+`ranking_reason`. Missing checks mean evaluation stopped, not success. The
+composite score remains display-only. New search-log evaluations use the same
+explanation shape; historical rows may omit it. See
+[release matching](release-matching.md) for examples and pack-mapping limitations.
 
 ### Try every route with curl
 

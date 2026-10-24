@@ -65,6 +65,143 @@ tags:
       and Radarr compatibility rationale.
 
 paths:
+  /api/v1/autosearch/evaluate:
+    post:
+      tags: [quality]
+      summary: Explain release decisions with the production engine without grabbing.
+      operationId: evaluateReleases
+      security:
+        - cookieAuth: []
+        - apiKey: []
+        - bearerAuth: []
+      description: |
+        Evaluates supplied indexer results with the same identity, policy and
+        ranking path used by acquisition. Optional policy_preview replaces only
+        the quality profile for this request; it never saves or grabs. Existing
+        library state, quality definitions and loaded format rules still apply.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [results]
+              properties:
+                media_type: { type: string, enum: [movie, series, episode] }
+                media_id: { type: string }
+                title: { type: string }
+                alternate_titles:
+                  type: array
+                  items: { type: string }
+                year: { type: integer }
+                quality_profile_id: { type: string }
+                imdb_id: { type: string }
+                tmdb_id: { type: string }
+                tvdb_id: { type: string }
+                season: { type: integer }
+                episode: { type: integer }
+                daily_date: { type: string, format: date }
+                runtime: { type: integer, description: Minutes used by per-minute size limits. }
+                policy_preview:
+                  type: object
+                  required: [items]
+                  properties:
+                    items:
+                      type: string
+                      description: JSON-encoded array of quality items; non-empty unique IDs, allowed boolean, ordered best first.
+                      example: '[{"id":"bluray-1080p","allowed":true}]'
+                    cutoff: { type: string }
+                    upgrade_allowed: { type: boolean }
+                    min_format_score: { type: integer, description: Points. }
+                    cutoff_format_score:
+                      type: integer
+                      description: Retained profile field; current acquisition does not use it as a rejection gate.
+                    format_items:
+                      type: array
+                      items:
+                        type: object
+                        required: [format_id, score]
+                        properties:
+                          format_id: { type: string }
+                          score: { type: integer, description: Profile-specific points. }
+                results:
+                  type: array
+                  items:
+                    type: object
+                    required: [title]
+                    properties:
+                      indexer_id: { type: string }
+                      title: { type: string }
+                      link: { type: string }
+                      size: { type: integer, format: int64, description: Bytes; 0 is unknown. }
+                      pub_date: { type: string, format: date-time }
+                      seeders: { type: integer, description: Omit for Usenet. }
+                      freeleech: { type: boolean }
+      responses:
+        "200":
+          description: Accepted results ranked by engine keys, followed by rejected results.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [preview, total, passed, results]
+                properties:
+                  preview: { type: boolean }
+                  total: { type: integer }
+                  passed: { type: integer }
+                  results:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        title: { type: string }
+                        indexer_id: { type: string }
+                        rejected: { type: boolean }
+                        reject_reason: { type: string }
+                        quality_name: { type: string }
+                        quality_tier: { type: integer, description: Zero-based position; lower is better; -1 means not selected. }
+                        format_score: { type: integer, description: Profile-specific points. }
+                        composite_score: { type: number, description: Display only; never the ordering comparator. }
+                        explanation:
+                          type: object
+                          properties:
+                            category:
+                              type: string
+                              enum: [accepted, incorrect_identity, ambiguous_identity, unsupported_naming, configuration_mismatch, availability]
+                            summary: { type: string }
+                            identity:
+                              type: array
+                              items: { $ref: "#/components/schemas/DecisionEvidence" }
+                            checks:
+                              type: array
+                              items: { $ref: "#/components/schemas/DecisionEvidence" }
+                            numbering:
+                              type: object
+                              properties:
+                                season: { type: integer }
+                                episode: { type: integer }
+                                episodes:
+                                  type: array
+                                  items: { type: integer }
+                                absolute_episode: { type: integer }
+                                season_pack: { type: boolean }
+                                daily_date: { type: string }
+                                pack_mapping: { type: string, description: Discovery-only limitation; never a correction. }
+                            contributions:
+                              type: array
+                              items:
+                                type: object
+                                properties:
+                                  id: { type: string }
+                                  name: { type: string }
+                                  score: { type: integer, description: Actual points added from this profile. }
+                            rank: { type: integer, description: One-based accepted rank. }
+                            ranking_reason: { type: string, description: First differing comparator key vs adjacent accepted candidate. }
+        "400":
+          description: Invalid JSON or malformed preview quality items.
+        "500":
+          description: Identity lookup, saved profile or evaluation dependency failed.
+
   /healthz:
     get:
       tags: [health]
@@ -1307,6 +1444,18 @@ paths:
 
 components:
   schemas:
+    DecisionEvidence:
+      type: object
+      required: [field, expected, actual, unit, passed]
+      description: |
+        Actual-engine comparison. Absence of a check means evaluation stopped;
+        identity observations can be corroborated by other identity evidence.
+      properties:
+        field: { type: string }
+        expected: { type: string }
+        actual: { type: string }
+        unit: { type: string }
+        passed: { type: boolean }
     HealthStatus:
       type: object
       required: [status]
