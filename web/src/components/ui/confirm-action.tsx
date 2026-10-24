@@ -14,6 +14,7 @@ interface ConfirmActionProps {
   actionLabel: string;
   title: string;
   description: string;
+  warning?: string;
   confirmLabel?: string;
   cancelLabel?: string;
   onConfirm: () => Promise<void> | void;
@@ -31,6 +32,7 @@ export function ConfirmActionButton({
   actionLabel,
   title,
   description,
+  warning = "This action clears stored history immediately and cannot be undone.",
   confirmLabel = "Confirm",
   cancelLabel = "Cancel",
   onConfirm,
@@ -81,7 +83,7 @@ export function ConfirmActionButton({
             <DialogDescription>{description}</DialogDescription>
           </DialogHeader>
           <div className="rounded-lg border border-destructive/20 bg-destructive/5 p-3 text-sm text-muted-foreground">
-            This action clears stored history immediately and cannot be undone.
+            {warning}
           </div>
           {details}
           <DialogFooter>

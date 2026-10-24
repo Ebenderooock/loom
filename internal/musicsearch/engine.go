@@ -308,7 +308,10 @@ func (e *Engine) searchAndGrab(ctx context.Context, albumID string, upgradeOnly 
 	}
 
 	year := albumYear(album)
-	candidates := e.gatherCandidates(ctx, artist.Name, album.Title, year, defs, profile)
+	candidates, err := e.gatherCandidates(ctx, albumID, artist.Name, album.Title, year, defs, profile)
+	if err != nil {
+		return nil, err
+	}
 	if len(candidates) == 0 {
 		e.logger.Info("musicsearch: no matching releases", "artist", artist.Name, "album", album.Title)
 		return nil, ErrNoResults
@@ -359,12 +362,17 @@ func (e *Engine) loadAlbumArtist(ctx context.Context, albumID string) (*music.Al
 // gatherCandidates runs the tiered query chain and returns identity-matched,
 // profile-allowed, scored releases. It stops at the first tier that yields
 // candidates.
-func (e *Engine) gatherCandidates(ctx context.Context, artist, album string, year int, defs []*music.AudioQualityDefinition, profile *music.AudioQualityProfile) []Candidate {
+func (e *Engine) gatherCandidates(ctx context.Context, albumID, artist, album string, year int, defs []*music.AudioQualityDefinition, profile *music.AudioQualityProfile) ([]Candidate, error) {
 	normArtist := normalize(artist)
 	normAlbum := normalize(album)
 
 	for _, q := range buildAudioQueries(artist, album, year) {
-		agg := e.indexerSvc.Search(ctx, q, nil, 0)
+		agg, err := e.dlRegistry.SearchAcquisition(ctx, e.indexerSvc, q, downloads.AddRequest{
+			Title: artist + " - " + album, MediaType: "music", MediaID: albumID,
+		})
+		if err != nil {
+			return nil, err
+		}
 		var candidates []Candidate
 		seen := make(map[string]bool)
 		for _, res := range agg.Results {
@@ -392,10 +400,10 @@ func (e *Engine) gatherCandidates(ctx context.Context, artist, album string, yea
 			})
 		}
 		if len(candidates) > 0 {
-			return candidates
+			return candidates, nil
 		}
 	}
-	return nil
+	return nil, nil
 }
 
 // buildAudioQueries returns the tiered free-text queries for an album. Torznab
@@ -434,9 +442,6 @@ func identityMatch(title string, parsed *music.MusicRelease, normArtist, normAlb
 
 func (e *Engine) grab(ctx context.Context, albumID string, c *Candidate) (*GrabResult, error) {
 	clients := e.dlRegistry.List()
-	if len(clients) == 0 {
-		return nil, ErrNoDownloaders
-	}
 	protocol := inferProtocol(&c.Result)
 	var target downloads.DownloadClient
 	for _, cl := range clients {
@@ -445,19 +450,24 @@ func (e *Engine) grab(ctx context.Context, albumID string, c *Candidate) (*GrabR
 			break
 		}
 	}
-	if target == nil {
+	if target == nil && len(clients) > 0 {
 		target = clients[0]
 	}
 
 	req := buildDownloadRequest(&c.Result)
 	req.MediaType = "music"
-	if req.Magnet == "" && req.TorrentURL == "" && req.NZBURL == "" && len(req.RawBytes) == 0 {
-		return nil, fmt.Errorf("musicsearch: release %q has no downloadable link", c.Result.Title)
+	req.MediaID = albumID
+	req.IndexerID = c.Result.IndexerID
+	clientID := ""
+	if target != nil {
+		clientID = target.ID()
 	}
-
-	addResult, err := target.Add(ctx, req)
+	addResult, err := e.dlRegistry.Acquire(ctx, clientID, req, nil)
 	if err != nil {
-		return nil, fmt.Errorf("add to %s: %w", target.Name(), err)
+		if target == nil {
+			return nil, fmt.Errorf("%w: %w", ErrNoDownloaders, err)
+		}
+		return nil, fmt.Errorf("acquire album: %w", err)
 	}
 
 	qualityName := ""
