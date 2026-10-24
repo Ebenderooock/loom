@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"log/slog"
+	"os"
 	"path/filepath"
 	"slices"
 	"testing"
@@ -46,6 +47,19 @@ func TestRegisterRequestAvailabilityReconcilesAndSchedules(t *testing.T) {
 		if _, err := db.DB().ExecContext(ctx, query); err != nil {
 			t.Fatal(err)
 		}
+	}
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "movie.mkv"), []byte("media"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.DB().ExecContext(ctx, `INSERT INTO libraries(id,name,path) VALUES('lib','Movies',?)`, root); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.DB().ExecContext(ctx, `UPDATE movies SET library_id='lib'`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.DB().ExecContext(ctx, `UPDATE movie_files SET file_path=?`, filepath.Join(root, "movie.mkv")); err != nil {
+		t.Fatal(err)
 	}
 	sched, err := scheduler.New(scheduler.Config{}, storage.NewSchedulerStore(db), logger, nil)
 	if err != nil {
