@@ -28,6 +28,9 @@ in `api/openapi/loom.yaml`.
 | `GET` | `/readyz` | none | `200` or `503 application/json` | DB ping + ready-flag check. |
 | `GET` | `/metrics` | none | `200 text/plain; version=0.0.4` | Prometheus exposition. |
 | `GET` | `/api/v1/system/status` | none (today) | `200 application/json` (`SystemStatus`) | Build metadata. |
+| `GET` | `/api/v1/libraries/{id}/health` | apiKey/bearer/cookie | `200 application/json` (`LibraryHealthReport` or `null`) | Fetch latest read-only health report snapshot. |
+| `POST` | `/api/v1/libraries/{id}/health` | apiKey/bearer/cookie | `200 application/json` (`LibraryHealthReport`) | Run a bounded, cancellable read-only health check for one library. |
+| `POST` | `/api/v1/libraries/{id}/health/dismiss` | apiKey/bearer/cookie | `200 application/json` (`LibraryHealthReport`) | Dismiss or restore one finding in the latest report. |
 | `GET\|POST` | `/debug/pprof/*` | gated by `debug.pprof` | varies | Standard `net/http/pprof` handlers. |
 | `GET` | `/api/v1/indexers/` | apiKey/bearer/cookie | `200 application/json` (`[]DefinitionWithHealth`) | List configured indexers with health; credential fields are omitted. |
 | `POST` | `/api/v1/indexers/` | admin | `201 application/json` (`Definition`) | Create an indexer. |

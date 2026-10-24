@@ -166,6 +166,74 @@ export async function scanLibrary(id: string): Promise<{ message: string }> {
   return request("POST", `/api/v1/libraries/${encodeURIComponent(id)}/scan`);
 }
 
+export interface HealthFinding {
+  id: string;
+  kind:
+    | "sample"
+    | "duplicate"
+    | "orphan_record"
+    | "untracked_file"
+    | "missing_file"
+    | "protected";
+  path: string;
+  related_paths: string[];
+  evidence: string[];
+  confidence: "low" | "medium" | "high";
+  dismissed: boolean;
+  preview: { action: string; outcome: string; executable: boolean };
+}
+
+export interface HealthReport {
+  library_id: string;
+  root: string;
+  status: "complete" | "incomplete" | "unavailable" | "cancelled";
+  checked_at: string;
+  scanned_entries: number;
+  inspected_records: number;
+  entry_limit: number;
+  warnings: string[];
+  findings: HealthFinding[];
+}
+
+export function getLibraryHealth(
+  id: string,
+  signal?: AbortSignal,
+): Promise<HealthReport | null> {
+  return request(
+    "GET",
+    `/api/v1/libraries/${encodeURIComponent(id)}/health`,
+    undefined,
+    signal,
+  );
+}
+
+export function runLibraryHealth(
+  id: string,
+  signal: AbortSignal,
+): Promise<HealthReport> {
+  return request(
+    "POST",
+    `/api/v1/libraries/${encodeURIComponent(id)}/health`,
+    undefined,
+    signal,
+  );
+}
+
+export function dismissLibraryHealth(
+  id: string,
+  findingID: string,
+  dismissed: boolean,
+): Promise<HealthReport> {
+  return request(
+    "POST",
+    `/api/v1/libraries/${encodeURIComponent(id)}/health/dismiss`,
+    {
+      finding_id: findingID,
+      dismissed,
+    },
+  );
+}
+
 export async function browseFilesystem(
   path?: string,
   signal?: AbortSignal,
