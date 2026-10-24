@@ -595,7 +595,12 @@ func (e *Engine) searchAndGrabSingle(ctx context.Context, req SearchRequest) (*S
 			// Pass 0 so the indexer service applies its configured
 			// fail-fast per-indexer timeout (15s direct, 65s for
 			// FlareSolverr-proxied indexers) instead of a flat 120s.
-			agg := e.indexerSvc.Search(ctx, q, nil, 0)
+			agg, searchErr := e.dlRegistry.SearchAcquisition(ctx, e.indexerSvc, q, downloads.AddRequest{
+				Title: req.Title, MediaType: req.MediaType, MediaID: req.MediaID,
+			})
+			if searchErr != nil {
+				return nil, searchErr
+			}
 			if agg.Diagnostics != nil {
 				for _, d := range agg.Diagnostics.Indexers {
 					if d.Status == "ok" {
@@ -782,14 +787,14 @@ func (e *Engine) searchAndGrabSingle(ctx context.Context, req SearchRequest) (*S
 		dbg.Status = searchdebug.StatusGrabbing
 		e.updateDebugEntry(dbg)
 	}
-	grabbed, err := e.grabRelease(ctx, &best)
+	grabbed, err := e.grabReleaseForMedia(ctx, &best, req)
 	if err != nil {
 		// If grab fails, try the next best.
 		e.logger.Warn("grab failed for best result, trying next",
 			"title", best.Result.Title,
 			"error", err)
 		for i := 1; i < len(scored); i++ {
-			grabbed, err = e.grabRelease(ctx, &scored[i])
+			grabbed, err = e.grabReleaseForMedia(ctx, &scored[i], req)
 			if err == nil {
 				best = scored[i]
 				break
@@ -1365,6 +1370,10 @@ func computeTiebreaker(res indexers.Result) float64 {
 
 // grabRelease sends the best-scoring release to a download client.
 func (e *Engine) grabRelease(ctx context.Context, sr *ScoredRelease) (*GrabbedRelease, error) {
+	return e.grabReleaseForMedia(ctx, sr, SearchRequest{})
+}
+
+func (e *Engine) grabReleaseForMedia(ctx context.Context, sr *ScoredRelease, media SearchRequest) (*GrabbedRelease, error) {
 	// Determine protocol from the result.
 	protocol := inferProtocol(&sr.Result)
 
@@ -1381,32 +1390,35 @@ func (e *Engine) grabRelease(ctx context.Context, sr *ScoredRelease) (*GrabbedRe
 		// Fallback: try any client.
 		if len(clients) > 0 {
 			target = clients[0]
-		} else {
-			return nil, fmt.Errorf("no download clients configured")
 		}
 	}
 
 	// Build the download request.
 	req := buildDownloadRequest(&sr.Result)
+	req.IndexerID = sr.Result.IndexerID
+	req.MediaType = media.MediaType
+	req.MediaID = media.MediaID
 
 	// If the indexer exposed a direct .torrent URL, fetch it through the
 	// live indexer client first so tracker auth cookies, per-indexer
 	// proxies, and anti-bot headers are preserved.
-	if e.indexerSvc != nil && sr.Result.IndexerID != "" && req.TorrentURL != "" {
-		if data, err := e.indexerSvc.FetchDownload(ctx, sr.Result.IndexerID, req.TorrentURL); err == nil {
+	prepare := func(req *downloads.AddRequest) error {
+		if e.indexerSvc != nil && req.IndexerID != "" && req.TorrentURL != "" {
+			data, err := e.indexerSvc.FetchDownload(ctx, req.IndexerID, req.TorrentURL)
+			if err != nil {
+				// A usable magnet remains an independent safe fallback.
+				if req.Magnet != "" {
+					return nil
+				}
+				return err
+			}
 			req.RawBytes = data
-		} else {
-			e.logger.Warn("autosearch: indexer-backed torrent fetch failed; falling back to direct URL/magnet",
-				"indexer_id", sr.Result.IndexerID,
-				"title", sr.Result.Title,
-				"url", req.TorrentURL,
-				"error", err,
-			)
 		}
+		return nil
 	}
 
 	// Apply per-indexer seed policy overrides if available.
-	if sr.Result.IndexerID != "" {
+	if e.indexerSvc != nil && sr.Result.IndexerID != "" {
 		if def, err := e.indexerSvc.Get(ctx, sr.Result.IndexerID); err == nil {
 			sc := indexers.ParseSeedConfig(def)
 			req.SeedRatioLimit = sc.RatioLimit
@@ -1424,9 +1436,13 @@ func (e *Engine) grabRelease(ctx context.Context, sr *ScoredRelease) (*GrabbedRe
 		)
 	}
 
-	addResult, err := target.Add(ctx, req)
+	clientID := ""
+	if target != nil {
+		clientID = target.ID()
+	}
+	addResult, err := e.dlRegistry.Acquire(ctx, clientID, req, prepare)
 	if err != nil {
-		return nil, fmt.Errorf("add to %s: %w", target.Name(), err)
+		return nil, fmt.Errorf("acquire release: %w", err)
 	}
 
 	e.logger.Info("release grabbed",

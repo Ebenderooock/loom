@@ -209,6 +209,7 @@ function GrabButton({
           nzb_url: result.nzb_url,
           infohash: result.infohash,
           title: result.title,
+          indexer_id: result.indexer_id,
           ...mediaContext,
         });
         toast.success(`Grabbed: ${result.title}`);
