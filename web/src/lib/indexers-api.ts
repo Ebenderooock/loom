@@ -208,17 +208,22 @@ async function request<T>(
   if (!res.ok) {
     // Loom returns {error: {code, message, details?}} envelopes.
     const env = parsed as
-      | { error?: { code?: string; message?: string; details?: unknown } }
+      | {
+          error?:
+            | string
+            | { code?: string; message?: string; details?: unknown };
+        }
       | undefined;
+    const error = env?.error;
     const message =
-      env?.error?.message ??
+      (typeof error === "string" ? error : error?.message) ??
       (typeof parsed === "string" ? parsed : undefined) ??
       `${method} ${path} failed: ${res.status} ${res.statusText}`;
     throw new ApiError(
       res.status,
       message,
-      env?.error?.code,
-      env?.error?.details,
+      typeof error === "object" ? error.code : undefined,
+      typeof error === "object" ? error.details : undefined,
     );
   }
   return parsed as T;
@@ -364,6 +369,15 @@ export async function searchIndexers(
 // ---------- Autosearch evaluate (dry-run quality scoring) ----------
 
 export interface EvaluateParams {
+  policy_preview?: {
+    items: string;
+    cutoff: string;
+    upgrade_allowed: boolean;
+    min_format_score: number;
+    format_items: { format_id: string; score: number }[];
+  };
+  runtime?: number;
+  alternate_titles?: string[];
   media_type?: string;
   media_id?: string;
   title?: string;
@@ -378,6 +392,7 @@ export interface EvaluateParams {
 }
 
 export interface EvaluatedResult {
+  explanation?: import("@/components/search/decision-explanation").DecisionExplanation;
   indexer_id: string;
   title: string;
   link: string;
@@ -395,7 +410,11 @@ export interface EvaluatedResult {
   quality_name?: string;
   quality_tier: number;
   format_score: number;
-  format_matches?: { format_id: string; name: string; score: number }[];
+  format_matches?: {
+    custom_format_id: string;
+    custom_format_name: string;
+    score: number;
+  }[];
   composite_score: number;
   parsed_title?: string;
   parsed_year?: number;
@@ -404,6 +423,7 @@ export interface EvaluatedResult {
 }
 
 export interface EvaluateResponse {
+  preview: boolean;
   results: EvaluatedResult[];
   total: number;
   passed: number;
@@ -418,6 +438,9 @@ export async function evaluateResults(
     title: params.title,
     year: params.year,
     quality_profile_id: params.quality_profile_id,
+    policy_preview: params.policy_preview,
+    runtime: params.runtime,
+    alternate_titles: params.alternate_titles,
     imdb_id: params.imdb_id,
     tmdb_id: params.tmdb_id,
     tvdb_id: params.tvdb_id,
@@ -441,6 +464,8 @@ export async function evaluateResults(
           ? r.seeders + r.leechers
           : undefined,
       freeleech: r.freeleech,
+      internal: r.internal,
+      scene: r.scene,
     })),
   });
 }

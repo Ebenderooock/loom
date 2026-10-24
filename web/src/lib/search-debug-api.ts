@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/fetch";
 import { useEffect, useCallback } from "react";
+import type { DecisionExplanation } from "@/components/search/decision-explanation";
 
 // ─── Types ──────────────────────────────────────────────────────────────
 
@@ -92,6 +93,7 @@ export interface ResultEntry {
 }
 
 export interface EvalResult {
+  explanation?: DecisionExplanation;
   title: string;
   indexer_id: string;
   rejected: boolean;

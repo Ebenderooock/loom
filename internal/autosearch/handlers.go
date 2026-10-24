@@ -52,7 +52,7 @@ func (h *Handler) HandleAutoSearch(w http.ResponseWriter, r *http.Request) {
 		h.logger.ErrorContext(r.Context(), "autosearch failed", "error", err, "title", req.Title)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 		return
 	}
 
@@ -74,12 +74,12 @@ func (h *Handler) HandleEvaluate(w http.ResponseWriter, r *http.Request) {
 			if err := validatePolicyPreview(req.PolicyPreview); err != nil {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusBadRequest)
-				json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+				_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 				return
 			}
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(&EvaluateResponse{Results: []EvaluatedResult{}, Preview: req.PolicyPreview != nil})
+		_ = json.NewEncoder(w).Encode(&EvaluateResponse{Results: []EvaluatedResult{}, Preview: req.PolicyPreview != nil})
 		return
 	}
 
@@ -88,7 +88,7 @@ func (h *Handler) HandleEvaluate(w http.ResponseWriter, r *http.Request) {
 		if errors.Is(err, ErrInvalidPolicyPreview) {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusBadRequest)
-			json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 			return
 		}
 		h.logger.ErrorContext(r.Context(), "evaluate failed", "error", err)

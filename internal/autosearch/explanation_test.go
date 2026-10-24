@@ -105,7 +105,7 @@ func TestEvaluatePreviewParityAndRanking(t *testing.T) {
 	e, defs := explanationEngine()
 	e.profileStore = store
 	e.movieSvc = explanationMovieService{defs: defs}
-	now := time.Now()
+	now := time.Unix(0, 0)
 	req := EvaluateRequest{SearchRequest: SearchRequest{Title: "Movie", QualityProfileID: profile.ID}, Results: []indexers.Result{
 		{Title: "Movie.2024.1080p.WEB-DL-PREFERRED", PubDate: now},
 		{Title: "Movie.2024.1080p.BluRay", PubDate: now},

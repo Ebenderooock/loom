@@ -1370,6 +1370,10 @@ export function SeriesDetailSheet({
       {/* Release search dialog */}
       {searchContext && (
         <ReleaseSearchDialog
+          qualityProfileId={series.qualityProfileId}
+          evaluationTitle={series.title}
+          runtime={series.runtime}
+          tvdbId={series.tvdbId ? Number(series.tvdbId) : undefined}
           open={searchOpen}
           onOpenChange={setSearchOpen}
           title={searchContext.title}

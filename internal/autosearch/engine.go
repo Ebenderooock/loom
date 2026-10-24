@@ -1066,6 +1066,12 @@ func (e *Engine) verifyIdentity(req SearchRequest, parsed *parser.Release, idBas
 		(req.TMDBID != "" && parsed.TmdbID != "" && req.TMDBID != parsed.TmdbID) {
 		return "wrong_embedded_id"
 	}
+	if req.MediaType == "series" || req.MediaType == "episode" {
+		pack := packs.Detect(parsed.Name)
+		if pack.Type == packs.PackTypeMultiSeason || pack.Type == packs.PackTypeCompleteSeries {
+			return "ambiguous_pack"
+		}
+	}
 
 	// Year verification for movies: reject if parsed year differs by >1
 	// from the requested year. This catches wrong movies with similar
@@ -1127,10 +1133,6 @@ func (e *Engine) verifyIdentity(req SearchRequest, parsed *parser.Release, idBas
 
 	// Series-specific checks.
 	if req.MediaType == "series" || req.MediaType == "episode" {
-		pack := packs.Detect(parsed.Name)
-		if pack.Type == packs.PackTypeMultiSeason || pack.Type == packs.PackTypeCompleteSeries {
-			return "ambiguous_pack"
-		}
 		// Season pack search: reject single-episode releases but allow multi-episode
 		// files (e.g. S04E01-E08) which may cover the whole season.
 		// Mirrors Sonarr: SeasonSearchCriteria only checks season number; individual

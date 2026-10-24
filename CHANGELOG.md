@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Explain release identity, parsed numbering, quality tiers, profile-specific
+  custom-format contributions, numeric policy limits and accepted-result ordering
+  using the production acquisition engine. Manual search includes read-only policy
+  previews; search logs retain the same evidence for new searches.
+
 ### Security
 
 - Require administrator access for integration configuration changes and tests,
@@ -16,6 +23,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   (including required transitive updates) to address known vulnerabilities.
 
 ### Fixed
+
+- Reject conflicting embedded external IDs even when a release title matches,
+  and reject ambiguous multi-season/complete-series packs instead of treating the
+  first parsed season as proof of coverage.
 
 - Enforce rolling-search quotas per admitted indexer query and retain retry
   eligibility after failed, cancelled or fully skipped searches.

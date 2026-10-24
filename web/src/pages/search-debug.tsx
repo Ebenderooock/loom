@@ -1,4 +1,5 @@
 import * as React from "react";
+import { DecisionDetails } from "@/components/search/decision-explanation";
 import {
   Table,
   TableBody,
@@ -465,11 +466,9 @@ function EvaluationPanel({ evals }: { evals: EvalResult[] }) {
           <TableBody>
             {evals.map((ev, i) => (
               <TableRow key={i}>
-                <TableCell
-                  className="max-w-[300px] truncate text-xs"
-                  title={ev.title}
-                >
+                <TableCell className="max-w-[300px] text-xs" title={ev.title}>
                   {ev.title}
+                  <DecisionDetails explanation={ev.explanation} />
                 </TableCell>
                 <TableCell>
                   {ev.rejected ? (

@@ -6,6 +6,7 @@ package autosearch
 
 import (
 	"errors"
+
 	"github.com/ebenderooock/loom/internal/customformats"
 	"github.com/ebenderooock/loom/internal/indexers"
 	"github.com/ebenderooock/loom/internal/movies"
