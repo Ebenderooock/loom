@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Persistent, atomic provider/account API budgets with explicit shared indexer
+  groups, conservative remaining/reset signals, per-attempt retry accounting,
+  and visible budget skip/resume reasons for manual and automated searches.
+
 ### Security
 
 - Require administrator access for integration configuration changes and tests,
