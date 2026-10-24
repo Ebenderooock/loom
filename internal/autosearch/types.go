@@ -33,6 +33,9 @@ type SearchRequest struct {
 	// providers fail or are skipped, or grabbing fails. Manual searches retain
 	// partial-result behavior.
 	RequireSuccessfulSearch bool `json:"-"`
+	// ConfirmedMissing is reserved for mount-verified request re-acquisition.
+	// Stale file records must not turn replacement into a quality upgrade.
+	ConfirmedMissing bool `json:"-"`
 }
 
 // SearchResult is returned by Engine.SearchAndGrab.

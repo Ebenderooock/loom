@@ -1606,6 +1606,9 @@ func (e *Engine) getExistingQuality(
 	qualDefs []*movies.QualityDefinition,
 	allowedMap map[string]int,
 ) existingQuality {
+	if req.ConfirmedMissing {
+		return existingQuality{}
+	}
 	switch req.MediaType {
 	case "movie":
 		return e.getExistingMovieQuality(ctx, req.MediaID, qualDefs, allowedMap)

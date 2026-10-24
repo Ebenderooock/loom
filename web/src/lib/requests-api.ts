@@ -6,6 +6,7 @@ import { apiFetch } from "@/lib/fetch";
 // ---------- Types ----------
 
 export type RequestMediaType = "movie" | "series" | "artist";
+export type RequestAvailability = "present" | "missing" | "unknown";
 
 export type RequestStatus =
   | "pending"
@@ -28,6 +29,12 @@ export interface MediaRequest {
   status: RequestStatus;
   reason?: string;
   media_id?: string;
+  availability?: RequestAvailability;
+  availability_reason?: string;
+  availability_checked_at?: string;
+  fulfilled_at?: string;
+  media_server_availability?: RequestAvailability;
+  monitored?: boolean | null;
   decided_by?: string;
   decided_at?: string;
   created_at: string;
@@ -41,6 +48,29 @@ export interface CreateRequestInput {
   year?: number;
   poster_path?: string;
   overview?: string;
+  re_request_of?: string;
+}
+
+export interface ReconciliationOutcome {
+  request_id: string;
+  before?: RequestAvailability | string;
+  after?: RequestAvailability | string;
+  reason: string;
+  changed: boolean;
+  error?: string;
+}
+
+export interface ReconcileResponse {
+  dry_run: boolean;
+  outcomes: ReconciliationOutcome[];
+}
+
+export interface ReconciliationRun {
+  id: string;
+  actor: string;
+  dry_run: boolean;
+  created_at: string;
+  outcomes: ReconciliationOutcome[];
 }
 
 export class ApiError extends Error {
@@ -149,6 +179,24 @@ export async function clearRequests(): Promise<void> {
   return request("DELETE", "/api/v1/requests");
 }
 
+export async function reconcileRequests(
+  dryRun: boolean,
+): Promise<ReconcileResponse> {
+  return request("POST", "/api/v1/requests/reconcile", { dry_run: dryRun });
+}
+
+export async function listReconciliationHistory(
+  signal?: AbortSignal,
+): Promise<ReconciliationRun[]> {
+  const data = await request<{ data: ReconciliationRun[] }>(
+    "GET",
+    "/api/v1/requests/reconciliation",
+    undefined,
+    signal,
+  );
+  return data?.data ?? [];
+}
+
 // ---------- Quotas ----------
 
 export interface MediaQuota {
@@ -199,6 +247,7 @@ export const requestKeys = {
     [...requestKeys.all, "list", status ?? "all"] as const,
   quota: () => [...requestKeys.all, "quota"] as const,
   quotaConfig: () => [...requestKeys.all, "quota", "config"] as const,
+  reconciliation: () => [...requestKeys.all, "reconciliation"] as const,
 };
 
 // ---------- React Query hooks ----------
@@ -255,6 +304,25 @@ export function useClearRequests() {
   return useMutation({
     mutationFn: clearRequests,
     onSuccess: () => qc.invalidateQueries({ queryKey: requestKeys.all }),
+  });
+}
+
+export function useReconcileRequests() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ dryRun }: { dryRun: boolean }) => reconcileRequests(dryRun),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: requestKeys.all });
+      qc.invalidateQueries({ queryKey: requestKeys.reconciliation() });
+    },
+  });
+}
+
+export function useReconciliationHistory(enabled = true) {
+  return useQuery<ReconciliationRun[], Error>({
+    queryKey: requestKeys.reconciliation(),
+    queryFn: ({ signal }) => listReconciliationHistory(signal),
+    enabled,
   });
 }
 

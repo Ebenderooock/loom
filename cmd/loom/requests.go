@@ -184,6 +184,59 @@ func (f *requestsFulfiller) FulfillArtist(ctx context.Context, mbid, qualityProf
 	return a.ID, nil
 }
 
+// Reacquire resumes an existing catalog entry without adding duplicate media.
+// Its configured library/profile and monitored episode/album scope are retained.
+func (f *requestsFulfiller) Reacquire(ctx context.Context, mt requests.MediaType, mediaID string) error {
+	switch mt {
+	case requests.MediaMovie:
+		m, err := f.movies.GetMovie(ctx, mediaID)
+		if err != nil {
+			return err
+		}
+		if err := f.movies.SetMonitoringStatus(ctx, mediaID, movies.MonitoringStatusMonitored); err != nil {
+			return err
+		}
+		req := autosearch.SearchRequest{MediaType: "movie", MediaID: mediaID, Title: m.Title, Year: m.Year, QualityProfileID: m.QualityProfileID, ConfirmedMissing: true}
+		if m.TMDBID != nil {
+			req.TMDBID = *m.TMDBID
+		}
+		if m.IMDBID != nil {
+			req.IMDBID = *m.IMDBID
+		}
+		f.grab(ctx, req)
+	case requests.MediaSeries:
+		sr, err := f.series.GetSeries(ctx, mediaID)
+		if err != nil {
+			return err
+		}
+		if err := f.series.SetMonitoringStatus(ctx, mediaID, series.MonitoringMonitored); err != nil {
+			return err
+		}
+		req := autosearch.SearchRequest{MediaType: "series", MediaID: mediaID, Title: sr.Title, Year: sr.Year, QualityProfileID: sr.QualityProfileID}
+		if sr.TMDBID != nil {
+			req.TMDBID = *sr.TMDBID
+		}
+		if sr.TVDBID != nil {
+			req.TVDBID = *sr.TVDBID
+		}
+		if sr.IMDBID != nil {
+			req.IMDBID = *sr.IMDBID
+		}
+		f.grab(ctx, req)
+	case requests.MediaArtist:
+		if f.music == nil {
+			return errors.New("music capability not available")
+		}
+		if _, err := f.music.SetArtistMonitoring(ctx, mediaID, music.MonitoringMonitored); err != nil {
+			return err
+		}
+		f.grabArtist(ctx, mediaID)
+	default:
+		return fmt.Errorf("unsupported media type %q", mt)
+	}
+	return nil
+}
+
 // grabArtist launches detached searches for an artist's monitored albums so a
 // freshly-approved request starts acquiring immediately rather than waiting for
 // the background rolling search. Bounded and best-effort.

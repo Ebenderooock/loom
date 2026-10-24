@@ -116,7 +116,7 @@ const linkPrompt = "🔗 Link your Loom account first.\nSend /link to get a code
 
 const helpText = "🎬 *Loom request bot*\n\n" +
 	"/search <title> — find a movie or show to request\n" +
-	"/status — see your requests\n" +
+	"/status — see your request history\n" +
 	"/link — link this chat to your Loom account\n" +
 	"/help — show this message\n\n" +
 	"Admins: /pending — review awaiting requests"
@@ -242,6 +242,11 @@ func (s *Service) cmdStatus(ctx context.Context, cmd Command) Reply {
 		b.WriteString("\n" + statusEmoji(r.Status) + " " + r.Title)
 		if r.Year > 0 {
 			b.WriteString(" (" + strconv.Itoa(r.Year) + ")")
+		}
+		if r.Status == requests.StatusAvailable {
+			b.WriteString(" — fulfilled (historical)")
+			b.WriteString(" · current availability may differ")
+			continue
 		}
 		b.WriteString(" — " + string(r.Status))
 	}

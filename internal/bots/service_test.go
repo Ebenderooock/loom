@@ -324,6 +324,12 @@ func TestHandle_StatusListsRequests(t *testing.T) {
 	if !strings.Contains(r.Text, "Dune") || !strings.Contains(r.Text, "Arrival") {
 		t.Fatalf("expected both titles, got %q", r.Text)
 	}
+	if !strings.Contains(r.Text, "fulfilled (historical)") {
+		t.Fatalf("expected fulfilled-history wording, got %q", r.Text)
+	}
+	if !strings.Contains(r.Text, "current availability may differ") {
+		t.Fatalf("expected current-availability disclaimer, got %q", r.Text)
+	}
 }
 
 func TestHandle_RateLimited(t *testing.T) {
