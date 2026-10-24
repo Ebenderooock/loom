@@ -215,6 +215,103 @@ paths:
         "409":
           $ref: "#/components/responses/Conflict"
 
+  /api/v1/indexers/provider-budgets:
+    get:
+      tags: [indexers]
+      summary: List persistent provider/account budgets (administrator only).
+      operationId: listProviderBudgets
+      security:
+        - apiKey: []
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "200":
+          description: Persisted state; expired windows roll forward on admission.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [budgets]
+                properties:
+                  budgets:
+                    type: array
+                    items:
+                      allOf:
+                        - $ref: "#/components/schemas/ProviderBudgetConfig"
+                        - type: object
+                          required: [id, consumed, reset_at, provider_remaining, provider_reset_at]
+                          properties:
+                            id:
+                              type: string
+                            consumed:
+                              type: integer
+                              format: int64
+                            reset_at:
+                              type: integer
+                              format: int64
+                              description: Configured-window reset, Unix seconds.
+                            provider_remaining:
+                              type: [integer, "null"]
+                              format: int64
+                              description: Null means no active provider-reported constraint.
+                            provider_reset_at:
+                              type: integer
+                              format: int64
+                              description: Provider reset Unix seconds; zero means unknown or unconstrained.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Administrator access required.
+        "500":
+          description: Cannot read budget accounting.
+        "503":
+          description: Budget store unavailable.
+
+  /api/v1/indexers/provider-budgets/{budgetID}:
+    parameters:
+      - name: budgetID
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$'
+        description: Opaque operator label, never a credential or hostname-derived identity.
+    put:
+      tags: [indexers]
+      summary: Configure an explicit provider/account group (administrator only).
+      operationId: configureProviderBudget
+      description: |
+        Atomically replaces configured limits and complete membership, retaining
+        consumed calls and provider remaining/reset state. No search-time bypass
+        or clear-exhaustion operation exists. Manual and streaming searches consume
+        the same allowance. Provider exhaustion with an unknown reset fails closed.
+        Successful changes emit an indexer.budget_configured audit event.
+      security:
+        - apiKey: []
+        - bearerAuth: []
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProviderBudgetConfig"
+            example:
+              allowance: 100
+              window_seconds: 86400
+              indexer_ids: [indexer-one, indexer-two]
+      responses:
+        "204":
+          description: Configuration saved; accounting retained.
+        "400":
+          description: Invalid configuration, duplicate/nonexistent member, or member assigned elsewhere.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Administrator access required.
+        "503":
+          description: Budget store unavailable.
+
   /api/v1/indexers/{id}:
     parameters:
       - $ref: "#/components/parameters/IndexerID"
@@ -375,6 +472,39 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AggregatedResults"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/v1/indexers/search/stream:
+    post:
+      tags: [indexers]
+      summary: Stream fan-out search events with shared provider admission.
+      operationId: streamSearchIndexers
+      description: |
+        Manual streaming searches consume the same persistent provider budgets
+        as non-streaming and automatic searches. Denied providers emit
+        indexer-error events with status skipped, an error reason, and optional
+        resume_at Unix seconds. Unknown resets omit resume_at. Skips are not
+        failures and do not trip circuit breakers.
+      security:
+        - apiKey: []
+        - bearerAuth: []
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SearchRequest"
+      responses:
+        "200":
+          description: Server-sent events; each data field contains a JSON StreamEvent.
+          content:
+            text/event-stream:
+              schema:
+                type: string
         "400":
           $ref: "#/components/responses/BadRequest"
         "401":
@@ -1307,6 +1437,26 @@ paths:
 
 components:
   schemas:
+    ProviderBudgetConfig:
+      type: object
+      required: [allowance, window_seconds, indexer_ids]
+      properties:
+        allowance:
+          type: integer
+          format: int64
+          minimum: 1
+          maximum: 1000000000
+        window_seconds:
+          type: integer
+          format: int64
+          minimum: 1
+          maximum: 31622400
+        indexer_ids:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+          description: Complete group membership; each definition can belong to only one group.
     HealthStatus:
       type: object
       required: [status]
@@ -1876,6 +2026,39 @@ components:
           description: Per-indexer error messages, keyed by indexer ID. Empty object when all sources succeeded.
           additionalProperties:
             type: string
+        diagnostics:
+          type: object
+          properties:
+            total_results:
+              type: integer
+            search_duration_ms:
+              type: integer
+              format: int64
+            indexers:
+              type: array
+              items:
+                type: object
+                required: [id, name, status, response_time_ms, result_count]
+                properties:
+                  id:
+                    type: string
+                  name:
+                    type: string
+                  status:
+                    type: string
+                    enum: [ok, error, timeout, skipped]
+                  response_time_ms:
+                    type: integer
+                    format: int64
+                  result_count:
+                    type: integer
+                  error_message:
+                    type: string
+                    description: Failure or skip reason, including UTC resume time or unknown provider reset.
+                  resume_at:
+                    type: integer
+                    format: int64
+                    description: Unix seconds when provider budget admission can resume; omitted when unknown.
 
     ErrorEnvelope:
       type: object

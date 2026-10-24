@@ -143,11 +143,30 @@ export interface SearchResult {
 }
 
 export interface IndexerDiagnostic {
+  id?: string;
   name: string;
-  status: "ok" | "error" | "timeout";
+  status: "ok" | "error" | "timeout" | "skipped";
   response_time_ms: number;
   result_count: number;
   error_message?: string;
+  resume_at?: number;
+}
+
+export interface ProviderBudget {
+  id: string;
+  allowance: number;
+  window_seconds: number;
+  consumed: number;
+  reset_at: number;
+  provider_remaining: number | null;
+  provider_reset_at: number;
+  indexer_ids: string[];
+}
+
+export interface ProviderBudgetConfig {
+  allowance: number;
+  window_seconds: number;
+  indexer_ids: string[];
 }
 
 export interface SearchDiagnostics {
@@ -319,6 +338,25 @@ export async function testIndexer(id: string): Promise<TestResult> {
   );
 }
 
+export async function listProviderBudgets(): Promise<ProviderBudget[]> {
+  const env = await request<{ budgets: ProviderBudget[] }>(
+    "GET",
+    "/api/v1/indexers/provider-budgets",
+  );
+  return env.budgets ?? [];
+}
+
+export async function configureProviderBudget(
+  budgetId: string,
+  body: ProviderBudgetConfig,
+): Promise<void> {
+  await request<void>(
+    "PUT",
+    `/api/v1/indexers/provider-budgets/${encodeURIComponent(budgetId)}`,
+    body,
+  );
+}
+
 export interface TestConfigPayload {
   id?: string;
   kind: string;
@@ -478,6 +516,7 @@ export interface StreamSearchEvent {
   elapsed_ms?: number;
   error?: string;
   status?: string;
+  resume_at?: number;
   indexers?: { id: string; name: string }[];
   total_results?: number;
   total_errors?: number;
@@ -500,6 +539,7 @@ export interface StreamSearchCallbacks {
     error: string,
     status: string,
     elapsedMs: number,
+    resumeAt?: number,
   ) => void;
   onDone?: (
     totalResults: number,
@@ -636,6 +676,7 @@ export function streamSearch(
                 evt.error ?? "Unknown error",
                 evt.status ?? "error",
                 evt.elapsed_ms ?? 0,
+                evt.resume_at,
               );
               break;
             case "done":

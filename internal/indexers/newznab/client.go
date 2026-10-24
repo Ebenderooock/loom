@@ -235,7 +235,7 @@ func (c *Client) get(ctx context.Context, fullURL string) ([]byte, error) {
 		if errors.Is(err, context.DeadlineExceeded) {
 			return nil, fmt.Errorf("%w: %s", ErrTimeout, err.Error())
 		}
-		return nil, fmt.Errorf("%w: %s", ErrUpstream, err.Error())
+		return nil, fmt.Errorf("%w: %w", ErrUpstream, err)
 	}
 	defer resp.Body.Close()
 
@@ -252,6 +252,11 @@ func (c *Client) get(ctx context.Context, fullURL string) ([]byte, error) {
 		return nil, err
 	}
 	if upstream := decodeUpstreamError(body); upstream != nil {
+		if errors.Is(upstream, ErrRateLimited) {
+			if err := indexers.RecordProviderExhaustion(ctx); err != nil {
+				return nil, err
+			}
+		}
 		return nil, upstream
 	}
 	return body, nil

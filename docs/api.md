@@ -1,5 +1,22 @@
 # API
 
+## Provider/account budgets
+
+`GET /api/v1/indexers/provider-budgets` returns `{ "budgets": [...] }` with
+configured allowance, consumed calls, local/provider reset Unix timestamps,
+nullable provider remaining calls, and explicit member IDs.
+`PUT /api/v1/indexers/provider-budgets/{budgetID}` atomically configures
+`allowance`, `window_seconds`, and the complete `indexer_ids` list; success is
+204, invalid configuration is 400, accounting unavailable is 503.
+Both routes require an administrator when authentication is enabled.
+They never accept consumed/reset fields or clear provider exhaustion.
+See [provider API budgets](indexers-provider-budgets.md) for curl examples,
+signal handling and manual/privileged behavior.
+
+Budget-denied search diagnostics and streaming events use `status: "skipped"`,
+a reason containing the UTC resume time (or unknown reset), and optional
+`resume_at` Unix seconds. A skipped provider is not a circuit-breaker failure.
+
 The canonical machine-readable specification of Loom's HTTP API lives in
 [`api/openapi/loom.yaml`](../api/openapi/loom.yaml) (OpenAPI 3.1). This
 page is the human summary.
