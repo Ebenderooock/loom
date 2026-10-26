@@ -86,6 +86,9 @@ func (s *Service) Get(ctx context.Context, id string) (Request, error) {
 // ErrAlreadyAvailable indicates the requested media already exists in the library.
 var ErrAlreadyAvailable = errors.New("requests: media already available")
 
+// ErrForbidden indicates a re-request targeted somebody else's request history.
+var ErrForbidden = errors.New("requests: only the requester or an administrator may re-request this title")
+
 // Create validates and stores a new request on behalf of the given user. It
 // rejects unsupported media types, missing TMDB ids, already-available media,
 // and duplicate open requests. Non-admin users are subject to the configured
@@ -98,6 +101,30 @@ func (s *Service) Create(ctx context.Context, userID, username string, isAdmin b
 	if in.TMDBID == "" {
 		return Request{}, errors.New("requests: tmdb_id required")
 	}
+	if in.ReRequestOf != "" {
+		original, err := s.store.Get(ctx, in.ReRequestOf)
+		if err != nil {
+			return Request{}, err
+		}
+		if original.UserID != userID && !isAdmin {
+			return Request{}, ErrForbidden
+		}
+		if original.MediaType != in.MediaType || original.TMDBID != in.TMDBID || original.Status != StatusAvailable {
+			return Request{}, fmt.Errorf("%w: re-request must match fulfilled history", ErrConflict)
+		}
+		// Recheck storage now, not just the last scheduled scan. Unknown or
+		// recovered storage cannot authorize a new acquisition.
+		if err := s.ReconcileAvailability(ctx); err != nil {
+			return Request{}, err
+		}
+		original, err = s.store.Get(ctx, original.ID)
+		if err != nil {
+			return Request{}, err
+		}
+		if original.Availability != AvailabilityMissing {
+			return Request{}, fmt.Errorf("%w: current absence is not confirmed", ErrConflict)
+		}
+	}
 
 	// Short-circuit if the media is already in the library. A lookup error is
 	// surfaced rather than swallowed so we never create a request on the false
@@ -107,20 +134,21 @@ func (s *Service) Create(ctx context.Context, userID, username string, isAdmin b
 		if err != nil {
 			return Request{}, fmt.Errorf("requests: checking existing media: %w", err)
 		}
-		if mediaID != "" {
+		if mediaID != "" && in.ReRequestOf == "" {
 			return Request{}, ErrAlreadyAvailable
 		}
 	}
 
 	req := Request{
-		UserID:     userID,
-		Username:   username,
-		MediaType:  in.MediaType,
-		TMDBID:     in.TMDBID,
-		Title:      in.Title,
-		Year:       in.Year,
-		PosterPath: in.PosterPath,
-		Overview:   in.Overview,
+		ReRequestOf: in.ReRequestOf,
+		UserID:      userID,
+		Username:    username,
+		MediaType:   in.MediaType,
+		TMDBID:      in.TMDBID,
+		Title:       in.Title,
+		Year:        in.Year,
+		PosterPath:  in.PosterPath,
+		Overview:    in.Overview,
 	}
 
 	// Enforce the per-user quota for non-admins when a limit is configured.
@@ -278,6 +306,26 @@ func (s *Service) Approve(ctx context.Context, id, qualityProfileID, libraryID, 
 	if err != nil {
 		return Request{}, fmt.Errorf("requests: checking existing media: %w", err)
 	}
+	reacquire := false
+	var missingIDs []string
+	if req.ReRequestOf != "" {
+		if err := s.ReconcileAvailability(ctx); err != nil {
+			return Request{}, err
+		}
+		original, err := s.store.Get(ctx, req.ReRequestOf)
+		if err != nil {
+			return Request{}, err
+		}
+		current, reason, _, err := s.store.observe(ctx, &original, time.Now().UTC(), false)
+		if err != nil {
+			return Request{}, fmt.Errorf("requests: verify re-acquisition scope: %w", err)
+		}
+		if current == AvailabilityUnknown {
+			return Request{}, fmt.Errorf("%w: %s", ErrConflict, reason)
+		}
+		reacquire = current == AvailabilityMissing
+		missingIDs = original.missingFileIDs
+	}
 	// Atomically claim so the request is fulfilled at most once.
 	won, err := s.store.ClaimForApproval(ctx, id, decidedBy)
 	if err != nil {
@@ -288,7 +336,16 @@ func (s *Service) Approve(ctx context.Context, id, qualityProfileID, libraryID, 
 	}
 
 	fulfilledID := mediaID
-	if fulfilledID == "" {
+	if fulfilledID != "" && reacquire {
+		reacquirer, ok := s.fulfiller.(interface {
+			Reacquire(context.Context, MediaType, string, []string) error
+		})
+		if !ok {
+			err = errors.New("re-acquisition is not configured")
+		} else {
+			err = reacquirer.Reacquire(ctx, req.MediaType, fulfilledID, missingIDs)
+		}
+	} else if fulfilledID == "" {
 		switch req.MediaType {
 		case MediaMovie:
 			fulfilledID, err = s.fulfiller.FulfillMovie(ctx, req.TMDBID, qualityProfileID, libraryID)
@@ -320,8 +377,14 @@ func (s *Service) Approve(ctx context.Context, id, qualityProfileID, libraryID, 
 // ReconcileAvailability catches successful imports, rescans and imports that
 // finished before approval or while Loom was stopped. It is safe to repeat.
 func (s *Service) ReconcileAvailability(ctx context.Context) error {
-	if err := s.store.ReconcileAvailability(ctx, time.Now().UTC()); err != nil {
+	run, err := s.store.Reconcile(ctx, time.Now().UTC(), "scheduler", false)
+	if err != nil {
 		return fmt.Errorf("requests: reconcile availability: %w", err)
+	}
+	for _, o := range run.Outcomes {
+		if o.Error != "" {
+			s.logger.WarnContext(ctx, "requests: availability unknown", "request_id", o.RequestID, "error", o.Error)
+		}
 	}
 	return nil
 }

@@ -5,11 +5,18 @@
 package autosearch
 
 import (
+	"errors"
+
 	"github.com/ebenderooock/loom/internal/customformats"
 	"github.com/ebenderooock/loom/internal/indexers"
 	"github.com/ebenderooock/loom/internal/movies"
 	"github.com/ebenderooock/loom/internal/parser"
+	"github.com/ebenderooock/loom/internal/qualityprofiles"
+	"github.com/ebenderooock/loom/internal/searchdebug"
 )
+
+// ErrInvalidPolicyPreview identifies malformed unsaved policy input.
+var ErrInvalidPolicyPreview = errors.New("invalid policy preview")
 
 // SearchRequest describes what to search for and which quality
 // profile to evaluate results against.
@@ -33,6 +40,9 @@ type SearchRequest struct {
 	// providers fail or are skipped, or grabbing fails. Manual searches retain
 	// partial-result behavior.
 	RequireSuccessfulSearch bool `json:"-"`
+	// ConfirmedMissing is reserved for mount-verified request re-acquisition.
+	// Stale file records must not turn replacement into a quality upgrade.
+	ConfirmedMissing bool `json:"-"`
 }
 
 // SearchResult is returned by Engine.SearchAndGrab.
@@ -64,6 +74,7 @@ type GrabbedRelease struct {
 // ScoredRelease is a search result after parsing, quality matching,
 // and scoring. Used internally for ranking and selection.
 type ScoredRelease struct {
+	Explanation     *searchdebug.Explanation
 	Result          indexers.Result
 	Parsed          *parser.Release
 	QualityDef      *movies.QualityDefinition // matched quality definition, nil if unmatched
@@ -92,13 +103,31 @@ func (sr *ScoredRelease) CompositeScore() float64 {
 }
 
 func betterScoredRelease(a, b ScoredRelease) bool {
+	order, _ := compareScoredRelease(a, b)
+	return order < 0
+}
+
+// compareScoredRelease is shared by selection, dry runs and ranking explanations.
+func compareScoredRelease(a, b ScoredRelease) (int, string) {
 	if a.QualityTier != b.QualityTier {
-		return a.QualityTier < b.QualityTier
+		if a.QualityTier < b.QualityTier {
+			return -1, "quality tier (lower position is preferred)"
+		}
+		return 1, "quality tier (lower position is preferred)"
 	}
 	if a.FormatScore != b.FormatScore {
-		return a.FormatScore > b.FormatScore
+		if a.FormatScore > b.FormatScore {
+			return -1, "custom-format score (higher points are preferred)"
+		}
+		return 1, "custom-format score (higher points are preferred)"
 	}
-	return a.TiebreakerScore > b.TiebreakerScore
+	if a.TiebreakerScore > b.TiebreakerScore {
+		return -1, "seeders/age/size/freeleech tiebreaker (higher points are preferred)"
+	}
+	if a.TiebreakerScore < b.TiebreakerScore {
+		return 1, "seeders/age/size/freeleech tiebreaker (higher points are preferred)"
+	}
+	return 0, "equal ranking keys; input order retained"
 }
 
 // RejectStat aggregates rejection reasons for the response.
@@ -112,10 +141,14 @@ type RejectStat struct {
 type EvaluateRequest struct {
 	SearchRequest
 	Results []indexers.Result `json:"results"`
+	// PolicyPreview replaces only the loaded profile for this dry run.
+	// It never writes configuration or affects SearchAndGrab.
+	PolicyPreview *qualityprofiles.QualityProfile `json:"policy_preview,omitempty"`
 }
 
 // EvaluatedResult is a single result scored by the evaluate endpoint.
 type EvaluatedResult struct {
+	Explanation *searchdebug.Explanation `json:"explanation,omitempty"`
 	// Original indexer result fields (echoed back).
 	IndexerID   string `json:"indexer_id"`
 	Title       string `json:"title"`
@@ -146,6 +179,7 @@ type EvaluatedResult struct {
 
 // EvaluateResponse is the response from the /evaluate endpoint.
 type EvaluateResponse struct {
+	Preview bool              `json:"preview"`
 	Results []EvaluatedResult `json:"results"`
 	Total   int               `json:"total"`
 	Passed  int               `json:"passed"`

@@ -1,5 +1,11 @@
 # Configuration
 
+Provider/account search allowances are configured through the administrator
+API, not credentials or hostname inference. See
+[provider API budgets](indexers-provider-budgets.md) for `allowance`,
+`window_seconds`, explicit `indexer_ids` membership, persistence, supported
+signals, and manual-search/override semantics.
+
 Loom reads configuration in layered order; each layer overrides the previous:
 
 1. Built-in defaults (in `internal/kernel/config/config.go`).

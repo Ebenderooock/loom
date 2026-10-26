@@ -1,5 +1,22 @@
 # API
 
+## Provider/account budgets
+
+`GET /api/v1/indexers/provider-budgets` returns `{ "budgets": [...] }` with
+configured allowance, consumed calls, local/provider reset Unix timestamps,
+nullable provider remaining calls, and explicit member IDs.
+`PUT /api/v1/indexers/provider-budgets/{budgetID}` atomically configures
+`allowance`, `window_seconds`, and the complete `indexer_ids` list; success is
+204, invalid configuration is 400, accounting unavailable is 503.
+Both routes require an administrator when authentication is enabled.
+They never accept consumed/reset fields or clear provider exhaustion.
+See [provider API budgets](indexers-provider-budgets.md) for curl examples,
+signal handling and manual/privileged behavior.
+
+Budget-denied search diagnostics and streaming events use `status: "skipped"`,
+a reason containing the UTC resume time (or unknown reset), and optional
+`resume_at` Unix seconds. A skipped provider is not a circuit-breaker failure.
+
 The canonical machine-readable specification of Loom's HTTP API lives in
 [`api/openapi/loom.yaml`](../api/openapi/loom.yaml) (OpenAPI 3.1). This
 page is the human summary.
@@ -23,6 +40,7 @@ in `api/openapi/loom.yaml`.
 
 | Method | Path | Auth | Response | Description |
 |---|---|---|---|---|
+| `POST` | `/api/v1/autosearch/evaluate` | apiKey/bearer/cookie | `200 application/json` | Production-engine dry run with decision evidence; optional unsaved policy preview. |
 | `GET` | `/healthz` | none | `200 application/json` | Liveness probe. |
 | `GET` | `/livez` | none | `200 application/json` | Same shape; conventional alias. |
 | `GET` | `/readyz` | none | `200` or `503 application/json` | DB ping + ready-flag check. |
@@ -49,6 +67,26 @@ in `api/openapi/loom.yaml`.
 | `PATCH` | `/api/v1/proxies/{id}` | admin | `200 application/json` (`Proxy`) | Partially update a proxy. |
 | `DELETE` | `/api/v1/proxies/{id}` | admin | `204` or `409 application/json` | Remove a proxy. Returns 409 `proxy_in_use` (with `details.indexer_ids`) when any indexer still references it. |
 | `POST` | `/api/v1/proxies/{id}/test` | admin | `200 application/json` (`ProxyTestResult`) | Probe the proxy: HTTP/SOCKS5 fetch the configured probe URL; FlareSolverr issues `sessions.list`. |
+| `POST` | `/api/v1/requests` | authenticated | `201 MediaRequest` | New request, or explicit owner/admin re-request with `re_request_of`. Active duplicates and unverified absence return 409; quotas return 429. |
+| `GET` | `/api/v1/requests` | admin | `200 {"data":[MediaRequest]}` | All request history; optional `status` filter. |
+| `GET` | `/api/v1/requests/mine` | authenticated | `200 {"data":[MediaRequest]}` | Own history with independent current file presence and monitoring. |
+| `POST` | `/api/v1/requests/reconcile` | admin | `200 RequestReconciliation` | Required `{"dry_run":true}` previews; `false` applies. Both are audited with per-item outcomes. |
+| `GET` | `/api/v1/requests/reconciliation` | admin | `200 {"data":[RequestReconciliation]}` | Latest 50 batch audits, including previews. |
+
+Request `status: "available"` means **historically fulfilled**, never a guarantee
+of current availability. `fulfilled_at` is preserved across file/catalog
+deletion and recovery. `availability` is independently `present`, `missing` or
+`unknown`, with a reason and observation time; observations older than five
+minutes are returned as `unknown`. `monitored` describes the linked catalog entry.
+`media_server_availability` remains `unknown` until a server-observation source
+is implemented; local file presence does not imply Plex/Jellyfin/Emby playback.
+
+Re-requests create new pending rows linked to their history, require freshly
+verified missing files and retain normal rolling quota accounting. Administrators
+bypass quotas, not duplicate or storage checks. Reconciliation never deletes
+media/import records. See [the request lifecycle guide](requests.md) for storage
+markers, conservative unknown states, and operator recovery.
+
 | `GET` | `/api/v1/downloads/history` | apiKey/bearer/cookie | `200 application/json` (`HistoryEntry[]`) | Completion and durable acquisition history, paginated with `limit`/`offset`. |
 | `DELETE` | `/api/v1/downloads/history` | admin | `204` | Clear completion history; retain acquisition admission/retry records. |
 | `POST` | `/api/v1/downloads/history/actions` | admin identity required | `200 application/json` | Enable retry or blocklist up to 100 latest failed/interrupted history items, with per-item outcomes. |
@@ -71,6 +109,45 @@ again to acquire fresh release coordinates. It does not bypass the blocklist.
 `SystemStatus` is `{ version, commit, buildDate, engine }` — the database
 engine name is included so readiness tooling can confirm what backend
 this instance is running against.
+
+### Release evaluation and policy previews
+
+`POST /api/v1/autosearch/evaluate` accepts the existing search identity context
+(`media_type`, `media_id`, `title`, `alternate_titles`, year/IDs, season/episode,
+`daily_date`, `runtime` in minutes), a `quality_profile_id`, and indexer `results`.
+Results use the native indexer shape (`size` in bytes, `pub_date`, optional
+`seeders`); no search or grab is performed. Linked movie identity is loaded from
+the library as for automatic acquisition.
+
+Omit `policy_preview` to use the saved profile. Supply it to replace only that
+profile during this evaluation; its `items` is a JSON-encoded quality array,
+`format_items` contains `{format_id, score}`, and `min_format_score`, `cutoff`,
+`upgrade_allowed` have their native meanings. Quality definitions and
+custom-format rules are not replaced. Invalid preview quality arrays and empty
+or duplicate quality IDs return HTTP 400; evaluation failures return HTTP 500.
+The response includes `preview`, `total`, `passed`, and `results`, ordered by the
+same comparator as automatic acquisition (accepted results before rejected).
+
+This example is available after this change ships; substitute local IDs/titles:
+
+```bash
+curl -sS -X POST http://localhost:1925/api/v1/autosearch/evaluate \
+  -H 'Content-Type: application/json' \
+  -d '{"media_type":"movie","title":"Example","quality_profile_id":"profile-id",
+       "results":[{"title":"Example.2024.1080p.BluRay","size":2000000000}],
+       "policy_preview":{"items":"[{\"id\":\"quality-definition-id\",\"allowed\":true}]",
+                         "min_format_score":100,"upgrade_allowed":true,
+                         "format_items":[{"format_id":"format-id","score":50}]}}'
+```
+
+Each result adds optional `explanation`: `category`, `summary`, `identity` and
+`checks` evidence arrays (`field`, `expected`, `actual`, `unit`, `passed`);
+`numbering` (season/episode/multi-episode/absolute/date/pack interpretation);
+profile-specific `contributions`; and, for accepted results, `rank` and
+`ranking_reason`. Missing checks mean evaluation stopped, not success. The
+composite score remains display-only. New search-log evaluations use the same
+explanation shape; historical rows may omit it. See
+[release matching](release-matching.md) for examples and pack-mapping limitations.
 
 ### Try every route with curl
 
