@@ -19,11 +19,17 @@ func (s *Service) mountSearchHealth(r chi.Router) {
 }
 
 func (s *Service) handleSearchHealthList(w http.ResponseWriter, r *http.Request) {
+	if !requireAdminIfPresent(w, r) {
+		return
+	}
 	all := s.searchHealthTracker.GetAllHealth()
 	writeJSON(w, http.StatusOK, map[string]any{"data": all})
 }
 
 func (s *Service) handleSearchHealthGet(w http.ResponseWriter, r *http.Request) {
+	if !requireAdminIfPresent(w, r) {
+		return
+	}
 	id := chi.URLParam(r, "id")
 
 	// Check whether this indexer exists at all: either tracked or registered.
@@ -36,12 +42,18 @@ func (s *Service) handleSearchHealthGet(w http.ResponseWriter, r *http.Request) 
 	writeJSON(w, http.StatusOK, h)
 }
 
-func (s *Service) handleSearchHealthResetAll(w http.ResponseWriter, _ *http.Request) {
+func (s *Service) handleSearchHealthResetAll(w http.ResponseWriter, r *http.Request) {
+	if !requireAdminIfPresent(w, r) {
+		return
+	}
 	s.searchHealthTracker.ResetAll()
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
 func (s *Service) handleSearchHealthReset(w http.ResponseWriter, r *http.Request) {
+	if !requireAdminIfPresent(w, r) {
+		return
+	}
 	id := chi.URLParam(r, "id")
 	s.searchHealthTracker.Reset(id)
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})

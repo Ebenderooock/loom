@@ -28,10 +28,11 @@ func (SystemClock) Now() time.Time { return time.Now() }
 
 // ServiceOptions wires Service dependencies.
 type ServiceOptions struct {
-	Repository Repository
-	Registry   *Registry
-	Logger     *slog.Logger
-	Clock      Clock
+	ProviderBudgets *ProviderBudgetStore
+	Repository      Repository
+	Registry        *Registry
+	Logger          *slog.Logger
+	Clock           Clock
 	// HTTPClientProvider, when non-nil, is used by kind factories to
 	// build outbound HTTP clients deterministically.
 	HTTPClientProvider HTTPClientProvider
@@ -77,6 +78,7 @@ type RouteMounter func(chi.Router)
 // the lifecycle that links a persisted Definition to a live Indexer
 // in the Registry.
 type Service struct {
+	providerBudgets     *ProviderBudgetStore
 	repo                Repository
 	registry            *Registry
 	logger              *slog.Logger
@@ -131,6 +133,7 @@ func NewService(opts ServiceOptions) (*Service, error) {
 		avail = NewIndexerAvailability(opts.Clock)
 	}
 	return &Service{
+		providerBudgets:     opts.ProviderBudgets,
 		repo:                opts.Repository,
 		registry:            opts.Registry,
 		logger:              opts.Logger.With("module", "indexers"),
@@ -631,18 +634,32 @@ func (s *Service) Search(ctx context.Context, q Query, ids []string, perTimeout 
 	}
 
 	// Filter out indexers that are in a circuit-breaker cooldown.
+	// Resolve the default selection before filtering: nil means all to the
+	// registry, but it contains no IDs for the availability tracker to inspect.
+	if len(ids) == 0 {
+		for _, ix := range s.registry.List() {
+			ids = append(ids, ix.ID())
+		}
+	}
 	availableIDs, skippedIDs := s.indexerAvailability.FilterAvailable(ids)
 	if len(skippedIDs) > 0 {
 		s.logger.Info("search: skipping indexers in cooldown",
 			"skipped", skippedIDs, "available", len(availableIDs))
 	}
 
-	agg := s.registry.Search(ctx, q, SearchOptions{
-		IndexerIDs:        availableIDs,
-		PerIndexerTimeout: perTimeout,
-		TimeoutOverrides:  s.proxyTimeoutOverrides(ctx, availableIDs),
-		MaxParallel:       s.maxParallel,
-	})
+	// An empty post-filter selection must not become "all indexers" again.
+	agg := AggregatedResults{
+		Results: []Result{}, Errors: map[string]string{}, Diagnostics: &SearchDiagnostics{},
+	}
+	if len(availableIDs) > 0 {
+		agg = s.registry.Search(ctx, q, SearchOptions{
+			ProviderBudgets:   s.providerBudgets,
+			IndexerIDs:        availableIDs,
+			PerIndexerTimeout: perTimeout,
+			TimeoutOverrides:  s.proxyTimeoutOverrides(ctx, availableIDs),
+			MaxParallel:       s.maxParallel,
+		})
+	}
 
 	// Record availability: clear on success, record failure on error.
 	// A "skipped" status (indexer can't service this query's IDs) is
@@ -697,7 +714,7 @@ func (s *Service) Search(ctx context.Context, q Query, ids []string, perTimeout 
 			if d.Status == "error" || d.Status == "timeout" {
 				searchErr = errors.New(d.ErrorMessage)
 			}
-			if s.searchHealthTracker != nil {
+			if s.searchHealthTracker != nil && d.Status != "skipped" {
 				s.searchHealthTracker.RecordSearch(indexerID, dur, d.ResultCount, searchErr)
 			}
 
@@ -761,6 +778,11 @@ func (s *Service) SearchStream(ctx context.Context, q Query, ids []string, perTi
 	}
 
 	// Filter out indexers in circuit-breaker cooldown.
+	if len(ids) == 0 {
+		for _, ix := range s.registry.List() {
+			ids = append(ids, ix.ID())
+		}
+	}
 	availableIDs, skippedIDs := s.indexerAvailability.FilterAvailable(ids)
 	if len(skippedIDs) > 0 {
 		s.logger.Info("search-stream: skipping indexers in cooldown",
@@ -768,12 +790,25 @@ func (s *Service) SearchStream(ctx context.Context, q Query, ids []string, perTi
 	}
 
 	internal := make(chan StreamEvent, len(availableIDs)+16)
-	go s.registry.SearchStream(ctx, q, SearchOptions{
-		IndexerIDs:        availableIDs,
-		PerIndexerTimeout: perTimeout,
-		TimeoutOverrides:  s.proxyTimeoutOverrides(ctx, availableIDs),
-		MaxParallel:       s.maxParallel,
-	}, internal)
+	if len(availableIDs) > 0 {
+		go s.registry.SearchStream(ctx, q, SearchOptions{
+			ProviderBudgets:   s.providerBudgets,
+			IndexerIDs:        availableIDs,
+			PerIndexerTimeout: perTimeout,
+			TimeoutOverrides:  s.proxyTimeoutOverrides(ctx, availableIDs),
+			MaxParallel:       s.maxParallel,
+		}, internal)
+	} else {
+		internal <- StreamEvent{Type: EventDone}
+		close(internal)
+	}
+	for _, id := range skippedIDs {
+		select {
+		case events <- StreamEvent{Type: EventIndexerError, IndexerID: id,
+			Status: "skipped", Error: "circuit breaker cooldown"}:
+		case <-ctx.Done():
+		}
+	}
 
 	var totalResults int
 	for evt := range internal {

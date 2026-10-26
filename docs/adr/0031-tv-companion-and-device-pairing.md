@@ -1,4 +1,4 @@
-# ADR-0027: Native TV companion and device pairing
+# ADR-0031: Native TV companion and device pairing
 
 - Status: Accepted
 - Date: 2026-10-21

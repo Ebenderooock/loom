@@ -1,6 +1,75 @@
 # Loom — Implementation Roadmap
 
-This is the detailed implementation roadmap for Loom's upcoming features. Each phase document contains full technical specifications including SQL schemas, Go interfaces, API routes, frontend tasks, implementation order, dependencies, and risks.
+This is the detailed implementation roadmap for Loom's upcoming features. Phase documents are design proposals, not a current capability inventory; some proposed functionality has already shipped with different schemas or APIs. See [platform documentation](../platform-documentation.md) and the implementation before treating a task as outstanding.
+
+Authenticated movie, series, and artist requests, request quotas, admin approval,
+and Discord/Telegram request bots already exist. The music module includes
+artist/album/release/track management and acquisition. Guest requests, broader
+auto-approval rules, and external media-server request availability checks remain
+separate roadmap work.
+
+## User-Feedback Backlog (2026-10-23)
+
+This intake is based on a bounded review of public Arr ecosystem reports, not
+a statistical popularity ranking or proof of equivalent defects in Loom.
+Each issue includes source links, acceptance criteria and exclusions. Historical
+Overseerr/Readarr reports are needs evidence, not claims about current Seerr
+behavior or commitments from retired projects. Reddit search-index leads were
+not verified against original post bodies and do not drive implementation priority.
+
+| Order | Priority | Work | Scope |
+|-------|----------|------|-------|
+| 1 | P1 | [Durable acquisition failures](https://github.com/Ebenderooock/loom/issues/174) | Extend history/blocklist mechanisms; bounded retries and restart recovery, including pre-workflow failures. |
+| 2 | P1 | [Explainable matching and policy](https://github.com/Ebenderooock/loom/issues/171) | Actual-engine identity/ranking explanations, configuration guidance and regression fixtures; investigate safe pack-mapping previews. |
+| 3 | P1 | [Request history versus availability](https://github.com/Ebenderooock/loom/issues/172) | Preserve fulfillment history, support re-requesting missing media and protect against disconnected mounts. |
+| Design alongside 1-3 | P1 | [Independent version tracks](https://github.com/Ebenderooock/loom/issues/169) | [Proposed ADR-0027](../adr/0027-independent-version-tracks.md) defines 1080p/4K isolation, migration and implementation gates; not implemented. |
+| Later | P2 | [Provider-aware API budgets](https://github.com/Ebenderooock/loom/issues/173) | Persistent allowances, explicit shared-account groups and provider reset signals. |
+| Later | P2 | [Read-only library health](https://github.com/Ebenderooock/loom/issues/170) | Safe first slice of Phase 3, with evidence and previews; no automatic deletion. |
+
+The ordering above is a delivery recommendation, not a claim that all items
+depend on one another. These issues are not marked implemented. The baseline
+review-fix batch in [PR #175](https://github.com/Ebenderooock/loom/pull/175) covers quota admission/retry eligibility,
+file-derived request fulfillment and import collision safety, not these complete
+follow-on capabilities.
+
+### Independent version-track implementation slices
+
+[ADR-0027](../adr/0027-independent-version-tracks.md) is proposed, not an
+implemented capability. Maintainer acceptance precedes coding; each slice uses a
+separate branch/PR. Additional tracks remain gated until the whole chain passes.
+
+| Slice | Issue | Prerequisites |
+|-------|-------|---------------|
+| Ownership and migration | [#176](https://github.com/Ebenderooock/loom/issues/176) | ADR acceptance |
+| API and compatibility | [#178](https://github.com/Ebenderooock/loom/issues/178) | #176 |
+| Acquisition isolation | [#180](https://github.com/Ebenderooock/loom/issues/180) | #176, #178 |
+| Import, naming and packs | [#179](https://github.com/Ebenderooock/loom/issues/179) | #176, #178 |
+| Deletion and reconciliation | [#181](https://github.com/Ebenderooock/loom/issues/181) | #179 |
+| UI and activation gate | [#182](https://github.com/Ebenderooock/loom/issues/182) | #178, #180, #179, #181 |
+
+These are child implementation slices of #169, not replacements for the other
+five intake items. Language/edition activation, shared files, temporary-copy
+automation and general retention remain outside the resolution-track MVP.
+
+### Discovery and Deferred Work
+
+- **Anime pack mapping:** investigate catalog-aware, reversible previews within
+  matching work; ambiguous identities must remain unresolved. Do not relax
+  matching globally.
+- **Metadata resilience:** assess cached reads, outage behavior, provider
+  provenance and identity migration before expanding
+  [books support](https://github.com/Ebenderooock/loom/issues/17).
+- **Storage fairness and destructive retention:** defer until shared-content
+  ownership, availability and monitoring/reacquisition semantics are explicit.
+- **SSO:** already supported; treat authorization coverage, recovery and logout
+  as audits of existing behavior, not a new missing authentication feature.
+- **Sports naming and bulk folder migration:** discovery only. Sports may need a
+  different catalog model; migration needs collision previews, extras/subtitle
+  preservation and a reversible operation manifest. Search snippets alone do
+  not justify prioritizing either above reliability work.
+- **Music backlog:** [the existing music issue](https://github.com/Ebenderooock/loom/issues/16)
+  tracks remaining coverage validation rather than describing the implemented
+  module as entirely absent.
 
 ## Architecture Context
 
@@ -13,7 +82,7 @@ Loom is a Go + React media automation platform. Key architectural facts relevant
 - **Libraries** have scanning, file tracking, and disk space monitoring.
 - **Config** is layered (defaults < YAML < env `LOOM_*` < flags) with hot-reload support.
 - **API** uses `go-chi/chi/v5` with `Set*` dependency injection and `RouteExtensions`.
-- **Frontend** is React 18 + TanStack Router/Query + shadcn/ui + Tailwind.
+- **Frontend** is React 19 + TanStack Router/Query + shadcn/ui + Tailwind.
 
 ---
 
@@ -22,7 +91,7 @@ Loom is a Go + React media automation platform. Key architectural facts relevant
 | Phase | Document | Status |
 |-------|----------|--------|
 | 1 | [Usenet / NZB Built-in Client](./phase-1-usenet-nzb.md) | High-level plan (deferred) |
-| 2 | [Media Requests](./phase-2-media-requests.md) | Fully detailed |
+| 2 | [Media Requests](./phase-2-media-requests.md) | Core implemented; expanded features remain proposed |
 | 3 | [Library Maintenance](./phase-3-library-maintenance.md) | Fully detailed |
 | 4 | [Media Server Analytics](./phase-4-media-server-analytics.md) | Fully detailed |
 | 5 | [Script Engine](./phase-5-script-engine.md) | Fully detailed |

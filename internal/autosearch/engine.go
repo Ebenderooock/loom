@@ -22,6 +22,7 @@ import (
 	torrentdl "github.com/ebenderooock/loom/internal/downloads/torrent"
 	"github.com/ebenderooock/loom/internal/indexers"
 	"github.com/ebenderooock/loom/internal/movies"
+	"github.com/ebenderooock/loom/internal/packs"
 	"github.com/ebenderooock/loom/internal/parser"
 	"github.com/ebenderooock/loom/internal/qualityprofiles"
 	"github.com/ebenderooock/loom/internal/searchdebug"
@@ -133,19 +134,27 @@ func WithSearchLogEnabled(fn func() bool) EngineOption {
 // SearchAndGrab, used by the manual search UI to display quality
 // badges, scores, and rejection reasons.
 func (e *Engine) Evaluate(ctx context.Context, req EvaluateRequest) (*EvaluateResponse, error) {
+	if req.PolicyPreview != nil {
+		if err := validatePolicyPreview(req.PolicyPreview); err != nil {
+			return nil, err
+		}
+	}
 	resolved, err := e.resolveMovieIdentity(ctx, req.SearchRequest)
 	if err != nil {
 		return nil, err
 	}
 	req.SearchRequest = resolved
 
-	if req.QualityProfileID == "" {
+	if req.QualityProfileID == "" && req.PolicyPreview == nil {
 		return &EvaluateResponse{Results: make([]EvaluatedResult, 0), Total: len(req.Results)}, nil
 	}
 
-	profile, err := e.profileStore.Get(ctx, req.QualityProfileID)
-	if err != nil {
-		return nil, fmt.Errorf("load quality profile %s: %w", req.QualityProfileID, err)
+	profile := req.PolicyPreview
+	if profile == nil {
+		profile, err = e.profileStore.Get(ctx, req.QualityProfileID)
+		if err != nil {
+			return nil, fmt.Errorf("load quality profile %s: %w", req.QualityProfileID, err)
+		}
 	}
 
 	var items []profileItem
@@ -185,14 +194,28 @@ func (e *Engine) Evaluate(ctx context.Context, req EvaluateRequest) (*EvaluateRe
 	idBased := req.IMDBID != "" || req.TVDBID != "" || req.TMDBID != ""
 
 	resp := &EvaluateResponse{
+		Preview: req.PolicyPreview != nil,
 		Total:   len(req.Results),
 		Results: make([]EvaluatedResult, 0, len(req.Results)),
 	}
 
+	scored := make([]ScoredRelease, 0, len(req.Results))
+	var rejected []ScoredRelease
 	for _, res := range req.Results {
 		sr := e.evaluateResult(req.SearchRequest, res, qualDefs, allowedMap, allowedDefs, formatScores, profile, existing, cutoffTier, idBased)
+		if sr.Rejected {
+			rejected = append(rejected, sr)
+		} else {
+			scored = append(scored, sr)
+		}
+	}
+	rankReleases(scored)
+	scored = append(scored, rejected...)
+	for _, sr := range scored {
+		res := sr.Result
 
 		er := EvaluatedResult{
+			Explanation: sr.Explanation,
 			IndexerID:   res.IndexerID,
 			Title:       res.Title,
 			Link:        res.Link,
@@ -240,20 +263,6 @@ func (e *Engine) Evaluate(ctx context.Context, req EvaluateRequest) (*EvaluateRe
 
 		resp.Results = append(resp.Results, er)
 	}
-
-	// Rank accepted results by quality tier, format score, then tiebreaker.
-	sort.SliceStable(resp.Results, func(i, j int) bool {
-		if resp.Results[i].Rejected != resp.Results[j].Rejected {
-			return !resp.Results[i].Rejected
-		}
-		if resp.Results[i].QualityTier != resp.Results[j].QualityTier {
-			return resp.Results[i].QualityTier < resp.Results[j].QualityTier
-		}
-		if resp.Results[i].FormatScore != resp.Results[j].FormatScore {
-			return resp.Results[i].FormatScore > resp.Results[j].FormatScore
-		}
-		return resp.Results[i].CompositeScore > resp.Results[j].CompositeScore
-	})
 
 	return resp, nil
 }
@@ -337,6 +346,7 @@ func (e *Engine) searchSeriesFallback(ctx context.Context, req SearchRequest) (*
 	}
 
 	combined := &SearchResult{}
+	successfulSeasons := 0
 	for _, season := range seasons {
 		if ctx.Err() != nil {
 			break
@@ -351,6 +361,7 @@ func (e *Engine) searchSeriesFallback(ctx context.Context, req SearchRequest) (*
 			e.logger.Warn("season search failed", "season", season.SeasonNumber, "error", err)
 			continue
 		}
+		successfulSeasons++
 		combined.Considered += result.Considered
 		combined.Rejected += result.Rejected
 		if result.Grabbed != nil && combined.Grabbed == nil {
@@ -359,6 +370,14 @@ func (e *Engine) searchSeriesFallback(ctx context.Context, req SearchRequest) (*
 	}
 	if combined.Grabbed == nil && combined.Considered == 0 {
 		combined.Reason = "no results from any season"
+	}
+	if req.RequireSuccessfulSearch {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		if successfulSeasons == 0 {
+			return nil, fmt.Errorf("no season search completed successfully")
+		}
 	}
 	return combined, nil
 }
@@ -555,6 +574,7 @@ func (e *Engine) searchAndGrabSingle(ctx context.Context, req SearchRequest) (*S
 	var scored []ScoredRelease
 	rejectCounts := make(map[string]int)
 	totalConsidered := 0
+	successfulQueries := 0
 
 	for tierIdx, tier := range tiers {
 		var tierResults []indexers.Result
@@ -584,7 +604,19 @@ func (e *Engine) searchAndGrabSingle(ctx context.Context, req SearchRequest) (*S
 			// Pass 0 so the indexer service applies its configured
 			// fail-fast per-indexer timeout (15s direct, 65s for
 			// FlareSolverr-proxied indexers) instead of a flat 120s.
-			agg := e.indexerSvc.Search(ctx, q, nil, 0)
+			agg, searchErr := e.dlRegistry.SearchAcquisition(ctx, e.indexerSvc, q, downloads.AddRequest{
+				Title: req.Title, MediaType: req.MediaType, MediaID: req.MediaID,
+			})
+			if searchErr != nil {
+				return nil, searchErr
+			}
+			if agg.Diagnostics != nil {
+				for _, d := range agg.Diagnostics.Indexers {
+					if d.Status == "ok" {
+						successfulQueries++
+					}
+				}
+			}
 			tierResults = append(tierResults, agg.Results...)
 			if q.IMDBID != "" || q.TVDBID != "" || q.TMDBID != "" {
 				tierIDsBased = true
@@ -693,6 +725,21 @@ func (e *Engine) searchAndGrabSingle(ctx context.Context, req SearchRequest) (*S
 		}
 	}
 
+	if req.RequireSuccessfulSearch {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		if successfulQueries == 0 {
+			e.logSearchFailed(ctx, req, "no indexer query completed successfully")
+			if dbg != nil {
+				dbg.Status = searchdebug.StatusFailed
+				dbg.Outcome = "search_failed"
+				dbg.ErrorMessage = "no indexer query completed successfully"
+			}
+			return nil, fmt.Errorf("no indexer query completed successfully")
+		}
+	}
+
 	result := &SearchResult{
 		Considered: totalConsidered,
 	}
@@ -739,9 +786,7 @@ func (e *Engine) searchAndGrabSingle(ctx context.Context, req SearchRequest) (*S
 
 	// Sort lexicographically so configured format scores cannot override
 	// the profile's quality ordering.
-	sort.Slice(scored, func(i, j int) bool {
-		return betterScoredRelease(scored[i], scored[j])
-	})
+	rankReleases(scored)
 
 	// Grab the best result.
 	best := scored[0]
@@ -749,14 +794,14 @@ func (e *Engine) searchAndGrabSingle(ctx context.Context, req SearchRequest) (*S
 		dbg.Status = searchdebug.StatusGrabbing
 		e.updateDebugEntry(dbg)
 	}
-	grabbed, err := e.grabRelease(ctx, &best)
+	grabbed, err := e.grabReleaseForMedia(ctx, &best, req)
 	if err != nil {
 		// If grab fails, try the next best.
 		e.logger.Warn("grab failed for best result, trying next",
 			"title", best.Result.Title,
 			"error", err)
 		for i := 1; i < len(scored); i++ {
-			grabbed, err = e.grabRelease(ctx, &scored[i])
+			grabbed, err = e.grabReleaseForMedia(ctx, &scored[i], req)
 			if err == nil {
 				best = scored[i]
 				break
@@ -773,6 +818,9 @@ func (e *Engine) searchAndGrabSingle(ctx context.Context, req SearchRequest) (*S
 				dbg.Status = searchdebug.StatusFailed
 			}
 			e.logSearchFailed(ctx, req, result.Reason)
+			if req.RequireSuccessfulSearch {
+				return result, fmt.Errorf("grab failed for all %d candidates: %w", len(scored), err)
+			}
 			return result, nil
 		}
 	}
@@ -865,12 +913,14 @@ func (e *Engine) evaluateResult(
 	existing existingQuality,
 	cutoffTier int,
 	idBasedQuery bool,
-) ScoredRelease {
-	sr := ScoredRelease{Result: res}
+) (sr ScoredRelease) {
+	sr = ScoredRelease{Result: res, QualityTier: -1}
 
 	// Parse the release name.
 	parsed := parser.Parse(res.Title)
 	sr.Parsed = parsed
+	explainIdentity(req, &sr, idBasedQuery)
+	defer func() { finishExplanation(&sr) }()
 
 	// Identity verification: ensure the result matches the requested media.
 	if reason := e.verifyIdentity(req, parsed, idBasedQuery); reason != "" {
@@ -881,6 +931,8 @@ func (e *Engine) evaluateResult(
 
 	// Match to a quality definition.
 	qd := matchQualityDef(parsed, qualDefs)
+	addCheck(&sr, "quality definition", "known source and resolution",
+		fmt.Sprintf("%s / %dp", parsed.Source, parsed.Resolution), "source / pixels", qd != nil)
 	if qd == nil {
 		sr.Rejected = true
 		sr.RejectReason = "unknown_quality"
@@ -890,16 +942,22 @@ func (e *Engine) evaluateResult(
 
 	// Check if this quality is allowed in the profile.
 	tier, ok := allowedMap[qd.ID]
+	addCheck(&sr, "allowed quality", "enabled in profile", qd.Title+" ("+qd.ID+")", "quality", ok && allowedDefs[qd.ID])
 	if !ok || !allowedDefs[qd.ID] {
 		sr.Rejected = true
 		sr.RejectReason = "quality_not_allowed"
 		return sr
 	}
 	sr.QualityTier = tier
+	addCheck(&sr, "quality order", "lower position is preferred", strconv.Itoa(tier), "zero-based tier", true)
 
 	// Upgrade logic: compare candidate against existing file quality.
 	if existing.HasFile {
+		addCheck(&sr, "existing quality", "known tier for comparison",
+			fmt.Sprintf("known=%t, tier=%d", existing.HasKnownTier, existing.Tier), "zero-based tier", existing.HasKnownTier)
 		if existing.HasKnownTier {
+			addCheck(&sr, "quality cutoff", fmt.Sprintf("existing tier > %d (or cutoff disabled)", cutoffTier),
+				strconv.Itoa(existing.Tier), "zero-based tier", cutoffTier < 0 || existing.Tier > cutoffTier)
 			// Check cutoff first: if existing quality is at or above cutoff,
 			// stop upgrading (lower tier = better quality).
 			if cutoffTier >= 0 && existing.Tier <= cutoffTier {
@@ -909,6 +967,7 @@ func (e *Engine) evaluateResult(
 			}
 
 			if !profile.UpgradeAllowed {
+				addCheck(&sr, "upgrades", "enabled", "disabled", "policy", false)
 				sr.Rejected = true
 				sr.RejectReason = "upgrade_not_allowed"
 				return sr
@@ -917,11 +976,13 @@ func (e *Engine) evaluateResult(
 			// Candidate must be a strict upgrade (better tier), unless it's
 			// a Proper/Repack at the same tier.
 			if tier > existing.Tier {
+				addCheck(&sr, "upgrade quality", fmt.Sprintf("< %d (same-tier Proper/Repack allowed)", existing.Tier), strconv.Itoa(tier), "zero-based tier", false)
 				sr.Rejected = true
 				sr.RejectReason = "not_an_upgrade"
 				return sr
 			}
 			if tier == existing.Tier && (!parsed.IsProper && !parsed.IsRepack) {
+				addCheck(&sr, "upgrade quality", fmt.Sprintf("< %d (same-tier Proper/Repack allowed)", existing.Tier), strconv.Itoa(tier), "zero-based tier", false)
 				sr.Rejected = true
 				sr.RejectReason = "not_an_upgrade"
 				return sr
@@ -939,6 +1000,7 @@ func (e *Engine) evaluateResult(
 
 	// Reject zero-seeder torrents (usenet results have nil seeders).
 	if res.Seeders != nil && *res.Seeders == 0 {
+		addCheck(&sr, "availability", "> 0", "0", "seeders", false)
 		sr.Rejected = true
 		sr.RejectReason = "zero_seeders"
 		return sr
@@ -946,6 +1008,16 @@ func (e *Engine) evaluateResult(
 
 	// Size check against quality definition limits.
 	minBytes, maxBytes := qd.EffectiveSizeLimits(req.Runtime)
+	effectiveRuntime := req.Runtime
+	if qd.SizeMode == movies.SizeModePerMinute && effectiveRuntime <= 0 {
+		effectiveRuntime = movies.DefaultRuntimeMinutes
+	}
+	addCheck(&sr, "runtime used for size limits", "request runtime; definition fallback when unknown",
+		strconv.Itoa(effectiveRuntime), "minutes (unused for absolute size mode)", true)
+	addCheck(&sr, "minimum size", fmt.Sprintf(">= %d (0 = disabled)", minBytes),
+		strconv.FormatInt(res.Size, 10), "bytes (0 = unknown, not size-filtered)", minBytes <= 0 || res.Size <= 0 || res.Size >= minBytes)
+	addCheck(&sr, "maximum size", fmt.Sprintf("<= %d (0 = disabled)", maxBytes),
+		strconv.FormatInt(res.Size, 10), "bytes (0 = unknown, not size-filtered)", maxBytes <= 0 || res.Size <= 0 || res.Size <= maxBytes)
 	if minBytes > 0 && res.Size > 0 && res.Size < minBytes {
 		sr.Rejected = true
 		sr.RejectReason = "below_min_size"
@@ -963,12 +1035,17 @@ func (e *Engine) evaluateResult(
 	sr.FormatMatches = matches
 
 	totalFormatScore := 0
-	for _, m := range matches {
-		if score, ok := formatScores[m.CustomFormatID]; ok {
-			totalFormatScore += score
-		}
+	for i, m := range matches {
+		score := formatScores[m.CustomFormatID]
+		matches[i].Score = score
+		totalFormatScore += score
+		sr.Explanation.Contributions = append(sr.Explanation.Contributions, searchdebug.FormatContribution{
+			ID: m.CustomFormatID, Name: m.CustomFormatName, Score: score,
+		})
 	}
 	sr.FormatScore = totalFormatScore
+	addCheck(&sr, "minimum custom-format score", fmt.Sprintf(">= %d", profile.MinFormatScore),
+		strconv.Itoa(totalFormatScore), "points", totalFormatScore >= profile.MinFormatScore)
 
 	// Reject if below minimum format score.
 	if totalFormatScore < profile.MinFormatScore {
@@ -984,13 +1061,21 @@ func (e *Engine) evaluateResult(
 }
 
 // verifyIdentity checks that a parsed result matches the requested media.
-// For ID-based queries (IMDB/TVDB/TMDB), the indexer already filtered by
-// the external ID so title matching is relaxed (0.3 threshold instead of
-// 0.5). For text-only queries the threshold is stricter (0.5). Returns
-// empty string if the result is valid, or a rejection reason.
+// ID-filtered queries still require independent title or embedded-ID evidence.
+// Returns empty string if valid, or a rejection reason.
 func (e *Engine) verifyIdentity(req SearchRequest, parsed *parser.Release, idBasedQuery bool) string {
 	if parsed == nil {
 		return ""
+	}
+	if (req.IMDBID != "" && parsed.ImdbID != "" && !strings.EqualFold(req.IMDBID, parsed.ImdbID)) ||
+		(req.TMDBID != "" && parsed.TmdbID != "" && req.TMDBID != parsed.TmdbID) {
+		return "wrong_embedded_id"
+	}
+	if req.MediaType == "series" || req.MediaType == "episode" {
+		pack := packs.Detect(parsed.Name)
+		if pack.Type == packs.PackTypeMultiSeason || pack.Type == packs.PackTypeCompleteSeries {
+			return "ambiguous_pack"
+		}
 	}
 
 	// Year verification for movies: reject if parsed year differs by >1
@@ -1329,6 +1414,10 @@ func computeTiebreaker(res indexers.Result) float64 {
 
 // grabRelease sends the best-scoring release to a download client.
 func (e *Engine) grabRelease(ctx context.Context, sr *ScoredRelease) (*GrabbedRelease, error) {
+	return e.grabReleaseForMedia(ctx, sr, SearchRequest{})
+}
+
+func (e *Engine) grabReleaseForMedia(ctx context.Context, sr *ScoredRelease, media SearchRequest) (*GrabbedRelease, error) {
 	// Determine protocol from the result.
 	protocol := inferProtocol(&sr.Result)
 
@@ -1345,32 +1434,35 @@ func (e *Engine) grabRelease(ctx context.Context, sr *ScoredRelease) (*GrabbedRe
 		// Fallback: try any client.
 		if len(clients) > 0 {
 			target = clients[0]
-		} else {
-			return nil, fmt.Errorf("no download clients configured")
 		}
 	}
 
 	// Build the download request.
 	req := buildDownloadRequest(&sr.Result)
+	req.IndexerID = sr.Result.IndexerID
+	req.MediaType = media.MediaType
+	req.MediaID = media.MediaID
 
 	// If the indexer exposed a direct .torrent URL, fetch it through the
 	// live indexer client first so tracker auth cookies, per-indexer
 	// proxies, and anti-bot headers are preserved.
-	if e.indexerSvc != nil && sr.Result.IndexerID != "" && req.TorrentURL != "" {
-		if data, err := e.indexerSvc.FetchDownload(ctx, sr.Result.IndexerID, req.TorrentURL); err == nil {
+	prepare := func(req *downloads.AddRequest) error {
+		if e.indexerSvc != nil && req.IndexerID != "" && req.TorrentURL != "" {
+			data, err := e.indexerSvc.FetchDownload(ctx, req.IndexerID, req.TorrentURL)
+			if err != nil {
+				// A usable magnet remains an independent safe fallback.
+				if req.Magnet != "" {
+					return nil
+				}
+				return err
+			}
 			req.RawBytes = data
-		} else {
-			e.logger.Warn("autosearch: indexer-backed torrent fetch failed; falling back to direct URL/magnet",
-				"indexer_id", sr.Result.IndexerID,
-				"title", sr.Result.Title,
-				"url", req.TorrentURL,
-				"error", err,
-			)
 		}
+		return nil
 	}
 
 	// Apply per-indexer seed policy overrides if available.
-	if sr.Result.IndexerID != "" {
+	if e.indexerSvc != nil && sr.Result.IndexerID != "" {
 		if def, err := e.indexerSvc.Get(ctx, sr.Result.IndexerID); err == nil {
 			sc := indexers.ParseSeedConfig(def)
 			req.SeedRatioLimit = sc.RatioLimit
@@ -1388,9 +1480,13 @@ func (e *Engine) grabRelease(ctx context.Context, sr *ScoredRelease) (*GrabbedRe
 		)
 	}
 
-	addResult, err := target.Add(ctx, req)
+	clientID := ""
+	if target != nil {
+		clientID = target.ID()
+	}
+	addResult, err := e.dlRegistry.Acquire(ctx, clientID, req, prepare)
 	if err != nil {
-		return nil, fmt.Errorf("add to %s: %w", target.Name(), err)
+		return nil, fmt.Errorf("acquire release: %w", err)
 	}
 
 	e.logger.Info("release grabbed",
@@ -1570,6 +1666,9 @@ func (e *Engine) getExistingQuality(
 	qualDefs []*movies.QualityDefinition,
 	allowedMap map[string]int,
 ) existingQuality {
+	if req.ConfirmedMissing {
+		return existingQuality{}
+	}
 	switch req.MediaType {
 	case "movie":
 		return e.getExistingMovieQuality(ctx, req.MediaID, qualDefs, allowedMap)
@@ -1790,6 +1889,7 @@ func sanitizeResult(r indexers.Result) searchdebug.ResultEntry {
 // scoredToEval converts a ScoredRelease to a debug EvalResult.
 func scoredToEval(sr ScoredRelease) searchdebug.EvalResult {
 	ev := searchdebug.EvalResult{
+		Explanation:    sr.Explanation,
 		Title:          sr.Result.Title,
 		IndexerID:      sr.Result.IndexerID,
 		Rejected:       sr.Rejected,

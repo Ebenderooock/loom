@@ -143,11 +143,30 @@ export interface SearchResult {
 }
 
 export interface IndexerDiagnostic {
+  id?: string;
   name: string;
-  status: "ok" | "error" | "timeout";
+  status: "ok" | "error" | "timeout" | "skipped";
   response_time_ms: number;
   result_count: number;
   error_message?: string;
+  resume_at?: number;
+}
+
+export interface ProviderBudget {
+  id: string;
+  allowance: number;
+  window_seconds: number;
+  consumed: number;
+  reset_at: number;
+  provider_remaining: number | null;
+  provider_reset_at: number;
+  indexer_ids: string[];
+}
+
+export interface ProviderBudgetConfig {
+  allowance: number;
+  window_seconds: number;
+  indexer_ids: string[];
 }
 
 export interface SearchDiagnostics {
@@ -208,17 +227,22 @@ async function request<T>(
   if (!res.ok) {
     // Loom returns {error: {code, message, details?}} envelopes.
     const env = parsed as
-      | { error?: { code?: string; message?: string; details?: unknown } }
+      | {
+          error?:
+            | string
+            | { code?: string; message?: string; details?: unknown };
+        }
       | undefined;
+    const error = env?.error;
     const message =
-      env?.error?.message ??
+      (typeof error === "string" ? error : error?.message) ??
       (typeof parsed === "string" ? parsed : undefined) ??
       `${method} ${path} failed: ${res.status} ${res.statusText}`;
     throw new ApiError(
       res.status,
       message,
-      env?.error?.code,
-      env?.error?.details,
+      typeof error === "object" ? error.code : undefined,
+      typeof error === "object" ? error.details : undefined,
     );
   }
   return parsed as T;
@@ -319,7 +343,27 @@ export async function testIndexer(id: string): Promise<TestResult> {
   );
 }
 
+export async function listProviderBudgets(): Promise<ProviderBudget[]> {
+  const env = await request<{ budgets: ProviderBudget[] }>(
+    "GET",
+    "/api/v1/indexers/provider-budgets",
+  );
+  return env.budgets ?? [];
+}
+
+export async function configureProviderBudget(
+  budgetId: string,
+  body: ProviderBudgetConfig,
+): Promise<void> {
+  await request<void>(
+    "PUT",
+    `/api/v1/indexers/provider-budgets/${encodeURIComponent(budgetId)}`,
+    body,
+  );
+}
+
 export interface TestConfigPayload {
+  id?: string;
   kind: string;
   name: string;
   config: Record<string, unknown>;
@@ -363,6 +407,15 @@ export async function searchIndexers(
 // ---------- Autosearch evaluate (dry-run quality scoring) ----------
 
 export interface EvaluateParams {
+  policy_preview?: {
+    items: string;
+    cutoff: string;
+    upgrade_allowed: boolean;
+    min_format_score: number;
+    format_items: { format_id: string; score: number }[];
+  };
+  runtime?: number;
+  alternate_titles?: string[];
   media_type?: string;
   media_id?: string;
   title?: string;
@@ -377,6 +430,7 @@ export interface EvaluateParams {
 }
 
 export interface EvaluatedResult {
+  explanation?: import("@/components/search/decision-explanation").DecisionExplanation;
   indexer_id: string;
   title: string;
   link: string;
@@ -394,7 +448,11 @@ export interface EvaluatedResult {
   quality_name?: string;
   quality_tier: number;
   format_score: number;
-  format_matches?: { format_id: string; name: string; score: number }[];
+  format_matches?: {
+    custom_format_id: string;
+    custom_format_name: string;
+    score: number;
+  }[];
   composite_score: number;
   parsed_title?: string;
   parsed_year?: number;
@@ -403,6 +461,7 @@ export interface EvaluatedResult {
 }
 
 export interface EvaluateResponse {
+  preview: boolean;
   results: EvaluatedResult[];
   total: number;
   passed: number;
@@ -417,6 +476,9 @@ export async function evaluateResults(
     title: params.title,
     year: params.year,
     quality_profile_id: params.quality_profile_id,
+    policy_preview: params.policy_preview,
+    runtime: params.runtime,
+    alternate_titles: params.alternate_titles,
     imdb_id: params.imdb_id,
     tmdb_id: params.tmdb_id,
     tvdb_id: params.tvdb_id,
@@ -440,6 +502,8 @@ export async function evaluateResults(
           ? r.seeders + r.leechers
           : undefined,
       freeleech: r.freeleech,
+      internal: r.internal,
+      scene: r.scene,
     })),
   });
 }
@@ -477,6 +541,7 @@ export interface StreamSearchEvent {
   elapsed_ms?: number;
   error?: string;
   status?: string;
+  resume_at?: number;
   indexers?: { id: string; name: string }[];
   total_results?: number;
   total_errors?: number;
@@ -499,6 +564,7 @@ export interface StreamSearchCallbacks {
     error: string,
     status: string,
     elapsedMs: number,
+    resumeAt?: number,
   ) => void;
   onDone?: (
     totalResults: number,
@@ -635,6 +701,7 @@ export function streamSearch(
                 evt.error ?? "Unknown error",
                 evt.status ?? "error",
                 evt.elapsed_ms ?? 0,
+                evt.resume_at,
               );
               break;
             case "done":

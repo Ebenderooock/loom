@@ -99,6 +99,8 @@ func (r *Registry) Len() int {
 
 // SearchOptions tunes a fan-out search.
 type SearchOptions struct {
+	// ProviderBudgets applies to manual, automatic and streaming queries alike.
+	ProviderBudgets *ProviderBudgetStore
 	// IndexerIDs restricts the fan-out to the given IDs. Empty means
 	// "every registered indexer".
 	IndexerIDs []string
@@ -141,6 +143,7 @@ type IndexerDiagnostic struct {
 	ResponseTimeMS int64  `json:"response_time_ms"`
 	ResultCount    int    `json:"result_count"`
 	ErrorMessage   string `json:"error_message,omitempty"`
+	ResumeAt       int64  `json:"resume_at,omitempty"`
 }
 
 // SearchDiagnostics carries observability metadata for a search
@@ -183,6 +186,7 @@ type StreamEvent struct {
 	ElapsedMS        int64           `json:"elapsed_ms,omitempty"`
 	Error            string          `json:"error,omitempty"`
 	Status           string          `json:"status,omitempty"`
+	ResumeAt         int64           `json:"resume_at,omitempty"`
 	Indexers         []IndexerInfo   `json:"indexers,omitempty"`
 	TotalResults     int             `json:"total_results,omitempty"`
 	TotalErrors      int             `json:"total_errors,omitempty"`
@@ -253,8 +257,17 @@ func (r *Registry) Search(ctx context.Context, q Query, opts SearchOptions) Aggr
 		go func() {
 			defer wg.Done()
 			defer func() { <-sem }()
+			if err := ctx.Err(); err != nil {
+				ch <- partial{id: ix.ID(), name: ix.Name(), err: err}
+				return
+			}
+			if !admitSearch(ctx, ix.ID()) {
+				ch <- partial{id: ix.ID(), name: ix.Name(), skipped: true,
+					skipReason: "search quota exhausted"}
+				return
+			}
 			start := time.Now()
-			res, err := runOne(ctx, ix, q, opts.timeoutFor(ix.ID()))
+			res, err := runOne(ctx, ix, q, opts.timeoutFor(ix.ID()), opts.ProviderBudgets)
 			ch <- partial{id: ix.ID(), name: ix.Name(), out: res, err: err, elapsed: time.Since(start)}
 		}()
 	}
@@ -272,13 +285,19 @@ func (r *Registry) Search(ctx context.Context, q Query, opts SearchOptions) Aggr
 			Name:           p.name,
 			ResponseTimeMS: p.elapsed.Milliseconds(),
 		}
-		if p.skipped {
+		var denied *BudgetDenied
+		switch {
+		case errors.As(p.err, &denied):
+			d.Status = "skipped"
+			d.ErrorMessage = denied.Error()
+			d.ResumeAt = denied.ResetAt
+		case p.skipped:
 			d.Status = "skipped"
 			d.ErrorMessage = p.skipReason
 			if d.ErrorMessage == "" {
 				d.ErrorMessage = "indexer skipped"
 			}
-		} else if p.err != nil {
+		case p.err != nil:
 			agg.Errors[p.id] = p.err.Error()
 			d.ErrorMessage = p.err.Error()
 			if errors.Is(p.err, context.DeadlineExceeded) {
@@ -286,11 +305,11 @@ func (r *Registry) Search(ctx context.Context, q Query, opts SearchOptions) Aggr
 			} else {
 				d.Status = "error"
 			}
-		} else if p.out != nil {
+		case p.out != nil:
 			d.Status = "ok"
 			d.ResultCount = len(p.out.Items)
 			agg.Results = append(agg.Results, p.out.Items...)
-		} else {
+		default:
 			d.Status = "ok"
 			slog.Warn("indexer returned nil results without error", "indexer", p.id, "name", p.name)
 		}
@@ -424,19 +443,35 @@ func (r *Registry) SearchStream(ctx context.Context, q Query, opts SearchOptions
 			}
 
 			start := time.Now()
-			res, err := runOne(ctx, ix, q, opts.timeoutFor(ix.ID()))
+			if !admitSearch(ctx, ix.ID()) {
+				select {
+				case events <- StreamEvent{
+					Type: EventIndexerError, IndexerID: ix.ID(), IndexerName: ix.Name(),
+					Error: "search quota exhausted", Status: "skipped",
+				}:
+				case <-ctx.Done():
+				}
+				return
+			}
+			res, err := runOne(ctx, ix, q, opts.timeoutFor(ix.ID()), opts.ProviderBudgets)
 			elapsed := time.Since(start).Milliseconds()
 
 			if err != nil {
-				atomic.AddInt32(&totalErrors, 1)
 				status := "error"
+				resumeAt := int64(0)
+				var denied *BudgetDenied
+				if errors.As(err, &denied) {
+					status, resumeAt, err = "skipped", denied.ResetAt, denied
+				} else {
+					atomic.AddInt32(&totalErrors, 1)
+				}
 				if errors.Is(err, context.DeadlineExceeded) {
 					status = "timeout"
 				}
 				select {
 				case events <- StreamEvent{
 					Type: EventIndexerError, IndexerID: ix.ID(), IndexerName: ix.Name(),
-					Error: err.Error(), Status: status, ElapsedMS: elapsed,
+					Error: err.Error(), Status: status, ElapsedMS: elapsed, ResumeAt: resumeAt,
 				}:
 				case <-ctx.Done():
 				}
@@ -475,16 +510,32 @@ func (r *Registry) SearchStream(ctx context.Context, q Query, opts SearchOptions
 
 // runOne wraps Search with a per-indexer deadline so a slow source
 // can't hold up the fan-out.
-func runOne(ctx context.Context, ix Indexer, q Query, timeout time.Duration) (*Results, error) {
+func runOne(ctx context.Context, ix Indexer, q Query, timeout time.Duration, budgets *ProviderBudgetStore) (*Results, error) {
 	if timeout > 0 {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, timeout)
 		defer cancel()
 	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if budgets != nil {
+		var err error
+		ctx, err = budgets.admit(ctx, ix.ID())
+		if err != nil {
+			return nil, err
+		}
+	}
 	if dl, ok := ctx.Deadline(); ok {
 		slog.Debug("runOne: context for indexer", "indexer", ix.Name(), "per_timeout", timeout.String(), "deadline_in", time.Until(dl).String())
 	}
-	return ix.Search(ctx, q)
+	results, err := ix.Search(ctx, q)
+	var accounting *budgetAccountingError
+	if errors.As(err, &accounting) {
+		// HTTP clients can wrap transport errors with credential-bearing URLs.
+		return nil, accounting
+	}
+	return results, err
 }
 
 func (r *Registry) selectTargets(ids []string) []Indexer {

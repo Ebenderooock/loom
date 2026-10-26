@@ -23,6 +23,9 @@ func (s *Service) mountQueryLog(r chi.Router) {
 }
 
 func (s *Service) handleQueryLogList(w http.ResponseWriter, r *http.Request) {
+	if !requireAdminIfPresent(w, r) {
+		return
+	}
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
 	if limit <= 0 {
@@ -37,6 +40,9 @@ func (s *Service) handleQueryLogList(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Service) handleQueryLogGet(w http.ResponseWriter, r *http.Request) {
+	if !requireAdminIfPresent(w, r) {
+		return
+	}
 	id := chi.URLParam(r, "id")
 	entry, err := s.queryLog.GetQuery(r.Context(), id)
 	if err != nil {
@@ -51,6 +57,9 @@ func (s *Service) handleQueryLogGet(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Service) handleQueryLogPrune(w http.ResponseWriter, r *http.Request) {
+	if !requireAdminIfPresent(w, r) {
+		return
+	}
 	days, _ := strconv.Atoi(r.URL.Query().Get("days"))
 	if days <= 0 {
 		days = 30

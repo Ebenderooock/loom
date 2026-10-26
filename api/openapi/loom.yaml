@@ -10,6 +10,19 @@ info:
 
     This specification covers only the routes implemented today. The
     PR template requires every new route to be reflected here.
+
+    When authentication is enabled, indexer, download-client and proxy
+    configuration mutations and connectivity tests require an administrator.
+    Indexer-rule mutations, Jackett imports, query logs and search-health
+    diagnostics/reset also require an administrator. Authenticated non-admin
+    users retain search and download-use access.
+
+    Integration configuration and health/test responses redact credentials.
+    On configuration edits, omitted, blank or masked credential values retain
+    stored secrets; non-empty replacement values update them. Unsaved
+    connectivity tests can supply the saved definition ID to retain credentials
+    without saving the tested settings. Explicitly disabled authentication
+    retains its existing access behavior.
   license:
     name: AGPL-3.0-only
     identifier: AGPL-3.0-only
@@ -32,6 +45,8 @@ tags:
     description: Liveness, readiness and metrics probes.
   - name: system
     description: Build / runtime metadata.
+  - name: libraries
+    description: Library root registration, scans and read-only health reporting.
   - name: indexers
     description: Indexer CRUD, capabilities, manual health checks, and aggregated search.
   - name: proxies
@@ -54,6 +69,386 @@ tags:
       and Radarr compatibility rationale.
 
 paths:
+  /api/v1/autosearch/evaluate:
+    post:
+      tags: [quality]
+      summary: Explain release decisions with the production engine without grabbing.
+      operationId: evaluateReleases
+      security:
+        - cookieAuth: []
+        - apiKey: []
+        - bearerAuth: []
+      description: |
+        Evaluates supplied indexer results with the same identity, policy and
+        ranking path used by acquisition. Optional policy_preview replaces only
+        the quality profile for this request; it never saves or grabs. Existing
+        library state, quality definitions and loaded format rules still apply.
+
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [results]
+              properties:
+                media_type: { type: string, enum: [movie, series, episode] }
+                media_id: { type: string }
+                title: { type: string }
+                alternate_titles:
+                  type: array
+                  items: { type: string }
+                year: { type: integer }
+                quality_profile_id: { type: string }
+                imdb_id: { type: string }
+                tmdb_id: { type: string }
+                tvdb_id: { type: string }
+                season: { type: integer }
+                episode: { type: integer }
+                daily_date: { type: string, format: date }
+                runtime: { type: integer, description: Minutes used by per-minute size limits. }
+                policy_preview:
+                  type: object
+                  required: [items]
+                  properties:
+                    items:
+                      type: string
+                      description: JSON-encoded array of quality items; non-empty unique IDs, allowed boolean, ordered best first.
+                      example: '[{"id":"bluray-1080p","allowed":true}]'
+                    cutoff: { type: string }
+                    upgrade_allowed: { type: boolean }
+                    min_format_score: { type: integer, description: Points. }
+                    cutoff_format_score:
+                      type: integer
+                      description: Retained profile field; current acquisition does not use it as a rejection gate.
+                    format_items:
+                      type: array
+                      items:
+                        type: object
+                        required: [format_id, score]
+                        properties:
+                          format_id: { type: string }
+                          score: { type: integer, description: Profile-specific points. }
+                results:
+                  type: array
+                  items:
+                    type: object
+                    required: [title]
+                    properties:
+                      indexer_id: { type: string }
+                      title: { type: string }
+                      link: { type: string }
+                      size: { type: integer, format: int64, description: Bytes; 0 is unknown. }
+                      pub_date: { type: string, format: date-time }
+                      seeders: { type: integer, description: Omit for Usenet. }
+                      freeleech: { type: boolean }
+      responses:
+        "200":
+          description: Accepted results ranked by engine keys, followed by rejected results.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [preview, total, passed, results]
+                properties:
+                  preview: { type: boolean }
+                  total: { type: integer }
+                  passed: { type: integer }
+                  results:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        title: { type: string }
+                        indexer_id: { type: string }
+                        rejected: { type: boolean }
+                        reject_reason: { type: string }
+                        quality_name: { type: string }
+                        quality_tier: { type: integer, description: Zero-based position; lower is better; -1 means not selected. }
+                        format_score: { type: integer, description: Profile-specific points. }
+                        composite_score: { type: number, description: Display only; never the ordering comparator. }
+                        explanation:
+                          type: object
+                          properties:
+                            category:
+                              type: string
+                              enum: [accepted, incorrect_identity, ambiguous_identity, unsupported_naming, configuration_mismatch, availability]
+                            summary: { type: string }
+                            identity:
+                              type: array
+                              items: { $ref: "#/components/schemas/DecisionEvidence" }
+                            checks:
+                              type: array
+                              items: { $ref: "#/components/schemas/DecisionEvidence" }
+                            numbering:
+                              type: object
+                              properties:
+                                season: { type: integer }
+                                episode: { type: integer }
+                                episodes:
+                                  type: array
+                                  items: { type: integer }
+                                absolute_episode: { type: integer }
+                                season_pack: { type: boolean }
+                                daily_date: { type: string }
+                                pack_mapping: { type: string, description: Discovery-only limitation; never a correction. }
+                            contributions:
+                              type: array
+                              items:
+                                type: object
+                                properties:
+                                  id: { type: string }
+                                  name: { type: string }
+                                  score: { type: integer, description: Actual points added from this profile. }
+                            rank: { type: integer, description: One-based accepted rank. }
+                            ranking_reason: { type: string, description: First differing comparator key vs adjacent accepted candidate. }
+        "400":
+          description: Invalid JSON or malformed preview quality items.
+        "500":
+          description: Identity lookup, saved profile or evaluation dependency failed.
+  /api/v1/requests:
+    post:
+      tags: [requests]
+      operationId: createMediaRequest
+      summary: Submit a new request or an explicit confirmed-missing re-request.
+      description: |
+        Requires authentication. With re_request_of, the caller must own the
+        fulfilled request or be an administrator; media_type and tmdb_id must
+        match its history. Storage is rechecked before admitting the request.
+        Only confirmed missing media can be re-requested; unknown and present
+        observations block admission. One global active request is allowed per
+        media identity. Each re-request consumes a new rolling quota slot;
+        historical fulfillment still counts in its original window. Admins
+        bypass quotas, not duplicates or storage checks.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [media_type, tmdb_id]
+              properties:
+                media_type: { type: string, enum: [movie, series, artist] }
+                tmdb_id: { type: string, description: "TMDB ID, or MusicBrainz ID for artists." }
+                title: { type: string }
+                year: { type: integer }
+                poster_path: { type: string }
+                overview: { type: string }
+                re_request_of: { type: string, description: "Original fulfilled request ID; never resets that history." }
+      responses:
+        "201":
+          description: Pending request created.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MediaRequest" }
+        "400": { description: Invalid request. }
+        "401": { description: Authentication required. }
+        "403": { description: Re-request targets another user's history. }
+        "409": { description: Active duplicate, present or unknown availability, or invalid history link. }
+        "429": { description: Rolling per-user quota exceeded. }
+    get:
+      tags: [requests]
+      operationId: listMediaRequests
+      summary: List all request history (administrator only).
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      parameters:
+        - in: query
+          name: status
+          schema: { type: string }
+      responses:
+        "200":
+          description: Request history with independent current observations.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/MediaRequest" }
+        "403": { description: Administrator access required. }
+  /api/v1/requests/mine:
+    get:
+      tags: [requests]
+      operationId: listMyMediaRequests
+      summary: List the authenticated user's request history.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "200":
+          description: Own requests; observations older than five minutes are unknown.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/MediaRequest" }
+        "401": { description: Authentication required. }
+  /api/v1/requests/reconcile:
+    post:
+      tags: [requests]
+      operationId: reconcileRequestAvailability
+      summary: Preview or apply audited, non-destructive availability reconciliation.
+      description: |
+        Administrator only. Each approved/fulfilled request receives an
+        independent outcome. No media or import records are deleted. Dry runs
+        persist an audit but do not modify requests, storage anchors or files.
+        Applied runs may register a storage marker only after physically
+        verifying an imported file on that volume. Missing/wrong markers,
+        inaccessible volumes, nested mounts and incomplete scan evidence yield
+        unknown, never bulk deletion. Applying the same observation preserves
+        fulfilled_at and updated_at; availability_checked_at is refreshed.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [dry_run]
+              properties:
+                dry_run: { type: boolean }
+      responses:
+        "200":
+          description: Batch audit with per-item observations and errors.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RequestReconciliation" }
+        "400": { description: Explicit dry_run boolean required. }
+        "403": { description: Administrator access required. }
+        "500": { description: Batch persistence failed; request updates rolled back. }
+  /api/v1/requests/reconciliation:
+    get:
+      tags: [requests]
+      operationId: listRequestReconciliations
+      summary: Return the latest 50 reconciliation audits (administrator only).
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "200":
+          description: Latest batches including previews and automatic state changes.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/RequestReconciliation" }
+        "403": { description: Administrator access required. }
+  /api/v1/downloads/history:
+    get:
+      tags: [download-clients]
+      summary: List download completion and durable acquisition history.
+      operationId: listDownloadHistory
+      parameters:
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, default: 50 }
+        - in: query
+          name: offset
+          schema: { type: integer, minimum: 0, default: 0 }
+      responses:
+        "200":
+          description: History ordered newest first. Acquisition rows include sanitized reasons and persistent retry decisions.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  required: [id, title, status, completed_at, retry_eligible]
+                  properties:
+                    id: { type: string }
+                    download_id: { type: string }
+                    client_id: { type: string }
+                    title: { type: string }
+                    category: { type: string }
+                    status: { type: string, description: "completed, failed, acquiring, acquisition_failed or acquired" }
+                    grabbed_at: { type: string, format: date-time }
+                    completed_at: { type: string, format: date-time }
+                    acquisition_key: { type: string }
+                    media_type: { type: string }
+                    media_id: { type: string }
+                    indexer_id: { type: string }
+                    release_hash: { type: string }
+                    stage: { type: string, enum: [admission, validation, provider, provider_search, client] }
+                    reason: { type: string }
+                    attempt: { type: integer }
+                    retry_count: { type: integer }
+                    retry_eligible: { type: boolean }
+                    is_latest: { type: boolean }
+                    next_retry_at: { type: string, format: date-time }
+        "500":
+          description: History storage failed.
+    delete:
+      tags: [download-clients]
+      summary: Clear completion history, retaining acquisition retry records.
+      operationId: clearDownloadHistory
+      responses:
+        "204":
+          description: Completion history cleared.
+        "403":
+          description: Administrator access required.
+  /api/v1/downloads/history/actions:
+    post:
+      tags: [download-clients]
+      summary: Authorize retry or blocklist latest failed/interrupted acquisitions.
+      description: Requires an administrator identity. Retry resets the budget for a future fresh search; it never replays stored URLs or removes a blocklist entry.
+      operationId: acquisitionHistoryActions
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ids, action]
+              properties:
+                ids:
+                  type: array
+                  minItems: 1
+                  maxItems: 100
+                  items: { type: string }
+                action: { type: string, enum: [retry, blocklist] }
+      responses:
+        "200":
+          description: Per-item outcomes, including partial failure.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [results]
+                properties:
+                  results:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, ok]
+                      properties:
+                        id: { type: string }
+                        ok: { type: boolean }
+                        error: { type: string }
+        "400":
+          description: Invalid action or batch size.
+        "403":
+          description: Administrator identity required.
+        "503":
+          description: Download history is unavailable.
+
   /api/v1/calendar:
     get:
       summary: List movie releases, episode airings, and album releases.
@@ -480,6 +875,95 @@ paths:
                     buildDate: "2025-05-01T13:50:14Z"
                     engine: "sqlite"
 
+  /api/v1/libraries/{id}/health:
+    parameters:
+      - $ref: "#/components/parameters/LibraryID"
+    get:
+      tags: [libraries]
+      summary: Get the latest read-only library health report.
+      operationId: getLibraryHealth
+      security:
+        - apiKey: []
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "200":
+          description: Latest report or null if no report has been generated yet.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/LibraryHealthReport"
+                  - type: "null"
+        "403":
+          description: Admin identity required when authentication is enabled.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      tags: [libraries]
+      summary: Run a bounded, cancellable read-only health check.
+      operationId: runLibraryHealth
+      security:
+        - apiKey: []
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "200":
+          description: Completed or cancelled report snapshot.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LibraryHealthReport"
+        "403":
+          description: Admin identity required when authentication is enabled.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/v1/libraries/{id}/health/dismiss:
+    parameters:
+      - $ref: "#/components/parameters/LibraryID"
+    post:
+      tags: [libraries]
+      summary: Dismiss or restore a finding in the latest report.
+      operationId: dismissLibraryHealthFinding
+      security:
+        - apiKey: []
+        - bearerAuth: []
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LibraryHealthDismissRequest"
+      responses:
+        "200":
+          description: Updated report with dismissal state applied.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LibraryHealthReport"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          description: Admin identity required when authentication is enabled.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
   /api/v1/indexers/:
     get:
       tags: [indexers]
@@ -531,6 +1015,103 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "409":
           $ref: "#/components/responses/Conflict"
+
+  /api/v1/indexers/provider-budgets:
+    get:
+      tags: [indexers]
+      summary: List persistent provider/account budgets (administrator only).
+      operationId: listProviderBudgets
+      security:
+        - apiKey: []
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "200":
+          description: Persisted state; expired windows roll forward on admission.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [budgets]
+                properties:
+                  budgets:
+                    type: array
+                    items:
+                      allOf:
+                        - $ref: "#/components/schemas/ProviderBudgetConfig"
+                        - type: object
+                          required: [id, consumed, reset_at, provider_remaining, provider_reset_at]
+                          properties:
+                            id:
+                              type: string
+                            consumed:
+                              type: integer
+                              format: int64
+                            reset_at:
+                              type: integer
+                              format: int64
+                              description: Configured-window reset, Unix seconds.
+                            provider_remaining:
+                              type: [integer, "null"]
+                              format: int64
+                              description: Null means no active provider-reported constraint.
+                            provider_reset_at:
+                              type: integer
+                              format: int64
+                              description: Provider reset Unix seconds; zero means unknown or unconstrained.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Administrator access required.
+        "500":
+          description: Cannot read budget accounting.
+        "503":
+          description: Budget store unavailable.
+
+  /api/v1/indexers/provider-budgets/{budgetID}:
+    parameters:
+      - name: budgetID
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$'
+        description: Opaque operator label, never a credential or hostname-derived identity.
+    put:
+      tags: [indexers]
+      summary: Configure an explicit provider/account group (administrator only).
+      operationId: configureProviderBudget
+      description: |
+        Atomically replaces configured limits and complete membership, retaining
+        consumed calls and provider remaining/reset state. No search-time bypass
+        or clear-exhaustion operation exists. Manual and streaming searches consume
+        the same allowance. Provider exhaustion with an unknown reset fails closed.
+        Successful changes emit an indexer.budget_configured audit event.
+      security:
+        - apiKey: []
+        - bearerAuth: []
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProviderBudgetConfig"
+            example:
+              allowance: 100
+              window_seconds: 86400
+              indexer_ids: [indexer-one, indexer-two]
+      responses:
+        "204":
+          description: Configuration saved; accounting retained.
+        "400":
+          description: Invalid configuration, duplicate/nonexistent member, or member assigned elsewhere.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Administrator access required.
+        "503":
+          description: Budget store unavailable.
 
   /api/v1/indexers/{id}:
     parameters:
@@ -692,6 +1273,39 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AggregatedResults"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/v1/indexers/search/stream:
+    post:
+      tags: [indexers]
+      summary: Stream fan-out search events with shared provider admission.
+      operationId: streamSearchIndexers
+      description: |
+        Manual streaming searches consume the same persistent provider budgets
+        as non-streaming and automatic searches. Denied providers emit
+        indexer-error events with status skipped, an error reason, and optional
+        resume_at Unix seconds. Unknown resets omit resume_at. Skips are not
+        failures and do not trip circuit breakers.
+      security:
+        - apiKey: []
+        - bearerAuth: []
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SearchRequest"
+      responses:
+        "200":
+          description: Server-sent events; each data field contains a JSON StreamEvent.
+          content:
+            text/event-stream:
+              schema:
+                type: string
         "400":
           $ref: "#/components/responses/BadRequest"
         "401":
@@ -1624,6 +2238,98 @@ paths:
 
 components:
   schemas:
+    RequestAvailability:
+      type: string
+      enum: [present, missing, unknown]
+      description: "Current verified file presence, independent of historical fulfillment."
+    MediaRequest:
+      type: object
+      required: [id, user_id, username, media_type, tmdb_id, title, year, status, availability, availability_reason, media_server_availability, created_at, updated_at]
+      properties:
+        id: { type: string }
+        user_id: { type: string }
+        username: { type: string }
+        media_type: { type: string, enum: [movie, series, artist] }
+        tmdb_id: { type: string }
+        title: { type: string }
+        year: { type: integer }
+        poster_path: { type: string }
+        overview: { type: string }
+        status:
+          type: string
+          enum: [pending, approving, approved, available, rejected, failed]
+          description: "available is historical fulfillment (UI label Fulfilled), not current presence."
+        reason: { type: string }
+        media_id: { type: string }
+        decided_by: { type: string }
+        decided_at: { type: string, format: date-time }
+        fulfilled_at:
+          type: string
+          format: date-time
+          description: "First verified fulfillment. Legacy fulfilled rows use their prior updated_at."
+        availability: { $ref: "#/components/schemas/RequestAvailability" }
+        availability_reason: { type: string }
+        availability_checked_at: { type: string, format: date-time }
+        re_request_of: { type: string }
+        monitored: { type: boolean, description: "Current catalog monitoring; omitted if no linked entry remains." }
+        media_server_availability:
+          $ref: "#/components/schemas/RequestAvailability"
+          description: "Currently always unknown; external server observations are not inferred from local files."
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    RequestReconciliation:
+      type: object
+      required: [id, actor, dry_run, created_at, outcomes]
+      properties:
+        id: { type: string }
+        actor: { type: string }
+        dry_run: { type: boolean }
+        created_at: { type: string, format: date-time }
+        outcomes:
+          type: array
+          items:
+            type: object
+            required: [request_id, before, after, reason, changed]
+            properties:
+              request_id: { type: string }
+              before: { $ref: "#/components/schemas/RequestAvailability" }
+              after: { $ref: "#/components/schemas/RequestAvailability" }
+              reason: { type: string }
+              changed: { type: boolean }
+              error: { type: string }
+    ProviderBudgetConfig:
+      type: object
+      required: [allowance, window_seconds, indexer_ids]
+      properties:
+        allowance:
+          type: integer
+          format: int64
+          minimum: 1
+          maximum: 1000000000
+        window_seconds:
+          type: integer
+          format: int64
+          minimum: 1
+          maximum: 31622400
+        indexer_ids:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+          description: Complete group membership; each definition can belong to only one group.
+
+    DecisionEvidence:
+      type: object
+      required: [field, expected, actual, unit, passed]
+      description: |
+        Actual-engine comparison. Absence of a check means evaluation stopped;
+        identity observations can be corroborated by other identity evidence.
+      properties:
+        field: { type: string }
+        expected: { type: string }
+        actual: { type: string }
+        unit: { type: string }
+        passed: { type: boolean }
     HealthStatus:
       type: object
       required: [status]
@@ -2193,6 +2899,39 @@ components:
           description: Per-indexer error messages, keyed by indexer ID. Empty object when all sources succeeded.
           additionalProperties:
             type: string
+        diagnostics:
+          type: object
+          properties:
+            total_results:
+              type: integer
+            search_duration_ms:
+              type: integer
+              format: int64
+            indexers:
+              type: array
+              items:
+                type: object
+                required: [id, name, status, response_time_ms, result_count]
+                properties:
+                  id:
+                    type: string
+                  name:
+                    type: string
+                  status:
+                    type: string
+                    enum: [ok, error, timeout, skipped]
+                  response_time_ms:
+                    type: integer
+                    format: int64
+                  result_count:
+                    type: integer
+                  error_message:
+                    type: string
+                    description: Failure or skip reason, including UTC resume time or unknown provider reset.
+                  resume_at:
+                    type: integer
+                    format: int64
+                    description: Unix seconds when provider budget admission can resume; omitted when unknown.
 
     ErrorEnvelope:
       type: object
@@ -2828,6 +3567,102 @@ components:
           type: boolean
           description: Whether the release name matches all filters.
 
+    LibraryHealthReport:
+      type: object
+      required:
+        - library_id
+        - root
+        - status
+        - checked_at
+        - scanned_entries
+        - inspected_records
+        - entry_limit
+        - warnings
+        - findings
+      properties:
+        library_id:
+          type: string
+        root:
+          type: string
+        status:
+          type: string
+          enum: [complete, incomplete, unavailable, cancelled]
+        checked_at:
+          type: string
+          format: date-time
+        scanned_entries:
+          type: integer
+          minimum: 0
+        inspected_records:
+          type: integer
+          minimum: 0
+        entry_limit:
+          type: integer
+          minimum: 1
+        warnings:
+          type: array
+          items:
+            type: string
+        findings:
+          type: array
+          items:
+            $ref: "#/components/schemas/LibraryHealthFinding"
+
+    LibraryHealthFinding:
+      type: object
+      required:
+        - id
+        - kind
+        - path
+        - related_paths
+        - evidence
+        - confidence
+        - dismissed
+        - preview
+      properties:
+        id:
+          type: string
+        kind:
+          type: string
+          enum: [sample, duplicate, orphan_record, untracked_file, missing_file, protected]
+        path:
+          type: string
+        related_paths:
+          type: array
+          items:
+            type: string
+        evidence:
+          type: array
+          items:
+            type: string
+        confidence:
+          type: string
+          enum: [low, medium, high]
+        dismissed:
+          type: boolean
+        preview:
+          $ref: "#/components/schemas/LibraryHealthPreview"
+
+    LibraryHealthPreview:
+      type: object
+      required: [action, outcome, executable]
+      properties:
+        action:
+          type: string
+        outcome:
+          type: string
+        executable:
+          type: boolean
+
+    LibraryHealthDismissRequest:
+      type: object
+      required: [finding_id, dismissed]
+      properties:
+        finding_id:
+          type: string
+        dismissed:
+          type: boolean
+
   parameters:
     DownloadClientID:
       name: id
@@ -2842,6 +3677,12 @@ components:
       schema:
         type: string
     ProxyID:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+    LibraryID:
       name: id
       in: path
       required: true

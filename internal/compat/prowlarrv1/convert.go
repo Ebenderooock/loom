@@ -2,7 +2,9 @@ package prowlarrv1
 
 import (
 	"encoding/json"
+	"net/url"
 	"strings"
+	"unicode"
 
 	"github.com/ebenderooock/loom/internal/indexers"
 )
@@ -68,11 +70,47 @@ func configURL(raw json.RawMessage) string {
 	for _, key := range []string{"base_url", "baseUrl", "url", "siteUrl"} {
 		if v, ok := m[key]; ok {
 			if s, ok := v.(string); ok {
-				return s
+				return redactConfigURL(s)
 			}
 		}
 	}
 	return ""
+}
+
+func redactConfigURL(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return ""
+	}
+	u.User = nil
+	query, queryErr := url.ParseQuery(u.RawQuery)
+	if queryErr != nil {
+		u.RawQuery = ""
+		u.ForceQuery = false
+		return u.String()
+	}
+	for key := range query {
+		var b strings.Builder
+		for _, r := range strings.ToLower(key) {
+			if unicode.IsLetter(r) || unicode.IsDigit(r) {
+				b.WriteRune(r)
+			}
+		}
+		normalized := b.String()
+		if normalized == "username" || normalized == "user" || normalized == "auth" || normalized == "pass" {
+			query.Del(key)
+			continue
+		}
+		for _, marker := range []string{"password", "passwd", "apikey", "passkey", "cookie", "token", "secret", "credential", "key", "passphrase", "authorization", "bearer"} {
+			if strings.Contains(normalized, marker) {
+				query.Del(key)
+				break
+			}
+		}
+	}
+	u.RawQuery = query.Encode()
+	u.ForceQuery = false
+	return u.String()
 }
 
 // defToIndexer converts a Loom Definition into a Prowlarr v1 indexer

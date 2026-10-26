@@ -30,8 +30,68 @@ the deviations from the original phase brief, see
 | POST   | `/api/v1/download-clients/{id}/pause`                   | Pause items (empty body = all).          |
 | POST   | `/api/v1/download-clients/{id}/resume`                  | Resume items (empty body = all).         |
 
+Creating, updating, deleting, or testing a download-client configuration
+requires an administrator role. List/detail responses omit usernames,
+passwords, and credential-like values inside `config`; submitting blank or
+omitting those fields during an edit keeps the stored credentials unchanged.
+Download-use routes such as listing items and submitting a grab remain
+available to authenticated users.
+Edit-form tests include the saved client `id` so blank/masked credentials
+can be restored for the test without persisting unsaved changes.
+
+Imports never silently overwrite an existing file or merge into an existing
+destination folder. Collisions return an explicit error and preserve both
+files. Automatic replacements require an enabled, configured recycle bin;
+if preservation fails, the import stops. A library-update failure leaves the
+imported file at its destination for recovery rather than deleting it.
+
 The full schema is in [`api/openapi/loom.yaml`](../api/openapi/loom.yaml)
 under the `download-clients` tag.
+
+## Acquisition failure history and recovery
+
+Activity → History includes acquisitions that fail before a download or
+workflow exists. Each admitted attempt records media/release identity, indexer,
+stage, timestamp, a sanitized reason and retry eligibility. Raw provider/client
+errors, signed URLs, credentials and response bodies are not stored as reasons.
+
+Manual grabs, automated movie/episode/music grabs and event-driven downloads
+share the same admission gate. A release is identified by its torrent infohash
+(including magnet hashes), or indexer plus normalized release title when no hash
+is available. Changing a signed URL does not reset the retry budget.
+
+Transient provider fetch and client failures get at most **three total automatic
+attempts**, using workflow backoff (five minutes, then fifteen minutes). The next
+normal search or grab can retry only after the persisted deadline; there is no
+separate replay worker storing stale authenticated URLs. Invalid releases with
+no payload stop immediately. Unknown client rejections are conservatively
+treated as transient rather than permanently blocklisting a potentially good
+release. Outages never add automatic blocklist entries.
+
+Successful and in-progress admissions reject duplicate attempts. If Loom exits
+after admission but before recording the outcome, the attempt stays pending:
+check the download client's queue before authorizing another attempt. This
+avoids blindly duplicating a request whose client outcome is unknown. Client
+cancellations/timeouts also remain pending. Recovery actions on pending attempts
+are refused for the first fifteen minutes to avoid racing an in-flight add.
+
+Administrators can **Enable retry** (reset the budget, then search again with
+fresh links) or **Blocklist** a failed/interrupted acquisition. Retry does not
+remove an existing blocklist entry; remove that entry in Activity → Blocklist
+first. Older superseded attempts cannot change current eligibility.
+Clearing completion history retains acquisition records and budgets.
+
+Automated movie/episode/music provider searches also persist failure budgets,
+keyed by media, indexer and query, even before any release exists. Healthy
+providers continue when another provider is deferred. Skipped queries preserve
+the previous failure budget; a successful query resets it. Provider search
+failures can be retried explicitly, but cannot be release-blocklisted because
+they do not identify a bad release.
+
+The existing search diagnostics, provider circuit breakers/API budgets and
+post-download workflow retries remain separate. This is not a replacement for
+individual HTTP transport retries. Interactive browsing searches retain their
+existing behavior; acquisition from their results still uses the shared gate.
 
 ## Configuration
 

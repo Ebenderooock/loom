@@ -61,6 +61,8 @@ func wireDownloads(
 	// Blocklist
 	blocklistStore := downloads.NewBlocklistStore(db.DB())
 	wiring.BlocklistStore = blocklistStore
+	downloadHistoryStore := downloads.NewHistoryStore(db.DB())
+	downloadSvc.SetHistoryStore(downloadHistoryStore)
 
 	// Workflow engine for tracking active downloads
 	wfStore, err := workflows.NewStore(db.DB())
@@ -241,7 +243,6 @@ func wireDownloads(
 	})
 
 	// Download monitor — polls clients for completion
-	downloadHistoryStore := downloads.NewHistoryStore(db.DB())
 	stallHandler := downloads.NewStallHandler(downloads.StallHandlerOptions{
 		Registry:  downloadSvc.Registry(),
 		Blocklist: blocklistStore,
@@ -354,6 +355,8 @@ func (g *autoSearchGrabber) Grab(ctx context.Context, c scheduler.SearchCandidat
 		mediaID = c.SeriesID
 	}
 	req := autosearch.SearchRequest{
+		RequireSuccessfulSearch: true,
+
 		MediaType:        mediaType,
 		MediaID:          mediaID,
 		Title:            c.Title,

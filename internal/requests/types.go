@@ -23,7 +23,8 @@ const (
 	StatusRejected Status = "rejected"
 	// StatusFailed — fulfillment (add) errored; the request is re-requestable.
 	StatusFailed Status = "failed"
-	// StatusAvailable — reserved for a future "downloaded & imported" transition.
+	// StatusAvailable records historical fulfillment. Current file presence is
+	// independent; deletion never resets this state or its fulfillment timestamp.
 	StatusAvailable Status = "available"
 )
 
@@ -38,33 +39,54 @@ const (
 
 // Request is a single user request for a piece of media.
 type Request struct {
-	ID         string     `json:"id"`
-	UserID     string     `json:"user_id"`
-	Username   string     `json:"username"`
-	MediaType  MediaType  `json:"media_type"`
-	TMDBID     string     `json:"tmdb_id"`
-	Title      string     `json:"title"`
-	Year       int        `json:"year"`
-	PosterPath string     `json:"poster_path,omitempty"`
-	Overview   string     `json:"overview,omitempty"`
-	Status     Status     `json:"status"`
-	Reason     string     `json:"reason,omitempty"`
-	MediaID    string     `json:"media_id,omitempty"`
-	DecidedBy  string     `json:"decided_by,omitempty"`
-	DecidedAt  *time.Time `json:"decided_at,omitempty"`
-	CreatedAt  time.Time  `json:"created_at"`
-	UpdatedAt  time.Time  `json:"updated_at"`
+	ID                      string       `json:"id"`
+	UserID                  string       `json:"user_id"`
+	Username                string       `json:"username"`
+	MediaType               MediaType    `json:"media_type"`
+	TMDBID                  string       `json:"tmdb_id"`
+	Title                   string       `json:"title"`
+	Year                    int          `json:"year"`
+	PosterPath              string       `json:"poster_path,omitempty"`
+	Overview                string       `json:"overview,omitempty"`
+	Status                  Status       `json:"status"`
+	Reason                  string       `json:"reason,omitempty"`
+	MediaID                 string       `json:"media_id,omitempty"`
+	DecidedBy               string       `json:"decided_by,omitempty"`
+	DecidedAt               *time.Time   `json:"decided_at,omitempty"`
+	CreatedAt               time.Time    `json:"created_at"`
+	UpdatedAt               time.Time    `json:"updated_at"`
+	FulfilledAt             *time.Time   `json:"fulfilled_at,omitempty"`
+	Availability            Availability `json:"availability"`
+	AvailabilityReason      string       `json:"availability_reason"`
+	AvailabilityCheckedAt   *time.Time   `json:"availability_checked_at,omitempty"`
+	AvailabilityLibraryID   string       `json:"-"`
+	AvailabilityFiles       string       `json:"-"`
+	missingFileIDs          []string
+	ReRequestOf             string       `json:"re_request_of,omitempty"`
+	Monitored               *bool        `json:"monitored,omitempty"`
+	MediaServerAvailability Availability `json:"media_server_availability"`
 }
+
+// Availability describes current file presence, never historical fulfillment.
+type Availability string
+
+// File-presence observations are independent of request lifecycle status.
+const (
+	AvailabilityPresent Availability = "present"
+	AvailabilityMissing Availability = "missing"
+	AvailabilityUnknown Availability = "unknown"
+)
 
 // CreateInput is the data needed to submit a request. Title/Year/PosterPath/
 // Overview are display-only hints captured from the lookup at request time.
 type CreateInput struct {
-	MediaType  MediaType `json:"media_type"`
-	TMDBID     string    `json:"tmdb_id"`
-	Title      string    `json:"title"`
-	Year       int       `json:"year"`
-	PosterPath string    `json:"poster_path"`
-	Overview   string    `json:"overview"`
+	ReRequestOf string    `json:"re_request_of,omitempty"`
+	MediaType   MediaType `json:"media_type"`
+	TMDBID      string    `json:"tmdb_id"`
+	Title       string    `json:"title"`
+	Year        int       `json:"year"`
+	PosterPath  string    `json:"poster_path"`
+	Overview    string    `json:"overview"`
 }
 
 // validMediaType reports whether t is a supported media type.

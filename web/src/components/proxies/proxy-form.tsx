@@ -297,7 +297,13 @@ export function ProxyForm({
               autoComplete="off"
               value={values.username}
               onChange={(e) => update("username", e.target.value)}
+              placeholder={isEdit ? "Leave blank to keep current" : ""}
             />
+            {isEdit ? (
+              <p className="text-xs text-muted-foreground">
+                Leave blank to keep the saved username.
+              </p>
+            ) : null}
           </div>
           <div className="grid gap-2">
             <Label htmlFor="proxy-password">Password</Label>
@@ -307,7 +313,14 @@ export function ProxyForm({
               autoComplete="off"
               value={values.password}
               onChange={(e) => update("password", e.target.value)}
+              placeholder={isEdit ? "Leave blank to keep current" : ""}
             />
+            {isEdit ? (
+              <p className="text-xs text-muted-foreground">
+                Leave blank to keep the saved password; enter a value to replace
+                it.
+              </p>
+            ) : null}
           </div>
         </div>
       ) : null}

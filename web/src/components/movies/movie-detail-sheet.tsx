@@ -1273,6 +1273,9 @@ export function MovieDetailSheet({
 
       {/* Release search dialog */}
       <ReleaseSearchDialog
+        qualityProfileId={movie.qualityProfileId}
+        year={movie.year}
+        runtime={movie.runtime}
         open={searchOpen}
         onOpenChange={setSearchOpen}
         title={movie.title}

@@ -9,6 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Separate immutable request fulfillment history from current file availability,
+  monitoring and media-server observations. Add explicit owner/admin re-requests
+  with global active deduplication and normal rolling quotas, mount-identity
+  guarded reconciliation, dry-run audits and per-item outcomes. Requests and chat
+  status now distinguish historical fulfillment from present/missing/unknown
+  files. Migration 0080 preserves legacy fulfillment timestamps.
+
+- Persistent, atomic provider/account API budgets with explicit shared indexer
+  groups, conservative remaining/reset signals, per-attempt retry accounting,
+  and visible budget skip/resume reasons for manual and automated searches.
+
+- Explain release identity, parsed numbering, quality tiers, profile-specific
+  custom-format contributions, numeric policy limits and accepted-result ordering
+  using the production acquisition engine. Manual search includes read-only policy
+  previews; search logs retain the same evidence for new searches.
+
 - Interactive calendar entries open movie and show detail drawers with search
   actions, labeled acquisition and monitoring states, and expandable busy days.
 - Discover cards have separate quick-add and full-details controls, with an
@@ -20,18 +36,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Isolated `prelease/<semver>` CI and container publishing, starting with
   `prelease/0.2.9`, without advancing stable or main image tags.
 
+### Documentation
+
+- Propose independent permanent 1080p/4K version tracks in ADR-0027, including
+  default-track compatibility, migration and acquisition/import/deletion
+  isolation. This is design work only; concurrent tracks are not implemented.
+
 ### Security
 
+- Require administrator access for integration configuration changes and tests,
+  redact stored credentials in responses, and preserve unchanged secrets on edit.
 - Upgrade the Go toolchain to 1.26.10 across CI and container builds, and update
   OpenTelemetry, gRPC, Gorilla WebSocket, and Go networking/text dependencies
   (including required transitive updates) to address known vulnerabilities.
 
 ### Fixed
 
+- Reject conflicting embedded external IDs even when a release title matches,
+  and reject ambiguous multi-season/complete-series packs instead of treating the
+  first parsed season as proof of coverage.
+
+- Persist pre-grab acquisition failures in download history with sanitized
+  stage reasons, restart-safe admission, bounded retries and administrator
+  recovery/blocklist actions in Activity.
+
+- Enforce rolling-search quotas per admitted indexer query and retain retry
+  eligibility after failed, cancelled or fully skipped searches.
+- Mark requests fulfilled only after imported files satisfy availability checks,
+  reconcile fulfillment periodically, and reject negative music request quotas.
+- Prevent imports from overwriting existing destinations or following symlinks,
+  and preserve moved files when a library update fails.
 - Movie searches now send the library year and resolve identity from library metadata
   server-side, preventing older same-title releases from bypassing year validation.
   Movie imports reject conflicting release years even when a workflow links the
   download to a library item, while retaining the existing one-year tolerance.
+- Add read-only per-library health reporting with bounded and cancellable execution,
+  evidence and uncertainty for suspected samples/duplicates/orphaned records/missing files,
+  mount and incomplete-scan safeguards, protected-item detection (hardlinks, versions, extras,
+  subtitles), and persisted dismissal/recheck state plus non-executable action previews.
 - Calendar movies that are downloading or importing are no longer shown as available.
   Calendar episode entries now include their parent series ID.
 
