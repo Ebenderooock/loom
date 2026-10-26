@@ -33,6 +33,7 @@ import {
 } from "lucide-react";
 import { cn, formatBytes } from "@/lib/utils";
 import { toast } from "sonner";
+import { PolicyPreview } from "./policy-preview";
 import {
   streamSearch,
   type SearchResult,
@@ -159,6 +160,10 @@ function applyFilters(
 // ─── Types ────────────────────────────────────────────────────────────
 
 export interface ReleaseSearchProps {
+  qualityProfileId?: string;
+  evaluationTitle?: string;
+  year?: number;
+  runtime?: number;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   title: string;
@@ -620,6 +625,10 @@ export function ReleaseSearchDialog({
   seriesId,
   episodeIds,
   movieId,
+  qualityProfileId,
+  evaluationTitle,
+  year,
+  runtime,
 }: ReleaseSearchProps) {
   const [query, setQuery] = useState(initialQuery ?? title);
   const [results, setResults] = useState<SearchResult[]>([]);
@@ -878,6 +887,25 @@ export function ReleaseSearchDialog({
           </div>
         )}
 
+        {open && searched && !loading && results.length > 0 && (
+          <PolicyPreview
+            key={`${movieId ?? seriesId ?? title}-${season}-${episode}`}
+            context={{
+              quality_profile_id: qualityProfileId ?? "",
+              media_type: mediaType === "season" ? "series" : mediaType,
+              media_id: movieId ?? seriesId,
+              title: evaluationTitle ?? title,
+              year,
+              runtime,
+              imdb_id: imdbId,
+              tmdb_id: tmdbId != null ? String(tmdbId) : undefined,
+              tvdb_id: tvdbId != null ? String(tvdbId) : undefined,
+              season,
+              episode,
+            }}
+            results={results}
+          />
+        )}
         {/* Filters */}
         {searched && results.length > 0 && (
           <FilterBar
@@ -900,7 +928,7 @@ export function ReleaseSearchDialog({
                   Quality
                 </th>
                 <th scope="col" className="w-14 px-3 py-2">
-                  Score
+                  Raw score
                 </th>
                 <th scope="col" className="w-20 px-3 py-2">
                   Size

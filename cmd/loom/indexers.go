@@ -84,6 +84,7 @@ func buildIndexerService(ctx context.Context, cfg *config.Config, db storage.DB,
 	cardigann.SetLoader(cardLoader)
 
 	svc, err := indexers.NewService(indexers.ServiceOptions{
+		ProviderBudgets:    indexers.NewProviderBudgetStore(db.DB(), nil),
 		Repository:         repo,
 		Logger:             logger,
 		HTTPClientProvider: indexerHTTPClientProvider{},
