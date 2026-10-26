@@ -169,6 +169,8 @@ Legend: ✅ done · 🚧 in progress · ⏳ planned
 
 ## 🚧 Phase 14 — Library maintenance (Cleanarr/Maintainerr-equivalent)
 
+- 🚧 Independent permanent version tracks — [proposed ADR-0027](docs/adr/0027-independent-version-tracks.md)
+  for concurrent 1080p/4K ownership and migration; design only, implementation gated.
 - ⏳ Duplicate detection (same media, multiple files/qualities)
 - ⏳ Unmatched media identification (files not linked to any library entry)
 - ✅ Orphaned download cleanup (completed downloads never imported)

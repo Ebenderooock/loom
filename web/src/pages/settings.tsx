@@ -25,6 +25,7 @@ import { cn } from "@/lib/utils";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { NamingSettings } from "@/components/movies/naming-settings";
+import { LibraryHealth } from "@/components/libraries/library-health";
 import {
   useLibraries,
   useDeleteLibrary,
@@ -604,19 +605,22 @@ function LibrariesPanel() {
                   </div>
                 </div>
               </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="text-destructive opacity-0 transition-opacity hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
-                onClick={() => handleDelete(lib.id)}
-                disabled={deletingId === lib.id}
-              >
-                {deletingId === lib.id ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Trash2 className="h-4 w-4" />
-                )}
-              </Button>
+              <div className="ml-3 flex shrink-0 items-center gap-2">
+                <LibraryHealth library={lib} />
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="text-destructive opacity-0 transition-opacity hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
+                  onClick={() => handleDelete(lib.id)}
+                  disabled={deletingId === lib.id}
+                >
+                  {deletingId === lib.id ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Trash2 className="h-4 w-4" />
+                  )}
+                </Button>
+              </div>
             </div>
           ))}
         </div>
