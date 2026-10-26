@@ -33,6 +33,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   server-side, preventing older same-title releases from bypassing year validation.
   Movie imports reject conflicting release years even when a workflow links the
   download to a library item, while retaining the existing one-year tolerance.
+- Add read-only per-library health reporting with bounded and cancellable execution,
+  evidence and uncertainty for suspected samples/duplicates/orphaned records/missing files,
+  mount and incomplete-scan safeguards, protected-item detection (hardlinks, versions, extras,
+  subtitles), and persisted dismissal/recheck state plus non-executable action previews.
 
 ## [0.1.1] - 2026-06-09
 
