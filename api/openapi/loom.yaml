@@ -10,6 +10,19 @@ info:
 
     This specification covers only the routes implemented today. The
     PR template requires every new route to be reflected here.
+
+    When authentication is enabled, indexer, download-client and proxy
+    configuration mutations and connectivity tests require an administrator.
+    Indexer-rule mutations, Jackett imports, query logs and search-health
+    diagnostics/reset also require an administrator. Authenticated non-admin
+    users retain search and download-use access.
+
+    Integration configuration and health/test responses redact credentials.
+    On configuration edits, omitted, blank or masked credential values retain
+    stored secrets; non-empty replacement values update them. Unsaved
+    connectivity tests can supply the saved definition ID to retain credentials
+    without saving the tested settings. Explicitly disabled authentication
+    retains its existing access behavior.
   license:
     name: AGPL-3.0-only
     identifier: AGPL-3.0-only

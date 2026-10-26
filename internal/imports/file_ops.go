@@ -1,16 +1,49 @@
 package imports
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
-// copyFile copies src to dst. The destination file is always created with
-// 0o644 permissions so that retry attempts can overwrite it even when the
-// source file is read-only.
-func copyFile(src, dst string) error {
+// ErrDestinationExists is returned rather than overwriting an existing file
+// or folder. Import conflict handling must be explicit at a higher layer.
+var ErrDestinationExists = errors.New("import destination already exists")
+
+func checkDestinationAbsent(path string) error {
+	_, err := os.Lstat(path)
+	if err == nil {
+		return fmt.Errorf("%w: %s", ErrDestinationExists, path)
+	}
+	if !os.IsNotExist(err) {
+		return fmt.Errorf("check destination %q: %w", path, err)
+	}
+	return nil
+}
+
+func checkRegularSource(path string) error {
+	info, err := os.Lstat(path)
+	if err != nil {
+		return fmt.Errorf("inspect source %q: %w", path, err)
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("refusing symlink source %q", path)
+	}
+	if !info.Mode().IsRegular() {
+		return fmt.Errorf("source is not a regular file: %s", path)
+	}
+	return nil
+}
+
+// copyFile creates a new regular destination file. O_EXCL prevents a racing
+// import or a symlink at dst from being followed and truncated.
+func copyFile(src, dst string) (retErr error) {
+	if err := checkRegularSource(src); err != nil {
+		return err
+	}
 	in, err := os.Open(src)
 	if err != nil {
 		return fmt.Errorf("open source: %w", err)
@@ -20,77 +53,151 @@ func copyFile(src, dst string) error {
 	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 		return fmt.Errorf("create dest dir: %w", err)
 	}
-
-	out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
+	if err := checkDestinationAbsent(dst); err != nil {
+		return err
+	}
+	out, err := os.OpenFile(dst, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644) //nolint:gosec // Import destinations are library paths; O_EXCL rejects existing files and symlinks.
 	if err != nil {
+		if os.IsExist(err) {
+			return fmt.Errorf("%w: %s", ErrDestinationExists, dst)
+		}
 		return fmt.Errorf("create dest: %w", err)
 	}
-	defer out.Close()
+	defer func() {
+		if closeErr := out.Close(); retErr == nil && closeErr != nil {
+			retErr = fmt.Errorf("close destination: %w", closeErr)
+		}
+		if retErr != nil {
+			_ = os.Remove(dst)
+		}
+	}()
 
 	if _, err := io.Copy(out, in); err != nil {
 		return fmt.Errorf("copy data: %w", err)
 	}
-	return out.Close()
+	return nil
 }
 
-// moveFile renames src to dst, falling back to copy+delete for
-// cross-device moves.
+// moveFile first tries an exclusive hard-link creation, which is atomic and
+// cannot replace dst. Cross-device moves fall back to exclusive copy+remove.
 func moveFile(src, dst string) error {
+	if err := checkRegularSource(src); err != nil {
+		return err
+	}
 	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 		return fmt.Errorf("create dest dir: %w", err)
 	}
-	if err := os.Rename(src, dst); err == nil {
-		return nil
+	if err := checkDestinationAbsent(dst); err != nil {
+		return err
 	}
-	// Cross-device fallback: copy then remove original.
+	if err := os.Link(src, dst); err == nil {
+		if err := os.Remove(src); err != nil && !os.IsNotExist(err) {
+			_ = os.Remove(dst)
+			return fmt.Errorf("remove source after link: %w", err)
+		}
+		return nil
+	} else if os.IsExist(err) {
+		return fmt.Errorf("%w: %s", ErrDestinationExists, dst)
+	}
+
 	if err := copyFile(src, dst); err != nil {
 		return err
 	}
-	// The copy succeeded, so the file is now in its destination. If removing the
-	// source fails because it is already gone (e.g. a concurrent/duplicate import
-	// removed it first), the move has effectively succeeded — do not report a
-	// false failure that would mark the whole import as failed and trigger retries.
 	if err := os.Remove(src); err != nil && !os.IsNotExist(err) {
+		_ = os.Remove(dst)
+		return fmt.Errorf("remove source after copy: %w", err)
+	}
+	return nil
+}
+
+// hardlinkFile creates a new hard link and never replaces an existing target.
+func hardlinkFile(src, dst string) error {
+	if err := checkRegularSource(src); err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+		return fmt.Errorf("create dest dir: %w", err)
+	}
+	if err := checkDestinationAbsent(dst); err != nil {
+		return err
+	}
+	if err := os.Link(src, dst); err != nil {
+		if os.IsExist(err) {
+			return fmt.Errorf("%w: %s", ErrDestinationExists, dst)
+		}
 		return err
 	}
 	return nil
 }
 
-// hardlinkFile creates a hard link from src to dst.
-func hardlinkFile(src, dst string) error {
-	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
-		return fmt.Errorf("create dest dir: %w", err)
-	}
-	return os.Link(src, dst)
-}
-
-// importFolder renames an entire source folder to the destination path,
-// preserving all contents (subtitles, NFOs, images, etc.).
-// Falls back to per-file move if rename fails (cross-device).
+// importFolder moves an entire source folder to an absent destination. It
+// rejects existing destinations rather than merging contents, so repeated
+// imports cannot silently replace or mix library data.
 func importFolder(srcDir, destDir string) error {
-	// If destination already exists, move contents into it
-	if _, err := os.Stat(destDir); err == nil {
-		return moveContents(srcDir, destDir)
+	info, err := os.Lstat(srcDir)
+	if err != nil {
+		return fmt.Errorf("inspect source folder: %w", err)
 	}
-
-	// Ensure parent of destination exists
+	if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
+		return fmt.Errorf("source is not a real directory: %s", srcDir)
+	}
+	if filepath.Clean(srcDir) == filepath.Clean(destDir) {
+		return nil
+	}
+	srcAbs, srcErr := filepath.Abs(srcDir)
+	destAbs, destErr := filepath.Abs(destDir)
+	if srcErr == nil && destErr == nil {
+		rel, err := filepath.Rel(srcAbs, destAbs)
+		if err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			return fmt.Errorf("destination folder must not be inside source folder")
+		}
+		rel, err = filepath.Rel(destAbs, srcAbs)
+		if err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			return fmt.Errorf("source folder must not be inside destination folder")
+		}
+	}
+	if err := validateImportTree(srcDir); err != nil {
+		return err
+	}
 	if err := os.MkdirAll(filepath.Dir(destDir), 0o755); err != nil {
 		return fmt.Errorf("create dest parent: %w", err)
 	}
-
-	// Try direct rename (same filesystem)
-	if err := os.Rename(srcDir, destDir); err == nil {
-		return nil
+	if err := checkDestinationAbsent(destDir); err != nil {
+		return err
 	}
-
-	// Cross-device fallback: create dest and move contents
-	if err := os.MkdirAll(destDir, 0o755); err != nil {
+	if err := os.Mkdir(destDir, 0o755); err != nil { //nolint:gosec // Media folders must remain readable by external media servers.
+		if os.IsExist(err) {
+			return fmt.Errorf("%w: %s", ErrDestinationExists, destDir)
+		}
 		return fmt.Errorf("create dest dir: %w", err)
 	}
-	return moveContents(srcDir, destDir)
+	if err := moveContents(srcDir, destDir); err != nil {
+		return fmt.Errorf("move folder contents: %w", err)
+	}
+	return nil
 }
 
-// moveContents moves all files and subdirectories from src into dst.
+func validateImportTree(root string) error {
+	return filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return fmt.Errorf("inspect source entry %q: %w", path, err)
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return fmt.Errorf("inspect source entry %q: %w", path, err)
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			return fmt.Errorf("refusing symlink in import folder: %s", path)
+		}
+		if !info.IsDir() && !info.Mode().IsRegular() {
+			return fmt.Errorf("unsupported source entry type: %s", path)
+		}
+		return nil
+	})
+}
+
+// moveContents moves entries individually. Each file operation is exclusive;
+// source symlinks and non-regular files are rejected instead of being followed.
 func moveContents(srcDir, destDir string) error {
 	entries, err := os.ReadDir(srcDir)
 	if err != nil {
@@ -99,54 +206,32 @@ func moveContents(srcDir, destDir string) error {
 	for _, entry := range entries {
 		srcPath := filepath.Join(srcDir, entry.Name())
 		dstPath := filepath.Join(destDir, entry.Name())
-		if err := os.Rename(srcPath, dstPath); err != nil {
-			// Cross-device: copy + delete
-			if entry.IsDir() {
-				if err := copyDir(srcPath, dstPath); err != nil {
-					return err
-				}
-				_ = os.RemoveAll(srcPath)
-			} else {
-				if err := copyFile(srcPath, dstPath); err != nil {
-					return err
-				}
-				_ = os.Remove(srcPath)
-			}
+		info, err := os.Lstat(srcPath)
+		if err != nil {
+			return fmt.Errorf("inspect source entry %q: %w", srcPath, err)
 		}
-	}
-	// Remove now-empty source dir
-	_ = os.Remove(srcDir)
-	return nil
-}
-
-// copyDir recursively copies a directory.
-func copyDir(src, dst string) error {
-	if err := os.MkdirAll(dst, 0o755); err != nil {
-		return err
-	}
-	entries, err := os.ReadDir(src)
-	if err != nil {
-		return err
-	}
-	for _, entry := range entries {
-		srcPath := filepath.Join(src, entry.Name())
-		dstPath := filepath.Join(dst, entry.Name())
-		if entry.IsDir() {
-			if err := copyDir(srcPath, dstPath); err != nil {
+		switch {
+		case info.Mode()&os.ModeSymlink != 0:
+			return fmt.Errorf("refusing symlink in import folder: %s", srcPath)
+		case info.IsDir():
+			if err := importFolder(srcPath, dstPath); err != nil {
 				return err
 			}
-		} else {
-			if err := copyFile(srcPath, dstPath); err != nil {
+		case info.Mode().IsRegular():
+			if err := moveFile(srcPath, dstPath); err != nil {
 				return err
 			}
+		default:
+			return fmt.Errorf("unsupported source entry type: %s", srcPath)
 		}
+	}
+	if err := os.Remove(srcDir); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("remove empty source folder: %w", err)
 	}
 	return nil
 }
 
 // importFile performs the file import using the specified mode.
-// For "hardlink" mode, it falls back to copy on failure (cross-device).
-// For "hardlink_only" mode, it fails if the hardlink cannot be created.
 func importFile(src, dst string, mode ImportMode) error {
 	switch mode {
 	case ImportModeCopy:
@@ -154,6 +239,8 @@ func importFile(src, dst string, mode ImportMode) error {
 	case ImportModeHardlink:
 		if err := hardlinkFile(src, dst); err == nil {
 			return nil
+		} else if errors.Is(err, ErrDestinationExists) {
+			return err
 		}
 		return copyFile(src, dst)
 	case ImportModeHardlinkOnly:
@@ -161,7 +248,7 @@ func importFile(src, dst string, mode ImportMode) error {
 			return fmt.Errorf("hardlink failed (hardlink_only mode): %w", err)
 		}
 		return nil
-	default: // ImportModeMove
+	default:
 		return moveFile(src, dst)
 	}
 }
@@ -186,7 +273,7 @@ func scanMediaFiles(dir string) ([]string, error) {
 		if err != nil {
 			return nil // skip unreadable entries
 		}
-		if info.IsDir() {
+		if info.Mode()&os.ModeSymlink != 0 || info.IsDir() {
 			return nil
 		}
 		ext := filepath.Ext(path)

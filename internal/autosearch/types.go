@@ -28,6 +28,11 @@ type SearchRequest struct {
 	DailyDate        string   `json:"daily_date,omitempty"`    // "YYYY-MM-DD" for daily shows
 	Runtime          int      `json:"runtime,omitempty"`       // minutes; used for per-minute size limits
 	SearchRunID      string   `json:"search_run_id,omitempty"` // groups sub-searches (season → episodes)
+
+	// RequireSuccessfulSearch keeps background searches retryable when all
+	// providers fail or are skipped, or grabbing fails. Manual searches retain
+	// partial-result behavior.
+	RequireSuccessfulSearch bool `json:"-"`
 }
 
 // SearchResult is returned by Engine.SearchAndGrab.

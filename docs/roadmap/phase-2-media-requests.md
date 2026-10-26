@@ -1,5 +1,26 @@
 # Phase 2: Media Requests
 
+### Implementation status
+
+The core authenticated request flow is implemented in `internal/requests`, with
+movie, series, and artist requests, global per-user rolling quotas, atomic admin
+approval, rejection, and Discord/Telegram bots. The native API uses
+`/api/v1/requests`; the actual table is `media_requests`. The specifications below
+remain proposals where they differ from the source.
+
+Approved requests are reconciled against imported file records on startup,
+after approval, and every minute. Movies require a live file; series require a
+file and no missing currently aired monitored episodes in monitored seasons;
+artists require files for all monitored tracks on selected releases of
+currently released monitored albums. Unknown dates are treated conservatively
+as due, and missing track metadata blocks completion. Future releases do not
+block fulfillment. Catalog membership or a successful download grab is not
+proof of availability. The `available` state records fulfillment and is not a
+continuous media-server health or quality-cutoff guarantee.
+
+Guest access, external media-server availability, comments, bulk decisions,
+and expanded auto-approval policies are not implied by the implemented core.
+
 ### Goal
 Built-in media request system (replaces Overseerr/Jellyseerr) with multi-user support, guest access, interactive bots (Discord/Telegram/Slack/WhatsApp), auto-approval engine, media server availability checking, and Overseerr API compatibility.
 

@@ -194,17 +194,6 @@ func (s *Store) MarkApproved(ctx context.Context, id, mediaID string) error {
 	return affectedOne(res, err)
 }
 
-// MarkAvailable marks a pending request as available, recording its media id
-// (used when the requested media already exists in the library). It is a no-op
-// (ErrConflict) if the request is no longer pending.
-func (s *Store) MarkAvailable(ctx context.Context, id, mediaID string) error {
-	now := time.Now().UTC().Format(tsLayout)
-	res, err := s.db.ExecContext(ctx, `
-		UPDATE media_requests SET status='available', media_id=?, reason='', updated_at=?
-		WHERE id=? AND status='pending'`, mediaID, now, id)
-	return affectedOne(res, err)
-}
-
 // MarkFailed returns a claimed (approving) request to a re-requestable failed
 // state with a reason. decided_at/by are cleared so a fresh attempt is
 // unambiguous.

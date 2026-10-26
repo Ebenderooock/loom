@@ -8,6 +8,7 @@ import (
 	"log/slog"
 
 	"github.com/ebenderooock/loom/internal/autosearch"
+	"github.com/ebenderooock/loom/internal/kernel/scheduler"
 	"github.com/ebenderooock/loom/internal/libraries"
 	"github.com/ebenderooock/loom/internal/movies"
 	"github.com/ebenderooock/loom/internal/music"
@@ -17,6 +18,14 @@ import (
 	"github.com/ebenderooock/loom/internal/series"
 	"github.com/ebenderooock/loom/internal/storage"
 )
+
+func registerRequestAvailabilityJob(ctx context.Context, sched *scheduler.Scheduler, svc *requests.Service) error {
+	if err := svc.ReconcileAvailability(ctx); err != nil {
+		return err
+	}
+	return sched.Register(ctx, "requests-availability", "* * * * *",
+		svc.ReconcileAvailability, []byte(`{"builtin":true}`))
+}
 
 // buildRequestsService assembles the media-requests Service, wiring it to the
 // movies/series/music add flows, the autosearch grab engine, and the quality

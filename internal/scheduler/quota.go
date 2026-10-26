@@ -49,6 +49,19 @@ func (q *QuotaTracker) RecordSearch(indexerID string) {
 	q.records[indexerID] = append(q.records[indexerID], time.Now())
 }
 
+// TryReserve atomically checks and consumes one provider-query attempt.
+// Reservations are not refunded on errors: providers may have received the query.
+func (q *QuotaTracker) TryReserve(indexerID string) bool {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	q.pruneOld(indexerID)
+	if len(q.records[indexerID]) >= q.maxPerDay {
+		return false
+	}
+	q.records[indexerID] = append(q.records[indexerID], time.Now())
+	return true
+}
+
 // Usage returns current counts per indexer (pruned to last 24 h).
 func (q *QuotaTracker) Usage() map[string]int {
 	q.mu.Lock()
