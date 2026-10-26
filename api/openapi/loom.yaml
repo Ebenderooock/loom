@@ -43,6 +43,8 @@ tags:
     description: Liveness, readiness and metrics probes.
   - name: system
     description: Build / runtime metadata.
+  - name: libraries
+    description: Library root registration, scans and read-only health reporting.
   - name: indexers
     description: Indexer CRUD, capabilities, manual health checks, and aggregated search.
   - name: proxies
@@ -79,6 +81,7 @@ paths:
         ranking path used by acquisition. Optional policy_preview replaces only
         the quality profile for this request; it never saves or grabs. Existing
         library state, quality definitions and loaded format rules still apply.
+
       requestBody:
         required: true
         content:
@@ -201,7 +204,104 @@ paths:
           description: Invalid JSON or malformed preview quality items.
         "500":
           description: Identity lookup, saved profile or evaluation dependency failed.
-
+  /api/v1/downloads/history:
+    get:
+      tags: [download-clients]
+      summary: List download completion and durable acquisition history.
+      operationId: listDownloadHistory
+      parameters:
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, default: 50 }
+        - in: query
+          name: offset
+          schema: { type: integer, minimum: 0, default: 0 }
+      responses:
+        "200":
+          description: History ordered newest first. Acquisition rows include sanitized reasons and persistent retry decisions.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  required: [id, title, status, completed_at, retry_eligible]
+                  properties:
+                    id: { type: string }
+                    download_id: { type: string }
+                    client_id: { type: string }
+                    title: { type: string }
+                    category: { type: string }
+                    status: { type: string, description: "completed, failed, acquiring, acquisition_failed or acquired" }
+                    grabbed_at: { type: string, format: date-time }
+                    completed_at: { type: string, format: date-time }
+                    acquisition_key: { type: string }
+                    media_type: { type: string }
+                    media_id: { type: string }
+                    indexer_id: { type: string }
+                    release_hash: { type: string }
+                    stage: { type: string, enum: [admission, validation, provider, provider_search, client] }
+                    reason: { type: string }
+                    attempt: { type: integer }
+                    retry_count: { type: integer }
+                    retry_eligible: { type: boolean }
+                    is_latest: { type: boolean }
+                    next_retry_at: { type: string, format: date-time }
+        "500":
+          description: History storage failed.
+    delete:
+      tags: [download-clients]
+      summary: Clear completion history, retaining acquisition retry records.
+      operationId: clearDownloadHistory
+      responses:
+        "204":
+          description: Completion history cleared.
+        "403":
+          description: Administrator access required.
+  /api/v1/downloads/history/actions:
+    post:
+      tags: [download-clients]
+      summary: Authorize retry or blocklist latest failed/interrupted acquisitions.
+      description: Requires an administrator identity. Retry resets the budget for a future fresh search; it never replays stored URLs or removes a blocklist entry.
+      operationId: acquisitionHistoryActions
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ids, action]
+              properties:
+                ids:
+                  type: array
+                  minItems: 1
+                  maxItems: 100
+                  items: { type: string }
+                action: { type: string, enum: [retry, blocklist] }
+      responses:
+        "200":
+          description: Per-item outcomes, including partial failure.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [results]
+                properties:
+                  results:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, ok]
+                      properties:
+                        id: { type: string }
+                        ok: { type: boolean }
+                        error: { type: string }
+        "400":
+          description: Invalid action or batch size.
+        "403":
+          description: Administrator identity required.
+        "503":
+          description: Download history is unavailable.
   /healthz:
     get:
       tags: [health]
@@ -299,6 +399,95 @@ paths:
                     commit: "10bdae3"
                     buildDate: "2025-05-01T13:50:14Z"
                     engine: "sqlite"
+
+  /api/v1/libraries/{id}/health:
+    parameters:
+      - $ref: "#/components/parameters/LibraryID"
+    get:
+      tags: [libraries]
+      summary: Get the latest read-only library health report.
+      operationId: getLibraryHealth
+      security:
+        - apiKey: []
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "200":
+          description: Latest report or null if no report has been generated yet.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/LibraryHealthReport"
+                  - type: "null"
+        "403":
+          description: Admin identity required when authentication is enabled.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      tags: [libraries]
+      summary: Run a bounded, cancellable read-only health check.
+      operationId: runLibraryHealth
+      security:
+        - apiKey: []
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "200":
+          description: Completed or cancelled report snapshot.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LibraryHealthReport"
+        "403":
+          description: Admin identity required when authentication is enabled.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/v1/libraries/{id}/health/dismiss:
+    parameters:
+      - $ref: "#/components/parameters/LibraryID"
+    post:
+      tags: [libraries]
+      summary: Dismiss or restore a finding in the latest report.
+      operationId: dismissLibraryHealthFinding
+      security:
+        - apiKey: []
+        - bearerAuth: []
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LibraryHealthDismissRequest"
+      responses:
+        "200":
+          description: Updated report with dismissal state applied.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LibraryHealthReport"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          description: Admin identity required when authentication is enabled.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "404":
+          $ref: "#/components/responses/NotFound"
 
   /api/v1/indexers/:
     get:
@@ -2660,6 +2849,102 @@ components:
           type: boolean
           description: Whether the release name matches all filters.
 
+    LibraryHealthReport:
+      type: object
+      required:
+        - library_id
+        - root
+        - status
+        - checked_at
+        - scanned_entries
+        - inspected_records
+        - entry_limit
+        - warnings
+        - findings
+      properties:
+        library_id:
+          type: string
+        root:
+          type: string
+        status:
+          type: string
+          enum: [complete, incomplete, unavailable, cancelled]
+        checked_at:
+          type: string
+          format: date-time
+        scanned_entries:
+          type: integer
+          minimum: 0
+        inspected_records:
+          type: integer
+          minimum: 0
+        entry_limit:
+          type: integer
+          minimum: 1
+        warnings:
+          type: array
+          items:
+            type: string
+        findings:
+          type: array
+          items:
+            $ref: "#/components/schemas/LibraryHealthFinding"
+
+    LibraryHealthFinding:
+      type: object
+      required:
+        - id
+        - kind
+        - path
+        - related_paths
+        - evidence
+        - confidence
+        - dismissed
+        - preview
+      properties:
+        id:
+          type: string
+        kind:
+          type: string
+          enum: [sample, duplicate, orphan_record, untracked_file, missing_file, protected]
+        path:
+          type: string
+        related_paths:
+          type: array
+          items:
+            type: string
+        evidence:
+          type: array
+          items:
+            type: string
+        confidence:
+          type: string
+          enum: [low, medium, high]
+        dismissed:
+          type: boolean
+        preview:
+          $ref: "#/components/schemas/LibraryHealthPreview"
+
+    LibraryHealthPreview:
+      type: object
+      required: [action, outcome, executable]
+      properties:
+        action:
+          type: string
+        outcome:
+          type: string
+        executable:
+          type: boolean
+
+    LibraryHealthDismissRequest:
+      type: object
+      required: [finding_id, dismissed]
+      properties:
+        finding_id:
+          type: string
+        dismissed:
+          type: boolean
+
   parameters:
     DownloadClientID:
       name: id
@@ -2674,6 +2959,12 @@ components:
       schema:
         type: string
     ProxyID:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+    LibraryID:
       name: id
       in: path
       required: true

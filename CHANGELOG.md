@@ -14,6 +14,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   using the production acquisition engine. Manual search includes read-only policy
   previews; search logs retain the same evidence for new searches.
 
+### Documentation
+
+- Propose independent permanent 1080p/4K version tracks in ADR-0027, including
+  default-track compatibility, migration and acquisition/import/deletion
+  isolation. This is design work only; concurrent tracks are not implemented.
+
 ### Security
 
 - Require administrator access for integration configuration changes and tests,
@@ -28,6 +34,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   and reject ambiguous multi-season/complete-series packs instead of treating the
   first parsed season as proof of coverage.
 
+- Persist pre-grab acquisition failures in download history with sanitized
+  stage reasons, restart-safe admission, bounded retries and administrator
+  recovery/blocklist actions in Activity.
+
 - Enforce rolling-search quotas per admitted indexer query and retain retry
   eligibility after failed, cancelled or fully skipped searches.
 - Mark requests fulfilled only after imported files satisfy availability checks,
@@ -38,6 +48,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   server-side, preventing older same-title releases from bypassing year validation.
   Movie imports reject conflicting release years even when a workflow links the
   download to a library item, while retaining the existing one-year tolerance.
+- Add read-only per-library health reporting with bounded and cancellable execution,
+  evidence and uncertainty for suspected samples/duplicates/orphaned records/missing files,
+  mount and incomplete-scan safeguards, protected-item detection (hardlinks, versions, extras,
+  subtitles), and persisted dismissal/recheck state plus non-executable action previews.
 
 ## [0.1.1] - 2026-06-09
 
