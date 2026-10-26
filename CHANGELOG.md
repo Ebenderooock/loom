@@ -13,6 +13,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   groups, conservative remaining/reset signals, per-attempt retry accounting,
   and visible budget skip/resume reasons for manual and automated searches.
 
+- Explain release identity, parsed numbering, quality tiers, profile-specific
+  custom-format contributions, numeric policy limits and accepted-result ordering
+  using the production acquisition engine. Manual search includes read-only policy
+  previews; search logs retain the same evidence for new searches.
+
 ### Documentation
 
 - Propose independent permanent 1080p/4K version tracks in ADR-0027, including
@@ -28,6 +33,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   (including required transitive updates) to address known vulnerabilities.
 
 ### Fixed
+
+- Reject conflicting embedded external IDs even when a release title matches,
+  and reject ambiguous multi-season/complete-series packs instead of treating the
+  first parsed season as proof of coverage.
 
 - Persist pre-grab acquisition failures in download history with sanitized
   stage reasons, restart-safe admission, bounded retries and administrator

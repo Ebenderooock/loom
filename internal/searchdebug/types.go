@@ -112,19 +112,20 @@ type ResultEntry struct {
 
 // EvalResult captures how a single result was evaluated.
 type EvalResult struct {
-	Title          string  `json:"title"`
-	IndexerID      string  `json:"indexer_id"`
-	Rejected       bool    `json:"rejected"`
-	RejectReason   string  `json:"reject_reason,omitempty"`
-	ParsedTitle    string  `json:"parsed_title,omitempty"`
-	ParsedSource   string  `json:"parsed_source,omitempty"`
-	ParsedRes      int     `json:"parsed_resolution,omitempty"`
-	QualityName    string  `json:"quality_name,omitempty"`
-	QualityTier    int     `json:"quality_tier"`
-	FormatScore    int     `json:"format_score"`
-	CompositeScore float64 `json:"composite_score"`
-	Size           int64   `json:"size"`
-	Seeders        *int    `json:"seeders,omitempty"`
+	Explanation    *Explanation `json:"explanation,omitempty"`
+	Title          string       `json:"title"`
+	IndexerID      string       `json:"indexer_id"`
+	Rejected       bool         `json:"rejected"`
+	RejectReason   string       `json:"reject_reason,omitempty"`
+	ParsedTitle    string       `json:"parsed_title,omitempty"`
+	ParsedSource   string       `json:"parsed_source,omitempty"`
+	ParsedRes      int          `json:"parsed_resolution,omitempty"`
+	QualityName    string       `json:"quality_name,omitempty"`
+	QualityTier    int          `json:"quality_tier"`
+	FormatScore    int          `json:"format_score"`
+	CompositeScore float64      `json:"composite_score"`
+	Size           int64        `json:"size"`
+	Seeders        *int         `json:"seeders,omitempty"`
 }
 
 // ListParams controls filtering and pagination for listing entries.
