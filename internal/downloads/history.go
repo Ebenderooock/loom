@@ -10,14 +10,26 @@ import (
 
 // HistoryEntry represents a single row in the download_history table.
 type HistoryEntry struct {
-	ID          string  `json:"id"`
-	DownloadID  string  `json:"download_id"`
-	ClientID    string  `json:"client_id"`
-	Title       string  `json:"title"`
-	Category    string  `json:"category"`
-	Status      string  `json:"status"`
-	GrabbedAt   *string `json:"grabbed_at,omitempty"`
-	CompletedAt string  `json:"completed_at"`
+	ID             string  `json:"id"`
+	DownloadID     string  `json:"download_id"`
+	ClientID       string  `json:"client_id"`
+	Title          string  `json:"title"`
+	Category       string  `json:"category"`
+	Status         string  `json:"status"`
+	GrabbedAt      *string `json:"grabbed_at,omitempty"`
+	CompletedAt    string  `json:"completed_at"`
+	AcquisitionKey string  `json:"acquisition_key,omitempty"`
+	MediaType      string  `json:"media_type,omitempty"`
+	MediaID        string  `json:"media_id,omitempty"`
+	IndexerID      string  `json:"indexer_id,omitempty"`
+	ReleaseHash    string  `json:"release_hash,omitempty"`
+	Stage          string  `json:"stage,omitempty"`
+	Reason         string  `json:"reason,omitempty"`
+	Attempt        int     `json:"attempt,omitempty"`
+	RetryCount     int     `json:"retry_count,omitempty"`
+	RetryEligible  bool    `json:"retry_eligible"`
+	NextRetryAt    string  `json:"next_retry_at,omitempty"`
+	IsLatest       bool    `json:"is_latest"`
 }
 
 // HistoryStore persists download completion/failure events to SQLite.
@@ -87,8 +99,13 @@ func (h *HistoryStore) List(ctx context.Context, limit, offset int) ([]HistoryEn
 	}
 
 	rows, err := h.db.QueryContext(ctx,
-		`SELECT id, download_id, client_id, title, category, status, grabbed_at, completed_at
+		`SELECT id, download_id, client_id, title, category, status, grabbed_at, completed_at,
+		 acquisition_key, media_type, media_id, indexer_id, release_hash, stage, reason,
+		 attempt, retry_count, retry_eligible, next_retry_at,
+		 (acquisition_key <> '' AND attempt = (SELECT MAX(d.attempt) FROM download_history d
+		 WHERE d.acquisition_key = download_history.acquisition_key))
 		 FROM download_history
+		 WHERE status <> 'search_completed'
 		 ORDER BY completed_at DESC
 		 LIMIT ? OFFSET ?`, limit, offset)
 	if err != nil {
@@ -99,7 +116,9 @@ func (h *HistoryStore) List(ctx context.Context, limit, offset int) ([]HistoryEn
 	var entries []HistoryEntry
 	for rows.Next() {
 		var e HistoryEntry
-		if err := rows.Scan(&e.ID, &e.DownloadID, &e.ClientID, &e.Title, &e.Category, &e.Status, &e.GrabbedAt, &e.CompletedAt); err != nil {
+		if err := rows.Scan(&e.ID, &e.DownloadID, &e.ClientID, &e.Title, &e.Category, &e.Status, &e.GrabbedAt, &e.CompletedAt,
+			&e.AcquisitionKey, &e.MediaType, &e.MediaID, &e.IndexerID, &e.ReleaseHash, &e.Stage, &e.Reason,
+			&e.Attempt, &e.RetryCount, &e.RetryEligible, &e.NextRetryAt, &e.IsLatest); err != nil {
 			return nil, err
 		}
 		entries = append(entries, e)
@@ -107,8 +126,9 @@ func (h *HistoryStore) List(ctx context.Context, limit, offset int) ([]HistoryEn
 	return entries, rows.Err()
 }
 
-// Clear removes all persisted download history entries.
+// Clear removes completion history while retaining acquisition admission state.
 func (h *HistoryStore) Clear(ctx context.Context) error {
-	_, err := h.db.ExecContext(ctx, `DELETE FROM download_history`)
+	// Admission records must survive clearing the visible completion history.
+	_, err := h.db.ExecContext(ctx, `DELETE FROM download_history WHERE acquisition_key = ''`)
 	return err
 }

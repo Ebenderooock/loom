@@ -49,6 +49,24 @@ in `api/openapi/loom.yaml`.
 | `PATCH` | `/api/v1/proxies/{id}` | admin | `200 application/json` (`Proxy`) | Partially update a proxy. |
 | `DELETE` | `/api/v1/proxies/{id}` | admin | `204` or `409 application/json` | Remove a proxy. Returns 409 `proxy_in_use` (with `details.indexer_ids`) when any indexer still references it. |
 | `POST` | `/api/v1/proxies/{id}/test` | admin | `200 application/json` (`ProxyTestResult`) | Probe the proxy: HTTP/SOCKS5 fetch the configured probe URL; FlareSolverr issues `sessions.list`. |
+| `GET` | `/api/v1/downloads/history` | apiKey/bearer/cookie | `200 application/json` (`HistoryEntry[]`) | Completion and durable acquisition history, paginated with `limit`/`offset`. |
+| `DELETE` | `/api/v1/downloads/history` | admin | `204` | Clear completion history; retain acquisition admission/retry records. |
+| `POST` | `/api/v1/downloads/history/actions` | admin identity required | `200 application/json` | Enable retry or blocklist up to 100 latest failed/interrupted history items, with per-item outcomes. |
+
+Acquisition history extends existing history rows with `acquisition_key`,
+`media_type`, `media_id`, `indexer_id`, `release_hash`, `stage`, `reason`,
+`attempt`, `retry_count`, `retry_eligible` and `next_retry_at` (UTC RFC3339).
+Failure reasons are sanitized stage summaries, never raw provider/client errors.
+`retry_count` counts attempts in the current bounded budget; `attempt` is
+monotonic even after explicit recovery.
+
+For example, an administrator can send
+`{"ids":["history-id","another-id"],"action":"retry"}` to the actions route.
+The response is `{"results":[{"id":"history-id","ok":true},{"id":"another-id","ok":false,"error":"History item not found or superseded."}]}`.
+An invalid top-level request returns `400`; missing/non-admin identity returns
+`403`. `retry` re-arms the budget without replaying stale download URLs: search
+again to acquire fresh release coordinates. It does not bypass the blocklist.
+`blocklist` reuses the existing release blocklist.
 
 `SystemStatus` is `{ version, commit, buildDate, engine }` — the database
 engine name is included so readiness tooling can confirm what backend

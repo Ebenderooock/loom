@@ -23,6 +23,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Persist pre-grab acquisition failures in download history with sanitized
+  stage reasons, restart-safe admission, bounded retries and administrator
+  recovery/blocklist actions in Activity.
+
 - Enforce rolling-search quotas per admitted indexer query and retain retry
   eligibility after failed, cancelled or fully skipped searches.
 - Mark requests fulfilled only after imported files satisfy availability checks,

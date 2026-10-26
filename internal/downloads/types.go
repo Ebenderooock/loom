@@ -117,10 +117,13 @@ type AddRequest struct {
 	// Media context — optional fields used to record grab linkage so the
 	// import pipeline can deterministically match completed downloads to
 	// the correct media item. Set by the interactive search dialog.
-	MediaType  string   `json:"media_type,omitempty"` // "movie" or "episode"
-	SeriesID   string   `json:"series_id,omitempty"`
-	EpisodeIDs []string `json:"episode_ids,omitempty"`
-	MovieID    string   `json:"movie_id,omitempty"`
+	MediaType        string   `json:"media_type,omitempty"` // "movie" or "episode"
+	SeriesID         string   `json:"series_id,omitempty"`
+	EpisodeIDs       []string `json:"episode_ids,omitempty"`
+	MovieID          string   `json:"movie_id,omitempty"`
+	MediaID          string   `json:"media_id,omitempty"`
+	IndexerID        string   `json:"indexer_id,omitempty"`
+	acquisitionScope string
 }
 
 // Normalize fills in derived fields: if Magnet is empty but Infohash

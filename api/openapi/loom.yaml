@@ -67,6 +67,104 @@ tags:
       and Radarr compatibility rationale.
 
 paths:
+  /api/v1/downloads/history:
+    get:
+      tags: [download-clients]
+      summary: List download completion and durable acquisition history.
+      operationId: listDownloadHistory
+      parameters:
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, default: 50 }
+        - in: query
+          name: offset
+          schema: { type: integer, minimum: 0, default: 0 }
+      responses:
+        "200":
+          description: History ordered newest first. Acquisition rows include sanitized reasons and persistent retry decisions.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  required: [id, title, status, completed_at, retry_eligible]
+                  properties:
+                    id: { type: string }
+                    download_id: { type: string }
+                    client_id: { type: string }
+                    title: { type: string }
+                    category: { type: string }
+                    status: { type: string, description: "completed, failed, acquiring, acquisition_failed or acquired" }
+                    grabbed_at: { type: string, format: date-time }
+                    completed_at: { type: string, format: date-time }
+                    acquisition_key: { type: string }
+                    media_type: { type: string }
+                    media_id: { type: string }
+                    indexer_id: { type: string }
+                    release_hash: { type: string }
+                    stage: { type: string, enum: [admission, validation, provider, provider_search, client] }
+                    reason: { type: string }
+                    attempt: { type: integer }
+                    retry_count: { type: integer }
+                    retry_eligible: { type: boolean }
+                    is_latest: { type: boolean }
+                    next_retry_at: { type: string, format: date-time }
+        "500":
+          description: History storage failed.
+    delete:
+      tags: [download-clients]
+      summary: Clear completion history, retaining acquisition retry records.
+      operationId: clearDownloadHistory
+      responses:
+        "204":
+          description: Completion history cleared.
+        "403":
+          description: Administrator access required.
+  /api/v1/downloads/history/actions:
+    post:
+      tags: [download-clients]
+      summary: Authorize retry or blocklist latest failed/interrupted acquisitions.
+      description: Requires an administrator identity. Retry resets the budget for a future fresh search; it never replays stored URLs or removes a blocklist entry.
+      operationId: acquisitionHistoryActions
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ids, action]
+              properties:
+                ids:
+                  type: array
+                  minItems: 1
+                  maxItems: 100
+                  items: { type: string }
+                action: { type: string, enum: [retry, blocklist] }
+      responses:
+        "200":
+          description: Per-item outcomes, including partial failure.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [results]
+                properties:
+                  results:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, ok]
+                      properties:
+                        id: { type: string }
+                        ok: { type: boolean }
+                        error: { type: string }
+        "400":
+          description: Invalid action or batch size.
+        "403":
+          description: Administrator identity required.
+        "503":
+          description: Download history is unavailable.
   /healthz:
     get:
       tags: [health]
