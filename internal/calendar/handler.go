@@ -1,6 +1,7 @@
 package calendar
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -22,6 +23,8 @@ type Event struct {
 	Date         string `json:"date"`
 	AirDateUTC   string `json:"airDateUtc,omitempty"`
 	Status       string `json:"status"`
+	Monitored    bool   `json:"monitored"`
+	SeriesID     string `json:"seriesId,omitempty"`
 	Year         int    `json:"year,omitempty"`
 	SeriesTitle  string `json:"seriesTitle,omitempty"`
 	Season       int    `json:"season,omitempty"`
@@ -32,7 +35,13 @@ type Event struct {
 
 // Handler serves the calendar API.
 type Handler struct {
-	db *sql.DB
+	db        *sql.DB
+	workflows WorkflowStatusSource
+}
+
+// WorkflowStatusSource supplies acquisition states independently of monitoring.
+type WorkflowStatusSource interface {
+	ActiveMediaStates(ctx context.Context, mediaType string, ids []string) (map[string]string, error)
 }
 
 // NewHandler creates a new calendar handler.
@@ -41,8 +50,11 @@ func NewHandler(db *sql.DB) *Handler {
 }
 
 // Router returns a chi.Router with the calendar endpoint.
-func Router(db *sql.DB) chi.Router {
+func Router(db *sql.DB, sources ...WorkflowStatusSource) chi.Router {
 	h := NewHandler(db)
+	if len(sources) > 0 {
+		h.workflows = sources[0]
+	}
 	r := chi.NewRouter()
 	r.Get("/", h.list)
 	return r
@@ -89,7 +101,7 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 
 	// Query movies with release_date, theatrical_date, or digital_date in range
 	movieRows, err := h.db.QueryContext(r.Context(),
-		`SELECT id, title, year, release_date, status, theatrical_date, digital_date FROM movies
+		`SELECT id, title, year, release_date, status, theatrical_date, digital_date, monitoring_status FROM movies
 		 WHERE deleted_at IS NULL AND (
 		   (release_date >= ? AND release_date <= ?) OR
 		   (theatrical_date != '' AND theatrical_date >= ? AND theatrical_date <= ?) OR
@@ -103,22 +115,25 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 	defer movieRows.Close()
 
 	for movieRows.Next() {
-		var id, title, releaseDate, status, theatricalDate, digitalDate string
+		var id, title, releaseDate, status, theatricalDate, digitalDate, monitoring string
 		var year int
-		if err := movieRows.Scan(&id, &title, &year, &releaseDate, &status, &theatricalDate, &digitalDate); err != nil {
+		if err := movieRows.Scan(&id, &title, &year, &releaseDate, &status, &theatricalDate, &digitalDate, &monitoring); err != nil {
 			writeError(w, http.StatusInternalServerError, fmt.Sprintf("scan movie: %v", err))
 			return
 		}
-		calStatus := "missing"
-		if status != "missing" && status != "unreleased" {
+		calStatus := status
+		switch status {
+		case "available_wrong_quality", "available_right_quality", "available_higher_quality":
 			calStatus = "downloaded"
+		case "storing":
+			calStatus = "importing"
 		}
 		appendMovieEvent := func(date, releaseType string) {
 			if date != "" && date >= startStr && date <= endStr {
 				events = append(events, Event{
 					ID: id, Title: title, Type: "movie",
 					ReleaseType: releaseType, Date: date,
-					Status: calStatus, Year: year,
+					Status: calStatus, Year: year, Monitored: monitoring == "monitored",
 				})
 			}
 		}
@@ -140,7 +155,7 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 	// Date-only rows retain their original calendar date, without conversion.
 	epRows, err := h.db.QueryContext(r.Context(),
 		`SELECT e.id, e.title, e.air_date, e.episode_number, e.has_file, e.air_date_utc,
-		        s.title, s.id, sea.season_number
+		        s.title, s.id, sea.season_number, e.monitored
 		 FROM episodes e
 		 JOIN series s ON s.id = e.series_id
 		 JOIN seasons sea ON sea.id = e.season_id
@@ -157,8 +172,8 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 	for epRows.Next() {
 		var epID, epTitle, airDate, airDateUTC, seriesTitle, seriesID string
 		var epNum, seasonNum int
-		var hasFile bool
-		if err := epRows.Scan(&epID, &epTitle, &airDate, &epNum, &hasFile, &airDateUTC, &seriesTitle, &seriesID, &seasonNum); err != nil {
+		var hasFile, monitored bool
+		if err := epRows.Scan(&epID, &epTitle, &airDate, &epNum, &hasFile, &airDateUTC, &seriesTitle, &seriesID, &seasonNum, &monitored); err != nil {
 			writeError(w, http.StatusInternalServerError, fmt.Sprintf("scan episode: %v", err))
 			return
 		}
@@ -182,6 +197,8 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 			Date:         airDate,
 			AirDateUTC:   airDateUTC,
 			Status:       calStatus,
+			Monitored:    monitored,
+			SeriesID:     seriesID,
 			SeriesTitle:  seriesTitle,
 			Season:       seasonNum,
 			Episode:      epNum,
@@ -197,7 +214,7 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 	// tables only contain rows once the music capability is used, so this is a
 	// no-op for installs that never enabled it.
 	albumRows, err := h.db.QueryContext(r.Context(),
-		`SELECT al.id, al.title, al.release_date, ar.name,
+		`SELECT al.id, al.title, al.release_date, ar.name, al.monitored,
 		        EXISTS (SELECT 1 FROM track_files tf WHERE tf.album_id = al.id AND tf.deleted_at IS NULL)
 		 FROM albums al
 		 JOIN artists ar ON ar.id = al.artist_id
@@ -208,8 +225,8 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 		defer albumRows.Close()
 		for albumRows.Next() {
 			var id, title, releaseDate, artist string
-			var hasFile bool
-			if err := albumRows.Scan(&id, &title, &releaseDate, &artist, &hasFile); err != nil {
+			var hasFile, monitored bool
+			if err := albumRows.Scan(&id, &title, &releaseDate, &artist, &monitored, &hasFile); err != nil {
 				writeError(w, http.StatusInternalServerError, fmt.Sprintf("scan album: %v", err))
 				return
 			}
@@ -218,12 +235,13 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 				calStatus = "downloaded"
 			}
 			events = append(events, Event{
-				ID:     id,
-				Title:  fmt.Sprintf("%s - %s", artist, title),
-				Type:   "album",
-				Date:   releaseDate,
-				Status: calStatus,
-				Artist: artist,
+				ID:        id,
+				Title:     fmt.Sprintf("%s - %s", artist, title),
+				Type:      "album",
+				Date:      releaseDate,
+				Status:    calStatus,
+				Monitored: monitored,
+				Artist:    artist,
 			})
 		}
 		if err := albumRows.Err(); err != nil {
@@ -232,6 +250,35 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	if h.workflows != nil {
+		for _, mediaType := range []string{"movie", "episode"} {
+			var ids []string
+			for _, event := range events {
+				if event.Type == mediaType {
+					ids = append(ids, event.ID)
+				}
+			}
+			states, err := h.workflows.ActiveMediaStates(r.Context(), mediaType, ids)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, fmt.Sprintf("query workflow status: %v", err))
+				return
+			}
+			for i := range events {
+				event := &events[i]
+				if event.Type != mediaType || event.Status == "downloaded" {
+					continue
+				}
+				if state := states[event.ID]; state != "" {
+					switch state {
+					case "post_download", "importing", "cleaning_up":
+						event.Status = "importing"
+					default:
+						event.Status = state
+					}
+				}
+			}
+		}
+	}
 	writeJSON(w, http.StatusOK, events)
 }
 

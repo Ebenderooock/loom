@@ -10,7 +10,6 @@ import (
 	"github.com/ebenderooock/loom/internal/alttitles"
 	"github.com/ebenderooock/loom/internal/anime"
 	"github.com/ebenderooock/loom/internal/auditlog"
-	"github.com/ebenderooock/loom/internal/calendar"
 	"github.com/ebenderooock/loom/internal/devmode"
 	"github.com/ebenderooock/loom/internal/discover"
 	"github.com/ebenderooock/loom/internal/importlists"
@@ -123,9 +122,6 @@ func wireMedia(
 	// Notifications
 	notifSvc := buildNotificationsService(db)
 	wiring.NotificationSvc = notifSvc
-
-	// Calendar
-	wiring.CalendarHandler = calendar.Router(db.DB())
 
 	// Language profiles
 	langStore := languages.NewStore(db.DB())

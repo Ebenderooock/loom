@@ -370,11 +370,26 @@ func (s *Store) PruneCompleted(ctx context.Context, maxAge time.Duration) (int64
 
 // ActiveMediaIDs returns the set of media IDs that have active workflows.
 func (s *Store) ActiveMediaIDs(ctx context.Context, mediaType string, ids []string) (map[string]bool, error) {
+	states, err := s.ActiveMediaStates(ctx, mediaType, ids)
+	if err != nil {
+		return nil, err
+	}
+	if states == nil {
+		return nil, nil
+	}
+	result := make(map[string]bool, len(states))
+	for id := range states {
+		result[id] = true
+	}
+	return result, nil
+}
+
+// ActiveMediaStates returns the latest active acquisition state for each item.
+func (s *Store) ActiveMediaStates(ctx context.Context, mediaType string, ids []string) (map[string]string, error) {
 	if len(ids) == 0 {
 		return nil, nil
 	}
-	query := `
-		SELECT DISTINCT wi.media_id FROM workflow_items wi
+	query := `SELECT wi.media_id, w.state FROM workflow_items wi
 		JOIN workflows w ON w.id = wi.workflow_id
 		WHERE wi.media_type = ? AND w.state NOT IN ('completed', 'failed', 'cancelled')
 		AND wi.media_id IN (`
@@ -386,23 +401,23 @@ func (s *Store) ActiveMediaIDs(ctx context.Context, mediaType string, ids []stri
 		query += "?"
 		args = append(args, id)
 	}
-	query += ")"
-
+	query += ") ORDER BY w.updated_at DESC, w.id DESC"
 	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-
-	result := make(map[string]bool)
+	states := make(map[string]string)
 	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
+		var id, state string
+		if err := rows.Scan(&id, &state); err != nil {
 			return nil, err
 		}
-		result[id] = true
+		if _, exists := states[id]; !exists {
+			states[id] = state
+		}
 	}
-	return result, rows.Err()
+	return states, rows.Err()
 }
 
 // StaleWorkflows returns workflows stuck in a state longer than expected.

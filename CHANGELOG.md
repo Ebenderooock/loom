@@ -25,6 +25,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   using the production acquisition engine. Manual search includes read-only policy
   previews; search logs retain the same evidence for new searches.
 
+- Interactive calendar entries open movie and show detail drawers with search
+  actions, labeled acquisition and monitoring states, and expandable busy days.
+- Discover cards have separate quick-add and full-details controls, with an
+  add-to-library action in the detail drawer using the import list's settings.
+- Experimental native Android TV home companion with Loom movie/series
+  catalogs, TV apps, settings, and input switching with OEM fallbacks.
+- Expiring TV pairing with signed-in browser approval, one-time delivery of
+  a dedicated revocable API key, and retained manual API-key setup.
+- Isolated `prelease/<semver>` CI and container publishing, starting with
+  `prelease/0.2.9`, without advancing stable or main image tags.
+
 ### Documentation
 
 - Propose independent permanent 1080p/4K version tracks in ADR-0027, including
@@ -63,6 +74,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   evidence and uncertainty for suspected samples/duplicates/orphaned records/missing files,
   mount and incomplete-scan safeguards, protected-item detection (hardlinks, versions, extras,
   subtitles), and persisted dismissal/recheck state plus non-executable action previews.
+- Calendar movies that are downloading or importing are no longer shown as available.
+  Calendar episode entries now include their parent series ID.
 
 ## [0.1.1] - 2026-06-09
 

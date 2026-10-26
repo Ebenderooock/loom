@@ -138,6 +138,8 @@ The [`docs/`](docs/) directory is the source of truth.
 - [Download clients](docs/downloads.md)
 - [Security](docs/security.md)
 - [Development setup](docs/development.md)
+- [Loom TV — experimental native Android TV companion home](android-tv/README.md)
+- [TV device pairing and server deployment](docs/device-pairing.md)
 - [Contributing & code style](docs/contributing-style.md)
 - [Architecture decision records](docs/adr/)
 

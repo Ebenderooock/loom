@@ -8,6 +8,7 @@ import (
 
 	"github.com/ebenderooock/loom/internal/auditlog"
 	"github.com/ebenderooock/loom/internal/autosearch"
+	"github.com/ebenderooock/loom/internal/calendar"
 	"github.com/ebenderooock/loom/internal/customformats"
 	"github.com/ebenderooock/loom/internal/downloads"
 	"github.com/ebenderooock/loom/internal/featureflags"
@@ -69,6 +70,7 @@ func wireDownloads(
 		return nil, fmt.Errorf("init workflow store: %w", err)
 	}
 	wfEngine := workflows.NewEngine(wfStore, workflowMediaAdapter{moviesSvc, media.seriesSvc}, logger)
+	wiring.CalendarHandler = calendar.Router(db.DB(), wfStore)
 
 	downloadSvc.SetWorkflowEngine(wfEngine)
 	downloadSvc.SetMovieStatusUpdater(movieStatusAdapter{moviesSvc})
