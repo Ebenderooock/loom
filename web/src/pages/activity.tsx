@@ -104,6 +104,16 @@ interface HistoryEntry {
   status: string;
   grabbed_at?: string;
   completed_at: string;
+  acquisition_key?: string;
+  media_type?: string;
+  media_id?: string;
+  indexer_id?: string;
+  stage?: string;
+  reason?: string;
+  attempt?: number;
+  retry_eligible?: boolean;
+  next_retry_at?: string;
+  is_latest?: boolean;
 }
 
 // ─── Queue action helpers ────────────────────────────────────────────────
@@ -536,6 +546,7 @@ function DownloadHistory() {
   const [entries, setEntries] = React.useState<HistoryEntry[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [clearing, setClearing] = React.useState(false);
+  const [pendingAction, setPendingAction] = React.useState<string | null>(null);
 
   const load = React.useCallback(async () => {
     try {
@@ -543,9 +554,11 @@ function DownloadHistory() {
       if (res.ok) {
         const body = await res.json();
         setEntries(body ?? []);
+      } else {
+        toast.error("Failed to load download history");
       }
     } catch {
-      // silently fail
+      toast.error("Failed to load download history");
     } finally {
       setLoading(false);
     }
@@ -553,7 +566,36 @@ function DownloadHistory() {
 
   React.useEffect(() => {
     void load();
+    const timer = setInterval(() => void load(), 30000);
+    return () => clearInterval(timer);
   }, [load]);
+
+  const act = async (id: string, action: "retry" | "blocklist") => {
+    setPendingAction(id);
+    try {
+      const res = await apiFetch("/api/v1/downloads/history/actions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: [id], action }),
+      });
+      if (!res.ok) throw new Error("Action failed");
+      const body: { results: { ok: boolean; error?: string }[] } =
+        await res.json();
+      if (!body.results[0]?.ok) {
+        throw new Error(body.results[0]?.error || "Action failed");
+      }
+      toast.success(
+        action === "retry"
+          ? "Retry enabled. Search again to use fresh release links."
+          : "Release blocklisted",
+      );
+      await load();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Action failed");
+    } finally {
+      setPendingAction(null);
+    }
+  };
 
   if (loading) {
     return (
@@ -587,7 +629,7 @@ function DownloadHistory() {
           <ConfirmActionButton
             actionLabel="Clear History"
             title="Clear download history?"
-            description="Remove the stored completed and failed download history entries."
+            description="Remove completion history. Acquisition records are retained to preserve retry limits."
             confirmLabel="Clear downloads"
             pending={clearing}
             disabled={entries.length === 0}
@@ -599,7 +641,7 @@ function DownloadHistory() {
                   method: "DELETE",
                 });
                 if (!res.ok) throw new Error("clear download history failed");
-                setEntries([]);
+                await load();
                 toast.success("Download history cleared");
               } catch {
                 toast.error("Failed to clear download history");
@@ -618,7 +660,9 @@ function DownloadHistory() {
               <TableHead>Title</TableHead>
               <TableHead>Category</TableHead>
               <TableHead>Status</TableHead>
-              <TableHead>Completed</TableHead>
+              <TableHead>Recorded</TableHead>
+              <TableHead>Failure / retry</TableHead>
+              {isAdmin && <TableHead>Actions</TableHead>}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -639,12 +683,77 @@ function DownloadHistory() {
                       variant={sc.variant}
                       className={`text-xs ${sc.className ?? ""}`}
                     >
-                      {sc.label}
+                      {entry.status === "acquisition_failed"
+                        ? "Acquisition failed"
+                        : entry.status === "acquiring"
+                          ? "In progress / interrupted"
+                          : entry.status === "acquired"
+                            ? "Acquired"
+                            : sc.label}
                     </Badge>
                   </TableCell>
                   <TableCell className="text-xs text-muted-foreground">
                     {relativeTime(entry.completed_at)}
                   </TableCell>
+                  <TableCell className="max-w-sm whitespace-normal text-xs">
+                    {entry.acquisition_key && (
+                      <div className="space-y-1">
+                        <div>
+                          {entry.media_type} {entry.media_id}{" "}
+                          {entry.indexer_id && `via ${entry.indexer_id}`}
+                        </div>
+                        <div>
+                          {entry.stage} · Attempt {entry.attempt}
+                        </div>
+                        {entry.reason && <div>{entry.reason}</div>}
+                        {entry.status === "acquisition_failed" && (
+                          <div>
+                            {entry.retry_eligible
+                              ? entry.next_retry_at
+                                ? `Next eligible retry: ${new Date(entry.next_retry_at).toLocaleString()}`
+                                : "Eligible on next search"
+                              : "Automatic retry stopped"}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </TableCell>
+                  {isAdmin && (
+                    <TableCell>
+                      {entry.is_latest &&
+                        entry.acquisition_key &&
+                        ["acquisition_failed", "acquiring"].includes(
+                          entry.status,
+                        ) && (
+                          <div className="flex flex-wrap gap-2">
+                            <ConfirmActionButton
+                              actionLabel="Enable retry"
+                              title="Enable acquisition retry?"
+                              description="Resets the retry budget. Search again with fresh release links. For interrupted attempts, check the client queue first to avoid duplicates."
+                              warning="Only authorize another attempt after checking the client queue."
+                              triggerVariant="outline"
+                              confirmVariant="default"
+                              confirmLabel="Enable retry"
+                              pending={pendingAction === entry.id}
+                              disabled={pendingAction !== null}
+                              onConfirm={() => act(entry.id, "retry")}
+                            />
+                            {!entry.acquisition_key.startsWith("search:") && (
+                              <ConfirmActionButton
+                                actionLabel="Blocklist"
+                                title="Blocklist this release?"
+                                description="Prevents this release from being acquired. Provider outages should normally be retried instead."
+                                warning="You can undo this from the Blocklist tab."
+                                confirmLabel="Blocklist"
+                                pending={pendingAction === entry.id}
+                                disabled={pendingAction !== null}
+                                onConfirm={() => act(entry.id, "blocklist")}
+                              />
+                            )}
+                          </div>
+                        )}
+                    </TableCell>
+                  )}
                 </TableRow>
               );
             })}

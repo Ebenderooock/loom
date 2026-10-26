@@ -22,6 +22,7 @@ func Router(store *Store, scanner *Scanner, logger *slog.Logger) chi.Router {
 	r.Put("/{id}", updateLibrary(store, logger))
 	r.Delete("/{id}", deleteLibrary(store, logger))
 	r.Post("/{id}/scan", scanLibrary(store, scanner, logger))
+	mountHealth(r, store, scanner, logger)
 
 	return r
 }
