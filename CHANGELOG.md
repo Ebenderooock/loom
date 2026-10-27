@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Manage all on-disk files from movie, show and season details, including samples,
+  subtitles and extras. Administrators can select files for explicitly confirmed
+  recycling or permanent deletion, with per-file audit records and immediate
+  movie/episode and fulfilled-request availability reconciliation.
+
 - Separate immutable request fulfillment history from current file availability,
   monitoring and media-server observations. Add explicit owner/admin re-requests
   with global active deduplication and normal rolling quotas, mount-identity

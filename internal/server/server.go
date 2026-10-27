@@ -78,6 +78,7 @@ import (
 	"github.com/ebenderooock/loom/internal/series"
 	"github.com/ebenderooock/loom/internal/storage"
 	"github.com/ebenderooock/loom/internal/systemlogs"
+	"github.com/ebenderooock/loom/internal/titlefiles"
 	"github.com/ebenderooock/loom/internal/validation"
 	"github.com/ebenderooock/loom/internal/workflows"
 )
@@ -783,7 +784,7 @@ func (s *Server) newMux() http.Handler {
 		r.Use(cors.Handler(cors.Options{
 			AllowedOrigins:   origins,
 			AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
-			AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-Api-Key", "X-Request-Id"},
+			AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-Api-Key", "X-Request-Id", "X-Confirm-Delete"},
 			ExposedHeaders:   []string{"X-Request-Id"},
 			AllowCredentials: true,
 			MaxAge:           300,
@@ -853,6 +854,19 @@ func (s *Server) newMux() http.Handler {
 		// RSS sources routes
 		if s.rssSvc != nil {
 			s.rssSvc.Mount(r)
+		}
+
+		if s.libStore != nil {
+			adminMW := func(next http.Handler) http.Handler { return next }
+			if s.authSvc != nil {
+				adminMW = s.authSvc.RequireRole("admin")
+			}
+			var reconcile func(context.Context) error
+			if s.requestsSvc != nil {
+				reconcile = s.requestsSvc.ReconcileAvailability
+			}
+			r.Mount("/api/v1/media-files", titlefiles.Router(
+				titlefiles.New(s.db.DB(), s.libStore, s.appCfg, s.auditLog, reconcile), adminMW))
 		}
 
 		// Movies routes

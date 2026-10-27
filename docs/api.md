@@ -40,6 +40,8 @@ in `api/openapi/loom.yaml`.
 
 | Method | Path | Auth | Response | Description |
 |---|---|---|---|---|
+| `GET` | `/api/v1/media-files/{mediaType}/{id}` | admin | `200 {"files":[TitleFile],"deletionMode":"recycle"\|"permanent"}` | List every regular file in the server-resolved movie or series folder; optional `season` query scopes series files. |
+| `POST` | `/api/v1/media-files/{mediaType}/{id}/delete` | admin | `200 {"deleted":["relative/file.mkv"]}` | Delete selected files with explicit mode and `X-Confirm-Delete: true`; optional `season` query restricts scope. |
 | `POST` | `/api/v1/autosearch/evaluate` | apiKey/bearer/cookie | `200 application/json` | Production-engine dry run with decision evidence; optional unsaved policy preview. |
 | `GET` | `/healthz` | none | `200 application/json` | Liveness probe. |
 | `GET` | `/livez` | none | `200 application/json` | Same shape; conventional alias. |
@@ -87,6 +89,63 @@ bypass quotas, not duplicate or storage checks. Reconciliation never deletes
 media/import records. See [the request lifecycle guide](requests.md) for storage
 markers, conservative unknown states, and operator recovery.
 
+## Title file management
+
+On movie and show detail pages, administrators can open **Manage files**; seasons
+have their own file manager. The list includes videos, samples, subtitles, `.nfo`
+files and other extras. Each row includes a title-relative `path`, byte `size`,
+`tracked` marker, and `quality` / `format` when known. Select files, choose delete,
+and review the confirmation listing every selected path. Nothing is deleted until
+the confirmation is accepted.
+
+`mediaType` is `movie` or `series`. A series can be scoped with `?season=1`
+(including `0` for specials). Season scope includes files tracked for that season,
+all extras in its `Season N` / `SN` folder (or a custom folder whose tracked files
+belong to only that season), and flat episode-named files that parse
+as that season. Unassigned show-level extras remain available in the whole-show
+manager. Directories, symlinks and special files are never selectable.
+
+For example, after listing `/api/v1/media-files/movie/movie-id`, send:
+
+```http
+POST /api/v1/media-files/movie/movie-id/delete
+Content-Type: application/json
+X-Confirm-Delete: true
+
+{"paths":["sample.mp4","subs/movie.en.srt"],"deletionMode":"recycle"}
+```
+
+Use the listing's `deletionMode` without substituting a default. When
+`recycle_bin.enabled` is true and `recycle_bin.path` is nonempty, files are copied
+into the existing recycle bin layout, preserving their library-relative paths,
+then removed from the title folder. A recycle failure never falls back to
+permanent deletion. Otherwise the mode is `permanent`. If policy changes between
+listing and confirmation, deletion returns `409` and requires a fresh confirmation.
+Rooted source/destination operations prevent symlink escapes during removal.
+
+The server resolves the title folder from library registration and tracked files,
+or an unambiguous title/year folder if no file evidence remains. It retains the
+resolved folder before deletion so extras remain manageable after removing the
+last episode file (migration `0091`). Loose files at a shared library root,
+ambiguous folders, symlink title folders, and folders shared with another tracked
+title are rejected rather than widening the deletion scope. Clients cannot supply
+an absolute root or folder. Paths must exactly match the current listing.
+
+Between 1 and 1000 unique files may be deleted per call. Invalid selections fail
+before any deletion (`400`); unknown titles/folders return `404`; unsafe or
+ambiguous title folders return `409`. Authentication is required when enabled;
+non-admins receive `403`. On runtime/storage failure, `500` includes
+`{"deleted":[...],"error":{"message":"..."}}`: already removed files are not
+rolled back. Refresh the list before retrying. Each successful disk removal is
+audited as `file_deleted` with actor, path and mode (visible in **Events** under
+the **Library** category); movie-file soft deletion,
+episode-file deletion, library file inventory, movie status, episode `has_file`,
+and request availability are reconciled. Fulfillment history is retained.
+
+## Acquisition history routes
+
+| Method | Path | Auth | Response | Description |
+|---|---|---|---|---|
 | `GET` | `/api/v1/downloads/history` | apiKey/bearer/cookie | `200 application/json` (`HistoryEntry[]`) | Completion and durable acquisition history, paginated with `limit`/`offset`. |
 | `DELETE` | `/api/v1/downloads/history` | admin | `204` | Clear completion history; retain acquisition admission/retry records. |
 | `POST` | `/api/v1/downloads/history/actions` | admin identity required | `200 application/json` | Enable retry or blocklist up to 100 latest failed/interrupted history items, with per-item outcomes. |
