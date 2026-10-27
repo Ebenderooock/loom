@@ -43,9 +43,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Documentation
 
-- Propose independent permanent 1080p/4K version tracks in ADR-0027, including
+- Propose independent permanent version tracks in ADR-0027, including
   default-track compatibility, migration and acquisition/import/deletion
-  isolation. This is design work only; concurrent tracks are not implemented.
+  isolation. Revision 2 generalises tracks beyond 1080p/4K (HDR, source, codec,
+  language, edition), identifies owned files by content fingerprint so external
+  renames are tolerated, and keeps quality profiles single-select per track with
+  reusable version sets. This is design work only; concurrent tracks are not
+  implemented.
 
 ### Security
 
