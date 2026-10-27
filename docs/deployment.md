@@ -7,12 +7,12 @@ This page covers the supported deployment shapes.
 
 ### Prerelease stream
 
-Experimental work lands through PRs into `prelease/0.2.10`, not `main`.
+Experimental work lands through PRs into `prelease/0.3.1`, not `main`.
 CI runs on PRs and pushes to `prelease/**`. After a code change is merged,
 the separate prerelease publisher builds Linux amd64 images under:
 
-- `ghcr.io/ebenderooock/loom:prelease-0.2.10` (moving opt-in channel).
-- `ghcr.io/ebenderooock/loom:prelease-0.2.10-<sha>-<run>-<attempt>`
+- `ghcr.io/ebenderooock/loom:prelease-0.3.1` (moving opt-in channel).
+- `ghcr.io/ebenderooock/loom:prelease-0.3.1-<sha>-<run>-<attempt>`
   (unique build tag for pinning/rollback).
 
 Flux image automation tracks only exact `prelease-X.Y.Z` tags and orders
@@ -38,7 +38,7 @@ back does not undo a migration. Back up before promoting any candidate.
 ```bash
 docker run --rm -p 1926:1925 \
   -v /opt/loom-prelease/config:/config \
-  ghcr.io/ebenderooock/loom:prelease-0.2.10
+  ghcr.io/ebenderooock/loom:prelease-0.3.1
 ```
 
 The usual release-tag workflow already supports tags such as
