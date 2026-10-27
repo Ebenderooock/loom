@@ -60,6 +60,11 @@ import { ReleaseSearchDialog } from "@/components/search/release-search-dialog";
 import { autoSearch } from "@/lib/autosearch-api";
 import { AltTitlesSection } from "@/components/alt-titles";
 import { PersonDiscoverDialog } from "@/components/person-discover-dialog";
+import {
+  isMissingQualityProfile,
+  MissingQualityProfileAlert,
+  MissingQualityProfileBadge,
+} from "@/components/quality-profile-warning";
 import type { Library } from "../../lib/libraries-api";
 import type { Movie, QualityProfile, Credits, CreditPerson } from "./types";
 import { TMDB_IMG } from "./types";
@@ -361,6 +366,13 @@ export function MovieDetailSheet({
   if (!movie) return null;
 
   const profile = profiles.find((p) => p.id === movie.qualityProfileId);
+  const missingProfile = isMissingQualityProfile(movie);
+  const openEditor = () => {
+    setEditing(true);
+    // A dangling ID can't be shown in the picker; start blank instead.
+    setEditProfile(missingProfile ? "" : movie.qualityProfileId);
+    setEditMonitoring(movie.monitoringStatus);
+  };
   const library = libraries.find((l) => l.id === movie.libraryId);
   const isMonitored = movie.monitoringStatus === "monitored";
   const moviePath = library
@@ -632,11 +644,7 @@ export function MovieDetailSheet({
                 size="sm"
                 variant="outline"
                 className="h-8 gap-1.5 text-xs"
-                onClick={() => {
-                  setEditing(true);
-                  setEditProfile(movie.qualityProfileId);
-                  setEditMonitoring(movie.monitoringStatus);
-                }}
+                onClick={openEditor}
                 title="Edit movie settings"
               >
                 <Pencil className="h-3.5 w-3.5" />
@@ -707,6 +715,14 @@ export function MovieDetailSheet({
             </div>
           </div>
 
+          {missingProfile && !editing && (
+            <MissingQualityProfileAlert
+              mediaLabel="movie"
+              onFix={openEditor}
+              className="mx-6 mb-3"
+            />
+          )}
+
           {/* ── Edit mode bar ── */}
           {editing && (
             <div className="mx-6 mb-3 space-y-4 rounded-lg border border-accent/30 bg-accent/5 p-4">
@@ -727,7 +743,7 @@ export function MovieDetailSheet({
                       id="movie-edit-profile"
                       className="h-9 text-sm"
                     >
-                      <SelectValue />
+                      <SelectValue placeholder="Select profile" />
                     </SelectTrigger>
                     <SelectContent>
                       {profiles.map((p) => (
@@ -862,10 +878,14 @@ export function MovieDetailSheet({
             <CollapsibleSection title="Details" icon={HardDrive} defaultOpen>
               <div className="grid grid-cols-2 gap-x-6 gap-y-4 text-sm">
                 <DetailRow label="Quality Profile">
-                  <div className="flex items-center gap-1.5">
-                    <span className="inline-block h-2 w-2 shrink-0 rounded-full bg-accent" />
-                    {profile?.name ?? "—"}
-                  </div>
+                  {missingProfile ? (
+                    <MissingQualityProfileBadge />
+                  ) : (
+                    <div className="flex items-center gap-1.5">
+                      <span className="inline-block h-2 w-2 shrink-0 rounded-full bg-accent" />
+                      {profile?.name ?? "—"}
+                    </div>
+                  )}
                 </DetailRow>
                 <DetailRow label="Library">
                   <span

@@ -95,9 +95,6 @@ func createList(store *Store) http.HandlerFunc {
 		if l.SyncIntervalMinutes == 0 {
 			l.SyncIntervalMinutes = 360
 		}
-		if l.QualityProfileID == "" {
-			l.QualityProfileID = "default"
-		}
 		if l.Mode != ListModeDiscover {
 			l.Mode = ListModeAuto
 		}

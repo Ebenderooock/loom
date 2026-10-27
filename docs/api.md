@@ -21,6 +21,25 @@ The canonical machine-readable specification of Loom's HTTP API lives in
 [`api/openapi/loom.yaml`](../api/openapi/loom.yaml) (OpenAPI 3.1). This
 page is the human summary.
 
+## Default quality profiles
+
+New movie and series additions, including Discovery, use the **Any** quality
+profile when `quality_profile_id` (movie) or `qualityProfileId` (series) is omitted,
+empty or whitespace. Explicit selections are preserved. The server resolves the
+actual stored Any ID, preferring current profiles and falling back to an active
+legacy profile; it does not select the first profile in the list. If Any is
+unavailable, adding the title fails with an actionable error rather than saving
+an unsearchable title. Existing titles are not silently reassigned: library cards,
+rows and details identify missing profiles, which can be repaired using the
+quality-profile editor.
+
+Import lists no longer insert the literal `default` placeholder for an omitted
+selection. Existing lists with that placeholder also resolve to Any when adding
+a title, unless an active profile actually has the ID `default`. Movie and series
+responses expose `qualityProfileMissing`, computed against both current and
+active legacy profiles, so existing blank, deleted or dangling selections are
+highlighted without incorrectly flagging valid legacy profiles.
+
 ## Versioning policy
 
 | Path prefix | Owner | Stability |
