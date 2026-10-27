@@ -226,6 +226,82 @@ test.describe("Downloads Queue", () => {
     await expect(page.getByText("Movie.Three.2024.4K.UHD")).toBeVisible();
   });
 
+  test("sorts by queue, speed, time to completion and status across refreshes", async ({
+    page,
+  }) => {
+    let items = [
+      makeQueueItem({
+        id: "third",
+        title: "Third",
+        queue_position: 2,
+        download_rate: 30,
+        eta_seconds: 20,
+      }),
+      makeQueueItem({
+        id: "first",
+        title: "First",
+        queue_position: 0,
+        status: "queued",
+        download_rate: 0,
+        eta_seconds: 0,
+      }),
+      makeQueueItem({
+        id: "second",
+        title: "Second",
+        queue_position: 1,
+        download_rate: 10,
+        eta_seconds: 10,
+      }),
+    ];
+    await page.route("**/api/v1/activity", (route) =>
+      route.fulfill({ json: { items } }),
+    );
+    await page.goto("/downloads");
+    const titles = page.locator('[role="button"].group span.truncate');
+    const sort = page.getByRole("combobox", { name: "Sort by" });
+    const reverse = page.getByRole("button", { name: /Reverse sort order/ });
+    const choose = async (label: string) => {
+      await sort.click();
+      await page.getByRole("option", { name: label, exact: true }).click();
+    };
+
+    await expect(sort).toHaveText("Queue");
+    await expect(titles).toHaveText(["First", "Second", "Third"]);
+    items = [...items].reverse();
+    await page.getByRole("button", { name: "Refresh", exact: true }).click();
+    await expect(titles).toHaveText(["First", "Second", "Third"]);
+
+    await choose("Download speed");
+    await expect(titles).toHaveText(["Third", "Second", "First"]);
+    await reverse.click();
+    await expect(titles).toHaveText(["First", "Second", "Third"]);
+
+    await choose("Time to completion");
+    await expect(titles).toHaveText(["Second", "Third", "First"]);
+    await reverse.click();
+    await expect(titles).toHaveText(["Third", "Second", "First"]);
+
+    await choose("Status");
+    await expect(titles).toHaveText(["Second", "Third", "First"]);
+    await reverse.click();
+    await expect(titles).toHaveText(["First", "Second", "Third"]);
+
+    await choose("Queue");
+    await reverse.click();
+    await expect(titles).toHaveText(["Third", "Second", "First"]);
+
+    // Polling updates sort values without resetting the user's selection.
+    items = items.map((item) =>
+      item.id === "first"
+        ? { ...item, queue_position: 3, status: "downloading" }
+        : item,
+    );
+    await page.getByRole("button", { name: "Refresh", exact: true }).click();
+    await expect(titles).toHaveText(["First", "Third", "Second"]);
+    await expect(sort).toHaveText("Queue");
+    await expect(reverse).toHaveAccessibleName(/descending/);
+  });
+
   test("queue stats show download speed", async ({ page }) => {
     await mockActivity(page, [
       makeQueueItem({ download_rate: 10000000, upload_rate: 2000000 }),

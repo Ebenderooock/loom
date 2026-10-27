@@ -3374,6 +3374,10 @@ components:
           format: float
         eta_seconds:
           type: integer
+        queue_position:
+          type: integer
+          minimum: 0
+          description: Zero-based position within the download client's queue. Omitted when unavailable or not queued.
         ratio:
           type: number
           format: float

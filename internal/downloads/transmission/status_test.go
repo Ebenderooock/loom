@@ -44,6 +44,7 @@ func TestStatusMappingCoversAllSevenStates(t *testing.T) {
 			"labels":        []string{"loom"},
 			"rateDownload":  int64(1024),
 			"rateUpload":    int64(2048),
+			"queuePosition": i,
 		})
 	}
 
@@ -60,6 +61,9 @@ func TestStatusMappingCoversAllSevenStates(t *testing.T) {
 		t.Fatalf("len = %d, want %d", len(items), len(cases))
 	}
 	for i, tc := range cases {
+		if items[i].QueuePosition == nil || *items[i].QueuePosition != i {
+			t.Errorf("queuePosition[%d] = %v", i, items[i].QueuePosition)
+		}
 		if items[i].Status != tc.want {
 			t.Errorf("status[%d]: raw=%d got=%q want=%q", i, tc.raw, items[i].Status, tc.want)
 		}
@@ -89,6 +93,9 @@ func TestStatusMapsRatioETAAndSize(t *testing.T) {
 		t.Fatalf("Status: %v", err)
 	}
 	got := items[0]
+	if got.QueuePosition != nil {
+		t.Errorf("missing queuePosition should remain nil, got %d", *got.QueuePosition)
+	}
 	if got.SizeBytes != 1_000_000 {
 		t.Errorf("SizeBytes = %d", got.SizeBytes)
 	}

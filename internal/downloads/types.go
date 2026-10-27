@@ -163,6 +163,9 @@ type Item struct {
 	Ratio           float64    `json:"ratio,omitempty"`
 	Message         string     `json:"message,omitempty"`
 	SavePath        string     `json:"save_path,omitempty"`
+	// QueuePosition is zero-based within the client; nil means unavailable
+	// or not queued (for example, a completed torrent).
+	QueuePosition *int `json:"queue_position,omitempty"`
 
 	// ContentPath is the actual filesystem path where the download's
 	// content lives. For torrent clients this is dataDir + the torrent's

@@ -127,6 +127,15 @@ func TestStatus_MergesListgroupsAndHistory(t *testing.T) {
 	if len(items) != 8 {
 		t.Fatalf("expected 8 items, got %d", len(items))
 	}
+	for i, it := range items {
+		if i < 5 {
+			if it.QueuePosition == nil || *it.QueuePosition != i {
+				t.Errorf("queue position[%d] = %v", i, it.QueuePosition)
+			}
+		} else if it.QueuePosition != nil {
+			t.Errorf("history item should not have a queue position: %+v", it)
+		}
+	}
 
 	byID := map[string]downloads.Item{}
 	for _, it := range items {

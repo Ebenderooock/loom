@@ -27,6 +27,7 @@ type torrentStatus struct {
 	UPPayload  int64   `json:"upload_payload_rate"`
 	Paused     bool    `json:"paused"`
 	IsFinished bool    `json:"is_finished"`
+	Queue      *int    `json:"queue"`
 }
 
 // statusFields is the field list passed to core.get_torrents_status.
@@ -36,6 +37,7 @@ var statusFields = []string{
 	"state", "label", "save_path", "message", "progress",
 	"download_payload_rate", "upload_payload_rate",
 	"paused", "is_finished",
+	"queue",
 }
 
 // Status implements downloads.DownloadClient. With ids set, Deluge's
@@ -108,6 +110,10 @@ func mapItem(hash string, t torrentStatus) downloads.Item {
 	if progress > 1 {
 		progress = 1
 	}
+	queuePosition := t.Queue
+	if queuePosition != nil && *queuePosition < 0 {
+		queuePosition = nil
+	}
 	return downloads.Item{
 		ID:              id,
 		Title:           t.Name,
@@ -122,6 +128,7 @@ func mapItem(hash string, t torrentStatus) downloads.Item {
 		Ratio:           t.Ratio,
 		Message:         t.Message,
 		SavePath:        t.SavePath,
+		QueuePosition:   queuePosition,
 	}
 }
 
