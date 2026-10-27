@@ -40,6 +40,7 @@ type torrentRow struct {
 	Labels        []string `json:"labels"`
 	RateDownload  int64    `json:"rateDownload"`
 	RateUpload    int64    `json:"rateUpload"`
+	QueuePosition *int     `json:"queuePosition"`
 }
 
 // statusFields is the static fields list we ask torrent-get for. Kept
@@ -59,6 +60,7 @@ var statusFields = []string{
 	"labels",
 	"rateDownload",
 	"rateUpload",
+	"queuePosition",
 }
 
 // Status implements downloads.DownloadClient. An empty ids slice
@@ -120,6 +122,7 @@ func mapTorrent(t torrentRow) downloads.Item {
 		UploadRate:      t.RateUpload,
 		Ratio:           t.UploadRatio,
 		Message:         t.ErrorString,
+		QueuePosition:   t.QueuePosition,
 	}
 }
 

@@ -40,6 +40,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   a dedicated revocable API key, and retained manual API-key setup.
 - Isolated `prelease/<semver>` CI and container publishing, starting with
   `prelease/0.2.9`, without advancing stable or main image tags.
+- Stable download-client queue ordering in Downloads, with selectable sorting
+  by queue position, download speed, time to completion or status and reversible
+  sort direction.
 
 ### Documentation
 

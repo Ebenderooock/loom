@@ -76,11 +76,13 @@ func (c *Client) Status(ctx context.Context, ids ...string) ([]downloads.Item, e
 	}
 
 	out := make([]downloads.Item, 0, len(queue.Queue.Slots)+len(hist.History.Slots))
-	for _, s := range queue.Queue.Slots {
+	for position, s := range queue.Queue.Slots {
 		if !filter.match(s.NzoID) {
 			continue
 		}
-		out = append(out, queueItem(s))
+		item := queueItem(s)
+		item.QueuePosition = &position
+		out = append(out, item)
 	}
 	for _, s := range hist.History.Slots {
 		if !filter.match(s.NzoID) {

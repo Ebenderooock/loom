@@ -2240,6 +2240,13 @@ separately by the media scanner
 
 1. **Activity** page shows all active downloads across all clients.
    - Progress bars, speeds, ETA.
+   - **Downloads → Active** defaults to download-client queue order (lowest position first).
+     Use **Sort by** to choose Queue, Download speed (fastest first), Time to completion
+     (shortest first), or Status. The arrow button reverses the order.
+     Queue positions are local to each client; equal positions use client and item IDs
+     for a stable order across refreshes. Clients without queue-position support
+     (including the built-in torrent client) appear last in stable ID order.
+     Unavailable ETAs always appear last.
    - Actions: pause, resume, remove, set priority, speed limit.
 2. **Workflows** page shows pipeline state for each search operation.
    - States: searching → grabbed → downloading → importing → completed.

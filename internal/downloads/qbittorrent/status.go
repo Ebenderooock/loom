@@ -31,6 +31,7 @@ type torrentInfo struct {
 	Ratio        float64 `json:"ratio"`
 	AmountLeft   int64   `json:"amount_left"`
 	CompletionOn int64   `json:"completion_on"`
+	Priority     *int    `json:"priority"`
 }
 
 // Status implements downloads.DownloadClient. An empty ids slice
@@ -67,6 +68,12 @@ func mapItem(t torrentInfo) downloads.Item {
 	if size == 0 {
 		size = t.Size
 	}
+	var queuePosition *int
+	// qBittorrent uses one-based priorities; zero means not in the queue.
+	if t.Priority != nil && *t.Priority > 0 {
+		position := *t.Priority - 1
+		queuePosition = &position
+	}
 	return downloads.Item{
 		ID:              strings.ToLower(t.Hash),
 		Title:           t.Name,
@@ -82,6 +89,7 @@ func mapItem(t torrentInfo) downloads.Item {
 		Message:         "",
 		SavePath:        t.SavePath,
 		ContentPath:     t.ContentPath,
+		QueuePosition:   queuePosition,
 	}
 }
 
