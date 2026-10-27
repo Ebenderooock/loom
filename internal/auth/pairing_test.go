@@ -11,9 +11,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ebenderooock/loom/internal/auth"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+
+	"github.com/ebenderooock/loom/internal/auth"
 )
 
 func pairingCall(h http.Handler, method, path, body, cookie string, confirm bool) *httptest.ResponseRecorder {
@@ -256,7 +257,7 @@ func TestPairingAPIKeyCannotAuthorize(t *testing.T) {
 
 func TestPairingProxyUsesSocketPeerNotForwardedIP(t *testing.T) {
 	_, _, _, routes, _ := pairingFixture(t)
-	h := auth.PairingPeer(middleware.RealIP(routes))
+	h := auth.PairingPeer(middleware.RealIP(routes)) //nolint:staticcheck // Deliberately mirrors server.go to prove pairing ignores spoofed headers.
 	r := httptest.NewRequest("GET", "http://loom.test/api/v1/auth/pairing/request?code=ABCD-2345", nil)
 	r.RemoteAddr = "192.0.2.10:1234"
 	r.Header.Set("X-Real-IP", "127.0.0.1")
