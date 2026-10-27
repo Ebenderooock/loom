@@ -191,7 +191,7 @@ func TestImportSingleFile_WorkflowCannotOverrideWrongMovieYear(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = p.importSingleFile(ctx, &downloads.DownloadCompletedEvent{
+	_, err = p.importSingleFile(ctx, &downloads.DownloadCompletedEvent{
 		ClientID: "client", DownloadID: "download", Title: title,
 	}, source)
 	if err == nil || !strings.Contains(err.Error(), "release year 1994") {
@@ -221,7 +221,7 @@ func TestProcessImport_PathMissingRecordsFailure(t *testing.T) {
 	}
 
 	missingPath := "/tmp/path-that-does-not-exist"
-	err = p.processImport(context.Background(), &downloads.DownloadCompletedEvent{Title: "Missing"}, missingPath)
+	_, err = p.processImport(context.Background(), &downloads.DownloadCompletedEvent{Title: "Missing"}, missingPath)
 	if err == nil || !strings.Contains(err.Error(), "download path not found") {
 		t.Fatalf("expected missing path error, got %v", err)
 	}

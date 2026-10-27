@@ -60,6 +60,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Make downloaded-title imports recoverable: coordinate a single import owner,
+  retain source media until verification and library registration succeed, retry
+  partial batches using preserved paths, and resume interrupted import cleanup.
 - Restore public IMDb list and watchlist imports through IMDb's GraphQL endpoint,
   including pagination and support for previously saved legacy RSS list URLs.
 - Default newly added movies and TV shows to the **Any** quality profile when

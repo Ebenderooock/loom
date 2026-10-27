@@ -26,8 +26,6 @@ type importRetryStrategy int
 const (
 	// retryImport re-dispatches the import after a delay (transient errors like path not found).
 	retryImport importRetryStrategy = iota
-	// retrySearch transitions back to searching state (wrong release matched).
-	retrySearch
 	// failPermanent marks the workflow as permanently failed (non-retryable errors).
 	failPermanent
 )
@@ -47,13 +45,13 @@ type CleanupFunc func(ctx context.Context, clientID, downloadID, sourcePath stri
 
 // PreImportFunc is called immediately before an import is dispatched. It gives
 // the download client a chance to satisfy any prerequisites for a safe import —
-// most importantly, stopping and removing the torrent from the client (while
+// most importantly, pausing the torrent in the client (while
 // keeping the downloaded files on disk) so the importer can MOVE files without
 // fighting an active seeder holding file locks.
 //
 // It returns the resolved on-disk content path and save (storage) directory so
 // the orchestrator can cache them in workflow metadata; the import pipeline
-// relies on these to locate files after the torrent is gone. Returning an error
+// relies on these to locate files if the torrent is later gone. Returning an error
 // is non-fatal — the orchestrator logs it and proceeds with the import using
 // whatever paths were previously cached.
 type PreImportFunc func(ctx context.Context, clientID, downloadID string) (contentPath, savePath string, err error)
@@ -84,7 +82,7 @@ type OrchestratorOpts struct {
 	Engine         *Engine
 	Logger         *slog.Logger
 	ImportFn       ImportFunc
-	PreImportFn    PreImportFunc          // optional; stops+removes torrent before import
+	PreImportFn    PreImportFunc          // optional; pauses torrent before import
 	CleanupFn      CleanupFunc            // optional; if nil, cleanup phase is skipped
 	MediaRefreshFn MediaRefreshFunc       // optional; if nil, media refresh is skipped
 	DownloadStatus DownloadStatusProvider // optional, for startup reconciliation
@@ -123,8 +121,8 @@ func (o *Orchestrator) Store() *Store { return o.store }
 // SetImportFn sets the import function after construction (for wiring order flexibility).
 func (o *Orchestrator) SetImportFn(fn ImportFunc) { o.importFn = fn }
 
-// SetPreImportFn sets the pre-import hook that stops and removes the download
-// from the client (keeping files) before the import runs.
+// SetPreImportFn sets the pre-import hook that pauses the download
+// in the client (keeping files) before the import runs.
 func (o *Orchestrator) SetPreImportFn(fn PreImportFunc) { o.preImportFn = fn }
 
 // SetCleanupFn sets the post-import cleanup function.
@@ -389,10 +387,16 @@ func (o *Orchestrator) handleDownloadComplete(ctx context.Context, cmd CmdDownlo
 		return
 	}
 	if wf == nil {
-		// Orphan download — no workflow tracks this. Leave it for event-bus path.
-		o.logger.Debug("no workflow for completed download", "client_id", cmd.ClientID,
-			"download_id", cmd.DownloadID, "title", cmd.Title)
-		return
+		wf = &Workflow{
+			Type: TypeManualImport, State: StateDownloading,
+			GrabTitle: cmd.Title, DownloadClientID: cmd.ClientID,
+			DownloadID: cmd.DownloadID, MaxRetries: MaxRetries,
+		}
+		if err := o.store.Create(ctx, wf); err != nil {
+			o.logger.Error("failed to track completed orphan download",
+				"client_id", cmd.ClientID, "download_id", cmd.DownloadID, "error", err)
+			return
+		}
 	}
 
 	// Idempotent: if already past downloading, nothing to do.
@@ -485,6 +489,11 @@ func (o *Orchestrator) handleImportResult(ctx context.Context, cmd CmdImportResu
 	if cmd.Success {
 		msg := "Import completed successfully"
 		meta := map[string]any{"imported_paths": cmd.ImportedPaths}
+		if err := o.store.MergeMetadata(ctx, cmd.WorkflowID, meta); err != nil {
+			o.logger.Error("failed to persist import destinations; retaining sources for recovery",
+				"workflow_id", cmd.WorkflowID, "error", err)
+			return
+		}
 		o.logEvent(ctx, cmd.WorkflowID, EventImportSuccess, msg, meta)
 
 		// Fetch workflow to get download client/ID and media info for cleanup and refresh.
@@ -574,19 +583,10 @@ func (o *Orchestrator) handleImportResult(ctx context.Context, cmd CmdImportResu
 		})
 		return
 
-	case retrySearch:
-		o.logger.Info("import failed with no match, falling back to re-search",
-			"workflow_id", cmd.WorkflowID, "error", cmd.Error)
-		if err := o.engine.markFailed(ctx, cmd.WorkflowID, "Import failed (re-search): "+cmd.Error); err != nil {
-			o.logger.Error("failed to mark failed for re-search", "workflow_id", cmd.WorkflowID, "error", err)
-		}
-		return
-
 	case failPermanent:
 		o.logger.Warn("import failed permanently",
 			"workflow_id", cmd.WorkflowID, "error", cmd.Error)
-		// Force max-retry exhaustion by passing a clear permanent failure message.
-		if err := o.engine.markFailed(ctx, cmd.WorkflowID, "Import failed permanently: "+cmd.Error); err != nil {
+		if err := o.engine.FailImport(ctx, cmd.WorkflowID, "Import failed permanently: "+cmd.Error); err != nil {
 			o.logger.Error("failed to mark permanently failed", "workflow_id", cmd.WorkflowID, "error", err)
 		}
 		return
@@ -664,27 +664,16 @@ func (o *Orchestrator) classifyImportError(errMsg string) importRetryStrategy {
 		"permission denied", "access denied", "unauthorized",
 		"already been imported", "already imported",
 		"import rejected",
-		"metadata not resolved yet", "unresolved content path",
+		"pending review",
 	} {
 		if strings.Contains(lower, s) {
 			return failPermanent
 		}
 	}
 
-	// Errors suggesting the wrong release was grabbed or no usable files exist
-	// at the expected path — fall back to a fresh search instead of retrying
-	// the same import payload.
-	for _, s := range []string{
-		"no match found", "no files found", "unmatched", "wrong series",
-		"download path not found", "no such file or directory",
-	} {
-		if strings.Contains(lower, s) {
-			return retrySearch
-		}
-	}
-
 	// Transient errors — retry the import after a delay.
-	// This includes "path not found", timeouts, and any other unclassified error.
+	// Delayed mounts, unresolved metadata, and missing paths retry the existing
+	// download rather than discarding it in favor of a duplicate download.
 	return retryImport
 }
 
@@ -728,8 +717,6 @@ func (s importRetryStrategy) String() string {
 	switch s {
 	case retryImport:
 		return "retry_import"
-	case retrySearch:
-		return "retry_search"
 	case failPermanent:
 		return "fail_permanent"
 	default:
@@ -764,9 +751,14 @@ func (o *Orchestrator) handleRetry(ctx context.Context, cmd CmdRetry) {
 	}
 
 	// Smart retry: check download status to determine the best recovery point
-	if wf.DownloadClientID != "" && wf.DownloadID != "" && o.dlStatus != nil {
+	switch {
+	case wf.DownloadClientID != "" && wf.DownloadID != "" &&
+		metadataPathFromWorkflow(wf.Metadata) != "" &&
+		strings.HasPrefix(strings.ToLower(wf.LastError), "import"):
+		err = o.retryCachedImport(ctx, wf)
+	case wf.DownloadClientID != "" && wf.DownloadID != "" && o.dlStatus != nil:
 		err = o.smartRetry(ctx, wf)
-	} else {
+	default:
 		// No download info — start from scratch
 		err = o.engine.Retry(ctx, wf.ID)
 		if err == nil {
@@ -777,6 +769,15 @@ func (o *Orchestrator) handleRetry(ctx context.Context, cmd CmdRetry) {
 	if cmd.Reply != nil {
 		cmd.Reply <- err
 	}
+}
+
+func (o *Orchestrator) retryCachedImport(ctx context.Context, wf *Workflow) error {
+	if err := o.engine.RecoverToImporting(ctx, wf.ID, "Manual retry using preserved download paths"); err != nil {
+		return err
+	}
+	o.logEvent(ctx, wf.ID, EventRetried, "Manual retry (preserved download, re-importing)", nil)
+	o.dispatchImport(ctx, wf.ID, wf.DownloadClientID, wf.DownloadID, wf.GrabTitle, o.categoryFromMetadata(wf.Metadata))
+	return nil
 }
 
 // smartRetry checks the download state and picks the optimal retry point.
@@ -1095,35 +1096,32 @@ func (o *Orchestrator) dispatchImport(ctx context.Context, workflowID, clientID,
 
 		o.logger.Info("import worker started", "workflow_id", workflowID, "title", title)
 
-		// Pre-import: stop and remove the torrent from the download client
-		// (keeping files) so the importer can safely MOVE files without the
-		// client holding locks or re-creating partial data. Cache the resolved
-		// paths in workflow metadata for the import resolver. Non-fatal.
+		// Pause before import; removal belongs to successful post-import cleanup.
 		if o.preImportFn != nil && clientID != "" && downloadID != "" {
 			contentPath, savePath, perr := o.preImportFn(ctx, clientID, downloadID)
+			patch := map[string]any{}
+			if contentPath != "" {
+				patch["content_path"] = contentPath
+			}
+			if savePath != "" {
+				patch["save_path"] = savePath
+			}
+			if len(patch) > 0 {
+				if err := o.store.MergeMetadata(ctx, workflowID, patch); err != nil {
+					o.Send(CmdImportResult{WorkflowID: workflowID, Error: "cache pre-import paths: " + err.Error()})
+					return
+				}
+			}
 			if perr != nil {
-				o.logger.Warn("pre-import stop/remove failed (non-fatal)",
+				o.logger.Warn("pre-import preparation failed (non-fatal)",
 					"workflow_id", workflowID,
 					"client_id", clientID,
 					"download_id", downloadID,
 					"error", perr,
 				)
 			} else {
-				patch := map[string]any{}
-				if contentPath != "" {
-					patch["content_path"] = contentPath
-				}
-				if savePath != "" {
-					patch["save_path"] = savePath
-				}
-				if len(patch) > 0 {
-					if err := o.store.MergeMetadata(ctx, workflowID, patch); err != nil {
-						o.logger.Warn("failed to cache pre-import paths",
-							"workflow_id", workflowID, "error", err)
-					}
-				}
 				o.logEvent(ctx, workflowID, EventImportStarted,
-					"Stopped and removed download from client before import",
+					"Prepared download for import",
 					map[string]any{"content_path": contentPath, "save_path": savePath})
 			}
 		}
@@ -1141,7 +1139,12 @@ func (o *Orchestrator) dispatchImport(ctx context.Context, workflowID, clientID,
 		}
 
 		// Send result back to orchestrator
-		o.Send(result)
+		select {
+		case o.commands <- result:
+			o.observeCommandBuffer(len(o.commands))
+		case <-ctx.Done():
+			// Sources are retained and startup reconciliation will re-import.
+		}
 	}()
 }
 
@@ -1287,7 +1290,14 @@ func (o *Orchestrator) reconcileOnBoot(ctx context.Context) {
 			o.logger.Info("reconcile: re-running post-import cleanup for interrupted workflow",
 				"workflow_id", wf.ID)
 			o.logEvent(ctx, wf.ID, EventCleanupStarted, "Re-running cleanup after restart", nil)
-			go o.runPostImportCleanup(ctx, wf, nil)
+			var metadata struct {
+				ImportedPaths []string `json:"imported_paths"`
+			}
+			if err := json.Unmarshal([]byte(wf.Metadata), &metadata); err != nil {
+				o.logger.Error("reconcile: cannot read persisted cleanup paths", "workflow_id", wf.ID, "error", err)
+				continue
+			}
+			go o.runPostImportCleanup(ctx, wf, metadata.ImportedPaths)
 			reconciled++
 
 		case !exists && wf.State == StateDownloading:
