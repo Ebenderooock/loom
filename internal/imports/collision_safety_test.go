@@ -165,7 +165,7 @@ func TestPipelineCollisionWithDisabledRecycleBinNeverDeletesExistingFile(t *test
 			t.Fatal(err)
 		}
 	}
-	err = p.importSingleFile(context.Background(), &downloads.DownloadCompletedEvent{Title: "Safety Film 2026"}, src)
+	_, err = p.importSingleFile(context.Background(), &downloads.DownloadCompletedEvent{Title: "Safety Film 2026"}, src)
 	if !errors.Is(err, ErrDestinationExists) {
 		t.Fatalf("want collision, got %v", err)
 	}

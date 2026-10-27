@@ -121,6 +121,36 @@ configuration. Advanced tuning is available via the scheduler constants:
 
 ## Self-Healing Behaviour
 
+### Download import safeguards
+
+Downloads have one import owner: the orchestrator. Completed downloads without
+an existing workflow get a tracked import workflow with the same recovery
+behavior. The download event subscriber does not import the same files in
+parallel or bypass settling and seeding requirements.
+
+Before import, Loom pauses the download and caches the client's paths. It
+removes the download from the client queue only after successful import,
+without deleting downloaded data. Move imports stage a hardlink (or a copy
+across filesystems), verify the destination, register it in the library, and
+persist successful import history before removing the source media file.
+For download-triggered moves, source removal is deferred to post-import cleanup;
+library destinations are persisted in workflow metadata so interrupted imports
+and cleanup can resume after a restart.
+Verification or library-registration failures retain the source for retry.
+
+A batch is not complete if any non-sample media file fails. Review-required
+downloads remain failed/pending review rather than triggering successful
+cleanup. Copy and hardlink retries recognize previously imported files only
+when the destination still exists and matches the source; equal sizes alone
+are not treated as proof of identity.
+
+Missing paths, unresolved download metadata, and transient filesystem/database
+errors retry the existing import with the configured retry limit, rather than
+immediately starting another download. Failed imports retain their errors and
+cached paths; manual retry reuses those paths even if the client item has since
+been removed. Safety checks and explicit destination-conflict handling still
+apply: recovery never means silently overwriting another file.
+
 The workflow engine's self-healing eliminates the "stuck grabbed" problem:
 
 1. Movie/episode grabs that exceed `StaleTimeout` without progressing are
