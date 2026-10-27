@@ -17,6 +17,15 @@ info:
     diagnostics/reset also require an administrator. Authenticated non-admin
     users retain search and download-use access.
 
+    Movie and series additions default an omitted, empty or whitespace-only
+    quality profile selection to the stored Any profile. Explicit selections
+    are preserved. If Any is unavailable, creation fails instead of saving a
+    title without a quality profile. Existing titles are not reassigned.
+    Legacy import-list placeholder "default" also resolves to Any unless it
+    identifies an active profile. Movie and series responses include
+    qualityProfileMissing for blank, deleted or dangling selections, checking
+    both current and active legacy profiles.
+
     Integration configuration and health/test responses redact credentials.
     On configuration edits, omitted, blank or masked credential values retain
     stored secrets; non-empty replacement values update them. Unsaved

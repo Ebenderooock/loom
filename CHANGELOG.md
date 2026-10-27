@@ -57,6 +57,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Default newly added movies and TV shows to the **Any** quality profile when
+  none is selected, including Discovery additions. Highlight existing titles
+  without a quality profile in library and detail views so they can be repaired.
+
 - Reject conflicting embedded external IDs even when a release title matches,
   and reject ambiguous multi-season/complete-series packs instead of treating the
   first parsed season as proof of coverage.

@@ -32,6 +32,7 @@ import {
 import { cn } from "@/lib/utils";
 import type { Library } from "@/lib/libraries-api";
 import type { QualityProfile } from "@/components/movies/types";
+import { defaultQualityProfileId } from "@/components/quality-profile-warning";
 
 // ─── Types ────────────────────────────────────────────────────────────
 
@@ -98,8 +99,8 @@ export function PersonDiscoverDialog({
   const [selectedLibrary, setSelectedLibrary] = useState(
     libraries[0]?.id ?? "",
   );
-  const [selectedProfile, setSelectedProfile] = useState(
-    qualityProfiles[0]?.id ?? "",
+  const [selectedProfile, setSelectedProfile] = useState(() =>
+    defaultQualityProfileId(qualityProfiles, libraries[0]?.quality_profile_id),
   );
   const [monitored, setMonitored] = useState(true);
   const [searchOnAdd, setSearchOnAdd] = useState(true);
@@ -148,7 +149,10 @@ export function PersonDiscoverDialog({
     if (qualityProfiles.length === 0) return;
     setSelectedProfile((prev) => {
       if (prev && qualityProfiles.some((p) => p.id === prev)) return prev;
-      return libraries[0]?.quality_profile_id || qualityProfiles[0]?.id || "";
+      return defaultQualityProfileId(
+        qualityProfiles,
+        libraries[0]?.quality_profile_id,
+      );
     });
   }, [qualityProfiles, libraries]);
 
@@ -162,7 +166,8 @@ export function PersonDiscoverDialog({
       : existingSeriesIds.has(item.tmdb_id);
 
   const handleAdd = async () => {
-    if (!selectedItem || !selectedLibrary || !selectedProfile) return;
+    // An empty profile is allowed: the server assigns the "Any" profile.
+    if (!selectedItem || !selectedLibrary) return;
     setAdding(true);
     setAddError("");
     try {
@@ -310,7 +315,7 @@ export function PersonDiscoverDialog({
                   onValueChange={setSelectedProfile}
                 >
                   <SelectTrigger id="person-discover-profile">
-                    <SelectValue placeholder="Select profile" />
+                    <SelectValue placeholder="Any (default)" />
                   </SelectTrigger>
                   <SelectContent>
                     {qualityProfiles.map((p) => (
@@ -352,7 +357,7 @@ export function PersonDiscoverDialog({
 
             <Button
               onClick={handleAdd}
-              disabled={adding || !selectedLibrary || !selectedProfile}
+              disabled={adding || !selectedLibrary}
               className="w-full"
             >
               {adding ? (

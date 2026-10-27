@@ -57,6 +57,11 @@ import { ReleaseSearchDialog } from "@/components/search/release-search-dialog";
 import { autoSearch } from "@/lib/autosearch-api";
 import { AltTitlesSection } from "@/components/alt-titles";
 import { PersonDiscoverDialog } from "@/components/person-discover-dialog";
+import {
+  isMissingQualityProfile,
+  MissingQualityProfileAlert,
+  MissingQualityProfileBadge,
+} from "@/components/quality-profile-warning";
 import type { Library } from "../../lib/libraries-api";
 import type {
   Series,
@@ -799,6 +804,14 @@ export function SeriesDetailSheet({
   };
 
   const profile = profiles.find((p) => p.id === series.qualityProfileId);
+  const missingProfile = isMissingQualityProfile(series);
+  const openEditor = () => {
+    setEditing(true);
+    // A dangling ID can't be shown in the picker; start blank instead.
+    setEditProfile(missingProfile ? "" : series.qualityProfileId);
+    setEditMonitoring(series.monitoringStatus);
+    setEditSeriesType(series.seriesType || "standard");
+  };
   const library = libraries.find((l) => l.id === series.libraryId);
   const isMonitored = series.monitoringStatus === "monitored";
 
@@ -1075,12 +1088,7 @@ export function SeriesDetailSheet({
                 size="sm"
                 variant="outline"
                 className="h-8 gap-1.5 text-xs"
-                onClick={() => {
-                  setEditing(true);
-                  setEditProfile(series.qualityProfileId);
-                  setEditMonitoring(series.monitoringStatus);
-                  setEditSeriesType(series.seriesType || "standard");
-                }}
+                onClick={openEditor}
                 title="Edit series settings"
               >
                 <Pencil className="h-3.5 w-3.5" />
@@ -1151,6 +1159,14 @@ export function SeriesDetailSheet({
             </div>
           </div>
 
+          {missingProfile && !editing && (
+            <MissingQualityProfileAlert
+              mediaLabel="series"
+              onFix={openEditor}
+              className="mx-6 mb-3"
+            />
+          )}
+
           {/* Edit mode bar */}
           {editing && (
             <div className="mx-6 mb-3 space-y-4 rounded-lg border border-accent/30 bg-accent/5 p-4">
@@ -1168,7 +1184,7 @@ export function SeriesDetailSheet({
                   </label>
                   <Select value={editProfile} onValueChange={setEditProfile}>
                     <SelectTrigger id="series-edit-profile">
-                      <SelectValue />
+                      <SelectValue placeholder="Select profile" />
                     </SelectTrigger>
                     <SelectContent>
                       {profiles.map((p) => (
@@ -1265,8 +1281,14 @@ export function SeriesDetailSheet({
                     {series.seriesType || "Standard"}
                   </span>
                 </DetailRow>
-                {profile && (
-                  <DetailRow label="Quality">{profile.name}</DetailRow>
+                {missingProfile ? (
+                  <DetailRow label="Quality">
+                    <MissingQualityProfileBadge />
+                  </DetailRow>
+                ) : (
+                  profile && (
+                    <DetailRow label="Quality">{profile.name}</DetailRow>
+                  )
                 )}
                 {library && (
                   <DetailRow label="Library">{library.name}</DetailRow>

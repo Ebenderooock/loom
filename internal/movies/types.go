@@ -32,28 +32,29 @@ const (
 
 // Movie represents a movie in the library.
 type Movie struct {
-	ID               string           `json:"id"`
-	Title            string           `json:"title"`
-	Year             int              `json:"year,omitempty"`
-	IMDBID           *string          `json:"imdb_id,omitempty"`
-	TMDBID           *string          `json:"tmdb_id,omitempty"`
-	TVDBID           *string          `json:"tvdb_id,omitempty"`
-	Overview         string           `json:"overview,omitempty"`
-	Genres           []string         `json:"genres,omitempty"`
-	Runtime          int              `json:"runtime,omitempty"`
-	Rating           float64          `json:"rating,omitempty"`
-	BackdropPath     string           `json:"backdrop_path,omitempty"`
-	PosterPath       string           `json:"poster_path,omitempty"`
-	MetadataProvider string           `json:"metadata_provider,omitempty"`
-	QualityProfileID string           `json:"quality_profile_id,omitempty"`
-	LibraryID        string           `json:"library_id,omitempty"`
-	Status           MovieStatus      `json:"status"`
-	ReleaseDate      string           `json:"release_date,omitempty"`
-	LastSearchAt     *time.Time       `json:"last_search_at,omitempty"`
-	MonitoringStatus MonitoringStatus `json:"monitoring_status"`
-	CreatedAt        time.Time        `json:"created_at"`
-	UpdatedAt        time.Time        `json:"updated_at"`
-	DeletedAt        *time.Time       `json:"deleted_at,omitempty"`
+	ID                    string           `json:"id"`
+	Title                 string           `json:"title"`
+	Year                  int              `json:"year,omitempty"`
+	IMDBID                *string          `json:"imdb_id,omitempty"`
+	TMDBID                *string          `json:"tmdb_id,omitempty"`
+	TVDBID                *string          `json:"tvdb_id,omitempty"`
+	Overview              string           `json:"overview,omitempty"`
+	Genres                []string         `json:"genres,omitempty"`
+	Runtime               int              `json:"runtime,omitempty"`
+	Rating                float64          `json:"rating,omitempty"`
+	BackdropPath          string           `json:"backdrop_path,omitempty"`
+	PosterPath            string           `json:"poster_path,omitempty"`
+	MetadataProvider      string           `json:"metadata_provider,omitempty"`
+	QualityProfileID      string           `json:"quality_profile_id,omitempty"`
+	QualityProfileMissing bool             `json:"quality_profile_missing"`
+	LibraryID             string           `json:"library_id,omitempty"`
+	Status                MovieStatus      `json:"status"`
+	ReleaseDate           string           `json:"release_date,omitempty"`
+	LastSearchAt          *time.Time       `json:"last_search_at,omitempty"`
+	MonitoringStatus      MonitoringStatus `json:"monitoring_status"`
+	CreatedAt             time.Time        `json:"created_at"`
+	UpdatedAt             time.Time        `json:"updated_at"`
+	DeletedAt             *time.Time       `json:"deleted_at,omitempty"`
 }
 
 // MovieFile represents a single file on disk associated with a movie.

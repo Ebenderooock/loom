@@ -291,9 +291,6 @@ func (s *service) AddMovieByTMDBID(ctx context.Context, tmdbID, qualityProfileID
 	if tmdbID == "" {
 		return nil, fmt.Errorf("movies: TMDB ID required")
 	}
-	if qualityProfileID == "" {
-		return nil, fmt.Errorf("movies: quality profile required")
-	}
 	if libraryID == "" {
 		return nil, fmt.Errorf("movies: library required")
 	}
