@@ -57,6 +57,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Restore public IMDb list and watchlist imports through IMDb's GraphQL endpoint,
+  including pagination and support for previously saved legacy RSS list URLs.
 - Default newly added movies and TV shows to the **Any** quality profile when
   none is selected, including Discovery additions. Highlight existing titles
   without a quality profile in library and detail views so they can be repaired.

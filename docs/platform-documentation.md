@@ -1048,8 +1048,8 @@ Defaults are seeded when no profiles exist. On startup, only built-in profiles w
 | `trakt_popular` | Trakt | Popular movies or shows (media type aware) |
 | `trakt_trending` | Trakt | Trending movies or shows (media type aware) |
 | `trakt_anticipated` | Trakt | Anticipated movies or shows (media type aware) |
-| `imdb_list` | IMDb | User list (URL) |
-| `imdb_watchlist` | IMDb | Watchlist (URL) |
+| `imdb_list` | IMDb | Public user list (URL or `ls...` ID) |
+| `imdb_watchlist` | IMDb | Public watchlist (URL or `ur...` / `p....` profile ID) |
 | `tmdb_list` | TMDb | User list (URL + API key) |
 | `tmdb_popular` | TMDb | Popular items |
 | `plex_watchlist` | Plex | Plex watchlist (access token) |
@@ -2211,7 +2211,7 @@ separately by the media scanner
 3. Choose provider (e.g., Trakt Watchlist).
 4. Configure credentials:
    - Trakt: uses OAuth from Connect integration (must be set up first).
-   - IMDb: list URL.
+   - IMDb: public list URL (`https://www.imdb.com/list/ls.../`) or watchlist URL (`https://www.imdb.com/user/ur.../watchlist/`; `p....` profile URLs also work). Lists must be public; no login or API key is needed. Loom fetches all pages through IMDb's GraphQL endpoint rather than the retired RSS service. Previously saved `rss.imdb.com/list/ls...` URLs are handled automatically.
    - TMDb: API key auto-filled from config.
 5. Set target library and quality profile.
 6. Enable/disable auto-search on add.
