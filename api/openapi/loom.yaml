@@ -69,6 +69,145 @@ tags:
       and Radarr compatibility rationale.
 
 paths:
+  /api/v1/media-files/{mediaType}/{id}:
+    parameters:
+      - $ref: "#/components/parameters/TitleFileMediaType"
+      - $ref: "#/components/parameters/TitleFileID"
+      - $ref: "#/components/parameters/TitleFileSeason"
+    get:
+      tags: [libraries]
+      operationId: listTitleFiles
+      summary: List all regular files in a movie, show or season folder (admin).
+      security:
+        - cookieAuth: []
+        - apiKey: []
+        - bearerAuth: []
+      description: |
+        Requires administrator access when authentication is enabled. Resolves
+        the title folder on the server. Includes untracked extras and subtitles,
+        excluding directories, symlinks and special files. Ambiguous/shared
+        folders and loose files at the library root are rejected.
+      responses:
+        "200":
+          description: Title-relative files and the policy the user must confirm.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [files, deletionMode]
+                properties:
+                  files:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/TitleFile"
+                  deletionMode:
+                    type: string
+                    enum: [recycle, permanent]
+        "400":
+          description: Invalid media type or season query.
+        "401":
+          description: Authentication required.
+        "403":
+          description: Administrator access required.
+        "404":
+          description: Title, season or folder not found.
+        "409":
+          description: Folder cannot be safely or unambiguously resolved.
+        "500":
+          description: Disk or database listing failed.
+  /api/v1/media-files/{mediaType}/{id}/delete:
+    parameters:
+      - $ref: "#/components/parameters/TitleFileMediaType"
+      - $ref: "#/components/parameters/TitleFileID"
+      - $ref: "#/components/parameters/TitleFileSeason"
+    post:
+      tags: [libraries]
+      operationId: deleteTitleFiles
+      summary: Remove explicitly confirmed title-relative files (admin).
+      security:
+        - cookieAuth: []
+        - apiKey: []
+        - bearerAuth: []
+      description: |
+        Requires administrator access when authentication is enabled. Clients
+        must display every selected path and the listing's deletionMode in an
+        explicit confirmation dialog. Rejects stale deletion policy rather
+        than silently changing recycle to permanent deletion. A configured
+        recycle bin uses rooted copy/remove with no permanent-delete fallback.
+        Prevalidates the entire selection; runtime failures may leave an explicit
+        partial result. Every removed file is audited and reconciled with movie,
+        episode, library inventory and current request availability. Historical
+        request fulfillment is preserved. Directories/symlinks cannot be deleted.
+      parameters:
+        - name: X-Confirm-Delete
+          in: header
+          required: true
+          schema:
+            type: string
+            const: "true"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [paths, deletionMode]
+              properties:
+                paths:
+                  type: array
+                  minItems: 1
+                  maxItems: 1000
+                  uniqueItems: true
+                  items:
+                    type: string
+                  description: Exact relative paths from the current listing; never an absolute root.
+                deletionMode:
+                  type: string
+                  enum: [recycle, permanent]
+      responses:
+        "200":
+          description: Files successfully removed and reconciled.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [deleted]
+                properties:
+                  deleted:
+                    type: array
+                    items:
+                      type: string
+        "400":
+          description: Invalid selection, JSON, scope, path, or missing confirmation header; nothing deleted.
+        "401":
+          description: Authentication required.
+        "403":
+          description: Administrator access required.
+        "404":
+          description: Title, season or folder not found.
+        "409":
+          description: Unsafe/ambiguous folder or changed deletion policy; reload and confirm again.
+        "500":
+          description: |
+            Removal or reconciliation failed. Already deleted files are not
+            rolled back. Refresh the listing before retrying.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [deleted, error]
+                properties:
+                  deleted:
+                    type: array
+                    items:
+                      type: string
+                  error:
+                    type: object
+                    required: [message]
+                    properties:
+                      message:
+                        type: string
   /api/v1/autosearch/evaluate:
     post:
       tags: [quality]
@@ -2238,6 +2377,26 @@ paths:
 
 components:
   schemas:
+    TitleFile:
+      type: object
+      required: [path, size, tracked]
+      properties:
+        path:
+          type: string
+          description: Slash-separated path relative to the server-resolved title folder.
+        size:
+          type: integer
+          format: int64
+          minimum: 0
+          description: File size in bytes.
+        tracked:
+          type: boolean
+          description: Whether Loom currently tracks this as a movie or episode file.
+        quality:
+          type: string
+        format:
+          type: string
+          description: Recorded format/codec when known, otherwise the file extension.
     RequestAvailability:
       type: string
       enum: [present, missing, unknown]
@@ -3664,6 +3823,27 @@ components:
           type: boolean
 
   parameters:
+    TitleFileMediaType:
+      name: mediaType
+      in: path
+      required: true
+      schema:
+        type: string
+        enum: [movie, series]
+    TitleFileID:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+    TitleFileSeason:
+      name: season
+      in: query
+      required: false
+      description: Series season scope only; zero selects specials.
+      schema:
+        type: integer
+        minimum: 0
     DownloadClientID:
       name: id
       in: path
