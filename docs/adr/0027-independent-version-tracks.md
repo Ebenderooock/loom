@@ -1,14 +1,27 @@
 # ADR-0027: Independent media version tracks
 
-- Status: Proposed
-- Date: 2026-10-23
+- Status: Proposed (revision 2)
+- Date: 2026-10-23; revised 2026-10-27
 - Deciders: @loom-maintainers
 
 ## Context
 
 [Issue #169](https://github.com/Ebenderooock/loom/issues/169) requests permanent,
-concurrent 1080p and 4K copies without separate Loom instances. Multiple file
-records are not independent acquisition policies. This ADR proposes the contract
+concurrent versions of a title without separate Loom instances. 1080p and 4K is
+the most common request, but it is not the only separation users need: 4K HDR/DV
+beside 4K SDR, a remux beside a compact encode, original audio beside a dubbed
+language, or a theatrical cut beside a director's cut. Multiple file records are
+not independent acquisition policies.
+
+Revision 2 (maintainer review) replaces three revision-1 choices:
+
+1. Tracks are no longer limited to disjoint *resolution* membership; they are
+   defined by a general, validated **version selector**.
+2. File identity no longer depends on a reserved `[vt-<uuid>]` filename suffix.
+   Other tools (media servers, renamers, manual reorganisation) can rename files,
+   so ownership is anchored to a reproducible **content fingerprint** instead.
+3. Choosing versions is specified explicitly: quality profiles stay single-select
+   and a title gets one or more tracks, usually from a reusable **version set**. This ADR proposes the contract
 and implementation sequence; it does not deliver the feature or approve a
 production migration. Maintainers accept the decision before implementation.
 
@@ -38,8 +51,10 @@ reintroduce overwrite behavior through a new naming or replacement path.
 Introduce an immutable version-track ID owned by a movie or series and make
 every acquisition target `(media_type, media_id, version_track_id)`. Keep one
 backfilled default track for existing clients. Opt-in additional tracks represent
-permanent copies, starting with disjoint 1080p and 2160p policies. They do not
-share files, replacement candidates, monitoring or completion. Build and verify
+permanent copies distinguished by a version selector (resolution, dynamic range,
+source, codec, audio language, edition). They do not share files, replacement
+candidates, monitoring or completion. Owned files are identified by content
+fingerprint, not by path or name. Build and verify
 the ownership foundation before enabling additional tracks.
 
 ### Identity and scope
@@ -50,33 +65,60 @@ series owns tracks inherited by its episodes; seasons are selection scopes,
 not new track owners. Metadata IDs, episode ordering and catalog identity stay
 unchanged. A version track cannot be moved to another owner.
 
-Use an opaque UUID as identity, a mutable display label (`1080p`, `4K`) and an
-immutable filesystem key derived from the full UUID. Renaming a label or editing
-a profile never creates a new identity or renames files implicitly. Exactly one
+Use an opaque UUID as identity, a mutable display label (`1080p`, `4K HDR`) and
+a mutable naming suffix. The UUID never appears in filenames; files are linked to
+tracks by content identity. Renaming a label or editing a profile never creates
+a new identity or renames files implicitly. Exactly one
 default track exists per owner. The default cannot be removed or switched in
 the MVP.
 
-MVP policies require explicit allowed resolution membership: a 1080p track
-accepts 1080p, and a 4K track accepts 2160p. Quality profile ordering, cutoff,
-custom formats and size constraints rank releases *inside* this membership.
-A 4K release is not a better replacement for a permanent 1080p track. The
-default track retains unrestricted legacy membership until explicitly configured.
-Adding a constrained track requires constraining the default too when their
-acceptance sets overlap. Reject overlapping enabled-track policies in the MVP.
-Preview both edits as one revision-checked transaction: intermediate overlapping
-policies cannot be enabled. A retained default file outside the new membership
-stays owned and playable (`available`, `below_cutoff`, reason `policy_mismatch`);
-it cannot satisfy membership or be reassigned/deleted automatically. The preview
-requires acknowledgment of this state before activation.
+A track's **acceptance** is its quality profile's allowed qualities intersected
+with its version selector. Quality profile ordering, cutoff, custom formats and
+size constraints rank releases *inside* that acceptance set. A release outside a
+track's acceptance is never a candidate for it: a 4K release is not an upgrade for
+a permanent 1080p track, and a dubbed release is not an upgrade for an
+original-language track.
 
-Language/edition tracks fit the same identity, with future normalized language
-requirements and edition selectors. The parser already extracts languages and
-edition; the language module already defines profiles. Neither proves file-level
-audio/edition identity or current end-to-end policy association. Language/edition
-selectors, overlapping policies, shared files and music/books are **not MVP
-capabilities**. Reject unsupported selectors instead of accepting inert fields.
-Their later design must specify MULTi/dual-audio matching, unknown metadata and
-edition normalization before activation.
+A **version selector** is a typed set of dimension constraints. Each dimension is
+either unconstrained (`any`) or an explicit include list:
+
+| Dimension | Values (normalised) | Evidence source |
+|---|---|---|
+| Resolution | 480p, 576p, 720p, 1080p, 2160p | Parsed release / quality; file probe when available |
+| Dynamic range | SDR, HDR10, HDR10+, Dolby Vision, HLG | `internal/mediainfo` parsing; file probe when available |
+| Source | Remux, Blu-ray encode, WEB-DL, WEBRip, HDTV, DVD | Quality source / parser |
+| Video codec | AVC, HEVC, AV1, other | Parser; file probe when available |
+| Audio language | ISO 639 codes, with `original` meaning the title's original language | Parser language detection; file probe when available |
+| Edition | Theatrical, Director's Cut, Extended, Unrated, IMAX, Remastered, custom normalised names | `internal/parser` edition extraction |
+
+Selectors are evaluated by one shared function used by search, RSS, import,
+manual import, scanner assignment and preview, so every surface agrees on which
+track a release or file belongs to. Dimensions whose evidence is unknown never
+satisfy an include list; the item goes to review instead of guessing.
+
+Enabled tracks of one owner must be **mutually exclusive**: no release may be
+accepted by two tracks. Validation checks this statically: two tracks are
+disjoint when at least one dimension has non-overlapping include lists (for
+example resolution `1080p` versus `2160p`, or dynamic range `SDR` versus
+`HDR10, HDR10+, Dolby Vision`). If no dimension separates them, the policy is
+rejected with the overlapping combination shown; it is not resolved by implicit
+priority. The default track keeps unrestricted legacy membership until another
+track is added; adding a track requires constraining the default in the same
+revision-checked transaction, so intermediate overlapping policies are never
+enabled. A retained default file outside its new acceptance stays owned and
+playable (`available`, `below_cutoff`, reason `policy_mismatch`); it is never
+reassigned or deleted automatically. The preview requires acknowledgment of this
+state before activation.
+
+Multi-language releases (`MULTi`, dual-audio) are evaluated per language: a
+release matching more than one track's language list is ambiguous and rejected
+for automatic acquisition rather than counted twice. Shared files across tracks
+remain out of scope (see Alternatives). Music and books are out of scope.
+
+Initial selector rollout order: resolution and dynamic range first (needed for
+1080p/4K and 4K HDR/SDR), then source/codec, then language and edition once the
+file-level evidence and ambiguity fixtures pass. Unsupported dimensions are
+rejected by the API rather than stored as inert fields.
 
 A **temporary copy** is a lower-quality fallback within one eventual target,
 eligible for same-track replacement when its desired quality arrives. It is not
@@ -84,14 +126,48 @@ a second permanent track and never satisfies another track. No new temporary-cop
 policy, expiry, transcoding or cross-track garbage collection ships in this MVP;
 existing single-track upgrade behavior remains.
 
+### Choosing versions: profiles, tracks and version sets
+
+Quality profiles do **not** become multi-select. A profile already means "accept
+these qualities and upgrade toward the cutoff"; selecting several profiles on one
+title would be ambiguous (keep all? keep the best?). Instead, a title has one or
+more tracks, and **each track picks exactly one quality profile** plus its
+selector and label:
+
+```text
+Dune: Part Two (2024)
+  Track "1080p"      profile: HD-1080p        selector: resolution=1080p          monitored
+  Track "4K HDR"     profile: Ultra-HD        selector: resolution=2160p,
+                                                         range=HDR10|HDR10+|DV    monitored
+  Track "4K SDR"     profile: Ultra-HD        selector: resolution=2160p,
+                                                         range=SDR               not monitored
+```
+
+To avoid configuring tracks per title, introduce reusable **version sets**: a
+named, ordered list of track templates (label, profile, selector, monitored,
+naming suffix). Examples: `Standard` (one unrestricted track, today's
+behaviour), `HD + 4K`, `4K HDR + 4K SDR`, `Original + English dub`.
+
+- Libraries choose a default version set; adding a title creates its tracks from
+  it. The existing "quality profile" picker on add/edit becomes a "Quality" picker
+  offering either a single profile (one default track, unchanged behaviour) or a
+  version set.
+- Titles can deviate: add, remove or edit a track locally. Once edited, the title
+  stops following the set's future changes for that track.
+- Changing a version set previews affected titles and applies per-title,
+  revision-checked; it never deletes files or silently retargets existing tracks.
+- Track templates are matched to existing tracks by template ID, never by label.
+
 ### Proposed persistence contract
 
 The following are proposed logical records/fields, **not shipped SQL**:
 
 | Record | Required contract |
 |---|---|
-| Version track | UUID; typed owner movie/series; label; immutable path key; default flag; monitored flag; quality-profile reference; allowed resolutions; policy revision; timestamps. Enforce owner existence and exactly one default transactionally, with database uniqueness for at-most-one default. |
+| Version track | UUID; typed owner movie/series; label; naming suffix; default flag; monitored flag; quality-profile reference; version selector; optional version-set/template origin; policy revision; timestamps. Enforce owner existence and exactly one default transactionally, with database uniqueness for at-most-one default. |
 | Target state | Movie/episode ID plus version-track ID; per-episode track monitor override; selected file ID; availability evidence/time; policy revision. A selected file must belong to that target; no cross-owner references. |
+| Version set | Named ordered track templates (label, profile, selector, monitored, naming suffix); library default reference. Edits are revisioned and previewed; they never cascade deletes. |
+| File identity | Per owned file: size, fast fingerprint, full content hash (nullable until computed), hash algorithm/version, device+inode and mtime observed at hashing, verified-at time. Indexed by fingerprint and by full hash. |
 | File ownership | Add version-track ownership to existing movie/episode file records. Multiple historical files remain possible; select at most one current file per target. Do not add uniqueness on media ID or discard duplicates. |
 | Workflow items/claims | Include version-track ID in item identity, indexes and active target claims. Acquire one durable unique claim per target transactionally before dispatching a grab. Claims release on completion/cancellation/failure; retry reacquires and revalidates policy. Preserve unique active client/download ownership. |
 | Search state | Extend cooldown/search count identity to include version-track ID. Keep indexer quota accounting at actual admitted provider queries, not per track. |
@@ -213,22 +289,68 @@ Single-track legacy calls continue selecting the default.
 
 Share one destination plan between automatic import, manual preview/execution,
 reimport, scanner registration and organizer rename. Keep existing default-track
-paths unchanged. New non-default destinations include a reserved suffix
-`[vt-<full-uuid>]` before the extension, in the existing movie or season folder.
-For example, **proposed**, not a current naming token:
+paths unchanged.
+
+**Filenames are presentation, not identity.** Ownership is never inferred from a
+path, label or suffix, so a rename by a media server or another tool cannot move
+a file to another track or orphan it (see *File identity* below). Non-default
+tracks append their human-readable naming suffix in the multi-version form that
+Plex and Jellyfin already group as versions of one title:
 
 ```text
-Movie (2024)/Movie (2024) [vt-76f769d1-71df-4592-88b3-b0ac97489025].mkv
-Show/Season 01/Show - S01E02 [vt-ff1ac04d-4613-42b3-8410-7509cf32e19d].mkv
+Movie (2024)/Movie (2024).mkv                    default track (unchanged)
+Movie (2024)/Movie (2024) - 2160p HDR.mkv        track "4K HDR"
+Show/Season 01/Show - S01E02 - 2160p HDR.mkv     track "4K HDR"
 ```
 
-Quality/edition/display labels may be optional human-readable tokens later, but
-cannot replace the immutable discriminator. Do not silently rename existing
-default files when adding another track. Preserve full UUID suffix through
-custom templates, sanitization and truncation; fail preview if paths still
-collide (including case-insensitive collisions). Apply the same basename to
-subtitles and extras. Previews list existing paths, ownership, replacement
-candidate and policy revision; execute revalidates that plan.
+Suffixes are sanitised and must be unique per owner (case-insensitively). They
+may come from the label or from naming tokens (`{Quality}`, `{HDR}`,
+`{Edition}`, `{Audio Language}`). Preview fails if any two tracks would produce
+colliding paths after templating, sanitising and truncation; truncation never
+removes the suffix. Changing a label or suffix renames only through an explicit
+organizer preview. Subtitles and extras follow the same basename. Previews list
+existing paths, ownership, replacement candidate and policy revision; execute
+revalidates that plan.
+
+### File identity and rename tolerance
+
+Every owned file has a reproducible content identity so Loom can find it again
+after an external rename or move:
+
+- **Fast fingerprint**, computed at import/registration: SHA-256 over file size
+  plus fixed-size samples (first, middle and last 4 MiB). Cost is bounded
+  regardless of file size, so scans of large libraries stay cheap.
+- **Full content hash** (SHA-256 of the whole file), computed when the bytes are
+  already being read (copy imports) or later by a throttled background verifier
+  for move/hardlink imports and backfilled files. Until it exists, the fast
+  fingerprint plus size is the lookup key; matches that rely only on the
+  fingerprint are confirmed against the full hash before any destructive action.
+- Device, inode and mtime recorded at hashing time are a cheap change detector:
+  an unchanged inode/mtime/size is not re-hashed on every scan.
+
+Scanner and import reconciliation uses identity in this order:
+
+1. Known path with unchanged size/inode/mtime: same file, no hashing.
+2. Known path whose content changed (size/mtime differ and fingerprint differs):
+   the owned file was replaced or edited externally; mark the target `unknown`
+   and send the file to review. Never treat it as the same version silently.
+3. Unknown path whose fingerprint (and, when available, full hash) matches an
+   owned file whose recorded path is missing: treat it as a rename/move inside
+   the owner's root, update the path and inventory, keep the track, and log it.
+4. Unknown path matching nothing: an unowned file. On single-track titles it is
+   registered to the default as today; on multi-track titles it is assigned only
+   when the shared selector puts it in exactly one track, otherwise review.
+5. One hash at two paths (hardlinks or copies) never proves two tracks are
+   satisfied; the second path is reported as a duplicate of the owning track.
+
+Missing or unmounted roots keep identity records untouched and yield `unknown`.
+Hash mismatch after an in-place metadata edit (for example `mkvpropedit` tag
+changes) is expected; it is surfaced for one-click re-confirmation rather than
+reassigned automatically. Identity records are deleted only with the owned file
+record. Optional extended attributes may cache the track ID for speed but are
+never authoritative, because copies and some filesystems drop them.
+
+### Import safety
 
 An import may replace/recycle only the selected same-track file after verification
 of the new file and durable ownership update. Filesystem and database writes
@@ -241,8 +363,9 @@ must update ownership/inventory references without changing the track.
 
 The import slice defines a durable manifest with `planned`, `staged`, `verified`,
 `ownership_committed`, `old_recycled`, `complete` and explicit `needs_review`
-states. It records target/track/revision, old and new file IDs/paths and observed
-file identities before side effects. The import service's startup recovery owns
+states. It records target/track/revision, old and new file IDs/paths and the old and new
+content fingerprints before side effects, so recovery can locate files by
+identity even if they were renamed between crash and restart. The import service's startup recovery owns
 resumption before accepting imports: verify staged content, reconcile committed
 ownership, then recycle only a still-owned old path. Pre-commit recovery keeps
 the old selection; post-commit recovery keeps the new selection. An ambiguous
@@ -328,10 +451,13 @@ documentation PR**. Test the real engine, repository and filesystem paths.
 | Scenario | Required observation |
 |---|---|
 | Upgrade existing installations | SQLite/Postgres fresh and upgrade fixtures converge; all rows/paths and default behavior survive, including multiple files, unknown quality, interrupted backfill and active workflows. |
-| Concurrent targets | 1080p and 4K can search/grab concurrently; simultaneous same-target admission creates one claim; client deduplication and restart cannot steal it. |
+| Concurrent targets | Two tracks (for example 1080p and 4K, or 4K HDR and 4K SDR) can search/grab concurrently; simultaneous same-target admission creates one claim; client deduplication and restart cannot steal it. |
 | Cross-track quality | A 2160p result cannot satisfy/replace 1080p; only selected-track file quality participates in cutoff and import ranking. |
 | Partial series/pack | One track/episode succeeds and another fails; only successful owned targets become available, cooldown/retry and counts remain independent. |
-| Naming and manual work | Automatic/manual/preview/reimport/rename agree; UUID suffix survives custom templates; existing/foreign files, case collisions and symlinks fail without data loss. |
+| Naming and manual work | Automatic/manual/preview/reimport/rename agree; per-track suffixes survive custom templates and truncation; existing/foreign files, case collisions and symlinks fail without data loss. |
+| External rename | A file renamed or moved within the owner's root by another tool keeps its track and target after rescan; an externally replaced or edited file goes to review; copies/hardlinks are not counted as a second track. |
+| Selectors | Resolution, dynamic range, source, codec, language and edition fixtures assign each release/file to at most one track; overlapping policies are rejected; MULTi/dual-audio and unknown evidence go to review. |
+| Version sets | Adding a title from a set creates its tracks; editing a set previews and applies per title without deleting files or retargeting by label. |
 | Hardlinks and crash recovery | Same-device links preserve source inode contents; cross-device hardlink-only fails; injected failures at staging/DB/recycle boundaries preserve recoverable files and operation ownership. |
 | Deletion and reconciliation | Delete/archive/unmonitor/rescan/recycle/cleanup touch only selected ownership; inaccessible roots remain unknown; permanent siblings survive. |
 | Compatibility and UI | Legacy API/Arr commands and requests use default only; foreign IDs fail; stale previews conflict; UI shows track-specific partial/cutoff/upgrade state with accessible labels. |
@@ -346,12 +472,12 @@ not delivery of concurrent tracks.
 
 | Slice | Issue | Blocks on |
 |---|---|---|
-| Ownership migration: schema/backfill/repository/default projections | [#176](https://github.com/Ebenderooock/loom/issues/176) | ADR acceptance |
-| API and compatibility: policy validation, DTOs, default-only adapters | [#178](https://github.com/Ebenderooock/loom/issues/178) | #176 |
-| Acquisition: claims, search/RSS/rolling/upgrade/retry isolation | [#180](https://github.com/Ebenderooock/loom/issues/180) | #176, #178 |
-| Import and naming: owned plans, hardlink safety, pack outcomes | [#179](https://github.com/Ebenderooock/loom/issues/179) | #176, #178 |
-| Lifecycle: scanner/delete/recycle/archive/cleanup boundaries | [#181](https://github.com/Ebenderooock/loom/issues/181) | #179 |
-| UI and release gate: per-track UX and activation matrix | [#182](https://github.com/Ebenderooock/loom/issues/182) | #178, #180, #179, #181 |
+| Ownership migration: schema/backfill/repository/default projections, file identity records and fingerprint backfill | [#176](https://github.com/Ebenderooock/loom/issues/176) | ADR acceptance |
+| API and compatibility: selector/disjointness validation, version sets, DTOs, default-only adapters | [#178](https://github.com/Ebenderooock/loom/issues/178) | #176 |
+| Acquisition: shared selector evaluation, claims, search/RSS/rolling/upgrade/retry isolation | [#180](https://github.com/Ebenderooock/loom/issues/180) | #176, #178 |
+| Import and naming: owned plans, per-track suffixes, fingerprint at import, hardlink safety, pack outcomes | [#179](https://github.com/Ebenderooock/loom/issues/179) | #176, #178 |
+| Lifecycle: identity-based rename detection, scanner/delete/recycle/archive/cleanup boundaries (including the #195 file manager) | [#181](https://github.com/Ebenderooock/loom/issues/181) | #179 |
+| UI and release gate: per-track UX, version-set picker and activation matrix | [#182](https://github.com/Ebenderooock/loom/issues/182) | #178, #180, #179, #181 |
 
 Ownership precedes API. Acquisition and import each require ownership and API.
 Lifecycle requires import ownership. UI/release integration requires API,
@@ -364,10 +490,16 @@ begins. Do not activate the capability until all six slices pass.
 The defaults above let implementation planning proceed without guessing. Review
 must explicitly accept or revise these substantive choices before coding:
 
-- MVP rejects overlapping policies/shared files and limits additional tracks to
-  disjoint resolution membership; language/edition activation is deferred.
-- Additional tracks stay under the owner's existing library root with full-UUID
-  basename suffixes, rather than separate roots or automatic folder migration.
+- Tracks are defined by a version selector over resolution, dynamic range,
+  source, codec, audio language and edition; enabled tracks of a title must be
+  provably disjoint, and shared files across tracks are deferred.
+- Quality profiles stay single-select; a title has one or more tracks, each with
+  one profile, normally created from a library's default version set.
+- File ownership is anchored to a content fingerprint/hash, not filename;
+  externally renamed files are re-identified, externally modified files go to
+  review.
+- Additional tracks stay under the owner's existing library root and use
+  Plex/Jellyfin-style `Title - <suffix>` names, rather than separate roots.
 - Legacy/Arr scalar state and requests project the immutable default track, not
   any-track or all-track availability.
 - Post-activation rollback is recovery/export or snapshot restore, not flattening;
@@ -377,7 +509,9 @@ must explicitly accept or revise these substantive choices before coding:
 
 ### Positive
 
-- Permanent 1080p/4K ownership is explicit throughout acquisition and deletion.
+- Permanent version ownership (resolution, HDR, source, language, edition) is
+  explicit throughout acquisition and deletion.
+- Ownership survives renames by media servers or other tools.
 - Existing installations keep one default policy and unchanged paths.
 - Partial completion and unknown evidence become observable, not hidden by flags.
 
@@ -385,7 +519,11 @@ must explicitly accept or revise these substantive choices before coding:
 
 - More targets mean more storage and searches; existing quota admission still
   applies. A claim reservation and crash-safe file manifest add persistence work.
-- Full UUID suffixes are long; media-server filename compatibility needs fixtures.
+- Hashing costs I/O: bounded for fingerprints, but full hashes of large
+  libraries need a throttled background job and storage for identity records.
+- Selector evidence parsed from release names can be wrong or missing; unknown
+  dimensions send items to review, which is safer but adds manual work until
+  file probing is available.
 - Every legacy media-wide mutation must be adapted before multi-track activation.
 
 ### Neutral
@@ -404,6 +542,18 @@ must explicitly accept or revise these substantive choices before coding:
 - **One physical file satisfies several tracks:** useful for future overlapping
   language policies, but requires reference-counted deletion and shared-content
   evidence. Deliberately deferred rather than hidden inside MVP.
+- **Reserved `[vt-<uuid>]` filename suffix (revision 1):** deterministic but
+  lost when another tool renames the file, ugly in media servers, and still
+  needs a recovery path. Rejected in favour of content identity.
+- **Full-file hash only:** strongest identity, but hashing every multi-GB file on
+  each scan is too slow. Kept as the verification layer behind a fast
+  fingerprint.
+- **Extended attributes or sidecar files as identity:** cheap, but lost on copy,
+  on some filesystems and network shares, and editable by other tools. Allowed
+  only as a non-authoritative cache.
+- **Multi-select quality profiles:** conflates "accept several qualities and
+  upgrade" with "keep several versions". Rejected; tracks with one profile each
+  express the intent directly.
 - **Track-specific roots immediately:** useful for media-server libraries, but
   introduces root migration and mount policy. Defer pending actual demand;
-  immutable suffixes solve the initial collision problem without moving files.
+  per-track suffixes plus content identity solve collisions without moving files.
