@@ -30,6 +30,7 @@ export function AddSeriesDialog({
   qualityProfiles,
   existingTmdbIds,
   onSeriesAdded,
+  initialSeries,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -37,6 +38,7 @@ export function AddSeriesDialog({
   qualityProfiles: QualityProfile[];
   existingTmdbIds: Set<string>;
   onSeriesAdded: () => void;
+  initialSeries?: TMDBSeriesResult;
 }) {
   const [searchTerm, setSearchTerm] = useState("");
   const [results, setResults] = useState<TMDBSeriesResult[]>([]);
@@ -64,7 +66,7 @@ export function AddSeriesDialog({
     if (open) {
       setSearchTerm("");
       setResults([]);
-      setSelectedSeries(null);
+      setSelectedSeries(initialSeries ?? null);
       setAddError("");
       const firstLib = libraries[0];
       setSelectedLibrary(firstLib?.id ?? "");
@@ -76,10 +78,10 @@ export function AddSeriesDialog({
       setSeriesType("standard");
       setSeasonFolder(true);
       setMonitoringStatus("all");
-      setSearchOnAdd(true);
+      setSearchOnAdd(!initialSeries);
       setTimeout(() => searchInputRef.current?.focus(), 100);
     }
-  }, [open, qualityProfiles, libraries, mediaPrefs]);
+  }, [open, qualityProfiles, libraries, mediaPrefs, initialSeries]);
 
   // Guarantee a valid quality profile is always selected once profiles load,
   // independent of dialog open state. Preserves any still-valid selection.
@@ -191,10 +193,13 @@ export function AddSeriesDialog({
               )}
               <div className="absolute inset-0 bg-gradient-to-t from-background to-transparent" />
               <button
-                onClick={() => setSelectedSeries(null)}
+                onClick={() =>
+                  initialSeries ? onOpenChange(false) : setSelectedSeries(null)
+                }
                 className="absolute left-4 top-4 flex items-center gap-1 rounded-full bg-black/40 px-3 py-1.5 text-sm text-white/80 hover:text-white"
               >
-                <ArrowLeft className="h-4 w-4" /> Back to results
+                <ArrowLeft className="h-4 w-4" />{" "}
+                {initialSeries ? "Back" : "Back to results"}
               </button>
             </div>
             <div className="relative z-10 -mt-16 p-6">
@@ -367,7 +372,11 @@ export function AddSeriesDialog({
               <div className="mt-6 flex justify-end gap-3 border-t border-border/50 pt-4">
                 <Button
                   variant="outline"
-                  onClick={() => setSelectedSeries(null)}
+                  onClick={() =>
+                    initialSeries
+                      ? onOpenChange(false)
+                      : setSelectedSeries(null)
+                  }
                 >
                   Cancel
                 </Button>

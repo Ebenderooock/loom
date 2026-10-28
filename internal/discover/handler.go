@@ -2,10 +2,12 @@
 package discover
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"sort"
 	"strconv"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -53,12 +55,18 @@ const (
 	maxOverviewLen = 500
 )
 
-// Router returns a chi.Router for person discovery endpoints.
-func Router(client *tmdb.Client) chi.Router {
+// Router preserves person filmography and optionally wires the read-only library
+// growth service. The optional argument keeps existing person-only callers valid.
+func Router(client *tmdb.Client, services ...*Service) chi.Router {
 	r := chi.NewRouter()
 	r.Get("/people/{id}", getPersonFilmography(client))
 	r.Get("/movie/{id}", getMediaDetails(client, "movie"))
 	r.Get("/series/{id}", getMediaDetails(client, "series"))
+	var service *Service
+	if len(services) > 0 {
+		service = services[0]
+	}
+	mountGrowth(r, service)
 	return r
 }
 
@@ -93,7 +101,12 @@ func getPersonFilmography(client *tmdb.Client) http.HandlerFunc {
 			return
 		}
 
-		ctx := r.Context()
+		if !client.Configured() {
+			writeDiscoveryError(w, ErrNotConfigured)
+			return
+		}
+		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+		defer cancel()
 
 		// Fetch person details and credits in parallel
 		type personResult struct {
@@ -121,11 +134,11 @@ func getPersonFilmography(client *tmdb.Client) http.HandlerFunc {
 		cRes := <-cCh
 
 		if pRes.err != nil {
-			http.Error(w, pRes.err.Error(), http.StatusInternalServerError)
+			writeDiscoveryError(w, pRes.err)
 			return
 		}
 		if cRes.err != nil {
-			http.Error(w, cRes.err.Error(), http.StatusInternalServerError)
+			writeDiscoveryError(w, cRes.err)
 			return
 		}
 
@@ -138,6 +151,7 @@ func getPersonFilmography(client *tmdb.Client) http.HandlerFunc {
 		}
 
 		resp := PersonFilmography{
+			Credits: []CreditItem{},
 			Person: PersonDetail{
 				ID:          person.ID,
 				Name:        person.Name,
