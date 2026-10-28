@@ -136,6 +136,7 @@ The [`docs/`](docs/) directory is the source of truth.
 - [Indexers — aggregator (Newznab/Torznab)](docs/indexers-aggregator.md)
 - [Indexers — rate limits and retry/backoff](docs/indexers-rate-limits.md)
 - [Download clients](docs/downloads.md)
+- [Grow your library and Collections](docs/discovery.md)
 - [Security](docs/security.md)
 - [Development setup](docs/development.md)
 - [Loom TV — experimental native Android TV companion home](android-tv/README.md)

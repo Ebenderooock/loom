@@ -2,6 +2,10 @@
 
 The metadata service (`internal/metadata`) provides a unified abstraction layer for movie, series, and episode metadata sourced from external providers (TMDB, TVDB, MusicBrainz).
 
+TMDB also supplies new-title candidates and movie-set membership for
+[Grow your library and Collections](discovery.md). These catalog lookups work
+without Import Lists and do not initiate downloads.
+
 ## Episode airing times and timezones
 
 On series add or refresh, Loom optionally enriches episode dates with actual

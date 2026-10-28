@@ -46,6 +46,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Stable download-client queue ordering in Downloads, with selectable sorting
   by queue position, download speed, time to completion or status and reversible
   sort direction.
+- **Grow your library and Collections.** Discover new movie and series
+  suggestions from TMDB using recurring cast/directors, genres, related titles
+  and movie-set gaps without requiring Import Lists. Browse missing/upcoming
+  collection members, persist per-user dismissals, and explicitly add titles
+  through the existing dialogs with immediate search off by default.
 
 ### Documentation
 

@@ -399,8 +399,7 @@ func (c *Client) doHTTPRequest(ctx context.Context, req *http.Request) ([]byte, 
 				return nil, NewContextError(ctx.Err())
 			case <-time.After(delay):
 				// Retry with fresh request
-				req2, _ := http.NewRequestWithContext(ctx, req.Method, req.URL.String(), nil)
-				*req = *req2
+				req = req.Clone(ctx) // preserve bearer authentication on retries
 				continue
 			}
 
@@ -428,8 +427,7 @@ func (c *Client) doHTTPRequest(ctx context.Context, req *http.Request) ([]byte, 
 					),
 				)
 				// Retry with fresh request
-				req2, _ := http.NewRequestWithContext(ctx, req.Method, req.URL.String(), nil)
-				*req = *req2
+				req = req.Clone(ctx) // preserve bearer authentication on retries
 				continue
 			}
 

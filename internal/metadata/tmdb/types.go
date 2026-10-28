@@ -2,20 +2,27 @@ package tmdb
 
 // MovieResponse is the JSON response from TMDb /movie/{id} endpoint.
 type MovieResponse struct {
-	ID          int                 `json:"id"`
-	IMDBID      string              `json:"imdb_id"`
-	Title       string              `json:"title"`
-	ReleaseDate string              `json:"release_date"`
-	Overview    string              `json:"overview"`
-	PosterPath  string              `json:"poster_path"`
-	Runtime     int                 `json:"runtime"`
-	VoteAverage float64             `json:"vote_average"`
-	Genres      []GenreResponse     `json:"genres"`
-	ExternalIDs *ExternalIDResponse `json:"external_ids"`
+	Adult       bool                 `json:"adult"`
+	Popularity  float64              `json:"popularity"`
+	Collection  *CollectionReference `json:"belongs_to_collection"`
+	Credits     CreditsResponse      `json:"credits"`
+	ID          int                  `json:"id"`
+	IMDBID      string               `json:"imdb_id"`
+	Title       string               `json:"title"`
+	ReleaseDate string               `json:"release_date"`
+	Overview    string               `json:"overview"`
+	PosterPath  string               `json:"poster_path"`
+	Runtime     int                  `json:"runtime"`
+	VoteAverage float64              `json:"vote_average"`
+	Genres      []GenreResponse      `json:"genres"`
+	ExternalIDs *ExternalIDResponse  `json:"external_ids"`
 }
 
 // TVResponse is the JSON response from TMDb /tv/{id} endpoint.
 type TVResponse struct {
+	Adult           bool                `json:"adult"`
+	Popularity      float64             `json:"popularity"`
+	Credits         CreditsResponse     `json:"credits"`
 	ID              int                 `json:"id"`
 	IMDBID          string              `json:"imdb_id"`
 	Name            string              `json:"name"`
@@ -51,6 +58,10 @@ type SearchResponse struct {
 
 // SearchResult is a single result in a search response.
 type SearchResult struct {
+	Adult        bool    `json:"adult"`
+	Popularity   float64 `json:"popularity"`
+	VoteCount    int     `json:"vote_count"`
+	GenreIDs     []int   `json:"genre_ids"`
 	ID           int     `json:"id"`
 	Title        string  `json:"title,omitempty"`
 	Name         string  `json:"name,omitempty"`
@@ -149,6 +160,8 @@ type CombinedCreditsResponse struct {
 
 // CombinedCreditEntry is a single entry in a combined credits response.
 type CombinedCreditEntry struct {
+	Adult        bool    `json:"adult"`
+	GenreIDs     []int   `json:"genre_ids"`
 	ID           int     `json:"id"`
 	MediaType    string  `json:"media_type"` // "movie" or "tv"
 	Title        string  `json:"title,omitempty"`
@@ -162,4 +175,21 @@ type CombinedCreditEntry struct {
 	Character    string  `json:"character,omitempty"`
 	Job          string  `json:"job,omitempty"`
 	Department   string  `json:"department,omitempty"`
+}
+
+// CollectionReference is TMDB's explicit movie-set membership, not a studio
+// affiliation or an inferred cinematic universe.
+type CollectionReference struct {
+	ID         int    `json:"id"`
+	Name       string `json:"name"`
+	PosterPath string `json:"poster_path"`
+}
+
+// CollectionResponse is a TMDB movie set (collection) payload.
+type CollectionResponse struct {
+	ID         int            `json:"id"`
+	Name       string         `json:"name"`
+	Overview   string         `json:"overview"`
+	PosterPath string         `json:"poster_path"`
+	Parts      []SearchResult `json:"parts"`
 }

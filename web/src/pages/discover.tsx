@@ -19,6 +19,10 @@ import {
 import { Check, Loader2, Plus, Compass, Info } from "lucide-react";
 import { CardGridSkeleton } from "@/components/ui/skeletons";
 import { DiscoverDetailSheet } from "@/components/discover-detail-sheet";
+import {
+  CollectionsPanel,
+  RecommendationPanel,
+} from "@/components/library-expansion";
 
 export function DiscoverPage() {
   const { setHeader } = usePageHeader();
@@ -26,17 +30,31 @@ export function DiscoverPage() {
 
   return (
     <div className="space-y-6 p-6">
-      <Tabs defaultValue="movie">
-        <TabsList>
-          <TabsTrigger value="movie">Movies</TabsTrigger>
-          <TabsTrigger value="series">TV Shows</TabsTrigger>
+      <Tabs defaultValue="recommendations">
+        <TabsList className="h-auto flex-wrap" aria-label="Discovery sections">
+          <TabsTrigger value="recommendations">Grow your library</TabsTrigger>
+          <TabsTrigger value="collections">Collections</TabsTrigger>
+          <TabsTrigger value="lists">Import Lists</TabsTrigger>
         </TabsList>
-
-        <TabsContent value="movie" className="mt-4">
-          <DiscoverGrid mediaType="movie" />
+        <TabsContent value="recommendations" className="mt-6">
+          <RecommendationPanel />
         </TabsContent>
-        <TabsContent value="series" className="mt-4">
-          <DiscoverGrid mediaType="series" />
+        <TabsContent value="collections" className="mt-6">
+          <CollectionsPanel />
+        </TabsContent>
+        <TabsContent value="lists" className="mt-6">
+          <Tabs defaultValue="movie">
+            <TabsList aria-label="Import list media type">
+              <TabsTrigger value="movie">Movies</TabsTrigger>
+              <TabsTrigger value="series">TV shows</TabsTrigger>
+            </TabsList>
+            <TabsContent value="movie" className="mt-4">
+              <DiscoverGrid mediaType="movie" />
+            </TabsContent>
+            <TabsContent value="series" className="mt-4">
+              <DiscoverGrid mediaType="series" />
+            </TabsContent>
+          </Tabs>
         </TabsContent>
       </Tabs>
     </div>

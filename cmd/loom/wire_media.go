@@ -167,9 +167,10 @@ func wireMedia(
 	wiring.QualityProfile = qpStore
 	qualityprofiles.SeedDefaults(ctx, qpStore, moviesSvc)
 
-	// Person discovery (TMDB-backed)
+	// Read-only library growth and person discovery (TMDB-backed).
 	discoverTMDB := buildTMDBClient(stubs)
-	wiring.DiscoverRouter = discover.Router(discoverTMDB)
+	discoverSvc := discover.NewService(discoverTMDB, moviesSvc, seriesSvc, discover.NewStore(db.DB()))
+	wiring.DiscoverRouter = discover.Router(discoverTMDB, discoverSvc)
 
 	return &mediaWiring{
 		libStore:          libStore,

@@ -85,7 +85,7 @@ Legend: ✅ done · 🚧 in progress · ⏳ planned
 - ✅ Quality profiles & custom formats with scoring
 - ✅ Frontend movies page (poster grid, detail modal, search)
 - ✅ RSS sync
-- ✅ Collections & lists
+- ✅ Import Lists, TMDB movie collections, and explained library-expansion suggestions
 - ✅ Calendar integration
 
 ## ✅ Phase 5 — Series module (Sonarr-equivalent)

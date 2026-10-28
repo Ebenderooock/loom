@@ -70,6 +70,10 @@ in `api/openapi/loom.yaml`.
 | `GET` | `/api/v1/libraries/{id}/health` | apiKey/bearer/cookie | `200 application/json` (`LibraryHealthReport` or `null`) | Fetch latest read-only health report snapshot. |
 | `POST` | `/api/v1/libraries/{id}/health` | apiKey/bearer/cookie | `200 application/json` (`LibraryHealthReport`) | Run a bounded, cancellable read-only health check for one library. |
 | `POST` | `/api/v1/libraries/{id}/health/dismiss` | apiKey/bearer/cookie | `200 application/json` (`LibraryHealthReport`) | Dismiss or restore one finding in the latest report. |
+| `GET` | `/api/v1/discover/recommendations` | identified user | `200 application/json` | TMDB-backed movie/series acquisition suggestions, reasons and cache/source warnings. |
+| `POST` | `/api/v1/discover/dismissals` | identified user | `204` | Persist a movie/series suggestion dismissal for the current user. |
+| `GET` | `/api/v1/discover/collections` | identified user | `200 application/json` | TMDB movie sets represented in the catalog, with coverage counts. |
+| `GET` | `/api/v1/discover/collections/{id}` | identified user | `200 application/json` | Release-ordered members with catalog/file/monitoring status; `404` for a missing collection. |
 | `GET\|POST` | `/debug/pprof/*` | gated by `debug.pprof` | varies | Standard `net/http/pprof` handlers. |
 | `GET` | `/api/v1/indexers/` | apiKey/bearer/cookie | `200 application/json` (`[]DefinitionWithHealth`) | List configured indexers with health; credential fields are omitted. |
 | `POST` | `/api/v1/indexers/` | admin | `201 application/json` (`Definition`) | Create an indexer. |

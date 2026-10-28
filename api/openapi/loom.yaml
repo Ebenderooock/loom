@@ -77,6 +77,11 @@ tags:
       (named collections with cutoff/upgrade rules). See ADR-0005 for the design
       and Radarr compatibility rationale.
 
+  - name: discovery
+    description: |
+      TMDB-backed library expansion and movie collection gaps. Import Lists are
+      not required. All discovery growth routes require a user-backed identity,
+      not an anonymous/shared configuration key.
 paths:
   /api/v1/media-files/{mediaType}/{id}:
     parameters:
@@ -1111,6 +1116,179 @@ paths:
                 $ref: "#/components/schemas/ErrorEnvelope"
         "404":
           $ref: "#/components/responses/NotFound"
+
+  /api/v1/discover/recommendations:
+    get:
+      tags: [discovery]
+      summary: Suggest new movies or series based on the existing catalog.
+      operationId: getDiscoveryRecommendations
+      description: |
+        Read-only, bounded TMDB candidate generation. Excludes already-added
+        and dismissed titles. Results include provenance and human-readable
+        reasons. Does not add, monitor, search for or download titles.
+      security:
+        - apiKey: []
+        - bearerAuth: []
+        - cookieAuth: []
+      parameters:
+        - name: media_type
+          in: query
+          schema:
+            type: string
+            enum: [movie, series]
+            default: movie
+        - name: include_upcoming
+          in: query
+          schema:
+            type: boolean
+            default: false
+      responses:
+        "200":
+          description: Candidates, potentially with partial-source or stale-cache warnings.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/DiscoveryStatus"
+                  - type: object
+                    required: [items]
+                    properties:
+                      items:
+                        type: array
+                        maxItems: 60
+                        items:
+                          $ref: "#/components/schemas/DiscoveryRecommendation"
+        "400":
+          description: Invalid media_type or include_upcoming.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "503":
+          description: TMDB provider or discovery service is not configured.
+        "502":
+          description: Provider failure or malformed catalog response with no usable fallback.
+        "504":
+          description: Discovery request deadline/cancellation.
+        "500":
+          description: Internal storage or library read failed.
+
+  /api/v1/discover/dismissals:
+    post:
+      tags: [discovery]
+      summary: Persist a dismissed recommendation for the current user.
+      operationId: dismissDiscoveryRecommendation
+      description: Requires an identified user; does not create shared anonymous dismissals.
+      security:
+        - apiKey: []
+        - bearerAuth: []
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tmdb_id, media_type]
+              properties:
+                tmdb_id:
+                  type: integer
+                  minimum: 1
+                media_type:
+                  type: string
+                  enum: [movie, series]
+      responses:
+        "204":
+          description: Dismissal persisted, including a repeated dismissal.
+        "400":
+          description: Invalid body, media type or TMDB ID.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          description: Dismissal could not be persisted.
+        "503":
+          description: Discovery service or dismissal storage is not configured.
+
+  /api/v1/discover/collections:
+    get:
+      tags: [discovery]
+      summary: List TMDB movie sets represented in the existing catalog.
+      operationId: listDiscoveryCollections
+      security:
+        - apiKey: []
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "200":
+          description: Bounded collection summaries with fresh catalog membership counts.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/DiscoveryStatus"
+                  - type: object
+                    required: [items]
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/DiscoveryCollection"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "503":
+          description: TMDB provider or discovery service is not configured.
+        "502":
+          description: Provider failure or malformed catalog response with no usable fallback.
+        "504":
+          description: Discovery request deadline/cancellation.
+        "500":
+          description: Internal storage or library read failed.
+
+  /api/v1/discover/collections/{id}:
+    get:
+      tags: [discovery]
+      summary: Inspect release-ordered movie set members and their Loom status.
+      operationId: getDiscoveryCollection
+      security:
+        - apiKey: []
+        - bearerAuth: []
+        - cookieAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        "200":
+          description: Collection metadata and members, including future releases.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/DiscoveryStatus"
+                  - type: object
+                    required: [collection, items]
+                    properties:
+                      collection:
+                        $ref: "#/components/schemas/DiscoveryCollection"
+                      items:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/DiscoveryCollectionItem"
+        "400":
+          description: Invalid collection ID.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: TMDB has no such collection.
+        "503":
+          description: TMDB provider or discovery service is not configured.
+        "502":
+          description: Provider failure or malformed catalog response with no usable fallback.
+        "504":
+          description: Discovery request deadline/cancellation.
+        "500":
+          description: Internal storage or library read failed.
 
   /api/v1/indexers/:
     get:
@@ -2386,6 +2564,101 @@ paths:
 
 components:
   schemas:
+    DiscoveryStatus:
+      type: object
+      required: [warnings, generated_at, stale]
+      properties:
+        warnings:
+          type: array
+          items:
+            type: string
+        generated_at:
+          type: string
+          format: date-time
+          description: Time the cached candidate snapshot was generated.
+        stale:
+          type: boolean
+          description: Expired provider data was served with a warning.
+
+    DiscoveryRecommendation:
+      type: object
+      required: [tmdb_id, media_type, title, year, rating, popularity, reasons, source]
+      properties:
+        tmdb_id:
+          type: integer
+          minimum: 1
+        media_type:
+          type: string
+          enum: [movie, series]
+        title:
+          type: string
+        year:
+          type: integer
+        overview:
+          type: string
+        poster_path:
+          type: string
+          description: Full TMDB image URL, when available.
+        rating:
+          type: number
+        popularity:
+          type: number
+        release_date:
+          type: string
+          format: date
+        reasons:
+          type: array
+          items:
+            type: string
+        source:
+          type: string
+          description: Candidate source provenance.
+        collection_id:
+          type: integer
+          minimum: 1
+
+    DiscoveryCollection:
+      type: object
+      required: [id, name, total, in_library, missing, upcoming]
+      properties:
+        id:
+          type: integer
+          minimum: 1
+        name:
+          type: string
+        overview:
+          type: string
+        poster_path:
+          type: string
+          description: Full TMDB image URL, when available.
+        total:
+          type: integer
+        in_library:
+          type: integer
+          description: Catalog entries, not necessarily imported files.
+        missing:
+          type: integer
+          description: Released or undated members without a Loom catalog entry.
+        upcoming:
+          type: integer
+          description: Future-dated members without a Loom catalog entry.
+
+    DiscoveryCollectionItem:
+      allOf:
+        - $ref: "#/components/schemas/DiscoveryRecommendation"
+        - type: object
+          required: [in_library, monitored]
+          properties:
+            in_library:
+              type: boolean
+            media_id:
+              type: string
+            has_file:
+              type: boolean
+              description: Whether Loom records an imported file; omitted if status is unavailable.
+            monitored:
+              type: boolean
+
     TitleFile:
       type: object
       required: [path, size, tracked]
