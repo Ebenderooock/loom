@@ -65,6 +65,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Populate Discover artwork directly from IMDb lists, watchlists, and charts,
+  including existing entries missing posters when their lists sync again.
 - Make downloaded-title imports recoverable: coordinate a single import owner,
   retain source media until verification and library registration succeed, retry
   partial batches using preserved paths, and resume interrupted import cleanup.

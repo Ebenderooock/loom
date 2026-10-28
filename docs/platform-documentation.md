@@ -1041,6 +1041,10 @@ Defaults are seeded when no profiles exist. On startup, only built-in profiles w
 
 **Supported list types:**
 
+IMDb lists, watchlists, and charts supply artwork directly from IMDb, without
+requiring a TMDb ID or API key. Existing entries missing posters are backfilled
+on their next list sync; already cached artwork is preserved.
+
 | ListType | Provider | Description |
 |----------|----------|-------------|
 | `trakt_list` | Trakt | User's custom list (slug in URL) |

@@ -228,6 +228,9 @@ func (m *SyncManager) SyncList(ctx context.Context, l *ImportList) error {
 			existing.TMDbID = fi.TMDbID
 			existing.TVDbID = fi.TVDbID
 			existing.MediaType = fi.MediaType
+			if existing.PosterPath == "" {
+				existing.PosterPath = fi.PosterPath
+			}
 			if fi.Year != 0 {
 				existing.Year = &fi.Year
 			}
@@ -256,6 +259,7 @@ func (m *SyncManager) SyncList(ctx context.Context, l *ImportList) error {
 			TVDbID:     fi.TVDbID,
 			MediaType:  fi.MediaType,
 			Status:     status,
+			PosterPath: fi.PosterPath,
 		}
 		m.enrichItem(ctx, item, l)
 		if err := m.store.UpsertItem(ctx, item); err != nil {

@@ -17,7 +17,7 @@ import (
 
 const imdbGraphQLEndpoint = "https://api.graphql.imdb.com/"
 
-const imdbTitleSelection = `id titleText { text } releaseYear { year } titleType { id }`
+const imdbTitleSelection = `id titleText { text } releaseYear { year } titleType { id } primaryImage { url }`
 
 const imdbTitleFields = `titleListItemSearch(first: $first, after: $after, sort: {by: LIST_ORDER, order: ASC}) {
 	edges { title { ` + imdbTitleSelection + ` } }
@@ -124,6 +124,9 @@ func (p *IMDbProvider) Fetch(ctx context.Context, cfg ProviderConfig) ([]Item, e
 			}
 			if title.ReleaseYear != nil {
 				item.Year = title.ReleaseYear.Year
+			}
+			if title.PrimaryImage != nil {
+				item.PosterPath = title.PrimaryImage.URL
 			}
 			switch title.TitleType.ID {
 			case "tvSeries", "tvMiniSeries":
@@ -270,6 +273,9 @@ type imdbTitleConnection struct {
 			TitleType struct {
 				ID string `json:"id"`
 			} `json:"titleType"`
+			PrimaryImage *struct {
+				URL string `json:"url"`
+			} `json:"primaryImage"`
 		} `json:"title"`
 	} `json:"edges"`
 	PageInfo *struct {
