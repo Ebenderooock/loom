@@ -506,6 +506,12 @@ func (s *service) RefreshMovie(ctx context.Context, id string) error {
 	movie.PosterPath = meta.PosterPath
 	movie.Runtime = meta.Runtime
 	movie.ReleaseDate = meta.ReleaseDate
+	if meta.IMDBID != nil && *meta.IMDBID != "" {
+		movie.IMDBID = meta.IMDBID
+	}
+	if meta.TVDBID != nil && *meta.TVDBID != "" {
+		movie.TVDBID = meta.TVDBID
+	}
 	if meta.Genres != nil {
 		movie.Genres = meta.Genres
 	}

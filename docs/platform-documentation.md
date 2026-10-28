@@ -1045,6 +1045,13 @@ IMDb lists, watchlists, and charts supply artwork directly from IMDb, without
 requiring a TMDb ID or API key. Existing entries missing posters are backfilled
 on their next list sync; already cached artwork is preserved.
 
+For movie library membership and duplicate checks, IMDb-only entries are
+resolved to TMDb IDs using TMDb's exact external-ID lookup. Resolved IDs are
+cached on list items and retained across syncs, so movies added through TMDb
+are recognized even when their library records lack IMDb IDs. This requires
+the configured TMDb metadata client; lookup failures are logged and retried on
+a later read or sync. Matching does not guess from titles.
+
 | ListType | Provider | Description |
 |----------|----------|-------------|
 | `trakt_list` | Trakt | User's custom list (slug in URL) |

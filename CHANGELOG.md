@@ -70,6 +70,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Recognize TMDb-added movies in IMDb Discover lists using exact cross-provider
+  ID mappings, cache resolved identities, and prevent duplicate additions.
+  Movie metadata refresh also retains IMDb and TVDb IDs.
 - Populate Discover artwork directly from IMDb lists, watchlists, and charts,
   including existing entries missing posters when their lists sync again.
 - Make downloaded-title imports recoverable: coordinate a single import owner,

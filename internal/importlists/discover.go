@@ -45,6 +45,13 @@ func (m *SyncManager) DiscoverItems(ctx context.Context, mediaType string) ([]*D
 	var out []*DiscoverItem
 	for _, row := range rows {
 		item := row.Item
+		oldID := item.TMDbID
+		m.resolveMovieIdentity(ctx, item, row.MediaType)
+		if item.TMDbID != oldID {
+			if err := m.store.UpsertItem(ctx, item); err != nil {
+				m.logger.Error("import-lists: cache resolved movie identity failed", "item_id", item.ID, "error", err)
+			}
+		}
 		key := dedupeKey(item)
 		if seen[key] {
 			continue
