@@ -143,6 +143,51 @@ func TestIMDbChartErrors(t *testing.T) {
 	}
 }
 
+func TestIMDbArtwork(t *testing.T) {
+	const poster = "https://m.media-amazon.com/images/poster.jpg"
+	for _, root := range []string{"list", "predefinedList", "chartTitles"} {
+		for _, image := range []string{`{"url":"` + poster + `"}`, "null"} {
+			t.Run(root+"/"+image, func(t *testing.T) {
+				p := NewIMDbList()
+				p.client.Transport = imdbRoundTripper(func(req *http.Request) (*http.Response, error) {
+					var payload struct {
+						Query string `json:"query"`
+					}
+					if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
+						t.Fatal(err)
+					}
+					if !strings.Contains(payload.Query, "primaryImage { url }") {
+						t.Fatal("query does not request artwork")
+					}
+					page := fmt.Sprintf(`{"edges":[{"title":{"id":"tt123","titleText":{"text":"Example"},"primaryImage":%s}}],"pageInfo":{"hasNextPage":false}}`, image)
+					if root != "chartTitles" {
+						page = `{"titleListItemSearch":` + page + `}`
+					}
+					return imdbResponse(200, fmt.Sprintf(`{"data":{%q:%s}}`, root, page)), nil
+				})
+				input := "ls123"
+				switch root {
+				case "predefinedList":
+					input = "ur123"
+				case "chartTitles":
+					input = "https://www.imdb.com/chart/moviemeter/"
+				}
+				items, err := p.Fetch(context.Background(), ProviderConfig{URL: input})
+				if err != nil || len(items) != 1 {
+					t.Fatalf("Fetch = (%v, %v), want one item", items, err)
+				}
+				want := poster
+				if image == "null" {
+					want = ""
+				}
+				if items[0].PosterPath != want {
+					t.Fatalf("poster = %q, want %q", items[0].PosterPath, want)
+				}
+			})
+		}
+	}
+}
+
 func TestIMDbFetchPagination(t *testing.T) {
 	p := NewIMDbList()
 	calls := 0
@@ -328,6 +373,9 @@ func TestIMDbLive(t *testing.T) {
 	if len(items) == 0 {
 		t.Fatal("expected titles from the public list")
 	}
+	if !strings.HasPrefix(items[0].PosterPath, "https://m.media-amazon.com/") {
+		t.Fatalf("expected IMDb artwork, got %q", items[0].PosterPath)
+	}
 	for _, item := range items {
 		if !imdbTitleID.MatchString(item.IMDbID) || item.ExternalID != item.IMDbID || item.Title == "" {
 			t.Fatalf("invalid item: %+v", item)
@@ -357,6 +405,9 @@ func TestIMDbChartsLive(t *testing.T) {
 			}
 			if len(items) != tc.count {
 				t.Fatalf("got %d titles, want %d", len(items), tc.count)
+			}
+			if !strings.HasPrefix(items[0].PosterPath, "https://m.media-amazon.com/") {
+				t.Fatalf("expected chart artwork, got %q", items[0].PosterPath)
 			}
 			for _, item := range items {
 				if !imdbTitleID.MatchString(item.IMDbID) || item.Title == "" || item.MediaType != tc.mediaType {
