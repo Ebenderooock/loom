@@ -17,8 +17,10 @@ import (
 
 const imdbGraphQLEndpoint = "https://api.graphql.imdb.com/"
 
+const imdbTitleSelection = `id titleText { text } releaseYear { year } titleType { id }`
+
 const imdbTitleFields = `titleListItemSearch(first: $first, after: $after, sort: {by: LIST_ORDER, order: ASC}) {
-	edges { title { id titleText { text } releaseYear { year } titleType { id } } }
+	edges { title { ` + imdbTitleSelection + ` } }
 	pageInfo { hasNextPage endCursor }
 }`
 
@@ -29,7 +31,7 @@ var (
 	imdbTitleID   = regexp.MustCompile(`^tt\d+$`)
 )
 
-// IMDbProvider fetches public IMDb lists and watchlists.
+// IMDbProvider fetches public IMDb lists, watchlists, and charts.
 type IMDbProvider struct {
 	client *http.Client
 }
@@ -74,6 +76,15 @@ func (p *IMDbProvider) Fetch(ctx context.Context, cfg ProviderConfig) ([]Item, e
 	}
 	query := "query($id: ID!, $first: Int!, $after: String) { " + field + " { " + imdbTitleFields + " } }"
 	variables := map[string]any{"id": id, "first": 250, "after": nil}
+	if root == "chartTitles" {
+		query = `query($chart: ChartTitleType!, $first: Int!, $after: String) {
+			chartTitles(chart: {chartType: $chart}, first: $first, after: $after) {
+				edges { title: node { ` + imdbTitleSelection + ` } }
+				pageInfo { hasNextPage endCursor }
+			}
+		}`
+		variables = map[string]any{"chart": id, "first": 250, "after": nil}
+	}
 	items := make([]Item, 0)
 	seenIDs := make(map[string]bool)
 	seenCursors := make(map[string]bool)
@@ -86,10 +97,15 @@ func (p *IMDbProvider) Fetch(ctx context.Context, cfg ProviderConfig) ([]Item, e
 		if root == "predefinedList" {
 			list = data.PredefinedList
 		}
-		if list == nil {
+		var page *imdbTitleConnection
+		switch {
+		case root == "chartTitles":
+			page = data.ChartTitles
+		case list != nil:
+			page = list.Items
+		default:
 			return nil, fmt.Errorf("imdb: list not found or private; check the URL and make the list public")
 		}
-		page := list.Items
 		if page == nil || page.Edges == nil || page.PageInfo == nil {
 			return nil, fmt.Errorf("imdb: incomplete list response")
 		}
@@ -139,7 +155,7 @@ func imdbSource(input string) (string, string, error) {
 	}
 	u, err := url.Parse(input)
 	if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" {
-		return "", "", fmt.Errorf("imdb: expected an IMDb list or public watchlist URL")
+		return "", "", fmt.Errorf("imdb: expected an IMDb list, public watchlist, or supported chart URL")
 	}
 	switch strings.ToLower(u.Hostname()) {
 	case "imdb.com", "www.imdb.com", "m.imdb.com", "rss.imdb.com":
@@ -149,6 +165,25 @@ func imdbSource(input string) (string, string, error) {
 	}
 	parts := strings.Split(strings.Trim(u.Path, "/"), "/")
 	for i := 0; i+1 < len(parts); i++ {
+		if parts[i] == "chart" {
+			if i+2 != len(parts) {
+				return "", "", fmt.Errorf("imdb: unsupported chart URL")
+			}
+			switch parts[i+1] {
+			case "moviemeter":
+				return "chartTitles", "MOST_POPULAR_MOVIES", nil
+			case "tvmeter":
+				return "chartTitles", "MOST_POPULAR_TV_SHOWS", nil
+			case "top":
+				return "chartTitles", "TOP_RATED_MOVIES", nil
+			case "toptv":
+				return "chartTitles", "TOP_RATED_TV_SHOWS", nil
+			case "bottom":
+				return "chartTitles", "LOWEST_RATED_MOVIES", nil
+			default:
+				return "", "", fmt.Errorf("imdb: unsupported chart %q; use moviemeter, tvmeter, top, toptv, or bottom", parts[i+1])
+			}
+		}
 		if parts[i] == "list" && imdbListID.MatchString(parts[i+1]) {
 			return "list", parts[i+1], nil
 		}
@@ -157,7 +192,7 @@ func imdbSource(input string) (string, string, error) {
 			return "predefinedList", parts[i+1], nil
 		}
 	}
-	return "", "", fmt.Errorf("imdb: expected an IMDb list or public watchlist URL")
+	return "", "", fmt.Errorf("imdb: expected an IMDb list, public watchlist, or supported chart URL")
 }
 
 func (p *IMDbProvider) query(ctx context.Context, query string, variables map[string]any) (*imdbData, error) {
@@ -210,34 +245,37 @@ func (p *IMDbProvider) query(ctx context.Context, query string, variables map[st
 }
 
 type imdbData struct {
-	List           *imdbList `json:"list"`
-	PredefinedList *imdbList `json:"predefinedList"`
+	List           *imdbList            `json:"list"`
+	PredefinedList *imdbList            `json:"predefinedList"`
+	ChartTitles    *imdbTitleConnection `json:"chartTitles"`
 	UserProfile    *struct {
 		UserID string `json:"userId"`
 	} `json:"userProfile"`
 }
 
 type imdbList struct {
-	Items *struct {
-		Edges []struct {
-			Title *struct {
-				ID        string `json:"id"`
-				TitleText struct {
-					Text string `json:"text"`
-				} `json:"titleText"`
-				ReleaseYear *struct {
-					Year int `json:"year"`
-				} `json:"releaseYear"`
-				TitleType struct {
-					ID string `json:"id"`
-				} `json:"titleType"`
-			} `json:"title"`
-		} `json:"edges"`
-		PageInfo *struct {
-			HasNextPage bool   `json:"hasNextPage"`
-			EndCursor   string `json:"endCursor"`
-		} `json:"pageInfo"`
-	} `json:"titleListItemSearch"`
+	Items *imdbTitleConnection `json:"titleListItemSearch"`
+}
+
+type imdbTitleConnection struct {
+	Edges []struct {
+		Title *struct {
+			ID        string `json:"id"`
+			TitleText struct {
+				Text string `json:"text"`
+			} `json:"titleText"`
+			ReleaseYear *struct {
+				Year int `json:"year"`
+			} `json:"releaseYear"`
+			TitleType struct {
+				ID string `json:"id"`
+			} `json:"titleType"`
+		} `json:"title"`
+	} `json:"edges"`
+	PageInfo *struct {
+		HasNextPage bool   `json:"hasNextPage"`
+		EndCursor   string `json:"endCursor"`
+	} `json:"pageInfo"`
 }
 
 func (p *IMDbProvider) fetchRSS(ctx context.Context, feedURL string) ([]Item, error) {

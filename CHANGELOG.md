@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Import IMDb Most Popular Movies/TV, Top 250 Movies/TV, and Bottom 100 Movies
+  charts by pasting their URLs into the IMDb List / Chart import source.
+
 - Manage all on-disk files from movie, show and season details, including samples,
   subtitles and extras. Administrators can select files for explicitly confirmed
   recycling or permanent deletion, with per-file audit records and immediate
@@ -52,6 +55,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Security
 
+- Upgrade `golang.org/x/net` to v0.62.0 and its required Go dependencies to
+  address GO-2026-6860 and GO-2026-6866 in HTML parsing and rendering.
 - Require administrator access for integration configuration changes and tests,
   redact stored credentials in responses, and preserve unchanged secrets on edit.
 - Upgrade the Go toolchain to 1.26.10 across CI and container builds, and update

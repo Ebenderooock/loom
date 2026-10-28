@@ -38,6 +38,13 @@ func TestIMDbSource(t *testing.T) {
 		{"ur123", "predefinedList", "ur123", false},
 		{"p.abc123", "predefinedList", "p.abc123", false},
 		{"https://feeds.example/list.rss", "", "", false},
+		{"https://www.imdb.com/chart/moviemeter/?ref_=ls_nv_menu", "chartTitles", "MOST_POPULAR_MOVIES", false},
+		{"https://imdb.com/chart/tvmeter", "chartTitles", "MOST_POPULAR_TV_SHOWS", false},
+		{"https://m.imdb.com/de/chart/top/#titles", "chartTitles", "TOP_RATED_MOVIES", false},
+		{"https://www.imdb.com/chart/toptv/", "chartTitles", "TOP_RATED_TV_SHOWS", false},
+		{"https://www.imdb.com/chart/bottom/", "chartTitles", "LOWEST_RATED_MOVIES", false},
+		{"https://www.imdb.com/chart/boxoffice/", "", "", true},
+		{"https://www.imdb.com/chart/moviemeter/invalid/", "", "", true},
 		{"https://imdb.com/list/not-a-list/", "", "", true},
 		{"https://imdb.com/user/ur123/", "", "", true},
 		{"https://imdb.com/title/tt123/", "", "", true},
@@ -48,6 +55,89 @@ func TestIMDbSource(t *testing.T) {
 			root, id, err := imdbSource(tc.input)
 			if (err != nil) != tc.wantErr || root != tc.root || id != tc.id {
 				t.Fatalf("imdbSource = (%q, %q, %v), want (%q, %q), error=%v", root, id, err, tc.root, tc.id, tc.wantErr)
+			}
+		})
+	}
+}
+
+func TestIMDbFetchCharts(t *testing.T) {
+	for _, tc := range []struct {
+		path, chart, mediaType string
+	}{
+		{"moviemeter", "MOST_POPULAR_MOVIES", "movie"},
+		{"tvmeter", "MOST_POPULAR_TV_SHOWS", "series"},
+		{"top", "TOP_RATED_MOVIES", "movie"},
+		{"toptv", "TOP_RATED_TV_SHOWS", "series"},
+		{"bottom", "LOWEST_RATED_MOVIES", "movie"},
+	} {
+		t.Run(tc.path, func(t *testing.T) {
+			p := NewIMDbList()
+			calls := 0
+			p.client.Transport = imdbRoundTripper(func(req *http.Request) (*http.Response, error) {
+				calls++
+				var payload struct {
+					Query     string `json:"query"`
+					Variables struct {
+						Chart string  `json:"chart"`
+						First int     `json:"first"`
+						After *string `json:"after"`
+					} `json:"variables"`
+				}
+				if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
+					t.Fatal(err)
+				}
+				if req.Method != http.MethodPost || req.URL.String() != imdbGraphQLEndpoint ||
+					payload.Variables.Chart != tc.chart || payload.Variables.First != 250 ||
+					!strings.Contains(payload.Query, "title: node") {
+					t.Fatalf("unexpected chart request: %+v", payload)
+				}
+				if calls == 1 && payload.Variables.After != nil {
+					t.Fatal("first page must not have a cursor")
+				}
+				if calls == 2 && (payload.Variables.After == nil || *payload.Variables.After != "next") {
+					t.Fatal("second page must use returned cursor")
+				}
+				if calls > 2 {
+					t.Fatal("unexpected extra request")
+				}
+				titleType := "movie"
+				if tc.mediaType == "series" {
+					titleType = "tvSeries"
+				}
+				return imdbResponse(200, fmt.Sprintf(`{"data":{"chartTitles":{"edges":[{"title":{"id":"tt%d","titleText":{"text":"Chart title"},"releaseYear":{"year":2026},"titleType":{"id":%q}}}],"pageInfo":{"hasNextPage":%t,"endCursor":"next"}}}}`, calls, titleType, calls == 1)), nil
+			})
+			items, err := p.Fetch(context.Background(), ProviderConfig{URL: "https://www.imdb.com/chart/" + tc.path + "/?ref_=ls_nv_menu"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if calls != 2 || len(items) != 2 {
+				t.Fatalf("got %d requests and %d items", calls, len(items))
+			}
+			for i, item := range items {
+				want := Item{ExternalID: fmt.Sprintf("tt%d", i+1), IMDbID: fmt.Sprintf("tt%d", i+1), Title: "Chart title", Year: 2026, MediaType: tc.mediaType}
+				if item != want {
+					t.Errorf("item = %+v, want %+v", item, want)
+				}
+			}
+		})
+	}
+}
+
+func TestIMDbChartErrors(t *testing.T) {
+	for _, body := range []string{
+		`{"data":{"chartTitles":null}}`,
+		`{"data":{"chartTitles":{"edges":[]}}}`,
+		`{"data":{"chartTitles":{"edges":[],"pageInfo":{"hasNextPage":true}}}}`,
+		`{"errors":[{"message":"chart unavailable"}],"data":{"chartTitles":null}}`,
+	} {
+		t.Run(body, func(t *testing.T) {
+			p := NewIMDbList()
+			p.client.Transport = imdbRoundTripper(func(req *http.Request) (*http.Response, error) {
+				return imdbResponse(200, body), nil
+			})
+			items, err := p.Fetch(context.Background(), ProviderConfig{URL: "https://www.imdb.com/chart/moviemeter/"})
+			if err == nil || items != nil {
+				t.Fatalf("Fetch = (%v, %v), want no partial items and an error", items, err)
 			}
 		})
 	}
@@ -230,6 +320,7 @@ func TestIMDbLive(t *testing.T) {
 	if os.Getenv("LOOM_TEST_IMDB_LIVE") != "1" {
 		t.Skip("set LOOM_TEST_IMDB_LIVE=1 to check the public IMDb API")
 	}
+
 	items, err := NewIMDbList().Fetch(context.Background(), ProviderConfig{URL: "https://www.imdb.com/list/ls004285275/"})
 	if err != nil {
 		t.Fatal(err)
@@ -243,4 +334,35 @@ func TestIMDbLive(t *testing.T) {
 		}
 	}
 	t.Logf("fetched %d titles", len(items))
+}
+
+func TestIMDbChartsLive(t *testing.T) {
+	if os.Getenv("LOOM_TEST_IMDB_LIVE") != "1" {
+		t.Skip("set LOOM_TEST_IMDB_LIVE=1 to check the public IMDb API")
+	}
+	for _, tc := range []struct {
+		path, mediaType string
+		count           int
+	}{
+		{"moviemeter", "movie", 100},
+		{"tvmeter", "series", 100},
+		{"top", "movie", 250},
+		{"toptv", "series", 250},
+		{"bottom", "movie", 100},
+	} {
+		t.Run(tc.path, func(t *testing.T) {
+			items, err := NewIMDbList().Fetch(context.Background(), ProviderConfig{URL: "https://www.imdb.com/chart/" + tc.path + "/?ref_=ls_nv_menu"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(items) != tc.count {
+				t.Fatalf("got %d titles, want %d", len(items), tc.count)
+			}
+			for _, item := range items {
+				if !imdbTitleID.MatchString(item.IMDbID) || item.Title == "" || item.MediaType != tc.mediaType {
+					t.Fatalf("invalid chart item: %+v", item)
+				}
+			}
+		})
+	}
 }
