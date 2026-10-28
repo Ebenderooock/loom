@@ -185,6 +185,7 @@ type CollectionReference struct {
 	PosterPath string `json:"poster_path"`
 }
 
+// CollectionResponse is a TMDB movie set (collection) payload.
 type CollectionResponse struct {
 	ID         int            `json:"id"`
 	Name       string         `json:"name"`

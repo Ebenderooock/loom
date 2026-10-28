@@ -25,15 +25,19 @@ const (
 	maxCacheItems  = 512
 )
 
+// ErrNotConfigured means no TMDB API key is configured.
 var ErrNotConfigured = errors.New("TMDB provider is not configured")
+
+// ErrProvider means TMDB failed and no usable cached response exists.
 var ErrProvider = errors.New("TMDB provider unavailable")
 
-// Narrow interfaces keep discovery read-only and use the real media services.
+// MovieLibrary is the read-only movie catalog view used to seed discovery.
 type MovieLibrary interface {
 	ListMovies(context.Context, int, int) ([]*movies.Movie, error)
 	ListMovieFiles(context.Context, string) ([]*movies.MovieFile, error)
 }
 
+// SeriesLibrary is the read-only series catalog view used to seed discovery.
 type SeriesLibrary interface {
 	ListSeries(context.Context) ([]*series.Series, error)
 }
@@ -43,6 +47,7 @@ type cacheEntry struct {
 	at    time.Time
 }
 
+// Service builds TMDB-backed library growth suggestions and collection views.
 type Service struct {
 	client *tmdb.Client
 	movies MovieLibrary
@@ -54,6 +59,7 @@ type Service struct {
 	now    func() time.Time
 }
 
+// NewService wires discovery to TMDB, the media catalogs and dismissal storage.
 func NewService(client *tmdb.Client, movies MovieLibrary, series SeriesLibrary, store *Store) *Service {
 	return &Service{client: client, movies: movies, series: series, store: store,
 		gate: make(chan struct{}, 1), cache: make(map[string]cacheEntry), now: time.Now}

@@ -45,6 +45,7 @@ func sourcePriority(source string) int {
 	}
 }
 
+// Recommendations suggests titles to add, excluding catalog and dismissed titles.
 func (s *Service) Recommendations(parent context.Context, userID int64, mediaType string, includeUpcoming bool) (*RecommendationsResponse, error) {
 	if !validMediaType(mediaType) || userID <= 0 {
 		return nil, fmt.Errorf("invalid recommendation request")

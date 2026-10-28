@@ -25,6 +25,7 @@ func (c *Client) GetMovieDetails(ctx context.Context, id int) (*MovieResponse, e
 	return &out, err
 }
 
+// GetTVDetails returns series details with genres and credits.
 func (c *Client) GetTVDetails(ctx context.Context, id int) (*TVResponse, error) {
 	var out TVResponse
 	err := c.catalog(ctx, fmt.Sprintf("/tv/%d", id), url.Values{"append_to_response": {"credits"}}, &out)
@@ -34,6 +35,7 @@ func (c *Client) GetTVDetails(ctx context.Context, id int) (*TVResponse, error) 
 	return &out, err
 }
 
+// GetCollection returns a TMDB movie set and its members.
 func (c *Client) GetCollection(ctx context.Context, id int) (*CollectionResponse, error) {
 	var out CollectionResponse
 	err := c.catalog(ctx, fmt.Sprintf("/collection/%d", id), nil, &out)
@@ -54,6 +56,7 @@ func catalogMediaPath(mediaType string) (string, error) {
 	}
 }
 
+// GetCatalogCredits returns cast and crew for a movie or series.
 func (c *Client) GetCatalogCredits(ctx context.Context, mediaType string, id int) (*CreditsResponse, error) {
 	path, err := catalogMediaPath(mediaType)
 	if err != nil {
@@ -64,6 +67,7 @@ func (c *Client) GetCatalogCredits(ctx context.Context, mediaType string, id int
 	return &out, err
 }
 
+// GetRecommendations returns TMDB titles related to a movie or series.
 func (c *Client) GetRecommendations(ctx context.Context, mediaType string, id int) (*SearchResponse, error) {
 	path, err := catalogMediaPath(mediaType)
 	if err != nil {
@@ -84,6 +88,7 @@ type DiscoverOptions struct {
 	ReleasedBy string // YYYY-MM-DD; empty permits future results.
 }
 
+// Discover queries TMDB discover for a media type using opts filters.
 func (c *Client) Discover(ctx context.Context, mediaType string, opts DiscoverOptions) (*SearchResponse, error) {
 	path, err := catalogMediaPath(mediaType)
 	if err != nil {

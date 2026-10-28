@@ -2,6 +2,7 @@ package discover
 
 import "time"
 
+// Recommendation is one title not yet in the catalog, with why it was suggested.
 type Recommendation struct {
 	TMDBID       int      `json:"tmdb_id"`
 	MediaType    string   `json:"media_type"`
@@ -17,17 +18,20 @@ type Recommendation struct {
 	CollectionID int      `json:"collection_id,omitempty"`
 }
 
+// ResultStatus reports cache freshness and partial provider failures.
 type ResultStatus struct {
 	Warnings    []string  `json:"warnings"`
 	GeneratedAt time.Time `json:"generated_at"`
 	Stale       bool      `json:"stale"`
 }
 
+// RecommendationsResponse is the body of GET /discover/recommendations.
 type RecommendationsResponse struct {
 	Items []Recommendation `json:"items"`
 	ResultStatus
 }
 
+// Collection summarizes a TMDB movie set represented in the catalog.
 type Collection struct {
 	ID         int    `json:"id"`
 	Name       string `json:"name"`
@@ -39,6 +43,7 @@ type Collection struct {
 	Upcoming   int    `json:"upcoming"`
 }
 
+// CollectionItem is one movie in a collection with its catalog status.
 type CollectionItem struct {
 	Recommendation
 	InLibrary bool   `json:"in_library"`
@@ -47,11 +52,13 @@ type CollectionItem struct {
 	Monitored bool   `json:"monitored"`
 }
 
+// CollectionsResponse is the body of GET /discover/collections.
 type CollectionsResponse struct {
 	Items []Collection `json:"items"`
 	ResultStatus
 }
 
+// CollectionResponse is the body of GET /discover/collections/{id}.
 type CollectionResponse struct {
 	Collection Collection       `json:"collection"`
 	Items      []CollectionItem `json:"items"`

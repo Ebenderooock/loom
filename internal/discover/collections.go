@@ -8,6 +8,7 @@ import (
 	"github.com/ebenderooock/loom/internal/metadata/tmdb"
 )
 
+// Collections lists movie sets that contain at least one catalog movie.
 func (s *Service) Collections(parent context.Context) (*CollectionsResponse, error) {
 	ctx, done, err := s.begin(parent)
 	if err != nil {
@@ -34,6 +35,7 @@ func (s *Service) Collections(parent context.Context) (*CollectionsResponse, err
 	return out, nil
 }
 
+// Collection returns one movie set with release-ordered member status.
 func (s *Service) Collection(parent context.Context, id int) (*CollectionResponse, error) {
 	if id <= 0 {
 		return nil, fmt.Errorf("invalid collection ID")

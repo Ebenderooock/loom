@@ -221,7 +221,7 @@ func fixtureService(t *testing.T) (*Service, *catalogFixture, *movieLibrary, *se
 }
 
 func recommendationIDs(items []Recommendation) []int {
-	out := []int{}
+	out := make([]int, 0, len(items))
 	for _, item := range items {
 		out = append(out, item.TMDBID)
 	}
