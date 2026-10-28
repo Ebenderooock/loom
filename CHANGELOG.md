@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Import IMDb Most Popular Movies/TV, Top 250 Movies/TV, and Bottom 100 Movies
+  charts by pasting their URLs into the IMDb List / Chart import source.
+
 - Manage all on-disk files from movie, show and season details, including samples,
   subtitles and extras. Administrators can select files for explicitly confirmed
   recycling or permanent deletion, with per-file audit records and immediate
