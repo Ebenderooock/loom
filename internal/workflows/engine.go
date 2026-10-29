@@ -505,6 +505,9 @@ func (e *Engine) CompleteImport(ctx context.Context, workflowID string) error {
 // FailImport transitions an import workflow to failed.
 func (e *Engine) FailImport(ctx context.Context, workflowID, reason string) error {
 	ctx = WithWorkflowID(ctx, workflowID)
+	if err := e.store.SetError(ctx, workflowID, reason); err != nil {
+		return err
+	}
 	ok, err := e.store.Transition(ctx, workflowID, StateImporting, StateFailed, reason)
 	if err != nil {
 		return err

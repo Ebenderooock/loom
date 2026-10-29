@@ -1015,6 +1015,12 @@ Defaults are seeded when no profiles exist. On startup, only built-in profiles w
 | `POST` | `/api/v1/import-lists/exclusions` | Create exclusion (title required) |
 | `DELETE` | `/api/v1/import-lists/exclusions/{id}` | Delete exclusion |
 | `GET` | `/api/v1/import-lists/trakt/lists` | Fetch authenticated user's Trakt lists |
+| `GET` | `/api/v1/import-lists/discover?media_type=movie` | Discover feed from discover-mode lists (`movie` or `series`) |
+| `POST` | `/api/v1/import-lists/discover/add` | Add a discover item by `item_id`, using its parent list's settings |
+| `GET` | `/api/v1/discover/movie/{id}` | Movie metadata by TMDB ID |
+| `GET` | `/api/v1/discover/series/{id}` | Show metadata by TMDB ID |
+
+**Discover UI:** Each card has separate quick-add and details controls. Details open a full-height side drawer with an overview, genres, release date, rating, runtime or season count, and external links where available. Users can add from the drawer using the same library, quality profile, monitoring, and search-on-add settings as quick add. Details remain accessible for items already in the library.
 
 **Data model (ImportList):**
 
@@ -1038,6 +1044,17 @@ Defaults are seeded when no profiles exist. On startup, only built-in profiles w
 
 **Supported list types:**
 
+IMDb lists, watchlists, and charts supply artwork directly from IMDb, without
+requiring a TMDb ID or API key. Existing entries missing posters are backfilled
+on their next list sync; already cached artwork is preserved.
+
+For movie library membership and duplicate checks, IMDb-only entries are
+resolved to TMDb IDs using TMDb's exact external-ID lookup. Resolved IDs are
+cached on list items and retained across syncs, so movies added through TMDb
+are recognized even when their library records lack IMDb IDs. This requires
+the configured TMDb metadata client; lookup failures are logged and retried on
+a later read or sync. Matching does not guess from titles.
+
 | ListType | Provider | Description |
 |----------|----------|-------------|
 | `trakt_list` | Trakt | User's custom list (slug in URL) |
@@ -1045,8 +1062,8 @@ Defaults are seeded when no profiles exist. On startup, only built-in profiles w
 | `trakt_popular` | Trakt | Popular movies or shows (media type aware) |
 | `trakt_trending` | Trakt | Trending movies or shows (media type aware) |
 | `trakt_anticipated` | Trakt | Anticipated movies or shows (media type aware) |
-| `imdb_list` | IMDb | User list (URL) |
-| `imdb_watchlist` | IMDb | Watchlist (URL) |
+| `imdb_list` | IMDb | Public user list (URL or `ls...` ID), or chart URL |
+| `imdb_watchlist` | IMDb | Public watchlist (URL or `ur...` / `p....` profile ID) |
 | `tmdb_list` | TMDb | User list (URL + API key) |
 | `tmdb_popular` | TMDb | Popular items |
 | `plex_watchlist` | Plex | Plex watchlist (access token) |
@@ -1443,6 +1460,7 @@ Returns `{ success: true/false, items: [...], count: N }` with up to 5 preview i
 |-------|------|---------|-------------|
 | start | string (YYYY-MM-DD) | First of current month | Range start |
 | end | string (YYYY-MM-DD) | Last of current month | Range end |
+| timezone | string (IANA timezone) | UTC | Browser timezone used to place timestamped episodes on local calendar days |
 
 **Response Model (Event):**
 
@@ -1450,12 +1468,15 @@ Returns `{ success: true/false, items: [...], count: N }` with up to 5 preview i
 |-------|------|-------------|
 | id | string | Media item ID |
 | title | string | Display title (for episodes: "Series - S01E02 - Title") |
-| type | enum | `movie` or `episode` |
+| type | enum | `movie`, `episode`, or `album` |
 | releaseType | string | `release`, `theatrical`, or `digital` (movies only) |
 | date | string | Event date (YYYY-MM-DD) |
-| status | enum | `missing` or `downloaded` |
+| airDateUtc | string | Actual episode airing instant, when known |
+| status | enum | `missing`, `downloaded`, `unaired`, `unreleased`, `searching`, `grabbed`, `downloading`, or `importing` |
+| monitored | bool | Whether the movie, episode, or album is monitored |
 | year | int | Release year (movies only) |
 | seriesTitle | string | Parent series title (episodes only) |
+| seriesId | string | Parent series ID for opening its detail drawer (episodes only) |
 | season | int | Season number (episodes only) |
 | episode | int | Episode number (episodes only) |
 | episodeTitle | string | Individual episode title (episodes only) |
@@ -1463,7 +1484,9 @@ Returns `{ success: true/false, items: [...], count: N }` with up to 5 preview i
 **Logic:**
 - Movies: queries `movies` table for rows where `release_date`, `theatrical_date`, or `digital_date` falls within range. A single movie can produce up to 3 events (one per release type, only for dates within range).
 - Episodes: queries `episodes` joined with `series` and `seasons` for rows where `air_date` is within range.
-- Status derived from movie status field (missing/unreleased → "missing") or episode `has_file` flag.
+- Available movie statuses and episode files map to `downloaded` (displayed as **Available**). Downloading and importing are not treated as available. Active workflow states enrich movie and episode events; files already available take precedence. Monitoring is reported independently.
+- Episode availability respects the actual airing instant when known, falling back to the date-only airing day.
+- Selecting a movie or episode opens its existing full detail drawer without leaving the calendar, including search and download actions. Busy days can expand to show all entries. Status labels refresh every 30 seconds.
 
 **Expected outcomes:**
 - Month/range view showing all release dates for monitored content.
@@ -2205,7 +2228,7 @@ separately by the media scanner
 3. Choose provider (e.g., Trakt Watchlist).
 4. Configure credentials:
    - Trakt: uses OAuth from Connect integration (must be set up first).
-   - IMDb: list URL.
+   - IMDb: public list URL (`https://www.imdb.com/list/ls.../`) or watchlist URL (`https://www.imdb.com/user/ur.../watchlist/`; `p....` profile URLs also work). Lists must be public; no login or API key is needed. Loom fetches all pages through IMDb's GraphQL endpoint rather than the retired RSS service. Previously saved `rss.imdb.com/list/ls...` URLs are handled automatically. Choose **IMDb List / Chart** for chart URLs such as `https://www.imdb.com/chart/moviemeter/` (Most Popular Movies). Also supported: `/chart/tvmeter/` (Most Popular TV), `/chart/top/` (Top 250 Movies), `/chart/toptv/` (Top 250 TV), and `/chart/bottom/` (Bottom 100 Movies). URL tracking parameters can be left in place. Chart entries refresh on each sync; existing imported items are retained when they leave the chart, as with other import lists.
    - TMDb: API key auto-filled from config.
 5. Set target library and quality profile.
 6. Enable/disable auto-search on add.
@@ -2234,6 +2257,13 @@ separately by the media scanner
 
 1. **Activity** page shows all active downloads across all clients.
    - Progress bars, speeds, ETA.
+   - **Downloads → Active** defaults to download-client queue order (lowest position first).
+     Use **Sort by** to choose Queue, Download speed (fastest first), Time to completion
+     (shortest first), or Status. The arrow button reverses the order.
+     Queue positions are local to each client; equal positions use client and item IDs
+     for a stable order across refreshes. Clients without queue-position support
+     (including the built-in torrent client) appear last in stable ID order.
+     Unavailable ETAs always appear last.
    - Actions: pause, resume, remove, set priority, speed limit.
 2. **Workflows** page shows pipeline state for each search operation.
    - States: searching → grabbed → downloading → importing → completed.

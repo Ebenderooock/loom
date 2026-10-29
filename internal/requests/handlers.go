@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -36,6 +37,8 @@ func Router(svc *Service, adminOnly func(http.Handler) http.Handler) chi.Router 
 		ar.Post("/{id}/reject", svc.handleReject)
 		ar.Get("/quota/config", svc.handleGetQuotaConfig)
 		ar.Put("/quota/config", svc.handleSetQuotaConfig)
+		ar.Post("/reconcile", svc.handleReconcile)
+		ar.Get("/reconciliation", svc.handleReconciliationHistory)
 	})
 
 	return r
@@ -66,11 +69,17 @@ func (s *Service) handleCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	req, err := s.Create(r.Context(), userIDStr(id), id.Username, id.HasRole("admin"), in)
 	switch {
+	case errors.Is(err, ErrForbidden):
+		writeError(w, http.StatusForbidden, err.Error())
+		return
+	case errors.Is(err, ErrConflict):
+		writeError(w, http.StatusConflict, err.Error())
+		return
 	case errors.Is(err, ErrDuplicate):
 		writeError(w, http.StatusConflict, err.Error())
 		return
 	case errors.Is(err, ErrAlreadyAvailable):
-		writeError(w, http.StatusConflict, "this title is already in your library")
+		writeError(w, http.StatusConflict, "this title is already in your library; use confirmed-missing request history to re-request it")
 		return
 	case errors.Is(err, ErrQuotaExceeded):
 		writeError(w, http.StatusTooManyRequests, "you have reached your request limit; try again later")
@@ -82,6 +91,40 @@ func (s *Service) handleCreate(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, req)
 }
 
+func (s *Service) handleReconcile(w http.ResponseWriter, r *http.Request) {
+	id := auth.IdentityFrom(r.Context())
+	if id == nil {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	var body struct {
+		DryRun *bool `json:"dry_run"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096)).Decode(&body); err != nil || body.DryRun == nil {
+		writeError(w, http.StatusBadRequest, "dry_run is required")
+		return
+	}
+	run, err := s.store.Reconcile(r.Context(), time.Now().UTC(), userIDStr(id)+":"+id.Username, *body.DryRun)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	for _, o := range run.Outcomes {
+		if o.Error != "" {
+			s.logger.WarnContext(r.Context(), "requests: reconciliation observation failed", "request_id", o.RequestID, "error", o.Error)
+		}
+	}
+	writeJSON(w, http.StatusOK, run)
+}
+
+func (s *Service) handleReconciliationHistory(w http.ResponseWriter, r *http.Request) {
+	history, err := s.store.ReconciliationHistory(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": history})
+}
 func (s *Service) handleQuotaStatus(w http.ResponseWriter, r *http.Request) {
 	id := auth.IdentityFrom(r.Context())
 	if id == nil {

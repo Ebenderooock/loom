@@ -104,6 +104,7 @@ func NewService(opts ServiceOptions) (*Service, error) {
 		opts.HealthTimeout = 10 * time.Second
 	}
 	SetHTTPClientProvider(opts.HTTPClientProvider)
+	opts.Registry.SetHistoryStore(opts.HistoryStore)
 	return &Service{
 		repo:               opts.Repository,
 		registry:           opts.Registry,
@@ -125,6 +126,13 @@ func (s *Service) Repository() Repository { return s.repo }
 
 // Registry returns the underlying live-instance registry.
 func (s *Service) Registry() *Registry { return s.registry }
+
+// SetHistoryStore shares download history with all acquisition entry points.
+// Must be called before serving requests.
+func (s *Service) SetHistoryStore(h *HistoryStore) {
+	s.historyStore = h
+	s.registry.SetHistoryStore(h)
+}
 
 // SetWorkflowEngine sets the workflow engine for recording manual grab linkage.
 func (s *Service) SetWorkflowEngine(wf *workflows.Engine) {

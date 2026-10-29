@@ -32,6 +32,8 @@ func (s *Service) Mount(r chi.Router) {
 		r.Post("/search/stream", s.handleSearchStream)
 		r.Post("/test", s.handleTestConfig)
 		r.Get("/definitions", s.handleListDefinitions)
+		r.Get("/provider-budgets", s.handleProviderBudgets)
+		r.Put("/provider-budgets/{budgetID}", s.handleConfigureProviderBudget)
 		r.Route("/{id}", func(r chi.Router) {
 			r.Get("/", s.handleGet)
 			r.Put("/", s.handleReplace)

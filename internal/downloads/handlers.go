@@ -61,6 +61,7 @@ func (s *Service) Mount(r chi.Router) {
 	// Download history endpoint
 	r.Get("/api/v1/downloads/history", s.handleHistory)
 	r.Delete("/api/v1/downloads/history", s.handleClearHistory)
+	r.Post("/api/v1/downloads/history/actions", s.handleAcquisitionActions)
 	for _, ext := range s.routeExtensions {
 		if ext != nil {
 			ext(r)
@@ -611,8 +612,12 @@ func (s *Service) handleAdd(w http.ResponseWriter, r *http.Request) {
 			"magnet", req.Magnet, "torrent_url", req.TorrentURL,
 			"infohash", req.Infohash)
 	}
-	res, err := c.Add(r.Context(), req)
+	res, err := s.registry.Acquire(r.Context(), c.ID(), req, nil)
 	if err != nil {
+		if errors.Is(err, ErrAcquisitionDeferred) {
+			writeError(w, http.StatusConflict, "acquisition_deferred", err.Error())
+			return
+		}
 		writeError(w, http.StatusBadGateway, "add_failed", err.Error())
 		return
 	}

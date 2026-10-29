@@ -117,10 +117,13 @@ type AddRequest struct {
 	// Media context — optional fields used to record grab linkage so the
 	// import pipeline can deterministically match completed downloads to
 	// the correct media item. Set by the interactive search dialog.
-	MediaType  string   `json:"media_type,omitempty"` // "movie" or "episode"
-	SeriesID   string   `json:"series_id,omitempty"`
-	EpisodeIDs []string `json:"episode_ids,omitempty"`
-	MovieID    string   `json:"movie_id,omitempty"`
+	MediaType        string   `json:"media_type,omitempty"` // "movie" or "episode"
+	SeriesID         string   `json:"series_id,omitempty"`
+	EpisodeIDs       []string `json:"episode_ids,omitempty"`
+	MovieID          string   `json:"movie_id,omitempty"`
+	MediaID          string   `json:"media_id,omitempty"`
+	IndexerID        string   `json:"indexer_id,omitempty"`
+	acquisitionScope string
 
 	// IgnoreBlocklist lets an interactive grab proceed even when the
 	// release is on the blocklist. Without it the API rejects the grab.
@@ -164,6 +167,9 @@ type Item struct {
 	Ratio           float64    `json:"ratio,omitempty"`
 	Message         string     `json:"message,omitempty"`
 	SavePath        string     `json:"save_path,omitempty"`
+	// QueuePosition is zero-based within the client; nil means unavailable
+	// or not queued (for example, a completed torrent).
+	QueuePosition *int `json:"queue_position,omitempty"`
 
 	// ContentPath is the actual filesystem path where the download's
 	// content lives. For torrent clients this is dataDir + the torrent's

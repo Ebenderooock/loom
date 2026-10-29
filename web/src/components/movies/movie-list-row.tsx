@@ -2,6 +2,10 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { TableRow, TableCell } from "@/components/ui/table";
 import { Film, Star, Eye, EyeOff } from "lucide-react";
 import { StatusBadge } from "./status-badge";
+import {
+  isMissingQualityProfile,
+  MissingQualityProfileBadge,
+} from "@/components/quality-profile-warning";
 import type { Movie, QualityProfile } from "./types";
 import { TMDB_IMG } from "./types";
 
@@ -55,7 +59,11 @@ export function MovieListRow({
         <StatusBadge status={movie.status} />
       </TableCell>
       <TableCell className="text-xs text-muted-foreground">
-        {profile?.name ?? "—"}
+        {isMissingQualityProfile(movie) ? (
+          <MissingQualityProfileBadge />
+        ) : (
+          (profile?.name ?? "—")
+        )}
       </TableCell>
       <TableCell>
         {movie.monitoringStatus === "monitored" ? (

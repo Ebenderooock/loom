@@ -105,6 +105,10 @@ func (r *Router) handleIndexerResult(ctx context.Context, ev eventbus.Event) err
 
 	// Early return if no clients are configured or enabled.
 	if r.svc.registry.Len() == 0 {
+		_, err := r.svc.registry.Acquire(ctx, "", buildAddRequest(result), nil)
+		if err != nil {
+			r.logger.Warn("router acquisition failed", "error", err)
+		}
 		r.logger.Warn("router: no clients available",
 			"indexer_id", result.IndexerID)
 		telemetry.ObserveDownloadFailed("", "no_clients")
@@ -150,17 +154,18 @@ func (r *Router) handleIndexerResult(ctx context.Context, ev eventbus.Event) err
 	var addErr error
 	for _, client := range clients {
 		req := buildAddRequest(result)
-		if r.indexerFetch != nil && result.IndexerID != "" && req.TorrentURL != "" {
-			if data, fetchErr := r.indexerFetch(ctx, result.IndexerID, req.TorrentURL); fetchErr == nil {
+		prepare := func(req *AddRequest) error {
+			if r.indexerFetch != nil && result.IndexerID != "" && req.TorrentURL != "" {
+				data, err := r.indexerFetch(ctx, result.IndexerID, req.TorrentURL)
+				if err != nil {
+					if req.Magnet != "" {
+						return nil
+					}
+					return err
+				}
 				req.RawBytes = data
-			} else {
-				r.logger.Warn("router: indexer-backed torrent fetch failed; falling back to direct URL/magnet",
-					"indexer_id", result.IndexerID,
-					"title", result.Title,
-					"url", req.TorrentURL,
-					"error", fetchErr,
-				)
 			}
+			return nil
 		}
 		// Apply per-indexer seed policy overrides when available.
 		if r.indexerLookup != nil && result.IndexerID != "" {
@@ -179,7 +184,7 @@ func (r *Router) handleIndexerResult(ctx context.Context, ev eventbus.Event) err
 				"indexer", result.IndexerID,
 			)
 		}
-		res, err := client.Add(ctx, req)
+		res, err := r.svc.registry.Acquire(ctx, client.ID(), req, prepare)
 		if err == nil {
 			telemetry.ObserveDownloadQueued(res.ClientID)
 			// Success: emit DownloadQueued and return.
@@ -243,7 +248,9 @@ func (r *Router) qualityOK(result *indexers.Result) bool {
 // For usenet, Link is the NZB URL.
 func buildAddRequest(result *indexers.Result) AddRequest {
 	req := AddRequest{
-		Title: result.Title,
+		Title:     result.Title,
+		IndexerID: result.IndexerID,
+		Infohash:  result.Infohash,
 	}
 
 	// For torrents, prefer magnet links, then infohash, then URL.

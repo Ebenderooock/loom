@@ -41,6 +41,7 @@ export function AddMovieDialog({
   qualityProfiles,
   existingTmdbIds,
   onMovieAdded,
+  initialMovie,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -48,6 +49,7 @@ export function AddMovieDialog({
   qualityProfiles: QualityProfile[];
   existingTmdbIds: Set<string>;
   onMovieAdded: () => void;
+  initialMovie?: TMDBResult;
 }) {
   const [searchTerm, setSearchTerm] = useState("");
   const [results, setResults] = useState<TMDBResult[]>([]);
@@ -71,7 +73,7 @@ export function AddMovieDialog({
     if (open) {
       setSearchTerm("");
       setResults([]);
-      setSelectedMovie(null);
+      setSelectedMovie(initialMovie ?? null);
       setAddError("");
       const firstLib = libraries[0];
       setSelectedLibrary(firstLib?.id ?? "");
@@ -81,10 +83,10 @@ export function AddMovieDialog({
           (qualityProfiles[0]?.id ?? ""),
       );
       setMonitored(true);
-      setSearchOnAdd(true);
+      setSearchOnAdd(!initialMovie);
       setTimeout(() => searchInputRef.current?.focus(), 100);
     }
-  }, [open, qualityProfiles, libraries, mediaPrefs]);
+  }, [open, qualityProfiles, libraries, mediaPrefs, initialMovie]);
 
   // Guarantee a valid quality profile is always selected once profiles load,
   // independent of dialog open state. Preserves any still-valid selection.
@@ -211,10 +213,13 @@ export function AddMovieDialog({
               ) : null}
               <div className="absolute inset-0 bg-gradient-to-t from-background to-transparent" />
               <button
-                onClick={() => setSelectedMovie(null)}
+                onClick={() =>
+                  initialMovie ? onOpenChange(false) : setSelectedMovie(null)
+                }
                 className="absolute left-4 top-4 flex items-center gap-1 rounded-full bg-black/40 px-3 py-1.5 text-sm text-white/80 hover:text-white"
               >
-                <ArrowLeft className="h-4 w-4" /> Back to results
+                <ArrowLeft className="h-4 w-4" />{" "}
+                {initialMovie ? "Back" : "Back to results"}
               </button>
             </div>
             <div className="relative z-10 -mt-16 p-6">
@@ -357,7 +362,9 @@ export function AddMovieDialog({
               <div className="mt-6 flex justify-end gap-3 border-t border-border/50 pt-4">
                 <Button
                   variant="outline"
-                  onClick={() => setSelectedMovie(null)}
+                  onClick={() =>
+                    initialMovie ? onOpenChange(false) : setSelectedMovie(null)
+                  }
                 >
                   Cancel
                 </Button>

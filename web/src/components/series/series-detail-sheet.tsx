@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { apiFetch } from "@/lib/fetch";
+import { MediaFilesManager } from "@/components/media-files-manager";
 import {
   getEpisodeStatus,
   getSeasonStats,
@@ -56,6 +57,11 @@ import { ReleaseSearchDialog } from "@/components/search/release-search-dialog";
 import { autoSearch } from "@/lib/autosearch-api";
 import { AltTitlesSection } from "@/components/alt-titles";
 import { PersonDiscoverDialog } from "@/components/person-discover-dialog";
+import {
+  isMissingQualityProfile,
+  MissingQualityProfileAlert,
+  MissingQualityProfileBadge,
+} from "@/components/quality-profile-warning";
 import type { Library } from "../../lib/libraries-api";
 import type {
   Series,
@@ -213,10 +219,14 @@ function SeasonAccordion({
   seriesTitle,
   seriesData,
   onSearchOpen,
+  filesVersion,
+  onFilesChanged,
 }: {
   seriesId: string;
   season: Season;
   seriesTitle: string;
+  filesVersion: number;
+  onFilesChanged: () => void;
   seriesData: {
     qualityProfileId: string;
     imdbId?: string;
@@ -241,35 +251,54 @@ function SeasonAccordion({
   const [autoSearchingEp, setAutoSearchingEp] = useState<number | null>(null);
   const [autoSearchingSeason, setAutoSearchingSeason] = useState(false);
 
-  const fetchEpisodes = async () => {
-    try {
-      const res = await apiFetch(
-        `/api/v1/series/${seriesId}/seasons/${season.seasonNumber}/episodes`,
-      );
-      if (res.ok) {
-        const data = await res.json();
-        setEpisodes(
-          Array.isArray(data)
-            ? data
-            : Array.isArray(data?.data)
-              ? data.data
-              : [],
+  const fetchEpisodes = useCallback(
+    async (signal?: AbortSignal) => {
+      try {
+        const res = await apiFetch(
+          `/api/v1/series/${seriesId}/seasons/${season.seasonNumber}/episodes`,
+          { signal },
         );
+        if (!res.ok) {
+          const body = await res.json().catch(() => null);
+          throw new Error(
+            body?.error?.message || `Episode refresh failed (${res.status})`,
+          );
+        }
+        const data = await res.json();
+        const rows = Array.isArray(data) ? data : data?.data;
+        if (!Array.isArray(rows))
+          throw new Error("Unexpected episode response");
+        if (!signal?.aborted) {
+          setEpisodes(rows);
+          setLoaded(true);
+        }
+      } catch (error) {
+        if (!signal?.aborted) {
+          toast.error("Could not refresh season episodes", {
+            description: error instanceof Error ? error.message : String(error),
+          });
+        }
       }
-    } catch {
-      /* ignore */
-    }
-  };
+    },
+    [seriesId, season.seasonNumber],
+  );
 
-  const handleToggle = async () => {
-    if (!open && !loaded) {
-      setLoading(true);
-      await fetchEpisodes();
-      setLoading(false);
-      setLoaded(true);
+  useEffect(() => {
+    // Keep expanded lists current after either series- or season-scoped deletion.
+    // Collapsed seasons use refreshed server stats until their next expansion.
+    if (!open) {
+      setLoaded(false);
+      return;
     }
-    setOpen((v) => !v);
-  };
+    const controller = new AbortController();
+    setLoading(true);
+    void fetchEpisodes(controller.signal).finally(() => {
+      if (!controller.signal.aborted) setLoading(false);
+    });
+    return () => controller.abort();
+  }, [open, filesVersion, fetchEpisodes]);
+
+  const handleToggle = () => setOpen((value) => !value);
 
   const handleAutoSearchEpisode = async (ep: Episode) => {
     setAutoSearchingEp(ep.episodeNumber);
@@ -467,6 +496,15 @@ function SeasonAccordion({
       {/* Episode table */}
       {open && (
         <div className="border-t border-border/30">
+          <div className="px-4 pt-3">
+            <MediaFilesManager
+              mediaType="series"
+              id={seriesId}
+              season={season.seasonNumber}
+              title={`${seriesTitle} — ${season.seasonNumber === 0 ? "Specials" : `Season ${season.seasonNumber}`}`}
+              onChanged={onFilesChanged}
+            />
+          </div>
           {loading ? (
             <div className="flex items-center justify-center py-6">
               <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
@@ -605,6 +643,7 @@ export function SeriesDetailSheet({
   series,
   open,
   onOpenChange,
+  onCloseAutoFocus,
   profiles,
   libraries,
   onUpdated,
@@ -616,6 +655,7 @@ export function SeriesDetailSheet({
   series: Series | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onCloseAutoFocus?: (event: Event) => void;
   profiles: QualityProfile[];
   libraries: Library[];
   onUpdated: (updated: Series) => void;
@@ -637,6 +677,7 @@ export function SeriesDetailSheet({
   const [creditsLoading, setCreditsLoading] = useState(false);
   const [seasons, setSeasons] = useState<Season[]>([]);
   const [seasonsLoading, setSeasonsLoading] = useState(false);
+  const [filesVersion, setFilesVersion] = useState(0);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchContext, setSearchContext] = useState<{
     title: string;
@@ -736,7 +777,41 @@ export function SeriesDetailSheet({
 
   if (!series) return null;
 
+  const handleFilesChanged = () => {
+    // List refresh alone does not replace the independently held detail/season
+    // state. Refresh local season summaries and invalidate mounted episode lists.
+    setFilesVersion((version) => version + 1);
+    void apiFetch(`/api/v1/series/${series.id}/seasons`)
+      .then(async (response) => {
+        if (!response.ok) {
+          const body = await response.json().catch(() => null);
+          throw new Error(
+            body?.error?.message ||
+              `Season refresh failed (${response.status})`,
+          );
+        }
+        const data = await response.json();
+        const rows = Array.isArray(data) ? data : data?.data;
+        if (!Array.isArray(rows)) throw new Error("Unexpected season response");
+        setSeasons(rows);
+      })
+      .catch((error) =>
+        toast.error("Could not refresh season summaries", {
+          description: error instanceof Error ? error.message : String(error),
+        }),
+      );
+    onRefresh?.();
+  };
+
   const profile = profiles.find((p) => p.id === series.qualityProfileId);
+  const missingProfile = isMissingQualityProfile(series);
+  const openEditor = () => {
+    setEditing(true);
+    // A dangling ID can't be shown in the picker; start blank instead.
+    setEditProfile(missingProfile ? "" : series.qualityProfileId);
+    setEditMonitoring(series.monitoringStatus);
+    setEditSeriesType(series.seriesType || "standard");
+  };
   const library = libraries.find((l) => l.id === series.libraryId);
   const isMonitored = series.monitoringStatus === "monitored";
 
@@ -892,6 +967,7 @@ export function SeriesDetailSheet({
       <Sheet open={open} onOpenChange={onOpenChange}>
         <SheetContent
           side="right"
+          onCloseAutoFocus={onCloseAutoFocus}
           className="w-full overflow-y-auto p-0 sm:max-w-2xl"
         >
           <SheetHeader className="sr-only">
@@ -975,7 +1051,7 @@ export function SeriesDetailSheet({
 
           {/* Action buttons */}
           <div className="px-6 pb-2">
-            <div className="flex items-center gap-1.5">
+            <div className="flex flex-wrap items-center gap-1.5">
               {/* Primary actions with labels */}
               <Button
                 size="sm"
@@ -1012,12 +1088,7 @@ export function SeriesDetailSheet({
                 size="sm"
                 variant="outline"
                 className="h-8 gap-1.5 text-xs"
-                onClick={() => {
-                  setEditing(true);
-                  setEditProfile(series.qualityProfileId);
-                  setEditMonitoring(series.monitoringStatus);
-                  setEditSeriesType(series.seriesType || "standard");
-                }}
+                onClick={openEditor}
                 title="Edit series settings"
               >
                 <Pencil className="h-3.5 w-3.5" />
@@ -1088,6 +1159,14 @@ export function SeriesDetailSheet({
             </div>
           </div>
 
+          {missingProfile && !editing && (
+            <MissingQualityProfileAlert
+              mediaLabel="series"
+              onFix={openEditor}
+              className="mx-6 mb-3"
+            />
+          )}
+
           {/* Edit mode bar */}
           {editing && (
             <div className="mx-6 mb-3 space-y-4 rounded-lg border border-accent/30 bg-accent/5 p-4">
@@ -1105,7 +1184,7 @@ export function SeriesDetailSheet({
                   </label>
                   <Select value={editProfile} onValueChange={setEditProfile}>
                     <SelectTrigger id="series-edit-profile">
-                      <SelectValue />
+                      <SelectValue placeholder="Select profile" />
                     </SelectTrigger>
                     <SelectContent>
                       {profiles.map((p) => (
@@ -1202,8 +1281,14 @@ export function SeriesDetailSheet({
                     {series.seriesType || "Standard"}
                   </span>
                 </DetailRow>
-                {profile && (
-                  <DetailRow label="Quality">{profile.name}</DetailRow>
+                {missingProfile ? (
+                  <DetailRow label="Quality">
+                    <MissingQualityProfileBadge />
+                  </DetailRow>
+                ) : (
+                  profile && (
+                    <DetailRow label="Quality">{profile.name}</DetailRow>
+                  )
                 )}
                 {library && (
                   <DetailRow label="Library">{library.name}</DetailRow>
@@ -1244,6 +1329,12 @@ export function SeriesDetailSheet({
             <AltTitlesSection mediaId={series.id} mediaType="series" />
 
             {/* Seasons */}
+            <MediaFilesManager
+              mediaType="series"
+              id={series.id}
+              title={series.title}
+              onChanged={handleFilesChanged}
+            />
             <CollapsibleSection
               title={`Seasons (${seasons.length})`}
               icon={FileVideo}
@@ -1266,6 +1357,8 @@ export function SeriesDetailSheet({
                         seriesId={series.id}
                         season={season}
                         seriesTitle={series.title}
+                        filesVersion={filesVersion}
+                        onFilesChanged={handleFilesChanged}
                         seriesData={{
                           qualityProfileId: series.qualityProfileId,
                           imdbId: series.imdbId,
@@ -1370,6 +1463,10 @@ export function SeriesDetailSheet({
       {/* Release search dialog */}
       {searchContext && (
         <ReleaseSearchDialog
+          qualityProfileId={series.qualityProfileId}
+          evaluationTitle={series.title}
+          runtime={series.runtime}
+          tvdbId={series.tvdbId ? Number(series.tvdbId) : undefined}
           open={searchOpen}
           onOpenChange={setSearchOpen}
           title={searchContext.title}

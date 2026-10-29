@@ -240,6 +240,7 @@ export async function testDownloadConfig(
 // ---------- Grab (send release to download client) ----------
 
 export interface GrabRequest {
+  indexer_id?: string;
   magnet?: string;
   torrent_url?: string;
   nzb_url?: string;

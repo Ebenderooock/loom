@@ -2,12 +2,41 @@ package qbittorrent
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"testing"
 
 	"github.com/ebenderooock/loom/internal/downloads"
 )
+
+func TestQueuePosition(t *testing.T) {
+	for _, tc := range []struct {
+		payload string
+		want    int
+	}{
+		{`{"priority":1}`, 0},
+		{`{"priority":4}`, 3},
+		{`{"priority":0}`, -1},
+		{`{"priority":-1}`, -1},
+		{`{}`, -1},
+	} {
+		t.Run(tc.payload, func(t *testing.T) {
+			var raw torrentInfo
+			if err := json.Unmarshal([]byte(tc.payload), &raw); err != nil {
+				t.Fatal(err)
+			}
+			got := mapItem(raw).QueuePosition
+			if tc.want < 0 {
+				if got != nil {
+					t.Fatalf("want no queue position, got %d", *got)
+				}
+			} else if got == nil || *got != tc.want {
+				t.Fatalf("queue position = %v, want %d", got, tc.want)
+			}
+		})
+	}
+}
 
 const torrentsInfoFixture = `[
   {

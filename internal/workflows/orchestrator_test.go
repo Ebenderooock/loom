@@ -490,19 +490,19 @@ func TestOrchestratorImportFailure(t *testing.T) {
 	}
 }
 
-func TestClassifyImportError_MetadataNotResolvedIsPermanent(t *testing.T) {
+func TestClassifyImportError_MetadataNotResolvedRetriesImport(t *testing.T) {
 	orch := &Orchestrator{}
 	got := orch.classifyImportError(`download metadata not resolved yet: unresolved content path "/media/downloads/infohash:abc"`)
-	if got != failPermanent {
-		t.Fatalf("expected failPermanent, got %v", got)
+	if got != retryImport {
+		t.Fatalf("expected retryImport, got %v", got)
 	}
 }
 
-func TestClassifyImportError_DownloadPathNotFoundRetriesSearch(t *testing.T) {
+func TestClassifyImportError_DownloadPathNotFoundRetriesImport(t *testing.T) {
 	orch := &Orchestrator{}
 	got := orch.classifyImportError(`download path not found: stat /media/downloads/Some.Release: no such file or directory`)
-	if got != retrySearch {
-		t.Fatalf("expected retrySearch, got %v", got)
+	if got != retryImport {
+		t.Fatalf("expected retryImport, got %v", got)
 	}
 }
 
@@ -695,7 +695,7 @@ func TestOrchestratorSeedingWaitsForRatio(t *testing.T) {
 	})
 }
 
-func TestOrchestratorPreImportStopsAndRemovesBeforeImport(t *testing.T) {
+func TestOrchestratorPreImportCachesPathsBeforeImport(t *testing.T) {
 	imp := &mockImporter{paths: []string{"/media/movie.mkv"}}
 	orch, store := testOrchestrator(t, imp)
 

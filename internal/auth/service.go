@@ -30,21 +30,25 @@ type ServiceOptions struct {
 	// Invites is optional; when nil, invite endpoints report the feature as
 	// disabled. Production wires NewInviteStore(db.DB()).
 	Invites *InviteStore
+	// PairingDisabled explicitly disables device authorization (for auth-off deployments).
+	PairingDisabled bool
 }
 
 // Service is the orchestrator: middleware, handlers, and CLI all use
 // this struct.
 type Service struct {
-	store         Store
-	logger        *slog.Logger
-	appConfig     *appconfig.Config
-	appConfigPath string
-	sessionSecret []byte
-	sessionTTL    time.Duration
-	cookieSecure  bool
-	oidc          *OIDC
-	proxy         *ProxyAuth
-	invites       *InviteStore
+	store           Store
+	logger          *slog.Logger
+	appConfig       *appconfig.Config
+	appConfigPath   string
+	sessionSecret   []byte
+	sessionTTL      time.Duration
+	cookieSecure    bool
+	oidc            *OIDC
+	proxy           *ProxyAuth
+	invites         *InviteStore
+	pairing         *pairingStore
+	pairingDisabled bool
 }
 
 // NewService validates options and returns the configured Service. The
@@ -69,16 +73,18 @@ func NewService(opts ServiceOptions) (*Service, error) {
 		opts.SessionTTL = 30 * 24 * time.Hour
 	}
 	return &Service{
-		store:         opts.Store,
-		logger:        opts.Logger,
-		appConfig:     opts.AppConfig,
-		appConfigPath: opts.AppConfigPath,
-		sessionSecret: opts.SessionSecret,
-		sessionTTL:    opts.SessionTTL,
-		cookieSecure:  opts.CookieSecure,
-		oidc:          opts.OIDC,
-		proxy:         opts.Proxy,
-		invites:       opts.Invites,
+		store:           opts.Store,
+		logger:          opts.Logger,
+		appConfig:       opts.AppConfig,
+		appConfigPath:   opts.AppConfigPath,
+		sessionSecret:   opts.SessionSecret,
+		sessionTTL:      opts.SessionTTL,
+		cookieSecure:    opts.CookieSecure,
+		oidc:            opts.OIDC,
+		proxy:           opts.Proxy,
+		invites:         opts.Invites,
+		pairing:         newPairingStore(),
+		pairingDisabled: opts.PairingDisabled,
 	}, nil
 }
 

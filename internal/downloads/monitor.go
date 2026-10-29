@@ -218,6 +218,11 @@ func (m *Monitor) emitCompletions(ctx context.Context, items []Item) {
 	for _, item := range items {
 		key := item.ClientID + ":" + item.ID
 		if item.Status == StatusItemCompleted || item.Status == StatusItemSeeding {
+			// Workflow delivery is idempotent and must not be suppressed by
+			// download history: a prior command may have been dropped.
+			if m.orchNotifier != nil {
+				m.orchNotifier.NotifyDownloadComplete(item.ClientID, item.ID, item.Title, item.Category, item.ContentPath, item.SavePath)
+			}
 			if !m.lastCompleted[key] {
 				// Check history store for idempotency across restarts.
 				if m.historyStore != nil && m.historyStore.WasCompleted(ctx, item.ClientID, item.ID) {
@@ -237,11 +242,6 @@ func (m *Monitor) emitCompletions(ctx context.Context, items []Item) {
 					CompletedAt: m.clock.Now(),
 				}
 				_ = m.bus.Publish(ctx, event)
-
-				// Notify orchestrator for workflow-tracked downloads.
-				if m.orchNotifier != nil {
-					m.orchNotifier.NotifyDownloadComplete(item.ClientID, item.ID, item.Title, item.Category, item.ContentPath, item.SavePath)
-				}
 
 				durationSeconds := 0.0
 				if state, ok := m.lastProgress[key]; ok && !state.firstSeenAt.IsZero() {

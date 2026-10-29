@@ -450,9 +450,10 @@ export const LIST_TYPES: {
   },
   {
     value: "imdb_list",
-    label: "IMDb List",
+    label: "IMDb List / Chart",
     mediaType: "movie",
     fields: ["url"],
+    urlPlaceholder: "IMDb list or chart URL",
   },
   {
     value: "imdb_watchlist",

@@ -2,9 +2,9 @@ name: integration
 
 on:
   push:
-    branches: [main]
+    branches: [main, "prelease/**"]
   pull_request:
-    branches: [main]
+    branches: [main, "prelease/**"]
 
 permissions:
   contents: read
@@ -44,8 +44,7 @@ jobs:
   docker-regression:
     name: Docker regression
     runs-on: ubuntu-latest
-    # Only run on pushes to main and on PRs that touch the server, cmd, or
-    # Docker-related files to keep PR feedback fast.
+    # Run on main/prerelease pushes and explicitly labelled regression PRs.
     if: |
       github.event_name == 'push' ||
       contains(github.event.pull_request.labels.*.name, 'regression')

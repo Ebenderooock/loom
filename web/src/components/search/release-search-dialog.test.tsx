@@ -1,6 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ReleaseSearchDialog } from "./release-search-dialog";
 
 const mutateAsync = vi.fn(async () => ({ client_id: "qb", item_id: "x" }));
@@ -36,6 +37,8 @@ vi.mock("@/lib/indexers-api", () => ({
   },
 }));
 
+vi.mock("./policy-preview", () => ({ PolicyPreview: () => null }));
+
 vi.mock("@/lib/downloads-api", () => ({
   ApiError: class extends Error {},
   checkBlocklist: vi.fn(async (releases: { title: string }[]) =>
@@ -52,13 +55,15 @@ describe("ReleaseSearchDialog blocklist", () => {
 
   it("hides blocklisted releases until Ignore blocklist is enabled", async () => {
     render(
-      <ReleaseSearchDialog
-        open
-        onOpenChange={() => {}}
-        title="Movie"
-        mediaType="movie"
-        autoSearch
-      />,
+      <QueryClientProvider client={new QueryClient()}>
+        <ReleaseSearchDialog
+          open
+          onOpenChange={() => {}}
+          title="Movie"
+          mediaType="movie"
+          autoSearch
+        />
+      </QueryClientProvider>,
     );
 
     expect(await screen.findByText("Good.Release")).toBeInTheDocument();

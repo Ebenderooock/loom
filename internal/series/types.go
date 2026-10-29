@@ -44,29 +44,30 @@ const (
 
 // Series represents a TV series in the library.
 type Series struct {
-	ID               string           `json:"id"`
-	Title            string           `json:"title"`
-	Year             int              `json:"year,omitempty"`
-	IMDBID           *string          `json:"imdb_id,omitempty"`
-	TMDBID           *string          `json:"tmdb_id,omitempty"`
-	TVDBID           *string          `json:"tvdb_id,omitempty"`
-	Overview         string           `json:"overview,omitempty"`
-	Genres           StringSlice      `json:"genres,omitempty"`
-	Runtime          int              `json:"runtime,omitempty"`
-	Rating           float64          `json:"rating,omitempty"`
-	BackdropPath     string           `json:"backdrop_path,omitempty"`
-	PosterPath       string           `json:"poster_path,omitempty"`
-	Network          string           `json:"network,omitempty"`
-	Status           SeriesStatus     `json:"status"`
-	SeriesType       SeriesType       `json:"series_type"`
-	MetadataProvider string           `json:"metadata_provider,omitempty"`
-	QualityProfileID string           `json:"quality_profile_id,omitempty"`
-	LibraryID        string           `json:"library_id,omitempty"`
-	MonitoringStatus MonitoringStatus `json:"monitoring_status"`
-	SeasonFolder     bool             `json:"season_folder"`
-	ReleaseDate      string           `json:"release_date,omitempty"`
-	CreatedAt        time.Time        `json:"created_at"`
-	UpdatedAt        time.Time        `json:"updated_at"`
+	ID                    string           `json:"id"`
+	Title                 string           `json:"title"`
+	Year                  int              `json:"year,omitempty"`
+	IMDBID                *string          `json:"imdb_id,omitempty"`
+	TMDBID                *string          `json:"tmdb_id,omitempty"`
+	TVDBID                *string          `json:"tvdb_id,omitempty"`
+	Overview              string           `json:"overview,omitempty"`
+	Genres                StringSlice      `json:"genres,omitempty"`
+	Runtime               int              `json:"runtime,omitempty"`
+	Rating                float64          `json:"rating,omitempty"`
+	BackdropPath          string           `json:"backdrop_path,omitempty"`
+	PosterPath            string           `json:"poster_path,omitempty"`
+	Network               string           `json:"network,omitempty"`
+	Status                SeriesStatus     `json:"status"`
+	SeriesType            SeriesType       `json:"series_type"`
+	MetadataProvider      string           `json:"metadata_provider,omitempty"`
+	QualityProfileID      string           `json:"quality_profile_id,omitempty"`
+	QualityProfileMissing bool             `json:"quality_profile_missing"`
+	LibraryID             string           `json:"library_id,omitempty"`
+	MonitoringStatus      MonitoringStatus `json:"monitoring_status"`
+	SeasonFolder          bool             `json:"season_folder"`
+	ReleaseDate           string           `json:"release_date,omitempty"`
+	CreatedAt             time.Time        `json:"created_at"`
+	UpdatedAt             time.Time        `json:"updated_at"`
 
 	// Populated on read, not stored directly
 	Seasons  []*Season  `json:"seasons,omitempty"`

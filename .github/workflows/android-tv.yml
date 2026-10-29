@@ -1,0 +1,45 @@
+name: Android TV
+
+on:
+  pull_request:
+    paths:
+      - "android-tv/**"
+      - ".github/workflows/android-tv.yml"
+  push:
+    paths:
+      - "android-tv/**"
+      - ".github/workflows/android-tv.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+      - name: Install pinned SDK components
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+      - name: Unit tests, lint and debug APK
+        working-directory: android-tv
+        run: sh ./gradlew --no-daemon :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
+      - uses: actions/upload-artifact@v7
+        with:
+          name: loom-tv-debug
+          path: android-tv/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: loom-tv-reports
+          path: |
+            android-tv/app/build/reports/
+            android-tv/app/build/test-results/

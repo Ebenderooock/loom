@@ -13,8 +13,9 @@ import (
 // DownloadClient. It is a pure in-memory structure; persistence lives
 // in Repository and the two are stitched together by Service.
 type Registry struct {
-	mu    sync.RWMutex
-	items map[string]DownloadClient
+	mu      sync.RWMutex
+	items   map[string]DownloadClient
+	history *HistoryStore
 }
 
 // NewRegistry returns an empty Registry.

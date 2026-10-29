@@ -9,6 +9,7 @@ import (
 
 	"github.com/ebenderooock/loom/internal/auditlog"
 	"github.com/ebenderooock/loom/internal/autosearch"
+	"github.com/ebenderooock/loom/internal/calendar"
 	"github.com/ebenderooock/loom/internal/customformats"
 	"github.com/ebenderooock/loom/internal/downloads"
 	"github.com/ebenderooock/loom/internal/featureflags"
@@ -62,6 +63,8 @@ func wireDownloads(
 	blocklistStore := downloads.NewBlocklistStore(db.DB())
 	wiring.BlocklistStore = blocklistStore
 	downloadSvc.SetBlocklist(blocklistStore)
+	downloadHistoryStore := downloads.NewHistoryStore(db.DB())
+	downloadSvc.SetHistoryStore(downloadHistoryStore)
 
 	// Workflow engine for tracking active downloads
 	wfStore, err := workflows.NewStore(db.DB())
@@ -69,6 +72,7 @@ func wireDownloads(
 		return nil, fmt.Errorf("init workflow store: %w", err)
 	}
 	wfEngine := workflows.NewEngine(wfStore, workflowMediaAdapter{moviesSvc, media.seriesSvc}, logger)
+	wiring.CalendarHandler = calendar.Router(db.DB(), wfStore)
 
 	downloadSvc.SetWorkflowEngine(wfEngine)
 	downloadSvc.SetMovieStatusUpdater(movieStatusAdapter{moviesSvc})
@@ -150,15 +154,13 @@ func wireDownloads(
 	if err != nil {
 		return nil, fmt.Errorf("init import pipeline: %w", err)
 	}
-	importPipeline.Start()
+	// The monitor delivers completions to the orchestrator, including orphans.
+	// Do not also subscribe the importer to the asynchronous completion event.
 	wiring.ImportPipeline = importPipeline
 	orchestrator.SetImportFn(importPipeline.RunImport)
 
-	// Wire pre-import: stop and remove the torrent from the client BEFORE the
-	// import runs (keeping files on disk), so the importer can safely MOVE
-	// files without the client holding locks or re-seeding partial data.
-	// Returns the resolved content/save paths so the orchestrator can cache
-	// them for import resolution after the torrent is gone.
+	// Keep the download in the client until import succeeds so failures remain
+	// recoverable. Pause it and cache paths before touching the files.
 	orchestrator.SetPreImportFn(func(ctx context.Context, clientID, downloadID string) (string, string, error) {
 		c, ok := downloadSvc.Registry().Get(clientID)
 		if !ok {
@@ -166,28 +168,27 @@ func wireDownloads(
 		}
 		// Resolve the on-disk paths while the torrent still exists.
 		var contentPath, savePath string
-		if items, err := c.Status(ctx, downloadID); err == nil && len(items) > 0 {
-			contentPath = remotePathStore.MapPath(ctx, clientID, items[0].ContentPath)
-			savePath = remotePathStore.MapPath(ctx, clientID, items[0].SavePath)
+		items, err := c.Status(ctx, downloadID)
+		if err != nil {
+			return "", "", fmt.Errorf("resolve pre-import download paths: %w", err)
 		}
-		// Stop seeding/downloading, then remove from the client queue while
-		// keeping the data on disk (deleteFiles=false) so the import can read it.
+		for _, item := range items {
+			if item.ID == downloadID {
+				contentPath = item.ContentPath
+				savePath = item.SavePath
+				break
+			}
+		}
 		if err := c.Pause(ctx, downloadID); err != nil {
-			logger.Debug("pre-import pause failed (non-fatal)",
-				"client_id", clientID, "download_id", downloadID, "error", err)
-		}
-		if err := c.Remove(ctx, []string{downloadID}, false); err != nil {
-			return contentPath, savePath, fmt.Errorf("remove download from client: %w", err)
+			return contentPath, savePath, fmt.Errorf("pause download before import: %w", err)
 		}
 		return contentPath, savePath, nil
 	})
 
 	// Wire post-import cleanup: remove download from client queue (if still
-	// present) + clean source folder junk. After the pre-import step the
-	// torrent is usually already gone, so this primarily scrubs leftover junk
-	// using the cached source path.
+	// present) + clean source folder junk, only after successful import.
 	folderCleaner := &imports.FolderCleaner{}
-	orchestrator.SetCleanupFn(func(ctx context.Context, clientID, downloadID, sourcePath string, _ []string) error {
+	orchestrator.SetCleanupFn(func(ctx context.Context, clientID, downloadID, sourcePath string, importedPaths []string) error {
 		c, ok := downloadSvc.Registry().Get(clientID)
 		if !ok {
 			return fmt.Errorf("download client %q not found in registry", clientID)
@@ -195,7 +196,11 @@ func wireDownloads(
 		contentPath := remotePathStore.MapPath(ctx, clientID, sourcePath)
 		// The torrent may already have been removed during pre-import; tolerate
 		// a missing item. If still present, capture its path and remove it.
-		if items, err := c.Status(ctx, downloadID); err == nil && len(items) > 0 {
+		items, err := c.Status(ctx, downloadID)
+		if err != nil {
+			return fmt.Errorf("check download before source cleanup: %w", err)
+		}
+		if len(items) > 0 {
 			if contentPath == "" {
 				p := items[0].ContentPath
 				if p == "" {
@@ -205,9 +210,11 @@ func wireDownloads(
 			}
 			// Remove from client queue (keep files; already imported).
 			if err := c.Remove(ctx, []string{downloadID}, false); err != nil {
-				logger.Warn("post-import remove failed (non-fatal)",
-					"client_id", clientID, "download_id", downloadID, "error", err)
+				return fmt.Errorf("remove imported download from client: %w", err)
 			}
+		}
+		if err := importPipeline.FinalizeImports(ctx, importedPaths); err != nil {
+			return err
 		}
 		// Clean up any leftover junk in the source folder.
 		if contentPath != "" {
@@ -247,7 +254,6 @@ func wireDownloads(
 	})
 
 	// Download monitor — polls clients for completion
-	downloadHistoryStore := downloads.NewHistoryStore(db.DB())
 	stallTimeout := time.Duration(cfg.Downloads.StallTimeoutMin) * time.Minute
 	if stallTimeout <= 0 {
 		stallTimeout = 30 * time.Minute

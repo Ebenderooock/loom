@@ -427,7 +427,16 @@ const inviteRoute = createRoute({
   errorComponent: ErrorFallback,
 });
 
+const pairRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/pair",
+  component: lazyRouteComponent(() => import("@/pages/pair"), "PairPage"),
+  pendingComponent: PageLoader,
+  errorComponent: ErrorFallback,
+});
+
 const routeTree = rootRoute.addChildren([
+  pairRoute,
   setupRoute,
   indexRoute,
   inviteRoute,
@@ -480,6 +489,9 @@ const routeTree = rootRoute.addChildren([
 
 export const router = createRouter({
   routeTree,
+  basepath: /\/pair\/?$/.test(window.location.pathname)
+    ? window.location.pathname.replace(/\/pair\/?$/, "") || "/"
+    : "/",
   defaultPreload: "intent",
 });
 

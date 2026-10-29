@@ -7,6 +7,7 @@ import (
 	"io"
 	"math"
 	"net/http"
+	"net/url"
 	"strconv"
 	"sync"
 	"time"
@@ -61,6 +62,30 @@ func NewClient(config Config) *Client {
 		},
 		backoffConfig: DefaultBackoffConfig(),
 	}
+}
+
+// FindMovieByIMDbID resolves an exact IMDb movie ID to its TMDb ID.
+func (c *Client) FindMovieByIMDbID(ctx context.Context, imdbID string) (string, error) {
+	endpoint := fmt.Sprintf("%s/find/%s?external_source=imdb_id", c.config.BaseURL, url.PathEscape(imdbID))
+	body, err := c.doRequest(ctx, endpoint)
+	if err != nil {
+		return "", err
+	}
+	var result struct {
+		Movies []struct {
+			ID int `json:"id"`
+		} `json:"movie_results"`
+	}
+	if err := json.Unmarshal(body, &result); err != nil {
+		return "", fmt.Errorf("tmdb: decode IMDb lookup: %w", err)
+	}
+	if len(result.Movies) == 0 {
+		return "", nil
+	}
+	if len(result.Movies) != 1 || result.Movies[0].ID <= 0 {
+		return "", fmt.Errorf("tmdb: ambiguous or invalid movie mapping for %s", imdbID)
+	}
+	return strconv.Itoa(result.Movies[0].ID), nil
 }
 
 // GetMovie fetches movie metadata by TMDb ID.
@@ -399,8 +424,7 @@ func (c *Client) doHTTPRequest(ctx context.Context, req *http.Request) ([]byte, 
 				return nil, NewContextError(ctx.Err())
 			case <-time.After(delay):
 				// Retry with fresh request
-				req2, _ := http.NewRequestWithContext(ctx, req.Method, req.URL.String(), nil)
-				*req = *req2
+				req = req.Clone(ctx) // preserve bearer authentication on retries
 				continue
 			}
 
@@ -428,8 +452,7 @@ func (c *Client) doHTTPRequest(ctx context.Context, req *http.Request) ([]byte, 
 					),
 				)
 				// Retry with fresh request
-				req2, _ := http.NewRequestWithContext(ctx, req.Method, req.URL.String(), nil)
-				*req = *req2
+				req = req.Clone(ctx) // preserve bearer authentication on retries
 				continue
 			}
 
