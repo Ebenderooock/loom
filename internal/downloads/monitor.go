@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
@@ -18,6 +19,9 @@ type stalledState struct {
 	downloadedBytes int64
 	firstSeenAt     time.Time
 	lastProgressAt  time.Time
+	// stalledFor accumulates time without progress, counted only while the
+	// network was healthy. Outages therefore never make a download "stall".
+	stalledFor time.Duration
 }
 
 // MonitorOrchNotifier is an optional interface for the orchestrator to receive
@@ -32,7 +36,15 @@ type MonitorOrchNotifier interface {
 	// contentPath and savePath are passed so the orchestrator can cache them in
 	// workflow metadata before the download client removes the completed item.
 	NotifyDownloadProgress(clientID, downloadID string, progress float64, downSpeed, upSpeed int64, ratio float64, status, contentPath, savePath string)
+	// NotifyDownloadFailed tells the orchestrator that a download stalled or
+	// failed and was removed from the client, so its workflow can be failed
+	// and a replacement searched for.
+	NotifyDownloadFailed(clientID, downloadID, reason string)
 }
+
+// ConnectivityCheck reports whether general network connectivity is up. It
+// lets stall detection tell a dead torrent apart from a network outage.
+type ConnectivityCheck func(ctx context.Context) bool
 
 // Monitor periodically checks the status of downloads on all configured
 // clients and emits completion events when items finish. It decouples
@@ -52,8 +64,11 @@ type Monitor struct {
 	checkInterval time.Duration
 
 	// Stall detection config.
-	stallTimeout    time.Duration
-	checkForStalled bool
+	stallTimeout      time.Duration
+	noStartTimeout    time.Duration
+	checkForStalled   bool
+	connectivityCheck ConnectivityCheck
+	lastSweepAt       time.Time
 
 	mu sync.Mutex
 	// lastCompleted tracks the item IDs we've already emitted as completed
@@ -67,16 +82,22 @@ type Monitor struct {
 
 // MonitorOptions wires a Monitor.
 type MonitorOptions struct {
-	Service         *Service
-	Bus             eventbus.Bus
-	Logger          *slog.Logger
-	Clock           Clock
-	CheckInterval   time.Duration
-	StallTimeout    time.Duration
+	Service       *Service
+	Bus           eventbus.Bus
+	Logger        *slog.Logger
+	Clock         Clock
+	CheckInterval time.Duration
+	StallTimeout  time.Duration
+	// NoStartTimeout is the stall timeout for downloads that have never
+	// received any data (dead magnets, no seeders). Defaults to 2×StallTimeout.
+	NoStartTimeout  time.Duration
 	CheckForStalled bool
-	StallHandler    *StallHandler
-	HistoryStore    *HistoryStore
-	OrchNotifier    MonitorOrchNotifier
+	// ConnectivityCheck, if set, is consulted when no download is moving to
+	// decide whether the network is up. Stall time only accrues while it is.
+	ConnectivityCheck ConnectivityCheck
+	StallHandler      *StallHandler
+	HistoryStore      *HistoryStore
+	OrchNotifier      MonitorOrchNotifier
 }
 
 // NewMonitor returns a Monitor wired to the Service and event bus.
@@ -101,25 +122,31 @@ func NewMonitor(opts MonitorOptions) (*Monitor, error) {
 	if opts.StallTimeout <= 0 {
 		opts.StallTimeout = 30 * time.Minute
 	}
+	if opts.NoStartTimeout <= 0 {
+		opts.NoStartTimeout = 2 * opts.StallTimeout
+	}
 
 	m := &Monitor{
-		svc:             opts.Service,
-		bus:             opts.Bus,
-		logger:          opts.Logger.With("module", "downloads/monitor"),
-		clock:           opts.Clock,
-		stallHandler:    opts.StallHandler,
-		historyStore:    opts.HistoryStore,
-		orchNotifier:    opts.OrchNotifier,
-		checkInterval:   opts.CheckInterval,
-		stallTimeout:    opts.StallTimeout,
-		checkForStalled: opts.CheckForStalled,
-		lastCompleted:   make(map[string]bool),
-		lastProgress:    make(map[string]stalledState),
-		stalledEmitted:  make(map[string]bool),
+		svc:               opts.Service,
+		bus:               opts.Bus,
+		logger:            opts.Logger.With("module", "downloads/monitor"),
+		clock:             opts.Clock,
+		stallHandler:      opts.StallHandler,
+		historyStore:      opts.HistoryStore,
+		orchNotifier:      opts.OrchNotifier,
+		checkInterval:     opts.CheckInterval,
+		stallTimeout:      opts.StallTimeout,
+		noStartTimeout:    opts.NoStartTimeout,
+		checkForStalled:   opts.CheckForStalled,
+		connectivityCheck: opts.ConnectivityCheck,
+		lastCompleted:     make(map[string]bool),
+		lastProgress:      make(map[string]stalledState),
+		stalledEmitted:    make(map[string]bool),
 	}
 
 	m.logger.Info("monitor initialized", "interval", opts.CheckInterval,
-		"stall_detection", opts.CheckForStalled, "stall_timeout", opts.StallTimeout)
+		"stall_detection", opts.CheckForStalled, "stall_timeout", opts.StallTimeout,
+		"no_start_timeout", opts.NoStartTimeout)
 	return m, nil
 }
 
@@ -166,7 +193,11 @@ func (m *Monitor) Run(ctx context.Context) error {
 
 	// Process results: detect stalled/failed downloads.
 	if m.checkForStalled {
-		m.detectStalled(ctx, status.Items)
+		erroredClients := make(map[string]bool, len(status.Errors))
+		for clientID := range status.Errors {
+			erroredClients[clientID] = true
+		}
+		m.detectStalledSweep(ctx, status.Items, erroredClients)
 	}
 
 	m.logger.Debug("monitor: status sweep completed", "items", len(status.Items))
@@ -238,12 +269,67 @@ func (m *Monitor) emitCompletions(ctx context.Context, items []Item) {
 	m.lastCompleted = thisRun
 }
 
-// detectStalled checks items for stall conditions and failed status.
+// detectStalled checks items for stall conditions and failed status,
+// assuming every client responded.
 func (m *Monitor) detectStalled(ctx context.Context, items []Item) {
+	m.detectStalledSweep(ctx, items, nil)
+}
+
+// maxSweepGapFactor caps how much stall time a single sweep may add, so a
+// suspended host or a paused monitor doesn't instantly "stall" everything.
+const maxSweepGapFactor = 5
+
+// detectStalledSweep checks items for stall conditions and failed status.
+// erroredClients lists clients whose status could not be fetched this sweep;
+// their tracking state is preserved rather than pruned.
+//
+// Stall time accrues only while the network is healthy: if nothing is moving
+// and the connectivity check fails, the outage is not counted. Downloads that
+// have never received data are held to NoStartTimeout instead of being exempt.
+func (m *Monitor) detectStalledSweep(ctx context.Context, items []Item, erroredClients map[string]bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	now := m.clock.Now()
+	var elapsed time.Duration
+	if !m.lastSweepAt.IsZero() {
+		elapsed = now.Sub(m.lastSweepAt)
+		maxGap := maxSweepGapFactor * m.checkInterval
+		if maxGap < 5*time.Minute {
+			maxGap = 5 * time.Minute
+		}
+		if elapsed > maxGap {
+			elapsed = maxGap
+		}
+		if elapsed < 0 {
+			elapsed = 0
+		}
+	}
+	m.lastSweepAt = now
+
+	healthyKnown, healthy := false, false
+	networkHealthy := func() bool {
+		if healthyKnown {
+			return healthy
+		}
+		healthyKnown = true
+		for _, it := range items {
+			if it.DownloadRate > 0 || it.UploadRate > 0 {
+				healthy = true
+				return healthy
+			}
+		}
+		if m.connectivityCheck == nil {
+			healthy = true
+			return healthy
+		}
+		healthy = m.connectivityCheck(ctx)
+		if !healthy {
+			m.logger.Info("monitor: network appears down, pausing stall timers")
+		}
+		return healthy
+	}
+
 	activeIDs := make(map[string]bool, len(items))
 
 	for _, item := range items {
@@ -260,34 +346,17 @@ func (m *Monitor) detectStalled(ctx context.Context, items []Item) {
 			}
 			if !m.stalledEmitted[key] {
 				m.stalledEmitted[key] = true
-				if m.stallHandler != nil {
-					m.stallHandler.Handle(ctx, item, "download failed: "+item.Message)
+				msg := item.Message
+				if msg == "" {
+					msg = "reported failed by client"
 				}
+				m.handleStalled(ctx, item, "download failed: "+msg)
 			}
-			continue
-		}
-
-		// Only check downloading items for stalls.
-		if item.Status != StatusItemDownloading {
-			continue
-		}
-		// Downloads that have never transferred bytes (or reported progress)
-		// should remain queued/inactive and must not be treated as stalled.
-		// This avoids auto-removing peerless torrents before they ever start.
-		if item.DownloadedBytes <= 0 && item.Progress <= 0 {
-			m.lastProgress[key] = stalledState{
-				progress:        item.Progress,
-				downloadedBytes: item.DownloadedBytes,
-				firstSeenAt:     now,
-				lastProgressAt:  now,
-			}
-			delete(m.stalledEmitted, key)
 			continue
 		}
 
 		prev, tracked := m.lastProgress[key]
 		if !tracked {
-			// First time seeing this item — start tracking.
 			m.lastProgress[key] = stalledState{
 				progress:        item.Progress,
 				downloadedBytes: item.DownloadedBytes,
@@ -296,45 +365,85 @@ func (m *Monitor) detectStalled(ctx context.Context, items []Item) {
 			}
 			continue
 		}
+		state := prev
 
-		// Check if progress changed.
-		if item.Progress != prev.progress || item.DownloadedBytes != prev.downloadedBytes {
-			// Progress made — update tracking.
-			m.lastProgress[key] = stalledState{
-				progress:        item.Progress,
-				downloadedBytes: item.DownloadedBytes,
-				firstSeenAt:     prev.firstSeenAt,
-				lastProgressAt:  now,
-			}
-			// Clear stalled flag if it was set.
+		// Only downloading items can stall. Queued/paused/seeding items keep
+		// their tracking but accrue no stall time.
+		if item.Status != StatusItemDownloading {
+			state.progress = item.Progress
+			state.downloadedBytes = item.DownloadedBytes
+			state.lastProgressAt = now
+			state.stalledFor = 0
+			m.lastProgress[key] = state
 			delete(m.stalledEmitted, key)
 			continue
 		}
 
-		// No progress — check if stall timeout exceeded.
-		stalledDuration := now.Sub(prev.lastProgressAt)
-		if stalledDuration >= m.stallTimeout && !m.stalledEmitted[key] {
-			m.stalledEmitted[key] = true
-			m.logger.Warn("monitor: download stalled",
-				"item_id", item.ID,
-				"client_id", item.ClientID,
-				"title", item.Title,
-				"stalled_for", stalledDuration.String(),
-				"progress", item.Progress,
-			)
-			if m.stallHandler != nil {
-				reason := fmt.Sprintf("no progress for %s", stalledDuration.Truncate(time.Second))
-				m.stallHandler.Handle(ctx, item, reason)
-			}
+		if item.Progress != prev.progress || item.DownloadedBytes != prev.downloadedBytes || item.DownloadRate > 0 {
+			state.progress = item.Progress
+			state.downloadedBytes = item.DownloadedBytes
+			state.lastProgressAt = now
+			state.stalledFor = 0
+			m.lastProgress[key] = state
+			delete(m.stalledEmitted, key)
+			continue
 		}
+
+		if elapsed > 0 && networkHealthy() {
+			state.stalledFor += elapsed
+		}
+		m.lastProgress[key] = state
+
+		started := item.DownloadedBytes > 0 || item.Progress > 0
+		timeout := m.stallTimeout
+		if !started {
+			timeout = m.noStartTimeout
+		}
+		if state.stalledFor < timeout || m.stalledEmitted[key] {
+			continue
+		}
+
+		m.stalledEmitted[key] = true
+		var reason string
+		if started {
+			reason = fmt.Sprintf("no progress for %s", state.stalledFor.Truncate(time.Second))
+		} else {
+			reason = fmt.Sprintf("download never started after %s", state.stalledFor.Truncate(time.Second))
+		}
+		m.logger.Warn("monitor: download stalled",
+			"item_id", item.ID,
+			"client_id", item.ClientID,
+			"title", item.Title,
+			"stalled_for", state.stalledFor.String(),
+			"progress", item.Progress,
+			"started", started,
+		)
+		m.handleStalled(ctx, item, reason)
 	}
 
-	// Prune tracking maps for items no longer active.
+	// Prune tracking maps for items no longer present. Items on clients that
+	// failed to respond this sweep are kept (the client may be briefly down).
 	for key := range m.lastProgress {
-		if !activeIDs[key] {
-			delete(m.lastProgress, key)
-			delete(m.stalledEmitted, key)
+		if activeIDs[key] {
+			continue
 		}
+		if clientID, _, ok := strings.Cut(key, ":"); ok && erroredClients[clientID] {
+			continue
+		}
+		delete(m.lastProgress, key)
+		delete(m.stalledEmitted, key)
+	}
+}
+
+// handleStalled runs the stall handler and, if the download was abandoned
+// (removed from the client), tells the orchestrator so the workflow fails
+// and a replacement is searched for.
+func (m *Monitor) handleStalled(ctx context.Context, item Item, reason string) {
+	if m.stallHandler == nil {
+		return
+	}
+	if abandoned := m.stallHandler.Handle(ctx, item, reason); abandoned && m.orchNotifier != nil {
+		m.orchNotifier.NotifyDownloadFailed(item.ClientID, item.ID, reason)
 	}
 }
 

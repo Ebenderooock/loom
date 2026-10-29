@@ -188,6 +188,15 @@ func (s *Service) ActiveDownloads(ctx context.Context) (map[string]workflows.Act
 			SavePath:    item.SavePath,
 		}
 	}
+	if len(status.Errors) > 0 {
+		// Report unreachable clients so callers don't mistake their missing
+		// downloads for removed or finished ones (e.g. during an outage).
+		errs := make(map[string]string, len(status.Errors))
+		for id, e := range status.Errors {
+			errs[id] = fmt.Sprint(e)
+		}
+		return result, &workflows.PartialDownloadStatusError{ClientErrors: errs}
+	}
 	return result, nil
 }
 

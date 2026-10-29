@@ -102,6 +102,19 @@ type CmdDownloadRemoved struct {
 
 func (CmdDownloadRemoved) commandTag() {}
 
+// CmdDownloadFailed signals that a download stalled or failed in the client
+// and was dealt with by the stall handler (e.g. removed and blocklisted).
+// The orchestrator fails the owning workflow terminally, resets the media
+// status so the title no longer shows as downloading, and triggers a
+// re-search for a replacement release.
+type CmdDownloadFailed struct {
+	ClientID   string
+	DownloadID string
+	Reason     string
+}
+
+func (CmdDownloadFailed) commandTag() {}
+
 // CmdTick is an internal command for periodic health checks.
 // Sent by the orchestrator's own ticker, not by external callers.
 type CmdTick struct{}

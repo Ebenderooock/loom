@@ -51,6 +51,14 @@ var StateTimeouts = map[string]time.Duration{
 // the client is unreachable AND the download has been silent for this long.
 const DownloadingStaleThreshold = 7 * 24 * time.Hour
 
+// MissingDownloadGrace is how long a grabbed/downloading workflow's download
+// may be absent from a reachable client before the workflow is abandoned.
+const MissingDownloadGrace = 15 * time.Minute
+
+// MetaFailedFrom is the workflow metadata key recording which state a
+// workflow was in when it failed terminally (e.g. "downloading").
+const MetaFailedFrom = "failed_from"
+
 // Valid transitions from each state
 var ValidTransitions = map[string][]string{
 	StateSearching:    {StateGrabbed, StateFailed, StateCancelled},
@@ -151,6 +159,7 @@ const (
 	EventRetried           = "retried"
 	EventFailed            = "failed"
 	EventCancelled         = "cancelled"
+	EventDownloadFailed    = "download_failed"
 	EventCompleted         = "completed"
 )
 

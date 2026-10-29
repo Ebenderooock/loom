@@ -61,6 +61,14 @@ type Engine struct {
 	// searchLogEnabled, when set, gates whether new search debug log entries
 	// are recorded. A nil func means "always enabled" (back-compat).
 	searchLogEnabled func() bool
+	// blocklist, when set, rejects releases that were previously abandoned
+	// (e.g. stalled torrents) so they are never grabbed again.
+	blocklist BlocklistChecker
+}
+
+// BlocklistChecker reports whether a release has been blocklisted.
+type BlocklistChecker interface {
+	IsReleaseBlocked(ctx context.Context, title, infoHash string) (bool, error)
 }
 
 // NewEngine creates an autosearch Engine.
@@ -99,6 +107,43 @@ type EngineOption func(*Engine)
 
 // yearRe matches a 4-digit year (1900-2099) in a release title.
 var yearRe = regexp.MustCompile(`\b(19|20)\d{2}\b`)
+
+// WithBlocklist rejects search results that match the download blocklist.
+func WithBlocklist(b BlocklistChecker) EngineOption {
+	return func(e *Engine) { e.blocklist = b }
+}
+
+// isBlocklisted reports whether a search result matches the blocklist.
+// Lookup errors are logged and treated as not blocked.
+func (e *Engine) isBlocklisted(ctx context.Context, res indexers.Result) bool {
+	if e.blocklist == nil {
+		return false
+	}
+	hash := res.Infohash
+	if hash == "" {
+		hash = infoHashFromMagnet(res.MagnetURI)
+	}
+	blocked, err := e.blocklist.IsReleaseBlocked(ctx, res.Title, hash)
+	if err != nil {
+		e.logger.Warn("autosearch: blocklist check failed", "title", res.Title, "error", err)
+		return false
+	}
+	return blocked
+}
+
+// infoHashFromMagnet extracts a hex v1 infohash from a magnet URI.
+func infoHashFromMagnet(magnet string) string {
+	const marker = "xt=urn:btih:"
+	idx := strings.Index(strings.ToLower(magnet), marker)
+	if idx < 0 {
+		return ""
+	}
+	h := magnet[idx+len(marker):]
+	if end := strings.IndexByte(h, '&'); end >= 0 {
+		h = h[:end]
+	}
+	return downloads.NormalizeInfoHash(h)
+}
 
 // WithAuditLogger attaches an audit logger to the engine for search event tracking.
 func WithAuditLogger(al *auditlog.Logger) EngineOption {
@@ -191,6 +236,10 @@ func (e *Engine) Evaluate(ctx context.Context, req EvaluateRequest) (*EvaluateRe
 
 	for _, res := range req.Results {
 		sr := e.evaluateResult(req.SearchRequest, res, qualDefs, allowedMap, allowedDefs, formatScores, profile, existing, cutoffTier, idBased)
+		if !sr.Rejected && e.isBlocklisted(ctx, res) {
+			sr.Rejected = true
+			sr.RejectReason = "blocklisted"
+		}
 
 		er := EvaluatedResult{
 			IndexerID:   res.IndexerID,
@@ -660,7 +709,12 @@ func (e *Engine) searchAndGrabSingle(ctx context.Context, req SearchRequest) (*S
 
 		var tierAccepted int
 		for _, res := range tierResults {
-			sr := e.evaluateResult(req, res, qualDefs, allowedMap, allowedDefs, formatScores, profile, existing, cutoffTier, tierIDsBased)
+			var sr ScoredRelease
+			if e.isBlocklisted(ctx, res) {
+				sr = ScoredRelease{Result: res, Rejected: true, RejectReason: "blocklisted"}
+			} else {
+				sr = e.evaluateResult(req, res, qualDefs, allowedMap, allowedDefs, formatScores, profile, existing, cutoffTier, tierIDsBased)
+			}
 			if sr.Rejected {
 				rejectCounts[sr.RejectReason]++
 				e.logger.Debug("autosearch: result rejected",
