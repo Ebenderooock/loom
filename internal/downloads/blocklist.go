@@ -99,6 +99,20 @@ func NormalizeInfoHash(s string) string {
 	return ""
 }
 
+// InfoHashFromMagnet extracts a normalised v1 infohash from a magnet URI.
+func InfoHashFromMagnet(magnet string) string {
+	const marker = "xt=urn:btih:"
+	idx := strings.Index(strings.ToLower(magnet), marker)
+	if idx < 0 {
+		return ""
+	}
+	h := magnet[idx+len(marker):]
+	if end := strings.IndexByte(h, '&'); end >= 0 {
+		h = h[:end]
+	}
+	return NormalizeInfoHash(h)
+}
+
 // TitleHash returns the hex sha256 of a release title.
 func TitleHash(title string) string {
 	return fmt.Sprintf("%x", sha256.Sum256([]byte(title)))

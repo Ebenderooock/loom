@@ -75,6 +75,7 @@ type Service struct {
 	orchestrator       *workflows.Orchestrator
 	movieStatusUpdater MovieStatusUpdater
 	builtinTorrentOn   func() bool
+	blocklist          *BlocklistStore
 
 	mu sync.RWMutex
 }
@@ -162,6 +163,13 @@ func (s *Service) builtinTorrentAllowed() bool {
 }
 
 // SetMovieStatusUpdater sets the movie status updater for the service.
+// SetBlocklist enables blocklist enforcement for API grabs.
+func (s *Service) SetBlocklist(b *BlocklistStore) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.blocklist = b
+}
+
 func (s *Service) SetMovieStatusUpdater(u MovieStatusUpdater) {
 	s.mu.Lock()
 	s.movieStatusUpdater = u

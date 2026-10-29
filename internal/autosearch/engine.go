@@ -121,7 +121,7 @@ func (e *Engine) isBlocklisted(ctx context.Context, res indexers.Result) bool {
 	}
 	hash := res.Infohash
 	if hash == "" {
-		hash = infoHashFromMagnet(res.MagnetURI)
+		hash = downloads.InfoHashFromMagnet(res.MagnetURI)
 	}
 	blocked, err := e.blocklist.IsReleaseBlocked(ctx, res.Title, hash)
 	if err != nil {
@@ -129,20 +129,6 @@ func (e *Engine) isBlocklisted(ctx context.Context, res indexers.Result) bool {
 		return false
 	}
 	return blocked
-}
-
-// infoHashFromMagnet extracts a hex v1 infohash from a magnet URI.
-func infoHashFromMagnet(magnet string) string {
-	const marker = "xt=urn:btih:"
-	idx := strings.Index(strings.ToLower(magnet), marker)
-	if idx < 0 {
-		return ""
-	}
-	h := magnet[idx+len(marker):]
-	if end := strings.IndexByte(h, '&'); end >= 0 {
-		h = h[:end]
-	}
-	return downloads.NormalizeInfoHash(h)
 }
 
 // WithAuditLogger attaches an audit logger to the engine for search event tracking.
@@ -236,7 +222,7 @@ func (e *Engine) Evaluate(ctx context.Context, req EvaluateRequest) (*EvaluateRe
 
 	for _, res := range req.Results {
 		sr := e.evaluateResult(req.SearchRequest, res, qualDefs, allowedMap, allowedDefs, formatScores, profile, existing, cutoffTier, idBased)
-		if !sr.Rejected && e.isBlocklisted(ctx, res) {
+		if !sr.Rejected && !req.IgnoreBlocklist && e.isBlocklisted(ctx, res) {
 			sr.Rejected = true
 			sr.RejectReason = "blocklisted"
 		}

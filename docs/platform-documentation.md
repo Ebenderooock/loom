@@ -1564,6 +1564,7 @@ All review create/approve/reject actions logged to audit log with full context.
 | GET | `/api/v1/blocklist` | List all blocklisted releases |
 | DELETE | `/api/v1/blocklist` | Clear entire blocklist |
 | DELETE | `/api/v1/blocklist/{id}` | Remove single entry |
+| POST | `/api/v1/blocklist/check` | Check releases (`{releases:[{title, infohash, magnet}]}`) → `{blocked:[bool]}` |
 
 **Data Model (BlocklistEntry):**
 
@@ -1579,6 +1580,8 @@ All review create/approve/reject actions logged to audit log with full context.
 **Integration:**
 - `IsReleaseBlocked(title, infohash)` is checked during automatic and interactive search evaluation; matches are rejected with reason `blocklisted` (by infohash, title hash or case-insensitive title)
 - Entries created automatically when a download stalls or fails
+- Interactive search hides blocklisted releases. Enabling **Ignore blocklist** in the search dialog shows them with a *Blocklisted* badge and allows grabbing them
+- Grabs via `POST /api/v1/download-clients/{id}/items` are rejected with `409 blocklisted` unless the body sets `"ignore_blocklist": true`; `POST /api/v1/autosearch/evaluate` accepts the same flag
 - Uses `INSERT OR REPLACE` for idempotent additions
 
 **Database:** `blocklist`

@@ -121,6 +121,10 @@ type AddRequest struct {
 	SeriesID   string   `json:"series_id,omitempty"`
 	EpisodeIDs []string `json:"episode_ids,omitempty"`
 	MovieID    string   `json:"movie_id,omitempty"`
+
+	// IgnoreBlocklist lets an interactive grab proceed even when the
+	// release is on the blocklist. Without it the API rejects the grab.
+	IgnoreBlocklist bool `json:"ignore_blocklist,omitempty"`
 }
 
 // Normalize fills in derived fields: if Magnet is empty but Infohash

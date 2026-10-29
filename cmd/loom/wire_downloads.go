@@ -61,6 +61,7 @@ func wireDownloads(
 	// Blocklist
 	blocklistStore := downloads.NewBlocklistStore(db.DB())
 	wiring.BlocklistStore = blocklistStore
+	downloadSvc.SetBlocklist(blocklistStore)
 
 	// Workflow engine for tracking active downloads
 	wfStore, err := workflows.NewStore(db.DB())

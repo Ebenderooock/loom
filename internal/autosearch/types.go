@@ -112,6 +112,9 @@ type RejectStat struct {
 type EvaluateRequest struct {
 	SearchRequest
 	Results []indexers.Result `json:"results"`
+	// IgnoreBlocklist skips the blocklist check so blocklisted releases
+	// are scored like any other result.
+	IgnoreBlocklist bool `json:"ignore_blocklist,omitempty"`
 }
 
 // EvaluatedResult is a single result scored by the evaluate endpoint.

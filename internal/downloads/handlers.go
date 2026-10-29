@@ -600,6 +600,11 @@ func (s *Service) handleAdd(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req.Normalize()
+	if !req.IgnoreBlocklist && s.releaseBlocked(r.Context(), req) {
+		writeError(w, http.StatusConflict, "blocklisted",
+			"release is blocklisted; set ignore_blocklist to grab it anyway")
+		return
+	}
 	if req.Magnet == "" && req.TorrentURL == "" && req.NZBURL == "" && len(req.RawBytes) == 0 {
 		slog.WarnContext(r.Context(), "handleAdd: empty download request after normalize",
 			"client_id", id, "title", req.Title,
@@ -896,6 +901,27 @@ func (s *Service) handleClearHistory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// releaseBlocked reports whether an add request targets a blocklisted
+// release. Lookup errors are logged and treated as not blocked.
+func (s *Service) releaseBlocked(ctx context.Context, req AddRequest) bool {
+	s.mu.RLock()
+	bl := s.blocklist
+	s.mu.RUnlock()
+	if bl == nil {
+		return false
+	}
+	hash := NormalizeInfoHash(req.Infohash)
+	if hash == "" {
+		hash = InfoHashFromMagnet(req.Magnet)
+	}
+	blocked, err := bl.IsReleaseBlocked(ctx, req.Title, hash)
+	if err != nil {
+		slog.WarnContext(ctx, "blocklist check failed", "title", req.Title, "error", err)
+		return false
+	}
+	return blocked
 }
 
 // recordManualGrab records grab linkage for interactive search grabs.
