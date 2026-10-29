@@ -62,6 +62,7 @@ in `api/openapi/loom.yaml`.
 | `GET` | `/api/v1/media-files/{mediaType}/{id}` | admin | `200 {"files":[TitleFile],"deletionMode":"recycle"\|"permanent"}` | List every regular file in the server-resolved movie or series folder; optional `season` query scopes series files. |
 | `POST` | `/api/v1/media-files/{mediaType}/{id}/delete` | admin | `200 {"deleted":["relative/file.mkv"]}` | Delete selected files with explicit mode and `X-Confirm-Delete: true`; optional `season` query restricts scope. |
 | `POST` | `/api/v1/autosearch/evaluate` | apiKey/bearer/cookie | `200 application/json` | Production-engine dry run with decision evidence; optional unsaved policy preview. |
+| `POST` | `/api/v1/blocklist/check` | apiKey/bearer/cookie | `200 {"blocked":[bool]}` | Positional blocklist flags for up to 2000 candidate releases (`title`, `infohash`, `magnet`). |
 | `GET` | `/healthz` | none | `200 application/json` | Liveness probe. |
 | `GET` | `/livez` | none | `200 application/json` | Same shape; conventional alias. |
 | `GET` | `/readyz` | none | `200` or `503 application/json` | DB ping + ready-flag check. |
@@ -187,6 +188,16 @@ An invalid top-level request returns `400`; missing/non-admin identity returns
 `403`. `retry` re-arms the budget without replaying stale download URLs: search
 again to acquire fresh release coordinates. It does not bypass the blocklist.
 `blocklist` reuses the existing release blocklist.
+
+### Blocklist overrides
+
+`POST /api/v1/download-clients/{id}/items` rejects a release whose info hash
+(explicit or parsed from the magnet) or normalized title is blocklisted with
+`409 {"error":{"code":"blocklisted",...}}`. Set `"ignore_blocklist": true` to
+grab it anyway; interactive search exposes this as **Ignore blocklist**.
+`POST /api/v1/autosearch/evaluate` accepts the same flag. Automatic search never
+ignores the blocklist. Releases are blocklisted automatically when a download
+stalls (see `downloads.stall_action` in [configuration](configuration.md)).
 
 `SystemStatus` is `{ version, commit, buildDate, engine }` — the database
 engine name is included so readiness tooling can confirm what backend

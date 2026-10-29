@@ -89,9 +89,9 @@ func (h *HistoryStore) beginAcquisition(ctx context.Context, req AddRequest, cli
 		 AND attempt = (SELECT MAX(attempt) FROM download_history WHERE acquisition_key = ?)
 		 AND status <> 'search_completed'
 		 AND (status <> 'acquisition_failed' OR retry_eligible = 0 OR next_retry_at > ?)
-		) AND NOT EXISTS (SELECT 1 FROM blocklist WHERE release_hash = ?)`,
+		) AND (? OR NOT EXISTS (SELECT 1 FROM blocklist WHERE release_hash = ?))`,
 		id, clientID, req.Title, req.Category, at, key, req.MediaType, mediaID, req.IndexerID, hash,
-		key, key, key, key, at, hash)
+		key, key, key, key, at, req.IgnoreBlocklist, hash)
 	if err != nil {
 		return "", fmt.Errorf("persist acquisition admission: %w", err)
 	}

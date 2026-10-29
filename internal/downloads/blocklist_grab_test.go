@@ -37,6 +37,7 @@ func newBlocklistRouter(t *testing.T) *chi.Mux {
 		t.Fatalf("blocklist add: %v", err)
 	}
 	svc.SetBlocklist(bl)
+	svc.SetHistoryStore(downloads.NewHistoryStore(raw))
 
 	r := chi.NewMux()
 	svc.Mount(r)

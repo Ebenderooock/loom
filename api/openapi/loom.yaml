@@ -260,6 +260,7 @@ paths:
                 episode: { type: integer }
                 daily_date: { type: string, format: date }
                 runtime: { type: integer, description: Minutes used by per-minute size limits. }
+                ignore_blocklist: { type: boolean, description: Evaluate blocklisted releases instead of rejecting them. }
                 policy_preview:
                   type: object
                   required: [items]
@@ -503,6 +504,51 @@ paths:
                     type: array
                     items: { $ref: "#/components/schemas/RequestReconciliation" }
         "403": { description: Administrator access required. }
+  /api/v1/blocklist/check:
+    post:
+      tags: [download-clients]
+      summary: Report which candidate releases are blocklisted.
+      description: |
+        Matches each release by info hash (explicit or parsed from the magnet)
+        and by normalized title. Results are positional. At most 2000 releases.
+      operationId: checkBlocklist
+      security:
+        - apiKey: []
+        - bearerAuth: []
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [releases]
+              properties:
+                releases:
+                  type: array
+                  maxItems: 2000
+                  items:
+                    type: object
+                    properties:
+                      title: { type: string }
+                      infohash: { type: string }
+                      magnet: { type: string }
+      responses:
+        "200":
+          description: One flag per submitted release, in order.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [blocked]
+                properties:
+                  blocked:
+                    type: array
+                    items: { type: boolean }
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
   /api/v1/downloads/history:
     get:
       tags: [download-clients]
@@ -2229,6 +2275,11 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
+        "409":
+          description: |
+            `blocklisted` when the release matches the blocklist and
+            `ignore_blocklist` is not set, or `acquisition_deferred` when an
+            equivalent acquisition is already in flight or awaiting retry.
 
   /api/v1/download-clients/{id}/pause:
     parameters:
@@ -3677,6 +3728,12 @@ components:
           type: string
         paused:
           type: boolean
+        ignore_blocklist:
+          type: boolean
+          description: |
+            Grab the release even when it matches the blocklist (by info hash
+            or title). Defaults to false, which rejects blocklisted releases
+            with `409 blocklisted`.
 
     DownloadAddResult:
       type: object

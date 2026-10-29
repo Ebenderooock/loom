@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Interactive search hides blocklisted releases by default and offers an
+  **Ignore blocklist** option to show and grab them. Manual grabs of blocklisted
+  releases are rejected unless `ignore_blocklist` is set; `POST
+  /api/v1/blocklist/check` reports blocklist matches for candidate releases.
+
 - Import IMDb Most Popular Movies/TV, Top 250 Movies/TV, and Bottom 100 Movies
   charts by pasting their URLs into the IMDb List / Chart import source.
 
@@ -70,6 +75,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Stop stalled downloads from staying in "Downloading": stalled workflows now
+  fail, reset the movie/episode status and trigger a fresh search. Stall
+  detection ignores client/network outages, catches downloads that never start,
+  tolerates briefly missing items, recovers late completions, and honors the
+  `downloads.check_for_stalled`, `stall_timeout`, `stall_action` and
+  `max_retries` settings. Stalled releases are blocklisted so they are not
+  grabbed again.
 - Recognize TMDb-added movies in IMDb Discover lists using exact cross-provider
   ID mappings, cache resolved identities, and prevent duplicate additions.
   Movie metadata refresh also retains IMDb and TVDb IDs.
