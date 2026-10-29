@@ -68,6 +68,10 @@ real values look like. Every key gets an `example:` line.
 | `indexers.health_check_timeout` | `LOOM_INDEXERS_HEALTH_CHECK_TIMEOUT` | int (s) | `10` | no | Per-indexer ceiling for the periodic health check `Test()` call. |
 | `indexers.proxies.flaresolverr_default_timeout` | `LOOM_INDEXERS_PROXIES_FLARESOLVERR_DEFAULT_TIMEOUT` | int (s) | `60` | no | Default `maxTimeout` (in seconds) sent on FlareSolverr `request.get` calls when the proxy row leaves it unset. |
 | `indexers.proxies.test_probe_url` | `LOOM_INDEXERS_PROXIES_TEST_PROBE_URL` | string | `https://www.google.com/generate_204` | no | URL fetched by `POST /api/v1/proxies/{id}/test` for HTTP/HTTPS/SOCKS5 proxies. |
+| `downloads.check_for_stalled` | `LOOM_DOWNLOADS_CHECK_FOR_STALLED` | bool | `true` | no | Enable stall detection for tracked downloads. Progress pauses caused by an unreachable client or a network outage do not count as a stall. |
+| `downloads.stall_timeout` | `LOOM_DOWNLOADS_STALL_TIMEOUT` | int (min) | `30` | no | Minutes without progress (or without ever starting) before a download is declared stalled. Non-positive values fall back to `30`. |
+| `downloads.stall_action` | `LOOM_DOWNLOADS_STALL_ACTION` | string | `remove` | no | One of `pause`, `remove`, `remove_and_blocklist`, `retry`. Every action except `pause` removes the item and blocklists the release; the workflow fails and a fresh search runs. |
+| `downloads.max_retries` | `LOOM_DOWNLOADS_MAX_RETRIES` | int | `3` | no | Stall re-search attempts per title when `stall_action` is `retry`. |
 
 > **Per-indexer rate limiting and retry/backoff** are configured on
 > the indexer row itself (`rate_limit_per_min`, `rate_limit_burst`,

@@ -313,6 +313,26 @@ func (s *Store) ListRecent(ctx context.Context, limit int) ([]*Workflow, error) 
 		LIMIT ?`, limit)
 }
 
+// FindFailedByDownload returns the most recent failed workflow that tracked
+// the given download, or nil. Used to resume a workflow whose download was
+// abandoned but later completed anyway.
+func (s *Store) FindFailedByDownload(ctx context.Context, clientID, downloadID string) (*Workflow, error) {
+	rows, err := s.listArgs(ctx, `
+		SELECT id, type, state, media_type, grab_title,
+			download_client_id, download_id, quality_profile_id,
+			retry_count, max_retries, last_error, metadata,
+			created_at, updated_at, completed_at
+		FROM workflows
+		WHERE download_client_id = ? AND download_id = ? AND state = 'failed'
+		ORDER BY updated_at DESC
+		LIMIT 1`, clientID, downloadID)
+	if err != nil || len(rows) == 0 {
+		return nil, err
+	}
+	rows[0].Items, _ = s.getItems(ctx, rows[0].ID)
+	return rows[0], nil
+}
+
 // FindByDownload looks up active workflow by download client + download ID.
 func (s *Store) FindByDownload(ctx context.Context, clientID, downloadID string) (*Workflow, error) {
 	rows, err := s.listArgs(ctx, `
@@ -352,6 +372,36 @@ func (s *Store) FindActiveForMedia(ctx context.Context, mediaType, mediaID strin
 		return nil, err
 	}
 	return s.Get(ctx, wfID)
+}
+
+// OrphanedDownloadingMovies returns IDs of movies whose library status is
+// "downloading" but which have no active workflow. These are left behind
+// when a workflow ends without resetting media status (crash mid-transition,
+// workflows pruned, etc.) and would otherwise never be searched again.
+// Returns an empty result if the movies table is not present.
+func (s *Store) OrphanedDownloadingMovies(ctx context.Context) ([]string, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT m.id FROM movies m
+		WHERE m.status = 'downloading'
+		AND NOT EXISTS (
+			SELECT 1 FROM workflow_items wi
+			JOIN workflows w ON w.id = wi.workflow_id
+			WHERE wi.media_type = ? AND wi.media_id = m.id
+			AND w.state NOT IN ('completed', 'failed', 'cancelled')
+		)`, MediaTypeMovie)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
 }
 
 // PruneCompleted removes terminal workflows older than maxAge.

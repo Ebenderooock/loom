@@ -35,7 +35,7 @@ synchronisation.
 | `downloading`| Client acknowledged; download in progress.            |
 | `importing`  | Download complete; import pipeline processing.        |
 | `completed`  | Import successful; media marked available.            |
-| `failed`     | An error occurred; will auto-retry if attempts remain.|
+| `failed`     | An error occurred; imports auto-retry, downloads are re-searched.|
 | `cancelled`  | Terminal; user cancelled or max retries exhausted.    |
 
 ## Components
@@ -151,14 +151,33 @@ cached paths; manual retry reuses those paths even if the client item has since
 been removed. Safety checks and explicit destination-conflict handling still
 apply: recovery never means silently overwriting another file.
 
-The workflow engine's self-healing eliminates the "stuck grabbed" problem:
+### Download lifecycle
 
-1. Movie/episode grabs that exceed `StaleTimeout` without progressing are
-   automatically marked `failed`.
-2. On failure, the engine checks if retries remain. If yes, it schedules
-   a retry with exponential backoff.
-3. On final failure (retries exhausted), the media status is reset to
-   `missing`, allowing the auto-search scheduler to pick it up fresh on
-   its next cycle.
-4. Users can manually cancel stuck workflows via the API/UI, or force an
-   immediate retry.
+The orchestrator never leaves a title stuck on "Downloading" and never
+discards a download it simply can't see:
+
+1. **Stalled or failed downloads.** The download monitor reports abandoned
+   downloads via `NotifyDownloadFailed`. The workflow fails terminally
+   (`failed_from` is recorded in metadata), the media status is reset, and
+   a replacement search is triggered through the `ResearchFunc` hook. The
+   stalled release is blocklisted, so the search picks a different one.
+2. **Download vanished from the client.** If a grabbed/downloading item is
+   missing from a *reachable* client for `MissingDownloadGrace` (15m), it is
+   imported if it was last seen complete, otherwise abandoned as above.
+3. **Client unreachable.** `ActiveDownloads` returns a
+   `PartialDownloadStatusError` listing unreachable clients. Stale checks,
+   boot reconciliation, missing-download checks and manual retry all leave
+   downloads on those clients untouched until the client is back.
+4. **Late completion.** If an abandoned download finishes anyway (e.g. the
+   pause stall action), the failed workflow resumes into post-download —
+   unless another workflow has already taken over the media.
+5. **Failures in searching/grabbed/downloading are terminal.** Re-opening the
+   workflow in `searching` would block autosearch while nothing services it;
+   instead the media is released and re-searched. Import failures still retry
+   the import; unrecoverable import errors fail immediately.
+6. **Orphaned status.** Movies left `downloading` with no active workflow are
+   reset to `missing` at boot and hourly. A failed/cancelled *upgrade* never
+   downgrades an already-available movie.
+7. Users can manually cancel stuck workflows via the API/UI, or retry. A
+   retry that needs a new release triggers a fresh search instead of
+   re-opening the failed workflow.

@@ -19,6 +19,8 @@ func (n *completionNotifier) NotifyDownloadComplete(clientID, downloadID, title,
 func (*completionNotifier) NotifyDownloadProgress(string, string, float64, int64, int64, float64, string, string, string) {
 }
 
+func (*completionNotifier) NotifyDownloadFailed(string, string, string) {}
+
 func TestMonitorRedeliversCompletionToOrchestratorDespiteHistory(t *testing.T) {
 	bus := &eventbusStub{}
 	monitor := newTestMonitor(t, bus)

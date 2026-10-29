@@ -3,6 +3,7 @@ package workflows
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -76,6 +77,47 @@ type DownloadStatusProvider interface {
 	ActiveDownloads(ctx context.Context) (map[string]ActiveDownloadInfo, error)
 }
 
+// PartialDownloadStatusError is returned by DownloadStatusProvider.ActiveDownloads
+// alongside a partial result when some download clients could not be queried.
+// Downloads belonging to those clients are absent from the result, so callers
+// must not interpret their absence as "removed" or "finished" — the client may
+// simply be unreachable (e.g. during a network outage).
+type PartialDownloadStatusError struct {
+	// ClientErrors maps unreachable client IDs to their error message.
+	ClientErrors map[string]string
+}
+
+func (e *PartialDownloadStatusError) Error() string {
+	ids := make([]string, 0, len(e.ClientErrors))
+	for id := range e.ClientErrors {
+		ids = append(ids, id)
+	}
+	return fmt.Sprintf("download status unavailable for clients: %s", strings.Join(ids, ", "))
+}
+
+// unreachableClients interprets an ActiveDownloads error. usable is false when
+// the result cannot be trusted at all; otherwise the returned set lists clients
+// whose downloads are missing from the (partial) result.
+func unreachableClients(err error) (clients map[string]bool, usable bool) {
+	if err == nil {
+		return nil, true
+	}
+	var partial *PartialDownloadStatusError
+	if errors.As(err, &partial) {
+		clients = make(map[string]bool, len(partial.ClientErrors))
+		for id := range partial.ClientErrors {
+			clients[id] = true
+		}
+		return clients, true
+	}
+	return nil, false
+}
+
+// ResearchFunc triggers a fresh search for replacement releases for the given
+// media items. It is called asynchronously after a download is abandoned
+// (stalled, failed, vanished, unimportable). mediaType is "movie" or "episode".
+type ResearchFunc func(ctx context.Context, mediaType string, mediaIDs []string)
+
 // OrchestratorOpts configures the Orchestrator.
 type OrchestratorOpts struct {
 	Store          *Store
@@ -99,7 +141,13 @@ type Orchestrator struct {
 	preImportFn    PreImportFunc
 	cleanupFn      CleanupFunc
 	mediaRefreshFn MediaRefreshFunc
+	researchFn     ResearchFunc
 	dlStatus       DownloadStatusProvider
+
+	// missingSince records when an active download was first observed missing
+	// from a reachable client (keyed by workflow ID). Only touched from the
+	// Run goroutine.
+	missingSince map[string]time.Time
 
 	commands chan Command
 
@@ -131,6 +179,11 @@ func (o *Orchestrator) SetCleanupFn(fn CleanupFunc) { o.cleanupFn = fn }
 // SetMediaRefreshFn sets the post-import media refresh function.
 func (o *Orchestrator) SetMediaRefreshFn(fn MediaRefreshFunc) { o.mediaRefreshFn = fn }
 
+// SetResearchFn sets the hook used to search for a replacement release after
+// a download is abandoned. If unset, abandoned media is left for the rolling
+// searcher to pick up.
+func (o *Orchestrator) SetResearchFn(fn ResearchFunc) { o.researchFn = fn }
+
 // NewOrchestrator creates a workflow orchestrator.
 func NewOrchestrator(opts OrchestratorOpts) *Orchestrator {
 	if opts.Logger == nil {
@@ -148,6 +201,7 @@ func NewOrchestrator(opts OrchestratorOpts) *Orchestrator {
 		commands:       make(chan Command, commandBufferSize),
 		importSem:      make(chan struct{}, maxConcurrentImports),
 		progressBuf:    make(map[string]*CmdDownloadProgress),
+		missingSince:   make(map[string]time.Time),
 	}
 }
 
@@ -223,6 +277,12 @@ func (o *Orchestrator) NotifyDownloadRemoved(clientID string, downloadIDs []stri
 	}
 }
 
+// NotifyDownloadFailed satisfies downloads.MonitorOrchNotifier. It is called
+// when a download stalled or failed and was abandoned by the stall handler.
+func (o *Orchestrator) NotifyDownloadFailed(clientID, downloadID, reason string) {
+	o.Send(CmdDownloadFailed{ClientID: clientID, DownloadID: downloadID, Reason: reason})
+}
+
 // StartSearch is the synchronous API for creating a new workflow.
 // Callers need the workflow ID back to later send CmdGrabbed.
 func (o *Orchestrator) StartSearch(ctx context.Context, wfType, mediaType, qualityProfileID string, mediaIDs []string) (*Workflow, error) {
@@ -255,6 +315,7 @@ func (o *Orchestrator) Run(ctx context.Context) {
 
 	// Startup reconciliation: recover missed events.
 	o.reconcileOnBoot(ctx)
+	o.resetOrphanedMediaStatus(ctx)
 
 	ticker := time.NewTicker(SchedulerTick)
 	defer ticker.Stop()
@@ -278,11 +339,13 @@ func (o *Orchestrator) Run(ctx context.Context) {
 			o.handle(ctx, cmd)
 		case <-ticker.C:
 			o.handleStale(ctx)
+			o.checkMissingDownloads(ctx)
 			o.checkPostDownloadWorkflows(ctx)
 		case <-progressTicker.C:
 			o.flushProgress(ctx)
 		case <-pruneTicker.C:
 			o.pruneCompleted(ctx)
+			o.resetOrphanedMediaStatus(ctx)
 		}
 	}
 }
@@ -304,6 +367,8 @@ func (o *Orchestrator) handle(ctx context.Context, cmd Command) {
 		o.handleCancel(ctx, c)
 	case CmdDownloadRemoved:
 		o.handleDownloadRemoved(ctx, c)
+	case CmdDownloadFailed:
+		o.handleDownloadFailed(ctx, c)
 	case CmdRetry:
 		o.handleRetry(ctx, c)
 	default:
@@ -387,6 +452,13 @@ func (o *Orchestrator) handleDownloadComplete(ctx context.Context, cmd CmdDownlo
 		return
 	}
 	if wf == nil {
+		// A workflow abandoned during download (stalled/vanished) may still
+		// finish if the client kept it — resume it rather than lose the file.
+		if failed, ferr := o.store.FindFailedByDownload(ctx, cmd.ClientID, cmd.DownloadID); ferr == nil && failed != nil {
+			wf = failed
+		}
+	}
+	if wf == nil {
 		wf = &Workflow{
 			Type: TypeManualImport, State: StateDownloading,
 			GrabTitle: cmd.Title, DownloadClientID: cmd.ClientID,
@@ -405,7 +477,13 @@ func (o *Orchestrator) handleDownloadComplete(ctx context.Context, cmd CmdDownlo
 		o.logger.Debug("download complete received but workflow already advanced",
 			"workflow_id", wf.ID, "state", wf.State)
 		return
-	case StateFailed, StateCancelled:
+	case StateFailed:
+		if !o.recoverFailedDownload(ctx, wf) {
+			o.logger.Debug("download complete received for terminal workflow",
+				"workflow_id", wf.ID, "state", wf.State)
+			return
+		}
+	case StateCancelled:
 		o.logger.Debug("download complete received for terminal workflow",
 			"workflow_id", wf.ID, "state", wf.State)
 		return
@@ -760,10 +838,7 @@ func (o *Orchestrator) handleRetry(ctx context.Context, cmd CmdRetry) {
 		err = o.smartRetry(ctx, wf)
 	default:
 		// No download info — start from scratch
-		err = o.engine.Retry(ctx, wf.ID)
-		if err == nil {
-			o.logEvent(ctx, wf.ID, EventRetried, "Manual retry (re-search)", nil)
-		}
+		err = o.retryWithResearch(ctx, wf, "")
 	}
 
 	if cmd.Reply != nil {
@@ -783,14 +858,13 @@ func (o *Orchestrator) retryCachedImport(ctx context.Context, wf *Workflow) erro
 // smartRetry checks the download state and picks the optimal retry point.
 func (o *Orchestrator) smartRetry(ctx context.Context, wf *Workflow) error {
 	downloads, err := o.dlStatus.ActiveDownloads(ctx)
-	if err != nil {
-		o.logger.Warn("smart retry: failed to query downloads, falling back to re-search",
-			"workflow_id", wf.ID, "error", err)
-		if err := o.engine.Retry(ctx, wf.ID); err != nil {
-			return err
-		}
-		o.logEvent(ctx, wf.ID, EventRetried, "Manual retry (re-search, download query failed)", nil)
-		return nil
+	unreachable, usable := unreachableClients(err)
+	if !usable || unreachable[wf.DownloadClientID] {
+		// Don't abandon a download we can't see — the client may just be
+		// unreachable. Ask the user to try again once it is back.
+		o.logger.Warn("smart retry: download client unreachable",
+			"workflow_id", wf.ID, "client_id", wf.DownloadClientID, "error", err)
+		return fmt.Errorf("download client %s is unreachable; try again later", wf.DownloadClientID)
 	}
 
 	key := wf.DownloadClientID + ":" + wf.DownloadID
@@ -799,10 +873,7 @@ func (o *Orchestrator) smartRetry(ctx context.Context, wf *Workflow) error {
 	switch {
 	case !exists:
 		// Download gone — re-search from scratch
-		if err := o.engine.Retry(ctx, wf.ID); err != nil {
-			return err
-		}
-		o.logEvent(ctx, wf.ID, EventRetried, "Manual retry (re-search, download not found)", nil)
+		return o.retryWithResearch(ctx, wf, "download not found")
 
 	case info.Status == "completed":
 		// Download complete — skip straight to import
@@ -820,8 +891,8 @@ func (o *Orchestrator) smartRetry(ctx context.Context, wf *Workflow) error {
 		}
 		o.logEvent(ctx, wf.ID, EventRetried, "Manual retry (evaluating seed status)", nil)
 
-	case info.Status == "downloading":
-		// Still downloading — resume from downloading state
+	case info.Status == "downloading" || info.Status == "queued" || info.Status == "paused":
+		// Still in the client — resume from downloading state
 		if err := o.engine.RecoverToDownloading(ctx, wf.ID, "Manual retry (download still active)"); err != nil {
 			return err
 		}
@@ -831,12 +902,31 @@ func (o *Orchestrator) smartRetry(ctx context.Context, wf *Workflow) error {
 		// Unknown state — fall back to re-search
 		o.logger.Warn("smart retry: unknown download state, falling back to re-search",
 			"workflow_id", wf.ID, "dl_state", info.Status)
+		return o.retryWithResearch(ctx, wf, "download state: "+info.Status)
+	}
+
+	return nil
+}
+
+// retryWithResearch handles a manual retry that needs a new release. When a
+// research hook is available the failed workflow stays failed (its release is
+// abandoned) and a fresh search is triggered, which creates a new workflow on
+// grab. Without a hook it falls back to re-opening the workflow in searching.
+func (o *Orchestrator) retryWithResearch(ctx context.Context, wf *Workflow, detail string) error {
+	msg := "Manual retry (re-search)"
+	if detail != "" {
+		msg = fmt.Sprintf("Manual retry (re-search, %s)", detail)
+	}
+	if o.researchFn == nil {
 		if err := o.engine.Retry(ctx, wf.ID); err != nil {
 			return err
 		}
-		o.logEvent(ctx, wf.ID, EventRetried, fmt.Sprintf("Manual retry (re-search, unknown dl state: %s)", info.Status), nil)
+		o.logEvent(ctx, wf.ID, EventRetried, msg, nil)
+		return nil
 	}
-
+	o.engine.resetMediaStatus(ctx, wf)
+	o.logEvent(ctx, wf.ID, EventRetried, msg, nil)
+	o.triggerResearch(ctx, wf)
 	return nil
 }
 
@@ -864,6 +954,239 @@ func (o *Orchestrator) handleDownloadRemoved(ctx context.Context, cmd CmdDownloa
 		"client_id":   cmd.ClientID,
 		"download_id": cmd.DownloadID,
 	})
+}
+
+// handleDownloadFailed abandons a download that stalled or failed in the
+// client: the workflow fails terminally (no pointless retries of the same
+// release), the media status is reset so the title stops showing as
+// downloading, and a search for a replacement release is triggered.
+func (o *Orchestrator) handleDownloadFailed(ctx context.Context, cmd CmdDownloadFailed) {
+	wf, err := o.engine.FindByDownload(ctx, cmd.ClientID, cmd.DownloadID)
+	if err != nil {
+		o.logger.Error("failed to find workflow for failed download",
+			"client_id", cmd.ClientID, "download_id", cmd.DownloadID, "error", err)
+		return
+	}
+	if wf == nil || wf.IsTerminal() {
+		return
+	}
+	switch wf.State {
+	case StatePostDownload, StateImporting, StateCleaningUp:
+		// The payload is already complete; a late stall/failure report for
+		// the client item must not discard a finished download.
+		o.logger.Debug("ignoring download failure for workflow past downloading",
+			"workflow_id", wf.ID, "state", wf.State)
+		return
+	}
+	reason := cmd.Reason
+	if reason == "" {
+		reason = "download failed"
+	}
+	o.failDownload(ctx, wf, "Download abandoned: "+reason, map[string]any{
+		"client_id":   cmd.ClientID,
+		"download_id": cmd.DownloadID,
+		"reason":      reason,
+	})
+}
+
+// failDownload fails a grabbed/downloading workflow terminally, logs the
+// event, and triggers a re-search for its media.
+func (o *Orchestrator) failDownload(ctx context.Context, wf *Workflow, reason string, meta map[string]any) {
+	if len(wf.Items) == 0 {
+		// List queries don't load items; they're needed for media reset
+		// and the re-search.
+		if full, err := o.store.Get(ctx, wf.ID); err == nil && full != nil {
+			wf = full
+		}
+	}
+	if err := o.engine.FailTerminal(ctx, wf.ID, reason); err != nil {
+		o.logger.Error("failed to fail workflow for abandoned download",
+			"workflow_id", wf.ID, "error", err)
+		return
+	}
+	o.logEvent(ctx, wf.ID, EventDownloadFailed, reason, meta)
+	o.triggerResearch(ctx, wf)
+}
+
+// triggerResearch asynchronously asks for a replacement release. It must not
+// run on the orchestrator goroutine: the search path calls StartSearch, which
+// round-trips through the command channel.
+func (o *Orchestrator) triggerResearch(ctx context.Context, wf *Workflow) {
+	if o.researchFn == nil || wf == nil || len(wf.Items) == 0 {
+		return
+	}
+	byType := make(map[string][]string)
+	for _, it := range wf.Items {
+		byType[it.MediaType] = append(byType[it.MediaType], it.MediaID)
+	}
+	fn := o.researchFn
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				o.logger.Error("re-search hook panicked", "workflow_id", wf.ID, "panic", r)
+			}
+		}()
+		for mediaType, ids := range byType {
+			fn(ctx, mediaType, ids)
+		}
+	}()
+}
+
+// recoverFailedDownload re-opens a workflow that was failed during the
+// download phase when its download nonetheless completes (e.g. a stalled
+// torrent that was paused rather than removed, then finished). It refuses if
+// another workflow has since taken over the media, to avoid duplicate imports.
+func (o *Orchestrator) recoverFailedDownload(ctx context.Context, wf *Workflow) bool {
+	switch metaString(wf.Metadata, MetaFailedFrom) {
+	case StateGrabbed, StateDownloading:
+	default:
+		return false
+	}
+	if !o.mediaFreeFor(ctx, wf) {
+		return false
+	}
+	if err := o.engine.RecoverToDownloading(ctx, wf.ID, "Download completed after being abandoned"); err != nil {
+		o.logger.Warn("failed to recover abandoned download", "workflow_id", wf.ID, "error", err)
+		return false
+	}
+	o.logEvent(ctx, wf.ID, EventRetried, "Download completed after being abandoned — resuming import", nil)
+	return true
+}
+
+// mediaFreeFor reports whether no other active workflow owns any of wf's
+// media items, so wf can safely be resurrected without a duplicate import.
+func (o *Orchestrator) mediaFreeFor(ctx context.Context, wf *Workflow) bool {
+	for _, it := range wf.Items {
+		other, err := o.store.FindActiveForMedia(ctx, it.MediaType, it.MediaID)
+		if err != nil || (other != nil && other.ID != wf.ID) {
+			return false
+		}
+	}
+	return true
+}
+
+// checkMissingDownloads fails grabbed/downloading workflows whose download has
+// vanished from a reachable client (removed outside Loom, rejected by the
+// client, lost on client restart). Without this the title would show as
+// downloading until the multi-day stale threshold. Downloads on unreachable
+// clients are never touched.
+func (o *Orchestrator) checkMissingDownloads(ctx context.Context) {
+	if o.dlStatus == nil {
+		return
+	}
+	active, err := o.store.ListActive(ctx)
+	if err != nil {
+		o.logger.Error("missing-download check: list active failed", "error", err)
+		return
+	}
+	var candidates []*Workflow
+	for _, wf := range active {
+		if (wf.State == StateGrabbed || wf.State == StateDownloading) &&
+			wf.DownloadClientID != "" && wf.DownloadID != "" {
+			candidates = append(candidates, wf)
+		}
+	}
+	if len(candidates) == 0 {
+		clear(o.missingSince)
+		return
+	}
+
+	dlStates, dlErr := o.dlStatus.ActiveDownloads(ctx)
+	unreachable, usable := unreachableClients(dlErr)
+	if !usable {
+		return
+	}
+
+	now := time.Now()
+	stillMissing := make(map[string]bool, len(candidates))
+	for _, wf := range candidates {
+		key := wf.DownloadClientID + ":" + wf.DownloadID
+		if _, exists := dlStates[key]; exists || unreachable[wf.DownloadClientID] {
+			continue
+		}
+		stillMissing[wf.ID] = true
+		first, seen := o.missingSince[wf.ID]
+		if !seen {
+			o.missingSince[wf.ID] = now
+			continue
+		}
+		if now.Sub(first) < MissingDownloadGrace {
+			continue
+		}
+		delete(o.missingSince, wf.ID)
+		delete(stillMissing, wf.ID)
+
+		if lastKnownComplete(wf.Metadata) {
+			// Finished and then removed by the client (e.g. auto-remove on
+			// completion) before completion was observed — import it.
+			o.logger.Info("download missing from client but last seen complete, importing",
+				"workflow_id", wf.ID)
+			o.handleDownloadComplete(ctx, CmdDownloadComplete{
+				ClientID:   wf.DownloadClientID,
+				DownloadID: wf.DownloadID,
+				Title:      wf.GrabTitle,
+			})
+			continue
+		}
+		o.logger.Warn("download disappeared from client, abandoning",
+			"workflow_id", wf.ID, "client_id", wf.DownloadClientID, "download_id", wf.DownloadID)
+		o.failDownload(ctx, wf, "Download disappeared from the download client", map[string]any{
+			"client_id":   wf.DownloadClientID,
+			"download_id": wf.DownloadID,
+		})
+	}
+	for id := range o.missingSince {
+		if !stillMissing[id] {
+			delete(o.missingSince, id)
+		}
+	}
+}
+
+// resetOrphanedMediaStatus resets movies left in "downloading" status with no
+// active workflow back to missing so the rolling searcher picks them up again.
+func (o *Orchestrator) resetOrphanedMediaStatus(ctx context.Context) {
+	ids, err := o.store.OrphanedDownloadingMovies(ctx)
+	if err != nil {
+		o.logger.Debug("orphaned media status check skipped", "error", err)
+		return
+	}
+	for _, id := range ids {
+		if err := o.engine.media.SetMovieMissing(ctx, id); err != nil {
+			o.logger.Warn("failed to reset orphaned downloading movie", "movie_id", id, "error", err)
+			continue
+		}
+		o.logger.Info("reset orphaned downloading movie to missing", "movie_id", id)
+	}
+}
+
+// lastKnownComplete reports whether cached progress metadata shows the
+// download had finished.
+func lastKnownComplete(metadata string) bool {
+	if metadata == "" {
+		return false
+	}
+	var m map[string]any
+	if json.Unmarshal([]byte(metadata), &m) != nil {
+		return false
+	}
+	if st, _ := m["status"].(string); st == "completed" || st == "seeding" {
+		return true
+	}
+	p, _ := m["progress"].(float64)
+	return p >= 0.999
+}
+
+// metaString returns a string value from workflow metadata JSON.
+func metaString(metadata, key string) string {
+	if metadata == "" {
+		return ""
+	}
+	var m map[string]any
+	if json.Unmarshal([]byte(metadata), &m) != nil {
+		return ""
+	}
+	v, _ := m[key].(string)
+	return v
 }
 
 // ── Progress coalescing ───────────────────────────────────────────────
@@ -1158,9 +1481,15 @@ func (o *Orchestrator) handleStale(ctx context.Context) {
 	}
 
 	// Query current download states for recovery attempts.
-	var dlStates map[string]ActiveDownloadInfo
+	var (
+		dlStates    map[string]ActiveDownloadInfo
+		unreachable map[string]bool
+		dlUsable    bool
+	)
 	if o.dlStatus != nil {
-		dlStates, _ = o.dlStatus.ActiveDownloads(ctx)
+		var dlErr error
+		dlStates, dlErr = o.dlStatus.ActiveDownloads(ctx)
+		unreachable, dlUsable = unreachableClients(dlErr)
 	}
 
 	for _, wf := range stale {
@@ -1168,10 +1497,21 @@ func (o *Orchestrator) handleStale(ctx context.Context) {
 
 		// For downloading/grabbed workflows, attempt recovery before failing.
 		if wf.State == StateDownloading || wf.State == StateGrabbed {
-			if dlStates != nil && wf.DownloadClientID != "" && wf.DownloadID != "" {
+			if o.dlStatus != nil && wf.DownloadClientID != "" && wf.DownloadID != "" {
+				if !dlUsable || unreachable[wf.DownloadClientID] {
+					// Client unreachable (network outage, client down). We
+					// can't tell what happened to the download, so never
+					// abandon it on silence alone — wait for the client.
+					telemetry.ObserveWorkflowStale(wf.State, "client_unreachable")
+					_ = o.store.MergeMetadata(ctx, wf.ID, map[string]any{"stale_check": "client_unreachable"})
+					o.logger.Debug("stale check: download client unreachable, extending",
+						"workflow_id", wf.ID, "client_id", wf.DownloadClientID)
+					continue
+				}
 				key := wf.DownloadClientID + ":" + wf.DownloadID
 				if info, exists := dlStates[key]; exists {
-					if info.Status == "completed" || info.Status == "seeding" {
+					switch info.Status {
+					case "completed", "seeding":
 						telemetry.ObserveWorkflowStale(wf.State, "recovered_completion")
 						o.logger.Info("stale recovery: download is actually complete, recovering",
 							"workflow_id", wf.ID, "state", wf.State, "dl_state", info.Status)
@@ -1184,36 +1524,50 @@ func (o *Orchestrator) handleStale(ctx context.Context) {
 							ContentPath: info.ContentPath,
 							SavePath:    info.SavePath,
 						})
-						continue
-					}
-					if info.Status == "downloading" {
+					case "failed":
+						telemetry.ObserveWorkflowStale(wf.State, "failed")
+						o.failDownload(ctx, wf, "Download failed in client", map[string]any{
+							"client_id":   wf.DownloadClientID,
+							"download_id": wf.DownloadID,
+						})
+					default:
+						// Still present in the client (downloading, queued,
+						// paused, ...). Stall detection in the download
+						// monitor decides when a present download is dead;
+						// here we only keep the workflow alive.
 						telemetry.ObserveWorkflowStale(wf.State, "still_active")
-						// Still downloading — touch updated_at to reset stale timer
-						_ = o.store.MergeMetadata(ctx, wf.ID, map[string]any{"stale_check": "still_downloading"})
-						o.logger.Debug("stale check: download still active, resetting timer",
-							"workflow_id", wf.ID)
-						continue
+						if wf.State == StateGrabbed && info.Status == "downloading" {
+							if err := o.engine.markDownloading(ctx, wf.ID); err == nil {
+								o.logEvent(ctx, wf.ID, EventDownloading, "Download active", nil)
+							}
+						}
+						_ = o.store.MergeMetadata(ctx, wf.ID, map[string]any{"stale_check": "still_" + info.Status})
+						o.logger.Debug("stale check: download still in client, resetting timer",
+							"workflow_id", wf.ID, "dl_state", info.Status)
 					}
+					continue
 				}
 			}
 
 			// For downloading state, only fail if the item is gone AND silent
-			// for longer than the dedicated downloading threshold. This avoids
-			// false-positives for large files on slow connections where progress
-			// events may be temporarily absent (client restart, network blip).
-			if wf.State == StateDownloading {
-				if age < DownloadingStaleThreshold {
-					// Still within tolerance — reset the timer so this workflow
-					// doesn't immediately re-appear as stale next tick.
-					_ = o.store.MergeMetadata(ctx, wf.ID, map[string]any{"stale_check": "within_threshold"})
-					o.logger.Debug("stale check: downloading within threshold, extending",
-						"workflow_id", wf.ID, "age", age.Round(time.Minute))
-					continue
-				}
-				// Beyond threshold AND item not found in any client — genuinely stale.
-				o.logger.Warn("stale workflow: download silent beyond threshold",
-					"id", wf.ID, "age", age.Round(time.Minute))
+			// for longer than the dedicated downloading threshold. Missing
+			// downloads on reachable clients are normally handled sooner by
+			// checkMissingDownloads; this is the last-resort backstop.
+			if wf.State == StateDownloading && age < DownloadingStaleThreshold {
+				_ = o.store.MergeMetadata(ctx, wf.ID, map[string]any{"stale_check": "within_threshold"})
+				o.logger.Debug("stale check: downloading within threshold, extending",
+					"workflow_id", wf.ID, "age", age.Round(time.Minute))
+				continue
 			}
+
+			msg := fmt.Sprintf("Stale in %s state for %s", wf.State, age.Round(time.Second))
+			o.logger.Warn("stale workflow: download lost", "id", wf.ID, "state", wf.State,
+				"age", age.Round(time.Second))
+			o.logEvent(ctx, wf.ID, EventStaleDetected, msg,
+				map[string]any{"state": wf.State, "age_seconds": int(age.Seconds())})
+			telemetry.ObserveWorkflowStale(wf.State, "failed")
+			o.failDownload(ctx, wf, msg, nil)
+			continue
 		}
 
 		o.logger.Warn("stale workflow detected",
@@ -1253,10 +1607,17 @@ func (o *Orchestrator) reconcileOnBoot(ctx context.Context) {
 
 	o.logger.Info("running startup reconciliation")
 
-	downloads, err := o.dlStatus.ActiveDownloads(ctx)
-	if err != nil {
-		o.logger.Error("reconcile: failed to query download state", "error", err)
-		return
+	downloads, dlErr := o.dlStatus.ActiveDownloads(ctx)
+	unreachable, dlUsable := unreachableClients(dlErr)
+	if dlErr != nil {
+		o.logger.Warn("reconcile: download state incomplete; downloads on unreachable clients are left untouched",
+			"error", dlErr)
+	}
+	// clientKnown reports whether the download listing for a client can be
+	// trusted. A missing download on an unknown client is NOT evidence that
+	// it was removed or finished.
+	clientKnown := func(clientID string) bool {
+		return dlUsable && !unreachable[clientID]
 	}
 
 	// Phase 1: Reconcile active (non-terminal) workflows
@@ -1274,6 +1635,7 @@ func (o *Orchestrator) reconcileOnBoot(ctx context.Context) {
 
 		key := wf.DownloadClientID + ":" + wf.DownloadID
 		info, exists := downloads[key]
+		known := clientKnown(wf.DownloadClientID)
 
 		switch {
 		case wf.State == StateImporting:
@@ -1300,21 +1662,29 @@ func (o *Orchestrator) reconcileOnBoot(ctx context.Context) {
 			go o.runPostImportCleanup(ctx, wf, metadata.ImportedPaths)
 			reconciled++
 
-		case !exists && wf.State == StateDownloading:
-			// Download disappeared while we were down — treat it as completed
-			// and attempt to import. The download may have finished and been
-			// removed from the client (e.g. client auto-removed after seeding),
-			// or the import path is cached in metadata from a prior run.
-			o.logger.Info("reconcile: downloading workflow missing from client, treating as completed",
+		case !known:
+			// Client unreachable — leave the workflow as-is; stale and
+			// missing-download checks re-evaluate once the client is back.
+			continue
+		case !exists && wf.State == StateDownloading && lastKnownComplete(wf.Metadata):
+			// Download finished and was removed from the client while we
+			// were down (e.g. auto-remove after completion) — import it.
+			o.logger.Info("reconcile: completed download missing from client, importing",
 				"workflow_id", wf.ID)
 			o.logEvent(ctx, wf.ID, EventDownloadComplete,
-				"Download not found at startup — treating as completed", nil)
+				"Download not found at startup but was last seen complete — importing", nil)
 			o.handleDownloadComplete(ctx, CmdDownloadComplete{
 				ClientID:   wf.DownloadClientID,
 				DownloadID: wf.DownloadID,
 				Title:      wf.GrabTitle,
 			})
 			reconciled++
+		case !exists && (wf.State == StateDownloading || wf.State == StateGrabbed):
+			// Incomplete download vanished while we were down. Don't guess:
+			// checkMissingDownloads abandons it after MissingDownloadGrace
+			// if it doesn't reappear (clients can be slow to load state).
+			o.logger.Info("reconcile: incomplete download missing from client, will re-check",
+				"workflow_id", wf.ID, "state", wf.State)
 		case !exists && wf.State == StatePostDownload:
 			// Download removed after seeding — ready to import
 			o.logger.Info("reconcile: post_download item no longer in client, importing",
@@ -1367,7 +1737,7 @@ func (o *Orchestrator) reconcileOnBoot(ctx context.Context) {
 			}
 			key := wf.DownloadClientID + ":" + wf.DownloadID
 			info, exists := downloads[key]
-			if !exists {
+			if !exists || !o.mediaFreeFor(ctx, wf) {
 				continue
 			}
 

@@ -124,6 +124,10 @@ type AddRequest struct {
 	MediaID          string   `json:"media_id,omitempty"`
 	IndexerID        string   `json:"indexer_id,omitempty"`
 	acquisitionScope string
+
+	// IgnoreBlocklist lets an interactive grab proceed even when the
+	// release is on the blocklist. Without it the API rejects the grab.
+	IgnoreBlocklist bool `json:"ignore_blocklist,omitempty"`
 }
 
 // Normalize fills in derived fields: if Magnet is empty but Infohash

@@ -141,6 +141,9 @@ type RejectStat struct {
 type EvaluateRequest struct {
 	SearchRequest
 	Results []indexers.Result `json:"results"`
+	// IgnoreBlocklist skips the blocklist check so blocklisted releases
+	// are scored like any other result.
+	IgnoreBlocklist bool `json:"ignore_blocklist,omitempty"`
 	// PolicyPreview replaces only the loaded profile for this dry run.
 	// It never writes configuration or affects SearchAndGrab.
 	PolicyPreview *qualityprofiles.QualityProfile `json:"policy_preview,omitempty"`

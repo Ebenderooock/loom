@@ -757,7 +757,7 @@ searching → grabbed → downloading → post_download → importing → comple
 **Possible failures:**
 - Search yields no results → workflow fails at `searching`.
 - Grab fails (client down) → workflow fails at `grabbed`.
-- Download stalls → detected by monitor, workflow fails at `downloading`.
+- Download stalls, fails or vanishes from the client → workflow fails at `downloading`, the release is blocklisted, media status is reset and a replacement is searched for. Downloads on unreachable clients are never abandoned.
 - Import fails (permissions, disk full, file parsing error) → fails at `importing`.
 - **Current known issue:** the full end-to-end pipeline has reliability issues; the import/post-download stages may not complete successfully.
 
@@ -786,12 +786,14 @@ searching → grabbed → downloading → post_download → importing → comple
 7. Update `lastCompleted` set for next sweep.
 
 **Stall detection (`detectStalled`):**
-1. Track `StatusItemDownloading` items with progress bytes/rate.
-2. On first sighting, store initial progress and timestamp.
-3. If progress changes between sweeps, reset the stall timer.
-4. If progress is unchanged for `StallTimeout` (default 30 minutes), mark as stalled and invoke `StallHandler`.
+1. Track `StatusItemDownloading` items with progress bytes/rate. Queued, paused and seeding items accrue no stall time.
+2. Progress (bytes, percentage or a non-zero download rate) resets the stall timer.
+3. Stall time accrues only while the network is healthy: some item is transferring, or the connectivity probe (TCP dial to well-known hosts) succeeds. Network outages are not counted. A single sweep adds at most `max(5×CheckInterval, 5m)` so host sleep doesn't count either.
+4. Downloads that have received data stall after `StallTimeout` (`downloads.stall_timeout`, default 30 minutes). Downloads that never started (dead magnets, no seeders) stall after `NoStartTimeout` (2× `StallTimeout`).
 5. `StatusItemFailed` items are immediately handled via `StallHandler` (once per item).
-6. Prune tracking state for items no longer active.
+6. Prune tracking state for items no longer present — except on clients that failed to respond this sweep.
+
+**Stall actions (`downloads.stall_action`):** `remove` (default), `remove_and_blocklist` and `retry` all remove the download from its client, blocklist the release (by infohash for torrents, title hash otherwise) and notify the orchestrator, which fails the workflow and searches for a replacement. `pause` only pauses the download; the workflow stays active. `downloads.check_for_stalled` disables detection.
 
 **Events published:**
 
@@ -807,6 +809,7 @@ searching → grabbed → downloading → post_download → importing → comple
 - `NotifyDownloadComplete()` → sends `CmdDownloadComplete` to orchestrator
 - `NotifyDownloadProgress()` → sends `CmdDownloadProgress` with rate/ratio/status
 - `NotifyDownloadRemoved()` → sends `CmdDownloadRemoved`
+- `NotifyDownloadFailed()` → sends `CmdDownloadFailed` (stalled/failed download abandoned)
 - Progress is forwarded for `Downloading`, `Paused`, `Seeding`, `Completed` states
 
 **State tracking (in-memory):**
@@ -816,7 +819,7 @@ searching → grabbed → downloading → post_download → importing → comple
 
 **Expected outcomes:**
 - Completed downloads are detected and trigger import workflows.
-- Stalled downloads are flagged for retry or manual intervention.
+- Stalled downloads are removed, blocklisted and replaced by a new search.
 - Activity page reflects real-time download state.
 
 **Possible failures:**
@@ -1584,6 +1587,7 @@ All review create/approve/reject actions logged to audit log with full context.
 | GET | `/api/v1/blocklist` | List all blocklisted releases |
 | DELETE | `/api/v1/blocklist` | Clear entire blocklist |
 | DELETE | `/api/v1/blocklist/{id}` | Remove single entry |
+| POST | `/api/v1/blocklist/check` | Check releases (`{releases:[{title, infohash, magnet}]}`) → `{blocked:[bool]}` |
 
 **Data Model (BlocklistEntry):**
 
@@ -1597,8 +1601,10 @@ All review create/approve/reject actions logged to audit log with full context.
 | created_at | datetime | When blocklisted |
 
 **Integration:**
-- `IsBlocked(releaseHash)` is checked during search result evaluation
-- Entries created automatically when imports fail or manually by user
+- `IsReleaseBlocked(title, infohash)` is checked during automatic and interactive search evaluation; matches are rejected with reason `blocklisted` (by infohash, title hash or case-insensitive title)
+- Entries created automatically when a download stalls or fails
+- Interactive search hides blocklisted releases. Enabling **Ignore blocklist** in the search dialog shows them with a *Blocklisted* badge and allows grabbing them
+- Grabs via `POST /api/v1/download-clients/{id}/items` are rejected with `409 blocklisted` unless the body sets `"ignore_blocklist": true`; `POST /api/v1/autosearch/evaluate` accepts the same flag
 - Uses `INSERT OR REPLACE` for idempotent additions
 
 **Database:** `blocklist`
@@ -2301,7 +2307,7 @@ separately by the media scanner
 | **End-to-end download→import pipeline** | ⚠️ Unreliable | The post-download and import stages have known issues. Workflows may not complete successfully. This is the current development focus (Phase 3). |
 | **Grab cleanup on import** | 🔴 Incomplete | Active grab records may not be properly cleaned up after import. |
 | **Remote path mappings** | ⚠️ Partial | Feature exists but may not be fully integrated into the import pipeline. |
-| **Blocklist on failure** | ⚠️ Partial | Failed releases should be auto-blocklisted for redownload, but this may not work end-to-end. |
+| **Blocklist on failure** | ✅ Done | Stalled/failed downloads are blocklisted and skipped by search. Import failures are not blocklisted. |
 | **Season pack import** | ⚠️ Partial | Pack detection exists but unpacking/splitting into episodes may have gaps. |
 | **Anime episode mapping** | ⚠️ Partial | Absolute-to-season mapping exists but coverage depends on external data. |
 | **Wire-compat parity** | 🔴 Incomplete | Compatibility shims exist but don't cover all Radarr/Sonarr/Prowlarr endpoints. |
