@@ -1,14 +1,17 @@
-// Package discover provides person-filmography lookup backed by TMDB.
+// Package discover provides read-only title metadata and person filmographies.
 package discover
 
 import (
 	"encoding/json"
 	"net/http"
+	"regexp"
 	"sort"
 	"strconv"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 
+	"github.com/ebenderooock/loom/internal/metadata"
 	"github.com/ebenderooock/loom/internal/metadata/tmdb"
 )
 
@@ -53,11 +56,182 @@ const (
 	maxOverviewLen = 500
 )
 
-// Router returns a chi.Router for person discovery endpoints.
-func Router(client *tmdb.Client) chi.Router {
+type MusicDetails struct {
+	Provider metadata.MusicMetadataProvider
+	Enabled  func() bool
+}
+
+// Router returns read-only provider metadata routes for title and person discovery.
+func Router(client *tmdb.Client, music ...MusicDetails) chi.Router {
 	r := chi.NewRouter()
 	r.Get("/people/{id}", getPersonFilmography(client))
+	r.Get("/movie/{id}", getVideo(client, false))
+	r.Get("/series/{id}", getVideo(client, true))
+	if len(music) > 0 && music[0].Provider != nil {
+		details := music[0]
+		r.Group(func(r chi.Router) {
+			r.Use(func(next http.Handler) http.Handler {
+				return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+					if details.Enabled != nil && !details.Enabled() {
+						http.NotFound(w, req)
+						return
+					}
+					next.ServeHTTP(w, req)
+				})
+			})
+			r.Get("/artist/{id}", getArtist(details.Provider))
+			r.Get("/album/{id}", getAlbum(details.Provider))
+			r.Get("/release/{id}", getRelease(details.Provider))
+		})
+	}
 	return r
+}
+
+func getAlbum(provider metadata.MusicMetadataProvider) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id, err := uuid.Parse(chi.URLParam(r, "id"))
+		if err != nil {
+			http.Error(w, "invalid MusicBrainz ID", http.StatusBadRequest)
+			return
+		}
+		album, releases, err := provider.GetAlbum(r.Context(), id.String())
+		if err != nil {
+			http.Error(w, "Unable to load album metadata", http.StatusBadGateway)
+			return
+		}
+		if album == nil || album.MBID != id.String() {
+			http.Error(w, "Album not found for this identity", http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{"album": album, "releases": releases})
+	}
+}
+
+func getRelease(provider metadata.MusicMetadataProvider) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id, err := uuid.Parse(chi.URLParam(r, "id"))
+		if err != nil {
+			http.Error(w, "invalid MusicBrainz ID", http.StatusBadRequest)
+			return
+		}
+		release, err := provider.GetAlbumRelease(r.Context(), id.String())
+		if err != nil {
+			http.Error(w, "Unable to load track listing", http.StatusBadGateway)
+			return
+		}
+		if release == nil || release.MBID != id.String() {
+			http.Error(w, "Edition not found for this identity", http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(release)
+	}
+}
+
+// These routes are read-only: provider identity is always scoped by media type,
+// never interpreted as a local library ID or resolved by a title search.
+func getVideo(client *tmdb.Client, series bool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		rawID := chi.URLParam(r, "id")
+		provider := r.URL.Query().Get("provider")
+		if provider == "" {
+			provider = "tmdb"
+		}
+		if !validVideoIdentity(provider, rawID) {
+			http.Error(w, "invalid TMDB ID", http.StatusBadRequest)
+			return
+		}
+		id, _ := strconv.Atoi(rawID)
+		var err error
+		if provider != "tmdb" {
+			media := "movie"
+			if series {
+				media = "tv"
+			}
+			id, err = client.ResolveExternalID(r.Context(), media, provider, rawID)
+			if err != nil {
+				http.Error(w, "No unambiguous title found for this provider ID", http.StatusNotFound)
+				return
+			}
+		}
+		var title any
+		var credits *metadata.Credits
+		if series {
+			title, err = client.GetTV(r.Context(), id)
+		} else {
+			title, err = client.GetMovie(r.Context(), id)
+		}
+		if err != nil {
+			http.Error(w, "Unable to load title metadata", http.StatusBadGateway)
+			return
+		}
+		var actualID *string
+		switch result := title.(type) {
+		case *metadata.MovieMetadata:
+			if result != nil {
+				actualID = result.TMDBID
+			}
+		case *metadata.SeriesMetadata:
+			if result != nil {
+				actualID = result.TMDBID
+			}
+		}
+		if actualID == nil || *actualID != strconv.Itoa(id) {
+			http.Error(w, "Provider returned a conflicting title identity", http.StatusBadGateway)
+			return
+		}
+		if series {
+			credits, err = client.GetTVCredits(r.Context(), id)
+		} else {
+			credits, err = client.GetMovieCredits(r.Context(), id)
+		}
+		creditsError := ""
+		if err != nil {
+			creditsError = "Cast and crew could not be loaded."
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{"title": title, "credits": credits, "credits_error": creditsError})
+	}
+}
+
+var imdbIdentity = regexp.MustCompile(`^tt[0-9]{1,12}$`)
+
+func validVideoIdentity(provider, id string) bool {
+	if provider == "imdb" {
+		return imdbIdentity.MatchString(id)
+	}
+	if provider != "tmdb" && provider != "tvdb" {
+		return false
+	}
+	n, err := strconv.Atoi(id)
+	return err == nil && n > 0
+}
+
+func getArtist(provider metadata.MusicMetadataProvider) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id, err := uuid.Parse(chi.URLParam(r, "id"))
+		if err != nil {
+			http.Error(w, "invalid MusicBrainz ID", http.StatusBadRequest)
+			return
+		}
+		artist, err := provider.GetArtist(r.Context(), id.String())
+		if err != nil {
+			http.Error(w, "Unable to load artist metadata", http.StatusBadGateway)
+			return
+		}
+		if artist == nil || artist.MBID != id.String() {
+			http.Error(w, "Artist not found", http.StatusNotFound)
+			return
+		}
+		albums, err := provider.GetArtistAlbums(r.Context(), id.String())
+		if err != nil {
+			http.Error(w, "Unable to load artist albums", http.StatusBadGateway)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{"title": artist, "albums": albums})
+	}
 }
 
 func getPersonFilmography(client *tmdb.Client) http.HandlerFunc {

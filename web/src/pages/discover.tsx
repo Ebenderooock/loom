@@ -1,7 +1,6 @@
 import * as React from "react";
 import {
   useDiscover,
-  useAddDiscoverItem,
   type DiscoverItem,
   type MediaType,
 } from "@/lib/import-lists-api";
@@ -16,7 +15,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Check, Loader2, Plus, Compass } from "lucide-react";
+import { Check, Plus, Compass } from "lucide-react";
+import { TitleDialog } from "@/components/titles/title-experience";
 import { CardGridSkeleton } from "@/components/ui/skeletons";
 
 export function DiscoverPage() {
@@ -232,7 +232,7 @@ function DiscoverGrid({ mediaType }: { mediaType: MediaType }) {
       ) : (
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
           {visible.map((item) => (
-            <DiscoverCard key={item.id} item={item} />
+            <DiscoverCard key={item.id} item={item} mediaType={mediaType} />
           ))}
         </div>
       )}
@@ -240,19 +240,39 @@ function DiscoverGrid({ mediaType }: { mediaType: MediaType }) {
   );
 }
 
-function DiscoverCard({ item }: { item: DiscoverItem }) {
-  const addMut = useAddDiscoverItem();
+function DiscoverCard({
+  item,
+  mediaType,
+}: {
+  item: DiscoverItem;
+  mediaType: MediaType;
+}) {
+  const [view, setView] = React.useState<"details" | "add" | null>(null);
   const [added, setAdded] = React.useState(false);
 
   const inLibrary = item.in_library || added;
-
-  const handleAdd = () => {
-    addMut.mutate(item.id, { onSuccess: () => setAdded(true) });
-  };
+  const provider =
+    item.tmdb_id && item.tmdb_id !== "0"
+      ? "tmdb"
+      : item.imdb_id
+        ? "imdb"
+        : "tvdb";
+  const providerId =
+    provider === "tmdb"
+      ? item.tmdb_id
+      : provider === "imdb"
+        ? item.imdb_id
+        : item.tvdb_id;
 
   return (
     <div className="group flex flex-col overflow-hidden rounded-lg border bg-card">
-      <div className="relative aspect-[2/3] w-full bg-muted">
+      <button
+        type="button"
+        disabled={!providerId}
+        aria-label={`View details for ${item.title}`}
+        onClick={() => setView("details")}
+        className="relative aspect-[2/3] w-full bg-muted"
+      >
         {item.poster_path ? (
           <img
             src={item.poster_path}
@@ -270,13 +290,19 @@ function DiscoverCard({ item }: { item: DiscoverItem }) {
             In Library
           </Badge>
         )}
-      </div>
+      </button>
 
       <div className="flex flex-1 flex-col gap-2 p-3">
         <div className="min-h-[2.5rem]">
-          <p className="line-clamp-2 text-sm font-medium" title={item.title}>
+          <button
+            type="button"
+            disabled={!providerId}
+            onClick={() => setView("details")}
+            className="line-clamp-2 text-left text-sm font-medium hover:underline"
+            title={item.title}
+          >
             {item.title}
-          </p>
+          </button>
           {item.year ? (
             <p className="text-xs text-muted-foreground">{item.year}</p>
           ) : null}
@@ -291,24 +317,43 @@ function DiscoverCard({ item }: { item: DiscoverItem }) {
           <Button
             size="sm"
             className="w-full"
-            disabled={addMut.isPending}
-            onClick={handleAdd}
+            disabled={!providerId}
+            onClick={() => setView("add")}
           >
-            {addMut.isPending ? (
-              <Loader2 className="mr-1 h-4 w-4 animate-spin" />
-            ) : (
-              <Plus className="mr-1 h-4 w-4" />
-            )}
-            {addMut.isPending ? "Adding…" : "Add"}
+            <Plus className="mr-1 h-4 w-4" />
+            Add
           </Button>
         )}
 
-        {addMut.isError && (
-          <p className="text-xs text-destructive">
-            {(addMut.error as Error)?.message ?? "Failed to add"}
+        {!providerId && (
+          <p className="text-xs text-muted-foreground">
+            No provider identity is available for this title.
           </p>
         )}
       </div>
+      {view && providerId && (
+        <TitleDialog
+          open
+          onOpenChange={(open) => {
+            if (!open) setView(null);
+          }}
+          identity={{
+            media: mediaType === "series" ? "series" : "movie",
+            id: providerId,
+            provider,
+            title: item.title,
+            inLibrary,
+          }}
+          initialView={view}
+          defaults={item.defaults}
+          sourceItemId={item.id}
+          sourceName={item.list_name}
+          onAdded={() => {
+            setAdded(true);
+            setView(null);
+          }}
+        />
+      )}
     </div>
   );
 }

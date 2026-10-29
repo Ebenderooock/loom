@@ -145,29 +145,32 @@ export function SeriesPage() {
   const navigate = useNavigate();
   const { focus } = useSearch({ strict: false }) as { focus?: string };
 
-  const fetchAll = useCallback(async () => {
-    if (!isAuthenticated) return;
-    setIsLoading(true);
-    try {
-      const [seriesRes, profilesRes] = await Promise.all([
-        apiFetch("/api/v1/series"),
-        apiFetch("/api/v1/quality-profiles"),
-      ]);
-      if (seriesRes.ok) {
-        const data = await seriesRes.json();
-        setSeriesList(Array.isArray(data) ? data : (data.data ?? []));
+  const fetchAll = useCallback(
+    async (background = false) => {
+      if (!isAuthenticated) return;
+      if (!background) setIsLoading(true);
+      try {
+        const [seriesRes, profilesRes] = await Promise.all([
+          apiFetch("/api/v1/series"),
+          apiFetch("/api/v1/quality-profiles"),
+        ]);
+        if (seriesRes.ok) {
+          const data = await seriesRes.json();
+          setSeriesList(Array.isArray(data) ? data : (data.data ?? []));
+        }
+        if (profilesRes.ok) {
+          const data = await profilesRes.json();
+          const profiles = data?.data ?? (Array.isArray(data) ? data : []);
+          setQualityProfiles(profiles);
+        }
+      } catch {
+        /* ignore */
+      } finally {
+        if (!background) setIsLoading(false);
       }
-      if (profilesRes.ok) {
-        const data = await profilesRes.json();
-        const profiles = data?.data ?? (Array.isArray(data) ? data : []);
-        setQualityProfiles(profiles);
-      }
-    } catch {
-      /* ignore */
-    } finally {
-      setIsLoading(false);
-    }
-  }, [isAuthenticated]);
+    },
+    [isAuthenticated],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -619,7 +622,7 @@ export function SeriesPage() {
         libraries={libraries}
         qualityProfiles={qualityProfiles}
         existingTmdbIds={existingTmdbIds}
-        onSeriesAdded={fetchAll}
+        onSeriesAdded={() => void fetchAll(true)}
       />
 
       <SeriesDetailSheet

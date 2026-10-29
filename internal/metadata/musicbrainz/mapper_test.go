@@ -9,6 +9,9 @@ func TestMapArtist_Success(t *testing.T) {
 		ID:             "artist-1",
 		Name:           "The Beatles",
 		Disambiguation: "British rock band",
+		Type:           "Group",
+		SortName:       "Beatles, The",
+		Genres:         []GenreResponse{{Name: "rock"}, {Name: ""}},
 		Area: &AreaResponse{
 			ID:   "area-1",
 			Name: "United Kingdom",
@@ -28,6 +31,9 @@ func TestMapArtist_Success(t *testing.T) {
 	}
 	if result.Area != "United Kingdom" {
 		t.Errorf("expected area 'United Kingdom', got %q", result.Area)
+	}
+	if result.Type != "Group" || result.SortName != "Beatles, The" || len(result.Genres) != 1 || result.Genres[0] != "rock" {
+		t.Fatalf("available artist metadata was discarded: %+v", result)
 	}
 }
 

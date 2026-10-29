@@ -604,7 +604,7 @@ export function MoviesPage() {
         libraries={libraries}
         qualityProfiles={qualityProfiles}
         existingTmdbIds={existingTmdbIds}
-        onMovieAdded={fetchAll}
+        onMovieAdded={() => void fetchAll(true)}
       />
 
       <MovieDetailSheet

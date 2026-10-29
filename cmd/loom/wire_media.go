@@ -13,6 +13,7 @@ import (
 	"github.com/ebenderooock/loom/internal/calendar"
 	"github.com/ebenderooock/loom/internal/devmode"
 	"github.com/ebenderooock/loom/internal/discover"
+	"github.com/ebenderooock/loom/internal/featureflags"
 	"github.com/ebenderooock/loom/internal/importlists"
 	"github.com/ebenderooock/loom/internal/kernel/config"
 	"github.com/ebenderooock/loom/internal/languages"
@@ -173,7 +174,10 @@ func wireMedia(
 
 	// Person discovery (TMDB-backed)
 	discoverTMDB := buildTMDBClient(stubs)
-	wiring.DiscoverRouter = discover.Router(discoverTMDB)
+	wiring.DiscoverRouter = discover.Router(discoverTMDB, discover.MusicDetails{
+		Provider: mbProvider,
+		Enabled:  wiring.FeatureFlags.EnabledFunc(featureflags.KeyMusic),
+	})
 
 	return &mediaWiring{
 		libStore:          libStore,

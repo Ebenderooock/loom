@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -47,6 +48,7 @@ type service struct {
 	episodeProvider EpisodeProvider
 	postRefreshHook PostRefreshHook
 	airingProvider  AiringProvider
+	addMu           sync.Mutex
 }
 
 // SetPostRefreshHook installs the post-refresh re-link hook. It exists in
@@ -105,9 +107,35 @@ func (s *service) GetSeries(ctx context.Context, id string) (*Series, error) {
 	return sr, nil
 }
 
+// Serialize only the identity check and insert, not provider lookups or episode
+// hydration. Concurrent page entry points must not create renamed duplicates.
+func (s *service) createUniqueSeries(ctx context.Context, title *Series) error {
+	s.addMu.Lock()
+	defer s.addMu.Unlock()
+	existing, err := s.repo.ListSeries(ctx)
+	if err != nil {
+		return err
+	}
+	for _, current := range existing {
+		if current.TMDBID != nil && title.TMDBID != nil && *current.TMDBID == *title.TMDBID {
+			return fmt.Errorf("provider identity already exists")
+		}
+	}
+	return s.repo.CreateSeries(ctx, title)
+}
+
 func (s *service) AddSeries(ctx context.Context, req *AddSeriesRequest) (*Series, error) {
 	if req.TMDBID == "" {
 		return nil, fmt.Errorf("series: tmdb_id required")
+	}
+	existing, err := s.repo.ListSeries(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for _, title := range existing {
+		if title.TMDBID != nil && *title.TMDBID == req.TMDBID {
+			return nil, fmt.Errorf("series: provider identity already exists")
+		}
 	}
 
 	// Fetch details from TMDB
@@ -221,7 +249,7 @@ func (s *service) AddSeries(ctx context.Context, req *AddSeriesRequest) (*Series
 		UpdatedAt:        nowt,
 	}
 
-	if err := s.repo.CreateSeries(ctx, sr); err != nil {
+	if err := s.createUniqueSeries(ctx, sr); err != nil {
 		return nil, fmt.Errorf("series: create: %w", err)
 	}
 

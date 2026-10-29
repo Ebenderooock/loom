@@ -2,6 +2,8 @@ package movies
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"strconv"
 	"sync"
@@ -82,6 +84,7 @@ type service struct {
 	cache    sync.Map // map[string]*Movie with expiry
 	ttl      time.Duration
 	cfSvc    CustomFormatService
+	addMu    sync.Mutex
 }
 
 // cacheEntry holds a cached movie with expiry time.
@@ -263,6 +266,17 @@ func (s *service) AddMovie(ctx context.Context, movie *Movie) error {
 	}
 	if movie.LibraryID == "" {
 		return fmt.Errorf("movies: library required")
+	}
+	s.addMu.Lock()
+	defer s.addMu.Unlock()
+	if movie.TMDBID != nil && *movie.TMDBID != "" && *movie.TMDBID != "0" {
+		existing, err := s.repo.GetMovieByTMDBID(ctx, *movie.TMDBID)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return err
+		}
+		if existing != nil {
+			return fmt.Errorf("movies: provider identity already exists")
+		}
 	}
 
 	now := time.Now()

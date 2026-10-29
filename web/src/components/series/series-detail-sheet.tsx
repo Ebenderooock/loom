@@ -33,7 +33,6 @@ import {
 import {
   Loader2,
   Tv,
-  Star,
   Trash2,
   Pencil,
   Bookmark,
@@ -56,16 +55,14 @@ import { ReleaseSearchDialog } from "@/components/search/release-search-dialog";
 import { autoSearch } from "@/lib/autosearch-api";
 import { AltTitlesSection } from "@/components/alt-titles";
 import { PersonDiscoverDialog } from "@/components/person-discover-dialog";
+import {
+  TitlePersonCard as PersonCard,
+  TitleRating,
+  TitleSynopsis,
+  titleImage,
+} from "@/components/titles/title-metadata";
 import type { Library } from "../../lib/libraries-api";
-import type {
-  Series,
-  Season,
-  Episode,
-  QualityProfile,
-  Credits,
-  CreditPerson,
-} from "./types";
-import { TMDB_IMG } from "./types";
+import type { Series, Season, Episode, QualityProfile, Credits } from "./types";
 
 // ─── Helpers ──────────────────────────────────────────────────────────
 
@@ -114,61 +111,6 @@ function DetailRow({
         {label}
       </span>
       <div className="mt-1 text-sm">{children}</div>
-    </div>
-  );
-}
-
-const PROFILE_IMG = "https://image.tmdb.org/t/p/w185";
-
-function PersonCard({
-  person,
-  onClick,
-}: {
-  person: CreditPerson;
-  onClick?: () => void;
-}) {
-  return (
-    <div
-      className={cn(
-        "group w-[100px] flex-shrink-0",
-        onClick && "cursor-pointer",
-      )}
-      onClick={onClick}
-      role={onClick ? "button" : undefined}
-      tabIndex={onClick ? 0 : undefined}
-      onKeyDown={
-        onClick
-          ? (e) => {
-              if (e.key === "Enter" || e.key === " ") onClick();
-            }
-          : undefined
-      }
-    >
-      <div className="relative mb-1.5 h-[150px] w-[100px] overflow-hidden rounded-lg bg-muted/30">
-        {person.profile_path ? (
-          <img
-            src={`${PROFILE_IMG}${person.profile_path}`}
-            alt={person.name}
-            className="h-full w-full object-cover"
-            loading="lazy"
-          />
-        ) : (
-          <div className="flex h-full w-full items-center justify-center text-muted-foreground/30">
-            <Users className="h-8 w-8" />
-          </div>
-        )}
-      </div>
-      <p className="truncate text-xs font-medium" title={person.name}>
-        {person.name}
-      </p>
-      {(person.character || person.role) && (
-        <p
-          className="truncate text-[11px] text-muted-foreground"
-          title={person.character || person.role}
-        >
-          {person.character || person.role}
-        </p>
-      )}
     </div>
   );
 }
@@ -631,7 +573,6 @@ export function SeriesDetailSheet({
   const [saving, setSaving] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const [overviewExpanded, setOverviewExpanded] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [credits, setCredits] = useState<Credits | null>(null);
   const [creditsLoading, setCreditsLoading] = useState(false);
@@ -704,7 +645,6 @@ export function SeriesDetailSheet({
       setEditProfile(series.qualityProfileId);
       setEditMonitoring(series.monitoringStatus);
       setEditSeriesType(series.seriesType || "standard");
-      setOverviewExpanded(false);
 
       // Fetch credits
       setCredits(null);
@@ -885,11 +825,9 @@ export function SeriesDetailSheet({
     }
   };
 
-  const overviewIsLong = (series.overview?.length ?? 0) > 280;
-
   return (
     <>
-      <Sheet open={open} onOpenChange={onOpenChange}>
+      <Sheet open={open && !discoverPerson} onOpenChange={onOpenChange}>
         <SheetContent
           side="right"
           className="w-full overflow-y-auto p-0 sm:max-w-2xl"
@@ -905,13 +843,13 @@ export function SeriesDetailSheet({
           <div className="relative h-[300px] overflow-hidden bg-muted">
             {series.backdropPath ? (
               <img
-                src={`${TMDB_IMG}/w780${series.backdropPath}`}
+                src={titleImage(series.backdropPath, "w780")}
                 alt=""
                 className="h-full w-full object-cover"
               />
             ) : series.posterPath ? (
               <img
-                src={`${TMDB_IMG}/w780${series.posterPath}`}
+                src={titleImage(series.posterPath, "w780")}
                 alt=""
                 className="h-full w-full scale-110 object-cover opacity-30 blur-md"
               />
@@ -924,7 +862,7 @@ export function SeriesDetailSheet({
               <div className="w-[130px] overflow-hidden rounded-lg border-4 border-background shadow-2xl">
                 {series.posterPath ? (
                   <img
-                    src={`${TMDB_IMG}/w300${series.posterPath}`}
+                    src={titleImage(series.posterPath, "w300")}
                     alt={series.title}
                     className="aspect-[2/3] w-full object-cover"
                   />
@@ -1188,10 +1126,7 @@ export function SeriesDetailSheet({
                 <DetailRow label="Network">{series.network || "—"}</DetailRow>
                 {series.rating > 0 && (
                   <DetailRow label="Rating">
-                    <span className="flex items-center gap-1">
-                      <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400" />
-                      {series.rating.toFixed(1)}
-                    </span>
+                    <TitleRating rating={series.rating} />
                   </DetailRow>
                 )}
                 {series.runtime > 0 && (
@@ -1218,26 +1153,7 @@ export function SeriesDetailSheet({
                   ))}
                 </div>
               )}
-              {series.overview && (
-                <div>
-                  <p
-                    className={cn(
-                      "text-sm leading-relaxed text-muted-foreground",
-                      !overviewExpanded && overviewIsLong && "line-clamp-4",
-                    )}
-                  >
-                    {series.overview}
-                  </p>
-                  {overviewIsLong && (
-                    <button
-                      onClick={() => setOverviewExpanded((v) => !v)}
-                      className="mt-1 text-xs text-accent hover:underline"
-                    >
-                      {overviewExpanded ? "Show less" : "Read more"}
-                    </button>
-                  )}
-                </div>
-              )}
+              <TitleSynopsis key={series.id} overview={series.overview} />
             </CollapsibleSection>
 
             {/* Alt Titles */}

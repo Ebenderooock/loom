@@ -2,6 +2,7 @@ import { test, expect } from "@playwright/test";
 import {
   mockBaseApp,
   mockMovies,
+  mockGet,
   SAMPLE_MOVIE,
   SAMPLE_LIBRARY,
 } from "./helpers/mock-api";
@@ -136,7 +137,7 @@ test.describe("Movies Page", () => {
       await expect(addMovieButton).toBeVisible({ timeout: 10000 });
       await addMovieButton.click();
       await expect(
-        page.getByRole("heading", { name: "Search Movies" }),
+        page.getByRole("heading", { name: "Search movies" }),
       ).toBeVisible({ timeout: 10000 });
     });
 
@@ -145,6 +146,7 @@ test.describe("Movies Page", () => {
     }) => {
       await mockBaseApp(page);
       await mockMovies(page, [], [SAMPLE_LIBRARY]);
+      await mockGet(page, "libraries", { data: [SAMPLE_LIBRARY] });
       await page.goto("/movies");
 
       const addMovieButton = page
@@ -153,7 +155,7 @@ test.describe("Movies Page", () => {
       await expect(addMovieButton).toBeVisible({ timeout: 10000 });
       await addMovieButton.click();
       await expect(
-        page.getByRole("heading", { name: "Search Movies" }),
+        page.getByRole("heading", { name: "Search movies" }),
       ).toBeVisible({ timeout: 10000 });
     });
 

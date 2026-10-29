@@ -7,6 +7,7 @@ import (
 	"io"
 	"math"
 	"net/http"
+	"net/url"
 	"strconv"
 	"sync"
 	"time"
@@ -76,7 +77,9 @@ func (c *Client) GetMovie(ctx context.Context, tmdbID int) (*metadata.MovieMetad
 		return nil, fmt.Errorf("tmdb: failed to unmarshal movie response: %w", err)
 	}
 
-	return mapMovieResponse(&resp), nil
+	result := mapMovieResponse(&resp)
+	result.Overview = resp.Overview
+	return result, nil
 }
 
 // GetTV fetches TV series metadata by TMDb ID.
@@ -92,7 +95,9 @@ func (c *Client) GetTV(ctx context.Context, tvID int) (*metadata.SeriesMetadata,
 		return nil, fmt.Errorf("tmdb: failed to unmarshal tv response: %w", err)
 	}
 
-	return mapTVResponse(&resp), nil
+	result := mapTVResponse(&resp)
+	result.Overview = resp.Overview
+	return result, nil
 }
 
 // SearchMovie searches for movies by title and optional year.
@@ -195,7 +200,47 @@ func (c *Client) SearchTV(ctx context.Context, query string, year int) ([]*metad
 
 // GetMovieCredits fetches cast and crew for a movie by TMDb ID.
 func (c *Client) GetMovieCredits(ctx context.Context, tmdbID int) (*metadata.Credits, error) {
-	url := fmt.Sprintf("%s/movie/%d/credits", c.config.BaseURL, tmdbID)
+	return c.getCredits(ctx, "movie", tmdbID)
+}
+
+// GetTVCredits fetches cast and crew without requiring a library series.
+func (c *Client) GetTVCredits(ctx context.Context, tmdbID int) (*metadata.Credits, error) {
+	return c.getCredits(ctx, "tv", tmdbID)
+}
+
+// ResolveExternalID resolves an exact provider identity, scoped to movie or TV.
+// Never fall back to title matching: names and years are not unique identities.
+func (c *Client) ResolveExternalID(ctx context.Context, mediaType, provider, externalID string) (int, error) {
+	if (mediaType != "movie" && mediaType != "tv") || (provider != "imdb" && provider != "tvdb") {
+		return 0, fmt.Errorf("unsupported external identity")
+	}
+	endpoint := fmt.Sprintf("%s/find/%s?external_source=%s_id", c.config.BaseURL, url.PathEscape(externalID), provider)
+	body, err := c.doRequest(ctx, endpoint)
+	if err != nil {
+		return 0, err
+	}
+	var result struct {
+		Movies []struct {
+			ID int `json:"id"`
+		} `json:"movie_results"`
+		TV []struct {
+			ID int `json:"id"`
+		} `json:"tv_results"`
+	}
+	if err := json.Unmarshal(body, &result); err != nil {
+		return 0, err
+	}
+	if mediaType == "movie" && len(result.Movies) == 1 && result.Movies[0].ID > 0 {
+		return result.Movies[0].ID, nil
+	}
+	if mediaType == "tv" && len(result.TV) == 1 && result.TV[0].ID > 0 {
+		return result.TV[0].ID, nil
+	}
+	return 0, NewNotFoundError("no unambiguous title for external identity")
+}
+
+func (c *Client) getCredits(ctx context.Context, mediaType string, tmdbID int) (*metadata.Credits, error) {
+	url := fmt.Sprintf("%s/%s/%d/credits", c.config.BaseURL, mediaType, tmdbID)
 	body, err := c.doRequest(ctx, url)
 	if err != nil {
 		return nil, err

@@ -39,6 +39,8 @@ servers:
         default: loom.example.com
 
 tags:
+  - name: discovery
+    description: Read-only provider details and manual discovery source tracking.
   - name: health
     description: Liveness, readiness and metrics probes.
   - name: system
@@ -65,6 +67,154 @@ tags:
       and Radarr compatibility rationale.
 
 paths:
+  /api/v1/discover/{media}/{id}:
+    get:
+      tags: [discovery]
+      operationId: getExternalVideoDetails
+      summary: Read full provider metadata and credits without adding a library title.
+      description: |
+        Media is movie or series. The default provider is TMDB; exact IMDb or TVDB
+        identities are resolved with TMDB's find API, scoped by media type.
+        Ambiguous matches are rejected, never guessed by title or year.
+        A credits failure returns title metadata with a non-empty credits_error.
+      security: [{ apiKey: [] }, { bearerAuth: [] }, { cookieAuth: [] }]
+      parameters:
+        - name: media
+          in: path
+          required: true
+          schema: { type: string, enum: [movie, series] }
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: provider
+          in: query
+          schema: { type: string, enum: [tmdb, imdb, tvdb], default: tmdb }
+      responses:
+        "200":
+          description: Full synopsis, artwork, rating, genres, runtime/dates/status, and available cast and crew.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [title, credits, credits_error]
+                properties:
+                  title:
+                    type: object
+                    description: MovieMetadata or SeriesMetadata, including canonical tmdb_id and provider external IDs.
+                    additionalProperties: true
+                  credits:
+                    type: [object, "null"]
+                    properties:
+                      cast: { type: array, items: { $ref: "#/components/schemas/ExternalCreditPerson" } }
+                      crew: { type: array, items: { $ref: "#/components/schemas/ExternalCreditPerson" } }
+                  credits_error: { type: string }
+        "400": { $ref: "#/components/responses/InvalidProviderIdentity" }
+        "404": { $ref: "#/components/responses/ProviderTitleNotFound" }
+        "502": { $ref: "#/components/responses/ProviderUnavailable" }
+
+  /api/v1/discover/artist/{id}:
+    get:
+      tags: [discovery]
+      operationId: getExternalArtistDetails
+      summary: Read artist metadata and albums without adding the artist.
+      security: [{ apiKey: [] }, { bearerAuth: [] }, { cookieAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/MusicBrainzID"
+      responses:
+        "200":
+          description: ArtistMetadata in title and an albums array of AlbumMetadata (release-groups).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [title, albums]
+                properties:
+                  title: { type: object, additionalProperties: true }
+                  albums: { type: [array, "null"], items: { type: object, additionalProperties: true } }
+        "400": { $ref: "#/components/responses/InvalidProviderIdentity" }
+        "404": { $ref: "#/components/responses/ProviderTitleNotFound" }
+        "502": { $ref: "#/components/responses/ProviderUnavailable" }
+
+  /api/v1/discover/album/{id}:
+    get:
+      tags: [discovery]
+      operationId: getExternalAlbumDetails
+      summary: Read a MusicBrainz album and its candidate editions.
+      security: [{ apiKey: [] }, { bearerAuth: [] }, { cookieAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/MusicBrainzID"
+      responses:
+        "200":
+          description: AlbumMetadata plus releases (AlbumReleaseMetadata without track lists).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [album, releases]
+                properties:
+                  album: { type: object, additionalProperties: true }
+                  releases: { type: [array, "null"], items: { type: object, additionalProperties: true } }
+        "400": { $ref: "#/components/responses/InvalidProviderIdentity" }
+        "404": { $ref: "#/components/responses/ProviderTitleNotFound" }
+        "502": { $ref: "#/components/responses/ProviderUnavailable" }
+
+  /api/v1/discover/release/{id}:
+    get:
+      tags: [discovery]
+      operationId: getExternalEditionTracks
+      summary: Read an album edition and its full track listing.
+      security: [{ apiKey: [] }, { bearerAuth: [] }, { cookieAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/MusicBrainzID"
+      responses:
+        "200":
+          description: AlbumReleaseMetadata, including tracks with disc/track position, artist, and duration.
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        "400": { $ref: "#/components/responses/InvalidProviderIdentity" }
+        "404": { $ref: "#/components/responses/ProviderTitleNotFound" }
+        "502": { $ref: "#/components/responses/ProviderUnavailable" }
+
+  /api/v1/import-lists/discover/track:
+    post:
+      tags: [discovery]
+      operationId: trackDiscoverTitle
+      summary: Record a completed manual library add on its discovery source.
+      description: |
+        Checks membership using the source item's effective media type and provider
+        identity before marking it added. Does not add media or reapply source
+        settings. Idempotent and safe to retry after a library add succeeds.
+      security: [{ apiKey: [] }, { bearerAuth: [] }, { cookieAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [item_id]
+              properties:
+                item_id: { type: string, minLength: 1 }
+      responses:
+        "200":
+          description: Source tracking persisted.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [tracked]
+                properties:
+                  tracked: { type: boolean, const: true }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "409":
+          description: Membership could not be verified or tracking could not be persisted. Safe to retry.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error: { type: string }
   /healthz:
     get:
       tags: [health]
@@ -1307,6 +1457,15 @@ paths:
 
 components:
   schemas:
+    ExternalCreditPerson:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        role: { type: string }
+        department: { type: string }
+        profile_path: { type: string }
+        order: { type: integer }
     HealthStatus:
       type: object
       required: [status]
@@ -2512,6 +2671,11 @@ components:
           description: Whether the release name matches all filters.
 
   parameters:
+    MusicBrainzID:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
     DownloadClientID:
       name: id
       in: path
@@ -2532,6 +2696,21 @@ components:
         type: string
 
   responses:
+    InvalidProviderIdentity:
+      description: Invalid or unsupported media/provider identity.
+      content:
+        text/plain:
+          schema: { type: string }
+    ProviderTitleNotFound:
+      description: No unambiguous title exists for the provider identity.
+      content:
+        text/plain:
+          schema: { type: string }
+    ProviderUnavailable:
+      description: Provider metadata could not be loaded. Diagnostics and credentials are not exposed.
+      content:
+        text/plain:
+          schema: { type: string }
     BadRequest:
       description: The request body or parameters could not be processed.
       content:

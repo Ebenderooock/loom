@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Share full title details and explicit library-add settings across movie, TV,
+  music, Discover, and person search. Requests reuse read-only details while
+  retaining request permissions and approval semantics. Discover defaults are
+  visible/editable and source tracking can be retried without a duplicate add.
+
 ### Security
 
 - Require administrator access for integration configuration changes and tests,

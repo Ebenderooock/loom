@@ -28,6 +28,11 @@ in `api/openapi/loom.yaml`.
 | `GET` | `/readyz` | none | `200` or `503 application/json` | DB ping + ready-flag check. |
 | `GET` | `/metrics` | none | `200 text/plain; version=0.0.4` | Prometheus exposition. |
 | `GET` | `/api/v1/system/status` | none (today) | `200 application/json` (`SystemStatus`) | Build metadata. |
+| `GET` | `/api/v1/discover/{media}/{id}` | apiKey/bearer/cookie | `200 application/json` | Read-only full video metadata + credits; `media=movie\|series`, optional `provider=tmdb\|imdb\|tvdb`. Exact identity resolution only. |
+| `GET` | `/api/v1/discover/artist/{id}` | apiKey/bearer/cookie | `200 application/json` | MusicBrainz artist metadata and albums, without adding. |
+| `GET` | `/api/v1/discover/album/{id}` | apiKey/bearer/cookie | `200 application/json` | MusicBrainz album metadata and candidate editions. |
+| `GET` | `/api/v1/discover/release/{id}` | apiKey/bearer/cookie | `200 application/json` | MusicBrainz edition metadata and full tracks. |
+| `POST` | `/api/v1/import-lists/discover/track` | apiKey/bearer/cookie | `200 application/json` | Mark `{item_id}` added only after verifying library membership; never creates media or changes list settings. |
 | `GET\|POST` | `/debug/pprof/*` | gated by `debug.pprof` | varies | Standard `net/http/pprof` handlers. |
 | `GET` | `/api/v1/indexers/` | apiKey/bearer/cookie | `200 application/json` (`[]DefinitionWithHealth`) | List configured indexers with health; credential fields are omitted. |
 | `POST` | `/api/v1/indexers/` | admin | `201 application/json` (`Definition`) | Create an indexer. |

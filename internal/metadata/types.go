@@ -14,6 +14,9 @@ type MovieMetadata struct {
 	Year           int       `json:"year,omitempty"`
 	Overview       string    `json:"overview,omitempty"`
 	PosterPath     string    `json:"poster_path,omitempty"`
+	BackdropPath   string    `json:"backdrop_path,omitempty"`
+	Status         string    `json:"status,omitempty"`
+	Tagline        string    `json:"tagline,omitempty"`
 	ReleaseDate    string    `json:"release_date,omitempty"`    // ISO 8601
 	TheatricalDate string    `json:"theatrical_date,omitempty"` // ISO 8601
 	DigitalDate    string    `json:"digital_date,omitempty"`    // ISO 8601
@@ -31,6 +34,10 @@ type SeriesMetadata struct {
 	Title        string    `json:"title"`
 	Overview     string    `json:"overview,omitempty"`
 	PosterPath   string    `json:"poster_path,omitempty"`
+	BackdropPath string    `json:"backdrop_path,omitempty"`
+	Status       string    `json:"status,omitempty"`
+	Network      string    `json:"network,omitempty"`
+	Runtime      int       `json:"runtime,omitempty"`
 	FirstAirDate string    `json:"first_air_date,omitempty"` // ISO 8601
 	Genres       []string  `json:"genres,omitempty"`
 	Rating       float64   `json:"rating,omitempty"`

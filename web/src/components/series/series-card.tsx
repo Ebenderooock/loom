@@ -2,7 +2,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Tv, Star } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Series, QualityProfile } from "./types";
-import { TMDB_IMG } from "./types";
+import { titleImage } from "@/components/titles/title-metadata";
 
 function getEpisodeProgressInfo(series: Series) {
   const stats = series.episodeStats;
@@ -87,7 +87,7 @@ export function SeriesCard({
       <div className="aspect-[2/3] bg-muted">
         {series.posterPath ? (
           <img
-            src={`${TMDB_IMG}/w300${series.posterPath}`}
+            src={titleImage(series.posterPath, "w300")}
             alt={series.title}
             className="h-full w-full object-cover"
             loading="lazy"

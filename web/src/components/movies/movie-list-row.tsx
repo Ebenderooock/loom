@@ -3,7 +3,7 @@ import { TableRow, TableCell } from "@/components/ui/table";
 import { Film, Star, Eye, EyeOff } from "lucide-react";
 import { StatusBadge } from "./status-badge";
 import type { Movie, QualityProfile } from "./types";
-import { TMDB_IMG } from "./types";
+import { titleImage } from "@/components/titles/title-metadata";
 
 export function MovieListRow({
   movie,
@@ -37,7 +37,7 @@ export function MovieListRow({
         <div className="aspect-[2/3] w-8 shrink-0 overflow-hidden rounded bg-muted">
           {movie.posterPath ? (
             <img
-              src={`${TMDB_IMG}/w92${movie.posterPath}`}
+              src={titleImage(movie.posterPath, "w92")}
               alt=""
               className="h-full w-full object-cover"
               loading="lazy"

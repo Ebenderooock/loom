@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/fetch";
+import type { TitleDefaults } from "@/lib/title-api";
 
 // ---------- Types ----------
 
@@ -70,6 +71,7 @@ export interface DiscoverItem extends ImportListItem {
   list_name: string;
   in_library: boolean;
   genres?: string[];
+  defaults?: TitleDefaults;
 }
 
 export interface ImportListExclusion {

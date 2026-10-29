@@ -25,6 +25,7 @@ import { useSetPageHeader } from "@/hooks/use-page-header";
 import { apiFetch } from "@/lib/fetch";
 import { useArtists, type Artist } from "@/lib/music-api";
 import { AddArtistDialog } from "@/components/music/add-artist-dialog";
+import { ArtistMetadata } from "@/components/titles/title-metadata";
 import { useLibraries } from "@/lib/libraries-api";
 import { toast } from "sonner";
 
@@ -153,23 +154,7 @@ function ArtistDetailSheet({
                   </>
                 )}
 
-                {artist.country && (
-                  <div>
-                    <h4 className="text-xs font-semibold text-muted-foreground">
-                      COUNTRY
-                    </h4>
-                    <p className="mt-1 text-sm">{artist.country}</p>
-                  </div>
-                )}
-
-                {artist.disambiguation && (
-                  <div>
-                    <h4 className="text-xs font-semibold text-muted-foreground">
-                      DISAMBIGUATION
-                    </h4>
-                    <p className="mt-1 text-sm">{artist.disambiguation}</p>
-                  </div>
-                )}
+                <ArtistMetadata artist={artist} />
               </div>
 
               {/* Actions */}
