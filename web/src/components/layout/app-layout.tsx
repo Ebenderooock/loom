@@ -9,6 +9,7 @@ import {
   Download,
   Film,
   LayoutDashboard,
+  Layers,
   ListTodo,
   Menu,
   Music,
@@ -53,6 +54,7 @@ interface NavItem {
 const PRIMARY_NAV: NavItem[] = [
   { to: "/", label: "Dashboard", Icon: LayoutDashboard },
   { to: "/discover", label: "Discover", Icon: Compass },
+  { to: "/collections", label: "Collections", Icon: Layers },
   { to: "/requests", label: "Requests", Icon: Inbox },
   { to: "/movies", label: "Movies", Icon: Film },
   { to: "/series", label: "TV Shows", Icon: Tv },

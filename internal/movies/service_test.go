@@ -12,6 +12,23 @@ import (
 
 // ── Mock Repository ──────────────────────────────────────────────────
 
+func TestAddMovieRejectsDuplicateProviderIdentityWithDifferentTitle(t *testing.T) {
+	repo := newMockRepo()
+	svc := NewService(repo)
+	id := "42"
+	first := &Movie{ID: "original", Title: "Original", TMDBID: &id, LibraryID: "movies"}
+	if err := svc.AddMovie(context.Background(), first); err != nil {
+		t.Fatal(err)
+	}
+	duplicate := &Movie{ID: "renamed", Title: "Renamed", TMDBID: &id, LibraryID: "other"}
+	if err := svc.AddMovie(context.Background(), duplicate); err == nil {
+		t.Fatal("duplicate provider identity accepted")
+	}
+	if len(repo.movies) != 1 || repo.movies[first.ID].LibraryID != "movies" {
+		t.Fatal("duplicate changed original library title")
+	}
+}
+
 type mockRepo struct {
 	movies          map[string]*Movie
 	movieFiles      map[string][]*MovieFile

@@ -31,9 +31,11 @@ async function get<T>(path: string, signal: AbortSignal): Promise<T> {
 export function LibraryMediaSheet({
   target,
   onClose,
+  onChanged,
 }: {
   target: LibraryMediaTarget;
   onClose: () => void;
+  onChanged?: () => void;
 }) {
   const qc = useQueryClient();
   const opener = useRef(
@@ -82,9 +84,12 @@ export function LibraryMediaSheet({
   const refresh = () => {
     void qc.invalidateQueries({ queryKey: detailKey });
     void qc.invalidateQueries({ queryKey: ["calendar"] });
+    onChanged?.();
   };
   const onDeleted = () => {
     void qc.invalidateQueries({ queryKey: ["calendar"] });
+    void qc.invalidateQueries({ queryKey: ["title-membership"] });
+    onChanged?.();
     close();
   };
   const error = detail.error ?? profiles.error ?? libraries.error;
@@ -147,6 +152,7 @@ export function LibraryMediaSheet({
           item,
         });
         void qc.invalidateQueries({ queryKey: ["calendar"] });
+        onChanged?.();
       }}
     />
   ) : (
@@ -159,6 +165,7 @@ export function LibraryMediaSheet({
           item,
         });
         void qc.invalidateQueries({ queryKey: ["calendar"] });
+        onChanged?.();
       }}
     />
   );

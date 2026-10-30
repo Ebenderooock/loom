@@ -7,7 +7,8 @@ import {
   MissingQualityProfileBadge,
 } from "@/components/quality-profile-warning";
 import type { Movie, QualityProfile } from "./types";
-import { TMDB_IMG, STATUS_CONFIG } from "./types";
+import { STATUS_CONFIG } from "./types";
+import { titleImage } from "@/components/titles/title-metadata";
 
 export function MovieCard({
   movie,
@@ -61,7 +62,7 @@ export function MovieCard({
       <div className="aspect-[2/3] bg-muted">
         {movie.posterPath ? (
           <img
-            src={`${TMDB_IMG}/w300${movie.posterPath}`}
+            src={titleImage(movie.posterPath, "w300")}
             alt={movie.title}
             className="h-full w-full object-cover"
             loading="lazy"

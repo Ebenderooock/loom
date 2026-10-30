@@ -16,12 +16,15 @@ const (
 // Client.GetReleaseDates — they are not in the basic /movie/{id} response.
 func mapMovieResponse(resp *MovieResponse) *metadata.MovieMetadata {
 	m := &metadata.MovieMetadata{
-		Title:       resp.Title,
-		Overview:    cropOverview(resp.Overview),
-		PosterPath:  buildPosterURL(resp.PosterPath),
-		ReleaseDate: resp.ReleaseDate,
-		Runtime:     resp.Runtime,
-		Rating:      resp.VoteAverage,
+		Title:        resp.Title,
+		Overview:     cropOverview(resp.Overview),
+		PosterPath:   buildPosterURL(resp.PosterPath),
+		BackdropPath: buildPosterURL(resp.BackdropPath),
+		Status:       resp.Status,
+		Tagline:      resp.Tagline,
+		ReleaseDate:  resp.ReleaseDate,
+		Runtime:      resp.Runtime,
+		Rating:       resp.VoteAverage,
 	}
 
 	// Parse year from release date
@@ -60,9 +63,17 @@ func mapTVResponse(resp *TVResponse) *metadata.SeriesMetadata {
 		Title:        resp.Name,
 		Overview:     cropOverview(resp.Overview),
 		PosterPath:   buildPosterURL(resp.PosterPath),
+		BackdropPath: buildPosterURL(resp.BackdropPath),
+		Status:       resp.Status,
 		FirstAirDate: resp.FirstAirDate,
 		Rating:       resp.VoteAverage,
 		Seasons:      resp.NumberOfSeasons,
+	}
+	if len(resp.Networks) > 0 {
+		s.Network = resp.Networks[0].Name
+	}
+	if len(resp.EpisodeRunTime) > 0 {
+		s.Runtime = resp.EpisodeRunTime[0]
 	}
 
 	// Set TMDB ID

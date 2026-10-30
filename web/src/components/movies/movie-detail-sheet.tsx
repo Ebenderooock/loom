@@ -27,7 +27,6 @@ import {
 import {
   Loader2,
   Film,
-  Star,
   Check,
   Calendar,
   Clock,
@@ -61,13 +60,18 @@ import { autoSearch } from "@/lib/autosearch-api";
 import { AltTitlesSection } from "@/components/alt-titles";
 import { PersonDiscoverDialog } from "@/components/person-discover-dialog";
 import {
+  TitlePersonCard as PersonCard,
+  TitleRating,
+  TitleSynopsis,
+  titleImage,
+} from "@/components/titles/title-metadata";
+import {
   isMissingQualityProfile,
   MissingQualityProfileAlert,
   MissingQualityProfileBadge,
 } from "@/components/quality-profile-warning";
 import type { Library } from "../../lib/libraries-api";
 import type { Movie, QualityProfile, Credits, CreditPerson } from "./types";
-import { TMDB_IMG } from "./types";
 
 interface MovieFileItem {
   id?: string | number;
@@ -143,59 +147,6 @@ function DetailRow({
 
 const PROFILE_IMG = "https://image.tmdb.org/t/p/w185";
 
-function PersonCard({
-  person,
-  onClick,
-}: {
-  person: CreditPerson;
-  onClick?: () => void;
-}) {
-  return (
-    <div
-      className={cn(
-        "group w-[100px] flex-shrink-0",
-        onClick && "cursor-pointer",
-      )}
-      onClick={onClick}
-      role={onClick ? "button" : undefined}
-      tabIndex={onClick ? 0 : undefined}
-      onKeyDown={
-        onClick
-          ? (e) => {
-              if (e.key === "Enter" || e.key === " ") onClick();
-            }
-          : undefined
-      }
-    >
-      <div className="relative mb-1.5 h-[150px] w-[100px] overflow-hidden rounded-lg bg-muted/30">
-        {person.profile_path ? (
-          <img
-            src={`${PROFILE_IMG}${person.profile_path}`}
-            alt={person.name}
-            className="h-full w-full object-cover"
-            loading="lazy"
-          />
-        ) : (
-          <div className="flex h-full w-full items-center justify-center text-muted-foreground/30">
-            <Users className="h-8 w-8" />
-          </div>
-        )}
-      </div>
-      <p className="truncate text-xs font-medium" title={person.name}>
-        {person.name}
-      </p>
-      {person.role && (
-        <p
-          className="truncate text-[11px] text-muted-foreground"
-          title={person.role}
-        >
-          {person.role}
-        </p>
-      )}
-    </div>
-  );
-}
-
 function PersonChip({
   person,
   onClick,
@@ -270,7 +221,6 @@ export function MovieDetailSheet({
   const [saving, setSaving] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const [overviewExpanded, setOverviewExpanded] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [credits, setCredits] = useState<Credits | null>(null);
   const [creditsLoading, setCreditsLoading] = useState(false);
@@ -329,7 +279,6 @@ export function MovieDetailSheet({
       setEditing(false);
       setEditProfile(movie.qualityProfileId);
       setEditMonitoring(movie.monitoringStatus);
-      setOverviewExpanded(false);
     }
   }, [movie, open]);
 
@@ -525,11 +474,9 @@ export function MovieDetailSheet({
     }
   };
 
-  const overviewIsLong = (movie.overview?.length ?? 0) > 280;
-
   return (
     <>
-      <Sheet open={open} onOpenChange={onOpenChange}>
+      <Sheet open={open && !discoverPerson} onOpenChange={onOpenChange}>
         <SheetContent
           side="right"
           onCloseAutoFocus={onCloseAutoFocus}
@@ -544,13 +491,13 @@ export function MovieDetailSheet({
           <div className="relative h-[300px] overflow-hidden bg-muted">
             {movie.backdropPath ? (
               <img
-                src={`${TMDB_IMG}/w780${movie.backdropPath}`}
+                src={titleImage(movie.backdropPath, "w780")}
                 alt=""
                 className="h-full w-full object-cover"
               />
             ) : movie.posterPath ? (
               <img
-                src={`${TMDB_IMG}/w780${movie.posterPath}`}
+                src={titleImage(movie.posterPath, "w780")}
                 alt=""
                 className="h-full w-full scale-110 object-cover opacity-30 blur-md"
               />
@@ -563,7 +510,7 @@ export function MovieDetailSheet({
               <div className="w-[130px] overflow-hidden rounded-lg border-4 border-background shadow-2xl">
                 {movie.posterPath ? (
                   <img
-                    src={`${TMDB_IMG}/w300${movie.posterPath}`}
+                    src={titleImage(movie.posterPath, "w300")}
                     alt={movie.title}
                     className="aspect-[2/3] w-full object-cover"
                   />
@@ -814,15 +761,7 @@ export function MovieDetailSheet({
                   {Math.floor(movie.runtime / 60)}h {movie.runtime % 60}m
                 </span>
               )}
-              {movie.rating > 0 && (
-                <span className="flex items-center gap-1">
-                  <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400" />
-                  <span className="font-medium text-yellow-400">
-                    {movie.rating.toFixed(1)}
-                  </span>
-                  <span className="text-muted-foreground/60">/10</span>
-                </span>
-              )}
+              <TitleRating rating={movie.rating} />
               {movie.releaseDate && (
                 <span className="flex items-center gap-1">
                   <Calendar className="h-3.5 w-3.5" />
@@ -851,24 +790,7 @@ export function MovieDetailSheet({
           <div className="space-y-1 px-6 pb-8 pt-4">
             {/* ── Overview ── */}
             <CollapsibleSection title="Overview" icon={Info} defaultOpen>
-              <div className="relative">
-                <p
-                  className={cn(
-                    "text-sm leading-relaxed text-muted-foreground",
-                    !overviewExpanded && overviewIsLong && "line-clamp-3",
-                  )}
-                >
-                  {movie.overview || "No overview available."}
-                </p>
-                {overviewIsLong && (
-                  <button
-                    onClick={() => setOverviewExpanded((v) => !v)}
-                    className="mt-1.5 text-xs font-medium text-accent hover:underline"
-                  >
-                    {overviewExpanded ? "Show Less" : "Show More"}
-                  </button>
-                )}
-              </div>
+              <TitleSynopsis key={movie.id} overview={movie.overview} />
             </CollapsibleSection>
 
             {/* ── Alt Titles ── */}

@@ -24,6 +24,8 @@ import {
 import { toast } from "sonner";
 import { useSetPageHeader } from "@/hooks/use-page-header";
 import { AlbumSearchDialog } from "@/components/music/album-search-dialog";
+import { ArtistMetadata } from "@/components/titles/title-metadata";
+import { AlbumMetadataSummary } from "@/components/titles/album-metadata";
 import {
   useArtist,
   useSetArtistMonitoring,
@@ -80,10 +82,12 @@ function AlbumRow({ album }: { album: Album }) {
         )}
       </div>
       <div className="min-w-0 flex-1">
-        <div className="truncate text-sm font-medium">{album.title}</div>
+        <AlbumMetadataSummary
+          title={album.title}
+          date={album.release_date ? albumYear(album) : undefined}
+          type={album.album_type}
+        />
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          {album.release_date && <span>{albumYear(album)}</span>}
-          {album.album_type && <span>· {album.album_type}</span>}
           {tracks.length > 0 && (
             <span>
               · {present}/{tracks.length} tracks
@@ -254,18 +258,8 @@ export function MusicArtistPage() {
         </div>
         <div className="flex flex-1 flex-col">
           <h1 className="text-2xl font-semibold">{artist.name}</h1>
-          {artist.disambiguation && (
-            <p className="text-sm text-muted-foreground">
-              {artist.disambiguation}
-            </p>
-          )}
+          <ArtistMetadata artist={artist} />
           <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
-            {artist.artist_type && (
-              <Badge variant="outline">{artist.artist_type}</Badge>
-            )}
-            {artist.country && (
-              <Badge variant="outline">{artist.country}</Badge>
-            )}
             {stats && (
               <span className="self-center">
                 {stats.albumCount} albums · {stats.trackFileCount}/
@@ -273,11 +267,6 @@ export function MusicArtistPage() {
               </span>
             )}
           </div>
-          {artist.overview && (
-            <p className="mt-2 line-clamp-3 text-sm text-muted-foreground">
-              {artist.overview}
-            </p>
-          )}
           <div className="mt-auto flex items-center gap-2 pt-3">
             <Button
               size="sm"

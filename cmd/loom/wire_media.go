@@ -10,14 +10,17 @@ import (
 	"github.com/ebenderooock/loom/internal/alttitles"
 	"github.com/ebenderooock/loom/internal/anime"
 	"github.com/ebenderooock/loom/internal/auditlog"
+	"github.com/ebenderooock/loom/internal/collections"
 	"github.com/ebenderooock/loom/internal/devmode"
 	"github.com/ebenderooock/loom/internal/discover"
+	"github.com/ebenderooock/loom/internal/featureflags"
 	"github.com/ebenderooock/loom/internal/importlists"
 	"github.com/ebenderooock/loom/internal/kernel/config"
 	"github.com/ebenderooock/loom/internal/languages"
 	"github.com/ebenderooock/loom/internal/libraries"
 	"github.com/ebenderooock/loom/internal/mediainfo"
 	"github.com/ebenderooock/loom/internal/metadata/musicbrainz"
+	"github.com/ebenderooock/loom/internal/metadata/tvdb"
 	"github.com/ebenderooock/loom/internal/movies"
 	"github.com/ebenderooock/loom/internal/music"
 	"github.com/ebenderooock/loom/internal/notifications"
@@ -170,7 +173,25 @@ func wireMedia(
 	// Read-only library growth and person discovery (TMDB-backed).
 	discoverTMDB := buildTMDBClient(stubs)
 	discoverSvc := discover.NewService(discoverTMDB, moviesSvc, seriesSvc, discover.NewStore(db.DB()))
-	wiring.DiscoverRouter = discover.Router(discoverTMDB, discoverSvc)
+	tvdbKey := os.Getenv("LOOM_METADATA_TVDB_APIKEY")
+	if tvdbKey == "" {
+		tvdbKey = defaultTVDBKey
+	}
+	tvdbConfig := tvdb.Config{APIKey: tvdbKey, PIN: os.Getenv("LOOM_METADATA_TVDB_PIN")}
+	if stubs != nil {
+		tvdbConfig.BaseURL = stubs.TVDbURL
+		if tvdbConfig.APIKey == "" {
+			tvdbConfig.APIKey = "dev-key"
+		}
+	}
+	wiring.CollectionsRouter = collections.Router(collections.NewService(
+		collections.NewStore(db.DB()), discoverTMDB, tvdb.NewClient(tvdbConfig), moviesSvc, seriesSvc,
+		func() string { return os.Getenv("LOOM_TMDB_READ_TOKEN") },
+	))
+	wiring.DiscoverRouter = discover.RouterWithMusic(discoverTMDB, discoverSvc, discover.MusicDetails{
+		Provider: mbProvider,
+		Enabled:  wiring.FeatureFlags.EnabledFunc(featureflags.KeyMusic),
+	})
 
 	return &mediaWiring{
 		libStore:          libStore,

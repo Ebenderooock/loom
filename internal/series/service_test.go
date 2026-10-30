@@ -10,6 +10,20 @@ import (
 
 // ── Mock Repository ──────────────────────────────────────────────────
 
+func TestAddSeriesRejectsExistingProviderIdentityBeforeFetching(t *testing.T) {
+	repo := newMockRepo()
+	id := "42"
+	repo.series["original"] = &Series{ID: "original", Title: "Renamed", TMDBID: &id}
+	svc := NewService(repo, "")
+	_, err := svc.AddSeries(context.Background(), &AddSeriesRequest{TMDBID: id, LibraryID: "other"})
+	if err == nil || !strings.Contains(err.Error(), "already exists") {
+		t.Fatalf("expected identity duplicate, got %v", err)
+	}
+	if len(repo.series) != 1 {
+		t.Fatal("duplicate persisted")
+	}
+}
+
 type mockRepo struct {
 	series      map[string]*Series
 	seasons     map[string][]*Season

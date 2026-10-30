@@ -1,7 +1,6 @@
 import * as React from "react";
 import {
   useDiscover,
-  useAddDiscoverItem,
   type DiscoverItem,
   type MediaType,
 } from "@/lib/import-lists-api";
@@ -16,13 +15,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Check, Loader2, Plus, Compass, Info } from "lucide-react";
+import { Check, Plus, Compass, Info } from "lucide-react";
+import { TitleDialog } from "@/components/titles/title-experience";
 import { CardGridSkeleton } from "@/components/ui/skeletons";
-import { DiscoverDetailSheet } from "@/components/discover-detail-sheet";
-import {
-  CollectionsPanel,
-  RecommendationPanel,
-} from "@/components/library-expansion";
+import { RecommendationPanel } from "@/components/library-expansion";
 
 export function DiscoverPage() {
   const { setHeader } = usePageHeader();
@@ -33,14 +29,10 @@ export function DiscoverPage() {
       <Tabs defaultValue="recommendations">
         <TabsList className="h-auto flex-wrap" aria-label="Discovery sections">
           <TabsTrigger value="recommendations">Grow your library</TabsTrigger>
-          <TabsTrigger value="collections">Collections</TabsTrigger>
           <TabsTrigger value="lists">Import Lists</TabsTrigger>
         </TabsList>
         <TabsContent value="recommendations" className="mt-6">
           <RecommendationPanel />
-        </TabsContent>
-        <TabsContent value="collections" className="mt-6">
-          <CollectionsPanel />
         </TabsContent>
         <TabsContent value="lists" className="mt-6">
           <Tabs defaultValue="movie">
@@ -266,20 +258,33 @@ function DiscoverCard({
   item: DiscoverItem;
   mediaType: MediaType;
 }) {
-  const addMut = useAddDiscoverItem();
+  const [view, setView] = React.useState<"details" | "add" | null>(null);
   const [added, setAdded] = React.useState(false);
-  const [detailsOpen, setDetailsOpen] = React.useState(false);
   const detailsButton = React.useRef<HTMLButtonElement>(null);
 
   const inLibrary = item.in_library || added;
-
-  const handleAdd = () => {
-    addMut.mutate(item.id, { onSuccess: () => setAdded(true) });
-  };
+  const provider =
+    item.tmdb_id && item.tmdb_id !== "0"
+      ? "tmdb"
+      : item.imdb_id
+        ? "imdb"
+        : "tvdb";
+  const providerId =
+    provider === "tmdb"
+      ? item.tmdb_id
+      : provider === "imdb"
+        ? item.imdb_id
+        : item.tvdb_id;
 
   return (
     <div className="group flex flex-col overflow-hidden rounded-lg border bg-card">
-      <div className="relative aspect-[2/3] w-full bg-muted">
+      <button
+        type="button"
+        disabled={!providerId}
+        aria-label={`View details for ${item.title}`}
+        onClick={() => setView("details")}
+        className="relative aspect-[2/3] w-full bg-muted"
+      >
         {item.poster_path ? (
           <img
             src={item.poster_path}
@@ -297,13 +302,19 @@ function DiscoverCard({
             In Library
           </Badge>
         )}
-      </div>
+      </button>
 
       <div className="flex flex-1 flex-col gap-2 p-3">
         <div className="min-h-[2.5rem]">
-          <p className="line-clamp-2 text-sm font-medium" title={item.title}>
+          <button
+            type="button"
+            disabled={!providerId}
+            onClick={() => setView("details")}
+            className="line-clamp-2 text-left text-sm font-medium hover:underline"
+            title={item.title}
+          >
             {item.title}
-          </p>
+          </button>
           {item.year ? (
             <p className="text-xs text-muted-foreground">{item.year}</p>
           ) : null}
@@ -324,16 +335,12 @@ function DiscoverCard({
             <Button
               size="sm"
               className="min-h-11 min-w-0 flex-1 rounded-r-none"
-              aria-label={`Quick add ${item.title}`}
-              disabled={addMut.isPending}
-              onClick={handleAdd}
+              aria-label={`Add ${item.title}`}
+              disabled={!providerId}
+              onClick={() => setView("add")}
             >
-              {addMut.isPending ? (
-                <Loader2 className="mr-1 h-4 w-4 animate-spin" />
-              ) : (
-                <Plus className="mr-1 h-4 w-4" />
-              )}
-              {addMut.isPending ? "Adding…" : "Add"}
+              <Plus className="mr-1 h-4 w-4" />
+              Add
             </Button>
           )}
           <Button
@@ -343,28 +350,39 @@ function DiscoverCard({
             aria-label={`View details for ${item.title}`}
             title="View details"
             ref={detailsButton}
-            onClick={() => setDetailsOpen(true)}
+            onClick={() => setView("details")}
           >
             <Info className="h-4 w-4" />
           </Button>
         </div>
 
-        {addMut.isError && (
-          <p role="alert" className="text-xs text-destructive">
-            {addMut.error?.message ?? "Failed to add"}
+        {!providerId && (
+          <p className="text-xs text-muted-foreground">
+            No provider identity is available for this title.
           </p>
         )}
       </div>
-      {detailsOpen && (
-        <DiscoverDetailSheet
-          item={item}
-          mediaType={mediaType}
-          inLibrary={inLibrary}
-          adding={addMut.isPending}
-          addError={addMut.error?.message}
-          onAdd={handleAdd}
-          onClose={() => setDetailsOpen(false)}
-          onRestoreFocus={() => detailsButton.current?.focus()}
+      {view && providerId && (
+        <TitleDialog
+          open
+          onOpenChange={(open) => {
+            if (!open) setView(null);
+          }}
+          identity={{
+            media: mediaType === "series" ? "series" : "movie",
+            id: providerId,
+            provider,
+            title: item.title,
+            inLibrary,
+          }}
+          initialView={view}
+          defaults={item.defaults}
+          sourceItemId={item.id}
+          sourceName={item.list_name}
+          onAdded={() => {
+            setAdded(true);
+            setView(null);
+          }}
         />
       )}
     </div>

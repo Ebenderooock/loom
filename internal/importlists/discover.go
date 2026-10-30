@@ -3,14 +3,24 @@ package importlists
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 )
 
 // DiscoverItem is an aggregated, library-annotated item shown in the Discover UI.
 type DiscoverItem struct {
 	*ImportListItem
-	ListName  string `json:"list_name"`
-	InLibrary bool   `json:"in_library"`
+	ListName  string            `json:"list_name"`
+	InLibrary bool              `json:"in_library"`
+	Defaults  *DiscoverDefaults `json:"defaults,omitempty"`
+}
+
+// DiscoverDefaults exposes only add settings, never source credentials.
+type DiscoverDefaults struct {
+	LibraryPath      string      `json:"library_path"`
+	QualityProfileID string      `json:"quality_profile_id"`
+	MonitorType      MonitorType `json:"monitor_type"`
+	SearchOnAdd      bool        `json:"search_on_add"`
 }
 
 // DiscoverItems returns deduplicated items from enabled discover-mode lists for
@@ -42,6 +52,7 @@ func (m *SyncManager) DiscoverItems(ctx context.Context, mediaType string) ([]*D
 	}
 
 	seen := map[string]bool{}
+	defaults := map[string]*DiscoverDefaults{}
 	var out []*DiscoverItem
 	for _, row := range rows {
 		item := row.Item
@@ -59,10 +70,84 @@ func (m *SyncManager) DiscoverItems(ctx context.Context, mediaType string) ([]*D
 		seen[key] = true
 
 		di := &DiscoverItem{ImportListItem: item, ListName: row.ListName}
+		if _, loaded := defaults[item.ListID]; !loaded {
+			list, err := m.store.Get(ctx, item.ListID)
+			if err != nil {
+				return nil, err
+			}
+			if list == nil {
+				return nil, fmt.Errorf("parent list not found")
+			}
+			defaults[item.ListID] = &DiscoverDefaults{list.LibraryPath, list.QualityProfileID, list.MonitorType, list.SearchOnAdd}
+		}
+		di.Defaults = defaults[item.ListID]
 		di.InLibrary = m.itemInLibrary(ctx, row.MediaType, item, seriesTMDB)
 		out = append(out, di)
 	}
 	return out, nil
+}
+
+// TrackDiscoverItem records a completed manual add. Unlike AddDiscoverItem this
+// never creates media or reapplies the list's settings. A failed tracking write
+// can safely be retried after the library add has succeeded.
+func (m *SyncManager) TrackDiscoverItem(ctx context.Context, itemID string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	item, err := m.store.GetItem(ctx, itemID)
+	if err != nil {
+		return err
+	}
+	if item == nil {
+		return fmt.Errorf("discover item not found")
+	}
+	list, err := m.store.Get(ctx, item.ListID)
+	if err != nil {
+		return err
+	}
+	if list == nil {
+		return fmt.Errorf("parent list not found")
+	}
+	mediaType := item.MediaType
+	if mediaType == "" {
+		mediaType = string(list.MediaType)
+	}
+	if mediaType != string(MediaTypeMovie) && mediaType != string(MediaTypeSeries) {
+		return fmt.Errorf("unsupported discover media type")
+	}
+	if (item.TMDbID == "" || item.TMDbID == "0") && m.tmdbClient != nil {
+		provider, externalID := "imdb", item.IMDbID
+		if externalID == "" {
+			provider, externalID = "tvdb", item.TVDbID
+		}
+		if externalID != "" {
+			tmdbMedia := "movie"
+			if mediaType == string(MediaTypeSeries) {
+				tmdbMedia = "tv"
+			}
+			id, err := m.tmdbClient.ResolveExternalID(ctx, tmdbMedia, provider, externalID)
+			if err != nil {
+				return err
+			}
+			item.TMDbID = strconv.Itoa(id)
+		}
+	}
+	seriesIDs := map[string]bool{}
+	if mediaType == string(MediaTypeSeries) && m.seriesSvc != nil {
+		all, err := m.seriesSvc.ListSeries(ctx)
+		if err != nil {
+			return err
+		}
+		for _, s := range all {
+			if s.TMDBID != nil {
+				seriesIDs[*s.TMDBID] = true
+			}
+		}
+	}
+	if !m.itemInLibrary(ctx, mediaType, item, seriesIDs) {
+		return fmt.Errorf("title is not in the library")
+	}
+	item.Status = ItemStatusAdded
+	return m.store.UpsertItem(ctx, item)
 }
 
 // itemInLibrary reports whether the given item is already present in the library.

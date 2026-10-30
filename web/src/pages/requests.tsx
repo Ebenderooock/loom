@@ -58,6 +58,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
+import { TitleDialog } from "@/components/titles/title-experience";
 
 const TMDB_IMG = "https://image.tmdb.org/t/p";
 
@@ -228,8 +229,11 @@ function SearchAndRequest() {
   const [results, setResults] = React.useState<LookupResult[]>([]);
   const [searching, setSearching] = React.useState(false);
   const [requested, setRequested] = React.useState<Record<string, string>>({});
-  const debounceRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const create = useCreateRequest();
+  const [detail, setDetail] = React.useState<{
+    result: LookupResult;
+    media: RequestMediaType;
+  } | null>(null);
   const { data: mine } = useMyRequests();
 
   // Mark titles already requested by this user so we can disable them.
@@ -242,54 +246,64 @@ function SearchAndRequest() {
     return m;
   }, [mine]);
 
-  const runSearch = React.useCallback((mt: RequestMediaType, q: string) => {
-    if (q.trim().length < 2) {
-      setResults([]);
-      return;
+  React.useEffect(() => {
+    const controller = new AbortController();
+    setResults([]);
+    if (term.trim().length < 2) {
+      setSearching(false);
+      return () => controller.abort();
     }
     setSearching(true);
-    const controller = new AbortController();
-    lookup(mt, q, controller.signal)
-      .then(setResults)
-      .catch(() => setResults([]))
-      .finally(() => setSearching(false));
-  }, []);
+    const timer = setTimeout(() => {
+      lookup(mediaType, term, controller.signal)
+        .then((rows) => {
+          if (!controller.signal.aborted) setResults(rows);
+        })
+        .catch(() => {
+          if (!controller.signal.aborted) setResults([]);
+        })
+        .finally(() => {
+          if (!controller.signal.aborted) setSearching(false);
+        });
+    }, 400);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [mediaType, term]);
 
-  const onTermChange = (val: string) => {
-    setTerm(val);
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => runSearch(mediaType, val), 400);
-  };
-
-  const onMediaTypeChange = (mt: RequestMediaType) => {
-    setMediaType(mt);
-    setResults([]);
-    if (term.trim().length >= 2) runSearch(mt, term);
-  };
-
-  const submit = async (r: LookupResult) => {
+  const submit = async (r: LookupResult, mt = mediaType) => {
     try {
       await create.mutateAsync({
-        media_type: mediaType,
+        media_type: mt,
         tmdb_id: r.tmdbId,
         title: r.title,
         year: r.year,
         poster_path: r.posterPath,
         overview: r.overview,
       });
-      setRequested((prev) => ({ ...prev, [`${mediaType}:${r.tmdbId}`]: "ok" }));
+      setRequested((prev) => ({ ...prev, [`${mt}:${r.tmdbId}`]: "ok" }));
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Request failed";
-      setRequested((prev) => ({ ...prev, [`${mediaType}:${r.tmdbId}`]: msg }));
+      setRequested((prev) => ({ ...prev, [`${mt}:${r.tmdbId}`]: msg }));
     }
   };
+  const detailKey = detail ? `${detail.media}:${detail.result.tmdbId}` : "";
+  const detailRequested =
+    requested[detailKey] === "ok" ||
+    (!!existing[detailKey] &&
+      !["rejected", "failed"].includes(existing[detailKey]!));
+  const detailError =
+    requested[detailKey] && requested[detailKey] !== "ok"
+      ? requested[detailKey]
+      : undefined;
 
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
         <Tabs
           value={mediaType}
-          onValueChange={(v) => onMediaTypeChange(v as RequestMediaType)}
+          onValueChange={(v) => setMediaType(v as RequestMediaType)}
         >
           <TabsList>
             <TabsTrigger value="movie">Movies</TabsTrigger>
@@ -301,7 +315,7 @@ function SearchAndRequest() {
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={term}
-            onChange={(e) => onTermChange(e.target.value)}
+            onChange={(e) => setTerm(e.target.value)}
             placeholder={`Search for ${
               mediaType === "movie"
                 ? "a movie"
@@ -337,7 +351,12 @@ function SearchAndRequest() {
               key={key}
               className="flex flex-col overflow-hidden rounded-lg border border-border bg-card"
             >
-              <div className="aspect-[2/3] bg-muted">
+              <button
+                type="button"
+                aria-label={`View details for ${r.title}`}
+                onClick={() => setDetail({ result: r, media: mediaType })}
+                className="aspect-[2/3] bg-muted"
+              >
                 {r.posterPath ? (
                   <img
                     src={posterSrc(r.posterPath, "w300")}
@@ -350,12 +369,17 @@ function SearchAndRequest() {
                     No image
                   </div>
                 )}
-              </div>
+              </button>
               <div className="flex flex-1 flex-col gap-2 p-2">
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-medium" title={r.title}>
+                  <button
+                    type="button"
+                    onClick={() => setDetail({ result: r, media: mediaType })}
+                    className="block w-full truncate text-left text-sm font-medium hover:underline"
+                    title={r.title}
+                  >
                     {r.title}
-                  </p>
+                  </button>
                   {r.year ? (
                     <p className="text-xs text-muted-foreground">{r.year}</p>
                   ) : null}
@@ -383,6 +407,38 @@ function SearchAndRequest() {
           );
         })}
       </div>
+      {detail && (
+        <TitleDialog
+          open
+          onOpenChange={(open) => {
+            if (!open) setDetail(null);
+          }}
+          identity={{
+            media: detail.media,
+            id: detail.result.tmdbId,
+            title: detail.result.title,
+          }}
+          requestAction={
+            <div className="space-y-2">
+              <Button
+                disabled={create.isPending || detailRequested}
+                onClick={() => submit(detail.result, detail.media)}
+              >
+                {detailRequested
+                  ? "Requested"
+                  : create.isPending
+                    ? "Requesting…"
+                    : "Request"}
+              </Button>
+              {detailError && (
+                <p role="alert" className="text-sm text-destructive">
+                  {detailError}
+                </p>
+              )}
+            </div>
+          }
+        />
+      )}
     </div>
   );
 }

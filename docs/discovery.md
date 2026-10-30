@@ -1,4 +1,4 @@
-# Grow your library and Collections
+# Grow your library
 
 Open **Discover** to find movies and series to add, rather than to choose
 something already in your library to watch. **Import Lists are optional**:
@@ -23,7 +23,7 @@ include them.
 **Dismiss** persists a title's exclusion for your authenticated user, not for
 everyone sharing the instance.
 
-Select **Add to library** to use the normal movie or series add dialog. Choose
+Select **Details & add** to open shared full title details and the normal add form. Choose
 the target library, quality profile and monitoring settings, then confirm.
 **Search after adding is off by default for suggestions**; enable it explicitly
 if you want an immediate search. Browsing, viewing collections and dismissing
@@ -35,26 +35,15 @@ Lists** and is independent of these suggestions.
 
 ## Collections
 
-**Discover > Collections** automatically identifies TMDB movie sets from
-movies already added to Loom. Open a collection to see its members in release
-order, gaps, and upcoming entries, then add individual missing movies through
-the same explicit add dialog.
+**Collections** is now a standalone destination outside Discover and Libraries.
+It supports persistent mixed movie/show groupings, multiple simultaneous source
+references, local membership and exclusions, and explicit manual merges.
+Recommendation **View collection** links open that destination; an unsaved TMDB
+source can be explicitly imported by an administrator. Merely following a link
+does not mutate the collection or acquire any title.
 
-The detail view distinguishes:
-
-- **Added to Loom**: a movie catalog record exists, with monitoring shown
-  separately.
-- **Imported file recorded** or **No imported file recorded**: whether Loom
-  records a movie file. A catalog entry alone does not mean a playable file is
-  available; a recorded file is not a fresh filesystem accessibility check.
-- **Missing** and **Upcoming**: entries not yet added are split into
-  released/undated gaps and future releases. Both can be explicitly added.
-
-Membership comes from TMDB, not title matching or studio names. A TMDB film
-series such as Saw is not the same as the entire Disney catalog or every
-movie in the Marvel Cinematic Universe. This version does not create custom
-collections, automatically follow future releases, or write collection
-membership to Plex/Jellyfin. It does not group TV series into movie sets.
+See the [Collections guide](collections.md) for source access requirements,
+identity rules, library-management details, synchronization and limitations.
 
 ## Provider access, freshness and privacy
 
@@ -96,8 +85,8 @@ user identity are rejected; there is no shared anonymous preference bucket.
 |---|---|---|
 | `GET` | `/recommendations?media_type=movie&include_upcoming=false` | Movie or series candidates with reasons. |
 | `POST` | `/dismissals` | Persist `{ "tmdb_id": 123, "media_type": "movie" }` for the current user; returns `204`. |
-| `GET` | `/collections` | Movie collections represented in the existing catalog. |
-| `GET` | `/collections/{id}` | One TMDB collection with current Loom membership, file and monitoring state. |
+| `GET` | `/collections` | Legacy read-only TMDB movie-set view; deprecated for new clients. |
+| `GET` | `/collections/{id}` | Legacy TMDB set detail; use the standalone `/api/v1/collections` API for persistent mixed collections. |
 
 Recommendation and collection responses include `warnings`, `generated_at` and
 `stale`. Arrays are present even when empty. Invalid media types, booleans and

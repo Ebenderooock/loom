@@ -501,9 +501,32 @@ describe("PersonDiscoverDialog default profile", () => {
           ],
         });
       }
+      if (url === "/api/v1/discover/movie/42") {
+        return Response.json({
+          title: {
+            tmdb_id: "42",
+            title: "Credit Movie",
+            overview: "A synopsis",
+            poster_path: "/poster.jpg",
+          },
+          credits: { cast: [], crew: [] },
+          credits_error: "",
+        });
+      }
+      if (url === "/api/v1/libraries")
+        return Response.json({ data: libraries });
+      if (url === "/api/v1/quality-profiles")
+        return Response.json({ data: profiles });
+      if (url === "/api/v1/media-info/preferences")
+        return Response.json({ default_quality_profile_id: "qp-any" });
+      if (url === "/api/v1/movies?limit=1000&offset=0")
+        return Response.json([]);
+      if (url === "/api/v1/movies" && fetchMock.mock.calls.length > 0) {
+        return Response.json({ id: "movie-42" }, { status: 201 });
+      }
       return Response.json({}, { status: 201 });
     });
-    render(
+    withQuery(
       <PersonDiscoverDialog
         open
         onOpenChange={vi.fn()}
@@ -515,10 +538,10 @@ describe("PersonDiscoverDialog default profile", () => {
         existingSeriesIds={new Set()}
       />,
     );
+    await user.click(await screen.findByRole("button", { name: /^Add$/ }));
     await user.click(
-      await screen.findByRole("button", { name: /Credit Movie/ }),
+      await screen.findByRole("button", { name: "Add to library" }),
     );
-    await user.click(screen.getByRole("button", { name: "Add Movie" }));
     await waitFor(() =>
       expect(
         fetchMock.mock.calls.some(([u]) => String(u) === "/api/v1/movies"),

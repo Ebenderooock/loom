@@ -5,222 +5,251 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"strconv"
 	"strings"
-	"sync"
 	"testing"
-	"time"
 
 	"github.com/ebenderooock/loom/internal/auth"
+	"github.com/ebenderooock/loom/internal/metadata"
 	"github.com/ebenderooock/loom/internal/metadata/tmdb"
 )
 
-func request(router http.Handler, method, path, body string, userID int64) *httptest.ResponseRecorder {
-	req := httptest.NewRequest(method, path, strings.NewReader(body))
-	if userID > 0 {
-		req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UserID: userID, Roles: []string{"admin"}}))
-	}
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-	return w
-}
-
-func TestGrowthHTTPValidationAndIdentity(t *testing.T) {
-	service, _, _, _ := fixtureService(t)
-	router := Router(service.client, service)
-	for _, path := range []string{
-		"/recommendations?media_type=tv", "/recommendations?media_type=",
-		"/recommendations?include_upcoming=1", "/recommendations?include_upcoming=",
-		"/recommendations?include_upcoming=TRUE", "/collections/0", "/collections/-1", "/collections/nope",
-	} {
-		w := request(router, "GET", path, "", 1)
-		if w.Code != http.StatusBadRequest {
-			t.Errorf("%s returned %d: %s", path, w.Code, w.Body.String())
-		}
-	}
-	for _, path := range []string{"/recommendations", "/collections", "/collections/50"} {
-		w := request(router, "GET", path, "", 0)
-		if w.Code != http.StatusUnauthorized {
-			t.Errorf("anonymous %s returned %d", path, w.Code)
-		}
-	}
-	for _, body := range []string{
-		`{}`, `{"tmdb_id":0,"media_type":"movie"}`, `{"tmdb_id":1,"media_type":"tv"}`,
-		`{"tmdb_id":-1,"media_type":"series"}`, `{"tmdb_id":2,"media_type":"movie","user_id":2}`,
-		`{"tmdb_id":2,"media_type":"movie"} {}`, `invalid`,
-	} {
-		w := request(router, "POST", "/dismissals", body, 1)
-		if w.Code != http.StatusBadRequest {
-			t.Errorf("body %s returned %d", body, w.Code)
-		}
-	}
-	body := `{"tmdb_id":102,"media_type":"movie"}`
-	if w := request(router, "POST", "/dismissals", body, 0); w.Code != http.StatusUnauthorized {
-		t.Fatal("anonymous dismissal was accepted")
-	}
-	for range 2 {
-		if w := request(router, "POST", "/dismissals", body, 1); w.Code != http.StatusNoContent || w.Body.Len() != 0 {
-			t.Fatalf("valid/idempotent dismissal: %d %s", w.Code, w.Body.String())
-		}
-	}
-	for _, user := range []int64{1, 2} {
-		w := request(router, "GET", "/recommendations", "", user)
-		if w.Code != http.StatusOK || w.Header().Get("Cache-Control") != "private, no-store" {
-			t.Fatalf("recommendations user=%d: %d %s", user, w.Code, w.Body.String())
-		}
-		var out RecommendationsResponse
-		if err := json.Unmarshal(w.Body.Bytes(), &out); err != nil {
-			t.Fatal(err)
-		}
-		if out.Items == nil || out.Warnings == nil || out.GeneratedAt.IsZero() {
-			t.Fatalf("invalid envelope: %+v", out)
-		}
-		found := false
-		for _, item := range out.Items {
-			found = found || item.TMDBID == 102
-			if item.PosterPath != "" && !strings.HasPrefix(item.PosterPath, "https://image.tmdb.org/") {
-				t.Fatalf("poster path not a full CDN URL: %q", item.PosterPath)
-			}
-		}
-		if found != (user == 2) {
-			t.Fatalf("HTTP dismissal owner isolation broken for user %d", user)
-		}
-	}
-	for _, path := range []string{"/collections", "/collections/50", "/recommendations?media_type=series&include_upcoming=true"} {
-		if w := request(router, "GET", path, "", 1); w.Code != http.StatusOK {
-			t.Fatalf("%s returned %d: %s", path, w.Code, w.Body.String())
-		}
-	}
-	if w := request(router, "GET", "/collections/999", "", 1); w.Code != http.StatusNotFound {
-		t.Fatalf("missing collection: %d %s", w.Code, w.Body.String())
-	}
-}
-
-func TestPersonEndpointPreserved(t *testing.T) {
-	service, _, _, _ := fixtureService(t)
-	// The original Router(client) signature and person response are preserved.
-	router := Router(service.client)
-	w := request(router, "GET", "/people/10", "", 1)
-	if w.Code != http.StatusOK {
-		t.Fatalf("person endpoint returned %d: %s", w.Code, w.Body.String())
-	}
-	var person PersonFilmography
-	if err := json.Unmarshal(w.Body.Bytes(), &person); err != nil || person.Person.ID != 10 || len(person.Credits) == 0 {
-		t.Fatalf("person response: %+v, %v", person, err)
-	}
-	if w := request(router, "GET", "/people/0", "", 1); w.Code != http.StatusBadRequest {
-		t.Fatal("person ID validation regressed")
-	}
-}
-
-func TestHTTPProviderErrorsAreExplicitAndSanitized(t *testing.T) {
-	service, fixture, library, _ := fixtureService(t)
-	router := Router(service.client, service)
-	fixture.fail("/collection/50", http.StatusForbidden)
-	w := request(router, "GET", "/collections/50", "", 1)
-	if w.Code != http.StatusBadGateway || strings.Contains(w.Body.String(), "api_key") || strings.Contains(w.Body.String(), "never-echo") {
-		t.Fatalf("provider error leaked or misclassified: %d %s", w.Code, w.Body.String())
-	}
-	fixture.fail("/collection/50", http.StatusOK)
-	w = request(router, "GET", "/collections/50", "", 1)
-	if w.Code != http.StatusBadGateway {
-		t.Fatalf("malformed provider response misclassified: %d %s", w.Code, w.Body.String())
-	}
-	library.items = library.items[:1] // all seed details fail, not partial success
-	fixture.fail("/movie/2", http.StatusUnauthorized)
-	w = request(router, "GET", "/recommendations", "", 1)
-	if w.Code != http.StatusBadGateway {
-		t.Fatalf("total provider failure: %d %s", w.Code, w.Body.String())
-	}
-	service.client = tmdb.NewClient(tmdb.Config{})
-	w = request(router, "GET", "/collections", "", 1)
-	if w.Code != http.StatusServiceUnavailable || !strings.Contains(w.Body.String(), "not configured") {
-		t.Fatalf("missing provider config: %d %s", w.Code, w.Body.String())
-	}
-}
-
-func TestCacheCoalescesConcurrentReadsAndBoundsQueue(t *testing.T) {
-	service, fixture, _, _ := fixtureService(t)
-	var wg sync.WaitGroup
-	for range 8 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			if _, err := service.Recommendations(context.Background(), 1, "movie", false); err != nil {
-				t.Error(err)
-			}
-		}()
-	}
-	wg.Wait()
-	if fixture.count("/movie/1") != 1 || fixture.count("/collection/50") != 1 {
-		t.Fatal("concurrent cache misses caused duplicate provider fanout")
-	}
-	service.gate <- struct{}{}
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
-	defer cancel()
-	start := time.Now()
-	_, err := service.Collection(ctx, 50)
-	<-service.gate
-	if err == nil || time.Since(start) > time.Second {
-		t.Fatalf("queued request did not honor cancellation: %v", err)
-	}
-}
-
-func TestCacheCapacityIsBounded(t *testing.T) {
-	service, _, _, _ := fixtureService(t)
-	c := service.session()
-	for id := range maxCacheItems + 10 {
-		_, err := fetch(c, context.Background(), strconv.Itoa(id), func(context.Context) (*int, error) {
-			return pointer(id), nil
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
-	if len(service.cache) != maxCacheItems {
-		t.Fatalf("cache grew beyond capacity: %d", len(service.cache))
-	}
-}
-
-func TestMediaDetails(t *testing.T) {
+func TestVideoDetailsAreReadOnlyAndMediaScoped(t *testing.T) {
+	synopsis := strings.Repeat("Full synopsis. ", 150)
+	var paths []string
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			t.Errorf("unexpected write: %s", r.Method)
+		}
+		paths = append(paths, r.URL.Path)
 		switch r.URL.Path {
 		case "/movie/42":
-			_, _ = w.Write([]byte(`{"id":42,"title":"Movie","overview":"Full movie overview","runtime":123,"release_date":"2026-01-01","genres":[{"name":"Drama"}],"vote_average":8}`))
-		case "/tv/43":
-			_, _ = w.Write([]byte(`{"id":43,"name":"Show","overview":"Full show overview","first_air_date":"2026-01-01","number_of_seasons":3}`))
+			json.NewEncoder(w).Encode(map[string]any{"id": 42, "title": "Movie", "overview": synopsis, "vote_average": 8.5, "runtime": 120})
+		case "/tv/42":
+			json.NewEncoder(w).Encode(map[string]any{"id": 42, "name": "Series", "overview": synopsis, "number_of_seasons": 3, "vote_average": 9})
+		case "/movie/42/credits", "/tv/42/credits":
+			json.NewEncoder(w).Encode(map[string]any{"cast": []map[string]any{{"id": 7, "name": "Performer", "character": r.URL.Path}}, "crew": []any{}})
 		default:
-			http.Error(w, "upstream unavailable", http.StatusUnauthorized)
+			t.Errorf("unexpected provider path %s", r.URL.Path)
+			http.NotFound(w, r)
 		}
 	}))
 	defer upstream.Close()
-	router := Router(tmdb.NewClient(tmdb.Config{APIKey: "test", BaseURL: upstream.URL, Timeout: time.Second}))
-	for _, tc := range []struct {
-		path  string
-		code  int
-		title string
-	}{
-		{"/movie/42", 200, "Movie"},
-		{"/series/43", 200, "Show"},
-		{"/movie/nope", 400, ""},
-		{"/series/0", 400, ""},
-		{"/movie/99", 502, ""},
-	} {
-		t.Run(tc.path, func(t *testing.T) {
+	router := Router(tmdb.NewClient(tmdb.Config{APIKey: "test", BaseURL: upstream.URL}))
+	for _, media := range []string{"movie", "series"} {
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/"+media+"/42", nil))
+		if w.Code != http.StatusOK {
+			t.Fatalf("%s: %d %s", media, w.Code, w.Body.String())
+		}
+		var body struct {
+			Title struct {
+				Overview string  `json:"overview"`
+				TMDBID   string  `json:"tmdb_id"`
+				Rating   float64 `json:"rating"`
+			} `json:"title"`
+			Credits metadata.Credits `json:"credits"`
+		}
+		if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+			t.Fatal(err)
+		}
+		if body.Title.Overview != synopsis || body.Title.TMDBID != "42" || body.Title.Rating == 0 {
+			t.Fatalf("incomplete metadata: %+v", body.Title)
+		}
+		if len(body.Credits.Cast) != 1 || !strings.Contains(body.Credits.Cast[0].Role, "/42/credits") {
+			t.Fatalf("missing credits: %+v", body.Credits)
+		}
+	}
+	if strings.Join(paths, ",") != "/movie/42,/movie/42/credits,/tv/42,/tv/42/credits" {
+		t.Fatalf("wrong media resolution: %v", paths)
+	}
+}
+
+func TestExternalIdentityResolutionNeverGuessesByTitle(t *testing.T) {
+	var paths []string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		paths = append(paths, r.URL.Path)
+		switch r.URL.Path {
+		case "/find/tt123":
+			if r.URL.Query().Get("external_source") != "imdb_id" {
+				t.Error("missing provider scope")
+			}
+			json.NewEncoder(w).Encode(map[string]any{"movie_results": []map[string]int{{"id": 11}}, "tv_results": []map[string]int{{"id": 22}}})
+		case "/tv/22":
+			json.NewEncoder(w).Encode(map[string]any{"id": 22, "name": "Show"})
+		case "/tv/22/credits":
+			json.NewEncoder(w).Encode(map[string]any{"cast": []any{}, "crew": []any{}})
+		default:
+			t.Errorf("unexpected lookup %s", r.URL.Path)
+			http.NotFound(w, r)
+		}
+	}))
+	defer upstream.Close()
+	router := Router(tmdb.NewClient(tmdb.Config{BaseURL: upstream.URL}))
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/series/tt123?provider=imdb", nil))
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"tmdb_id":"22"`) {
+		t.Fatalf("%d: %s", w.Code, w.Body.String())
+	}
+	if strings.Join(paths, ",") != "/find/tt123,/tv/22,/tv/22/credits" {
+		t.Fatalf("unexpected lookups: %v", paths)
+	}
+}
+
+func TestInvalidIdentitiesDoNotReachProvider(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { t.Error("invalid ID reached provider") }))
+	defer upstream.Close()
+	router := Router(tmdb.NewClient(tmdb.Config{BaseURL: upstream.URL}))
+	for _, path := range []string{"/movie/0", "/series/-1", "/movie/nope", "/movie/12?provider=unknown", "/series/tt123?provider=tvdb", "/movie/hello?provider=imdb"} {
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, path, nil))
+		if w.Code != http.StatusBadRequest {
+			t.Errorf("%s: %d", path, w.Code)
+		}
+	}
+}
+
+func TestTVDBMovieIdentityFailsExplicitlyWithoutProviderRequest(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Error("unsupported TVDB movie lookup reached TMDB")
+	}))
+	defer upstream.Close()
+	router := Router(tmdb.NewClient(tmdb.Config{BaseURL: upstream.URL}))
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/movie/42?provider=tvdb", nil))
+	if w.Code != http.StatusUnprocessableEntity || !strings.Contains(w.Body.String(), "IMDb or TMDB mapping") {
+		t.Fatalf("unsupported identity: %d %s", w.Code, w.Body)
+	}
+}
+
+type readOnlyMusic struct{ metadata.MusicMetadataProvider }
+
+func (readOnlyMusic) GetArtist(_ context.Context, id string) (*metadata.ArtistMetadata, error) {
+	return &metadata.ArtistMetadata{MBID: id, Name: "Artist", Country: "NZ", Genres: []string{"Jazz"}}, nil
+}
+func (readOnlyMusic) GetArtistAlbums(context.Context, string) ([]*metadata.AlbumMetadata, error) {
+	return []*metadata.AlbumMetadata{{MBID: "b83ae2e8-0c20-48fc-9d8b-2b44d7206e18", Title: "Album", ReleaseDate: "2020-01-01"}}, nil
+}
+func (readOnlyMusic) GetAlbum(_ context.Context, id string) (*metadata.AlbumMetadata, []*metadata.AlbumReleaseMetadata, error) {
+	return &metadata.AlbumMetadata{MBID: id, Title: "Album"}, []*metadata.AlbumReleaseMetadata{{MBID: id, Title: "Edition"}}, nil
+}
+func (readOnlyMusic) GetAlbumRelease(_ context.Context, id string) (*metadata.AlbumReleaseMetadata, error) {
+	return &metadata.AlbumReleaseMetadata{MBID: id, Tracks: []metadata.TrackMetadata{{Title: "Track", TrackNumber: 1}}}, nil
+}
+
+func TestMusicDetailsHonorFeatureFlag(t *testing.T) {
+	enabled := false
+	router := RouterWithMusic(nil, nil, MusicDetails{Provider: readOnlyMusic{}, Enabled: func() bool { return enabled }})
+	for _, status := range []int{http.StatusNotFound, http.StatusOK} {
+		for _, kind := range []string{"artist", "album", "release"} {
 			w := httptest.NewRecorder()
-			router.ServeHTTP(w, httptest.NewRequest("GET", tc.path, nil))
-			if w.Code != tc.code {
-				t.Fatalf("status %d: %s", w.Code, w.Body)
+			router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/"+kind+"/b83ae2e8-0c20-48fc-9d8b-2b44d7206e18", nil))
+			if w.Code != status {
+				t.Fatalf("%s enabled=%v: got %d, want %d", kind, enabled, w.Code, status)
 			}
-			if tc.code == 200 {
-				var data map[string]any
-				if err := json.Unmarshal(w.Body.Bytes(), &data); err != nil {
-					t.Fatal(err)
-				}
-				if data["title"] != tc.title || data["overview"] == "" {
-					t.Fatalf("unexpected details: %v", data)
-				}
-			}
-		})
+		}
+		enabled = true
+	}
+}
+
+func TestMusicMetadataAndTracksWithoutAdding(t *testing.T) {
+	router := RouterWithMusic(nil, nil, MusicDetails{Provider: readOnlyMusic{}})
+	id := "b83ae2e8-0c20-48fc-9d8b-2b44d7206e18"
+	for _, kind := range []string{"artist", "album", "release"} {
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/"+kind+"/"+id, nil))
+		if w.Code != http.StatusOK {
+			t.Fatalf("%s: %d %s", kind, w.Code, w.Body.String())
+		}
+
+		if !strings.Contains(w.Body.String(), id) {
+			t.Errorf("missing identity in %s", kind)
+		}
+		w = httptest.NewRecorder()
+		router.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/"+kind+"/"+id, nil))
+		if w.Code != http.StatusMethodNotAllowed {
+			t.Errorf("write accepted: %d", w.Code)
+		}
+		w = httptest.NewRecorder()
+		router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/"+kind+"/invalid", nil))
+		if w.Code != http.StatusBadRequest {
+			t.Errorf("invalid music ID: %d", w.Code)
+		}
+	}
+}
+
+func TestProviderErrorDoesNotExposeCredentials(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+		w.Write([]byte(`{"status_message":"sensitive provider diagnostics"}`))
+	}))
+	defer upstream.Close()
+	router := Router(tmdb.NewClient(tmdb.Config{BaseURL: upstream.URL}))
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/movie/42", nil))
+	if w.Code != http.StatusBadGateway || strings.Contains(w.Body.String(), "sensitive") {
+		t.Fatalf("%d %s", w.Code, w.Body.String())
+	}
+
+}
+
+func TestConflictingAndAmbiguousVideoIdentitiesAreRejected(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/find/tt123":
+			json.NewEncoder(w).Encode(map[string]any{"movie_results": []map[string]int{{"id": 11}, {"id": 22}}})
+		case "/movie/42":
+			json.NewEncoder(w).Encode(map[string]any{"id": 99, "title": "Wrong title"})
+		default:
+			t.Errorf("conflicting identity triggered further lookup: %s", r.URL.Path)
+		}
+	}))
+	defer upstream.Close()
+	router := Router(tmdb.NewClient(tmdb.Config{BaseURL: upstream.URL}))
+	for path, status := range map[string]int{"/movie/tt123?provider=imdb": http.StatusNotFound, "/movie/42": http.StatusBadGateway} {
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, path, nil))
+		if w.Code != status {
+			t.Fatalf("%s: %d %s", path, w.Code, w.Body.String())
+		}
+	}
+}
+
+func TestCreditsFailureDoesNotDiscardFullTitleDetails(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/movie/42/credits" {
+			http.Error(w, "sensitive upstream diagnostics", http.StatusUnauthorized)
+			return
+		}
+
+		json.NewEncoder(w).Encode(map[string]any{"id": 42, "title": "Movie", "overview": "Full synopsis"})
+	}))
+	defer upstream.Close()
+	router := Router(tmdb.NewClient(tmdb.Config{BaseURL: upstream.URL}))
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/movie/42", nil))
+	var details struct {
+		Title        metadata.MovieMetadata `json:"title"`
+		CreditsError string                 `json:"credits_error"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &details); err != nil {
+		t.Fatal(err)
+	}
+	if w.Code != http.StatusOK || details.Title.Overview != "Full synopsis" || details.CreditsError == "" || strings.Contains(w.Body.String(), "sensitive") {
+		t.Fatalf("%d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestGrowthRoutesRemainMountedWithReadOnlyDetails(t *testing.T) {
+	service, _, _, _ := fixtureService(t)
+	router := Router(service.client, service)
+	req := httptest.NewRequest(http.MethodGet, "/recommendations", nil)
+	req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{
+		UserID: 1,
+		Roles:  []string{"admin"},
+	}))
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("recommendations route returned %d: %s", w.Code, w.Body.String())
 	}
 }

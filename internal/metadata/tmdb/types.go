@@ -2,33 +2,42 @@ package tmdb
 
 // MovieResponse is the JSON response from TMDb /movie/{id} endpoint.
 type MovieResponse struct {
-	Adult       bool                 `json:"adult"`
-	Popularity  float64              `json:"popularity"`
-	Collection  *CollectionReference `json:"belongs_to_collection"`
-	Credits     CreditsResponse      `json:"credits"`
-	ID          int                  `json:"id"`
-	IMDBID      string               `json:"imdb_id"`
-	Title       string               `json:"title"`
-	ReleaseDate string               `json:"release_date"`
-	Overview    string               `json:"overview"`
-	PosterPath  string               `json:"poster_path"`
-	Runtime     int                  `json:"runtime"`
-	VoteAverage float64              `json:"vote_average"`
-	Genres      []GenreResponse      `json:"genres"`
-	ExternalIDs *ExternalIDResponse  `json:"external_ids"`
+	Adult        bool                 `json:"adult"`
+	Popularity   float64              `json:"popularity"`
+	Collection   *CollectionReference `json:"belongs_to_collection"`
+	Credits      CreditsResponse      `json:"credits"`
+	ID           int                  `json:"id"`
+	IMDBID       string               `json:"imdb_id"`
+	Title        string               `json:"title"`
+	ReleaseDate  string               `json:"release_date"`
+	Overview     string               `json:"overview"`
+	PosterPath   string               `json:"poster_path"`
+	BackdropPath string               `json:"backdrop_path"`
+	Status       string               `json:"status"`
+	Tagline      string               `json:"tagline"`
+	Runtime      int                  `json:"runtime"`
+	VoteAverage  float64              `json:"vote_average"`
+	Genres       []GenreResponse      `json:"genres"`
+	ExternalIDs  *ExternalIDResponse  `json:"external_ids"`
 }
 
 // TVResponse is the JSON response from TMDb /tv/{id} endpoint.
 type TVResponse struct {
-	Adult           bool                `json:"adult"`
-	Popularity      float64             `json:"popularity"`
-	Credits         CreditsResponse     `json:"credits"`
-	ID              int                 `json:"id"`
-	IMDBID          string              `json:"imdb_id"`
-	Name            string              `json:"name"`
-	FirstAirDate    string              `json:"first_air_date"`
-	Overview        string              `json:"overview"`
-	PosterPath      string              `json:"poster_path"`
+	Adult        bool            `json:"adult"`
+	Popularity   float64         `json:"popularity"`
+	Credits      CreditsResponse `json:"credits"`
+	ID           int             `json:"id"`
+	IMDBID       string          `json:"imdb_id"`
+	Name         string          `json:"name"`
+	FirstAirDate string          `json:"first_air_date"`
+	Overview     string          `json:"overview"`
+	PosterPath   string          `json:"poster_path"`
+	BackdropPath string          `json:"backdrop_path"`
+	Status       string          `json:"status"`
+	Networks     []struct {
+		Name string `json:"name"`
+	} `json:"networks"`
+	EpisodeRunTime  []int               `json:"episode_run_time"`
 	VoteAverage     float64             `json:"vote_average"`
 	NumberOfSeasons int                 `json:"number_of_seasons"`
 	Genres          []GenreResponse     `json:"genres"`
