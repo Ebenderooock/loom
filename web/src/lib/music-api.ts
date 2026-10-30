@@ -276,7 +276,7 @@ export async function rescanArtist(
   id: string,
   libraryId: string,
 ): Promise<void> {
-  const res = await apiFetch(`/api/v1/scanner/artists/${id}/rescan`, {
+  const res = await apiFetch(`/api/v1/artists/${id}/rescan`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ libraryId }),

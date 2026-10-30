@@ -925,7 +925,10 @@ func (s *Server) newMux() http.Handler {
 
 		// Music (Artists/Albums/Tracks) routes — gated behind the "music"
 		// feature flag (off by default while the capability is in development).
-		if s.musicSvc != nil && s.featureFlags != nil && s.featureFlags.Enabled(featureflags.KeyMusic) {
+		// The flag is checked per request so toggling it takes effect without
+		// a restart.
+		if s.musicSvc != nil && s.featureFlags != nil {
+			musicEnabled := requireFeature(s.featureFlags.EnabledFunc(featureflags.KeyMusic))
 			artistOpts := []music.ArtistRouterOption{}
 			if s.libStore != nil && s.libScanner != nil {
 				artistOpts = append(artistOpts, music.WithLibraryRescan(s.libStore, s.libScanner))
@@ -934,13 +937,13 @@ func (s *Server) newMux() http.Handler {
 			if s.musicScannerSvc != nil {
 				scanner.RegisterMusicRoutes(artistsRouter, s.musicScannerSvc, s.libStore)
 			}
-			r.Mount("/api/v1/artists", artistsRouter)
+			r.With(musicEnabled).Mount("/api/v1/artists", artistsRouter)
 			albumsRouter := music.AlbumRouter(s.musicSvc)
 			if s.musicSearch != nil {
 				musicsearch.RegisterRoutes(albumsRouter, s.musicSearch)
 			}
-			r.Mount("/api/v1/albums", albumsRouter)
-			r.Mount("/api/v1/music", music.ProfileRouter(s.musicSvc))
+			r.With(musicEnabled).Mount("/api/v1/albums", albumsRouter)
+			r.With(musicEnabled).Mount("/api/v1/music", music.ProfileRouter(s.musicSvc))
 		}
 
 		// Notifications routes
@@ -1206,7 +1209,15 @@ func (s *Server) newMux() http.Handler {
 	// `-tags embed`. In dev mode spaHandler() returns nil and the Vite dev
 	// server on :5173 handles the UI.
 	if spa := spaHandler(); spa != nil {
-		r.NotFound(spa.ServeHTTP)
+		r.NotFound(func(w http.ResponseWriter, req *http.Request) {
+			// Unknown API paths must not fall back to index.html, or clients
+			// get a 200 HTML page where they expect JSON.
+			if req.URL.Path == "/api" || strings.HasPrefix(req.URL.Path, "/api/") {
+				writeJSONNotFound(w)
+				return
+			}
+			spa.ServeHTTP(w, req)
+		})
 	}
 
 	return otelhttp.NewHandler(r, "loom.http.server",

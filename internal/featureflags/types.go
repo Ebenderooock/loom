@@ -25,7 +25,7 @@ const (
 
 	// KeyMusic toggles the Music capability (artists/albums/tracks, music
 	// scanning and acquisition). Disabled by default while the feature is
-	// incomplete: when off, the Music API routes are not mounted. Flip on once
+	// incomplete: when off, the Music API routes respond 404. Flip on once
 	// the Music milestones and UI are ready.
 	KeyMusic = "music"
 
