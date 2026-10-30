@@ -107,6 +107,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Manual release search keeps Download visible without horizontal scrolling,
+  with wrapping release metadata, phone-friendly rows, compact diagnostics and
+  independently scrolling results. Download actions show sending, success and
+  retryable error states and prevent duplicate submissions.
 - Collection and Discover cards now match library card status, including
   Downloading, Importing, Available and series episode progress, with shared
   badges and status strips instead of inferring availability from file presence.
