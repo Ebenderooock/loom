@@ -76,6 +76,8 @@ tags:
       Quality definitions (resolution, source, codec metadata) and profiles
       (named collections with cutoff/upgrade rules). See ADR-0005 for the design
       and Radarr compatibility rationale.
+  - name: music
+    description: Music album editions and audio-quality / metadata profiles.
 
   - name: discovery
     description: |
@@ -1279,6 +1281,215 @@ paths:
           description: TMDB cannot resolve TVDB movie IDs; an IMDb or TMDB ID is required.
         "502":
           description: Metadata provider unavailable or returned conflicting identity.
+
+  /api/v1/albums/{id}/release:
+    put:
+      tags: [music]
+      operationId: selectMusicAlbumRelease
+      summary: Select the MusicBrainz edition used for an album.
+      description: |
+        The release must belong to the album. Selecting a different edition
+        refreshes the album's track listing. This endpoint is available when
+        the music feature is enabled.
+      security: [{ cookieAuth: [] }, { apiKey: [] }, { bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SelectAlbumReleaseRequest" }
+      responses:
+        "200":
+          description: Updated album with its selected edition and tracks.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MusicAlbum" }
+        "400": { description: Invalid request or release does not belong to the album. }
+        "401": { description: Authentication required. }
+        "404": { description: Album not found. }
+        "500": { description: Album update failed. }
+
+  /api/v1/music/audio-quality-definitions:
+    get:
+      tags: [music]
+      operationId: listMusicAudioQualityDefinitions
+      summary: List built-in audio quality definitions.
+      security: [{ cookieAuth: [] }, { apiKey: [] }, { bearerAuth: [] }]
+      responses:
+        "200":
+          description: Audio quality tiers available to profiles.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/AudioQualityDefinition" }
+        "401": { description: Authentication required. }
+        "500": { description: Audio quality definitions could not be loaded. }
+
+  /api/v1/music/audio-quality-profiles:
+    get:
+      tags: [music]
+      operationId: listMusicAudioQualityProfiles
+      summary: List audio quality profiles.
+      security: [{ cookieAuth: [] }, { apiKey: [] }, { bearerAuth: [] }]
+      responses:
+        "200":
+          description: Configured audio quality profiles.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/AudioQualityProfile" }
+        "401": { description: Authentication required. }
+        "500": { description: Audio quality profiles could not be loaded. }
+    post:
+      tags: [music]
+      operationId: createMusicAudioQualityProfile
+      summary: Create an audio quality profile.
+      security: [{ cookieAuth: [] }, { apiKey: [] }, { bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateAudioQualityProfileRequest" }
+      responses:
+        "201":
+          description: Created audio quality profile.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AudioQualityProfile" }
+        "400": { description: Invalid profile name, cutoff, or quality definition. }
+        "401": { description: Authentication required. }
+        "500": { description: Profile could not be created. }
+
+  /api/v1/music/audio-quality-profiles/{id}:
+    put:
+      tags: [music]
+      operationId: updateMusicAudioQualityProfile
+      summary: Update an audio quality profile.
+      description: Only supplied fields are changed.
+      security: [{ cookieAuth: [] }, { apiKey: [] }, { bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateAudioQualityProfileRequest" }
+      responses:
+        "200":
+          description: Updated audio quality profile.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AudioQualityProfile" }
+        "400": { description: Invalid cutoff or quality definition. }
+        "401": { description: Authentication required. }
+        "404": { description: Audio quality profile not found. }
+        "500": { description: Profile could not be updated. }
+    delete:
+      tags: [music]
+      operationId: deleteMusicAudioQualityProfile
+      summary: Delete an unassigned audio quality profile.
+      security: [{ cookieAuth: [] }, { apiKey: [] }, { bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "204": { description: Profile deleted. }
+        "400": { description: Profile is assigned to an artist. }
+        "401": { description: Authentication required. }
+        "404": { description: Audio quality profile not found. }
+        "500": { description: Profile could not be deleted. }
+
+  /api/v1/music/metadata-profiles:
+    get:
+      tags: [music]
+      operationId: listMusicMetadataProfiles
+      summary: List metadata profiles.
+      security: [{ cookieAuth: [] }, { apiKey: [] }, { bearerAuth: [] }]
+      responses:
+        "200":
+          description: Configured metadata profiles.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/MetadataProfile" }
+        "401": { description: Authentication required. }
+        "500": { description: Metadata profiles could not be loaded. }
+    post:
+      tags: [music]
+      operationId: createMusicMetadataProfile
+      summary: Create a metadata profile.
+      description: Metadata profiles select album types and release statuses for monitoring.
+      security: [{ cookieAuth: [] }, { apiKey: [] }, { bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateMetadataProfileRequest" }
+      responses:
+        "201":
+          description: Created metadata profile.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MetadataProfile" }
+        "400": { description: Invalid profile name. }
+        "401": { description: Authentication required. }
+        "500": { description: Profile could not be created. }
+
+  /api/v1/music/metadata-profiles/{id}:
+    put:
+      tags: [music]
+      operationId: updateMusicMetadataProfile
+      summary: Update a metadata profile.
+      description: Only supplied fields are changed.
+      security: [{ cookieAuth: [] }, { apiKey: [] }, { bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateMetadataProfileRequest" }
+      responses:
+        "200":
+          description: Updated metadata profile.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MetadataProfile" }
+        "400": { description: Invalid profile name. }
+        "401": { description: Authentication required. }
+        "404": { description: Metadata profile not found. }
+        "500": { description: Profile could not be updated. }
+    delete:
+      tags: [music]
+      operationId: deleteMusicMetadataProfile
+      summary: Delete an unassigned metadata profile.
+      security: [{ cookieAuth: [] }, { apiKey: [] }, { bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "204": { description: Profile deleted. }
+        "400": { description: Profile is assigned to an artist. }
+        "401": { description: Authentication required. }
+        "404": { description: Metadata profile not found. }
+        "500": { description: Profile could not be deleted. }
 
   /api/v1/discover/artist/{id}:
     get:
@@ -3244,6 +3455,136 @@ paths:
 
 components:
   schemas:
+    SelectAlbumReleaseRequest:
+      type: object
+      additionalProperties: false
+      required: [release_id]
+      properties:
+        release_id: { type: string, minLength: 1 }
+    MusicAlbum:
+      type: object
+      required: [id, title]
+      properties:
+        id: { type: string }
+        title: { type: string }
+        selected_release_id: { type: string }
+        releases:
+          type: array
+          items: { type: object, additionalProperties: true }
+        tracks:
+          type: array
+          items: { type: object, additionalProperties: true }
+      additionalProperties: true
+    AudioQualityDefinition:
+      type: object
+      required: [id, name, vbr, lossless, tier_order]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        format: { type: string }
+        bitrate: { type: integer }
+        vbr: { type: boolean }
+        lossless: { type: boolean }
+        tier_order: { type: integer }
+    AudioProfileItem:
+      type: object
+      required: [definition_id, allowed]
+      properties:
+        definition_id: { type: string }
+        allowed: { type: boolean }
+    AudioFormatItem:
+      type: object
+      required: [format_id, score]
+      properties:
+        format_id: { type: string }
+        score: { type: integer }
+    AudioQualityProfile:
+      type: object
+      required: [id, name, items, upgrade_allowed, format_items, min_format_score, created_at, updated_at]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        items:
+          type: [array, "null"]
+          items: { $ref: "#/components/schemas/AudioProfileItem" }
+        cutoff: { type: string }
+        upgrade_allowed: { type: boolean }
+        format_items:
+          type: [array, "null"]
+          items: { $ref: "#/components/schemas/AudioFormatItem" }
+        min_format_score: { type: integer }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    CreateAudioQualityProfileRequest:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, minLength: 1 }
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/AudioProfileItem" }
+        cutoff: { type: string }
+        upgrade_allowed: { type: boolean, default: true }
+        format_items:
+          type: array
+          items: { $ref: "#/components/schemas/AudioFormatItem" }
+        min_format_score: { type: integer, default: 0 }
+    UpdateAudioQualityProfileRequest:
+      type: object
+      properties:
+        cutoff: { type: string }
+        upgrade_allowed: { type: boolean }
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/AudioProfileItem" }
+        format_items:
+          type: array
+          items: { $ref: "#/components/schemas/AudioFormatItem" }
+        min_format_score: { type: integer }
+    MetadataProfile:
+      type: object
+      required: [id, name, primary_types, secondary_types, release_statuses, created_at, updated_at]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        primary_types:
+          type: array
+          items: { type: string }
+        secondary_types:
+          type: array
+          items: { type: string }
+        release_statuses:
+          type: array
+          items: { type: string }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    CreateMetadataProfileRequest:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, minLength: 1 }
+        primary_types:
+          type: array
+          items: { type: string }
+        secondary_types:
+          type: array
+          items: { type: string }
+        release_statuses:
+          type: array
+          items: { type: string }
+    UpdateMetadataProfileRequest:
+      type: object
+      properties:
+        name: { type: string, minLength: 1 }
+        primary_types:
+          type: array
+          items: { type: string }
+        secondary_types:
+          type: array
+          items: { type: string }
+        release_statuses:
+          type: array
+          items: { type: string }
     CollectionSourceInput:
       type: object
       additionalProperties: false

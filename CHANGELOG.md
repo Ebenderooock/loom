@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Music capability management: select an album's MusicBrainz edition, manage
+  audio quality and metadata profiles, and search for missing tracks in
+  partially available albums. Completed music downloads now import into the
+  configured library; higher-quality replacements preserve the previous file
+  in the recycle bin. See [`docs/music.md`](docs/music.md).
 - Collection management: delete collections without touching library media
   (deleted sources are not rediscovered until imported again), add real library
   or TMDB titles with a shared picker, "Add to collection" from movie/show

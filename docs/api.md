@@ -20,6 +20,8 @@ a reason containing the UTC resume time (or unknown reset), and optional
 The canonical machine-readable specification of Loom's HTTP API lives in
 [`api/openapi/loom.yaml`](../api/openapi/loom.yaml) (OpenAPI 3.1). This
 page is the human summary.
+Music capability routes are available when the `music` feature is enabled.
+See the [Music guide](music.md) for profile behavior and examples.
 
 ## Default quality profiles
 
@@ -72,6 +74,16 @@ in `api/openapi/loom.yaml`.
 | `GET` | `/api/v1/discover/artist/{id}` | apiKey/bearer/cookie | `200 application/json` | MusicBrainz artist metadata and albums, without adding. |
 | `GET` | `/api/v1/discover/album/{id}` | apiKey/bearer/cookie | `200 application/json` | MusicBrainz album metadata and candidate editions. |
 | `GET` | `/api/v1/discover/release/{id}` | apiKey/bearer/cookie | `200 application/json` | MusicBrainz edition metadata and full tracks. |
+| `PUT` | `/api/v1/albums/{id}/release` | apiKey/bearer/cookie | `200 application/json` (`Album`) | Select an edition using `{release_id}`; the edition must belong to this album, and selecting a different edition refreshes its tracks. |
+| `GET` | `/api/v1/music/audio-quality-definitions` | apiKey/bearer/cookie | `200 application/json` (`AudioQualityDefinition[]`) | List built-in audio quality tiers. |
+| `GET` | `/api/v1/music/audio-quality-profiles` | apiKey/bearer/cookie | `200 application/json` (`AudioQualityProfile[]`) | List audio quality profiles. |
+| `POST` | `/api/v1/music/audio-quality-profiles` | apiKey/bearer/cookie | `201 application/json` (`AudioQualityProfile`) | Create a profile defining allowed tiers, cutoff, upgrades and custom-format scoring. |
+| `PUT` | `/api/v1/music/audio-quality-profiles/{id}` | apiKey/bearer/cookie | `200 application/json` (`AudioQualityProfile`) | Update supplied audio profile fields. |
+| `DELETE` | `/api/v1/music/audio-quality-profiles/{id}` | apiKey/bearer/cookie | `204` | Delete an unassigned audio profile; assigned profiles cannot be deleted. |
+| `GET` | `/api/v1/music/metadata-profiles` | apiKey/bearer/cookie | `200 application/json` (`MetadataProfile[]`) | List metadata profiles that control monitored album and edition types. |
+| `POST` | `/api/v1/music/metadata-profiles` | apiKey/bearer/cookie | `201 application/json` (`MetadataProfile`) | Create a metadata profile. |
+| `PUT` | `/api/v1/music/metadata-profiles/{id}` | apiKey/bearer/cookie | `200 application/json` (`MetadataProfile`) | Update supplied metadata profile fields. |
+| `DELETE` | `/api/v1/music/metadata-profiles/{id}` | apiKey/bearer/cookie | `204` | Delete an unassigned metadata profile; assigned profiles cannot be deleted. |
 | `POST` | `/api/v1/import-lists/discover/track` | apiKey/bearer/cookie | `200 application/json` | Mark `{item_id}` added only after verifying library membership; never creates media or changes list settings. |
 | `GET` | `/api/v1/libraries/{id}/health` | apiKey/bearer/cookie | `200 application/json` (`LibraryHealthReport` or `null`) | Fetch latest read-only health report snapshot. |
 | `POST` | `/api/v1/libraries/{id}/health` | apiKey/bearer/cookie | `200 application/json` (`LibraryHealthReport`) | Run a bounded, cancellable read-only health check for one library. |
