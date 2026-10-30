@@ -249,6 +249,9 @@ func cmdServe(ctx context.Context, args []string) error {
 	}
 	media.importListSyncMgr.Start(ctx)
 	defer media.importListSyncMgr.Stop()
+	if err := sched.Register(ctx, "collections.discovery", "@every 15s", media.collectionsSvc.ScanBatch, []byte(`{"builtin":true}`)); err != nil {
+		return fmt.Errorf("register collections discovery: %w", err)
+	}
 
 	// Wire download services (grabs, autosearch, import pipeline, monitor)
 	dlWiring, err := wireDownloads(ctx, cfg, db, &wiring, downloadSvc, moviesSvc, indexerSvc, media, auditLogger, logger)

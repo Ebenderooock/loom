@@ -16,8 +16,12 @@ import (
 
 type movieLibrary struct{ items []*movies.Movie }
 
-func (l movieLibrary) ListMovies(context.Context, int, int) ([]*movies.Movie, error) {
-	return l.items, nil
+func (l movieLibrary) ListMovies(_ context.Context, limit, offset int) ([]*movies.Movie, error) {
+	if offset >= len(l.items) {
+		return nil, nil
+	}
+	end := min(offset+limit, len(l.items))
+	return l.items[offset:end], nil
 }
 func (movieLibrary) ListMovieFiles(context.Context, string) ([]*movies.MovieFile, error) {
 	return nil, nil

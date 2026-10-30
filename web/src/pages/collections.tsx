@@ -16,6 +16,7 @@ import {
 } from "@/lib/collections-api";
 import { LibraryMediaSheet } from "@/components/library-media-sheet";
 import { TitleDialog } from "@/components/titles/title-experience";
+import { TitlePosterCard } from "@/components/titles/title-poster-card";
 import { titleImage } from "@/components/titles/title-metadata";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,6 +24,15 @@ import { Badge } from "@/components/ui/badge";
 
 const GRID =
   "grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6";
+
+type CollectionScan = {
+  total: number;
+  checked: number;
+  pending: number;
+  failed: number;
+  running: boolean;
+  errors: { media_type: string; media_id: string; message: string }[];
+};
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -64,10 +74,18 @@ export function CollectionsPage() {
     await qc.invalidateQueries({ queryKey: collectionKeys.all });
   };
   const discover = useMutation({
-    mutationFn: () =>
-      collectionRequest<{ warnings: string[] }>("/discover", {}),
+    mutationFn: () => collectionRequest<CollectionScan>("/discover", {}),
     onSettled: invalidate,
   });
+  const scan = useQuery({
+    queryKey: ["collection-scan"],
+    queryFn: ({ signal }) =>
+      collectionRequest<CollectionScan>("/scan", undefined, "GET", signal),
+    refetchInterval: 5000,
+  });
+  useEffect(() => {
+    if (scan.data) void qc.invalidateQueries({ queryKey: collectionKeys.all });
+  }, [qc, scan.data]);
   const importSet = useMutation({
     mutationFn: () =>
       collectionRequest<LoomCollection>("", {
@@ -128,7 +146,7 @@ export function CollectionsPage() {
                   <RefreshCw
                     className={`mr-2 h-4 w-4 ${discover.isPending ? "animate-spin" : ""}`}
                   />
-                  Find from library
+                  Rescan library
                 </Button>
                 <Button onClick={() => setCreating(!creating)}>
                   <Plus className="mr-2 h-4 w-4" />
@@ -143,13 +161,41 @@ export function CollectionsPage() {
             shared titles never merge collections automatically.
           </p>
           <ErrorMessage
-            error={discover.error ?? importSet.error ?? libraries.error}
+            error={
+              discover.error ?? importSet.error ?? libraries.error ?? scan.error
+            }
           />
-          {discover.data?.warnings.map((warning) => (
-            <p role="status" key={warning} className="text-sm text-amber-600">
-              {warning}
-            </p>
-          ))}
+          {scan.data && (
+            <section
+              aria-label="Background collection discovery"
+              className="space-y-2 text-sm text-muted-foreground"
+            >
+              <p role="status">
+                Collections are found automatically in the background.{" "}
+                {scan.data.checked} of {scan.data.total} library titles checked.
+                {scan.data.running || scan.data.pending > 0
+                  ? " Scanning…"
+                  : scan.data.failed > 0
+                    ? " Waiting to retry."
+                    : " Up to date."}
+                {scan.data.failed > 0 &&
+                  ` ${scan.data.failed} titles need attention and will retry automatically.`}
+              </p>
+              {scan.data.errors.length > 0 && (
+                <details>
+                  <summary className="cursor-pointer">Discovery issues</summary>
+                  {scan.data.errors.map((error) => (
+                    <p
+                      key={`${error.media_type}:${error.media_id}`}
+                      className="break-words text-destructive"
+                    >
+                      {error.media_type} {error.media_id}: {error.message}
+                    </p>
+                  ))}
+                </details>
+              )}
+            </section>
+          )}
           {tmdb && !existingSet && !list.isPending && (
             <section className="space-y-3 rounded-lg border p-4">
               <h2 className="font-semibold">TMDB movie set {tmdb}</h2>
@@ -557,62 +603,22 @@ function CollectionDetails({
               {c.members
                 .filter((m) => matchesMember(m, library, media, status))
                 .map((m) => (
-                  <article
-                    key={m.id}
-                    className="overflow-hidden rounded-lg border bg-card"
-                  >
-                    <button
-                      type="button"
-                      className="block w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-                      onClick={() => setSelected(m)}
-                      aria-label={`${m.in_library ? "Manage" : "View"} ${m.title}`}
-                    >
-                      <div className="aspect-[2/3] bg-muted">
-                        {m.poster_path ? (
-                          <img
-                            src={titleImage(m.poster_path) ?? ""}
-                            alt=""
-                            className="h-full w-full object-cover"
-                            loading="lazy"
-                          />
-                        ) : (
-                          <Layers
-                            className="h-full w-full p-10 text-muted-foreground"
-                            aria-hidden
-                          />
-                        )}
-                      </div>
-                      <div className="space-y-2 p-3">
-                        <h2 className="text-sm font-semibold">{m.title}</h2>
-                        <p className="text-xs text-muted-foreground">
-                          {m.media_type === "movie" ? "Movie" : "TV show"}
-                          {m.year ? ` · ${m.year}` : ""}
-                        </p>
-                        <Badge variant={m.in_library ? "secondary" : "outline"}>
-                          {m.in_library ? "Added to Loom" : "Not in library"}
-                        </Badge>
-                        {m.in_library && (
-                          <p className="text-xs text-muted-foreground">
-                            {m.monitored ? "Monitored" : "Unmonitored"} ·{" "}
-                            {m.has_file === undefined
-                              ? "Files unknown"
-                              : m.has_file
-                                ? "Imported files"
-                                : "No imported files"}
-                          </p>
-                        )}
-                        <p className="text-xs text-muted-foreground">
-                          {m.local
-                            ? "Local addition"
-                            : `${m.sources.length} source${m.sources.length === 1 ? "" : "s"}`}
-                        </p>
-                        <span className="block text-xs font-medium text-accent">
-                          {m.in_library
-                            ? "Open management"
-                            : "Details & add settings"}
-                        </span>
-                      </div>
-                    </button>
+                  <article key={m.id} className="min-w-0 space-y-2">
+                    <TitlePosterCard
+                      title={m.title}
+                      poster={m.poster_path}
+                      year={m.year}
+                      available={m.has_file}
+                      inLibrary={m.in_library}
+                      onOpen={() => setSelected(m)}
+                      onAdd={canManage ? () => setSelected(m) : undefined}
+                      label={`${m.in_library ? "Manage" : "View"} ${m.title}`}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      {m.local
+                        ? "Local addition"
+                        : `${m.sources.length} source${m.sources.length === 1 ? "" : "s"}`}
+                    </p>
                     {canManage && (
                       <Button
                         variant="ghost"

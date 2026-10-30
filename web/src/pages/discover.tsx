@@ -6,7 +6,6 @@ import {
 } from "@/lib/import-lists-api";
 import { usePageHeader } from "@/hooks/use-page-header";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Select,
@@ -15,8 +14,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Check, Plus, Compass, Info } from "lucide-react";
+import { Compass } from "lucide-react";
 import { TitleDialog } from "@/components/titles/title-experience";
+import { TitlePosterCard } from "@/components/titles/title-poster-card";
 import { CardGridSkeleton } from "@/components/ui/skeletons";
 import { RecommendationPanel } from "@/components/library-expansion";
 
@@ -260,7 +260,6 @@ function DiscoverCard({
 }) {
   const [view, setView] = React.useState<"details" | "add" | null>(null);
   const [added, setAdded] = React.useState(false);
-  const detailsButton = React.useRef<HTMLButtonElement>(null);
 
   const inLibrary = item.in_library || added;
   const provider =
@@ -277,91 +276,21 @@ function DiscoverCard({
         : item.tvdb_id;
 
   return (
-    <div className="group flex flex-col overflow-hidden rounded-lg border bg-card">
-      <button
-        type="button"
+    <div className="min-w-0">
+      <TitlePosterCard
+        title={item.title}
+        poster={item.poster_path}
+        year={item.year}
+        inLibrary={inLibrary}
+        onOpen={() => setView("details")}
+        onAdd={() => setView("add")}
         disabled={!providerId}
-        aria-label={`View details for ${item.title}`}
-        onClick={() => setView("details")}
-        className="relative aspect-[2/3] w-full bg-muted"
-      >
-        {item.poster_path ? (
-          <img
-            src={item.poster_path}
-            alt={item.title}
-            loading="lazy"
-            className="h-full w-full object-cover"
-          />
-        ) : (
-          <div className="flex h-full w-full items-center justify-center p-2 text-center text-xs text-muted-foreground">
-            {item.title}
-          </div>
-        )}
-        {inLibrary && (
-          <Badge className="absolute left-2 top-2" variant="secondary">
-            In Library
-          </Badge>
-        )}
-      </button>
-
-      <div className="flex flex-1 flex-col gap-2 p-3">
-        <div className="min-h-[2.5rem]">
-          <button
-            type="button"
-            disabled={!providerId}
-            onClick={() => setView("details")}
-            className="line-clamp-2 text-left text-sm font-medium hover:underline"
-            title={item.title}
-          >
-            {item.title}
-          </button>
-          {item.year ? (
-            <p className="text-xs text-muted-foreground">{item.year}</p>
-          ) : null}
-        </div>
-
-        <div className="mt-auto flex w-full">
-          {inLibrary ? (
-            <Button
-              size="sm"
-              variant="secondary"
-              disabled
-              className="min-h-11 min-w-0 flex-1 rounded-r-none"
-            >
-              <Check className="mr-1 h-4 w-4" />
-              Added
-            </Button>
-          ) : (
-            <Button
-              size="sm"
-              className="min-h-11 min-w-0 flex-1 rounded-r-none"
-              aria-label={`Add ${item.title}`}
-              disabled={!providerId}
-              onClick={() => setView("add")}
-            >
-              <Plus className="mr-1 h-4 w-4" />
-              Add
-            </Button>
-          )}
-          <Button
-            size="icon"
-            variant="outline"
-            className="h-11 w-11 shrink-0 rounded-l-none"
-            aria-label={`View details for ${item.title}`}
-            title="View details"
-            ref={detailsButton}
-            onClick={() => setView("details")}
-          >
-            <Info className="h-4 w-4" />
-          </Button>
-        </div>
-
-        {!providerId && (
-          <p className="text-xs text-muted-foreground">
-            No provider identity is available for this title.
-          </p>
-        )}
-      </div>
+      />
+      {!providerId && (
+        <p className="text-xs text-muted-foreground">
+          No provider identity is available for this title.
+        </p>
+      )}
       {view && providerId && (
         <TitleDialog
           open

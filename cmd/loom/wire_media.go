@@ -42,6 +42,7 @@ type mediaWiring struct {
 	importListSyncMgr *importlists.SyncManager
 	musicRepo         music.Repository
 	musicSvc          music.Service
+	collectionsSvc    *collections.Service
 }
 
 // wireMedia constructs all media-related services (scanner, organizer,
@@ -184,10 +185,11 @@ func wireMedia(
 			tvdbConfig.APIKey = "dev-key"
 		}
 	}
-	wiring.CollectionsRouter = collections.Router(collections.NewService(
+	collectionsSvc := collections.NewService(
 		collections.NewStore(db.DB()), discoverTMDB, tvdb.NewClient(tvdbConfig), moviesSvc, seriesSvc,
 		func() string { return os.Getenv("LOOM_TMDB_READ_TOKEN") },
-	))
+	)
+	wiring.CollectionsRouter = collections.Router(collectionsSvc)
 	wiring.DiscoverRouter = discover.RouterWithMusic(discoverTMDB, discoverSvc, discover.MusicDetails{
 		Provider: mbProvider,
 		Enabled:  wiring.FeatureFlags.EnabledFunc(featureflags.KeyMusic),
@@ -201,6 +203,7 @@ func wireMedia(
 		importListSyncMgr: importListSyncMgr,
 		musicRepo:         musicRepo,
 		musicSvc:          musicSvc,
+		collectionsSvc:    collectionsSvc,
 	}, nil
 }
 

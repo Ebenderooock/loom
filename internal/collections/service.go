@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -16,6 +17,7 @@ import (
 	"github.com/ebenderooock/loom/internal/importlists/providers"
 	"github.com/ebenderooock/loom/internal/metadata/tmdb"
 	"github.com/ebenderooock/loom/internal/metadata/tvdb"
+	"github.com/ebenderooock/loom/internal/movies"
 	"github.com/ebenderooock/loom/internal/series"
 )
 
@@ -34,7 +36,8 @@ type Service struct {
 	series        SeriesLibrary
 	tmdbListToken func() string
 	// fetch is a test seam; production always uses the existing provider clients.
-	fetch func(context.Context, Source) (string, []Member, error)
+	fetch  func(context.Context, Source) (string, []Member, error)
+	scanMu sync.Mutex
 }
 
 // NewService reuses the configured metadata clients and library services.
@@ -326,11 +329,19 @@ type libraryRecord struct {
 
 func (s *Service) library(ctx context.Context) ([]libraryRecord, error) {
 	out := []libraryRecord{}
-	movies, err := s.movies.ListMovies(ctx, 100000, 0)
-	if err != nil {
-		return nil, err
+	movieItems := []*movies.Movie{}
+	for offset := 0; ; {
+		page, err := s.movies.ListMovies(ctx, 1000, offset)
+		if err != nil {
+			return nil, err
+		}
+		movieItems = append(movieItems, page...)
+		if len(page) < 1000 {
+			break
+		}
+		offset += len(page)
 	}
-	for _, movie := range movies {
+	for _, movie := range movieItems {
 		if movie.DeletedAt != nil || movie.MonitoringStatus == "deleted" {
 			continue
 		}
@@ -423,53 +434,96 @@ func decorate(c *Collection, library []libraryRecord, files bool) error {
 	return nil
 }
 
-// Discover imports exact provider-declared sets/lists from library titles.
-// Bounded batches report incompleteness rather than claiming franchise coverage.
+// Discover imports exact provider-declared sets/lists. Production discovery runs
+// through ScanBatch so progress survives interruption and request lifetimes.
 func (s *Service) Discover(ctx context.Context) ([]*Collection, []string, error) {
 	library, err := s.library(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
 	out, warnings := []*Collection{}, []string{}
-	seen := map[string]bool{}
-	for i, record := range library {
-		if i >= 32 {
-			warnings = append(warnings, "Only the first 32 library titles were checked. Import a source directly for other titles.")
-			break
+	for _, record := range library {
+		items, err := s.discoverMember(ctx, record.member)
+		if err != nil {
+			warnings = append(warnings, err.Error())
 		}
-		m := record.member
-		refs := []Source{}
-		if m.MediaType == "movie" && m.ExternalIDs["tmdb"] != "" {
-			title, err := s.tmdb.GetMovieDetails(ctx, number(m.ExternalIDs["tmdb"]))
-			if err != nil {
-				warnings = append(warnings, "TMDB candidate discovery failed for library title "+m.MediaID)
-			} else if title.Collection != nil {
-				refs = append(refs, Source{Provider: "tmdb", Kind: "collection", ExternalID: strconv.Itoa(title.Collection.ID)})
-			}
+		out = append(out, items...)
+	}
+	return out, warnings, nil
+}
+
+func (s *Service) discoverMember(ctx context.Context, m Member) ([]*Collection, error) {
+	refs := []Source{}
+	var failures []error
+	if m.ExternalIDs["tmdb"] == "" && m.ExternalIDs["imdb"] != "" {
+		id, err := s.tmdb.FindTitleID(ctx, m.MediaType, "imdb", m.ExternalIDs["imdb"])
+		if err != nil {
+			failures = append(failures, errors.New("IMDb identity mapping failed; check metadata credentials and retry"))
+		} else if id > 0 {
+			m.ExternalIDs["tmdb"] = strconv.Itoa(id)
 		}
-		if m.ExternalIDs["tvdb"] != "" {
-			title, err := s.tvdb.GetExtendedTitle(ctx, m.MediaType, number(m.ExternalIDs["tvdb"]))
-			if err != nil {
-				warnings = append(warnings, "TVDB candidate discovery failed for library title "+m.MediaID)
-			} else {
-				for _, list := range title.Lists {
-					if list.IsOfficial && list.ID > 0 {
-						refs = append(refs, Source{Provider: "tvdb", Kind: "list", ExternalID: strconv.Itoa(list.ID)})
-					}
+	}
+	if m.MediaType == "series" && m.ExternalIDs["tvdb"] == "" && m.ExternalIDs["tmdb"] != "" {
+		title, err := s.tmdb.GetTV(ctx, number(m.ExternalIDs["tmdb"]))
+		if err != nil {
+			failures = append(failures, errors.New("TVDB identity mapping failed; check metadata credentials and retry"))
+		} else {
+			putID(m.ExternalIDs, "tvdb", title.TVDBID)
+		}
+	}
+	if m.MediaType == "movie" && m.ExternalIDs["tmdb"] != "" {
+		title, err := s.tmdb.GetMovieDetails(ctx, number(m.ExternalIDs["tmdb"]))
+		if err != nil {
+			failures = append(failures, errors.New("TMDB candidate discovery failed; check metadata credentials and retry"))
+		} else if title.Collection != nil {
+			refs = append(refs, Source{Provider: "tmdb", Kind: "collection", ExternalID: strconv.Itoa(title.Collection.ID)})
+		}
+	}
+	if m.ExternalIDs["tvdb"] != "" {
+		title, err := s.tvdb.GetExtendedTitle(ctx, m.MediaType, number(m.ExternalIDs["tvdb"]))
+		if err != nil {
+			failures = append(failures, errors.New("TVDB candidate discovery failed; check metadata credentials and retry"))
+		} else {
+			for _, list := range title.Lists {
+				if list.IsOfficial && list.ID > 0 {
+					refs = append(refs, Source{Provider: "tvdb", Kind: "list", ExternalID: strconv.Itoa(list.ID)})
 				}
 			}
 		}
-		for _, ref := range refs {
-			if seen[ref.Key()] {
-				continue
-			}
-			seen[ref.Key()] = true
-			c, err := s.Import(ctx, ref)
-			if err != nil {
-				return out, warnings, err
-			}
-			out = append(out, c)
-		}
 	}
-	return out, warnings, nil
+	if m.ExternalIDs["tvdb"] == "" && (m.MediaType != "movie" || m.ExternalIDs["tmdb"] == "") {
+		failures = append(failures, errors.New("no provider-declared collection lookup for these IDs; import a known source directly"))
+	}
+	out := []*Collection{}
+	for _, ref := range refs {
+		existing, lookupErr := s.store.FindSource(ctx, ref)
+		if lookupErr != nil && !errors.Is(lookupErr, sql.ErrNoRows) {
+			return out, lookupErr
+		}
+		if existing != nil {
+			failed := false
+			for _, source := range existing.Sources {
+				failed = failed || source.Error != ""
+			}
+			if failed {
+				if err := s.Refresh(ctx, existing); err != nil {
+					return out, err
+				}
+				if err := s.store.Save(ctx, existing, false); err != nil {
+					return out, err
+				}
+			}
+		}
+		c, err := s.Import(ctx, ref)
+		if err != nil {
+			return out, err
+		}
+		for _, source := range c.Sources {
+			if source.Error != "" {
+				failures = append(failures, errors.New(source.Error))
+			}
+		}
+		out = append(out, c)
+	}
+	return out, errors.Join(failures...)
 }

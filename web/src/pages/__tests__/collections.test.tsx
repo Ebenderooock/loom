@@ -184,6 +184,21 @@ beforeEach(() => {
       });
     if (url === "/api/v1/collections/")
       return Response.json({ items: [collection, other] });
+    if (url === "/api/v1/collections/scan")
+      return Response.json({
+        total: 1020,
+        checked: 540,
+        pending: 480,
+        failed: 1,
+        running: true,
+        errors: [
+          {
+            media_type: "series",
+            media_id: "show",
+            message: "TVDB access failed; retry.",
+          },
+        ],
+      });
     if (url === "/api/v1/collections/loom-1") return Response.json(collection);
     throw new Error(`Unexpected request ${method} ${url}`);
   });
@@ -202,6 +217,23 @@ function page() {
 }
 
 describe("Standalone Collections", () => {
+  it("shows automatic background progress and only queues an optional rescan", async () => {
+    page();
+    expect(
+      await screen.findByText(/540 of 1020 library titles checked/),
+    ).toBeInTheDocument();
+    expect(requests).toEqual([]);
+    await userEvent.click(screen.getByText("Discovery issues"));
+    expect(screen.getByText(/TVDB access failed/)).toBeInTheDocument();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Rescan library" }),
+    );
+    await waitFor(() =>
+      expect(requests).toEqual([
+        { url: "/api/v1/collections/discover", method: "POST", body: {} },
+      ]),
+    );
+  });
   it("lists persisted collections with optional library and media filters", async () => {
     page();
     expect(

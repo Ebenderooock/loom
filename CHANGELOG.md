@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Automatic, resumable background collection discovery across the full
+  movie/show library, with fair batches, progress and retryable errors.
+- Library-style poster cards and right-side title drawers with inline add
+  settings across Discover and Collections, including narrow-screen layouts.
+
 - Standalone persistent Collections for mixed movie/TV groupings, with optional
   library/media/status filters, multiple simultaneous TMDB/IMDb/TVDB source
   references, explicit source imports and library-based candidate discovery.

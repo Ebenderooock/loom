@@ -19,6 +19,7 @@ const suggestion = {
   rating: 7.7,
   popularity: 50,
   source: "tmdb",
+  poster_path: "/adventure.jpg",
   reasons: ["You have 2 movies starring Ryan Reynolds"],
   collection_id: 10,
 };
@@ -76,12 +77,26 @@ const collection = {
 
 test.beforeEach(async ({ page }) => {
   await mockBaseApp(page);
+  await page.route("https://image.tmdb.org/**", async (route) => {
+    await route.fulfill({
+      contentType: "image/svg+xml",
+      body: `<svg xmlns="http://www.w3.org/2000/svg" width="342" height="513" viewBox="0 0 342 513"><defs><linearGradient id="sky" x2="0" y2="1"><stop stop-color="#173552"/><stop offset="1" stop-color="#c06b43"/></linearGradient></defs><rect width="342" height="513" fill="url(#sky)"/><circle cx="250" cy="130" r="70" fill="#edc784"/><path d="M0 400L95 140L200 400L270 250L342 400V513H0Z" fill="#192d39"/><path d="M45 400L96 240L150 400Z" fill="#366070"/></svg>`,
+    });
+  });
   await mockGet(page, "features", {});
   await mockGet(page, "discover/recommendations?*", {
     ...source,
     items: [suggestion],
   });
   await mockGet(page, "collections/", { items: [collection] });
+  await mockGet(page, "collections/scan", {
+    total: 1020,
+    checked: 540,
+    pending: 480,
+    failed: 0,
+    running: true,
+    errors: [],
+  });
   await mockGet(page, "collections/loom-collection", collection);
   await mockGet(page, "movies/actual-movie", {
     id: "actual-movie",
@@ -150,7 +165,7 @@ test("suggestions need no Import Lists and require an explicit add", async ({
   });
   await page.goto("/discover");
   await expect(
-    page.getByRole("button", { name: "A new adventure", exact: true }),
+    page.getByRole("button", { name: "View A new adventure", exact: true }),
   ).toBeVisible();
   await expect(
     page.getByText("You have 2 movies starring Ryan Reynolds"),
@@ -164,18 +179,39 @@ test("suggestions need no Import Lists and require an explicit add", async ({
   ).toBe(true);
 
   await page
-    .getByRole("button", { name: "Details & add", exact: true })
+    .getByRole("button", { name: "View A new adventure", exact: true })
     .click();
   const dialog = page.getByRole("dialog");
   await expect(
     dialog.getByRole("heading", { name: "A new adventure" }).last(),
   ).toBeVisible();
-  await dialog
-    .getByRole("button", { name: "Add to library", exact: true })
-    .click();
   await expect(
     dialog.getByRole("checkbox", { name: "Search after adding" }),
   ).not.toBeChecked();
+  let added = false;
+  await page.route("**/api/v1/movies?limit=1000&offset=0", async (route) => {
+    await route.fulfill({
+      json: added ? [{ id: "new-movie", tmdbId: "107" }] : [],
+    });
+  });
+  await mockGet(page, "movies/new-movie", {
+    id: "new-movie",
+    tmdbId: "107",
+    title: "A new adventure",
+    status: "missing",
+    year: 2024,
+    monitoringStatus: "monitored",
+    libraryId: "lib-1",
+    qualityProfileId: "qp-1",
+    genres: [],
+  });
+  await mockGet(page, "movies/new-movie/credits", { cast: [], crew: [] });
+  await mockGet(page, "movies/files/new-movie", []);
+  await mockGet(page, "movies/new-movie/history", []);
+  await mockGet(page, "media-files/movie/new-movie*", {
+    files: [],
+    warnings: [],
+  });
   await page.route("**/api/v1/movies", async (route) => {
     expect(route.request().postDataJSON()).toMatchObject({
       tmdb_id: "107",
@@ -183,11 +219,12 @@ test("suggestions need no Import Lists and require an explicit add", async ({
       quality_profile_id: "qp-1",
       search: false,
     });
+    added = true;
     await route.fulfill({ status: 201, json: { id: "new-movie" } });
   });
   await dialog.getByRole("button", { name: "Add to library" }).click();
   await expect(
-    dialog.getByRole("button", { name: "In library", exact: true }),
+    dialog.getByRole("button", { name: "Edit", exact: true }),
   ).toBeVisible();
   expect(writes).toHaveLength(1);
 });
@@ -208,7 +245,6 @@ test("standalone mixed collections open real library management and shared exter
   await expect(
     page.getByRole("heading", { name: "Original adventure" }),
   ).toBeVisible();
-  await expect(page.getByText("Monitored · No imported files")).toBeVisible();
   await page.getByRole("button", { name: "Manage Original adventure" }).click();
   const management = page.getByRole("dialog");
   await expect(
@@ -267,3 +303,102 @@ test("provider failure has a visible retry path", async ({ page }) => {
   await expect(page.getByRole("button", { name: "Retry" })).toBeVisible();
   await expect(page.getByText("No new suggestions yet")).not.toBeVisible();
 });
+
+for (const width of [375, 768, 1440]) {
+  test(`title drawer stays within ${width}px with long titles and credits`, async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize({ width, height: 900 });
+    const longTitle = "An extraordinarily long adventure title ".repeat(5);
+    await mockGet(page, "discover/movie/107", {
+      title: {
+        tmdb_id: "107",
+        title: longTitle,
+        overview: "A synopsis with a long identifier: " + "x".repeat(300),
+        poster_path: "/adventure.jpg",
+        backdrop_path: "/adventure.jpg",
+      },
+      credits: {
+        cast: Array.from({ length: 30 }, (_, index) => ({
+          id: index,
+          name: `A performer with a very long name ${index}`,
+          character: "An unusually long character description",
+        })),
+        crew: [],
+      },
+    });
+    await page.goto("/discover");
+    const opener = page.getByRole("button", {
+      name: "View A new adventure",
+      exact: true,
+    });
+    await opener.click();
+    const drawer = page.getByRole("dialog");
+    await expect(drawer.getByLabel("Library", { exact: true })).toBeVisible();
+    await expect(
+      drawer.getByRole("button", { name: "Close", exact: true }),
+    ).toBeInViewport();
+    await expect(
+      drawer.getByRole("button", { name: "Add to library", exact: true }),
+    ).toBeEnabled();
+    await expect(
+      drawer.getByText("A performer with a very long name 29", { exact: true }),
+    ).toHaveCount(1);
+    await expect
+      .poll(async () => {
+        const bounds = await drawer.boundingBox();
+        return bounds
+          ? Math.abs(bounds.x + bounds.width - width)
+          : Number.POSITIVE_INFINITY;
+      })
+      .toBeLessThanOrEqual(1);
+    const bounds = await drawer.boundingBox();
+    expect(bounds).not.toBeNull();
+    expect(Math.abs(bounds!.x + bounds!.width - width)).toBeLessThanOrEqual(1);
+    expect(bounds!.width).toBeLessThanOrEqual(Math.min(width, 768));
+    expect(
+      await drawer.evaluate(
+        (element) => element.scrollWidth <= element.clientWidth,
+      ),
+    ).toBe(true);
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth,
+      ),
+    ).toBe(true);
+    await page.screenshot({
+      path: testInfo.outputPath(`drawer-${width}.png`),
+      fullPage: true,
+    });
+    await page.keyboard.press("Escape");
+    await expect(opener).toBeFocused();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await page.screenshot({
+      path: testInfo.outputPath(`posters-${width}.png`),
+      fullPage: true,
+    });
+    await page.emulateMedia({ colorScheme: "dark", reducedMotion: "reduce" });
+    await opener.click();
+    await expect(drawer.getByLabel("Library", { exact: true })).toBeVisible();
+    await expect(
+      drawer.getByRole("button", { name: "Close", exact: true }),
+    ).toBeInViewport();
+    await expect
+      .poll(async () => {
+        const bounds = await drawer.boundingBox();
+        return bounds
+          ? Math.abs(bounds.x + bounds.width - width)
+          : Number.POSITIVE_INFINITY;
+      })
+      .toBeLessThanOrEqual(1);
+    expect(
+      await drawer.evaluate(
+        (element) => element.scrollWidth <= element.clientWidth,
+      ),
+    ).toBe(true);
+    await page.screenshot({
+      path: testInfo.outputPath(`drawer-dark-${width}.png`),
+      fullPage: true,
+    });
+  });
+}

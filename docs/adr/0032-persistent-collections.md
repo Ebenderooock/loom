@@ -32,6 +32,13 @@ collections as acquisition lists. Reuse shared external title details/add and
 normal library management sheets rather than introducing collection-specific
 media settings or acquisition controls.
 
+Discover candidates through the existing scheduler, not a blocking UI request.
+Reconcile all movie pages and shows into a persistent, interleaved queue.
+Checkpoint each title independently, lease batches against concurrent workers,
+pace provider requests, retry failures, and expose progress/errors. The UI rescan
+action only queues optional work. Existing successful source membership refresh
+remains an explicit separate operation.
+
 ## Consequences
 
 ### Positive
@@ -47,8 +54,10 @@ media settings or acquisition controls.
   justify separate member tables later, not speculative infrastructure now.
 - Provider access and identity coverage vary. In particular, TMDB cannot map
   TVDB movie IDs; unsupported/unavailable mappings must remain explicit.
-- Candidate discovery and refresh are on-demand and bounded, not guarantees of
-  franchise completeness.
+- Candidate discovery runs in bounded, resumable background batches and depends
+  on the scheduler being enabled. Successful titles are revisited daily;
+  failures retry after five minutes. Neither discovery nor explicit source
+  refresh guarantees franchise completeness.
 
 ### Neutral
 

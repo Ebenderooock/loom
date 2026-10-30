@@ -11,10 +11,11 @@ availability on a media server.
 Administrators can:
 
 - **New collection**: create a local grouping or import an external source.
-- **Find from library**: discover TMDB movie sets and official TVDB list
-  candidates declared by library titles. This bounded action checks up to 32
-  titles and reports if additional titles were not checked. It does not claim
-  complete franchise coverage. Import other source IDs directly.
+- Collections are found **automatically in the background** from TMDB movie
+  sets and official TVDB lists declared by library titles. **Rescan library** is
+  optional: it queues another scan without waiting for provider requests.
+  Discovery does not claim complete franchise coverage. Import known source IDs
+  directly when a provider does not declare the grouping.
 - **Edit collection**: edit its name/description, attach another source, or add
   a local movie/show by exact external title ID. Local membership does not
   acquire or monitor the title.
@@ -96,6 +97,32 @@ aggregates (members, sources, provenance and local intent), relational unique
 source ownership, and merge redirects. Revisions and transactions prevent stale
 edits/refreshes from overwriting concurrent work. API edits and merges require
 the current revisions and return 409 on stale state or conflicting identities.
+
+### Background discovery
+
+The existing scheduler runs `collections.discovery` every 15 seconds, including
+after startup. Each run reconciles the complete library (movies are paginated
+in 1,000-row pages), then processes up to 16 due titles with a 90-second batch
+budget and 15-second per-title budget. Movies and shows are interleaved so a
+large movie library cannot starve shows. New titles and changed external IDs
+join the queue automatically; removed titles leave it.
+
+Migration `0094_collection_scan.sql` stores per-title checkpoints, retry errors
+and a cross-process lease. Restarts resume unfinished titles instead of
+repeating the beginning of the library. Successful titles are checked again
+after 24 hours; failures retry after five minutes. Requests are paced in
+addition to provider-client throttling, and shutdown cancels in-flight work.
+The Collections page polls `/api/v1/collections/scan` for checked/total/pending
+counts and actionable per-title errors. Scheduler failures are also recorded by
+the normal scheduler job history. Discovery requires the scheduler to be
+enabled; `Rescan library` only queues work, never runs provider calls in an HTTP
+request.
+
+This queue governs finding collections, not refreshing existing collection
+members. **Refresh sources** still explicitly reconciles full attached sources,
+with its existing payload bounds and preservation of local intent. Titles
+without a supported exact lookup remain visible as discovery issues rather
+than being silently skipped or matched by name.
 
 The old `/api/v1/discover/collections` endpoints remain read-only legacy TMDB
 movie-set views for compatibility. The standalone UI and recommendation links
