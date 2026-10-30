@@ -51,6 +51,8 @@ jobs:
       # they are inherently timing-sensitive and produce false timeouts under
       # -race on loaded runners, so they are run without -race separately.
       - name: Run tests (with race detector)
+        # Windows runners default to PowerShell, which rejects bash syntax.
+        shell: bash
         run: |
           go test -race -tags disable_libutp -count=1 \
             $(go list ./... | grep -v 'internal/workflows') \
