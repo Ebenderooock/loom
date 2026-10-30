@@ -33,14 +33,16 @@ const completionPredicate = `(
 				AND EXISTS (
 					SELECT 1 FROM tracks t
 					JOIN albums al ON al.id=t.album_id
+					JOIN album_artists aa ON aa.album_id=al.id AND aa.catalog_included=true
 					JOIN track_files f ON f.track_id=t.id AND f.deleted_at IS NULL
-					WHERE al.artist_id=media_requests.media_id AND al.deleted_at IS NULL
+					WHERE aa.artist_id=media_requests.media_id AND al.deleted_at IS NULL
 						AND al.monitored=true AND t.monitored=true
 						AND t.release_id=al.selected_release_id
 				)
 				AND NOT EXISTS (
 					SELECT 1 FROM albums al
-					WHERE al.artist_id=media_requests.media_id AND al.deleted_at IS NULL
+					JOIN album_artists aa ON aa.album_id=al.id AND aa.catalog_included=true
+					WHERE aa.artist_id=media_requests.media_id AND al.deleted_at IS NULL
 						AND al.monitored=true AND (al.release_date='' OR al.release_date<=?)
 						AND (
 							NOT EXISTS (

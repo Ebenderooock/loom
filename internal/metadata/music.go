@@ -76,7 +76,8 @@ type MusicMetadataProvider interface {
 	// GetArtist fetches a single artist by MBID.
 	GetArtist(ctx context.Context, mbid string) (*ArtistMetadata, error)
 
-	// GetArtistAlbums returns the artist's albums (release-groups).
+	// GetArtistAlbums returns the artist's studio albums, EPs and singles that
+	// have an official release, deduplicated by release-group MBID.
 	GetArtistAlbums(ctx context.Context, artistMBID string) ([]*AlbumMetadata, error)
 
 	// GetAlbum fetches an album (release-group) and its candidate editions

@@ -4,6 +4,25 @@ Loom's Music capability manages artists, albums, editions, tracks and audio
 files using MusicBrainz metadata. Enable the `music` feature flag to expose the
 Music API and UI.
 
+## Artist catalogue
+
+The artist catalogue includes studio albums, EPs and singles with at least one
+MusicBrainz release explicitly marked **Official**. Different editions of the
+same release group appear as one entry, not as separate albums.
+
+Live releases, compilations, remixes, broadcasts, demos and other secondary
+release types are excluded for now, even when officially released. Bootleg,
+promotional, pseudo-release and unknown-status editions do not qualify a group
+for inclusion.
+
+For artists already added, use **Refresh** on the Music page to apply the
+catalogue rules, then reload after the background refresh finishes.
+Monitored artists are also refreshed periodically.
+Excluded entries no longer appear in the artist catalogue, its counts, automatic
+searches or the calendar. Their album, track and file records are retained;
+refreshing does not delete audio files. A failed metadata fetch leaves the
+existing catalogue unchanged.
+
 ## Profiles
 
 Audio quality profiles control which audio tiers are eligible for search, the
@@ -33,7 +52,9 @@ only supplied fields. A profile cannot be deleted while assigned to an artist.
 Metadata profiles filter which MusicBrainz primary types, secondary types and
 release statuses are monitored for an artist. Create and manage them under
 `/api/v1/music/metadata-profiles`, then assign one when adding or updating an
-artist. An empty primary-type list permits all primary types; when an album has
+artist. Profiles control monitoring within the supported catalogue; they do not
+reintroduce excluded release types. An empty primary-type list permits all
+supported primary types; when an album has
 secondary types, each must be included in the profile's secondary-type list.
 An empty release-status list uses MusicBrainz's `official` status preference
 when choosing an edition.

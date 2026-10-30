@@ -179,6 +179,11 @@ func newMusicBrainzServer() *httptest.Server {
 
 	// /release/{mbid} or /release?query=...
 	mux.HandleFunc("/release", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("artist") != "" {
+			writeJSON(w, []byte(`{"release-count":1,"releases":[`+
+				string(fixture("musicbrainz_release.json"))+`]}`))
+			return
+		}
 		if r.URL.Query().Get("query") != "" {
 			// Return search response shape
 			w.Header().Set("Content-Type", "application/json")

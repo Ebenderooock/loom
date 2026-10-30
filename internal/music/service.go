@@ -914,14 +914,20 @@ func (s *service) syncArtistAlbums(ctx context.Context, artist *Artist, metadata
 	}
 	monitorAlbums := monitoring == MonitoringMonitored
 	added := 0
+	catalogIDs := make([]string, 0, len(albums))
 	for _, am := range albums {
 		if am == nil || am.MBID == "" {
 			continue
 		}
-		if existingAl, _ := s.repo.GetAlbumByMBID(ctx, am.MBID); existingAl != nil {
+		existingAl, err := s.repo.GetAlbumByMBID(ctx, am.MBID)
+		if err != nil {
+			return added, fmt.Errorf("get album %q: %w", am.MBID, err)
+		}
+		if existingAl != nil {
 			if err := s.repo.LinkAlbumArtist(ctx, existingAl.ID, artist.ID); err != nil {
 				return added, fmt.Errorf("link existing album %q to artist %q: %w", existingAl.ID, artist.ID, err)
 			}
+			catalogIDs = append(catalogIDs, existingAl.ID)
 			continue
 		}
 		// Album types outside the metadata profile are still stored but left
@@ -940,10 +946,13 @@ func (s *service) syncArtistAlbums(ctx context.Context, artist *Artist, metadata
 			Monitored:      monitored,
 		}
 		if err := s.repo.CreateAlbum(ctx, al); err != nil {
-			s.logger.Warn("music: failed to create album", "mbid", am.MBID, "error", err)
-			continue
+			return added, fmt.Errorf("create album %q: %w", am.MBID, err)
 		}
+		catalogIDs = append(catalogIDs, al.ID)
 		added++
+	}
+	if err := s.repo.SetArtistAlbumCatalog(ctx, artist.ID, catalogIDs); err != nil {
+		return added, fmt.Errorf("update artist album catalog: %w", err)
 	}
 	return added, nil
 }

@@ -2,6 +2,8 @@ package music
 
 import (
 	"context"
+	"errors"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -13,6 +15,7 @@ import (
 // fakeProvider is an in-memory metadata.MusicMetadataProvider for tests.
 type fakeProvider struct {
 	artist   *metadata.ArtistMetadata
+	albumErr error
 	albums   []*metadata.AlbumMetadata
 	releases map[string][]*metadata.AlbumReleaseMetadata // album mbid -> editions
 	tracks   map[string]*metadata.AlbumReleaseMetadata   // release mbid -> edition w/ tracks
@@ -32,7 +35,93 @@ func (f *fakeProvider) GetArtist(_ context.Context, mbid string) (*metadata.Arti
 }
 
 func (f *fakeProvider) GetArtistAlbums(_ context.Context, _ string) ([]*metadata.AlbumMetadata, error) {
-	return f.albums, nil
+	return f.albums, f.albumErr
+}
+
+func TestRefreshArtistCatalogPreservesExcludedFiles(t *testing.T) {
+	ctx := context.Background()
+	provider := sampleProvider()
+	svc, repo := newTestService(t, provider)
+	artist, err := svc.AddArtist(ctx, AddArtistRequest{
+		MBID: "artist-1", QualityProfileID: "qp-1", LibraryID: "lib-1",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	excluded := artist.Albums[1]
+	path := filepath.Join(t.TempDir(), "existing.flac")
+	if err := os.WriteFile(path, []byte("existing audio"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.ReplaceTracks(ctx, excluded.ID, []*Track{{
+		ID: "existing-track", AlbumID: excluded.ID, TrackNumber: 1, Monitored: true,
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.CreateTrackFile(ctx, &TrackFile{
+		ID: "existing-file", TrackID: "existing-track", AlbumID: excluded.ID,
+		ArtistID: artist.ID, FilePath: path,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// The refreshed provider catalogue no longer includes this legacy entry.
+	provider.albums = provider.albums[:1]
+	if _, err := svc.RefreshArtistAlbums(ctx, artist.ID); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := svc.GetArtist(ctx, artist.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(loaded.Albums) != 1 || loaded.Stats.AlbumCount != 1 || loaded.Stats.TrackCount != 0 {
+		t.Fatalf("excluded entry still affects catalogue/stats: %+v", loaded)
+	}
+	artists, err := svc.ListArtists(ctx)
+	if err != nil || len(artists) != 1 || artists[0].Stats.AlbumCount != 1 {
+		t.Fatalf("artist list stats: artists=%+v, error=%v", artists, err)
+	}
+	tracks, err := repo.ListTracksByAlbum(ctx, excluded.ID)
+	if err != nil || len(tracks) != 1 || !tracks[0].HasFile {
+		t.Fatalf("existing track lost: tracks=%+v, error=%v", tracks, err)
+	}
+	file, err := repo.GetTrackFileByPath(ctx, path)
+	if err != nil || file == nil || file.ID != "existing-file" {
+		t.Fatalf("existing file record lost: file=%+v, error=%v", file, err)
+	}
+	content, err := os.ReadFile(path)
+	if err != nil || string(content) != "existing audio" {
+		t.Fatalf("existing audio changed: %q, error=%v", content, err)
+	}
+	// Re-including a group must reuse its album and file records.
+	provider.albums = append(provider.albums, &metadata.AlbumMetadata{MBID: excluded.MBID})
+	if _, err := svc.RefreshArtistAlbums(ctx, artist.ID); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err = svc.GetArtist(ctx, artist.ID)
+	if err != nil || len(loaded.Albums) != 2 || loaded.Albums[1].ID != excluded.ID {
+		t.Fatalf("existing album not restored: artist=%+v, error=%v", loaded, err)
+	}
+}
+
+func TestRefreshArtistCatalogFailurePreservesVisibility(t *testing.T) {
+	ctx := context.Background()
+	provider := sampleProvider()
+	svc, _ := newTestService(t, provider)
+	artist, err := svc.AddArtist(ctx, AddArtistRequest{
+		MBID: "artist-1", QualityProfileID: "qp-1", LibraryID: "lib-1",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	provider.albums = nil
+	provider.albumErr = errors.New("metadata unavailable")
+	if _, err := svc.RefreshArtistAlbums(ctx, artist.ID); err == nil {
+		t.Fatal("expected metadata failure")
+	}
+	loaded, err := svc.GetArtist(ctx, artist.ID)
+	if err != nil || len(loaded.Albums) != 2 {
+		t.Fatalf("failed refresh changed catalogue: artist=%+v, error=%v", loaded, err)
+	}
 }
 
 func (f *fakeProvider) GetAlbum(_ context.Context, rgMBID string) (*metadata.AlbumMetadata, []*metadata.AlbumReleaseMetadata, error) {

@@ -90,9 +90,12 @@ type RelationResponse struct {
 
 // ReleaseGroupResponse represents a release group (album, single, etc.).
 type ReleaseGroupResponse struct {
-	ID    string `json:"id"`
-	Type  string `json:"type,omitempty"`
-	Title string `json:"title,omitempty"`
+	ID               string   `json:"id"`
+	Type             string   `json:"type,omitempty"`
+	Title            string   `json:"title,omitempty"`
+	PrimaryType      string   `json:"primary-type,omitempty"`
+	SecondaryTypes   []string `json:"secondary-types,omitempty"`
+	FirstReleaseDate string   `json:"first-release-date,omitempty"`
 }
 
 // CoverartResponse represents cover art information.
