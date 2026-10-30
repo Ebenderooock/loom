@@ -555,7 +555,8 @@ export function useCreateMetadataProfile() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: createMetadataProfile,
-    onSuccess: () => qc.invalidateQueries({ queryKey: musicKeys.metadataProfiles }),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: musicKeys.metadataProfiles }),
   });
 }
 
@@ -564,7 +565,8 @@ export function useUpdateMetadataProfile() {
   return useMutation({
     mutationFn: (vars: { id: string; req: UpdateMetadataProfileRequest }) =>
       updateMetadataProfile(vars.id, vars.req),
-    onSuccess: () => qc.invalidateQueries({ queryKey: musicKeys.metadataProfiles }),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: musicKeys.metadataProfiles }),
   });
 }
 
@@ -572,7 +574,8 @@ export function useDeleteMetadataProfile() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: deleteMetadataProfile,
-    onSuccess: () => qc.invalidateQueries({ queryKey: musicKeys.metadataProfiles }),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: musicKeys.metadataProfiles }),
   });
 }
 

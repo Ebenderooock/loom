@@ -182,7 +182,10 @@ function AlbumRow({ album }: { album: Album }) {
           </option>
           {releases.map((release) => (
             <option key={release.id} value={release.id}>
-              {release.title || release.disambiguation || release.status || release.id}
+              {release.title ||
+                release.disambiguation ||
+                release.status ||
+                release.id}
             </option>
           ))}
         </select>

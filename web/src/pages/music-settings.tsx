@@ -80,10 +80,14 @@ function AudioProfileCard({
     profile.min_format_score ?? 0,
   );
   const [allowed, setAllowed] = React.useState<Record<string, boolean>>(() =>
-    Object.fromEntries(parseItems(profile).map((item) => [item.definition_id, item.allowed])),
+    Object.fromEntries(
+      parseItems(profile).map((item) => [item.definition_id, item.allowed]),
+    ),
   );
   const [cutoff, setCutoff] = React.useState(profile.cutoff ?? "");
-  const [upgradeAllowed, setUpgradeAllowed] = React.useState(profile.upgrade_allowed);
+  const [upgradeAllowed, setUpgradeAllowed] = React.useState(
+    profile.upgrade_allowed,
+  );
 
   React.useEffect(() => {
     setScores(initialScores);
@@ -104,7 +108,9 @@ function AudioProfileCard({
     definitions.some(
       (definition) =>
         (allowed[definition.id] ?? false) !==
-        (parseItems(profile).find((item) => item.definition_id === definition.id)?.allowed ?? false),
+        (parseItems(profile).find(
+          (item) => item.definition_id === definition.id,
+        )?.allowed ?? false),
     ) ||
     customFormats.some(
       (cf) => (scores[cf.id] ?? 0) !== (initialScores[cf.id] ?? 0),
@@ -182,7 +188,10 @@ function AudioProfileCard({
         </div>
         <div className="grid gap-1 sm:grid-cols-2">
           {definitions.map((definition) => (
-            <label key={definition.id} className="flex items-center gap-2 text-sm">
+            <label
+              key={definition.id}
+              className="flex items-center gap-2 text-sm"
+            >
               <input
                 type="checkbox"
                 checked={allowed[definition.id] ?? false}
@@ -318,19 +327,31 @@ function MetadataProfileCard({ profile }: { profile: MetadataProfile }) {
       <div className="grid gap-2 sm:grid-cols-2">
         <Label className="space-y-1">
           Name
-          <Input value={name} onChange={(event) => setName(event.target.value)} />
+          <Input
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+          />
         </Label>
         <Label className="space-y-1">
           Primary types
-          <Input value={primary} onChange={(event) => setPrimary(event.target.value)} />
+          <Input
+            value={primary}
+            onChange={(event) => setPrimary(event.target.value)}
+          />
         </Label>
         <Label className="space-y-1">
           Secondary types
-          <Input value={secondary} onChange={(event) => setSecondary(event.target.value)} />
+          <Input
+            value={secondary}
+            onChange={(event) => setSecondary(event.target.value)}
+          />
         </Label>
         <Label className="space-y-1">
           Release statuses
-          <Input value={statuses} onChange={(event) => setStatuses(event.target.value)} />
+          <Input
+            value={statuses}
+            onChange={(event) => setStatuses(event.target.value)}
+          />
         </Label>
       </div>
       <div className="flex justify-end gap-2">
@@ -428,7 +449,9 @@ export function MusicProfilesPage() {
                       definition_id: definition.id,
                       allowed: true,
                     })),
-                    cutoff: definitions.some((definition) => definition.id === "aq_flac")
+                    cutoff: definitions.some(
+                      (definition) => definition.id === "aq_flac",
+                    )
                       ? "aq_flac"
                       : "",
                     upgrade_allowed: true,
@@ -439,7 +462,9 @@ export function MusicProfilesPage() {
                       setNewAudioName("");
                     },
                     onError: (e) =>
-                      toast.error(e instanceof Error ? e.message : "Create failed"),
+                      toast.error(
+                        e instanceof Error ? e.message : "Create failed",
+                      ),
                   },
                 )
               }
@@ -542,7 +567,9 @@ export function MusicProfilesPage() {
                       setNewMetadataName("");
                     },
                     onError: (e) =>
-                      toast.error(e instanceof Error ? e.message : "Create failed"),
+                      toast.error(
+                        e instanceof Error ? e.message : "Create failed",
+                      ),
                   },
                 )
               }
