@@ -212,7 +212,11 @@ paths:
     patch:
       tags: [collections]
       operationId: editCollection
-      summary: Edit local collection name/description (admin).
+      summary: Edit local collection name/description/quality default (admin).
+      description: |
+        quality_profile_id is validated server-side and only applies to titles
+        added from this collection; apply it to existing titles explicitly with
+        POST /quality. An empty string clears the default.
       security: [{ cookieAuth: [] }, { apiKey: [] }, { bearerAuth: [] }]
       requestBody:
         required: true
@@ -226,6 +230,7 @@ paths:
                 name: { type: string, minLength: 1, maxLength: 300 }
                 overview: { type: string, maxLength: 20000 }
                 revision: { type: integer, minimum: 0 }
+                quality_profile_id: { type: string }
       responses:
         "200":
           description: Updated collection.
@@ -238,6 +243,35 @@ paths:
         "404": { description: Collection not found. }
         "409": { description: Stale revision; reload before editing. }
         "500": { description: Storage failed. }
+        "503": { description: Quality profiles unavailable during startup. }
+    delete:
+      tags: [collections]
+      operationId: deleteCollection
+      summary: Delete a collection without touching library titles or files (admin).
+      description: |
+        Removes only the collection, its source ownership, redirects and
+        membership. Source references are durably suppressed so background
+        discovery does not recreate the collection; importing the same source
+        explicitly (POST / or POST /{id}/sources) clears the suppression.
+      security: [{ cookieAuth: [] }, { apiKey: [] }, { bearerAuth: [] }]
+      parameters:
+        - { name: revision, in: query, required: true, schema: { type: integer, minimum: 0 } }
+      responses:
+        "200":
+          description: Deleted.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  deleted: { type: string }
+                  suppressed_sources: { type: integer }
+        "400": { description: Missing revision. }
+        "401": { description: Authentication required. }
+        "403": { description: Administrator required. }
+        "404": { description: Collection not found. }
+        "409": { description: Stale revision or a merged (redirected) ID. }
+        "500": { description: Storage failed; nothing deleted. }
   /api/v1/collections/{id}/sources:
     parameters:
       - { $ref: "#/components/parameters/CollectionID" }
@@ -337,7 +371,13 @@ paths:
     post:
       tags: [collections]
       operationId: addCollectionMember
-      summary: Add local movie/show membership without acquisition (admin).
+      summary: Add real library or provider titles as local members (admin).
+      description: |
+        Each item is either an existing library title (media_type + media_id,
+        resolved server-side to its provider IDs) or a provider search result
+        (media_type, title and exact external_ids, enriched via TMDB when
+        configured). Never creates library media. Exact IDs deduplicate;
+        contradictory IDs return 409.
       security: [{ cookieAuth: [] }, { apiKey: [] }, { bearerAuth: [] }]
       requestBody:
         required: true
@@ -346,18 +386,31 @@ paths:
             schema:
               type: object
               additionalProperties: false
-              required: [media_type, title, external_ids]
+              required: [items]
               properties:
-                media_type: { type: string, enum: [movie, series] }
-                title: { type: string, minLength: 1, maxLength: 500 }
-                external_ids: { $ref: "#/components/schemas/CollectionTitleIDs" }
+                revision: { type: integer, minimum: 0 }
+                items:
+                  type: array
+                  minItems: 1
+                  maxItems: 100
+                  items:
+                    type: object
+                    additionalProperties: false
+                    required: [media_type]
+                    properties:
+                      media_type: { type: string, enum: [movie, series] }
+                      media_id: { type: string, description: Existing library title ID. }
+                      title: { type: string, minLength: 1, maxLength: 500 }
+                      year: { type: integer }
+                      poster_path: { type: string }
+                      external_ids: { $ref: "#/components/schemas/CollectionTitleIDs" }
       responses:
         "200":
-          description: Collection with local member; existing exact IDs deduplicate.
+          description: Collection with local members; existing exact IDs deduplicate.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/LoomCollection" }
-        "400": { description: Invalid movie/show title or external IDs. }
+        "400": { description: Unknown library title, missing IDs or invalid input. }
         "401": { description: Authentication required. }
         "403": { description: Administrator required. }
         "404": { description: Collection not found. }
@@ -401,6 +454,154 @@ paths:
         "404": { description: Collection/member not found. }
         "409": { description: Collection changed concurrently. }
         "500": { description: Storage failed. }
+    delete:
+      tags: [collections]
+      operationId: removeCollectionMember
+      summary: Remove a local member, or drop the local addition of a source member (admin).
+      description: Source-only members must be excluded instead. Never deletes media.
+      security: [{ cookieAuth: [] }, { apiKey: [] }, { bearerAuth: [] }]
+      responses:
+        "200":
+          description: Updated collection.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LoomCollection" }
+        "400": { description: Source-only member; exclude it instead. }
+        "403": { description: Administrator required. }
+        "404": { description: Collection/member not found. }
+  /api/v1/collections/{id}/bulk/add:
+    parameters:
+      - { $ref: "#/components/parameters/CollectionID" }
+    post:
+      tags: [collections]
+      operationId: bulkAddCollectionMembers
+      summary: Preview or start adding missing members to the library (admin).
+      description: |
+        execute=false returns per-member eligibility with skip reasons and the
+        resolved shared settings (library, quality profile defaulting to the
+        collection default, monitoring, search). execute=true starts a
+        background job adding only eligible titles through the existing movie
+        and show services; poll /jobs/{job}. Partial failures are per item.
+      security: [{ cookieAuth: [] }, { apiKey: [] }, { bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - { $ref: "#/components/schemas/CollectionSelection" }
+                - type: object
+                  properties:
+                    execute: { type: boolean }
+                    include_unreleased: { type: boolean }
+                    movie: { $ref: "#/components/schemas/CollectionAddSettings" }
+                    series: { $ref: "#/components/schemas/CollectionAddSettings" }
+      responses:
+        "200":
+          description: Preview or started job.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CollectionBulkPlan" }
+        "400": { description: Invalid selection/library/profile, or nothing eligible to execute. }
+        "403": { description: Administrator required. }
+        "404": { description: Collection not found. }
+        "503": { description: Library actions unavailable during startup. }
+  /api/v1/collections/{id}/bulk/search:
+    parameters:
+      - { $ref: "#/components/parameters/CollectionID" }
+    post:
+      tags: [collections]
+      operationId: bulkSearchCollectionMembers
+      summary: Preview or start automatic search for monitored missing members (admin).
+      description: |
+        Only library titles that are monitored and missing are eligible; shows
+        search monitored aired missing episodes. Never adds titles. Concurrent
+        searches for the same title are deduplicated.
+      security: [{ cookieAuth: [] }, { apiKey: [] }, { bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - { $ref: "#/components/schemas/CollectionSelection" }
+                - type: object
+                  properties:
+                    execute: { type: boolean }
+      responses:
+        "200":
+          description: Preview or started job.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CollectionBulkPlan" }
+        "400": { description: Invalid selection or nothing eligible to execute. }
+        "403": { description: Administrator required. }
+        "404": { description: Collection not found. }
+        "503": { description: Search engine unavailable. }
+  /api/v1/collections/{id}/quality:
+    parameters:
+      - { $ref: "#/components/parameters/CollectionID" }
+    post:
+      tags: [collections]
+      operationId: applyCollectionQuality
+      summary: Preview or explicitly apply a quality profile to existing member titles (admin).
+      description: |
+        Defaults to the collection's quality default. Only selected library
+        titles change; other collections are unaffected.
+      security: [{ cookieAuth: [] }, { apiKey: [] }, { bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - { $ref: "#/components/schemas/CollectionSelection" }
+                - type: object
+                  properties:
+                    execute: { type: boolean }
+                    quality_profile_id: { type: string }
+      responses:
+        "200":
+          description: Per-title current/new profile and outcome.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CollectionBulkPlan" }
+        "400": { description: Invalid selection or profile. }
+        "403": { description: Administrator required. }
+        "404": { description: Collection not found. }
+  /api/v1/collections/{id}/jobs:
+    parameters:
+      - { $ref: "#/components/parameters/CollectionID" }
+    get:
+      tags: [collections]
+      operationId: listCollectionJobs
+      summary: Recent bulk add/search jobs for a collection.
+      security: [{ cookieAuth: [] }, { apiKey: [] }, { bearerAuth: [] }]
+      responses:
+        "200":
+          description: Jobs, newest first.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/CollectionJob" } }
+  /api/v1/collections/{id}/jobs/{job}:
+    parameters:
+      - { $ref: "#/components/parameters/CollectionID" }
+      - { name: job, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [collections]
+      operationId: getCollectionJob
+      summary: Bulk job progress with per-item results.
+      security: [{ cookieAuth: [] }, { apiKey: [] }, { bearerAuth: [] }]
+      responses:
+        "200":
+          description: Job snapshot.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CollectionJob" }
+        "404": { description: Unknown or expired job. }
   /api/v1/media-files/{mediaType}/{id}:
     parameters:
       - $ref: "#/components/parameters/TitleFileMediaType"
@@ -3135,12 +3336,76 @@ components:
         revision: { type: integer, minimum: 0 }
         total: { type: integer, description: Non-excluded member count on reads. }
         in_library: { type: integer, description: Non-excluded members currently added to Loom on reads. }
+        quality_profile_id:
+          type: string
+          description: Default quality profile for titles added from this collection. Never changes existing titles implicitly.
         sources:
           type: array
           items: { $ref: "#/components/schemas/CollectionSource" }
         members:
           type: array
           items: { $ref: "#/components/schemas/CollectionMember" }
+    CollectionSelection:
+      type: object
+      description: Exactly one of member_ids or all=true.
+      properties:
+        member_ids: { type: array, maxItems: 5000, items: { type: string } }
+        all: { type: boolean }
+    CollectionAddSettings:
+      type: object
+      additionalProperties: false
+      properties:
+        library_id: { type: string }
+        quality_profile_id: { type: string }
+        monitored: { type: boolean, default: true }
+        search: { type: boolean, description: Search after adding (monitored titles only). }
+    CollectionBulkItem:
+      type: object
+      required: [member_id, media_type, title, status]
+      properties:
+        member_id: { type: string }
+        media_type: { type: string, enum: [movie, series] }
+        title: { type: string }
+        year: { type: integer }
+        media_id: { type: string }
+        status: { type: string, enum: [eligible, skipped, queued, running, done, failed] }
+        reason:
+          type: string
+          description: Skip reason code.
+          enum: [excluded, in_library, unresolved, unreleased, no_library, no_profile, already_running, not_in_library, unmonitored, has_file, nothing_missing, unchanged]
+        detail: { type: string }
+        current_profile_id: { type: string }
+        new_profile_id: { type: string }
+        missing_episodes: { type: integer }
+    CollectionJob:
+      type: object
+      description: In-process background job; not persisted across restarts.
+      properties:
+        id: { type: string, format: uuid }
+        kind: { type: string, enum: [add, search] }
+        collection_id: { type: string }
+        status: { type: string, enum: [running, done] }
+        items: { type: array, items: { $ref: "#/components/schemas/CollectionBulkItem" } }
+        counts: { type: object, additionalProperties: { type: integer } }
+        started_at: { type: string, format: date-time }
+        finished_at: { type: string, format: date-time }
+    CollectionBulkPlan:
+      type: object
+      properties:
+        kind: { type: string, enum: [add, search, quality] }
+        items: { type: array, items: { $ref: "#/components/schemas/CollectionBulkItem" } }
+        counts: { type: object, additionalProperties: { type: integer } }
+        settings: { type: object, additionalProperties: { $ref: "#/components/schemas/CollectionAddSettings" } }
+        libraries: { type: object, additionalProperties: { type: array, items: { $ref: "#/components/schemas/CollectionOption" } } }
+        profiles: { type: array, items: { $ref: "#/components/schemas/CollectionOption" } }
+        job: { $ref: "#/components/schemas/CollectionJob" }
+        note: { type: string }
+    CollectionOption:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        quality_profile_id: { type: string }
     ExternalCreditPerson:
       type: object
       properties:

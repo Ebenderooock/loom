@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
+import { AddToCollectionDialog } from "@/components/collections/add-to-collection";
 import { useSearch, useNavigate } from "@tanstack/react-router";
 import { apiFetch } from "@/lib/fetch";
 import { Button } from "@/components/ui/button";
@@ -116,7 +117,7 @@ function BulkDeleteDialog({
 // ─── Main Page ──────────────────────────────────────────────────────────
 
 export function MoviesPage() {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
   const [movies, setMovies] = useState<Movie[]>([]);
   const { data: allLibraries = [] } = useLibraries();
   const libraries = allLibraries.filter((l) => l.media_type === "movie");
@@ -139,6 +140,7 @@ export function MoviesPage() {
   // Selection
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [collectionOpen, setCollectionOpen] = useState(false);
 
   // Detail sheet
   const [detailMovie, setDetailMovie] = useState<Movie | null>(null);
@@ -203,7 +205,9 @@ export function MoviesPage() {
     let cancelled = false;
     (async () => {
       try {
-        const res = await apiFetch(`/api/v1/movies/${focus}`);
+        const res = await apiFetch(
+          `/api/v1/movies/${encodeURIComponent(focus)}`,
+        );
         if (cancelled) return;
         if (res.ok) {
           const data = await res.json();
@@ -311,7 +315,7 @@ export function MoviesPage() {
     const ids = Array.from(selectedIds);
     await Promise.all(
       ids.map((id) =>
-        apiFetch(`/api/v1/movies/${id}/monitoring`, {
+        apiFetch(`/api/v1/movies/${encodeURIComponent(id)}/monitoring`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ status }),
@@ -332,7 +336,11 @@ export function MoviesPage() {
   const handleBulkDelete = async () => {
     const ids = Array.from(selectedIds);
     await Promise.all(
-      ids.map((id) => apiFetch(`/api/v1/movies/${id}`, { method: "DELETE" })),
+      ids.map((id) =>
+        apiFetch(`/api/v1/movies/${encodeURIComponent(id)}`, {
+          method: "DELETE",
+        }),
+      ),
     );
     setMovies((prev) => prev.filter((m) => !selectedIds.has(m.id)));
     clearSelection();
@@ -343,7 +351,7 @@ export function MoviesPage() {
     const ids = Array.from(selectedIds);
     const results = await Promise.allSettled(
       ids.map((id) =>
-        apiFetch(`/api/v1/movies/${id}`, {
+        apiFetch(`/api/v1/movies/${encodeURIComponent(id)}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ qualityProfileId: profileId }),
@@ -478,6 +486,9 @@ export function MoviesPage() {
           onBulkUnmonitor={() => handleBulkMonitoring("unmonitored")}
           onBulkDelete={() => setBulkDeleteOpen(true)}
           onBulkQualityProfile={handleBulkQualityProfile}
+          onBulkCollection={
+            user?.role === "admin" ? () => setCollectionOpen(true) : undefined
+          }
           onAddMovie={() => setAddDialogOpen(true)}
           onImportLibrary={() => setImportDialogOpen(true)}
           onOrganize={() => setOrganizeDialogOpen(true)}
@@ -619,6 +630,20 @@ export function MoviesPage() {
         existingMovieIds={existingMovieNumericIds}
       />
 
+      {collectionOpen && (
+        <AddToCollectionDialog
+          open
+          onOpenChange={setCollectionOpen}
+          targets={movies
+            .filter((m) => selectedIds.has(m.id))
+            .map((m) => ({
+              media_type: "movie",
+              media_id: m.id,
+              title: m.title,
+              tmdb: m.tmdbId ? String(m.tmdbId) : undefined,
+            }))}
+        />
+      )}
       <BulkDeleteDialog
         open={bulkDeleteOpen}
         onOpenChange={setBulkDeleteOpen}

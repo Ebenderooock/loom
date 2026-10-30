@@ -89,7 +89,13 @@ in `api/openapi/loom.yaml`.
 | `POST` | `/api/v1/collections/{id}/sources` | admin | `200 LoomCollection` | Attach and refresh another exact provider source. |
 | `POST` | `/api/v1/collections/{id}/refresh` | admin | `200 LoomCollection` | Reconcile attached sources while preserving local additions and exclusions. |
 | `POST` | `/api/v1/collections/{id}/merge` | admin | `200 LoomCollection` | Explicitly merge collections with exact-ID deduplication and provenance. |
-| `POST` | `/api/v1/collections/{id}/members` | admin | `200 LoomCollection` | Add a local movie/show member without acquisition or monitoring. |
+| `DELETE` | `/api/v1/collections/{id}?revision=` | admin | `200 {"deleted","suppressed_sources"}` | Delete collection metadata, sources and membership only; suppresses its source refs from rediscovery. |
+| `POST` | `/api/v1/collections/{id}/members` | admin | `200 LoomCollection` | Attach real library titles (`media_id`) or exact TMDB titles (`items[]`) without acquisition or monitoring. |
+| `DELETE` | `/api/v1/collections/{id}/members/{member}` | admin | `200 LoomCollection` | Remove a locally added member; source members must be excluded instead. |
+| `POST` | `/api/v1/collections/{id}/bulk/add` | admin | `200 BulkPlan` | Preview (`execute:false`) or start a background add of missing members, selected or `all`. |
+| `POST` | `/api/v1/collections/{id}/bulk/search` | admin | `200 BulkPlan` | Preview or start a search of monitored, missing library members. Never adds titles. |
+| `POST` | `/api/v1/collections/{id}/quality` | admin | `200 BulkPlan` | Preview or apply a quality profile to existing library members. |
+| `GET` | `/api/v1/collections/{id}/jobs[/{job}]` | apiKey/bearer/cookie | `200 CollectionJob` | Read in-memory bulk job progress and per-title results. |
 | `PATCH` | `/api/v1/collections/{id}/members/{member}` | admin | `200 LoomCollection` | Exclude/restore a member or override its local title. |
 | `GET\|POST` | `/debug/pprof/*` | gated by `debug.pprof` | varies | Standard `net/http/pprof` handlers. |
 | `GET` | `/api/v1/indexers/` | apiKey/bearer/cookie | `200 application/json` (`[]DefinitionWithHealth`) | List configured indexers with health; credential fields are omitted. |

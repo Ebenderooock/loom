@@ -79,14 +79,17 @@ func (m Member) Validate() error {
 
 // Collection is a Loom-owned aggregate with simultaneous provider references.
 type Collection struct {
-	ID        string   `json:"id"`
-	Name      string   `json:"name"`
-	Overview  string   `json:"overview"`
-	Sources   []Source `json:"sources"`
-	Members   []Member `json:"members"`
-	Revision  int      `json:"revision"`
-	Total     int      `json:"total"`
-	InLibrary int      `json:"in_library"`
+	ID       string `json:"id"`
+	Name     string `json:"name"`
+	Overview string `json:"overview"`
+	// QualityProfileID is the default for titles added from this collection.
+	// It never changes existing titles unless explicitly applied.
+	QualityProfileID string   `json:"quality_profile_id,omitempty"`
+	Sources          []Source `json:"sources"`
+	Members          []Member `json:"members"`
+	Revision         int      `json:"revision"`
+	Total            int      `json:"total"`
+	InLibrary        int      `json:"in_library"`
 }
 
 // Validate checks user-controlled collection metadata before persistence.

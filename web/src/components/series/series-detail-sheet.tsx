@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
+import { useAuth } from "@/hooks/use-auth";
+import { AddToCollectionButton } from "@/components/collections/add-to-collection";
 import { apiFetch } from "@/lib/fetch";
 import { MediaFilesManager } from "@/components/media-files-manager";
 import {
@@ -633,6 +635,8 @@ export function SeriesDetailSheet({
   const [archiving, setArchiving] = useState(false);
   const [autoSearching, setAutoSearching] = useState(false);
   const [rescanning, setRescanning] = useState(false);
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
   const [discoverPerson, setDiscoverPerson] = useState<{
     id: number;
     name: string;
@@ -1083,6 +1087,18 @@ export function SeriesDetailSheet({
                   <Archive className="h-3.5 w-3.5" />
                 )}
               </Button>
+
+              {isAdmin && (
+                <AddToCollectionButton
+                  iconOnly
+                  target={{
+                    media_type: "series",
+                    media_id: series.id,
+                    title: series.title,
+                    tmdb: series.tmdbId ? String(series.tmdbId) : undefined,
+                  }}
+                />
+              )}
 
               {/* Delete — pushed right */}
               <Button

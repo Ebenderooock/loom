@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/ebenderooock/loom/internal/kernel/httpparam"
+
 	"github.com/go-chi/chi/v5"
 
 	"github.com/ebenderooock/loom/internal/libraries"
@@ -317,7 +319,7 @@ func rescanArtist(ms *MusicScanner, libStore *libraries.Store) http.HandlerFunc 
 
 func rescanMovie(s *Scanner, libStore *libraries.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		movieID := chi.URLParam(r, "id")
+		movieID := httpparam.Param(r, "id")
 
 		var req struct {
 			LibraryID string `json:"libraryId"`

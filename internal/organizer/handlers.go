@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/ebenderooock/loom/internal/kernel/httpparam"
+
 	"github.com/go-chi/chi/v5"
 )
 
@@ -161,7 +163,7 @@ func executeRenames(org *Organizer) http.HandlerFunc {
 // OrganizeSingleMovie is a handler for POST /api/v1/movies/{id}/organize.
 func OrganizeSingleMovie(org *Organizer) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		movieID := chi.URLParam(r, "id")
+		movieID := httpparam.Param(r, "id")
 		if movieID == "" {
 			http.Error(w, "movie id is required", http.StatusBadRequest)
 			return

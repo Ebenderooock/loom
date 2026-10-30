@@ -1,12 +1,25 @@
-import { useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Layers, Loader2, Plus, RefreshCw } from "lucide-react";
+import {
+  ArrowLeft,
+  Check,
+  Download,
+  Layers,
+  ListChecks,
+  Loader2,
+  Plus,
+  RefreshCw,
+  Search,
+  Settings2,
+  Trash2,
+} from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { usePageHeader } from "@/hooks/use-page-header";
 import { useLibraries } from "@/lib/libraries-api";
 import {
   collectionKeys,
+  collectionPath,
   collectionRequest,
   matchesMember,
   memberIdentity,
@@ -21,6 +34,27 @@ import { titleImage } from "@/components/titles/title-metadata";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import { useQualityProfiles } from "@/lib/quality-profiles-api";
+import { CollectionTitlePicker } from "@/components/collections/collection-title-picker";
+import {
+  CollectionBulkSheet,
+  type BulkKind,
+} from "@/components/collections/collection-bulk-sheet";
 
 const GRID =
   "grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6";
@@ -399,16 +433,21 @@ function CollectionDetails({
   canManage: boolean;
   all: LoomCollection[];
   onBack: () => void;
-  onOpen: (id: string) => void;
+  onOpen: (id?: string) => void;
 }) {
   const qc = useQueryClient();
   const [selected, setSelected] = useState<CollectionMember | null>(null);
   const [library, setLibrary] = useState("");
   const [media, setMedia] = useState("");
   const [status, setStatus] = useState("");
-  const [editing, setEditing] = useState(false);
-  const [mergeFrom, setMergeFrom] = useState("");
-  const [showMerge, setShowMerge] = useState(false);
+  const [managing, setManaging] = useState(false);
+  const [picker, setPicker] = useState<{
+    media?: "movie" | "series";
+    term?: string;
+  }>();
+  const [selecting, setSelecting] = useState(false);
+  const [checked, setChecked] = useState<Set<string>>(new Set());
+  const [bulk, setBulk] = useState<{ kind: BulkKind; ids?: string[] }>();
   const detail = useQuery({
     queryKey: collectionKeys.detail(id),
     queryFn: ({ signal }) =>
@@ -419,11 +458,11 @@ function CollectionDetails({
         signal,
       ),
   });
-  const changed = () => {
+  const changed = useCallback(() => {
     void qc.invalidateQueries({ queryKey: collectionKeys.all });
     void qc.invalidateQueries({ queryKey: ["discovery"] });
     void qc.invalidateQueries({ queryKey: ["title-membership"] });
-  };
+  }, [qc]);
   const mutation = useMutation({
     mutationFn: ({
       path,
@@ -435,21 +474,29 @@ function CollectionDetails({
       method?: string;
     }) =>
       collectionRequest<LoomCollection>(
-        `/${detail.data?.id ?? id}${path}`,
+        collectionPath(detail.data?.id ?? id, path),
         body,
         method,
       ),
-    onSuccess: () => {
-      changed();
-      setShowMerge(false);
-    },
+    onSuccess: changed,
   });
   const c = detail.data;
-  const from = all.find((candidate) => candidate.id === mergeFrom);
   const active = selected && c?.members.find((m) => m.id === selected.id);
+  const visible = c?.members.filter((m) =>
+    matchesMember(m, library, media, status),
+  );
+  const ids = checked.size ? [...checked] : undefined;
+  const toggle = (memberId: string) =>
+    setChecked((prev) => {
+      const next = new Set(prev);
+      if (next.has(memberId)) next.delete(memberId);
+      else next.add(memberId);
+      return next;
+    });
+  const failing = c?.sources.filter((s) => s.error) ?? [];
   return (
-    <section className="space-y-5" aria-label="Collection details">
-      <Button variant="ghost" onClick={onBack}>
+    <section className="min-w-0 space-y-5" aria-label="Collection details">
+      <Button variant="ghost" onClick={() => onBack()}>
         <ArrowLeft className="mr-2 h-4 w-4" />
         All collections
       </Button>
@@ -468,184 +515,266 @@ function CollectionDetails({
                 </Button>
               </p>
             )}
-            <header className="flex flex-wrap justify-between gap-4">
-              <div className="max-w-3xl space-y-2">
-                <h1 className="text-2xl font-semibold tracking-tight">
+            <header className="flex flex-wrap items-start justify-between gap-4">
+              <div className="min-w-0 max-w-3xl space-y-2">
+                <h1 className="break-words text-2xl font-semibold tracking-tight">
                   {c.name}
                 </h1>
-                <p className="text-sm text-muted-foreground">{c.overview}</p>
-                <p className="font-medium">
-                  {c.in_library} of {c.total} added to Loom
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  Membership, monitoring and imported files are separate. Open
-                  an added title to manage it without leaving this collection.
+                {c.overview && (
+                  <p className="text-sm text-muted-foreground">{c.overview}</p>
+                )}
+                <p className="text-sm">
+                  <span className="font-medium">
+                    {c.in_library} of {c.total} in library
+                  </span>
+                  <span className="text-muted-foreground">
+                    {" · "}
+                    {c.sources.length
+                      ? `${c.sources.length} source${c.sources.length === 1 ? "" : "s"}`
+                      : "Local collection"}
+                  </span>
                 </p>
               </div>
               {canManage && (
                 <div className="flex flex-wrap items-start gap-2">
-                  <Button
-                    variant="outline"
-                    onClick={() => setEditing(!editing)}
-                  >
-                    Edit collection
+                  <Button onClick={() => setPicker({})}>
+                    <Plus className="mr-2 h-4 w-4" />
+                    Add titles
                   </Button>
                   <Button
                     variant="outline"
-                    disabled={mutation.isPending || !c.sources.length}
-                    onClick={() =>
-                      mutation.mutate({ path: "/refresh", body: {} })
-                    }
+                    onClick={() => setBulk({ kind: "add" })}
                   >
-                    <RefreshCw className="mr-2 h-4 w-4" />
-                    {mutation.isPending ? "Working…" : "Refresh sources"}
+                    <Download className="mr-2 h-4 w-4" />
+                    Add missing
                   </Button>
                   <Button
                     variant="outline"
-                    onClick={() => setShowMerge(!showMerge)}
+                    onClick={() => setBulk({ kind: "search" })}
                   >
-                    Merge collections
+                    <Search className="mr-2 h-4 w-4" />
+                    Search
+                  </Button>
+                  <Button
+                    variant={selecting ? "secondary" : "outline"}
+                    aria-pressed={selecting}
+                    onClick={() => {
+                      setSelecting(!selecting);
+                      setChecked(new Set());
+                    }}
+                  >
+                    <ListChecks className="mr-2 h-4 w-4" />
+                    Select
+                  </Button>
+                  <Button variant="outline" onClick={() => setManaging(true)}>
+                    <Settings2 className="mr-2 h-4 w-4" />
+                    Manage
                   </Button>
                 </div>
               )}
             </header>
+            {failing.length > 0 && (
+              <p role="alert" className="text-sm text-destructive">
+                {failing.length} source{failing.length === 1 ? "" : "s"} need
+                attention: {failing[0]?.error}
+              </p>
+            )}
             <ErrorMessage error={mutation.error} />
-            {showMerge && canManage && (
-              <form
-                className="space-y-3 rounded-lg border p-4"
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  if (from)
-                    mutation.mutate({
-                      path: "/merge",
-                      body: {
-                        from_id: from.id,
-                        revision: c.revision,
-                        from_revision: from.revision,
-                      },
-                    });
-                }}
-              >
-                <Field label={`Merge another collection into ${c.name}`}>
-                  <select
-                    className={SELECT}
-                    required
-                    value={mergeFrom}
-                    onChange={(e) => setMergeFrom(e.target.value)}
-                  >
-                    <option value="">Choose collection</option>
-                    {all
-                      .filter((candidate) => candidate.id !== c.id)
-                      .map((candidate) => (
-                        <option key={candidate.id} value={candidate.id}>
-                          {candidate.name}
-                        </option>
-                      ))}
-                  </select>
-                </Field>
-                <p className="text-sm text-muted-foreground">
-                  Combines sources and exact-ID members. Local additions and
-                  exclusions survive. The old link redirects to this collection.
-                  This cannot be undone automatically.
-                </p>
-                <label className="flex gap-2 text-sm">
-                  <input type="checkbox" required key={mergeFrom} />I confirm
-                  these collections should be one.
-                </label>
-                <Button disabled={!from || mutation.isPending}>
-                  Merge into {c.name}
-                </Button>
-              </form>
-            )}
-            {editing && canManage && (
-              <div className="grid gap-6 rounded-lg border p-4 md:grid-cols-2">
-                <CollectionForm
-                  collection={c}
-                  onSaved={() => {
-                    changed();
-                    setEditing(false);
-                  }}
-                />
-                <SourceForm collection={c} onSaved={changed} />
-                <MemberForm collection={c} onSaved={changed} />
-              </div>
-            )}
-            <section aria-label="Collection sources" className="space-y-2">
-              {c.sources.length === 0 && (
-                <p className="text-xs text-muted-foreground">
-                  Local collection — no external sources.
-                </p>
-              )}
-              {c.sources.map((s) => (
-                <div
-                  key={`${s.provider}:${s.kind}:${s.external_id}`}
-                  className="rounded-md border px-3 py-2 text-sm"
-                >
-                  <span className="font-medium uppercase">{s.provider}</span>{" "}
-                  {s.kind} {s.external_id}
-                  <span className="ml-3 text-xs text-muted-foreground">
-                    {s.last_sync
-                      ? `Last synced ${new Date(s.last_sync).toLocaleString()}`
-                      : "Not synced"}
-                  </span>
-                  {s.error && (
-                    <p role="alert" className="mt-1 text-destructive">
-                      {s.error}
-                    </p>
-                  )}
-                </div>
-              ))}
-            </section>
             <Filters
               {...{ library, setLibrary, media, setMedia, status, setStatus }}
             />
             <div className={GRID}>
-              {c.members
-                .filter((m) => matchesMember(m, library, media, status))
-                .map((m) => (
-                  <article key={m.id} className="min-w-0 space-y-2">
+              {visible?.map((m) => {
+                const unresolved = !m.in_library && !m.external_ids.tmdb;
+                const isChecked = checked.has(m.id);
+                return (
+                  <article key={m.id} className="relative min-w-0 space-y-1.5">
                     <TitlePosterCard
                       title={m.title}
                       poster={m.poster_path}
                       year={m.year}
                       available={m.has_file}
                       inLibrary={m.in_library}
-                      onOpen={() => setSelected(m)}
-                      onAdd={canManage ? () => setSelected(m) : undefined}
-                      label={`${m.in_library ? "Manage" : "View"} ${m.title}`}
+                      onOpen={() => (selecting ? toggle(m.id) : setSelected(m))}
+                      onAdd={
+                        canManage && !selecting
+                          ? () => setSelected(m)
+                          : undefined
+                      }
+                      label={
+                        selecting
+                          ? `${isChecked ? "Deselect" : "Select"} ${m.title}`
+                          : `${m.in_library ? "Manage" : "View"} ${m.title}`
+                      }
                     />
-                    <p className="text-xs text-muted-foreground">
-                      {m.local
-                        ? "Local addition"
-                        : `${m.sources.length} source${m.sources.length === 1 ? "" : "s"}`}
-                    </p>
-                    {canManage && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="m-2"
-                        disabled={mutation.isPending}
-                        onClick={() =>
-                          mutation.mutate({
-                            path: `/members/${m.id}`,
-                            method: "PATCH",
-                            body: { excluded: !m.excluded },
-                          })
-                        }
+                    {selecting && (
+                      <span
+                        aria-hidden
+                        className={`pointer-events-none absolute left-2 top-2 z-20 flex h-7 w-7 items-center justify-center rounded-full border-2 border-white/80 shadow ${isChecked ? "bg-accent text-accent-foreground" : "bg-black/50"}`}
                       >
-                        {m.excluded ? "Restore member" : "Exclude locally"}
-                      </Button>
+                        {isChecked && <Check className="h-4 w-4" />}
+                      </span>
+                    )}
+                    <p className="truncate text-xs text-muted-foreground">
+                      {m.excluded
+                        ? "Excluded"
+                        : unresolved
+                          ? "Needs a TMDB match"
+                          : m.local && m.sources.length
+                            ? "Source + local"
+                            : m.local
+                              ? "Added manually"
+                              : `${m.sources.length} source${m.sources.length === 1 ? "" : "s"}`}
+                    </p>
+                    {canManage && !selecting && (
+                      <div className="flex flex-wrap gap-1">
+                        {unresolved && !m.excluded && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-8 px-2 text-xs"
+                            onClick={() =>
+                              setPicker({ media: m.media_type, term: m.title })
+                            }
+                          >
+                            Find match
+                          </Button>
+                        )}
+                        {m.local && !m.sources.length ? (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 px-2 text-xs"
+                            disabled={mutation.isPending}
+                            onClick={() =>
+                              mutation.mutate({
+                                path: `/members/${encodeURIComponent(m.id)}`,
+                                method: "DELETE",
+                                body: undefined,
+                              })
+                            }
+                          >
+                            Remove
+                          </Button>
+                        ) : (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 px-2 text-xs"
+                            disabled={mutation.isPending}
+                            onClick={() =>
+                              mutation.mutate({
+                                path: `/members/${encodeURIComponent(m.id)}`,
+                                method: "PATCH",
+                                body: { excluded: !m.excluded },
+                              })
+                            }
+                          >
+                            {m.excluded ? "Restore" : "Exclude"}
+                          </Button>
+                        )}
+                      </div>
                     )}
                   </article>
-                ))}
+                );
+              })}
             </div>
-            {!c.members.some((m) =>
-              matchesMember(m, library, media, status),
-            ) && (
-              <p className="py-8 text-center text-muted-foreground">
-                No members match these filters. Edit the collection to add a
-                source or a local member.
-              </p>
+            {!visible?.length && (
+              <div className="space-y-3 py-8 text-center text-muted-foreground">
+                <p>
+                  {c.members.length
+                    ? "No members match these filters."
+                    : "This collection is empty."}
+                </p>
+                {canManage && !c.members.length && (
+                  <Button onClick={() => setPicker({})}>
+                    <Plus className="mr-2 h-4 w-4" />
+                    Add titles
+                  </Button>
+                )}
+              </div>
+            )}
+            {selecting && (
+              <div
+                role="toolbar"
+                aria-label="Selected titles"
+                className="sticky bottom-4 z-30 mx-auto flex w-fit max-w-full flex-wrap items-center justify-center gap-2 rounded-xl border bg-background/95 p-2 shadow-xl backdrop-blur"
+              >
+                <span className="px-2 text-sm font-medium">
+                  {checked.size} selected
+                </span>
+                <Button
+                  size="sm"
+                  disabled={!ids}
+                  onClick={() => setBulk({ kind: "add", ids })}
+                >
+                  Add missing
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={!ids}
+                  onClick={() => setBulk({ kind: "search", ids })}
+                >
+                  Search
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={!ids}
+                  onClick={() => setBulk({ kind: "quality", ids })}
+                >
+                  Set quality
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() =>
+                    setChecked(
+                      checked.size
+                        ? new Set()
+                        : new Set(visible?.map((m) => m.id)),
+                    )
+                  }
+                >
+                  {checked.size ? "Clear" : "Select all"}
+                </Button>
+              </div>
+            )}
+            {canManage && (
+              <ManageSheet
+                open={managing}
+                onOpenChange={setManaging}
+                collection={c}
+                all={all}
+                onChanged={changed}
+                onApplyQuality={() => setBulk({ kind: "quality" })}
+                onDeleted={() => {
+                  setManaging(false);
+                  changed();
+                  onBack();
+                }}
+                onMerged={(retained) => onOpen(retained.id)}
+              />
+            )}
+            {picker && (
+              <CollectionTitlePicker
+                open
+                collection={c}
+                initialMedia={picker.media}
+                initialTerm={picker.term}
+                onOpenChange={(open) => !open && setPicker(undefined)}
+                onSaved={changed}
+              />
+            )}
+            {bulk && (
+              <CollectionBulkSheet
+                collection={c}
+                kind={bulk.kind}
+                memberIds={bulk.ids}
+                onChanged={changed}
+                onOpenChange={(open) => !open && setBulk(undefined)}
+              />
             )}
           </>
         )
@@ -663,7 +792,12 @@ function CollectionDetails({
         ) : (
           <TitleDialog
             open
-            defaults={{ search_on_add: false }}
+            defaults={{
+              search_on_add: false,
+              ...(c?.quality_profile_id
+                ? { quality_profile_id: c.quality_profile_id }
+                : {}),
+            }}
             identity={memberIdentity(active || selected)}
             onOpenChange={(open) => {
               if (!open) {
@@ -685,23 +819,268 @@ function CollectionDetails({
   );
 }
 
+function ManageSheet({
+  open,
+  onOpenChange,
+  collection: c,
+  all,
+  onChanged,
+  onApplyQuality,
+  onDeleted,
+  onMerged,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  collection: LoomCollection;
+  all: LoomCollection[];
+  onChanged: () => void;
+  onApplyQuality: () => void;
+  onDeleted: () => void;
+  onMerged: (retained: LoomCollection) => void;
+}) {
+  const [mergeFrom, setMergeFrom] = useState("");
+  const [confirmMerge, setConfirmMerge] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const from = all.find((candidate) => candidate.id === mergeFrom);
+  const refresh = useMutation({
+    mutationFn: () =>
+      collectionRequest<LoomCollection>(collectionPath(c.id, "/refresh"), {}),
+    onSuccess: onChanged,
+  });
+  const merge = useMutation({
+    mutationFn: () =>
+      collectionRequest<LoomCollection>(collectionPath(c.id, "/merge"), {
+        from_id: from?.id,
+        revision: c.revision,
+        from_revision: from?.revision,
+      }),
+    onSuccess: (retained) => {
+      setMergeFrom("");
+      setConfirmMerge(false);
+      onChanged();
+      onMerged(retained);
+    },
+  });
+  const remove = useMutation({
+    mutationFn: () =>
+      collectionRequest<{ deleted: string }>(
+        collectionPath(c.id, `?revision=${c.revision}`),
+        undefined,
+        "DELETE",
+      ),
+    onSuccess: () => {
+      setDeleting(false);
+      onDeleted();
+    },
+  });
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent className="w-full min-w-0 max-w-full overflow-y-auto overflow-x-hidden p-4 sm:max-w-lg sm:p-6">
+        <SheetHeader className="pr-8 text-left">
+          <SheetTitle>Manage collection</SheetTitle>
+          <SheetDescription>
+            Changes here never add, remove or re-download library titles.
+          </SheetDescription>
+        </SheetHeader>
+        <div className="mt-6 space-y-8">
+          <ManageSection title="Details">
+            <CollectionForm
+              key={c.revision}
+              collection={c}
+              onSaved={onChanged}
+              onApplyQuality={() => {
+                onOpenChange(false);
+                onApplyQuality();
+              }}
+            />
+          </ManageSection>
+          <ManageSection title="Sources">
+            {c.sources.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No external sources. Members are managed by hand.
+              </p>
+            ) : (
+              <ul className="space-y-2">
+                {c.sources.map((s) => (
+                  <li
+                    key={`${s.provider}:${s.kind}:${s.external_id}`}
+                    className="min-w-0 rounded-md border px-3 py-2 text-sm"
+                  >
+                    <span className="font-medium uppercase">{s.provider}</span>{" "}
+                    {s.kind} {s.external_id}
+                    <span className="block text-xs text-muted-foreground">
+                      {s.last_sync
+                        ? `Synced ${new Date(s.last_sync).toLocaleString()}`
+                        : "Not synced"}
+                    </span>
+                    {s.error && (
+                      <p
+                        role="alert"
+                        className="mt-1 break-words text-destructive"
+                      >
+                        {s.error}
+                      </p>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+            {c.sources.length > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={refresh.isPending}
+                onClick={() => refresh.mutate()}
+              >
+                <RefreshCw
+                  className={`mr-2 h-4 w-4 ${refresh.isPending ? "animate-spin" : ""}`}
+                />
+                Refresh sources
+              </Button>
+            )}
+            <ErrorMessage error={refresh.error} />
+            <SourceForm collection={c} onSaved={onChanged} />
+          </ManageSection>
+          <ManageSection title="Merge">
+            <form
+              className="space-y-3"
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (from) merge.mutate();
+              }}
+            >
+              <Field label={`Merge another collection into ${c.name}`}>
+                <select
+                  className={SELECT}
+                  value={mergeFrom}
+                  onChange={(e) => {
+                    setMergeFrom(e.target.value);
+                    setConfirmMerge(false);
+                  }}
+                >
+                  <option value="">Choose collection</option>
+                  {all
+                    .filter((candidate) => candidate.id !== c.id)
+                    .map((candidate) => (
+                      <option key={candidate.id} value={candidate.id}>
+                        {candidate.name}
+                      </option>
+                    ))}
+                </select>
+              </Field>
+              {from && (
+                <>
+                  <p className="text-xs text-muted-foreground">
+                    Combines sources and exact-ID members. Local additions and
+                    exclusions survive; the old link redirects here.
+                  </p>
+                  <label className="flex gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={confirmMerge}
+                      onChange={(e) => setConfirmMerge(e.target.checked)}
+                    />
+                    Merge {from.name} into {c.name}
+                  </label>
+                  <Button size="sm" disabled={!confirmMerge || merge.isPending}>
+                    Merge
+                  </Button>
+                </>
+              )}
+              <ErrorMessage error={merge.error} />
+            </form>
+          </ManageSection>
+          <ManageSection title="Delete">
+            <p className="text-sm text-muted-foreground">
+              Removes this collection only. Library titles, monitoring and files
+              are untouched, and automatic discovery won't recreate it.
+            </p>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => setDeleting(true)}
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              Delete collection
+            </Button>
+          </ManageSection>
+        </div>
+        <Dialog open={deleting} onOpenChange={setDeleting}>
+          <DialogContent className="w-[calc(100vw-2rem)] max-w-md">
+            <DialogHeader>
+              <DialogTitle className="break-words">
+                Delete {c.name}?
+              </DialogTitle>
+              <DialogDescription>
+                {c.total} member{c.total === 1 ? "" : "s"} will leave this
+                collection. {c.in_library} library title
+                {c.in_library === 1 ? "" : "s"} and their files stay exactly as
+                they are.
+                {c.sources.length > 0 &&
+                  " Its sources won't be re-imported automatically; import them again to restore it."}
+              </DialogDescription>
+            </DialogHeader>
+            <ErrorMessage error={remove.error} />
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setDeleting(false)}>
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                disabled={remove.isPending}
+                onClick={() => remove.mutate()}
+              >
+                {remove.isPending && (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                )}
+                Delete collection
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+function ManageSection({
+  title,
+  children,
+}: {
+  title: string;
+  children: ReactNode;
+}) {
+  return (
+    <section aria-label={title} className="min-w-0 space-y-3">
+      <h3 className="text-sm font-semibold">{title}</h3>
+      {children}
+    </section>
+  );
+}
+
 function CollectionForm({
   collection,
   onSaved,
+  onApplyQuality,
 }: {
   collection?: LoomCollection;
   onSaved: (c: LoomCollection) => void;
+  onApplyQuality?: () => void;
 }) {
   const [name, setName] = useState(collection?.name ?? "");
   const [overview, setOverview] = useState(collection?.overview ?? "");
+  const [profile, setProfile] = useState(collection?.quality_profile_id ?? "");
+  const profiles = useQualityProfiles();
   const mutation = useMutation({
     mutationFn: () =>
       collectionRequest<LoomCollection>(
-        collection ? `/${collection.id}` : "",
+        collection ? collectionPath(collection.id) : "",
         {
           name,
           overview,
-          ...(collection ? { revision: collection.revision } : {}),
+          ...(collection
+            ? { revision: collection.revision, quality_profile_id: profile }
+            : {}),
         },
         collection ? "PATCH" : "POST",
       ),
@@ -715,9 +1094,9 @@ function CollectionForm({
         mutation.mutate();
       }}
     >
-      <h2 className="font-semibold">
-        {collection ? "Collection details" : "Create a local collection"}
-      </h2>
+      {!collection && (
+        <h2 className="font-semibold">Create a local collection</h2>
+      )}
       <Field label="Name">
         <Input
           required
@@ -735,8 +1114,38 @@ function CollectionForm({
           onChange={(e) => setOverview(e.target.value)}
         />
       </Field>
+      {collection && (
+        <div className="space-y-1.5">
+          <Field label="Quality for new additions">
+            <select
+              className={SELECT}
+              value={profile}
+              onChange={(e) => setProfile(e.target.value)}
+            >
+              <option value="">Use each library's default</option>
+              {profiles.data?.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <p className="text-xs text-muted-foreground">
+            Titles already in your library keep their profile.{" "}
+            {collection.quality_profile_id && onApplyQuality && (
+              <button
+                type="button"
+                className="font-medium text-foreground underline underline-offset-2"
+                onClick={onApplyQuality}
+              >
+                Apply to existing members…
+              </button>
+            )}
+          </p>
+        </div>
+      )}
       <Button disabled={mutation.isPending}>
-        {collection ? "Save changes" : "Create collection"}
+        {collection ? "Save details" : "Create collection"}
       </Button>
       <ErrorMessage error={mutation.error} />
     </form>
@@ -761,7 +1170,7 @@ function SourceForm({
         external_id: externalID.trim(),
       } as CollectionSource;
       return collectionRequest<LoomCollection>(
-        collection ? `/${collection.id}/sources` : "",
+        collection ? collectionPath(collection.id, "/sources") : "",
         collection ? source : { source },
       );
     },
@@ -814,85 +1223,6 @@ function SourceForm({
             ? "Attach source"
             : "Import collection"}
       </Button>
-      <ErrorMessage error={mutation.error} />
-    </form>
-  );
-}
-
-function MemberForm({
-  collection,
-  onSaved,
-}: {
-  collection: LoomCollection;
-  onSaved: (c: LoomCollection) => void;
-}) {
-  const [title, setTitle] = useState("");
-  const [media, setMedia] = useState("movie");
-  const [provider, setProvider] = useState("tmdb");
-  const [externalID, setExternalID] = useState("");
-  const mutation = useMutation({
-    mutationFn: () =>
-      collectionRequest<LoomCollection>(`/${collection.id}/members`, {
-        title: title.trim(),
-        media_type: media,
-        external_ids: { [provider]: externalID.trim() },
-      }),
-    onSuccess: (c) => {
-      setTitle("");
-      setExternalID("");
-      onSaved(c);
-    },
-  });
-  const submit = (e: FormEvent) => {
-    e.preventDefault();
-    mutation.mutate();
-  };
-  return (
-    <form className="space-y-3" onSubmit={submit}>
-      <h2 className="font-semibold">Add a local member</h2>
-      <Field label="Title">
-        <Input
-          required
-          maxLength={500}
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-        />
-      </Field>
-      <Field label="Member media type">
-        <select
-          className={SELECT}
-          value={media}
-          onChange={(e) => setMedia(e.target.value)}
-        >
-          <option value="movie">Movie</option>
-          <option value="series">TV show</option>
-        </select>
-      </Field>
-      <Field label="Title ID provider">
-        <select
-          className={SELECT}
-          value={provider}
-          onChange={(e) => setProvider(e.target.value)}
-        >
-          <option value="tmdb">TMDB</option>
-          <option value="imdb">IMDb</option>
-          <option value="tvdb">TVDB</option>
-        </select>
-      </Field>
-      <Field label="External title ID">
-        <Input
-          required
-          maxLength={20}
-          value={externalID}
-          onChange={(e) => setExternalID(e.target.value)}
-          pattern={provider === "imdb" ? "tt[0-9]+" : "[1-9][0-9]*"}
-        />
-      </Field>
-      <p className="text-xs text-muted-foreground">
-        Adds membership only, not the title to a library. TVDB-only movies need
-        an IMDb or TMDB mapping to use the shared add form.
-      </p>
-      <Button disabled={mutation.isPending}>Add member</Button>
       <ErrorMessage error={mutation.error} />
     </form>
   );

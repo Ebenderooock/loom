@@ -189,26 +189,43 @@ test("suggestions need no Import Lists and require an explicit add", async ({
     dialog.getByRole("checkbox", { name: "Search after adding" }),
   ).not.toBeChecked();
   let added = false;
+  // Backend movie IDs keep title punctuation; the drawer must request the
+  // persisted ID returned by POST, browser-encoded, not a fake local ID.
+  const movieID = "a/new-adventure:-part-#1?-50%25-2024";
+  const detailPaths: string[] = [];
   await page.route("**/api/v1/movies?limit=1000&offset=0", async (route) => {
     await route.fulfill({
-      json: added ? [{ id: "new-movie", tmdbId: "107" }] : [],
+      json: added ? [{ id: movieID, tmdbId: "107" }] : [],
     });
   });
-  await mockGet(page, "movies/new-movie", {
-    id: "new-movie",
-    tmdbId: "107",
-    title: "A new adventure",
-    status: "missing",
-    year: 2024,
-    monitoringStatus: "monitored",
-    libraryId: "lib-1",
-    qualityProfileId: "qp-1",
-    genres: [],
-  });
-  await mockGet(page, "movies/new-movie/credits", { cast: [], crew: [] });
-  await mockGet(page, "movies/files/new-movie", []);
-  await mockGet(page, "movies/new-movie/history", []);
-  await mockGet(page, "media-files/movie/new-movie*", {
+  await page.route(
+    (url) =>
+      url.pathname.startsWith("/api/v1/movies/") &&
+      decodeURIComponent(url.pathname).includes(movieID),
+    async (route) => {
+      const path = new URL(route.request().url()).pathname;
+      detailPaths.push(path);
+      const decoded = decodeURIComponent(path);
+      await route.fulfill({
+        json: decoded.endsWith("/credits")
+          ? { cast: [], crew: [] }
+          : decoded.endsWith("/history") || decoded.includes("/files/")
+            ? []
+            : {
+                id: movieID,
+                tmdbId: "107",
+                title: "A new adventure",
+                status: "missing",
+                year: 2024,
+                monitoringStatus: "monitored",
+                libraryId: "lib-1",
+                qualityProfileId: "qp-1",
+                genres: [],
+              },
+      });
+    },
+  );
+  await mockGet(page, "media-files/movie/**", {
     files: [],
     warnings: [],
   });
@@ -220,12 +237,23 @@ test("suggestions need no Import Lists and require an explicit add", async ({
       search: false,
     });
     added = true;
-    await route.fulfill({ status: 201, json: { id: "new-movie" } });
+    await route.fulfill({ status: 201, json: { id: movieID } });
   });
   await dialog.getByRole("button", { name: "Add to library" }).click();
   await expect(
     dialog.getByRole("button", { name: "Edit", exact: true }),
   ).toBeVisible();
+  const encodedID = encodeURIComponent(movieID);
+  await expect
+    .poll(() => [...detailPaths].sort())
+    .toEqual(
+      expect.arrayContaining([
+        `/api/v1/movies/${encodedID}`,
+        `/api/v1/movies/${encodedID}/credits`,
+        `/api/v1/movies/${encodedID}/history`,
+        `/api/v1/movies/files/${encodedID}`,
+      ]),
+    );
   expect(writes).toHaveLength(1);
 });
 
@@ -290,6 +318,169 @@ test("standalone mixed collections open real library management and shared exter
   await expect(
     page.getByRole("link", { name: /Adventure collection/ }),
   ).toBeVisible();
+});
+
+test("collection management stays in one place and never overflows", async ({
+  page,
+}, testInfo) => {
+  const posts: { url: string; method: string; body: unknown }[] = [];
+  await page.route(
+    "**/api/v1/collections/loom-collection/**",
+    async (route) => {
+      const req = route.request();
+      if (req.method() === "GET") return route.fallback();
+      const body = req.postData() ? JSON.parse(req.postData()!) : {};
+      posts.push({
+        url: new URL(req.url()).pathname,
+        method: req.method(),
+        body,
+      });
+      if (req.url().endsWith("/bulk/add"))
+        return route.fulfill({
+          json: {
+            kind: "add",
+            total: 3,
+            counts: { eligible: 1, in_library: 1, unreleased: 1 },
+            items: [
+              {
+                member_id: "member-2",
+                title: "Connected show",
+                media_type: "series",
+                status: "eligible",
+                library_id: "lib-1",
+                profile_id: "qp-1",
+              },
+              {
+                member_id: "member-1",
+                title: "Original adventure",
+                media_type: "movie",
+                status: "skipped",
+                reason: "in_library",
+              },
+              {
+                member_id: "member-3",
+                title: "Future adventure",
+                media_type: "movie",
+                status: "skipped",
+                reason: "unreleased",
+              },
+            ],
+            libraries: {
+              movie: [
+                { id: "lib-1", name: "Movies", quality_profile_id: "qp-1" },
+              ],
+              series: [
+                { id: "lib-tv", name: "TV", quality_profile_id: "qp-1" },
+              ],
+            },
+            profiles: [{ id: "qp-1", name: "HD-1080p" }],
+            settings: {
+              movie: {
+                library_id: "lib-1",
+                quality_profile_id: "qp-1",
+                monitored: true,
+              },
+              series: {
+                library_id: "lib-tv",
+                quality_profile_id: "qp-1",
+                monitored: true,
+              },
+            },
+          },
+        });
+      return route.fulfill({ json: collection });
+    },
+  );
+  await mockGet(page, "movies?limit=1000&offset=0", {
+    data: [{ id: "actual-movie", title: "Original adventure", tmdbId: 101 }],
+  });
+  await mockGet(page, "movies/lookup?*", [
+    {
+      tmdbId: 990001,
+      title:
+        "An extraordinarily long adventure title that must wrap inside the picker",
+      year: 2023,
+      posterPath: "/adventure.jpg",
+    },
+  ]);
+  const noOverflow = async () => {
+    // Let sheet/dialog enter animations finish before measuring.
+    await page.waitForTimeout(500);
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth,
+      ),
+    ).toBe(true);
+    for (const dialog of await page.getByRole("dialog").all()) {
+      await expect(dialog).toBeInViewport({ ratio: 1 });
+      expect(
+        await dialog.evaluate((el) => el.scrollWidth <= el.clientWidth),
+      ).toBe(true);
+    }
+  };
+
+  await page.goto("/collections?id=loom-collection");
+  await expect(
+    page.getByRole("heading", { name: "Adventure collection" }),
+  ).toBeVisible();
+
+  await page.getByRole("button", { name: "Add titles", exact: true }).click();
+  const picker = page.getByRole("dialog", {
+    name: "Add titles to Adventure collection",
+  });
+  await picker.getByLabel("Search titles").fill("adventure");
+  await expect(
+    picker.getByRole("checkbox", { name: /Original adventure/ }),
+  ).toBeDisabled();
+  await picker
+    .getByRole("checkbox", { name: /extraordinarily long adventure/ })
+    .click();
+  await expect(
+    picker.getByRole("button", { name: "Add 1 title" }),
+  ).toBeEnabled();
+  await noOverflow();
+  await page.screenshot({ path: testInfo.outputPath("collection-picker.png") });
+  await picker.getByRole("button", { name: "Add 1 title" }).click();
+  await expect(picker).not.toBeVisible();
+  expect(posts.at(-1)).toMatchObject({
+    url: "/api/v1/collections/loom-collection/members",
+    body: {
+      items: [{ media_type: "movie", external_ids: { tmdb: "990001" } }],
+    },
+  });
+
+  await page.getByRole("button", { name: "Select", exact: true }).click();
+  await page.getByRole("button", { name: "Select Connected show" }).click();
+  await page.getByRole("button", { name: "Select Future adventure" }).click();
+  const bar = page.getByRole("toolbar", { name: "Selected titles" });
+  await expect(bar).toContainText("2 selected");
+  await noOverflow();
+  await page.screenshot({ path: testInfo.outputPath("collection-select.png") });
+  await bar.getByRole("button", { name: "Add missing" }).click();
+  const bulk = page.getByRole("dialog", { name: "Add missing titles" });
+  await expect(bulk.getByText("Connected show")).toBeVisible();
+  await expect(bulk.getByLabel("Library").first()).toHaveValue("lib-1");
+  expect(
+    posts.every((p) => (p.body as { execute?: boolean }).execute !== true),
+  ).toBe(true);
+  await noOverflow();
+  await page.screenshot({ path: testInfo.outputPath("collection-bulk.png") });
+  await page.keyboard.press("Escape");
+  await expect(bulk).not.toBeVisible();
+
+  await page.getByRole("button", { name: "Manage", exact: true }).click();
+  const manage = page.getByRole("dialog", { name: "Manage collection" });
+  await expect(manage.getByLabel("Quality for new additions")).toBeVisible();
+  await noOverflow();
+  await page.screenshot({ path: testInfo.outputPath("collection-manage.png") });
+  await manage.getByRole("button", { name: "Delete collection" }).click();
+  const confirm = page.getByRole("dialog", {
+    name: "Delete Adventure collection?",
+  });
+  await expect(confirm).toContainText("stay exactly as they are");
+  await noOverflow();
+  await page.screenshot({ path: testInfo.outputPath("collection-delete.png") });
+  expect(posts.some((p) => p.method === "DELETE")).toBe(false);
 });
 
 test("provider failure has a visible retry path", async ({ page }) => {

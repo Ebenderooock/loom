@@ -30,7 +30,9 @@ func respond(fn endpoint) http.HandlerFunc {
 			case errors.Is(err, ErrInvalid):
 				status, message = http.StatusBadRequest, err.Error()
 			case errors.Is(err, ErrConflict):
-				status, message = http.StatusConflict, ErrConflict.Error()
+				status, message = http.StatusConflict, err.Error()
+			case errors.Is(err, ErrUnavailable):
+				status, message = http.StatusServiceUnavailable, ErrUnavailable.Error()
 			case errors.Is(err, context.DeadlineExceeded), errors.Is(err, context.Canceled):
 				status, message = http.StatusGatewayTimeout, "Collection operation timed out; retry."
 			}
@@ -147,9 +149,10 @@ func Router(s *Service) http.Handler {
 	}))
 	r.Patch("/{id}", respond(func(w http.ResponseWriter, r *http.Request) (any, error) {
 		var body struct {
-			Name     string `json:"name"`
-			Overview string `json:"overview"`
-			Revision *int   `json:"revision"`
+			Name             string  `json:"name"`
+			Overview         string  `json:"overview"`
+			Revision         *int    `json:"revision"`
+			QualityProfileID *string `json:"quality_profile_id,omitempty"`
 		}
 		if err := readBody(w, r, &body); err != nil {
 			return nil, err
@@ -165,6 +168,12 @@ func Router(s *Service) http.Handler {
 			return nil, ErrConflict
 		}
 		c.Name, c.Overview = strings.TrimSpace(body.Name), body.Overview
+		if body.QualityProfileID != nil {
+			if err := s.validateProfile(r.Context(), *body.QualityProfileID); err != nil {
+				return nil, err
+			}
+			c.QualityProfileID = *body.QualityProfileID
+		}
 		return c, s.store.Save(r.Context(), c, false)
 	}))
 	r.Post("/{id}/sources", respond(func(w http.ResponseWriter, r *http.Request) (any, error) {
@@ -192,6 +201,9 @@ func Router(s *Service) http.Handler {
 		}
 		if len(c.Sources) >= 50 {
 			return nil, ErrInvalid
+		}
+		if err := s.store.Unsuppress(r.Context(), ref); err != nil {
+			return nil, err
 		}
 		c.Sources = append(c.Sources, ref)
 		if err := s.Refresh(r.Context(), c); err != nil {
@@ -237,31 +249,6 @@ func Router(s *Service) http.Handler {
 		}
 		return into, s.store.Merge(r.Context(), into, from)
 	}))
-	r.Post("/{id}/members", respond(func(w http.ResponseWriter, r *http.Request) (any, error) {
-		var body struct {
-			MediaType   string            `json:"media_type"`
-			Title       string            `json:"title"`
-			ExternalIDs map[string]string `json:"external_ids"`
-		}
-		if err := readBody(w, r, &body); err != nil {
-			return nil, err
-		}
-		m := Member{ID: uuid.NewString(), MediaType: body.MediaType, Title: body.Title, ExternalIDs: body.ExternalIDs, Local: true}
-		if err := m.Validate(); err != nil {
-			return nil, err
-		}
-		// Local additions work without provider availability. They can be
-		// enriched by a later source refresh sharing an exact external ID.
-		c, err := s.getForWrite(r.Context(), chi.URLParam(r, "id"))
-		if err != nil {
-			return nil, err
-		}
-		c.Members, err = coalesce(c.Members, m)
-		if err != nil {
-			return nil, err
-		}
-		return c, s.store.Save(r.Context(), c, false)
-	}))
 	r.Patch("/{id}/members/{member}", respond(func(w http.ResponseWriter, r *http.Request) (any, error) {
 		var body struct {
 			Excluded *bool   `json:"excluded,omitempty"`
@@ -295,5 +282,6 @@ func Router(s *Service) http.Handler {
 		}
 		return nil, sql.ErrNoRows
 	}))
+	s.manageRoutes(r)
 	return r
 }

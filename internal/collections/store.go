@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -221,4 +222,75 @@ func (s *Store) Merge(ctx context.Context, into, from *Collection) error {
 	}
 	into.Revision++
 	return nil
+}
+
+// Delete removes only the Loom collection aggregate: its source ownership,
+// redirects and membership document. Library titles and files are never
+// touched. Every source reference is durably suppressed so background
+// discovery cannot recreate the collection; explicit imports clear it.
+func (s *Store) Delete(ctx context.Context, id string, revision int) (int, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback() //nolint:errcheck
+	// Read sources before the delete: FK cascades remove them with the row.
+	rows, err := tx.QueryContext(ctx, `SELECT provider, kind, external_id FROM collection_sources WHERE collection_id=$1`, id)
+	if err != nil {
+		return 0, err
+	}
+	refs := []Source{}
+	for rows.Next() {
+		var ref Source
+		if err := rows.Scan(&ref.Provider, &ref.Kind, &ref.ExternalID); err != nil {
+			_ = rows.Close()
+			return 0, err
+		}
+		refs = append(refs, ref)
+	}
+	if err := rows.Close(); err != nil {
+		return 0, err
+	}
+	for _, query := range []string{`DELETE FROM collection_sources WHERE collection_id=$1`, `DELETE FROM collection_redirects WHERE collection_id=$1`} {
+		if _, err := tx.ExecContext(ctx, query, id); err != nil {
+			return 0, err
+		}
+	}
+	result, err := tx.ExecContext(ctx, `DELETE FROM collections WHERE id=$1 AND revision=$2`, id, revision)
+	if err != nil {
+		return 0, err
+	}
+	if n, err := result.RowsAffected(); err != nil {
+		return 0, err
+	} else if n != 1 {
+		var current int
+		if err := tx.QueryRowContext(ctx, `SELECT revision FROM collections WHERE id=$1`, id).Scan(&current); err != nil {
+			return 0, err
+		}
+		return 0, ErrConflict
+	}
+	now := time.Now().Unix()
+	for _, ref := range refs {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO collection_source_suppressions(provider,kind,external_id,suppressed_at) VALUES($1,$2,$3,$4) ON CONFLICT(provider,kind,external_id) DO UPDATE SET suppressed_at=excluded.suppressed_at`, ref.Provider, ref.Kind, ref.ExternalID, now); err != nil {
+			return 0, err
+		}
+	}
+	return len(refs), tx.Commit()
+}
+
+// Suppressed reports whether a deleted collection's source must not be
+// recreated by background discovery.
+func (s *Store) Suppressed(ctx context.Context, ref Source) (bool, error) {
+	var one int
+	err := s.db.QueryRowContext(ctx, `SELECT 1 FROM collection_source_suppressions WHERE provider=$1 AND kind=$2 AND external_id=$3`, ref.Provider, ref.Kind, ref.ExternalID).Scan(&one)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	return err == nil, err
+}
+
+// Unsuppress records an explicit user import of a previously deleted source.
+func (s *Store) Unsuppress(ctx context.Context, ref Source) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM collection_source_suppressions WHERE provider=$1 AND kind=$2 AND external_id=$3`, ref.Provider, ref.Kind, ref.ExternalID)
+	return err
 }

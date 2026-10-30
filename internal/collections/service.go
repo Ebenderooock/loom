@@ -38,6 +38,12 @@ type Service struct {
 	// fetch is a test seam; production always uses the existing provider clients.
 	fetch  func(context.Context, Source) (string, []Member, error)
 	scanMu sync.Mutex
+
+	jobsMu     sync.Mutex
+	actions    Actions
+	jobs       map[string]*Job
+	jobOrder   []string
+	activeKeys map[string]string
 }
 
 // NewService reuses the configured metadata clients and library services.
@@ -286,7 +292,18 @@ func (s *Service) Refresh(ctx context.Context, c *Collection) error {
 
 // Import creates a Loom collection from a new exact source identity. It never
 // joins names/overlap; known source identities return their current owner.
+// Import is an explicit user action, so it clears a deletion suppression.
 func (s *Service) Import(ctx context.Context, ref Source) (*Collection, error) {
+	if err := ref.Validate(); err != nil {
+		return nil, err
+	}
+	if err := s.store.Unsuppress(ctx, ref); err != nil {
+		return nil, err
+	}
+	return s.importSource(ctx, ref)
+}
+
+func (s *Service) importSource(ctx context.Context, ref Source) (*Collection, error) {
 	if err := ref.Validate(); err != nil {
 		return nil, err
 	}
@@ -323,8 +340,11 @@ func (s *Service) Import(ctx context.Context, ref Source) (*Collection, error) {
 }
 
 type libraryRecord struct {
-	member Member
-	file   func() (*bool, error)
+	member  Member
+	profile string
+	file    func() (*bool, error)
+	// missing counts monitored aired episodes without files (series only).
+	missing func() (int, error)
 }
 
 func (s *Service) library(ctx context.Context) ([]libraryRecord, error) {
@@ -350,7 +370,7 @@ func (s *Service) library(ctx context.Context) ([]libraryRecord, error) {
 		putID(ids, "imdb", movie.IMDBID)
 		putID(ids, "tvdb", movie.TVDBID)
 		id := movie.ID
-		out = append(out, libraryRecord{Member{MediaType: "movie", ExternalIDs: ids, InLibrary: true, MediaID: id, LibraryID: movie.LibraryID, Monitored: movie.MonitoringStatus == "monitored"}, func() (*bool, error) {
+		out = append(out, libraryRecord{member: Member{MediaType: "movie", Title: movie.Title, Year: movie.Year, PosterPath: movie.PosterPath, Overview: movie.Overview, ReleaseDate: movie.ReleaseDate, ExternalIDs: ids, InLibrary: true, MediaID: id, LibraryID: movie.LibraryID, Monitored: movie.MonitoringStatus == "monitored"}, profile: movie.QualityProfileID, file: func() (*bool, error) {
 			files, err := s.movies.ListMovieFiles(ctx, id)
 			if err != nil {
 				return nil, err
@@ -374,13 +394,19 @@ func (s *Service) library(ctx context.Context) ([]libraryRecord, error) {
 		putID(ids, "imdb", show.IMDBID)
 		putID(ids, "tvdb", show.TVDBID)
 		id := show.ID
-		out = append(out, libraryRecord{Member{MediaType: "series", ExternalIDs: ids, InLibrary: true, MediaID: id, LibraryID: show.LibraryID, Monitored: show.MonitoringStatus != "none" && show.MonitoringStatus != "unmonitored" && show.MonitoringStatus != "archived"}, func() (*bool, error) {
+		out = append(out, libraryRecord{member: Member{MediaType: "series", Title: show.Title, Year: show.Year, PosterPath: show.PosterPath, Overview: show.Overview, ExternalIDs: ids, InLibrary: true, MediaID: id, LibraryID: show.LibraryID, Monitored: show.MonitoringStatus != "none" && show.MonitoringStatus != "unmonitored" && show.MonitoringStatus != "archived"}, profile: show.QualityProfileID, file: func() (*bool, error) {
 			stats, err := s.series.GetEpisodeStats(ctx, id)
 			if err != nil {
 				return nil, err
 			}
 			has := stats != nil && stats.DownloadedEpisodes > 0
 			return &has, nil
+		}, missing: func() (int, error) {
+			stats, err := s.series.GetEpisodeStats(ctx, id)
+			if err != nil || stats == nil {
+				return 0, err
+			}
+			return stats.MissingEpisodes, nil
 		}})
 	}
 	return out, nil
@@ -496,6 +522,12 @@ func (s *Service) discoverMember(ctx context.Context, m Member) ([]*Collection, 
 	}
 	out := []*Collection{}
 	for _, ref := range refs {
+		// Deleted collections stay deleted until the user imports the source.
+		if suppressed, err := s.store.Suppressed(ctx, ref); err != nil {
+			return out, err
+		} else if suppressed {
+			continue
+		}
 		existing, lookupErr := s.store.FindSource(ctx, ref)
 		if lookupErr != nil && !errors.Is(lookupErr, sql.ErrNoRows) {
 			return out, lookupErr
@@ -514,7 +546,7 @@ func (s *Service) discoverMember(ctx context.Context, m Member) ([]*Collection, 
 				}
 			}
 		}
-		c, err := s.Import(ctx, ref)
+		c, err := s.importSource(ctx, ref)
 		if err != nil {
 			return out, err
 		}

@@ -314,6 +314,7 @@ func cmdServe(ctx context.Context, args []string) error {
 	// Connect the autosearch engine so the rolling searcher performs full
 	// search-and-grab cycles rather than discarding indexer results.
 	infra.rollingSearcher.SetGrabber(&autoSearchGrabber{engine: dlWiring.autoSearchEngine})
+	media.collectionsSvc.SetActions(&collectionActions{db: db.DB(), movies: moviesSvc, series: media.seriesSvc, libs: media.libStore, profiles: media.qpStore, engine: dlWiring.autoSearchEngine, logger: logger.With("module", "collections")})
 	infra.notifDispatcher.Start(ctx)
 	defer infra.notifDispatcher.Stop()
 	infra.rollingSearcher.Start(ctx)

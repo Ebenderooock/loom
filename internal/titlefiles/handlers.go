@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/ebenderooock/loom/internal/kernel/httpparam"
+
 	"github.com/go-chi/chi/v5"
 )
 
@@ -42,7 +44,7 @@ func (s *Service) handleList(w http.ResponseWriter, r *http.Request) {
 		writeResult(w, r, nil, err)
 		return
 	}
-	listing, err := s.List(r.Context(), chi.URLParam(r, "mediaType"), chi.URLParam(r, "id"), season)
+	listing, err := s.List(r.Context(), chi.URLParam(r, "mediaType"), httpparam.Param(r, "id"), season)
 	writeResult(w, r, listing, err)
 }
 
@@ -70,7 +72,7 @@ func (s *Service) handleDelete(w http.ResponseWriter, r *http.Request) {
 		writeResult(w, r, nil, errInvalid)
 		return
 	}
-	deleted, err := s.Delete(r.Context(), chi.URLParam(r, "mediaType"), chi.URLParam(r, "id"), season, body.Paths, body.DeletionMode)
+	deleted, err := s.Delete(r.Context(), chi.URLParam(r, "mediaType"), httpparam.Param(r, "id"), season, body.Paths, body.DeletionMode)
 	writeResult(w, r, map[string]any{"deleted": deleted}, err)
 }
 

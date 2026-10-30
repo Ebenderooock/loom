@@ -155,8 +155,32 @@ beforeEach(() => {
     const url = String(input),
       method = init?.method ?? "GET";
     if (method !== "GET") {
-      const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      const body = (init?.body ? JSON.parse(String(init.body)) : {}) as Record<
+        string,
+        unknown
+      >;
       requests.push({ url, method, body });
+      if (method === "DELETE" && url.startsWith("/api/v1/collections/loom-1?"))
+        return Response.json({ deleted: "loom-1" });
+      if (url.endsWith("/bulk/add"))
+        return Response.json(bulkPlan(body.execute === true));
+      if (url.endsWith("/loom-1/members") && method === "POST") {
+        const items = body.items as Array<Record<string, string>>;
+        collection = {
+          ...collection,
+          members: [
+            ...collection.members,
+            ...items.map((item, i) =>
+              member({
+                id: `new-${i}`,
+                title: item.media_id ?? `TMDB ${item.tmdb}`,
+                local: true,
+                sources: [],
+              }),
+            ),
+          ],
+        };
+      }
       if (url.endsWith("/refresh"))
         collection = {
           ...collection,
@@ -175,6 +199,25 @@ beforeEach(() => {
         };
       return Response.json(collection);
     }
+    if (url === "/api/v1/quality-profiles")
+      return Response.json({
+        data: [
+          { id: "hd", name: "HD" },
+          { id: "uhd", name: "UHD" },
+        ],
+      });
+    if (url.startsWith("/api/v1/movies?limit=1000"))
+      return Response.json({
+        data: [
+          { id: "actual-movie", title: "A movie", tmdbId: 42 },
+          { id: "lib-dune", title: "Dune", tmdbId: 438631, year: 2021 },
+        ],
+      });
+    if (url.startsWith("/api/v1/movies/lookup"))
+      return Response.json([
+        { tmdbId: 438631, title: "Dune", year: 2021 },
+        { tmdbId: 693134, title: "Dune: Part Two", year: 2024 },
+      ]);
     if (url === "/api/v1/libraries")
       return Response.json({
         data: [
@@ -208,6 +251,38 @@ afterEach(() => {
   client.clear();
   vi.restoreAllMocks();
 });
+function bulkPlan(executed: boolean) {
+  return {
+    kind: "add",
+    total: 2,
+    counts: { eligible: 1, in_library: 1 },
+    items: [
+      {
+        member_id: "s1",
+        title: "A show",
+        media_type: "series",
+        status: executed ? "queued" : "eligible",
+      },
+      {
+        member_id: "m1",
+        title: "A movie",
+        media_type: "movie",
+        status: "skipped",
+        reason: "in_library",
+      },
+    ],
+    libraries: { series: [{ id: "shows", name: "Shows" }] },
+    profiles: [{ id: "hd", name: "HD" }],
+    settings: {
+      series: {
+        library_id: "shows",
+        quality_profile_id: "hd",
+        monitored: true,
+      },
+    },
+    ...(executed ? { job_id: "job-1" } : {}),
+  };
+}
 function page() {
   render(
     <QueryClientProvider client={client}>
@@ -269,7 +344,7 @@ describe("Standalone Collections", () => {
     await userEvent.click(
       screen.getByRole("button", { name: "Shared add form" }),
     );
-    expect(await screen.findByText("2 of 2 added to Loom")).toBeInTheDocument();
+    expect(await screen.findByText("2 of 2 in library")).toBeInTheDocument();
     expect(
       await screen.findByRole("dialog", { name: "Actual library management" }),
     ).toHaveTextContent("series:actual-show");
@@ -286,8 +361,12 @@ describe("Standalone Collections", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "Source access failed",
     );
+    await userEvent.click(screen.getByRole("button", { name: "Manage" }));
+    const sheet = await screen.findByRole("dialog", {
+      name: "Manage collection",
+    });
     await userEvent.click(
-      screen.getByRole("button", { name: "Refresh sources" }),
+      within(sheet).getByRole("button", { name: "Refresh sources" }),
     );
     await waitFor(() =>
       expect(screen.queryByRole("alert")).not.toBeInTheDocument(),
@@ -296,8 +375,9 @@ describe("Standalone Collections", () => {
       url: "/api/v1/collections/loom-1/refresh",
       method: "POST",
     });
+    await userEvent.keyboard("{Escape}");
     expect(
-      screen.getByRole("heading", { name: "Mixed universe" }),
+      await screen.findByRole("heading", { name: "Mixed universe" }),
     ).toBeInTheDocument();
   });
   it("excludes locally and offers restoration without deleting the library title", async () => {
@@ -307,7 +387,7 @@ describe("Standalone Collections", () => {
       await screen.findByRole("button", { name: "Manage A movie" })
     ).closest("article")!;
     await userEvent.click(
-      within(card).getByRole("button", { name: "Exclude locally" }),
+      within(card).getByRole("button", { name: "Exclude" }),
     );
     await waitFor(() =>
       expect(
@@ -316,7 +396,7 @@ describe("Standalone Collections", () => {
     );
     await userEvent.selectOptions(screen.getByLabelText("Status"), "excluded");
     expect(
-      await screen.findByRole("button", { name: "Restore member" }),
+      await screen.findByRole("button", { name: "Restore" }),
     ).toBeInTheDocument();
     expect(requests[0]).toMatchObject({
       method: "PATCH",
@@ -328,18 +408,18 @@ describe("Standalone Collections", () => {
     state.search = { id: "loom-1" };
     page();
     await userEvent.click(
-      await screen.findByRole("button", { name: "Merge collections" }),
+      await screen.findByRole("button", { name: "Manage" }),
     );
     await userEvent.selectOptions(
       screen.getByLabelText("Merge another collection into Mixed universe"),
       "loom-2",
     );
+    const merge = screen.getByRole("button", { name: "Merge" });
+    expect(merge).toBeDisabled();
     await userEvent.click(
-      screen.getByLabelText("I confirm these collections should be one."),
+      screen.getByLabelText("Merge Other universe into Mixed universe"),
     );
-    await userEvent.click(
-      screen.getByRole("button", { name: "Merge into Mixed universe" }),
-    );
+    await userEvent.click(merge);
     await waitFor(() =>
       expect(requests).toContainEqual({
         url: "/api/v1/collections/loom-1/merge",
@@ -347,6 +427,143 @@ describe("Standalone Collections", () => {
         body: { from_id: "loom-2", revision: 3, from_revision: 2 },
       }),
     );
+  });
+  it("deletes only the collection after confirmation", async () => {
+    state.search = { id: "loom-1" };
+    page();
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Manage" }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Delete collection" }),
+    );
+    const confirm = await screen.findByRole("dialog", {
+      name: "Delete Mixed universe?",
+    });
+    expect(confirm).toHaveTextContent(
+      "1 library title and their files stay exactly as they are",
+    );
+    expect(confirm).toHaveTextContent("won't be re-imported automatically");
+    expect(requests).toEqual([]);
+    await userEvent.click(
+      within(confirm).getByRole("button", { name: "Delete collection" }),
+    );
+    await waitFor(() =>
+      expect(requests).toEqual([
+        {
+          url: "/api/v1/collections/loom-1?revision=3",
+          method: "DELETE",
+          body: {},
+        },
+      ]),
+    );
+    expect(state.navigate).toHaveBeenCalled();
+    expect(requests.some((r) => r.url.includes("/movies"))).toBe(false);
+  });
+  it("saves a collection quality default without touching existing members", async () => {
+    state.search = { id: "loom-1" };
+    page();
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Manage" }),
+    );
+    const select = screen.getByLabelText("Quality for new additions");
+    await screen.findByRole("option", { name: "UHD" });
+    await userEvent.selectOptions(select, "uhd");
+    await userEvent.click(screen.getByRole("button", { name: "Save details" }));
+    await waitFor(() =>
+      expect(requests).toEqual([
+        {
+          url: "/api/v1/collections/loom-1",
+          method: "PATCH",
+          body: {
+            name: "Mixed universe",
+            overview: "Movies and shows",
+            revision: 3,
+            quality_profile_id: "uhd",
+          },
+        },
+      ]),
+    );
+  });
+  it("adds real library and TMDB titles from the picker", async () => {
+    state.search = { id: "loom-1" };
+    page();
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Add titles" }),
+    );
+    const picker = await screen.findByRole("dialog", {
+      name: "Add titles to Mixed universe",
+    });
+    await userEvent.type(
+      within(picker).getByLabelText("Search titles"),
+      "dune",
+    );
+    const library = await within(picker).findByRole("region", {
+      name: "Library results",
+    });
+    const tmdb = await within(picker).findByRole("region", {
+      name: "TMDB results",
+    });
+    // TMDB's Dune is already in the library, so it only appears once.
+    await within(tmdb).findByRole("checkbox", { name: /Dune: Part Two/ });
+    expect(
+      within(tmdb).queryByRole("checkbox", { name: /^Dune 2021/ }),
+    ).toBeNull();
+    await userEvent.click(
+      within(library).getByRole("checkbox", { name: /^Dune/ }),
+    );
+    await userEvent.click(
+      within(tmdb).getByRole("checkbox", { name: /Dune: Part Two/ }),
+    );
+    await userEvent.click(
+      within(picker).getByRole("button", { name: "Add 2 titles" }),
+    );
+    await waitFor(() =>
+      expect(requests).toContainEqual({
+        url: "/api/v1/collections/loom-1/members",
+        method: "POST",
+        body: {
+          items: [
+            { media_type: "movie", media_id: "lib-dune" },
+            {
+              media_type: "movie",
+              title: "Dune: Part Two",
+              year: 2024,
+              external_ids: { tmdb: "693134" },
+            },
+          ],
+        },
+      }),
+    );
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", { name: "Add titles to Mixed universe" }),
+      ).not.toBeInTheDocument(),
+    );
+  });
+  it("previews bulk add for a selection and only adds after confirming", async () => {
+    state.search = { id: "loom-1" };
+    page();
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Select" }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Select A show" }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Select A movie" }),
+    );
+    const bar = screen.getByRole("toolbar", { name: "Selected titles" });
+    expect(bar).toHaveTextContent("2 selected");
+    await userEvent.click(
+      within(bar).getByRole("button", { name: "Add missing" }),
+    );
+    const sheet = await screen.findByRole("dialog", { name: /Add missing/ });
+    expect(await within(sheet).findByText("A show")).toBeInTheDocument();
+    expect(within(sheet).getByText(/Already in library/i)).toBeInTheDocument();
+    await waitFor(() => expect(requests.length).toBeGreaterThan(0));
+    expect(requests.every((r) => r.body.execute !== true)).toBe(true);
+    expect(requests[0]?.body).toMatchObject({ member_ids: ["s1", "m1"] });
   });
   it("creates a local collection without requiring a source", async () => {
     page();
@@ -393,10 +610,13 @@ describe("Standalone Collections", () => {
       screen.queryByRole("button", { name: "Edit collection" }),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Merge collections" }),
+      screen.queryByRole("button", { name: "Manage" }),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Exclude locally" }),
+      screen.queryByRole("button", { name: "Add titles" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Exclude" }),
     ).not.toBeInTheDocument();
   });
 });
