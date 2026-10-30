@@ -27,9 +27,11 @@ import { AlbumSearchDialog } from "@/components/music/album-search-dialog";
 import { ArtistMetadata } from "@/components/titles/title-metadata";
 import { AlbumMetadataSummary } from "@/components/titles/album-metadata";
 import {
+  fetchAlbum,
   useArtist,
   useSetArtistMonitoring,
   useSetAlbumMonitored,
+  useSelectAlbumRelease,
   useSearchAlbum,
   useDeleteArtist,
   useRescanArtist,
@@ -42,9 +44,11 @@ function albumYear(a: Album): string {
 
 function AlbumRow({ album }: { album: Album }) {
   const setMonitored = useSetAlbumMonitored();
+  const selectRelease = useSelectAlbumRelease();
   const search = useSearchAlbum();
   const [searchOpen, setSearchOpen] = useState(false);
   const [imageLoadError, setImageLoadError] = useState(false);
+  const [releases, setReleases] = useState<Album["releases"] | null>(null);
   const tracks = album.tracks ?? [];
   const present = tracks.filter((t) => t.has_file).length;
 
@@ -56,6 +60,19 @@ function AlbumRow({ album }: { album: Album }) {
       );
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Search failed");
+    }
+  };
+
+  const openReleasePicker = async () => {
+    if (releases) {
+      setReleases(null);
+      return;
+    }
+    try {
+      const fullAlbum = await fetchAlbum(album.id);
+      setReleases(fullAlbum.releases ?? []);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not load editions");
     }
   };
 
@@ -127,6 +144,49 @@ function AlbumRow({ album }: { album: Album }) {
       >
         <TextSearch className="h-4 w-4" />
       </Button>
+      <Button
+        size="sm"
+        variant="ghost"
+        onClick={() => void openReleasePicker()}
+        aria-label="Choose album edition"
+        title="Choose album edition"
+      >
+        <Disc3 className="h-4 w-4" />
+      </Button>
+      {releases && (
+        <select
+          aria-label={`Selected edition for ${album.title}`}
+          className="max-w-40 rounded-md border bg-background px-2 py-1 text-xs"
+          value={album.selected_release_id ?? ""}
+          disabled={selectRelease.isPending}
+          onChange={(event) => {
+            const releaseId = event.target.value;
+            if (!releaseId) return;
+            selectRelease.mutate(
+              { albumId: album.id, releaseId },
+              {
+                onSuccess: () => {
+                  toast.success(`Edition updated for ${album.title}`);
+                  setReleases(null);
+                },
+                onError: (e) =>
+                  toast.error(
+                    e instanceof Error ? e.message : "Edition update failed",
+                  ),
+              },
+            );
+          }}
+        >
+          <option value="" disabled>
+            Choose edition
+          </option>
+          {releases.map((release) => (
+            <option key={release.id} value={release.id}>
+              {release.title || release.disambiguation || release.status || release.id}
+            </option>
+          ))}
+        </select>
+      )}
       <AlbumSearchDialog
         albumId={album.id}
         albumTitle={album.title}

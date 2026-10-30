@@ -21,6 +21,7 @@ import (
 	"github.com/ebenderooock/loom/internal/kernel/eventbus"
 	"github.com/ebenderooock/loom/internal/libraries"
 	"github.com/ebenderooock/loom/internal/movies"
+	musiclib "github.com/ebenderooock/loom/internal/music"
 	"github.com/ebenderooock/loom/internal/notifications"
 	"github.com/ebenderooock/loom/internal/parser"
 	"github.com/ebenderooock/loom/internal/safety"
@@ -36,6 +37,7 @@ type PipelineOptions struct {
 	RemotePathStore *downloads.RemotePathStore
 	MoviesSvc       movies.Service
 	SeriesSvc       series.Service
+	MusicSvc        musiclib.Service
 	LibStore        *libraries.Store
 	WorkflowEngine  *workflows.Engine
 	NotifSvc        notifications.Service
@@ -58,6 +60,8 @@ type ImportPipeline struct {
 	matcher         *Matcher
 	wfEngine        *workflows.Engine
 	moviesSvc       movies.Service
+	musicSvc        musiclib.Service
+	libStore        *libraries.Store
 	notifSvc        notifications.Service
 	postVal         *safety.PostValidator
 	reviewStore     *safety.ReviewStore
@@ -126,6 +130,8 @@ func NewPipeline(opts PipelineOptions) (*ImportPipeline, error) {
 		matcher:         matcher,
 		wfEngine:        opts.WorkflowEngine,
 		moviesSvc:       opts.MoviesSvc,
+		musicSvc:        opts.MusicSvc,
+		libStore:        opts.LibStore,
 		notifSvc:        opts.NotifSvc,
 		postVal:         opts.PostVal,
 		reviewStore:     opts.ReviewStore,
@@ -411,6 +417,9 @@ func (p *ImportPipeline) processImport(ctx context.Context, ev *downloads.Downlo
 	info, err := os.Stat(downloadPath)
 	if err != nil {
 		return nil, p.recordFailure(ctx, "", "", ev.Title, downloadPath, fmt.Errorf("download path not found: %w", err))
+	}
+	if strings.EqualFold(strings.TrimSpace(ev.Category), "music") {
+		return p.processMusicImport(ctx, ev, downloadPath, info)
 	}
 
 	scanPath := downloadPath

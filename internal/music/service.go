@@ -2,6 +2,7 @@ package music
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -9,6 +10,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"os"
+	"path/filepath"
 
 	"github.com/ebenderooock/loom/internal/metadata"
 )
@@ -38,21 +41,67 @@ type Service interface {
 	GetAlbum(ctx context.Context, id string) (*Album, error)
 	ListAlbumsByArtist(ctx context.Context, artistID string) ([]*Album, error)
 	SetAlbumMonitored(ctx context.Context, id string, monitored bool) (*Album, error)
+	SelectAlbumRelease(ctx context.Context, albumID, releaseID string) (*Album, error)
 
 	// ImportTrackFile links a physical audio file to a track and marks the
 	// track as present. Used by the music scanner/import pipeline.
 	ImportTrackFile(ctx context.Context, tf *TrackFile) error
+	ListTrackFilesByArtist(ctx context.Context, artistID string) ([]*TrackFile, error)
+	DeleteTrackFile(ctx context.Context, id string) error
+	PruneMissingTrackFiles(ctx context.Context, artistID, root string) (int, error)
 
 	ListAudioQualityDefinitions(ctx context.Context) ([]*AudioQualityDefinition, error)
 	ListAudioQualityProfiles(ctx context.Context) ([]*AudioQualityProfile, error)
+	CreateAudioQualityProfile(ctx context.Context, req CreateAudioQualityProfileRequest) (*AudioQualityProfile, error)
 	UpdateAudioQualityProfile(ctx context.Context, id string, req UpdateAudioQualityProfileRequest) (*AudioQualityProfile, error)
+	DeleteAudioQualityProfile(ctx context.Context, id string) error
 	ListMetadataProfiles(ctx context.Context) ([]*MetadataProfile, error)
+	CreateMetadataProfile(ctx context.Context, req CreateMetadataProfileRequest) (*MetadataProfile, error)
+	UpdateMetadataProfile(ctx context.Context, id string, req UpdateMetadataProfileRequest) (*MetadataProfile, error)
+	DeleteMetadataProfile(ctx context.Context, id string) error
+}
+
+// PruneMissingTrackFiles removes stale track-file records under root and
+// repairs their tracks' has_file state. It is called only after a successful
+// scan of that folder, so inaccessible directories are never treated as empty.
+func (s *service) PruneMissingTrackFiles(ctx context.Context, artistID, root string) (int, error) {
+	files, err := s.repo.ListTrackFilesByArtist(ctx, artistID)
+	if err != nil {
+		return 0, err
+	}
+	rootAbs, err := filepath.Abs(root)
+	if err != nil {
+		return 0, err
+	}
+	removed := 0
+	for _, file := range files {
+		if err := ctx.Err(); err != nil {
+			return removed, err
+		}
+		pathAbs, err := filepath.Abs(file.FilePath)
+		if err != nil {
+			continue
+		}
+		rel, err := filepath.Rel(rootAbs, pathAbs)
+		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			continue
+		}
+		if _, err := os.Stat(pathAbs); err == nil || !os.IsNotExist(err) {
+			continue
+		}
+		if err := s.repo.DeleteTrackFile(ctx, file.ID); err != nil {
+			return removed, err
+		}
+		removed++
+	}
+	return removed, nil
 }
 
 type service struct {
-	repo     Repository
-	provider metadata.MusicMetadataProvider
-	logger   *slog.Logger
+	repo        Repository
+	provider    metadata.MusicMetadataProvider
+	logger      *slog.Logger
+	searchOnAdd func(context.Context, string) error
 }
 
 // NewService builds the music service. The provider must be non-nil for
@@ -61,7 +110,15 @@ func NewService(repo Repository, provider metadata.MusicMetadataProvider, logger
 	if logger == nil {
 		logger = slog.Default()
 	}
+
 	return &service{repo: repo, provider: provider, logger: logger}
+}
+
+// SetSearchOnAdd installs the bounded acquisition hook used by the search-on-add
+// option. It is intentionally optional so metadata-only/test configurations do
+// not start searches without a wired indexer and download stack.
+func (s *service) SetSearchOnAdd(search func(context.Context, string) error) {
+	s.searchOnAdd = search
 }
 
 func (s *service) ListArtists(ctx context.Context) ([]*Artist, error) {
@@ -202,6 +259,10 @@ func (s *service) AddArtist(ctx context.Context, req AddArtistRequest) (*Artist,
 	}
 
 	monitoring := MonitoringMonitored
+	if req.MonitoringStatus != "" && req.MonitoringStatus != string(MonitoringMonitored) &&
+		req.MonitoringStatus != string(MonitoringUnmonitored) {
+		return nil, fmt.Errorf("%w: invalid monitoring status %q", ErrInvalid, req.MonitoringStatus)
+	}
 	if req.MonitoringStatus == string(MonitoringUnmonitored) {
 		monitoring = MonitoringUnmonitored
 	}
@@ -265,14 +326,20 @@ func (s *service) AddArtist(ctx context.Context, req AddArtistRequest) (*Artist,
 
 	// Persist albums (release-groups). Tracks are fetched lazily when an album
 	// is opened/searched to respect the MusicBrainz rate limit.
-	if n, err := s.syncArtistAlbums(ctx, artist, req.MetadataProfileID, monitoring); err != nil {
-		s.logger.Warn("music: failed to fetch artist albums", "mbid", req.MBID, "error", err)
-	} else if n > 0 {
+	n, err := s.syncArtistAlbums(ctx, artist, req.MetadataProfileID, monitoring)
+	if err != nil {
+		return nil, fmt.Errorf("sync artist albums: %w", err)
+	}
+	if n > 0 {
 		s.logger.Info("music: added albums", "artist", artist.Name, "count", n)
 	}
 
 	if req.Search {
-		s.logger.Info("music: search-on-add requested (acquisition implemented in a later milestone)", "artist", artist.Name)
+		if s.searchOnAdd == nil {
+			s.logger.Warn("music: search-on-add requested but acquisition is not wired", "artist", artist.Name)
+		} else if err := s.searchOnAdd(ctx, artist.ID); err != nil {
+			s.logger.Warn("music: search-on-add did not complete", "artist", artist.Name, "error", err)
+		}
 	}
 
 	return s.GetArtist(ctx, artist.ID)
@@ -287,6 +354,9 @@ func (s *service) UpdateArtist(ctx context.Context, id string, req UpdateArtistR
 		return nil, ErrNotFound
 	}
 	if req.MonitoringStatus != nil {
+		if *req.MonitoringStatus != string(MonitoringMonitored) && *req.MonitoringStatus != string(MonitoringUnmonitored) {
+			return nil, fmt.Errorf("%w: invalid monitoring status %q", ErrInvalid, *req.MonitoringStatus)
+		}
 		a.MonitoringStatus = MonitoringStatus(*req.MonitoringStatus)
 	}
 	if req.QualityProfileID != nil {
@@ -297,6 +367,9 @@ func (s *service) UpdateArtist(ctx context.Context, id string, req UpdateArtistR
 	}
 	if req.MetadataProfileID != nil {
 		a.MetadataProfileID = *req.MetadataProfileID
+	}
+	if req.Path != nil {
+		a.Path = strings.TrimSpace(*req.Path)
 	}
 	if err := s.repo.UpdateArtist(ctx, a); err != nil {
 		return nil, err
@@ -371,9 +444,21 @@ func (s *service) GetAlbum(ctx context.Context, id string) (*Album, error) {
 // fetchReleases pulls the album's editions from the provider, stores them, and
 // selects a preferred release for acquisition/track matching.
 func (s *service) fetchReleases(ctx context.Context, al *Album) error {
+	oldSelectedID := al.SelectedReleaseID
 	_, releaseMetas, err := s.provider.GetAlbum(ctx, al.MBID)
 	if err != nil {
 		return err
+	}
+	priorReleases, err := s.repo.ListReleasesByAlbum(ctx, al.ID)
+	if err != nil {
+		return err
+	}
+	priorSelectedMBID := ""
+	for _, prior := range priorReleases {
+		if prior.ID == al.SelectedReleaseID {
+			priorSelectedMBID = prior.MBID
+			break
+		}
 	}
 	releases := make([]*AlbumRelease, 0, len(releaseMetas))
 	for _, rm := range releaseMetas {
@@ -402,7 +487,32 @@ func (s *service) fetchReleases(ctx context.Context, al *Album) error {
 	al.ReleasesFetchedAt = &now
 
 	// Select the preferred release; if none match criteria, pick the first one
-	selected := pickRelease(releases)
+	var selected *AlbumRelease
+	if priorSelectedMBID != "" {
+		for _, rel := range releases {
+			if rel.MBID == priorSelectedMBID {
+				selected = rel
+				break
+			}
+		}
+	}
+	if selected == nil {
+		var releaseStatuses []string
+		artist, err := s.repo.GetArtist(ctx, al.ArtistID)
+		if err != nil {
+			return fmt.Errorf("get album artist: %w", err)
+		}
+		if artist != nil && artist.MetadataProfileID != "" {
+			profile, err := s.repo.GetMetadataProfile(ctx, artist.MetadataProfileID)
+			if err != nil {
+				return fmt.Errorf("get metadata profile %q: %w", artist.MetadataProfileID, err)
+			}
+			if profile != nil {
+				releaseStatuses = profile.ReleaseStatuses
+			}
+		}
+		selected = pickRelease(releases, releaseStatuses)
+	}
 	if selected == nil && len(releases) > 0 {
 		selected = releases[0]
 		s.logger.Warn("music: no ideal release found, using first available", "album", al.ID, "count", len(releases))
@@ -411,8 +521,11 @@ func (s *service) fetchReleases(ctx context.Context, al *Album) error {
 		al.SelectedReleaseID = selected.ID
 	}
 
-	// Re-fetching releases invalidates any previously fetched track list.
-	al.TracksFetchedAt = nil
+	// A release refresh does not invalidate the selected edition's tracks unless
+	// the selected edition actually changed. Track replacement is merge-safe.
+	if selected == nil || selected.ID != oldSelectedID {
+		al.TracksFetchedAt = nil
+	}
 	return s.repo.UpdateAlbum(ctx, al)
 }
 
@@ -492,6 +605,38 @@ func (s *service) SetAlbumMonitored(ctx context.Context, id string, monitored bo
 	return s.GetAlbum(ctx, id)
 }
 
+func (s *service) SelectAlbumRelease(ctx context.Context, albumID, releaseID string) (*Album, error) {
+	al, err := s.repo.GetAlbum(ctx, albumID)
+	if err != nil {
+		return nil, err
+	}
+	if al == nil {
+		return nil, ErrNotFound
+	}
+	releases, err := s.repo.ListReleasesByAlbum(ctx, albumID)
+	if err != nil {
+		return nil, err
+	}
+	found := false
+	for _, release := range releases {
+		if release.ID == releaseID {
+			found = true
+			break
+		}
+	}
+	if !found {
+		return nil, fmt.Errorf("%w: release %q does not belong to album %q", ErrInvalid, releaseID, albumID)
+	}
+	if al.SelectedReleaseID != releaseID {
+		al.SelectedReleaseID = releaseID
+		al.TracksFetchedAt = nil
+		if err := s.repo.UpdateAlbum(ctx, al); err != nil {
+			return nil, err
+		}
+	}
+	return s.GetAlbum(ctx, albumID)
+}
+
 // ListAlbumsByArtist returns the albums belonging to an artist (no lazy fetch).
 func (s *service) ListAlbumsByArtist(ctx context.Context, artistID string) ([]*Album, error) {
 	return s.repo.ListAlbumsByArtist(ctx, artistID)
@@ -502,7 +647,11 @@ func (s *service) ImportTrackFile(ctx context.Context, tf *TrackFile) error {
 	if tf == nil || tf.FilePath == "" {
 		return ErrInvalid
 	}
-	if existing, err := s.repo.GetTrackFileByPath(ctx, tf.FilePath); err == nil && existing != nil {
+	existing, err := s.repo.GetTrackFileByPath(ctx, tf.FilePath)
+	if err != nil {
+		return err
+	}
+	if existing != nil {
 		return nil // already imported
 	}
 	if err := s.repo.CreateTrackFile(ctx, tf); err != nil {
@@ -510,10 +659,18 @@ func (s *service) ImportTrackFile(ctx context.Context, tf *TrackFile) error {
 	}
 	if tf.TrackID != "" {
 		if err := s.repo.MarkTrackHasFile(ctx, tf.TrackID, true); err != nil {
-			s.logger.Warn("music: failed to mark track has_file", "track", tf.TrackID, "error", err)
+			return fmt.Errorf("mark track %s as present: %w", tf.TrackID, err)
 		}
 	}
 	return nil
+}
+
+func (s *service) ListTrackFilesByArtist(ctx context.Context, artistID string) ([]*TrackFile, error) {
+	return s.repo.ListTrackFilesByArtist(ctx, artistID)
+}
+
+func (s *service) DeleteTrackFile(ctx context.Context, id string) error {
+	return s.repo.DeleteTrackFile(ctx, id)
 }
 
 func (s *service) ListAudioQualityDefinitions(ctx context.Context) ([]*AudioQualityDefinition, error) {
@@ -522,6 +679,60 @@ func (s *service) ListAudioQualityDefinitions(ctx context.Context) ([]*AudioQual
 
 func (s *service) ListAudioQualityProfiles(ctx context.Context) ([]*AudioQualityProfile, error) {
 	return s.repo.ListAudioQualityProfiles(ctx)
+}
+
+func (s *service) CreateAudioQualityProfile(ctx context.Context, req CreateAudioQualityProfileRequest) (*AudioQualityProfile, error) {
+	req.Name = strings.TrimSpace(req.Name)
+	if req.Name == "" {
+		return nil, fmt.Errorf("%w: profile name is required", ErrInvalid)
+	}
+	definitions, err := s.repo.ListAudioQualityDefinitions(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if req.Cutoff != "" && !hasQualityDefinition(definitions, req.Cutoff) {
+		return nil, fmt.Errorf("%w: unknown audio quality cutoff %q", ErrInvalid, req.Cutoff)
+	}
+	seen := make(map[string]bool)
+	for _, item := range req.Items {
+		if !hasQualityDefinition(definitions, item.DefinitionID) {
+			return nil, fmt.Errorf("%w: unknown audio quality definition %q", ErrInvalid, item.DefinitionID)
+		}
+		if seen[item.DefinitionID] {
+			return nil, fmt.Errorf("%w: duplicate audio quality definition %q", ErrInvalid, item.DefinitionID)
+		}
+		seen[item.DefinitionID] = true
+	}
+	if req.Items == nil {
+		req.Items = []AudioProfileItem{}
+	}
+	items, err := json.Marshal(req.Items)
+	if err != nil {
+		return nil, fmt.Errorf("encode audio quality profile items: %w", err)
+	}
+	upgradeAllowed := true
+	if req.UpgradeAllowed != nil {
+		upgradeAllowed = *req.UpgradeAllowed
+	}
+	now := time.Now().UTC()
+	profile := &AudioQualityProfile{
+		ID: uuid.New().String(), Name: req.Name, Items: items, Cutoff: req.Cutoff,
+		UpgradeAllowed: upgradeAllowed, FormatItems: req.FormatItems,
+		MinFormatScore: req.MinFormatScore, CreatedAt: now, UpdatedAt: now,
+	}
+	if err := s.repo.CreateAudioQualityProfile(ctx, profile); err != nil {
+		return nil, err
+	}
+	return profile, nil
+}
+
+func hasQualityDefinition(definitions []*AudioQualityDefinition, id string) bool {
+	for _, definition := range definitions {
+		if definition.ID == id {
+			return true
+		}
+	}
+	return false
 }
 
 // UpdateAudioQualityProfile updates the custom-format scoring, cutoff and
@@ -534,7 +745,14 @@ func (s *service) UpdateAudioQualityProfile(ctx context.Context, id string, req 
 	if p == nil {
 		return nil, ErrNotFound
 	}
+	definitions, err := s.repo.ListAudioQualityDefinitions(ctx)
+	if err != nil {
+		return nil, err
+	}
 	if req.Cutoff != nil {
+		if *req.Cutoff != "" && !hasQualityDefinition(definitions, *req.Cutoff) {
+			return nil, fmt.Errorf("%w: unknown audio quality cutoff %q", ErrInvalid, *req.Cutoff)
+		}
 		p.Cutoff = *req.Cutoff
 	}
 	if req.UpgradeAllowed != nil {
@@ -542,6 +760,18 @@ func (s *service) UpdateAudioQualityProfile(ctx context.Context, id string, req 
 	}
 	if req.FormatItems != nil {
 		p.FormatItems = req.FormatItems
+	}
+	if req.Items != nil {
+		for _, item := range *req.Items {
+			if !hasQualityDefinition(definitions, item.DefinitionID) {
+				return nil, fmt.Errorf("%w: unknown audio quality definition %q", ErrInvalid, item.DefinitionID)
+			}
+		}
+		items, err := json.Marshal(*req.Items)
+		if err != nil {
+			return nil, fmt.Errorf("encode audio quality profile items: %w", err)
+		}
+		p.Items = items
 	}
 	if req.MinFormatScore != nil {
 		p.MinFormatScore = *req.MinFormatScore
@@ -552,8 +782,112 @@ func (s *service) UpdateAudioQualityProfile(ctx context.Context, id string, req 
 	return s.repo.GetAudioQualityProfile(ctx, id)
 }
 
+func (s *service) DeleteAudioQualityProfile(ctx context.Context, id string) error {
+	profile, err := s.repo.GetAudioQualityProfile(ctx, id)
+	if err != nil {
+		return err
+	}
+	if profile == nil {
+		return ErrNotFound
+	}
+	artists, err := s.repo.ListArtists(ctx)
+	if err != nil {
+		return err
+	}
+	for _, artist := range artists {
+		if artist.QualityProfileID == id {
+			return fmt.Errorf("%w: audio quality profile is assigned to artist %q", ErrInvalid, artist.Name)
+		}
+	}
+	if err := s.repo.SoftDeleteAudioQualityProfile(ctx, id); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (s *service) ListMetadataProfiles(ctx context.Context) ([]*MetadataProfile, error) {
 	return s.repo.ListMetadataProfiles(ctx)
+}
+
+func (s *service) CreateMetadataProfile(ctx context.Context, req CreateMetadataProfileRequest) (*MetadataProfile, error) {
+	req.Name = strings.TrimSpace(req.Name)
+	if req.Name == "" {
+		return nil, fmt.Errorf("%w: profile name is required", ErrInvalid)
+	}
+	now := time.Now().UTC()
+	profile := &MetadataProfile{
+		ID: uuid.New().String(), Name: req.Name,
+		PrimaryTypes:    cleanProfileTypes(req.PrimaryTypes),
+		SecondaryTypes:  cleanProfileTypes(req.SecondaryTypes),
+		ReleaseStatuses: cleanProfileTypes(req.ReleaseStatuses),
+		CreatedAt:       now, UpdatedAt: now,
+	}
+	if err := s.repo.CreateMetadataProfile(ctx, profile); err != nil {
+		return nil, err
+	}
+	return profile, nil
+}
+
+func (s *service) UpdateMetadataProfile(ctx context.Context, id string, req UpdateMetadataProfileRequest) (*MetadataProfile, error) {
+	profile, err := s.repo.GetMetadataProfile(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if profile == nil {
+		return nil, ErrNotFound
+	}
+	if req.Name != nil {
+		name := strings.TrimSpace(*req.Name)
+		if name == "" {
+			return nil, fmt.Errorf("%w: profile name is required", ErrInvalid)
+		}
+		profile.Name = name
+	}
+	if req.PrimaryTypes != nil {
+		profile.PrimaryTypes = cleanProfileTypes(*req.PrimaryTypes)
+	}
+	if req.SecondaryTypes != nil {
+		profile.SecondaryTypes = cleanProfileTypes(*req.SecondaryTypes)
+	}
+	if req.ReleaseStatuses != nil {
+		profile.ReleaseStatuses = cleanProfileTypes(*req.ReleaseStatuses)
+	}
+	profile.UpdatedAt = time.Now().UTC()
+	if err := s.repo.UpdateMetadataProfile(ctx, profile); err != nil {
+		return nil, err
+	}
+	return s.repo.GetMetadataProfile(ctx, id)
+}
+
+func (s *service) DeleteMetadataProfile(ctx context.Context, id string) error {
+	profile, err := s.repo.GetMetadataProfile(ctx, id)
+	if err != nil {
+		return err
+	}
+	if profile == nil {
+		return ErrNotFound
+	}
+	artists, err := s.repo.ListArtists(ctx)
+	if err != nil {
+		return err
+	}
+	for _, artist := range artists {
+		if artist.MetadataProfileID == id {
+			return fmt.Errorf("%w: metadata profile is assigned to artist %q", ErrInvalid, artist.Name)
+		}
+	}
+	return s.repo.SoftDeleteMetadataProfile(ctx, id)
+}
+
+func cleanProfileTypes(values []string) StringSlice {
+	cleaned := make(StringSlice, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value != "" && !containsFold(cleaned, value) {
+			cleaned = append(cleaned, value)
+		}
+	}
+	return cleaned
 }
 
 // syncArtistAlbums fetches the artist's release-groups from the metadata
@@ -570,7 +904,13 @@ func (s *service) syncArtistAlbums(ctx context.Context, artist *Artist, metadata
 	}
 	var metaProfile *MetadataProfile
 	if metadataProfileID != "" {
-		metaProfile, _ = s.repo.GetMetadataProfile(ctx, metadataProfileID)
+		metaProfile, err = s.repo.GetMetadataProfile(ctx, metadataProfileID)
+		if err != nil {
+			return 0, fmt.Errorf("get metadata profile %q: %w", metadataProfileID, err)
+		}
+		if metaProfile == nil {
+			return 0, fmt.Errorf("%w: metadata profile %q", ErrNotFound, metadataProfileID)
+		}
 	}
 	monitorAlbums := monitoring == MonitoringMonitored
 	added := 0
@@ -579,6 +919,9 @@ func (s *service) syncArtistAlbums(ctx context.Context, artist *Artist, metadata
 			continue
 		}
 		if existingAl, _ := s.repo.GetAlbumByMBID(ctx, am.MBID); existingAl != nil {
+			if err := s.repo.LinkAlbumArtist(ctx, existingAl.ID, artist.ID); err != nil {
+				return added, fmt.Errorf("link existing album %q to artist %q: %w", existingAl.ID, artist.ID, err)
+			}
 			continue
 		}
 		// Album types outside the metadata profile are still stored but left
@@ -650,26 +993,44 @@ func containsFold(set []string, v string) bool {
 	return false
 }
 
-// pickRelease chooses a preferred edition: official status first, then the one
-// with the most tracks, then the earliest release date.
-func pickRelease(releases []*AlbumRelease) *AlbumRelease {
+// pickRelease prefers configured release statuses, then the earliest known
+// date, using track count only to break ties between otherwise equivalent editions.
+func pickRelease(releases []*AlbumRelease, preferredStatuses []string) *AlbumRelease {
+	if len(preferredStatuses) == 0 {
+		preferredStatuses = []string{"official"}
+	}
 	var best *AlbumRelease
 	for _, rel := range releases {
 		if best == nil {
 			best = rel
 			continue
 		}
-		if releaseScore(rel) > releaseScore(best) {
+		relStatusRank := releaseStatusRank(rel.Status, preferredStatuses)
+		bestStatusRank := releaseStatusRank(best.Status, preferredStatuses)
+		if relStatusRank < bestStatusRank ||
+			(relStatusRank == bestStatusRank && releaseDateBefore(rel.ReleaseDate, best.ReleaseDate)) ||
+			(relStatusRank == bestStatusRank && rel.ReleaseDate == best.ReleaseDate && rel.TrackCount > best.TrackCount) {
 			best = rel
 		}
 	}
 	return best
 }
 
-func releaseScore(r *AlbumRelease) int {
-	score := r.TrackCount
-	if strings.EqualFold(r.Status, "official") {
-		score += 10000
+func releaseStatusRank(status string, preferred []string) int {
+	for i, candidate := range preferred {
+		if strings.EqualFold(strings.TrimSpace(status), strings.TrimSpace(candidate)) {
+			return i
+		}
 	}
-	return score
+	return len(preferred)
+}
+
+func releaseDateBefore(a, b string) bool {
+	if a == "" {
+		return false
+	}
+	if b == "" {
+		return true
+	}
+	return a < b
 }

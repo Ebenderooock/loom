@@ -4,6 +4,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 )
 
 // MusicRelease is the parsed form of an indexer release title for a music
@@ -24,12 +26,13 @@ type MusicRelease struct {
 
 var (
 	reYear      = regexp.MustCompile(`\b(19\d{2}|20\d{2})\b`)
-	reBitrate   = regexp.MustCompile(`(?i)\b(\d{2,4})\s*kbps\b|\b(96|112|128|160|192|224|256|320)\b`)
+	reBitrate   = regexp.MustCompile(`(?i)\b(\d{2,4})\s*(?:kbps|kbit/s)\b|(?:mp3|aac|m4a)[\s._-]*(96|112|128|160|192|224|256|320)\b|\b(96|112|128|160|192|224|256|320)[\s._-]*(?:mp3|aac|m4a)\b`)
 	reBitDepth  = regexp.MustCompile(`(?i)\b(16|24|32)[\s\-]?bit\b`)
 	reMP3VBR    = regexp.MustCompile(`(?i)\b(V0|V2|APS|APX)\b`)
-	reSplitDash = regexp.MustCompile(`\s+-\s+`)
+	reSplitDash = regexp.MustCompile(`\s+[-–—]\s+`)
 	// reTagBlock matches trailing/inline bracket or brace tag groups.
-	reTagBlock = regexp.MustCompile(`[\[\({][^\]\)}]*[\]\)}]`)
+	reTagBlock    = regexp.MustCompile(`[\[\({][^\]\)}]*[\]\)}]`)
+	reCodecSuffix = regexp.MustCompile(`(?i)^[\s._-]*(?:v[02]|(?:96|112|128|160|192|224|256|320)(?:\s*kbps)?)$`)
 )
 
 // formatKeywords maps lowercase tokens to a normalized format label and whether
@@ -52,7 +55,9 @@ var formatKeywords = []struct {
 	{"vorbis", "OGG", false},
 	{"ogg", "OGG", false},
 	{"aac", "AAC", false},
-	{"m4a", "AAC", false},
+	// M4A is a container, not a codec. Prefer explicit ALAC detection above;
+	// otherwise the common lossy M4A/AAC form is the best available guess.
+	{"m4a", "M4A", false},
 	{"mp3", "MP3", false},
 }
 
@@ -78,11 +83,15 @@ func ParseMusic(title string) *MusicRelease {
 
 	// Format (first keyword wins; ordered so lossless/specific tokens win).
 	for _, fk := range formatKeywords {
-		if containsToken(lower, fk.token) {
+		if containsQualityToken(title, fk.token) {
 			r.Format = fk.format
 			r.Lossless = fk.lossless
 			break
 		}
+	}
+	if r.Format == "AAC" && containsToken(lower, "alac") {
+		r.Format = "ALAC"
+		r.Lossless = true
 	}
 
 	// Bit depth (e.g. 24bit).
@@ -99,9 +108,12 @@ func ParseMusic(title string) *MusicRelease {
 	// Lossy bitrate (skip for lossless formats).
 	if !r.Lossless {
 		if m := reBitrate.FindStringSubmatch(lower); m != nil {
-			val := m[1]
-			if val == "" {
-				val = m[2]
+			val := ""
+			for _, candidate := range m[1:] {
+				if candidate != "" {
+					val = candidate
+					break
+				}
 			}
 			if n, err := strconv.Atoi(val); err == nil {
 				r.Bitrate = n
@@ -124,6 +136,28 @@ func ParseMusic(title string) *MusicRelease {
 
 	r.Artist, r.Album = parseArtistAlbum(title)
 	return r
+}
+
+func containsQualityToken(title, token string) bool {
+	lower := strings.ToLower(title)
+	if !containsToken(lower, token) {
+		return false
+	}
+	// Codec names are also ordinary album words ("The Flac House"). Accept
+	// them in explicit release-tag blocks, as a trailing codec suffix, or
+	// after a release year; do not infer quality from an interior title word.
+	for _, block := range reTagBlock.FindAllString(lower, -1) {
+		if containsToken(block, token) {
+			return true
+		}
+	}
+	loc := reYear.FindStringIndex(lower)
+	if loc != nil && containsToken(lower[loc[1]:], token) {
+		return true
+	}
+	idx := indexToken(lower, token)
+	return idx >= 0 && (strings.TrimSpace(lower[idx+len(token):]) == "" ||
+		reCodecSuffix.MatchString(lower[idx+len(token):]))
 }
 
 // parseArtistAlbum splits "Artist - Album ..." on the first " - " separator and
@@ -185,16 +219,22 @@ func indexToken(s, token string) int {
 }
 
 func isBounded(s string, start, length int) bool {
-	if start > 0 && isAlnum(s[start-1]) {
-		return false
+	if start > 0 {
+		r, _ := utf8.DecodeLastRuneInString(s[:start])
+		if isWordRune(r) {
+			return false
+		}
 	}
 	end := start + length
-	if end < len(s) && isAlnum(s[end]) {
-		return false
+	if end < len(s) {
+		r, _ := utf8.DecodeRuneInString(s[end:])
+		if isWordRune(r) {
+			return false
+		}
 	}
 	return true
 }
 
-func isAlnum(b byte) bool {
-	return b >= 'a' && b <= 'z' || b >= 'A' && b <= 'Z' || b >= '0' && b <= '9'
+func isWordRune(r rune) bool {
+	return unicode.IsLetter(r) || unicode.IsDigit(r) || unicode.IsMark(r)
 }

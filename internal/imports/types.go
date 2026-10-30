@@ -31,6 +31,7 @@ type MediaType string
 const (
 	MediaTypeMovie   MediaType = "movie"
 	MediaTypeEpisode MediaType = "episode"
+	MediaTypeMusic   MediaType = "music"
 )
 
 // ImportRecord is the persisted history of a single file import.

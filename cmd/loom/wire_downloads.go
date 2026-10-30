@@ -72,7 +72,7 @@ func wireDownloads(
 		return nil, fmt.Errorf("init workflow store: %w", err)
 	}
 	wfEngine := workflows.NewEngine(wfStore, workflowMediaAdapter{moviesSvc, media.seriesSvc}, logger)
-	wiring.CalendarHandler = calendar.Router(db.DB(), wfStore)
+	wiring.CalendarHandler = calendar.RouterForEngine(db.DB(), string(db.Engine()), wfStore)
 
 	downloadSvc.SetWorkflowEngine(wfEngine)
 	downloadSvc.SetMovieStatusUpdater(movieStatusAdapter{moviesSvc})
@@ -119,6 +119,16 @@ func wireDownloads(
 			indexerSvc, downloadSvc.Registry(), media.musicRepo, logger,
 		)
 		musicSearchEngine.SetCustomFormats(cfEngine)
+		if media.musicSvc != nil {
+			musicSearchEngine.SetAlbumLoader(media.musicSvc)
+			if setter, ok := media.musicSvc.(interface {
+				SetSearchOnAdd(func(context.Context, string) error)
+			}); ok {
+				setter.SetSearchOnAdd(func(ctx context.Context, artistID string) error {
+					return musicSearchEngine.SearchArtistAcquisition(ctx, artistID, 3)
+				})
+			}
+		}
 		wiring.MusicSearch = musicSearchEngine
 		musicAutoSearcher = musicsearch.NewAutoSearcher(
 			musicSearchEngine, wiring.FeatureFlags.EnabledFunc(featureflags.KeyMusic),
@@ -143,6 +153,7 @@ func wireDownloads(
 		RemotePathStore: remotePathStore,
 		MoviesSvc:       moviesSvc,
 		SeriesSvc:       media.seriesSvc,
+		MusicSvc:        media.musicSvc,
 		LibStore:        media.libStore,
 		WorkflowEngine:  wfEngine,
 		NotifSvc:        media.notifSvc,

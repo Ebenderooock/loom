@@ -49,7 +49,8 @@ func TestMissingAlbumCandidates(t *testing.T) {
 		},
 		artists: map[string][]*music.Album{
 			"a1": {
-				{ID: "missing", Monitored: true, LastSearchAt: &old},      // due, missing track
+				{ID: "missing", Monitored: true, LastSearchAt: &old},      // due, no monitored files
+				{ID: "partial", Monitored: true, LastSearchAt: &old},      // some tracks still missing
 				{ID: "complete", Monitored: true, LastSearchAt: &old},     // all present -> skip
 				{ID: "unmonitored", Monitored: false, LastSearchAt: &old}, // skip
 				{ID: "recent", Monitored: true, LastSearchAt: &recent},    // within recheck -> skip
@@ -60,7 +61,8 @@ func TestMissingAlbumCandidates(t *testing.T) {
 			},
 		},
 		tracks: map[string][]*music.Track{
-			"missing":  trackList(true, false),
+			"missing":  trackList(false, false),
+			"partial":  trackList(true, false),
 			"complete": trackList(true, true),
 			"recent":   trackList(false),
 			"never":    trackList(false),
@@ -78,8 +80,8 @@ func TestMissingAlbumCandidates(t *testing.T) {
 	for _, al := range got {
 		ids[al.ID] = true
 	}
-	if !ids["missing"] || !ids["never"] {
-		t.Errorf("expected missing+never, got %v", ids)
+	if !ids["missing"] || !ids["partial"] || !ids["never"] {
+		t.Errorf("expected missing+partial+never, got %v", ids)
 	}
 	if ids["complete"] || ids["unmonitored"] || ids["recent"] || ids["other"] {
 		t.Errorf("unexpected candidate included: %v", ids)
@@ -91,14 +93,23 @@ func TestMissingAlbumCandidates(t *testing.T) {
 	}
 }
 
-func TestAlbumMissingTracksNoListing(t *testing.T) {
+func TestAlbumMissingTracksNoListingIsNotKnownMissing(t *testing.T) {
 	repo := &fakeRepo{tracks: map[string][]*music.Track{"x": nil}}
 	eng := NewEngine(nil, nil, repo, slog.Default())
 	missing, err := eng.albumMissingTracks(context.Background(), "x")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !missing {
-		t.Error("album with no track listing should be treated as missing")
+	if missing {
+		t.Error("album with no track listing should not be treated as missing")
+	}
+}
+
+func TestAlbumNeedsInitialGrabDoesNotRegrabPartialAlbum(t *testing.T) {
+	if albumNeedsInitialGrab(trackList(true, false)) {
+		t.Fatal("partial album must not trigger album-wide automatic grab")
+	}
+	if !albumNeedsInitialGrab(trackList(false, false)) {
+		t.Fatal("empty album should be eligible for initial acquisition")
 	}
 }

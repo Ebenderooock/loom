@@ -124,6 +124,7 @@ func TestAddArtistIsIdempotentAndRevives(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AddArtist #1: %v", err)
 	}
+
 	// Soft-delete then re-add: should revive the same row, not duplicate.
 	if err := svc.DeleteArtist(ctx, first.ID); err != nil {
 		t.Fatalf("DeleteArtist: %v", err)
@@ -147,6 +148,50 @@ func TestAddArtistIsIdempotentAndRevives(t *testing.T) {
 	}
 }
 
+func TestSharedAlbumIsLinkedToEveryCreditedArtist(t *testing.T) {
+	ctx := context.Background()
+	firstProvider := sampleProvider()
+	firstService, repo := newTestService(t, firstProvider)
+	first, err := firstService.AddArtist(ctx, AddArtistRequest{
+		MBID: "artist-1", QualityProfileID: "qp-1", LibraryID: "lib-1",
+	})
+	if err != nil {
+		t.Fatalf("add first artist: %v", err)
+	}
+
+	secondProvider := &fakeProvider{
+		artist: &metadata.ArtistMetadata{MBID: "artist-2", Name: "Second Artist"},
+		albums: []*metadata.AlbumMetadata{
+			{MBID: "rg-1", Title: "First Album", ArtistMBID: "artist-2", Type: "Album"},
+		},
+	}
+	secondService := NewService(repo, secondProvider, nil)
+	second, err := secondService.AddArtist(ctx, AddArtistRequest{
+		MBID: "artist-2", QualityProfileID: "qp-1", LibraryID: "lib-1",
+	})
+	if err != nil {
+		t.Fatalf("add second artist: %v", err)
+	}
+
+	firstAlbums, err := secondService.ListAlbumsByArtist(ctx, first.ID)
+	if err != nil {
+		t.Fatalf("list first artist albums: %v", err)
+	}
+	secondAlbums, err := secondService.ListAlbumsByArtist(ctx, second.ID)
+	if err != nil {
+		t.Fatalf("list second artist albums: %v", err)
+	}
+	if len(firstAlbums) != 2 || len(secondAlbums) != 1 {
+		t.Fatalf("album counts = first %d, second %d; want 2 and 1", len(firstAlbums), len(secondAlbums))
+	}
+	if firstAlbums[0].ID != secondAlbums[0].ID {
+		t.Fatalf("shared album IDs differ: %q and %q", firstAlbums[0].ID, secondAlbums[0].ID)
+	}
+	if second.Stats == nil || second.Stats.AlbumCount != 1 {
+		t.Fatalf("second artist stats = %+v, want one shared album", second.Stats)
+	}
+}
+
 func TestGetAlbumLazilyFetchesReleasesAndTracks(t *testing.T) {
 	ctx := context.Background()
 	svc, _ := newTestService(t, sampleProvider())
@@ -155,6 +200,7 @@ func TestGetAlbumLazilyFetchesReleasesAndTracks(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AddArtist: %v", err)
 	}
+
 	var albumID string
 	for _, al := range artist.Albums {
 		if al.MBID == "rg-1" {
@@ -202,6 +248,175 @@ func TestGetAlbumLazilyFetchesReleasesAndTracks(t *testing.T) {
 	}
 	if len(album2.Tracks) != 2 {
 		t.Errorf("tracks after re-get = %d, want 2", len(album2.Tracks))
+	}
+}
+
+func TestSelectAlbumReleaseValidatesOwnershipAndRefreshesTracks(t *testing.T) {
+	ctx := context.Background()
+	svc, _ := newTestService(t, sampleProvider())
+	artist, err := svc.AddArtist(ctx, AddArtistRequest{
+		MBID: "artist-1", QualityProfileID: "qp-1", LibraryID: "lib-1",
+	})
+	if err != nil {
+		t.Fatalf("AddArtist: %v", err)
+	}
+	album, err := svc.GetAlbum(ctx, artist.Albums[0].ID)
+	if err != nil {
+		t.Fatalf("GetAlbum: %v", err)
+	}
+	var otherRelease *AlbumRelease
+	for _, release := range album.Releases {
+		if release.ID != album.SelectedReleaseID {
+			otherRelease = release
+			break
+		}
+	}
+	if otherRelease == nil {
+		t.Fatal("expected another release")
+	}
+
+	selected, err := svc.SelectAlbumRelease(ctx, album.ID, otherRelease.ID)
+	if err != nil {
+		t.Fatalf("SelectAlbumRelease: %v", err)
+	}
+	if selected.SelectedReleaseID != otherRelease.ID {
+		t.Fatalf("selected release = %q, want %q", selected.SelectedReleaseID, otherRelease.ID)
+	}
+	if _, err := svc.SelectAlbumRelease(ctx, album.ID, "release-from-another-album"); err == nil {
+		t.Fatal("expected invalid release ownership to be rejected")
+	}
+}
+
+func TestPickReleaseHonorsStatusAndEarliestDate(t *testing.T) {
+	releases := []*AlbumRelease{
+		{ID: "late", Status: "Official", ReleaseDate: "2010-01-01", TrackCount: 30},
+		{ID: "early", Status: "Official", ReleaseDate: "2000-01-01", TrackCount: 10},
+		{ID: "preferred", Status: "Promotion", ReleaseDate: "2020-01-01", TrackCount: 2},
+	}
+	got := pickRelease(releases, []string{"Promotion", "Official"})
+	if got.ID != "preferred" {
+		t.Fatalf("pickRelease() = %q, want preferred status", got.ID)
+	}
+	got = pickRelease(releases[:2], []string{"Official"})
+	if got.ID != "early" {
+		t.Fatalf("pickRelease() = %q, want earliest date", got.ID)
+	}
+}
+
+func TestMusicProfilesCanBeManagedWithoutDeletingAssignedProfiles(t *testing.T) {
+	ctx := context.Background()
+	svc, _ := newTestService(t, sampleProvider())
+	audio, err := svc.CreateAudioQualityProfile(ctx, CreateAudioQualityProfileRequest{
+		Name: "Portable", Items: []AudioProfileItem{{DefinitionID: "aq_mp3_320", Allowed: true}},
+		Cutoff: "aq_mp3_320",
+	})
+	if err != nil {
+		t.Fatalf("CreateAudioQualityProfile: %v", err)
+	}
+	metadata, err := svc.CreateMetadataProfile(ctx, CreateMetadataProfileRequest{
+		Name: "Albums only", PrimaryTypes: []string{"Album"}, ReleaseStatuses: []string{"official"},
+	})
+	if err != nil {
+		t.Fatalf("CreateMetadataProfile: %v", err)
+	}
+	if _, err := svc.AddArtist(ctx, AddArtistRequest{
+		MBID: "artist-1", QualityProfileID: audio.ID, MetadataProfileID: metadata.ID, LibraryID: "lib-1",
+	}); err != nil {
+		t.Fatalf("AddArtist with new profiles: %v", err)
+	}
+	if err := svc.DeleteAudioQualityProfile(ctx, audio.ID); err == nil {
+		t.Fatal("expected assigned audio profile deletion to fail")
+	}
+	if err := svc.DeleteMetadataProfile(ctx, metadata.ID); err == nil {
+		t.Fatal("expected assigned metadata profile deletion to fail")
+	}
+
+	newName := "Official albums"
+	update := UpdateMetadataProfileRequest{Name: &newName}
+	updated, err := svc.UpdateMetadataProfile(ctx, metadata.ID, update)
+	if err != nil {
+		t.Fatalf("UpdateMetadataProfile: %v", err)
+	}
+	if updated.Name != newName {
+		t.Fatalf("updated metadata profile name = %q, want %q", updated.Name, newName)
+	}
+}
+
+func TestAddArtistHonorsSearchOnAddHookAndValidatesMonitoring(t *testing.T) {
+	ctx := context.Background()
+	svc, _ := newTestService(t, sampleProvider())
+	if _, err := svc.AddArtist(ctx, AddArtistRequest{
+		MBID: "artist-1", QualityProfileID: "qp-1", LibraryID: "lib-1",
+		MonitoringStatus: "sometimes",
+	}); err == nil {
+		t.Fatal("expected invalid monitoring status to fail")
+	}
+	concrete, ok := svc.(*service)
+	if !ok {
+		t.Fatal("service is not the expected implementation")
+	}
+	calls := 0
+	concrete.SetSearchOnAdd(func(_ context.Context, artistID string) error {
+		calls++
+		if artistID == "" {
+			t.Error("search hook received empty artist ID")
+		}
+		return nil
+	})
+	if _, err := svc.AddArtist(ctx, AddArtistRequest{
+		MBID: "artist-1", QualityProfileID: "qp-1", LibraryID: "lib-1", Search: true,
+	}); err != nil {
+		t.Fatalf("AddArtist: %v", err)
+	}
+	if calls != 1 {
+		t.Fatalf("search-on-add calls = %d, want 1", calls)
+	}
+}
+
+func TestTrackRefreshPreservesPhysicalFileAssociations(t *testing.T) {
+	ctx := context.Background()
+	svc, repo := newTestService(t, sampleProvider())
+	artist, err := svc.AddArtist(ctx, AddArtistRequest{
+		MBID: "artist-1", QualityProfileID: "qp-1", LibraryID: "lib-1",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	album := artist.Albums[0]
+	loaded, err := svc.GetAlbum(ctx, album.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	track := loaded.Tracks[0]
+	if err := svc.ImportTrackFile(ctx, &TrackFile{
+		ID: "file-1", TrackID: track.ID, AlbumID: loaded.ID, ArtistID: artist.ID,
+		FilePath: "/library/track.flac", Format: "FLAC",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	loaded.TracksFetchedAt = nil
+	if err := repo.UpdateAlbum(ctx, loaded); err != nil {
+		t.Fatal(err)
+	}
+	refreshed, err := svc.GetAlbum(ctx, loaded.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var refreshedTrack *Track
+	for _, candidate := range refreshed.Tracks {
+		if candidate.ID == track.ID {
+			refreshedTrack = candidate
+		}
+	}
+	if len(refreshed.Tracks) != 2 || refreshedTrack == nil || !refreshedTrack.HasFile {
+		t.Fatalf("refreshed tracks lost stable ID/file state: %+v", refreshed.Tracks)
+	}
+	files, err := repo.ListTrackFilesByArtist(ctx, artist.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files) != 1 || files[0].TrackID != track.ID {
+		t.Fatalf("track files after refresh = %+v, want preserved association", files)
 	}
 }
 

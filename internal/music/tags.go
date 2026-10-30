@@ -1,7 +1,9 @@
 package music
 
 import (
+	"encoding/binary"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -22,6 +24,8 @@ type AudioTags struct {
 	Year        int
 	Genre       string
 	Format      string // normalized container/codec, e.g. "FLAC", "MP3"
+	Bitrate     int    // kbps when exposed by an audio metadata reader
+	Bits        int    // sample bit depth when exposed by an audio metadata reader
 }
 
 // ReadAudioTags reads embedded metadata from the audio file at path using the
@@ -59,7 +63,37 @@ func ReadAudioTags(path string) (*AudioTags, error) {
 	if t.Format == "" {
 		t.Format = audioFormatFromExt(filepath.Ext(path))
 	}
+	if strings.EqualFold(t.Format, "FLAC") {
+		t.Bits = readFLACBitDepth(path)
+	}
 	return t, nil
+}
+
+// EstimateAudioBitrate returns the average bitrate in kbps for a track when
+// both its file size and metadata duration are known.
+func EstimateAudioBitrate(size int64, durationMs int) int {
+	if size <= 0 || durationMs <= 0 {
+		return 0
+	}
+	return int((size*8 + int64(durationMs)/2) / int64(durationMs))
+}
+
+func readFLACBitDepth(path string) int {
+	f, err := os.Open(path) //nolint:gosec // path comes from a scanned library or download folder
+	if err != nil {
+		return 0
+	}
+	defer func() { _ = f.Close() }()
+
+	var header [42]byte
+	if _, err := io.ReadFull(f, header[:]); err != nil {
+		return 0
+	}
+	if string(header[:4]) != "fLaC" || header[4]&0x7f != 0 || header[7] != 34 {
+		return 0
+	}
+	streamInfo := binary.BigEndian.Uint64(header[18:26])
+	return int((streamInfo>>36)&0x1f) + 1
 }
 
 // audioFormatFromFileType maps a dhowden/tag FileType to a human label.
@@ -94,8 +128,10 @@ func audioFormatFromExt(ext string) string {
 		return "FLAC"
 	case "mp3":
 		return "MP3"
-	case "m4a", "alac":
+	case "m4a":
 		return "M4A"
+	case "alac":
+		return "ALAC"
 	case "m4b":
 		return "M4B"
 	case "aac":

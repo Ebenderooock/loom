@@ -101,6 +101,17 @@ func TestScoreAudioReleaseProfileGating(t *testing.T) {
 	}
 }
 
+func TestScoreAudioReleaseRejectsInvalidCutoff(t *testing.T) {
+	profile := &AudioQualityProfile{ID: "p", Cutoff: "missing-definition"}
+	score := ScoreAudioRelease(ParseMusic("Artist - Album [MP3 128]"), testDefs(), profile, 0, 0)
+	if score.Allowed {
+		t.Fatal("invalid cutoff must not be treated as tier zero")
+	}
+	if score.MeetsCutoff {
+		t.Fatal("release must not meet an unknown cutoff")
+	}
+}
+
 func TestCompositeOrdersByTier(t *testing.T) {
 	defs := testDefs()
 	flac := ScoreAudioRelease(ParseMusic("Artist - Album [FLAC]"), defs, nil, 1, 0)
