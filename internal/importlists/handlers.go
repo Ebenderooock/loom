@@ -24,6 +24,21 @@ func Router(store *Store, syncMgr *SyncManager, logger *slog.Logger) chi.Router 
 	// Discover feed (items from discover-mode lists).
 	r.Get("/discover", listDiscover(syncMgr))
 	r.Post("/discover/add", addDiscover(syncMgr, logger))
+	r.Post("/discover/track", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			ItemID string `json:"item_id"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.ItemID == "" {
+			writeError(w, http.StatusBadRequest, "item_id is required")
+			return
+		}
+		if err := syncMgr.TrackDiscoverItem(r.Context(), body.ItemID); err != nil {
+			// Provider transport errors can include credential-bearing URLs.
+			writeError(w, http.StatusConflict, "Unable to verify library membership or update source tracking. Please retry.")
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]bool{"tracked": true})
+	})
 
 	r.Get("/{id}", getList(store))
 	r.Put("/{id}", updateList(store))
@@ -94,9 +109,6 @@ func createList(store *Store) http.HandlerFunc {
 		}
 		if l.SyncIntervalMinutes == 0 {
 			l.SyncIntervalMinutes = 360
-		}
-		if l.QualityProfileID == "" {
-			l.QualityProfileID = "default"
 		}
 		if l.Mode != ListModeDiscover {
 			l.Mode = ListModeAuto

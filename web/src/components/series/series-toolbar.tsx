@@ -23,6 +23,7 @@ import {
   FolderSync,
   Settings2,
   MoreHorizontal,
+  Layers,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -58,6 +59,7 @@ export function SeriesToolbar({
   onBulkUnmonitor,
   onBulkDelete,
   onBulkQualityProfile,
+  onBulkCollection,
   onAddSeries,
   onImportLibrary,
   onOrganize,
@@ -87,6 +89,7 @@ export function SeriesToolbar({
   onBulkUnmonitor: () => void;
   onBulkDelete: () => void;
   onBulkQualityProfile: (profileId: string) => void;
+  onBulkCollection?: () => void;
   onAddSeries: () => void;
   onImportLibrary?: () => void;
   onOrganize: () => void;
@@ -320,6 +323,16 @@ export function SeriesToolbar({
                 ))}
               </DropdownMenuContent>
             </DropdownMenu>
+            {onBulkCollection && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 gap-1 text-xs"
+                onClick={onBulkCollection}
+              >
+                <Layers className="h-3.5 w-3.5" /> Add to collection
+              </Button>
+            )}
             <Button
               size="sm"
               variant="destructive"

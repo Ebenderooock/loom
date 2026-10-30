@@ -1,16 +1,8 @@
 package requests
 
-import (
-	"context"
-	"time"
-)
-
-// ReconcileAvailability only promotes approved requests. File records, rather
-// than catalog membership or a successful grab, establish availability.
-func (s *Store) ReconcileAvailability(ctx context.Context, now time.Time) error {
-	_, err := s.db.ExecContext(ctx, `
-		UPDATE media_requests SET status='available', reason='', updated_at=?
-		WHERE status='approved' AND (
+// completionPredicate preserves the scope of fulfillment: currently due,
+// monitored episodes and selected music releases, not future releases.
+const completionPredicate = `(
 			(media_type='movie' AND EXISTS (
 				SELECT 1 FROM movie_files f JOIN movies m ON m.id=f.movie_id
 				WHERE f.movie_id=media_requests.media_id
@@ -65,6 +57,4 @@ func (s *Store) ReconcileAvailability(ctx context.Context, now time.Time) error 
 						)
 				)
 			)
-		)`, now.Format(tsLayout), now.Format(time.RFC3339), now.Format(time.DateOnly), now.Format(time.DateOnly))
-	return err
-}
+		)`

@@ -10,15 +10,17 @@ import (
 	"github.com/ebenderooock/loom/internal/alttitles"
 	"github.com/ebenderooock/loom/internal/anime"
 	"github.com/ebenderooock/loom/internal/auditlog"
-	"github.com/ebenderooock/loom/internal/calendar"
+	"github.com/ebenderooock/loom/internal/collections"
 	"github.com/ebenderooock/loom/internal/devmode"
 	"github.com/ebenderooock/loom/internal/discover"
+	"github.com/ebenderooock/loom/internal/featureflags"
 	"github.com/ebenderooock/loom/internal/importlists"
 	"github.com/ebenderooock/loom/internal/kernel/config"
 	"github.com/ebenderooock/loom/internal/languages"
 	"github.com/ebenderooock/loom/internal/libraries"
 	"github.com/ebenderooock/loom/internal/mediainfo"
 	"github.com/ebenderooock/loom/internal/metadata/musicbrainz"
+	"github.com/ebenderooock/loom/internal/metadata/tvdb"
 	"github.com/ebenderooock/loom/internal/movies"
 	"github.com/ebenderooock/loom/internal/music"
 	"github.com/ebenderooock/loom/internal/notifications"
@@ -40,6 +42,7 @@ type mediaWiring struct {
 	importListSyncMgr *importlists.SyncManager
 	musicRepo         music.Repository
 	musicSvc          music.Service
+	collectionsSvc    *collections.Service
 }
 
 // wireMedia constructs all media-related services (scanner, organizer,
@@ -124,9 +127,6 @@ func wireMedia(
 	notifSvc := buildNotificationsService(db)
 	wiring.NotificationSvc = notifSvc
 
-	// Calendar
-	wiring.CalendarHandler = calendar.Router(db.DB())
-
 	// Language profiles
 	langStore := languages.NewStore(db.DB())
 	if err := langStore.EnsureDefault(ctx); err != nil {
@@ -171,9 +171,29 @@ func wireMedia(
 	wiring.QualityProfile = qpStore
 	qualityprofiles.SeedDefaults(ctx, qpStore, moviesSvc)
 
-	// Person discovery (TMDB-backed)
+	// Read-only library growth and person discovery (TMDB-backed).
 	discoverTMDB := buildTMDBClient(stubs)
-	wiring.DiscoverRouter = discover.Router(discoverTMDB)
+	discoverSvc := discover.NewService(discoverTMDB, moviesSvc, seriesSvc, discover.NewStore(db.DB()))
+	tvdbKey := os.Getenv("LOOM_METADATA_TVDB_APIKEY")
+	if tvdbKey == "" {
+		tvdbKey = defaultTVDBKey
+	}
+	tvdbConfig := tvdb.Config{APIKey: tvdbKey, PIN: os.Getenv("LOOM_METADATA_TVDB_PIN")}
+	if stubs != nil {
+		tvdbConfig.BaseURL = stubs.TVDbURL
+		if tvdbConfig.APIKey == "" {
+			tvdbConfig.APIKey = "dev-key"
+		}
+	}
+	collectionsSvc := collections.NewService(
+		collections.NewStore(db.DB()), discoverTMDB, tvdb.NewClient(tvdbConfig), moviesSvc, seriesSvc,
+		func() string { return os.Getenv("LOOM_TMDB_READ_TOKEN") },
+	)
+	wiring.CollectionsRouter = collections.Router(collectionsSvc)
+	wiring.DiscoverRouter = discover.RouterWithMusic(discoverTMDB, discoverSvc, discover.MusicDetails{
+		Provider: mbProvider,
+		Enabled:  wiring.FeatureFlags.EnabledFunc(featureflags.KeyMusic),
+	})
 
 	return &mediaWiring{
 		libStore:          libStore,
@@ -183,6 +203,7 @@ func wireMedia(
 		importListSyncMgr: importListSyncMgr,
 		musicRepo:         musicRepo,
 		musicSvc:          musicSvc,
+		collectionsSvc:    collectionsSvc,
 	}, nil
 }
 

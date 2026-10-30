@@ -3,17 +3,23 @@ import { usePageHeader } from "@/hooks/use-page-header";
 import { useAuth } from "@/hooks/use-auth";
 import { apiFetch } from "@/lib/fetch";
 import {
+  ApiError,
   useMyRequests,
   useAllRequests,
   useClearRequests,
   useCreateRequest,
   useApproveRequest,
   useRejectRequest,
+  useReconcileRequests,
+  useReconciliationHistory,
   useQuotaStatus,
   useQuotaConfig,
   useUpdateQuotaConfig,
   type MediaRequest,
+  type ReconciliationOutcome,
+  type ReconcileResponse,
   type MediaQuota,
+  type RequestAvailability,
   type RequestMediaType,
   type RequestStatus,
 } from "@/lib/requests-api";
@@ -52,6 +58,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
+import { TitleDialog } from "@/components/titles/title-experience";
 
 const TMDB_IMG = "https://image.tmdb.org/t/p";
 
@@ -85,7 +92,7 @@ const STATUS_STYLES: Record<
     className: "bg-emerald-500/15 text-emerald-500 border-emerald-500/30",
   },
   available: {
-    label: "Available",
+    label: "Fulfilled",
     className: "bg-emerald-500/15 text-emerald-500 border-emerald-500/30",
   },
   rejected: {
@@ -98,11 +105,45 @@ const STATUS_STYLES: Record<
   },
 };
 
+const AVAILABILITY_STYLES: Record<
+  RequestAvailability,
+  { label: string; className: string }
+> = {
+  present: {
+    label: "Currently present",
+    className: "bg-emerald-500/15 text-emerald-500 border-emerald-500/30",
+  },
+  missing: {
+    label: "Currently missing",
+    className: "bg-amber-500/15 text-amber-500 border-amber-500/30",
+  },
+  unknown: {
+    label: "Current availability unknown",
+    className: "bg-muted text-muted-foreground border-border",
+  },
+};
+
 function StatusBadge({ status }: { status: RequestStatus }) {
   const s = STATUS_STYLES[status] ?? { label: status, className: "" };
   return (
     <Badge variant="outline" className={s.className}>
       {s.label}
+    </Badge>
+  );
+}
+
+function AvailabilityBadge({
+  availability,
+  title,
+}: {
+  availability?: RequestAvailability;
+  title?: string;
+}) {
+  if (!availability) return null;
+  const a = AVAILABILITY_STYLES[availability];
+  return (
+    <Badge variant="outline" className={a.className} title={title}>
+      {a.label}
     </Badge>
   );
 }
@@ -188,65 +229,81 @@ function SearchAndRequest() {
   const [results, setResults] = React.useState<LookupResult[]>([]);
   const [searching, setSearching] = React.useState(false);
   const [requested, setRequested] = React.useState<Record<string, string>>({});
-  const debounceRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const create = useCreateRequest();
+  const [detail, setDetail] = React.useState<{
+    result: LookupResult;
+    media: RequestMediaType;
+  } | null>(null);
   const { data: mine } = useMyRequests();
 
   // Mark titles already requested by this user so we can disable them.
   const existing = React.useMemo(() => {
     const m: Record<string, RequestStatus> = {};
-    for (const r of mine ?? []) m[`${r.media_type}:${r.tmdb_id}`] = r.status;
+    for (const r of mine ?? []) {
+      const key = `${r.media_type}:${r.tmdb_id}`;
+      if (!m[key]) m[key] = r.status;
+    }
     return m;
   }, [mine]);
 
-  const runSearch = React.useCallback((mt: RequestMediaType, q: string) => {
-    if (q.trim().length < 2) {
-      setResults([]);
-      return;
+  React.useEffect(() => {
+    const controller = new AbortController();
+    setResults([]);
+    if (term.trim().length < 2) {
+      setSearching(false);
+      return () => controller.abort();
     }
     setSearching(true);
-    const controller = new AbortController();
-    lookup(mt, q, controller.signal)
-      .then(setResults)
-      .catch(() => setResults([]))
-      .finally(() => setSearching(false));
-  }, []);
+    const timer = setTimeout(() => {
+      lookup(mediaType, term, controller.signal)
+        .then((rows) => {
+          if (!controller.signal.aborted) setResults(rows);
+        })
+        .catch(() => {
+          if (!controller.signal.aborted) setResults([]);
+        })
+        .finally(() => {
+          if (!controller.signal.aborted) setSearching(false);
+        });
+    }, 400);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [mediaType, term]);
 
-  const onTermChange = (val: string) => {
-    setTerm(val);
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => runSearch(mediaType, val), 400);
-  };
-
-  const onMediaTypeChange = (mt: RequestMediaType) => {
-    setMediaType(mt);
-    setResults([]);
-    if (term.trim().length >= 2) runSearch(mt, term);
-  };
-
-  const submit = async (r: LookupResult) => {
+  const submit = async (r: LookupResult, mt = mediaType) => {
     try {
       await create.mutateAsync({
-        media_type: mediaType,
+        media_type: mt,
         tmdb_id: r.tmdbId,
         title: r.title,
         year: r.year,
         poster_path: r.posterPath,
         overview: r.overview,
       });
-      setRequested((prev) => ({ ...prev, [`${mediaType}:${r.tmdbId}`]: "ok" }));
+      setRequested((prev) => ({ ...prev, [`${mt}:${r.tmdbId}`]: "ok" }));
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Request failed";
-      setRequested((prev) => ({ ...prev, [`${mediaType}:${r.tmdbId}`]: msg }));
+      setRequested((prev) => ({ ...prev, [`${mt}:${r.tmdbId}`]: msg }));
     }
   };
+  const detailKey = detail ? `${detail.media}:${detail.result.tmdbId}` : "";
+  const detailRequested =
+    requested[detailKey] === "ok" ||
+    (!!existing[detailKey] &&
+      !["rejected", "failed"].includes(existing[detailKey]!));
+  const detailError =
+    requested[detailKey] && requested[detailKey] !== "ok"
+      ? requested[detailKey]
+      : undefined;
 
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
         <Tabs
           value={mediaType}
-          onValueChange={(v) => onMediaTypeChange(v as RequestMediaType)}
+          onValueChange={(v) => setMediaType(v as RequestMediaType)}
         >
           <TabsList>
             <TabsTrigger value="movie">Movies</TabsTrigger>
@@ -258,7 +315,7 @@ function SearchAndRequest() {
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={term}
-            onChange={(e) => onTermChange(e.target.value)}
+            onChange={(e) => setTerm(e.target.value)}
             placeholder={`Search for ${
               mediaType === "movie"
                 ? "a movie"
@@ -294,7 +351,12 @@ function SearchAndRequest() {
               key={key}
               className="flex flex-col overflow-hidden rounded-lg border border-border bg-card"
             >
-              <div className="aspect-[2/3] bg-muted">
+              <button
+                type="button"
+                aria-label={`View details for ${r.title}`}
+                onClick={() => setDetail({ result: r, media: mediaType })}
+                className="aspect-[2/3] bg-muted"
+              >
                 {r.posterPath ? (
                   <img
                     src={posterSrc(r.posterPath, "w300")}
@@ -307,12 +369,17 @@ function SearchAndRequest() {
                     No image
                   </div>
                 )}
-              </div>
+              </button>
               <div className="flex flex-1 flex-col gap-2 p-2">
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-medium" title={r.title}>
+                  <button
+                    type="button"
+                    onClick={() => setDetail({ result: r, media: mediaType })}
+                    className="block w-full truncate text-left text-sm font-medium hover:underline"
+                    title={r.title}
+                  >
                     {r.title}
-                  </p>
+                  </button>
                   {r.year ? (
                     <p className="text-xs text-muted-foreground">{r.year}</p>
                   ) : null}
@@ -340,21 +407,75 @@ function SearchAndRequest() {
           );
         })}
       </div>
+      {detail && (
+        <TitleDialog
+          open
+          onOpenChange={(open) => {
+            if (!open) setDetail(null);
+          }}
+          identity={{
+            media: detail.media,
+            id: detail.result.tmdbId,
+            title: detail.result.title,
+          }}
+          requestAction={
+            <div className="space-y-2">
+              <Button
+                disabled={create.isPending || detailRequested}
+                onClick={() => submit(detail.result, detail.media)}
+              >
+                {detailRequested
+                  ? "Requested"
+                  : create.isPending
+                    ? "Requesting…"
+                    : "Request"}
+              </Button>
+              {detailError && (
+                <p role="alert" className="text-sm text-destructive">
+                  {detailError}
+                </p>
+              )}
+            </div>
+          }
+        />
+      )}
     </div>
   );
+}
+
+function canReRequest(r: MediaRequest): boolean {
+  return r.status === "available" && r.availability === "missing";
+}
+
+function mapReRequestError(error: unknown): string {
+  if (error instanceof ApiError) {
+    if (error.status === 409) {
+      return "A matching active request already exists. Re-requests are blocked while an active duplicate exists.";
+    }
+    if (error.status === 429) {
+      return "Re-request blocked by quota. Fulfilled history still counts within the quota window.";
+    }
+  }
+  if (error instanceof Error) return error.message;
+  return "Failed to re-request";
 }
 
 function RequestRow({
   r,
   admin,
+  reRequesting,
   onApprove,
   onReject,
+  onReRequest,
 }: {
   r: MediaRequest;
   admin?: boolean;
+  reRequesting?: boolean;
   onApprove?: (r: MediaRequest) => void;
   onReject?: (r: MediaRequest) => void;
+  onReRequest?: (r: MediaRequest) => void;
 }) {
+  const showReRequest = canReRequest(r) && !!onReRequest;
   return (
     <div className="flex items-center gap-3 rounded-lg border border-border bg-card p-3">
       <div className="h-16 w-11 shrink-0 overflow-hidden rounded bg-muted">
@@ -385,8 +506,38 @@ function RequestRow({
         </div>
         <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
           <StatusBadge status={r.status} />
+          {(r.status === "approved" || r.status === "available") && (
+            <>
+              <AvailabilityBadge
+                availability={r.availability}
+                title={r.availability_reason}
+              />
+              {r.status === "available" && (
+                <span className="text-[11px] text-muted-foreground/90">
+                  Fulfilled is historical. Current availability may change.
+                </span>
+              )}
+              {r.monitored != null && (
+                <span>{r.monitored ? "Monitored" : "Unmonitored"}</span>
+              )}
+              <span>
+                Media server: {r.media_server_availability ?? "unknown"}
+              </span>
+              {r.availability_checked_at && (
+                <span>Checked {formatWhen(r.availability_checked_at)}</span>
+              )}
+              {r.fulfilled_at && (
+                <span>Fulfilled {formatWhen(r.fulfilled_at)}</span>
+              )}
+            </>
+          )}
           {admin && <span>by {r.username || "unknown"}</span>}
           {r.reason ? <span className="text-red-500">· {r.reason}</span> : null}
+          {r.re_request_of && <span>Re-request of {r.re_request_of}</span>}
+          {r.availability_reason &&
+          (r.status === "available" || r.status === "approved") ? (
+            <span>· {r.availability_reason}</span>
+          ) : null}
         </div>
       </div>
       {admin && r.status === "pending" && (
@@ -396,6 +547,21 @@ function RequestRow({
           </Button>
           <Button size="sm" onClick={() => onApprove?.(r)}>
             <Check className="mr-1 h-3.5 w-3.5" /> Approve
+          </Button>
+        </div>
+      )}
+      {showReRequest && (
+        <div className="flex shrink-0">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => onReRequest?.(r)}
+            disabled={reRequesting}
+          >
+            {reRequesting && (
+              <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+            )}
+            Re-request
           </Button>
         </div>
       )}
@@ -616,6 +782,31 @@ function RejectDialog({
 
 function MyRequests() {
   const { data, isLoading } = useMyRequests();
+  const create = useCreateRequest();
+  const [reRequestingID, setReRequestingID] = React.useState<string | null>(
+    null,
+  );
+
+  const onReRequest = async (r: MediaRequest) => {
+    setReRequestingID(r.id);
+    try {
+      await create.mutateAsync({
+        media_type: r.media_type,
+        tmdb_id: r.tmdb_id,
+        title: r.title,
+        year: r.year,
+        poster_path: r.poster_path,
+        overview: r.overview,
+        re_request_of: r.id,
+      });
+      toast.success(`Submitted a re-request for ${r.title}`);
+    } catch (error) {
+      toast.error(mapReRequestError(error));
+    } finally {
+      setReRequestingID(null);
+    }
+  };
+
   if (isLoading) {
     return <p className="text-sm text-muted-foreground">Loading…</p>;
   }
@@ -629,7 +820,12 @@ function MyRequests() {
   return (
     <div className="space-y-2">
       {data.map((r) => (
-        <RequestRow key={r.id} r={r} />
+        <RequestRow
+          key={r.id}
+          r={r}
+          reRequesting={create.isPending && reRequestingID === r.id}
+          onReRequest={onReRequest}
+        />
       ))}
     </div>
   );
@@ -638,7 +834,7 @@ function MyRequests() {
 const STATUS_FILTERS: Array<{ value: RequestStatus | "all"; label: string }> = [
   { value: "pending", label: "Pending" },
   { value: "approved", label: "Approved" },
-  { value: "available", label: "Available" },
+  { value: "available", label: "Fulfilled" },
   { value: "rejected", label: "Rejected" },
   { value: "failed", label: "Failed" },
   { value: "all", label: "All" },
@@ -647,9 +843,33 @@ const STATUS_FILTERS: Array<{ value: RequestStatus | "all"; label: string }> = [
 function ManageRequests() {
   const [status, setStatus] = React.useState<RequestStatus | "all">("pending");
   const { data, isLoading } = useAllRequests(status);
+  const create = useCreateRequest();
+  const [reRequestingID, setReRequestingID] = React.useState<string | null>(
+    null,
+  );
   const [approving, setApproving] = React.useState<MediaRequest | null>(null);
   const [rejecting, setRejecting] = React.useState<MediaRequest | null>(null);
   const clearRequests = useClearRequests();
+
+  const onReRequest = async (r: MediaRequest) => {
+    setReRequestingID(r.id);
+    try {
+      await create.mutateAsync({
+        media_type: r.media_type,
+        tmdb_id: r.tmdb_id,
+        title: r.title,
+        year: r.year,
+        poster_path: r.poster_path,
+        overview: r.overview,
+        re_request_of: r.id,
+      });
+      toast.success(`Submitted re-request for ${r.title}`);
+    } catch (error) {
+      toast.error(mapReRequestError(error));
+    } finally {
+      setReRequestingID(null);
+    }
+  };
 
   return (
     <div className="space-y-4">
@@ -706,8 +926,10 @@ function ManageRequests() {
               key={r.id}
               r={r}
               admin
+              reRequesting={create.isPending && reRequestingID === r.id}
               onApprove={setApproving}
               onReject={setRejecting}
+              onReRequest={onReRequest}
             />
           ))}
         </div>
@@ -715,6 +937,169 @@ function ManageRequests() {
 
       <ApproveDialog request={approving} onClose={() => setApproving(null)} />
       <RejectDialog request={rejecting} onClose={() => setRejecting(null)} />
+    </div>
+  );
+}
+
+function formatWhen(ts?: string): string {
+  if (!ts) return "Unknown time";
+  const d = new Date(ts);
+  if (Number.isNaN(d.getTime())) return ts;
+  return d.toLocaleString();
+}
+
+function AvailabilityValue({
+  value,
+}: {
+  value?: RequestAvailability | string;
+}) {
+  const normalized = value as RequestAvailability | undefined;
+  if (
+    normalized === "present" ||
+    normalized === "missing" ||
+    normalized === "unknown"
+  ) {
+    return <AvailabilityBadge availability={normalized} />;
+  }
+  return (
+    <span className="rounded-md border border-border px-2 py-0.5 text-[11px] text-muted-foreground">
+      {value || "—"}
+    </span>
+  );
+}
+
+function ReconciliationOutcomes({
+  run,
+}: {
+  run: ReconcileResponse | { outcomes: ReconciliationOutcome[] };
+}) {
+  if (!run.outcomes.length) {
+    return <p className="text-xs text-muted-foreground">No items returned.</p>;
+  }
+  return (
+    <div className="space-y-1.5">
+      {run.outcomes.map((outcome) => (
+        <div
+          key={`${outcome.request_id}-${outcome.reason}`}
+          className="rounded-md border border-border/60 px-2.5 py-2 text-xs"
+        >
+          <p className="font-medium">{outcome.request_id}</p>
+          <div className="mt-1 flex flex-wrap items-center gap-1.5">
+            <AvailabilityValue value={outcome.before} />
+            <span aria-hidden>→</span>
+            <AvailabilityValue value={outcome.after} />
+            <Badge variant="outline" className="text-[10px]">
+              {outcome.changed ? "Changed" : "No change"}
+            </Badge>
+          </div>
+          <p className="mt-1 text-muted-foreground">{outcome.reason}</p>
+          {outcome.error ? (
+            <p className="mt-1 text-red-500">Error: {outcome.error}</p>
+          ) : null}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ReconciliationCard() {
+  const [latestRun, setLatestRun] = React.useState<ReconcileResponse | null>(
+    null,
+  );
+  const reconcile = useReconcileRequests();
+  const { data: history, isLoading, error } = useReconciliationHistory();
+
+  const run = async (dryRun: boolean) => {
+    try {
+      const result = await reconcile.mutateAsync({ dryRun });
+      setLatestRun(result);
+      const failed = result.outcomes.filter((outcome) => outcome.error).length;
+      if (failed > 0) {
+        toast.error(
+          `Reconciliation completed with ${failed} observation error(s); review the outcomes.`,
+        );
+      } else
+        toast.success(
+          dryRun
+            ? "Reconciliation preview completed"
+            : "Reconciliation applied successfully",
+        );
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Reconciliation failed",
+      );
+    }
+  };
+
+  return (
+    <div className="space-y-3 rounded-lg border border-border/60 p-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          variant="outline"
+          onClick={() => run(true)}
+          disabled={reconcile.isPending}
+        >
+          {reconcile.isPending && (
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          )}
+          Preview reconciliation
+        </Button>
+        <ConfirmActionButton
+          actionLabel="Apply reconciliation"
+          title="Apply availability reconciliation?"
+          description="This updates stored current-availability snapshots for fulfilled requests."
+          confirmLabel="Apply"
+          pending={reconcile.isPending}
+          onConfirm={async () => {
+            await run(false);
+          }}
+        />
+      </div>
+
+      {latestRun && (
+        <div className="space-y-2">
+          <p className="text-xs font-medium text-muted-foreground">
+            Latest run ({latestRun.dry_run ? "preview" : "applied"})
+          </p>
+          <ReconciliationOutcomes run={latestRun} />
+        </div>
+      )}
+
+      <div className="space-y-2">
+        <p className="text-xs font-medium text-muted-foreground">
+          Reconciliation history
+        </p>
+        {isLoading ? (
+          <p className="text-xs text-muted-foreground">Loading history…</p>
+        ) : error ? (
+          <p role="alert" className="text-xs text-destructive">
+            {error.message}
+          </p>
+        ) : !history || history.length === 0 ? (
+          <p className="text-xs text-muted-foreground">
+            No reconciliation runs recorded yet.
+          </p>
+        ) : (
+          <div className="space-y-1.5">
+            {history.slice(0, 5).map((entry) => (
+              <details
+                key={entry.id}
+                className="rounded-md border border-border/60 px-2.5 py-2 text-xs"
+              >
+                <summary className="cursor-pointer list-none font-medium">
+                  <span>
+                    {entry.dry_run ? "Preview" : "Applied"} by {entry.actor} ·{" "}
+                    {formatWhen(entry.created_at)}
+                  </span>
+                </summary>
+                <div className="mt-2">
+                  <ReconciliationOutcomes run={entry} />
+                </div>
+              </details>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -920,6 +1305,18 @@ export function RequestsPage() {
         <section className="space-y-3">
           <h2 className="text-lg font-semibold">Manage requests</h2>
           <ManageRequests />
+        </section>
+      )}
+
+      {isAdmin && (
+        <section className="space-y-3">
+          <h2 className="text-lg font-semibold">Availability reconciliation</h2>
+          <p className="text-sm text-muted-foreground">
+            Preview or apply a refresh of current availability snapshots for
+            approved and fulfilled requests. No media or import records are
+            deleted. Storage that cannot be verified remains unknown.
+          </p>
+          <ReconciliationCard />
         </section>
       )}
     </div>

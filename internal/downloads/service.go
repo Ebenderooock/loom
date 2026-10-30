@@ -75,6 +75,7 @@ type Service struct {
 	orchestrator       *workflows.Orchestrator
 	movieStatusUpdater MovieStatusUpdater
 	builtinTorrentOn   func() bool
+	blocklist          *BlocklistStore
 
 	mu sync.RWMutex
 }
@@ -103,6 +104,7 @@ func NewService(opts ServiceOptions) (*Service, error) {
 		opts.HealthTimeout = 10 * time.Second
 	}
 	SetHTTPClientProvider(opts.HTTPClientProvider)
+	opts.Registry.SetHistoryStore(opts.HistoryStore)
 	return &Service{
 		repo:               opts.Repository,
 		registry:           opts.Registry,
@@ -124,6 +126,13 @@ func (s *Service) Repository() Repository { return s.repo }
 
 // Registry returns the underlying live-instance registry.
 func (s *Service) Registry() *Registry { return s.registry }
+
+// SetHistoryStore shares download history with all acquisition entry points.
+// Must be called before serving requests.
+func (s *Service) SetHistoryStore(h *HistoryStore) {
+	s.historyStore = h
+	s.registry.SetHistoryStore(h)
+}
 
 // SetWorkflowEngine sets the workflow engine for recording manual grab linkage.
 func (s *Service) SetWorkflowEngine(wf *workflows.Engine) {
@@ -162,6 +171,13 @@ func (s *Service) builtinTorrentAllowed() bool {
 }
 
 // SetMovieStatusUpdater sets the movie status updater for the service.
+// SetBlocklist enables blocklist enforcement for API grabs.
+func (s *Service) SetBlocklist(b *BlocklistStore) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.blocklist = b
+}
+
 func (s *Service) SetMovieStatusUpdater(u MovieStatusUpdater) {
 	s.mu.Lock()
 	s.movieStatusUpdater = u
@@ -187,6 +203,15 @@ func (s *Service) ActiveDownloads(ctx context.Context) (map[string]workflows.Act
 			ContentPath: item.ContentPath,
 			SavePath:    item.SavePath,
 		}
+	}
+	if len(status.Errors) > 0 {
+		// Report unreachable clients so callers don't mistake their missing
+		// downloads for removed or finished ones (e.g. during an outage).
+		errs := make(map[string]string, len(status.Errors))
+		for id, e := range status.Errors {
+			errs[id] = fmt.Sprint(e)
+		}
+		return result, &workflows.PartialDownloadStatusError{ClientErrors: errs}
 	}
 	return result, nil
 }

@@ -178,7 +178,7 @@ func TransportForDefinition(def Definition) (http.RoundTripper, error) {
 			cfg.Burst = maxRPM
 		}
 	}
-	tracedBase := otelhttp.NewTransport(base)
+	tracedBase := otelhttp.NewTransport(budgetTransport{base: base})
 	return throttle.Wrap(tracedBase, def.ID, string(def.Kind), cfg, throttle.Options{}), nil
 }
 

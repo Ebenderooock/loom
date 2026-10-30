@@ -1,0 +1,7 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp" android:height="48dp" android:viewportWidth="48" android:viewportHeight="48">
+    <path android:fillColor="#0B1220" android:pathData="M0,0h48v48h-48z" />
+    <!-- Loom's existing web/public/loom.svg cross, framed for TV. -->
+    <path android:strokeColor="#F5F2EA" android:strokeWidth="4"
+        android:strokeLineCap="round" android:pathData="M24,8v32M8,24h32" />
+</vector>

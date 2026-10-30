@@ -49,6 +49,9 @@ func (p *Provider) SearchArtist(ctx context.Context, query string, limit int) ([
 			Name:           a.Name,
 			Disambiguation: a.Disambiguation,
 			Country:        a.Area,
+			SortName:       a.SortName,
+			Type:           a.Type,
+			Genres:         a.Genres,
 		})
 	}
 	return out, nil
@@ -68,6 +71,9 @@ func (p *Provider) GetArtist(ctx context.Context, mbid string) (*metadata.Artist
 		Name:           a.Name,
 		Disambiguation: a.Disambiguation,
 		Country:        a.Area,
+		SortName:       a.SortName,
+		Type:           a.Type,
+		Genres:         a.Genres,
 	}, nil
 }
 

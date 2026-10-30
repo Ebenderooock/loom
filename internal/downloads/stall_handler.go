@@ -2,9 +2,9 @@ package downloads
 
 import (
 	"context"
-	"crypto/sha256"
 	"fmt"
 	"log/slog"
+	"sync"
 
 	"github.com/ebenderooock/loom/internal/kernel/eventbus"
 )
@@ -31,6 +31,9 @@ type StallHandlerOptions struct {
 }
 
 // StallHandler executes the configured action when a download stalls.
+//
+// Every action except pause abandons the release: it is removed from the
+// client and added to the blocklist so automatic search never grabs it again.
 type StallHandler struct {
 	registry   *Registry
 	blocklist  *BlocklistStore
@@ -40,7 +43,8 @@ type StallHandler struct {
 	action     StallAction
 	maxRetries int
 
-	// retryCount tracks per-item retry attempts in memory.
+	mu sync.Mutex
+	// retryCount tracks per-title retry attempts in memory (retry action).
 	retryCount map[string]int
 }
 
@@ -70,16 +74,19 @@ func NewStallHandler(opts StallHandlerOptions) *StallHandler {
 	}
 }
 
-// Handle processes a stalled or failed item.
-func (h *StallHandler) Handle(ctx context.Context, item Item, reason string) {
+// Handle processes a stalled or failed item. It returns true when the
+// download was abandoned (removed and blocklisted), meaning the owning
+// workflow should be failed and a replacement searched for. It returns false
+// for the pause action, which leaves the download in place.
+func (h *StallHandler) Handle(ctx context.Context, item Item, reason string) bool {
 	h.logger.WarnContext(ctx, "stall detected",
 		"item_id", item.ID,
+		"client_id", item.ClientID,
 		"title", item.Title,
 		"reason", reason,
 		"action", string(h.action),
 	)
 
-	// Emit event for notifications.
 	if h.bus != nil {
 		_ = h.bus.Publish(ctx, &DownloadStalledEvent{
 			DownloadID: item.ID,
@@ -93,80 +100,108 @@ func (h *StallHandler) Handle(ctx context.Context, item Item, reason string) {
 	switch h.action {
 	case StallActionPause:
 		h.doPause(ctx, item)
-	case StallActionRemove:
-		h.doRemove(ctx, item, true)
-	case StallActionRemoveAndBlocklist:
+		return false
+	case StallActionRemove, StallActionRemoveAndBlocklist:
 		h.doRemoveAndBlocklist(ctx, item, reason)
+		return true
 	case StallActionRetry:
 		h.doRetry(ctx, item, reason)
+		return true
 	default:
-		h.logger.ErrorContext(ctx, "unknown stall action", "action", string(h.action))
+		h.logger.ErrorContext(ctx, "unknown stall action, abandoning download", "action", string(h.action))
+		h.doRemoveAndBlocklist(ctx, item, reason)
+		return true
 	}
+}
+
+func (h *StallHandler) client(item Item) (DownloadClient, bool) {
+	if h.registry == nil {
+		return nil, false
+	}
+	return h.registry.Get(item.ClientID)
 }
 
 func (h *StallHandler) doPause(ctx context.Context, item Item) {
-	for _, c := range h.registry.List() {
-		if err := c.Pause(ctx, item.ID); err == nil {
-			h.logger.DebugContext(ctx, "paused stalled download", "item_id", item.ID)
-			return
-		}
+	c, ok := h.client(item)
+	if !ok {
+		h.logger.WarnContext(ctx, "cannot pause stalled download: client not found",
+			"item_id", item.ID, "client_id", item.ClientID)
+		return
 	}
-	h.logger.WarnContext(ctx, "could not pause stalled download on any client", "item_id", item.ID)
+	if err := c.Pause(ctx, item.ID); err != nil {
+		h.logger.WarnContext(ctx, "could not pause stalled download",
+			"item_id", item.ID, "client_id", item.ClientID, "error", err)
+		return
+	}
+	h.logger.DebugContext(ctx, "paused stalled download", "item_id", item.ID)
 }
 
 func (h *StallHandler) doRemove(ctx context.Context, item Item, deleteFiles bool) {
-	for _, c := range h.registry.List() {
-		if err := c.Remove(ctx, []string{item.ID}, deleteFiles); err == nil {
-			h.logger.DebugContext(ctx, "removed stalled download", "item_id", item.ID, "delete_files", deleteFiles)
-			return
-		}
+	c, ok := h.client(item)
+	if !ok {
+		h.logger.WarnContext(ctx, "cannot remove stalled download: client not found",
+			"item_id", item.ID, "client_id", item.ClientID)
+		return
 	}
-	h.logger.WarnContext(ctx, "could not remove stalled download on any client", "item_id", item.ID)
+	if err := c.Remove(ctx, []string{item.ID}, deleteFiles); err != nil {
+		h.logger.WarnContext(ctx, "could not remove stalled download",
+			"item_id", item.ID, "client_id", item.ClientID, "error", err)
+		return
+	}
+	h.logger.DebugContext(ctx, "removed stalled download", "item_id", item.ID, "delete_files", deleteFiles)
 }
 
 func (h *StallHandler) doRemoveAndBlocklist(ctx context.Context, item Item, reason string) {
 	h.doRemove(ctx, item, true)
-	if h.blocklist != nil {
-		hash := fmt.Sprintf("%x", sha256.Sum256([]byte(item.Title)))
-		entry := BlocklistEntry{
-			ID:          fmt.Sprintf("bl-%s", hash[:12]),
-			Title:       item.Title,
-			ReleaseHash: hash,
-			Reason:      reason,
-			CreatedAt:   h.clock.Now(),
-		}
-		if err := h.blocklist.Add(ctx, entry); err != nil {
-			h.logger.ErrorContext(ctx, "failed to add to blocklist", "item_id", item.ID, "error", err)
-		} else {
-			h.logger.DebugContext(ctx, "added to blocklist", "item_id", item.ID, "title", item.Title)
-		}
+	h.addToBlocklist(ctx, item, reason)
+}
+
+// addToBlocklist records the release so it is never grabbed again. Torrents
+// are keyed by infohash (stable across indexers); other downloads by a hash
+// of the release title.
+func (h *StallHandler) addToBlocklist(ctx context.Context, item Item, reason string) {
+	if h.blocklist == nil {
+		return
 	}
+	hash := ReleaseHash(item.Title, item.ID)
+	entry := BlocklistEntry{
+		ID:          fmt.Sprintf("bl-%s", hash[:12]),
+		Title:       item.Title,
+		ReleaseHash: hash,
+		Reason:      reason,
+		CreatedAt:   h.clock.Now(),
+	}
+	if err := h.blocklist.Add(ctx, entry); err != nil {
+		h.logger.ErrorContext(ctx, "failed to add to blocklist", "item_id", item.ID, "error", err)
+		return
+	}
+	h.logger.InfoContext(ctx, "blocklisted stalled release", "item_id", item.ID, "title", item.Title)
 }
 
 func (h *StallHandler) doRetry(ctx context.Context, item Item, reason string) {
-	h.retryCount[item.ID]++
-	if h.retryCount[item.ID] > h.maxRetries {
-		h.logger.WarnContext(ctx, "max retries exceeded, removing and blocklisting",
-			"item_id", item.ID, "retries", h.retryCount[item.ID]-1)
-		h.doRemoveAndBlocklist(ctx, item, reason+"; max retries exceeded")
-		delete(h.retryCount, item.ID)
+	h.mu.Lock()
+	h.retryCount[item.Title]++
+	attempt := h.retryCount[item.Title]
+	if attempt > h.maxRetries {
+		delete(h.retryCount, item.Title)
+	}
+	h.mu.Unlock()
+
+	// The stalled release itself is never retried — it is blocklisted and a
+	// different release is searched for.
+	h.doRemoveAndBlocklist(ctx, item, reason)
+
+	if attempt > h.maxRetries {
+		h.logger.WarnContext(ctx, "max retries exceeded for stalled download",
+			"item_id", item.ID, "retries", attempt-1)
 		return
 	}
-
-	h.logger.DebugContext(ctx, "retrying stalled download",
-		"item_id", item.ID,
-		"attempt", h.retryCount[item.ID],
-		"max_retries", h.maxRetries,
-	)
-	h.doRemove(ctx, item, true)
-
-	// Publish a re-search event so upstream can find a replacement.
 	if h.bus != nil {
 		_ = h.bus.Publish(ctx, &DownloadRetryEvent{
 			Title:     item.Title,
 			Category:  item.Category,
 			Reason:    reason,
-			Attempt:   h.retryCount[item.ID],
+			Attempt:   attempt,
 			RetriedAt: h.clock.Now(),
 		})
 	}

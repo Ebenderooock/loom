@@ -1,14 +1,19 @@
-// Package discover provides person-filmography lookup backed by TMDB.
+// Package discover provides read-only title metadata and person filmographies.
 package discover
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
+	"regexp"
 	"sort"
 	"strconv"
+	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 
+	"github.com/ebenderooock/loom/internal/metadata"
 	"github.com/ebenderooock/loom/internal/metadata/tmdb"
 )
 
@@ -53,11 +58,193 @@ const (
 	maxOverviewLen = 500
 )
 
-// Router returns a chi.Router for person discovery endpoints.
-func Router(client *tmdb.Client) chi.Router {
+// MusicDetails configures read-only music metadata routes and their feature gate.
+type MusicDetails struct {
+	Provider metadata.MusicMetadataProvider
+	Enabled  func() bool
+}
+
+// Router returns read-only provider metadata and optional library-growth routes.
+func Router(client *tmdb.Client, services ...*Service) chi.Router {
 	r := chi.NewRouter()
 	r.Get("/people/{id}", getPersonFilmography(client))
+	r.Get("/movie/{id}", getVideo(client, false))
+	r.Get("/series/{id}", getVideo(client, true))
+	if len(services) > 0 {
+		mountGrowth(r, services[0])
+	}
 	return r
+}
+
+// RouterWithMusic wires the MusicBrainz routes alongside video details and
+// library growth, while keeping Router's optional service argument strongly typed.
+func RouterWithMusic(client *tmdb.Client, service *Service, music MusicDetails) chi.Router {
+	r := Router(client, service)
+	if music.Provider == nil {
+		return r
+	}
+	r.Group(func(r chi.Router) {
+		r.Use(func(next http.Handler) http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+				if music.Enabled != nil && !music.Enabled() {
+					http.NotFound(w, req)
+					return
+				}
+				next.ServeHTTP(w, req)
+			})
+		})
+		r.Get("/artist/{id}", getArtist(music.Provider))
+		r.Get("/album/{id}", getAlbum(music.Provider))
+		r.Get("/release/{id}", getRelease(music.Provider))
+	})
+	return r
+}
+
+func getAlbum(provider metadata.MusicMetadataProvider) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id, err := uuid.Parse(chi.URLParam(r, "id"))
+		if err != nil {
+			http.Error(w, "invalid MusicBrainz ID", http.StatusBadRequest)
+			return
+		}
+		album, releases, err := provider.GetAlbum(r.Context(), id.String())
+		if err != nil {
+			http.Error(w, "Unable to load album metadata", http.StatusBadGateway)
+			return
+		}
+		if album == nil || album.MBID != id.String() {
+			http.Error(w, "Album not found for this identity", http.StatusNotFound)
+			return
+		}
+		writeDiscoveryResult(w, map[string]any{"album": album, "releases": releases}, nil)
+	}
+}
+
+func getRelease(provider metadata.MusicMetadataProvider) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id, err := uuid.Parse(chi.URLParam(r, "id"))
+		if err != nil {
+			http.Error(w, "invalid MusicBrainz ID", http.StatusBadRequest)
+			return
+		}
+		release, err := provider.GetAlbumRelease(r.Context(), id.String())
+		if err != nil {
+			http.Error(w, "Unable to load track listing", http.StatusBadGateway)
+			return
+		}
+		if release == nil || release.MBID != id.String() {
+			http.Error(w, "Edition not found for this identity", http.StatusNotFound)
+			return
+		}
+		writeDiscoveryResult(w, release, nil)
+	}
+}
+
+// These routes are read-only: provider identity is always scoped by media type,
+// never interpreted as a local library ID or resolved by a title search.
+func getVideo(client *tmdb.Client, series bool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		rawID := chi.URLParam(r, "id")
+		provider := r.URL.Query().Get("provider")
+		if provider == "" {
+			provider = "tmdb"
+		}
+		if !validVideoIdentity(provider, rawID) {
+			http.Error(w, "invalid TMDB ID", http.StatusBadRequest)
+			return
+		}
+		if provider == "tvdb" && !series {
+			http.Error(w, "TVDB-only movies cannot be resolved by TMDB. An IMDb or TMDB mapping is required for shared details and adding.", http.StatusUnprocessableEntity)
+			return
+		}
+		id, _ := strconv.Atoi(rawID)
+		var err error
+		if provider != "tmdb" {
+			media := "movie"
+			if series {
+				media = "tv"
+			}
+			id, err = client.ResolveExternalID(r.Context(), media, provider, rawID)
+			if err != nil {
+				http.Error(w, "No unambiguous title found for this provider ID", http.StatusNotFound)
+				return
+			}
+		}
+		var title any
+		var credits *metadata.Credits
+		if series {
+			title, err = client.GetTV(r.Context(), id)
+		} else {
+			title, err = client.GetMovie(r.Context(), id)
+		}
+		if err != nil {
+			http.Error(w, "Unable to load title metadata", http.StatusBadGateway)
+			return
+		}
+		var actualID *string
+		switch result := title.(type) {
+		case *metadata.MovieMetadata:
+			if result != nil {
+				actualID = result.TMDBID
+			}
+		case *metadata.SeriesMetadata:
+			if result != nil {
+				actualID = result.TMDBID
+			}
+		}
+		if actualID == nil || *actualID != strconv.Itoa(id) {
+			http.Error(w, "Provider returned a conflicting title identity", http.StatusBadGateway)
+			return
+		}
+		if series {
+			credits, err = client.GetTVCredits(r.Context(), id)
+		} else {
+			credits, err = client.GetMovieCredits(r.Context(), id)
+		}
+		castWarning := ""
+		if err != nil {
+			castWarning = "Cast and crew could not be loaded."
+		}
+		writeDiscoveryResult(w, map[string]any{"title": title, "credits": credits, "credits_error": castWarning}, nil)
+	}
+}
+
+var imdbIdentity = regexp.MustCompile(`^tt[0-9]{1,12}$`)
+
+func validVideoIdentity(provider, id string) bool {
+	if provider == "imdb" {
+		return imdbIdentity.MatchString(id)
+	}
+	if provider != "tmdb" && provider != "tvdb" {
+		return false
+	}
+	n, err := strconv.Atoi(id)
+	return err == nil && n > 0
+}
+
+func getArtist(provider metadata.MusicMetadataProvider) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id, err := uuid.Parse(chi.URLParam(r, "id"))
+		if err != nil {
+			http.Error(w, "invalid MusicBrainz ID", http.StatusBadRequest)
+			return
+		}
+		artist, err := provider.GetArtist(r.Context(), id.String())
+		if err != nil {
+			http.Error(w, "Unable to load artist metadata", http.StatusBadGateway)
+			return
+		}
+		if artist == nil || artist.MBID != id.String() {
+			http.Error(w, "Artist not found", http.StatusNotFound)
+			return
+		}
+		albums, err := provider.GetArtistAlbums(r.Context(), id.String())
+		if err != nil {
+			http.Error(w, "Unable to load artist albums", http.StatusBadGateway)
+			return
+		}
+		writeDiscoveryResult(w, map[string]any{"title": artist, "albums": albums}, nil)
+	}
 }
 
 func getPersonFilmography(client *tmdb.Client) http.HandlerFunc {
@@ -69,7 +256,12 @@ func getPersonFilmography(client *tmdb.Client) http.HandlerFunc {
 			return
 		}
 
-		ctx := r.Context()
+		if !client.Configured() {
+			writeDiscoveryError(w, ErrNotConfigured)
+			return
+		}
+		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+		defer cancel()
 
 		// Fetch person details and credits in parallel
 		type personResult struct {
@@ -97,11 +289,11 @@ func getPersonFilmography(client *tmdb.Client) http.HandlerFunc {
 		cRes := <-cCh
 
 		if pRes.err != nil {
-			http.Error(w, pRes.err.Error(), http.StatusInternalServerError)
+			writeDiscoveryError(w, pRes.err)
 			return
 		}
 		if cRes.err != nil {
-			http.Error(w, cRes.err.Error(), http.StatusInternalServerError)
+			writeDiscoveryError(w, cRes.err)
 			return
 		}
 
@@ -114,6 +306,7 @@ func getPersonFilmography(client *tmdb.Client) http.HandlerFunc {
 		}
 
 		resp := PersonFilmography{
+			Credits: []CreditItem{},
 			Person: PersonDetail{
 				ID:          person.ID,
 				Name:        person.Name,

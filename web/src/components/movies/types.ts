@@ -19,6 +19,11 @@ export interface Movie {
   status: string;
   monitoringStatus: string;
   qualityProfileId: string;
+  /**
+   * Authoritative server flag: true when the assigned quality profile is
+   * blank or no longer exists. Absent on older API responses.
+   */
+  qualityProfileMissing?: boolean;
   libraryId: string;
   createdAt?: string;
   updatedAt?: string;

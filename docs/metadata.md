@@ -2,6 +2,10 @@
 
 The metadata service (`internal/metadata`) provides a unified abstraction layer for movie, series, and episode metadata sourced from external providers (TMDB, TVDB, MusicBrainz).
 
+TMDB also supplies new-title candidates and movie-set membership for
+[Grow your library and Collections](discovery.md). These catalog lookups work
+without Import Lists and do not initiate downloads.
+
 ## Episode airing times and timezones
 
 On series add or refresh, Loom optionally enriches episode dates with actual
@@ -37,6 +41,25 @@ TVmaze data is licensed under
 is displayed alongside enriched episode dates and in calendar tooltips.
 
 ## Architecture
+
+### Read-only title details
+
+Search, Discover, person filmographies, and Requests share provider detail
+endpoints under `/api/v1/discover/`. Movie and series details include the full
+synopsis, artwork, rating, genres, and cast/crew. IMDb/TVDB identities are resolved
+through TMDB's exact-ID lookup, scoped by media type; ambiguous identities are
+rejected instead of guessed by title. Artist details include available
+MusicBrainz metadata and albums; editions and tracks load on demand.
+No library records are created while reading these endpoints. The UI caches
+details for five minutes with media- and provider-scoped keys.
+
+The shared add form uses the normal movie, series, and artist persistence
+endpoints. Discover supplies non-secret source defaults, displayed for review
+and editing. After the library add succeeds, `/import-lists/discover/track`
+verifies membership and updates item tracking without reapplying list settings.
+If tracking fails, retrying it does not repeat the library add. Requests keep
+their own quota/approval/fulfillment semantics; opening details never exposes a
+direct library-add form in that context.
 
 The service implements a three-tier lookup strategy:
 

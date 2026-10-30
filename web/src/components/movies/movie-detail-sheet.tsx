@@ -1,5 +1,8 @@
 import { useEffect, useState } from "react";
+import { useAuth } from "@/hooks/use-auth";
+import { AddToCollectionButton } from "@/components/collections/add-to-collection";
 import { apiFetch } from "@/lib/fetch";
+import { MediaFilesManager } from "@/components/media-files-manager";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -26,7 +29,6 @@ import {
 import {
   Loader2,
   Film,
-  Star,
   Check,
   Calendar,
   Clock,
@@ -59,9 +61,19 @@ import { ReleaseSearchDialog } from "@/components/search/release-search-dialog";
 import { autoSearch } from "@/lib/autosearch-api";
 import { AltTitlesSection } from "@/components/alt-titles";
 import { PersonDiscoverDialog } from "@/components/person-discover-dialog";
+import {
+  TitlePersonCard as PersonCard,
+  TitleRating,
+  TitleSynopsis,
+  titleImage,
+} from "@/components/titles/title-metadata";
+import {
+  isMissingQualityProfile,
+  MissingQualityProfileAlert,
+  MissingQualityProfileBadge,
+} from "@/components/quality-profile-warning";
 import type { Library } from "../../lib/libraries-api";
 import type { Movie, QualityProfile, Credits, CreditPerson } from "./types";
-import { TMDB_IMG } from "./types";
 
 interface MovieFileItem {
   id?: string | number;
@@ -137,59 +149,6 @@ function DetailRow({
 
 const PROFILE_IMG = "https://image.tmdb.org/t/p/w185";
 
-function PersonCard({
-  person,
-  onClick,
-}: {
-  person: CreditPerson;
-  onClick?: () => void;
-}) {
-  return (
-    <div
-      className={cn(
-        "group w-[100px] flex-shrink-0",
-        onClick && "cursor-pointer",
-      )}
-      onClick={onClick}
-      role={onClick ? "button" : undefined}
-      tabIndex={onClick ? 0 : undefined}
-      onKeyDown={
-        onClick
-          ? (e) => {
-              if (e.key === "Enter" || e.key === " ") onClick();
-            }
-          : undefined
-      }
-    >
-      <div className="relative mb-1.5 h-[150px] w-[100px] overflow-hidden rounded-lg bg-muted/30">
-        {person.profile_path ? (
-          <img
-            src={`${PROFILE_IMG}${person.profile_path}`}
-            alt={person.name}
-            className="h-full w-full object-cover"
-            loading="lazy"
-          />
-        ) : (
-          <div className="flex h-full w-full items-center justify-center text-muted-foreground/30">
-            <Users className="h-8 w-8" />
-          </div>
-        )}
-      </div>
-      <p className="truncate text-xs font-medium" title={person.name}>
-        {person.name}
-      </p>
-      {person.role && (
-        <p
-          className="truncate text-[11px] text-muted-foreground"
-          title={person.role}
-        >
-          {person.role}
-        </p>
-      )}
-    </div>
-  );
-}
-
 function PersonChip({
   person,
   onClick,
@@ -237,6 +196,7 @@ export function MovieDetailSheet({
   movie,
   open,
   onOpenChange,
+  onCloseAutoFocus,
   profiles,
   libraries,
   onUpdated,
@@ -248,6 +208,7 @@ export function MovieDetailSheet({
   movie: Movie | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onCloseAutoFocus?: (event: Event) => void;
   profiles: QualityProfile[];
   libraries: Library[];
   onUpdated: (updated: Movie) => void;
@@ -262,7 +223,6 @@ export function MovieDetailSheet({
   const [saving, setSaving] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const [overviewExpanded, setOverviewExpanded] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [credits, setCredits] = useState<Credits | null>(null);
   const [creditsLoading, setCreditsLoading] = useState(false);
@@ -270,6 +230,8 @@ export function MovieDetailSheet({
   const [archiving, setArchiving] = useState(false);
   const [autoSearching, setAutoSearching] = useState(false);
   const [rescanning, setRescanning] = useState(false);
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
   const [discoverPerson, setDiscoverPerson] = useState<{
     id: number;
     name: string;
@@ -321,11 +283,16 @@ export function MovieDetailSheet({
       setEditing(false);
       setEditProfile(movie.qualityProfileId);
       setEditMonitoring(movie.monitoringStatus);
-      setOverviewExpanded(false);
+    }
+  }, [movie, open]);
+
+  const movieId = movie?.id;
+  useEffect(() => {
+    if (movieId && open) {
       // Fetch credits
       setCredits(null);
       setCreditsLoading(true);
-      apiFetch(`/api/v1/movies/${movie.id}/credits`)
+      apiFetch(`/api/v1/movies/${encodeURIComponent(movieId)}/credits`)
         .then((r) => (r.ok ? r.json() : null))
         .then((data) => setCredits(data))
         .catch((err) => console.error("fetch failed:", err))
@@ -333,7 +300,7 @@ export function MovieDetailSheet({
       // Fetch movie files
       setMovieFiles([]);
       setMovieFilesLoading(true);
-      apiFetch(`/api/v1/movies/files/${movie.id}`)
+      apiFetch(`/api/v1/movies/files/${encodeURIComponent(movieId)}`)
         .then((r) => (r.ok ? r.json() : []))
         .then((data) => setMovieFiles(Array.isArray(data) ? data : []))
         .catch(() => setMovieFiles([]))
@@ -341,17 +308,24 @@ export function MovieDetailSheet({
       // Fetch history
       setMovieHistory([]);
       setMovieHistoryLoading(true);
-      apiFetch(`/api/v1/movies/${movie.id}/history`)
+      apiFetch(`/api/v1/movies/${encodeURIComponent(movieId)}/history`)
         .then((r) => (r.ok ? r.json() : []))
         .then((data) => setMovieHistory(Array.isArray(data) ? data : []))
         .catch(() => setMovieHistory([]))
         .finally(() => setMovieHistoryLoading(false));
     }
-  }, [movie, open]);
+  }, [movieId, open]);
 
   if (!movie) return null;
 
   const profile = profiles.find((p) => p.id === movie.qualityProfileId);
+  const missingProfile = isMissingQualityProfile(movie);
+  const openEditor = () => {
+    setEditing(true);
+    // A dangling ID can't be shown in the picker; start blank instead.
+    setEditProfile(missingProfile ? "" : movie.qualityProfileId);
+    setEditMonitoring(movie.monitoringStatus);
+  };
   const library = libraries.find((l) => l.id === movie.libraryId);
   const isMonitored = movie.monitoringStatus === "monitored";
   const moviePath = library
@@ -361,14 +335,17 @@ export function MovieDetailSheet({
   const handleSave = async () => {
     setSaving(true);
     try {
-      const res = await apiFetch(`/api/v1/movies/${movie.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          quality_profile_id: editProfile,
-          monitoring_status: editMonitoring,
-        }),
-      });
+      const res = await apiFetch(
+        `/api/v1/movies/${encodeURIComponent(movie.id)}`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            quality_profile_id: editProfile,
+            monitoring_status: editMonitoring,
+          }),
+        },
+      );
       if (res.ok) {
         const updated = await res.json();
         onUpdated(updated);
@@ -387,11 +364,14 @@ export function MovieDetailSheet({
   const handleToggleMonitoring = async () => {
     const newStatus = isMonitored ? "unmonitored" : "monitored";
     try {
-      const res = await apiFetch(`/api/v1/movies/${movie.id}/monitoring`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: newStatus }),
-      });
+      const res = await apiFetch(
+        `/api/v1/movies/${encodeURIComponent(movie.id)}/monitoring`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status: newStatus }),
+        },
+      );
       if (res.ok) {
         onUpdated({ ...movie, monitoringStatus: newStatus });
         toast.success(
@@ -406,9 +386,12 @@ export function MovieDetailSheet({
   const handleDelete = async () => {
     setDeleting(true);
     try {
-      const res = await apiFetch(`/api/v1/movies/${movie.id}`, {
-        method: "DELETE",
-      });
+      const res = await apiFetch(
+        `/api/v1/movies/${encodeURIComponent(movie.id)}`,
+        {
+          method: "DELETE",
+        },
+      );
       if (res.ok || res.status === 204) {
         onDeleted(movie.id);
         onOpenChange(false);
@@ -429,8 +412,8 @@ export function MovieDetailSheet({
     setArchiving(true);
     const isArchived = movie.monitoringStatus === "unmonitored";
     const endpoint = isArchived
-      ? `/api/v1/movies/${movie.id}/unarchive`
-      : `/api/v1/movies/${movie.id}/archive`;
+      ? `/api/v1/movies/${encodeURIComponent(movie.id)}/unarchive`
+      : `/api/v1/movies/${encodeURIComponent(movie.id)}/archive`;
     try {
       const res = await apiFetch(endpoint, { method: "POST" });
       if (res.ok) {
@@ -450,14 +433,19 @@ export function MovieDetailSheet({
   const handleRefresh = async () => {
     setRefreshing(true);
     try {
-      const refreshRes = await apiFetch(`/api/v1/movies/${movie.id}/refresh`, {
-        method: "POST",
-      });
+      const refreshRes = await apiFetch(
+        `/api/v1/movies/${encodeURIComponent(movie.id)}/refresh`,
+        {
+          method: "POST",
+        },
+      );
       if (!refreshRes.ok) {
         toast.error("Failed to refresh");
         return;
       }
-      const res = await apiFetch(`/api/v1/movies/${movie.id}`);
+      const res = await apiFetch(
+        `/api/v1/movies/${encodeURIComponent(movie.id)}`,
+      );
       if (res.ok) {
         const updated = await res.json();
         onUpdated(updated);
@@ -482,17 +470,22 @@ export function MovieDetailSheet({
     }
     setRescanning(true);
     try {
-      const res = await apiFetch(`/api/v1/movies/${movie.id}/rescan`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ libraryId: fallbackLibraryId }),
-      });
+      const res = await apiFetch(
+        `/api/v1/movies/${encodeURIComponent(movie.id)}/rescan`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ libraryId: fallbackLibraryId }),
+        },
+      );
       if (res.ok) {
         const result = await res.json();
         toast.success(
           `Rescan complete: ${result.matched} matched, ${result.imported} imported`,
         );
-        const updated = await apiFetch(`/api/v1/movies/${movie.id}`);
+        const updated = await apiFetch(
+          `/api/v1/movies/${encodeURIComponent(movie.id)}`,
+        );
         if (updated.ok) onUpdated(await updated.json());
       } else {
         toast.error("Rescan failed");
@@ -504,13 +497,12 @@ export function MovieDetailSheet({
     }
   };
 
-  const overviewIsLong = (movie.overview?.length ?? 0) > 280;
-
   return (
     <>
-      <Sheet open={open} onOpenChange={onOpenChange}>
+      <Sheet open={open && !discoverPerson} onOpenChange={onOpenChange}>
         <SheetContent
           side="right"
+          onCloseAutoFocus={onCloseAutoFocus}
           className="w-full overflow-y-auto p-0 sm:max-w-2xl"
         >
           <SheetHeader className="sr-only">
@@ -522,13 +514,13 @@ export function MovieDetailSheet({
           <div className="relative h-[300px] overflow-hidden bg-muted">
             {movie.backdropPath ? (
               <img
-                src={`${TMDB_IMG}/w780${movie.backdropPath}`}
+                src={titleImage(movie.backdropPath, "w780")}
                 alt=""
                 className="h-full w-full object-cover"
               />
             ) : movie.posterPath ? (
               <img
-                src={`${TMDB_IMG}/w780${movie.posterPath}`}
+                src={titleImage(movie.posterPath, "w780")}
                 alt=""
                 className="h-full w-full scale-110 object-cover opacity-30 blur-md"
               />
@@ -541,7 +533,7 @@ export function MovieDetailSheet({
               <div className="w-[130px] overflow-hidden rounded-lg border-4 border-background shadow-2xl">
                 {movie.posterPath ? (
                   <img
-                    src={`${TMDB_IMG}/w300${movie.posterPath}`}
+                    src={titleImage(movie.posterPath, "w300")}
                     alt={movie.title}
                     className="aspect-[2/3] w-full object-cover"
                   />
@@ -591,7 +583,7 @@ export function MovieDetailSheet({
 
           {/* ── Action Buttons toolbar ── */}
           <div className="px-6 pb-2">
-            <div className="flex items-center gap-1.5">
+            <div className="flex flex-wrap items-center gap-1.5">
               {/* Primary actions with labels */}
               <Button
                 size="sm"
@@ -622,11 +614,7 @@ export function MovieDetailSheet({
                 size="sm"
                 variant="outline"
                 className="h-8 gap-1.5 text-xs"
-                onClick={() => {
-                  setEditing(true);
-                  setEditProfile(movie.qualityProfileId);
-                  setEditMonitoring(movie.monitoringStatus);
-                }}
+                onClick={openEditor}
                 title="Edit movie settings"
               >
                 <Pencil className="h-3.5 w-3.5" />
@@ -684,6 +672,18 @@ export function MovieDetailSheet({
                 )}
               </Button>
 
+              {isAdmin && (
+                <AddToCollectionButton
+                  iconOnly
+                  target={{
+                    media_type: "movie",
+                    media_id: movie.id,
+                    title: movie.title,
+                    tmdb: movie.tmdbId ? String(movie.tmdbId) : undefined,
+                  }}
+                />
+              )}
+
               {/* Delete — pushed right */}
               <Button
                 size="icon"
@@ -696,6 +696,14 @@ export function MovieDetailSheet({
               </Button>
             </div>
           </div>
+
+          {missingProfile && !editing && (
+            <MissingQualityProfileAlert
+              mediaLabel="movie"
+              onFix={openEditor}
+              className="mx-6 mb-3"
+            />
+          )}
 
           {/* ── Edit mode bar ── */}
           {editing && (
@@ -717,7 +725,7 @@ export function MovieDetailSheet({
                       id="movie-edit-profile"
                       className="h-9 text-sm"
                     >
-                      <SelectValue />
+                      <SelectValue placeholder="Select profile" />
                     </SelectTrigger>
                     <SelectContent>
                       {profiles.map((p) => (
@@ -788,15 +796,7 @@ export function MovieDetailSheet({
                   {Math.floor(movie.runtime / 60)}h {movie.runtime % 60}m
                 </span>
               )}
-              {movie.rating > 0 && (
-                <span className="flex items-center gap-1">
-                  <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400" />
-                  <span className="font-medium text-yellow-400">
-                    {movie.rating.toFixed(1)}
-                  </span>
-                  <span className="text-muted-foreground/60">/10</span>
-                </span>
-              )}
+              <TitleRating rating={movie.rating} />
               {movie.releaseDate && (
                 <span className="flex items-center gap-1">
                   <Calendar className="h-3.5 w-3.5" />
@@ -825,24 +825,7 @@ export function MovieDetailSheet({
           <div className="space-y-1 px-6 pb-8 pt-4">
             {/* ── Overview ── */}
             <CollapsibleSection title="Overview" icon={Info} defaultOpen>
-              <div className="relative">
-                <p
-                  className={cn(
-                    "text-sm leading-relaxed text-muted-foreground",
-                    !overviewExpanded && overviewIsLong && "line-clamp-3",
-                  )}
-                >
-                  {movie.overview || "No overview available."}
-                </p>
-                {overviewIsLong && (
-                  <button
-                    onClick={() => setOverviewExpanded((v) => !v)}
-                    className="mt-1.5 text-xs font-medium text-accent hover:underline"
-                  >
-                    {overviewExpanded ? "Show Less" : "Show More"}
-                  </button>
-                )}
-              </div>
+              <TitleSynopsis key={movie.id} overview={movie.overview} />
             </CollapsibleSection>
 
             {/* ── Alt Titles ── */}
@@ -852,10 +835,14 @@ export function MovieDetailSheet({
             <CollapsibleSection title="Details" icon={HardDrive} defaultOpen>
               <div className="grid grid-cols-2 gap-x-6 gap-y-4 text-sm">
                 <DetailRow label="Quality Profile">
-                  <div className="flex items-center gap-1.5">
-                    <span className="inline-block h-2 w-2 shrink-0 rounded-full bg-accent" />
-                    {profile?.name ?? "—"}
-                  </div>
+                  {missingProfile ? (
+                    <MissingQualityProfileBadge />
+                  ) : (
+                    <div className="flex items-center gap-1.5">
+                      <span className="inline-block h-2 w-2 shrink-0 rounded-full bg-accent" />
+                      {profile?.name ?? "—"}
+                    </div>
+                  )}
                 </DetailRow>
                 <DetailRow label="Library">
                   <span
@@ -971,6 +958,39 @@ export function MovieDetailSheet({
             )}
 
             {/* ── Movie Files ── */}
+            <MediaFilesManager
+              mediaType="movie"
+              id={movie.id}
+              title={movie.title}
+              onChanged={() => {
+                void apiFetch(
+                  `/api/v1/movies/files/${encodeURIComponent(movie.id)}`,
+                )
+                  .then(async (response) => {
+                    if (!response.ok) {
+                      const body = await response.json().catch(() => null);
+                      throw new Error(
+                        body?.error?.message ||
+                          `File refresh failed (${response.status})`,
+                      );
+                    }
+                    return response.json();
+                  })
+                  .then((data) => {
+                    if (!Array.isArray(data)) {
+                      throw new Error("Unexpected movie file response");
+                    }
+                    setMovieFiles(data);
+                  })
+                  .catch((error) =>
+                    toast.error("Could not refresh movie files", {
+                      description:
+                        error instanceof Error ? error.message : String(error),
+                    }),
+                  );
+                onRefresh?.();
+              }}
+            />
             <CollapsibleSection
               title="Movie Files"
               icon={FileVideo}
@@ -1270,6 +1290,9 @@ export function MovieDetailSheet({
 
       {/* Release search dialog */}
       <ReleaseSearchDialog
+        qualityProfileId={movie.qualityProfileId}
+        year={movie.year}
+        runtime={movie.runtime}
         open={searchOpen}
         onOpenChange={setSearchOpen}
         title={movie.title}

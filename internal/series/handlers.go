@@ -2,7 +2,9 @@ package series
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -109,29 +111,30 @@ func RouterWithSearch(svc Service, indexerSvc *indexers.Service, grabStore GrabC
 
 func seriesToResponse(s *Series) map[string]interface{} {
 	resp := map[string]interface{}{
-		"id":               s.ID,
-		"title":            s.Title,
-		"year":             s.Year,
-		"imdbId":           s.IMDBID,
-		"tmdbId":           s.TMDBID,
-		"tvdbId":           s.TVDBID,
-		"overview":         s.Overview,
-		"genres":           s.Genres,
-		"runtime":          s.Runtime,
-		"rating":           s.Rating,
-		"backdropPath":     s.BackdropPath,
-		"posterPath":       s.PosterPath,
-		"network":          s.Network,
-		"status":           string(s.Status),
-		"seriesType":       string(s.SeriesType),
-		"metadataProvider": s.MetadataProvider,
-		"qualityProfileId": s.QualityProfileID,
-		"libraryId":        s.LibraryID,
-		"monitoringStatus": string(s.MonitoringStatus),
-		"seasonFolder":     s.SeasonFolder,
-		"releaseDate":      s.ReleaseDate,
-		"createdAt":        s.CreatedAt.Format("2006-01-02T15:04:05Z"),
-		"updatedAt":        s.UpdatedAt.Format("2006-01-02T15:04:05Z"),
+		"id":                    s.ID,
+		"title":                 s.Title,
+		"year":                  s.Year,
+		"imdbId":                s.IMDBID,
+		"tmdbId":                s.TMDBID,
+		"tvdbId":                s.TVDBID,
+		"overview":              s.Overview,
+		"genres":                s.Genres,
+		"runtime":               s.Runtime,
+		"rating":                s.Rating,
+		"backdropPath":          s.BackdropPath,
+		"posterPath":            s.PosterPath,
+		"network":               s.Network,
+		"status":                string(s.Status),
+		"seriesType":            string(s.SeriesType),
+		"metadataProvider":      s.MetadataProvider,
+		"qualityProfileId":      s.QualityProfileID,
+		"qualityProfileMissing": s.QualityProfileMissing,
+		"libraryId":             s.LibraryID,
+		"monitoringStatus":      string(s.MonitoringStatus),
+		"seasonFolder":          s.SeasonFolder,
+		"releaseDate":           s.ReleaseDate,
+		"createdAt":             s.CreatedAt.Format("2006-01-02T15:04:05Z"),
+		"updatedAt":             s.UpdatedAt.Format("2006-01-02T15:04:05Z"),
 	}
 	if s.Seasons != nil {
 		seasons := make([]map[string]interface{}, 0, len(s.Seasons))
@@ -611,12 +614,12 @@ func getSeries(svc Service) http.HandlerFunc {
 		}
 
 		sr, err := svc.GetSeries(r.Context(), id)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+		if errors.Is(err, sql.ErrNoRows) || (err == nil && sr == nil) {
+			http.Error(w, "series not found", http.StatusNotFound)
 			return
 		}
-		if sr == nil {
-			http.Error(w, "series not found", http.StatusNotFound)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 

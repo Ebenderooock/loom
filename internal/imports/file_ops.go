@@ -75,6 +75,9 @@ func copyFile(src, dst string) (retErr error) {
 	if _, err := io.Copy(out, in); err != nil {
 		return fmt.Errorf("copy data: %w", err)
 	}
+	if err := out.Sync(); err != nil {
+		return fmt.Errorf("sync destination: %w", err)
+	}
 	return nil
 }
 
@@ -271,12 +274,12 @@ func scanMediaFiles(dir string) ([]string, error) {
 	var files []string
 	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
-			return nil // skip unreadable entries
+			return fmt.Errorf("inspect media path %q: %w", path, err)
 		}
 		if info.Mode()&os.ModeSymlink != 0 || info.IsDir() {
 			return nil
 		}
-		ext := filepath.Ext(path)
+		ext := strings.ToLower(filepath.Ext(path))
 		if mediaExtensions[ext] {
 			files = append(files, path)
 		}

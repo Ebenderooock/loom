@@ -2,8 +2,11 @@ package downloads
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
 	"fmt"
+	"regexp"
+	"strings"
 	"time"
 )
 
@@ -79,6 +82,73 @@ func (s *BlocklistStore) IsBlocked(ctx context.Context, releaseHash string) (boo
 	err := s.db.QueryRowContext(ctx,
 		`SELECT COUNT(*) FROM blocklist WHERE release_hash = ?`, releaseHash).Scan(&count)
 	if err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
+var infoHashRe = regexp.MustCompile(`^[0-9a-fA-F]{40}$`)
+
+// NormalizeInfoHash returns the lowercase hex infohash if s is a v1 torrent
+// infohash, or "" otherwise.
+func NormalizeInfoHash(s string) string {
+	s = strings.TrimSpace(s)
+	if infoHashRe.MatchString(s) {
+		return strings.ToLower(s)
+	}
+	return ""
+}
+
+// InfoHashFromMagnet extracts a normalised v1 infohash from a magnet URI.
+func InfoHashFromMagnet(magnet string) string {
+	const marker = "xt=urn:btih:"
+	idx := strings.Index(strings.ToLower(magnet), marker)
+	if idx < 0 {
+		return ""
+	}
+	h := magnet[idx+len(marker):]
+	if end := strings.IndexByte(h, '&'); end >= 0 {
+		h = h[:end]
+	}
+	return NormalizeInfoHash(h)
+}
+
+// TitleHash returns the hex sha256 of a release title.
+func TitleHash(title string) string {
+	return fmt.Sprintf("%x", sha256.Sum256([]byte(title)))
+}
+
+// ReleaseHash returns the blocklist key for a release: its infohash when the
+// download ID is one, otherwise a hash of the title.
+func ReleaseHash(title, downloadID string) string {
+	if h := NormalizeInfoHash(downloadID); h != "" {
+		return h
+	}
+	return TitleHash(title)
+}
+
+// IsReleaseBlocked reports whether a candidate release matches a blocklist
+// entry by infohash, by title hash, or by case-insensitive title.
+func (s *BlocklistStore) IsReleaseBlocked(ctx context.Context, title, infoHash string) (bool, error) {
+	title = strings.TrimSpace(title)
+	hashes := []any{}
+	if title != "" {
+		hashes = append(hashes, TitleHash(title))
+	}
+	if h := NormalizeInfoHash(infoHash); h != "" {
+		hashes = append(hashes, h)
+	}
+	if len(hashes) == 0 {
+		return false, nil
+	}
+	query := `SELECT COUNT(*) FROM blocklist WHERE release_hash IN (?` + strings.Repeat(", ?", len(hashes)-1) + `)`
+	args := hashes
+	if title != "" {
+		query += ` OR LOWER(title) = LOWER(?)`
+		args = append(args, title)
+	}
+	var count int
+	if err := s.db.QueryRowContext(ctx, query, args...).Scan(&count); err != nil {
 		return false, err
 	}
 	return count > 0, nil

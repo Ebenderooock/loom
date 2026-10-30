@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/ebenderooock/loom/internal/airing"
+	"github.com/ebenderooock/loom/internal/movies"
 )
 
 // Repository defines data access operations for series, seasons, episodes, and credits.
@@ -51,7 +52,7 @@ type sqlRepo struct {
 	db *sql.DB
 }
 
-const seriesColumns = `id, title, year, imdb_id, tmdb_id, tvdb_id, overview, genres, runtime, rating, backdrop_path, poster_path, network, status, series_type, metadata_provider, quality_profile_id, library_id, monitoring_status, season_folder, release_date, created_at, updated_at`
+const seriesColumns = `id, title, year, imdb_id, tmdb_id, tvdb_id, overview, genres, runtime, rating, backdrop_path, poster_path, network, status, series_type, metadata_provider, quality_profile_id, library_id, monitoring_status, season_folder, release_date, created_at, updated_at, ` + movies.MissingQualityProfileSQL
 
 func scanSeries(scanner interface {
 	Scan(dest ...interface{}) error
@@ -65,7 +66,7 @@ func scanSeries(scanner interface {
 		&s.BackdropPath, &s.PosterPath, &s.Network,
 		&s.Status, &s.SeriesType, &s.MetadataProvider,
 		&s.QualityProfileID, &s.LibraryID, &s.MonitoringStatus,
-		&s.SeasonFolder, &s.ReleaseDate, &createdStr, &updatedStr,
+		&s.SeasonFolder, &s.ReleaseDate, &createdStr, &updatedStr, &s.QualityProfileMissing,
 	)
 	if err != nil {
 		return nil, err
@@ -123,8 +124,17 @@ func (r *sqlRepo) GetSeries(ctx context.Context, id string) (*Series, error) {
 }
 
 func (r *sqlRepo) CreateSeries(ctx context.Context, s *Series) error {
+	profileID, err := movies.ResolveQualityProfileID(ctx, r.db, s.QualityProfileID)
+	if err != nil {
+		return err
+	}
+	s.QualityProfileID = profileID
+	s.QualityProfileMissing, err = movies.IsQualityProfileMissing(ctx, r.db, profileID)
+	if err != nil {
+		return err
+	}
 	genreBytes, _ := json.Marshal(s.Genres)
-	_, err := r.db.ExecContext(ctx,
+	_, err = r.db.ExecContext(ctx,
 		`INSERT INTO series (id, title, year, imdb_id, tmdb_id, tvdb_id, overview, genres, runtime, rating, backdrop_path, poster_path, network, status, series_type, metadata_provider, quality_profile_id, library_id, monitoring_status, season_folder, release_date, created_at, updated_at)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		s.ID, s.Title, s.Year, s.IMDBID, s.TMDBID, s.TVDBID,
@@ -138,8 +148,13 @@ func (r *sqlRepo) CreateSeries(ctx context.Context, s *Series) error {
 }
 
 func (r *sqlRepo) UpdateSeries(ctx context.Context, s *Series) error {
+	missing, err := movies.IsQualityProfileMissing(ctx, r.db, s.QualityProfileID)
+	if err != nil {
+		return err
+	}
+	s.QualityProfileMissing = missing
 	genreBytes, _ := json.Marshal(s.Genres)
-	_, err := r.db.ExecContext(ctx,
+	_, err = r.db.ExecContext(ctx,
 		`UPDATE series SET title = ?, year = ?, imdb_id = ?, tvdb_id = ?, overview = ?, genres = ?, runtime = ?, rating = ?, backdrop_path = ?, poster_path = ?, network = ?, status = ?, series_type = ?, metadata_provider = ?, quality_profile_id = ?, library_id = ?, monitoring_status = ?, season_folder = ?, release_date = ?, updated_at = ?
 		 WHERE id = ?`,
 		s.Title, s.Year, s.IMDBID, s.TVDBID, s.Overview, string(genreBytes), s.Runtime, s.Rating,

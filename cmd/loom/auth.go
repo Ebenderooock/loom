@@ -38,15 +38,16 @@ func buildAuthService(ctx context.Context, cfg *config.Config, db storage.DB, ap
 		ttl = time.Duration(cfg.Auth.SessionTTL) * time.Second
 	}
 	return auth.NewService(auth.ServiceOptions{
-		Store:         store,
-		Logger:        logger,
-		AppConfig:     appCfg,
-		AppConfigPath: appCfgPath,
-		SessionSecret: secret,
-		SessionTTL:    ttl,
-		CookieSecure:  cfg.Auth.CookieSecure,
-		OIDC:          oidc,
-		Proxy:         proxyCfg,
-		Invites:       auth.NewInviteStore(db.DB()),
+		Store:           store,
+		Logger:          logger,
+		AppConfig:       appCfg,
+		AppConfigPath:   appCfgPath,
+		SessionSecret:   secret,
+		SessionTTL:      ttl,
+		CookieSecure:    cfg.Auth.CookieSecure,
+		OIDC:            oidc,
+		Proxy:           proxyCfg,
+		Invites:         auth.NewInviteStore(db.DB()),
+		PairingDisabled: cfg.Auth.Mode == "disabled",
 	})
 }

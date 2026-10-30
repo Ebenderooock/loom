@@ -674,7 +674,7 @@ func TestVerifyIdentity_IDBasedCorroboration(t *testing.T) {
 			name:       "embedded mismatched ID does not corroborate",
 			req:        SearchRequest{MediaType: "movie", Title: "Primary", IMDBID: "tt1234567"},
 			parsed:     &parser.Release{Title: "Localized", ImdbID: "tt7654321"},
-			wantReason: "identity_unverified",
+			wantReason: "wrong_embedded_id",
 		},
 		{
 			name:       "matching embedded TMDB ID corroborates empty title",

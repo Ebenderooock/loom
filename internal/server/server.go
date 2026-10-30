@@ -78,6 +78,7 @@ import (
 	"github.com/ebenderooock/loom/internal/series"
 	"github.com/ebenderooock/loom/internal/storage"
 	"github.com/ebenderooock/loom/internal/systemlogs"
+	"github.com/ebenderooock/loom/internal/titlefiles"
 	"github.com/ebenderooock/loom/internal/validation"
 	"github.com/ebenderooock/loom/internal/workflows"
 )
@@ -148,6 +149,7 @@ type Server struct {
 	periodicScanner   *scheduler.PeriodicScanner
 	syncProfileStore  *syncprofiles.Store
 	discoverRouter    http.Handler
+	collectionsRouter http.Handler
 	httpMetrics       *telemetry.HTTPMetrics
 	ready             atomic.Bool
 }
@@ -217,6 +219,7 @@ type Wiring struct {
 	PeriodicScanner   *scheduler.PeriodicScanner
 	SyncProfileStore  *syncprofiles.Store
 	DiscoverRouter    http.Handler
+	CollectionsRouter http.Handler
 	HTTPMetrics       *telemetry.HTTPMetrics
 }
 
@@ -332,6 +335,7 @@ func New(cfg *config.Config, wiring Wiring) (*Server, error) {
 		periodicScanner:   wiring.PeriodicScanner,
 		syncProfileStore:  wiring.SyncProfileStore,
 		discoverRouter:    wiring.DiscoverRouter,
+		collectionsRouter: wiring.CollectionsRouter,
 		httpMetrics:       wiring.HTTPMetrics,
 	}
 
@@ -773,6 +777,7 @@ func (s *Server) newMux() http.Handler {
 	r.Use(s.httpMetrics.Handler)
 
 	r.Use(middleware.RequestID)
+	r.Use(auth.PairingPeer)
 	r.Use(middleware.RealIP)
 	r.Use(s.accessLog)
 	r.Use(s.recoverer)
@@ -782,7 +787,7 @@ func (s *Server) newMux() http.Handler {
 		r.Use(cors.Handler(cors.Options{
 			AllowedOrigins:   origins,
 			AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
-			AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-Api-Key", "X-Request-Id"},
+			AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-Api-Key", "X-Request-Id", "X-Confirm-Delete"},
 			ExposedHeaders:   []string{"X-Request-Id"},
 			AllowCredentials: true,
 			MaxAge:           300,
@@ -852,6 +857,19 @@ func (s *Server) newMux() http.Handler {
 		// RSS sources routes
 		if s.rssSvc != nil {
 			s.rssSvc.Mount(r)
+		}
+
+		if s.libStore != nil {
+			adminMW := func(next http.Handler) http.Handler { return next }
+			if s.authSvc != nil {
+				adminMW = s.authSvc.RequireRole("admin")
+			}
+			var reconcile func(context.Context) error
+			if s.requestsSvc != nil {
+				reconcile = s.requestsSvc.ReconcileAvailability
+			}
+			r.Mount("/api/v1/media-files", titlefiles.Router(
+				titlefiles.New(s.db.DB(), s.libStore, s.appCfg, s.auditLog, reconcile), adminMW))
 		}
 
 		// Movies routes
@@ -1061,6 +1079,9 @@ func (s *Server) newMux() http.Handler {
 		// Person discovery routes
 		if s.discoverRouter != nil {
 			r.Mount("/api/v1/discover", s.discoverRouter)
+		}
+		if s.collectionsRouter != nil {
+			r.Mount("/api/v1/collections", s.collectionsRouter)
 		}
 
 		// API key management routes

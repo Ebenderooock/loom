@@ -1,5 +1,11 @@
 import { test, expect } from "@playwright/test";
-import { mockBaseApp, mockSeriesApi, SAMPLE_SERIES } from "./helpers/mock-api";
+import {
+  mockBaseApp,
+  mockSeriesApi,
+  mockGet,
+  SAMPLE_SERIES,
+  SAMPLE_LIBRARY,
+} from "./helpers/mock-api";
 
 test.describe("Series Page", () => {
   test.beforeEach(async ({ page }) => {
@@ -65,7 +71,7 @@ test.describe("Series Page", () => {
       await expect(addSeriesButton).toBeVisible({ timeout: 10000 });
       await addSeriesButton.click();
       await expect(
-        page.getByRole("heading", { name: "Search Series" }),
+        page.getByRole("heading", { name: "Search TV shows" }),
       ).toBeVisible({ timeout: 10000 });
     });
 
@@ -74,6 +80,9 @@ test.describe("Series Page", () => {
     }) => {
       await mockBaseApp(page);
       await mockSeriesApi(page, []);
+      await mockGet(page, "libraries", {
+        data: [{ ...SAMPLE_LIBRARY, media_type: "series" }],
+      });
       await page.goto("/series");
 
       const addSeriesButton = page
@@ -82,7 +91,7 @@ test.describe("Series Page", () => {
       await expect(addSeriesButton).toBeVisible({ timeout: 10000 });
       await addSeriesButton.click();
       await expect(
-        page.getByRole("heading", { name: "Search Series" }),
+        page.getByRole("heading", { name: "Search TV shows" }),
       ).toBeVisible({ timeout: 10000 });
     });
 

@@ -240,6 +240,7 @@ export async function testDownloadConfig(
 // ---------- Grab (send release to download client) ----------
 
 export interface GrabRequest {
+  indexer_id?: string;
   magnet?: string;
   torrent_url?: string;
   nzb_url?: string;
@@ -253,6 +254,8 @@ export interface GrabRequest {
   series_id?: string;
   episode_ids?: string[];
   movie_id?: string;
+  /** Grab even if the release is blocklisted. */
+  ignore_blocklist?: boolean;
 }
 
 export interface GrabResult {
@@ -269,6 +272,29 @@ export async function grabRelease(
     `/api/v1/download-clients/${encodeURIComponent(clientId)}/items`,
     body,
   );
+}
+
+// ---------- Blocklist ----------
+
+export interface BlocklistCheckRelease {
+  title: string;
+  infohash?: string;
+  magnet?: string;
+}
+
+/** Reports, index-aligned with `releases`, which ones are blocklisted. */
+export async function checkBlocklist(
+  releases: BlocklistCheckRelease[],
+  signal?: AbortSignal,
+): Promise<boolean[]> {
+  if (releases.length === 0) return [];
+  const res = await request<{ blocked: boolean[] }>(
+    "POST",
+    "/api/v1/blocklist/check",
+    { releases },
+    signal,
+  );
+  return res.blocked ?? [];
 }
 
 // ---------- Rain torrent sidecar management ----------

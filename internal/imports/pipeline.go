@@ -2,10 +2,12 @@ package imports
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -111,7 +113,6 @@ func NewPipeline(opts PipelineOptions) (*ImportPipeline, error) {
 		&FreeSpaceSpec{},
 		&UnpackingSpec{},
 		&DangerousFileSpec{},
-		NewAlreadyImportedSpec(opts.DB),
 	}
 	if opts.QualityProfiles != nil {
 		specs = append(specs, NewUpgradeSpec(opts.QualityProfiles))
@@ -174,11 +175,7 @@ func (p *ImportPipeline) RunImport(ctx context.Context, clientID, downloadID, ti
 		return nil, fmt.Errorf("resolve download path: %w", err)
 	}
 
-	if err := p.processImport(ctx, ev, downloadPath); err != nil {
-		return nil, err
-	}
-
-	return []string{downloadPath}, nil
+	return p.processImport(ctx, ev, downloadPath)
 }
 
 // handleCompleted processes a download completion event.
@@ -198,20 +195,19 @@ func (p *ImportPipeline) handleCompleted(ctx context.Context, ev eventbus.Event)
 	)
 
 	// Check if an orchestrator workflow already owns this download.
-	var isOrchestrated bool
 	if p.wfEngine != nil && completed.ClientID != "" && completed.DownloadID != "" {
 		wf, err := p.wfEngine.FindByDownload(ctx, completed.ClientID, completed.DownloadID)
 		if err != nil {
-			p.logger.Warn("failed to check workflow for download", "error", err)
+			return fmt.Errorf("check import ownership: %w", err)
 		}
 		if wf != nil {
-			isOrchestrated = true
+			return nil // The orchestrator owns dispatch, retries, and cleanup.
 		}
 	}
 
 	// For orphan downloads, create a trackable workflow.
 	var wfID string
-	if !isOrchestrated && p.wfEngine != nil {
+	if p.wfEngine != nil {
 		wf, wfErr := p.wfEngine.StartImport(ctx, "", nil, completed.Title)
 		if wfErr != nil {
 			p.logger.Warn("failed to create orphan import workflow", "title", completed.Title, "error", wfErr)
@@ -230,7 +226,8 @@ func (p *ImportPipeline) handleCompleted(ctx context.Context, ev eventbus.Event)
 		return nil // don't block the event bus
 	}
 
-	if err := p.processImport(ctx, completed, downloadPath); err != nil {
+	paths, err := p.processImport(ctx, completed, downloadPath)
+	if err != nil {
 		p.logger.Error("import failed", "error", err, "title", completed.Title, "path", downloadPath)
 		if wfID != "" {
 			_ = p.wfEngine.FailImport(ctx, wfID, err.Error())
@@ -239,7 +236,12 @@ func (p *ImportPipeline) handleCompleted(ctx context.Context, ev eventbus.Event)
 	}
 
 	if wfID != "" {
-		_ = p.wfEngine.CompleteImport(ctx, wfID)
+		if err := p.wfEngine.CompleteImport(ctx, wfID); err != nil {
+			return err
+		}
+	}
+	if err := p.FinalizeImports(ctx, paths); err != nil {
+		p.logger.Warn("import succeeded but source cleanup failed", "error", err)
 	}
 	return nil
 }
@@ -251,6 +253,7 @@ func (p *ImportPipeline) resolveDownloadPath(ctx context.Context, ev *downloads.
 	}
 
 	candidates := make([]string, 0, 8)
+	var fallbackPaths []string
 	seen := make(map[string]struct{}, 8)
 	var unresolvedPath string
 	addCandidate := func(path string) {
@@ -299,7 +302,7 @@ func (p *ImportPipeline) resolveDownloadPath(ctx context.Context, ev *downloads.
 					// (e.g. Rain's {download_dir}/{torrent_id}); scanning it
 					// directly resolves the content regardless of the internal
 					// folder/file name.
-					addCandidate(p.applyRemotePathMapping(ctx, ev.ClientID, item.SavePath))
+					fallbackPaths = append(fallbackPaths, p.applyRemotePathMapping(ctx, ev.ClientID, item.SavePath))
 				}
 			}
 		} else {
@@ -317,6 +320,7 @@ func (p *ImportPipeline) resolveDownloadPath(ctx context.Context, ev *downloads.
 	}
 	if ev.SavePath != "" {
 		addCandidate(p.applyRemotePathMapping(ctx, ev.ClientID, filepath.Join(ev.SavePath, ev.Title)))
+		fallbackPaths = append(fallbackPaths, p.applyRemotePathMapping(ctx, ev.ClientID, ev.SavePath))
 	}
 	if path, ok := resolveFirst(); ok {
 		return path, nil
@@ -342,9 +346,15 @@ func (p *ImportPipeline) resolveDownloadPath(ctx context.Context, ev *downloads.
 				addCandidate(p.applyRemotePathMapping(ctx, ev.ClientID, filepath.Join(sp, ev.Title)))
 				// The cached save_path is the torrent's storage directory;
 				// scan it directly as a last resort.
-				addCandidate(p.applyRemotePathMapping(ctx, ev.ClientID, sp))
+				fallbackPaths = append(fallbackPaths, p.applyRemotePathMapping(ctx, ev.ClientID, sp))
 			}
 		}
+	}
+	if path, ok := resolveFirst(); ok {
+		return path, nil
+	}
+	for _, path := range fallbackPaths {
+		addCandidate(path)
 	}
 	if path, ok := resolveFirst(); ok {
 		return path, nil
@@ -396,11 +406,11 @@ func isUnresolvedContentPath(path string) bool {
 }
 
 // processImport runs the full import pipeline for a single download.
-func (p *ImportPipeline) processImport(ctx context.Context, ev *downloads.DownloadCompletedEvent, downloadPath string) error {
+func (p *ImportPipeline) processImport(ctx context.Context, ev *downloads.DownloadCompletedEvent, downloadPath string) ([]string, error) {
 	// 1. Verify the path exists
 	info, err := os.Stat(downloadPath)
 	if err != nil {
-		return p.recordFailure(ctx, "", "", ev.Title, downloadPath, fmt.Errorf("download path not found: %w", err))
+		return nil, p.recordFailure(ctx, "", "", ev.Title, downloadPath, fmt.Errorf("download path not found: %w", err))
 	}
 
 	scanPath := downloadPath
@@ -408,29 +418,26 @@ func (p *ImportPipeline) processImport(ctx context.Context, ev *downloads.Downlo
 		scanPath = filepath.Dir(downloadPath)
 	}
 
-	// 2. Scan for media files
-	mediaFiles, err := scanMediaFiles(scanPath)
-	if err != nil {
-		return p.recordFailure(ctx, "", "", ev.Title, downloadPath, fmt.Errorf("scan media files: %w", err))
-	}
-
-	// If the download path is a file itself and it's a media file, include it
-	if !info.IsDir() {
-		ext := filepath.Ext(downloadPath)
-		if mediaExtensions[ext] {
-			mediaFiles = []string{downloadPath}
+	// A single-file download must never scan unrelated siblings.
+	var mediaFiles []string
+	if info.IsDir() {
+		mediaFiles, err = scanMediaFiles(downloadPath)
+		if err != nil {
+			return nil, p.recordFailure(ctx, "", "", ev.Title, downloadPath, fmt.Errorf("scan media files: %w", err))
 		}
+	} else if mediaExtensions[strings.ToLower(filepath.Ext(downloadPath))] {
+		mediaFiles = []string{downloadPath}
 	}
 
 	if len(mediaFiles) == 0 {
-		return p.recordFailure(ctx, "", "", ev.Title, downloadPath, fmt.Errorf("no media files found in %s", scanPath))
+		return nil, p.recordFailure(ctx, "", "", ev.Title, downloadPath, fmt.Errorf("no media files found in %s", downloadPath))
 	}
 
 	// 3. Post-download safety validation
 	if p.postVal != nil {
-		result, err := p.postVal.ValidateDownload(scanPath)
+		result, err := p.postVal.ValidateDownload(downloadPath)
 		if err != nil {
-			p.logger.Warn("post-validation error, continuing", "error", err)
+			return nil, p.recordFailure(ctx, "", "", ev.Title, downloadPath, fmt.Errorf("post-validation: %w", err))
 		} else if !result.Pass {
 			reason := strings.Join(result.Reasons, "; ")
 			p.logger.Warn("download flagged by post-validator",
@@ -442,35 +449,45 @@ func (p *ImportPipeline) processImport(ctx context.Context, ev *downloads.Downlo
 				}
 			}
 
-			return p.recordStatus(ctx, "", "", downloadPath, "", StatusPendingReview, reason)
+			if err := p.recordStatus(ctx, "", "", downloadPath, "", StatusPendingReview, reason); err != nil {
+				return nil, err
+			}
+			return nil, fmt.Errorf("import pending review: %s", reason)
 		}
 	}
 
 	// 4. Match and import each media file
-	var lastErr error
-	imported := 0
+	var failures []error
+	var paths []string
 	for _, mediaFile := range mediaFiles {
-		if err := p.importSingleFile(ctx, ev, mediaFile); err != nil {
+		dest, err := p.importSingleFile(ctx, ev, mediaFile)
+		if err != nil {
+			if errors.Is(err, errImportSkipped) {
+				continue
+			}
 			p.logger.Error("failed to import file", "file", mediaFile, "error", err)
-			lastErr = err
+			failures = append(failures, err)
 			continue
 		}
-		imported++
+		paths = append(paths, dest)
 	}
 
-	if imported == 0 && lastErr != nil {
-		return lastErr
+	if len(failures) > 0 {
+		return paths, fmt.Errorf("import incomplete (%d of %d files failed): %w", len(failures), len(mediaFiles), errors.Join(failures...))
+	}
+	if len(paths) == 0 {
+		return nil, fmt.Errorf("no importable media files found in %s", downloadPath)
 	}
 
 	p.logger.Info("import completed",
 		"title", ev.Title,
-		"imported", imported,
+		"imported", len(paths),
 		"total", len(mediaFiles),
 	)
 
 	// Clean up source folder if it only contains junk after import.
 	// Only for download-triggered imports (non-manual).
-	if imported > 0 && ev.DownloadID != "" && info.IsDir() && p.cleaner != nil {
+	if ev.DownloadID != "" && info.IsDir() && p.cleaner != nil {
 		if cleaned, err := p.cleaner.CleanFolder(scanPath); err != nil {
 			p.logger.Warn("folder cleanup failed", "path", scanPath, "error", err)
 		} else if cleaned {
@@ -478,11 +495,16 @@ func (p *ImportPipeline) processImport(ctx context.Context, ev *downloads.Downlo
 		}
 	}
 
-	return nil
+	return paths, nil
 }
 
+var errImportSkipped = errors.New("import skipped")
+
 // importSingleFile matches and imports a single media file.
-func (p *ImportPipeline) importSingleFile(ctx context.Context, ev *downloads.DownloadCompletedEvent, mediaFile string) error {
+func (p *ImportPipeline) importSingleFile(ctx context.Context, ev *downloads.DownloadCompletedEvent, mediaFile string) (string, error) {
+	if dest, err := p.completedImport(ctx, mediaFile); err != nil || dest != "" {
+		return dest, err
+	}
 	// For single-item workflows, grab-based matching is authoritative and avoids
 	// parser-related season/episode drift (especially visible with anime ordering).
 	// For multi-item workflows, grab-based matching is too coarse (all files would
@@ -520,15 +542,15 @@ func (p *ImportPipeline) importSingleFile(ctx context.Context, ev *downloads.Dow
 	if match == nil || !match.Matched {
 		match, err = p.matcher.Match(ctx, ev.Title)
 		if err != nil {
-			return p.recordFailure(ctx, "", "", ev.Title, mediaFile, fmt.Errorf("match: %w", err))
+			return "", p.recordFailure(ctx, "", "", ev.Title, mediaFile, fmt.Errorf("match: %w", err))
 		}
 	}
 	if !match.Matched {
-		return p.recordFailure(ctx, "", "", ev.Title, mediaFile, fmt.Errorf("no match found for %q", ev.Title))
+		return "", p.recordFailure(ctx, "", "", ev.Title, mediaFile, fmt.Errorf("no match found for %q", ev.Title))
 	}
 
 	if err := verifyMovieImportYear(match, ev.Title, mediaFile); err != nil {
-		return p.recordFailure(ctx, string(match.MediaType), match.MediaID, ev.Title, mediaFile, err)
+		return "", p.recordFailure(ctx, string(match.MediaType), match.MediaID, ev.Title, mediaFile, err)
 	}
 
 	// Build destination path with proper naming
@@ -554,8 +576,10 @@ func (p *ImportPipeline) importSingleFile(ctx context.Context, ev *downloads.Dow
 	p.enrichCandidateQuality(ctx, candidate)
 	eval := p.decisions.Evaluate(ctx, candidate)
 	if !eval.Approved() {
+		sampleOnly := true
 		reasons := make([]string, len(eval.Rejections))
 		for i, r := range eval.Rejections {
+			sampleOnly = sampleOnly && r.Reason == RejectionSample
 			reasons[i] = r.Message
 			// Log each rejection to the decision log
 			_ = p.decisionLog.Log(ctx, ImportDecision{
@@ -568,30 +592,37 @@ func (p *ImportPipeline) importSingleFile(ctx context.Context, ev *downloads.Dow
 				FileSize:   fileSize,
 			})
 		}
-		return p.recordFailure(ctx, string(match.MediaType), match.MediaID, ev.Title, mediaFile,
+		if sampleOnly {
+			return "", fmt.Errorf("%w: %s", errImportSkipped, strings.Join(reasons, "; "))
+		}
+		return "", p.recordFailure(ctx, string(match.MediaType), match.MediaID, ev.Title, mediaFile,
 			fmt.Errorf("import rejected: %s", strings.Join(reasons, "; ")))
 	}
 
-	// A destination is only considered an already-completed move when the
-	// source is gone (or both paths are the same file). A same-size collision
+	// A destination can be resumed when both paths are the same file. A same-size collision
 	// is not proof of identity and must never silently discard the source.
 	destInfo, destErr := os.Lstat(destFile)
 	if destErr == nil {
 		if destInfo.Mode()&os.ModeSymlink != 0 || !destInfo.Mode().IsRegular() {
-			return p.recordFailure(ctx, string(match.MediaType), match.MediaID, ev.Title, mediaFile,
+			return "", p.recordFailure(ctx, string(match.MediaType), match.MediaID, ev.Title, mediaFile,
 				fmt.Errorf("import destination is not a regular file: %s", destFile))
 		}
 		srcInfo, srcErr := os.Lstat(mediaFile)
-		alreadyMoved := os.IsNotExist(srcErr)
 		sameFile := srcErr == nil && os.SameFile(srcInfo, destInfo)
-		if alreadyMoved || sameFile {
+		if sameFile {
+			if p.verifier != nil {
+				if vr := p.verifier.Verify(destFile, fileSize); !vr.OK {
+					return "", p.recordFailure(ctx, string(match.MediaType), match.MediaID, ev.Title, mediaFile,
+						fmt.Errorf("verification failed (source preserved at %s): %s", mediaFile, vr.Reason))
+				}
+			}
 			p.logger.Info("source already present at import destination",
 				"dest", destFile, "src", mediaFile)
 			if err := p.updateLibrary(ctx, match, destFile, mediaFile); err != nil {
-				p.logger.Warn("library update for existing file failed", "error", err)
+				return "", p.recordFailure(ctx, string(match.MediaType), match.MediaID, ev.Title, mediaFile, err)
 			}
 			if err := p.recordStatus(ctx, string(match.MediaType), match.MediaID, mediaFile, destFile, StatusImported, "already exists"); err != nil {
-				p.logger.Error("failed to record import history", "error", err)
+				return "", fmt.Errorf("record import history: %w", err)
 			}
 			if match.MediaType == "movie" && match.MediaID != "" {
 				if err := p.moviesSvc.SetMovieStatus(ctx, match.MediaID, movies.MovieStatusAvailableRightQuality); err != nil {
@@ -606,32 +637,36 @@ func (p *ImportPipeline) importSingleFile(ctx context.Context, ev *downloads.Dow
 				Title:     match.Title,
 				DestPath:  destFile,
 			})
-			return nil
+			return destFile, nil
 		}
 		if srcErr != nil {
-			return p.recordFailure(ctx, string(match.MediaType), match.MediaID, ev.Title, mediaFile,
+			return "", p.recordFailure(ctx, string(match.MediaType), match.MediaID, ev.Title, mediaFile,
 				fmt.Errorf("inspect import source: %w", srcErr))
 		}
 
 		// Only an explicit recycle succeeds as an upgrade path; never fall
 		// through to an overwrite if the recycle bin is unavailable or fails.
 		if p.recycler == nil || !p.recycler.Enabled || p.recycler.Path == "" {
-			return p.recordFailure(ctx, string(match.MediaType), match.MediaID, ev.Title, mediaFile,
+			return "", p.recordFailure(ctx, string(match.MediaType), match.MediaID, ev.Title, mediaFile,
 				fmt.Errorf("%w: %s", ErrDestinationExists, destFile))
 		}
 		libraryRoot := filepath.Dir(match.DestPath)
 		if err := p.recycler.Recycle(destFile, libraryRoot); err != nil {
-			return p.recordFailure(ctx, string(match.MediaType), match.MediaID, ev.Title, mediaFile,
+			return "", p.recordFailure(ctx, string(match.MediaType), match.MediaID, ev.Title, mediaFile,
 				fmt.Errorf("preserve existing destination before upgrade: %w", err))
 		}
 	} else if !os.IsNotExist(destErr) {
-		return p.recordFailure(ctx, string(match.MediaType), match.MediaID, ev.Title, mediaFile,
+		return "", p.recordFailure(ctx, string(match.MediaType), match.MediaID, ev.Title, mediaFile,
 			fmt.Errorf("inspect import destination: %w", destErr))
 	}
 
-	// Import the file
-	if err := importFile(mediaFile, destFile, p.importMode); err != nil {
-		return p.recordFailure(ctx, string(match.MediaType), match.MediaID, ev.Title, mediaFile, err)
+	// Stage moves without consuming the source until verification and registration succeed.
+	mode := p.importMode
+	if mode == ImportModeMove {
+		mode = ImportModeHardlink
+	}
+	if err := importFile(mediaFile, destFile, mode); err != nil {
+		return "", p.recordFailure(ctx, string(match.MediaType), match.MediaID, ev.Title, mediaFile, err)
 	}
 
 	// Verify imported file
@@ -640,9 +675,23 @@ func (p *ImportPipeline) importSingleFile(ctx context.Context, ev *downloads.Dow
 		if !vr.OK {
 			p.logger.Error("import verification failed",
 				"dest", destFile, "reason", vr.Reason)
-			return p.recordFailure(ctx, string(match.MediaType), match.MediaID, ev.Title, mediaFile,
-				fmt.Errorf("verification failed (file preserved at %s): %s", destFile, vr.Reason))
+			if err := os.Remove(destFile); err != nil {
+				p.logger.Error("failed to remove unverified destination", "dest", destFile, "error", err)
+			}
+			return "", p.recordFailure(ctx, string(match.MediaType), match.MediaID, ev.Title, mediaFile,
+				fmt.Errorf("verification failed (source preserved at %s): %s", mediaFile, vr.Reason))
 		}
+	}
+
+	// Register before consuming any source media or sidecar files.
+	if err := p.updateLibrary(ctx, match, destFile, mediaFile); err != nil {
+		p.logger.Error("library update failed after import, preserving source",
+			"error", err, "dest", destFile)
+		if removeErr := os.Remove(destFile); removeErr != nil {
+			p.logger.Error("failed to remove staged destination", "dest", destFile, "error", removeErr)
+		}
+		return "", p.recordFailure(ctx, string(match.MediaType), match.MediaID, ev.Title, mediaFile,
+			fmt.Errorf("library update failed (source preserved at %s): %w", mediaFile, err))
 	}
 
 	// Import associated subtitle files (failures are non-fatal)
@@ -671,17 +720,14 @@ func (p *ImportPipeline) importSingleFile(ctx context.Context, ev *downloads.Dow
 		}
 	}
 
-	// Update database
-	if err := p.updateLibrary(ctx, match, destFile, mediaFile); err != nil {
-		p.logger.Error("library update failed after import, preserving file",
-			"error", err, "dest", destFile)
-		return p.recordFailure(ctx, string(match.MediaType), match.MediaID, ev.Title, mediaFile,
-			fmt.Errorf("library update failed (file preserved at %s): %w", destFile, err))
-	}
-
 	// Record success
 	if err := p.recordStatus(ctx, string(match.MediaType), match.MediaID, mediaFile, destFile, StatusImported, ""); err != nil {
-		p.logger.Error("failed to record import history", "error", err)
+		return "", fmt.Errorf("record import history (source preserved at %s): %w", mediaFile, err)
+	}
+	if p.importMode == ImportModeMove && ev.DownloadID == "" {
+		if err := os.Remove(mediaFile); err != nil && !os.IsNotExist(err) {
+			p.logger.Warn("import registered but source cleanup failed", "source", mediaFile, "error", err)
+		}
 	}
 
 	// Update movie status to available
@@ -704,6 +750,96 @@ func (p *ImportPipeline) importSingleFile(ctx context.Context, ev *downloads.Dow
 		DestPath:  destFile,
 	})
 
+	return destFile, nil
+}
+
+// completedImport makes retries of copy/hardlink imports idempotent without
+// mistaking a reused source pathname or missing destination for an import.
+func (p *ImportPipeline) completedImport(ctx context.Context, source string) (string, error) {
+	var dest string
+	err := p.db.QueryRowContext(ctx, `SELECT dest_path FROM import_history
+		WHERE source_path = ? AND status = ? ORDER BY imported_at DESC LIMIT 1`,
+		source, string(StatusImported)).Scan(&dest)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("check previous import: %w", err)
+	}
+	srcInfo, err := os.Lstat(source)
+	if err != nil {
+		return "", fmt.Errorf("inspect previous import source: %w", err)
+	}
+	destInfo, err := os.Lstat(dest)
+	if os.IsNotExist(err) {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("inspect previous import destination: %w", err)
+	}
+	if !srcInfo.Mode().IsRegular() || !destInfo.Mode().IsRegular() ||
+		srcInfo.Size() == 0 || srcInfo.Size() != destInfo.Size() {
+		return "", nil
+	}
+	if !os.SameFile(srcInfo, destInfo) {
+		digest := func(path string) ([sha256.Size]byte, error) {
+			f, err := os.Open(path) //nolint:gosec // Both import paths are validated regular files before hashing.
+			if err != nil {
+				return [sha256.Size]byte{}, err
+			}
+			defer func() { _ = f.Close() }()
+			h := sha256.New()
+			if _, err := io.Copy(h, f); err != nil {
+				return [sha256.Size]byte{}, err
+			}
+			var sum [sha256.Size]byte
+			copy(sum[:], h.Sum(nil))
+			return sum, nil
+		}
+		srcHash, err := digest(source)
+		if err != nil {
+			return "", fmt.Errorf("verify previous import source: %w", err)
+		}
+		destHash, err := digest(dest)
+		if err != nil {
+			return "", fmt.Errorf("verify previous import destination: %w", err)
+		}
+		if srcHash != destHash {
+			return "", nil
+		}
+	}
+	return dest, nil
+}
+
+// FinalizeImports consumes move sources only after the workflow has durably
+// entered cleanup. Until then, a restart can safely repeat the import.
+func (p *ImportPipeline) FinalizeImports(ctx context.Context, paths []string) error {
+	for _, dest := range paths {
+		var source, mode string
+		if err := p.db.QueryRowContext(ctx, `SELECT source_path, import_mode FROM import_history
+			WHERE dest_path = ? AND status = ? ORDER BY imported_at DESC LIMIT 1`,
+			dest, string(StatusImported)).Scan(&source, &mode); err != nil {
+			return fmt.Errorf("find import source for cleanup: %w", err)
+		}
+		if mode != string(ImportModeMove) || filepath.Clean(source) == filepath.Clean(dest) {
+			continue
+		}
+		if _, err := os.Lstat(source); os.IsNotExist(err) {
+			continue
+		} else if err != nil {
+			return fmt.Errorf("inspect import source for cleanup: %w", err)
+		}
+		verifiedDest, err := p.completedImport(ctx, source)
+		if err != nil {
+			return err
+		}
+		if verifiedDest != dest {
+			return fmt.Errorf("source or destination changed after import; retaining %s", source)
+		}
+		if err := os.Remove(source); err != nil {
+			return fmt.Errorf("remove registered import source %q: %w", source, err)
+		}
+	}
 	return nil
 }
 
@@ -1020,7 +1156,7 @@ func (p *ImportPipeline) SubmitManualImport(path string) error {
 		}
 	} else {
 		ext := filepath.Ext(path)
-		if !mediaExtensions[ext] {
+		if !mediaExtensions[strings.ToLower(ext)] {
 			return fmt.Errorf("not a media file: %s", path)
 		}
 		mediaFiles = []string{path}
@@ -1187,7 +1323,7 @@ func (p *ImportPipeline) ImportManual(ctx context.Context, path string) error {
 		}
 	} else {
 		ext := filepath.Ext(path)
-		if !mediaExtensions[ext] {
+		if !mediaExtensions[strings.ToLower(ext)] {
 			return fmt.Errorf("not a media file: %s", path)
 		}
 		mediaFiles = []string{path}
@@ -1204,7 +1340,7 @@ func (p *ImportPipeline) ImportManual(ctx context.Context, path string) error {
 
 	var lastErr error
 	for _, mf := range mediaFiles {
-		if err := p.importSingleFile(ctx, fakeEvent, mf); err != nil {
+		if _, err := p.importSingleFile(ctx, fakeEvent, mf); err != nil {
 			lastErr = err
 		}
 	}
@@ -1231,7 +1367,7 @@ func (p *ImportPipeline) ImportManualMatch(ctx context.Context, path string, med
 		}
 	} else {
 		ext := filepath.Ext(path)
-		if !mediaExtensions[ext] {
+		if !mediaExtensions[strings.ToLower(ext)] {
 			return nil, fmt.Errorf("not a media file: %s", path)
 		}
 		mediaFiles = []string{path}
@@ -1382,7 +1518,7 @@ func (p *ImportPipeline) PreviewImport(ctx context.Context, path string) ([]Impo
 		}
 	} else {
 		ext := filepath.Ext(path)
-		if !mediaExtensions[ext] {
+		if !mediaExtensions[strings.ToLower(ext)] {
 			return nil, fmt.Errorf("not a media file: %s", path)
 		}
 		mediaFiles = []string{path}

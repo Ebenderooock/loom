@@ -18,11 +18,20 @@ func MapArtist(resp *ArtistResponse) *ArtistMetadata {
 		area = resp.Country
 	}
 
+	var genres []string
+	for _, genre := range resp.Genres {
+		if genre.Name != "" {
+			genres = append(genres, genre.Name)
+		}
+	}
 	return &ArtistMetadata{
 		MBID:           resp.ID,
 		Name:           resp.Name,
 		Disambiguation: resp.Disambiguation,
 		Area:           area,
+		SortName:       resp.SortName,
+		Type:           resp.Type,
+		Genres:         genres,
 	}
 }
 

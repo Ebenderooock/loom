@@ -7,6 +7,7 @@ import (
 	"io"
 	"math"
 	"net/http"
+	"net/url"
 	"strconv"
 	"sync"
 	"time"
@@ -63,6 +64,30 @@ func NewClient(config Config) *Client {
 	}
 }
 
+// FindMovieByIMDbID resolves an exact IMDb movie ID to its TMDb ID.
+func (c *Client) FindMovieByIMDbID(ctx context.Context, imdbID string) (string, error) {
+	endpoint := fmt.Sprintf("%s/find/%s?external_source=imdb_id", c.config.BaseURL, url.PathEscape(imdbID))
+	body, err := c.doRequest(ctx, endpoint)
+	if err != nil {
+		return "", err
+	}
+	var result struct {
+		Movies []struct {
+			ID int `json:"id"`
+		} `json:"movie_results"`
+	}
+	if err := json.Unmarshal(body, &result); err != nil {
+		return "", fmt.Errorf("tmdb: decode IMDb lookup: %w", err)
+	}
+	if len(result.Movies) == 0 {
+		return "", nil
+	}
+	if len(result.Movies) != 1 || result.Movies[0].ID <= 0 {
+		return "", fmt.Errorf("tmdb: ambiguous or invalid movie mapping for %s", imdbID)
+	}
+	return strconv.Itoa(result.Movies[0].ID), nil
+}
+
 // GetMovie fetches movie metadata by TMDb ID.
 func (c *Client) GetMovie(ctx context.Context, tmdbID int) (*metadata.MovieMetadata, error) {
 	url := fmt.Sprintf("%s/movie/%d?append_to_response=external_ids", c.config.BaseURL, tmdbID)
@@ -76,7 +101,9 @@ func (c *Client) GetMovie(ctx context.Context, tmdbID int) (*metadata.MovieMetad
 		return nil, fmt.Errorf("tmdb: failed to unmarshal movie response: %w", err)
 	}
 
-	return mapMovieResponse(&resp), nil
+	result := mapMovieResponse(&resp)
+	result.Overview = resp.Overview
+	return result, nil
 }
 
 // GetTV fetches TV series metadata by TMDb ID.
@@ -92,7 +119,9 @@ func (c *Client) GetTV(ctx context.Context, tvID int) (*metadata.SeriesMetadata,
 		return nil, fmt.Errorf("tmdb: failed to unmarshal tv response: %w", err)
 	}
 
-	return mapTVResponse(&resp), nil
+	result := mapTVResponse(&resp)
+	result.Overview = resp.Overview
+	return result, nil
 }
 
 // SearchMovie searches for movies by title and optional year.
@@ -195,7 +224,39 @@ func (c *Client) SearchTV(ctx context.Context, query string, year int) ([]*metad
 
 // GetMovieCredits fetches cast and crew for a movie by TMDb ID.
 func (c *Client) GetMovieCredits(ctx context.Context, tmdbID int) (*metadata.Credits, error) {
-	url := fmt.Sprintf("%s/movie/%d/credits", c.config.BaseURL, tmdbID)
+	return c.getCredits(ctx, "movie", tmdbID)
+}
+
+// GetTVCredits fetches cast and crew without requiring a library series.
+func (c *Client) GetTVCredits(ctx context.Context, tmdbID int) (*metadata.Credits, error) {
+	return c.getCredits(ctx, "tv", tmdbID)
+}
+
+// ResolveExternalID resolves an exact provider identity, scoped to movie or TV.
+// Never fall back to title matching: names and years are not unique identities.
+func (c *Client) ResolveExternalID(ctx context.Context, mediaType, provider, externalID string) (int, error) {
+	if (mediaType != "movie" && mediaType != "tv") || (provider != "imdb" && provider != "tvdb") {
+		return 0, fmt.Errorf("unsupported external identity")
+	}
+	if mediaType == "movie" && provider == "tvdb" {
+		return 0, fmt.Errorf("TMDB does not support TVDB movie identity lookup")
+	}
+	media := mediaType
+	if media == "tv" {
+		media = "series"
+	}
+	id, err := c.FindTitleID(ctx, media, provider, externalID)
+	if err != nil {
+		return 0, err
+	}
+	if id > 0 {
+		return id, nil
+	}
+	return 0, NewNotFoundError("no unambiguous title for external identity")
+}
+
+func (c *Client) getCredits(ctx context.Context, mediaType string, tmdbID int) (*metadata.Credits, error) {
+	url := fmt.Sprintf("%s/%s/%d/credits", c.config.BaseURL, mediaType, tmdbID)
 	body, err := c.doRequest(ctx, url)
 	if err != nil {
 		return nil, err
@@ -399,8 +460,7 @@ func (c *Client) doHTTPRequest(ctx context.Context, req *http.Request) ([]byte, 
 				return nil, NewContextError(ctx.Err())
 			case <-time.After(delay):
 				// Retry with fresh request
-				req2, _ := http.NewRequestWithContext(ctx, req.Method, req.URL.String(), nil)
-				*req = *req2
+				req = req.Clone(ctx) // preserve bearer authentication on retries
 				continue
 			}
 
@@ -428,8 +488,7 @@ func (c *Client) doHTTPRequest(ctx context.Context, req *http.Request) ([]byte, 
 					),
 				)
 				// Retry with fresh request
-				req2, _ := http.NewRequestWithContext(ctx, req.Method, req.URL.String(), nil)
-				*req = *req2
+				req = req.Clone(ctx) // preserve bearer authentication on retries
 				continue
 			}
 

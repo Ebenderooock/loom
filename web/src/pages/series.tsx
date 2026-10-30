@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
+import { AddToCollectionDialog } from "@/components/collections/add-to-collection";
 import { useSearch, useNavigate } from "@tanstack/react-router";
 import { apiFetch } from "@/lib/fetch";
 import { Button } from "@/components/ui/button";
@@ -113,7 +114,7 @@ function BulkDeleteDialog({
 // ─── Main Page ──────────────────────────────────────────────────────────
 
 export function SeriesPage() {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
   const [seriesList, setSeriesList] = useState<Series[]>([]);
   const { data: allLibraries = [] } = useLibraries();
   const libraries = allLibraries.filter((l) => l.media_type === "series");
@@ -135,6 +136,7 @@ export function SeriesPage() {
   // Selection
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [collectionOpen, setCollectionOpen] = useState(false);
 
   // Detail sheet
   const [detailSeries, setDetailSeries] = useState<Series | null>(null);
@@ -145,29 +147,32 @@ export function SeriesPage() {
   const navigate = useNavigate();
   const { focus } = useSearch({ strict: false }) as { focus?: string };
 
-  const fetchAll = useCallback(async () => {
-    if (!isAuthenticated) return;
-    setIsLoading(true);
-    try {
-      const [seriesRes, profilesRes] = await Promise.all([
-        apiFetch("/api/v1/series"),
-        apiFetch("/api/v1/quality-profiles"),
-      ]);
-      if (seriesRes.ok) {
-        const data = await seriesRes.json();
-        setSeriesList(Array.isArray(data) ? data : (data.data ?? []));
+  const fetchAll = useCallback(
+    async (background = false) => {
+      if (!isAuthenticated) return;
+      if (!background) setIsLoading(true);
+      try {
+        const [seriesRes, profilesRes] = await Promise.all([
+          apiFetch("/api/v1/series"),
+          apiFetch("/api/v1/quality-profiles"),
+        ]);
+        if (seriesRes.ok) {
+          const data = await seriesRes.json();
+          setSeriesList(Array.isArray(data) ? data : (data.data ?? []));
+        }
+        if (profilesRes.ok) {
+          const data = await profilesRes.json();
+          const profiles = data?.data ?? (Array.isArray(data) ? data : []);
+          setQualityProfiles(profiles);
+        }
+      } catch {
+        /* ignore */
+      } finally {
+        if (!background) setIsLoading(false);
       }
-      if (profilesRes.ok) {
-        const data = await profilesRes.json();
-        const profiles = data?.data ?? (Array.isArray(data) ? data : []);
-        setQualityProfiles(profiles);
-      }
-    } catch {
-      /* ignore */
-    } finally {
-      setIsLoading(false);
-    }
-  }, [isAuthenticated]);
+    },
+    [isAuthenticated],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -492,6 +497,9 @@ export function SeriesPage() {
           onBulkUnmonitor={() => handleBulkMonitoring("unmonitored")}
           onBulkDelete={() => setBulkDeleteOpen(true)}
           onBulkQualityProfile={handleBulkQualityProfile}
+          onBulkCollection={
+            user?.role === "admin" ? () => setCollectionOpen(true) : undefined
+          }
           onAddSeries={() => setAddDialogOpen(true)}
           onImportLibrary={() => setImportDialogOpen(true)}
           onOrganize={handleOrganize}
@@ -619,7 +627,7 @@ export function SeriesPage() {
         libraries={libraries}
         qualityProfiles={qualityProfiles}
         existingTmdbIds={existingTmdbIds}
-        onSeriesAdded={fetchAll}
+        onSeriesAdded={() => void fetchAll(true)}
       />
 
       <SeriesDetailSheet
@@ -634,6 +642,20 @@ export function SeriesPage() {
         existingSeriesIds={existingSeriesNumericIds}
       />
 
+      {collectionOpen && (
+        <AddToCollectionDialog
+          open
+          onOpenChange={setCollectionOpen}
+          targets={seriesList
+            .filter((m) => selectedIds.has(m.id))
+            .map((m) => ({
+              media_type: "series",
+              media_id: m.id,
+              title: m.title,
+              tmdb: m.tmdbId ? String(m.tmdbId) : undefined,
+            }))}
+        />
+      )}
       <BulkDeleteDialog
         open={bulkDeleteOpen}
         onOpenChange={setBulkDeleteOpen}

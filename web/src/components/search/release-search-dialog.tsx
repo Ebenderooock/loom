@@ -30,9 +30,11 @@ import {
   XCircle,
   Clock,
   MinusCircle,
+  Ban,
 } from "lucide-react";
 import { cn, formatBytes } from "@/lib/utils";
 import { toast } from "sonner";
+import { PolicyPreview } from "./policy-preview";
 import {
   streamSearch,
   type SearchResult,
@@ -40,6 +42,8 @@ import {
   type IndexerStatus,
 } from "@/lib/indexers-api";
 import {
+  ApiError,
+  checkBlocklist,
   useDownloads,
   useGrabRelease,
   type Download as DownloadClient,
@@ -93,6 +97,11 @@ const QUALITY_OPTIONS = ["2160p", "1080p", "720p", "480p", "SD"] as const;
 
 const MB = 1024 * 1024;
 const GB = 1024 * 1024 * 1024;
+
+/** Stable identity for a result, used to track blocklist status. */
+function resultKey(r: SearchResult): string {
+  return `${r.indexer_id}|${r.link}|${r.title}`;
+}
 
 // ─── Filter state ─────────────────────────────────────────────────────
 
@@ -159,6 +168,10 @@ function applyFilters(
 // ─── Types ────────────────────────────────────────────────────────────
 
 export interface ReleaseSearchProps {
+  qualityProfileId?: string;
+  evaluationTitle?: string;
+  year?: number;
+  runtime?: number;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   title: string;
@@ -190,10 +203,12 @@ function GrabButton({
   result,
   clients,
   mediaContext,
+  ignoreBlocklist,
 }: {
   result: SearchResult;
   clients: DownloadClient[];
   mediaContext?: MediaContext;
+  ignoreBlocklist: boolean;
 }) {
   const grab = useGrabRelease();
   const [grabbing, setGrabbing] = useState(false);
@@ -209,17 +224,25 @@ function GrabButton({
           nzb_url: result.nzb_url,
           infohash: result.infohash,
           title: result.title,
+          indexer_id: result.indexer_id,
           ...mediaContext,
+          ...(ignoreBlocklist ? { ignore_blocklist: true } : {}),
         });
         toast.success(`Grabbed: ${result.title}`);
       } catch (err) {
-        const msg = err instanceof Error ? err.message : "Grab failed";
-        toast.error(msg);
+        if (err instanceof ApiError && err.code === "blocklisted") {
+          toast.error(
+            "This release is blocklisted. Enable “Ignore blocklist” to grab it anyway.",
+          );
+        } else {
+          const msg = err instanceof Error ? err.message : "Grab failed";
+          toast.error(msg);
+        }
       } finally {
         setGrabbing(false);
       }
     },
-    [grab, result, mediaContext],
+    [grab, result, mediaContext, ignoreBlocklist],
   );
 
   if (clients.length === 0) {
@@ -619,6 +642,10 @@ export function ReleaseSearchDialog({
   seriesId,
   episodeIds,
   movieId,
+  qualityProfileId,
+  evaluationTitle,
+  year,
+  runtime,
 }: ReleaseSearchProps) {
   const [query, setQuery] = useState(initialQuery ?? title);
   const [results, setResults] = useState<SearchResult[]>([]);
@@ -631,6 +658,9 @@ export function ReleaseSearchDialog({
   const [errorsExpanded, setErrorsExpanded] = useState(false);
   const [filters, setFilters] = useState<SearchFilters>({ ...EMPTY_FILTERS });
   const [didAutoSearch, setDidAutoSearch] = useState(false);
+  const [ignoreBlocklist, setIgnoreBlocklist] = useState(false);
+  const [blocked, setBlocked] = useState<Set<string>>(new Set());
+  const searchGenRef = useRef(0);
   const abortRef = useRef<AbortController | null>(null);
   const resultCountRef = useRef(0);
 
@@ -651,10 +681,40 @@ export function ReleaseSearchDialog({
     return undefined;
   }, [mediaType, movieId, seriesId, episodeIds]);
 
-  const filteredResults = useMemo(
-    () => applyFilters(results, filters),
-    [results, filters],
+  const blockedCount = useMemo(
+    () => results.filter((r) => blocked.has(resultKey(r))).length,
+    [results, blocked],
   );
+
+  const filteredResults = useMemo(() => {
+    const visible = ignoreBlocklist
+      ? results
+      : results.filter((r) => !blocked.has(resultKey(r)));
+    return applyFilters(visible, filters);
+  }, [results, filters, blocked, ignoreBlocklist]);
+
+  // Flag blocklisted releases as they stream in. Failures are non-fatal:
+  // the grab endpoint enforces the blocklist regardless.
+  const markBlocklisted = useCallback((batch: SearchResult[], gen: number) => {
+    checkBlocklist(
+      batch.map((r) => ({
+        title: r.title,
+        infohash: r.infohash,
+        magnet: r.magnet_uri,
+      })),
+    )
+      .then((flags) => {
+        if (gen !== searchGenRef.current) return;
+        const hits = batch.filter((_, i) => flags[i]);
+        if (hits.length === 0) return;
+        setBlocked((prev) => {
+          const next = new Set(prev);
+          for (const r of hits) next.add(resultKey(r));
+          return next;
+        });
+      })
+      .catch(() => {});
+  }, []);
 
   // Reset state when dialog opens with new context
   useEffect(() => {
@@ -667,6 +727,8 @@ export function ReleaseSearchDialog({
       setErrorsExpanded(false);
       setFilters({ ...EMPTY_FILTERS });
       setDidAutoSearch(false);
+      setIgnoreBlocklist(false);
+      setBlocked(new Set());
     } else {
       // Cancel any in-flight search when dialog closes
       abortRef.current?.abort();
@@ -689,7 +751,9 @@ export function ReleaseSearchDialog({
       setErrors({});
       setIndexerStates(new Map());
       setFilters({ ...EMPTY_FILTERS });
+      setBlocked(new Set());
       resultCountRef.current = 0;
+      const gen = ++searchGenRef.current;
 
       const controller = streamSearch(
         {
@@ -735,6 +799,7 @@ export function ReleaseSearchDialog({
           onIndexerResult: (id, name, newResults, count, elapsedMs) => {
             setResults((prev) => [...prev, ...newResults]);
             resultCountRef.current += newResults.length;
+            markBlocklisted(newResults, gen);
             setIndexerStates((prev) => {
               const next = new Map(prev);
               next.set(id, {
@@ -792,7 +857,16 @@ export function ReleaseSearchDialog({
 
       abortRef.current = controller;
     },
-    [query, mediaType, tmdbId, tvdbId, imdbId, season, episode],
+    [
+      query,
+      mediaType,
+      tmdbId,
+      tvdbId,
+      imdbId,
+      season,
+      episode,
+      markBlocklisted,
+    ],
   );
 
   // Auto-run search when dialog opens with autoSearch enabled
@@ -877,6 +951,25 @@ export function ReleaseSearchDialog({
           </div>
         )}
 
+        {open && searched && !loading && results.length > 0 && (
+          <PolicyPreview
+            key={`${movieId ?? seriesId ?? title}-${season}-${episode}`}
+            context={{
+              quality_profile_id: qualityProfileId ?? "",
+              media_type: mediaType === "season" ? "series" : mediaType,
+              media_id: movieId ?? seriesId,
+              title: evaluationTitle ?? title,
+              year,
+              runtime,
+              imdb_id: imdbId,
+              tmdb_id: tmdbId != null ? String(tmdbId) : undefined,
+              tvdb_id: tvdbId != null ? String(tvdbId) : undefined,
+              season,
+              episode,
+            }}
+            results={results}
+          />
+        )}
         {/* Filters */}
         {searched && results.length > 0 && (
           <FilterBar
@@ -884,6 +977,31 @@ export function ReleaseSearchDialog({
             filters={filters}
             onChange={setFilters}
           />
+        )}
+
+        {/* Blocklist toggle */}
+        {searched && (
+          <div className="flex items-center justify-between gap-3 text-xs">
+            <label
+              htmlFor="ignore-blocklist"
+              className="flex cursor-pointer select-none items-center gap-1.5"
+            >
+              <Checkbox
+                id="ignore-blocklist"
+                checked={ignoreBlocklist}
+                onCheckedChange={(v) => setIgnoreBlocklist(v === true)}
+                className="h-3.5 w-3.5"
+              />
+              Ignore blocklist
+            </label>
+            {blockedCount > 0 && (
+              <span className="text-muted-foreground">
+                {ignoreBlocklist
+                  ? `${blockedCount} blocklisted release${blockedCount !== 1 ? "s" : ""} shown`
+                  : `${blockedCount} blocklisted release${blockedCount !== 1 ? "s" : ""} hidden`}
+              </span>
+            )}
+          </div>
         )}
 
         {/* Results table */}
@@ -899,7 +1017,7 @@ export function ReleaseSearchDialog({
                   Quality
                 </th>
                 <th scope="col" className="w-14 px-3 py-2">
-                  Score
+                  Raw score
                 </th>
                 <th scope="col" className="w-20 px-3 py-2">
                   Size
@@ -951,7 +1069,9 @@ export function ReleaseSearchDialog({
                       colSpan={8}
                       className="px-3 py-10 text-center text-muted-foreground"
                     >
-                      No results match the current filters.
+                      {!ignoreBlocklist && blockedCount === results.length
+                        ? "All results are blocklisted. Enable \u201cIgnore blocklist\u201d to show them."
+                        : "No results match the current filters."}
                     </td>
                   </tr>
                 )}
@@ -968,6 +1088,7 @@ export function ReleaseSearchDialog({
               )}
               {filteredResults.map((r, idx) => {
                 const qb = qualityBadge(r);
+                const isBlocked = blocked.has(resultKey(r));
                 return (
                   <tr
                     key={`${r.indexer_id}-${r.link}-${idx}`}
@@ -977,6 +1098,12 @@ export function ReleaseSearchDialog({
                       <div className="line-clamp-2 text-xs font-medium leading-snug">
                         {r.title}
                       </div>
+                      {isBlocked && (
+                        <span className="mt-0.5 inline-flex items-center gap-0.5 rounded bg-red-500/15 px-1 py-0.5 text-[9px] font-semibold text-red-700 dark:text-red-300">
+                          <Ban className="h-2.5 w-2.5" />
+                          Blocklisted
+                        </span>
+                      )}
                       {/* Tracker flags */}
                       {(r.freeleech || r.internal || r.scene) && (
                         <div className="mt-0.5 flex gap-1">
@@ -1032,6 +1159,7 @@ export function ReleaseSearchDialog({
                           result={r}
                           clients={enabledClients}
                           mediaContext={mediaContext}
+                          ignoreBlocklist={ignoreBlocklist}
                         />
                         {r.info_url && (
                           <a
@@ -1058,7 +1186,10 @@ export function ReleaseSearchDialog({
           <p className="text-right text-xs text-muted-foreground">
             {filteredResults.length === results.length
               ? `${results.length} result${results.length !== 1 ? "s" : ""}`
-              : `${filteredResults.length} of ${results.length} results (filtered)`}
+              : !ignoreBlocklist &&
+                  filteredResults.length === results.length - blockedCount
+                ? `${filteredResults.length} of ${results.length} results (blocklisted hidden)`
+                : `${filteredResults.length} of ${results.length} results (filtered)`}
           </p>
         )}
       </DialogContent>

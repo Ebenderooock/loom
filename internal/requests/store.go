@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -26,7 +27,8 @@ var ErrQuotaExceeded = errors.New("requests: request quota exceeded")
 
 // Store persists media requests.
 type Store struct {
-	db *sql.DB
+	db          *sql.DB
+	reconcileMu sync.Mutex
 }
 
 // NewStore creates a request store backed by the given database.
@@ -50,24 +52,41 @@ func parseTS(s string) time.Time {
 }
 
 const selectCols = `id, user_id, username, media_type, tmdb_id, title, year, poster_path,
-	overview, status, reason, media_id, decided_by, decided_at, created_at, updated_at`
+	overview, status, reason, media_id, decided_by, decided_at, created_at, updated_at,
+	fulfilled_at, availability, availability_reason, availability_checked_at,
+	availability_library_id, re_request_of, availability_files`
 
 func scanRequest(row interface{ Scan(...any) error }) (Request, error) {
 	var (
-		r                 Request
-		mediaType, status string
-		created, updated  string
-		decidedNull       sql.NullString
+		r                          Request
+		mediaType, status          string
+		created, updated           string
+		decidedNull                sql.NullString
+		fulfilledNull, checkedNull sql.NullString
 	)
 	if err := row.Scan(&r.ID, &r.UserID, &r.Username, &mediaType, &r.TMDBID, &r.Title,
 		&r.Year, &r.PosterPath, &r.Overview, &status, &r.Reason, &r.MediaID,
-		&r.DecidedBy, &decidedNull, &created, &updated); err != nil {
+		&r.DecidedBy, &decidedNull, &created, &updated, &fulfilledNull,
+		&r.Availability, &r.AvailabilityReason, &checkedNull, &r.AvailabilityLibraryID, &r.ReRequestOf, &r.AvailabilityFiles); err != nil {
 		return Request{}, err
 	}
 	r.MediaType = MediaType(mediaType)
 	r.Status = Status(status)
 	r.CreatedAt = parseTS(created)
 	r.UpdatedAt = parseTS(updated)
+	r.MediaServerAvailability = AvailabilityUnknown
+	if fulfilledNull.Valid {
+		t := parseTS(fulfilledNull.String)
+		r.FulfilledAt = &t
+	}
+	if checkedNull.Valid {
+		t := parseTS(checkedNull.String)
+		r.AvailabilityCheckedAt = &t
+		if time.Since(t) > availabilityFreshness {
+			r.Availability = AvailabilityUnknown
+			r.AvailabilityReason = "Observation is stale; reconciliation required"
+		}
+	}
 	if decidedNull.Valid && decidedNull.String != "" {
 		t := parseTS(decidedNull.String)
 		r.DecidedAt = &t
@@ -90,26 +109,7 @@ func isUniqueViolation(err error) bool {
 // Create inserts a new pending request. The unique partial index on open
 // requests enforces dedupe at the DB level; a conflict maps to ErrDuplicate.
 func (s *Store) Create(ctx context.Context, r Request) (Request, error) {
-	r.ID = uuid.NewString()
-	now := time.Now().UTC()
-	r.CreatedAt = now
-	r.UpdatedAt = now
-	r.Status = StatusPending
-	_, err := s.db.ExecContext(ctx, `
-		INSERT INTO media_requests
-			(id, user_id, username, media_type, tmdb_id, title, year, poster_path,
-			 overview, status, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)`,
-		r.ID, r.UserID, r.Username, string(r.MediaType), r.TMDBID, r.Title, r.Year,
-		r.PosterPath, r.Overview, now.Format(tsLayout), now.Format(tsLayout),
-	)
-	if err != nil {
-		if isUniqueViolation(err) {
-			return Request{}, ErrDuplicate
-		}
-		return Request{}, err
-	}
-	return r, nil
+	return s.CreateWithinQuota(ctx, r, 0, time.Time{})
 }
 
 // List returns requests filtered by status (empty = all), newest first.
@@ -145,7 +145,18 @@ func (s *Store) query(ctx context.Context, q string, args ...any) ([]Request, er
 		}
 		out = append(out, r)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	for i := range out {
+		if err := s.loadMonitoring(ctx, &out[i]); err != nil {
+			return nil, err
+		}
+	}
+	return out, nil
 }
 
 // Clear removes all persisted media requests.
@@ -160,6 +171,9 @@ func (s *Store) Get(ctx context.Context, id string) (Request, error) {
 	r, err := scanRequest(row)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Request{}, ErrNotFound
+	}
+	if err == nil {
+		err = s.loadMonitoring(ctx, &r)
 	}
 	return r, err
 }
@@ -313,6 +327,29 @@ func (s *Store) CreateWithinQuota(ctx context.Context, r Request, limit int, sin
 	if _, err := tx.ExecContext(ctx, `UPDATE request_quota_config SET id = id WHERE id = 1`); err != nil {
 		return Request{}, err
 	}
+	if r.ReRequestOf != "" {
+		var eligible int
+		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM media_requests
+			WHERE id=? AND media_type=? AND tmdb_id=? AND status='available'
+			AND availability='missing' AND availability_checked_at>=?`,
+			r.ReRequestOf, r.MediaType, r.TMDBID, time.Now().UTC().Add(-availabilityFreshness).Format(tsLayout)).Scan(&eligible); err != nil {
+			return Request{}, err
+		}
+		if eligible != 1 {
+			return Request{}, ErrConflict
+		}
+	}
+	var duplicate int
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM media_requests
+		WHERE media_type=? AND tmdb_id=? AND (
+			status IN ('pending','approving','approved') OR
+			(status='available' AND (availability<>'missing' OR ?=''))
+		)`, r.MediaType, r.TMDBID, r.ReRequestOf).Scan(&duplicate); err != nil {
+		return Request{}, err
+	}
+	if duplicate > 0 {
+		return Request{}, ErrDuplicate
+	}
 
 	statusList, statusArgs := statusPlaceholders()
 	countQ := `SELECT COUNT(*) FROM media_requests
@@ -326,7 +363,7 @@ func (s *Store) CreateWithinQuota(ctx context.Context, r Request, limit int, sin
 	if err := tx.QueryRowContext(ctx, countQ, countArgs...).Scan(&used); err != nil {
 		return Request{}, err
 	}
-	if used >= limit {
+	if limit > 0 && used >= limit {
 		return Request{}, ErrQuotaExceeded
 	}
 
@@ -335,13 +372,16 @@ func (s *Store) CreateWithinQuota(ctx context.Context, r Request, limit int, sin
 	r.CreatedAt = now
 	r.UpdatedAt = now
 	r.Status = StatusPending
+	r.Availability = AvailabilityUnknown
+	r.AvailabilityReason = "Not checked"
+	r.MediaServerAvailability = AvailabilityUnknown
 	_, err = tx.ExecContext(ctx, `
 		INSERT INTO media_requests
 			(id, user_id, username, media_type, tmdb_id, title, year, poster_path,
-			 overview, status, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)`,
+			 overview, status, created_at, updated_at, re_request_of)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)`,
 		r.ID, r.UserID, r.Username, string(r.MediaType), r.TMDBID, r.Title, r.Year,
-		r.PosterPath, r.Overview, now.Format(tsLayout), now.Format(tsLayout),
+		r.PosterPath, r.Overview, now.Format(tsLayout), now.Format(tsLayout), r.ReRequestOf,
 	)
 	if err != nil {
 		if isUniqueViolation(err) {

@@ -5,6 +5,7 @@ type ArtistResponse struct {
 	ID             string             `json:"id"`
 	Name           string             `json:"name"`
 	SortName       string             `json:"sort-name,omitempty"`
+	Type           string             `json:"type,omitempty"`
 	Disambiguation string             `json:"disambiguation,omitempty"`
 	Area           *AreaResponse      `json:"area,omitempty"`
 	Country        string             `json:"country,omitempty"`
@@ -115,6 +116,9 @@ type ArtistMetadata struct {
 	Name           string
 	Disambiguation string
 	Area           string
+	SortName       string
+	Type           string
+	Genres         []string
 }
 
 // ReleaseMetadata represents the final mapped release metadata.

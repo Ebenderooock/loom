@@ -32,6 +32,20 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  queueSortOptions,
+  sortQueueItems,
+  type QueueItem,
+  type QueueSortKey,
+  type SortDirection,
+} from "@/lib/download-queue";
 import { ImportManager } from "@/components/imports/import-manager";
 import {
   useDownloads,
@@ -66,23 +80,6 @@ import {
 } from "@/components/ui/table";
 
 // ─── Types ──────────────────────────────────────────────────────────────
-
-interface QueueItem {
-  id: string;
-  client_id: string;
-  title: string;
-  category: string;
-  status: string;
-  progress: number;
-  size_bytes: number;
-  downloaded_bytes: number;
-  eta_seconds: number;
-  download_rate: number;
-  upload_rate: number;
-  ratio: number;
-  message: string;
-  save_path: string;
-}
 
 interface PeerInfo {
   ip: string;
@@ -768,6 +765,9 @@ function TrackersTab({ detail }: { detail: TorrentDetail }) {
 
 function ActiveDownloads() {
   const [items, setItems] = React.useState<QueueItem[]>([]);
+  const [sortKey, setSortKey] = React.useState<QueueSortKey>("queue");
+  const [sortDirection, setSortDirection] =
+    React.useState<SortDirection>("asc");
   const [loading, setLoading] = React.useState(true);
   const [refreshing, setRefreshing] = React.useState(false);
   const [selectedItem, setSelectedItem] = React.useState<QueueItem | null>(
@@ -796,18 +796,7 @@ function ActiveDownloads() {
     return () => clearInterval(interval);
   }, [fetchActivity]);
 
-  // Sort: downloading first, then queued, seeding, paused, completed, failed
-  const statusOrder: Record<string, number> = {
-    downloading: 0,
-    queued: 1,
-    paused: 2,
-    seeding: 3,
-    completed: 4,
-    failed: 5,
-  };
-  const sorted = [...items].sort(
-    (a, b) => (statusOrder[a.status] ?? 9) - (statusOrder[b.status] ?? 9),
-  );
+  const sorted = sortQueueItems(items, sortKey, sortDirection);
 
   if (loading) {
     return (
@@ -821,22 +810,63 @@ function ActiveDownloads() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <QueueStats items={items} />
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => fetchActivity(true)}
-          disabled={refreshing}
-          className="h-8 text-zinc-400 hover:text-zinc-200"
-        >
-          {refreshing ? (
-            <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-          ) : (
-            <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
-          )}
-          Refresh
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Label htmlFor="download-sort">Sort by</Label>
+          <Select
+            value={sortKey}
+            onValueChange={(value) => {
+              const option = queueSortOptions.find((o) => o.value === value);
+              if (!option) return;
+              setSortKey(option.value);
+              setSortDirection(option.value === "speed" ? "desc" : "asc");
+            }}
+          >
+            <SelectTrigger id="download-sort" className="h-9 w-[180px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {queueSortOptions.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button
+            variant="outline"
+            size="icon"
+            className="h-9 w-9"
+            aria-label={`Sort ${sortDirection === "asc" ? "ascending" : "descending"}. Reverse sort order`}
+            title={sortDirection === "asc" ? "Ascending" : "Descending"}
+            onClick={() =>
+              setSortDirection((direction) =>
+                direction === "asc" ? "desc" : "asc",
+              )
+            }
+          >
+            {sortDirection === "asc" ? (
+              <ArrowUp className="h-4 w-4" />
+            ) : (
+              <ArrowDown className="h-4 w-4" />
+            )}
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => fetchActivity(true)}
+            disabled={refreshing}
+            className="h-8 text-zinc-400 hover:text-zinc-200"
+          >
+            {refreshing ? (
+              <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+            )}
+            Refresh
+          </Button>
+        </div>
       </div>
 
       {items.length === 0 ? (
@@ -854,7 +884,7 @@ function ActiveDownloads() {
           <div className="divide-y divide-zinc-800/50">
             {sorted.map((item) => (
               <QueueItemRow
-                key={item.id}
+                key={JSON.stringify([item.client_id, item.id])}
                 item={item}
                 onRefresh={() => fetchActivity()}
                 onSelect={setSelectedItem}

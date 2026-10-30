@@ -1,5 +1,8 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { useAuth } from "@/hooks/use-auth";
+import { AddToCollectionButton } from "@/components/collections/add-to-collection";
 import { apiFetch } from "@/lib/fetch";
+import { MediaFilesManager } from "@/components/media-files-manager";
 import {
   getEpisodeStatus,
   getSeasonStats,
@@ -33,7 +36,6 @@ import {
 import {
   Loader2,
   Tv,
-  Star,
   Trash2,
   Pencil,
   Bookmark,
@@ -56,16 +58,19 @@ import { ReleaseSearchDialog } from "@/components/search/release-search-dialog";
 import { autoSearch } from "@/lib/autosearch-api";
 import { AltTitlesSection } from "@/components/alt-titles";
 import { PersonDiscoverDialog } from "@/components/person-discover-dialog";
+import {
+  TitlePersonCard as PersonCard,
+  TitleRating,
+  TitleSynopsis,
+  titleImage,
+} from "@/components/titles/title-metadata";
+import {
+  isMissingQualityProfile,
+  MissingQualityProfileAlert,
+  MissingQualityProfileBadge,
+} from "@/components/quality-profile-warning";
 import type { Library } from "../../lib/libraries-api";
-import type {
-  Series,
-  Season,
-  Episode,
-  QualityProfile,
-  Credits,
-  CreditPerson,
-} from "./types";
-import { TMDB_IMG } from "./types";
+import type { Series, Season, Episode, QualityProfile, Credits } from "./types";
 
 // ─── Helpers ──────────────────────────────────────────────────────────
 
@@ -118,61 +123,6 @@ function DetailRow({
   );
 }
 
-const PROFILE_IMG = "https://image.tmdb.org/t/p/w185";
-
-function PersonCard({
-  person,
-  onClick,
-}: {
-  person: CreditPerson;
-  onClick?: () => void;
-}) {
-  return (
-    <div
-      className={cn(
-        "group w-[100px] flex-shrink-0",
-        onClick && "cursor-pointer",
-      )}
-      onClick={onClick}
-      role={onClick ? "button" : undefined}
-      tabIndex={onClick ? 0 : undefined}
-      onKeyDown={
-        onClick
-          ? (e) => {
-              if (e.key === "Enter" || e.key === " ") onClick();
-            }
-          : undefined
-      }
-    >
-      <div className="relative mb-1.5 h-[150px] w-[100px] overflow-hidden rounded-lg bg-muted/30">
-        {person.profile_path ? (
-          <img
-            src={`${PROFILE_IMG}${person.profile_path}`}
-            alt={person.name}
-            className="h-full w-full object-cover"
-            loading="lazy"
-          />
-        ) : (
-          <div className="flex h-full w-full items-center justify-center text-muted-foreground/30">
-            <Users className="h-8 w-8" />
-          </div>
-        )}
-      </div>
-      <p className="truncate text-xs font-medium" title={person.name}>
-        {person.name}
-      </p>
-      {(person.character || person.role) && (
-        <p
-          className="truncate text-[11px] text-muted-foreground"
-          title={person.character || person.role}
-        >
-          {person.character || person.role}
-        </p>
-      )}
-    </div>
-  );
-}
-
 // ─── Episode Status (Sonarr-style) ────────────────────────────────────
 
 const EPISODE_STATUS_STYLE: Record<
@@ -213,10 +163,14 @@ function SeasonAccordion({
   seriesTitle,
   seriesData,
   onSearchOpen,
+  filesVersion,
+  onFilesChanged,
 }: {
   seriesId: string;
   season: Season;
   seriesTitle: string;
+  filesVersion: number;
+  onFilesChanged: () => void;
   seriesData: {
     qualityProfileId: string;
     imdbId?: string;
@@ -241,35 +195,54 @@ function SeasonAccordion({
   const [autoSearchingEp, setAutoSearchingEp] = useState<number | null>(null);
   const [autoSearchingSeason, setAutoSearchingSeason] = useState(false);
 
-  const fetchEpisodes = async () => {
-    try {
-      const res = await apiFetch(
-        `/api/v1/series/${seriesId}/seasons/${season.seasonNumber}/episodes`,
-      );
-      if (res.ok) {
-        const data = await res.json();
-        setEpisodes(
-          Array.isArray(data)
-            ? data
-            : Array.isArray(data?.data)
-              ? data.data
-              : [],
+  const fetchEpisodes = useCallback(
+    async (signal?: AbortSignal) => {
+      try {
+        const res = await apiFetch(
+          `/api/v1/series/${seriesId}/seasons/${season.seasonNumber}/episodes`,
+          { signal },
         );
+        if (!res.ok) {
+          const body = await res.json().catch(() => null);
+          throw new Error(
+            body?.error?.message || `Episode refresh failed (${res.status})`,
+          );
+        }
+        const data = await res.json();
+        const rows = Array.isArray(data) ? data : data?.data;
+        if (!Array.isArray(rows))
+          throw new Error("Unexpected episode response");
+        if (!signal?.aborted) {
+          setEpisodes(rows);
+          setLoaded(true);
+        }
+      } catch (error) {
+        if (!signal?.aborted) {
+          toast.error("Could not refresh season episodes", {
+            description: error instanceof Error ? error.message : String(error),
+          });
+        }
       }
-    } catch {
-      /* ignore */
-    }
-  };
+    },
+    [seriesId, season.seasonNumber],
+  );
 
-  const handleToggle = async () => {
-    if (!open && !loaded) {
-      setLoading(true);
-      await fetchEpisodes();
-      setLoading(false);
-      setLoaded(true);
+  useEffect(() => {
+    // Keep expanded lists current after either series- or season-scoped deletion.
+    // Collapsed seasons use refreshed server stats until their next expansion.
+    if (!open) {
+      setLoaded(false);
+      return;
     }
-    setOpen((v) => !v);
-  };
+    const controller = new AbortController();
+    setLoading(true);
+    void fetchEpisodes(controller.signal).finally(() => {
+      if (!controller.signal.aborted) setLoading(false);
+    });
+    return () => controller.abort();
+  }, [open, filesVersion, fetchEpisodes]);
+
+  const handleToggle = () => setOpen((value) => !value);
 
   const handleAutoSearchEpisode = async (ep: Episode) => {
     setAutoSearchingEp(ep.episodeNumber);
@@ -467,6 +440,15 @@ function SeasonAccordion({
       {/* Episode table */}
       {open && (
         <div className="border-t border-border/30">
+          <div className="px-4 pt-3">
+            <MediaFilesManager
+              mediaType="series"
+              id={seriesId}
+              season={season.seasonNumber}
+              title={`${seriesTitle} — ${season.seasonNumber === 0 ? "Specials" : `Season ${season.seasonNumber}`}`}
+              onChanged={onFilesChanged}
+            />
+          </div>
           {loading ? (
             <div className="flex items-center justify-center py-6">
               <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
@@ -605,6 +587,7 @@ export function SeriesDetailSheet({
   series,
   open,
   onOpenChange,
+  onCloseAutoFocus,
   profiles,
   libraries,
   onUpdated,
@@ -616,6 +599,7 @@ export function SeriesDetailSheet({
   series: Series | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onCloseAutoFocus?: (event: Event) => void;
   profiles: QualityProfile[];
   libraries: Library[];
   onUpdated: (updated: Series) => void;
@@ -631,12 +615,12 @@ export function SeriesDetailSheet({
   const [saving, setSaving] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const [overviewExpanded, setOverviewExpanded] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [credits, setCredits] = useState<Credits | null>(null);
   const [creditsLoading, setCreditsLoading] = useState(false);
   const [seasons, setSeasons] = useState<Season[]>([]);
   const [seasonsLoading, setSeasonsLoading] = useState(false);
+  const [filesVersion, setFilesVersion] = useState(0);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchContext, setSearchContext] = useState<{
     title: string;
@@ -651,6 +635,8 @@ export function SeriesDetailSheet({
   const [archiving, setArchiving] = useState(false);
   const [autoSearching, setAutoSearching] = useState(false);
   const [rescanning, setRescanning] = useState(false);
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
   const [discoverPerson, setDiscoverPerson] = useState<{
     id: number;
     name: string;
@@ -704,7 +690,6 @@ export function SeriesDetailSheet({
       setEditProfile(series.qualityProfileId);
       setEditMonitoring(series.monitoringStatus);
       setEditSeriesType(series.seriesType || "standard");
-      setOverviewExpanded(false);
 
       // Fetch credits
       setCredits(null);
@@ -736,7 +721,41 @@ export function SeriesDetailSheet({
 
   if (!series) return null;
 
+  const handleFilesChanged = () => {
+    // List refresh alone does not replace the independently held detail/season
+    // state. Refresh local season summaries and invalidate mounted episode lists.
+    setFilesVersion((version) => version + 1);
+    void apiFetch(`/api/v1/series/${series.id}/seasons`)
+      .then(async (response) => {
+        if (!response.ok) {
+          const body = await response.json().catch(() => null);
+          throw new Error(
+            body?.error?.message ||
+              `Season refresh failed (${response.status})`,
+          );
+        }
+        const data = await response.json();
+        const rows = Array.isArray(data) ? data : data?.data;
+        if (!Array.isArray(rows)) throw new Error("Unexpected season response");
+        setSeasons(rows);
+      })
+      .catch((error) =>
+        toast.error("Could not refresh season summaries", {
+          description: error instanceof Error ? error.message : String(error),
+        }),
+      );
+    onRefresh?.();
+  };
+
   const profile = profiles.find((p) => p.id === series.qualityProfileId);
+  const missingProfile = isMissingQualityProfile(series);
+  const openEditor = () => {
+    setEditing(true);
+    // A dangling ID can't be shown in the picker; start blank instead.
+    setEditProfile(missingProfile ? "" : series.qualityProfileId);
+    setEditMonitoring(series.monitoringStatus);
+    setEditSeriesType(series.seriesType || "standard");
+  };
   const library = libraries.find((l) => l.id === series.libraryId);
   const isMonitored = series.monitoringStatus === "monitored";
 
@@ -885,13 +904,12 @@ export function SeriesDetailSheet({
     }
   };
 
-  const overviewIsLong = (series.overview?.length ?? 0) > 280;
-
   return (
     <>
-      <Sheet open={open} onOpenChange={onOpenChange}>
+      <Sheet open={open && !discoverPerson} onOpenChange={onOpenChange}>
         <SheetContent
           side="right"
+          onCloseAutoFocus={onCloseAutoFocus}
           className="w-full overflow-y-auto p-0 sm:max-w-2xl"
         >
           <SheetHeader className="sr-only">
@@ -905,13 +923,13 @@ export function SeriesDetailSheet({
           <div className="relative h-[300px] overflow-hidden bg-muted">
             {series.backdropPath ? (
               <img
-                src={`${TMDB_IMG}/w780${series.backdropPath}`}
+                src={titleImage(series.backdropPath, "w780")}
                 alt=""
                 className="h-full w-full object-cover"
               />
             ) : series.posterPath ? (
               <img
-                src={`${TMDB_IMG}/w780${series.posterPath}`}
+                src={titleImage(series.posterPath, "w780")}
                 alt=""
                 className="h-full w-full scale-110 object-cover opacity-30 blur-md"
               />
@@ -924,7 +942,7 @@ export function SeriesDetailSheet({
               <div className="w-[130px] overflow-hidden rounded-lg border-4 border-background shadow-2xl">
                 {series.posterPath ? (
                   <img
-                    src={`${TMDB_IMG}/w300${series.posterPath}`}
+                    src={titleImage(series.posterPath, "w300")}
                     alt={series.title}
                     className="aspect-[2/3] w-full object-cover"
                   />
@@ -975,7 +993,7 @@ export function SeriesDetailSheet({
 
           {/* Action buttons */}
           <div className="px-6 pb-2">
-            <div className="flex items-center gap-1.5">
+            <div className="flex flex-wrap items-center gap-1.5">
               {/* Primary actions with labels */}
               <Button
                 size="sm"
@@ -1012,12 +1030,7 @@ export function SeriesDetailSheet({
                 size="sm"
                 variant="outline"
                 className="h-8 gap-1.5 text-xs"
-                onClick={() => {
-                  setEditing(true);
-                  setEditProfile(series.qualityProfileId);
-                  setEditMonitoring(series.monitoringStatus);
-                  setEditSeriesType(series.seriesType || "standard");
-                }}
+                onClick={openEditor}
                 title="Edit series settings"
               >
                 <Pencil className="h-3.5 w-3.5" />
@@ -1075,6 +1088,18 @@ export function SeriesDetailSheet({
                 )}
               </Button>
 
+              {isAdmin && (
+                <AddToCollectionButton
+                  iconOnly
+                  target={{
+                    media_type: "series",
+                    media_id: series.id,
+                    title: series.title,
+                    tmdb: series.tmdbId ? String(series.tmdbId) : undefined,
+                  }}
+                />
+              )}
+
               {/* Delete — pushed right */}
               <Button
                 size="icon"
@@ -1087,6 +1112,14 @@ export function SeriesDetailSheet({
               </Button>
             </div>
           </div>
+
+          {missingProfile && !editing && (
+            <MissingQualityProfileAlert
+              mediaLabel="series"
+              onFix={openEditor}
+              className="mx-6 mb-3"
+            />
+          )}
 
           {/* Edit mode bar */}
           {editing && (
@@ -1105,7 +1138,7 @@ export function SeriesDetailSheet({
                   </label>
                   <Select value={editProfile} onValueChange={setEditProfile}>
                     <SelectTrigger id="series-edit-profile">
-                      <SelectValue />
+                      <SelectValue placeholder="Select profile" />
                     </SelectTrigger>
                     <SelectContent>
                       {profiles.map((p) => (
@@ -1188,10 +1221,7 @@ export function SeriesDetailSheet({
                 <DetailRow label="Network">{series.network || "—"}</DetailRow>
                 {series.rating > 0 && (
                   <DetailRow label="Rating">
-                    <span className="flex items-center gap-1">
-                      <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400" />
-                      {series.rating.toFixed(1)}
-                    </span>
+                    <TitleRating rating={series.rating} />
                   </DetailRow>
                 )}
                 {series.runtime > 0 && (
@@ -1202,8 +1232,14 @@ export function SeriesDetailSheet({
                     {series.seriesType || "Standard"}
                   </span>
                 </DetailRow>
-                {profile && (
-                  <DetailRow label="Quality">{profile.name}</DetailRow>
+                {missingProfile ? (
+                  <DetailRow label="Quality">
+                    <MissingQualityProfileBadge />
+                  </DetailRow>
+                ) : (
+                  profile && (
+                    <DetailRow label="Quality">{profile.name}</DetailRow>
+                  )
                 )}
                 {library && (
                   <DetailRow label="Library">{library.name}</DetailRow>
@@ -1218,32 +1254,19 @@ export function SeriesDetailSheet({
                   ))}
                 </div>
               )}
-              {series.overview && (
-                <div>
-                  <p
-                    className={cn(
-                      "text-sm leading-relaxed text-muted-foreground",
-                      !overviewExpanded && overviewIsLong && "line-clamp-4",
-                    )}
-                  >
-                    {series.overview}
-                  </p>
-                  {overviewIsLong && (
-                    <button
-                      onClick={() => setOverviewExpanded((v) => !v)}
-                      className="mt-1 text-xs text-accent hover:underline"
-                    >
-                      {overviewExpanded ? "Show less" : "Read more"}
-                    </button>
-                  )}
-                </div>
-              )}
+              <TitleSynopsis key={series.id} overview={series.overview} />
             </CollapsibleSection>
 
             {/* Alt Titles */}
             <AltTitlesSection mediaId={series.id} mediaType="series" />
 
             {/* Seasons */}
+            <MediaFilesManager
+              mediaType="series"
+              id={series.id}
+              title={series.title}
+              onChanged={handleFilesChanged}
+            />
             <CollapsibleSection
               title={`Seasons (${seasons.length})`}
               icon={FileVideo}
@@ -1266,6 +1289,8 @@ export function SeriesDetailSheet({
                         seriesId={series.id}
                         season={season}
                         seriesTitle={series.title}
+                        filesVersion={filesVersion}
+                        onFilesChanged={handleFilesChanged}
                         seriesData={{
                           qualityProfileId: series.qualityProfileId,
                           imdbId: series.imdbId,
@@ -1370,6 +1395,10 @@ export function SeriesDetailSheet({
       {/* Release search dialog */}
       {searchContext && (
         <ReleaseSearchDialog
+          qualityProfileId={series.qualityProfileId}
+          evaluationTitle={series.title}
+          runtime={series.runtime}
+          tvdbId={series.tvdbId ? Number(series.tvdbId) : undefined}
           open={searchOpen}
           onOpenChange={setSearchOpen}
           title={searchContext.title}

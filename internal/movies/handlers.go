@@ -2,7 +2,9 @@ package movies
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"regexp"
@@ -10,6 +12,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/ebenderooock/loom/internal/kernel/httpparam"
 
 	"github.com/go-chi/chi/v5"
 
@@ -159,26 +163,27 @@ func RouterWithSearch(service Service, indexerSvc *indexers.Service, grabStore G
 
 func movieToResponse(m *Movie) map[string]interface{} {
 	resp := map[string]interface{}{
-		"id":               m.ID,
-		"title":            m.Title,
-		"year":             m.Year,
-		"imdbId":           m.IMDBID,
-		"tmdbId":           m.TMDBID,
-		"tvdbId":           m.TVDBID,
-		"overview":         m.Overview,
-		"genres":           m.Genres,
-		"runtime":          m.Runtime,
-		"rating":           m.Rating,
-		"backdropPath":     m.BackdropPath,
-		"posterPath":       m.PosterPath,
-		"metadataProvider": m.MetadataProvider,
-		"qualityProfileId": m.QualityProfileID,
-		"libraryId":        m.LibraryID,
-		"status":           string(m.Status),
-		"releaseDate":      m.ReleaseDate,
-		"monitoringStatus": string(m.MonitoringStatus),
-		"createdAt":        m.CreatedAt.Format("2006-01-02T15:04:05Z"),
-		"updatedAt":        m.UpdatedAt.Format("2006-01-02T15:04:05Z"),
+		"id":                    m.ID,
+		"title":                 m.Title,
+		"year":                  m.Year,
+		"imdbId":                m.IMDBID,
+		"tmdbId":                m.TMDBID,
+		"tvdbId":                m.TVDBID,
+		"overview":              m.Overview,
+		"genres":                m.Genres,
+		"runtime":               m.Runtime,
+		"rating":                m.Rating,
+		"backdropPath":          m.BackdropPath,
+		"posterPath":            m.PosterPath,
+		"metadataProvider":      m.MetadataProvider,
+		"qualityProfileId":      m.QualityProfileID,
+		"qualityProfileMissing": m.QualityProfileMissing,
+		"libraryId":             m.LibraryID,
+		"status":                string(m.Status),
+		"releaseDate":           m.ReleaseDate,
+		"monitoringStatus":      string(m.MonitoringStatus),
+		"createdAt":             m.CreatedAt.Format("2006-01-02T15:04:05Z"),
+		"updatedAt":             m.UpdatedAt.Format("2006-01-02T15:04:05Z"),
 	}
 	if m.LastSearchAt != nil {
 		resp["lastSearchAt"] = m.LastSearchAt.Format("2006-01-02T15:04:05Z")
@@ -488,19 +493,19 @@ func lookupMovies(svc Service) http.HandlerFunc {
 
 func getMovie(svc Service, grabStore GrabChecker) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		id := chi.URLParam(r, "id")
+		id := httpparam.Param(r, "id")
 		if id == "" {
 			http.Error(w, "movie ID required", http.StatusBadRequest)
 			return
 		}
 
 		movie, err := svc.GetMovie(r.Context(), id)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+		if errors.Is(err, sql.ErrNoRows) || (err == nil && movie == nil) {
+			http.Error(w, "movie not found", http.StatusNotFound)
 			return
 		}
-		if movie == nil {
-			http.Error(w, "movie not found", http.StatusNotFound)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 
@@ -605,7 +610,7 @@ func fireMovieSearch(movie *Movie, indexerSvc *indexers.Service) {
 
 func updateMovie(svc Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		id := chi.URLParam(r, "id")
+		id := httpparam.Param(r, "id")
 		if id == "" {
 			http.Error(w, "movie ID required", http.StatusBadRequest)
 			return
@@ -674,7 +679,7 @@ func updateMovie(svc Service) http.HandlerFunc {
 
 func deleteMovie(svc Service, checker UnmonitorOnDeleteChecker) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		id := chi.URLParam(r, "id")
+		id := httpparam.Param(r, "id")
 		if id == "" {
 			http.Error(w, "movie ID required", http.StatusBadRequest)
 			return
@@ -700,7 +705,7 @@ func deleteMovie(svc Service, checker UnmonitorOnDeleteChecker) http.HandlerFunc
 
 func setMonitoringStatus(svc Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		id := chi.URLParam(r, "id")
+		id := httpparam.Param(r, "id")
 		if id == "" {
 			http.Error(w, "movie ID required", http.StatusBadRequest)
 			return
@@ -725,7 +730,7 @@ func setMonitoringStatus(svc Service) http.HandlerFunc {
 
 func refreshMovie(svc Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		id := chi.URLParam(r, "id")
+		id := httpparam.Param(r, "id")
 		if id == "" {
 			http.Error(w, "movie ID required", http.StatusBadRequest)
 			return
@@ -743,7 +748,7 @@ func refreshMovie(svc Service) http.HandlerFunc {
 
 func getMovieCredits(svc Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		id := chi.URLParam(r, "id")
+		id := httpparam.Param(r, "id")
 		if id == "" {
 			http.Error(w, "movie ID required", http.StatusBadRequest)
 			return
@@ -762,7 +767,7 @@ func getMovieCredits(svc Service) http.HandlerFunc {
 
 func getMovieHistory(svc Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		id := chi.URLParam(r, "id")
+		id := httpparam.Param(r, "id")
 		if id == "" {
 			http.Error(w, "movie ID required", http.StatusBadRequest)
 			return
@@ -784,7 +789,7 @@ func getMovieHistory(svc Service) http.HandlerFunc {
 
 func listMovieFiles(svc Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		movieID := chi.URLParam(r, "movieID")
+		movieID := httpparam.Param(r, "movieID")
 		if movieID == "" {
 			http.Error(w, "movie ID required", http.StatusBadRequest)
 			return
@@ -876,7 +881,7 @@ func addQualityDefinition(svc Service) http.HandlerFunc {
 
 func getQualityDefinition(svc Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		id := chi.URLParam(r, "id")
+		id := httpparam.Param(r, "id")
 		if id == "" {
 			http.Error(w, "quality definition ID required", http.StatusBadRequest)
 			return
@@ -895,7 +900,7 @@ func getQualityDefinition(svc Service) http.HandlerFunc {
 
 func updateQualityDefinition(svc Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		id := chi.URLParam(r, "id")
+		id := httpparam.Param(r, "id")
 		if id == "" {
 			http.Error(w, "quality definition ID required", http.StatusBadRequest)
 			return
@@ -955,7 +960,7 @@ func updateQualityDefinition(svc Service) http.HandlerFunc {
 
 func deleteQualityDefinition(svc Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		id := chi.URLParam(r, "id")
+		id := httpparam.Param(r, "id")
 		if id == "" {
 			http.Error(w, "quality definition ID required", http.StatusBadRequest)
 			return
@@ -1022,7 +1027,7 @@ func addQualityProfile(svc Service) http.HandlerFunc {
 
 func getQualityProfile(svc Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		id := chi.URLParam(r, "id")
+		id := httpparam.Param(r, "id")
 		if id == "" {
 			http.Error(w, "quality profile ID required", http.StatusBadRequest)
 			return
@@ -1041,7 +1046,7 @@ func getQualityProfile(svc Service) http.HandlerFunc {
 
 func updateQualityProfile(svc Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		id := chi.URLParam(r, "id")
+		id := httpparam.Param(r, "id")
 		if id == "" {
 			http.Error(w, "quality profile ID required", http.StatusBadRequest)
 			return
@@ -1089,7 +1094,7 @@ func updateQualityProfile(svc Service) http.HandlerFunc {
 
 func deleteQualityProfile(svc Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		id := chi.URLParam(r, "id")
+		id := httpparam.Param(r, "id")
 		if id == "" {
 			http.Error(w, "quality profile ID required", http.StatusBadRequest)
 			return
@@ -1167,7 +1172,7 @@ func addCustomFormat(svc Service) http.HandlerFunc {
 
 func getCustomFormat(svc Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		id := chi.URLParam(r, "id")
+		id := httpparam.Param(r, "id")
 		cf, err := svc.GetCustomFormat(r.Context(), id)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -1184,7 +1189,7 @@ func getCustomFormat(svc Service) http.HandlerFunc {
 
 func updateCustomFormat(svc Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		id := chi.URLParam(r, "id")
+		id := httpparam.Param(r, "id")
 
 		var req UpdateCustomFormatRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -1243,7 +1248,7 @@ func updateCustomFormat(svc Service) http.HandlerFunc {
 
 func deleteCustomFormat(svc Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		id := chi.URLParam(r, "id")
+		id := httpparam.Param(r, "id")
 		if err := svc.DeleteCustomFormat(r.Context(), id); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -1254,7 +1259,7 @@ func deleteCustomFormat(svc Service) http.HandlerFunc {
 
 func testCustomFormat(svc Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		id := chi.URLParam(r, "id")
+		id := httpparam.Param(r, "id")
 
 		var req struct {
 			ReleaseName string `json:"release_name"`
@@ -1324,7 +1329,7 @@ func slugify(name string) string {
 
 func archiveMovie(svc Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		id := chi.URLParam(r, "id")
+		id := httpparam.Param(r, "id")
 		if id == "" {
 			http.Error(w, "movie ID required", http.StatusBadRequest)
 			return
@@ -1341,7 +1346,7 @@ func archiveMovie(svc Service) http.HandlerFunc {
 
 func unarchiveMovie(svc Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		id := chi.URLParam(r, "id")
+		id := httpparam.Param(r, "id")
 		if id == "" {
 			http.Error(w, "movie ID required", http.StatusBadRequest)
 			return

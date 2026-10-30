@@ -39,6 +39,10 @@ const (
 // non-nil; callers must close any non-nil resp.Body when discarding.
 func shouldRetry(resp *http.Response, err error) (Reason, bool) {
 	if err != nil {
+		var policy interface{ Retryable() bool }
+		if errors.As(err, &policy) && !policy.Retryable() {
+			return "", false
+		}
 		// Don't retry caller-initiated cancellation/timeout — that's
 		// the operator's deliberate kill switch, not a transient blip.
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {

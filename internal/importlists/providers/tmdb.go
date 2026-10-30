@@ -11,8 +11,14 @@ import (
 
 // TMDbProvider fetches items from TMDb lists or popular/trending endpoints.
 type TMDbProvider struct {
-	Popular bool // if true, fetches popular instead of a specific list
-	client  *http.Client
+	Popular  bool // if true, fetches popular instead of a specific list
+	Version4 bool // explicit mixed movie/TV lists; requires a v4 read token
+	client   *http.Client
+}
+
+// NewTMDbMixedList reuses the list adapter for paginated TMDB v4 mixed lists.
+func NewTMDbMixedList() *TMDbProvider {
+	return &TMDbProvider{Version4: true, client: &http.Client{Timeout: 30 * time.Second}}
 }
 
 // NewTMDbList returns a provider for a specific TMDb list.
@@ -25,7 +31,11 @@ func NewTMDbPopular() *TMDbProvider {
 	return &TMDbProvider{Popular: true, client: &http.Client{Timeout: 30 * time.Second}}
 }
 
+// Fetch reads the configured TMDB source without inferring identity from names.
 func (p *TMDbProvider) Fetch(ctx context.Context, cfg ProviderConfig) ([]Item, error) {
+	if p.Version4 {
+		return p.fetchMixed(ctx, cfg)
+	}
 	if cfg.APIKey == "" {
 		return nil, fmt.Errorf("tmdb: API key required")
 	}
@@ -59,7 +69,7 @@ func (p *TMDbProvider) Fetch(ctx context.Context, cfg ProviderConfig) ([]Item, e
 	if err != nil {
 		return nil, fmt.Errorf("tmdb: request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("tmdb: unexpected status %d", resp.StatusCode)
 	}
@@ -90,10 +100,10 @@ func (p *TMDbProvider) Fetch(ctx context.Context, cfg ProviderConfig) ([]Item, e
 		}
 		year := 0
 		if len(e.ReleaseDate) >= 4 {
-			fmt.Sscanf(e.ReleaseDate[:4], "%d", &year)
+			_, _ = fmt.Sscanf(e.ReleaseDate[:4], "%d", &year)
 		}
 		if year == 0 && len(e.FirstAirDate) >= 4 {
-			fmt.Sscanf(e.FirstAirDate[:4], "%d", &year)
+			_, _ = fmt.Sscanf(e.FirstAirDate[:4], "%d", &year)
 		}
 
 		items = append(items, Item{
@@ -101,6 +111,8 @@ func (p *TMDbProvider) Fetch(ctx context.Context, cfg ProviderConfig) ([]Item, e
 			Title:      title,
 			Year:       year,
 			TMDbID:     fmt.Sprintf("%d", e.ID),
+			MediaType:  tmdbMedia(e),
+			PosterPath: e.PosterPath,
 		})
 	}
 	return items, nil
@@ -117,4 +129,80 @@ type tmdbEntry struct {
 	Name         string `json:"name"`
 	ReleaseDate  string `json:"release_date"`
 	FirstAirDate string `json:"first_air_date"`
+	MediaType    string `json:"media_type"`
+	PosterPath   string `json:"poster_path"`
+}
+
+func tmdbMedia(e tmdbEntry) string {
+	if e.MediaType == "tv" || e.MediaType == "series" || (e.MediaType == "" && e.Name != "" && e.Title == "") {
+		return "series"
+	}
+	if e.MediaType == "" || e.MediaType == "movie" {
+		return "movie"
+	}
+	return ""
+}
+
+func (p *TMDbProvider) fetchMixed(ctx context.Context, cfg ProviderConfig) ([]Item, error) {
+	// Only numeric IDs can reach the fixed provider host.
+	for _, ch := range cfg.URL {
+		if ch < '0' || ch > '9' {
+			return nil, fmt.Errorf("tmdb: numeric list ID required")
+		}
+	}
+	if cfg.URL == "" || cfg.APIKey == "" {
+		return nil, fmt.Errorf("tmdb: list ID and v4 read access token required")
+	}
+	items := []Item{}
+	for page := 1; page <= 500; page++ {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("https://api.themoviedb.org/4/list/%s?page=%d", cfg.URL, page), nil)
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Authorization", "Bearer "+cfg.APIKey)
+		resp, err := p.client.Do(req)
+		if err != nil {
+			return nil, fmt.Errorf("tmdb: list request failed")
+		}
+		body, err := io.ReadAll(io.LimitReader(resp.Body, (10<<20)+1))
+		_ = resp.Body.Close()
+		if err != nil || len(body) > 10<<20 {
+			return nil, fmt.Errorf("tmdb: list response exceeds limit or cannot be read")
+		}
+		if resp.StatusCode != http.StatusOK {
+			return nil, fmt.Errorf("tmdb: list access failed (%d); v4 read token required", resp.StatusCode)
+		}
+		var result struct {
+			Results    []tmdbEntry `json:"results"`
+			TotalPages int         `json:"total_pages"`
+		}
+		if err := json.Unmarshal(body, &result); err != nil {
+			return nil, fmt.Errorf("tmdb: invalid list response")
+		}
+		if result.Results == nil || result.TotalPages < 0 {
+			return nil, fmt.Errorf("tmdb: incomplete list response")
+		}
+		for _, e := range result.Results {
+			media := tmdbMedia(e)
+			if media == "" {
+				continue
+			}
+			if e.ID <= 0 {
+				return nil, fmt.Errorf("tmdb: invalid title ID")
+			}
+			title, date := e.Title, e.ReleaseDate
+			if media == "series" {
+				title, date = e.Name, e.FirstAirDate
+			}
+			var year int
+			if len(date) >= 4 {
+				_, _ = fmt.Sscanf(date[:4], "%d", &year)
+			}
+			items = append(items, Item{TMDbID: fmt.Sprint(e.ID), Title: title, Year: year, MediaType: media, PosterPath: e.PosterPath})
+		}
+		if page >= result.TotalPages {
+			return items, nil
+		}
+	}
+	return nil, fmt.Errorf("tmdb: list exceeds 500 pages")
 }

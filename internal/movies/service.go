@@ -2,6 +2,8 @@ package movies
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"strconv"
 	"sync"
@@ -82,6 +84,7 @@ type service struct {
 	cache    sync.Map // map[string]*Movie with expiry
 	ttl      time.Duration
 	cfSvc    CustomFormatService
+	addMu    sync.Mutex
 }
 
 // cacheEntry holds a cached movie with expiry time.
@@ -264,6 +267,17 @@ func (s *service) AddMovie(ctx context.Context, movie *Movie) error {
 	if movie.LibraryID == "" {
 		return fmt.Errorf("movies: library required")
 	}
+	s.addMu.Lock()
+	defer s.addMu.Unlock()
+	if movie.TMDBID != nil && *movie.TMDBID != "" && *movie.TMDBID != "0" {
+		existing, err := s.repo.GetMovieByTMDBID(ctx, *movie.TMDBID)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return err
+		}
+		if existing != nil {
+			return fmt.Errorf("movies: provider identity already exists")
+		}
+	}
 
 	now := time.Now()
 	if movie.CreatedAt.IsZero() {
@@ -290,9 +304,6 @@ func (s *service) AddMovie(ctx context.Context, movie *Movie) error {
 func (s *service) AddMovieByTMDBID(ctx context.Context, tmdbID, qualityProfileID, libraryID string, monitored bool) (*Movie, error) {
 	if tmdbID == "" {
 		return nil, fmt.Errorf("movies: TMDB ID required")
-	}
-	if qualityProfileID == "" {
-		return nil, fmt.Errorf("movies: quality profile required")
 	}
 	if libraryID == "" {
 		return nil, fmt.Errorf("movies: library required")
@@ -509,6 +520,12 @@ func (s *service) RefreshMovie(ctx context.Context, id string) error {
 	movie.PosterPath = meta.PosterPath
 	movie.Runtime = meta.Runtime
 	movie.ReleaseDate = meta.ReleaseDate
+	if meta.IMDBID != nil && *meta.IMDBID != "" {
+		movie.IMDBID = meta.IMDBID
+	}
+	if meta.TVDBID != nil && *meta.TVDBID != "" {
+		movie.TVDBID = meta.TVDBID
+	}
 	if meta.Genres != nil {
 		movie.Genres = meta.Genres
 	}

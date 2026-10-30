@@ -2,8 +2,13 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Film, Star } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { StatusBadge } from "./status-badge";
+import {
+  isMissingQualityProfile,
+  MissingQualityProfileBadge,
+} from "@/components/quality-profile-warning";
 import type { Movie, QualityProfile } from "./types";
-import { TMDB_IMG, STATUS_CONFIG } from "./types";
+import { STATUS_CONFIG } from "./types";
+import { titleImage } from "@/components/titles/title-metadata";
 
 export function MovieCard({
   movie,
@@ -21,6 +26,7 @@ export function MovieCard({
   onClick: () => void;
 }) {
   const profile = profiles.find((p) => p.id === movie.qualityProfileId);
+  const missingProfile = isMissingQualityProfile(movie);
   const statusColor = STATUS_CONFIG[movie.status]?.border ?? "#6b7280";
 
   return (
@@ -56,7 +62,7 @@ export function MovieCard({
       <div className="aspect-[2/3] bg-muted">
         {movie.posterPath ? (
           <img
-            src={`${TMDB_IMG}/w300${movie.posterPath}`}
+            src={titleImage(movie.posterPath, "w300")}
             alt={movie.title}
             className="h-full w-full object-cover"
             loading="lazy"
@@ -104,6 +110,9 @@ export function MovieCard({
           {movie.title}
         </h3>
         <p className="text-xs text-gray-400">{movie.year}</p>
+        {missingProfile && (
+          <MissingQualityProfileBadge onDark className="mt-1.5" />
+        )}
       </div>
 
       {/* Hover overlay with details */}
@@ -132,8 +141,14 @@ export function MovieCard({
         </div>
         <div className="space-y-1.5">
           <StatusBadge status={movie.status} />
-          {profile && (
-            <p className="text-[10px] text-gray-500">Quality: {profile.name}</p>
+          {missingProfile ? (
+            <MissingQualityProfileBadge onDark />
+          ) : (
+            profile && (
+              <p className="text-[10px] text-gray-500">
+                Quality: {profile.name}
+              </p>
+            )
           )}
         </div>
       </div>

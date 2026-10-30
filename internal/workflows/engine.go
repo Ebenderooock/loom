@@ -167,17 +167,7 @@ func (e *Engine) markGrabbed(ctx context.Context, workflowID, clientID, download
 	if err != nil {
 		return err
 	}
-	for _, item := range wf.Items {
-		if item.MediaType == MediaTypeMovie {
-			if err := e.media.SetMovieDownloading(ctx, item.MediaID); err != nil {
-				e.logger.Warn("failed to set movie downloading", "movie_id", item.MediaID, "error", err)
-			}
-		} else if item.MediaType == MediaTypeEpisode {
-			if err := e.media.SetEpisodeDownloading(ctx, item.MediaID); err != nil {
-				e.logger.Warn("failed to set episode downloading", "episode_id", item.MediaID, "error", err)
-			}
-		}
-	}
+	e.setMediaDownloading(ctx, wf)
 
 	e.logger.Info("workflow grabbed", "id", workflowID, "title", title)
 	return nil
@@ -310,6 +300,15 @@ func (e *Engine) markFailed(ctx context.Context, workflowID, errMsg string) erro
 
 	// Determine retry target state based on where it failed
 	retryState := e.retryTargetState(wf.State)
+	if retryState == StateSearching {
+		// Nothing services workflows parked in "searching": autosearch creates
+		// a fresh workflow per grab and treats any active workflow as
+		// "already grabbed". Parking here would block re-searches and leave
+		// the media stuck as downloading, so fail terminally instead and let
+		// the caller (or the rolling searcher) look for a new release.
+		telemetry.ObserveWorkflowRetry(wf.State, "research")
+		return e.failTerminal(ctx, wf, errMsg)
+	}
 	telemetry.ObserveWorkflowRetry(wf.State, "retrying")
 	ok, transErr := e.store.Transition(ctx, workflowID, wf.State, retryState,
 		fmt.Sprintf("Retry %d/%d: %s", retryCount, wf.MaxRetries, errMsg))
@@ -320,6 +319,40 @@ func (e *Engine) markFailed(ctx context.Context, workflowID, errMsg string) erro
 		e.logger.Info("workflow retrying",
 			"id", workflowID, "from", wf.State, "to", retryState,
 			"retry", retryCount, "max", wf.MaxRetries)
+	}
+	return nil
+}
+
+// FailTerminal transitions an active workflow straight to failed without
+// consuming retries, records the reason, and resets the media status so the
+// title is searchable again. It is used when the release itself is bad
+// (stalled, failed in the client, unimportable) and retrying it is pointless.
+func (e *Engine) FailTerminal(ctx context.Context, workflowID, reason string) error {
+	ctx = WithWorkflowID(ctx, workflowID)
+	wf, err := e.store.Get(ctx, workflowID)
+	if err != nil {
+		return err
+	}
+	if wf.IsTerminal() {
+		return nil
+	}
+	return e.failTerminal(ctx, wf, reason)
+}
+
+func (e *Engine) failTerminal(ctx context.Context, wf *Workflow, reason string) error {
+	if err := e.store.SetError(ctx, wf.ID, reason); err != nil {
+		e.logger.Warn("failed to record workflow error", "id", wf.ID, "error", err)
+	}
+	if err := e.store.MergeMetadata(ctx, wf.ID, map[string]any{MetaFailedFrom: wf.State}); err != nil {
+		e.logger.Warn("failed to record failed-from state", "id", wf.ID, "error", err)
+	}
+	ok, err := e.store.Transition(ctx, wf.ID, wf.State, StateFailed, reason)
+	if err != nil {
+		return err
+	}
+	if ok {
+		e.resetMediaStatus(ctx, wf)
+		e.logger.Warn("workflow failed", "id", wf.ID, "from", wf.State, "reason", reason)
 	}
 	return nil
 }
@@ -386,6 +419,7 @@ func (e *Engine) RecoverToImporting(ctx context.Context, workflowID, reason stri
 	if !ok {
 		return fmt.Errorf("workflow %s not in failed state", workflowID)
 	}
+	e.restoreMediaDownloading(ctx, workflowID)
 	e.logger.Info("workflow recovered to importing", "id", workflowID, "reason", reason)
 	return nil
 }
@@ -404,6 +438,7 @@ func (e *Engine) RecoverToPostDownload(ctx context.Context, workflowID, reason s
 	if !ok {
 		return fmt.Errorf("workflow %s not in failed state", workflowID)
 	}
+	e.restoreMediaDownloading(ctx, workflowID)
 	e.logger.Info("workflow recovered to post_download", "id", workflowID, "reason", reason)
 	return nil
 }
@@ -422,6 +457,7 @@ func (e *Engine) RecoverToDownloading(ctx context.Context, workflowID, reason st
 	if !ok {
 		return fmt.Errorf("workflow %s not in failed state", workflowID)
 	}
+	e.restoreMediaDownloading(ctx, workflowID)
 	e.logger.Info("workflow recovered to downloading", "id", workflowID, "reason", reason)
 	return nil
 }
@@ -469,6 +505,9 @@ func (e *Engine) CompleteImport(ctx context.Context, workflowID string) error {
 // FailImport transitions an import workflow to failed.
 func (e *Engine) FailImport(ctx context.Context, workflowID, reason string) error {
 	ctx = WithWorkflowID(ctx, workflowID)
+	if err := e.store.SetError(ctx, workflowID, reason); err != nil {
+		return err
+	}
 	ok, err := e.store.Transition(ctx, workflowID, StateImporting, StateFailed, reason)
 	if err != nil {
 		return err
@@ -498,9 +537,41 @@ func (e *Engine) retryTargetState(failedState string) string {
 	}
 }
 
-// resetMediaStatus sets all workflow media items back to missing.
+// setMediaDownloading marks all workflow media items as downloading.
+func (e *Engine) setMediaDownloading(ctx context.Context, wf *Workflow) {
+	for _, item := range wf.Items {
+		switch item.MediaType {
+		case MediaTypeMovie:
+			if err := e.media.SetMovieDownloading(ctx, item.MediaID); err != nil {
+				e.logger.Warn("failed to set movie downloading", "movie_id", item.MediaID, "error", err)
+			}
+		case MediaTypeEpisode:
+			if err := e.media.SetEpisodeDownloading(ctx, item.MediaID); err != nil {
+				e.logger.Warn("failed to set episode downloading", "episode_id", item.MediaID, "error", err)
+			}
+		}
+	}
+}
+
+// restoreMediaDownloading re-marks media as downloading after a failed
+// workflow is recovered (failure reset it to missing).
+func (e *Engine) restoreMediaDownloading(ctx context.Context, workflowID string) {
+	wf, err := e.store.Get(ctx, workflowID)
+	if err != nil {
+		e.logger.Warn("failed to load recovered workflow", "id", workflowID, "error", err)
+		return
+	}
+	e.setMediaDownloading(ctx, wf)
+}
+
+// resetMediaStatus sets all workflow media items back to missing. Items that
+// are still owned by another active workflow (e.g. a replacement grab) are
+// left alone so their downloading status isn't clobbered.
 func (e *Engine) resetMediaStatus(ctx context.Context, wf *Workflow) {
 	for _, item := range wf.Items {
+		if other, err := e.store.FindActiveForMedia(ctx, item.MediaType, item.MediaID); err == nil && other != nil && other.ID != wf.ID {
+			continue
+		}
 		if item.MediaType == MediaTypeMovie {
 			if err := e.media.SetMovieMissing(ctx, item.MediaID); err != nil {
 				e.logger.Warn("failed to reset movie status", "movie_id", item.MediaID, "error", err)

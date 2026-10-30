@@ -71,7 +71,7 @@ type sqlRepo struct {
 }
 
 // movie column list used by all SELECT queries
-const movieColumns = `id, title, year, imdb_id, tmdb_id, tvdb_id, overview, genres, runtime, rating, backdrop_path, poster_path, metadata_provider, quality_profile_id, library_id, status, release_date, last_search_at, monitoring_status, created_at, updated_at, deleted_at`
+const movieColumns = `id, title, year, imdb_id, tmdb_id, tvdb_id, overview, genres, runtime, rating, backdrop_path, poster_path, metadata_provider, quality_profile_id, library_id, status, release_date, last_search_at, monitoring_status, created_at, updated_at, deleted_at, ` + MissingQualityProfileSQL
 
 // scanMovie scans a movie row from the database.
 func scanMovie(scanner interface {
@@ -82,7 +82,7 @@ func scanMovie(scanner interface {
 	err := scanner.Scan(&movie.ID, &movie.Title, &movie.Year, &movie.IMDBID, &movie.TMDBID, &movie.TVDBID, &movie.Overview, &genreBytes,
 		&movie.Runtime, &movie.Rating, &movie.BackdropPath, &movie.PosterPath, &movie.MetadataProvider,
 		&movie.QualityProfileID, &movie.LibraryID, &movie.Status, &movie.ReleaseDate,
-		&movie.LastSearchAt, &movie.MonitoringStatus, &movie.CreatedAt, &movie.UpdatedAt, &movie.DeletedAt)
+		&movie.LastSearchAt, &movie.MonitoringStatus, &movie.CreatedAt, &movie.UpdatedAt, &movie.DeletedAt, &movie.QualityProfileMissing)
 	if err != nil {
 		return nil, err
 	}
@@ -95,8 +95,17 @@ func scanMovie(scanner interface {
 // Movie operations
 
 func (r *sqlRepo) AddMovie(ctx context.Context, movie *Movie) error {
+	profileID, err := ResolveQualityProfileID(ctx, r.db, movie.QualityProfileID)
+	if err != nil {
+		return err
+	}
+	movie.QualityProfileID = profileID
+	movie.QualityProfileMissing, err = IsQualityProfileMissing(ctx, r.db, profileID)
+	if err != nil {
+		return err
+	}
 	genreBytes, _ := json.Marshal(movie.Genres)
-	_, err := r.db.ExecContext(ctx,
+	_, err = r.db.ExecContext(ctx,
 		`INSERT INTO movies (id, title, year, imdb_id, tmdb_id, tvdb_id, overview, genres, runtime, rating, backdrop_path, poster_path, metadata_provider, quality_profile_id, library_id, status, release_date, monitoring_status, created_at, updated_at)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		movie.ID, movie.Title, movie.Year, movie.IMDBID, movie.TMDBID, movie.TVDBID, movie.Overview, string(genreBytes),
@@ -113,8 +122,13 @@ func (r *sqlRepo) GetMovie(ctx context.Context, id string) (*Movie, error) {
 }
 
 func (r *sqlRepo) UpdateMovie(ctx context.Context, movie *Movie) error {
+	missing, err := IsQualityProfileMissing(ctx, r.db, movie.QualityProfileID)
+	if err != nil {
+		return err
+	}
+	movie.QualityProfileMissing = missing
 	genreBytes, _ := json.Marshal(movie.Genres)
-	_, err := r.db.ExecContext(ctx,
+	_, err = r.db.ExecContext(ctx,
 		`UPDATE movies SET title = ?, year = ?, overview = ?, genres = ?, runtime = ?, rating = ?, backdrop_path = ?, poster_path = ?,
 		 quality_profile_id = ?, library_id = ?, status = ?, release_date = ?, monitoring_status = ?, updated_at = ?
 		 WHERE id = ? AND deleted_at IS NULL`,
