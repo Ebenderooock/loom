@@ -7,33 +7,12 @@ import {
 } from "@/components/quality-profile-warning";
 import type { Series, QualityProfile } from "./types";
 import { titleImage } from "@/components/titles/title-metadata";
-
-function getEpisodeProgressInfo(series: Series) {
-  const stats = series.episodeStats;
-  if (!stats || stats.airedEpisodes === 0) {
-    return {
-      percent: 0,
-      downloaded: 0,
-      total: 0,
-      color: "#6b7280",
-      label: "No episodes",
-    };
-  }
-  const downloaded = stats.downloadedEpisodes;
-  const total = stats.airedEpisodes;
-  const percent = total > 0 ? Math.round((downloaded / total) * 100) : 0;
-
-  let color: string;
-  if (downloaded === 0) {
-    color = "#ef4444"; // red – nothing downloaded
-  } else if (downloaded < total) {
-    color = "#f59e0b"; // amber – partial
-  } else {
-    color = "#10b981"; // green – all downloaded
-  }
-
-  return { percent, downloaded, total, color, label: `${downloaded}/${total}` };
-}
+import {
+  getEpisodeProgressInfo,
+  SeriesStatusAccent,
+  SeriesStatusBadge,
+} from "./series-status";
+import { MonitoringLabel } from "@/components/movies/status-badge";
 
 export function SeriesCard({
   series,
@@ -72,21 +51,7 @@ export function SeriesCard({
       }}
     >
       {/* Episode progress bar at top */}
-      <div className="absolute left-0 right-0 top-0 z-10 h-[3px] bg-gray-700/50">
-        <div
-          className="h-full transition-all duration-300"
-          style={{
-            width: `${progress.percent}%`,
-            backgroundColor: progress.color,
-          }}
-        />
-      </div>
-      <div
-        className="pointer-events-none absolute left-0 right-0 top-[3px] z-10 h-3"
-        style={{
-          background: `linear-gradient(180deg, ${progress.color}25, transparent)`,
-        }}
-      />
+      <SeriesStatusAccent series={series} />
 
       {/* Poster */}
       <div className="aspect-[2/3] bg-muted">
@@ -136,20 +101,8 @@ export function SeriesCard({
       {/* Status bar at bottom */}
       <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/60 to-transparent p-3 pt-8">
         <div className="flex items-center justify-between gap-1">
-          <span
-            className="rounded px-1.5 py-0.5 text-[10px] font-medium"
-            style={{
-              color: progress.color,
-              backgroundColor: `${progress.color}20`,
-            }}
-          >
-            {progress.total > 0 ? `${progress.label} episodes` : series.status}
-          </span>
-          {series.monitoringStatus === "unmonitored" && (
-            <span className="text-[10px] uppercase tracking-wider text-gray-500">
-              Unmonitored
-            </span>
-          )}
+          <SeriesStatusBadge series={series} />
+          <MonitoringLabel status={series.monitoringStatus} />
         </div>
         <h3 className="mt-1 truncate text-sm font-semibold text-white">
           {series.title}

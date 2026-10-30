@@ -83,6 +83,7 @@ func encode(c *Collection) ([]byte, error) {
 	for i := range copy.Members {
 		m := &copy.Members[i]
 		m.MediaID, m.LibraryID, m.InLibrary, m.Monitored, m.HasFile = "", "", false, false, nil
+		m.Status, m.MonitoringStatus, m.EpisodeStats = "", "", nil
 	}
 	body, err := json.Marshal(copy)
 	if len(body) > 8<<20 {

@@ -1,5 +1,6 @@
 import {
   cleanup,
+  act,
   render,
   screen,
   waitFor,
@@ -308,6 +309,37 @@ describe("Standalone Collections", () => {
         { url: "/api/v1/collections/discover", method: "POST", body: {} },
       ]),
     );
+  });
+  it("polls canonical status Missing -> Downloading -> Available without treating membership as files", async () => {
+    state.search = { id: collection.id };
+    collection.members[0] = { ...collection.members[0]!, status: "missing" };
+    vi.useFakeTimers();
+    try {
+      page();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(10);
+      });
+      const card = screen.getByRole("button", { name: "Manage A movie" });
+      expect(within(card).getByText("Missing")).toBeInTheDocument();
+      for (const [status, label] of [
+        ["downloading", "Downloading"],
+        ["available_right_quality", "Available"],
+      ] as const) {
+        collection.members[0] = {
+          ...collection.members[0]!,
+          status,
+          has_file: status === "available_right_quality",
+        };
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(30_000);
+        });
+        expect(within(card).getByText(label)).toBeInTheDocument();
+      }
+      expect(within(card).queryByText("available")).not.toBeInTheDocument();
+      expect(requests).toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
   it("lists persisted collections with optional library and media filters", async () => {
     page();

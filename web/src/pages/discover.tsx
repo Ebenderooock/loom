@@ -1,4 +1,6 @@
 import * as React from "react";
+import { useQuery } from "@tanstack/react-query";
+import { loadLibraryTitles } from "@/lib/collections-api";
 import {
   useDiscover,
   type DiscoverItem,
@@ -274,6 +276,16 @@ function DiscoverCard({
       : provider === "imdb"
         ? item.imdb_id
         : item.tvdb_id;
+  const libraryMedia = mediaType === "series" ? "series" : "movie";
+  const library = useQuery({
+    queryKey: ["collection-picker-library", mediaType],
+    queryFn: ({ signal }) => loadLibraryTitles(libraryMedia, signal),
+    enabled: inLibrary && mediaType !== "music",
+    refetchInterval: 30_000,
+  });
+  const local = providerId
+    ? library.data?.find((row) => row[provider] === providerId)
+    : undefined;
 
   return (
     <div className="min-w-0">
@@ -282,10 +294,23 @@ function DiscoverCard({
         poster={item.poster_path}
         year={item.year}
         inLibrary={inLibrary}
+        mediaType={libraryMedia}
+        status={local?.status}
+        episodeStats={local?.episodeStats}
+        monitoringStatus={local?.monitoringStatus}
         onOpen={() => setView("details")}
         onAdd={() => setView("add")}
         disabled={!providerId}
       />
+      {inLibrary && library.error && (
+        <button
+          type="button"
+          className="text-xs text-destructive"
+          onClick={() => void library.refetch()}
+        >
+          Unable to load library status. Retry
+        </button>
+      )}
       {!providerId && (
         <p className="text-xs text-muted-foreground">
           No provider identity is available for this title.

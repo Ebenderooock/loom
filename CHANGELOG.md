@@ -102,6 +102,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Collection and Discover cards now match library card status, including
+  Downloading, Importing, Available and series episode progress, with shared
+  badges and status strips instead of inferring availability from file presence.
 - Opening a title whose local ID contains punctuation (for example `%`, `:`,
   `&`) no longer fails with a 500 after adding it from a collection; route IDs
   are encoded by the UI and decoded exactly once by the API.

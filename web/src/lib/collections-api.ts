@@ -1,5 +1,6 @@
 import { apiFetch } from "@/lib/fetch";
 import type { TitleIdentity } from "@/lib/title-api";
+import type { EpisodeStats } from "@/components/series/types";
 
 export interface CollectionSource {
   provider: "tmdb" | "imdb" | "tvdb";
@@ -27,6 +28,9 @@ export interface CollectionMember {
   in_library: boolean;
   monitored: boolean;
   has_file?: boolean;
+  status?: string;
+  monitoring_status?: string;
+  episode_stats?: EpisodeStats;
 }
 
 export interface LoomCollection {
@@ -130,6 +134,11 @@ export interface LibraryTitle {
   year?: number;
   poster?: string;
   tmdb?: string;
+  imdb?: string;
+  tvdb?: string;
+  status?: string;
+  monitoringStatus?: string;
+  episodeStats?: EpisodeStats;
 }
 
 /** Loads every movie (paginated) or show in the library for local search. */
@@ -159,6 +168,14 @@ export async function loadLibraryTitles(
         year: Number(row.year) || undefined,
         poster: String(row.posterPath ?? row.poster_path ?? "") || undefined,
         tmdb: tmdb ? String(tmdb) : undefined,
+        imdb: typeof row.imdbId === "string" ? row.imdbId : undefined,
+        tvdb: typeof row.tvdbId === "string" ? row.tvdbId : undefined,
+        status: typeof row.status === "string" ? row.status : undefined,
+        monitoringStatus:
+          typeof row.monitoringStatus === "string"
+            ? row.monitoringStatus
+            : undefined,
+        episodeStats: row.episodeStats as EpisodeStats | undefined,
       });
     }
     if (media !== "movie" || rows.length < 1000) return out;
@@ -252,11 +269,32 @@ export function matchesMember(
       : !member.excluded &&
         (!status ||
           (status === "added" && member.in_library) ||
-          (status === "missing" && !member.in_library) ||
+          (status === "external" && !member.in_library) ||
+          (member.in_library &&
+            status === "missing" &&
+            (member.media_type === "movie"
+              ? member.status === "missing"
+              : !!member.episode_stats &&
+                member.episode_stats.airedEpisodes >
+                  member.episode_stats.downloadedEpisodes)) ||
+          (member.in_library &&
+            status === "available" &&
+            (member.media_type === "movie"
+              ? member.status?.startsWith("available_")
+              : !!member.episode_stats &&
+                member.episode_stats.airedEpisodes > 0 &&
+                member.episode_stats.downloadedEpisodes >=
+                  member.episode_stats.airedEpisodes)) ||
+          (member.in_library &&
+            (status === "downloading" || status === "storing") &&
+            member.media_type === "movie" &&
+            member.status === status) ||
           (status === "upcoming" &&
-            !!member.release_date &&
-            member.release_date.slice(0, 10) >
-              new Date().toISOString().slice(0, 10)) ||
+            (member.in_library
+              ? member.status === "unreleased"
+              : !!member.release_date &&
+                member.release_date.slice(0, 10) >
+                  new Date().toISOString().slice(0, 10))) ||
           (status === "monitored" && member.monitored) ||
           (status === "files" && member.has_file === true)))
   );

@@ -44,6 +44,8 @@ const collection = {
       in_library: true,
       media_id: "actual-movie",
       library_id: "lib-1",
+      status: "missing",
+      monitoring_status: "monitored",
       has_file: false,
       monitored: true,
     },
@@ -255,6 +257,109 @@ test("suggestions need no Import Lists and require an explicit add", async ({
       ]),
     );
   expect(writes).toHaveLength(1);
+});
+
+test("library and collection card status stay identical during acquisition", async ({
+  page,
+}, testInfo) => {
+  await page.clock.install();
+  let status = "missing";
+  const movie = () => ({
+    id: "actual-movie",
+    tmdbId: "101",
+    title: "Jurassic World",
+    year: 2015,
+    status,
+    posterPath: "/jurassic.jpg",
+    monitoringStatus: "monitored",
+    qualityProfileId: "qp-1",
+    libraryId: "lib-1",
+    genres: [],
+    overview: "",
+    rating: 0,
+  });
+  const currentCollection = () => ({
+    ...collection,
+    members: collection.members.map((m, i) =>
+      i === 0
+        ? {
+            ...m,
+            title: movie().title,
+            poster_path: movie().posterPath,
+            status,
+            has_file: status === "available_right_quality",
+          }
+        : m,
+    ),
+  });
+  await page.route("**/api/v1/movies?*", (route) =>
+    route.fulfill({ json: { data: [movie()], total: 1 } }),
+  );
+  await page.route("**/api/v1/collections/loom-collection", (route) =>
+    route.fulfill({ json: currentCollection() }),
+  );
+
+  status = "downloading";
+  await page.goto("/movies");
+  await page.waitForLoadState("networkidle");
+  const libraryCard = page
+    .getByRole("button")
+    .filter({ hasText: "Jurassic World" })
+    .first();
+  await expect(
+    libraryCard.getByText("Downloading", { exact: true }).first(),
+  ).toBeVisible();
+  const libraryBadge = await libraryCard
+    .getByText("Downloading", { exact: true })
+    .first()
+    .evaluate((el) => ({
+      color: getComputedStyle(el).color,
+      dot: getComputedStyle(el.querySelector("span")!).backgroundColor,
+    }));
+  const libraryStrip = await libraryCard
+    .locator(".h-\\[3px\\]")
+    .evaluate((el) => el.getAttribute("style"));
+  await page.screenshot({
+    path: testInfo.outputPath("library-downloading.png"),
+    fullPage: true,
+  });
+
+  await page.goto("/collections?id=loom-collection");
+  await page.waitForLoadState("networkidle");
+  const card = page.getByRole("button", {
+    name: "Manage Jurassic World",
+    exact: true,
+  });
+  await expect(card.getByText("Downloading", { exact: true })).toBeVisible();
+  expect(
+    await card.getByText("Downloading", { exact: true }).evaluate((el) => ({
+      color: getComputedStyle(el).color,
+      dot: getComputedStyle(el.querySelector("span")!).backgroundColor,
+    })),
+  ).toEqual(libraryBadge);
+  expect(
+    await card
+      .locator(".h-\\[3px\\]")
+      .evaluate((el) => el.getAttribute("style")),
+  ).toBe(libraryStrip);
+  await page.screenshot({
+    path: testInfo.outputPath("collection-downloading.png"),
+    fullPage: true,
+  });
+
+  status = "available_right_quality";
+  await page.clock.fastForward(30_000);
+  await expect(card.getByText("Available", { exact: true })).toBeVisible();
+  await expect(card.getByText("available", { exact: true })).toHaveCount(0);
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
+  await page.screenshot({
+    path: testInfo.outputPath("collection-available.png"),
+    fullPage: true,
+  });
 });
 
 test("standalone mixed collections open real library management and shared external details", async ({

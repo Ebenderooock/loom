@@ -6,6 +6,14 @@ library and titles not yet added to a library. A title can belong to any number
 of collections. Membership does not imply monitoring, imported files, or
 availability on a media server.
 
+Library members use the same live card status as their library: movies retain
+acquisition and quality states (for example Downloading, Importing, Available),
+and shows use the same downloaded/aired episode counts and progress bar.
+Membership, monitoring and file presence remain separate. Collections refresh
+this state every 30 seconds; provider-source refresh is not required.
+Status filters distinguish **Not in library** from **Missing** library media.
+For shows, **Available** means all aired episodes are downloaded, not just one.
+
 ## Creating and maintaining collections
 
 Administrators can:

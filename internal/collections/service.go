@@ -343,6 +343,7 @@ type libraryRecord struct {
 	member  Member
 	profile string
 	file    func() (*bool, error)
+	stats   func() (*series.EpisodeStats, error)
 	// missing counts monitored aired episodes without files (series only).
 	missing func() (int, error)
 }
@@ -370,7 +371,7 @@ func (s *Service) library(ctx context.Context) ([]libraryRecord, error) {
 		putID(ids, "imdb", movie.IMDBID)
 		putID(ids, "tvdb", movie.TVDBID)
 		id := movie.ID
-		out = append(out, libraryRecord{member: Member{MediaType: "movie", Title: movie.Title, Year: movie.Year, PosterPath: movie.PosterPath, Overview: movie.Overview, ReleaseDate: movie.ReleaseDate, ExternalIDs: ids, InLibrary: true, MediaID: id, LibraryID: movie.LibraryID, Monitored: movie.MonitoringStatus == "monitored"}, profile: movie.QualityProfileID, file: func() (*bool, error) {
+		out = append(out, libraryRecord{member: Member{MediaType: "movie", Title: movie.Title, Year: movie.Year, PosterPath: movie.PosterPath, Overview: movie.Overview, ReleaseDate: movie.ReleaseDate, ExternalIDs: ids, InLibrary: true, MediaID: id, LibraryID: movie.LibraryID, Status: string(movie.Status), MonitoringStatus: string(movie.MonitoringStatus), Monitored: movie.MonitoringStatus == "monitored"}, profile: movie.QualityProfileID, file: func() (*bool, error) {
 			files, err := s.movies.ListMovieFiles(ctx, id)
 			if err != nil {
 				return nil, err
@@ -394,15 +395,25 @@ func (s *Service) library(ctx context.Context) ([]libraryRecord, error) {
 		putID(ids, "imdb", show.IMDBID)
 		putID(ids, "tvdb", show.TVDBID)
 		id := show.ID
-		out = append(out, libraryRecord{member: Member{MediaType: "series", Title: show.Title, Year: show.Year, PosterPath: show.PosterPath, Overview: show.Overview, ExternalIDs: ids, InLibrary: true, MediaID: id, LibraryID: show.LibraryID, Monitored: show.MonitoringStatus != "none" && show.MonitoringStatus != "unmonitored" && show.MonitoringStatus != "archived"}, profile: show.QualityProfileID, file: func() (*bool, error) {
-			stats, err := s.series.GetEpisodeStats(ctx, id)
+		var stats *series.EpisodeStats
+		var statsErr error
+		loaded := false
+		loadStats := func() (*series.EpisodeStats, error) {
+			if !loaded {
+				stats, statsErr = s.series.GetEpisodeStats(ctx, id)
+				loaded = true
+			}
+			return stats, statsErr
+		}
+		out = append(out, libraryRecord{member: Member{MediaType: "series", Title: show.Title, Year: show.Year, PosterPath: show.PosterPath, Overview: show.Overview, ExternalIDs: ids, InLibrary: true, MediaID: id, LibraryID: show.LibraryID, Status: string(show.Status), MonitoringStatus: string(show.MonitoringStatus), Monitored: show.MonitoringStatus != "none" && show.MonitoringStatus != "unmonitored" && show.MonitoringStatus != "archived"}, profile: show.QualityProfileID, stats: loadStats, file: func() (*bool, error) {
+			stats, err := loadStats()
 			if err != nil {
 				return nil, err
 			}
 			has := stats != nil && stats.DownloadedEpisodes > 0
 			return &has, nil
 		}, missing: func() (int, error) {
-			stats, err := s.series.GetEpisodeStats(ctx, id)
+			stats, err := loadStats()
 			if err != nil || stats == nil {
 				return 0, err
 			}
@@ -417,6 +428,7 @@ func decorate(c *Collection, library []libraryRecord, files bool) error {
 	for i := range c.Members {
 		m := &c.Members[i]
 		m.InLibrary, m.MediaID, m.LibraryID, m.Monitored, m.HasFile = false, "", "", false, nil
+		m.Status, m.MonitoringStatus, m.EpisodeStats = "", "", nil
 		for _, record := range library {
 			if record.member.MediaType != m.MediaType {
 				continue
@@ -438,6 +450,14 @@ func decorate(c *Collection, library []libraryRecord, files bool) error {
 				return ErrConflict
 			}
 			m.InLibrary, m.MediaID, m.LibraryID, m.Monitored = true, record.member.MediaID, record.member.LibraryID, record.member.Monitored
+			m.Status, m.MonitoringStatus, m.EpisodeStats = record.member.Status, record.member.MonitoringStatus, record.member.EpisodeStats
+			if record.stats != nil {
+				stats, err := record.stats()
+				if err != nil {
+					return err
+				}
+				m.EpisodeStats = stats
+			}
 			if files {
 				has, err := record.file()
 				if err != nil {
