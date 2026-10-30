@@ -84,7 +84,7 @@ in `api/openapi/loom.yaml`.
 | `POST` | `/api/v1/collections/` | admin | `200 LoomCollection` | Create a local collection or import an exact TMDB/IMDb/TVDB source. |
 | `POST` | `/api/v1/collections/discover` | admin | `200 CollectionScanStatus` | Queue an optional background rescan; never calls providers in the request. |
 | `GET` | `/api/v1/collections/scan` | apiKey/bearer/cookie | `200 CollectionScanStatus` | Read durable progress, pending counts and retryable discovery issues. |
-| `GET` | `/api/v1/collections/{id}` | apiKey/bearer/cookie | `200 LoomCollection` | Read members and current library/file state; merged IDs resolve to the retained collection. |
+| `GET` | `/api/v1/collections/{id}` | apiKey/bearer/cookie | `200 LoomCollection` | Read members and live library status, monitoring state, series episode statistics and file state; merged IDs resolve to the retained collection. |
 | `PATCH` | `/api/v1/collections/{id}` | admin | `200 LoomCollection` | Edit collection metadata with an optimistic revision. |
 | `POST` | `/api/v1/collections/{id}/sources` | admin | `200 LoomCollection` | Attach and refresh another exact provider source. |
 | `POST` | `/api/v1/collections/{id}/refresh` | admin | `200 LoomCollection` | Reconcile attached sources while preserving local additions and exclusions. |

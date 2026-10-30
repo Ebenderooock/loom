@@ -94,6 +94,7 @@ export function CollectionsPage() {
   const libraries = useLibraries();
   const list = useQuery({
     queryKey: collectionKeys.all,
+    refetchInterval: 30_000,
     queryFn: ({ signal }) =>
       collectionRequest<{ items: LoomCollection[] }>(
         "",
@@ -411,7 +412,11 @@ function Filters({
         >
           <option value="">All active members</option>
           <option value="added">Added to Loom</option>
-          <option value="missing">Not in library</option>
+          <option value="external">Not in library</option>
+          <option value="missing">Missing</option>
+          <option value="downloading">Downloading</option>
+          <option value="storing">Importing</option>
+          <option value="available">Available</option>
           <option value="upcoming">Upcoming</option>
           <option value="monitored">Monitored</option>
           {fileFilter && <option value="files">Has imported files</option>}
@@ -450,6 +455,7 @@ function CollectionDetails({
   const [bulk, setBulk] = useState<{ kind: BulkKind; ids?: string[] }>();
   const detail = useQuery({
     queryKey: collectionKeys.detail(id),
+    refetchInterval: 30_000,
     queryFn: ({ signal }) =>
       collectionRequest<LoomCollection>(
         `/${encodeURIComponent(id)}`,
@@ -593,7 +599,10 @@ function CollectionDetails({
                       title={m.title}
                       poster={m.poster_path}
                       year={m.year}
-                      available={m.has_file}
+                      status={m.status}
+                      mediaType={m.media_type}
+                      episodeStats={m.episode_stats}
+                      monitoringStatus={m.monitoring_status}
                       inLibrary={m.in_library}
                       onOpen={() => (selecting ? toggle(m.id) : setSelected(m))}
                       onAdd={

@@ -1,13 +1,12 @@
 import { Checkbox } from "@/components/ui/checkbox";
 import { Film, Star } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { StatusBadge } from "./status-badge";
+import { MonitoringLabel, StatusAccent, StatusBadge } from "./status-badge";
 import {
   isMissingQualityProfile,
   MissingQualityProfileBadge,
 } from "@/components/quality-profile-warning";
 import type { Movie, QualityProfile } from "./types";
-import { STATUS_CONFIG } from "./types";
 import { titleImage } from "@/components/titles/title-metadata";
 
 export function MovieCard({
@@ -27,7 +26,6 @@ export function MovieCard({
 }) {
   const profile = profiles.find((p) => p.id === movie.qualityProfileId);
   const missingProfile = isMissingQualityProfile(movie);
-  const statusColor = STATUS_CONFIG[movie.status]?.border ?? "#6b7280";
 
   return (
     <div
@@ -46,18 +44,7 @@ export function MovieCard({
       }}
     >
       {/* Status accent — thin gradient bar at top */}
-      <div
-        className="absolute left-0 right-0 top-0 z-10 h-[3px]"
-        style={{
-          background: `linear-gradient(90deg, ${statusColor}, ${statusColor}cc 60%, transparent)`,
-        }}
-      />
-      <div
-        className="pointer-events-none absolute left-0 right-0 top-[3px] z-10 h-3"
-        style={{
-          background: `linear-gradient(180deg, ${statusColor}25, transparent)`,
-        }}
-      />
+      <StatusAccent status={movie.status} />
       {/* Poster */}
       <div className="aspect-[2/3] bg-muted">
         {movie.posterPath ? (
@@ -100,11 +87,7 @@ export function MovieCard({
       <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/95 via-black/70 to-transparent p-3 pt-8">
         <div className="flex items-center justify-between gap-1">
           <StatusBadge status={movie.status} />
-          {movie.monitoringStatus === "unmonitored" && (
-            <span className="text-[10px] uppercase tracking-wider text-gray-500">
-              Unmonitored
-            </span>
-          )}
+          <MonitoringLabel status={movie.monitoringStatus} />
         </div>
         <h3 className="mt-1 truncate text-sm font-semibold text-white">
           {movie.title}

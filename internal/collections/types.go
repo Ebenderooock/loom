@@ -6,6 +6,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/ebenderooock/loom/internal/series"
 )
 
 var (
@@ -56,11 +58,14 @@ type Member struct {
 	Local       bool              `json:"local"`
 	Excluded    bool              `json:"excluded"`
 	// Library state is computed on reads, never persisted as membership.
-	MediaID   string `json:"media_id,omitempty"`
-	LibraryID string `json:"library_id,omitempty"`
-	InLibrary bool   `json:"in_library"`
-	Monitored bool   `json:"monitored"`
-	HasFile   *bool  `json:"has_file,omitempty"`
+	MediaID          string               `json:"media_id,omitempty"`
+	LibraryID        string               `json:"library_id,omitempty"`
+	InLibrary        bool                 `json:"in_library"`
+	Monitored        bool                 `json:"monitored"`
+	HasFile          *bool                `json:"has_file,omitempty"`
+	Status           string               `json:"status,omitempty"`
+	MonitoringStatus string               `json:"monitoring_status,omitempty"`
+	EpisodeStats     *series.EpisodeStats `json:"episode_stats,omitempty"`
 }
 
 // Validate accepts only bounded movie/show titles and supported external IDs.

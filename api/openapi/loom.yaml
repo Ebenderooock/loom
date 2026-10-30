@@ -3304,6 +3304,21 @@ components:
         library_id: { type: string }
         in_library: { type: boolean }
         monitored: { type: boolean }
+        status:
+          type: string
+          description: Live canonical library status (movie acquisition/quality status, show broadcast status). Absent for external-only members.
+        monitoring_status:
+          type: string
+          description: Live library monitoring state, independent of file or acquisition status.
+        episode_stats:
+          type: object
+          description: Same aired/downloaded episode counts as the series library cards. Computed on reads, never persisted.
+          properties:
+            totalEpisodes: { type: integer }
+            downloadedEpisodes: { type: integer }
+            monitoredEpisodes: { type: integer }
+            missingEpisodes: { type: integer }
+            airedEpisodes: { type: integer }
         has_file:
           type: boolean
           description: Computed on detail reads. For shows, at least one imported episode file.

@@ -181,4 +181,44 @@ describe("Discover recommendations", () => {
     );
     expect(state.writes).toEqual([]);
   });
+  it("uses the live library acquisition status for an already-added import-list movie", async () => {
+    const original = vi.mocked(fetch).getMockImplementation()!;
+    vi.mocked(fetch).mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.startsWith("/api/v1/import-lists/discover"))
+        return Response.json({
+          data: [
+            {
+              id: "list-item",
+              title: "Jurassic World",
+              tmdb_id: "135397",
+              in_library: true,
+              list_name: "Dinosaurs",
+              year: 2015,
+            },
+          ],
+        });
+      if (url.startsWith("/api/v1/movies?"))
+        return Response.json({
+          data: [
+            {
+              id: "jurassic-world",
+              title: "Jurassic World",
+              tmdbId: "135397",
+              status: "downloading",
+              monitoringStatus: "monitored",
+            },
+          ],
+        });
+      return original(input, init);
+    });
+    page();
+    await userEvent.click(screen.getByRole("tab", { name: "Import Lists" }));
+    const card = await screen.findByRole("button", {
+      name: "View details for Jurassic World",
+    });
+    await waitFor(() => expect(card).toHaveTextContent("Downloading"));
+    expect(card).not.toHaveTextContent("Missing");
+    expect(state.writes).toEqual([]);
+  });
 });
