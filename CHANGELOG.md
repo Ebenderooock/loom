@@ -107,6 +107,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Music artist search no longer fails with `Unexpected token '<'` after the
+  Music feature is enabled at runtime: the flag now gates the music API per
+  request instead of only at startup. Unknown `/api` paths return a JSON 404
+  instead of the web app's HTML, and the artist folder rescan button uses the
+  correct API path.
 - Collection and Discover cards now match library card status, including
   Downloading, Importing, Available and series episode progress, with shared
   badges and status strips instead of inferring availability from file presence.
