@@ -212,10 +212,16 @@ function GrabButton({
 }) {
   const grab = useGrabRelease();
   const [grabbing, setGrabbing] = useState(false);
+  const [grabbed, setGrabbed] = useState(false);
+  const [error, setError] = useState("");
+  const inFlight = useRef(false);
 
   const doGrab = useCallback(
     async (clientId: string) => {
+      if (inFlight.current || grabbed) return;
+      inFlight.current = true;
       setGrabbing(true);
+      setError("");
       try {
         await grab.mutateAsync({
           clientId,
@@ -228,81 +234,112 @@ function GrabButton({
           ...mediaContext,
           ...(ignoreBlocklist ? { ignore_blocklist: true } : {}),
         });
+        setGrabbed(true);
         toast.success(`Grabbed: ${result.title}`);
       } catch (err) {
         if (err instanceof ApiError && err.code === "blocklisted") {
-          toast.error(
-            "This release is blocklisted. Enable “Ignore blocklist” to grab it anyway.",
-          );
+          const message =
+            "This release is blocklisted. Enable “Ignore blocklist” to grab it anyway.";
+          setError(message);
+          toast.error(message);
         } else {
           const msg = err instanceof Error ? err.message : "Grab failed";
+          setError(msg);
           toast.error(msg);
         }
       } finally {
+        inFlight.current = false;
         setGrabbing(false);
       }
     },
-    [grab, result, mediaContext, ignoreBlocklist],
+    [grab, result, mediaContext, ignoreBlocklist, grabbed],
   );
+
+  const label = grabbing ? "Sending…" : grabbed ? "Sent" : "Download";
+  const icon = grabbing ? (
+    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+  ) : grabbed ? (
+    <CheckCircle2 className="h-3.5 w-3.5" />
+  ) : (
+    <Download className="h-3.5 w-3.5" />
+  );
+  const buttonClass = "min-h-11 w-full gap-1.5 px-2 text-xs sm:min-h-9";
 
   if (clients.length === 0) {
     return (
       <Button
-        size="icon"
-        variant="ghost"
-        className="h-7 w-7"
+        size="sm"
+        variant="outline"
+        className={buttonClass}
         disabled
+        aria-label={`Download ${result.title} — no download clients configured`}
         title="No download clients configured"
       >
-        <Download className="h-3.5 w-3.5" />
+        {icon}
+        Download
       </Button>
     );
   }
 
   if (clients.length === 1) {
     return (
-      <Button
-        size="icon"
-        variant="ghost"
-        className="h-7 w-7"
-        disabled={grabbing}
-        title={`Grab via ${clients[0]!.name}`}
-        onClick={() => doGrab(clients[0]!.id)}
-      >
-        {grabbing ? (
-          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-        ) : (
-          <Download className="h-3.5 w-3.5" />
+      <div className="min-w-0">
+        <Button
+          size="sm"
+          variant="outline"
+          className={buttonClass}
+          disabled={grabbing || grabbed}
+          aria-label={`${label} ${result.title}`}
+          title={`Grab via ${clients[0]!.name}`}
+          onClick={() => doGrab(clients[0]!.id)}
+        >
+          {icon}
+          {label}
+        </Button>
+        {error && (
+          <p role="alert" className="mt-1 break-words text-xs text-destructive">
+            {error}
+          </p>
         )}
-      </Button>
+      </div>
     );
   }
 
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button
-          size="icon"
-          variant="ghost"
-          className="h-7 w-7"
-          disabled={grabbing}
-          title="Grab release"
-        >
-          {grabbing ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          ) : (
-            <Download className="h-3.5 w-3.5" />
-          )}
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        {clients.map((c) => (
-          <DropdownMenuItem key={c.id} onClick={() => doGrab(c.id)}>
-            {c.name}
-          </DropdownMenuItem>
-        ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <div className="min-w-0">
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            size="sm"
+            variant="outline"
+            className={buttonClass}
+            disabled={grabbing || grabbed}
+            aria-label={`${label} ${result.title}`}
+            title="Grab release"
+          >
+            {icon}
+            {label}
+            <ChevronDown className="h-3 w-3" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          {clients.map((c) => (
+            <DropdownMenuItem
+              key={c.id}
+              disabled={grabbing || grabbed}
+              onClick={() => doGrab(c.id)}
+            >
+              {c.name}
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+      {error && (
+        <p role="alert" className="mt-1 break-words text-xs text-destructive">
+          {error}
+        </p>
+      )}
+    </div>
   );
 }
 
@@ -327,8 +364,8 @@ function IndexerStatusGrid({
   const totalResults = entries.reduce((sum, i) => sum + i.resultCount, 0);
 
   return (
-    <div className="rounded-md border border-border bg-muted/30 text-sm">
-      <div className="flex items-center gap-3 px-3 py-1.5 text-xs text-muted-foreground">
+    <details className="min-w-0 rounded-md border border-border bg-muted/30 text-sm">
+      <summary className="flex min-h-9 cursor-pointer flex-wrap items-center gap-2 px-3 py-1.5 text-xs text-muted-foreground focus-visible:outline focus-visible:outline-2">
         <Activity className="h-3.5 w-3.5 shrink-0" />
         <span>
           {searching > 0 ? (
@@ -355,7 +392,10 @@ function IndexerStatusGrid({
             <span className="text-muted-foreground"> · {skipped} skipped</span>
           )}
         </span>
-      </div>
+        <span className="ml-auto inline-flex items-center gap-1">
+          Indexer details <ChevronDown className="h-3 w-3" />
+        </span>
+      </summary>
       <div className="flex flex-wrap gap-1.5 px-3 pb-2">
         {entries.map((ix) => (
           <div
@@ -401,7 +441,7 @@ function IndexerStatusGrid({
           </div>
         ))}
       </div>
-    </div>
+    </details>
   );
 }
 
@@ -453,6 +493,7 @@ function FilterBar({
           variant="outline"
           size="sm"
           className="h-7 gap-1.5 text-xs"
+          aria-expanded={expanded}
           onClick={() => setExpanded((v) => !v)}
         >
           <Filter className="h-3.5 w-3.5" />
@@ -490,7 +531,8 @@ function FilterBar({
             onChange({ ...filters, titleFilter: e.target.value })
           }
           placeholder="Filter by name…"
-          className="h-7 max-w-xs flex-1 text-xs"
+          aria-label="Filter releases by name"
+          className="h-9 min-w-0 flex-1 text-sm sm:text-xs"
         />
       </div>
 
@@ -881,24 +923,27 @@ export function ReleaseSearchDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex max-h-[85vh] max-w-4xl flex-col">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Search className="h-4 w-4" />
-            Search: {title}
+      <DialogContent className="flex h-[92dvh] max-h-[92dvh] w-[calc(100%-1rem)] min-w-0 max-w-5xl flex-col gap-3 overflow-hidden p-3 sm:p-5">
+        <DialogHeader className="min-w-0 shrink-0 pr-7 text-left">
+          <DialogTitle className="flex min-w-0 items-start gap-2 text-base leading-snug">
+            <Search className="mt-0.5 h-4 w-4 shrink-0" />
+            <span className="line-clamp-2 [overflow-wrap:anywhere]">
+              Search: {title}
+            </span>
           </DialogTitle>
-          <DialogDescription>
-            Search indexers for releases and grab them to a download client.
+          <DialogDescription className="text-xs">
+            Choose a release to download.
           </DialogDescription>
         </DialogHeader>
 
         {/* Search form */}
-        <form onSubmit={runSearch} className="flex items-center gap-2">
+        <form onSubmit={runSearch} className="flex shrink-0 items-center gap-2">
           <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search query…"
-            className="flex-1"
+            className="min-w-0 flex-1"
+            aria-label="Search query"
             // eslint-disable-next-line jsx-a11y/no-autofocus -- intentional: focus the search field when the dialog opens
             autoFocus
           />
@@ -912,136 +957,127 @@ export function ReleaseSearchDialog({
           </Button>
         </form>
 
-        {/* Live indexer status */}
-        {searched && indexerStates.size > 0 && (
-          <IndexerStatusGrid indexers={indexerStates} />
-        )}
+        <div className="max-h-[40%] min-h-0 min-w-0 shrink-0 space-y-2 overflow-y-auto">
+          {/* Live indexer status */}
+          {searched && indexerStates.size > 0 && (
+            <IndexerStatusGrid indexers={indexerStates} />
+          )}
 
-        {/* Indexer errors */}
-        {errorEntries.length > 0 && (
-          <div className="rounded-md border border-amber-500/40 bg-amber-500/10 text-sm">
-            <button
-              onClick={() => setErrorsExpanded((v) => !v)}
-              className="flex w-full items-center gap-2 px-3 py-2 text-amber-700 dark:text-amber-300"
-            >
-              <AlertTriangle className="h-4 w-4 shrink-0" />
-              <span>
-                {errorEntries.length} indexer
-                {errorEntries.length > 1 ? "s" : ""} reported errors
-              </span>
-              <ChevronDown
-                className={cn(
-                  "ml-auto h-4 w-4 transition-transform",
-                  errorsExpanded && "rotate-180",
-                )}
-              />
-            </button>
-            {errorsExpanded && (
-              <div className="space-y-1 px-3 pb-2">
-                {errorEntries.map(([id, msg]) => (
-                  <p
-                    key={id}
-                    className="text-xs text-amber-600 dark:text-amber-400"
-                  >
-                    <span className="font-medium">{id}:</span> {msg}
-                  </p>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
+          {/* Indexer errors */}
+          {errorEntries.length > 0 && (
+            <div className="rounded-md border border-amber-500/40 bg-amber-500/10 text-sm">
+              <button
+                aria-expanded={errorsExpanded}
+                onClick={() => setErrorsExpanded((v) => !v)}
+                className="flex w-full items-center gap-2 px-3 py-2 text-amber-700 dark:text-amber-300"
+              >
+                <AlertTriangle className="h-4 w-4 shrink-0" />
+                <span>
+                  {errorEntries.length} indexer
+                  {errorEntries.length > 1 ? "s" : ""} reported errors
+                </span>
+                <ChevronDown
+                  className={cn(
+                    "ml-auto h-4 w-4 transition-transform",
+                    errorsExpanded && "rotate-180",
+                  )}
+                />
+              </button>
+              {errorsExpanded && (
+                <div className="space-y-1 px-3 pb-2">
+                  {errorEntries.map(([id, msg]) => (
+                    <p
+                      key={id}
+                      className="break-words text-xs text-amber-600 dark:text-amber-400"
+                    >
+                      <span className="font-medium">{id}:</span> {msg}
+                    </p>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
-        {open && searched && !loading && results.length > 0 && (
-          <PolicyPreview
-            key={`${movieId ?? seriesId ?? title}-${season}-${episode}`}
-            context={{
-              quality_profile_id: qualityProfileId ?? "",
-              media_type: mediaType === "season" ? "series" : mediaType,
-              media_id: movieId ?? seriesId,
-              title: evaluationTitle ?? title,
-              year,
-              runtime,
-              imdb_id: imdbId,
-              tmdb_id: tmdbId != null ? String(tmdbId) : undefined,
-              tvdb_id: tvdbId != null ? String(tvdbId) : undefined,
-              season,
-              episode,
-            }}
-            results={results}
-          />
-        )}
-        {/* Filters */}
-        {searched && results.length > 0 && (
-          <FilterBar
-            results={results}
-            filters={filters}
-            onChange={setFilters}
-          />
-        )}
+          {open && searched && !loading && results.length > 0 && (
+            <PolicyPreview
+              key={`${movieId ?? seriesId ?? title}-${season}-${episode}`}
+              context={{
+                quality_profile_id: qualityProfileId ?? "",
+                media_type: mediaType === "season" ? "series" : mediaType,
+                media_id: movieId ?? seriesId,
+                title: evaluationTitle ?? title,
+                year,
+                runtime,
+                imdb_id: imdbId,
+                tmdb_id: tmdbId != null ? String(tmdbId) : undefined,
+                tvdb_id: tvdbId != null ? String(tvdbId) : undefined,
+                season,
+                episode,
+              }}
+              results={results}
+            />
+          )}
+          {/* Filters */}
+          {searched && results.length > 0 && (
+            <FilterBar
+              results={results}
+              filters={filters}
+              onChange={setFilters}
+            />
+          )}
 
-        {/* Blocklist toggle */}
-        {searched && (
-          <div className="flex items-center justify-between gap-3 text-xs">
-            <label
-              htmlFor="ignore-blocklist"
-              className="flex cursor-pointer select-none items-center gap-1.5"
-            >
-              <Checkbox
-                id="ignore-blocklist"
-                checked={ignoreBlocklist}
-                onCheckedChange={(v) => setIgnoreBlocklist(v === true)}
-                className="h-3.5 w-3.5"
-              />
-              Ignore blocklist
-            </label>
-            {blockedCount > 0 && (
-              <span className="text-muted-foreground">
-                {ignoreBlocklist
-                  ? `${blockedCount} blocklisted release${blockedCount !== 1 ? "s" : ""} shown`
-                  : `${blockedCount} blocklisted release${blockedCount !== 1 ? "s" : ""} hidden`}
-              </span>
-            )}
-          </div>
-        )}
+          {/* Blocklist toggle */}
+          {searched && (
+            <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+              <label
+                htmlFor="ignore-blocklist"
+                className="flex cursor-pointer select-none items-center gap-1.5"
+              >
+                <Checkbox
+                  id="ignore-blocklist"
+                  checked={ignoreBlocklist}
+                  onCheckedChange={(v) => setIgnoreBlocklist(v === true)}
+                  className="h-3.5 w-3.5"
+                />
+                Ignore blocklist
+              </label>
+              {blockedCount > 0 && (
+                <span className="text-muted-foreground">
+                  {ignoreBlocklist
+                    ? `${blockedCount} blocklisted release${blockedCount !== 1 ? "s" : ""} shown`
+                    : `${blockedCount} blocklisted release${blockedCount !== 1 ? "s" : ""} hidden`}
+                </span>
+              )}
+            </div>
+          )}
+        </div>
 
         {/* Results table */}
-        <div className="flex-1 overflow-auto rounded-md border border-border">
-          <table className="w-full text-sm">
+        <div
+          role="region"
+          aria-label="Release results"
+          // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- keyboard users must be able to scroll results without leaving the tools
+          tabIndex={0}
+          className="min-h-0 min-w-0 flex-1 overflow-y-auto rounded-md border border-border focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring"
+        >
+          <table className="block w-full table-fixed text-sm sm:table">
             <caption className="sr-only">Search results</caption>
-            <thead className="sticky top-0 z-10 bg-muted/50 text-left">
+            <thead className="sticky top-0 z-10 hidden bg-muted text-left sm:table-header-group">
               <tr>
                 <th scope="col" className="px-3 py-2">
-                  Title
+                  Release
                 </th>
-                <th scope="col" className="w-16 px-3 py-2">
-                  Quality
-                </th>
-                <th scope="col" className="w-14 px-3 py-2">
-                  Raw score
-                </th>
-                <th scope="col" className="w-20 px-3 py-2">
-                  Size
-                </th>
-                <th scope="col" className="w-14 px-3 py-2">
-                  Age
-                </th>
-                <th scope="col" className="w-16 px-3 py-2">
-                  S/L
-                </th>
-                <th scope="col" className="w-24 px-3 py-2">
-                  Indexer
-                </th>
-                <th scope="col" className="w-16 px-3 py-2">
-                  Actions
+                <th scope="col" className="w-36 px-3 py-2 text-right">
+                  Download
                 </th>
               </tr>
             </thead>
-            <tbody>
+            <tbody className="block sm:table-row-group">
               {!searched && !loading && (
                 <tr>
                   <td
-                    colSpan={8}
-                    className="px-3 py-10 text-center text-muted-foreground"
+                    colSpan={2}
+                    className="block px-3 py-10 text-center text-muted-foreground sm:table-cell"
                   >
                     Enter a query and click Search to find releases.
                   </td>
@@ -1053,8 +1089,8 @@ export function ReleaseSearchDialog({
                 results.length === 0 && (
                   <tr>
                     <td
-                      colSpan={8}
-                      className="px-3 py-10 text-center text-muted-foreground"
+                      colSpan={2}
+                      className="block px-3 py-10 text-center text-muted-foreground sm:table-cell"
                     >
                       No results found.
                     </td>
@@ -1066,8 +1102,8 @@ export function ReleaseSearchDialog({
                 results.length > 0 && (
                   <tr>
                     <td
-                      colSpan={8}
-                      className="px-3 py-10 text-center text-muted-foreground"
+                      colSpan={2}
+                      className="block px-3 py-10 text-center text-muted-foreground sm:table-cell"
                     >
                       {!ignoreBlocklist && blockedCount === results.length
                         ? "All results are blocklisted. Enable \u201cIgnore blocklist\u201d to show them."
@@ -1078,24 +1114,27 @@ export function ReleaseSearchDialog({
               {loading && results.length === 0 && (
                 <tr>
                   <td
-                    colSpan={8}
-                    className="px-3 py-10 text-center text-muted-foreground"
+                    colSpan={2}
+                    className="block px-3 py-10 text-center text-muted-foreground sm:table-cell"
                   >
                     <Loader2 className="mr-2 inline-block h-5 w-5 animate-spin" />
                     Searching indexers…
                   </td>
                 </tr>
               )}
-              {filteredResults.map((r, idx) => {
+              {filteredResults.map((r) => {
                 const qb = qualityBadge(r);
                 const isBlocked = blocked.has(resultKey(r));
                 return (
                   <tr
-                    key={`${r.indexer_id}-${r.link}-${idx}`}
-                    className="border-t border-border transition-colors hover:bg-accent/5"
+                    key={resultKey(r)}
+                    className="block border-t border-border transition-colors hover:bg-accent/5 sm:table-row"
                   >
-                    <td className="px-3 py-2">
-                      <div className="line-clamp-2 text-xs font-medium leading-snug">
+                    <td className="block min-w-0 px-3 py-2 sm:table-cell">
+                      <div
+                        className="line-clamp-2 text-sm font-medium leading-snug [overflow-wrap:anywhere]"
+                        title={r.title}
+                      >
                         {r.title}
                       </div>
                       {isBlocked && (
@@ -1124,54 +1163,55 @@ export function ReleaseSearchDialog({
                           )}
                         </div>
                       )}
-                    </td>
-                    <td className="whitespace-nowrap px-3 py-2">
-                      <span
-                        className={cn(
-                          "inline-block rounded px-1.5 py-0.5 text-[10px] font-semibold",
-                          QUALITY_COLORS[qb] ?? QUALITY_COLORS.SD,
+                      <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs tabular-nums text-muted-foreground">
+                        <span
+                          className={cn(
+                            "inline-block rounded px-1.5 py-0.5 text-[10px] font-semibold",
+                            QUALITY_COLORS[qb] ?? QUALITY_COLORS.SD,
+                          )}
+                        >
+                          {qb}
+                        </span>
+                        <span>{formatBytes(r.size_bytes)}</span>
+                        <span>Age {formatAge(r.publish_date)}</span>
+                        <span title="Seeders / leechers">
+                          S/L{" "}
+                          {typeof r.seeders === "number" ||
+                          typeof r.leechers === "number"
+                            ? `${r.seeders ?? 0}/${r.leechers ?? 0}`
+                            : "—"}
+                        </span>
+                        <span>
+                          Raw score{" "}
+                          {typeof r.score === "number"
+                            ? Math.round(r.score)
+                            : "—"}
+                        </span>
+                        <span className="min-w-0 [overflow-wrap:anywhere]">
+                          {r.indexer_id}
+                        </span>
+                        {r.info_url && (
+                          <a
+                            href={r.info_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex min-h-9 items-center gap-1 rounded text-muted-foreground hover:text-foreground"
+                            aria-label={`View details for ${r.title}`}
+                            title="View details"
+                          >
+                            Details <ExternalLink className="h-3 w-3" />
+                          </a>
                         )}
-                      >
-                        {qb}
-                      </span>
+                      </div>
                     </td>
-                    <td className="whitespace-nowrap px-3 py-2 text-xs tabular-nums text-muted-foreground">
-                      {typeof r.score === "number" ? Math.round(r.score) : "—"}
-                    </td>
-                    <td className="whitespace-nowrap px-3 py-2 text-xs tabular-nums text-muted-foreground">
-                      {formatBytes(r.size_bytes)}
-                    </td>
-                    <td className="whitespace-nowrap px-3 py-2 text-xs tabular-nums text-muted-foreground">
-                      {formatAge(r.publish_date)}
-                    </td>
-                    <td className="whitespace-nowrap px-3 py-2 text-xs tabular-nums text-muted-foreground">
-                      {typeof r.seeders === "number" ||
-                      typeof r.leechers === "number"
-                        ? `${r.seeders ?? 0}/${r.leechers ?? 0}`
-                        : "—"}
-                    </td>
-                    <td className="max-w-[6rem] truncate px-3 py-2 text-xs text-muted-foreground">
-                      {r.indexer_id}
-                    </td>
-                    <td className="px-3 py-2">
-                      <div className="flex items-center gap-1">
+                    <td className="block px-3 pb-3 sm:table-cell sm:py-2 sm:align-top">
+                      <div className="ml-auto w-32 sm:w-full">
                         <GrabButton
                           result={r}
                           clients={enabledClients}
                           mediaContext={mediaContext}
                           ignoreBlocklist={ignoreBlocklist}
                         />
-                        {r.info_url && (
-                          <a
-                            href={r.info_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent/10 hover:text-foreground"
-                            title="View details"
-                          >
-                            <ExternalLink className="h-3.5 w-3.5" />
-                          </a>
-                        )}
                       </div>
                     </td>
                   </tr>
@@ -1183,7 +1223,10 @@ export function ReleaseSearchDialog({
 
         {/* Result count */}
         {searched && !loading && results.length > 0 && (
-          <p className="text-right text-xs text-muted-foreground">
+          <p
+            className="shrink-0 text-right text-xs text-muted-foreground"
+            aria-live="polite"
+          >
             {filteredResults.length === results.length
               ? `${results.length} result${results.length !== 1 ? "s" : ""}`
               : !ignoreBlocklist &&

@@ -6,6 +6,25 @@ preview policy** after results arrive. In Search Log, expand **decision evidence
 on a recorded result. Older log entries retain their original rejection code but
 cannot recover evidence that was not recorded.
 
+## Choose a release
+
+Manual search keeps the query and compact tools above a vertically scrolling
+results area. Release metadata wraps beneath each title; **Download** stays in
+the right-hand column on desktop and beneath each release on phones. Expand
+**Indexer details** for individual indexer progress or the warning banner for
+reported errors. Filters and **Explain matching / preview policy** remain
+optional and do not change the search query or start a download.
+
+Click **Download** to send that release to the configured client, or choose a
+client when several are enabled. The action shows **Sending…** while pending and
+**Sent** after the client accepts it; **Sent** does not mean the media download
+has completed. Failed submissions show an inline error and can be retried.
+Repeated clicks cannot submit the same pending or successful row again.
+
+Blocklisted releases remain hidden by default. **Ignore blocklist** reveals
+them with a **Blocklisted** badge and explicitly permits a manual blocklist
+override. Policy previews remain read-only and do not override grab safeguards.
+
 ## Read a decision
 
 Identity evidence shows the requested title and alternate titles, embedded IDs,

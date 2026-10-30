@@ -107,6 +107,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Manual release search keeps Download visible without horizontal scrolling,
+  with wrapping release metadata, phone-friendly rows, compact diagnostics and
+  independently scrolling results. Download actions show sending, success and
+  retryable error states and prevent duplicate submissions.
 - Music artist search no longer fails with `Unexpected token '<'` after the
   Music feature is enabled at runtime: the flag now gates the music API per
   request instead of only at startup. Unknown `/api` paths return a JSON 404
