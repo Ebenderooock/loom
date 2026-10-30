@@ -58,6 +58,7 @@ const (
 	maxOverviewLen = 500
 )
 
+// MusicDetails configures read-only music metadata routes and their feature gate.
 type MusicDetails struct {
 	Provider metadata.MusicMetadataProvider
 	Enabled  func() bool
@@ -115,8 +116,7 @@ func getAlbum(provider metadata.MusicMetadataProvider) http.HandlerFunc {
 			http.Error(w, "Album not found for this identity", http.StatusNotFound)
 			return
 		}
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]any{"album": album, "releases": releases})
+		writeDiscoveryResult(w, map[string]any{"album": album, "releases": releases}, nil)
 	}
 }
 
@@ -136,8 +136,7 @@ func getRelease(provider metadata.MusicMetadataProvider) http.HandlerFunc {
 			http.Error(w, "Edition not found for this identity", http.StatusNotFound)
 			return
 		}
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(release)
+		writeDiscoveryResult(w, release, nil)
 	}
 }
 
@@ -202,12 +201,11 @@ func getVideo(client *tmdb.Client, series bool) http.HandlerFunc {
 		} else {
 			credits, err = client.GetMovieCredits(r.Context(), id)
 		}
-		creditsError := ""
+		castWarning := ""
 		if err != nil {
-			creditsError = "Cast and crew could not be loaded."
+			castWarning = "Cast and crew could not be loaded."
 		}
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]any{"title": title, "credits": credits, "credits_error": creditsError})
+		writeDiscoveryResult(w, map[string]any{"title": title, "credits": credits, "credits_error": castWarning}, nil)
 	}
 }
 
@@ -245,8 +243,7 @@ func getArtist(provider metadata.MusicMetadataProvider) http.HandlerFunc {
 			http.Error(w, "Unable to load artist albums", http.StatusBadGateway)
 			return
 		}
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]any{"title": artist, "albums": albums})
+		writeDiscoveryResult(w, map[string]any{"title": artist, "albums": albums}, nil)
 	}
 }
 
