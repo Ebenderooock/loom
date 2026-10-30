@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"context"
@@ -33,6 +34,7 @@ var mediaExtensions = map[string]bool{
 type Scanner struct {
 	store  *Store
 	logger *slog.Logger
+	scanMu sync.RWMutex
 }
 
 // NewScanner creates a library scanner.
@@ -45,6 +47,8 @@ func NewScanner(store *Store, logger *slog.Logger) *Scanner {
 
 // ScanLibrary walks the root folder of a library and upserts discovered media files.
 func (sc *Scanner) ScanLibrary(ctx context.Context, lib *Library) error {
+	sc.scanMu.Lock()
+	defer sc.scanMu.Unlock()
 	sc.logger.Info("scanning library", "id", lib.ID, "path", lib.Path)
 	scanStart := time.Now().UTC()
 

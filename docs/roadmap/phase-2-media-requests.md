@@ -8,15 +8,22 @@ approval, rejection, and Discord/Telegram bots. The native API uses
 `/api/v1/requests`; the actual table is `media_requests`. The specifications below
 remain proposals where they differ from the source.
 
-Approved requests are reconciled against imported file records on startup,
-after approval, and every minute. Movies require a live file; series require a
+Approved and fulfilled requests are reconciled against physically verified
+imported files on startup, after approval, and every minute. Movies require a live file; series require a
 file and no missing currently aired monitored episodes in monitored seasons;
 artists require files for all monitored tracks on selected releases of
 currently released monitored albums. Unknown dates are treated conservatively
 as due, and missing track metadata blocks completion. Future releases do not
 block fulfillment. Catalog membership or a successful download grab is not
-proof of availability. The `available` state records fulfillment and is not a
-continuous media-server health or quality-cutoff guarantee.
+proof of availability. The `available` state records immutable fulfillment
+history; `availability` independently reports present/missing/unknown.
+Missing storage markers, disconnected roots, stale observations and incomplete
+scan evidence remain unknown. Explicit owner/admin re-requests preserve the
+original history and consume normal quota slots; one active request is allowed
+globally per title. Admin dry-run/apply reconciliation records per-item audit
+outcomes without deleting media or import records. See the
+[request lifecycle guide](../requests.md) and [ADR-0030](../adr/0030-request-availability-lifecycle.md).
+No media-server playback or quality-cutoff guarantee is implied.
 
 Guest access, external media-server availability, comments, bulk decisions,
 and expanded auto-approval policies are not implied by the implemented core.

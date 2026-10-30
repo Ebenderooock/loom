@@ -3,9 +3,9 @@ import { useQuery } from "@tanstack/react-query";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogDescription,
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -25,10 +25,13 @@ interface CreditItem {
   title: string;
   year?: number;
   poster_path?: string;
+  overview?: string;
+  release_date?: string;
   rating: number;
   character?: string;
   job?: string;
 }
+
 interface PersonFilmography {
   person: {
     name: string;
@@ -38,6 +41,7 @@ interface PersonFilmography {
   };
   credits: CreditItem[];
 }
+
 type Props = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -86,9 +90,11 @@ function PersonFilmographyContent({
   const [tab, setTab] = useState("movie");
   const [lastIdentity, setLastIdentity] = useState("");
   const backFocus = useRef<HTMLButtonElement>(null);
+
   useEffect(() => {
     if (!selection) backFocus.current?.focus();
   }, [selection]);
+
   const data = useQuery({
     queryKey: ["person-filmography", personId],
     queryFn: ({ signal }) =>
@@ -96,7 +102,8 @@ function PersonFilmographyContent({
         signal,
       }),
   });
-  if (selection)
+
+  if (selection) {
     return (
       <TitleContent
         key={`${selection.identity.media}:${selection.identity.id}`}
@@ -116,16 +123,19 @@ function PersonFilmographyContent({
         }}
       />
     );
+  }
   if (data.isPending) return <p role="status">Loading filmography…</p>;
-  if (data.isError)
+  if (data.isError) {
     return (
       <div role="alert">
         <p className="text-sm text-destructive">{data.error.message}</p>
-        <Button variant="outline" onClick={() => data.refetch()}>
+        <Button variant="outline" onClick={() => void data.refetch()}>
           Retry
         </Button>
       </div>
     );
+  }
+
   return (
     <div className="space-y-5">
       <div className="flex items-start gap-4">
@@ -174,7 +184,7 @@ function PersonFilmographyContent({
                   };
                   return (
                     <div
-                      key={`${media}:${item.tmdb_id}`}
+                      key={key}
                       className="overflow-hidden rounded-lg border"
                     >
                       <button

@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ebenderooock/loom/internal/auth"
 	"github.com/ebenderooock/loom/internal/metadata"
 	"github.com/ebenderooock/loom/internal/metadata/tmdb"
 )
@@ -124,7 +125,7 @@ func (readOnlyMusic) GetAlbumRelease(_ context.Context, id string) (*metadata.Al
 
 func TestMusicDetailsHonorFeatureFlag(t *testing.T) {
 	enabled := false
-	router := Router(nil, MusicDetails{Provider: readOnlyMusic{}, Enabled: func() bool { return enabled }})
+	router := RouterWithMusic(nil, nil, MusicDetails{Provider: readOnlyMusic{}, Enabled: func() bool { return enabled }})
 	for _, status := range []int{http.StatusNotFound, http.StatusOK} {
 		for _, kind := range []string{"artist", "album", "release"} {
 			w := httptest.NewRecorder()
@@ -138,7 +139,7 @@ func TestMusicDetailsHonorFeatureFlag(t *testing.T) {
 }
 
 func TestMusicMetadataAndTracksWithoutAdding(t *testing.T) {
-	router := Router(nil, MusicDetails{Provider: readOnlyMusic{}})
+	router := RouterWithMusic(nil, nil, MusicDetails{Provider: readOnlyMusic{}})
 	id := "b83ae2e8-0c20-48fc-9d8b-2b44d7206e18"
 	for _, kind := range []string{"artist", "album", "release"} {
 		w := httptest.NewRecorder()
@@ -206,6 +207,7 @@ func TestCreditsFailureDoesNotDiscardFullTitleDetails(t *testing.T) {
 			http.Error(w, "sensitive upstream diagnostics", http.StatusUnauthorized)
 			return
 		}
+
 		json.NewEncoder(w).Encode(map[string]any{"id": 42, "title": "Movie", "overview": "Full synopsis"})
 	}))
 	defer upstream.Close()
@@ -221,5 +223,20 @@ func TestCreditsFailureDoesNotDiscardFullTitleDetails(t *testing.T) {
 	}
 	if w.Code != http.StatusOK || details.Title.Overview != "Full synopsis" || details.CreditsError == "" || strings.Contains(w.Body.String(), "sensitive") {
 		t.Fatalf("%d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestGrowthRoutesRemainMountedWithReadOnlyDetails(t *testing.T) {
+	service, _, _, _ := fixtureService(t)
+	router := Router(service.client, service)
+	req := httptest.NewRequest(http.MethodGet, "/recommendations", nil)
+	req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{
+		UserID: 1,
+		Roles:  []string{"admin"},
+	}))
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("recommendations route returned %d: %s", w.Code, w.Body.String())
 	}
 }

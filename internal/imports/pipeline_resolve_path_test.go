@@ -57,15 +57,36 @@ func TestResolveDownloadPathPrefersExistingCandidate(t *testing.T) {
 	}
 }
 
+func TestResolveDownloadPathPrefersCachedContentOverLiveSaveDirectory(t *testing.T) {
+	opts := basePipelineOptions(t)
+	content := filepath.Join(t.TempDir(), "actual-video.mkv")
+	if err := os.WriteFile(content, []byte("video"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	client := &resolvePathFakeClient{id: "client", items: []downloads.Item{{
+		ID: "download", Title: "unresolved", SavePath: t.TempDir(),
+	}}}
+	if err := opts.DownloadSvc.Registry().Register(client); err != nil {
+		t.Fatal(err)
+	}
+	p := &ImportPipeline{downloadSvc: opts.DownloadSvc}
+	got, err := p.resolveDownloadPath(context.Background(), &downloads.DownloadCompletedEvent{
+		ClientID: "client", DownloadID: "download", Title: "Title", ContentPath: content,
+	})
+	if err != nil || got != content {
+		t.Fatalf("generic save directory shadowed cached content: %q, %v", got, err)
+	}
+}
+
 type resolvePathFakeClient struct {
 	id    string
 	items []downloads.Item
 }
 
-func (c *resolvePathFakeClient) ID() string                               { return c.id }
-func (c *resolvePathFakeClient) Name() string                             { return "fake" }
-func (c *resolvePathFakeClient) Kind() downloads.Kind                     { return downloads.KindTransmission }
-func (c *resolvePathFakeClient) Protocol() downloads.Protocol             { return downloads.ProtocolTorrent }
+func (c *resolvePathFakeClient) ID() string                   { return c.id }
+func (c *resolvePathFakeClient) Name() string                 { return "fake" }
+func (c *resolvePathFakeClient) Kind() downloads.Kind         { return downloads.KindTransmission }
+func (c *resolvePathFakeClient) Protocol() downloads.Protocol { return downloads.ProtocolTorrent }
 func (c *resolvePathFakeClient) Add(context.Context, downloads.AddRequest) (downloads.AddResult, error) {
 	return downloads.AddResult{}, nil
 }
@@ -81,14 +102,14 @@ func (c *resolvePathFakeClient) SetPriority(context.Context, downloads.Priority,
 	return nil
 }
 func (c *resolvePathFakeClient) SetSpeedLimit(context.Context, int64, ...string) error { return nil }
-func (c *resolvePathFakeClient) ForceStart(context.Context, ...string) error            { return nil }
-func (c *resolvePathFakeClient) Recheck(context.Context, ...string) error               { return nil }
-func (c *resolvePathFakeClient) Reannounce(context.Context, ...string) error            { return nil }
+func (c *resolvePathFakeClient) ForceStart(context.Context, ...string) error           { return nil }
+func (c *resolvePathFakeClient) Recheck(context.Context, ...string) error              { return nil }
+func (c *resolvePathFakeClient) Reannounce(context.Context, ...string) error           { return nil }
 func (c *resolvePathFakeClient) Categories(context.Context) ([]downloads.Category, error) {
 	return nil, nil
 }
 func (c *resolvePathFakeClient) FreeSpace(context.Context) (int64, error) { return 0, nil }
-func (c *resolvePathFakeClient) Test(context.Context) error                { return nil }
+func (c *resolvePathFakeClient) Test(context.Context) error               { return nil }
 
 type resolvePathFakeRepo struct{}
 
@@ -98,8 +119,10 @@ func (resolvePathFakeRepo) Create(context.Context, downloads.Definition) (downlo
 func (resolvePathFakeRepo) Get(context.Context, string) (downloads.Definition, error) {
 	return downloads.Definition{}, downloads.ErrNotFound
 }
-func (resolvePathFakeRepo) List(context.Context) ([]downloads.Definition, error)        { return nil, nil }
-func (resolvePathFakeRepo) ListEnabled(context.Context) ([]downloads.Definition, error) { return nil, nil }
+func (resolvePathFakeRepo) List(context.Context) ([]downloads.Definition, error) { return nil, nil }
+func (resolvePathFakeRepo) ListEnabled(context.Context) ([]downloads.Definition, error) {
+	return nil, nil
+}
 func (resolvePathFakeRepo) Replace(context.Context, downloads.Definition) (downloads.Definition, error) {
 	return downloads.Definition{}, nil
 }

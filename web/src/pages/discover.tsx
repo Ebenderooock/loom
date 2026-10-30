@@ -15,9 +15,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Check, Plus, Compass } from "lucide-react";
+import { Check, Plus, Compass, Info } from "lucide-react";
 import { TitleDialog } from "@/components/titles/title-experience";
 import { CardGridSkeleton } from "@/components/ui/skeletons";
+import {
+  CollectionsPanel,
+  RecommendationPanel,
+} from "@/components/library-expansion";
 
 export function DiscoverPage() {
   const { setHeader } = usePageHeader();
@@ -25,17 +29,31 @@ export function DiscoverPage() {
 
   return (
     <div className="space-y-6 p-6">
-      <Tabs defaultValue="movie">
-        <TabsList>
-          <TabsTrigger value="movie">Movies</TabsTrigger>
-          <TabsTrigger value="series">TV Shows</TabsTrigger>
+      <Tabs defaultValue="recommendations">
+        <TabsList className="h-auto flex-wrap" aria-label="Discovery sections">
+          <TabsTrigger value="recommendations">Grow your library</TabsTrigger>
+          <TabsTrigger value="collections">Collections</TabsTrigger>
+          <TabsTrigger value="lists">Import Lists</TabsTrigger>
         </TabsList>
-
-        <TabsContent value="movie" className="mt-4">
-          <DiscoverGrid mediaType="movie" />
+        <TabsContent value="recommendations" className="mt-6">
+          <RecommendationPanel />
         </TabsContent>
-        <TabsContent value="series" className="mt-4">
-          <DiscoverGrid mediaType="series" />
+        <TabsContent value="collections" className="mt-6">
+          <CollectionsPanel />
+        </TabsContent>
+        <TabsContent value="lists" className="mt-6">
+          <Tabs defaultValue="movie">
+            <TabsList aria-label="Import list media type">
+              <TabsTrigger value="movie">Movies</TabsTrigger>
+              <TabsTrigger value="series">TV shows</TabsTrigger>
+            </TabsList>
+            <TabsContent value="movie" className="mt-4">
+              <DiscoverGrid mediaType="movie" />
+            </TabsContent>
+            <TabsContent value="series" className="mt-4">
+              <DiscoverGrid mediaType="series" />
+            </TabsContent>
+          </Tabs>
         </TabsContent>
       </Tabs>
     </div>
@@ -249,6 +267,7 @@ function DiscoverCard({
 }) {
   const [view, setView] = React.useState<"details" | "add" | null>(null);
   const [added, setAdded] = React.useState(false);
+  const detailsButton = React.useRef<HTMLButtonElement>(null);
 
   const inLibrary = item.in_library || added;
   const provider =
@@ -308,22 +327,41 @@ function DiscoverCard({
           ) : null}
         </div>
 
-        {inLibrary ? (
-          <Button size="sm" variant="ghost" disabled className="w-full">
-            <Check className="mr-1 h-4 w-4" />
-            Added
-          </Button>
-        ) : (
+        <div className="mt-auto flex w-full">
+          {inLibrary ? (
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled
+              className="min-h-11 min-w-0 flex-1 rounded-r-none"
+            >
+              <Check className="mr-1 h-4 w-4" />
+              Added
+            </Button>
+          ) : (
+            <Button
+              size="sm"
+              className="min-h-11 min-w-0 flex-1 rounded-r-none"
+              aria-label={`Add ${item.title}`}
+              disabled={!providerId}
+              onClick={() => setView("add")}
+            >
+              <Plus className="mr-1 h-4 w-4" />
+              Add
+            </Button>
+          )}
           <Button
-            size="sm"
-            className="w-full"
-            disabled={!providerId}
-            onClick={() => setView("add")}
+            size="icon"
+            variant="outline"
+            className="h-11 w-11 shrink-0 rounded-l-none"
+            aria-label={`View details for ${item.title}`}
+            title="View details"
+            ref={detailsButton}
+            onClick={() => setView("details")}
           >
-            <Plus className="mr-1 h-4 w-4" />
-            Add
+            <Info className="h-4 w-4" />
           </Button>
-        )}
+        </div>
 
         {!providerId && (
           <p className="text-xs text-muted-foreground">

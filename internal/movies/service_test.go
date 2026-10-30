@@ -639,6 +639,7 @@ func TestRefreshMovie_Success(t *testing.T) {
 	t.Parallel()
 	repo := newMockRepo()
 	tmdb := "550"
+	imdb := "tt0137523"
 	repo.movies["m1"] = &Movie{ID: "m1", Title: "Old Title", TMDBID: &tmdb}
 
 	meta := &mockMetadata{
@@ -647,6 +648,7 @@ func TestRefreshMovie_Success(t *testing.T) {
 			Year:     1999,
 			Overview: "Updated overview",
 			Rating:   8.4,
+			IMDBID:   &imdb,
 		},
 	}
 	svc := NewService(repo, WithMetadata(meta))
@@ -659,6 +661,10 @@ func TestRefreshMovie_Success(t *testing.T) {
 	}
 	if repo.movies["m1"].Year != 1999 {
 		t.Errorf("year = %d, want 1999", repo.movies["m1"].Year)
+	}
+	found, err := svc.GetMovieByIMDBID(context.Background(), imdb)
+	if err != nil || found == nil || found.ID != "m1" {
+		t.Fatalf("refreshed movie not found by IMDb ID: (%v, %v)", found, err)
 	}
 }
 

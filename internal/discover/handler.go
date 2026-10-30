@@ -2,11 +2,13 @@
 package discover
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"regexp"
 	"sort"
 	"strconv"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -61,29 +63,39 @@ type MusicDetails struct {
 	Enabled  func() bool
 }
 
-// Router returns read-only provider metadata routes for title and person discovery.
-func Router(client *tmdb.Client, music ...MusicDetails) chi.Router {
+// Router returns read-only provider metadata and optional library-growth routes.
+func Router(client *tmdb.Client, services ...*Service) chi.Router {
 	r := chi.NewRouter()
 	r.Get("/people/{id}", getPersonFilmography(client))
 	r.Get("/movie/{id}", getVideo(client, false))
 	r.Get("/series/{id}", getVideo(client, true))
-	if len(music) > 0 && music[0].Provider != nil {
-		details := music[0]
-		r.Group(func(r chi.Router) {
-			r.Use(func(next http.Handler) http.Handler {
-				return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-					if details.Enabled != nil && !details.Enabled() {
-						http.NotFound(w, req)
-						return
-					}
-					next.ServeHTTP(w, req)
-				})
-			})
-			r.Get("/artist/{id}", getArtist(details.Provider))
-			r.Get("/album/{id}", getAlbum(details.Provider))
-			r.Get("/release/{id}", getRelease(details.Provider))
-		})
+	if len(services) > 0 {
+		mountGrowth(r, services[0])
 	}
+	return r
+}
+
+// RouterWithMusic wires the MusicBrainz routes alongside video details and
+// library growth, while keeping Router's optional service argument strongly typed.
+func RouterWithMusic(client *tmdb.Client, service *Service, music MusicDetails) chi.Router {
+	r := Router(client, service)
+	if music.Provider == nil {
+		return r
+	}
+	r.Group(func(r chi.Router) {
+		r.Use(func(next http.Handler) http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+				if music.Enabled != nil && !music.Enabled() {
+					http.NotFound(w, req)
+					return
+				}
+				next.ServeHTTP(w, req)
+			})
+		})
+		r.Get("/artist/{id}", getArtist(music.Provider))
+		r.Get("/album/{id}", getAlbum(music.Provider))
+		r.Get("/release/{id}", getRelease(music.Provider))
+	})
 	return r
 }
 
@@ -243,7 +255,12 @@ func getPersonFilmography(client *tmdb.Client) http.HandlerFunc {
 			return
 		}
 
-		ctx := r.Context()
+		if !client.Configured() {
+			writeDiscoveryError(w, ErrNotConfigured)
+			return
+		}
+		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+		defer cancel()
 
 		// Fetch person details and credits in parallel
 		type personResult struct {
@@ -271,11 +288,11 @@ func getPersonFilmography(client *tmdb.Client) http.HandlerFunc {
 		cRes := <-cCh
 
 		if pRes.err != nil {
-			http.Error(w, pRes.err.Error(), http.StatusInternalServerError)
+			writeDiscoveryError(w, pRes.err)
 			return
 		}
 		if cRes.err != nil {
-			http.Error(w, cRes.err.Error(), http.StatusInternalServerError)
+			writeDiscoveryError(w, cRes.err)
 			return
 		}
 
@@ -288,6 +305,7 @@ func getPersonFilmography(client *tmdb.Client) http.HandlerFunc {
 		}
 
 		resp := PersonFilmography{
+			Credits: []CreditItem{},
 			Person: PersonDetail{
 				ID:          person.ID,
 				Name:        person.Name,

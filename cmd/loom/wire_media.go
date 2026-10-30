@@ -10,7 +10,6 @@ import (
 	"github.com/ebenderooock/loom/internal/alttitles"
 	"github.com/ebenderooock/loom/internal/anime"
 	"github.com/ebenderooock/loom/internal/auditlog"
-	"github.com/ebenderooock/loom/internal/calendar"
 	"github.com/ebenderooock/loom/internal/devmode"
 	"github.com/ebenderooock/loom/internal/discover"
 	"github.com/ebenderooock/loom/internal/featureflags"
@@ -125,9 +124,6 @@ func wireMedia(
 	notifSvc := buildNotificationsService(db)
 	wiring.NotificationSvc = notifSvc
 
-	// Calendar
-	wiring.CalendarHandler = calendar.Router(db.DB())
-
 	// Language profiles
 	langStore := languages.NewStore(db.DB())
 	if err := langStore.EnsureDefault(ctx); err != nil {
@@ -172,9 +168,10 @@ func wireMedia(
 	wiring.QualityProfile = qpStore
 	qualityprofiles.SeedDefaults(ctx, qpStore, moviesSvc)
 
-	// Person discovery (TMDB-backed)
+	// Read-only library growth and person discovery (TMDB-backed).
 	discoverTMDB := buildTMDBClient(stubs)
-	wiring.DiscoverRouter = discover.Router(discoverTMDB, discover.MusicDetails{
+	discoverSvc := discover.NewService(discoverTMDB, moviesSvc, seriesSvc, discover.NewStore(db.DB()))
+	wiring.DiscoverRouter = discover.RouterWithMusic(discoverTMDB, discoverSvc, discover.MusicDetails{
 		Provider: mbProvider,
 		Enabled:  wiring.FeatureFlags.EnabledFunc(featureflags.KeyMusic),
 	})

@@ -1,6 +1,10 @@
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tv, Star } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  isMissingQualityProfile,
+  MissingQualityProfileBadge,
+} from "@/components/quality-profile-warning";
 import type { Series, QualityProfile } from "./types";
 import { titleImage } from "@/components/titles/title-metadata";
 
@@ -47,6 +51,7 @@ export function SeriesCard({
   onClick: () => void;
 }) {
   const profile = profiles.find((p) => p.id === series.qualityProfileId);
+  const missingProfile = isMissingQualityProfile(series);
   const progress = getEpisodeProgressInfo(series);
   const seasonCount = series.seasons?.length ?? 0;
 
@@ -153,6 +158,9 @@ export function SeriesCard({
           {series.year}
           {series.network ? ` • ${series.network}` : ""}
         </p>
+        {missingProfile && (
+          <MissingQualityProfileBadge onDark className="mt-1.5" />
+        )}
       </div>
 
       {/* Hover overlay */}
@@ -206,8 +214,14 @@ export function SeriesCard({
               </div>
             </div>
           )}
-          {profile && (
-            <p className="text-[10px] text-gray-500">Quality: {profile.name}</p>
+          {missingProfile ? (
+            <MissingQualityProfileBadge onDark />
+          ) : (
+            profile && (
+              <p className="text-[10px] text-gray-500">
+                Quality: {profile.name}
+              </p>
+            )
           )}
         </div>
       </div>

@@ -79,12 +79,14 @@ func (c *Client) Status(ctx context.Context, ids ...string) ([]downloads.Item, e
 	}
 
 	out := make([]downloads.Item, 0, len(queue)+len(hist))
-	for _, g := range queue {
+	for position, g := range queue {
 		id := strconv.FormatInt(g.NZBID, 10)
 		if !filter.match(id) {
 			continue
 		}
-		out = append(out, queueItem(id, g))
+		item := queueItem(id, g)
+		item.QueuePosition = &position
+		out = append(out, item)
 	}
 	for _, h := range hist {
 		id := strconv.FormatInt(h.NZBID, 10)

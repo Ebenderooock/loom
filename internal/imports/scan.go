@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // ScanResult describes a potential match found during a folder scan.
@@ -39,7 +40,7 @@ func (p *ImportPipeline) ScanFolder(ctx context.Context, path string) ([]ScanRes
 		}
 	} else {
 		ext := filepath.Ext(path)
-		if !mediaExtensions[ext] {
+		if !mediaExtensions[strings.ToLower(ext)] {
 			return nil, fmt.Errorf("not a media file: %s", path)
 		}
 		mediaFiles = []string{path}

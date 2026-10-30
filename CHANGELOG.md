@@ -14,8 +14,64 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   retaining request permissions and approval semantics. Discover defaults are
   visible/editable and source tracking can be retried without a duplicate add.
 
+- Interactive search hides blocklisted releases by default and offers an
+  **Ignore blocklist** option to show and grab them. Manual grabs of blocklisted
+  releases are rejected unless `ignore_blocklist` is set; `POST
+  /api/v1/blocklist/check` reports blocklist matches for candidate releases.
+
+- Import IMDb Most Popular Movies/TV, Top 250 Movies/TV, and Bottom 100 Movies
+  charts by pasting their URLs into the IMDb List / Chart import source.
+
+- Manage all on-disk files from movie, show and season details, including samples,
+  subtitles and extras. Administrators can select files for explicitly confirmed
+  recycling or permanent deletion, with per-file audit records and immediate
+  movie/episode and fulfilled-request availability reconciliation.
+
+- Separate immutable request fulfillment history from current file availability,
+  monitoring and media-server observations. Add explicit owner/admin re-requests
+  with global active deduplication and normal rolling quotas, mount-identity
+  guarded reconciliation, dry-run audits and per-item outcomes. Requests and chat
+  status now distinguish historical fulfillment from present/missing/unknown
+  files. Migration 0080 preserves legacy fulfillment timestamps.
+
+- Persistent, atomic provider/account API budgets with explicit shared indexer
+  groups, conservative remaining/reset signals, per-attempt retry accounting,
+  and visible budget skip/resume reasons for manual and automated searches.
+
+- Explain release identity, parsed numbering, quality tiers, profile-specific
+  custom-format contributions, numeric policy limits and accepted-result ordering
+  using the production acquisition engine. Manual search includes read-only policy
+  previews; search logs retain the same evidence for new searches.
+
+- Interactive calendar entries open movie and show detail drawers with search
+  actions, labeled acquisition and monitoring states, and expandable busy days.
+- Discover cards have separate quick-add and full-details controls, with an
+  add-to-library action in the detail drawer using the import list's settings.
+- Experimental native Android TV home companion with Loom movie/series
+  catalogs, TV apps, settings, and input switching with OEM fallbacks.
+- Expiring TV pairing with signed-in browser approval, one-time delivery of
+  a dedicated revocable API key, and retained manual API-key setup.
+- Isolated `prelease/<semver>` CI and container publishing, starting with
+  `prelease/0.2.9`, without advancing stable or main image tags.
+- Stable download-client queue ordering in Downloads, with selectable sorting
+  by queue position, download speed, time to completion or status and reversible
+  sort direction.
+- **Grow your library and Collections.** Discover new movie and series
+  suggestions from TMDB using recurring cast/directors, genres, related titles
+  and movie-set gaps without requiring Import Lists. Browse missing/upcoming
+  collection members, persist per-user dismissals, and explicitly add titles
+  through the existing dialogs with immediate search off by default.
+
+### Documentation
+
+- Propose independent permanent 1080p/4K version tracks in ADR-0027, including
+  default-track compatibility, migration and acquisition/import/deletion
+  isolation. This is design work only; concurrent tracks are not implemented.
+
 ### Security
 
+- Upgrade `golang.org/x/net` to v0.62.0 and its required Go dependencies to
+  address GO-2026-6860 and GO-2026-6866 in HTML parsing and rendering.
 - Require administrator access for integration configuration changes and tests,
   redact stored credentials in responses, and preserve unchanged secrets on edit.
 - Upgrade the Go toolchain to 1.26.10 across CI and container builds, and update
@@ -23,6 +79,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   (including required transitive updates) to address known vulnerabilities.
 
 ### Fixed
+
+- Stop stalled downloads from staying in "Downloading": stalled workflows now
+  fail, reset the movie/episode status and trigger a fresh search. Stall
+  detection ignores client/network outages, catches downloads that never start,
+  tolerates briefly missing items, recovers late completions, and honors the
+  `downloads.check_for_stalled`, `stall_timeout`, `stall_action` and
+  `max_retries` settings. Stalled releases are blocklisted so they are not
+  grabbed again.
+- Recognize TMDb-added movies in IMDb Discover lists using exact cross-provider
+  ID mappings, cache resolved identities, and prevent duplicate additions.
+  Movie metadata refresh also retains IMDb and TVDb IDs.
+- Populate Discover artwork directly from IMDb lists, watchlists, and charts,
+  including existing entries missing posters when their lists sync again.
+- Make downloaded-title imports recoverable: coordinate a single import owner,
+  retain source media until verification and library registration succeed, retry
+  partial batches using preserved paths, and resume interrupted import cleanup.
+- Restore public IMDb list and watchlist imports through IMDb's GraphQL endpoint,
+  including pagination and support for previously saved legacy RSS list URLs.
+- Default newly added movies and TV shows to the **Any** quality profile when
+  none is selected, including Discovery additions. Highlight existing titles
+  without a quality profile in library and detail views so they can be repaired.
+
+- Reject conflicting embedded external IDs even when a release title matches,
+  and reject ambiguous multi-season/complete-series packs instead of treating the
+  first parsed season as proof of coverage.
+
+- Persist pre-grab acquisition failures in download history with sanitized
+  stage reasons, restart-safe admission, bounded retries and administrator
+  recovery/blocklist actions in Activity.
 
 - Enforce rolling-search quotas per admitted indexer query and retain retry
   eligibility after failed, cancelled or fully skipped searches.
@@ -34,6 +119,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   server-side, preventing older same-title releases from bypassing year validation.
   Movie imports reject conflicting release years even when a workflow links the
   download to a library item, while retaining the existing one-year tolerance.
+- Add read-only per-library health reporting with bounded and cancellable execution,
+  evidence and uncertainty for suspected samples/duplicates/orphaned records/missing files,
+  mount and incomplete-scan safeguards, protected-item detection (hardlinks, versions, extras,
+  subtitles), and persisted dismissal/recheck state plus non-executable action previews.
+- Calendar movies that are downloading or importing are no longer shown as available.
+  Calendar episode entries now include their parent series ID.
 
 ## [0.1.1] - 2026-06-09
 

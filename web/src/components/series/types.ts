@@ -28,6 +28,11 @@ export interface Series {
   status: string;
   seriesType: string;
   qualityProfileId: string;
+  /**
+   * Authoritative server flag: true when the assigned quality profile is
+   * blank or no longer exists. Absent on older API responses.
+   */
+  qualityProfileMissing?: boolean;
   libraryId: string;
   monitoringStatus: string;
   seasonFolder: boolean;

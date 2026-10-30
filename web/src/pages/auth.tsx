@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertCircle } from "lucide-react";
+import { apiFetch } from "@/lib/fetch";
 
 export function AuthPage() {
   const [username, setUsername] = useState("");
@@ -26,7 +27,7 @@ export function AuthPage() {
     setError(null);
 
     try {
-      const response = await fetch("/api/v1/auth/login", {
+      const response = await apiFetch("/api/v1/auth/login", {
         method: "POST",
         credentials: "include",
         headers: {
@@ -46,8 +47,11 @@ export function AuthPage() {
       // Refresh auth state to pick up the new session cookie
       await refreshAuth();
 
-      // Redirect to dashboard
-      navigate({ to: "/" });
+      // The auth gate renders in place. Preserve a device code across login
+      // without trusting an arbitrary external return URL.
+      if (!/\/pair\/?$/.test(window.location.pathname)) {
+        navigate({ to: "/" });
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login failed");
     } finally {

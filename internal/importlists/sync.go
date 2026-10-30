@@ -225,9 +225,14 @@ func (m *SyncManager) SyncList(ctx context.Context, l *ImportList) error {
 		if existing != nil {
 			existing.Title = fi.Title
 			existing.IMDbID = fi.IMDbID
-			existing.TMDbID = fi.TMDbID
+			if fi.TMDbID != "" && fi.TMDbID != "0" {
+				existing.TMDbID = fi.TMDbID
+			}
 			existing.TVDbID = fi.TVDbID
 			existing.MediaType = fi.MediaType
+			if existing.PosterPath == "" {
+				existing.PosterPath = fi.PosterPath
+			}
 			if fi.Year != 0 {
 				existing.Year = &fi.Year
 			}
@@ -256,6 +261,7 @@ func (m *SyncManager) SyncList(ctx context.Context, l *ImportList) error {
 			TVDbID:     fi.TVDbID,
 			MediaType:  fi.MediaType,
 			Status:     status,
+			PosterPath: fi.PosterPath,
 		}
 		m.enrichItem(ctx, item, l)
 		if err := m.store.UpsertItem(ctx, item); err != nil {
@@ -293,6 +299,7 @@ func (m *SyncManager) enrichItem(ctx context.Context, item *ImportListItem, l *I
 	if mt == string(MediaTypeMusic) {
 		return
 	}
+	m.resolveMovieIdentity(ctx, item, mt)
 	// Fetch when any cacheable field is still missing.
 	if item.PosterPath != "" && len(item.Genres) > 0 {
 		return
@@ -345,6 +352,21 @@ func (m *SyncManager) enrichItem(ctx context.Context, item *ImportListItem, l *I
 	if len(item.Genres) == 0 {
 		item.Genres = meta.Genres
 	}
+}
+
+func (m *SyncManager) resolveMovieIdentity(ctx context.Context, item *ImportListItem, mediaType string) {
+	if mediaType != string(MediaTypeMovie) || m.tmdbClient == nil ||
+		(item.TMDbID != "" && item.TMDbID != "0") || item.IMDbID == "" {
+		return
+	}
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	id, err := m.tmdbClient.FindMovieByIMDbID(ctx, item.IMDbID)
+	if err != nil {
+		m.logger.Warn("import-lists: IMDb movie identity lookup failed", "imdb_id", item.IMDbID, "error", err)
+		return
+	}
+	item.TMDbID = id
 }
 
 func (m *SyncManager) providerFor(lt ListType, mediaType MediaType) providers.ListProvider {
@@ -513,6 +535,7 @@ func (m *SyncManager) addMovieToLibrary(ctx context.Context, l *ImportList, item
 	if m.moviesSvc == nil {
 		return fmt.Errorf("movies service not configured")
 	}
+	m.resolveMovieIdentity(ctx, item, string(MediaTypeMovie))
 
 	// Check if the movie already exists in the library by TMDb ID or IMDb ID.
 	if item.TMDbID != "" && item.TMDbID != "0" {

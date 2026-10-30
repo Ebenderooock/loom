@@ -47,6 +47,7 @@ const CATEGORIES = [
   { value: "search", label: "Search" },
   { value: "download", label: "Download" },
   { value: "import", label: "Import" },
+  { value: "library", label: "Library" },
   { value: "safety", label: "Safety Review" },
   { value: "system", label: "System" },
   { value: "auth", label: "Auth" },

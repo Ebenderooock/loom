@@ -2,6 +2,10 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { TableRow, TableCell } from "@/components/ui/table";
 import { Tv, Star, Eye, EyeOff } from "lucide-react";
 import { SeriesStatusBadge } from "./series-status-badge";
+import {
+  isMissingQualityProfile,
+  MissingQualityProfileBadge,
+} from "@/components/quality-profile-warning";
 import type { Series, QualityProfile } from "./types";
 import { TMDB_IMG } from "./types";
 
@@ -62,7 +66,11 @@ export function SeriesListRow({
         <SeriesStatusBadge status={series.status} />
       </TableCell>
       <TableCell className="text-xs text-muted-foreground">
-        {profile?.name ?? "—"}
+        {isMissingQualityProfile(series) ? (
+          <MissingQualityProfileBadge />
+        ) : (
+          (profile?.name ?? "—")
+        )}
       </TableCell>
       <TableCell>
         {series.monitoringStatus === "monitored" ? (

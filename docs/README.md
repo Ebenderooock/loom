@@ -15,6 +15,7 @@ Radarr + Sonarr + Prowlarr. These pages cover the project as it stands today
 | [Storage](storage.md) | SQLite vs Postgres, migrations, backups. |
 | [Security](security.md) | Threat model, secrets, vuln reporting. |
 | [Workflows](workflows.md) | Stateful download tracking, self-healing, retry logic. |
+| [Grow your library and Collections](discovery.md) | Explained TMDB acquisition suggestions and missing movie-set entries without Import Lists. |
 | [Migration from Radarr/Sonarr/Prowlarr](migration.md) | _Stub — lands in Phase 8._ |
 
 ## For contributors

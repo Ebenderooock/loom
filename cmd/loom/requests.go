@@ -43,6 +43,7 @@ func buildRequestsService(
 	logger *slog.Logger,
 ) *requests.Service {
 	f := &requestsFulfiller{
+		db:          db.DB(),
 		movies:      moviesSvc,
 		series:      seriesSvc,
 		music:       musicSvc,
@@ -66,6 +67,7 @@ func buildRequestsService(
 // requestsFulfiller implements requests.Fulfiller against the real add-media
 // and search-and-grab flows.
 type requestsFulfiller struct {
+	db          *sql.DB
 	movies      movies.Service
 	series      series.Service
 	music       music.Service
@@ -182,6 +184,106 @@ func (f *requestsFulfiller) FulfillArtist(ctx context.Context, mbid, qualityProf
 	}
 	f.grabArtist(ctx, a.ID)
 	return a.ID, nil
+}
+
+// Reacquire resumes an existing catalog entry without adding duplicate media.
+// Its configured library/profile and monitored episode/album scope are retained.
+func (f *requestsFulfiller) Reacquire(ctx context.Context, mt requests.MediaType, mediaID string, missingIDs []string) error {
+	if len(missingIDs) == 0 {
+		return errors.New("no verified missing files to re-acquire")
+	}
+	switch mt {
+	case requests.MediaMovie:
+		if f.engine == nil {
+			return errors.New("movie acquisition is not configured")
+		}
+		m, err := f.movies.GetMovie(ctx, mediaID)
+		if err != nil {
+			return err
+		}
+		if err := f.movies.SetMonitoringStatus(ctx, mediaID, movies.MonitoringStatusMonitored); err != nil {
+			return err
+		}
+		req := autosearch.SearchRequest{MediaType: "movie", MediaID: mediaID, Title: m.Title, Year: m.Year, QualityProfileID: m.QualityProfileID, ConfirmedMissing: true}
+		if m.TMDBID != nil {
+			req.TMDBID = *m.TMDBID
+		}
+		if m.IMDBID != nil {
+			req.IMDBID = *m.IMDBID
+		}
+		f.grab(ctx, req)
+	case requests.MediaSeries:
+		if f.engine == nil || f.db == nil {
+			return errors.New("series acquisition is not configured")
+		}
+		sr, err := f.series.GetSeries(ctx, mediaID)
+		if err != nil {
+			return err
+		}
+		if err := f.series.SetMonitoringStatus(ctx, mediaID, series.MonitoringMonitored); err != nil {
+			return err
+		}
+		req := autosearch.SearchRequest{MediaType: "series", MediaID: mediaID, Title: sr.Title, Year: sr.Year, QualityProfileID: sr.QualityProfileID}
+		if sr.TMDBID != nil {
+			req.TMDBID = *sr.TMDBID
+		}
+		if sr.TVDBID != nil {
+			req.TVDBID = *sr.TVDBID
+		}
+		if sr.IMDBID != nil {
+			req.IMDBID = *sr.IMDBID
+		}
+		searches := make([]autosearch.SearchRequest, 0, len(missingIDs))
+		for _, id := range missingIDs {
+			target := req
+			err := f.db.QueryRowContext(ctx, `SELECT sn.season_number,e.episode_number FROM episodes e
+				JOIN seasons sn ON sn.id=e.season_id WHERE e.id=? AND e.series_id=?
+				AND e.monitored=true AND sn.monitored=true`, id, mediaID).Scan(&target.Season, &target.Episode)
+			if err != nil {
+				return fmt.Errorf("resolve missing episode %s: %w", id, err)
+			}
+			target.MediaType = "episode"
+			target.ConfirmedMissing = true
+			searches = append(searches, target)
+		}
+		go func(ctx context.Context) {
+			ctx = context.WithoutCancel(ctx)
+			for _, target := range searches {
+				if _, err := f.engine.SearchAndGrab(ctx, target); err != nil {
+					f.logger.WarnContext(ctx, "requests: missing episode search failed", "media_id", mediaID, "season", target.Season, "episode", target.Episode, "error", err)
+				}
+			}
+		}(ctx)
+	case requests.MediaArtist:
+		if f.music == nil || f.musicEngine == nil || f.db == nil {
+			return errors.New("music capability not available")
+		}
+		if _, err := f.music.SetArtistMonitoring(ctx, mediaID, music.MonitoringMonitored); err != nil {
+			return err
+		}
+		albums := map[string]bool{}
+		for _, id := range missingIDs {
+			var albumID string
+			err := f.db.QueryRowContext(ctx, `SELECT al.id FROM tracks t JOIN albums al ON al.id=t.album_id
+				WHERE t.id=? AND al.artist_id=? AND al.monitored=true AND t.monitored=true
+				AND t.release_id=al.selected_release_id AND al.deleted_at IS NULL`, id, mediaID).Scan(&albumID)
+			if err != nil {
+				return fmt.Errorf("resolve missing track %s: %w", id, err)
+			}
+			albums[albumID] = true
+		}
+		go func(ctx context.Context) {
+			ctx = context.WithoutCancel(ctx)
+			for albumID := range albums {
+				if _, err := f.musicEngine.SearchAlbum(ctx, albumID); err != nil {
+					f.logger.WarnContext(ctx, "requests: missing album search failed", "album_id", albumID, "error", err)
+				}
+			}
+		}(ctx)
+	default:
+		return fmt.Errorf("unsupported media type %q", mt)
+	}
+	return nil
 }
 
 // grabArtist launches detached searches for an artist's monitored albums so a

@@ -4,10 +4,12 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net"
 	"time"
 
 	"github.com/ebenderooock/loom/internal/auditlog"
 	"github.com/ebenderooock/loom/internal/autosearch"
+	"github.com/ebenderooock/loom/internal/calendar"
 	"github.com/ebenderooock/loom/internal/customformats"
 	"github.com/ebenderooock/loom/internal/downloads"
 	"github.com/ebenderooock/loom/internal/featureflags"
@@ -60,6 +62,9 @@ func wireDownloads(
 	// Blocklist
 	blocklistStore := downloads.NewBlocklistStore(db.DB())
 	wiring.BlocklistStore = blocklistStore
+	downloadSvc.SetBlocklist(blocklistStore)
+	downloadHistoryStore := downloads.NewHistoryStore(db.DB())
+	downloadSvc.SetHistoryStore(downloadHistoryStore)
 
 	// Workflow engine for tracking active downloads
 	wfStore, err := workflows.NewStore(db.DB())
@@ -67,6 +72,7 @@ func wireDownloads(
 		return nil, fmt.Errorf("init workflow store: %w", err)
 	}
 	wfEngine := workflows.NewEngine(wfStore, workflowMediaAdapter{moviesSvc, media.seriesSvc}, logger)
+	wiring.CalendarHandler = calendar.Router(db.DB(), wfStore)
 
 	downloadSvc.SetWorkflowEngine(wfEngine)
 	downloadSvc.SetMovieStatusUpdater(movieStatusAdapter{moviesSvc})
@@ -94,8 +100,14 @@ func wireDownloads(
 		autosearch.WithDebugStore(wiring.SearchDebugStore),
 		autosearch.WithDebugHub(wiring.SearchDebugHub),
 		autosearch.WithSearchLogEnabled(wiring.FeatureFlags.EnabledFunc(featureflags.KeySearchLog)),
+		autosearch.WithBlocklist(blocklistStore),
 	)
 	wiring.AutoSearchEngine = autoSearchEngine
+
+	// When a download is abandoned (stalled, failed, vanished, unimportable)
+	// the orchestrator asks for a replacement release. The stalled release is
+	// already blocklisted, so the search picks a different one.
+	orchestrator.SetResearchFn(newResearchFunc(autoSearchEngine, moviesSvc, media.seriesSvc, logger))
 
 	// Music acquisition engine — self-contained parallel to autosearch that
 	// reuses only the media-agnostic indexer transport and download registry.
@@ -142,15 +154,13 @@ func wireDownloads(
 	if err != nil {
 		return nil, fmt.Errorf("init import pipeline: %w", err)
 	}
-	importPipeline.Start()
+	// The monitor delivers completions to the orchestrator, including orphans.
+	// Do not also subscribe the importer to the asynchronous completion event.
 	wiring.ImportPipeline = importPipeline
 	orchestrator.SetImportFn(importPipeline.RunImport)
 
-	// Wire pre-import: stop and remove the torrent from the client BEFORE the
-	// import runs (keeping files on disk), so the importer can safely MOVE
-	// files without the client holding locks or re-seeding partial data.
-	// Returns the resolved content/save paths so the orchestrator can cache
-	// them for import resolution after the torrent is gone.
+	// Keep the download in the client until import succeeds so failures remain
+	// recoverable. Pause it and cache paths before touching the files.
 	orchestrator.SetPreImportFn(func(ctx context.Context, clientID, downloadID string) (string, string, error) {
 		c, ok := downloadSvc.Registry().Get(clientID)
 		if !ok {
@@ -158,28 +168,27 @@ func wireDownloads(
 		}
 		// Resolve the on-disk paths while the torrent still exists.
 		var contentPath, savePath string
-		if items, err := c.Status(ctx, downloadID); err == nil && len(items) > 0 {
-			contentPath = remotePathStore.MapPath(ctx, clientID, items[0].ContentPath)
-			savePath = remotePathStore.MapPath(ctx, clientID, items[0].SavePath)
+		items, err := c.Status(ctx, downloadID)
+		if err != nil {
+			return "", "", fmt.Errorf("resolve pre-import download paths: %w", err)
 		}
-		// Stop seeding/downloading, then remove from the client queue while
-		// keeping the data on disk (deleteFiles=false) so the import can read it.
+		for _, item := range items {
+			if item.ID == downloadID {
+				contentPath = item.ContentPath
+				savePath = item.SavePath
+				break
+			}
+		}
 		if err := c.Pause(ctx, downloadID); err != nil {
-			logger.Debug("pre-import pause failed (non-fatal)",
-				"client_id", clientID, "download_id", downloadID, "error", err)
-		}
-		if err := c.Remove(ctx, []string{downloadID}, false); err != nil {
-			return contentPath, savePath, fmt.Errorf("remove download from client: %w", err)
+			return contentPath, savePath, fmt.Errorf("pause download before import: %w", err)
 		}
 		return contentPath, savePath, nil
 	})
 
 	// Wire post-import cleanup: remove download from client queue (if still
-	// present) + clean source folder junk. After the pre-import step the
-	// torrent is usually already gone, so this primarily scrubs leftover junk
-	// using the cached source path.
+	// present) + clean source folder junk, only after successful import.
 	folderCleaner := &imports.FolderCleaner{}
-	orchestrator.SetCleanupFn(func(ctx context.Context, clientID, downloadID, sourcePath string, _ []string) error {
+	orchestrator.SetCleanupFn(func(ctx context.Context, clientID, downloadID, sourcePath string, importedPaths []string) error {
 		c, ok := downloadSvc.Registry().Get(clientID)
 		if !ok {
 			return fmt.Errorf("download client %q not found in registry", clientID)
@@ -187,7 +196,11 @@ func wireDownloads(
 		contentPath := remotePathStore.MapPath(ctx, clientID, sourcePath)
 		// The torrent may already have been removed during pre-import; tolerate
 		// a missing item. If still present, capture its path and remove it.
-		if items, err := c.Status(ctx, downloadID); err == nil && len(items) > 0 {
+		items, err := c.Status(ctx, downloadID)
+		if err != nil {
+			return fmt.Errorf("check download before source cleanup: %w", err)
+		}
+		if len(items) > 0 {
 			if contentPath == "" {
 				p := items[0].ContentPath
 				if p == "" {
@@ -197,9 +210,11 @@ func wireDownloads(
 			}
 			// Remove from client queue (keep files; already imported).
 			if err := c.Remove(ctx, []string{downloadID}, false); err != nil {
-				logger.Warn("post-import remove failed (non-fatal)",
-					"client_id", clientID, "download_id", downloadID, "error", err)
+				return fmt.Errorf("remove imported download from client: %w", err)
 			}
+		}
+		if err := importPipeline.FinalizeImports(ctx, importedPaths); err != nil {
+			return err
 		}
 		// Clean up any leftover junk in the source folder.
 		if contentPath != "" {
@@ -239,23 +254,29 @@ func wireDownloads(
 	})
 
 	// Download monitor — polls clients for completion
-	downloadHistoryStore := downloads.NewHistoryStore(db.DB())
+	stallTimeout := time.Duration(cfg.Downloads.StallTimeoutMin) * time.Minute
+	if stallTimeout <= 0 {
+		stallTimeout = 30 * time.Minute
+	}
 	stallHandler := downloads.NewStallHandler(downloads.StallHandlerOptions{
-		Registry:  downloadSvc.Registry(),
-		Blocklist: blocklistStore,
-		Bus:       wiring.Bus,
-		Logger:    logger,
+		Registry:   downloadSvc.Registry(),
+		Blocklist:  blocklistStore,
+		Bus:        wiring.Bus,
+		Logger:     logger,
+		Action:     downloads.StallAction(cfg.Downloads.StallAction),
+		MaxRetries: cfg.Downloads.MaxRetries,
 	})
 	downloadMonitor, err := downloads.NewMonitor(downloads.MonitorOptions{
-		Service:         downloadSvc,
-		Bus:             wiring.Bus,
-		Logger:          logger,
-		CheckInterval:   30 * time.Second,
-		StallTimeout:    30 * time.Minute,
-		CheckForStalled: true,
-		StallHandler:    stallHandler,
-		HistoryStore:    downloadHistoryStore,
-		OrchNotifier:    orchestrator,
+		Service:           downloadSvc,
+		Bus:               wiring.Bus,
+		Logger:            logger,
+		CheckInterval:     30 * time.Second,
+		StallTimeout:      stallTimeout,
+		CheckForStalled:   cfg.Downloads.CheckForStalled,
+		ConnectivityCheck: internetReachable,
+		StallHandler:      stallHandler,
+		HistoryStore:      downloadHistoryStore,
+		OrchNotifier:      orchestrator,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("init download monitor: %w", err)
@@ -314,7 +335,17 @@ func (a workflowMediaAdapter) SetMovieDownloading(ctx context.Context, movieID s
 	return a.moviesSvc.SetMovieStatus(ctx, movieID, movies.MovieStatusDownloading)
 }
 
+// SetMovieMissing reverts a movie that is shown as downloading. Movies in any
+// other status (e.g. already available while an upgrade failed) are left
+// untouched so a failed or cancelled upgrade never hides an existing file.
 func (a workflowMediaAdapter) SetMovieMissing(ctx context.Context, movieID string) error {
+	m, err := a.moviesSvc.GetMovie(ctx, movieID)
+	if err != nil {
+		return err
+	}
+	if m == nil || m.Status != movies.MovieStatusDownloading {
+		return nil
+	}
 	return a.moviesSvc.SetMovieStatus(ctx, movieID, movies.MovieStatusMissing)
 }
 
@@ -367,4 +398,133 @@ func (g *autoSearchGrabber) Grab(ctx context.Context, c scheduler.SearchCandidat
 	}
 	_, err := g.engine.SearchAndGrab(ctx, req)
 	return err
+}
+
+// internetReachable is the download monitor's connectivity probe. It lets
+// stall detection distinguish a dead download from a network outage: stall
+// time is not counted while no well-known host is reachable.
+func internetReachable(ctx context.Context) bool {
+	targets := []string{"1.1.1.1:443", "8.8.8.8:53", "9.9.9.9:443"}
+	d := net.Dialer{Timeout: 3 * time.Second}
+	for _, addr := range targets {
+		conn, err := d.DialContext(ctx, "tcp", addr)
+		if err == nil {
+			_ = conn.Close()
+			return true
+		}
+	}
+	return false
+}
+
+// newResearchFunc returns the orchestrator hook that searches for a
+// replacement release after a download is abandoned. Only monitored media is
+// searched; episodes are grouped per season so a failed season pack is
+// replaced by a season search rather than many individual searches.
+func newResearchFunc(engine *autosearch.Engine, moviesSvc movies.Service, seriesSvc series.Service, logger *slog.Logger) workflows.ResearchFunc {
+	logger = logger.With("module", "research")
+	search := func(ctx context.Context, req autosearch.SearchRequest) {
+		ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Minute)
+		defer cancel()
+		res, err := engine.SearchAndGrab(ctx, req)
+		if err != nil {
+			logger.Warn("re-search after abandoned download failed",
+				"media_type", req.MediaType, "media_id", req.MediaID, "title", req.Title, "error", err)
+			return
+		}
+		if res != nil {
+			logger.Info("re-search after abandoned download",
+				"media_type", req.MediaType, "media_id", req.MediaID, "title", req.Title,
+				"grabbed", res.Grabbed != nil, "reason", res.Reason)
+		}
+	}
+	deref := func(p *string) string {
+		if p == nil {
+			return ""
+		}
+		return *p
+	}
+
+	return func(ctx context.Context, mediaType string, mediaIDs []string) {
+		switch mediaType {
+		case "movie":
+			if moviesSvc == nil {
+				return
+			}
+			for _, id := range mediaIDs {
+				m, err := moviesSvc.GetMovie(ctx, id)
+				if err != nil || m == nil {
+					continue
+				}
+				if m.MonitoringStatus != movies.MonitoringStatusMonitored {
+					continue
+				}
+				search(ctx, autosearch.SearchRequest{
+					MediaType:        "movie",
+					MediaID:          m.ID,
+					Title:            m.Title,
+					Year:             m.Year,
+					QualityProfileID: m.QualityProfileID,
+					IMDBID:           deref(m.IMDBID),
+					TMDBID:           deref(m.TMDBID),
+					TVDBID:           deref(m.TVDBID),
+				})
+			}
+		case "episode":
+			if seriesSvc == nil {
+				return
+			}
+			type seasonKey struct {
+				seriesID string
+				seasonID string
+			}
+			groups := make(map[seasonKey][]int)
+			var order []seasonKey
+			for _, id := range mediaIDs {
+				ep, err := seriesSvc.GetEpisode(ctx, id)
+				if err != nil || ep == nil || !ep.Monitored {
+					continue
+				}
+				k := seasonKey{ep.SeriesID, ep.SeasonID}
+				if _, ok := groups[k]; !ok {
+					order = append(order, k)
+				}
+				groups[k] = append(groups[k], ep.EpisodeNumber)
+			}
+			for _, k := range order {
+				sr, err := seriesSvc.GetSeries(ctx, k.seriesID)
+				if err != nil || sr == nil {
+					continue
+				}
+				seasons, err := seriesSvc.ListSeasons(ctx, k.seriesID)
+				if err != nil {
+					continue
+				}
+				seasonNum := -1
+				for _, se := range seasons {
+					if se.ID == k.seasonID {
+						seasonNum = se.SeasonNumber
+						break
+					}
+				}
+				if seasonNum < 0 {
+					continue
+				}
+				req := autosearch.SearchRequest{
+					MediaType:        "series",
+					MediaID:          sr.ID,
+					Title:            sr.Title,
+					Year:             sr.Year,
+					QualityProfileID: sr.QualityProfileID,
+					IMDBID:           deref(sr.IMDBID),
+					TMDBID:           deref(sr.TMDBID),
+					TVDBID:           deref(sr.TVDBID),
+					Season:           seasonNum,
+				}
+				if eps := groups[k]; len(eps) == 1 {
+					req.Episode = eps[0]
+				}
+				search(ctx, req)
+			}
+		}
+	}
 }

@@ -281,7 +281,11 @@ func mapStatus(s string) downloads.ItemStatus {
 		return downloads.StatusItemSeeding
 	case "stopped":
 		return downloads.StatusItemPaused
-	case "downloading metadata", "allocating", "verifying", "stopping":
+	case "downloading metadata":
+		// A magnet resolving metadata is trying to start; treating it as
+		// downloading lets stall detection catch dead magnets.
+		return downloads.StatusItemDownloading
+	case "allocating", "verifying", "stopping":
 		return downloads.StatusItemQueued
 	default:
 		return downloads.StatusItemUnknown
