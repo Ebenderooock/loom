@@ -126,8 +126,10 @@ func Router(s *Service) http.Handler {
 		return c, s.store.Save(r.Context(), c, true)
 	}))
 	r.Post("/discover", respond(func(_ http.ResponseWriter, r *http.Request) (any, error) {
-		items, warnings, err := s.Discover(r.Context())
-		return map[string]any{"items": items, "warnings": warnings}, err
+		return s.RequestScan(r.Context())
+	}))
+	r.Get("/scan", respond(func(_ http.ResponseWriter, r *http.Request) (any, error) {
+		return s.ScanStatus(r.Context())
 	}))
 	r.Get("/{id}", respond(func(_ http.ResponseWriter, r *http.Request) (any, error) {
 		c, err := s.store.Get(r.Context(), chi.URLParam(r, "id"))

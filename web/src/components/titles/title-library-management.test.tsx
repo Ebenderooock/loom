@@ -60,20 +60,17 @@ it.each(["movie", "series"] as const)(
         />
       </QueryClientProvider>,
     );
-    await user.click(
-      await screen.findByRole("button", { name: "Manage in library" }),
-    );
     expect(
       await screen.findByRole("dialog", { name: "Normal management" }),
     ).toHaveTextContent(`${media}:actual-library-id`);
+    expect(
+      screen.queryByRole("button", { name: "Manage in library" }),
+    ).not.toBeInTheDocument();
     await user.click(
       screen.getByRole("button", { name: "Save management change" }),
     );
     expect(added).not.toHaveBeenCalled();
     await user.click(screen.getByRole("button", { name: "Close management" }));
-    expect(
-      await screen.findByRole("button", { name: "Manage in library" }),
-    ).toBeInTheDocument();
     expect(added).not.toHaveBeenCalled();
     client.clear();
   },

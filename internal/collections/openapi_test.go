@@ -21,6 +21,7 @@ func TestOpenAPICollectionsContract(t *testing.T) {
 	for path, method := range map[string]string{
 		"/api/v1/collections/":                      "get",
 		"/api/v1/collections/discover":              "post",
+		"/api/v1/collections/scan":                  "get",
 		"/api/v1/collections/{id}":                  "patch",
 		"/api/v1/collections/{id}/sources":          "post",
 		"/api/v1/collections/{id}/refresh":          "post",

@@ -105,13 +105,13 @@ export function TitleCredits({ credits }: { credits?: Credits }) {
       <p className="text-sm text-muted-foreground">No credits available.</p>
     );
   return (
-    <div className="space-y-4">
+    <div className="min-w-0 max-w-full space-y-4">
       {(["cast", "crew"] as const).map(
         (group) =>
           credits[group]?.length > 0 && (
-            <section key={group}>
+            <section key={group} className="min-w-0">
               <h3 className="mb-2 text-sm font-semibold capitalize">{group}</h3>
-              <div className="flex gap-3 overflow-x-auto pb-2">
+              <div className="flex min-w-0 flex-wrap gap-3 pb-2">
                 {credits[group].map((person, i) => (
                   <TitlePersonCard key={`${person.id}-${i}`} person={person} />
                 ))}

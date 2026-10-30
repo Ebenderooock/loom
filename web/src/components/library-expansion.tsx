@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
-import { Film, Layers, Loader2, X } from "lucide-react";
+import { Layers, Loader2, X } from "lucide-react";
 import {
   discoveryKeys,
   useDismissRecommendation,
@@ -12,7 +12,7 @@ import {
 import { collectionKeys } from "@/lib/collections-api";
 import { useAuth } from "@/hooks/use-auth";
 import { TitleDialog } from "@/components/titles/title-experience";
-import { titleImage } from "@/components/titles/title-metadata";
+import { TitlePosterCard } from "@/components/titles/title-poster-card";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { CardGridSkeleton } from "@/components/ui/skeletons";
@@ -149,33 +149,21 @@ function RecommendationCard({
   onOpen: () => void;
 }) {
   const dismiss = useDismissRecommendation();
+  const { user } = useAuth();
   return (
-    <article className="flex flex-col overflow-hidden rounded-lg border bg-card">
+    <article className="flex min-w-0 flex-col gap-3">
       <div className="relative">
-        <button
-          type="button"
-          className="block aspect-[2/3] w-full bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-          onClick={onOpen}
-          aria-label={`View ${item.title}`}
-        >
-          {item.poster_path ? (
-            <img
-              src={titleImage(item.poster_path) ?? ""}
-              alt=""
-              className="h-full w-full object-cover"
-              loading="lazy"
-            />
-          ) : (
-            <Film
-              className="h-full w-full p-10 text-muted-foreground"
-              aria-hidden
-            />
-          )}
-        </button>
+        <TitlePosterCard
+          title={item.title}
+          poster={item.poster_path}
+          year={item.year}
+          onOpen={onOpen}
+          label={`View ${item.title}`}
+        />
         <Button
           variant="secondary"
           size="icon"
-          className="absolute right-2 top-2 h-8 w-8 shadow"
+          className="absolute right-2 top-2 h-11 w-11 shadow"
           aria-label={`Dismiss ${item.title}`}
           disabled={dismiss.isPending}
           onClick={() =>
@@ -193,17 +181,6 @@ function RecommendationCard({
         </Button>
       </div>
       <div className="flex flex-1 flex-col gap-3 p-3">
-        <button
-          type="button"
-          onClick={onOpen}
-          className="text-left text-sm font-semibold hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          {item.title}
-        </button>
-        <p className="text-xs text-muted-foreground">
-          {item.year || "Date unknown"}
-          {item.rating > 0 && ` / ${item.rating.toFixed(1)} TMDB`}
-        </p>
         {item.reasons.length > 0 && (
           <p className="text-xs leading-relaxed text-muted-foreground">
             {item.reasons.join(" · ")}
@@ -211,7 +188,7 @@ function RecommendationCard({
         )}
         <div className="mt-auto space-y-2">
           <Button size="sm" className="w-full" onClick={onOpen}>
-            Details & add
+            {user?.role === "admin" ? "Add to library" : "View details"}
           </Button>
           {item.collection_id && (
             <Button variant="outline" size="sm" className="w-full" asChild>

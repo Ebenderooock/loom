@@ -132,7 +132,7 @@ describe("Discover recommendations", () => {
       const user = userEvent.setup();
       await user.click(screen.getByRole("tab", { name: tab }));
       await user.click(
-        await screen.findByRole("button", { name: "Details & add" }),
+        await screen.findByRole("button", { name: "Add to library" }),
       );
       expect(await screen.findByRole("dialog")).toHaveTextContent(
         `${tab === "Movies" ? "movie" : "series"}:42`,
@@ -146,7 +146,7 @@ describe("Discover recommendations", () => {
     state.role = "user";
     page();
     await userEvent.click(
-      await screen.findByRole("button", { name: "Details & add" }),
+      await screen.findByRole("button", { name: "View details" }),
     );
     expect(await screen.findByRole("dialog")).toHaveTextContent(
       "Ask an administrator",

@@ -178,7 +178,10 @@ describe("shared title details and settings", () => {
       screen.getByText("Director", { selector: "p.text-xs" }),
     ).toBeInTheDocument();
     expect(writes).toEqual([]);
-    expect(screen.queryByLabelText("Library")).not.toBeInTheDocument();
+    expect(await screen.findByLabelText("Library")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "View full details" }),
+    ).not.toBeInTheDocument();
   });
 
   it("uses editable visible source defaults and tracks only after persisting", async () => {
@@ -212,8 +215,6 @@ describe("shared title details and settings", () => {
     expect(screen.getByLabelText("Quality profile")).toHaveValue(
       "library-profile",
     );
-    fireEvent.click(screen.getByRole("button", { name: "View full details" }));
-    fireEvent.click(screen.getByRole("button", { name: "Add to library" }));
     expect(screen.getByLabelText("Library")).toHaveValue("movies");
     fireEvent.click(screen.getByRole("button", { name: "Add to library" }));
     await waitFor(() => expect(onAdded).toHaveBeenCalledOnce());
@@ -328,7 +329,6 @@ describe("shared title details and settings", () => {
     );
     expect(await screen.findByText("Test track")).toBeInTheDocument();
     expect(writes).toEqual([]);
-    fireEvent.click(screen.getByRole("button", { name: "Add to library" }));
     await waitFor(() =>
       expect(screen.getByLabelText("Metadata profile")).toHaveValue("metadata"),
     );

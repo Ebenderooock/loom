@@ -4,12 +4,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from "@/components/ui/dialog";
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+} from "@/components/ui/sheet";
 import { useLibraries } from "@/lib/libraries-api";
 import { useMediaPreferences } from "@/lib/media-info-api";
 import {
@@ -43,15 +43,20 @@ type Membership = Record<string, string>;
 export function useTitleDialogFocus() {
   const opener = useRef<HTMLElement | null>(null);
   return {
-    onOpenAutoFocus: () => {
+    onOpenAutoFocus: (event: Event) => {
       opener.current =
         document.activeElement instanceof HTMLElement
           ? document.activeElement
           : null;
+      event.preventDefault();
+      if (event.target instanceof HTMLElement) {
+        event.target.focus({ preventScroll: true });
+      }
     },
     onCloseAutoFocus: (event: Event) => {
       event.preventDefault();
-      if (opener.current?.isConnected) opener.current.focus();
+      if (opener.current?.isConnected)
+        opener.current.focus({ preventScroll: true });
     },
   };
 }
@@ -111,7 +116,7 @@ function SelectField({
         id={id}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="h-11 w-full min-w-0 rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         {!value && <option value="">Select {label.toLowerCase()}</option>}
         {options.map((option) => (
@@ -299,7 +304,10 @@ function AddTitleSettings({
                       monitoring === "none" ? "unmonitored" : "monitored",
                     search,
                   };
-          await titleJSON(
+          const created = await titleJSON<{
+            id?: string;
+            data?: { id?: string };
+          }>(
             `/api/v1/${identity.media === "movie" ? "movies" : identity.media === "series" ? "series" : "artists"}`,
             {
               method: "POST",
@@ -307,12 +315,15 @@ function AddTitleSettings({
               body: JSON.stringify(payload),
             },
           );
+          const mediaID = created.id ?? created.data?.id;
+          if (mediaID) {
+            qc.setQueryData<Membership>(
+              ["title-membership", identity.media],
+              (old) => ({ ...old, [providerId]: mediaID }),
+            );
+          }
         }
         setPersisted(true);
-        qc.setQueryData<Membership>(
-          ["title-membership", identity.media],
-          (old) => ({ ...old, [providerId!]: "added" }),
-        );
       }
       await finish();
     } catch (e) {
@@ -341,7 +352,10 @@ function AddTitleSettings({
       : preferencesQuery.isPending);
 
   return (
-    <div className="space-y-4">
+    <div
+      className="min-w-0 space-y-4 rounded-lg border bg-muted/20 p-4"
+      aria-label="Add settings"
+    >
       {sourceName && (
         <p className="text-sm text-muted-foreground">
           Settings from {sourceName}. You can change them before adding.
@@ -353,8 +367,11 @@ function AddTitleSettings({
         </p>
       ) : null}
       {!persisted && (
-        <fieldset disabled={pending || !!inLibrary} className="space-y-4">
-          <div className="grid gap-4 sm:grid-cols-2">
+        <fieldset
+          disabled={pending || !!inLibrary}
+          className="min-w-0 space-y-4"
+        >
+          <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2">
             <SelectField
               label="Library"
               value={libraryId}
@@ -498,13 +515,14 @@ function AddTitleSettings({
 // instead of piling another modal/focus trap on top.
 export function TitleContent(props: TitleContentProps) {
   const { identity, onBack, requestAction } = props;
-  const [view, setView] = useState(props.initialView ?? "details");
-  const [settingsVisited, setSettingsVisited] = useState(
-    props.initialView === "add",
+  const [showAddSettings] = useState(
+    !identity.inLibrary || !!props.sourceItemId,
   );
   const focusRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    const frame = requestAnimationFrame(() => focusRef.current?.focus());
+    const frame = requestAnimationFrame(() =>
+      focusRef.current?.focus({ preventScroll: true }),
+    );
     return () => cancelAnimationFrame(frame);
   }, []);
   const details = useQuery({
@@ -524,8 +542,8 @@ export function TitleContent(props: TitleContentProps) {
     <div
       ref={focusRef}
       tabIndex={-1}
-      aria-label={`${identity.title} ${view === "add" ? "add settings" : "details"}`}
-      className="space-y-5 outline-none"
+      aria-label={`${identity.title} details`}
+      className="min-w-0 max-w-full space-y-5 outline-none [overflow-wrap:anywhere]"
     >
       <div className="flex flex-wrap gap-2">
         {onBack && (
@@ -533,10 +551,7 @@ export function TitleContent(props: TitleContentProps) {
             Back to results
           </Button>
         )}
-        {!requestAction &&
-        inLibrary &&
-        !props.sourceItemId &&
-        view === "details" ? (
+        {!requestAction && inLibrary && !props.sourceItemId ? (
           props.onManage &&
           identity.media !== "artist" &&
           membership.data?.[providerId ?? ""] ? (
@@ -555,24 +570,7 @@ export function TitleContent(props: TitleContentProps) {
           ) : (
             <Badge variant="secondary">In library</Badge>
           )
-        ) : (
-          !requestAction && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                setSettingsVisited(true);
-                setView(view === "details" ? "add" : "details");
-              }}
-            >
-              {view === "add"
-                ? "View full details"
-                : inLibrary
-                  ? "In library"
-                  : "Add to library"}
-            </Button>
-          )
-        )}
+        ) : null}
         {requestAction}
       </div>
       {details.isPending && (
@@ -597,12 +595,12 @@ export function TitleContent(props: TitleContentProps) {
               className="max-h-52 w-full rounded-lg object-cover"
             />
           )}
-          <div className="flex gap-4">
+          <div className="flex min-w-0 gap-4">
             {titleImage(title.poster_path || title.image_url) && (
               <img
                 src={titleImage(title.poster_path || title.image_url)}
                 alt=""
-                className={`w-28 shrink-0 self-start rounded-lg object-cover ${identity.media === "artist" ? "aspect-square" : "aspect-[2/3]"}`}
+                className={`w-20 shrink-0 self-start rounded-lg object-cover sm:w-28 ${identity.media === "artist" ? "aspect-square" : "aspect-[2/3]"}`}
               />
             )}
             <div className="min-w-0 space-y-3">
@@ -633,49 +631,48 @@ export function TitleContent(props: TitleContentProps) {
               )}
             </div>
           </div>
-          {settingsVisited && !requestAction && (
-            <div hidden={view !== "add"}>
+          {!requestAction && showAddSettings && (
+            <section className="min-w-0 space-y-3">
+              <h3 className="text-base font-semibold">Add to library</h3>
               <AddTitleSettings {...props} details={details.data} />
-            </div>
+            </section>
           )}
-          {(view === "details" || requestAction) && (
-            <>
-              {identity.media === "artist" ? (
-                <ArtistMetadata artist={title} />
+          <>
+            {identity.media === "artist" ? (
+              <ArtistMetadata artist={title} />
+            ) : (
+              <section className="space-y-2">
+                <h3 className="text-sm font-semibold">Synopsis</h3>
+                <TitleSynopsis overview={title.overview} />
+              </section>
+            )}
+            {identity.media !== "artist" &&
+              (details.data.credits_error ? (
+                <div role="alert">
+                  <p className="text-sm text-destructive">
+                    {details.data.credits_error}
+                  </p>
+                  <Button variant="outline" onClick={() => details.refetch()}>
+                    Retry credits
+                  </Button>
+                </div>
               ) : (
-                <section className="space-y-2">
-                  <h3 className="text-sm font-semibold">Synopsis</h3>
-                  <TitleSynopsis overview={title.overview} />
-                </section>
-              )}
-              {identity.media !== "artist" &&
-                (details.data.credits_error ? (
-                  <div role="alert">
-                    <p className="text-sm text-destructive">
-                      {details.data.credits_error}
-                    </p>
-                    <Button variant="outline" onClick={() => details.refetch()}>
-                      Retry credits
-                    </Button>
-                  </div>
-                ) : (
-                  <TitleCredits credits={details.data.credits} />
+                <TitleCredits credits={details.data.credits} />
+              ))}
+            {identity.media === "artist" && (
+              <section className="space-y-3">
+                <h3 className="text-sm font-semibold">Albums</h3>
+                {!details.data.albums?.length && (
+                  <p className="text-sm text-muted-foreground">
+                    No albums available.
+                  </p>
+                )}
+                {details.data.albums?.map((album) => (
+                  <ExternalAlbumDetails key={album.mbid} album={album} />
                 ))}
-              {identity.media === "artist" && (
-                <section className="space-y-3">
-                  <h3 className="text-sm font-semibold">Albums</h3>
-                  {!details.data.albums?.length && (
-                    <p className="text-sm text-muted-foreground">
-                      No albums available.
-                    </p>
-                  )}
-                  {details.data.albums?.map((album) => (
-                    <ExternalAlbumDetails key={album.mbid} album={album} />
-                  ))}
-                </section>
-              )}
-            </>
-          )}
+              </section>
+            )}
+          </>
         </>
       )}
     </div>
@@ -691,8 +688,37 @@ export function TitleDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const focus = useTitleDialogFocus();
+  const opener = useRef(
+    document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null,
+  );
   const qc = useQueryClient();
   const [managing, setManaging] = useState<LibraryMediaTarget | null>(null);
+  const membership = useMembership(
+    props.identity.media,
+    open && !props.requestAction,
+  );
+  const resolved = useQuery({
+    queryKey: titleKey(props.identity),
+    queryFn: ({ signal }) => loadTitle(props.identity, signal),
+    enabled:
+      open &&
+      !props.requestAction &&
+      !!props.identity.provider &&
+      props.identity.provider !== "tmdb",
+  });
+  const localID =
+    membership.data?.[
+      props.identity.provider === "tmdb" || !props.identity.provider
+        ? props.identity.id
+        : (resolved.data?.title.tmdb_id ?? "")
+    ];
+  const automaticTarget: LibraryMediaTarget | null =
+    localID && props.identity.media !== "artist" && !props.requestAction
+      ? { type: props.identity.media, id: localID }
+      : null;
+  const target = managing ?? automaticTarget;
   const managementChanged = () => {
     void qc.invalidateQueries({ queryKey: ["title-membership"] });
     void qc.invalidateQueries({ queryKey: ["collections"] });
@@ -700,19 +726,21 @@ export function TitleDialog({
   };
   return (
     <>
-      <Dialog open={open && !managing} onOpenChange={onOpenChange}>
-        <DialogContent
+      <Sheet open={open && !target} onOpenChange={onOpenChange}>
+        <SheetContent
           {...focus}
-          className="max-h-[85vh] max-w-3xl overflow-y-auto"
+          className="w-full min-w-0 max-w-full overflow-y-auto p-4 sm:max-w-3xl sm:p-6"
         >
-          <DialogHeader>
-            <DialogTitle>{props.identity.title}</DialogTitle>
-            <DialogDescription>
+          <SheetHeader className="min-w-0 pr-8 text-left">
+            <SheetTitle className="break-words">
+              {props.identity.title}
+            </SheetTitle>
+            <SheetDescription>
               {props.requestAction
                 ? "View full details before requesting this title."
-                : "View details or choose how to add this title."}
-            </DialogDescription>
-          </DialogHeader>
+                : "Title details and library settings."}
+            </SheetDescription>
+          </SheetHeader>
           {open && (
             <TitleContent
               key={`${props.identity.media}:${props.identity.id}`}
@@ -720,15 +748,19 @@ export function TitleDialog({
               onManage={setManaging}
             />
           )}
-        </DialogContent>
-      </Dialog>
-      {open && managing && (
+        </SheetContent>
+      </Sheet>
+      {open && target && (
         <LibraryMediaSheet
-          target={managing}
+          target={target}
           onChanged={managementChanged}
           onClose={() => {
             setManaging(null);
             managementChanged();
+            onOpenChange(false);
+            requestAnimationFrame(() =>
+              opener.current?.focus({ preventScroll: true }),
+            );
           }}
         />
       )}
@@ -753,24 +785,24 @@ export function TitleSearchDialog({
   // Remount the contents each time, so settings and pending searches cannot
   // leak from the previous search session.
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent
         {...focus}
-        className="max-h-[85vh] max-w-3xl overflow-y-auto"
+        className="w-full min-w-0 max-w-full overflow-y-auto p-4 sm:max-w-3xl sm:p-6"
       >
-        <DialogHeader>
-          <DialogTitle>
+        <SheetHeader className="pr-8 text-left">
+          <SheetTitle>
             Search{" "}
             {media === "movie"
               ? "movies"
               : media === "series"
                 ? "TV shows"
                 : "artists"}
-          </DialogTitle>
-          <DialogDescription>
-            Open a title for full details, or choose Add to configure it.
-          </DialogDescription>
-        </DialogHeader>
+          </SheetTitle>
+          <SheetDescription>
+            Choose a title to view details and add it.
+          </SheetDescription>
+        </SheetHeader>
         {open && (
           <TitleSearch
             media={media}
@@ -781,8 +813,8 @@ export function TitleSearchDialog({
             }}
           />
         )}
-      </DialogContent>
-    </Dialog>
+      </SheetContent>
+    </Sheet>
   );
 }
 

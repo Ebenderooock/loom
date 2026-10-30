@@ -156,30 +156,36 @@ paths:
     post:
       tags: [collections]
       operationId: discoverCollections
-      summary: Import provider-declared collection candidates from library titles (admin).
+      summary: Queue an optional background library rescan (admin).
       description: |
-        Bounded on-demand scan of up to 32 library titles. TMDB declares movie
-        sequel sets; official TVDB lists are candidates and may mix movies and
-        shows. Reports provider/discovery incompleteness as warnings and
-        per-source errors, never claims complete franchise coverage.
+        No provider requests occur in this HTTP request. The existing scheduler
+        automatically discovers collections in persistent, fair movie/show
+        batches across the full paginated library. This optional action resets
+        the checkpoints for another scan. Provider errors retry automatically.
       security: [{ cookieAuth: [] }, { apiKey: [] }, { bearerAuth: [] }]
       responses:
         "200":
-          description: Exact-source imported collections and discovery warnings.
+          description: Current background scan progress after queueing.
           content:
             application/json:
-              schema:
-                type: object
-                required: [items, warnings]
-                properties:
-                  items:
-                    type: array
-                    items: { $ref: "#/components/schemas/LoomCollection" }
-                  warnings: { type: array, items: { type: string } }
+              schema: { $ref: "#/components/schemas/CollectionScanStatus" }
         "401": { description: Authentication required. }
         "403": { description: Administrator required. }
         "500": { description: Storage or library read failed. }
-        "504": { description: Discovery work budget expired; retry. }
+  /api/v1/collections/scan:
+    get:
+      tags: [collections]
+      operationId: getCollectionScan
+      summary: Get durable background discovery progress and retryable errors.
+      security: [{ cookieAuth: [] }, { apiKey: [] }, { bearerAuth: [] }]
+      responses:
+        "200":
+          description: Per-title progress. Errors list the first ten issues; failed counts all issues.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CollectionScanStatus" }
+        "401": { description: Authentication required. }
+        "500": { description: Scan status storage failed. }
   /api/v1/collections/{id}:
     parameters:
       - { $ref: "#/components/parameters/CollectionID" }
@@ -3100,6 +3106,25 @@ components:
         has_file:
           type: boolean
           description: Computed on detail reads. For shows, at least one imported episode file.
+    CollectionScanStatus:
+      type: object
+      required: [total, checked, pending, failed, running, errors]
+      properties:
+        total: { type: integer, minimum: 0 }
+        checked: { type: integer, minimum: 0 }
+        pending: { type: integer, minimum: 0 }
+        failed: { type: integer, minimum: 0 }
+        running: { type: boolean }
+        errors:
+          type: array
+          maxItems: 10
+          items:
+            type: object
+            required: [media_type, media_id, message]
+            properties:
+              media_type: { type: string, enum: [movie, series] }
+              media_id: { type: string }
+              message: { type: string }
     LoomCollection:
       type: object
       required: [id, name, overview, sources, members, revision, total, in_library]
