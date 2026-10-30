@@ -231,7 +231,8 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 		        EXISTS (SELECT 1 FROM track_files tf WHERE tf.album_id = al.id AND tf.deleted_at IS NULL)
 		 FROM albums al
 		 JOIN artists ar ON ar.id = al.artist_id
-		 WHERE al.deleted_at IS NULL AND al.release_date != ''
+		 JOIN album_artists aa ON aa.album_id = al.id AND aa.artist_id = ar.id
+		 WHERE aa.catalog_included = TRUE AND al.deleted_at IS NULL AND al.release_date != ''
 		   AND al.release_date >= ? AND al.release_date <= ?`,
 		startStr, endStr)
 	if err == nil {

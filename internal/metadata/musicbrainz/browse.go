@@ -22,33 +22,34 @@ type ReleaseGroupFull struct {
 	Relations        []RelationResponse `json:"relations,omitempty"`
 }
 
-// releaseGroupBrowseResponse wraps a browse-by-artist response.
-type releaseGroupBrowseResponse struct {
-	Count         int                `json:"release-group-count"`
-	Offset        int                `json:"release-group-offset"`
-	ReleaseGroups []ReleaseGroupFull `json:"release-groups"`
+type releaseBrowseResponse struct {
+	Count    int               `json:"release-count"`
+	Releases []ReleaseResponse `json:"releases"`
 }
 
-// GetArtistReleaseGroups browses the release-groups (albums) for an artist.
-// Returns the page of release-groups and the total count.
-func (c *Client) GetArtistReleaseGroups(ctx context.Context, artistMBID string, offset, limit int) ([]ReleaseGroupFull, int, error) {
+// GetArtistOfficialReleases browses official editions with their release groups.
+// Status belongs to an edition, not a release group, so browsing groups alone
+// cannot establish whether an album has an official release.
+func (c *Client) GetArtistOfficialReleases(ctx context.Context, artistMBID string, offset, limit int) ([]ReleaseResponse, int, error) {
 	if limit <= 0 {
 		limit = 100
 	}
 	params := url.Values{
 		"fmt":    {"json"},
 		"artist": {artistMBID},
-		"inc":    {"genres"},
+		"inc":    {"release-groups"},
+		"status": {"official"},
+		"type":   {"album|ep|single"},
 		"offset": {strconv.Itoa(offset)},
 		"limit":  {strconv.Itoa(limit)},
 	}
-	endpoint := fmt.Sprintf("%s/release-group?%s", c.config.BaseURL, params.Encode())
+	endpoint := fmt.Sprintf("%s/release?%s", c.config.BaseURL, params.Encode())
 
-	resp := &releaseGroupBrowseResponse{}
+	resp := &releaseBrowseResponse{}
 	if err := c.doRequest(ctx, endpoint, resp); err != nil {
 		return nil, 0, err
 	}
-	return resp.ReleaseGroups, resp.Count, nil
+	return resp.Releases, resp.Count, nil
 }
 
 // GetReleaseGroup fetches a single release-group (album) including its releases

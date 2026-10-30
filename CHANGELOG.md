@@ -107,6 +107,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Music artist catalogues now include only official studio albums, EPs and
+  singles, deduplicated across editions. Metadata refresh hides legacy excluded
+  entries without deleting existing audio files or their records.
 - Manual release search keeps Download visible without horizontal scrolling,
   with wrapping release metadata, phone-friendly rows, compact diagnostics and
   independently scrolling results. Download actions show sending, success and

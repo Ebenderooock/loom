@@ -28,6 +28,7 @@ type Repository interface {
 	GetAlbumByMBID(ctx context.Context, mbid string) (*Album, error)
 	CreateAlbum(ctx context.Context, al *Album) error
 	LinkAlbumArtist(ctx context.Context, albumID, artistID string) error
+	SetArtistAlbumCatalog(ctx context.Context, artistID string, albumIDs []string) error
 	UpdateAlbum(ctx context.Context, al *Album) error
 	TouchAlbumSearch(ctx context.Context, albumID string, searchedAt time.Time) error
 
@@ -291,7 +292,7 @@ func (r *sqlRepo) ListAlbumsByArtist(ctx context.Context, artistID string) ([]*A
 		`SELECT `+albumColumns+` FROM albums
 		 WHERE deleted_at IS NULL AND EXISTS (
 		   SELECT 1 FROM album_artists aa
-		   WHERE aa.album_id = albums.id AND aa.artist_id = ?
+		   WHERE aa.album_id = albums.id AND aa.artist_id = ? AND aa.catalog_included = TRUE
 		 )
 		 ORDER BY release_date, title`, artistID)
 	if err != nil {
@@ -363,6 +364,28 @@ func (r *sqlRepo) LinkAlbumArtist(ctx context.Context, albumID, artistID string)
 		 ON CONFLICT (album_id, artist_id) DO NOTHING`,
 		albumID, artistID)
 	return err
+}
+
+// SetArtistAlbumCatalog reconciles visibility without deleting albums, tracks,
+// files or artist credits. Call only after a complete metadata fetch succeeds.
+func (r *sqlRepo) SetArtistAlbumCatalog(ctx context.Context, artistID string, albumIDs []string) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE album_artists SET catalog_included = FALSE WHERE artist_id = ?`, artistID); err != nil {
+		return err
+	}
+	for _, albumID := range albumIDs {
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE album_artists SET catalog_included = TRUE WHERE artist_id = ? AND album_id = ?`,
+			artistID, albumID); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
 }
 
 func (r *sqlRepo) UpdateAlbum(ctx context.Context, al *Album) error {
@@ -994,7 +1017,7 @@ func (r *sqlRepo) GetArtistStats(ctx context.Context, artistID string) (*ArtistS
 		 FROM albums al
 		 JOIN album_artists aa ON aa.album_id = al.id
 		 JOIN artists ar ON ar.id = aa.artist_id
-		 WHERE aa.artist_id = ? AND al.deleted_at IS NULL AND ar.deleted_at IS NULL`, artistID,
+		 WHERE aa.artist_id = ? AND aa.catalog_included = TRUE AND al.deleted_at IS NULL AND ar.deleted_at IS NULL`, artistID,
 	).Scan(&stats.AlbumCount, &stats.MonitoredAlbumCount)
 	if err != nil {
 		return nil, err
@@ -1005,7 +1028,7 @@ func (r *sqlRepo) GetArtistStats(ctx context.Context, artistID string) (*ArtistS
 		 FROM tracks t JOIN albums al ON al.id = t.album_id
 		 JOIN album_artists aa ON aa.album_id = al.id
 		 JOIN artists ar ON ar.id = aa.artist_id
-		 WHERE aa.artist_id = ? AND al.deleted_at IS NULL AND ar.deleted_at IS NULL`, artistID,
+		 WHERE aa.artist_id = ? AND aa.catalog_included = TRUE AND al.deleted_at IS NULL AND ar.deleted_at IS NULL`, artistID,
 	).Scan(&stats.TrackCount, &stats.TrackFileCount, &stats.MissingTrackCount)
 	return stats, err
 }
@@ -1020,7 +1043,7 @@ func (r *sqlRepo) GetAllArtistStats(ctx context.Context) (map[string]*ArtistStat
 		 FROM albums al
 		 JOIN album_artists aa ON aa.album_id = al.id
 		 JOIN artists ar ON ar.id = aa.artist_id
-		 WHERE al.deleted_at IS NULL AND ar.deleted_at IS NULL
+		 WHERE aa.catalog_included = TRUE AND al.deleted_at IS NULL AND ar.deleted_at IS NULL
 		 GROUP BY aa.artist_id`)
 	if err != nil {
 		return nil, err
@@ -1048,7 +1071,7 @@ func (r *sqlRepo) GetAllArtistStats(ctx context.Context) (map[string]*ArtistStat
 		 FROM tracks t JOIN albums al ON al.id = t.album_id
 		 JOIN album_artists aa ON aa.album_id = al.id
 		 JOIN artists ar ON ar.id = aa.artist_id
-		 WHERE al.deleted_at IS NULL AND ar.deleted_at IS NULL
+		 WHERE aa.catalog_included = TRUE AND al.deleted_at IS NULL AND ar.deleted_at IS NULL
 		 GROUP BY aa.artist_id`)
 	if err != nil {
 		return nil, err

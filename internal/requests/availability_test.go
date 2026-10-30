@@ -162,6 +162,8 @@ func TestReconcileArtistRequiresCompleteSelectedReleasedAlbums(t *testing.T) {
 		VALUES ('album','artist','Album','2020-01-01'),
 			('missing','artist','Missing track list','2020-01-01'),
 			('future','artist','Future','2027-01-01')`)
+	execAvailabilitySQL(t, db, `INSERT INTO album_artists(album_id,artist_id)
+		SELECT id,artist_id FROM albums`)
 	execAvailabilitySQL(t, db, `INSERT INTO album_releases(id,album_id) VALUES ('selected','album'),('other','album')`)
 	execAvailabilitySQL(t, db, `UPDATE albums SET selected_release_id='selected' WHERE id='album'`)
 	execAvailabilitySQL(t, db, `INSERT INTO tracks(id,album_id,release_id,track_number)
@@ -175,7 +177,8 @@ func TestReconcileArtistRequiresCompleteSelectedReleasedAlbums(t *testing.T) {
 	assertAvailability(t, store, r.ID, StatusApproved)
 	execAvailabilitySQL(t, db, `UPDATE track_files SET deleted_at=NULL WHERE id='second'`)
 	assertAvailability(t, store, r.ID, StatusApproved)
-	execAvailabilitySQL(t, db, `UPDATE albums SET monitored=false WHERE id='missing'`)
+	// An excluded catalogue entry must not hold an otherwise complete request open.
+	execAvailabilitySQL(t, db, `UPDATE album_artists SET catalog_included=false WHERE album_id='missing'`)
 	assertAvailability(t, store, r.ID, StatusAvailable)
 }
 

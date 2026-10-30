@@ -77,21 +77,43 @@ func (p *Provider) GetArtist(ctx context.Context, mbid string) (*metadata.Artist
 	}, nil
 }
 
-// GetArtistAlbums implements metadata.MusicMetadataProvider. It pages through
-// all release-groups for the artist.
+// GetArtistAlbums returns studio albums, EPs and singles with an official edition.
+// Multiple editions are collapsed to a single release-group entry.
 func (p *Provider) GetArtistAlbums(ctx context.Context, artistMBID string) ([]*metadata.AlbumMetadata, error) {
 	const pageSize = 100
 	var albums []*metadata.AlbumMetadata
+	seen := make(map[string]bool)
 	offset := 0
 	for {
-		page, total, err := p.client.GetArtistReleaseGroups(ctx, artistMBID, offset, pageSize)
+		page, total, err := p.client.GetArtistOfficialReleases(ctx, artistMBID, offset, pageSize)
 		if err != nil {
 			return nil, err
 		}
-		for i := range page {
-			albums = append(albums, mapReleaseGroup(&page[i]))
+		for _, release := range page {
+			rg := release.ReleaseGroup
+			if !strings.EqualFold(release.Status, "Official") || rg == nil || rg.ID == "" || seen[rg.ID] {
+				continue
+			}
+			switch strings.ToLower(rg.PrimaryType) {
+			case "album", "ep", "single":
+			default:
+				continue
+			}
+			if len(rg.SecondaryTypes) != 0 {
+				continue
+			}
+			seen[rg.ID] = true
+			album := mapReleaseGroup(&ReleaseGroupFull{
+				ID: rg.ID, Title: rg.Title, PrimaryType: rg.PrimaryType,
+				SecondaryTypes: rg.SecondaryTypes, FirstReleaseDate: rg.FirstReleaseDate,
+			})
+			album.ArtistMBID = artistMBID
+			albums = append(albums, album)
 		}
 		offset += len(page)
+		if len(page) == 0 && offset < total {
+			return nil, fmt.Errorf("incomplete official release catalogue: fetched %d of %d editions", offset, total)
+		}
 		if len(page) == 0 || offset >= total {
 			break
 		}
