@@ -76,7 +76,7 @@ func (s *MusicScanner) StartMusicScan(ctx context.Context, libraryID, rootFolder
 		return "", fmt.Errorf("music scan: %s is not a directory", rootFolder)
 	}
 
-	scanID := uuid.New().String()[:8]
+	scanID := uuid.New().String()
 	result := &ScanResult{
 		ID:             scanID,
 		LibraryID:      libraryID,
@@ -137,6 +137,10 @@ func (s *MusicScanner) runMusicScan(ctx context.Context, scanID, rootFolder stri
 
 	result := s.GetMusicScanStatus(scanID)
 	for _, af := range folders {
+		if ctx.Err() != nil {
+			s.failMusicScan(scanID, ctx.Err().Error())
+			return
+		}
 		artist := artistsByName[normalizeTitle(af.Name)]
 		if artist == nil {
 			added, addErr := s.ensureArtistForFolder(ctx, result.LibraryID, af.Name)
@@ -150,6 +154,16 @@ func (s *MusicScanner) runMusicScan(ctx context.Context, scanID, rootFolder stri
 			}
 			artistsByName[normalizeTitle(af.Name)] = added
 			artist = added
+		}
+		if artist.Path != af.Path {
+			path := af.Path
+			updated, updateErr := s.musicSvc.UpdateArtist(ctx, artist.ID, music.UpdateArtistRequest{Path: &path})
+			if updateErr != nil {
+				s.logger.Warn("music: failed to update artist path", "artist", artist.ID, "error", updateErr)
+			} else if updated != nil {
+				artist = updated
+				artistsByName[normalizeTitle(af.Name)] = artist
+			}
 		}
 		s.scanArtistFolder(ctx, scanID, result, artist, af.Path)
 	}
@@ -202,7 +216,7 @@ func (s *MusicScanner) ensureArtistForFolder(ctx context.Context, libraryID, fol
 		MBID:             match.MBID,
 		LibraryID:        libraryID,
 		QualityProfileID: qualityProfiles[0].ID,
-		MonitoringStatus: string(music.MonitoringMonitored),
+		MonitoringStatus: string(music.MonitoringUnmonitored),
 		Search:           false,
 	}
 	metadataProfiles, err := s.musicSvc.ListMetadataProfiles(ctx)
@@ -254,9 +268,12 @@ func (s *MusicScanner) scanArtistFolder(ctx context.Context, scanID string, resu
 	// Cache album track lists (lazy-fetched via GetAlbum) keyed by album ID.
 	trackCache := make(map[string][]*music.Track)
 
-	files, walkErr := walkAudioFolder(folderPath)
+	files, walkErr := walkAudioFolder(ctx, folderPath)
 	if walkErr != nil {
 		s.logger.Warn("music: error walking artist folder", "path", folderPath, "error", walkErr)
+		if ctx.Err() != nil {
+			return
+		}
 	}
 
 	s.mu.Lock()
@@ -264,6 +281,9 @@ func (s *MusicScanner) scanArtistFolder(ctx context.Context, scanID string, resu
 	s.mu.Unlock()
 
 	for _, f := range files {
+		if ctx.Err() != nil {
+			return
+		}
 		tags, err := music.ReadAudioTags(f.Path)
 		if err != nil {
 			s.logger.Debug("music: failed to read tags", "path", f.Path, "error", err)
@@ -315,6 +335,13 @@ func (s *MusicScanner) scanArtistFolder(ctx context.Context, scanID string, resu
 		result.Imported++
 		s.mu.Unlock()
 	}
+	if walkErr == nil {
+		if removed, err := s.musicSvc.PruneMissingTrackFiles(ctx, artist.ID, folderPath); err != nil {
+			s.logger.Warn("music: failed to prune missing track files", "artist", artist.ID, "error", err)
+		} else if removed > 0 {
+			s.logger.Info("music: pruned missing track files", "artist", artist.ID, "count", removed)
+		}
+	}
 }
 
 func (s *MusicScanner) importTrackFile(ctx context.Context, artist *music.Artist, album *music.Album, track *music.Track, path string, size int64, tags *music.AudioTags) error {
@@ -331,9 +358,16 @@ func (s *MusicScanner) importTrackFile(ctx context.Context, artist *music.Artist
 	if tags.Year > 0 {
 		mediaInfo["year"] = tags.Year
 	}
+	bitrate := music.EstimateAudioBitrate(size, track.DurationMs)
+	if bitrate > 0 {
+		mediaInfo["bitrate"] = bitrate
+	}
+	if tags.Bits > 0 {
+		mediaInfo["bits"] = tags.Bits
+	}
 
 	tf := &music.TrackFile{
-		ID:        uuid.New().String()[:8],
+		ID:        uuid.New().String(),
 		TrackID:   track.ID,
 		AlbumID:   album.ID,
 		ArtistID:  artist.ID,
@@ -341,6 +375,7 @@ func (s *MusicScanner) importTrackFile(ctx context.Context, artist *music.Artist
 		Size:      size,
 		Quality:   tags.Format,
 		Format:    tags.Format,
+		Bitrate:   bitrate,
 		MediaInfo: mediaInfo,
 		FileDate:  fileDate,
 	}
@@ -397,7 +432,7 @@ func (s *MusicScanner) addMusicUnmatched(scanID string, result *ScanResult, path
 		label = fmt.Sprintf("%s — %s", album, parsed)
 	}
 	uf := &UnmatchedFile{
-		ID:          uuid.New().String()[:8],
+		ID:          uuid.New().String(),
 		ScanID:      scanID,
 		FilePath:    path,
 		Size:        size,
@@ -456,7 +491,7 @@ func (s *MusicScanner) RescanArtist(ctx context.Context, artistID, libraryPath s
 		return nil, fmt.Errorf("no folder found for artist %q in %s", artist.Name, libraryPath)
 	}
 
-	scanID := uuid.New().String()[:8]
+	scanID := uuid.New().String()
 	result := &ScanResult{
 		ID:             scanID,
 		LibraryID:      artist.LibraryID,
@@ -487,9 +522,12 @@ type audioScannedFile struct {
 	Size int64
 }
 
-func walkAudioFolder(root string) ([]audioScannedFile, error) {
+func walkAudioFolder(ctx context.Context, root string) ([]audioScannedFile, error) {
 	var files []audioScannedFile
 	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		if err != nil {
 			return nil //nolint:nilerr // skip unreadable entries and keep walking
 		}

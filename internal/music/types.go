@@ -155,10 +155,21 @@ type AudioFormatItem struct {
 // UpdateAudioQualityProfileRequest patches an audio quality profile's
 // custom-format scoring and acquisition policy. Nil fields are left unchanged.
 type UpdateAudioQualityProfileRequest struct {
-	Cutoff         *string           `json:"cutoff,omitempty"`
-	UpgradeAllowed *bool             `json:"upgrade_allowed,omitempty"`
-	FormatItems    []AudioFormatItem `json:"format_items,omitempty"`
-	MinFormatScore *int              `json:"min_format_score,omitempty"`
+	Cutoff         *string             `json:"cutoff,omitempty"`
+	UpgradeAllowed *bool               `json:"upgrade_allowed,omitempty"`
+	Items          *[]AudioProfileItem `json:"items,omitempty"`
+	FormatItems    []AudioFormatItem   `json:"format_items,omitempty"`
+	MinFormatScore *int                `json:"min_format_score,omitempty"`
+}
+
+// CreateAudioQualityProfileRequest is the payload for creating or updating an audio quality profile.
+type CreateAudioQualityProfileRequest struct {
+	Name           string             `json:"name"`
+	Items          []AudioProfileItem `json:"items"`
+	Cutoff         string             `json:"cutoff,omitempty"`
+	UpgradeAllowed *bool              `json:"upgrade_allowed,omitempty"`
+	FormatItems    []AudioFormatItem  `json:"format_items,omitempty"`
+	MinFormatScore int                `json:"min_format_score,omitempty"`
 }
 
 // MetadataProfile controls which album/release types are monitored.
@@ -170,6 +181,22 @@ type MetadataProfile struct {
 	ReleaseStatuses StringSlice `json:"release_statuses"`
 	CreatedAt       time.Time   `json:"created_at"`
 	UpdatedAt       time.Time   `json:"updated_at"`
+}
+
+// CreateMetadataProfileRequest is the payload for creating a metadata profile.
+type CreateMetadataProfileRequest struct {
+	Name            string   `json:"name"`
+	PrimaryTypes    []string `json:"primary_types"`
+	SecondaryTypes  []string `json:"secondary_types"`
+	ReleaseStatuses []string `json:"release_statuses"`
+}
+
+// UpdateMetadataProfileRequest is the payload for updating a metadata profile.
+type UpdateMetadataProfileRequest struct {
+	Name            *string   `json:"name,omitempty"`
+	PrimaryTypes    *[]string `json:"primary_types,omitempty"`
+	SecondaryTypes  *[]string `json:"secondary_types,omitempty"`
+	ReleaseStatuses *[]string `json:"release_statuses,omitempty"`
 }
 
 // ArtistStats holds rollup counts for an artist.
@@ -197,6 +224,7 @@ type UpdateArtistRequest struct {
 	QualityProfileID  *string `json:"qualityProfileId,omitempty"`
 	LibraryID         *string `json:"libraryId,omitempty"`
 	MetadataProfileID *string `json:"metadataProfileId,omitempty"`
+	Path              *string `json:"path,omitempty"`
 }
 
 // SetMonitoringRequest sets an artist's monitoring status.
@@ -207,6 +235,11 @@ type SetMonitoringRequest struct {
 // SetAlbumMonitoredRequest toggles album monitoring.
 type SetAlbumMonitoredRequest struct {
 	Monitored bool `json:"monitored"`
+}
+
+// SelectAlbumReleaseRequest selects the MusicBrainz release (edition) used for an album.
+type SelectAlbumReleaseRequest struct {
+	ReleaseID string `json:"release_id"`
 }
 
 // ArtistLookupResult is a metadata search hit (not yet in the library).

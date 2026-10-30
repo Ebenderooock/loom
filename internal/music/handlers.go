@@ -68,6 +68,7 @@ func AlbumRouter(svc Service) chi.Router {
 	r := chi.NewRouter()
 	r.Get("/{id}", handleGetAlbum(svc))
 	r.Put("/{id}/monitoring", handleSetAlbumMonitored(svc))
+	r.Put("/{id}/release", handleSelectAlbumRelease(svc))
 	return r
 }
 
@@ -76,8 +77,13 @@ func ProfileRouter(svc Service) chi.Router {
 	r := chi.NewRouter()
 	r.Get("/audio-quality-definitions", handleListAudioQualityDefinitions(svc))
 	r.Get("/audio-quality-profiles", handleListAudioQualityProfiles(svc))
+	r.Post("/audio-quality-profiles", handleCreateAudioQualityProfile(svc))
 	r.Put("/audio-quality-profiles/{id}", handleUpdateAudioQualityProfile(svc))
+	r.Delete("/audio-quality-profiles/{id}", handleDeleteAudioQualityProfile(svc))
 	r.Get("/metadata-profiles", handleListMetadataProfiles(svc))
+	r.Post("/metadata-profiles", handleCreateMetadataProfile(svc))
+	r.Put("/metadata-profiles/{id}", handleUpdateMetadataProfile(svc))
+	r.Delete("/metadata-profiles/{id}", handleDeleteMetadataProfile(svc))
 	return r
 }
 
@@ -281,6 +287,22 @@ func handleSetAlbumMonitored(svc Service) http.HandlerFunc {
 	}
 }
 
+func handleSelectAlbumRelease(svc Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req SelectAlbumReleaseRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.ReleaseID == "" {
+			http.Error(w, "release_id is required", http.StatusBadRequest)
+			return
+		}
+		al, err := svc.SelectAlbumRelease(r.Context(), chi.URLParam(r, "id"), req.ReleaseID)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, al)
+	}
+}
+
 func handleListAudioQualityDefinitions(svc Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		defs, err := svc.ListAudioQualityDefinitions(r.Context())
@@ -326,6 +348,32 @@ func handleUpdateAudioQualityProfile(svc Service) http.HandlerFunc {
 	}
 }
 
+func handleCreateAudioQualityProfile(svc Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req CreateAudioQualityProfileRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "invalid request body", http.StatusBadRequest)
+			return
+		}
+		profile, err := svc.CreateAudioQualityProfile(r.Context(), req)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusCreated, profile)
+	}
+}
+
+func handleDeleteAudioQualityProfile(svc Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if err := svc.DeleteAudioQualityProfile(r.Context(), chi.URLParam(r, "id")); err != nil {
+			writeErr(w, err)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
 func handleListMetadataProfiles(svc Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		profiles, err := svc.ListMetadataProfiles(r.Context())
@@ -337,6 +385,48 @@ func handleListMetadataProfiles(svc Service) http.HandlerFunc {
 			profiles = []*MetadataProfile{}
 		}
 		writeJSON(w, http.StatusOK, profiles)
+	}
+}
+
+func handleCreateMetadataProfile(svc Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req CreateMetadataProfileRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "invalid request body", http.StatusBadRequest)
+			return
+		}
+		profile, err := svc.CreateMetadataProfile(r.Context(), req)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusCreated, profile)
+	}
+}
+
+func handleUpdateMetadataProfile(svc Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req UpdateMetadataProfileRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "invalid request body", http.StatusBadRequest)
+			return
+		}
+		profile, err := svc.UpdateMetadataProfile(r.Context(), chi.URLParam(r, "id"), req)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, profile)
+	}
+}
+
+func handleDeleteMetadataProfile(svc Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if err := svc.DeleteMetadataProfile(r.Context(), chi.URLParam(r, "id")); err != nil {
+			writeErr(w, err)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
 	}
 }
 

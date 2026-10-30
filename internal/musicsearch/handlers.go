@@ -86,6 +86,8 @@ func writeSearchErr(w http.ResponseWriter, err error) {
 		status = http.StatusNotFound
 	case errors.Is(err, ErrNoDownloaders):
 		status = http.StatusConflict
+	case errors.Is(err, ErrInvalidReleaseLink):
+		status = http.StatusBadRequest
 	}
 	writeJSON(w, status, map[string]string{"error": err.Error()})
 }

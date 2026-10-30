@@ -86,7 +86,7 @@ func wireMedia(
 		mbCfg.BaseURL = stubs.MusicBrainzURL
 	}
 	mbProvider := musicbrainz.NewProvider(musicbrainz.NewClient(mbCfg))
-	musicRepo := music.NewRepository(db.DB())
+	musicRepo := music.NewRepository(db.DB(), string(db.Engine()))
 	musicSvc := music.NewService(musicRepo, mbProvider, logger)
 	wiring.MusicService = musicSvc
 

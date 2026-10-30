@@ -5,7 +5,10 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"strconv"
 	"time"
+
+	"github.com/ebenderooock/loom/internal/storage"
 )
 
 // Repository defines data access for artists, albums, releases, tracks and the
@@ -24,7 +27,9 @@ type Repository interface {
 	GetAlbum(ctx context.Context, id string) (*Album, error)
 	GetAlbumByMBID(ctx context.Context, mbid string) (*Album, error)
 	CreateAlbum(ctx context.Context, al *Album) error
+	LinkAlbumArtist(ctx context.Context, albumID, artistID string) error
 	UpdateAlbum(ctx context.Context, al *Album) error
+	TouchAlbumSearch(ctx context.Context, albumID string, searchedAt time.Time) error
 
 	// Album releases (editions)
 	ListReleasesByAlbum(ctx context.Context, albumID string) ([]*AlbumRelease, error)
@@ -45,9 +50,14 @@ type Repository interface {
 	ListAudioQualityDefinitions(ctx context.Context) ([]*AudioQualityDefinition, error)
 	ListAudioQualityProfiles(ctx context.Context) ([]*AudioQualityProfile, error)
 	GetAudioQualityProfile(ctx context.Context, id string) (*AudioQualityProfile, error)
+	CreateAudioQualityProfile(ctx context.Context, p *AudioQualityProfile) error
 	UpdateAudioQualityProfile(ctx context.Context, p *AudioQualityProfile) error
+	SoftDeleteAudioQualityProfile(ctx context.Context, id string) error
 	ListMetadataProfiles(ctx context.Context) ([]*MetadataProfile, error)
 	GetMetadataProfile(ctx context.Context, id string) (*MetadataProfile, error)
+	CreateMetadataProfile(ctx context.Context, p *MetadataProfile) error
+	UpdateMetadataProfile(ctx context.Context, p *MetadataProfile) error
+	SoftDeleteMetadataProfile(ctx context.Context, id string) error
 
 	// Stats
 	GetArtistStats(ctx context.Context, artistID string) (*ArtistStats, error)
@@ -55,12 +65,62 @@ type Repository interface {
 }
 
 // NewRepository creates a Repository backed by the given database.
-func NewRepository(db *sql.DB) Repository {
-	return &sqlRepo{db: db}
+func NewRepository(db *sql.DB, engine ...string) Repository {
+	postgres := len(engine) > 0 && engine[0] == "postgres"
+	return &sqlRepo{db: &musicDB{raw: db, postgres: postgres}}
 }
 
 type sqlRepo struct {
-	db *sql.DB
+	db *musicDB
+}
+
+// musicDB adapts the repository's portable ? placeholders to pgx's $n
+// syntax when Loom is configured for PostgreSQL. Keeping rebinding at this
+// boundary also covers transactional queries and avoids dialect drift.
+type musicDB struct {
+	raw      *sql.DB
+	postgres bool
+}
+
+type musicTx struct {
+	*sql.Tx
+	postgres bool
+}
+
+func (db *musicDB) QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error) {
+	return db.raw.QueryContext(ctx, bindMusicQuery(query, db.postgres), args...) //nolint:gosec // Rebinds constant repository SQL; values remain bound parameters.
+}
+
+func (db *musicDB) QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row {
+	return db.raw.QueryRowContext(ctx, bindMusicQuery(query, db.postgres), args...) //nolint:gosec // Rebinds constant repository SQL; values remain bound parameters.
+}
+
+func (db *musicDB) ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error) {
+	return db.raw.ExecContext(ctx, bindMusicQuery(query, db.postgres), args...) //nolint:gosec // Rebinds constant repository SQL; values remain bound parameters.
+}
+
+func (db *musicDB) BeginTx(ctx context.Context, opts *sql.TxOptions) (*musicTx, error) {
+	tx, err := db.raw.BeginTx(ctx, opts)
+	if err != nil {
+		return nil, err
+	}
+	return &musicTx{Tx: tx, postgres: db.postgres}, nil
+}
+
+func (tx *musicTx) QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error) {
+	return tx.Tx.QueryContext(ctx, bindMusicQuery(query, tx.postgres), args...) //nolint:gosec // Rebinds constant repository SQL; values remain bound parameters.
+}
+
+func (tx *musicTx) QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row {
+	return tx.Tx.QueryRowContext(ctx, bindMusicQuery(query, tx.postgres), args...) //nolint:gosec // Rebinds constant repository SQL; values remain bound parameters.
+}
+
+func (tx *musicTx) ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error) {
+	return tx.Tx.ExecContext(ctx, bindMusicQuery(query, tx.postgres), args...) //nolint:gosec // Rebinds constant repository SQL; values remain bound parameters.
+}
+
+func bindMusicQuery(query string, postgres bool) string {
+	return storage.RebindQuery(query, postgres)
 }
 
 // --- column lists ---
@@ -228,7 +288,12 @@ func scanAlbum(s rowScanner) (*Album, error) {
 
 func (r *sqlRepo) ListAlbumsByArtist(ctx context.Context, artistID string) ([]*Album, error) {
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT `+albumColumns+` FROM albums WHERE artist_id = ? AND deleted_at IS NULL ORDER BY release_date, title`, artistID)
+		`SELECT `+albumColumns+` FROM albums
+		 WHERE deleted_at IS NULL AND EXISTS (
+		   SELECT 1 FROM album_artists aa
+		   WHERE aa.album_id = albums.id AND aa.artist_id = ?
+		 )
+		 ORDER BY release_date, title`, artistID)
 	if err != nil {
 		return nil, err
 	}
@@ -268,7 +333,12 @@ func (r *sqlRepo) CreateAlbum(ctx context.Context, al *Album) error {
 		al.CreatedAt = now
 	}
 	al.UpdatedAt = now
-	_, err := r.db.ExecContext(ctx,
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.ExecContext(ctx,
 		`INSERT INTO albums (id, mbid, artist_id, title, album_type, secondary_types, release_date, genres, cover_art_url, overview, monitored, selected_release_id, last_search_at, releases_fetched_at, tracks_fetched_at, created_at, updated_at)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		al.ID, nullString(al.MBID), al.ArtistID, al.Title, al.AlbumType, al.SecondaryTypes,
@@ -276,7 +346,22 @@ func (r *sqlRepo) CreateAlbum(ctx context.Context, al *Album) error {
 		nullString(al.SelectedReleaseID), nullTime(al.LastSearchAt),
 		nullTime(al.ReleasesFetchedAt), nullTime(al.TracksFetchedAt),
 		al.CreatedAt, al.UpdatedAt,
-	)
+	); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO album_artists (album_id, artist_id) VALUES (?, ?)`,
+		al.ID, al.ArtistID); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func (r *sqlRepo) LinkAlbumArtist(ctx context.Context, albumID, artistID string) error {
+	_, err := r.db.ExecContext(ctx,
+		`INSERT INTO album_artists (album_id, artist_id) VALUES (?, ?)
+		 ON CONFLICT (album_id, artist_id) DO NOTHING`,
+		albumID, artistID)
 	return err
 }
 
@@ -290,6 +375,16 @@ func (r *sqlRepo) UpdateAlbum(ctx context.Context, al *Album) error {
 		nullTime(al.ReleasesFetchedAt), nullTime(al.TracksFetchedAt),
 		al.UpdatedAt, al.ID,
 	)
+	return err
+}
+
+// TouchAlbumSearch updates only search scheduling state. Album search results
+// may have been loaded before another request changed monitoring or metadata,
+// so writing the caller's whole Album record here could overwrite newer data.
+func (r *sqlRepo) TouchAlbumSearch(ctx context.Context, albumID string, searchedAt time.Time) error {
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE albums SET last_search_at = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL`,
+		searchedAt.UTC(), searchedAt.UTC(), albumID)
 	return err
 }
 
@@ -338,8 +433,9 @@ func (r *sqlRepo) ListReleasesByAlbum(ctx context.Context, albumID string) ([]*A
 	return list, rows.Err()
 }
 
-// ReplaceReleases deletes existing releases for an album and inserts the given
-// set in a single transaction.
+// ReplaceReleases refreshes release metadata without deleting existing rows.
+// Release and track rows are linked to physical files, so replacing an edition
+// wholesale can cascade-delete a user's file associations.
 func (r *sqlRepo) ReplaceReleases(ctx context.Context, albumID string, releases []*AlbumRelease) error {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -347,15 +443,49 @@ func (r *sqlRepo) ReplaceReleases(ctx context.Context, albumID string, releases 
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	if _, err := tx.ExecContext(ctx, `DELETE FROM album_releases WHERE album_id = ?`, albumID); err != nil {
+	rows, err := tx.QueryContext(ctx,
+		`SELECT id, mbid, created_at FROM album_releases WHERE album_id = ?`, albumID)
+	if err != nil {
+		return err
+	}
+	type storedRelease struct {
+		id        string
+		createdAt time.Time
+	}
+	existing := make(map[string]storedRelease)
+	for rows.Next() {
+		var id, mbid, created string
+		if err := rows.Scan(&id, &mbid, &created); err != nil {
+			_ = rows.Close()
+			return err
+		}
+		existing[mbid] = storedRelease{id: id, createdAt: parseTime(created)}
+	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return err
+	}
+	if err := rows.Close(); err != nil {
 		return err
 	}
 	now := time.Now().UTC()
 	for _, rel := range releases {
+		rel.AlbumID = albumID
+		rel.UpdatedAt = now
+		if prev, ok := existing[rel.MBID]; ok {
+			rel.ID = prev.id
+			rel.CreatedAt = prev.createdAt
+			if _, err := tx.ExecContext(ctx,
+				`UPDATE album_releases SET title=?, disambiguation=?, status=?, release_date=?, country=?, label=?, format=?, media_count=?, track_count=?, updated_at=? WHERE id=?`,
+				rel.Title, rel.Disambiguation, rel.Status, rel.ReleaseDate, rel.Country,
+				rel.Label, rel.Format, rel.MediaCount, rel.TrackCount, now, rel.ID); err != nil {
+				return err
+			}
+			continue
+		}
 		if rel.CreatedAt.IsZero() {
 			rel.CreatedAt = now
 		}
-		rel.UpdatedAt = now
 		if _, err := tx.ExecContext(ctx,
 			`INSERT INTO album_releases (id, mbid, album_id, title, disambiguation, status, release_date, country, label, format, media_count, track_count, created_at, updated_at)
 			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -411,8 +541,9 @@ func (r *sqlRepo) ListTracksByAlbum(ctx context.Context, albumID string) ([]*Tra
 	return list, rows.Err()
 }
 
-// ReplaceTracks deletes existing tracks for an album and inserts the given set
-// in a single transaction.
+// ReplaceTracks merges refreshed metadata with existing tracks by stable MusicBrainz
+// IDs (or release position). Existing IDs, monitoring and file associations are
+// preserved; obsolete rows are removed only when no live track file references them.
 func (r *sqlRepo) ReplaceTracks(ctx context.Context, albumID string, tracks []*Track) error {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -420,17 +551,69 @@ func (r *sqlRepo) ReplaceTracks(ctx context.Context, albumID string, tracks []*T
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	if _, err := tx.ExecContext(ctx, `DELETE FROM tracks WHERE album_id = ?`, albumID); err != nil {
+	rows, err := tx.QueryContext(ctx,
+		`SELECT `+trackColumns+` FROM tracks WHERE album_id = ?`, albumID)
+	if err != nil {
+		return err
+	}
+	var oldTracks []*Track
+	byRecording := make(map[string]*Track)
+	byTrackMBID := make(map[string]*Track)
+	byPosition := make(map[string]*Track)
+	for rows.Next() {
+		old, err := scanTrack(rows)
+		if err != nil {
+			_ = rows.Close()
+			return err
+		}
+		oldTracks = append(oldTracks, old)
+		if old.RecordingMBID != "" {
+			byRecording[old.RecordingMBID] = old
+		}
+		if old.TrackMBID != "" {
+			byTrackMBID[old.TrackMBID] = old
+		}
+		byPosition[trackPositionKey(old)] = old
+	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return err
+	}
+	if err := rows.Close(); err != nil {
 		return err
 	}
 	now := time.Now().UTC()
+	retained := make(map[string]bool, len(tracks))
 	for _, t := range tracks {
+		t.AlbumID = albumID
 		if t.CreatedAt.IsZero() {
 			t.CreatedAt = now
 		}
 		t.UpdatedAt = now
 		if t.DiscNumber == 0 {
 			t.DiscNumber = 1
+		}
+		old := byRecording[t.RecordingMBID]
+		if old == nil {
+			old = byTrackMBID[t.TrackMBID]
+		}
+		if old == nil {
+			old = byPosition[trackPositionKey(t)]
+		}
+		if old != nil {
+			t.ID = old.ID
+			t.CreatedAt = old.CreatedAt
+			t.Monitored = old.Monitored
+			t.HasFile = old.HasFile
+			retained[old.ID] = true
+			if _, err := tx.ExecContext(ctx,
+				`UPDATE tracks SET recording_mbid=?, track_mbid=?, release_id=?, title=?, track_number=?, disc_number=?, duration_ms=?, artist_name=?, monitored=?, has_file=?, updated_at=? WHERE id=?`,
+				nullString(t.RecordingMBID), nullString(t.TrackMBID), nullString(t.ReleaseID),
+				t.Title, t.TrackNumber, t.DiscNumber, t.DurationMs, t.ArtistName,
+				t.Monitored, t.HasFile, now, t.ID); err != nil {
+				return err
+			}
+			continue
 		}
 		if _, err := tx.ExecContext(ctx,
 			`INSERT INTO tracks (id, recording_mbid, track_mbid, album_id, release_id, title, track_number, disc_number, duration_ms, artist_name, monitored, has_file, created_at, updated_at)
@@ -441,8 +624,24 @@ func (r *sqlRepo) ReplaceTracks(ctx context.Context, albumID string, tracks []*T
 		); err != nil {
 			return err
 		}
+		retained[t.ID] = true
+	}
+	for _, old := range oldTracks {
+		if retained[old.ID] {
+			continue
+		}
+		if _, err := tx.ExecContext(ctx,
+			`DELETE FROM tracks WHERE id = ?
+			   AND NOT EXISTS (SELECT 1 FROM track_files tf WHERE tf.track_id = tracks.id AND tf.deleted_at IS NULL)`,
+			old.ID); err != nil {
+			return err
+		}
 	}
 	return tx.Commit()
+}
+
+func trackPositionKey(t *Track) string {
+	return strconv.Itoa(t.DiscNumber) + "|" + strconv.Itoa(t.TrackNumber)
 }
 
 // MarkTrackHasFile updates a track's has_file flag.
@@ -552,9 +751,32 @@ func (r *sqlRepo) ListTrackFilesByArtist(ctx context.Context, artistID string) (
 }
 
 func (r *sqlRepo) DeleteTrackFile(ctx context.Context, id string) error {
-	_, err := r.db.ExecContext(ctx,
-		`UPDATE track_files SET deleted_at = ? WHERE id = ?`, time.Now().UTC(), id)
-	return err
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	now := time.Now().UTC()
+	var trackID sql.NullString
+	if err := tx.QueryRowContext(ctx,
+		`SELECT track_id FROM track_files WHERE id = ? AND deleted_at IS NULL`, id).Scan(&trackID); err != nil && err != sql.ErrNoRows {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE track_files SET deleted_at = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL`,
+		now, now, id); err != nil {
+		return err
+	}
+	if trackID.Valid {
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE tracks SET has_file = EXISTS(
+			   SELECT 1 FROM track_files WHERE track_id = ? AND deleted_at IS NULL
+			 ), updated_at = ? WHERE id = ?`,
+			trackID.String, now, trackID.String); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
 }
 
 // --- quality definitions / profiles ---
@@ -623,9 +845,33 @@ func (r *sqlRepo) GetAudioQualityProfile(ctx context.Context, id string) (*Audio
 	return p, err
 }
 
+func (r *sqlRepo) CreateAudioQualityProfile(ctx context.Context, p *AudioQualityProfile) error {
+	items := p.Items
+	if len(items) == 0 {
+		items = []byte("[]")
+	}
+	formatItems, err := json.Marshal(p.FormatItems)
+	if err != nil {
+		return err
+	}
+	if len(p.FormatItems) == 0 {
+		formatItems = []byte("[]")
+	}
+	_, err = r.db.ExecContext(ctx,
+		`INSERT INTO audio_quality_profiles (id, name, items, cutoff, upgrade_allowed, format_items, min_format_score, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		p.ID, p.Name, string(items), p.Cutoff, p.UpgradeAllowed,
+		string(formatItems), p.MinFormatScore, p.CreatedAt, p.UpdatedAt)
+	return err
+}
+
 // UpdateAudioQualityProfile persists the custom-format scoring (format_items +
 // min_format_score), cutoff and upgrade policy for an existing profile.
 func (r *sqlRepo) UpdateAudioQualityProfile(ctx context.Context, p *AudioQualityProfile) error {
+	items := p.Items
+	if len(items) == 0 {
+		items = []byte("[]")
+	}
 	formatItems, err := json.Marshal(p.FormatItems)
 	if err != nil {
 		return err
@@ -634,8 +880,22 @@ func (r *sqlRepo) UpdateAudioQualityProfile(ctx context.Context, p *AudioQuality
 		formatItems = []byte("[]")
 	}
 	res, err := r.db.ExecContext(ctx,
-		`UPDATE audio_quality_profiles SET cutoff = ?, upgrade_allowed = ?, format_items = ?, min_format_score = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND deleted_at IS NULL`,
-		p.Cutoff, p.UpgradeAllowed, string(formatItems), p.MinFormatScore, p.ID)
+		`UPDATE audio_quality_profiles SET items = ?, cutoff = ?, upgrade_allowed = ?, format_items = ?, min_format_score = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND deleted_at IS NULL`,
+		string(items), p.Cutoff, p.UpgradeAllowed, string(formatItems), p.MinFormatScore, p.ID)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
+func (r *sqlRepo) SoftDeleteAudioQualityProfile(ctx context.Context, id string) error {
+	res, err := r.db.ExecContext(ctx,
+		`UPDATE audio_quality_profiles SET deleted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+		 WHERE id = ? AND deleted_at IS NULL`, id)
 	if err != nil {
 		return err
 	}
@@ -688,17 +948,66 @@ func (r *sqlRepo) GetMetadataProfile(ctx context.Context, id string) (*MetadataP
 	return p, err
 }
 
+func (r *sqlRepo) CreateMetadataProfile(ctx context.Context, p *MetadataProfile) error {
+	_, err := r.db.ExecContext(ctx,
+		`INSERT INTO metadata_profiles (id, name, primary_types, secondary_types, release_statuses, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		p.ID, p.Name, p.PrimaryTypes, p.SecondaryTypes, p.ReleaseStatuses, p.CreatedAt, p.UpdatedAt)
+	return err
+}
+
+func (r *sqlRepo) UpdateMetadataProfile(ctx context.Context, p *MetadataProfile) error {
+	res, err := r.db.ExecContext(ctx,
+		`UPDATE metadata_profiles SET name = ?, primary_types = ?, secondary_types = ?, release_statuses = ?, updated_at = ?
+		 WHERE id = ? AND deleted_at IS NULL`,
+		p.Name, p.PrimaryTypes, p.SecondaryTypes, p.ReleaseStatuses, p.UpdatedAt, p.ID)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
+func (r *sqlRepo) SoftDeleteMetadataProfile(ctx context.Context, id string) error {
+	res, err := r.db.ExecContext(ctx,
+		`UPDATE metadata_profiles SET deleted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+		 WHERE id = ? AND deleted_at IS NULL`, id)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
 // --- stats ---
 
 func (r *sqlRepo) GetArtistStats(ctx context.Context, artistID string) (*ArtistStats, error) {
-	all, err := r.GetAllArtistStats(ctx)
+	stats := &ArtistStats{}
+	err := r.db.QueryRowContext(ctx,
+		`SELECT COUNT(*), COALESCE(SUM(CASE WHEN monitored THEN 1 ELSE 0 END), 0)
+		 FROM albums al
+		 JOIN album_artists aa ON aa.album_id = al.id
+		 JOIN artists ar ON ar.id = aa.artist_id
+		 WHERE aa.artist_id = ? AND al.deleted_at IS NULL AND ar.deleted_at IS NULL`, artistID,
+	).Scan(&stats.AlbumCount, &stats.MonitoredAlbumCount)
 	if err != nil {
 		return nil, err
 	}
-	if s, ok := all[artistID]; ok {
-		return s, nil
-	}
-	return &ArtistStats{}, nil
+	err = r.db.QueryRowContext(ctx,
+		`SELECT COUNT(*), COALESCE(SUM(CASE WHEN t.has_file THEN 1 ELSE 0 END), 0),
+		        COALESCE(SUM(CASE WHEN t.monitored AND NOT t.has_file THEN 1 ELSE 0 END), 0)
+		 FROM tracks t JOIN albums al ON al.id = t.album_id
+		 JOIN album_artists aa ON aa.album_id = al.id
+		 JOIN artists ar ON ar.id = aa.artist_id
+		 WHERE aa.artist_id = ? AND al.deleted_at IS NULL AND ar.deleted_at IS NULL`, artistID,
+	).Scan(&stats.TrackCount, &stats.TrackFileCount, &stats.MissingTrackCount)
+	return stats, err
 }
 
 // GetAllArtistStats computes album/track rollups for every artist in one pass.
@@ -707,8 +1016,12 @@ func (r *sqlRepo) GetAllArtistStats(ctx context.Context) (map[string]*ArtistStat
 
 	// Album counts per artist.
 	albRows, err := r.db.QueryContext(ctx,
-		`SELECT artist_id, COUNT(*), SUM(CASE WHEN monitored THEN 1 ELSE 0 END)
-		 FROM albums WHERE deleted_at IS NULL GROUP BY artist_id`)
+		`SELECT aa.artist_id, COUNT(*), SUM(CASE WHEN al.monitored THEN 1 ELSE 0 END)
+		 FROM albums al
+		 JOIN album_artists aa ON aa.album_id = al.id
+		 JOIN artists ar ON ar.id = aa.artist_id
+		 WHERE al.deleted_at IS NULL AND ar.deleted_at IS NULL
+		 GROUP BY aa.artist_id`)
 	if err != nil {
 		return nil, err
 	}
@@ -729,11 +1042,14 @@ func (r *sqlRepo) GetAllArtistStats(ctx context.Context) (map[string]*ArtistStat
 
 	// Track counts per artist (joined via albums).
 	trkRows, err := r.db.QueryContext(ctx,
-		`SELECT al.artist_id, COUNT(*),
+		`SELECT aa.artist_id, COUNT(*),
 		        SUM(CASE WHEN t.has_file THEN 1 ELSE 0 END),
 		        SUM(CASE WHEN t.monitored AND NOT t.has_file THEN 1 ELSE 0 END)
 		 FROM tracks t JOIN albums al ON al.id = t.album_id
-		 WHERE al.deleted_at IS NULL GROUP BY al.artist_id`)
+		 JOIN album_artists aa ON aa.album_id = al.id
+		 JOIN artists ar ON ar.id = aa.artist_id
+		 WHERE al.deleted_at IS NULL AND ar.deleted_at IS NULL
+		 GROUP BY aa.artist_id`)
 	if err != nil {
 		return nil, err
 	}

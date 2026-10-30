@@ -52,7 +52,7 @@ func MatchAudioQuality(rel *MusicRelease, defs []*AudioQualityDefinition) *Audio
 		}
 	case format == "mp3":
 		return matchMP3(rel, byID)
-	case format == "aac" || format == "m4a":
+	case format == "aac" || (format == "m4a" && rel.Bitrate > 0):
 		if rel.Bitrate >= 320 {
 			if d := byID["aq_aac_320"]; d != nil {
 				return d
@@ -160,13 +160,16 @@ func ScoreAudioRelease(rel *MusicRelease, defs []*AudioQualityDefinition, profil
 	}
 
 	if profile != nil {
-		allowedIDs, cutoffTier, hasItems := parseProfile(profile, defs)
+		allowedIDs, cutoffTier, hasItems, cutoffValid := parseProfile(profile, defs)
 		if hasItems {
 			if def == nil || !allowedIDs[def.ID] {
 				score.Allowed = false
 			}
 		}
-		score.MeetsCutoff = def != nil && def.TierOrder >= cutoffTier
+		if !cutoffValid {
+			score.Allowed = false
+		}
+		score.MeetsCutoff = cutoffValid && def != nil && def.TierOrder >= cutoffTier
 	} else {
 		score.MeetsCutoff = true
 	}
@@ -176,8 +179,8 @@ func ScoreAudioRelease(rel *MusicRelease, defs []*AudioQualityDefinition, profil
 }
 
 // parseProfile returns the set of allowed definition IDs, the cutoff tier order,
-// and whether the profile declared any items.
-func parseProfile(profile *AudioQualityProfile, defs []*AudioQualityDefinition) (allowed map[string]bool, cutoffTier int, hasItems bool) {
+// whether the profile declared any items, and whether its cutoff is valid.
+func parseProfile(profile *AudioQualityProfile, defs []*AudioQualityDefinition) (allowed map[string]bool, cutoffTier int, hasItems bool, cutoffValid bool) {
 	allowed = make(map[string]bool)
 	var items []AudioProfileItem
 	if len(profile.Items) > 0 {
@@ -189,15 +192,17 @@ func parseProfile(profile *AudioQualityProfile, defs []*AudioQualityDefinition) 
 		}
 	}
 	hasItems = len(allowed) > 0
+	cutoffValid = profile.Cutoff == ""
 	if profile.Cutoff != "" {
 		for _, d := range defs {
 			if d.ID == profile.Cutoff {
 				cutoffTier = d.TierOrder
+				cutoffValid = true
 				break
 			}
 		}
 	}
-	return allowed, cutoffTier, hasItems
+	return allowed, cutoffTier, hasItems, cutoffValid
 }
 
 // audioTiebreaker scores torrents by seeders (primary) with a small size nudge,

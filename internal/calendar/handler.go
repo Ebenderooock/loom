@@ -12,6 +12,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/ebenderooock/loom/internal/airing"
+	"github.com/ebenderooock/loom/internal/storage"
 )
 
 // Event represents a unified calendar event (movie release or episode air date).
@@ -36,6 +37,7 @@ type Event struct {
 // Handler serves the calendar API.
 type Handler struct {
 	db        *sql.DB
+	postgres  bool
 	workflows WorkflowStatusSource
 }
 
@@ -45,19 +47,30 @@ type WorkflowStatusSource interface {
 }
 
 // NewHandler creates a new calendar handler.
-func NewHandler(db *sql.DB) *Handler {
-	return &Handler{db: db}
+func NewHandler(db *sql.DB, engine ...string) *Handler {
+	postgres := len(engine) > 0 && engine[0] == "postgres"
+	return &Handler{db: db, postgres: postgres}
 }
 
 // Router returns a chi.Router with the calendar endpoint.
 func Router(db *sql.DB, sources ...WorkflowStatusSource) chi.Router {
-	h := NewHandler(db)
+	return RouterForEngine(db, "", sources...)
+}
+
+// RouterForEngine is Router with SQL placeholders rebound for the given
+// storage engine ("postgres" or "sqlite").
+func RouterForEngine(db *sql.DB, engine string, sources ...WorkflowStatusSource) chi.Router {
+	h := NewHandler(db, engine)
 	if len(sources) > 0 {
 		h.workflows = sources[0]
 	}
 	r := chi.NewRouter()
 	r.Get("/", h.list)
 	return r
+}
+
+func (h *Handler) queryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error) {
+	return h.db.QueryContext(ctx, storage.RebindQuery(query, h.postgres), args...)
 }
 
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
@@ -100,7 +113,7 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 	events := make([]Event, 0)
 
 	// Query movies with release_date, theatrical_date, or digital_date in range
-	movieRows, err := h.db.QueryContext(r.Context(),
+	movieRows, err := h.queryContext(r.Context(),
 		`SELECT id, title, year, release_date, status, theatrical_date, digital_date, monitoring_status FROM movies
 		 WHERE deleted_at IS NULL AND (
 		   (release_date >= ? AND release_date <= ?) OR
@@ -153,7 +166,7 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 	rangeEnd := endDay.AddDate(0, 0, 1).UTC().Format(time.RFC3339)
 
 	// Date-only rows retain their original calendar date, without conversion.
-	epRows, err := h.db.QueryContext(r.Context(),
+	epRows, err := h.queryContext(r.Context(),
 		`SELECT e.id, e.title, e.air_date, e.episode_number, e.has_file, e.air_date_utc,
 		        s.title, s.id, sea.season_number, e.monitored
 		 FROM episodes e
@@ -213,7 +226,7 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 	// Query monitored albums with a release_date in range (music). The albums
 	// tables only contain rows once the music capability is used, so this is a
 	// no-op for installs that never enabled it.
-	albumRows, err := h.db.QueryContext(r.Context(),
+	albumRows, err := h.queryContext(r.Context(),
 		`SELECT al.id, al.title, al.release_date, ar.name, al.monitored,
 		        EXISTS (SELECT 1 FROM track_files tf WHERE tf.album_id = al.id AND tf.deleted_at IS NULL)
 		 FROM albums al

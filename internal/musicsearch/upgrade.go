@@ -2,6 +2,7 @@ package musicsearch
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/ebenderooock/loom/internal/music"
@@ -11,16 +12,24 @@ import (
 // files and whether the album currently has any files. The album's "current
 // quality" is the weakest track, mirroring how upgrade-eligibility is judged
 // per-album (the whole album is re-grabbed as a unit).
-func (e *Engine) albumCurrentTier(ctx context.Context, album *music.Album, defs []*music.AudioQualityDefinition) (tier int, hasFiles bool) {
+func (e *Engine) albumCurrentTier(ctx context.Context, album *music.Album, defs []*music.AudioQualityDefinition) (tier int, hasFiles bool, err error) {
 	files, err := e.repo.ListTrackFilesByArtist(ctx, album.ArtistID)
 	if err != nil {
-		return 0, false
+		return 0, false, err
 	}
 	for _, f := range files {
 		if f.AlbumID != album.ID {
 			continue
 		}
 		rel := &music.MusicRelease{Format: f.Format, Bitrate: f.Bitrate}
+		switch bits := f.MediaInfo["bits"].(type) {
+		case int:
+			rel.Bits = bits
+		case int64:
+			rel.Bits = int(bits)
+		case float64:
+			rel.Bits = int(bits)
+		}
 		t := 0
 		if def := music.MatchAudioQuality(rel, defs); def != nil {
 			t = def.TierOrder
@@ -30,21 +39,21 @@ func (e *Engine) albumCurrentTier(ctx context.Context, album *music.Album, defs 
 		}
 		hasFiles = true
 	}
-	return tier, hasFiles
+	return tier, hasFiles, nil
 }
 
-// cutoffTierOf resolves a profile's cutoff definition to its tier order. A blank
-// or unknown cutoff yields 0 (no effective cutoff).
-func cutoffTierOf(profile *music.AudioQualityProfile, defs []*music.AudioQualityDefinition) int {
+// cutoffTierOf resolves a profile's cutoff definition to its tier order. An
+// unknown non-empty ID is invalid and must not silently become the lowest tier.
+func cutoffTierOf(profile *music.AudioQualityProfile, defs []*music.AudioQualityDefinition) (int, bool) {
 	if profile == nil || profile.Cutoff == "" {
-		return 0
+		return 0, false
 	}
 	for _, d := range defs {
 		if d.ID == profile.Cutoff {
-			return d.TierOrder
+			return d.TierOrder, true
 		}
 	}
-	return 0
+	return 0, false
 }
 
 // CutoffUnmetCandidates returns complete monitored albums whose on-disk quality
@@ -66,12 +75,15 @@ func (e *Engine) CutoffUnmetCandidates(ctx context.Context, minRecheck time.Dura
 		if ar.MonitoringStatus != music.MonitoringMonitored || ar.QualityProfileID == "" {
 			continue
 		}
-		profile, _ := e.repo.GetAudioQualityProfile(ctx, ar.QualityProfileID)
+		profile, err := e.repo.GetAudioQualityProfile(ctx, ar.QualityProfileID)
+		if err != nil {
+			return nil, fmt.Errorf("get audio quality profile for artist %s: %w", ar.ID, err)
+		}
 		if profile == nil || !profile.UpgradeAllowed {
 			continue
 		}
-		cutoffTier := cutoffTierOf(profile, defs)
-		if cutoffTier <= 0 {
+		cutoffTier, validCutoff := cutoffTierOf(profile, defs)
+		if !validCutoff {
 			continue
 		}
 		albums, err := e.repo.ListAlbumsByArtist(ctx, ar.ID)
@@ -92,7 +104,10 @@ func (e *Engine) CutoffUnmetCandidates(ctx context.Context, minRecheck time.Dura
 			if err != nil || missing {
 				continue
 			}
-			tier, hasFiles := e.albumCurrentTier(ctx, al, defs)
+			tier, hasFiles, err := e.albumCurrentTier(ctx, al, defs)
+			if err != nil {
+				return nil, fmt.Errorf("get track files for album %s: %w", al.ID, err)
+			}
 			if hasFiles && tier < cutoffTier {
 				due = append(due, al)
 			}

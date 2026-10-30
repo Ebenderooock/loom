@@ -149,7 +149,7 @@ func New(t testing.TB) *TestServer {
 		Timeout: 5 * time.Second,
 	})
 	mbProvider := musicbrainz.NewProvider(mbClient)
-	musicSvc := music.NewService(music.NewRepository(db.DB()), mbProvider, logger)
+	musicSvc := music.NewService(music.NewRepository(db.DB(), string(db.Engine())), mbProvider, logger)
 
 	importStore := importlists.NewStore(db.DB())
 	importSync := importlists.NewSyncManager(importStore, logger)
