@@ -51,3 +51,12 @@ func TestMatchTrack_NoMatch(t *testing.T) {
 		t.Fatalf("expected nil for empty tracks, got %+v", got)
 	}
 }
+
+func TestMusicScannerNormalizationPreservesUnicodeNames(t *testing.T) {
+	if got := normalizeTitle("Beyoncé"); got != "beyonce" {
+		t.Fatalf("normalizeTitle(Beyoncé) = %q, want beyonce", got)
+	}
+	if got := normalizeTitle("東京"); got != "東京" {
+		t.Fatalf("normalizeTitle(東京) = %q, want 東京", got)
+	}
+}

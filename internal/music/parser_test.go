@@ -72,6 +72,27 @@ func TestParseMusic(t *testing.T) {
 			bitrate:  256,
 			lossless: false,
 		},
+		{
+			name:     "bare year and track number are not bitrates",
+			title:    "Artist - 320 Songs (2020) - 01 FLAC",
+			artist:   "Artist",
+			album:    "320 Songs",
+			year:     2020,
+			format:   "FLAC",
+			lossless: true,
+		},
+		{
+			name:    "bitrate adjacent to codec",
+			title:   "Artist - Album [AAC-256]",
+			format:  "AAC",
+			bitrate: 256,
+		},
+		{
+			name:     "explicit ALAC takes precedence over m4a",
+			title:    "Artist - Album [M4A ALAC]",
+			format:   "ALAC",
+			lossless: true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -108,6 +129,13 @@ func TestParseMusic(t *testing.T) {
 				t.Errorf("Media = %q, want %q", r.Media, tt.media)
 			}
 		})
+	}
+}
+
+func TestParseMusicDoesNotTreatEmbeddedKeywordAsFormat(t *testing.T) {
+	r := ParseMusic("Artist - The Flac House 2024")
+	if r.Format != "" {
+		t.Errorf("format = %q, want no format", r.Format)
 	}
 }
 

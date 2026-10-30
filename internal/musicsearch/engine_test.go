@@ -1,7 +1,10 @@
 package musicsearch
 
 import (
+	"errors"
 	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"testing"
 
@@ -11,19 +14,24 @@ import (
 	"github.com/ebenderooock/loom/internal/music"
 )
 
+func TestInvalidReleaseLinkUsesBadRequestStatus(t *testing.T) {
+	recorder := httptest.NewRecorder()
+	writeSearchErr(recorder, errors.Join(ErrInvalidReleaseLink, errors.New("bad link")))
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusBadRequest)
+	}
+}
+
 func TestBuildAudioQueries(t *testing.T) {
 	qs := buildAudioQueries("Pink Floyd", "Animals", 1977)
-	if len(qs) != 3 {
-		t.Fatalf("want 3 queries, got %d", len(qs))
+	if len(qs) != 2 {
+		t.Fatalf("want 2 specific queries, got %d", len(qs))
 	}
 	if qs[0].Term != "Pink Floyd Animals" {
 		t.Errorf("tier0 = %q", qs[0].Term)
 	}
 	if qs[1].Term != "Pink Floyd Animals 1977" {
 		t.Errorf("tier1 = %q", qs[1].Term)
-	}
-	if qs[2].Term != "Animals" {
-		t.Errorf("tier2 = %q", qs[2].Term)
 	}
 	for _, q := range qs {
 		if q.Mode != indexers.ModeSearch {
@@ -37,8 +45,25 @@ func TestBuildAudioQueries(t *testing.T) {
 
 func TestBuildAudioQueriesNoYear(t *testing.T) {
 	qs := buildAudioQueries("Artist", "Album", 0)
-	if len(qs) != 2 {
-		t.Fatalf("want 2 queries without year, got %d", len(qs))
+	if len(qs) != 1 {
+		t.Fatalf("want 1 specific query without year, got %d", len(qs))
+	}
+}
+
+func TestBuildTrackQueriesAndIdentity(t *testing.T) {
+	queries := buildTrackQueries("Pink Floyd", "Animals", "Dogs")
+	if len(queries) != 2 || queries[0].Term != "Pink Floyd Animals Dogs" ||
+		queries[1].Term != "Pink Floyd Dogs" {
+		t.Fatalf("track queries = %+v", queries)
+	}
+	if !trackIdentityMatch("Pink Floyd - Animals - Dogs (FLAC)", "Pink Floyd", "Dogs") {
+		t.Fatal("expected release matching artist and track")
+	}
+	if trackIdentityMatch("Pink Floyd - Animals - Pigs (FLAC)", "Pink Floyd", "Dogs") {
+		t.Fatal("unrelated track should not match")
+	}
+	if trackIdentityMatch("Some Artist - Dogs (FLAC)", "Pink Floyd", "Dogs") {
+		t.Fatal("unrelated artist should not match")
 	}
 }
 
@@ -57,11 +82,31 @@ func TestIdentityMatch(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.title, func(t *testing.T) {
 			parsed := music.ParseMusic(tt.title)
-			got := identityMatch(tt.title, parsed, normalize(tt.artist), normalize(tt.album))
+			got := identityMatch(tt.title, parsed, tt.artist, tt.album)
 			if got != tt.want {
 				t.Errorf("identityMatch = %v, want %v", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestIdentityMatchUsesUnicodeAndWholePhrases(t *testing.T) {
+	tests := []struct {
+		title, artist, album string
+		want                 bool
+	}{
+		{"Björk - Debut (1993) FLAC", "Bjork", "Debut", true},
+		{"Sigur Rós — Álbum FLAC", "Sigur Ros", "Album", true},
+		{"The Artist - Art of Noise FLAC", "Art", "Art of Noise", false},
+		{"Pink Floyd - Animals Remastered FLAC", "Pink Floyd", "Animal", false},
+	}
+	for _, tt := range tests {
+		parsed := music.ParseMusic(tt.title)
+		got := identityMatch(tt.title, parsed, tt.artist, tt.album)
+		if got != tt.want {
+			t.Errorf("identityMatch(%q, %q, %q) = %v, want %v; parsed=%+v",
+				tt.title, tt.artist, tt.album, got, tt.want, parsed)
+		}
 	}
 }
 
@@ -92,6 +137,12 @@ func TestInferProtocol(t *testing.T) {
 	usenet := &indexers.Result{Link: "https://x/file.nzb"}
 	if inferProtocol(usenet) != downloads.ProtocolUsenet {
 		t.Error("expected usenet for .nzb link")
+	}
+	if got := inferProtocol(&indexers.Result{Link: "https://x/download?id=123"}); got != "" {
+		t.Errorf("ambiguous link protocol = %q, want unknown", got)
+	}
+	if got := inferProtocol(&indexers.Result{Link: "file:///tmp/file.torrent"}); got != "" {
+		t.Errorf("non-web link protocol = %q, want unknown", got)
 	}
 }
 

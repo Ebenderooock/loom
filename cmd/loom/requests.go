@@ -166,6 +166,16 @@ func (f *requestsFulfiller) ArtistExists(ctx context.Context, mbid string) (stri
 	if a == nil || a.MonitoringStatus == "" {
 		return "", nil
 	}
+	live, err := f.music.GetArtist(ctx, a.ID)
+	if errors.Is(err, music.ErrNotFound) {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	if live == nil || live.MonitoringStatus == "" {
+		return "", nil
+	}
 	return a.ID, nil
 }
 

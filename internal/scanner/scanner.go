@@ -13,6 +13,7 @@ import (
 	"unicode"
 
 	"github.com/google/uuid"
+	"golang.org/x/text/unicode/norm"
 
 	"github.com/ebenderooock/loom/internal/auditlog"
 	"github.com/ebenderooock/loom/internal/kernel/telemetry"
@@ -620,8 +621,8 @@ func normalizeTitle(title string) string {
 	}
 	// Remove non-alphanumeric
 	var b strings.Builder
-	for _, r := range t {
-		if r >= 'a' && r <= 'z' || r >= '0' && r <= '9' {
+	for _, r := range norm.NFD.String(t) {
+		if unicode.IsLetter(r) || unicode.IsNumber(r) {
 			b.WriteRune(r)
 		}
 	}
@@ -638,8 +639,8 @@ func normalizeTitleForTokens(title string) string {
 		t = strings.TrimPrefix(t, article)
 	}
 	var b strings.Builder
-	for _, r := range t {
-		if r >= 'a' && r <= 'z' || r >= '0' && r <= '9' || r == ' ' {
+	for _, r := range norm.NFD.String(t) {
+		if unicode.IsLetter(r) || unicode.IsNumber(r) || r == ' ' {
 			b.WriteRune(r)
 		}
 	}

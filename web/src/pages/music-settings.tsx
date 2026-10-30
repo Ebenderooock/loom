@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Trash2 } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -23,8 +24,14 @@ import {
 import {
   useAudioQualityDefinitions,
   useAudioQualityProfiles,
+  useCreateAudioQualityProfile,
+  useDeleteAudioQualityProfile,
+  useCreateMetadataProfile,
+  useDeleteMetadataProfile,
   useMetadataProfiles,
+  useUpdateMetadataProfile,
   useUpdateAudioQualityProfile,
+  type MetadataProfile,
   type AudioQualityProfile,
 } from "@/lib/music-api";
 import { useCustomFormats } from "@/lib/custom-formats-api";
@@ -49,14 +56,17 @@ function parseItems(profile: AudioQualityProfile): ProfileItem[] {
 
 function AudioProfileCard({
   profile,
+  definitions,
   defName,
 }: {
   profile: AudioQualityProfile;
+  definitions: { id: string; name: string }[];
   defName: (id: string) => string;
 }) {
   const items = parseItems(profile).filter((i) => i.allowed);
   const { data: customFormats = [] } = useCustomFormats();
   const update = useUpdateAudioQualityProfile();
+  const remove = useDeleteAudioQualityProfile();
 
   const initialScores = React.useMemo(() => {
     const m: Record<string, number> = {};
@@ -69,14 +79,39 @@ function AudioProfileCard({
   const [minScore, setMinScore] = React.useState<number>(
     profile.min_format_score ?? 0,
   );
+  const [allowed, setAllowed] = React.useState<Record<string, boolean>>(() =>
+    Object.fromEntries(
+      parseItems(profile).map((item) => [item.definition_id, item.allowed]),
+    ),
+  );
+  const [cutoff, setCutoff] = React.useState(profile.cutoff ?? "");
+  const [upgradeAllowed, setUpgradeAllowed] = React.useState(
+    profile.upgrade_allowed,
+  );
 
   React.useEffect(() => {
     setScores(initialScores);
     setMinScore(profile.min_format_score ?? 0);
-  }, [initialScores, profile.min_format_score]);
+    setAllowed(
+      Object.fromEntries(
+        parseItems(profile).map((item) => [item.definition_id, item.allowed]),
+      ),
+    );
+    setCutoff(profile.cutoff ?? "");
+    setUpgradeAllowed(profile.upgrade_allowed);
+  }, [initialScores, profile]);
 
   const dirty =
     minScore !== (profile.min_format_score ?? 0) ||
+    cutoff !== (profile.cutoff ?? "") ||
+    upgradeAllowed !== profile.upgrade_allowed ||
+    definitions.some(
+      (definition) =>
+        (allowed[definition.id] ?? false) !==
+        (parseItems(profile).find(
+          (item) => item.definition_id === definition.id,
+        )?.allowed ?? false),
+    ) ||
     customFormats.some(
       (cf) => (scores[cf.id] ?? 0) !== (initialScores[cf.id] ?? 0),
     );
@@ -86,7 +121,19 @@ function AudioProfileCard({
       .map((cf) => ({ format_id: cf.id, score: scores[cf.id] ?? 0 }))
       .filter((fi) => fi.score !== 0);
     update.mutate(
-      { id: profile.id, req: { format_items, min_format_score: minScore } },
+      {
+        id: profile.id,
+        req: {
+          format_items,
+          min_format_score: minScore,
+          items: definitions.map((definition) => ({
+            definition_id: definition.id,
+            allowed: allowed[definition.id] ?? false,
+          })),
+          cutoff,
+          upgrade_allowed: upgradeAllowed,
+        },
+      },
       {
         onSuccess: () => toast.success(`Saved scoring for ${profile.name}`),
         onError: (e) =>
@@ -99,10 +146,27 @@ function AudioProfileCard({
     <div className="rounded-md border p-3">
       <div className="mb-2 flex items-center justify-between">
         <span className="font-medium">{profile.name}</span>
-        <span className="text-xs text-muted-foreground">
-          Cutoff: {profile.cutoff ? defName(profile.cutoff) : "—"}
-          {profile.upgrade_allowed ? " · upgrades on" : " · upgrades off"}
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-muted-foreground">
+            Cutoff: {profile.cutoff ? defName(profile.cutoff) : "—"}
+            {profile.upgrade_allowed ? " · upgrades on" : " · upgrades off"}
+          </span>
+          <Button
+            size="icon"
+            variant="ghost"
+            aria-label={`Delete ${profile.name}`}
+            disabled={remove.isPending}
+            onClick={() =>
+              remove.mutate(profile.id, {
+                onSuccess: () => toast.success(`Deleted ${profile.name}`),
+                onError: (e) =>
+                  toast.error(e instanceof Error ? e.message : "Delete failed"),
+              })
+            }
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
       <div className="mb-3 flex flex-wrap gap-1.5">
         {items.length === 0 ? (
@@ -116,6 +180,57 @@ function AudioProfileCard({
             </Badge>
           ))
         )}
+      </div>
+
+      <div className="mt-3 border-t pt-3">
+        <div className="mb-2 text-xs font-medium text-muted-foreground">
+          Allowed audio qualities
+        </div>
+        <div className="grid gap-1 sm:grid-cols-2">
+          {definitions.map((definition) => (
+            <label
+              key={definition.id}
+              className="flex items-center gap-2 text-sm"
+            >
+              <input
+                type="checkbox"
+                checked={allowed[definition.id] ?? false}
+                onChange={(event) =>
+                  setAllowed((current) => ({
+                    ...current,
+                    [definition.id]: event.target.checked,
+                  }))
+                }
+              />
+              {definition.name}
+            </label>
+          ))}
+        </div>
+        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+          <label className="flex items-center gap-2 text-sm">
+            Cutoff
+            <select
+              className="h-8 rounded-md border bg-background px-2"
+              value={cutoff}
+              onChange={(event) => setCutoff(event.target.value)}
+            >
+              <option value="">None</option>
+              {definitions.map((definition) => (
+                <option key={definition.id} value={definition.id}>
+                  {definition.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={upgradeAllowed}
+              onChange={(event) => setUpgradeAllowed(event.target.checked)}
+            />
+            Allow quality upgrades
+          </label>
+        </div>
       </div>
 
       <div className="mt-3 border-t pt-3">
@@ -175,6 +290,115 @@ function AudioProfileCard({
   );
 }
 
+function splitProfileValues(value: string): string[] {
+  return value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function MetadataProfileCard({ profile }: { profile: MetadataProfile }) {
+  const update = useUpdateMetadataProfile();
+  const remove = useDeleteMetadataProfile();
+  const [name, setName] = React.useState(profile.name);
+  const [primary, setPrimary] = React.useState(
+    (profile.primary_types ?? []).join(", "),
+  );
+  const [secondary, setSecondary] = React.useState(
+    (profile.secondary_types ?? []).join(", "),
+  );
+  const [statuses, setStatuses] = React.useState(
+    (profile.release_statuses ?? []).join(", "),
+  );
+  React.useEffect(() => {
+    setName(profile.name);
+    setPrimary((profile.primary_types ?? []).join(", "));
+    setSecondary((profile.secondary_types ?? []).join(", "));
+    setStatuses((profile.release_statuses ?? []).join(", "));
+  }, [profile]);
+  const dirty =
+    name !== profile.name ||
+    primary !== (profile.primary_types ?? []).join(", ") ||
+    secondary !== (profile.secondary_types ?? []).join(", ") ||
+    statuses !== (profile.release_statuses ?? []).join(", ");
+
+  return (
+    <div className="space-y-2 rounded-md border p-3">
+      <div className="grid gap-2 sm:grid-cols-2">
+        <Label className="space-y-1">
+          Name
+          <Input
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+          />
+        </Label>
+        <Label className="space-y-1">
+          Primary types
+          <Input
+            value={primary}
+            onChange={(event) => setPrimary(event.target.value)}
+          />
+        </Label>
+        <Label className="space-y-1">
+          Secondary types
+          <Input
+            value={secondary}
+            onChange={(event) => setSecondary(event.target.value)}
+          />
+        </Label>
+        <Label className="space-y-1">
+          Release statuses
+          <Input
+            value={statuses}
+            onChange={(event) => setStatuses(event.target.value)}
+          />
+        </Label>
+      </div>
+      <div className="flex justify-end gap-2">
+        <Button
+          size="sm"
+          variant="ghost"
+          disabled={remove.isPending}
+          onClick={() =>
+            remove.mutate(profile.id, {
+              onSuccess: () => toast.success(`Deleted ${profile.name}`),
+              onError: (e) =>
+                toast.error(e instanceof Error ? e.message : "Delete failed"),
+            })
+          }
+        >
+          <Trash2 className="mr-1 h-4 w-4" />
+          Delete
+        </Button>
+        <Button
+          size="sm"
+          disabled={!dirty || update.isPending}
+          onClick={() =>
+            update.mutate(
+              {
+                id: profile.id,
+                req: {
+                  name,
+                  primary_types: splitProfileValues(primary),
+                  secondary_types: splitProfileValues(secondary),
+                  release_statuses: splitProfileValues(statuses),
+                },
+              },
+              {
+                onSuccess: () => toast.success(`Saved ${name}`),
+                onError: (e) =>
+                  toast.error(e instanceof Error ? e.message : "Save failed"),
+              },
+            )
+          }
+        >
+          {update.isPending ? "Saving…" : "Save"}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 export function MusicProfilesPage() {
   const { data: definitions = [], isLoading: defsLoading } =
     useAudioQualityDefinitions();
@@ -182,6 +406,10 @@ export function MusicProfilesPage() {
     useAudioQualityProfiles();
   const { data: metadataProfiles = [], isLoading: metaLoading } =
     useMetadataProfiles();
+  const createAudioProfile = useCreateAudioQualityProfile();
+  const createMetadata = useCreateMetadataProfile();
+  const [newAudioName, setNewAudioName] = React.useState("");
+  const [newMetadataName, setNewMetadataName] = React.useState("");
 
   const defName = (id: string) =>
     definitions.find((d) => d.id === id)?.name ?? id;
@@ -204,6 +432,46 @@ export function MusicProfilesPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          <div className="flex gap-2">
+            <Input
+              aria-label="New audio quality profile name"
+              placeholder="New profile name"
+              value={newAudioName}
+              onChange={(event) => setNewAudioName(event.target.value)}
+            />
+            <Button
+              disabled={!newAudioName.trim() || createAudioProfile.isPending}
+              onClick={() =>
+                createAudioProfile.mutate(
+                  {
+                    name: newAudioName.trim(),
+                    items: definitions.map((definition) => ({
+                      definition_id: definition.id,
+                      allowed: true,
+                    })),
+                    cutoff: definitions.some(
+                      (definition) => definition.id === "aq_flac",
+                    )
+                      ? "aq_flac"
+                      : "",
+                    upgrade_allowed: true,
+                  },
+                  {
+                    onSuccess: () => {
+                      toast.success(`Created ${newAudioName.trim()}`);
+                      setNewAudioName("");
+                    },
+                    onError: (e) =>
+                      toast.error(
+                        e instanceof Error ? e.message : "Create failed",
+                      ),
+                  },
+                )
+              }
+            >
+              Create profile
+            </Button>
+          </div>
           {profilesLoading ? (
             <Skeleton className="h-20 w-full" />
           ) : profiles.length === 0 ? (
@@ -212,7 +480,12 @@ export function MusicProfilesPage() {
             </p>
           ) : (
             profiles.map((p) => (
-              <AudioProfileCard key={p.id} profile={p} defName={defName} />
+              <AudioProfileCard
+                key={p.id}
+                profile={p}
+                definitions={definitions}
+                defName={defName}
+              />
             ))
           )}
         </CardContent>
@@ -271,6 +544,39 @@ export function MusicProfilesPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
+          <div className="flex gap-2">
+            <Input
+              aria-label="New metadata profile name"
+              placeholder="New profile name"
+              value={newMetadataName}
+              onChange={(event) => setNewMetadataName(event.target.value)}
+            />
+            <Button
+              disabled={!newMetadataName.trim() || createMetadata.isPending}
+              onClick={() =>
+                createMetadata.mutate(
+                  {
+                    name: newMetadataName.trim(),
+                    primary_types: ["Album", "EP"],
+                    secondary_types: [],
+                    release_statuses: ["official"],
+                  },
+                  {
+                    onSuccess: () => {
+                      toast.success(`Created ${newMetadataName.trim()}`);
+                      setNewMetadataName("");
+                    },
+                    onError: (e) =>
+                      toast.error(
+                        e instanceof Error ? e.message : "Create failed",
+                      ),
+                  },
+                )
+              }
+            >
+              Create profile
+            </Button>
+          </div>
           {metaLoading ? (
             <Skeleton className="h-16 w-full" />
           ) : metadataProfiles.length === 0 ? (
@@ -278,22 +584,8 @@ export function MusicProfilesPage() {
               No metadata profiles configured.
             </p>
           ) : (
-            metadataProfiles.map((m) => (
-              <div key={m.id} className="rounded-md border p-3">
-                <div className="mb-1 font-medium">{m.name}</div>
-                <div className="flex flex-wrap gap-1.5">
-                  {(m.primary_types ?? []).map((t) => (
-                    <Badge key={t} variant="secondary">
-                      {t}
-                    </Badge>
-                  ))}
-                  {(m.secondary_types ?? []).map((t) => (
-                    <Badge key={t} variant="outline">
-                      {t}
-                    </Badge>
-                  ))}
-                </div>
-              </div>
+            metadataProfiles.map((profile) => (
+              <MetadataProfileCard key={profile.id} profile={profile} />
             ))
           )}
         </CardContent>

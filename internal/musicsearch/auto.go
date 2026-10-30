@@ -22,7 +22,7 @@ func (e *Engine) touchLastSearch(ctx context.Context, album *music.Album) {
 	now := time.Now()
 	album.LastSearchAt = &now
 	uctx := context.WithoutCancel(ctx)
-	if err := e.repo.UpdateAlbum(uctx, album); err != nil {
+	if err := e.repo.TouchAlbumSearch(uctx, album.ID, now); err != nil {
 		e.logger.Debug("musicsearch: update album last_search_at failed", "album", album.ID, "error", err)
 	}
 }
@@ -53,12 +53,13 @@ func (e *Engine) MissingAlbumCandidates(ctx context.Context, minRecheck time.Dur
 			if al.LastSearchAt != nil && now.Sub(*al.LastSearchAt) < minRecheck {
 				continue
 			}
-			missing, err := e.albumMissingTracks(ctx, al.ID)
+			tracks, err := e.ensureAlbumTracks(ctx, al)
 			if err != nil {
-				e.logger.Debug("musicsearch: track check failed", "album", al.ID, "error", err)
+				e.logger.Debug("musicsearch: track metadata check failed", "album", al.ID, "error", err)
 				continue
 			}
-			if missing {
+			al.Tracks = tracks
+			if anyMissingTrack(tracks) {
 				due = append(due, al)
 			}
 		}
@@ -82,9 +83,49 @@ func (e *Engine) albumMissingTracks(ctx context.Context, albumID string) (bool, 
 			return true, nil
 		}
 	}
-	// If an album has no track listing yet, treat it as missing so a search can
-	// kick off acquisition; if it has tracks and all are present, it's complete.
-	return !hasTracked, nil
+	return hasTracked && anyMissingTrack(tracks), nil
+}
+
+func (e *Engine) ensureAlbumTracks(ctx context.Context, album *music.Album) ([]*music.Track, error) {
+	tracks, err := e.repo.ListTracksByAlbum(ctx, album.ID)
+	if err != nil {
+		return nil, err
+	}
+	if len(tracks) > 0 || album.TracksFetchedAt != nil || e.albumLoader == nil {
+		return tracks, nil
+	}
+	loaded, err := e.albumLoader.GetAlbum(ctx, album.ID)
+	if err != nil {
+		return nil, err
+	}
+	if loaded == nil {
+		return nil, nil
+	}
+	album.TracksFetchedAt = loaded.TracksFetchedAt
+	return loaded.Tracks, nil
+}
+
+func albumNeedsInitialGrab(tracks []*music.Track) bool {
+	hasMonitored := false
+	for _, track := range tracks {
+		if track == nil || !track.Monitored {
+			continue
+		}
+		hasMonitored = true
+		if track.HasFile {
+			return false
+		}
+	}
+	return hasMonitored
+}
+
+func anyMissingTrack(tracks []*music.Track) bool {
+	for _, track := range tracks {
+		if track != nil && track.Monitored && !track.HasFile {
+			return true
+		}
+	}
+	return false
 }
 
 // AutoSearchMissing searches up to limit due albums, returning how many were
@@ -93,6 +134,7 @@ func (e *Engine) AutoSearchMissing(ctx context.Context, limit int, minRecheck ti
 	if limit <= 0 {
 		limit = defaultAutoLimit
 	}
+
 	candidates, err := e.MissingAlbumCandidates(ctx, minRecheck)
 	if err != nil {
 		return 0, err
@@ -105,8 +147,18 @@ func (e *Engine) AutoSearchMissing(ctx context.Context, limit int, minRecheck ti
 		if searched >= limit {
 			break
 		}
-		if _, err := e.SearchAlbum(ctx, al.ID); err != nil {
-			e.logger.Debug("musicsearch: auto-search album failed", "album", al.ID, "error", err)
+		if albumNeedsInitialGrab(al.Tracks) {
+			if _, err := e.SearchAlbum(ctx, al.ID); err != nil {
+				e.logger.Debug("musicsearch: auto-search album failed", "album", al.ID, "error", err)
+			}
+		} else {
+			album, artist, err := e.loadAlbumArtist(ctx, al.ID)
+			if err != nil {
+				e.logger.Debug("musicsearch: auto-search album lookup failed", "album", al.ID, "error", err)
+			} else if err := e.searchMissingTracks(ctx, album, artist, al.Tracks); err != nil {
+				e.logger.Debug("musicsearch: auto-search missing tracks failed", "album", al.ID, "error", err)
+			}
+			e.touchLastSearch(ctx, al)
 		}
 		searched++
 	}
@@ -114,6 +166,59 @@ func (e *Engine) AutoSearchMissing(ctx context.Context, limit int, minRecheck ti
 		e.logger.Info("musicsearch: auto-search run complete", "searched", searched, "candidates", len(candidates))
 	}
 	return searched, nil
+}
+
+// SearchArtistAcquisition runs a bounded search-on-add pass for one artist.
+// Only albums with known track listings are eligible. Complete missing albums
+// are searched as a whole; partially imported albums use track-level queries.
+func (e *Engine) SearchArtistAcquisition(ctx context.Context, artistID string, limit int) error {
+	if limit <= 0 {
+		limit = defaultAutoLimit
+	}
+	artist, err := e.repo.GetArtist(ctx, artistID)
+	if err != nil {
+		return err
+	}
+	if artist == nil {
+		return ErrNotFound
+	}
+	if artist.MonitoringStatus != music.MonitoringMonitored {
+		return nil
+	}
+	albums, err := e.repo.ListAlbumsByArtist(ctx, artistID)
+	if err != nil {
+		return err
+	}
+	attempted := 0
+	for _, album := range albums {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		if !album.Monitored || attempted >= limit {
+			continue
+		}
+		tracks, err := e.ensureAlbumTracks(ctx, album)
+		if err != nil {
+			e.logger.Debug("musicsearch: search-on-add metadata load failed", "album", album.ID, "error", err)
+			continue
+		}
+		if !anyMissingTrack(tracks) {
+			continue
+		}
+		attempted++
+		if albumNeedsInitialGrab(tracks) {
+			if _, err := e.SearchAlbum(ctx, album.ID); err != nil {
+				e.logger.Debug("musicsearch: search-on-add album failed", "album", album.ID, "error", err)
+			}
+		} else {
+			if err := e.searchMissingTracks(ctx, album, artist, tracks); err != nil {
+				e.logger.Debug("musicsearch: search-on-add missing tracks failed", "album", album.ID, "error", err)
+			}
+			e.touchLastSearch(ctx, album)
+			continue
+		}
+	}
+	return nil
 }
 
 func sortAlbumsByLastSearch(albums []*music.Album) {

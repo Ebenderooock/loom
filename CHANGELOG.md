@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Music capability management: select an album's MusicBrainz edition, manage
+  audio quality and metadata profiles, and search for missing tracks in
+  partially available albums. Completed music downloads now import into the
+  configured library; higher-quality replacements preserve the previous file
+  in the recycle bin. See [`docs/music.md`](docs/music.md).
 - Collection management: delete collections without touching library media
   (deleted sources are not rediscovered until imported again), add real library
   or TMDB titles with a shared picker, "Add to collection" from movie/show
@@ -102,6 +107,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Collection and Discover cards now match library card status, including
+  Downloading, Importing, Available and series episode progress, with shared
+  badges and status strips instead of inferring availability from file presence.
 - Opening a title whose local ID contains punctuation (for example `%`, `:`,
   `&`) no longer fails with a 500 after adding it from a collection; route IDs
   are encoded by the UI and decoded exactly once by the API.

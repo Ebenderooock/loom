@@ -130,12 +130,33 @@ export interface AudioQualityProfile {
   min_format_score?: number;
 }
 
+export interface CreateAudioQualityProfileRequest {
+  name: string;
+  items: { definition_id: string; allowed: boolean }[];
+  cutoff?: string;
+  upgrade_allowed?: boolean;
+}
+
 export interface MetadataProfile {
   id: string;
   name: string;
   primary_types: string[];
   secondary_types: string[];
   release_statuses: string[];
+}
+
+export interface CreateMetadataProfileRequest {
+  name: string;
+  primary_types: string[];
+  secondary_types: string[];
+  release_statuses: string[];
+}
+
+export interface UpdateMetadataProfileRequest {
+  name?: string;
+  primary_types?: string[];
+  secondary_types?: string[];
+  release_statuses?: string[];
 }
 
 export interface AlbumGrabResult {
@@ -276,9 +297,25 @@ export async function setAlbumMonitored(
   return (await res.json()) as Album;
 }
 
+export async function selectAlbumRelease(
+  albumId: string,
+  releaseId: string,
+): Promise<Album> {
+  const res = await apiFetch(`/api/v1/albums/${albumId}/release`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ release_id: releaseId }),
+  });
+  if (!res.ok) {
+    throw new Error(`select album release failed: ${res.status}`);
+  }
+  return (await res.json()) as Album;
+}
+
 export interface UpdateAudioQualityProfileRequest {
   cutoff?: string;
   upgrade_allowed?: boolean;
+  items?: { definition_id: string; allowed: boolean }[];
   format_items?: AudioFormatItem[];
   min_format_score?: number;
 }
@@ -295,6 +332,67 @@ export async function updateAudioQualityProfile(
   if (!res.ok)
     throw new Error(`update audio quality profile failed: ${res.status}`);
   return (await res.json()) as AudioQualityProfile;
+}
+
+export async function createAudioQualityProfile(
+  req: CreateAudioQualityProfileRequest,
+): Promise<AudioQualityProfile> {
+  const res = await apiFetch("/api/v1/music/audio-quality-profiles", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(req),
+  });
+  if (!res.ok) {
+    throw new Error(`create audio quality profile failed: ${res.status}`);
+  }
+  return (await res.json()) as AudioQualityProfile;
+}
+
+export async function deleteAudioQualityProfile(id: string): Promise<void> {
+  const res = await apiFetch(`/api/v1/music/audio-quality-profiles/${id}`, {
+    method: "DELETE",
+  });
+  if (!res.ok && res.status !== 204) {
+    throw new Error(`delete audio quality profile failed: ${res.status}`);
+  }
+}
+
+export async function createMetadataProfile(
+  req: CreateMetadataProfileRequest,
+): Promise<MetadataProfile> {
+  const res = await apiFetch("/api/v1/music/metadata-profiles", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(req),
+  });
+  if (!res.ok) {
+    throw new Error(`create metadata profile failed: ${res.status}`);
+  }
+  return (await res.json()) as MetadataProfile;
+}
+
+export async function updateMetadataProfile(
+  id: string,
+  req: UpdateMetadataProfileRequest,
+): Promise<MetadataProfile> {
+  const res = await apiFetch(`/api/v1/music/metadata-profiles/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(req),
+  });
+  if (!res.ok) {
+    throw new Error(`update metadata profile failed: ${res.status}`);
+  }
+  return (await res.json()) as MetadataProfile;
+}
+
+export async function deleteMetadataProfile(id: string): Promise<void> {
+  const res = await apiFetch(`/api/v1/music/metadata-profiles/${id}`, {
+    method: "DELETE",
+  });
+  if (!res.ok && res.status !== 204) {
+    throw new Error(`delete metadata profile failed: ${res.status}`);
+  }
 }
 
 export async function searchAlbum(id: string): Promise<AlbumGrabResult> {
@@ -426,12 +524,58 @@ export function useUpdateAudioQualityProfile() {
   });
 }
 
+export function useCreateAudioQualityProfile() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: createAudioQualityProfile,
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: musicKeys.audioQualityProfiles }),
+  });
+}
+
+export function useDeleteAudioQualityProfile() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: deleteAudioQualityProfile,
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: musicKeys.audioQualityProfiles }),
+  });
+}
+
 export function useMetadataProfiles() {
   return useQuery({
     queryKey: musicKeys.metadataProfiles,
     queryFn: ({ signal }) =>
       getJSON<MetadataProfile[]>("/api/v1/music/metadata-profiles", signal),
     staleTime: 60_000,
+  });
+}
+
+export function useCreateMetadataProfile() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: createMetadataProfile,
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: musicKeys.metadataProfiles }),
+  });
+}
+
+export function useUpdateMetadataProfile() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: { id: string; req: UpdateMetadataProfileRequest }) =>
+      updateMetadataProfile(vars.id, vars.req),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: musicKeys.metadataProfiles }),
+  });
+}
+
+export function useDeleteMetadataProfile() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: deleteMetadataProfile,
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: musicKeys.metadataProfiles }),
   });
 }
 
@@ -482,6 +626,18 @@ export function useSetAlbumMonitored() {
     onSuccess: (al) => {
       qc.invalidateQueries({ queryKey: musicKeys.artist(al.artist_id) });
       qc.invalidateQueries({ queryKey: musicKeys.album(al.id) });
+    },
+  });
+}
+
+export function useSelectAlbumRelease() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: { albumId: string; releaseId: string }) =>
+      selectAlbumRelease(vars.albumId, vars.releaseId),
+    onSuccess: (album) => {
+      qc.invalidateQueries({ queryKey: musicKeys.album(album.id) });
+      qc.invalidateQueries({ queryKey: musicKeys.artist(album.artist_id) });
     },
   });
 }
