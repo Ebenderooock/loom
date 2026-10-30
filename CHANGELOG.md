@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Standalone persistent Collections for mixed movie/TV groupings, with optional
+  library/media/status filters, multiple simultaneous TMDB/IMDb/TVDB source
+  references, explicit source imports and library-based candidate discovery.
+  Administrators can create/edit collections, add local members, exclude/restore
+  members, retry source refreshes, and merge collections transactionally.
+  Exact external IDs deduplicate members; names/overlap never imply collection
+  identity. Merged links remain valid and refresh preserves local intent.
+  Added members open normal library management; missing members share title
+  details and the existing explicit add form. Source access failures remain
+  visible without discarding previous membership.
+
 - Share full title details and explicit library-add settings across movie, TV,
   music, Discover, and person search. Requests reuse read-only details while
   retaining request permissions and approval semantics. Discover defaults are

@@ -108,6 +108,19 @@ func TestInvalidIdentitiesDoNotReachProvider(t *testing.T) {
 	}
 }
 
+func TestTVDBMovieIdentityFailsExplicitlyWithoutProviderRequest(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Error("unsupported TVDB movie lookup reached TMDB")
+	}))
+	defer upstream.Close()
+	router := Router(tmdb.NewClient(tmdb.Config{BaseURL: upstream.URL}))
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/movie/42?provider=tvdb", nil))
+	if w.Code != http.StatusUnprocessableEntity || !strings.Contains(w.Body.String(), "IMDb or TMDB mapping") {
+		t.Fatalf("unsupported identity: %d %s", w.Code, w.Body)
+	}
+}
+
 type readOnlyMusic struct{ metadata.MusicMetadataProvider }
 
 func (readOnlyMusic) GetArtist(_ context.Context, id string) (*metadata.ArtistMetadata, error) {

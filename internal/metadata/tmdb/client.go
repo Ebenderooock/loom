@@ -238,27 +238,19 @@ func (c *Client) ResolveExternalID(ctx context.Context, mediaType, provider, ext
 	if (mediaType != "movie" && mediaType != "tv") || (provider != "imdb" && provider != "tvdb") {
 		return 0, fmt.Errorf("unsupported external identity")
 	}
-	endpoint := fmt.Sprintf("%s/find/%s?external_source=%s_id", c.config.BaseURL, url.PathEscape(externalID), provider)
-	body, err := c.doRequest(ctx, endpoint)
+	if mediaType == "movie" && provider == "tvdb" {
+		return 0, fmt.Errorf("TMDB does not support TVDB movie identity lookup")
+	}
+	media := mediaType
+	if media == "tv" {
+		media = "series"
+	}
+	id, err := c.FindTitleID(ctx, media, provider, externalID)
 	if err != nil {
 		return 0, err
 	}
-	var result struct {
-		Movies []struct {
-			ID int `json:"id"`
-		} `json:"movie_results"`
-		TV []struct {
-			ID int `json:"id"`
-		} `json:"tv_results"`
-	}
-	if err := json.Unmarshal(body, &result); err != nil {
-		return 0, err
-	}
-	if mediaType == "movie" && len(result.Movies) == 1 && result.Movies[0].ID > 0 {
-		return result.Movies[0].ID, nil
-	}
-	if mediaType == "tv" && len(result.TV) == 1 && result.TV[0].ID > 0 {
-		return result.TV[0].ID, nil
+	if id > 0 {
+		return id, nil
 	}
 	return 0, NewNotFoundError("no unambiguous title for external identity")
 }

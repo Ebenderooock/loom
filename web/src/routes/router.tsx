@@ -132,6 +132,25 @@ const discoverRoute = createRoute({
   errorComponent: ErrorFallback,
 });
 
+const collectionsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/collections",
+  validateSearch: (
+    search: Record<string, unknown>,
+  ): { id?: string; tmdb?: number } => ({
+    ...(typeof search.id === "string" ? { id: search.id } : {}),
+    ...(Number.isSafeInteger(Number(search.tmdb)) && Number(search.tmdb) > 0
+      ? { tmdb: Number(search.tmdb) }
+      : {}),
+  }),
+  component: lazyRouteComponent(
+    () => import("@/pages/collections"),
+    "CollectionsPage",
+  ),
+  pendingComponent: PageLoader,
+  errorComponent: ErrorFallback,
+});
+
 const requestsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/requests",
@@ -445,6 +464,7 @@ const routeTree = rootRoute.addChildren([
   musicRoute,
   musicArtistRoute,
   discoverRoute,
+  collectionsRoute,
   requestsRoute,
   analyticsRoute,
   activityRoute,

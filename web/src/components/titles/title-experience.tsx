@@ -30,6 +30,10 @@ import {
   titleImage,
 } from "./title-metadata";
 import { ExternalAlbumDetails } from "./album-metadata";
+import {
+  LibraryMediaSheet,
+  type LibraryMediaTarget,
+} from "@/components/library-media-sheet";
 
 type Profile = { id: string; name: string };
 type Membership = Record<string, string>;
@@ -149,6 +153,7 @@ export interface TitleContentProps {
   sourceItemId?: string;
   sourceName?: string;
   onAdded?: () => void;
+  onManage?: (target: LibraryMediaTarget) => void;
   onBack?: () => void;
   // Requests deliberately supply an action rather than getting library add
   // controls. Viewing metadata must never turn a request into a direct add.
@@ -532,7 +537,24 @@ export function TitleContent(props: TitleContentProps) {
         inLibrary &&
         !props.sourceItemId &&
         view === "details" ? (
-          <Badge variant="secondary">In library</Badge>
+          props.onManage &&
+          identity.media !== "artist" &&
+          membership.data?.[providerId ?? ""] ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                props.onManage?.({
+                  type: identity.media as "movie" | "series",
+                  id: membership.data?.[providerId ?? ""] ?? "",
+                })
+              }
+            >
+              Manage in library
+            </Button>
+          ) : (
+            <Badge variant="secondary">In library</Badge>
+          )
         ) : (
           !requestAction && (
             <Button
@@ -669,28 +691,48 @@ export function TitleDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const focus = useTitleDialogFocus();
+  const qc = useQueryClient();
+  const [managing, setManaging] = useState<LibraryMediaTarget | null>(null);
+  const managementChanged = () => {
+    void qc.invalidateQueries({ queryKey: ["title-membership"] });
+    void qc.invalidateQueries({ queryKey: ["collections"] });
+    void qc.invalidateQueries({ queryKey: ["discovery"] });
+  };
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-        {...focus}
-        className="max-h-[85vh] max-w-3xl overflow-y-auto"
-      >
-        <DialogHeader>
-          <DialogTitle>{props.identity.title}</DialogTitle>
-          <DialogDescription>
-            {props.requestAction
-              ? "View full details before requesting this title."
-              : "View details or choose how to add this title."}
-          </DialogDescription>
-        </DialogHeader>
-        {open && (
-          <TitleContent
-            key={`${props.identity.media}:${props.identity.id}`}
-            {...props}
-          />
-        )}
-      </DialogContent>
-    </Dialog>
+    <>
+      <Dialog open={open && !managing} onOpenChange={onOpenChange}>
+        <DialogContent
+          {...focus}
+          className="max-h-[85vh] max-w-3xl overflow-y-auto"
+        >
+          <DialogHeader>
+            <DialogTitle>{props.identity.title}</DialogTitle>
+            <DialogDescription>
+              {props.requestAction
+                ? "View full details before requesting this title."
+                : "View details or choose how to add this title."}
+            </DialogDescription>
+          </DialogHeader>
+          {open && (
+            <TitleContent
+              key={`${props.identity.media}:${props.identity.id}`}
+              {...props}
+              onManage={setManaging}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+      {open && managing && (
+        <LibraryMediaSheet
+          target={managing}
+          onChanged={managementChanged}
+          onClose={() => {
+            setManaging(null);
+            managementChanged();
+          }}
+        />
+      )}
+    </>
   );
 }
 

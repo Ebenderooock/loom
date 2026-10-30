@@ -18,10 +18,7 @@ import {
 import { Check, Plus, Compass, Info } from "lucide-react";
 import { TitleDialog } from "@/components/titles/title-experience";
 import { CardGridSkeleton } from "@/components/ui/skeletons";
-import {
-  CollectionsPanel,
-  RecommendationPanel,
-} from "@/components/library-expansion";
+import { RecommendationPanel } from "@/components/library-expansion";
 
 export function DiscoverPage() {
   const { setHeader } = usePageHeader();
@@ -32,14 +29,10 @@ export function DiscoverPage() {
       <Tabs defaultValue="recommendations">
         <TabsList className="h-auto flex-wrap" aria-label="Discovery sections">
           <TabsTrigger value="recommendations">Grow your library</TabsTrigger>
-          <TabsTrigger value="collections">Collections</TabsTrigger>
           <TabsTrigger value="lists">Import Lists</TabsTrigger>
         </TabsList>
         <TabsContent value="recommendations" className="mt-6">
           <RecommendationPanel />
-        </TabsContent>
-        <TabsContent value="collections" className="mt-6">
-          <CollectionsPanel />
         </TabsContent>
         <TabsContent value="lists" className="mt-6">
           <Tabs defaultValue="movie">

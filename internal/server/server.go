@@ -149,6 +149,7 @@ type Server struct {
 	periodicScanner   *scheduler.PeriodicScanner
 	syncProfileStore  *syncprofiles.Store
 	discoverRouter    http.Handler
+	collectionsRouter http.Handler
 	httpMetrics       *telemetry.HTTPMetrics
 	ready             atomic.Bool
 }
@@ -218,6 +219,7 @@ type Wiring struct {
 	PeriodicScanner   *scheduler.PeriodicScanner
 	SyncProfileStore  *syncprofiles.Store
 	DiscoverRouter    http.Handler
+	CollectionsRouter http.Handler
 	HTTPMetrics       *telemetry.HTTPMetrics
 }
 
@@ -333,6 +335,7 @@ func New(cfg *config.Config, wiring Wiring) (*Server, error) {
 		periodicScanner:   wiring.PeriodicScanner,
 		syncProfileStore:  wiring.SyncProfileStore,
 		discoverRouter:    wiring.DiscoverRouter,
+		collectionsRouter: wiring.CollectionsRouter,
 		httpMetrics:       wiring.HTTPMetrics,
 	}
 
@@ -1076,6 +1079,9 @@ func (s *Server) newMux() http.Handler {
 		// Person discovery routes
 		if s.discoverRouter != nil {
 			r.Mount("/api/v1/discover", s.discoverRouter)
+		}
+		if s.collectionsRouter != nil {
+			r.Mount("/api/v1/collections", s.collectionsRouter)
 		}
 
 		// API key management routes

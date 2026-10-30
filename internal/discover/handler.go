@@ -154,6 +154,10 @@ func getVideo(client *tmdb.Client, series bool) http.HandlerFunc {
 			http.Error(w, "invalid TMDB ID", http.StatusBadRequest)
 			return
 		}
+		if provider == "tvdb" && !series {
+			http.Error(w, "TVDB-only movies cannot be resolved by TMDB. An IMDb or TMDB mapping is required for shared details and adding.", http.StatusUnprocessableEntity)
+			return
+		}
 		id, _ := strconv.Atoi(rawID)
 		var err error
 		if provider != "tmdb" {
