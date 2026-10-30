@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
+import { AddToCollectionDialog } from "@/components/collections/add-to-collection";
 import { useSearch, useNavigate } from "@tanstack/react-router";
 import { apiFetch } from "@/lib/fetch";
 import { Button } from "@/components/ui/button";
@@ -113,7 +114,7 @@ function BulkDeleteDialog({
 // ─── Main Page ──────────────────────────────────────────────────────────
 
 export function SeriesPage() {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
   const [seriesList, setSeriesList] = useState<Series[]>([]);
   const { data: allLibraries = [] } = useLibraries();
   const libraries = allLibraries.filter((l) => l.media_type === "series");
@@ -135,6 +136,7 @@ export function SeriesPage() {
   // Selection
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [collectionOpen, setCollectionOpen] = useState(false);
 
   // Detail sheet
   const [detailSeries, setDetailSeries] = useState<Series | null>(null);
@@ -495,6 +497,9 @@ export function SeriesPage() {
           onBulkUnmonitor={() => handleBulkMonitoring("unmonitored")}
           onBulkDelete={() => setBulkDeleteOpen(true)}
           onBulkQualityProfile={handleBulkQualityProfile}
+          onBulkCollection={
+            user?.role === "admin" ? () => setCollectionOpen(true) : undefined
+          }
           onAddSeries={() => setAddDialogOpen(true)}
           onImportLibrary={() => setImportDialogOpen(true)}
           onOrganize={handleOrganize}
@@ -637,6 +642,20 @@ export function SeriesPage() {
         existingSeriesIds={existingSeriesNumericIds}
       />
 
+      {collectionOpen && (
+        <AddToCollectionDialog
+          open
+          onOpenChange={setCollectionOpen}
+          targets={seriesList
+            .filter((m) => selectedIds.has(m.id))
+            .map((m) => ({
+              media_type: "series",
+              media_id: m.id,
+              title: m.title,
+              tmdb: m.tmdbId ? String(m.tmdbId) : undefined,
+            }))}
+        />
+      )}
       <BulkDeleteDialog
         open={bulkDeleteOpen}
         onOpenChange={setBulkDeleteOpen}

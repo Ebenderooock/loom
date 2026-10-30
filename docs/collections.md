@@ -16,9 +16,33 @@ Administrators can:
   optional: it queues another scan without waiting for provider requests.
   Discovery does not claim complete franchise coverage. Import known source IDs
   directly when a provider does not declare the grouping.
-- **Edit collection**: edit its name/description, attach another source, or add
-  a local movie/show by exact external title ID. Local membership does not
-  acquire or monitor the title.
+- **Add titles**: search your library or TMDB and select one or more real
+  movies/shows. Library titles attach by their Loom ID; provider titles attach
+  by exact TMDB ID with canonical artwork. Titles already in the collection are
+  marked and never duplicated. Membership alone does not acquire or monitor.
+- **Add to collection** from movie/show detail drawers or the library bulk
+  selection bar: choose an existing collection or create one by name, then
+  attach the selected titles. Admin only.
+- **Find match**: unresolved source rows (no usable TMDB ID) stay visible and
+  open the picker prefilled with their title. Loom never invents media.
+- **Manage** (one side sheet): name, description and quality for new
+  additions; sources and refresh; merge; delete.
+- **Quality for new additions** is a default only. It preselects the profile in
+  single and bulk add. **Apply to existing members** previews each affected
+  library title with its current and new profile and changes only those
+  titles after confirmation; other collections' defaults are untouched.
+- **Add missing / Search** work on selected titles or the whole collection.
+  Both open a preview with eligible/skipped counts and reasons (in library,
+  unresolved, no library, unreleased, not monitored, already has file).
+  Nothing changes until confirmed. Add uses the shared add settings
+  (library, profile, monitor, search after adding); Search only searches
+  monitored library titles that are missing files (series respect episode
+  monitoring) through the existing automatic search, and never adds titles.
+  Confirmed runs execute as background jobs with per-title results and retry.
+- **Delete collection**: after confirmation, removes only the collection, its
+  sources and membership. Library titles and files are never touched. Its
+  exact source references are suppressed so background discovery does not
+  recreate it; importing a source again explicitly lifts that suppression.
 - **Exclude locally**: hide a source member without deleting library media.
   Use the **Locally excluded** status filter to restore it.
 - **Refresh sources**: reconcile current provider membership. Local additions,
@@ -91,6 +115,11 @@ compute current file status. Merged stale IDs return the canonical collection's
 `id`, and the UI offers its retained link.
 Writes through a merged stale ID return 409, even if an old revision number
 happens to match the retained collection; reload the canonical collection first.
+
+Bulk add/search jobs run in memory (deduplicated per title, last 50 per
+process). They are not persisted across restarts; rerun the action after a
+restart. Migration `0095_collection_suppressions.sql` stores deleted source
+references and adds the collection `quality_profile_id` default.
 
 SQLite and PostgreSQL migration `0093_collections.sql` stores collection
 aggregates (members, sources, provenance and local intent), relational unique

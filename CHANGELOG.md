@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Collection management: delete collections without touching library media
+  (deleted sources are not rediscovered until imported again), add real library
+  or TMDB titles with a shared picker, "Add to collection" from movie/show
+  drawers and library bulk selection, a collection quality default with an
+  explicit previewed "Apply to existing members", and previewed bulk add/search
+  for selected titles or the whole collection.
 - Automatic, resumable background collection discovery across the full
   movie/show library, with fair batches, progress and retryable errors.
 - Library-style poster cards and right-side title drawers with inline add
@@ -96,6 +102,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Opening a title whose local ID contains punctuation (for example `%`, `:`,
+  `&`) no longer fails with a 500 after adding it from a collection; route IDs
+  are encoded by the UI and decoded exactly once by the API.
 - Stop stalled downloads from staying in "Downloading": stalled workflows now
   fail, reset the movie/episode status and trigger a fresh search. Stall
   detection ignores client/network outages, catches downloads that never start,

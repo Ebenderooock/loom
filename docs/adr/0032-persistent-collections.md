@@ -39,6 +39,14 @@ pace provider requests, retry failures, and expose progress/errors. The UI resca
 action only queues optional work. Existing successful source membership refresh
 remains an explicit separate operation.
 
+Collections manage real media only: members are picked from the library or by
+exact provider ID. A collection quality profile is a default for new additions;
+existing titles change only through an explicit, previewed apply. Bulk add and
+search reuse the existing add and automatic-search services behind previews and
+in-memory jobs. Deleting a collection removes only collection data and
+records its exact source references as suppressed, so discovery does not
+recreate it until an explicit import.
+
 ## Consequences
 
 ### Positive
@@ -58,6 +66,9 @@ remains an explicit separate operation.
   on the scheduler being enabled. Successful titles are revisited daily;
   failures retry after five minutes. Neither discovery nor explicit source
   refresh guarantees franchise completeness.
+
+- Bulk jobs are in memory and are lost on restart; only per-title outcomes of
+  completed work persist (as library changes).
 
 ### Neutral
 

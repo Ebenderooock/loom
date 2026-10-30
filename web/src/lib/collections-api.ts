@@ -38,6 +38,162 @@ export interface LoomCollection {
   revision: number;
   total: number;
   in_library: number;
+  quality_profile_id?: string;
+}
+
+export type BulkStatus =
+  | "eligible"
+  | "skipped"
+  | "queued"
+  | "running"
+  | "done"
+  | "failed";
+
+export interface BulkItem {
+  member_id: string;
+  media_type: "movie" | "series";
+  title: string;
+  year?: number;
+  media_id?: string;
+  status: BulkStatus;
+  reason?: string;
+  detail?: string;
+  current_profile_id?: string;
+  new_profile_id?: string;
+  missing_episodes?: number;
+}
+
+export interface CollectionOption {
+  id: string;
+  name: string;
+  quality_profile_id?: string;
+}
+
+export interface AddSettings {
+  library_id?: string;
+  quality_profile_id?: string;
+  monitored?: boolean;
+  search?: boolean;
+}
+
+export interface CollectionJob {
+  id: string;
+  kind: "add" | "search";
+  collection_id: string;
+  status: "running" | "done";
+  items: BulkItem[];
+  counts: Partial<Record<BulkStatus, number>>;
+  started_at: string;
+  finished_at?: string;
+}
+
+export interface BulkPlan {
+  kind: "add" | "search" | "quality";
+  items: BulkItem[];
+  counts: Partial<Record<BulkStatus, number>>;
+  settings?: Partial<Record<"movie" | "series", AddSettings>>;
+  libraries?: Partial<Record<"movie" | "series", CollectionOption[]>>;
+  profiles?: CollectionOption[];
+  job?: CollectionJob;
+  note?: string;
+}
+
+export type MemberInput =
+  | { media_type: "movie" | "series"; media_id: string }
+  | {
+      media_type: "movie" | "series";
+      title: string;
+      year?: number;
+      poster_path?: string;
+      external_ids: Partial<Record<"tmdb" | "imdb" | "tvdb", string>>;
+    };
+
+export const SKIP_REASONS: Record<string, string> = {
+  excluded: "Excluded",
+  in_library: "Already in library",
+  unresolved: "Needs a TMDB match",
+  unreleased: "Not released",
+  no_library: "Choose a library",
+  no_profile: "Choose a quality profile",
+  already_running: "Already running",
+  not_in_library: "Not in library",
+  unmonitored: "Not monitored",
+  has_file: "Already downloaded",
+  nothing_missing: "Nothing missing",
+  unchanged: "Already uses profile",
+};
+
+export interface LibraryTitle {
+  media_type: "movie" | "series";
+  id: string;
+  title: string;
+  year?: number;
+  poster?: string;
+  tmdb?: string;
+}
+
+/** Loads every movie (paginated) or show in the library for local search. */
+export async function loadLibraryTitles(
+  media: "movie" | "series",
+  signal?: AbortSignal,
+): Promise<LibraryTitle[]> {
+  const out: LibraryTitle[] = [];
+  for (let offset = 0; ; ) {
+    const url =
+      media === "movie"
+        ? `/api/v1/movies?limit=1000&offset=${offset}`
+        : "/api/v1/series";
+    const response = await apiFetch(url, { signal });
+    if (!response.ok)
+      throw new Error((await response.text()) || "Unable to load library");
+    const body = (await response.json()) as
+      | Array<Record<string, unknown>>
+      | { data?: Array<Record<string, unknown>> };
+    const rows = Array.isArray(body) ? body : (body.data ?? []);
+    for (const row of rows) {
+      const tmdb = row.tmdbId ?? row.tmdb_id;
+      out.push({
+        media_type: media,
+        id: String(row.id),
+        title: String(row.title ?? ""),
+        year: Number(row.year) || undefined,
+        poster: String(row.posterPath ?? row.poster_path ?? "") || undefined,
+        tmdb: tmdb ? String(tmdb) : undefined,
+      });
+    }
+    if (media !== "movie" || rows.length < 1000) return out;
+    offset += rows.length;
+  }
+}
+
+export function collectionPath(id: string, path = "") {
+  return `/${encodeURIComponent(id)}${path}`;
+}
+
+/** Adds real titles to an existing collection. */
+export function addCollectionMembers(
+  collection: Pick<LoomCollection, "id">,
+  items: MemberInput[],
+) {
+  return collectionRequest<LoomCollection>(
+    collectionPath(collection.id, "/members"),
+    { items },
+  );
+}
+
+/** True when the member already represents this exact local or provider title. */
+export function hasTitle(
+  collection: Pick<LoomCollection, "members">,
+  media: "movie" | "series",
+  ids: { media_id?: string; tmdb?: string },
+) {
+  return collection.members.some(
+    (m) =>
+      !m.excluded &&
+      m.media_type === media &&
+      ((!!ids.media_id && m.media_id === ids.media_id) ||
+        (!!ids.tmdb && m.external_ids.tmdb === ids.tmdb)),
+  );
 }
 
 export const collectionKeys = {

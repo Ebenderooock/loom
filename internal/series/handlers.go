@@ -2,7 +2,9 @@ package series
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -612,12 +614,12 @@ func getSeries(svc Service) http.HandlerFunc {
 		}
 
 		sr, err := svc.GetSeries(r.Context(), id)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+		if errors.Is(err, sql.ErrNoRows) || (err == nil && sr == nil) {
+			http.Error(w, "series not found", http.StatusNotFound)
 			return
 		}
-		if sr == nil {
-			http.Error(w, "series not found", http.StatusNotFound)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 

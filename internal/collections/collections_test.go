@@ -249,7 +249,7 @@ func TestRouterManagementAuthorizationValidationAndStaleWrites(t *testing.T) {
 		router.ServeHTTP(w, r)
 		return w
 	}
-	for _, path := range []string{"/", "/discover", "/a/refresh", "/a/merge", "/a/sources", "/a/members"} {
+	for _, path := range []string{"/", "/discover", "/a/refresh", "/a/merge", "/a/sources", "/a/members", "/a/bulk/add", "/a/bulk/search", "/a/quality"} {
 		if got := request("POST", path, `{}`, "user").Code; got != http.StatusForbidden {
 			t.Fatalf("role guard %s: %d", path, got)
 		}
@@ -267,7 +267,7 @@ func TestRouterManagementAuthorizationValidationAndStaleWrites(t *testing.T) {
 	if w.Code != 409 {
 		t.Fatalf("stale edit: %d %s", w.Code, w.Body)
 	}
-	w = request("POST", "/"+c.ID+"/members", `{"media_type":"movie","title":"A","external_ids":{"tmdb":"1"}}`, "admin")
+	w = request("POST", "/"+c.ID+"/members", `{"items":[{"media_type":"movie","title":"A","external_ids":{"tmdb":"1"}}]}`, "admin")
 	if w.Code != 200 {
 		t.Fatalf("local member: %d %s", w.Code, w.Body)
 	}

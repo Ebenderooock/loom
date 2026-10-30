@@ -28,6 +28,10 @@ func TestOpenAPICollectionsContract(t *testing.T) {
 		"/api/v1/collections/{id}/merge":            "post",
 		"/api/v1/collections/{id}/members":          "post",
 		"/api/v1/collections/{id}/members/{member}": "patch",
+		"/api/v1/collections/{id}/bulk/add":         "post",
+		"/api/v1/collections/{id}/bulk/search":      "post",
+		"/api/v1/collections/{id}/quality":          "post",
+		"/api/v1/collections/{id}/jobs/{job}":       "get",
 	} {
 		entry, ok := paths[path].(map[string]any)
 		if !ok || entry[method] == nil {
