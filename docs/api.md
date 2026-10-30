@@ -80,6 +80,16 @@ in `api/openapi/loom.yaml`.
 | `POST` | `/api/v1/discover/dismissals` | identified user | `204` | Persist a movie/series suggestion dismissal for the current user. |
 | `GET` | `/api/v1/discover/collections` | identified user | `200 application/json` | TMDB movie sets represented in the catalog, with coverage counts. |
 | `GET` | `/api/v1/discover/collections/{id}` | identified user | `200 application/json` | Release-ordered members with catalog/file/monitoring status; `404` for a missing collection. |
+| `GET` | `/api/v1/collections/` | apiKey/bearer/cookie | `200 {"items":[LoomCollection]}` | List persistent Loom-owned collections using existing library access. |
+| `POST` | `/api/v1/collections/` | admin | `200 LoomCollection` | Create a local collection or import an exact TMDB/IMDb/TVDB source. |
+| `POST` | `/api/v1/collections/discover` | admin | `200 {"items":[LoomCollection],"warnings":[string]}` | Find bounded provider-declared collection candidates from library titles. |
+| `GET` | `/api/v1/collections/{id}` | apiKey/bearer/cookie | `200 LoomCollection` | Read members and current library/file state; merged IDs resolve to the retained collection. |
+| `PATCH` | `/api/v1/collections/{id}` | admin | `200 LoomCollection` | Edit collection metadata with an optimistic revision. |
+| `POST` | `/api/v1/collections/{id}/sources` | admin | `200 LoomCollection` | Attach and refresh another exact provider source. |
+| `POST` | `/api/v1/collections/{id}/refresh` | admin | `200 LoomCollection` | Reconcile attached sources while preserving local additions and exclusions. |
+| `POST` | `/api/v1/collections/{id}/merge` | admin | `200 LoomCollection` | Explicitly merge collections with exact-ID deduplication and provenance. |
+| `POST` | `/api/v1/collections/{id}/members` | admin | `200 LoomCollection` | Add a local movie/show member without acquisition or monitoring. |
+| `PATCH` | `/api/v1/collections/{id}/members/{member}` | admin | `200 LoomCollection` | Exclude/restore a member or override its local title. |
 | `GET\|POST` | `/debug/pprof/*` | gated by `debug.pprof` | varies | Standard `net/http/pprof` handlers. |
 | `GET` | `/api/v1/indexers/` | apiKey/bearer/cookie | `200 application/json` (`[]DefinitionWithHealth`) | List configured indexers with health; credential fields are omitted. |
 | `POST` | `/api/v1/indexers/` | admin | `201 application/json` (`Definition`) | Create an indexer. |
