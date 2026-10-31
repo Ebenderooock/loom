@@ -199,7 +199,39 @@ export const musicKeys = {
   audioQualityDefinitions: ["music", "audio-quality-definitions"] as const,
   audioQualityProfiles: ["music", "audio-quality-profiles"] as const,
   metadataProfiles: ["music", "metadata-profiles"] as const,
+  metadataSource: ["music", "metadata-source"] as const,
 };
+
+export type MetadataSourceMode = "musicbrainz" | "custom";
+
+export interface MetadataSource {
+  mode: MetadataSourceMode;
+  base_url: string;
+  rate_limit_ms: number;
+  auth_header_name: string;
+  auth_header_set: boolean;
+  search_on_public: boolean;
+}
+
+export interface MetadataSourceUpdate {
+  mode: MetadataSourceMode;
+  base_url: string;
+  rate_limit_ms: number;
+  auth_header_name: string;
+  // Empty keeps the stored value unless clear_auth_header is true.
+  auth_header_value?: string;
+  clear_auth_header?: boolean;
+  search_on_public: boolean;
+}
+
+export interface MetadataSourceTestResult {
+  ok: boolean;
+  lookup_ok: boolean;
+  lookup_error?: string;
+  search_tested: boolean;
+  search_ok: boolean;
+  search_error?: string;
+}
 
 // ---------- Fetchers ----------
 
@@ -539,6 +571,57 @@ export function useDeleteAudioQualityProfile() {
     mutationFn: deleteAudioQualityProfile,
     onSuccess: () =>
       qc.invalidateQueries({ queryKey: musicKeys.audioQualityProfiles }),
+  });
+}
+
+async function sendMetadataSource<T>(
+  path: string,
+  method: "PUT" | "POST",
+  req: MetadataSourceUpdate,
+): Promise<T> {
+  const res = await apiFetch(path, {
+    method,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(req),
+  });
+  if (!res.ok) {
+    const detail = (await res.text()).trim();
+    throw new Error(detail || `metadata source request failed: ${res.status}`);
+  }
+  return (await res.json()) as T;
+}
+
+export function useMetadataSource(enabled = true) {
+  return useQuery({
+    queryKey: musicKeys.metadataSource,
+    queryFn: ({ signal }) =>
+      getJSON<MetadataSource>("/api/v1/music/metadata-source", signal),
+    enabled,
+    staleTime: 60_000,
+  });
+}
+
+export function useUpdateMetadataSource() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (req: MetadataSourceUpdate) =>
+      sendMetadataSource<MetadataSource>(
+        "/api/v1/music/metadata-source",
+        "PUT",
+        req,
+      ),
+    onSuccess: (src) => qc.setQueryData(musicKeys.metadataSource, src),
+  });
+}
+
+export function useTestMetadataSource() {
+  return useMutation({
+    mutationFn: (req: MetadataSourceUpdate) =>
+      sendMetadataSource<MetadataSourceTestResult>(
+        "/api/v1/music/metadata-source/test",
+        "POST",
+        req,
+      ),
   });
 }
 

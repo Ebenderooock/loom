@@ -11,20 +11,47 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/ebenderooock/loom/internal/buildinfo"
 )
 
 // Config holds MusicBrainz client configuration.
 type Config struct {
 	BaseURL string        // MusicBrainz API base URL (default: https://musicbrainz.org/ws/2)
 	Timeout time.Duration // HTTP request timeout (default: 10s)
+	// RequestInterval is the minimum gap between requests. Zero disables
+	// throttling, except for the public MusicBrainz server, which is always
+	// limited to PublicRequestInterval.
+	RequestInterval time.Duration
+	// AuthHeaderName and AuthHeaderValue are sent with every request when set,
+	// for hosted mirrors that require a token.
+	AuthHeaderName  string
+	AuthHeaderValue string
 }
+
+// PublicBaseURL is the public MusicBrainz web service.
+const PublicBaseURL = "https://musicbrainz.org/ws/2"
+
+// PublicRequestInterval is the public MusicBrainz rate limit.
+const PublicRequestInterval = time.Second
 
 // DefaultConfig returns the default MusicBrainz configuration.
 func DefaultConfig() *Config {
 	return &Config{
-		BaseURL: "https://musicbrainz.org/ws/2",
-		Timeout: 10 * time.Second,
+		BaseURL:         PublicBaseURL,
+		Timeout:         10 * time.Second,
+		RequestInterval: PublicRequestInterval,
 	}
+}
+
+// IsPublicHost reports whether baseURL points at musicbrainz.org.
+func IsPublicHost(baseURL string) bool {
+	parsed, err := url.Parse(baseURL)
+	if err != nil {
+		return false
+	}
+	host := strings.ToLower(parsed.Hostname())
+	return host == "musicbrainz.org" || strings.HasSuffix(host, ".musicbrainz.org")
 }
 
 // Client is the MusicBrainz HTTP client.
@@ -72,14 +99,26 @@ func NewClient(cfg *Config) *Client {
 		cfg = DefaultConfig()
 	}
 
+	timeout := cfg.Timeout
+	if timeout <= 0 {
+		timeout = 10 * time.Second
+	}
 	httpClient := &http.Client{
-		Timeout: cfg.Timeout,
+		Timeout: timeout,
+	}
+
+	interval := cfg.RequestInterval
+	if interval < 0 {
+		interval = 0
+	}
+	if IsPublicHost(cfg.BaseURL) && interval < PublicRequestInterval {
+		interval = PublicRequestInterval
 	}
 
 	return &Client{
 		config:     cfg,
 		httpClient: httpClient,
-		throttler:  NewThrottler(1 * time.Second),
+		throttler:  NewThrottler(interval),
 	}
 }
 
@@ -174,9 +213,6 @@ func (c *Client) SearchRelease(ctx context.Context, query string, offset, limit 
 // doRequest performs an HTTP request with error handling, retries, and throttling.
 // It implements exponential backoff for 429 responses and enforces the 1s throttle.
 func (c *Client) doRequest(ctx context.Context, endpoint string, result interface{}) error {
-	// Enforce 1s minimum delay between requests
-	c.throttler.Wait()
-
 	// Exponential backoff parameters
 	const (
 		maxRetries     = 5
@@ -191,6 +227,9 @@ func (c *Client) doRequest(ctx context.Context, endpoint string, result interfac
 		if ctx.Err() != nil {
 			return NewContextError(ctx.Err())
 		}
+		// Retries are spaced like normal requests so concurrent jobs never
+		// exceed the configured rate.
+		c.throttler.Wait()
 
 		req, err := http.NewRequestWithContext(ctx, "GET", endpoint, nil)
 		if err != nil {
@@ -199,14 +238,19 @@ func (c *Client) doRequest(ctx context.Context, endpoint string, result interfac
 
 		// Set User-Agent header (required by MusicBrainz)
 		// MusicBrainz requires a descriptive User-Agent to identify clients
-		req.Header.Set("User-Agent", "Loom/1.0 (metadata_service)")
+		req.Header.Set("User-Agent", userAgent())
 		req.Header.Set("Accept", "application/json")
+		if c.config.AuthHeaderName != "" && c.config.AuthHeaderValue != "" {
+			req.Header.Set(c.config.AuthHeaderName, c.config.AuthHeaderValue)
+		}
 
 		resp, err := c.httpClient.Do(req)
 		if err != nil {
 			// Network error; retry with backoff
 			if attempt < maxRetries {
-				time.Sleep(backoff)
+				if err := sleepContext(ctx, backoff); err != nil {
+					return NewContextError(err)
+				}
 				backoff = c.nextBackoff(backoff, maxBackoff)
 				continue
 			}
@@ -232,7 +276,10 @@ func (c *Client) doRequest(ctx context.Context, endpoint string, result interfac
 			// 429: Rate limited; parse Retry-After header and backoff
 			retryAfter := c.parseRetryAfter(resp, backoff)
 			if attempt < maxRetries {
-				time.Sleep(retryAfter)
+				_ = resp.Body.Close()
+				if err := sleepContext(ctx, retryAfter); err != nil {
+					return NewContextError(err)
+				}
 				backoff = c.nextBackoff(backoff, maxBackoff)
 				continue
 			}
@@ -246,7 +293,10 @@ func (c *Client) doRequest(ctx context.Context, endpoint string, result interfac
 		case http.StatusServiceUnavailable, http.StatusGatewayTimeout:
 			// 5xx server errors; retry with backoff
 			if attempt < maxRetries {
-				time.Sleep(backoff)
+				_ = resp.Body.Close()
+				if err := sleepContext(ctx, backoff); err != nil {
+					return NewContextError(err)
+				}
 				backoff = c.nextBackoff(backoff, maxBackoff)
 				continue
 			}
@@ -257,7 +307,10 @@ func (c *Client) doRequest(ctx context.Context, endpoint string, result interfac
 			if resp.StatusCode >= 500 {
 				// Server error; retry with backoff
 				if attempt < maxRetries {
-					time.Sleep(backoff)
+					_ = resp.Body.Close()
+					if err := sleepContext(ctx, backoff); err != nil {
+						return NewContextError(err)
+					}
 					backoff = c.nextBackoff(backoff, maxBackoff)
 					continue
 				}
@@ -273,6 +326,24 @@ func (c *Client) doRequest(ctx context.Context, endpoint string, result interfac
 
 	// Exhausted retries (should not reach here)
 	return NewServerError(http.StatusServiceUnavailable, "max retries exhausted")
+}
+
+// userAgent identifies Loom with a version and contact URL, as MusicBrainz
+// requires; generic agents are throttled more aggressively.
+func userAgent() string {
+	return fmt.Sprintf("Loom/%s ( https://github.com/ebenderooock/loom )", buildinfo.Version)
+}
+
+// sleepContext waits for d or until ctx is cancelled.
+func sleepContext(ctx context.Context, d time.Duration) error {
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
 }
 
 // parseRetryAfter extracts the Retry-After duration from response headers.

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/ebenderooock/loom/internal/kernel/config"
@@ -14,11 +15,12 @@ import (
 
 // fakeProvider is an in-memory metadata.MusicMetadataProvider for tests.
 type fakeProvider struct {
-	artist   *metadata.ArtistMetadata
-	albumErr error
-	albums   []*metadata.AlbumMetadata
-	releases map[string][]*metadata.AlbumReleaseMetadata // album mbid -> editions
-	tracks   map[string]*metadata.AlbumReleaseMetadata   // release mbid -> edition w/ tracks
+	artist     *metadata.ArtistMetadata
+	albumErr   error
+	releaseErr error
+	albums     []*metadata.AlbumMetadata
+	releases   map[string][]*metadata.AlbumReleaseMetadata // album mbid -> editions
+	tracks     map[string]*metadata.AlbumReleaseMetadata   // release mbid -> edition w/ tracks
 }
 
 func (f *fakeProvider) Name() string { return "musicbrainz" }
@@ -134,6 +136,9 @@ func (f *fakeProvider) GetAlbum(_ context.Context, rgMBID string) (*metadata.Alb
 }
 
 func (f *fakeProvider) GetAlbumRelease(_ context.Context, releaseMBID string) (*metadata.AlbumReleaseMetadata, error) {
+	if f.releaseErr != nil {
+		return nil, f.releaseErr
+	}
 	return f.tracks[releaseMBID], nil
 }
 
@@ -557,5 +562,41 @@ func TestAlbumMatchesMetadataProfile(t *testing.T) {
 				t.Errorf("albumMatchesMetadataProfile(%q,%v) = %v, want %v", c.primary, c.secondary, got, c.want)
 			}
 		})
+	}
+}
+
+func TestLoadAlbumTracksReportsUnavailableMetadataAndRetries(t *testing.T) {
+	ctx := context.Background()
+	provider := sampleProvider()
+	svc, _ := newTestService(t, provider)
+
+	artist, err := svc.AddArtist(ctx, AddArtistRequest{MBID: "artist-1", QualityProfileID: "qp-1", LibraryID: "lib-1"})
+	if err != nil {
+		t.Fatalf("AddArtist: %v", err)
+	}
+	var albumID string
+	for _, al := range artist.Albums {
+		if al.MBID == "rg-1" {
+			albumID = al.ID
+		}
+	}
+
+	provider.releaseErr = errors.New("musicbrainz busy")
+	album, err := svc.GetAlbum(ctx, albumID)
+	if err != nil || len(album.Tracks) != 0 {
+		t.Fatalf("GetAlbum should degrade to no tracks, got album=%+v err=%v", album, err)
+	}
+	if _, err := svc.LoadAlbumTracks(ctx, albumID); !errors.Is(err, ErrAlbumTracksUnavailable) ||
+		!strings.Contains(err.Error(), "musicbrainz busy") {
+		t.Fatalf("LoadAlbumTracks error = %v, want ErrAlbumTracksUnavailable with cause", err)
+	}
+
+	provider.releaseErr = nil
+	album, err = svc.LoadAlbumTracks(ctx, albumID)
+	if err != nil {
+		t.Fatalf("LoadAlbumTracks after recovery: %v", err)
+	}
+	if len(album.Tracks) != 2 {
+		t.Fatalf("tracks after recovery = %d, want 2", len(album.Tracks))
 	}
 }

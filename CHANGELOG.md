@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Music metadata source setting: admins can keep the public MusicBrainz API or
+  point Loom at a self-hosted mirror or hosted MusicBrainz-compatible service,
+  with its own request rate, an optional auth header and an option to keep
+  artist search on public MusicBrainz. Requests to `musicbrainz.org`, including
+  retries, are always spaced at least one second apart. See
+  [`docs/music.md`](docs/music.md#metadata-source).
 - Music capability management: select an album's MusicBrainz edition, manage
   audio quality and metadata profiles, and search for missing tracks in
   partially available albums. Completed music downloads now import into the
@@ -107,6 +113,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Music imports no longer fail with `could not match audio track` when
+  MusicBrainz is temporarily unavailable: the import reports that the album's
+  track list could not be loaded and the next attempt fetches it again. The
+  library scanner skips such files instead of listing them as unmatched.
+  Tagged titles with qualifiers such as `(feat. Kiiara)` or `(album version)`
+  now match the MusicBrainz track when the match is unambiguous. MusicBrainz
+  requests identify Loom with its version and project URL, and retry waits
+  stop when the request is cancelled. Each failed import now sends a single
+  "Import Failed" notification instead of two.
 - Music artist catalogues now include only official studio albums, EPs and
   singles, deduplicated across editions. Metadata refresh hides legacy excluded
   entries without deleting existing audio files or their records.

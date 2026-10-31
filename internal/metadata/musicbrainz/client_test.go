@@ -13,13 +13,15 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/ebenderooock/loom/internal/buildinfo"
 )
 
 func TestGetArtist_Success(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Verify User-Agent header
-		if ua := r.Header.Get("User-Agent"); ua != "Loom/1.0 (metadata_service)" {
-			t.Errorf("expected User-Agent 'Loom/1.0 (metadata_service)', got %q", ua)
+		if ua := r.Header.Get("User-Agent"); !strings.HasPrefix(ua, "Loom/") || !strings.Contains(ua, "https://github.com/ebenderooock/loom") {
+			t.Errorf("expected User-Agent with Loom version and contact URL, got %q", ua)
 		}
 		if got := r.URL.Query().Get("fmt"); got != "json" {
 			t.Errorf("expected fmt=json, got %q", got)
@@ -384,7 +386,7 @@ func TestUserAgentHeader(t *testing.T) {
 
 	_, _ = client.GetArtist(context.Background(), "artist-1")
 
-	expected := "Loom/1.0 (metadata_service)"
+	expected := "Loom/" + buildinfo.Version + " ( https://github.com/ebenderooock/loom )"
 	if userAgent != expected {
 		t.Errorf("expected User-Agent %q, got %q", expected, userAgent)
 	}
@@ -568,5 +570,43 @@ func TestClientErrorMessages(t *testing.T) {
 				t.Errorf("expected error to contain %q, got %q", tt.expectedString, errStr)
 			}
 		})
+	}
+}
+
+func TestDoRequestStopsRetryingWhenContextCancelled(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer server.Close()
+
+	client := &Client{
+		config:     &Config{BaseURL: server.URL, Timeout: 5 * time.Second},
+		httpClient: &http.Client{Timeout: 5 * time.Second},
+		throttler:  NewThrottler(time.Millisecond),
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+
+	start := time.Now()
+	_, err := client.GetArtist(ctx, "artist-1")
+	if err == nil {
+		t.Fatal("expected an error")
+	}
+	if elapsed := time.Since(start); elapsed > 2*time.Second {
+		t.Fatalf("retry backoff ignored cancellation; took %s", elapsed)
+	}
+}
+
+func TestNewClientEnforcesPublicRateLimit(t *testing.T) {
+	public := NewClient(&Config{BaseURL: PublicBaseURL})
+	if public.throttler.interval < PublicRequestInterval {
+		t.Fatalf("public interval = %v, want at least %v", public.throttler.interval, PublicRequestInterval)
+	}
+	mirror := NewClient(&Config{BaseURL: "http://mirror.lan:5000/ws/2", RequestInterval: 0})
+	if mirror.throttler.interval != 0 {
+		t.Fatalf("mirror interval = %v, want 0", mirror.throttler.interval)
+	}
+	if !IsPublicHost("https://beta.musicbrainz.org/ws/2") || IsPublicHost("https://musicbrainz.org.example.com") {
+		t.Fatal("IsPublicHost matched incorrectly")
 	}
 }

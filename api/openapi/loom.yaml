@@ -1491,6 +1491,66 @@ paths:
         "404": { description: Metadata profile not found. }
         "500": { description: Profile could not be deleted. }
 
+  /api/v1/music/metadata-source:
+    get:
+      tags: [music]
+      operationId: getMusicMetadataSource
+      summary: Get the MusicBrainz metadata source.
+      description: Admin only. The auth header value is never returned.
+      security: [{ cookieAuth: [] }, { apiKey: [] }, { bearerAuth: [] }]
+      responses:
+        "200":
+          description: Current metadata source.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MusicMetadataSource" }
+        "401": { description: Authentication required. }
+        "403": { description: Administrator required. }
+        "500": { description: Metadata source could not be loaded. }
+    put:
+      tags: [music]
+      operationId: updateMusicMetadataSource
+      summary: Save and apply the MusicBrainz metadata source.
+      description: Admin only. Changes apply immediately. An empty auth_header_value keeps the saved value unless clear_auth_header is true.
+      security: [{ cookieAuth: [] }, { apiKey: [] }, { bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/MusicMetadataSourceUpdate" }
+      responses:
+        "200":
+          description: Saved metadata source.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MusicMetadataSource" }
+        "400": { description: "Invalid mode, URL, rate limit or header." }
+        "401": { description: Authentication required. }
+        "403": { description: Administrator required. }
+        "500": { description: Metadata source could not be saved. }
+
+  /api/v1/music/metadata-source/test:
+    post:
+      tags: [music]
+      operationId: testMusicMetadataSource
+      summary: Check an unsaved MusicBrainz metadata source.
+      description: Admin only. Looks up a known artist and, when the server handles search, runs an artist search. An empty auth_header_value uses the saved value.
+      security: [{ cookieAuth: [] }, { apiKey: [] }, { bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/MusicMetadataSourceUpdate" }
+      responses:
+        "200":
+          description: Connection check result.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MusicMetadataSourceTestResult" }
+        "400": { description: "Invalid mode, URL, rate limit or header." }
+        "401": { description: Authentication required. }
+        "403": { description: Administrator required. }
+
   /api/v1/discover/artist/{id}:
     get:
       tags: [discovery]
@@ -3541,6 +3601,37 @@ components:
           type: array
           items: { $ref: "#/components/schemas/AudioFormatItem" }
         min_format_score: { type: integer }
+    MusicMetadataSource:
+      type: object
+      required: [mode, base_url, rate_limit_ms, auth_header_name, auth_header_set, search_on_public]
+      properties:
+        mode: { type: string, enum: [musicbrainz, custom] }
+        base_url: { type: string, description: Custom MusicBrainz web service root ending in /ws/2. }
+        rate_limit_ms: { type: integer, minimum: 0, maximum: 60000, description: Minimum gap between custom-server requests. musicbrainz.org is always held to 1000. }
+        auth_header_name: { type: string }
+        auth_header_set: { type: boolean, description: Whether an auth header value is saved. }
+        search_on_public: { type: boolean, description: Send artist search to public MusicBrainz in custom mode. }
+    MusicMetadataSourceUpdate:
+      type: object
+      required: [mode]
+      properties:
+        mode: { type: string, enum: [musicbrainz, custom] }
+        base_url: { type: string, format: uri }
+        rate_limit_ms: { type: integer, minimum: 0, maximum: 60000 }
+        auth_header_name: { type: string }
+        auth_header_value: { type: string, writeOnly: true }
+        clear_auth_header: { type: boolean }
+        search_on_public: { type: boolean }
+    MusicMetadataSourceTestResult:
+      type: object
+      required: [ok, lookup_ok, search_tested, search_ok]
+      properties:
+        ok: { type: boolean }
+        lookup_ok: { type: boolean }
+        lookup_error: { type: string }
+        search_tested: { type: boolean }
+        search_ok: { type: boolean }
+        search_error: { type: string }
     MetadataProfile:
       type: object
       required: [id, name, primary_types, secondary_types, release_statuses, created_at, updated_at]

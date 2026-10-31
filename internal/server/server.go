@@ -105,6 +105,7 @@ type Server struct {
 	organizerSvc      *organizer.Organizer
 	seriesSvc         series.Service
 	musicSvc          music.Service
+	musicMetadataSrc  *music.MetadataSourceService
 	notifSvc          notifications.Service
 	connectSvc        connect.Service
 	analyticsSvc      *analytics.Service
@@ -175,6 +176,7 @@ type Wiring struct {
 	OrganizerService  *organizer.Organizer
 	SeriesService     series.Service
 	MusicService      music.Service
+	MusicMetadataSrc  *music.MetadataSourceService // admin-only MusicBrainz endpoint settings
 	NotificationSvc   notifications.Service
 	ConnectService    connect.Service
 	AnalyticsService  *analytics.Service
@@ -291,6 +293,7 @@ func New(cfg *config.Config, wiring Wiring) (*Server, error) {
 		organizerSvc:      wiring.OrganizerService,
 		seriesSvc:         wiring.SeriesService,
 		musicSvc:          wiring.MusicService,
+		musicMetadataSrc:  wiring.MusicMetadataSrc,
 		notifSvc:          wiring.NotificationSvc,
 		connectSvc:        wiring.ConnectService,
 		analyticsSvc:      wiring.AnalyticsService,
@@ -943,7 +946,15 @@ func (s *Server) newMux() http.Handler {
 				musicsearch.RegisterRoutes(albumsRouter, s.musicSearch)
 			}
 			r.With(musicEnabled).Mount("/api/v1/albums", albumsRouter)
-			r.With(musicEnabled).Mount("/api/v1/music", music.ProfileRouter(s.musicSvc))
+			profileRouter := music.ProfileRouter(s.musicSvc)
+			if s.musicMetadataSrc != nil {
+				adminMW := func(next http.Handler) http.Handler { return next }
+				if s.authSvc != nil {
+					adminMW = s.authSvc.RequireRole("admin")
+				}
+				profileRouter.With(adminMW).Mount("/metadata-source", music.MetadataSourceRouter(s.musicMetadataSrc))
+			}
+			r.With(musicEnabled).Mount("/api/v1/music", profileRouter)
 		}
 
 		// Notifications routes

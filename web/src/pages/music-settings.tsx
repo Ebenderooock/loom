@@ -12,6 +12,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { useAuth } from "@/hooks/use-auth";
 import { Trash2 } from "lucide-react";
 import {
   Table,
@@ -31,6 +40,13 @@ import {
   useMetadataProfiles,
   useUpdateMetadataProfile,
   useUpdateAudioQualityProfile,
+  useMetadataSource,
+  useTestMetadataSource,
+  useUpdateMetadataSource,
+  type MetadataSource,
+  type MetadataSourceMode,
+  type MetadataSourceTestResult,
+  type MetadataSourceUpdate,
   type MetadataProfile,
   type AudioQualityProfile,
 } from "@/lib/music-api";
@@ -399,7 +415,247 @@ function MetadataProfileCard({ profile }: { profile: MetadataProfile }) {
   );
 }
 
+function MetadataSourceCard() {
+  const { data: source, isLoading, isError } = useMetadataSource();
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Metadata Source</CardTitle>
+        <CardDescription>
+          Where Loom looks up artists, albums and tracks. The public MusicBrainz
+          API allows about one request per second; a mirror you host can go much
+          faster.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <Skeleton className="h-24 w-full" />
+        ) : isError || !source ? (
+          <p className="text-sm text-destructive">
+            Could not load the metadata source.
+          </p>
+        ) : (
+          <MetadataSourceForm key={JSON.stringify(source)} source={source} />
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function MetadataSourceForm({ source }: { source: MetadataSource }) {
+  const update = useUpdateMetadataSource();
+  const test = useTestMetadataSource();
+  const [mode, setMode] = React.useState<MetadataSourceMode>(source.mode);
+  const [baseURL, setBaseURL] = React.useState(source.base_url);
+  const [rateLimit, setRateLimit] = React.useState(
+    String(source.rate_limit_ms),
+  );
+  const [headerName, setHeaderName] = React.useState(source.auth_header_name);
+  const [headerValue, setHeaderValue] = React.useState("");
+  const [clearHeader, setClearHeader] = React.useState(false);
+  const [searchOnPublic, setSearchOnPublic] = React.useState(
+    source.search_on_public,
+  );
+  const [result, setResult] = React.useState<MetadataSourceTestResult>();
+
+  const custom = mode === "custom";
+  const rateLimitMS = Number(rateLimit);
+  const invalid =
+    custom &&
+    (!/^https?:\/\/.+/i.test(baseURL.trim()) ||
+      !Number.isInteger(rateLimitMS) ||
+      rateLimitMS < 0 ||
+      rateLimitMS > 60000);
+
+  const request = (): MetadataSourceUpdate => ({
+    mode,
+    base_url: baseURL.trim(),
+    rate_limit_ms: Number.isInteger(rateLimitMS) ? rateLimitMS : 0,
+    auth_header_name: headerName.trim(),
+    auth_header_value: headerValue || undefined,
+    clear_auth_header: clearHeader || undefined,
+    search_on_public: searchOnPublic,
+  });
+
+  const onError = (e: unknown) =>
+    toast.error(e instanceof Error ? e.message : "Request failed");
+
+  return (
+    <div className="space-y-4">
+      <div className="space-y-1.5">
+        <Label htmlFor="music-metadata-mode">Source</Label>
+        <Select
+          value={mode}
+          onValueChange={(v) => {
+            setMode(v as MetadataSourceMode);
+            setResult(undefined);
+          }}
+        >
+          <SelectTrigger id="music-metadata-mode" className="w-full sm:w-80">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="musicbrainz">Public MusicBrainz</SelectItem>
+            <SelectItem value="custom">
+              Custom server (mirror or hosted)
+            </SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {custom && (
+        <>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-1.5 sm:col-span-2">
+              <Label htmlFor="music-metadata-url">API base URL</Label>
+              <Input
+                id="music-metadata-url"
+                placeholder="http://musicbrainz.lan:5000/ws/2"
+                value={baseURL}
+                onChange={(e) => setBaseURL(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                The MusicBrainz web service root, ending in /ws/2.
+              </p>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="music-metadata-rate">
+                Minimum gap between requests (ms)
+              </Label>
+              <Input
+                id="music-metadata-rate"
+                type="number"
+                min={0}
+                max={60000}
+                value={rateLimit}
+                onChange={(e) => setRateLimit(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                0 for no limit. musicbrainz.org is always held to 1000.
+              </p>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="music-metadata-header-name">
+                Auth header name (optional)
+              </Label>
+              <Input
+                id="music-metadata-header-name"
+                placeholder="Authorization"
+                value={headerName}
+                onChange={(e) => setHeaderName(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5 sm:col-span-2">
+              <Label htmlFor="music-metadata-header-value">
+                Auth header value
+              </Label>
+              <Input
+                id="music-metadata-header-value"
+                type="password"
+                autoComplete="off"
+                placeholder={
+                  source.auth_header_set && !clearHeader
+                    ? "Saved — leave blank to keep"
+                    : "Bearer …"
+                }
+                value={headerValue}
+                disabled={clearHeader || !headerName.trim()}
+                onChange={(e) => setHeaderValue(e.target.value)}
+              />
+              {source.auth_header_set && (
+                <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <input
+                    type="checkbox"
+                    checked={clearHeader}
+                    onChange={(e) => {
+                      setClearHeader(e.target.checked);
+                      setHeaderValue("");
+                    }}
+                  />
+                  Remove saved value
+                </label>
+              )}
+            </div>
+          </div>
+          <div className="flex items-start justify-between gap-4 rounded-md border p-3">
+            <div className="space-y-0.5">
+              <Label htmlFor="music-metadata-search-public">
+                Search artists on public MusicBrainz
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                Turn on if your mirror has no search indexes. Lookups still use
+                your server.
+              </p>
+            </div>
+            <Switch
+              id="music-metadata-search-public"
+              checked={searchOnPublic}
+              onCheckedChange={setSearchOnPublic}
+            />
+          </div>
+        </>
+      )}
+
+      {result && (
+        <div className="space-y-1 text-sm" role="status">
+          <div className="flex items-center gap-2">
+            <Badge variant={result.lookup_ok ? "default" : "destructive"}>
+              Lookups {result.lookup_ok ? "OK" : "failed"}
+            </Badge>
+            {result.search_tested && (
+              <Badge variant={result.search_ok ? "default" : "destructive"}>
+                Search {result.search_ok ? "OK" : "failed"}
+              </Badge>
+            )}
+          </div>
+          {result.lookup_error && (
+            <p className="text-xs text-destructive">{result.lookup_error}</p>
+          )}
+          {result.search_error && (
+            <p className="text-xs text-destructive">
+              {result.search_error}. Turn on public search if your mirror has no
+              search indexes.
+            </p>
+          )}
+        </div>
+      )}
+
+      <div className="flex gap-2">
+        <Button
+          variant="outline"
+          disabled={invalid || test.isPending}
+          onClick={() =>
+            test.mutate(request(), {
+              onSuccess: (res) => {
+                setResult(res);
+                if (res.ok) toast.success("Metadata source is reachable");
+                else toast.error("Metadata source check failed");
+              },
+              onError,
+            })
+          }
+        >
+          {test.isPending ? "Testing…" : "Test connection"}
+        </Button>
+        <Button
+          disabled={invalid || update.isPending}
+          onClick={() =>
+            update.mutate(request(), {
+              onSuccess: () => toast.success("Metadata source saved"),
+              onError,
+            })
+          }
+        >
+          Save
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 export function MusicProfilesPage() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
   const { data: definitions = [], isLoading: defsLoading } =
     useAudioQualityDefinitions();
   const { data: profiles = [], isLoading: profilesLoading } =
@@ -590,6 +846,8 @@ export function MusicProfilesPage() {
           )}
         </CardContent>
       </Card>
+
+      {isAdmin && <MetadataSourceCard />}
     </div>
   );
 }
