@@ -31,6 +31,7 @@ import {
   AddSeriesDialog,
   SeriesDetailSheet,
   sortSeries,
+  isSeriesMonitored,
 } from "@/components/series";
 import { SeriesLibraryImportDialog } from "@/components/series/series-library-import-dialog";
 import { useLibraries } from "@/lib/libraries-api";
@@ -258,11 +259,11 @@ export function SeriesPage() {
       list = list.filter((s) => s.status === statusFilter);
     }
     if (monitoredFilter === "monitored") {
-      list = list.filter((s) => s.monitoringStatus === "monitored");
+      list = list.filter((s) => isSeriesMonitored(s.monitoringStatus));
     } else if (monitoredFilter === "unmonitored") {
-      list = list.filter((s) => s.monitoringStatus === "unmonitored");
+      list = list.filter((s) => !isSeriesMonitored(s.monitoringStatus));
     } else if (monitoredFilter === "archived") {
-      list = list.filter((s) => s.monitoringStatus === "unmonitored");
+      list = list.filter((s) => !isSeriesMonitored(s.monitoringStatus));
     }
     return sortSeries(list, sortKey);
   }, [seriesList, filterText, statusFilter, monitoredFilter, sortKey]);
@@ -459,8 +460,8 @@ export function SeriesPage() {
 
   // Stats
   const totalSeries = seriesList.length;
-  const monitoredCount = seriesList.filter(
-    (s) => s.monitoringStatus === "monitored",
+  const monitoredCount = seriesList.filter((s) =>
+    isSeriesMonitored(s.monitoringStatus),
   ).length;
   const continuingCount = seriesList.filter(
     (s) => s.status === "continuing",
@@ -561,7 +562,7 @@ export function SeriesPage() {
             <div
               key={s.id}
               className={cn(
-                s.monitoringStatus === "unmonitored" && "opacity-60",
+                !isSeriesMonitored(s.monitoringStatus) && "opacity-60",
               )}
             >
               <SeriesCard

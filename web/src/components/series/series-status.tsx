@@ -1,4 +1,10 @@
-import type { Series } from "./types";
+import { MonitoringLabel } from "@/components/movies/status-badge";
+import { isSeriesMonitored, type Series } from "./types";
+
+export function SeriesMonitoringLabel({ status }: { status?: string }) {
+  if (!status || isSeriesMonitored(status)) return null;
+  return <MonitoringLabel status="unmonitored" />;
+}
 
 type SeriesState = Pick<Series, "status" | "episodeStats">;
 

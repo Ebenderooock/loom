@@ -6,6 +6,7 @@ import {
   StatusBadge,
 } from "@/components/movies/status-badge";
 import {
+  SeriesMonitoringLabel,
   SeriesStatusAccent,
   SeriesStatusBadge,
 } from "@/components/series/series-status";
@@ -84,7 +85,11 @@ export function TitlePosterCard({
             ) : (
               <StatusBadge status={displayStatus ?? "missing"} />
             )}
-            <MonitoringLabel status={monitoringStatus} />
+            {mediaType === "series" ? (
+              <SeriesMonitoringLabel status={monitoringStatus} />
+            ) : (
+              <MonitoringLabel status={monitoringStatus} />
+            )}
           </div>
           <h3
             className="mt-1 truncate text-sm font-semibold text-white"

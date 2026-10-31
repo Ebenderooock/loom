@@ -2,6 +2,7 @@ package series
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"strings"
 	"testing"
@@ -104,6 +105,21 @@ func (r *mockRepo) CreateSeason(_ context.Context, s *Season) error {
 	return nil
 }
 func (r *mockRepo) UpdateSeason(_ context.Context, _ *Season) error { return nil }
+func (r *mockRepo) SetSeasonMonitoring(_ context.Context, seriesID string, seasonNum int, monitored bool) (*Season, error) {
+	for _, season := range r.seasons[seriesID] {
+		if season.SeasonNumber != seasonNum {
+			continue
+		}
+		season.Monitored = monitored
+		for _, episode := range r.episodes[seriesID] {
+			if episode.SeasonID == season.ID {
+				episode.Monitored = monitored
+			}
+		}
+		return season, nil
+	}
+	return nil, sql.ErrNoRows
+}
 func (r *mockRepo) ListEpisodes(_ context.Context, seriesID string, seasonNum *int) ([]*Episode, error) {
 	eps := r.episodes[seriesID]
 	if seasonNum == nil {

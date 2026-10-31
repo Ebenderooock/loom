@@ -250,10 +250,10 @@ describe("Media file manager detail entry points", () => {
         />,
       );
       const user = userEvent.setup();
-      const header = await screen.findByRole("button", { name: /Season 2/ });
+      const header = await screen.findByRole("button", { name: /^Season 2/ });
       await user.click(header);
       expect(await screen.findByText("Downloaded")).toBeVisible();
-      const accordion = header.parentElement!;
+      const accordion = header.parentElement!.parentElement!;
       const managerButton =
         scope === "season"
           ? within(accordion).getByRole("button", { name: "Manage files" })
@@ -278,7 +278,7 @@ describe("Media file manager detail entry points", () => {
       expect(screen.queryByText("Downloaded")).not.toBeInTheDocument();
       expect(within(accordion).getByText("0 / 1")).toBeVisible();
       expect(
-        screen.getByRole("button", { name: /Specials/ }),
+        screen.getByRole("button", { name: /^Specials/ }),
       ).toHaveTextContent("0 / 1");
       expect(
         fetchMock.mock.calls.filter(([input]) =>
@@ -346,7 +346,7 @@ describe("Media file manager detail entry points", () => {
       within(manager).getAllByRole("button", { name: "Close" })[0]!,
     );
     expect(screen.getByText("Existing episode")).toBeVisible();
-    expect(screen.getByRole("button", { name: /Specials/ })).toBeVisible();
+    expect(screen.getByRole("button", { name: /^Specials/ })).toBeVisible();
   });
 
   it("opens movie file inventory from the movie detail sheet", async () => {
@@ -381,10 +381,10 @@ describe("Media file manager detail entry points", () => {
       const user = userEvent.setup();
       const name = season === 0 ? "Specials" : `Season ${season}`;
       const header = await screen.findByRole("button", {
-        name: new RegExp(name),
+        name: new RegExp(`^${name}`),
       });
       await user.click(header);
-      const accordion = header.parentElement!;
+      const accordion = header.parentElement!.parentElement!;
       await user.click(
         within(accordion).getByRole("button", { name: "Manage files" }),
       );

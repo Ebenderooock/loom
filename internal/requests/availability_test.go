@@ -128,6 +128,9 @@ func TestReconcileSeriesRequiresAllDueMonitoredEpisodes(t *testing.T) {
 			('future','series','season',3,'2026-10-22','2026-10-22T23:00:00Z'),
 			('unmonitored','series','season',4,'2026-10-01','')`)
 	execAvailabilitySQL(t, db, `UPDATE episodes SET monitored=false WHERE id='unmonitored'`)
+	execAvailabilitySQL(t, db, `INSERT INTO seasons(id,series_id,season_number) VALUES ('specials','series',0)`)
+	execAvailabilitySQL(t, db, `INSERT INTO episodes(id,series_id,season_id,episode_number,air_date)
+		VALUES ('bonus','series','specials',1,'2000-01-01')`)
 	assertAvailability(t, store, r.ID, StatusApproved)
 	execAvailabilitySQL(t, db, `INSERT INTO episode_files(id,episode_id,series_id,file_path)
 		VALUES ('one','first','series','/first.mkv')`)

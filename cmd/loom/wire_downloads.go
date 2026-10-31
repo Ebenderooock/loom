@@ -506,13 +506,16 @@ func newResearchFunc(engine *autosearch.Engine, moviesSvc movies.Service, series
 				if err != nil || sr == nil {
 					continue
 				}
+				if !sr.MonitoringStatus.IsMonitored() {
+					continue
+				}
 				seasons, err := seriesSvc.ListSeasons(ctx, k.seriesID)
 				if err != nil {
 					continue
 				}
 				seasonNum := -1
 				for _, se := range seasons {
-					if se.ID == k.seasonID {
+					if se.ID == k.seasonID && se.Monitored {
 						seasonNum = se.SeasonNumber
 						break
 					}

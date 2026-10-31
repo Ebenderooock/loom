@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useId, useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { AddToCollectionButton } from "@/components/collections/add-to-collection";
 import { apiFetch } from "@/lib/fetch";
@@ -71,6 +71,7 @@ import {
 } from "@/components/quality-profile-warning";
 import type { Library } from "../../lib/libraries-api";
 import type { Series, Season, Episode, QualityProfile, Credits } from "./types";
+import { isSeriesMonitored } from "./types";
 
 // ─── Helpers ──────────────────────────────────────────────────────────
 
@@ -165,12 +166,14 @@ function SeasonAccordion({
   onSearchOpen,
   filesVersion,
   onFilesChanged,
+  onMonitoringChanged,
 }: {
   seriesId: string;
   season: Season;
   seriesTitle: string;
   filesVersion: number;
   onFilesChanged: () => void;
+  onMonitoringChanged: (updated: Season) => void;
   seriesData: {
     qualityProfileId: string;
     imdbId?: string;
@@ -194,6 +197,38 @@ function SeasonAccordion({
   const [loaded, setLoaded] = useState(false);
   const [autoSearchingEp, setAutoSearchingEp] = useState<number | null>(null);
   const [autoSearchingSeason, setAutoSearchingSeason] = useState(false);
+  const [monitoringPending, setMonitoringPending] = useState(false);
+  const episodesId = useId();
+  const seasonTitle =
+    season.seasonNumber === 0 ? "Specials" : `Season ${season.seasonNumber}`;
+
+  const handleToggleMonitoring = async () => {
+    setMonitoringPending(true);
+    try {
+      const response = await apiFetch(
+        `/api/v1/series/${seriesId}/seasons/${season.seasonNumber}/monitoring`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ monitored: !season.monitored }),
+        },
+      );
+      if (!response.ok) {
+        const body = await response.json().catch(() => null);
+        throw new Error(
+          body?.error?.message ||
+            `Monitoring update failed (${response.status})`,
+        );
+      }
+      onMonitoringChanged(await response.json());
+    } catch (error) {
+      toast.error(`Could not update ${seasonTitle} monitoring`, {
+        description: error instanceof Error ? error.message : String(error),
+      });
+    } finally {
+      setMonitoringPending(false);
+    }
+  };
 
   const fetchEpisodes = useCallback(
     async (signal?: AbortSignal) => {
@@ -228,7 +263,7 @@ function SeasonAccordion({
   );
 
   useEffect(() => {
-    // Keep expanded lists current after either series- or season-scoped deletion.
+    // Keep expanded lists current after file deletion or monitoring changes.
     // Collapsed seasons use refreshed server stats until their next expansion.
     if (!open) {
       setLoaded(false);
@@ -361,45 +396,39 @@ function SeasonAccordion({
   return (
     <div className="overflow-hidden rounded-lg border border-border/40">
       {/* Season header */}
-      <button
-        onClick={handleToggle}
-        className="flex w-full items-center gap-3 bg-muted/10 px-4 py-3 text-sm transition-colors hover:bg-accent/5"
-      >
-        {open ? (
-          <ChevronDown className="h-4 w-4 shrink-0" />
-        ) : (
-          <ChevronRight className="h-4 w-4 shrink-0" />
-        )}
+      <div className="flex items-center gap-2 bg-muted/10 pr-2 text-sm">
+        <button
+          type="button"
+          onClick={handleToggle}
+          aria-expanded={open}
+          aria-controls={open ? episodesId : undefined}
+          className="flex min-h-11 min-w-0 flex-1 items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-accent/5 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+        >
+          {open ? (
+            <ChevronDown className="h-4 w-4 shrink-0" />
+          ) : (
+            <ChevronRight className="h-4 w-4 shrink-0" />
+          )}
 
-        {/* Season icon + title */}
-        <FileVideo className="h-4 w-4 shrink-0 text-muted-foreground" />
-        <span className="text-sm font-semibold">
-          {season.seasonNumber === 0
-            ? "Specials"
-            : `Season ${season.seasonNumber}`}
-        </span>
+          {/* Season icon + title */}
+          <FileVideo className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <span className="text-sm font-semibold">{seasonTitle}</span>
 
-        {/* Episode count badge (Sonarr-style: downloaded/aired) */}
-        {stats && (
-          <span
-            className={cn(
-              "rounded-sm px-2 py-0.5 text-[11px] font-bold tabular-nums text-white",
-              badgeColor,
-            )}
-          >
-            {stats.downloaded} / {stats.aired}
-          </span>
-        )}
-
-        {/* Spacer */}
-        <div className="flex-1" />
+          {/* Episode count badge (Sonarr-style: downloaded/aired) */}
+          {stats && (
+            <span
+              className={cn(
+                "rounded-sm px-2 py-0.5 text-[11px] font-bold tabular-nums text-white",
+                badgeColor,
+              )}
+            >
+              {stats.downloaded} / {stats.aired}
+            </span>
+          )}
+        </button>
 
         {/* Season action icons */}
-        {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events -- non-interactive wrapper; only stops row activation so its child buttons work */}
-        <div
-          className="flex shrink-0 items-center gap-1"
-          onClick={(e) => e.stopPropagation()}
-        >
+        <div className="flex shrink-0 items-center gap-1">
           <button
             className="rounded p-1 text-muted-foreground transition-colors hover:bg-accent/10 hover:text-accent"
             title="Automatic search for season"
@@ -430,16 +459,37 @@ function SeasonAccordion({
         </div>
 
         {/* Monitoring toggle */}
-        {season.monitored ? (
-          <Bookmark className="h-4 w-4 shrink-0 text-accent" />
-        ) : (
-          <Bookmark className="h-4 w-4 shrink-0 text-muted-foreground/30" />
-        )}
-      </button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="h-11 w-11 shrink-0"
+          aria-label={`Monitor ${seasonTitle}`}
+          aria-pressed={season.monitored}
+          aria-busy={monitoringPending}
+          title={`${season.monitored ? "Unmonitor" : "Monitor"} ${seasonTitle}`}
+          disabled={monitoringPending}
+          onClick={handleToggleMonitoring}
+        >
+          {monitoringPending ? (
+            <Loader2 className="animate-spin" />
+          ) : season.monitored ? (
+            <BookmarkCheck className="text-accent" />
+          ) : (
+            <Bookmark className="text-muted-foreground" />
+          )}
+        </Button>
+      </div>
+      {season.seasonNumber === 0 && (
+        <p className="px-4 pb-3 text-xs text-muted-foreground">
+          Specials are monitored separately and do not count toward show
+          completeness.
+        </p>
+      )}
 
       {/* Episode table */}
       {open && (
-        <div className="border-t border-border/30">
+        <div id={episodesId} className="border-t border-border/30">
           <div className="px-4 pt-3">
             <MediaFilesManager
               mediaType="series"
@@ -635,6 +685,7 @@ export function SeriesDetailSheet({
   const [archiving, setArchiving] = useState(false);
   const [autoSearching, setAutoSearching] = useState(false);
   const [rescanning, setRescanning] = useState(false);
+  const [monitoringPending, setMonitoringPending] = useState(false);
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
   const [discoverPerson, setDiscoverPerson] = useState<{
@@ -690,20 +741,31 @@ export function SeriesDetailSheet({
       setEditProfile(series.qualityProfileId);
       setEditMonitoring(series.monitoringStatus);
       setEditSeriesType(series.seriesType || "standard");
+    }
+  }, [series, open]);
 
+  const seriesId = series?.id;
+  const refreshCredits = useCallback(() => {
+    if (!seriesId) return;
+    setCreditsLoading(true);
+    void apiFetch(`/api/v1/series/${seriesId}/credits`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => setCredits(data))
+      .catch((err) => console.error("fetch failed:", err))
+      .finally(() => setCreditsLoading(false));
+  }, [seriesId]);
+
+  useEffect(() => {
+    // Parent summary updates must not unmount expanded seasons or reset their selections.
+    if (seriesId && open) {
       // Fetch credits
       setCredits(null);
-      setCreditsLoading(true);
-      apiFetch(`/api/v1/series/${series.id}/credits`)
-        .then((r) => (r.ok ? r.json() : null))
-        .then((data) => setCredits(data))
-        .catch((err) => console.error("fetch failed:", err))
-        .finally(() => setCreditsLoading(false));
+      refreshCredits();
 
       // Fetch seasons
       setSeasons([]);
       setSeasonsLoading(true);
-      apiFetch(`/api/v1/series/${series.id}/seasons`)
+      apiFetch(`/api/v1/series/${seriesId}/seasons`)
         .then((r) => (r.ok ? r.json() : []))
         .then((data) =>
           setSeasons(
@@ -717,11 +779,11 @@ export function SeriesDetailSheet({
         .catch((err) => console.error("fetch failed:", err))
         .finally(() => setSeasonsLoading(false));
     }
-  }, [series, open]);
+  }, [seriesId, open, refreshCredits]);
 
   if (!series) return null;
 
-  const handleFilesChanged = () => {
+  const refreshSeasonData = () => {
     // List refresh alone does not replace the independently held detail/season
     // state. Refresh local season summaries and invalidate mounted episode lists.
     setFilesVersion((version) => version + 1);
@@ -744,6 +806,10 @@ export function SeriesDetailSheet({
           description: error instanceof Error ? error.message : String(error),
         }),
       );
+  };
+
+  const handleFilesChanged = () => {
+    refreshSeasonData();
     onRefresh?.();
   };
 
@@ -757,7 +823,7 @@ export function SeriesDetailSheet({
     setEditSeriesType(series.seriesType || "standard");
   };
   const library = libraries.find((l) => l.id === series.libraryId);
-  const isMonitored = series.monitoringStatus === "monitored";
+  const isMonitored = isSeriesMonitored(series.monitoringStatus);
 
   const handleSave = async () => {
     setSaving(true);
@@ -788,20 +854,29 @@ export function SeriesDetailSheet({
 
   const handleToggleMonitoring = async () => {
     const newStatus = isMonitored ? "unmonitored" : "monitored";
+    setMonitoringPending(true);
     try {
       const res = await apiFetch(`/api/v1/series/${series.id}/monitoring`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: newStatus }),
       });
-      if (res.ok) {
-        onUpdated({ ...series, monitoringStatus: newStatus });
-        toast.success(
-          newStatus === "monitored" ? "Now monitoring" : "Unmonitored",
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error(
+          body?.error?.message || `Monitoring update failed (${res.status})`,
         );
       }
-    } catch {
-      toast.error("Failed to update monitoring");
+      onUpdated({ ...series, monitoringStatus: newStatus });
+      toast.success(
+        newStatus === "monitored" ? "Now monitoring" : "Unmonitored",
+      );
+    } catch (error) {
+      toast.error("Failed to update monitoring", {
+        description: error instanceof Error ? error.message : String(error),
+      });
+    } finally {
+      setMonitoringPending(false);
     }
   };
 
@@ -829,7 +904,7 @@ export function SeriesDetailSheet({
   const handleArchiveToggle = async () => {
     if (!series) return;
     setArchiving(true);
-    const isArchived = series.monitoringStatus === "unmonitored";
+    const isArchived = !isMonitored;
     const endpoint = isArchived
       ? `/api/v1/series/${series.id}/unarchive`
       : `/api/v1/series/${series.id}/archive`;
@@ -859,6 +934,8 @@ export function SeriesDetailSheet({
         toast.error("Failed to refresh");
         return;
       }
+      refreshSeasonData();
+      refreshCredits();
       const res = await apiFetch(`/api/v1/series/${series.id}`);
       if (res.ok) {
         const updated = await res.json();
@@ -891,6 +968,8 @@ export function SeriesDetailSheet({
         toast.success(
           `Rescan complete: ${result.matched} matched, ${result.imported} imported`,
         );
+        refreshSeasonData();
+        refreshCredits();
         // Refresh series data to reflect any new files
         const updated = await apiFetch(`/api/v1/series/${series.id}`);
         if (updated.ok) onUpdated(await updated.json());
@@ -967,9 +1046,14 @@ export function SeriesDetailSheet({
 
             {/* Monitoring toggle — offset left to avoid sheet close button */}
             <button
+              type="button"
               onClick={handleToggleMonitoring}
+              aria-label="Monitor show"
+              aria-pressed={isMonitored}
+              aria-busy={monitoringPending}
+              disabled={monitoringPending}
               className={cn(
-                "absolute right-14 top-4 z-20 rounded-full p-2 shadow-lg transition-all duration-200",
+                "absolute right-14 top-4 z-20 rounded-full p-2 shadow-lg transition-all duration-200 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50",
                 isMonitored
                   ? "bg-accent text-accent-foreground hover:bg-accent/90"
                   : "bg-black/50 text-white/70 hover:bg-black/70 hover:text-white",
@@ -980,7 +1064,9 @@ export function SeriesDetailSheet({
                   : "Unmonitored — click to monitor"
               }
             >
-              {isMonitored ? (
+              {monitoringPending ? (
+                <Loader2 className="h-5 w-5 animate-spin" />
+              ) : isMonitored ? (
                 <BookmarkCheck className="h-5 w-5" />
               ) : (
                 <Bookmark className="h-5 w-5" />
@@ -1075,13 +1161,9 @@ export function SeriesDetailSheet({
                 className="h-8 w-8"
                 onClick={handleArchiveToggle}
                 disabled={archiving}
-                title={
-                  series.monitoringStatus === "unmonitored"
-                    ? "Unarchive"
-                    : "Archive"
-                }
+                title={isMonitored ? "Archive" : "Unarchive"}
               >
-                {series.monitoringStatus === "unmonitored" ? (
+                {!isMonitored ? (
                   <ArchiveRestore className="h-3.5 w-3.5" />
                 ) : (
                   <Archive className="h-3.5 w-3.5" />
@@ -1291,6 +1373,14 @@ export function SeriesDetailSheet({
                         seriesTitle={series.title}
                         filesVersion={filesVersion}
                         onFilesChanged={handleFilesChanged}
+                        onMonitoringChanged={(updated) => {
+                          setSeasons((current) =>
+                            current.map((item) =>
+                              item.id === updated.id ? updated : item,
+                            ),
+                          );
+                          handleFilesChanged();
+                        }}
                         seriesData={{
                           qualityProfileId: series.qualityProfileId,
                           imdbId: series.imdbId,

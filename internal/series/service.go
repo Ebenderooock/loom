@@ -27,6 +27,7 @@ type Service interface {
 	SetPostRefreshHook(fn PostRefreshHook)
 
 	ListSeasons(ctx context.Context, seriesID string) ([]*Season, error)
+	SetSeasonMonitoring(ctx context.Context, seriesID string, seasonNum int, monitored bool) (*Season, error)
 	ListEpisodes(ctx context.Context, seriesID string, seasonNum *int) ([]*Episode, error)
 	GetEpisode(ctx context.Context, id string) (*Episode, error)
 	UpdateEpisode(ctx context.Context, e *Episode) error
@@ -427,6 +428,14 @@ func (s *service) RefreshSeries(ctx context.Context, id string) error {
 	}
 
 	savedAiringTimes := s.savedAiringTimes(ctx, sr.ID)
+	savedSeasons, err := s.repo.ListSeasons(ctx, sr.ID)
+	if err != nil {
+		return fmt.Errorf("series: read season monitoring: %w", err)
+	}
+	savedEpisodes, err := s.repo.ListEpisodes(ctx, sr.ID, nil)
+	if err != nil {
+		return fmt.Errorf("series: read episode monitoring: %w", err)
+	}
 
 	// Delete existing children, then re-create from fresh data
 	if err := s.repo.DeleteEpisodesBySeriesID(ctx, sr.ID); err != nil {
@@ -450,6 +459,9 @@ func (s *service) RefreshSeries(ctx context.Context, id string) error {
 		s.createSeasonsFromTMDB(ctx, details, sr.ID, *sr.TMDBID, nowt)
 	}
 
+	if err := s.restoreMonitoring(ctx, sr.ID, savedSeasons, savedEpisodes); err != nil {
+		return fmt.Errorf("series: restore monitoring: %w", err)
+	}
 	s.enrichAiringTimes(ctx, sr, savedAiringTimes)
 	// Re-create credits
 	s.fetchAndStoreCredits(ctx, details, sr.ID)
@@ -466,6 +478,55 @@ func (s *service) RefreshSeries(ctx context.Context, id string) error {
 
 func (s *service) ListSeasons(ctx context.Context, seriesID string) ([]*Season, error) {
 	return s.repo.ListSeasons(ctx, seriesID)
+}
+
+func (s *service) SetSeasonMonitoring(ctx context.Context, seriesID string, seasonNum int, monitored bool) (*Season, error) {
+	if seriesID == "" || seasonNum < 0 {
+		return nil, fmt.Errorf("series: series ID and non-negative season number required")
+	}
+	return s.repo.SetSeasonMonitoring(ctx, seriesID, seasonNum, monitored)
+}
+
+func (s *service) restoreMonitoring(ctx context.Context, seriesID string, savedSeasons []*Season, savedEpisodes []*Episode) error {
+	seasonNumbers := make(map[string]int, len(savedSeasons))
+	seasonMonitoring := make(map[int]bool, len(savedSeasons))
+	for _, season := range savedSeasons {
+		seasonNumbers[season.ID] = season.SeasonNumber
+		seasonMonitoring[season.SeasonNumber] = season.Monitored
+	}
+	type episodeKey struct{ season, episode int }
+	episodeMonitoring := make(map[episodeKey]bool, len(savedEpisodes))
+	for _, episode := range savedEpisodes {
+		if number, ok := seasonNumbers[episode.SeasonID]; ok {
+			episodeMonitoring[episodeKey{number, episode.EpisodeNumber}] = episode.Monitored
+		}
+	}
+
+	seasons, err := s.repo.ListSeasons(ctx, seriesID)
+	if err != nil {
+		return err
+	}
+	for _, season := range seasons {
+		seasonNumbers[season.ID] = season.SeasonNumber
+		if monitored, ok := seasonMonitoring[season.SeasonNumber]; ok {
+			if _, err := s.repo.SetSeasonMonitoring(ctx, seriesID, season.SeasonNumber, monitored); err != nil {
+				return err
+			}
+		}
+	}
+	episodes, err := s.repo.ListEpisodes(ctx, seriesID, nil)
+	if err != nil {
+		return err
+	}
+	for _, episode := range episodes {
+		if monitored, ok := episodeMonitoring[episodeKey{seasonNumbers[episode.SeasonID], episode.EpisodeNumber}]; ok && episode.Monitored != monitored {
+			episode.Monitored = monitored
+			if err := s.UpdateEpisode(ctx, episode); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 func (s *service) ListEpisodes(ctx context.Context, seriesID string, seasonNum *int) ([]*Episode, error) {
@@ -661,7 +722,7 @@ func (s *service) createSeasonsFromTMDB(ctx context.Context, details map[string]
 			Title:        getString(sm, "name"),
 			Overview:     getString(sm, "overview"),
 			PosterPath:   getString(sm, "poster_path"),
-			Monitored:    true,
+			Monitored:    !IsSpecialEpisode(seasonNum),
 			EpisodeCount: getInt(sm, "episode_count"),
 			CreatedAt:    ts,
 			UpdatedAt:    ts,
@@ -708,7 +769,7 @@ func buildSeasonsAndEpisodes(seriesID string, eps []ProviderEpisode, ts time.Tim
 			AirDate:       ep.AirDate,
 			Runtime:       ep.Runtime,
 			StillPath:     ep.StillPath,
-			Monitored:     true,
+			Monitored:     !IsSpecialEpisode(ep.SeasonNumber),
 			CreatedAt:     ts,
 			UpdatedAt:     ts,
 		})
@@ -722,7 +783,7 @@ func buildSeasonsAndEpisodes(seriesID string, eps []ProviderEpisode, ts time.Tim
 			SeriesID:     seriesID,
 			SeasonNumber: sn,
 			Title:        seasonTitle(sn),
-			Monitored:    true,
+			Monitored:    !IsSpecialEpisode(sn),
 			EpisodeCount: counts[sn],
 			CreatedAt:    ts,
 			UpdatedAt:    ts,
@@ -771,7 +832,7 @@ func (s *service) fetchAndStoreEpisodes(ctx context.Context, tmdbID string, seas
 			AirDate:       ep.AirDate,
 			Runtime:       ep.Runtime,
 			StillPath:     ep.StillPath,
-			Monitored:     true,
+			Monitored:     !IsSpecialEpisode(seasonNum),
 			HasFile:       false,
 			CreatedAt:     ts,
 			UpdatedAt:     ts,
