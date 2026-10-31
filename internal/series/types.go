@@ -42,6 +42,12 @@ const (
 	MonitoringArchived    MonitoringStatus = "archived"
 )
 
+// IsMonitored reports whether the show permits automatic acquisition.
+// Season and episode selections remain independent of this master switch.
+func (s MonitoringStatus) IsMonitored() bool {
+	return s != MonitoringNone && s != MonitoringUnmonitored && s != MonitoringArchived
+}
+
 // Series represents a TV series in the library.
 type Series struct {
 	ID                    string           `json:"id"`
@@ -134,12 +140,13 @@ type SeriesCredit struct {
 	DisplayOrder  int    `json:"display_order"`
 }
 
-// EpisodeStats holds episode count statistics for a series.
+// EpisodeStats holds episode counts. Series aggregates exclude specials;
+// season-scoped statistics include all episodes in that season.
 type EpisodeStats struct {
 	TotalEpisodes      int `json:"totalEpisodes"`
 	DownloadedEpisodes int `json:"downloadedEpisodes"`
 	MonitoredEpisodes  int `json:"monitoredEpisodes"`
-	MissingEpisodes    int `json:"missingEpisodes"` // aired, monitored, not downloaded, excluding specials
+	MissingEpisodes    int `json:"missingEpisodes"` // aired, monitored, not downloaded
 	AiredEpisodes      int `json:"airedEpisodes"`   // actual instant passed, or legacy date-only UTC day fallback
 }
 

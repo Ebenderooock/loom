@@ -107,6 +107,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- TV monitoring now works at the show and season level. Each season, including
+  Specials, has its own monitor toggle that is kept across metadata refreshes.
+  Specials no longer count toward show completeness and new specials start
+  unmonitored. See [`docs/api.md`](docs/api.md#tv-monitoring-and-completeness).
+
 - Collection and Discover cards now match library card status, including
   Downloading, Importing, Available and series episode progress, with shared
   badges and status strips instead of inferring availability from file presence.

@@ -90,6 +90,60 @@ tags:
       manual merges. Reads resolve merged IDs; writes through stale merged IDs
       return 409 and require reloading the canonical collection.
 paths:
+  /api/v1/series/{id}/seasons/{seasonNum}/monitoring:
+    put:
+      operationId: setSeasonMonitoring
+      summary: Monitor or unmonitor a season and all its episodes.
+      description: |
+        Updates the season and its episode monitoring flags atomically.
+        Season 0 is Specials and is independent of regular seasons. Show
+        monitoring remains the automatic-search master switch and does not
+        reset season selections. Metadata refresh preserves selections;
+        newly discovered episodes inherit their season's setting. New
+        specials default to unmonitored. Show-level completeness excludes
+        all specials, even when monitored; season statistics include them.
+      security: [{ cookieAuth: [] }, { apiKey: [] }, { bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+        - in: path
+          name: seasonNum
+          required: true
+          schema: { type: integer, minimum: 0 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [monitored]
+              properties:
+                monitored: { type: boolean }
+      responses:
+        "200":
+          description: Updated season.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, seriesId, seasonNumber, monitored, episodeCount]
+                properties:
+                  id: { type: string }
+                  seriesId: { type: string }
+                  seasonNumber: { type: integer }
+                  title: { type: string }
+                  overview: { type: string }
+                  posterPath: { type: string }
+                  monitored: { type: boolean }
+                  episodeCount: { type: integer }
+                  createdAt: { type: string, format: date-time }
+                  updatedAt: { type: string, format: date-time }
+        "400": { description: Invalid season number or monitored boolean. }
+        "401": { description: Authentication required when enabled. }
+        "404": { description: Season not found for this show. }
+        "500": { description: Monitoring update failed; transaction rolled back. }
   /api/v1/collections/:
     get:
       tags: [collections]

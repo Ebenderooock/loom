@@ -2,6 +2,7 @@ import { cleanup, render, within } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { MovieCard } from "@/components/movies/movie-card";
 import { SeriesCard } from "@/components/series/series-card";
+import { SeriesListRow } from "@/components/series/series-list-row";
 import type { Movie } from "@/components/movies/types";
 import type { Series } from "@/components/series/types";
 import { TitlePosterCard } from "../title-poster-card";
@@ -44,6 +45,64 @@ function expectSamePresentation(
 }
 
 describe("canonical library card status on collection/Discover posters", () => {
+  it.each([
+    ["monitored", true],
+    ["all", true],
+    ["future", true],
+    ["missing", true],
+    ["existing", true],
+    ["pilot", true],
+    ["firstSeason", true],
+    ["lastSeason", true],
+    ["none", false],
+    ["unmonitored", false],
+    ["archived", false],
+  ] as const)(
+    "consistently presents series strategy %s across library cards, lists and collection posters",
+    (monitoringStatus, monitored) => {
+      const series: Series = {
+        ...movie,
+        network: "",
+        seriesType: "standard",
+        seasonFolder: true,
+        status: "continuing",
+        monitoringStatus,
+      };
+      const { getByTestId } = render(
+        <>
+          <section data-testid="library">
+            <SeriesCard {...actions} series={series} />
+          </section>
+          <section data-testid="collection">
+            <TitlePosterCard
+              title={series.title}
+              mediaType="series"
+              inLibrary
+              status={series.status}
+              monitoringStatus={monitoringStatus}
+              onOpen={noop}
+            />
+          </section>
+          <table data-testid="list">
+            <tbody>
+              <SeriesListRow {...actions} series={series} />
+            </tbody>
+          </table>
+        </>,
+      );
+      for (const id of ["library", "collection"]) {
+        const label = within(getByTestId(id)).queryByText("Unmonitored");
+        if (monitored) expect(label).not.toBeInTheDocument();
+        else expect(label).toBeInTheDocument();
+      }
+      expect(
+        within(getByTestId("list")).getByRole("img", {
+          name: monitored ? "Monitored" : "Unmonitored",
+        }),
+      ).toBeInTheDocument();
+    },
+  );
+
   it.each([
     ["missing", "Missing"],
     ["downloading", "Downloading"],

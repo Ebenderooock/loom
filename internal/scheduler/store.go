@@ -56,6 +56,7 @@ func (s *Store) GetCandidates(ctx context.Context, mediaType string, limit int, 
 			LEFT JOIN search_state ss ON ss.media_type = 'episode' AND ss.media_id = e.id
 			WHERE e.has_file = 0
 			  AND e.monitored = 1
+			  AND se.monitored = 1
 			  AND s.monitoring_status NOT IN ('none', 'unmonitored', 'archived')
 			  AND ` + airing.SQLAired + `
 			  AND (ss.last_searched_at IS NULL OR ss.last_searched_at < ?)
@@ -122,9 +123,11 @@ func (s *Store) QueueSize(ctx context.Context, minResearchDays int) (int, error)
 	row = s.db.QueryRowContext(ctx, `
 		SELECT COUNT(*) FROM episodes e
 		JOIN series s ON e.series_id = s.id
+		JOIN seasons se ON e.season_id = se.id AND se.series_id = e.series_id
 		LEFT JOIN search_state ss ON ss.media_type = 'episode' AND ss.media_id = e.id
 		WHERE e.has_file = 0
 		  AND e.monitored = 1
+		  AND se.monitored = 1
 		  AND s.monitoring_status NOT IN ('none', 'unmonitored', 'archived')
 		  AND `+airing.SQLAired+`
 		  AND (ss.last_searched_at IS NULL OR ss.last_searched_at < ?)`, cutoff)

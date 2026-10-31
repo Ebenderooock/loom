@@ -147,6 +147,27 @@ bypass quotas, not duplicate or storage checks. Reconciliation never deletes
 media/import records. See [the request lifecycle guide](requests.md) for storage
 markers, conservative unknown states, and operator recovery.
 
+## TV monitoring and completeness
+
+Show monitoring is the automatic-search master switch:
+`PUT /api/v1/series/{id}/monitoring` accepts `{"status":"monitored"}` or
+`{"status":"unmonitored"}`. Turning a show off pauses automatic acquisition
+without changing its season selections; turning it on resumes those selections.
+
+`PUT /api/v1/series/{id}/seasons/{seasonNum}/monitoring` accepts
+`{"monitored":true}` or `{"monitored":false}` and atomically updates the season
+and its episodes. It returns the updated season, `400` for an invalid season
+number or missing/non-boolean `monitored`, and `404` for a missing season.
+Season `0` is **Specials** and can be monitored independently. Newly added
+specials default to unmonitored; regular seasons default to monitored.
+Metadata refresh preserves existing season and episode choices, and new
+episodes in an existing season inherit that season's monitoring setting.
+
+Show-level episode statistics exclude season `0` from every count, including
+downloaded and aired totals, regardless of whether specials are monitored.
+The Specials row retains its own counts and completion progress. Show
+completeness therefore reflects regular episodes only, not bonus content.
+
 ## Title file management
 
 On movie and show detail pages, administrators can open **Manage files**; seasons

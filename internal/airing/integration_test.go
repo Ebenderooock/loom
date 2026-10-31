@@ -91,7 +91,7 @@ func TestTimestampPersistenceStatsAndScheduler(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if stats.TotalEpisodes != 6 || stats.AiredEpisodes != 4 || stats.MissingEpisodes != 2 || stats.DownloadedEpisodes != 1 {
+	if stats.TotalEpisodes != 5 || stats.AiredEpisodes != 3 || stats.MissingEpisodes != 2 || stats.DownloadedEpisodes != 1 {
 		t.Fatalf("stats: %+v", stats)
 	}
 	all, err := repo.GetAllEpisodeStats(ctx)
@@ -99,7 +99,7 @@ func TestTimestampPersistenceStatsAndScheduler(t *testing.T) {
 		t.Fatalf("all stats: %+v, %v", all, err)
 	}
 	seasons, err := repo.GetSeasonEpisodeStats(ctx, "show")
-	if err != nil || seasons["season"].AiredEpisodes != 3 || seasons["season"].MissingEpisodes != 2 || seasons["specials"].MissingEpisodes != 0 {
+	if err != nil || seasons["season"].AiredEpisodes != 3 || seasons["season"].MissingEpisodes != 2 || seasons["specials"].MissingEpisodes != 1 {
 		t.Fatalf("season stats: %+v, %v", seasons, err)
 	}
 	store := scheduler.NewStore(db.DB())

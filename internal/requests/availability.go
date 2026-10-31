@@ -1,7 +1,7 @@
 package requests
 
 // completionPredicate preserves the scope of fulfillment: currently due,
-// monitored episodes and selected music releases, not future releases.
+// monitored regular episodes and selected music releases, not specials or future releases.
 const completionPredicate = `(
 			(media_type='movie' AND EXISTS (
 				SELECT 1 FROM movie_files f JOIN movies m ON m.id=f.movie_id
@@ -11,12 +11,15 @@ const completionPredicate = `(
 			OR (media_type='series'
 				AND EXISTS (
 					SELECT 1 FROM episode_files f
-					WHERE f.series_id=media_requests.media_id
+					JOIN episodes e ON e.id=f.episode_id
+					JOIN seasons sn ON sn.id=e.season_id
+					WHERE f.series_id=media_requests.media_id AND sn.season_number<>0
 				)
 				AND NOT EXISTS (
 					SELECT 1 FROM episodes e JOIN seasons sn ON sn.id=e.season_id
 					WHERE e.series_id=media_requests.media_id
 						AND e.monitored=true AND sn.monitored=true
+						AND sn.season_number<>0
 						AND (
 							(e.air_date_utc<>'' AND e.air_date_utc<=?)
 							OR (e.air_date_utc='' AND (e.air_date IS NULL OR e.air_date='' OR e.air_date<=?))

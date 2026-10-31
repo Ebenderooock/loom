@@ -9,10 +9,10 @@ import type { Series, QualityProfile } from "./types";
 import { titleImage } from "@/components/titles/title-metadata";
 import {
   getEpisodeProgressInfo,
+  SeriesMonitoringLabel,
   SeriesStatusAccent,
   SeriesStatusBadge,
 } from "./series-status";
-import { MonitoringLabel } from "@/components/movies/status-badge";
 
 export function SeriesCard({
   series,
@@ -102,7 +102,7 @@ export function SeriesCard({
       <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/60 to-transparent p-3 pt-8">
         <div className="flex items-center justify-between gap-1">
           <SeriesStatusBadge series={series} />
-          <MonitoringLabel status={series.monitoringStatus} />
+          <SeriesMonitoringLabel status={series.monitoringStatus} />
         </div>
         <h3 className="mt-1 truncate text-sm font-semibold text-white">
           {series.title}

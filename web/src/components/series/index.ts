@@ -22,4 +22,5 @@ export {
   SERIES_SORT_OPTIONS,
   seriesStatusLabel,
   sortSeries,
+  isSeriesMonitored,
 } from "./types";

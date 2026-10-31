@@ -14,7 +14,33 @@ import (
 	"github.com/ebenderooock/loom/internal/movies"
 	"github.com/ebenderooock/loom/internal/parser"
 	"github.com/ebenderooock/loom/internal/qualityprofiles"
+	"github.com/ebenderooock/loom/internal/series"
 )
+
+type specialEpisodeService struct {
+	series.Service
+	specialHasFile bool
+}
+
+func (s specialEpisodeService) ListEpisodes(_ context.Context, _ string, season *int) ([]*series.Episode, error) {
+	if season == nil || *season == 1 {
+		return []*series.Episode{{EpisodeNumber: 1, HasFile: true}}, nil
+	}
+	return []*series.Episode{{EpisodeNumber: 1, HasFile: s.specialHasFile}}, nil
+}
+
+func TestExistingSpecialDoesNotUseRegularEpisodeFile(t *testing.T) {
+	e := newEngine()
+	for _, downloaded := range []bool{false, true} {
+		e.seriesSvc = specialEpisodeService{specialHasFile: downloaded}
+		got := e.getExistingEpisodeQuality(context.Background(), SearchRequest{
+			MediaType: "episode", MediaID: "show", Season: 0, Episode: 1,
+		})
+		if got.HasFile != downloaded {
+			t.Fatalf("special downloaded=%v, got existing=%+v", downloaded, got)
+		}
+	}
+}
 
 type identityMovieService struct {
 	movies.Service
@@ -723,6 +749,23 @@ func TestVerifyIdentity_EpisodeChecks(t *testing.T) {
 			name:   "correct episode passes",
 			req:    SearchRequest{MediaType: "episode", Title: "FROM", Season: 4, Episode: 1},
 			parsed: &parser.Release{Title: "FROM", Season: 4, Episode: 1},
+		},
+		{
+			name:   "special episode passes",
+			req:    SearchRequest{MediaType: "episode", Title: "FROM", Season: 0, Episode: 1},
+			parsed: &parser.Release{Title: "FROM", Season: 0, Episode: 1},
+		},
+		{
+			name:       "special search rejects regular episode with same number",
+			req:        SearchRequest{MediaType: "episode", Title: "FROM", Season: 0, Episode: 1},
+			parsed:     &parser.Release{Title: "FROM", Season: 1, Episode: 1},
+			wantReason: "wrong_season",
+		},
+		{
+			name:       "special search rejects unknown season",
+			req:        SearchRequest{MediaType: "episode", Title: "FROM", Season: 0, Episode: 1},
+			parsed:     &parser.Release{Title: "FROM", Season: -1, Episode: 1},
+			wantReason: "unverifiable_season",
 		},
 		{
 			name:       "wrong episode rejected",
