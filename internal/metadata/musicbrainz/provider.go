@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/ebenderooock/loom/internal/metadata"
 )
@@ -16,7 +17,11 @@ const coverArtArchiveBase = "https://coverartarchive.org"
 // Provider implements metadata.MusicMetadataProvider backed by MusicBrainz
 // (with cover art from the Cover Art Archive).
 type Provider struct {
-	client *Client
+	mu sync.RWMutex
+	// lookup serves entity lookups and browses; search serves free-text
+	// artist search, which a database-only mirror cannot answer.
+	lookup *Client
+	search *Client
 }
 
 // NewProvider builds a MusicBrainz music metadata provider.
@@ -24,7 +29,51 @@ func NewProvider(client *Client) *Provider {
 	if client == nil {
 		client = NewClient(DefaultConfig())
 	}
-	return &Provider{client: client}
+	return &Provider{lookup: client, search: client}
+}
+
+// Configure replaces the endpoints used for lookups and for artist search.
+// A nil search config sends search to the lookup endpoint. In-flight requests
+// finish on the previous clients.
+func (p *Provider) Configure(lookup, search *Config) {
+	lookupClient := NewClient(lookup)
+	searchClient := lookupClient
+	if search != nil {
+		searchClient = NewClient(search)
+	}
+	p.mu.Lock()
+	p.lookup, p.search = lookupClient, searchClient
+	p.mu.Unlock()
+}
+
+func (p *Provider) lookupClient() *Client {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.lookup
+}
+
+func (p *Provider) searchClient() *Client {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.search
+}
+
+// connectionTestArtistMBID is the stable "Various Artists" entity.
+const connectionTestArtistMBID = "89ad4ac3-39f7-470e-963a-56509c546377"
+
+// TestEndpoint checks that cfg answers an artist lookup and, when
+// checkSearch is set, an artist search.
+func TestEndpoint(ctx context.Context, cfg *Config, checkSearch bool) (lookupErr, searchErr error) {
+	client := NewClient(cfg)
+	if _, err := client.GetArtist(ctx, connectionTestArtistMBID); err != nil {
+		lookupErr = err
+	}
+	if checkSearch {
+		if _, err := client.SearchArtist(ctx, "test", 0, 1); err != nil {
+			searchErr = err
+		}
+	}
+	return lookupErr, searchErr
 }
 
 // Name returns the provider identifier.
@@ -35,7 +84,7 @@ func (p *Provider) SearchArtist(ctx context.Context, query string, limit int) ([
 	if limit <= 0 {
 		limit = 10
 	}
-	results, err := p.client.SearchArtist(ctx, query, 0, limit)
+	results, err := p.searchClient().SearchArtist(ctx, query, 0, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -59,7 +108,7 @@ func (p *Provider) SearchArtist(ctx context.Context, query string, limit int) ([
 
 // GetArtist implements metadata.MusicMetadataProvider.
 func (p *Provider) GetArtist(ctx context.Context, mbid string) (*metadata.ArtistMetadata, error) {
-	a, err := p.client.GetArtist(ctx, mbid)
+	a, err := p.lookupClient().GetArtist(ctx, mbid)
 	if err != nil {
 		return nil, err
 	}
@@ -85,7 +134,7 @@ func (p *Provider) GetArtistAlbums(ctx context.Context, artistMBID string) ([]*m
 	seen := make(map[string]bool)
 	offset := 0
 	for {
-		page, total, err := p.client.GetArtistOfficialReleases(ctx, artistMBID, offset, pageSize)
+		page, total, err := p.lookupClient().GetArtistOfficialReleases(ctx, artistMBID, offset, pageSize)
 		if err != nil {
 			return nil, err
 		}
@@ -123,7 +172,7 @@ func (p *Provider) GetArtistAlbums(ctx context.Context, artistMBID string) ([]*m
 
 // GetAlbum implements metadata.MusicMetadataProvider.
 func (p *Provider) GetAlbum(ctx context.Context, releaseGroupMBID string) (*metadata.AlbumMetadata, []*metadata.AlbumReleaseMetadata, error) {
-	rg, err := p.client.GetReleaseGroup(ctx, releaseGroupMBID)
+	rg, err := p.lookupClient().GetReleaseGroup(ctx, releaseGroupMBID)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -137,7 +186,7 @@ func (p *Provider) GetAlbum(ctx context.Context, releaseGroupMBID string) (*meta
 
 // GetAlbumRelease implements metadata.MusicMetadataProvider.
 func (p *Provider) GetAlbumRelease(ctx context.Context, releaseMBID string) (*metadata.AlbumReleaseMetadata, error) {
-	r, err := p.client.GetReleaseRaw(ctx, releaseMBID)
+	r, err := p.lookupClient().GetReleaseRaw(ctx, releaseMBID)
 	if err != nil {
 		return nil, err
 	}

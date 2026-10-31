@@ -303,14 +303,22 @@ func (s *MusicScanner) scanArtistFolder(ctx context.Context, scanID string, resu
 
 		tracks, ok := trackCache[album.ID]
 		if !ok {
-			full, gerr := s.musicSvc.GetAlbum(ctx, album.ID)
+			full, gerr := s.musicSvc.LoadAlbumTracks(ctx, album.ID)
 			if gerr != nil || full == nil {
-				s.logger.Warn("music: get album failed", "album", album.ID, "error", gerr)
+				s.logger.Warn("music: load album tracks failed", "album", album.ID, "error", gerr)
 				tracks = nil
 			} else {
 				tracks = full.Tracks
 			}
 			trackCache[album.ID] = tracks
+		}
+		if len(tracks) == 0 {
+			// Metadata is unavailable; leave the file untouched so a later
+			// scan can match it instead of reporting it as unmatched.
+			s.mu.Lock()
+			result.Errors = append(result.Errors, fmt.Sprintf("%s: track list for album %q is unavailable", f.Path, album.Title))
+			s.mu.Unlock()
+			continue
 		}
 
 		track := matchTrack(tracks, tags)
@@ -418,6 +426,7 @@ func matchTrack(tracks []*music.Track, tags *music.AudioTags) *music.Track {
 				return t
 			}
 		}
+		return music.MatchTrackByBaseTitle(tracks, tags.Title, normalizeTitle)
 	}
 	return nil
 }

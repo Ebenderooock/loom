@@ -86,6 +86,54 @@ when its detected quality is higher. The previous file is sent to the recycle
 bin before replacement; upgrades are refused if the recycle bin is unavailable
 or disabled, so the existing track is not silently discarded.
 
+Tracks are matched by disc and track number first, then by title. If the
+titles differ only by a trailing qualifier, such as `Heavy (feat. Kiiara)`
+against `Heavy` or `Heavy (album version)`, the file still matches when exactly
+one track fits. An album's track list is fetched from MusicBrainz the first
+time it is needed. If MusicBrainz is unavailable, the import fails with
+`album track list unavailable` rather than a track-match error, and a later
+retry or library scan fetches the list again.
+
+## Metadata source
+
+Loom reads artist, album and track data from MusicBrainz. Admins choose the
+source under **Settings → Music Profiles → Metadata Source**:
+
+- **Public MusicBrainz** (default) uses `https://musicbrainz.org/ws/2`. The
+  public service allows about one request per second per IP address, so adding
+  a large artist or refreshing many albums takes minutes. Loom always waits at
+  least one second between requests to `musicbrainz.org`, including retries.
+- **Custom server** uses any MusicBrainz-compatible web service: your own
+  mirror or a hosted instance. Enter the base URL ending in `/ws/2`, the
+  minimum gap between requests in milliseconds (`0` for no limit), and an
+  optional authentication header such as `Authorization: Bearer …` for hosted
+  services. The header value is write-only: the API reports only whether one
+  is saved, and leaving it blank keeps the saved value.
+
+Use **Test connection** before saving. It looks up a known artist and, when
+your server also handles search, runs an artist search. Saved changes apply
+immediately without a restart.
+
+Artist search uses MusicBrainz's search indexes. A mirror built without them
+can still serve lookups but not search, so turn on **Search artists on public
+MusicBrainz** to send only searches to the public service.
+
+### Running your own mirror
+
+The [musicbrainz-docker](https://github.com/metabrainz/musicbrainz-docker)
+project runs a replicated MusicBrainz server. Its published requirements are:
+
+| Setup | Disk | Memory | CPU |
+| --- | --- | --- | --- |
+| Database only (lookups; use public search) | 100 GB | 4 GB | 2 threads |
+| With search indexes | 350 GB | 16 GB | 16 threads |
+
+Point Loom at the mirror's web service, for example
+`http://musicbrainz.lan:5000/ws/2`, with a rate limit of `0`. MusicBrainz core
+data is CC0, but replication access and commercial use are governed by the
+[MetaBrainz terms](https://metabrainz.org/supporters); check them before
+offering a hosted instance to others.
+
 See the [API reference](api.md) and
 [`api/openapi/loom.yaml`](../api/openapi/loom.yaml) for request and response
 schemas for Music routes.

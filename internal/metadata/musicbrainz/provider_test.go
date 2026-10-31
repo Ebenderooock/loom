@@ -117,3 +117,66 @@ func TestArtistCatalogRejectsTruncatedBrowse(t *testing.T) {
 		t.Fatalf("truncated catalogue accepted: albums=%v, error=%v", albums, err)
 	}
 }
+
+func TestProviderConfigureRoutesSearchSeparately(t *testing.T) {
+	var lookupHits, searchHits int
+	var authHeader string
+	lookup := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		lookupHits++
+		authHeader = r.Header.Get("X-Api-Key")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"artist-1","name":"Mirror Artist"}`))
+	}))
+	defer lookup.Close()
+	search := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		searchHits++
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"artists":[{"id":"artist-1","name":"Search Artist"}],"count":1}`))
+	}))
+	defer search.Close()
+
+	p := NewProvider(nil)
+	p.Configure(
+		&Config{BaseURL: lookup.URL, AuthHeaderName: "X-Api-Key", AuthHeaderValue: "secret"},
+		&Config{BaseURL: search.URL},
+	)
+	if _, err := p.GetArtist(context.Background(), "artist-1"); err != nil {
+		t.Fatalf("GetArtist: %v", err)
+	}
+	if _, err := p.SearchArtist(context.Background(), "artist", 5); err != nil {
+		t.Fatalf("SearchArtist: %v", err)
+	}
+	if lookupHits != 1 || searchHits != 1 {
+		t.Fatalf("lookup hits = %d, search hits = %d; want 1 each", lookupHits, searchHits)
+	}
+	if authHeader != "secret" {
+		t.Fatalf("auth header = %q, want secret", authHeader)
+	}
+
+	// A nil search config sends search to the lookup endpoint.
+	p.Configure(&Config{BaseURL: lookup.URL}, nil)
+	_, _ = p.SearchArtist(context.Background(), "artist", 5)
+	if lookupHits != 2 || searchHits != 1 {
+		t.Fatalf("after reconfigure lookup hits = %d, search hits = %d", lookupHits, searchHits)
+	}
+}
+
+func TestTestEndpointReportsLookupAndSearch(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("query") != "" {
+			http.Error(w, "search not available", http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"89ad4ac3-39f7-470e-963a-56509c546377","name":"Various Artists"}`))
+	}))
+	defer server.Close()
+
+	lookupErr, searchErr := TestEndpoint(context.Background(), &Config{BaseURL: server.URL}, true)
+	if lookupErr != nil {
+		t.Fatalf("lookup error: %v", lookupErr)
+	}
+	if searchErr == nil {
+		t.Fatal("expected search error from database-only mirror")
+	}
+}

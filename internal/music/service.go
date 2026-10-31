@@ -20,6 +20,9 @@ import (
 var (
 	ErrNotFound = errors.New("music: not found")
 	ErrInvalid  = errors.New("music: invalid request")
+	// ErrAlbumTracksUnavailable means the album's track list could not be
+	// resolved, usually because the metadata provider was unavailable.
+	ErrAlbumTracksUnavailable = errors.New("music: album track list unavailable")
 )
 
 // Service defines the music business logic.
@@ -39,6 +42,10 @@ type Service interface {
 	RefreshArtistAlbums(ctx context.Context, artistID string) (int, error)
 
 	GetAlbum(ctx context.Context, id string) (*Album, error)
+	// LoadAlbumTracks is GetAlbum for callers that must match files to tracks:
+	// it returns an error wrapping ErrAlbumTracksUnavailable instead of an
+	// album with no tracks when metadata cannot be fetched.
+	LoadAlbumTracks(ctx context.Context, id string) (*Album, error)
 	ListAlbumsByArtist(ctx context.Context, artistID string) ([]*Album, error)
 	SetAlbumMonitored(ctx context.Context, id string, monitored bool) (*Album, error)
 	SelectAlbumRelease(ctx context.Context, albumID, releaseID string) (*Album, error)
@@ -407,23 +414,46 @@ func (s *service) SetArtistMonitoring(ctx context.Context, id string, status Mon
 }
 
 func (s *service) GetAlbum(ctx context.Context, id string) (*Album, error) {
-	al, err := s.repo.GetAlbum(ctx, id)
+	al, _, err := s.loadAlbum(ctx, id)
+	return al, err
+}
+
+func (s *service) LoadAlbumTracks(ctx context.Context, id string) (*Album, error) {
+	al, fetchErr, err := s.loadAlbum(ctx, id)
 	if err != nil {
 		return nil, err
 	}
+	if len(al.Tracks) > 0 {
+		return al, nil
+	}
+	if fetchErr != nil {
+		return nil, fmt.Errorf("%w for %q: %w", ErrAlbumTracksUnavailable, al.Title, fetchErr)
+	}
+	return nil, fmt.Errorf("%w for %q: no tracks found for the selected release", ErrAlbumTracksUnavailable, al.Title)
+}
+
+// loadAlbum returns the album with releases and tracks, lazily fetching them
+// from the provider. Provider failures are logged and returned separately as
+// fetchErr so read-only callers still get the stored album.
+func (s *service) loadAlbum(ctx context.Context, id string) (al *Album, fetchErr error, err error) {
+	al, err = s.repo.GetAlbum(ctx, id)
+	if err != nil {
+		return nil, nil, err
+	}
 	if al == nil {
-		return nil, ErrNotFound
+		return nil, nil, ErrNotFound
 	}
 
 	// Lazily fetch the concrete releases (editions) for this album.
 	if al.ReleasesFetchedAt == nil && al.MBID != "" && s.provider != nil {
 		if err := s.fetchReleases(ctx, al); err != nil {
 			s.logger.Warn("music: failed to fetch album releases", "album", al.ID, "error", err)
+			fetchErr = fmt.Errorf("fetch releases: %w", err)
 		}
 	}
 	releases, err := s.repo.ListReleasesByAlbum(ctx, id)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	al.Releases = releases
 
@@ -431,14 +461,15 @@ func (s *service) GetAlbum(ctx context.Context, id string) (*Album, error) {
 	if al.TracksFetchedAt == nil && al.SelectedReleaseID != "" && s.provider != nil {
 		if err := s.fetchTracks(ctx, al); err != nil {
 			s.logger.Warn("music: failed to fetch album tracks", "album", al.ID, "error", err)
+			fetchErr = fmt.Errorf("fetch tracks: %w", err)
 		}
 	}
 	tracks, err := s.repo.ListTracksByAlbum(ctx, id)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	al.Tracks = tracks
-	return al, nil
+	return al, fetchErr, nil
 }
 
 // fetchReleases pulls the album's editions from the provider, stores them, and
