@@ -65,10 +65,19 @@ type RecordingResponse struct {
 
 // SearchResponse wraps results from a MusicBrainz search endpoint.
 type SearchResponse struct {
-	Count    int               `json:"count"`
-	Offset   int               `json:"offset"`
-	Artists  []ArtistResponse  `json:"artists,omitempty"`
-	Releases []ReleaseResponse `json:"releases,omitempty"`
+	Count        int                `json:"count"`
+	Offset       int                `json:"offset"`
+	Artists      []ArtistResponse   `json:"artists,omitempty"`
+	Releases     []ReleaseResponse  `json:"releases,omitempty"`
+	ReleaseGroup []ReleaseGroupFull `json:"release-groups,omitempty"`
+}
+
+// ArtistCreditResponse represents one linked MusicBrainz artist in an
+// artist-credit entry. The join phrase is retained for presentation clients.
+type ArtistCreditResponse struct {
+	Name       string         `json:"name,omitempty"`
+	Artist     ArtistResponse `json:"artist"`
+	JoinPhrase string         `json:"joinphrase,omitempty"`
 }
 
 // AreaResponse represents a geographic area (country, city, etc.).

@@ -74,6 +74,9 @@ in `api/openapi/loom.yaml`.
 | `GET` | `/api/v1/discover/artist/{id}` | apiKey/bearer/cookie | `200 application/json` | MusicBrainz artist metadata and albums, without adding. |
 | `GET` | `/api/v1/discover/album/{id}` | apiKey/bearer/cookie | `200 application/json` | MusicBrainz album metadata and candidate editions. |
 | `GET` | `/api/v1/discover/release/{id}` | apiKey/bearer/cookie | `200 application/json` | MusicBrainz edition metadata and full tracks. |
+| `GET` | `/api/v1/albums` | apiKey/bearer/cookie | `200 application/json` (`Album[]`) | List managed and standalone albums, including their complete artist credits. |
+| `GET` | `/api/v1/albums/lookup` | apiKey/bearer/cookie | `200 application/json` (`AlbumLookupResult[]`) | Search MusicBrainz release groups using `q`; results include artist credits and whether the album has already been added. |
+| `POST` | `/api/v1/albums` | apiKey/bearer/cookie | `201 application/json` (`Album`) | Add a release group with `{mbid, libraryId, qualityProfileId, metadataProfileId?, monitored?}` without adding contributor artists. Multi-artist albums use the Various Artists folder. |
 | `PUT` | `/api/v1/albums/{id}/release` | apiKey/bearer/cookie | `200 application/json` (`Album`) | Select an edition using `{release_id}`; the edition must belong to this album, and selecting a different edition refreshes its tracks. |
 | `GET` | `/api/v1/music/audio-quality-definitions` | apiKey/bearer/cookie | `200 application/json` (`AudioQualityDefinition[]`) | List built-in audio quality tiers. |
 | `GET` | `/api/v1/music/audio-quality-profiles` | apiKey/bearer/cookie | `200 application/json` (`AudioQualityProfile[]`) | List audio quality profiles. |

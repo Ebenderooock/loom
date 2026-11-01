@@ -38,20 +38,29 @@ type ExternalLink struct {
 // AlbumMetadata represents metadata for an album. An "album" maps to a
 // MusicBrainz release-group (the abstract album), not a specific edition.
 type AlbumMetadata struct {
-	MBID           string    `json:"mbid"` // release-group MBID
-	Title          string    `json:"title"`
-	ArtistMBID     string    `json:"artist_mbid,omitempty"`
-	ArtistName     string    `json:"artist_name,omitempty"`
-	Type           string    `json:"type,omitempty"`            // Album, EP, Single, Broadcast, Other
-	SecondaryTypes []string  `json:"secondary_types,omitempty"` // Live, Compilation, Soundtrack, ...
-	ReleaseDate    string    `json:"release_date,omitempty"`    // first release date (ISO 8601)
-	Genres         []string  `json:"genres,omitempty"`
-	CoverArtURL    string    `json:"cover_art_url,omitempty"`
-	CachedAt       time.Time `json:"cached_at,omitempty"`
+	MBID           string                `json:"mbid"` // release-group MBID
+	Title          string                `json:"title"`
+	ArtistMBID     string                `json:"artist_mbid,omitempty"`
+	ArtistName     string                `json:"artist_name,omitempty"`
+	Artists        []AlbumArtistMetadata `json:"artists,omitempty"`
+	Type           string                `json:"type,omitempty"`            // Album, EP, Single, Broadcast, Other
+	SecondaryTypes []string              `json:"secondary_types,omitempty"` // Live, Compilation, Soundtrack, ...
+	ReleaseDate    string                `json:"release_date,omitempty"`    // first release date (ISO 8601)
+	Genres         []string              `json:"genres,omitempty"`
+	CoverArtURL    string                `json:"cover_art_url,omitempty"`
+	CachedAt       time.Time             `json:"cached_at,omitempty"`
 
 	Rating      float64        `json:"rating,omitempty"` // 0-5
 	RatingVotes int            `json:"rating_votes,omitempty"`
 	Links       []ExternalLink `json:"links,omitempty"`
+}
+
+// AlbumArtistMetadata preserves the full credited artist list on a release
+// group. ArtistMBID is empty when MusicBrainz has no linked artist entity.
+type AlbumArtistMetadata struct {
+	ArtistMBID string `json:"artist_mbid,omitempty"`
+	Name       string `json:"name"`
+	JoinPhrase string `json:"join_phrase,omitempty"`
 }
 
 // AlbumReleaseMetadata represents a specific edition (MusicBrainz release) of an
@@ -91,6 +100,9 @@ type MusicMetadataProvider interface {
 
 	// SearchArtist searches for artists by free-text query.
 	SearchArtist(ctx context.Context, query string, limit int) ([]*ArtistMetadata, error)
+
+	// SearchAlbum searches release-groups (not concrete release editions).
+	SearchAlbum(ctx context.Context, query string, limit int) ([]*AlbumMetadata, error)
 
 	// GetArtist fetches a single artist by MBID.
 	GetArtist(ctx context.Context, mbid string) (*ArtistMetadata, error)

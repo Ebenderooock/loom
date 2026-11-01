@@ -76,15 +76,23 @@ func (p *ImportPipeline) importMusicFile(ctx context.Context, ev *downloads.Down
 	if albumName == "" {
 		albumName = parsed.Album
 	}
-	artist, album, track, err := p.findMusicTrack(ctx, artistName, albumName, tags)
+	trackArtistName := strings.TrimSpace(tags.Artist)
+	if trackArtistName == "" {
+		trackArtistName = artistName
+	}
+	artist, album, track, err := p.findMusicTrack(ctx, artistName, trackArtistName, albumName, tags)
 	if err != nil {
 		return "", p.recordFailure(ctx, string(MediaTypeMusic), "", ev.Title, source, err)
 	}
-	if p.libStore == nil || artist.LibraryID == "" {
-		return "", p.recordFailure(ctx, string(MediaTypeMusic), album.ID, ev.Title, source,
-			fmt.Errorf("music artist %q has no configured library", artist.Name))
+	libraryID := album.LibraryID
+	if album.ArtistID != "" && artist != nil && artist.LibraryID != "" {
+		libraryID = artist.LibraryID
 	}
-	lib, err := p.libStore.Get(ctx, artist.LibraryID)
+	if p.libStore == nil || libraryID == "" {
+		return "", p.recordFailure(ctx, string(MediaTypeMusic), album.ID, ev.Title, source,
+			fmt.Errorf("music album %q has no configured library", album.Title))
+	}
+	lib, err := p.libStore.Get(ctx, libraryID)
 	if err != nil {
 		return "", p.recordFailure(ctx, string(MediaTypeMusic), album.ID, ev.Title, source,
 			fmt.Errorf("get music library: %w", err))
@@ -107,7 +115,7 @@ func (p *ImportPipeline) importMusicFile(ctx context.Context, ev *downloads.Down
 	if bitrate <= 0 {
 		bitrate = musiclib.EstimateAudioBitrate(sourceInfo.Size(), track.DurationMs)
 	}
-	oldTrackFiles, err := p.prepareMusicUpgrade(ctx, artist, track, lib.Path, destination, source, tags, bitrate)
+	oldTrackFiles, err := p.prepareMusicUpgrade(ctx, artist, album, track, lib.Path, destination, source, tags, bitrate)
 	if err != nil {
 		return "", p.recordFailure(ctx, string(MediaTypeMusic), album.ID, ev.Title, source, err)
 	}
@@ -145,9 +153,12 @@ func (p *ImportPipeline) importMusicFile(ctx context.Context, ev *downloads.Down
 		mediaInfo["bits"] = tags.Bits
 	}
 	tf := &musiclib.TrackFile{
-		ID: uuid.New().String(), TrackID: track.ID, AlbumID: album.ID, ArtistID: artist.ID,
+		ID: uuid.New().String(), TrackID: track.ID, AlbumID: album.ID,
 		FilePath: destination, Size: info.Size(), Quality: tags.Format, Format: tags.Format,
 		Bitrate: bitrate, MediaInfo: mediaInfo, FileDate: fileDate,
+	}
+	if album.ArtistID != "" && artist != nil {
+		tf.ArtistID = artist.ID
 	}
 	if err := p.musicSvc.ImportTrackFile(ctx, tf); err != nil {
 		return "", p.recordFailure(ctx, string(MediaTypeMusic), album.ID, ev.Title, destination,
@@ -161,7 +172,7 @@ func (p *ImportPipeline) importMusicFile(ctx context.Context, ev *downloads.Down
 	}
 	mediaID := track.ID
 	if err := p.libStore.UpsertFile(ctx, &libraries.LibraryFile{
-		LibraryID: artist.LibraryID, Path: destination, SizeBytes: info.Size(), MediaID: &mediaID,
+		LibraryID: libraryID, Path: destination, SizeBytes: info.Size(), MediaID: &mediaID,
 	}); err != nil {
 		return "", p.recordFailure(ctx, string(MediaTypeMusic), album.ID, ev.Title, destination,
 			fmt.Errorf("update music library index: %w", err))
@@ -183,12 +194,19 @@ func (p *ImportPipeline) importMusicFile(ctx context.Context, ev *downloads.Down
 func (p *ImportPipeline) prepareMusicUpgrade(
 	ctx context.Context,
 	artist *musiclib.Artist,
+	album *musiclib.Album,
 	track *musiclib.Track,
 	libraryRoot, destination, source string,
 	tags *musiclib.AudioTags,
 	bitrate int,
 ) ([]*musiclib.TrackFile, error) {
-	files, err := p.musicSvc.ListTrackFilesByArtist(ctx, artist.ID)
+	var files []*musiclib.TrackFile
+	var err error
+	if album.ArtistID != "" && artist != nil {
+		files, err = p.musicSvc.ListTrackFilesByArtist(ctx, artist.ID)
+	} else {
+		files, err = p.musicSvc.ListTrackFilesByAlbum(ctx, album.ID)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("list existing music track files: %w", err)
 	}
@@ -270,74 +288,175 @@ func (p *ImportPipeline) prepareMusicUpgrade(
 	return existing, nil
 }
 
-func (p *ImportPipeline) findMusicTrack(ctx context.Context, artistName, albumName string, tags *musiclib.AudioTags) (*musiclib.Artist, *musiclib.Album, *musiclib.Track, error) {
-	if artistName == "" || albumName == "" {
+func (p *ImportPipeline) findMusicTrack(ctx context.Context, albumArtistName, trackArtistName, albumName string, tags *musiclib.AudioTags) (*musiclib.Artist, *musiclib.Album, *musiclib.Track, error) {
+	if (strings.TrimSpace(albumArtistName) == "" && strings.TrimSpace(trackArtistName) == "") ||
+		strings.TrimSpace(albumName) == "" || tags == nil {
 		return nil, nil, nil, fmt.Errorf("audio tags do not identify an artist and album")
+	}
+	effectiveTags := *tags
+	if strings.TrimSpace(effectiveTags.Artist) == "" {
+		effectiveTags.Artist = trackArtistName
 	}
 	artists, err := p.musicSvc.ListArtists(ctx)
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	var artist *musiclib.Artist
+	artistsByID := make(map[string]*musiclib.Artist, len(artists))
 	for _, candidate := range artists {
-		if normalizeMusicText(candidate.Name) == normalizeMusicText(artistName) {
-			artist = candidate
-			break
-		}
+		artistsByID[candidate.ID] = candidate
 	}
-	if artist == nil {
-		return nil, nil, nil, fmt.Errorf("music artist %q is not in the library", artistName)
-	}
-	albums, err := p.musicSvc.ListAlbumsByArtist(ctx, artist.ID)
+	albums, err := p.musicSvc.ListAlbums(ctx)
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	var album *musiclib.Album
+	type albumTrackMatch struct {
+		album *musiclib.Album
+		full  *musiclib.Album
+		track *musiclib.Track
+		owner *musiclib.Artist
+	}
+	var matches []albumTrackMatch
+	var sameTitle []*musiclib.Album
+	var ambiguousTracks []string
 	for _, candidate := range albums {
-		if normalizeMusicText(candidate.Title) == normalizeMusicText(albumName) {
-			album = candidate
-			break
+		if normalizeMusicText(candidate.Title) != normalizeMusicText(albumName) {
+			continue
+		}
+		sameTitle = append(sameTitle, candidate)
+		owner := artistsByID[candidate.ArtistID]
+		identityEstablished := albumCreditMatches(candidate, owner, albumArtistName)
+		if !identityEstablished && strings.TrimSpace(albumArtistName) == "" &&
+			!musiclib.IsVariousArtistAlbum(candidate) {
+			identityEstablished = albumCreditMatches(candidate, owner, trackArtistName)
+		}
+		if !identityEstablished && !musiclib.IsVariousArtistAlbum(candidate) {
+			continue
+		}
+		loaded, loadErr := p.musicSvc.LoadAlbumTracks(ctx, candidate.ID)
+		if loadErr != nil {
+			ambiguousTracks = append(ambiguousTracks, fmt.Sprintf("%s (track metadata unavailable)", candidate.ID))
+			continue
+		}
+		candidateTrack, matchErr := matchTaggedTrack(loaded.Tracks, &effectiveTags, !identityEstablished)
+		if matchErr != nil {
+			ambiguousTracks = append(ambiguousTracks, candidate.ID)
+			continue
+		}
+		if candidateTrack != nil {
+			matches = append(matches, albumTrackMatch{
+				album: candidate, full: loaded, track: candidateTrack, owner: owner,
+			})
 		}
 	}
-	if album == nil {
-		return nil, nil, nil, fmt.Errorf("music album %q is not in the artist library", albumName)
+	if len(matches) > 1 {
+		ids := make([]string, 0, len(matches))
+		for _, match := range matches {
+			ids = append(ids, match.album.ID)
+		}
+		return nil, nil, nil, fmt.Errorf("ambiguous music album %q: matching albums %s", albumName, strings.Join(ids, ", "))
 	}
-	full, err := p.musicSvc.LoadAlbumTracks(ctx, album.ID)
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("load track list for album %q: %w", albumName, err)
+	if len(matches) == 1 && len(ambiguousTracks) > 0 {
+		return nil, nil, nil, fmt.Errorf("ambiguous music album %q: track identity could not be verified for %s", albumName, strings.Join(ambiguousTracks, ", "))
+	}
+	if len(matches) == 0 {
+		if len(ambiguousTracks) > 0 {
+			return nil, nil, nil, fmt.Errorf("ambiguous music track %q on album %q: matching track identity is unavailable or duplicated", tags.Title, albumName)
+		}
+		if len(sameTitle) > 0 {
+			return nil, nil, nil, fmt.Errorf("music album %q has no matching credited artist and track identity", albumName)
+		}
+		return nil, nil, nil, fmt.Errorf("could not match audio track %q on album %q", tags.Title, albumName)
+	}
+	match := matches[0]
+	return match.owner, match.full, match.track, nil
+}
+
+func albumCreditMatches(album *musiclib.Album, owner *musiclib.Artist, name string) bool {
+	name = normalizeMusicText(name)
+	if name == "" || name == normalizeMusicText("Various Artists") {
+		return false
+	}
+	if owner != nil && normalizeMusicText(owner.Name) == name {
+		return true
+	}
+	for _, credit := range album.Artists {
+		if normalizeMusicText(credit.Name) == name {
+			return true
+		}
+	}
+	return false
+}
+
+func matchTaggedTrack(tracks []*musiclib.Track, tags *musiclib.AudioTags, requireArtist bool) (*musiclib.Track, error) {
+	var candidates []*musiclib.Track
+	if strings.TrimSpace(tags.Title) != "" {
+		title := normalizeMusicText(tags.Title)
+		var eligible []*musiclib.Track
+		for _, candidate := range tracks {
+			if candidate == nil || !trackArtistMatches(candidate, tags.Artist, requireArtist) {
+				continue
+			}
+			eligible = append(eligible, candidate)
+			if normalizeMusicText(candidate.Title) == title {
+				candidates = append(candidates, candidate)
+			}
+		}
+		if len(candidates) == 0 {
+			if track := musiclib.MatchTrackByBaseTitle(eligible, tags.Title, normalizeMusicText); track != nil {
+				candidates = append(candidates, track)
+			}
+		}
+	} else if !requireArtist && tags.TrackNumber > 0 {
+		disc := tags.DiscNumber
+		if disc < 1 {
+			disc = 1
+		}
+		for _, candidate := range tracks {
+			if candidate == nil || candidate.TrackNumber != tags.TrackNumber {
+				continue
+			}
+			candidateDisc := candidate.DiscNumber
+			if candidateDisc < 1 {
+				candidateDisc = 1
+			}
+			if candidateDisc == disc && trackArtistMatches(candidate, tags.Artist, false) {
+				candidates = append(candidates, candidate)
+			}
+		}
+	}
+	if len(candidates) == 1 {
+		return candidates[0], nil
+	}
+	if len(candidates) == 0 {
+		return nil, nil
 	}
 	disc := tags.DiscNumber
 	if disc < 1 {
 		disc = 1
 	}
-	var track *musiclib.Track
-	if tags.TrackNumber > 0 {
-		for _, candidate := range full.Tracks {
-			candidateDisc := candidate.DiscNumber
-			if candidateDisc < 1 {
-				candidateDisc = 1
-			}
-			if candidate.TrackNumber == tags.TrackNumber && candidateDisc == disc {
-				track = candidate
-				break
-			}
+	var positioned []*musiclib.Track
+	for _, candidate := range candidates {
+		candidateDisc := candidate.DiscNumber
+		if candidateDisc < 1 {
+			candidateDisc = 1
+		}
+		if tags.TrackNumber > 0 && candidate.TrackNumber == tags.TrackNumber && candidateDisc == disc {
+			positioned = append(positioned, candidate)
 		}
 	}
-	if track == nil && tags.Title != "" {
-		for _, candidate := range full.Tracks {
-			if normalizeMusicText(candidate.Title) == normalizeMusicText(tags.Title) {
-				track = candidate
-				break
-			}
-		}
+	if len(positioned) == 1 {
+		return positioned[0], nil
 	}
-	if track == nil && tags.Title != "" {
-		track = musiclib.MatchTrackByBaseTitle(full.Tracks, tags.Title, normalizeMusicText)
+	return nil, fmt.Errorf("multiple tracks match title and artist")
+}
+
+func trackArtistMatches(track *musiclib.Track, artistName string, requireArtist bool) bool {
+	artistName = normalizeMusicText(artistName)
+	trackArtist := normalizeMusicText(track.ArtistName)
+	if requireArtist {
+		return artistName != "" && trackArtist != "" && artistName == trackArtist
 	}
-	if track == nil {
-		return nil, nil, nil, fmt.Errorf("could not match audio track %q on album %q", tags.Title, albumName)
-	}
-	return artist, full, track, nil
+	return artistName == "" || trackArtist == "" || artistName == trackArtist
 }
 
 func scanAudioFiles(ctx context.Context, dir string) ([]string, error) {

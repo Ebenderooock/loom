@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Standalone MusicBrainz album management for compilations and multi-artist
+  albums, preserving all credited artists without creating contributor artist
+  records. Albums can be browsed in the Albums view, show in a movie-style
+  detail drawer with editions, tracks, availability and monitoring actions, and
+  organize beneath `Various Artists`. Added `GET/POST /api/v1/albums` and
+  `GET /api/v1/albums/lookup`; migration 0100 makes the managed artist optional
+  and stores album library/profile and artist-credit metadata.
 - Music artwork and details: artists show a photo, background, logo,
   biography, origin, active years and MusicBrainz rating; albums show a cover,
   description and rating. Artwork comes from fanart.tv (optional API key) and

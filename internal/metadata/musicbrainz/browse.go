@@ -10,17 +10,17 @@ import (
 // ReleaseGroupFull is the full release-group representation returned by the
 // /release-group lookup and browse endpoints (richer than ReleaseGroupResponse).
 type ReleaseGroupFull struct {
-	ID               string             `json:"id"`
-	Title            string             `json:"title"`
-	PrimaryType      string             `json:"primary-type,omitempty"`
-	SecondaryTypes   []string           `json:"secondary-types,omitempty"`
-	FirstReleaseDate string             `json:"first-release-date,omitempty"`
-	Disambiguation   string             `json:"disambiguation,omitempty"`
-	Artists          []ArtistResponse   `json:"artist-credit,omitempty"`
-	Genres           []GenreResponse    `json:"genres,omitempty"`
-	Releases         []ReleaseResponse  `json:"releases,omitempty"`
-	Relations        []RelationResponse `json:"relations,omitempty"`
-	Rating           *RatingResponse    `json:"rating,omitempty"`
+	ID               string                 `json:"id"`
+	Title            string                 `json:"title"`
+	PrimaryType      string                 `json:"primary-type,omitempty"`
+	SecondaryTypes   []string               `json:"secondary-types,omitempty"`
+	FirstReleaseDate string                 `json:"first-release-date,omitempty"`
+	Disambiguation   string                 `json:"disambiguation,omitempty"`
+	Artists          []ArtistCreditResponse `json:"artist-credit,omitempty"`
+	Genres           []GenreResponse        `json:"genres,omitempty"`
+	Releases         []ReleaseResponse      `json:"releases,omitempty"`
+	Relations        []RelationResponse     `json:"relations,omitempty"`
+	Rating           *RatingResponse        `json:"rating,omitempty"`
 }
 
 type releaseBrowseResponse struct {

@@ -29,6 +29,10 @@ func (f *fakeProvider) SearchArtist(_ context.Context, _ string, _ int) ([]*meta
 	return []*metadata.ArtistMetadata{f.artist}, nil
 }
 
+func (f *fakeProvider) SearchAlbum(_ context.Context, _ string, _ int) ([]*metadata.AlbumMetadata, error) {
+	return f.albums, nil
+}
+
 func (f *fakeProvider) GetArtist(_ context.Context, mbid string) (*metadata.ArtistMetadata, error) {
 	if f.artist != nil && f.artist.MBID == mbid {
 		return f.artist, nil
@@ -123,6 +127,45 @@ func TestRefreshArtistCatalogFailurePreservesVisibility(t *testing.T) {
 	loaded, err := svc.GetArtist(ctx, artist.ID)
 	if err != nil || len(loaded.Albums) != 2 {
 		t.Fatalf("failed refresh changed catalogue: artist=%+v, error=%v", loaded, err)
+	}
+}
+
+func TestAddAlbumKeepsCreditsWithoutCreatingManagedArtists(t *testing.T) {
+	ctx := context.Background()
+	provider := &fakeProvider{
+		albums: []*metadata.AlbumMetadata{{
+			MBID: "compilation-1", Title: "A Shared Record", Type: "Album",
+			SecondaryTypes: []string{"Compilation"},
+			Artists: []metadata.AlbumArtistMetadata{
+				{ArtistMBID: "contributor-1", Name: "First Artist"},
+				{ArtistMBID: "contributor-2", Name: "Second Artist"},
+			},
+		}},
+	}
+	svc, repo := newTestService(t, provider)
+	album, err := svc.AddAlbum(ctx, AddAlbumRequest{
+		MBID: "compilation-1", QualityProfileID: "qp-1", LibraryID: "lib-1",
+	})
+	if err != nil {
+		t.Fatalf("AddAlbum: %v", err)
+	}
+	if album.ArtistID != "" {
+		t.Fatalf("standalone album has a primary managed artist: %q", album.ArtistID)
+	}
+	if len(album.Artists) != 2 || album.Artists[0].Name != "First Artist" ||
+		album.Artists[1].Name != "Second Artist" {
+		t.Fatalf("artist credits were not preserved: %+v", album.Artists)
+	}
+	if album.Artists[0].ArtistID != "" || album.Artists[1].ArtistID != "" {
+		t.Fatalf("unmanaged contributors were linked as managed artists: %+v", album.Artists)
+	}
+	artists, err := repo.ListArtists(ctx)
+	if err != nil || len(artists) != 0 {
+		t.Fatalf("adding a compilation created artists: artists=%+v error=%v", artists, err)
+	}
+	albums, err := svc.ListAlbums(ctx)
+	if err != nil || len(albums) != 1 || albums[0].LibraryID != "lib-1" {
+		t.Fatalf("standalone album missing from library listing: albums=%+v error=%v", albums, err)
 	}
 }
 
@@ -399,7 +442,7 @@ func TestPickReleaseHonorsStatusAndEarliestDate(t *testing.T) {
 
 func TestMusicProfilesCanBeManagedWithoutDeletingAssignedProfiles(t *testing.T) {
 	ctx := context.Background()
-	svc, _ := newTestService(t, sampleProvider())
+	svc, repo := newTestService(t, sampleProvider())
 	audio, err := svc.CreateAudioQualityProfile(ctx, CreateAudioQualityProfileRequest{
 		Name: "Portable", Items: []AudioProfileItem{{DefinitionID: "aq_mp3_320", Allowed: true}},
 		Cutoff: "aq_mp3_320",
@@ -413,16 +456,39 @@ func TestMusicProfilesCanBeManagedWithoutDeletingAssignedProfiles(t *testing.T) 
 	if err != nil {
 		t.Fatalf("CreateMetadataProfile: %v", err)
 	}
+	standaloneAudio, err := svc.CreateAudioQualityProfile(ctx, CreateAudioQualityProfileRequest{
+		Name: "Standalone quality", Items: []AudioProfileItem{{DefinitionID: "aq_mp3_320", Allowed: true}},
+	})
+	if err != nil {
+		t.Fatalf("CreateAudioQualityProfile for standalone album: %v", err)
+	}
+	standaloneMetadata, err := svc.CreateMetadataProfile(ctx, CreateMetadataProfileRequest{Name: "Standalone metadata"})
+	if err != nil {
+		t.Fatalf("CreateMetadataProfile for standalone album: %v", err)
+	}
 	if _, err := svc.AddArtist(ctx, AddArtistRequest{
 		MBID: "artist-1", QualityProfileID: audio.ID, MetadataProfileID: metadata.ID, LibraryID: "lib-1",
 	}); err != nil {
 		t.Fatalf("AddArtist with new profiles: %v", err)
 	}
+	if err := repo.CreateAlbum(ctx, &Album{
+		ID: "standalone-profile-assignment", MBID: "standalone-profile-assignment",
+		Title: "Standalone Compilation", Monitored: true,
+		QualityProfileID: standaloneAudio.ID, MetadataProfileID: standaloneMetadata.ID,
+	}); err != nil {
+		t.Fatalf("create standalone profile assignment: %v", err)
+	}
 	if err := svc.DeleteAudioQualityProfile(ctx, audio.ID); err == nil {
-		t.Fatal("expected assigned audio profile deletion to fail")
+		t.Fatal("expected artist/album-assigned audio profile deletion to fail")
 	}
 	if err := svc.DeleteMetadataProfile(ctx, metadata.ID); err == nil {
-		t.Fatal("expected assigned metadata profile deletion to fail")
+		t.Fatal("expected artist/album-assigned metadata profile deletion to fail")
+	}
+	if err := svc.DeleteAudioQualityProfile(ctx, standaloneAudio.ID); err == nil || !strings.Contains(err.Error(), "album") {
+		t.Fatalf("expected standalone album audio profile deletion guard, got %v", err)
+	}
+	if err := svc.DeleteMetadataProfile(ctx, standaloneMetadata.ID); err == nil || !strings.Contains(err.Error(), "album") {
+		t.Fatalf("expected standalone album metadata profile deletion guard, got %v", err)
 	}
 
 	newName := "Official albums"

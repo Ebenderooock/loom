@@ -106,6 +106,24 @@ func (p *Provider) SearchArtist(ctx context.Context, query string, limit int) ([
 	return out, nil
 }
 
+// SearchAlbum returns release-group search results with all credited artists.
+func (p *Provider) SearchAlbum(ctx context.Context, query string, limit int) ([]*metadata.AlbumMetadata, error) {
+	if limit <= 0 {
+		limit = 10
+	}
+	groups, err := p.searchClient().SearchReleaseGroup(ctx, query, 0, limit)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*metadata.AlbumMetadata, 0, len(groups))
+	for _, group := range groups {
+		if group != nil {
+			out = append(out, mapReleaseGroup(group))
+		}
+	}
+	return out, nil
+}
+
 // GetArtist implements metadata.MusicMetadataProvider.
 func (p *Provider) GetArtist(ctx context.Context, mbid string) (*metadata.ArtistMetadata, error) {
 	a, err := p.lookupClient().GetArtist(ctx, mbid)
@@ -207,7 +225,11 @@ func mapReleaseGroup(rg *ReleaseGroupFull) *metadata.AlbumMetadata {
 	if rg == nil {
 		return nil
 	}
-	artistMBID, artistName := firstArtist(rg.Artists)
+	artists := mapArtistCredits(rg.Artists)
+	artistMBID, artistName := "", ""
+	if len(artists) > 0 {
+		artistMBID, artistName = artists[0].ArtistMBID, artists[0].Name
+	}
 	rating, votes := mapRating(rg.Rating)
 	links, _ := mapURLRelations(rg.Relations)
 	return &metadata.AlbumMetadata{
@@ -218,12 +240,32 @@ func mapReleaseGroup(rg *ReleaseGroupFull) *metadata.AlbumMetadata {
 		Title:          rg.Title,
 		ArtistMBID:     artistMBID,
 		ArtistName:     artistName,
+		Artists:        artists,
 		Type:           rg.PrimaryType,
 		SecondaryTypes: rg.SecondaryTypes,
 		ReleaseDate:    rg.FirstReleaseDate,
 		Genres:         mapGenres(rg.Genres),
 		CoverArtURL:    fmt.Sprintf("%s/release-group/%s/front", coverArtArchiveBase, rg.ID),
 	}
+}
+
+func mapArtistCredits(credits []ArtistCreditResponse) []metadata.AlbumArtistMetadata {
+	artists := make([]metadata.AlbumArtistMetadata, 0, len(credits))
+	for _, credit := range credits {
+		name := credit.Name
+		if name == "" {
+			name = credit.Artist.Name
+		}
+		if credit.Artist.ID == "" && name == "" {
+			continue
+		}
+		artists = append(artists, metadata.AlbumArtistMetadata{
+			ArtistMBID: credit.Artist.ID,
+			Name:       name,
+			JoinPhrase: credit.JoinPhrase,
+		})
+	}
+	return artists
 }
 
 func mapReleaseSummary(r *ReleaseResponse) *metadata.AlbumReleaseMetadata {
