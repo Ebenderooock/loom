@@ -139,6 +139,7 @@ jobs:
           - { goos: darwin,  goarch: amd64 }
           - { goos: darwin,  goarch: arm64 }
           - { goos: windows, goarch: amd64 }
+          - { goos: windows, goarch: arm64 }
           - { goos: freebsd, goarch: amd64 }
     env:
       GOOS: ${{ matrix.goos }}
@@ -152,6 +153,27 @@ jobs:
           go-version: "1.26.10"
           cache: true
       - run: go build -trimpath -ldflags="-s -w" -o /tmp/loom ./cmd/loom
+
+  installers:
+    name: Windows service installer
+    runs-on: windows-latest
+    timeout-minutes: 15
+    env:
+      CGO_ENABLED: "0"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "1.26.10"
+          cache: true
+      - name: Test native service lifecycle and installer
+        shell: pwsh
+        run: |
+          go test ./cmd/loom
+          if ($LASTEXITCODE -ne 0) { throw 'Go tests failed' }
+          go build -o .\loom-test.exe ./cmd/loom
+          if ($LASTEXITCODE -ne 0) { throw 'Go build failed' }
+          & .\packaging\windows\smoke-test.ps1 -BinaryPath .\loom-test.exe
 
   web:
     name: Frontend

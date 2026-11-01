@@ -10,7 +10,15 @@ Radarr + Sonarr + Prowlarr. These pages cover the project as it stands today
 |---|---|
 | [Quickstart (README)](../README.md#quickstart) | Run Loom in 60 seconds with Docker. |
 | [Configuration](configuration.md) | Every config key, env var, default, and whether it hot-reloads. |
-| [Deployment](deployment.md) | Docker / Compose / Kubernetes / bare-metal / reverse proxy. |
+| [Deployment](deployment.md) | Installation chooser, backup/upgrade principles, reverse proxies. |
+| [Windows](windows.md) | PowerShell installer and Windows service operation. |
+| [Linux](linux.md) | Native binary and systemd service installation. |
+| [macOS](macos.md) | Intel/Apple Silicon binary and launchd installation. |
+| [Raspberry Pi](raspberry-pi.md) | ARM64/ARMv7 native installation and ARM64 Docker. |
+| [Docker](docker.md) | Persistent single-container and Compose deployments. |
+| [Kubernetes](kubernetes.md) | Helm installation, storage, ingress, and operation. |
+| [Flux](flux.md) | Short GitOps setup using the repository Helm chart. |
+| [Synology](synology.md) | Container Manager, manual `.spk` upload, and SynoCommunity pathway. |
 | [Observability](observability.md) | Logs, `/metrics`, OpenTelemetry, pprof. |
 | [Storage](storage.md) | SQLite vs Postgres, migrations, backups. |
 | [Security](security.md) | Threat model, secrets, vuln reporting. |

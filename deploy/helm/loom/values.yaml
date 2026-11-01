@@ -1,6 +1,24 @@
 # Default values for loom.
 
 replicaCount: 1
+# SQLite is single-writer: the chart enforces one replica and uses Recreate.
+progressDeadlineSeconds: 900
+terminationGracePeriodSeconds: 90
+
+# Rendered into a read-only kernel config; writable UI/auth state is loom.json
+# on the /config PVC. Use YAML for the DB path, not an unbound env-only key.
+config:
+  config_dir: /config
+  data_dir: /config
+  storage:
+    engine: sqlite
+    sqlite:
+      path: /config/data/loom.db
+  auth:
+    mode: forms
+  filesystem:
+    allowed_browse_roots:
+      - /media
 
 image:
   repository: ghcr.io/ebenderooock/loom
@@ -14,7 +32,7 @@ fullnameOverride: ""
 
 serviceAccount:
   create: true
-  automount: true
+  automount: false
   annotations: {}
   name: ""
 
@@ -22,14 +40,16 @@ podAnnotations: {}
 podLabels: {}
 
 podSecurityContext:
-  runAsUser: 999
-  runAsGroup: 1001
-  fsGroup: 1001
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  fsGroup: 65532
+  fsGroupChangePolicy: OnRootMismatch
 
 securityContext:
   runAsNonRoot: true
-  runAsUser: 999
-  runAsGroup: 1001
+  runAsUser: 65532
+  runAsGroup: 65532
   allowPrivilegeEscalation: false
   readOnlyRootFilesystem: true
   seccompProfile:
@@ -54,12 +74,13 @@ dnsPolicy: ""
 # Loom's builtin/torrent kind now talks to a co-located Rain sidecar over
 # internal JSON-RPC. No public UI/API exposure is required; auth stays in Loom.
 rain:
-  enabled: true
+  # Release images do not include /usr/local/bin/rain. Opt in only with a
+  # separately built image containing that executable; no runtime installation.
+  enabled: false
   image:
-    repository: docker.io/golang
-    tag: 1.24-alpine
+    repository: ""
+    tag: ""
     pullPolicy: IfNotPresent
-  installVersion: v2.3.1
   rpc:
     host: 127.0.0.1
     port: 7246
@@ -103,6 +124,17 @@ persistence:
 
   media:
     enabled: false
+    mountPath: /media
+    storageClass: ""
+    accessMode: ReadWriteOnce
+    size: 100Gi
+    existingClaim: ""
+
+  # Optional separate download PVC. Prefer downloads under media.mountPath
+  # on the SAME filesystem for hardlinks/atomic moves.
+  downloads:
+    enabled: false
+    mountPath: /downloads
     storageClass: ""
     accessMode: ReadWriteOnce
     size: 100Gi
@@ -123,15 +155,23 @@ affinity: {}
 
 # Liveness/readiness probes hit the built-in healthcheck endpoint.
 probes:
+  startup:
+    enabled: true
+    path: /healthz
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 60
   liveness:
     enabled: true
-    path: /api/v1/health
+    path: /livez
     initialDelaySeconds: 10
     periodSeconds: 30
     timeoutSeconds: 5
+    failureThreshold: 3
   readiness:
     enabled: true
-    path: /api/v1/health
+    path: /readyz
     initialDelaySeconds: 5
     periodSeconds: 10
     timeoutSeconds: 5
+    failureThreshold: 3

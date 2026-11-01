@@ -15,8 +15,9 @@ spk/loom/src/loom.png          # 256x256 package icon (SPK_ICON)
 ## Why this is feasible
 
 Loom is a single static binary built with `CGO_ENABLED=0` using the pure-Go
-`modernc.org/sqlite` driver, so it cross-compiles to every DSM architecture with
-no C toolchain — the same model as the pure-Go `syncthing` package. The React web
+`modernc.org/sqlite` driver, so supported Go/SQLite targets need no C toolchain
+— the same model as the pure-Go `syncthing` package. Not every DSM architecture
+is supported; validate the target rather than assuming universal support. The React web
 UI is compiled into the binary via the `embed` build tag.
 
 ## How the source is consumed
@@ -38,13 +39,28 @@ toolchain**. `cross/loom/Makefile` points `PKG_DIST_SITE` at this asset.
 
 ## Building locally
 
+Use the official [spksrc build environment](https://github.com/SynoCommunity/spksrc#setup-development-environment)
+on a Linux amd64 host, or its Linux amd64 Docker environment on macOS
+(Apple Silicon requires emulation). Windows is not supported by that development
+environment. Building on the NAS itself is not the intended path.
+
+Choose a Loom release with a curated source asset. Update `PKG_VERS` in
+`cross/loom/Makefile` and `SPK_VERS` in `spk/loom/Makefile` to that same version
+before generating digests; increment `SPK_REV` for packaging-only changes.
+The checked-in recipe and digests currently target `0.1.1`.
+
 ```sh
 git clone https://github.com/SynoCommunity/spksrc
 cd spksrc
 cp -r /path/to/loom/packaging/synology/cross/loom cross/loom
 cp -r /path/to/loom/packaging/synology/spk/loom    spk/loom
 
-# Generate the source digest (after the release asset exists):
+# Enter the official spksrc environment; on macOS also add
+# -e TAR_CMD="fakeroot tar" as described in the upstream setup guide.
+docker run --rm -it --platform=linux/amd64 \
+  -v "$PWD:/spksrc" -w /spksrc ghcr.io/synocommunity/spksrc /bin/bash
+
+# Inside the container, generate digests after the release asset exists:
 make -C cross/loom digests
 cat cross/loom/digests   # commit this in the spksrc PR
 
@@ -52,17 +68,23 @@ cat cross/loom/digests   # commit this in the spksrc PR
 make -C spk/loom arch-x64-7.1
 make -C spk/loom arch-aarch64-7.1
 
-# Or build everything spksrc supports:
+# For contributor matrix validation (not a promise of support):
 make -C spk/loom all-supported
 ```
 
-The resulting `.spk` files land in `spk/loom/packages/`. Install them on DSM via
-**Package Center → Manual Install**.
+The resulting `.spk` files land in the spksrc checkout's `packages/` directory.
+Match the package's architecture and DSM version to the NAS, then install via
+**Package Center → Manual Install**. Retain the build's spksrc commit, build image
+digest, Loom source digest, and target for reproducibility. These packages are
+locally built, not signed or published by SynoCommunity.
 
 ## DSM runtime notes
 
 - **State directory:** all config + the sqlite DB live under `${SYNOPKG_PKGVAR}`
-  (`LOOM_CONFIG_DIR` and `LOOM_DATA_DIR`). DSM preserves this across upgrades.
+  (`LOOM_CONFIG_DIR` and `LOOM_DATA_DIR`; the default database path is
+  `${SYNOPKG_PKGVAR}/data/loom.db`). A custom `storage.sqlite.path` in `loom.yaml`
+  remains honored. DSM preserves state across upgrades; back it up separately
+  before uninstalling.
 - **Port:** Loom serves HTTP on `SERVICE_PORT` (default `1925`). Put it behind the
   DSM reverse proxy (Control Panel → Login Portal → Advanced → Reverse Proxy) for
   TLS — Loom does not terminate TLS itself.

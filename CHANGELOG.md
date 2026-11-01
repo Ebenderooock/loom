@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Native service installer scripts for Windows, Linux/systemd, and macOS/launchd,
+  bundled into platform release archives, with Windows amd64/arm64 release builds.
+- Installation pathways for Raspberry Pi, Docker/Compose, Kubernetes/Helm,
+  Flux GitOps, and Synology Container Manager or native `.spk` manual upload,
+  with persistent storage, permissions, upgrade, and backup guidance.
+
 - Music capability management: select an album's MusicBrainz edition, manage
   audio quality and metadata profiles, and search for missing tracks in
   partially available albums. Completed music downloads now import into the
