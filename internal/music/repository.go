@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"sort"
 	"strconv"
 	"time"
 
@@ -40,12 +41,19 @@ type Repository interface {
 	ListTracksByAlbum(ctx context.Context, albumID string) ([]*Track, error)
 	ReplaceTracks(ctx context.Context, albumID string, tracks []*Track) error
 	MarkTrackHasFile(ctx context.Context, trackID string, hasFile bool) error
+	GetTrack(ctx context.Context, id string) (*Track, error)
+	SetTrackMonitored(ctx context.Context, id string, monitored bool) error
+	SetAlbumTracksMonitored(ctx context.Context, albumID string, monitored bool) error
 
 	// Track files (physical audio files linked to a track)
 	CreateTrackFile(ctx context.Context, tf *TrackFile) error
 	GetTrackFileByPath(ctx context.Context, path string) (*TrackFile, error)
 	ListTrackFilesByArtist(ctx context.Context, artistID string) ([]*TrackFile, error)
+	ListArtistFiles(ctx context.Context, artistID string) ([]*ArtistFile, error)
 	DeleteTrackFile(ctx context.Context, id string) error
+
+	// History (grabs and imports for an artist's albums)
+	ListArtistHistory(ctx context.Context, artistID string, limit int) ([]*ArtistHistoryEntry, error)
 
 	// Profiles / quality definitions (read-only in M1)
 	ListAudioQualityDefinitions(ctx context.Context) ([]*AudioQualityDefinition, error)
@@ -700,6 +708,123 @@ func (r *sqlRepo) MarkTrackHasFile(ctx context.Context, trackID string, hasFile 
 		hasFile, time.Now().UTC(), trackID,
 	)
 	return err
+}
+
+// GetTrack returns a single track, or nil when it does not exist.
+func (r *sqlRepo) GetTrack(ctx context.Context, id string) (*Track, error) {
+	t, err := scanTrack(r.db.QueryRowContext(ctx,
+		`SELECT `+trackColumns+` FROM tracks WHERE id = ?`, id))
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	return t, err
+}
+
+// SetTrackMonitored updates one track's monitored flag.
+func (r *sqlRepo) SetTrackMonitored(ctx context.Context, id string, monitored bool) error {
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE tracks SET monitored = ?, updated_at = ? WHERE id = ?`,
+		monitored, time.Now().UTC(), id)
+	return err
+}
+
+// SetAlbumTracksMonitored sets the monitored flag on every track of an album.
+func (r *sqlRepo) SetAlbumTracksMonitored(ctx context.Context, albumID string, monitored bool) error {
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE tracks SET monitored = ?, updated_at = ? WHERE album_id = ?`,
+		monitored, time.Now().UTC(), albumID)
+	return err
+}
+
+// ListArtistFiles lists an artist's live track files with album and track context.
+func (r *sqlRepo) ListArtistFiles(ctx context.Context, artistID string) ([]*ArtistFile, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT tf.id, tf.track_id, tf.album_id, tf.artist_id, tf.file_path, tf.size, tf.quality,
+		        tf.format, tf.bitrate, tf.media_info, tf.file_date, tf.date_added, tf.created_at, tf.updated_at,
+		        COALESCE(al.title, ''), COALESCE(t.title, ''), COALESCE(t.track_number, 0), COALESCE(t.disc_number, 0)
+		 FROM track_files tf
+		 LEFT JOIN tracks t ON t.id = tf.track_id
+		 LEFT JOIN albums al ON al.id = tf.album_id
+		 WHERE tf.artist_id = ? AND tf.deleted_at IS NULL
+		 ORDER BY al.title, t.disc_number, t.track_number, tf.file_path`, artistID)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	var files []*ArtistFile
+	for rows.Next() {
+		var f ArtistFile
+		var trackID, albumID, fileArtistID, fileDate sql.NullString
+		var dateAdded, createdAt, updatedAt string
+		if err := rows.Scan(
+			&f.ID, &trackID, &albumID, &fileArtistID, &f.FilePath, &f.Size,
+			&f.Quality, &f.Format, &f.Bitrate, &f.MediaInfo, &fileDate,
+			&dateAdded, &createdAt, &updatedAt,
+			&f.AlbumTitle, &f.TrackTitle, &f.TrackNumber, &f.DiscNumber,
+		); err != nil {
+			return nil, err
+		}
+		f.TrackID = trackID.String
+		f.AlbumID = albumID.String
+		f.ArtistID = fileArtistID.String
+		f.FileDate = parseNullTime(fileDate)
+		f.DateAdded = parseTime(dateAdded)
+		f.CreatedAt = parseTime(createdAt)
+		f.UpdatedAt = parseTime(updatedAt)
+		files = append(files, &f)
+	}
+	return files, rows.Err()
+}
+
+// ListArtistHistory merges download grabs and imports recorded against any of
+// the artist's albums, newest first. Each source is queried separately so the
+// differing date column types never need a cross-engine UNION.
+func (r *sqlRepo) ListArtistHistory(ctx context.Context, artistID string, limit int) ([]*ArtistHistoryEntry, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	var entries []*ArtistHistoryEntry
+	collect := func(query, kind string) error {
+		rows, err := r.db.QueryContext(ctx, query, artistID, limit)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = rows.Close() }()
+		for rows.Next() {
+			e := &ArtistHistoryEntry{Type: kind}
+			var date sql.NullString
+			if err := rows.Scan(&e.ID, &e.Status, &e.AlbumID, &e.AlbumTitle, &e.Title,
+				&e.Reason, &e.SourcePath, &e.DestPath, &date); err != nil {
+				return err
+			}
+			e.Date = parseTime(date.String)
+			entries = append(entries, e)
+		}
+		return rows.Err()
+	}
+	if err := collect(
+		`SELECT dh.id, dh.status, dh.media_id, al.title, COALESCE(dh.title, ''), COALESCE(dh.reason, ''), '', '', dh.completed_at
+		 FROM download_history dh
+		 JOIN albums al ON al.id = dh.media_id
+		 JOIN album_artists aa ON aa.album_id = al.id
+		 WHERE dh.media_type = 'music' AND aa.artist_id = ?
+		 ORDER BY dh.completed_at DESC LIMIT ?`, "grab"); err != nil {
+		return nil, err
+	}
+	if err := collect(
+		`SELECT ih.id, ih.status, ih.media_id, al.title, '', COALESCE(ih.error, ''), COALESCE(ih.source_path, ''), COALESCE(ih.dest_path, ''), ih.imported_at
+		 FROM import_history ih
+		 JOIN albums al ON al.id = ih.media_id
+		 JOIN album_artists aa ON aa.album_id = al.id
+		 WHERE ih.media_type = 'music' AND aa.artist_id = ?
+		 ORDER BY ih.imported_at DESC LIMIT ?`, "import"); err != nil {
+		return nil, err
+	}
+	sort.SliceStable(entries, func(i, j int) bool { return entries[i].Date.After(entries[j].Date) })
+	if len(entries) > limit {
+		entries = entries[:limit]
+	}
+	return entries, nil
 }
 
 // --- track files ---

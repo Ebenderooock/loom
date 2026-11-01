@@ -18,6 +18,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   YouTube Music and other services listed on MusicBrainz. A new **Refresh
   Metadata** action updates one artist. See
   [`docs/music.md`](docs/music.md#artwork-and-details).
+- Music artist detail drawer with artist, album and per-track monitoring,
+  metadata refresh and folder rescan actions, automatic and interactive album
+  search, expandable track availability, an edit dialog for monitoring and
+  profiles, and Files and History sections. New endpoints:
+  `GET /api/v1/artists/{id}/files`, `GET /api/v1/artists/{id}/history` and
+  `PUT /api/v1/albums/{id}/tracks/{trackId}/monitoring`.
 
 - Music metadata source setting: admins can keep the public MusicBrainz API or
   point Loom at a self-hosted mirror or hosted MusicBrainz-compatible service,
@@ -123,6 +129,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Monitoring a music album now also monitors its tracks. Previously, tracks
+  stayed unmonitored when an album was monitored later, so searches skipped
+  them.
 - Music imports no longer fail with `could not match audio track` when
   MusicBrainz is temporarily unavailable: the import reports that the album's
   track list could not be loaded and the next attempt fetches it again. The

@@ -1313,6 +1313,38 @@ paths:
         "404": { description: Album not found. }
         "500": { description: Album update failed. }
 
+  /api/v1/albums/{id}/tracks/{trackId}/monitoring:
+    put:
+      tags: [music]
+      operationId: setMusicTrackMonitored
+      summary: Monitor or unmonitor one track.
+      description: |
+        Monitoring a track also monitors its album so album searches include
+        it. Unmonitoring a track leaves the album unchanged. Album monitoring
+        changes cascade to every track on the album.
+      security: [{ cookieAuth: [] }, { apiKey: [] }, { bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: trackId, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [monitored]
+              properties:
+                monitored: { type: boolean }
+      responses:
+        "200":
+          description: Updated track.
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        "400": { description: Invalid request body. }
+        "401": { description: Authentication required. }
+        "404": { description: Track not found on this album. }
+
   /api/v1/music/audio-quality-definitions:
     get:
       tags: [music]
@@ -1569,6 +1601,48 @@ paths:
         "401": { description: Authentication required. }
         "404": { description: Artist not found. }
         "502": { description: MusicBrainz could not be reached. }
+
+  /api/v1/artists/{id}/files:
+    get:
+      tags: [music]
+      operationId: listMusicArtistFiles
+      summary: List an artist's imported audio files.
+      security: [{ cookieAuth: [] }, { apiKey: [] }, { bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Track files with their album and track titles.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/MusicArtistFile" }
+        "401": { description: Authentication required. }
+        "404": { description: Artist not found. }
+
+  /api/v1/artists/{id}/history:
+    get:
+      tags: [music]
+      operationId: listMusicArtistHistory
+      summary: List grabs and imports for an artist's albums.
+      security: [{ cookieAuth: [] }, { apiKey: [] }, { bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 500, default: 100 }
+      responses:
+        "200":
+          description: History entries, newest first.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/MusicArtistHistoryEntry" }
+        "400": { description: Invalid limit. }
+        "401": { description: Authentication required. }
+        "404": { description: Artist not found. }
 
   /api/v1/music/artwork-settings:
     get:
@@ -3683,6 +3757,39 @@ components:
           type: array
           items: { type: object, additionalProperties: true }
       additionalProperties: true
+    MusicArtistFile:
+      type: object
+      required: [id, file_path, size, date_added]
+      properties:
+        id: { type: string }
+        track_id: { type: string }
+        album_id: { type: string }
+        artist_id: { type: string }
+        file_path: { type: string }
+        size: { type: integer, format: int64 }
+        quality: { type: string }
+        format: { type: string }
+        bitrate: { type: integer }
+        date_added: { type: string, format: date-time }
+        album_title: { type: string }
+        track_title: { type: string }
+        track_number: { type: integer }
+        disc_number: { type: integer }
+      additionalProperties: true
+    MusicArtistHistoryEntry:
+      type: object
+      required: [id, type, status, date]
+      properties:
+        id: { type: string }
+        type: { type: string, enum: [grab, import] }
+        status: { type: string }
+        album_id: { type: string }
+        album_title: { type: string }
+        title: { type: string, description: Release title for grabs. }
+        reason: { type: string, description: Failure or progress detail. }
+        source_path: { type: string }
+        dest_path: { type: string }
+        date: { type: string, format: date-time }
     AudioQualityDefinition:
       type: object
       required: [id, name, vbr, lossless, tier_order]

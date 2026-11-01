@@ -1,16 +1,9 @@
 import { useMemo, useState } from "react";
-import { Link } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
 import {
   Plus,
   Search,
@@ -18,19 +11,13 @@ import {
   Disc3,
   RefreshCw,
   FolderSync,
-  Edit,
-  Trash2,
 } from "lucide-react";
 import { useSetPageHeader } from "@/hooks/use-page-header";
 import { apiFetch } from "@/lib/fetch";
 import { useArtists, type Artist } from "@/lib/music-api";
 import { AddArtistDialog } from "@/components/music/add-artist-dialog";
-import { ArtistMetadata } from "@/components/titles/title-metadata";
-import {
-  ArtistFacts,
-  MusicArtwork,
-  MusicExternalLinks,
-} from "@/components/music/artist-details";
+import { MusicArtwork } from "@/components/music/artist-details";
+import { ArtistDetailSheet } from "@/components/music/artist-detail-sheet";
 import { useLibraries } from "@/lib/libraries-api";
 import { toast } from "sonner";
 
@@ -84,141 +71,6 @@ function ArtistCard({
         )}
       </div>
     </button>
-  );
-}
-
-function ArtistDetailSheet({
-  artist,
-  open,
-  onOpenChange,
-  onDelete,
-}: {
-  artist: Artist | null;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  onDelete: (id: string) => void;
-}) {
-  const stats = artist?.stats;
-
-  return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="overflow-y-auto">
-        {artist && (
-          <div className="space-y-6">
-            <div className="relative -mx-6 -mt-6 overflow-hidden">
-              {artist.background_url ? (
-                <MusicArtwork
-                  src={artist.background_url}
-                  alt=""
-                  className="aspect-video w-full"
-                  fallback={<div className="aspect-video w-full bg-muted" />}
-                />
-              ) : (
-                <div className="h-32 w-full bg-gradient-to-br from-muted to-muted-foreground/20" />
-              )}
-              <div className="absolute inset-0 bg-gradient-to-t from-background via-background/40 to-transparent" />
-              <div className="absolute bottom-0 left-6 right-6 flex items-end gap-4">
-                <MusicArtwork
-                  src={artist.image_url}
-                  alt={artist.name}
-                  loading="eager"
-                  className="h-24 w-24 shrink-0 rounded-lg border border-border shadow-md"
-                  fallback={
-                    <div className="flex h-full w-full items-center justify-center">
-                      <Music className="h-8 w-8 text-muted-foreground" />
-                    </div>
-                  }
-                />
-                <SheetHeader className="min-w-0 pb-1 text-left">
-                  {artist.logo_url ? (
-                    <SheetTitle>
-                      <img
-                        src={artist.logo_url}
-                        alt={artist.name}
-                        className="max-h-14 max-w-full object-contain"
-                      />
-                    </SheetTitle>
-                  ) : (
-                    <SheetTitle className="truncate">{artist.name}</SheetTitle>
-                  )}
-                </SheetHeader>
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              <ArtistFacts artist={artist} />
-              {/* Info section */}
-              <div className="space-y-3">
-                <div>
-                  <h4 className="text-xs font-semibold text-muted-foreground">
-                    MONITORING
-                  </h4>
-                  <p className="mt-1 text-sm capitalize">
-                    {artist.monitoring_status}
-                  </p>
-                </div>
-
-                {stats && (
-                  <>
-                    <div>
-                      <h4 className="text-xs font-semibold text-muted-foreground">
-                        ALBUMS
-                      </h4>
-                      <p className="mt-1 text-sm">{stats.albumCount}</p>
-                    </div>
-                    <div>
-                      <h4 className="text-xs font-semibold text-muted-foreground">
-                        TRACKS
-                      </h4>
-                      <p className="mt-1 text-sm">{stats.trackCount}</p>
-                    </div>
-                    {stats.missingTrackCount > 0 && (
-                      <div>
-                        <h4 className="text-xs font-semibold text-muted-foreground">
-                          MISSING
-                        </h4>
-                        <p className="mt-1 text-sm text-destructive">
-                          {stats.missingTrackCount} track
-                          {stats.missingTrackCount === 1 ? "" : "s"}
-                        </p>
-                      </div>
-                    )}
-                  </>
-                )}
-
-                <ArtistMetadata artist={artist} />
-                <MusicExternalLinks links={artist.links} />
-              </div>
-
-              {/* Actions */}
-              <div className="space-y-2 border-t pt-4">
-                <Link
-                  to="/music/$artistId"
-                  params={{ artistId: artist.id }}
-                  className="block"
-                >
-                  <Button variant="outline" className="w-full">
-                    <Edit className="mr-2 h-4 w-4" />
-                    View Details
-                  </Button>
-                </Link>
-                <Button
-                  variant="destructive"
-                  className="w-full"
-                  onClick={() => {
-                    onDelete(artist.id);
-                    onOpenChange(false);
-                  }}
-                >
-                  <Trash2 className="mr-2 h-4 w-4" />
-                  Delete Artist
-                </Button>
-              </div>
-            </div>
-          </div>
-        )}
-      </SheetContent>
-    </Sheet>
   );
 }
 

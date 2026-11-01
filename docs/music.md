@@ -23,6 +23,25 @@ searches or the calendar. Their album, track and file records are retained;
 refreshing does not delete audio files. A failed metadata fetch leaves the
 existing catalogue unchanged.
 
+Select an artist card to open its detail drawer. The drawer includes artist
+monitoring, metadata refresh and folder rescan actions, and an **Edit** dialog
+for monitoring, the quality profile and the metadata profile. Changing the
+metadata profile refreshes the artist so the catalogue matches.
+
+Albums are grouped by type. For each album you can toggle monitoring, start an
+automatic search, open an interactive search to pick a release yourself, and
+expand it to see each track's file availability. Each track has its own
+monitor toggle:
+
+- Monitoring or unmonitoring an album applies to all its tracks.
+- Monitoring a single track also monitors its album, so searches include it.
+- Searches only look for monitored tracks that are missing a file.
+
+The **Files** section lists imported audio files with their album, track,
+quality and size. The **History** section lists grabs and imports for the
+artist's albums. Both load when opened. Searching for a single track is not
+supported because releases are grabbed per album.
+
 ## Artwork and details
 
 Artists show a photo, background, logo and biography. Albums show their cover

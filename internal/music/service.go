@@ -48,12 +48,17 @@ type Service interface {
 	LoadAlbumTracks(ctx context.Context, id string) (*Album, error)
 	ListAlbumsByArtist(ctx context.Context, artistID string) ([]*Album, error)
 	SetAlbumMonitored(ctx context.Context, id string, monitored bool) (*Album, error)
+	// SetTrackMonitored toggles one track. Monitoring a track also monitors
+	// its album so the album-level searcher will consider it.
+	SetTrackMonitored(ctx context.Context, albumID, trackID string, monitored bool) (*Track, error)
 	SelectAlbumRelease(ctx context.Context, albumID, releaseID string) (*Album, error)
 
 	// ImportTrackFile links a physical audio file to a track and marks the
 	// track as present. Used by the music scanner/import pipeline.
 	ImportTrackFile(ctx context.Context, tf *TrackFile) error
 	ListTrackFilesByArtist(ctx context.Context, artistID string) ([]*TrackFile, error)
+	ListArtistFiles(ctx context.Context, artistID string) ([]*ArtistFile, error)
+	ListArtistHistory(ctx context.Context, artistID string, limit int) ([]*ArtistHistoryEntry, error)
 	DeleteTrackFile(ctx context.Context, id string) error
 	PruneMissingTrackFiles(ctx context.Context, artistID, root string) (int, error)
 
@@ -732,7 +737,42 @@ func (s *service) SetAlbumMonitored(ctx context.Context, id string, monitored bo
 	if err := s.repo.UpdateAlbum(ctx, al); err != nil {
 		return nil, err
 	}
+	// Tracks inherit their monitored flag when fetched, so an album toggled
+	// after its tracks were loaded must cascade or search would ignore them.
+	if err := s.repo.SetAlbumTracksMonitored(ctx, id, monitored); err != nil {
+		return nil, err
+	}
 	return s.GetAlbum(ctx, id)
+}
+
+func (s *service) SetTrackMonitored(ctx context.Context, albumID, trackID string, monitored bool) (*Track, error) {
+	t, err := s.repo.GetTrack(ctx, trackID)
+	if err != nil {
+		return nil, err
+	}
+	if t == nil || t.AlbumID != albumID {
+		return nil, ErrNotFound
+	}
+	if monitored {
+		al, err := s.repo.GetAlbum(ctx, albumID)
+		if err != nil {
+			return nil, err
+		}
+		if al == nil {
+			return nil, ErrNotFound
+		}
+		if !al.Monitored {
+			al.Monitored = true
+			if err := s.repo.UpdateAlbum(ctx, al); err != nil {
+				return nil, err
+			}
+		}
+	}
+	if err := s.repo.SetTrackMonitored(ctx, trackID, monitored); err != nil {
+		return nil, err
+	}
+	t.Monitored = monitored
+	return t, nil
 }
 
 func (s *service) SelectAlbumRelease(ctx context.Context, albumID, releaseID string) (*Album, error) {
@@ -797,6 +837,31 @@ func (s *service) ImportTrackFile(ctx context.Context, tf *TrackFile) error {
 
 func (s *service) ListTrackFilesByArtist(ctx context.Context, artistID string) ([]*TrackFile, error) {
 	return s.repo.ListTrackFilesByArtist(ctx, artistID)
+}
+
+func (s *service) ListArtistFiles(ctx context.Context, artistID string) ([]*ArtistFile, error) {
+	if err := s.requireArtist(ctx, artistID); err != nil {
+		return nil, err
+	}
+	return s.repo.ListArtistFiles(ctx, artistID)
+}
+
+func (s *service) ListArtistHistory(ctx context.Context, artistID string, limit int) ([]*ArtistHistoryEntry, error) {
+	if err := s.requireArtist(ctx, artistID); err != nil {
+		return nil, err
+	}
+	return s.repo.ListArtistHistory(ctx, artistID, limit)
+}
+
+func (s *service) requireArtist(ctx context.Context, id string) error {
+	a, err := s.repo.GetArtist(ctx, id)
+	if err != nil {
+		return err
+	}
+	if a == nil {
+		return ErrNotFound
+	}
+	return nil
 }
 
 func (s *service) DeleteTrackFile(ctx context.Context, id string) error {

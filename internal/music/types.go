@@ -135,6 +135,29 @@ type TrackFile struct {
 	UpdatedAt time.Time    `json:"updated_at"`
 }
 
+// ArtistFile is a track file enriched with the album and track it belongs to.
+type ArtistFile struct {
+	TrackFile
+	AlbumTitle  string `json:"album_title,omitempty"`
+	TrackTitle  string `json:"track_title,omitempty"`
+	TrackNumber int    `json:"track_number,omitempty"`
+	DiscNumber  int    `json:"disc_number,omitempty"`
+}
+
+// ArtistHistoryEntry is a grab or import event for one of an artist's albums.
+type ArtistHistoryEntry struct {
+	ID         string    `json:"id"`
+	Type       string    `json:"type"` // "grab" or "import"
+	Status     string    `json:"status"`
+	AlbumID    string    `json:"album_id,omitempty"`
+	AlbumTitle string    `json:"album_title,omitempty"`
+	Title      string    `json:"title,omitempty"`
+	Reason     string    `json:"reason,omitempty"`
+	SourcePath string    `json:"source_path,omitempty"`
+	DestPath   string    `json:"dest_path,omitempty"`
+	Date       time.Time `json:"date"`
+}
+
 // AudioQualityDefinition is an objective audio quality tier (format/bitrate).
 type AudioQualityDefinition struct {
 	ID        string `json:"id"`
