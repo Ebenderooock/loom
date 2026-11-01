@@ -176,7 +176,7 @@ func (s *Store) fileGroups(ctx context.Context, r Request, now time.Time) (map[s
 	case MediaSeries:
 		q = `SELECT e.id,COALESCE(f.file_path,'') FROM episodes e
 			JOIN seasons sn ON sn.id=e.season_id LEFT JOIN episode_files f ON f.episode_id=e.id
-			WHERE e.series_id=? AND e.monitored=true AND sn.monitored=true AND (
+			WHERE e.series_id=? AND e.monitored=true AND sn.monitored=true AND sn.season_number<>0 AND (
 				(e.air_date_utc<>'' AND e.air_date_utc<=?) OR
 				(e.air_date_utc='' AND (e.air_date IS NULL OR e.air_date='' OR e.air_date<=?)))`
 		args = append(args, now.Format(time.RFC3339), now.Format(time.DateOnly))

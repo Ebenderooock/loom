@@ -43,8 +43,7 @@ func seriesToSonarr(s *series.Series, ids *idCache, libs []libraries.Library) so
 	}
 
 	// Map monitoring status → Sonarr "monitored" bool.
-	monitored := s.MonitoringStatus != series.MonitoringNone &&
-		s.MonitoringStatus != series.MonitoringUnmonitored
+	monitored := s.MonitoringStatus.IsMonitored()
 
 	// Map seasons.
 	seasons := make([]sonarrSeason, 0, len(s.Seasons))
@@ -72,10 +71,19 @@ func seriesToSonarr(s *series.Series, ids *idCache, libs []libraries.Library) so
 
 	// Statistics.
 	stats := sonarrStatistics{SeasonCount: len(s.Seasons)}
+	specialSeasons := make(map[string]bool)
+	for _, sn := range s.Seasons {
+		if series.IsSpecialEpisode(sn.SeasonNumber) {
+			specialSeasons[sn.ID] = true
+		}
+	}
 	if s.Episodes != nil {
-		stats.TotalEpisodeCount = len(s.Episodes)
-		stats.EpisodeCount = len(s.Episodes)
 		for _, ep := range s.Episodes {
+			if specialSeasons[ep.SeasonID] {
+				continue
+			}
+			stats.TotalEpisodeCount++
+			stats.EpisodeCount++
 			if ep.HasFile {
 				stats.EpisodeFileCount++
 			}

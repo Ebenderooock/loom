@@ -7,7 +7,7 @@ import {
   MissingQualityProfileBadge,
 } from "@/components/quality-profile-warning";
 import type { Series, QualityProfile } from "./types";
-import { TMDB_IMG } from "./types";
+import { isSeriesMonitored, TMDB_IMG } from "./types";
 
 export function SeriesListRow({
   series,
@@ -73,10 +73,18 @@ export function SeriesListRow({
         )}
       </TableCell>
       <TableCell>
-        {series.monitoringStatus === "monitored" ? (
-          <Eye className="h-4 w-4 text-accent" />
+        {isSeriesMonitored(series.monitoringStatus) ? (
+          <Eye
+            role="img"
+            aria-label="Monitored"
+            className="h-4 w-4 text-accent"
+          />
         ) : (
-          <EyeOff className="h-4 w-4 text-muted-foreground/50" />
+          <EyeOff
+            role="img"
+            aria-label="Unmonitored"
+            className="h-4 w-4 text-muted-foreground/50"
+          />
         )}
       </TableCell>
       <TableCell>
