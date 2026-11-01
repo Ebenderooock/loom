@@ -16,6 +16,24 @@ spec:
       storage: {{ .Values.persistence.config.size }}
 {{- end }}
 ---
+{{- if and .Values.persistence.downloads.enabled (not .Values.persistence.downloads.existingClaim) }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "loom.fullname" . }}-downloads
+  labels:
+    {{- include "loom.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - {{ .Values.persistence.downloads.accessMode }}
+  {{- if .Values.persistence.downloads.storageClass }}
+  storageClassName: {{ .Values.persistence.downloads.storageClass | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.downloads.size }}
+{{- end }}
+---
 {{- if and .Values.persistence.media.enabled (not .Values.persistence.media.existingClaim) }}
 apiVersion: v1
 kind: PersistentVolumeClaim

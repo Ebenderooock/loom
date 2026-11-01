@@ -1,0 +1,29 @@
+# Managed by Loom native installer
+[Unit]
+Description=Loom media automation
+Wants=network-online.target
+After=network-online.target
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=loom
+Group=loom
+WorkingDirectory=/var/lib/loom
+Environment=HOME=/var/lib/loom
+ExecStart=/usr/local/lib/loom/loom serve --config /etc/loom/loom.yaml
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=120
+KillSignal=SIGTERM
+UMask=0027
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=loom
+
+[Install]
+WantedBy=multi-user.target

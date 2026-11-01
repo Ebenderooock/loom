@@ -1,7 +1,7 @@
 # Loom service definition for SynoCommunity / spksrc.
 #
-# Loom is a single static binary. All mutable state (loom.json config, the
-# sqlite database under data/loom.db, caches and logs) lives under one writable
+# Loom is a single static binary. All mutable state (loom.yaml config, the
+# sqlite database, caches and logs) lives under one writable
 # directory. ${SYNOPKG_PKGVAR} is preserved across package upgrades by DSM, so
 # pointing both LOOM_CONFIG_DIR and LOOM_DATA_DIR at it gives upgrade-safe,
 # self-contained persistence.
@@ -20,7 +20,5 @@ SVC_WRITE_PID=y
 
 service_prestart ()
 {
-    # Loom opens ${LOOM_CONFIG_DIR}/data/loom.db on boot; make sure the
-    # directory exists and is owned by the package service user.
-    mkdir -p "${SYNOPKG_PKGVAR}/data"
+    mkdir -p "${SYNOPKG_PKGVAR}/data" || return 1
 }

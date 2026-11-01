@@ -1,0 +1,58 @@
+# Standalone deployment; see ../../docs/docker.md for directory preparation.
+# Requires Docker Compose >= 2.23.1 (inline config content).
+services:
+  loom:
+    image: ghcr.io/ebenderooock/loom:${LOOM_IMAGE_TAG:?Set LOOM_IMAGE_TAG to a published release version without v}
+    restart: unless-stopped
+    user: "65532:65532"
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    stop_grace_period: 90s
+    ports:
+      - "${LOOM_BIND_ADDRESS:-127.0.0.1}:1925:1925"
+    environment:
+      LOOM_CONFIG_DIR: /config
+      LOOM_DATA_DIR: /config
+      LOOM_HTTP_ADDR: ":1925"
+      LOOM_LOG_LEVEL: info
+    command: ["serve", "--config", "/etc/loom/loom.yaml"]
+    configs:
+      - source: loom
+        target: /etc/loom/loom.yaml
+    volumes:
+      - type: bind
+        source: ${LOOM_CONFIG_PATH:?Set LOOM_CONFIG_PATH to an absolute local state directory}
+        target: /config
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${LOOM_MEDIA_PATH:?Set LOOM_MEDIA_PATH to an absolute shared media directory}
+        target: /media
+        bind:
+          create_host_path: false
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=256m,mode=1777
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/loom", "healthcheck", "--url", "http://127.0.0.1:1925"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5m
+
+configs:
+  loom:
+    content: |
+      config_dir: /config
+      data_dir: /config
+      storage:
+        engine: sqlite
+        sqlite:
+          path: /config/data/loom.db
+      auth:
+        mode: forms
+      filesystem:
+        allowed_browse_roots:
+          - /media

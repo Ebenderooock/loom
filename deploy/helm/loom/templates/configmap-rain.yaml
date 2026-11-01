@@ -6,8 +6,8 @@
 {{- $rainRPCHost := (get $rainRPC "host") | default "127.0.0.1" -}}
 {{- $rainRPCPort := (get $rainRPC "port") | default 7246 -}}
 {{- $rainDownloadDir := (get $rain "downloadDir") | default "/media/downloads" -}}
-{{- $rainDHT := (get $rain "dhtEnabled") | default true -}}
-{{- $rainPEX := (get $rain "pexEnabled") | default true -}}
+{{- $rainDHT := .Values.rain.dhtEnabled -}}
+{{- $rainPEX := .Values.rain.pexEnabled -}}
 {{- $rainDLKB := (get $rain "speedLimitDownloadKBps") | default 0 -}}
 {{- $rainULKB := (get $rain "speedLimitUploadKBps") | default 0 -}}
 {{- $rainStateDir := (get $rain "stateDir") | default "/config/rain" -}}
