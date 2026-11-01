@@ -2,7 +2,10 @@ package music
 
 import (
 	"context"
+	"errors"
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/ebenderooock/loom/internal/kernel/config"
@@ -12,10 +15,12 @@ import (
 
 // fakeProvider is an in-memory metadata.MusicMetadataProvider for tests.
 type fakeProvider struct {
-	artist   *metadata.ArtistMetadata
-	albums   []*metadata.AlbumMetadata
-	releases map[string][]*metadata.AlbumReleaseMetadata // album mbid -> editions
-	tracks   map[string]*metadata.AlbumReleaseMetadata   // release mbid -> edition w/ tracks
+	artist     *metadata.ArtistMetadata
+	albumErr   error
+	releaseErr error
+	albums     []*metadata.AlbumMetadata
+	releases   map[string][]*metadata.AlbumReleaseMetadata // album mbid -> editions
+	tracks     map[string]*metadata.AlbumReleaseMetadata   // release mbid -> edition w/ tracks
 }
 
 func (f *fakeProvider) Name() string { return "musicbrainz" }
@@ -32,7 +37,93 @@ func (f *fakeProvider) GetArtist(_ context.Context, mbid string) (*metadata.Arti
 }
 
 func (f *fakeProvider) GetArtistAlbums(_ context.Context, _ string) ([]*metadata.AlbumMetadata, error) {
-	return f.albums, nil
+	return f.albums, f.albumErr
+}
+
+func TestRefreshArtistCatalogPreservesExcludedFiles(t *testing.T) {
+	ctx := context.Background()
+	provider := sampleProvider()
+	svc, repo := newTestService(t, provider)
+	artist, err := svc.AddArtist(ctx, AddArtistRequest{
+		MBID: "artist-1", QualityProfileID: "qp-1", LibraryID: "lib-1",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	excluded := artist.Albums[1]
+	path := filepath.Join(t.TempDir(), "existing.flac")
+	if err := os.WriteFile(path, []byte("existing audio"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.ReplaceTracks(ctx, excluded.ID, []*Track{{
+		ID: "existing-track", AlbumID: excluded.ID, TrackNumber: 1, Monitored: true,
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.CreateTrackFile(ctx, &TrackFile{
+		ID: "existing-file", TrackID: "existing-track", AlbumID: excluded.ID,
+		ArtistID: artist.ID, FilePath: path,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// The refreshed provider catalogue no longer includes this legacy entry.
+	provider.albums = provider.albums[:1]
+	if _, err := svc.RefreshArtistAlbums(ctx, artist.ID); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := svc.GetArtist(ctx, artist.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(loaded.Albums) != 1 || loaded.Stats.AlbumCount != 1 || loaded.Stats.TrackCount != 0 {
+		t.Fatalf("excluded entry still affects catalogue/stats: %+v", loaded)
+	}
+	artists, err := svc.ListArtists(ctx)
+	if err != nil || len(artists) != 1 || artists[0].Stats.AlbumCount != 1 {
+		t.Fatalf("artist list stats: artists=%+v, error=%v", artists, err)
+	}
+	tracks, err := repo.ListTracksByAlbum(ctx, excluded.ID)
+	if err != nil || len(tracks) != 1 || !tracks[0].HasFile {
+		t.Fatalf("existing track lost: tracks=%+v, error=%v", tracks, err)
+	}
+	file, err := repo.GetTrackFileByPath(ctx, path)
+	if err != nil || file == nil || file.ID != "existing-file" {
+		t.Fatalf("existing file record lost: file=%+v, error=%v", file, err)
+	}
+	content, err := os.ReadFile(path)
+	if err != nil || string(content) != "existing audio" {
+		t.Fatalf("existing audio changed: %q, error=%v", content, err)
+	}
+	// Re-including a group must reuse its album and file records.
+	provider.albums = append(provider.albums, &metadata.AlbumMetadata{MBID: excluded.MBID})
+	if _, err := svc.RefreshArtistAlbums(ctx, artist.ID); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err = svc.GetArtist(ctx, artist.ID)
+	if err != nil || len(loaded.Albums) != 2 || loaded.Albums[1].ID != excluded.ID {
+		t.Fatalf("existing album not restored: artist=%+v, error=%v", loaded, err)
+	}
+}
+
+func TestRefreshArtistCatalogFailurePreservesVisibility(t *testing.T) {
+	ctx := context.Background()
+	provider := sampleProvider()
+	svc, _ := newTestService(t, provider)
+	artist, err := svc.AddArtist(ctx, AddArtistRequest{
+		MBID: "artist-1", QualityProfileID: "qp-1", LibraryID: "lib-1",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	provider.albums = nil
+	provider.albumErr = errors.New("metadata unavailable")
+	if _, err := svc.RefreshArtistAlbums(ctx, artist.ID); err == nil {
+		t.Fatal("expected metadata failure")
+	}
+	loaded, err := svc.GetArtist(ctx, artist.ID)
+	if err != nil || len(loaded.Albums) != 2 {
+		t.Fatalf("failed refresh changed catalogue: artist=%+v, error=%v", loaded, err)
+	}
 }
 
 func (f *fakeProvider) GetAlbum(_ context.Context, rgMBID string) (*metadata.AlbumMetadata, []*metadata.AlbumReleaseMetadata, error) {
@@ -45,6 +136,9 @@ func (f *fakeProvider) GetAlbum(_ context.Context, rgMBID string) (*metadata.Alb
 }
 
 func (f *fakeProvider) GetAlbumRelease(_ context.Context, releaseMBID string) (*metadata.AlbumReleaseMetadata, error) {
+	if f.releaseErr != nil {
+		return nil, f.releaseErr
+	}
 	return f.tracks[releaseMBID], nil
 }
 
@@ -468,5 +562,145 @@ func TestAlbumMatchesMetadataProfile(t *testing.T) {
 				t.Errorf("albumMatchesMetadataProfile(%q,%v) = %v, want %v", c.primary, c.secondary, got, c.want)
 			}
 		})
+	}
+}
+
+func TestLoadAlbumTracksReportsUnavailableMetadataAndRetries(t *testing.T) {
+	ctx := context.Background()
+	provider := sampleProvider()
+	svc, _ := newTestService(t, provider)
+
+	artist, err := svc.AddArtist(ctx, AddArtistRequest{MBID: "artist-1", QualityProfileID: "qp-1", LibraryID: "lib-1"})
+	if err != nil {
+		t.Fatalf("AddArtist: %v", err)
+	}
+	var albumID string
+	for _, al := range artist.Albums {
+		if al.MBID == "rg-1" {
+			albumID = al.ID
+		}
+	}
+
+	provider.releaseErr = errors.New("musicbrainz busy")
+	album, err := svc.GetAlbum(ctx, albumID)
+	if err != nil || len(album.Tracks) != 0 {
+		t.Fatalf("GetAlbum should degrade to no tracks, got album=%+v err=%v", album, err)
+	}
+	if _, err := svc.LoadAlbumTracks(ctx, albumID); !errors.Is(err, ErrAlbumTracksUnavailable) ||
+		!strings.Contains(err.Error(), "musicbrainz busy") {
+		t.Fatalf("LoadAlbumTracks error = %v, want ErrAlbumTracksUnavailable with cause", err)
+	}
+
+	provider.releaseErr = nil
+	album, err = svc.LoadAlbumTracks(ctx, albumID)
+	if err != nil {
+		t.Fatalf("LoadAlbumTracks after recovery: %v", err)
+	}
+	if len(album.Tracks) != 2 {
+		t.Fatalf("tracks after recovery = %d, want 2", len(album.Tracks))
+	}
+}
+
+func TestTrackMonitoringCascadesAndMonitorsAlbum(t *testing.T) {
+	ctx := context.Background()
+	svc, repo := newTestService(t, sampleProvider())
+	artist, err := svc.AddArtist(ctx, AddArtistRequest{MBID: "artist-1", QualityProfileID: "qp-1", LibraryID: "lib-1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	album, err := svc.GetAlbum(ctx, artist.Albums[0].ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(album.Tracks) != 2 {
+		t.Fatalf("tracks = %d, want 2", len(album.Tracks))
+	}
+
+	if _, err := svc.SetAlbumMonitored(ctx, album.ID, false); err != nil {
+		t.Fatal(err)
+	}
+	tracks, _ := repo.ListTracksByAlbum(ctx, album.ID)
+	for _, tr := range tracks {
+		if tr.Monitored {
+			t.Fatalf("track %q still monitored after album unmonitor", tr.Title)
+		}
+	}
+
+	track := tracks[0]
+	updated, err := svc.SetTrackMonitored(ctx, album.ID, track.ID, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !updated.Monitored {
+		t.Fatal("track should be monitored")
+	}
+	al, _ := repo.GetAlbum(ctx, album.ID)
+	if !al.Monitored {
+		t.Fatal("monitoring a track should monitor its album")
+	}
+	tracks, _ = repo.ListTracksByAlbum(ctx, album.ID)
+	if !tracks[0].Monitored || tracks[1].Monitored {
+		t.Fatalf("only the toggled track should be monitored: %+v %+v", tracks[0], tracks[1])
+	}
+
+	if _, err := svc.SetTrackMonitored(ctx, artist.Albums[1].ID, track.ID, false); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("track from another album err = %v, want ErrNotFound", err)
+	}
+	if _, err := svc.SetTrackMonitored(ctx, album.ID, "missing", true); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("missing track err = %v, want ErrNotFound", err)
+	}
+}
+
+func TestArtistFilesAndHistory(t *testing.T) {
+	ctx := context.Background()
+	svc, repo := newTestService(t, sampleProvider())
+	artist, err := svc.AddArtist(ctx, AddArtistRequest{MBID: "artist-1", QualityProfileID: "qp-1", LibraryID: "lib-1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	album, err := svc.GetAlbum(ctx, artist.Albums[0].ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.ImportTrackFile(ctx, &TrackFile{
+		ID: "file-1", TrackID: album.Tracks[0].ID, AlbumID: album.ID, ArtistID: artist.ID,
+		FilePath: "/library/a/01.flac", Format: "FLAC", Size: 1234,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	files, err := svc.ListArtistFiles(ctx, artist.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files) != 1 || files[0].AlbumTitle != album.Title || files[0].TrackTitle != "Song One" || files[0].TrackNumber != 1 {
+		t.Fatalf("files = %+v", files)
+	}
+
+	db := repo.(*sqlRepo).db
+	if _, err := db.ExecContext(ctx,
+		`INSERT INTO download_history (id, download_id, title, status, completed_at, media_type, media_id, reason)
+		 VALUES ('dh-1', 'd1', 'Release.FLAC', 'acquired', '2024-01-01T10:00:00Z', 'music', ?, '')`, album.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.ExecContext(ctx,
+		`INSERT INTO download_history (id, download_id, title, status, completed_at, media_type, media_id)
+		 VALUES ('dh-other', 'd2', 'Movie', 'acquired', '2024-01-03T10:00:00Z', 'movie', ?)`, album.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.ExecContext(ctx,
+		`INSERT INTO import_history (id, media_type, media_id, source_path, dest_path, status, error, imported_at)
+		 VALUES ('ih-1', 'music', ?, '/dl/01.flac', '/library/a/01.flac', 'imported', '', '2024-01-02 10:00:00')`, album.ID); err != nil {
+		t.Fatal(err)
+	}
+	history, err := svc.ListArtistHistory(ctx, artist.ID, 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(history) != 2 || history[0].ID != "ih-1" || history[0].Type != "import" ||
+		history[1].ID != "dh-1" || history[1].Type != "grab" || history[1].AlbumTitle != album.Title {
+		t.Fatalf("history = %+v", history)
+	}
+	if _, err := svc.ListArtistHistory(ctx, "missing", 10); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("missing artist err = %v", err)
 	}
 }

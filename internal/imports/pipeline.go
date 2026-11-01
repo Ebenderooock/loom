@@ -1103,7 +1103,9 @@ func (p *ImportPipeline) publishNotification(ctx context.Context, match *MatchRe
 	}
 }
 
-// recordFailure records a failed import in history and publishes a failure event.
+// recordFailure records a failed import in history and publishes a failure
+// event. The notification dispatcher turns that event into the user alert, so
+// no direct notification is sent here.
 func (p *ImportPipeline) recordFailure(ctx context.Context, mediaType, mediaID, title, sourcePath string, importErr error) error {
 	errMsg := ""
 	if importErr != nil {
@@ -1117,14 +1119,6 @@ func (p *ImportPipeline) recordFailure(ctx context.Context, mediaType, mediaID, 
 		SourcePath: sourcePath,
 		Error:      errMsg,
 	})
-
-	if p.notifSvc != nil {
-		msg := fmt.Sprintf("Import failed for %s: %s", title, errMsg)
-		_ = p.notifSvc.Send(ctx, notifications.EventOnDownload, "Import Failed", msg, map[string]any{
-			"title": title,
-			"error": errMsg,
-		})
-	}
 
 	return importErr
 }

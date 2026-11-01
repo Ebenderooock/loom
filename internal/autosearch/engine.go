@@ -1195,9 +1195,9 @@ func (e *Engine) verifyIdentity(req SearchRequest, parsed *parser.Release, idBas
 			return "season_pack_for_episode_search"
 		}
 
-		// Season-scoped searches require a positively parsed matching season.
-		if req.Season > 0 {
-			if parsed.Season <= 0 {
+		// Episode searches in season 0 must match specials, not regular episodes.
+		if req.Season > 0 || (req.Season == 0 && req.Episode > 0) {
+			if parsed.Season < 0 || (req.Season > 0 && parsed.Season == 0) {
 				return "unverifiable_season"
 			}
 			if parsed.Season != req.Season {
@@ -1769,7 +1769,7 @@ func (e *Engine) getExistingEpisodeQuality(ctx context.Context, req SearchReques
 	}
 
 	seasonFilter := &req.Season
-	if req.Season <= 0 {
+	if req.Season < 0 {
 		seasonFilter = nil
 	}
 	episodes, err := e.seriesSvc.ListEpisodes(ctx, req.MediaID, seasonFilter)
@@ -1862,7 +1862,7 @@ func (e *Engine) recordGrabOrchestrator(ctx context.Context, req SearchRequest, 
 		}
 
 		var seasonFilter *int
-		if req.Season > 0 {
+		if req.Season > 0 || (req.Season == 0 && req.Episode > 0) {
 			s := req.Season
 			seasonFilter = &s
 		}

@@ -89,12 +89,8 @@ func (p *ImportPipeline) importMusicFile(ctx context.Context, ev *downloads.Down
 		return "", p.recordFailure(ctx, string(MediaTypeMusic), album.ID, ev.Title, source,
 			fmt.Errorf("get music library: %w", err))
 	}
-	tracks, err := p.musicSvc.GetAlbum(ctx, album.ID)
-	if err != nil {
-		return "", p.recordFailure(ctx, string(MediaTypeMusic), album.ID, ev.Title, source, err)
-	}
 	multiDisc := false
-	for _, candidate := range tracks.Tracks {
+	for _, candidate := range album.Tracks {
 		if candidate.DiscNumber > 1 {
 			multiDisc = true
 			break
@@ -306,9 +302,9 @@ func (p *ImportPipeline) findMusicTrack(ctx context.Context, artistName, albumNa
 	if album == nil {
 		return nil, nil, nil, fmt.Errorf("music album %q is not in the artist library", albumName)
 	}
-	full, err := p.musicSvc.GetAlbum(ctx, album.ID)
+	full, err := p.musicSvc.LoadAlbumTracks(ctx, album.ID)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, fmt.Errorf("load track list for album %q: %w", albumName, err)
 	}
 	disc := tags.DiscNumber
 	if disc < 1 {
@@ -334,6 +330,9 @@ func (p *ImportPipeline) findMusicTrack(ctx context.Context, artistName, albumNa
 				break
 			}
 		}
+	}
+	if track == nil && tags.Title != "" {
+		track = musiclib.MatchTrackByBaseTitle(full.Tracks, tags.Title, normalizeMusicText)
 	}
 	if track == nil {
 		return nil, nil, nil, fmt.Errorf("could not match audio track %q on album %q", tags.Title, albumName)
