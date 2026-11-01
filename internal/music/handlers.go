@@ -33,6 +33,7 @@ func ArtistRouter(svc Service, opts ...ArtistRouterOption) chi.Router {
 	r.Put("/{id}", handleUpdateArtist(svc))
 	r.Delete("/{id}", handleDeleteArtist(svc))
 	r.Put("/{id}/monitoring", handleSetArtistMonitoring(svc))
+	r.Post("/{id}/refresh", handleRefreshArtist(svc))
 	return r
 }
 
@@ -184,6 +185,24 @@ func handleSetArtistMonitoring(svc Service) http.HandlerFunc {
 			return
 		}
 		a, err := svc.SetArtistMonitoring(r.Context(), chi.URLParam(r, "id"), MonitoringStatus(req.Status))
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, a)
+	}
+}
+
+// handleRefreshArtist re-fetches one artist's metadata, artwork and albums and
+// returns the updated artist.
+func handleRefreshArtist(svc Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := chi.URLParam(r, "id")
+		if _, err := svc.RefreshArtistAlbums(r.Context(), id); err != nil {
+			writeErr(w, err)
+			return
+		}
+		a, err := svc.GetArtist(r.Context(), id)
 		if err != nil {
 			writeErr(w, err)
 			return

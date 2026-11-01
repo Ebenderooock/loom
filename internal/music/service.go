@@ -109,7 +109,12 @@ type service struct {
 	provider    metadata.MusicMetadataProvider
 	logger      *slog.Logger
 	searchOnAdd func(context.Context, string) error
+	artwork     metadata.MusicArtworkProvider
 }
+
+// artworkTimeout bounds best-effort artwork lookups so a slow artwork service
+// never stalls an add, refresh or album load.
+const artworkTimeout = 10 * time.Second
 
 // NewService builds the music service. The provider must be non-nil for
 // lookup/add to work; CRUD over already-imported data works without it.
@@ -126,6 +131,73 @@ func NewService(repo Repository, provider metadata.MusicMetadataProvider, logger
 // not start searches without a wired indexer and download stack.
 func (s *service) SetSearchOnAdd(search func(context.Context, string) error) {
 	s.searchOnAdd = search
+}
+
+// SetArtwork installs the optional artwork source (fanart.tv / TheAudioDB).
+func (s *service) SetArtwork(p metadata.MusicArtworkProvider) {
+	s.artwork = p
+}
+
+// applyArtistMetadata copies provider metadata onto an artist record.
+func applyArtistMetadata(a *Artist, meta *metadata.ArtistMetadata) {
+	a.Name = meta.Name
+	a.SortName = meta.SortName
+	a.Disambiguation = meta.Disambiguation
+	a.ArtistType = meta.Type
+	a.Country = meta.Country
+	a.Genres = meta.Genres
+	a.BeginArea = meta.BeginArea
+	a.BeginDate = meta.BeginDate
+	a.EndDate = meta.EndDate
+	a.Ended = meta.Ended
+	a.Rating = meta.Rating
+	a.RatingVotes = meta.RatingVotes
+	a.Links = externalLinksFrom(meta.Links)
+	if meta.Overview != "" {
+		a.Overview = meta.Overview
+	}
+	if meta.ImageURL != "" && a.ImageURL == "" {
+		a.ImageURL = meta.ImageURL
+	}
+}
+
+// enrichArtist applies artwork and biography from the artwork source. Failures
+// are logged and leave the existing values untouched. It returns any album
+// covers the source supplied, keyed by release-group MBID.
+func (s *service) enrichArtist(ctx context.Context, a *Artist, fallbackImage string) map[string]string {
+	if s.artwork == nil || a.MBID == "" {
+		if a.ImageURL == "" {
+			a.ImageURL = fallbackImage
+		}
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(ctx, artworkTimeout)
+	defer cancel()
+	art, err := s.artwork.ArtistArtwork(ctx, a.MBID)
+	if err != nil {
+		s.logger.Warn("music: artist artwork lookup failed", "artist", a.Name, "error", err)
+	}
+	if art == nil {
+		if a.ImageURL == "" {
+			a.ImageURL = fallbackImage
+		}
+		return nil
+	}
+	if art.ThumbURL != "" {
+		a.ImageURL = art.ThumbURL
+	} else if a.ImageURL == "" {
+		a.ImageURL = fallbackImage
+	}
+	if art.BackgroundURL != "" {
+		a.BackgroundURL = art.BackgroundURL
+	}
+	if art.LogoURL != "" {
+		a.LogoURL = art.LogoURL
+	}
+	if art.Biography != "" {
+		a.Overview = art.Biography
+	}
+	return art.AlbumCovers
 }
 
 func (s *service) ListArtists(ctx context.Context) ([]*Artist, error) {
@@ -289,16 +361,11 @@ func (s *service) AddArtist(ctx context.Context, req AddArtistRequest) (*Artist,
 	}
 
 	var artist *Artist
+	var albumCovers map[string]string
 	if existing != nil {
 		// Update existing row (also clears deleted_at via UpdateArtist).
-		existing.Name = meta.Name
-		existing.SortName = meta.SortName
-		existing.Disambiguation = meta.Disambiguation
-		existing.ArtistType = meta.Type
-		existing.Country = meta.Country
-		existing.Overview = meta.Overview
-		existing.Genres = meta.Genres
-		existing.ImageURL = meta.ImageURL
+		applyArtistMetadata(existing, meta)
+		albumCovers = s.enrichArtist(ctx, existing, meta.ImageURL)
 		existing.LibraryID = req.LibraryID
 		existing.QualityProfileID = req.QualityProfileID
 		existing.MetadataProfileID = req.MetadataProfileID
@@ -312,20 +379,14 @@ func (s *service) AddArtist(ctx context.Context, req AddArtistRequest) (*Artist,
 		artist = &Artist{
 			ID:                uuid.New().String(),
 			MBID:              meta.MBID,
-			Name:              meta.Name,
-			SortName:          meta.SortName,
-			Disambiguation:    meta.Disambiguation,
-			ArtistType:        meta.Type,
-			Country:           meta.Country,
-			Overview:          meta.Overview,
-			Genres:            meta.Genres,
-			ImageURL:          meta.ImageURL,
 			LibraryID:         req.LibraryID,
 			QualityProfileID:  req.QualityProfileID,
 			MetadataProfileID: req.MetadataProfileID,
 			MonitoringStatus:  monitoring,
 			MetadataProvider:  s.provider.Name(),
 		}
+		applyArtistMetadata(artist, meta)
+		albumCovers = s.enrichArtist(ctx, artist, meta.ImageURL)
 		if err := s.repo.CreateArtist(ctx, artist); err != nil {
 			return nil, err
 		}
@@ -333,7 +394,7 @@ func (s *service) AddArtist(ctx context.Context, req AddArtistRequest) (*Artist,
 
 	// Persist albums (release-groups). Tracks are fetched lazily when an album
 	// is opened/searched to respect the MusicBrainz rate limit.
-	n, err := s.syncArtistAlbums(ctx, artist, req.MetadataProfileID, monitoring)
+	n, err := s.syncArtistAlbums(ctx, artist, req.MetadataProfileID, monitoring, albumCovers)
 	if err != nil {
 		return nil, fmt.Errorf("sync artist albums: %w", err)
 	}
@@ -445,7 +506,9 @@ func (s *service) loadAlbum(ctx context.Context, id string) (al *Album, fetchErr
 	}
 
 	// Lazily fetch the concrete releases (editions) for this album.
-	if al.ReleasesFetchedAt == nil && al.MBID != "" && s.provider != nil {
+	// Albums stored before details were tracked are refreshed once to pick up
+	// links, rating and artwork; release IDs and selection are preserved.
+	if (al.ReleasesFetchedAt == nil || al.DetailsFetchedAt == nil) && al.MBID != "" && s.provider != nil {
 		if err := s.fetchReleases(ctx, al); err != nil {
 			s.logger.Warn("music: failed to fetch album releases", "album", al.ID, "error", err)
 			fetchErr = fmt.Errorf("fetch releases: %w", err)
@@ -476,10 +539,11 @@ func (s *service) loadAlbum(ctx context.Context, id string) (al *Album, fetchErr
 // selects a preferred release for acquisition/track matching.
 func (s *service) fetchReleases(ctx context.Context, al *Album) error {
 	oldSelectedID := al.SelectedReleaseID
-	_, releaseMetas, err := s.provider.GetAlbum(ctx, al.MBID)
+	albumMeta, releaseMetas, err := s.provider.GetAlbum(ctx, al.MBID)
 	if err != nil {
 		return err
 	}
+	s.applyAlbumDetails(ctx, al, albumMeta)
 	priorReleases, err := s.repo.ListReleasesByAlbum(ctx, al.ID)
 	if err != nil {
 		return err
@@ -558,6 +622,41 @@ func (s *service) fetchReleases(ctx context.Context, al *Album) error {
 		al.TracksFetchedAt = nil
 	}
 	return s.repo.UpdateAlbum(ctx, al)
+}
+
+// applyAlbumDetails stores MusicBrainz links and rating plus best-effort
+// artwork. The Cover Art Archive URL is built without checking that a cover
+// exists, so a cover confirmed by the artwork source takes precedence.
+func (s *service) applyAlbumDetails(ctx context.Context, al *Album, meta *metadata.AlbumMetadata) {
+	now := time.Now().UTC()
+	al.DetailsFetchedAt = &now
+	if meta != nil {
+		al.Rating = meta.Rating
+		al.RatingVotes = meta.RatingVotes
+		al.Links = externalLinksFrom(meta.Links)
+		if al.CoverArtURL == "" {
+			al.CoverArtURL = meta.CoverArtURL
+		}
+	}
+	if s.artwork == nil {
+		return
+	}
+	actx, cancel := context.WithTimeout(ctx, artworkTimeout)
+	defer cancel()
+	art, err := s.artwork.AlbumArtwork(actx, al.MBID)
+	if err != nil {
+		s.logger.Warn("music: album artwork lookup failed", "album", al.Title, "error", err)
+		return
+	}
+	if art == nil {
+		return
+	}
+	if art.Description != "" {
+		al.Overview = art.Description
+	}
+	if art.CoverURL != "" {
+		al.CoverArtURL = art.CoverURL
+	}
 }
 
 // fetchTracks pulls the track list for the album's selected release.
@@ -925,7 +1024,7 @@ func cleanProfileTypes(values []string) StringSlice {
 // provider and inserts any that are not yet stored, returning the number added.
 // New albums respect the metadata profile and overall monitoring status. It is
 // shared by AddArtist and the new-release refresher.
-func (s *service) syncArtistAlbums(ctx context.Context, artist *Artist, metadataProfileID string, monitoring MonitoringStatus) (int, error) {
+func (s *service) syncArtistAlbums(ctx context.Context, artist *Artist, metadataProfileID string, monitoring MonitoringStatus, covers map[string]string) (int, error) {
 	if s.provider == nil {
 		return 0, fmt.Errorf("no music metadata provider configured")
 	}
@@ -955,6 +1054,12 @@ func (s *service) syncArtistAlbums(ctx context.Context, artist *Artist, metadata
 			return added, fmt.Errorf("get album %q: %w", am.MBID, err)
 		}
 		if existingAl != nil {
+			if cover := covers[am.MBID]; cover != "" && cover != existingAl.CoverArtURL {
+				existingAl.CoverArtURL = cover
+				if err := s.repo.UpdateAlbum(ctx, existingAl); err != nil {
+					return added, fmt.Errorf("update album cover %q: %w", existingAl.ID, err)
+				}
+			}
 			if err := s.repo.LinkAlbumArtist(ctx, existingAl.ID, artist.ID); err != nil {
 				return added, fmt.Errorf("link existing album %q to artist %q: %w", existingAl.ID, artist.ID, err)
 			}
@@ -973,7 +1078,10 @@ func (s *service) syncArtistAlbums(ctx context.Context, artist *Artist, metadata
 			SecondaryTypes: am.SecondaryTypes,
 			ReleaseDate:    am.ReleaseDate,
 			Genres:         am.Genres,
-			CoverArtURL:    am.CoverArtURL,
+			CoverArtURL:    firstNonEmpty(covers[am.MBID], am.CoverArtURL),
+			Rating:         am.Rating,
+			RatingVotes:    am.RatingVotes,
+			Links:          externalLinksFrom(am.Links),
 			Monitored:      monitored,
 		}
 		if err := s.repo.CreateAlbum(ctx, al); err != nil {
@@ -998,7 +1106,36 @@ func (s *service) RefreshArtistAlbums(ctx context.Context, artistID string) (int
 	if artist == nil {
 		return 0, ErrNotFound
 	}
-	return s.syncArtistAlbums(ctx, artist, artist.MetadataProfileID, artist.MonitoringStatus)
+	covers := s.refreshArtistDetails(ctx, artist)
+	return s.syncArtistAlbums(ctx, artist, artist.MetadataProfileID, artist.MonitoringStatus, covers)
+}
+
+// refreshArtistDetails re-fetches artist metadata and artwork. It is
+// best-effort: failures are logged and the album refresh continues.
+func (s *service) refreshArtistDetails(ctx context.Context, artist *Artist) map[string]string {
+	if s.provider == nil || artist.MBID == "" {
+		return nil
+	}
+	meta, err := s.provider.GetArtist(ctx, artist.MBID)
+	if err != nil || meta == nil {
+		s.logger.Warn("music: artist metadata refresh failed", "artist", artist.Name, "error", err)
+		return nil
+	}
+	applyArtistMetadata(artist, meta)
+	covers := s.enrichArtist(ctx, artist, meta.ImageURL)
+	if err := s.repo.UpdateArtist(ctx, artist); err != nil {
+		s.logger.Warn("music: failed to save refreshed artist details", "artist", artist.Name, "error", err)
+	}
+	return covers
+}
+
+func firstNonEmpty(vals ...string) string {
+	for _, v := range vals {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
 }
 
 // albumMatchesMetadataProfile reports whether an album's primary/secondary types

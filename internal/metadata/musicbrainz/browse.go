@@ -20,6 +20,7 @@ type ReleaseGroupFull struct {
 	Genres           []GenreResponse    `json:"genres,omitempty"`
 	Releases         []ReleaseResponse  `json:"releases,omitempty"`
 	Relations        []RelationResponse `json:"relations,omitempty"`
+	Rating           *RatingResponse    `json:"rating,omitempty"`
 }
 
 type releaseBrowseResponse struct {
@@ -55,7 +56,7 @@ func (c *Client) GetArtistOfficialReleases(ctx context.Context, artistMBID strin
 // GetReleaseGroup fetches a single release-group (album) including its releases
 // (editions). Track lists are NOT included; use GetReleaseRaw for tracks.
 func (c *Client) GetReleaseGroup(ctx context.Context, mbid string) (*ReleaseGroupFull, error) {
-	endpoint := fmt.Sprintf("%s/release-group/%s?fmt=json&inc=releases+artist-credits+genres",
+	endpoint := fmt.Sprintf("%s/release-group/%s?fmt=json&inc=releases+artist-credits+genres+url-rels+ratings",
 		c.config.BaseURL, url.QueryEscape(mbid))
 
 	resp := &ReleaseGroupFull{}

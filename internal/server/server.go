@@ -106,6 +106,7 @@ type Server struct {
 	seriesSvc         series.Service
 	musicSvc          music.Service
 	musicMetadataSrc  *music.MetadataSourceService
+	musicArtworkCfg   *music.ArtworkSettingsService
 	notifSvc          notifications.Service
 	connectSvc        connect.Service
 	analyticsSvc      *analytics.Service
@@ -176,7 +177,8 @@ type Wiring struct {
 	OrganizerService  *organizer.Organizer
 	SeriesService     series.Service
 	MusicService      music.Service
-	MusicMetadataSrc  *music.MetadataSourceService // admin-only MusicBrainz endpoint settings
+	MusicMetadataSrc  *music.MetadataSourceService  // admin-only MusicBrainz endpoint settings
+	MusicArtworkCfg   *music.ArtworkSettingsService // admin-only fanart.tv / TheAudioDB keys
 	NotificationSvc   notifications.Service
 	ConnectService    connect.Service
 	AnalyticsService  *analytics.Service
@@ -294,6 +296,7 @@ func New(cfg *config.Config, wiring Wiring) (*Server, error) {
 		seriesSvc:         wiring.SeriesService,
 		musicSvc:          wiring.MusicService,
 		musicMetadataSrc:  wiring.MusicMetadataSrc,
+		musicArtworkCfg:   wiring.MusicArtworkCfg,
 		notifSvc:          wiring.NotificationSvc,
 		connectSvc:        wiring.ConnectService,
 		analyticsSvc:      wiring.AnalyticsService,
@@ -947,12 +950,15 @@ func (s *Server) newMux() http.Handler {
 			}
 			r.With(musicEnabled).Mount("/api/v1/albums", albumsRouter)
 			profileRouter := music.ProfileRouter(s.musicSvc)
+			adminMW := func(next http.Handler) http.Handler { return next }
+			if s.authSvc != nil {
+				adminMW = s.authSvc.RequireRole("admin")
+			}
 			if s.musicMetadataSrc != nil {
-				adminMW := func(next http.Handler) http.Handler { return next }
-				if s.authSvc != nil {
-					adminMW = s.authSvc.RequireRole("admin")
-				}
 				profileRouter.With(adminMW).Mount("/metadata-source", music.MetadataSourceRouter(s.musicMetadataSrc))
+			}
+			if s.musicArtworkCfg != nil {
+				profileRouter.With(adminMW).Mount("/artwork-settings", music.ArtworkSettingsRouter(s.musicArtworkCfg))
 			}
 			r.With(musicEnabled).Mount("/api/v1/music", profileRouter)
 		}

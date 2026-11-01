@@ -23,6 +23,35 @@ searches or the calendar. Their album, track and file records are retained;
 refreshing does not delete audio files. A failed metadata fetch leaves the
 existing catalogue unchanged.
 
+## Artwork and details
+
+Artists show a photo, background, logo and biography. Albums show their cover
+and a description when you open **Album details**. Sources, in order of
+preference:
+
+- **fanart.tv** supplies HD artist photos, backgrounds, logos and album covers.
+  It needs a free personal API key.
+- **TheAudioDB** supplies artist photos, backgrounds, logos, biographies and
+  album descriptions. Without a key, Loom uses its free shared key.
+- **MusicBrainz** supplies origin, active years, community ratings, the Cover
+  Art Archive cover and an artist image from Wikimedia Commons as a fallback.
+
+Admins add keys under **Settings → Music Profiles → Artwork**. Keys are
+write-only: the API only reports whether each one is saved. You can also set
+`LOOM_FANART_API_KEY` and `LOOM_THEAUDIODB_API_KEY` in the server environment;
+a key saved in Settings takes precedence. Use **Test keys** before saving.
+
+Artwork is fetched when an artist is added or refreshed. Use **Refresh
+Metadata** on an artist page to update one artist, or **Refresh** on the Music
+page for all of them. Album details are fetched the first time an album is
+opened. A failed artwork lookup never fails an add or refresh; Loom keeps the
+existing images.
+
+Artists and albums also link to Spotify, Apple Music, YouTube Music, TIDAL,
+Deezer, Bandcamp, the official website, Wikipedia and other services when
+MusicBrainz lists them. Loom does not call those services; the links open in
+a new tab.
+
 ## Profiles
 
 Audio quality profiles control which audio tiers are eligible for search, the

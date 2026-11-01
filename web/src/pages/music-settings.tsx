@@ -40,6 +40,12 @@ import {
   useMetadataProfiles,
   useUpdateMetadataProfile,
   useUpdateAudioQualityProfile,
+  useArtworkSettings,
+  useTestArtworkSettings,
+  useUpdateArtworkSettings,
+  type ArtworkSettings,
+  type ArtworkSettingsUpdate,
+  type ArtworkTestResult,
   useMetadataSource,
   useTestMetadataSource,
   useUpdateMetadataSource,
@@ -409,6 +415,213 @@ function MetadataProfileCard({ profile }: { profile: MetadataProfile }) {
           }
         >
           {update.isPending ? "Saving…" : "Save"}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function ArtworkSettingsCard() {
+  const { data: settings, isLoading, isError } = useArtworkSettings();
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Artwork</CardTitle>
+        <CardDescription>
+          Artist photos, backgrounds, logos and biographies come from fanart.tv
+          and TheAudioDB. TheAudioDB works with its free shared key; add your
+          own keys for better coverage.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <Skeleton className="h-24 w-full" />
+        ) : isError || !settings ? (
+          <p className="text-sm text-destructive">
+            Could not load the artwork settings.
+          </p>
+        ) : (
+          <ArtworkSettingsForm
+            key={JSON.stringify(settings)}
+            settings={settings}
+          />
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function ArtworkKeyField({
+  id,
+  label,
+  help,
+  isSet,
+  fromEnv,
+  value,
+  onChange,
+  clear,
+  onClear,
+}: {
+  id: string;
+  label: string;
+  help: React.ReactNode;
+  isSet: boolean;
+  fromEnv: boolean;
+  value: string;
+  onChange: (v: string) => void;
+  clear: boolean;
+  onClear: (v: boolean) => void;
+}) {
+  const placeholder =
+    isSet && !clear
+      ? "Saved — leave blank to keep"
+      : fromEnv
+        ? "Using server environment key"
+        : "Not set";
+  return (
+    <div className="space-y-1.5">
+      <Label htmlFor={id}>{label}</Label>
+      <Input
+        id={id}
+        type="password"
+        autoComplete="off"
+        placeholder={placeholder}
+        value={value}
+        disabled={clear}
+        onChange={(e) => onChange(e.target.value)}
+      />
+      <p className="text-xs text-muted-foreground">{help}</p>
+      {isSet && (
+        <label className="flex items-center gap-2 text-xs text-muted-foreground">
+          <input
+            type="checkbox"
+            checked={clear}
+            onChange={(e) => {
+              onClear(e.target.checked);
+              onChange("");
+            }}
+          />
+          Remove saved key
+        </label>
+      )}
+    </div>
+  );
+}
+
+function ArtworkSettingsForm({ settings }: { settings: ArtworkSettings }) {
+  const update = useUpdateArtworkSettings();
+  const test = useTestArtworkSettings();
+  const [fanartKey, setFanartKey] = React.useState("");
+  const [audioDBKey, setAudioDBKey] = React.useState("");
+  const [clearFanart, setClearFanart] = React.useState(false);
+  const [clearAudioDB, setClearAudioDB] = React.useState(false);
+  const [result, setResult] = React.useState<ArtworkTestResult>();
+
+  const request = (): ArtworkSettingsUpdate => ({
+    fanart_api_key: fanartKey.trim() || undefined,
+    audiodb_api_key: audioDBKey.trim() || undefined,
+    clear_fanart_api_key: clearFanart || undefined,
+    clear_audiodb_api_key: clearAudioDB || undefined,
+  });
+  const invalid = /\s/.test(fanartKey.trim()) || /\s/.test(audioDBKey.trim());
+  const onError = (e: unknown) =>
+    toast.error(e instanceof Error ? e.message : "Request failed");
+
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-4 sm:grid-cols-2">
+        <ArtworkKeyField
+          id="music-artwork-fanart"
+          label="fanart.tv API key"
+          help={
+            <>
+              Free personal key from{" "}
+              <a
+                href="https://fanart.tv/get-an-api-key/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline"
+              >
+                fanart.tv
+              </a>
+              . Adds HD backgrounds, logos and album covers.
+            </>
+          }
+          isSet={settings.fanart_api_key_set}
+          fromEnv={settings.fanart_api_key_from_env}
+          value={fanartKey}
+          onChange={setFanartKey}
+          clear={clearFanart}
+          onClear={setClearFanart}
+        />
+        <ArtworkKeyField
+          id="music-artwork-audiodb"
+          label="TheAudioDB API key (optional)"
+          help="Leave blank to use the free shared key."
+          isSet={settings.audiodb_api_key_set}
+          fromEnv={settings.audiodb_api_key_from_env}
+          value={audioDBKey}
+          onChange={setAudioDBKey}
+          clear={clearAudioDB}
+          onClear={setClearAudioDB}
+        />
+      </div>
+
+      {result && (
+        <div className="space-y-1 text-sm" role="status">
+          <div className="flex flex-wrap items-center gap-2">
+            {result.fanart_tested ? (
+              <Badge variant={result.fanart_ok ? "default" : "destructive"}>
+                fanart.tv {result.fanart_ok ? "OK" : "failed"}
+              </Badge>
+            ) : (
+              <Badge variant="secondary">fanart.tv not configured</Badge>
+            )}
+            <Badge variant={result.audiodb_ok ? "default" : "destructive"}>
+              TheAudioDB{result.audiodb_shared_key ? " (shared key)" : ""}{" "}
+              {result.audiodb_ok ? "OK" : "failed"}
+            </Badge>
+          </div>
+          {result.fanart_error && (
+            <p className="text-xs text-destructive">{result.fanart_error}</p>
+          )}
+          {result.audiodb_error && (
+            <p className="text-xs text-destructive">{result.audiodb_error}</p>
+          )}
+        </div>
+      )}
+
+      <p className="text-xs text-muted-foreground">
+        New artwork appears when an artist is added or refreshed.
+      </p>
+
+      <div className="flex gap-2">
+        <Button
+          variant="outline"
+          disabled={invalid || test.isPending}
+          onClick={() =>
+            test.mutate(request(), {
+              onSuccess: (res) => {
+                setResult(res);
+                if (res.ok) toast.success("Artwork sources are reachable");
+                else toast.error("Artwork source check failed");
+              },
+              onError,
+            })
+          }
+        >
+          {test.isPending ? "Testing…" : "Test keys"}
+        </Button>
+        <Button
+          disabled={invalid || update.isPending}
+          onClick={() =>
+            update.mutate(request(), {
+              onSuccess: () => toast.success("Artwork settings saved"),
+              onError,
+            })
+          }
+        >
+          Save
         </Button>
       </div>
     </div>
@@ -848,6 +1061,7 @@ export function MusicProfilesPage() {
       </Card>
 
       {isAdmin && <MetadataSourceCard />}
+      {isAdmin && <ArtworkSettingsCard />}
     </div>
   );
 }

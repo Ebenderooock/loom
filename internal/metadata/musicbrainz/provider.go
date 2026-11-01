@@ -123,6 +123,14 @@ func (p *Provider) GetArtist(ctx context.Context, mbid string) (*metadata.Artist
 		SortName:       a.SortName,
 		Type:           a.Type,
 		Genres:         a.Genres,
+		ImageURL:       a.ImageURL,
+		BeginArea:      a.BeginArea,
+		BeginDate:      a.BeginDate,
+		EndDate:        a.EndDate,
+		Ended:          a.Ended,
+		Rating:         a.Rating,
+		RatingVotes:    a.RatingVotes,
+		Links:          a.Links,
 	}, nil
 }
 
@@ -200,7 +208,12 @@ func mapReleaseGroup(rg *ReleaseGroupFull) *metadata.AlbumMetadata {
 		return nil
 	}
 	artistMBID, artistName := firstArtist(rg.Artists)
+	rating, votes := mapRating(rg.Rating)
+	links, _ := mapURLRelations(rg.Relations)
 	return &metadata.AlbumMetadata{
+		Rating:         rating,
+		RatingVotes:    votes,
+		Links:          links,
 		MBID:           rg.ID,
 		Title:          rg.Title,
 		ArtistMBID:     artistMBID,

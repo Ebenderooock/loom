@@ -26,8 +26,8 @@ func TestGetArtist_Success(t *testing.T) {
 		if got := r.URL.Query().Get("fmt"); got != "json" {
 			t.Errorf("expected fmt=json, got %q", got)
 		}
-		if got := r.URL.Query().Get("inc"); got != "genres" {
-			t.Errorf("expected inc=genres, got %q", got)
+		if got := r.URL.Query().Get("inc"); got != "genres url-rels ratings" {
+			t.Errorf("expected inc=genres+url-rels+ratings, got %q", got)
 		}
 
 		w.Header().Set("Content-Type", "application/json")

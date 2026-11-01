@@ -26,6 +26,11 @@ import { apiFetch } from "@/lib/fetch";
 import { useArtists, type Artist } from "@/lib/music-api";
 import { AddArtistDialog } from "@/components/music/add-artist-dialog";
 import { ArtistMetadata } from "@/components/titles/title-metadata";
+import {
+  ArtistFacts,
+  MusicArtwork,
+  MusicExternalLinks,
+} from "@/components/music/artist-details";
 import { useLibraries } from "@/lib/libraries-api";
 import { toast } from "sonner";
 
@@ -44,19 +49,18 @@ function ArtistCard({
       className="group flex flex-col overflow-hidden rounded-lg border border-border bg-card transition-colors hover:border-accent/50 hover:shadow-md"
     >
       <div className="relative aspect-square overflow-hidden bg-gradient-to-br from-muted to-muted-foreground/20">
-        {artist.image_url ? (
-          <img
-            src={artist.image_url}
-            alt={artist.name}
-            loading="lazy"
-            className="h-full w-full object-cover transition-transform group-hover:scale-105"
-          />
-        ) : (
-          <div className="flex h-full w-full flex-col items-center justify-center gap-2 text-muted-foreground">
-            <Music className="h-12 w-12 opacity-40" />
-            <span className="text-xs font-medium opacity-60">No artwork</span>
-          </div>
-        )}
+        <MusicArtwork
+          src={artist.image_url}
+          alt={artist.name}
+          className="h-full w-full bg-transparent"
+          imgClassName="transition-transform group-hover:scale-105"
+          fallback={
+            <div className="flex h-full w-full flex-col items-center justify-center gap-2 text-muted-foreground">
+              <Music className="h-12 w-12 opacity-40" />
+              <span className="text-xs font-medium opacity-60">No artwork</span>
+            </div>
+          }
+        />
         {artist.monitoring_status !== "monitored" && (
           <Badge
             variant="secondary"
@@ -101,20 +105,48 @@ function ArtistDetailSheet({
       <SheetContent className="overflow-y-auto">
         {artist && (
           <div className="space-y-6">
-            <SheetHeader>
-              <SheetTitle>{artist.name}</SheetTitle>
-            </SheetHeader>
-
-            <div className="space-y-4">
-              {/* Artwork */}
-              {artist.image_url && (
-                <img
+            <div className="relative -mx-6 -mt-6 overflow-hidden">
+              {artist.background_url ? (
+                <MusicArtwork
+                  src={artist.background_url}
+                  alt=""
+                  className="aspect-video w-full"
+                  fallback={<div className="aspect-video w-full bg-muted" />}
+                />
+              ) : (
+                <div className="h-32 w-full bg-gradient-to-br from-muted to-muted-foreground/20" />
+              )}
+              <div className="absolute inset-0 bg-gradient-to-t from-background via-background/40 to-transparent" />
+              <div className="absolute bottom-0 left-6 right-6 flex items-end gap-4">
+                <MusicArtwork
                   src={artist.image_url}
                   alt={artist.name}
-                  className="w-full rounded-lg"
+                  loading="eager"
+                  className="h-24 w-24 shrink-0 rounded-lg border border-border shadow-md"
+                  fallback={
+                    <div className="flex h-full w-full items-center justify-center">
+                      <Music className="h-8 w-8 text-muted-foreground" />
+                    </div>
+                  }
                 />
-              )}
+                <SheetHeader className="min-w-0 pb-1 text-left">
+                  {artist.logo_url ? (
+                    <SheetTitle>
+                      <img
+                        src={artist.logo_url}
+                        alt={artist.name}
+                        className="max-h-14 max-w-full object-contain"
+                      />
+                    </SheetTitle>
+                  ) : (
+                    <SheetTitle className="truncate">{artist.name}</SheetTitle>
+                  )}
+                </SheetHeader>
+              </div>
+            </div>
 
+            <div className="space-y-4">
+              <ArtistFacts artist={artist} />
               {/* Info section */}
               <div className="space-y-3">
                 <div>
@@ -155,6 +187,7 @@ function ArtistDetailSheet({
                 )}
 
                 <ArtistMetadata artist={artist} />
+                <MusicExternalLinks links={artist.links} />
               </div>
 
               {/* Actions */}

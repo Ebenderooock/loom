@@ -43,6 +43,32 @@ export interface AlbumRelease {
   track_count: number;
 }
 
+export type ExternalLinkType =
+  | "website"
+  | "spotify"
+  | "apple_music"
+  | "youtube_music"
+  | "tidal"
+  | "deezer"
+  | "amazon_music"
+  | "bandcamp"
+  | "soundcloud"
+  | "youtube"
+  | "wikipedia"
+  | "wikidata"
+  | "discogs"
+  | "allmusic"
+  | "lastfm"
+  | "instagram"
+  | "facebook"
+  | "twitter"
+  | "tiktok";
+
+export interface ExternalLink {
+  type: ExternalLinkType;
+  url: string;
+}
+
 export interface Album {
   id: string;
   mbid: string;
@@ -54,6 +80,9 @@ export interface Album {
   genres?: string[];
   cover_art_url?: string;
   overview?: string;
+  rating?: number;
+  rating_votes?: number;
+  links?: ExternalLink[];
   monitored: boolean;
   selected_release_id?: string;
   last_search_at?: string;
@@ -72,6 +101,15 @@ export interface Artist {
   overview?: string;
   genres?: string[];
   image_url?: string;
+  background_url?: string;
+  logo_url?: string;
+  begin_area?: string;
+  begin_date?: string;
+  end_date?: string;
+  ended?: boolean;
+  rating?: number;
+  rating_votes?: number;
+  links?: ExternalLink[];
   path?: string;
   library_id?: string;
   quality_profile_id?: string;
@@ -200,7 +238,33 @@ export const musicKeys = {
   audioQualityProfiles: ["music", "audio-quality-profiles"] as const,
   metadataProfiles: ["music", "metadata-profiles"] as const,
   metadataSource: ["music", "metadata-source"] as const,
+  artworkSettings: ["music", "artwork-settings"] as const,
 };
+
+export interface ArtworkSettings {
+  fanart_api_key_set: boolean;
+  audiodb_api_key_set: boolean;
+  fanart_api_key_from_env: boolean;
+  audiodb_api_key_from_env: boolean;
+}
+
+export interface ArtworkSettingsUpdate {
+  // Empty keeps the stored value unless the matching clear flag is true.
+  fanart_api_key?: string;
+  audiodb_api_key?: string;
+  clear_fanart_api_key?: boolean;
+  clear_audiodb_api_key?: boolean;
+}
+
+export interface ArtworkTestResult {
+  ok: boolean;
+  fanart_tested: boolean;
+  fanart_ok: boolean;
+  fanart_error?: string;
+  audiodb_ok: boolean;
+  audiodb_error?: string;
+  audiodb_shared_key: boolean;
+}
 
 export type MetadataSourceMode = "musicbrainz" | "custom";
 
@@ -301,6 +365,17 @@ export async function setArtistMonitoring(
     body: JSON.stringify({ status }),
   });
   if (!res.ok) throw new Error(`set monitoring failed: ${res.status}`);
+  return (await res.json()) as Artist;
+}
+
+export async function refreshArtist(id: string): Promise<Artist> {
+  const res = await apiFetch(`/api/v1/artists/${id}/refresh`, {
+    method: "POST",
+  });
+  if (!res.ok) {
+    const detail = (await res.text()).trim();
+    throw new Error(detail || `refresh failed: ${res.status}`);
+  }
   return (await res.json()) as Artist;
 }
 
@@ -577,7 +652,7 @@ export function useDeleteAudioQualityProfile() {
 async function sendMetadataSource<T>(
   path: string,
   method: "PUT" | "POST",
-  req: MetadataSourceUpdate,
+  req: MetadataSourceUpdate | ArtworkSettingsUpdate,
 ): Promise<T> {
   const res = await apiFetch(path, {
     method,
@@ -619,6 +694,41 @@ export function useTestMetadataSource() {
     mutationFn: (req: MetadataSourceUpdate) =>
       sendMetadataSource<MetadataSourceTestResult>(
         "/api/v1/music/metadata-source/test",
+        "POST",
+        req,
+      ),
+  });
+}
+
+export function useArtworkSettings(enabled = true) {
+  return useQuery({
+    queryKey: musicKeys.artworkSettings,
+    queryFn: ({ signal }) =>
+      getJSON<ArtworkSettings>("/api/v1/music/artwork-settings", signal),
+    enabled,
+    staleTime: 60_000,
+  });
+}
+
+export function useUpdateArtworkSettings() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (req: ArtworkSettingsUpdate) =>
+      sendMetadataSource<ArtworkSettings>(
+        "/api/v1/music/artwork-settings",
+        "PUT",
+        req,
+      ),
+    onSuccess: (settings) =>
+      qc.setQueryData(musicKeys.artworkSettings, settings),
+  });
+}
+
+export function useTestArtworkSettings() {
+  return useMutation({
+    mutationFn: (req: ArtworkSettingsUpdate) =>
+      sendMetadataSource<ArtworkTestResult>(
+        "/api/v1/music/artwork-settings/test",
         "POST",
         req,
       ),
@@ -686,6 +796,17 @@ export function useSetArtistMonitoring() {
     onSuccess: (a) => {
       qc.invalidateQueries({ queryKey: musicKeys.artists });
       qc.invalidateQueries({ queryKey: musicKeys.artist(a.id) });
+    },
+  });
+}
+
+export function useRefreshArtist() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: refreshArtist,
+    onSuccess: (a) => {
+      qc.setQueryData(musicKeys.artist(a.id), a);
+      qc.invalidateQueries({ queryKey: musicKeys.artists });
     },
   });
 }

@@ -18,6 +18,21 @@ type ArtistMetadata struct {
 	Genres         []string  `json:"genres,omitempty"`
 	ImageURL       string    `json:"image_url,omitempty"`
 	CachedAt       time.Time `json:"cached_at,omitempty"`
+
+	BeginArea   string         `json:"begin_area,omitempty"`
+	BeginDate   string         `json:"begin_date,omitempty"`
+	EndDate     string         `json:"end_date,omitempty"`
+	Ended       bool           `json:"ended,omitempty"`
+	Rating      float64        `json:"rating,omitempty"` // 0-5
+	RatingVotes int            `json:"rating_votes,omitempty"`
+	Links       []ExternalLink `json:"links,omitempty"`
+}
+
+// ExternalLink is a curated link to a service page for an artist or album,
+// such as Spotify, Apple Music, YouTube Music, Wikipedia or the official site.
+type ExternalLink struct {
+	Type string `json:"type"`
+	URL  string `json:"url"`
 }
 
 // AlbumMetadata represents metadata for an album. An "album" maps to a
@@ -33,6 +48,10 @@ type AlbumMetadata struct {
 	Genres         []string  `json:"genres,omitempty"`
 	CoverArtURL    string    `json:"cover_art_url,omitempty"`
 	CachedAt       time.Time `json:"cached_at,omitempty"`
+
+	Rating      float64        `json:"rating,omitempty"` // 0-5
+	RatingVotes int            `json:"rating_votes,omitempty"`
+	Links       []ExternalLink `json:"links,omitempty"`
 }
 
 // AlbumReleaseMetadata represents a specific edition (MusicBrainz release) of an
@@ -87,4 +106,28 @@ type MusicMetadataProvider interface {
 
 	// GetAlbumRelease fetches a single edition (release) including its tracks.
 	GetAlbumRelease(ctx context.Context, releaseMBID string) (*AlbumReleaseMetadata, error)
+}
+
+// ArtistArtwork is artwork and descriptive text for an artist from an artwork
+// source (fanart.tv, TheAudioDB). AlbumCovers maps release-group MBIDs to cover
+// URLs when the source returns them with the artist.
+type ArtistArtwork struct {
+	ThumbURL      string            `json:"thumb_url,omitempty"`
+	BackgroundURL string            `json:"background_url,omitempty"`
+	LogoURL       string            `json:"logo_url,omitempty"`
+	Biography     string            `json:"biography,omitempty"`
+	AlbumCovers   map[string]string `json:"album_covers,omitempty"`
+}
+
+// AlbumArtwork is artwork and descriptive text for an album (release-group).
+type AlbumArtwork struct {
+	CoverURL    string `json:"cover_url,omitempty"`
+	Description string `json:"description,omitempty"`
+}
+
+// MusicArtworkProvider supplies artwork that MusicBrainz does not carry. All
+// lookups are best-effort: a nil result with a nil error means no artwork.
+type MusicArtworkProvider interface {
+	ArtistArtwork(ctx context.Context, artistMBID string) (*ArtistArtwork, error)
+	AlbumArtwork(ctx context.Context, releaseGroupMBID string) (*AlbumArtwork, error)
 }

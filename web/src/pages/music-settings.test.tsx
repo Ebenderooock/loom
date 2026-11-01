@@ -49,6 +49,24 @@ describe("MusicProfilesPage metadata source", () => {
           search_on_public: true,
         });
       }
+      if (url.endsWith("/api/v1/music/artwork-settings") && !init?.method) {
+        return json({
+          fanart_api_key_set: false,
+          audiodb_api_key_set: false,
+          fanart_api_key_from_env: false,
+          audiodb_api_key_from_env: false,
+        });
+      }
+      if (url.endsWith("/api/v1/music/artwork-settings/test")) {
+        return json({
+          ok: false,
+          fanart_tested: true,
+          fanart_ok: false,
+          fanart_error: "fanart.tv: API key rejected",
+          audiodb_ok: true,
+          audiodb_shared_key: true,
+        });
+      }
       if (url.endsWith("/api/v1/music/metadata-source/test")) {
         return json({
           ok: false,
@@ -79,14 +97,12 @@ describe("MusicProfilesPage metadata source", () => {
 
     await user.click(screen.getByRole("button", { name: "Test connection" }));
 
+    const isSourceTest = (u: unknown) =>
+      String(u).endsWith("/metadata-source/test");
     await waitFor(() =>
-      expect(
-        fetchMock.mock.calls.some(([u]) => String(u).endsWith("/test")),
-      ).toBe(true),
+      expect(fetchMock.mock.calls.some(([u]) => isSourceTest(u))).toBe(true),
     );
-    const call = fetchMock.mock.calls.find(([u]) =>
-      String(u).endsWith("/test"),
-    );
+    const call = fetchMock.mock.calls.find(([u]) => isSourceTest(u));
     const body = JSON.parse(String(call?.[1]?.body));
     expect(body).toMatchObject({
       mode: "custom",
@@ -98,13 +114,37 @@ describe("MusicProfilesPage metadata source", () => {
     expect(await screen.findByText("Lookups OK")).toBeInTheDocument();
   });
 
+  it("sends artwork keys only when entered and shows test results", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    const fanart = await screen.findByLabelText("fanart.tv API key");
+    await user.type(fanart, "my-fanart-key");
+    await user.click(screen.getByRole("button", { name: "Test keys" }));
+
+    expect(
+      await screen.findByText("fanart.tv: API key rejected"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("TheAudioDB (shared key) OK")).toBeInTheDocument();
+    const call = fetchMock.mock.calls.find(([u]) =>
+      String(u).endsWith("/artwork-settings/test"),
+    );
+    const body = JSON.parse(String(call?.[1]?.body));
+    expect(body).toEqual({ fanart_api_key: "my-fanart-key" });
+  });
+
   it("hides the metadata source from non-admins", async () => {
     auth.user = { id: 2, role: "user" };
     renderPage();
     expect(await screen.findByText("Music Profiles")).toBeInTheDocument();
     expect(screen.queryByText("Metadata Source")).not.toBeInTheDocument();
+    expect(screen.queryByText("Artwork")).not.toBeInTheDocument();
     expect(
-      fetchMock.mock.calls.some(([u]) => String(u).includes("metadata-source")),
+      fetchMock.mock.calls.some(
+        ([u]) =>
+          String(u).includes("metadata-source") ||
+          String(u).includes("artwork-settings"),
+      ),
     ).toBe(false);
   });
 });

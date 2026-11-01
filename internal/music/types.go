@@ -4,6 +4,8 @@ import (
 	"database/sql/driver"
 	"encoding/json"
 	"time"
+
+	"github.com/ebenderooock/loom/internal/metadata"
 )
 
 // MonitoringStatus represents whether an artist is actively monitored.
@@ -26,6 +28,15 @@ type Artist struct {
 	Overview          string           `json:"overview,omitempty"`
 	Genres            StringSlice      `json:"genres,omitempty"`
 	ImageURL          string           `json:"image_url,omitempty"`
+	BackgroundURL     string           `json:"background_url,omitempty"`
+	LogoURL           string           `json:"logo_url,omitempty"`
+	BeginArea         string           `json:"begin_area,omitempty"`
+	BeginDate         string           `json:"begin_date,omitempty"`
+	EndDate           string           `json:"end_date,omitempty"`
+	Ended             bool             `json:"ended,omitempty"`
+	Rating            float64          `json:"rating,omitempty"`
+	RatingVotes       int              `json:"rating_votes,omitempty"`
+	Links             ExternalLinks    `json:"links,omitempty"`
 	Path              string           `json:"path,omitempty"`
 	LibraryID         string           `json:"library_id,omitempty"`
 	QualityProfileID  string           `json:"quality_profile_id,omitempty"`
@@ -43,23 +54,27 @@ type Artist struct {
 
 // Album represents an abstract album (MusicBrainz release-group) for an artist.
 type Album struct {
-	ID                string      `json:"id"`
-	MBID              string      `json:"mbid"`
-	ArtistID          string      `json:"artist_id"`
-	Title             string      `json:"title"`
-	AlbumType         string      `json:"album_type,omitempty"`
-	SecondaryTypes    StringSlice `json:"secondary_types,omitempty"`
-	ReleaseDate       string      `json:"release_date,omitempty"`
-	Genres            StringSlice `json:"genres,omitempty"`
-	CoverArtURL       string      `json:"cover_art_url,omitempty"`
-	Overview          string      `json:"overview,omitempty"`
-	Monitored         bool        `json:"monitored"`
-	SelectedReleaseID string      `json:"selected_release_id,omitempty"`
-	LastSearchAt      *time.Time  `json:"last_search_at,omitempty"`
-	ReleasesFetchedAt *time.Time  `json:"releases_fetched_at,omitempty"`
-	TracksFetchedAt   *time.Time  `json:"tracks_fetched_at,omitempty"`
-	CreatedAt         time.Time   `json:"created_at"`
-	UpdatedAt         time.Time   `json:"updated_at"`
+	ID                string        `json:"id"`
+	MBID              string        `json:"mbid"`
+	ArtistID          string        `json:"artist_id"`
+	Title             string        `json:"title"`
+	AlbumType         string        `json:"album_type,omitempty"`
+	SecondaryTypes    StringSlice   `json:"secondary_types,omitempty"`
+	ReleaseDate       string        `json:"release_date,omitempty"`
+	Genres            StringSlice   `json:"genres,omitempty"`
+	CoverArtURL       string        `json:"cover_art_url,omitempty"`
+	Overview          string        `json:"overview,omitempty"`
+	Rating            float64       `json:"rating,omitempty"`
+	RatingVotes       int           `json:"rating_votes,omitempty"`
+	Links             ExternalLinks `json:"links,omitempty"`
+	Monitored         bool          `json:"monitored"`
+	SelectedReleaseID string        `json:"selected_release_id,omitempty"`
+	LastSearchAt      *time.Time    `json:"last_search_at,omitempty"`
+	ReleasesFetchedAt *time.Time    `json:"releases_fetched_at,omitempty"`
+	TracksFetchedAt   *time.Time    `json:"tracks_fetched_at,omitempty"`
+	DetailsFetchedAt  *time.Time    `json:"details_fetched_at,omitempty"`
+	CreatedAt         time.Time     `json:"created_at"`
+	UpdatedAt         time.Time     `json:"updated_at"`
 
 	// Populated on read, not stored directly.
 	Releases []*AlbumRelease `json:"releases,omitempty"`
@@ -309,4 +324,58 @@ func (m *MediaInfoMap) Scan(value interface{}) error {
 		return nil
 	}
 	return json.Unmarshal(bytes, m)
+}
+
+// ExternalLink is a curated link to a service page (Spotify, Apple Music,
+// YouTube Music, Wikipedia, official site, ...).
+type ExternalLink struct {
+	Type string `json:"type"`
+	URL  string `json:"url"`
+}
+
+// ExternalLinks is stored as a JSON array.
+type ExternalLinks []ExternalLink
+
+// Value implements driver.Valuer.
+func (l ExternalLinks) Value() (driver.Value, error) {
+	if l == nil {
+		return json.Marshal([]ExternalLink{})
+	}
+	return json.Marshal(l)
+}
+
+// Scan implements sql.Scanner.
+func (l *ExternalLinks) Scan(value interface{}) error {
+	var b []byte
+	switch v := value.(type) {
+	case nil:
+		*l = nil
+		return nil
+	case []byte:
+		b = v
+	case string:
+		b = []byte(v)
+	default:
+		return nil
+	}
+	var out []ExternalLink
+	if err := json.Unmarshal(b, &out); err != nil {
+		return err
+	}
+	if len(out) == 0 {
+		out = nil
+	}
+	*l = out
+	return nil
+}
+
+func externalLinksFrom(in []metadata.ExternalLink) ExternalLinks {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make(ExternalLinks, 0, len(in))
+	for _, l := range in {
+		out = append(out, ExternalLink{Type: l.Type, URL: l.URL})
+	}
+	return out
 }

@@ -1551,6 +1551,85 @@ paths:
         "401": { description: Authentication required. }
         "403": { description: Administrator required. }
 
+  /api/v1/artists/{id}/refresh:
+    post:
+      tags: [music]
+      operationId: refreshMusicArtist
+      summary: Refresh one artist's metadata, artwork and albums.
+      description: Re-fetches MusicBrainz details, artwork from fanart.tv and TheAudioDB, and the album catalogue. Artwork failures are logged and do not fail the refresh.
+      security: [{ cookieAuth: [] }, { apiKey: [] }, { bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Refreshed artist.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MusicArtist" }
+        "401": { description: Authentication required. }
+        "404": { description: Artist not found. }
+        "502": { description: MusicBrainz could not be reached. }
+
+  /api/v1/music/artwork-settings:
+    get:
+      tags: [music]
+      operationId: getMusicArtworkSettings
+      summary: Get the music artwork API key status.
+      description: Admin only. Keys are never returned; only whether each is set.
+      security: [{ cookieAuth: [] }, { apiKey: [] }, { bearerAuth: [] }]
+      responses:
+        "200":
+          description: Current artwork settings.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MusicArtworkSettings" }
+        "401": { description: Authentication required. }
+        "403": { description: Administrator required. }
+        "500": { description: Artwork settings could not be loaded. }
+    put:
+      tags: [music]
+      operationId: updateMusicArtworkSettings
+      summary: Save and apply the music artwork API keys.
+      description: Admin only. Changes apply immediately. An empty key keeps the saved value unless its clear flag is true.
+      security: [{ cookieAuth: [] }, { apiKey: [] }, { bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/MusicArtworkSettingsUpdate" }
+      responses:
+        "200":
+          description: Saved artwork settings.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MusicArtworkSettings" }
+        "400": { description: Invalid key. }
+        "401": { description: Authentication required. }
+        "403": { description: Administrator required. }
+        "500": { description: Artwork settings could not be saved. }
+
+  /api/v1/music/artwork-settings/test:
+    post:
+      tags: [music]
+      operationId: testMusicArtworkSettings
+      summary: Check music artwork API keys.
+      description: Admin only. Looks up a known artist on fanart.tv (when a key is set) and TheAudioDB. Empty keys use the saved or environment keys.
+      security: [{ cookieAuth: [] }, { apiKey: [] }, { bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/MusicArtworkSettingsUpdate" }
+      responses:
+        "200":
+          description: Key check result.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MusicArtworkTestResult" }
+        "400": { description: Invalid key. }
+        "401": { description: Authentication required. }
+        "403": { description: Administrator required. }
+
   /api/v1/discover/artist/{id}:
     get:
       tags: [discovery]
@@ -3521,12 +3600,81 @@ components:
       required: [release_id]
       properties:
         release_id: { type: string, minLength: 1 }
+    MusicExternalLink:
+      type: object
+      required: [type, url]
+      properties:
+        type:
+          type: string
+          description: Service from MusicBrainz URL relationships.
+          enum: [website, spotify, apple_music, youtube_music, tidal, deezer, amazon_music, bandcamp, soundcloud, youtube, wikipedia, wikidata, discogs, allmusic, lastfm, instagram, facebook, twitter, tiktok]
+        url: { type: string, format: uri }
+    MusicArtist:
+      type: object
+      required: [id, mbid, name, monitoring_status]
+      properties:
+        id: { type: string }
+        mbid: { type: string }
+        name: { type: string }
+        overview: { type: string, description: Biography from TheAudioDB when available. }
+        image_url: { type: string, description: "Artist photo from fanart.tv or TheAudioDB, else Wikimedia Commons." }
+        background_url: { type: string }
+        logo_url: { type: string }
+        begin_area: { type: string }
+        begin_date: { type: string }
+        end_date: { type: string }
+        ended: { type: boolean }
+        rating: { type: number, minimum: 0, maximum: 5, description: MusicBrainz community rating. }
+        rating_votes: { type: integer }
+        links:
+          type: array
+          items: { $ref: "#/components/schemas/MusicExternalLink" }
+        monitoring_status: { type: string }
+        albums:
+          type: array
+          items: { $ref: "#/components/schemas/MusicAlbum" }
+      additionalProperties: true
+    MusicArtworkSettings:
+      type: object
+      required: [fanart_api_key_set, audiodb_api_key_set, fanart_api_key_from_env, audiodb_api_key_from_env]
+      properties:
+        fanart_api_key_set: { type: boolean }
+        audiodb_api_key_set: { type: boolean }
+        fanart_api_key_from_env: { type: boolean, description: LOOM_FANART_API_KEY is used because no key is saved. }
+        audiodb_api_key_from_env: { type: boolean, description: LOOM_THEAUDIODB_API_KEY is used because no key is saved. }
+    MusicArtworkSettingsUpdate:
+      type: object
+      additionalProperties: false
+      properties:
+        fanart_api_key: { type: string, writeOnly: true, maxLength: 256 }
+        audiodb_api_key: { type: string, writeOnly: true, maxLength: 256 }
+        clear_fanart_api_key: { type: boolean }
+        clear_audiodb_api_key: { type: boolean }
+    MusicArtworkTestResult:
+      type: object
+      required: [ok, fanart_tested, fanart_ok, audiodb_ok, audiodb_shared_key]
+      properties:
+        ok: { type: boolean }
+        fanart_tested: { type: boolean }
+        fanart_ok: { type: boolean }
+        fanart_error: { type: string }
+        audiodb_ok: { type: boolean }
+        audiodb_error: { type: string }
+        audiodb_shared_key: { type: boolean, description: The free shared TheAudioDB key was tested. }
     MusicAlbum:
       type: object
       required: [id, title]
       properties:
         id: { type: string }
         title: { type: string }
+        cover_art_url: { type: string }
+        overview: { type: string, description: Album description from TheAudioDB when available. }
+        rating: { type: number, minimum: 0, maximum: 5 }
+        rating_votes: { type: integer }
+        links:
+          type: array
+          items: { $ref: "#/components/schemas/MusicExternalLink" }
+        details_fetched_at: { type: string, format: date-time }
         selected_release_id: { type: string }
         releases:
           type: array

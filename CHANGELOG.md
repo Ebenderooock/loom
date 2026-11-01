@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Music artwork and details: artists show a photo, background, logo,
+  biography, origin, active years and MusicBrainz rating; albums show a cover,
+  description and rating. Artwork comes from fanart.tv (optional API key) and
+  TheAudioDB (free shared key by default), configured under **Settings → Music
+  Profiles → Artwork** or with `LOOM_FANART_API_KEY` and
+  `LOOM_THEAUDIODB_API_KEY`. Artists and albums link to Spotify, Apple Music,
+  YouTube Music and other services listed on MusicBrainz. A new **Refresh
+  Metadata** action updates one artist. See
+  [`docs/music.md`](docs/music.md#artwork-and-details).
+
 - Music metadata source setting: admins can keep the public MusicBrainz API or
   point Loom at a self-hosted mirror or hosted MusicBrainz-compatible service,
   with its own request rate, an optional auth header and an option to keep

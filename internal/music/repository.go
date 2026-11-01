@@ -126,9 +126,9 @@ func bindMusicQuery(query string, postgres bool) string {
 
 // --- column lists ---
 
-const artistColumns = `id, mbid, name, sort_name, disambiguation, artist_type, country, overview, genres, image_url, path, library_id, quality_profile_id, metadata_profile_id, monitoring_status, metadata_provider, last_search_at, created_at, updated_at`
+const artistColumns = `id, mbid, name, sort_name, disambiguation, artist_type, country, overview, genres, image_url, background_url, logo_url, begin_area, begin_date, end_date, ended, rating, rating_votes, links, path, library_id, quality_profile_id, metadata_profile_id, monitoring_status, metadata_provider, last_search_at, created_at, updated_at`
 
-const albumColumns = `id, mbid, artist_id, title, album_type, secondary_types, release_date, genres, cover_art_url, overview, monitored, selected_release_id, last_search_at, releases_fetched_at, tracks_fetched_at, created_at, updated_at`
+const albumColumns = `id, mbid, artist_id, title, album_type, secondary_types, release_date, genres, cover_art_url, overview, rating, rating_votes, links, monitored, selected_release_id, last_search_at, releases_fetched_at, tracks_fetched_at, details_fetched_at, created_at, updated_at`
 
 const releaseColumns = `id, mbid, album_id, title, disambiguation, status, release_date, country, label, format, media_count, track_count, created_at, updated_at`
 
@@ -145,6 +145,11 @@ type rowScanner interface {
 func scanArtist(s rowScanner) (*Artist, error) {
 	a := &Artist{}
 	var mbid, sortName, disamb, artistType, country, overview, imageURL, path sql.NullString
+	var backgroundURL, logoURL, beginArea, beginDate, endDate sql.NullString
+	var ended sql.NullBool
+	var rating sql.NullFloat64
+	var ratingVotes sql.NullInt64
+	var linkBytes []byte
 	var libraryID, qpID, mpID, provider sql.NullString
 	var status string
 	var genreBytes []byte
@@ -152,7 +157,9 @@ func scanArtist(s rowScanner) (*Artist, error) {
 	var createdStr, updatedStr string
 	err := s.Scan(
 		&a.ID, &mbid, &a.Name, &sortName, &disamb, &artistType, &country,
-		&overview, &genreBytes, &imageURL, &path, &libraryID, &qpID, &mpID,
+		&overview, &genreBytes, &imageURL, &backgroundURL, &logoURL, &beginArea,
+		&beginDate, &endDate, &ended, &rating, &ratingVotes, &linkBytes,
+		&path, &libraryID, &qpID, &mpID,
 		&status, &provider, &lastSearch, &createdStr, &updatedStr,
 	)
 	if err != nil {
@@ -165,6 +172,15 @@ func scanArtist(s rowScanner) (*Artist, error) {
 	a.Country = country.String
 	a.Overview = overview.String
 	a.ImageURL = imageURL.String
+	a.BackgroundURL = backgroundURL.String
+	a.LogoURL = logoURL.String
+	a.BeginArea = beginArea.String
+	a.BeginDate = beginDate.String
+	a.EndDate = endDate.String
+	a.Ended = ended.Bool
+	a.Rating = rating.Float64
+	a.RatingVotes = int(ratingVotes.Int64)
+	_ = a.Links.Scan(linkBytes)
 	a.Path = path.String
 	a.LibraryID = libraryID.String
 	a.QualityProfileID = qpID.String
@@ -223,10 +239,11 @@ func (r *sqlRepo) CreateArtist(ctx context.Context, a *Artist) error {
 	}
 	a.UpdatedAt = now
 	_, err := r.db.ExecContext(ctx,
-		`INSERT INTO artists (id, mbid, name, sort_name, disambiguation, artist_type, country, overview, genres, image_url, path, library_id, quality_profile_id, metadata_profile_id, monitoring_status, metadata_provider, last_search_at, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO artists (id, mbid, name, sort_name, disambiguation, artist_type, country, overview, genres, image_url, background_url, logo_url, begin_area, begin_date, end_date, ended, rating, rating_votes, links, path, library_id, quality_profile_id, metadata_profile_id, monitoring_status, metadata_provider, last_search_at, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		a.ID, nullString(a.MBID), a.Name, a.SortName, a.Disambiguation, a.ArtistType,
-		a.Country, a.Overview, a.Genres, a.ImageURL, a.Path,
+		a.Country, a.Overview, a.Genres, a.ImageURL, a.BackgroundURL, a.LogoURL,
+		a.BeginArea, a.BeginDate, a.EndDate, a.Ended, a.Rating, a.RatingVotes, a.Links, a.Path,
 		nullString(a.LibraryID), nullString(a.QualityProfileID), nullString(a.MetadataProfileID),
 		string(a.MonitoringStatus), a.MetadataProvider, nullTime(a.LastSearchAt),
 		a.CreatedAt, a.UpdatedAt,
@@ -237,9 +254,10 @@ func (r *sqlRepo) CreateArtist(ctx context.Context, a *Artist) error {
 func (r *sqlRepo) UpdateArtist(ctx context.Context, a *Artist) error {
 	a.UpdatedAt = time.Now().UTC()
 	_, err := r.db.ExecContext(ctx,
-		`UPDATE artists SET mbid=?, name=?, sort_name=?, disambiguation=?, artist_type=?, country=?, overview=?, genres=?, image_url=?, path=?, library_id=?, quality_profile_id=?, metadata_profile_id=?, monitoring_status=?, metadata_provider=?, last_search_at=?, updated_at=?, deleted_at=NULL WHERE id=?`,
+		`UPDATE artists SET mbid=?, name=?, sort_name=?, disambiguation=?, artist_type=?, country=?, overview=?, genres=?, image_url=?, background_url=?, logo_url=?, begin_area=?, begin_date=?, end_date=?, ended=?, rating=?, rating_votes=?, links=?, path=?, library_id=?, quality_profile_id=?, metadata_profile_id=?, monitoring_status=?, metadata_provider=?, last_search_at=?, updated_at=?, deleted_at=NULL WHERE id=?`,
 		nullString(a.MBID), a.Name, a.SortName, a.Disambiguation, a.ArtistType, a.Country,
-		a.Overview, a.Genres, a.ImageURL, a.Path,
+		a.Overview, a.Genres, a.ImageURL, a.BackgroundURL, a.LogoURL,
+		a.BeginArea, a.BeginDate, a.EndDate, a.Ended, a.Rating, a.RatingVotes, a.Links, a.Path,
 		nullString(a.LibraryID), nullString(a.QualityProfileID), nullString(a.MetadataProfileID),
 		string(a.MonitoringStatus), a.MetadataProvider, nullTime(a.LastSearchAt),
 		a.UpdatedAt, a.ID,
@@ -260,12 +278,16 @@ func scanAlbum(s rowScanner) (*Album, error) {
 	al := &Album{}
 	var mbid, albumType, releaseDate, coverArt, overview, selectedRelease sql.NullString
 	var secondaryBytes, genreBytes []byte
-	var lastSearch, releasesFetched, tracksFetched sql.NullString
+	var lastSearch, releasesFetched, tracksFetched, detailsFetched sql.NullString
+	var rating sql.NullFloat64
+	var ratingVotes sql.NullInt64
+	var linkBytes []byte
 	var createdStr, updatedStr string
 	err := s.Scan(
 		&al.ID, &mbid, &al.ArtistID, &al.Title, &albumType, &secondaryBytes,
-		&releaseDate, &genreBytes, &coverArt, &overview, &al.Monitored,
-		&selectedRelease, &lastSearch, &releasesFetched, &tracksFetched,
+		&releaseDate, &genreBytes, &coverArt, &overview, &rating, &ratingVotes,
+		&linkBytes, &al.Monitored,
+		&selectedRelease, &lastSearch, &releasesFetched, &tracksFetched, &detailsFetched,
 		&createdStr, &updatedStr,
 	)
 	if err != nil {
@@ -276,6 +298,10 @@ func scanAlbum(s rowScanner) (*Album, error) {
 	al.ReleaseDate = releaseDate.String
 	al.CoverArtURL = coverArt.String
 	al.Overview = overview.String
+	al.Rating = rating.Float64
+	al.RatingVotes = int(ratingVotes.Int64)
+	_ = al.Links.Scan(linkBytes)
+	al.DetailsFetchedAt = parseNullTime(detailsFetched)
 	al.SelectedReleaseID = selectedRelease.String
 	_ = al.SecondaryTypes.Scan(secondaryBytes)
 	_ = al.Genres.Scan(genreBytes)
@@ -340,12 +366,12 @@ func (r *sqlRepo) CreateAlbum(ctx context.Context, al *Album) error {
 	}
 	defer func() { _ = tx.Rollback() }()
 	if _, err := tx.ExecContext(ctx,
-		`INSERT INTO albums (id, mbid, artist_id, title, album_type, secondary_types, release_date, genres, cover_art_url, overview, monitored, selected_release_id, last_search_at, releases_fetched_at, tracks_fetched_at, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO albums (id, mbid, artist_id, title, album_type, secondary_types, release_date, genres, cover_art_url, overview, rating, rating_votes, links, monitored, selected_release_id, last_search_at, releases_fetched_at, tracks_fetched_at, details_fetched_at, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		al.ID, nullString(al.MBID), al.ArtistID, al.Title, al.AlbumType, al.SecondaryTypes,
-		al.ReleaseDate, al.Genres, al.CoverArtURL, al.Overview, al.Monitored,
+		al.ReleaseDate, al.Genres, al.CoverArtURL, al.Overview, al.Rating, al.RatingVotes, al.Links, al.Monitored,
 		nullString(al.SelectedReleaseID), nullTime(al.LastSearchAt),
-		nullTime(al.ReleasesFetchedAt), nullTime(al.TracksFetchedAt),
+		nullTime(al.ReleasesFetchedAt), nullTime(al.TracksFetchedAt), nullTime(al.DetailsFetchedAt),
 		al.CreatedAt, al.UpdatedAt,
 	); err != nil {
 		return err
@@ -391,11 +417,11 @@ func (r *sqlRepo) SetArtistAlbumCatalog(ctx context.Context, artistID string, al
 func (r *sqlRepo) UpdateAlbum(ctx context.Context, al *Album) error {
 	al.UpdatedAt = time.Now().UTC()
 	_, err := r.db.ExecContext(ctx,
-		`UPDATE albums SET mbid=?, title=?, album_type=?, secondary_types=?, release_date=?, genres=?, cover_art_url=?, overview=?, monitored=?, selected_release_id=?, last_search_at=?, releases_fetched_at=?, tracks_fetched_at=?, updated_at=? WHERE id=?`,
+		`UPDATE albums SET mbid=?, title=?, album_type=?, secondary_types=?, release_date=?, genres=?, cover_art_url=?, overview=?, rating=?, rating_votes=?, links=?, monitored=?, selected_release_id=?, last_search_at=?, releases_fetched_at=?, tracks_fetched_at=?, details_fetched_at=?, updated_at=? WHERE id=?`,
 		nullString(al.MBID), al.Title, al.AlbumType, al.SecondaryTypes, al.ReleaseDate,
-		al.Genres, al.CoverArtURL, al.Overview, al.Monitored,
+		al.Genres, al.CoverArtURL, al.Overview, al.Rating, al.RatingVotes, al.Links, al.Monitored,
 		nullString(al.SelectedReleaseID), nullTime(al.LastSearchAt),
-		nullTime(al.ReleasesFetchedAt), nullTime(al.TracksFetchedAt),
+		nullTime(al.ReleasesFetchedAt), nullTime(al.TracksFetchedAt), nullTime(al.DetailsFetchedAt),
 		al.UpdatedAt, al.ID,
 	)
 	return err

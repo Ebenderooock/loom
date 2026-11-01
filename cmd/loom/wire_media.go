@@ -19,6 +19,8 @@ import (
 	"github.com/ebenderooock/loom/internal/languages"
 	"github.com/ebenderooock/loom/internal/libraries"
 	"github.com/ebenderooock/loom/internal/mediainfo"
+	"github.com/ebenderooock/loom/internal/metadata"
+	"github.com/ebenderooock/loom/internal/metadata/artwork"
 	"github.com/ebenderooock/loom/internal/metadata/musicbrainz"
 	"github.com/ebenderooock/loom/internal/metadata/tvdb"
 	"github.com/ebenderooock/loom/internal/movies"
@@ -98,6 +100,23 @@ func wireMedia(
 	musicRepo := music.NewRepository(db.DB(), string(db.Engine()))
 	musicSvc := music.NewService(musicRepo, mbProvider, logger)
 	wiring.MusicService = musicSvc
+	// Artwork (fanart.tv / TheAudioDB) is skipped in dev-stub mode so the
+	// stack makes no outbound requests.
+	if stubs == nil {
+		artworkProvider := artwork.New(artwork.Config{})
+		artworkCfg := music.NewArtworkSettingsService(
+			music.NewArtworkSettingsStore(db.DB(), string(db.Engine())), artworkProvider,
+			os.Getenv("LOOM_FANART_API_KEY"), os.Getenv("LOOM_THEAUDIODB_API_KEY"))
+		if _, err := artworkCfg.ApplyStored(ctx); err != nil {
+			logger.Warn("music: failed to load artwork settings; using environment keys", "error", err)
+		}
+		if setter, ok := musicSvc.(interface {
+			SetArtwork(metadata.MusicArtworkProvider)
+		}); ok {
+			setter.SetArtwork(artworkProvider)
+		}
+		wiring.MusicArtworkCfg = artworkCfg
+	}
 
 	musicScannerSvc := scanner.NewMusicScanner(musicSvc, logger)
 	wiring.MusicScanner = musicScannerSvc
