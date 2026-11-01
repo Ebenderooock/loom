@@ -9,6 +9,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Music artwork and details: artists show a photo, background, logo,
+  biography, origin, active years and MusicBrainz rating; albums show a cover,
+  description and rating. Artwork comes from fanart.tv (optional API key) and
+  TheAudioDB (free shared key by default), configured under **Settings → Music
+  Profiles → Artwork** or with `LOOM_FANART_API_KEY` and
+  `LOOM_THEAUDIODB_API_KEY`. Artists and albums link to Spotify, Apple Music,
+  YouTube Music and other services listed on MusicBrainz. A new **Refresh
+  Metadata** action updates one artist. See
+  [`docs/music.md`](docs/music.md#artwork-and-details).
+- Music artist detail drawer with artist, album and per-track monitoring,
+  metadata refresh and folder rescan actions, automatic and interactive album
+  search, expandable track availability, an edit dialog for monitoring and
+  profiles, and Files and History sections. New endpoints:
+  `GET /api/v1/artists/{id}/files`, `GET /api/v1/artists/{id}/history` and
+  `PUT /api/v1/albums/{id}/tracks/{trackId}/monitoring`.
+
+- Music metadata source setting: admins can keep the public MusicBrainz API or
+  point Loom at a self-hosted mirror or hosted MusicBrainz-compatible service,
+  with its own request rate, an optional auth header and an option to keep
+  artist search on public MusicBrainz. Requests to `musicbrainz.org`, including
+  retries, are always spaced at least one second apart. See
+  [`docs/music.md`](docs/music.md#metadata-source).
 - Music capability management: select an album's MusicBrainz edition, manage
   audio quality and metadata profiles, and search for missing tracks in
   partially available albums. Completed music downloads now import into the
@@ -107,6 +129,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Monitoring a music album now also monitors its tracks. Previously, tracks
+  stayed unmonitored when an album was monitored later, so searches skipped
+  them.
+- Music imports no longer fail with `could not match audio track` when
+  MusicBrainz is temporarily unavailable: the import reports that the album's
+  track list could not be loaded and the next attempt fetches it again. The
+  library scanner skips such files instead of listing them as unmatched.
+  Tagged titles with qualifiers such as `(feat. Kiiara)` or `(album version)`
+  now match the MusicBrainz track when the match is unambiguous. MusicBrainz
+  requests identify Loom with its version and project URL, and retry waits
+  stop when the request is cancelled. Each failed import now sends a single
+  "Import Failed" notification instead of two.
+- Music artist catalogues now include only official studio albums, EPs and
+  singles, deduplicated across editions. Metadata refresh hides legacy excluded
+  entries without deleting existing audio files or their records.
+- Manual release search keeps Download visible without horizontal scrolling,
+  with wrapping release metadata, phone-friendly rows, compact diagnostics and
+  independently scrolling results. Download actions show sending, success and
+  retryable error states and prevent duplicate submissions.
+- Music artist search no longer fails with `Unexpected token '<'` after the
+  Music feature is enabled at runtime: the flag now gates the music API per
+  request instead of only at startup. Unknown `/api` paths return a JSON 404
+  instead of the web app's HTML, and the artist folder rescan button uses the
+  correct API path.
 - TV monitoring now works at the show and season level. Each season, including
   Specials, has its own monitor toggle that is kept across metadata refreshes.
   Specials no longer count toward show completeness and new specials start

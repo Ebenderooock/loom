@@ -183,7 +183,8 @@ func (s *Store) fileGroups(ctx context.Context, r Request, now time.Time) (map[s
 	case MediaArtist:
 		q = `SELECT t.id,COALESCE(f.file_path,'') FROM tracks t
 			JOIN albums al ON al.id=t.album_id LEFT JOIN track_files f ON f.track_id=t.id AND f.deleted_at IS NULL
-			WHERE al.artist_id=? AND al.deleted_at IS NULL
+			JOIN album_artists aa ON aa.album_id=al.id AND aa.catalog_included=true
+			WHERE aa.artist_id=? AND al.deleted_at IS NULL
 			AND al.monitored=true AND t.monitored=true AND t.release_id=al.selected_release_id
 			AND (al.release_date='' OR al.release_date<=?)`
 		args = append(args, now.Format(time.DateOnly))

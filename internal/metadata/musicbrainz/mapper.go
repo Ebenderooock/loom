@@ -24,7 +24,7 @@ func MapArtist(resp *ArtistResponse) *ArtistMetadata {
 			genres = append(genres, genre.Name)
 		}
 	}
-	return &ArtistMetadata{
+	out := &ArtistMetadata{
 		MBID:           resp.ID,
 		Name:           resp.Name,
 		Disambiguation: resp.Disambiguation,
@@ -33,6 +33,17 @@ func MapArtist(resp *ArtistResponse) *ArtistMetadata {
 		Type:           resp.Type,
 		Genres:         genres,
 	}
+	if resp.BeginArea != nil {
+		out.BeginArea = resp.BeginArea.Name
+	}
+	if resp.LifeSpan != nil {
+		out.BeginDate = resp.LifeSpan.Begin
+		out.EndDate = resp.LifeSpan.End
+		out.Ended = resp.LifeSpan.Ended
+	}
+	out.Rating, out.RatingVotes = mapRating(resp.Rating)
+	out.Links, out.ImageURL = mapURLRelations(resp.Relations)
+	return out
 }
 
 // MapRelease converts a ReleaseResponse to ReleaseMetadata.

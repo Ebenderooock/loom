@@ -33,6 +33,9 @@ func ArtistRouter(svc Service, opts ...ArtistRouterOption) chi.Router {
 	r.Put("/{id}", handleUpdateArtist(svc))
 	r.Delete("/{id}", handleDeleteArtist(svc))
 	r.Put("/{id}/monitoring", handleSetArtistMonitoring(svc))
+	r.Post("/{id}/refresh", handleRefreshArtist(svc))
+	r.Get("/{id}/files", handleListArtistFiles(svc))
+	r.Get("/{id}/history", handleListArtistHistory(svc))
 	return r
 }
 
@@ -69,6 +72,7 @@ func AlbumRouter(svc Service) chi.Router {
 	r.Get("/{id}", handleGetAlbum(svc))
 	r.Put("/{id}/monitoring", handleSetAlbumMonitored(svc))
 	r.Put("/{id}/release", handleSelectAlbumRelease(svc))
+	r.Put("/{id}/tracks/{trackId}/monitoring", handleSetTrackMonitored(svc))
 	return r
 }
 
@@ -192,6 +196,24 @@ func handleSetArtistMonitoring(svc Service) http.HandlerFunc {
 	}
 }
 
+// handleRefreshArtist re-fetches one artist's metadata, artwork and albums and
+// returns the updated artist.
+func handleRefreshArtist(svc Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := chi.URLParam(r, "id")
+		if _, err := svc.RefreshArtistAlbums(r.Context(), id); err != nil {
+			writeErr(w, err)
+			return
+		}
+		a, err := svc.GetArtist(r.Context(), id)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, a)
+	}
+}
+
 func handleGetAlbum(svc Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		al, err := svc.GetAlbum(r.Context(), chi.URLParam(r, "id"))
@@ -284,6 +306,59 @@ func handleSetAlbumMonitored(svc Service) http.HandlerFunc {
 			return
 		}
 		writeJSON(w, http.StatusOK, al)
+	}
+}
+
+func handleSetTrackMonitored(svc Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req SetAlbumMonitoredRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "invalid request body", http.StatusBadRequest)
+			return
+		}
+		t, err := svc.SetTrackMonitored(r.Context(), chi.URLParam(r, "id"), chi.URLParam(r, "trackId"), req.Monitored)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, t)
+	}
+}
+
+func handleListArtistFiles(svc Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		files, err := svc.ListArtistFiles(r.Context(), chi.URLParam(r, "id"))
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		if files == nil {
+			files = []*ArtistFile{}
+		}
+		writeJSON(w, http.StatusOK, files)
+	}
+}
+
+func handleListArtistHistory(svc Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		limit := 100
+		if raw := r.URL.Query().Get("limit"); raw != "" {
+			n, err := strconv.Atoi(raw)
+			if err != nil || n < 1 || n > 500 {
+				http.Error(w, "limit must be between 1 and 500", http.StatusBadRequest)
+				return
+			}
+			limit = n
+		}
+		entries, err := svc.ListArtistHistory(r.Context(), chi.URLParam(r, "id"), limit)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		if entries == nil {
+			entries = []*ArtistHistoryEntry{}
+		}
+		writeJSON(w, http.StatusOK, entries)
 	}
 }
 

@@ -43,6 +43,32 @@ export interface AlbumRelease {
   track_count: number;
 }
 
+export type ExternalLinkType =
+  | "website"
+  | "spotify"
+  | "apple_music"
+  | "youtube_music"
+  | "tidal"
+  | "deezer"
+  | "amazon_music"
+  | "bandcamp"
+  | "soundcloud"
+  | "youtube"
+  | "wikipedia"
+  | "wikidata"
+  | "discogs"
+  | "allmusic"
+  | "lastfm"
+  | "instagram"
+  | "facebook"
+  | "twitter"
+  | "tiktok";
+
+export interface ExternalLink {
+  type: ExternalLinkType;
+  url: string;
+}
+
 export interface Album {
   id: string;
   mbid: string;
@@ -54,6 +80,9 @@ export interface Album {
   genres?: string[];
   cover_art_url?: string;
   overview?: string;
+  rating?: number;
+  rating_votes?: number;
+  links?: ExternalLink[];
   monitored: boolean;
   selected_release_id?: string;
   last_search_at?: string;
@@ -72,6 +101,15 @@ export interface Artist {
   overview?: string;
   genres?: string[];
   image_url?: string;
+  background_url?: string;
+  logo_url?: string;
+  begin_area?: string;
+  begin_date?: string;
+  end_date?: string;
+  ended?: boolean;
+  rating?: number;
+  rating_votes?: number;
+  links?: ExternalLink[];
   path?: string;
   library_id?: string;
   quality_profile_id?: string;
@@ -83,6 +121,44 @@ export interface Artist {
   updated_at: string;
   albums?: Album[];
   stats?: ArtistStats;
+}
+
+export interface UpdateArtistRequest {
+  monitoringStatus?: MonitoringStatus;
+  qualityProfileId?: string;
+  metadataProfileId?: string;
+  libraryId?: string;
+  path?: string;
+}
+
+export interface ArtistFile {
+  id: string;
+  track_id?: string;
+  album_id?: string;
+  artist_id?: string;
+  file_path: string;
+  size: number;
+  quality?: string;
+  format?: string;
+  bitrate?: number;
+  date_added: string;
+  album_title?: string;
+  track_title?: string;
+  track_number?: number;
+  disc_number?: number;
+}
+
+export interface ArtistHistoryEntry {
+  id: string;
+  type: "grab" | "import";
+  status: string;
+  album_id?: string;
+  album_title?: string;
+  title?: string;
+  reason?: string;
+  source_path?: string;
+  dest_path?: string;
+  date: string;
 }
 
 export interface ArtistLookupResult {
@@ -194,12 +270,72 @@ export interface ReleaseCandidate {
 export const musicKeys = {
   artists: ["music", "artists"] as const,
   artist: (id: string) => ["music", "artist", id] as const,
+  artistFiles: (id: string) => ["music", "artist", id, "files"] as const,
+  artistHistory: (id: string) => ["music", "artist", id, "history"] as const,
   album: (id: string) => ["music", "album", id] as const,
   lookup: (q: string) => ["music", "lookup", q] as const,
   audioQualityDefinitions: ["music", "audio-quality-definitions"] as const,
   audioQualityProfiles: ["music", "audio-quality-profiles"] as const,
   metadataProfiles: ["music", "metadata-profiles"] as const,
+  metadataSource: ["music", "metadata-source"] as const,
+  artworkSettings: ["music", "artwork-settings"] as const,
 };
+
+export interface ArtworkSettings {
+  fanart_api_key_set: boolean;
+  audiodb_api_key_set: boolean;
+  fanart_api_key_from_env: boolean;
+  audiodb_api_key_from_env: boolean;
+}
+
+export interface ArtworkSettingsUpdate {
+  // Empty keeps the stored value unless the matching clear flag is true.
+  fanart_api_key?: string;
+  audiodb_api_key?: string;
+  clear_fanart_api_key?: boolean;
+  clear_audiodb_api_key?: boolean;
+}
+
+export interface ArtworkTestResult {
+  ok: boolean;
+  fanart_tested: boolean;
+  fanart_ok: boolean;
+  fanart_error?: string;
+  audiodb_ok: boolean;
+  audiodb_error?: string;
+  audiodb_shared_key: boolean;
+}
+
+export type MetadataSourceMode = "musicbrainz" | "custom";
+
+export interface MetadataSource {
+  mode: MetadataSourceMode;
+  base_url: string;
+  rate_limit_ms: number;
+  auth_header_name: string;
+  auth_header_set: boolean;
+  search_on_public: boolean;
+}
+
+export interface MetadataSourceUpdate {
+  mode: MetadataSourceMode;
+  base_url: string;
+  rate_limit_ms: number;
+  auth_header_name: string;
+  // Empty keeps the stored value unless clear_auth_header is true.
+  auth_header_value?: string;
+  clear_auth_header?: boolean;
+  search_on_public: boolean;
+}
+
+export interface MetadataSourceTestResult {
+  ok: boolean;
+  lookup_ok: boolean;
+  lookup_error?: string;
+  search_tested: boolean;
+  search_ok: boolean;
+  search_error?: string;
+}
 
 // ---------- Fetchers ----------
 
@@ -272,11 +408,22 @@ export async function setArtistMonitoring(
   return (await res.json()) as Artist;
 }
 
+export async function refreshArtist(id: string): Promise<Artist> {
+  const res = await apiFetch(`/api/v1/artists/${id}/refresh`, {
+    method: "POST",
+  });
+  if (!res.ok) {
+    const detail = (await res.text()).trim();
+    throw new Error(detail || `refresh failed: ${res.status}`);
+  }
+  return (await res.json()) as Artist;
+}
+
 export async function rescanArtist(
   id: string,
   libraryId: string,
 ): Promise<void> {
-  const res = await apiFetch(`/api/v1/scanner/artists/${id}/rescan`, {
+  const res = await apiFetch(`/api/v1/artists/${id}/rescan`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ libraryId }),
@@ -295,6 +442,53 @@ export async function setAlbumMonitored(
   });
   if (!res.ok) throw new Error(`set album monitored failed: ${res.status}`);
   return (await res.json()) as Album;
+}
+
+export async function setTrackMonitored(
+  albumId: string,
+  trackId: string,
+  monitored: boolean,
+): Promise<Track> {
+  const res = await apiFetch(
+    `/api/v1/albums/${albumId}/tracks/${trackId}/monitoring`,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ monitored }),
+    },
+  );
+  if (!res.ok) throw new Error(`set track monitored failed: ${res.status}`);
+  return (await res.json()) as Track;
+}
+
+export async function updateArtist(
+  id: string,
+  req: UpdateArtistRequest,
+): Promise<Artist> {
+  const res = await apiFetch(`/api/v1/artists/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(req),
+  });
+  if (!res.ok) {
+    const detail = (await res.text()).trim();
+    throw new Error(detail || `update artist failed: ${res.status}`);
+  }
+  return (await res.json()) as Artist;
+}
+
+export async function fetchArtistFiles(
+  id: string,
+  signal?: AbortSignal,
+): Promise<ArtistFile[]> {
+  return getJSON<ArtistFile[]>(`/api/v1/artists/${id}/files`, signal);
+}
+
+export async function fetchArtistHistory(
+  id: string,
+  signal?: AbortSignal,
+): Promise<ArtistHistoryEntry[]> {
+  return getJSON<ArtistHistoryEntry[]>(`/api/v1/artists/${id}/history`, signal);
 }
 
 export async function selectAlbumRelease(
@@ -542,6 +736,92 @@ export function useDeleteAudioQualityProfile() {
   });
 }
 
+async function sendMetadataSource<T>(
+  path: string,
+  method: "PUT" | "POST",
+  req: MetadataSourceUpdate | ArtworkSettingsUpdate,
+): Promise<T> {
+  const res = await apiFetch(path, {
+    method,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(req),
+  });
+  if (!res.ok) {
+    const detail = (await res.text()).trim();
+    throw new Error(detail || `metadata source request failed: ${res.status}`);
+  }
+  return (await res.json()) as T;
+}
+
+export function useMetadataSource(enabled = true) {
+  return useQuery({
+    queryKey: musicKeys.metadataSource,
+    queryFn: ({ signal }) =>
+      getJSON<MetadataSource>("/api/v1/music/metadata-source", signal),
+    enabled,
+    staleTime: 60_000,
+  });
+}
+
+export function useUpdateMetadataSource() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (req: MetadataSourceUpdate) =>
+      sendMetadataSource<MetadataSource>(
+        "/api/v1/music/metadata-source",
+        "PUT",
+        req,
+      ),
+    onSuccess: (src) => qc.setQueryData(musicKeys.metadataSource, src),
+  });
+}
+
+export function useTestMetadataSource() {
+  return useMutation({
+    mutationFn: (req: MetadataSourceUpdate) =>
+      sendMetadataSource<MetadataSourceTestResult>(
+        "/api/v1/music/metadata-source/test",
+        "POST",
+        req,
+      ),
+  });
+}
+
+export function useArtworkSettings(enabled = true) {
+  return useQuery({
+    queryKey: musicKeys.artworkSettings,
+    queryFn: ({ signal }) =>
+      getJSON<ArtworkSettings>("/api/v1/music/artwork-settings", signal),
+    enabled,
+    staleTime: 60_000,
+  });
+}
+
+export function useUpdateArtworkSettings() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (req: ArtworkSettingsUpdate) =>
+      sendMetadataSource<ArtworkSettings>(
+        "/api/v1/music/artwork-settings",
+        "PUT",
+        req,
+      ),
+    onSuccess: (settings) =>
+      qc.setQueryData(musicKeys.artworkSettings, settings),
+  });
+}
+
+export function useTestArtworkSettings() {
+  return useMutation({
+    mutationFn: (req: ArtworkSettingsUpdate) =>
+      sendMetadataSource<ArtworkTestResult>(
+        "/api/v1/music/artwork-settings/test",
+        "POST",
+        req,
+      ),
+  });
+}
+
 export function useMetadataProfiles() {
   return useQuery({
     queryKey: musicKeys.metadataProfiles,
@@ -607,6 +887,17 @@ export function useSetArtistMonitoring() {
   });
 }
 
+export function useRefreshArtist() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: refreshArtist,
+    onSuccess: (a) => {
+      qc.setQueryData(musicKeys.artist(a.id), a);
+      qc.invalidateQueries({ queryKey: musicKeys.artists });
+    },
+  });
+}
+
 export function useRescanArtist() {
   const qc = useQueryClient();
   return useMutation({
@@ -627,6 +918,52 @@ export function useSetAlbumMonitored() {
       qc.invalidateQueries({ queryKey: musicKeys.artist(al.artist_id) });
       qc.invalidateQueries({ queryKey: musicKeys.album(al.id) });
     },
+  });
+}
+
+export function useSetTrackMonitored() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: {
+      albumId: string;
+      trackId: string;
+      monitored: boolean;
+      artistId?: string;
+    }) => setTrackMonitored(vars.albumId, vars.trackId, vars.monitored),
+    onSuccess: (_track, vars) => {
+      qc.invalidateQueries({ queryKey: musicKeys.album(vars.albumId) });
+      if (vars.artistId) {
+        qc.invalidateQueries({ queryKey: musicKeys.artist(vars.artistId) });
+      }
+    },
+  });
+}
+
+export function useUpdateArtist() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: { id: string; req: UpdateArtistRequest }) =>
+      updateArtist(vars.id, vars.req),
+    onSuccess: (artist) => {
+      qc.invalidateQueries({ queryKey: musicKeys.artist(artist.id) });
+      qc.invalidateQueries({ queryKey: musicKeys.artists });
+    },
+  });
+}
+
+export function useArtistFiles(id: string | undefined, enabled = true) {
+  return useQuery({
+    queryKey: musicKeys.artistFiles(id ?? ""),
+    queryFn: ({ signal }) => fetchArtistFiles(id!, signal),
+    enabled: !!id && enabled,
+  });
+}
+
+export function useArtistHistory(id: string | undefined, enabled = true) {
+  return useQuery({
+    queryKey: musicKeys.artistHistory(id ?? ""),
+    queryFn: ({ signal }) => fetchArtistHistory(id!, signal),
+    enabled: !!id && enabled,
   });
 }
 

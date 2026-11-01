@@ -84,6 +84,16 @@ in `api/openapi/loom.yaml`.
 | `POST` | `/api/v1/music/metadata-profiles` | apiKey/bearer/cookie | `201 application/json` (`MetadataProfile`) | Create a metadata profile. |
 | `PUT` | `/api/v1/music/metadata-profiles/{id}` | apiKey/bearer/cookie | `200 application/json` (`MetadataProfile`) | Update supplied metadata profile fields. |
 | `DELETE` | `/api/v1/music/metadata-profiles/{id}` | apiKey/bearer/cookie | `204` | Delete an unassigned metadata profile; assigned profiles cannot be deleted. |
+| `GET` | `/api/v1/music/metadata-source` | apiKey/bearer/cookie (admin) | `200 application/json` (`MusicMetadataSource`) | Read the MusicBrainz metadata source. The auth header value is never returned. |
+| `PUT` | `/api/v1/music/metadata-source` | apiKey/bearer/cookie (admin) | `200 application/json` (`MusicMetadataSource`) | Save and apply the metadata source. An empty `auth_header_value` keeps the saved value unless `clear_auth_header` is true. |
+| `GET` | `/api/v1/music/artwork-settings` | apiKey/bearer/cookie (admin) | `200 application/json` (`MusicArtworkSettings`) | Report whether fanart.tv and TheAudioDB keys are saved or come from the environment. Keys are never returned. |
+| `PUT` | `/api/v1/music/artwork-settings` | apiKey/bearer/cookie (admin) | `200 application/json` (`MusicArtworkSettings`) | Save and apply artwork keys. An empty key keeps the saved value unless its `clear_*` flag is true. |
+| `POST` | `/api/v1/music/artwork-settings/test` | apiKey/bearer/cookie (admin) | `200 application/json` (`MusicArtworkTestResult`) | Check artwork keys with a known artist lookup; empty keys use the saved or environment keys. |
+| `POST` | `/api/v1/artists/{id}/refresh` | apiKey/bearer/cookie | `200 application/json` (`MusicArtist`) | Re-fetch one artist's MusicBrainz details, artwork and album catalogue. |
+| `GET` | `/api/v1/artists/{id}/files` | apiKey/bearer/cookie | `200 application/json` (`MusicArtistFile[]`) | List the artist's imported audio files with album and track titles. |
+| `GET` | `/api/v1/artists/{id}/history` | apiKey/bearer/cookie | `200 application/json` (`MusicArtistHistoryEntry[]`) | List grabs and imports for the artist's albums, newest first. Optional `limit` (1-500, default 100). |
+| `PUT` | `/api/v1/albums/{id}/tracks/{trackId}/monitoring` | apiKey/bearer/cookie | `200 application/json` (`Track`) | Set `{monitored}` for one track. Monitoring a track also monitors its album; album monitoring changes cascade to all its tracks. |
+| `POST` | `/api/v1/music/metadata-source/test` | apiKey/bearer/cookie (admin) | `200 application/json` (`MusicMetadataSourceTestResult`) | Check an unsaved source with an artist lookup and, when it serves search, an artist search. |
 | `POST` | `/api/v1/import-lists/discover/track` | apiKey/bearer/cookie | `200 application/json` | Mark `{item_id}` added only after verifying library membership; never creates media or changes list settings. |
 | `GET` | `/api/v1/libraries/{id}/health` | apiKey/bearer/cookie | `200 application/json` (`LibraryHealthReport` or `null`) | Fetch latest read-only health report snapshot. |
 | `POST` | `/api/v1/libraries/{id}/health` | apiKey/bearer/cookie | `200 application/json` (`LibraryHealthReport`) | Run a bounded, cancellable read-only health check for one library. |
