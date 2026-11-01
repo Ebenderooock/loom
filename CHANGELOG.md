@@ -16,6 +16,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   organize beneath `Various Artists`. Added `GET/POST /api/v1/albums` and
   `GET /api/v1/albums/lookup`; migration 0100 makes the managed artist optional
   and stores album library/profile and artist-credit metadata.
+
+- Native service installer scripts for Windows, Linux/systemd, and macOS/launchd,
+  bundled into platform release archives, with Windows amd64/arm64 release builds.
+- Installation pathways for Raspberry Pi, Docker/Compose, Kubernetes/Helm,
+  Flux GitOps, and Synology Container Manager or native `.spk` manual upload,
+  with persistent storage, permissions, upgrade, and backup guidance.
+
 - Music artwork and details: artists show a photo, background, logo,
   biography, origin, active years and MusicBrainz rating; albums show a cover,
   description and rating. Artwork comes from fanart.tv (optional API key) and

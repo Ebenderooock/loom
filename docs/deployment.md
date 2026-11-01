@@ -1,7 +1,58 @@
 # Deployment
 
 Loom ships as a single static binary and as multi-arch container images.
-This page covers the supported deployment shapes.
+Choose an installation pathway below. Native installers are shipped inside
+platform release archives by the updated release pipeline; **older releases do
+not gain these files retroactively**. Until a release includes them, use this
+checkout's scripts with a compatible binary. Windows requires a service-aware
+binary built from this source; older binaries without the `service` command
+cannot be installed as a native Windows service.
+
+## Installation pathways
+
+| Host | Installer / deployment | Guide |
+|---|---|---|
+| Windows (x64, ARM64) | ZIP with `loom.exe` and PowerShell Windows service installer | [Windows](windows.md) |
+| Linux (amd64, ARM64, ARMv7) | Static binary archive and systemd installer | [Linux](linux.md) |
+| macOS (Intel, Apple Silicon) | Static binary archive and launchd installer | [macOS](macos.md) |
+| Raspberry Pi | Raspberry Pi OS + Linux installer, or ARM64 container | [Raspberry Pi](raspberry-pi.md) |
+| Docker / Compose | GHCR image and standalone Compose file | [Docker](docker.md) |
+| Kubernetes | Repository Helm chart with persistent storage | [Kubernetes](kubernetes.md) |
+| Kubernetes with Flux | GitRepository + HelmRelease example | [Short Flux setup](flux.md) |
+| Synology DSM | Container Manager, locally built `.spk` upload, or SynoCommunity once published | [Synology](synology.md) |
+
+The archives and scripts are not signed MSI, macOS PKG/DMG, DEB, or RPM packages.
+Synology native packages require a matching spksrc build; catalog publication is
+a separate upstream process. Containers currently support Linux amd64 and ARM64
+only. Other operating systems are not published release targets; source builds
+on them are outside these installation paths.
+
+### Before installing
+
+- Choose a release from [GitHub Releases](https://github.com/ebenderooock/loom/releases).
+  Check `checksums.txt` against the exact archive before executing its binary or
+  installer; checksums detect corruption but are not publisher signatures.
+- Persist config, database, and caches; set `LOOM_CONFIG_DIR`, `LOOM_DATA_DIR`,
+  and `LOOM_STORAGE_SQLITE_PATH` explicitly when writing your own service.
+- Grant the service account access to the media and download folders. Both Loom
+  and the download client must see compatible paths; use a shared filesystem for
+  hardlinks. Do not grant world-write access to work around permissions.
+- Keep SQLite on local storage, with one Loom instance per database. Use the
+  same single-instance deployment model for Postgres: the scheduler is not
+  distributed just because the database is remote.
+- Open `http://<host>:1925`, complete initial administrator setup, and use TLS
+  via a reverse proxy for remote access. Do not expose an unconfigured instance
+  directly to the Internet.
+
+### Upgrades and backups
+
+Stop Loom before copying the complete state directory, including SQLite WAL/SHM
+files if present, or use a consistent database backup. Keep media separately
+backed up. Pin the binary version, container tag/digest, and Helm source revision.
+After upgrading, check `/readyz` and the UI. Database migrations are not undone
+by replacing a binary: rollback needs the old version **and** its pre-upgrade
+database backup. Each platform guide covers service logs and removal without
+discarding state.
 
 ## Docker
 
@@ -48,25 +99,21 @@ explicit maintainer action, not an automatic consequence of this branch.
 
 ### Stable images
 
-The published image lives at `ghcr.io/ebenderooock/loom:latest` (and
-`:v<semver>` once tagged releases begin). It is built `FROM
+The published image lives at `ghcr.io/ebenderooock/loom:latest` and
+`:<semver>` (without a `v` prefix). It is built `FROM
 gcr.io/distroless/static-debian12:nonroot`, runs as the unprivileged
 `nonroot` user, and exposes port 1925.
 
 ### Single container
 
 ```bash
-docker run --rm -p 1925:1925 \
-  -v /opt/loom/config:/config \
-  -v /mnt/media:/media \
-  ghcr.io/ebenderooock/loom:latest
+docker compose -f deploy/docker/compose.yaml up -d
 ```
 
-Volumes:
-
-- `/config` — Loom's config + state (DB file, caches). Persist this.
-- `/media` — your media library; mount at the same path the download
-  client sees so hardlinks work.
+Run from this checkout after following the [Docker guide](docker.md) to create
+the state and shared data directories with the correct ownership. `/config`
+holds persistent state, and `/media` holds downloads and media at matching paths
+in Loom and the download client.
 
 ### Docker Compose (development & demos)
 
@@ -88,47 +135,24 @@ and setting `LOOM_DATABASE_URL=postgres://loom:loom@postgres:5432/loom?sslmode=d
 
 ### Health probes
 
-The image's `HEALTHCHECK` runs `loom healthcheck`, which probes
-`/healthz`. Override with `LOOM_HEALTH_URL=http://127.0.0.1:1925` if
-you've changed the listen address.
+Use `loom healthcheck` to probe `/healthz`; it works without a shell or curl
+inside the distroless image. Override with
+`LOOM_HEALTH_URL=http://127.0.0.1:1925` if you've changed the listen address.
+The Compose example configures a health check; Kubernetes uses HTTP probes.
 
 ## Kubernetes
 
-A Helm chart (`deploy/helm/loom/`) and a Kustomize base + overlays
-(`deploy/kustomize/`) are scheduled for **Phase 11**. The chart will
-expose values for ingress, persistence, OIDC, Postgres, NATS, OTel
-collector. Until then, a minimal Deployment + Service + PVC manifest is
-straightforward to write against the container above.
+The [Helm chart](../deploy/helm/loom/) already exists and can be installed from
+this checkout. Follow the [Kubernetes guide](kubernetes.md) for storage,
+permissions, probes, ingress, and upgrades, or the [Flux guide](flux.md) for
+Git-managed installation. No published Helm repository or OCI chart is required.
 
 ## Bare-metal binary
 
-GoReleaser (`.goreleaser.yaml`) produces signed binaries for Linux,
-macOS, Windows, and FreeBSD across `amd64`, `arm64`, and `armv7`.
-Download from the releases page, drop into `/usr/local/bin`, and run
-under your favourite supervisor:
-
-```ini
-# /etc/systemd/system/loom.service
-[Unit]
-Description=Loom
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-ExecStart=/usr/local/bin/loom serve --config /etc/loom/loom.yaml
-User=loom
-Group=loom
-Restart=on-failure
-RestartSec=5
-NoNewPrivileges=true
-ProtectSystem=strict
-ReadWritePaths=/var/lib/loom /etc/loom
-ProtectHome=true
-PrivateTmp=true
-
-[Install]
-WantedBy=multi-user.target
-```
+GoReleaser (`.goreleaser.yaml`) produces checksummed archives for Linux, macOS,
+and Windows. Use the [Linux systemd](linux.md), [macOS launchd](macos.md), or
+[Windows service](windows.md) installer rather than copying a service unit with
+implicit working-directory-dependent configuration.
 
 ## Reverse proxy
 
@@ -191,10 +215,10 @@ When the proxy mounts Loom under a path prefix, set
   the collector to your tracing backend of choice. See
   [observability.md](observability.md).
 
-## Reference deployment topology (Phase 11 target)
+## Reference deployment topology
 
 ```text
-[ users ]──TLS──▶ [ Traefik / Caddy ]──HTTP──▶ [ Loom ]──┬──▶ [ Postgres ]
+[ users ]──TLS──▶ [ Traefik / Caddy ]──HTTP──▶ [ Loom ]──┬──▶ [ SQLite / Postgres ]
                                                          ├──▶ [ NATS (split-mode) ]
                                                          └──▶ [ OTel Collector ]──▶ [ Tempo / Grafana / … ]
 

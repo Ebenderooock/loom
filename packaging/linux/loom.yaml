@@ -1,0 +1,12 @@
+# Native installer defaults. Existing configurations are never overwritten.
+config_dir: /etc/loom
+data_dir: /var/lib/loom
+http:
+  addr: "127.0.0.1:1925"
+storage:
+  engine: sqlite
+  sqlite:
+    path: /var/lib/loom/loom.db
+log:
+  level: info
+  format: json

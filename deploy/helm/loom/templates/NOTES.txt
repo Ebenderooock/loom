@@ -19,5 +19,5 @@ Loom has been deployed!
 
 2. On first run, Loom will prompt you to create an admin account.
 
-3. To migrate from existing *arr apps:
-  kubectl exec -it deploy/{{ include "loom.fullname" . }} -- /usr/local/bin/loom migrate --from radarr --db /path/to/radarr.db
+3. Keep access private until setup is complete. See docs/kubernetes.md for
+   shared media/download mounts, SQLite storage, backups, and upgrades.
