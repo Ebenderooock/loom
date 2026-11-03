@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Music support in Downloads / Imports: audio scanning, automatic tagged-track
+  matching, and manual album/track selection, including standalone albums and
+  compilations. Imports transfer files into the assigned media library and
+  distinguish queued work from completion. Episode re-imports now use the series
+  library root; Music imports report partial failures and preserve replacement
+  track registration when an upgrade reuses the destination path.
+
 - Standalone MusicBrainz album management for compilations and multi-artist
   albums, preserving all credited artists without creating contributor artist
   records. Albums can be browsed in the Albums view, show in a movie-style

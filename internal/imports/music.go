@@ -2,6 +2,7 @@ package imports
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -23,22 +24,21 @@ func (p *ImportPipeline) processMusicImport(ctx context.Context, ev *downloads.D
 		return nil, p.recordFailure(ctx, string(MediaTypeMusic), "", ev.Title, downloadPath,
 			fmt.Errorf("music import service is not configured"))
 	}
-	scanPath := downloadPath
-	if !info.IsDir() {
-		scanPath = filepath.Dir(downloadPath)
-	}
-	files, err := scanAudioFiles(ctx, scanPath)
-	if err != nil {
-		return nil, p.recordFailure(ctx, string(MediaTypeMusic), "", ev.Title, downloadPath, err)
-	}
-	if !info.IsDir() && mediafiles.IsAudio(strings.ToLower(filepath.Ext(downloadPath))) {
+	var files []string
+	var err error
+	if info.IsDir() {
+		files, err = scanAudioFiles(ctx, downloadPath)
+		if err != nil {
+			return nil, p.recordFailure(ctx, string(MediaTypeMusic), "", ev.Title, downloadPath, err)
+		}
+	} else if mediafiles.IsAudio(strings.ToLower(filepath.Ext(downloadPath))) {
 		files = []string{downloadPath}
 	}
 	if len(files) == 0 {
 		return nil, p.recordFailure(ctx, string(MediaTypeMusic), "", ev.Title, downloadPath,
-			fmt.Errorf("no audio files found in %s", scanPath))
+			fmt.Errorf("no audio files found in %s", downloadPath))
 	}
-	var lastErr error
+	var failures []error
 	var paths []string
 	for _, file := range files {
 		if err := ctx.Err(); err != nil {
@@ -47,24 +47,49 @@ func (p *ImportPipeline) processMusicImport(ctx context.Context, ev *downloads.D
 		dest, err := p.importMusicFile(ctx, ev, file)
 		if err != nil {
 			p.logger.Error("failed to import music file", "file", file, "error", err)
-			lastErr = err
+			failures = append(failures, err)
 			continue
 		}
 		paths = append(paths, dest)
 	}
-	if len(paths) == 0 && lastErr != nil {
-		return nil, lastErr
+	if len(failures) > 0 {
+		return paths, fmt.Errorf("music import incomplete (%d of %d files failed): %w", len(failures), len(files), errors.Join(failures...))
 	}
 	p.logger.Info("music import completed", "title", ev.Title, "imported", len(paths), "total", len(files))
 	return paths, nil
 }
 
 func (p *ImportPipeline) importMusicFile(ctx context.Context, ev *downloads.DownloadCompletedEvent, source string) (string, error) {
+	if p.musicSvc == nil {
+		return "", p.recordFailure(ctx, string(MediaTypeMusic), "", ev.Title, source,
+			fmt.Errorf("music import service is not configured"))
+	}
+	if dest, err := p.completedImport(ctx, source); err != nil {
+		return "", err
+	} else if dest != "" {
+		if p.importMode == ImportModeMove && ev.DownloadID == "" {
+			if err := p.FinalizeImports(ctx, []string{dest}); err != nil {
+				return "", err
+			}
+		}
+		return dest, nil
+	}
+	artist, album, track, tags, err := p.matchMusicFile(ctx, source, ev.Title)
+	if err != nil {
+		return "", p.recordFailure(ctx, string(MediaTypeMusic), "", ev.Title, source, err)
+	}
+	return p.importMatchedMusicFile(ctx, ev, source, artist, album, track, tags)
+}
+
+func (p *ImportPipeline) matchMusicFile(ctx context.Context, source, releaseTitle string) (*musiclib.Artist, *musiclib.Album, *musiclib.Track, *musiclib.AudioTags, error) {
+	if p.musicSvc == nil {
+		return nil, nil, nil, nil, fmt.Errorf("music import service is not configured")
+	}
 	tags, err := musiclib.ReadAudioTags(source)
 	if err != nil {
-		return "", p.recordFailure(ctx, string(MediaTypeMusic), "", ev.Title, source, fmt.Errorf("read audio tags: %w", err))
+		return nil, nil, nil, nil, fmt.Errorf("read audio tags: %w", err)
 	}
-	parsed := musiclib.ParseMusic(ev.Title)
+	parsed := musiclib.ParseMusic(releaseTitle)
 	artistName := strings.TrimSpace(tags.AlbumArtist)
 	if artistName == "" {
 		artistName = strings.TrimSpace(tags.Artist)
@@ -82,10 +107,18 @@ func (p *ImportPipeline) importMusicFile(ctx context.Context, ev *downloads.Down
 	}
 	artist, album, track, err := p.findMusicTrack(ctx, artistName, trackArtistName, albumName, tags)
 	if err != nil {
-		return "", p.recordFailure(ctx, string(MediaTypeMusic), "", ev.Title, source, err)
+		return nil, nil, nil, tags, err
 	}
+	return artist, album, track, tags, nil
+}
+
+func (p *ImportPipeline) importMatchedMusicFile(ctx context.Context, ev *downloads.DownloadCompletedEvent, source string, artist *musiclib.Artist, album *musiclib.Album, track *musiclib.Track, tags *musiclib.AudioTags) (string, error) {
 	libraryID := album.LibraryID
-	if album.ArtistID != "" && artist != nil && artist.LibraryID != "" {
+	if album.ArtistID != "" {
+		if artist == nil {
+			return "", p.recordFailure(ctx, string(MediaTypeMusic), album.ID, ev.Title, source,
+				fmt.Errorf("music album %q has no managed owner", album.Title))
+		}
 		libraryID = artist.LibraryID
 	}
 	if p.libStore == nil || libraryID == "" {
@@ -97,6 +130,10 @@ func (p *ImportPipeline) importMusicFile(ctx context.Context, ev *downloads.Down
 		return "", p.recordFailure(ctx, string(MediaTypeMusic), album.ID, ev.Title, source,
 			fmt.Errorf("get music library: %w", err))
 	}
+	if lib.MediaType != "music" || strings.TrimSpace(lib.Path) == "" || !filepath.IsAbs(lib.Path) {
+		return "", p.recordFailure(ctx, string(MediaTypeMusic), album.ID, ev.Title, source,
+			fmt.Errorf("album %q must use an absolute music library path", album.Title))
+	}
 	multiDisc := false
 	for _, candidate := range album.Tracks {
 		if candidate.DiscNumber > 1 {
@@ -106,6 +143,16 @@ func (p *ImportPipeline) importMusicFile(ctx context.Context, ev *downloads.Down
 	}
 	relative := musiclib.BuildTrackPath(artist, album, track, multiDisc, strings.ToLower(filepath.Ext(source)))
 	destination := filepath.Join(lib.Path, relative)
+	if previous, err := p.completedImport(ctx, source); err != nil {
+		return "", err
+	} else if previous == destination {
+		if p.importMode == ImportModeMove && ev.DownloadID == "" {
+			if err := p.FinalizeImports(ctx, []string{destination}); err != nil {
+				return "", err
+			}
+		}
+		return destination, nil
+	}
 	sourceInfo, err := os.Stat(source)
 	if err != nil {
 		return "", p.recordFailure(ctx, string(MediaTypeMusic), album.ID, ev.Title, source,
@@ -136,6 +183,12 @@ func (p *ImportPipeline) importMusicFile(ctx context.Context, ev *downloads.Down
 		return "", p.recordFailure(ctx, string(MediaTypeMusic), album.ID, ev.Title, source,
 			fmt.Errorf("inspect imported audio file: %w", err))
 	}
+	if p.verifier != nil {
+		if result := p.verifier.Verify(destination, sourceInfo.Size()); !result.OK {
+			return "", p.recordFailure(ctx, string(MediaTypeMusic), album.ID, ev.Title, source,
+				fmt.Errorf("verify imported audio file (source preserved): %s", result.Reason))
+		}
+	}
 	var fileDate *time.Time
 	modified := info.ModTime()
 	fileDate = &modified
@@ -160,15 +213,18 @@ func (p *ImportPipeline) importMusicFile(ctx context.Context, ev *downloads.Down
 	if album.ArtistID != "" && artist != nil {
 		tf.ArtistID = artist.ID
 	}
-	if err := p.musicSvc.ImportTrackFile(ctx, tf); err != nil {
-		return "", p.recordFailure(ctx, string(MediaTypeMusic), album.ID, ev.Title, destination,
-			fmt.Errorf("save music track file: %w", err))
-	}
+	// A replacement can reuse the same pathname. Remove recycled file records
+	// before registration so ImportTrackFile does not mistake the new file for
+	// the old one and then leave the track without a file.
 	for _, old := range oldTrackFiles {
 		if err := p.musicSvc.DeleteTrackFile(ctx, old.ID); err != nil {
 			return "", p.recordFailure(ctx, string(MediaTypeMusic), album.ID, ev.Title, destination,
 				fmt.Errorf("remove replaced music track-file record %s: %w", old.ID, err))
 		}
+	}
+	if err := p.musicSvc.ImportTrackFile(ctx, tf); err != nil {
+		return "", p.recordFailure(ctx, string(MediaTypeMusic), album.ID, ev.Title, source,
+			fmt.Errorf("save music track file (source preserved): %w", err))
 	}
 	mediaID := track.ID
 	if err := p.libStore.UpsertFile(ctx, &libraries.LibraryFile{
@@ -180,15 +236,103 @@ func (p *ImportPipeline) importMusicFile(ctx context.Context, ev *downloads.Down
 	if err := p.recordStatus(ctx, string(MediaTypeMusic), album.ID, source, destination, StatusImported, ""); err != nil {
 		return "", fmt.Errorf("record import history (source preserved at %s): %w", source, err)
 	}
-	if p.importMode == ImportModeMove && ev.DownloadID == "" && filepath.Clean(source) != filepath.Clean(destination) {
-		if err := os.Remove(source); err != nil && !os.IsNotExist(err) {
-			p.logger.Warn("music import registered but source cleanup failed", "source", source, "error", err)
+	if p.importMode == ImportModeMove && ev.DownloadID == "" {
+		if err := p.FinalizeImports(ctx, []string{destination}); err != nil {
+			return "", fmt.Errorf("music import registered but source cleanup failed: %w", err)
 		}
 	}
 	_ = p.bus.Publish(ctx, &ImportCompletedEvent{
 		MediaType: MediaTypeMusic, MediaID: album.ID, Title: album.Title, DestPath: destination,
 	})
 	return destination, nil
+}
+
+func (p *ImportPipeline) importMusicMatch(ctx context.Context, source, trackID string) (*ImportRecord, error) {
+	if p.musicSvc == nil {
+		return nil, fmt.Errorf("music import service is not configured")
+	}
+	if err := checkRegularSource(source); err != nil {
+		return nil, err
+	}
+	if !mediafiles.IsAudio(strings.ToLower(filepath.Ext(source))) {
+		return nil, fmt.Errorf("not an audio file: %s", source)
+	}
+	track, err := p.musicSvc.GetTrack(ctx, trackID)
+	if err != nil {
+		return nil, fmt.Errorf("get music track: %w", err)
+	}
+	album, err := p.musicSvc.LoadAlbumTracks(ctx, track.AlbumID)
+	if err != nil {
+		return nil, fmt.Errorf("load music album: %w", err)
+	}
+	// Loading an edition can replace its track IDs; do not import a stale
+	// selection into a track that is no longer in the selected edition.
+	var selected *musiclib.Track
+	for _, candidate := range album.Tracks {
+		if candidate.ID == trackID {
+			selected = candidate
+			break
+		}
+	}
+	if selected == nil {
+		return nil, fmt.Errorf("music track %s is not in the album's selected edition", trackID)
+	}
+	var artist *musiclib.Artist
+	if album.ArtistID != "" {
+		artist, err = p.musicSvc.GetArtist(ctx, album.ArtistID)
+		if err != nil {
+			return nil, fmt.Errorf("get music album owner: %w", err)
+		}
+	}
+	tags, err := musiclib.ReadAudioTags(source)
+	if err != nil {
+		return nil, fmt.Errorf("read audio tags: %w", err)
+	}
+	ev := &downloads.DownloadCompletedEvent{Title: filepath.Base(source)}
+	dest, err := p.importMatchedMusicFile(ctx, ev, source, artist, album, selected, tags)
+	if err != nil {
+		return nil, err
+	}
+	return &ImportRecord{
+		ID: uuid.New().String(), ImportedAt: time.Now().UTC(),
+		MediaType: MediaTypeMusic, MediaID: album.ID, SourcePath: source,
+		DestPath: dest, ImportMode: p.importMode, Status: StatusImported,
+	}, nil
+}
+
+func (p *ImportPipeline) scanMusicFile(ctx context.Context, source string) ScanResult {
+	result := ScanResult{
+		FilePath: source, MediaType: string(MediaTypeMusic),
+		DetectedTitle:   strings.TrimSuffix(filepath.Base(source), filepath.Ext(source)),
+		SuggestedAction: "no_match",
+	}
+	if info, err := os.Stat(source); err == nil {
+		result.FileSize = info.Size()
+	}
+	_, album, track, tags, err := p.matchMusicFile(ctx, source, filepath.Base(filepath.Dir(source)))
+	if tags != nil {
+		if tags.Title != "" {
+			result.DetectedTitle = tags.Title
+		}
+		result.DetectedArtist = tags.Artist
+		result.DetectedAlbum = tags.Album
+		result.DetectedTrack = tags.TrackNumber
+		result.DetectedDisc = tags.DiscNumber
+		result.DetectedYear = tags.Year
+		result.Quality = tags.Format
+	}
+	if err != nil {
+		p.logger.Warn("music scan match failed", "file", source, "error", err)
+		return result
+	}
+	result.MatchedMedia = fmt.Sprintf("%s / %s", album.Title, track.Title)
+	result.MatchedMediaID = track.ID
+	result.Confidence = 1
+	result.SuggestedAction = "import"
+	if track.HasFile {
+		result.SuggestedAction = "reimport"
+	}
+	return result
 }
 
 func (p *ImportPipeline) prepareMusicUpgrade(

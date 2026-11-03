@@ -20,6 +20,7 @@ import (
 	"github.com/ebenderooock/loom/internal/downloads"
 	"github.com/ebenderooock/loom/internal/kernel/eventbus"
 	"github.com/ebenderooock/loom/internal/libraries"
+	"github.com/ebenderooock/loom/internal/mediafiles"
 	"github.com/ebenderooock/loom/internal/movies"
 	musiclib "github.com/ebenderooock/loom/internal/music"
 	"github.com/ebenderooock/loom/internal/notifications"
@@ -418,10 +419,6 @@ func (p *ImportPipeline) processImport(ctx context.Context, ev *downloads.Downlo
 	if err != nil {
 		return nil, p.recordFailure(ctx, "", "", ev.Title, downloadPath, fmt.Errorf("download path not found: %w", err))
 	}
-	if strings.EqualFold(strings.TrimSpace(ev.Category), "music") {
-		return p.processMusicImport(ctx, ev, downloadPath, info)
-	}
-
 	scanPath := downloadPath
 	if !info.IsDir() {
 		scanPath = filepath.Dir(downloadPath)
@@ -430,11 +427,11 @@ func (p *ImportPipeline) processImport(ctx context.Context, ev *downloads.Downlo
 	// A single-file download must never scan unrelated siblings.
 	var mediaFiles []string
 	if info.IsDir() {
-		mediaFiles, err = scanMediaFiles(downloadPath)
+		mediaFiles, err = scanImportFiles(ctx, downloadPath)
 		if err != nil {
 			return nil, p.recordFailure(ctx, "", "", ev.Title, downloadPath, fmt.Errorf("scan media files: %w", err))
 		}
-	} else if mediaExtensions[strings.ToLower(filepath.Ext(downloadPath))] {
+	} else if ext := strings.ToLower(filepath.Ext(downloadPath)); mediaExtensions[ext] || mediafiles.IsAudio(ext) {
 		mediaFiles = []string{downloadPath}
 	}
 
@@ -463,6 +460,10 @@ func (p *ImportPipeline) processImport(ctx context.Context, ev *downloads.Downlo
 			}
 			return nil, fmt.Errorf("import pending review: %s", reason)
 		}
+	}
+
+	if strings.EqualFold(strings.TrimSpace(ev.Category), "music") {
+		return p.processMusicImport(ctx, ev, downloadPath, info)
 	}
 
 	// 4. Match and import each media file
@@ -511,6 +512,9 @@ var errImportSkipped = errors.New("import skipped")
 
 // importSingleFile matches and imports a single media file.
 func (p *ImportPipeline) importSingleFile(ctx context.Context, ev *downloads.DownloadCompletedEvent, mediaFile string) (string, error) {
+	if mediafiles.IsAudio(strings.ToLower(filepath.Ext(mediaFile))) {
+		return p.importMusicFile(ctx, ev, mediaFile)
+	}
 	if dest, err := p.completedImport(ctx, mediaFile); err != nil || dest != "" {
 		return dest, err
 	}
@@ -734,8 +738,8 @@ func (p *ImportPipeline) importSingleFile(ctx context.Context, ev *downloads.Dow
 		return "", fmt.Errorf("record import history (source preserved at %s): %w", mediaFile, err)
 	}
 	if p.importMode == ImportModeMove && ev.DownloadID == "" {
-		if err := os.Remove(mediaFile); err != nil && !os.IsNotExist(err) {
-			p.logger.Warn("import registered but source cleanup failed", "source", mediaFile, "error", err)
+		if err := p.FinalizeImports(ctx, []string{destFile}); err != nil {
+			return "", fmt.Errorf("import registered but source cleanup failed: %w", err)
 		}
 	}
 
@@ -1146,23 +1150,9 @@ func (p *ImportPipeline) recordStatus(ctx context.Context, mediaType, mediaID, s
 // fails or the queue is full. Import results are delivered via
 // notifications/events, not via the return value.
 func (p *ImportPipeline) SubmitManualImport(path string) error {
-	info, err := os.Stat(path)
+	mediaFiles, err := scanImportFiles(context.Background(), path)
 	if err != nil {
-		return fmt.Errorf("path not found: %w", err)
-	}
-
-	var mediaFiles []string
-	if info.IsDir() {
-		mediaFiles, err = scanMediaFiles(path)
-		if err != nil {
-			return fmt.Errorf("scan: %w", err)
-		}
-	} else {
-		ext := filepath.Ext(path)
-		if !mediaExtensions[strings.ToLower(ext)] {
-			return fmt.Errorf("not a media file: %s", path)
-		}
-		mediaFiles = []string{path}
+		return err
 	}
 	if len(mediaFiles) == 0 {
 		return fmt.Errorf("no media files found in %s", path)
@@ -1215,6 +1205,14 @@ func (p *ImportPipeline) SubmitManualMatch(path string, mediaType MediaType, med
 	// Validate path exists before queuing
 	if _, err := os.Stat(path); err != nil {
 		return fmt.Errorf("path not found: %w", err)
+	}
+	if mediaType == MediaTypeMusic {
+		if err := checkRegularSource(path); err != nil {
+			return err
+		}
+		if !mediafiles.IsAudio(strings.ToLower(filepath.Ext(path))) {
+			return fmt.Errorf("not an audio file: %s", path)
+		}
 	}
 
 	select {
@@ -1310,26 +1308,9 @@ func (p *ImportPipeline) SubmitReimport(mediaType MediaType, mediaID, sourcePath
 
 // ImportManual triggers an import for an arbitrary filesystem path.
 func (p *ImportPipeline) ImportManual(ctx context.Context, path string) error {
-	info, err := os.Lstat(path)
+	mediaFiles, err := scanImportFiles(ctx, path)
 	if err != nil {
-		return fmt.Errorf("path not found: %w", err)
-	}
-	if info.Mode()&os.ModeSymlink != 0 {
-		return fmt.Errorf("refusing symlink import path: %s", path)
-	}
-
-	var mediaFiles []string
-	if info.IsDir() {
-		mediaFiles, err = scanMediaFiles(path)
-		if err != nil {
-			return fmt.Errorf("scan: %w", err)
-		}
-	} else {
-		ext := filepath.Ext(path)
-		if !mediaExtensions[strings.ToLower(ext)] {
-			return fmt.Errorf("not a media file: %s", path)
-		}
-		mediaFiles = []string{path}
+		return err
 	}
 
 	if len(mediaFiles) == 0 {
@@ -1341,19 +1322,22 @@ func (p *ImportPipeline) ImportManual(ctx context.Context, path string) error {
 		CompletedAt: time.Now(),
 	}
 
-	var lastErr error
+	var failures []error
 	for _, mf := range mediaFiles {
 		if _, err := p.importSingleFile(ctx, fakeEvent, mf); err != nil {
-			lastErr = err
+			failures = append(failures, err)
 		}
 	}
-	return lastErr
+	return errors.Join(failures...)
 }
 
 // ImportManualMatch imports a file or folder and directly links it to a
 // specific media item, bypassing fuzzy matching. The user explicitly
 // provides the media_type and media_id, so no guessing is needed.
 func (p *ImportPipeline) ImportManualMatch(ctx context.Context, path string, mediaType MediaType, mediaID string) (*ImportRecord, error) {
+	if mediaType == MediaTypeMusic {
+		return p.importMusicMatch(ctx, path, mediaID)
+	}
 	info, err := os.Lstat(path)
 	if err != nil {
 		return nil, fmt.Errorf("path not found: %w", err)
@@ -1508,23 +1492,9 @@ type ImportPreview struct {
 // PreviewImport is a dry-run mode that returns what would happen without
 // actually importing. POST /api/v1/imports/preview uses this.
 func (p *ImportPipeline) PreviewImport(ctx context.Context, path string) ([]ImportPreview, error) {
-	info, err := os.Stat(path)
+	mediaFiles, err := scanImportFiles(ctx, path)
 	if err != nil {
-		return nil, fmt.Errorf("path not found: %w", err)
-	}
-
-	var mediaFiles []string
-	if info.IsDir() {
-		mediaFiles, err = scanMediaFiles(path)
-		if err != nil {
-			return nil, fmt.Errorf("scan: %w", err)
-		}
-	} else {
-		ext := filepath.Ext(path)
-		if !mediaExtensions[strings.ToLower(ext)] {
-			return nil, fmt.Errorf("not a media file: %s", path)
-		}
-		mediaFiles = []string{path}
+		return nil, err
 	}
 
 	var previews []ImportPreview
@@ -1536,6 +1506,18 @@ func (p *ImportPipeline) PreviewImport(ctx context.Context, path string) ([]Impo
 }
 
 func (p *ImportPipeline) previewSingleFile(ctx context.Context, filePath string) ImportPreview {
+	if mediafiles.IsAudio(strings.ToLower(filepath.Ext(filePath))) {
+		scan := p.scanMusicFile(ctx, filePath)
+		reason := "no unique album and track match; manual matching is required"
+		if scan.MatchedMediaID != "" {
+			reason = "matched using audio tags and album track metadata"
+		}
+		return ImportPreview{
+			FilePath: scan.FilePath, FileSize: scan.FileSize, MediaType: scan.MediaType,
+			MediaID: scan.MatchedMediaID, Title: scan.MatchedMedia, Quality: scan.Quality,
+			Action: scan.SuggestedAction, Reason: reason,
+		}
+	}
 	info, _ := os.Stat(filePath)
 	var fileSize int64
 	if info != nil {

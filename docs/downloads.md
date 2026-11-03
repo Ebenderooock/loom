@@ -48,6 +48,43 @@ imported file at its destination for recovery rather than deleting it.
 The full schema is in [`api/openapi/loom.yaml`](../api/openapi/loom.yaml)
 under the `download-clients` tag.
 
+## Downloads / Imports
+
+**Scan & Import** previews video and audio files recursively without changing
+them. Music matches use embedded artist, album and track tags against albums
+already added to Loom, including standalone albums and compilations. Ambiguous
+matches are not imported automatically. **Manual Match → Music** lets you
+select an existing album and its specific track when automatic matching fails.
+Add the album to Music first if it is not already in your library.
+
+Imports transfer the physical media, not just its database association:
+
+| Media | Destination |
+| --- | --- |
+| Movie | Assigned library / movie title and year |
+| Episode | Assigned series library / series / season |
+| Music | Owner's library (or standalone album's library) / artist / album and year / numbered track |
+
+Multi-artist albums and compilations use the `Various Artists` directory.
+The album's selected edition determines its track list and numbering.
+An unrelated same-title album is never selected solely by track position.
+
+`media_management.import_mode` controls source handling. The default `move`
+mode transfers media into the library and removes the source. Automatically
+matched imports and re-imports verify and register their staged destinations
+before removing source files. `copy`, `hardlink`, and `hardlink_only`
+deliberately retain the source; hardlink mode falls back to copying across
+filesystems, while hardlink-only mode reports an error. Download-triggered
+moves retain sources until the workflow reaches its durable cleanup stage.
+Automatically unmatched files remain at the source, and partial failures are
+reported rather than counted as a completed import. If an explicitly matched
+video folder was already moved before registration failed, its files remain
+at the destination for recovery.
+
+**Import queued** means the server accepted background work, not that files
+have already moved. Check the workflow and import history for the completed
+destination or failure. Scanning alone never transfers files.
+
 ## Acquisition failure history and recovery
 
 Activity → History includes acquisitions that fail before a download or

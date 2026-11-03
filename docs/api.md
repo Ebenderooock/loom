@@ -42,6 +42,29 @@ responses expose `qualityProfileMissing`, computed against both current and
 active legacy profiles, so existing blank, deleted or dangling selections are
 highlighted without incorrectly flagging valid legacy profiles.
 
+## Manual media imports
+
+`POST /api/v1/imports/scan` and `/api/v1/imports/preview` accept `{path}` and
+include audio as well as video files. Music scan results use `media_type:
+"music"`, a **track ID** for `matched_media_id`, and optional
+`detected_artist`, `detected_album`, `detected_track`, and `detected_disc` tags.
+Scanning does not move files.
+
+`POST /api/v1/imports/manual` accepts `{path}` for automatic matching.
+`POST /api/v1/imports/manual-match` accepts `{path, media_type, media_id}`.
+For Music, use `media_type: "music"` and the selected **track ID**, not an
+artist or album ID; the path must identify one audio file.
+`POST /api/v1/imports/reimport` accepts
+`{source_path, media_type, media_id, conflict_policy?}` with the same Music
+track ID contract. Music replacements only support `replace_if_better` and
+preserve the existing file unless an audio-quality upgrade can be established.
+
+All three submission endpoints return **202 `{status: "accepted"}`**,
+not an import record or a completion guarantee. Import history uses the album
+ID for Music records and reports the actual library destination. Transfer and
+source cleanup follow the configured import mode; see
+[Downloads / Imports](downloads.md#downloads--imports).
+
 ## Versioning policy
 
 | Path prefix | Owner | Stability |

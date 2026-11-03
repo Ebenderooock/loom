@@ -46,6 +46,7 @@ type Service interface {
 	RefreshArtistAlbums(ctx context.Context, artistID string) (int, error)
 
 	GetAlbum(ctx context.Context, id string) (*Album, error)
+	GetTrack(ctx context.Context, id string) (*Track, error)
 	// LoadAlbumTracks is GetAlbum for callers that must match files to tracks:
 	// it returns an error wrapping ErrAlbumTracksUnavailable instead of an
 	// album with no tracks when metadata cannot be fetched.
@@ -66,6 +67,7 @@ type Service interface {
 	ListArtistHistory(ctx context.Context, artistID string, limit int) ([]*ArtistHistoryEntry, error)
 	DeleteTrackFile(ctx context.Context, id string) error
 	PruneMissingTrackFiles(ctx context.Context, artistID, root string) (int, error)
+	PruneMissingAlbumTrackFiles(ctx context.Context, albumID, root string) (int, error)
 
 	ListAudioQualityDefinitions(ctx context.Context) ([]*AudioQualityDefinition, error)
 	ListAudioQualityProfiles(ctx context.Context) ([]*AudioQualityProfile, error)
@@ -86,6 +88,21 @@ func (s *service) PruneMissingTrackFiles(ctx context.Context, artistID, root str
 	if err != nil {
 		return 0, err
 	}
+	return pruneMissingTrackFiles(ctx, s.repo, files, root)
+}
+
+// PruneMissingAlbumTrackFiles removes stale records for one album. This is
+// used for standalone and Various Artists folders where no single managed
+// artist owns the physical directory.
+func (s *service) PruneMissingAlbumTrackFiles(ctx context.Context, albumID, root string) (int, error) {
+	files, err := s.repo.ListTrackFilesByAlbum(ctx, albumID)
+	if err != nil {
+		return 0, err
+	}
+	return pruneMissingTrackFiles(ctx, s.repo, files, root)
+}
+
+func pruneMissingTrackFiles(ctx context.Context, repo Repository, files []*TrackFile, root string) (int, error) {
 	rootAbs, err := filepath.Abs(root)
 	if err != nil {
 		return 0, err
@@ -106,7 +123,7 @@ func (s *service) PruneMissingTrackFiles(ctx context.Context, artistID, root str
 		if _, err := os.Stat(pathAbs); err == nil || !os.IsNotExist(err) {
 			continue
 		}
-		if err := s.repo.DeleteTrackFile(ctx, file.ID); err != nil {
+		if err := repo.DeleteTrackFile(ctx, file.ID); err != nil {
 			return removed, err
 		}
 		removed++
@@ -120,6 +137,17 @@ type service struct {
 	logger      *slog.Logger
 	searchOnAdd func(context.Context, string) error
 	artwork     metadata.MusicArtworkProvider
+}
+
+func (s *service) GetTrack(ctx context.Context, id string) (*Track, error) {
+	track, err := s.repo.GetTrack(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if track == nil {
+		return nil, ErrNotFound
+	}
+	return track, nil
 }
 
 // artworkTimeout bounds best-effort artwork lookups so a slow artwork service
