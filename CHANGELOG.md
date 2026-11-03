@@ -11,6 +11,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - Update the grouped Go dependencies, including Rain, SQLite, OpenTelemetry,
   Prometheus, OIDC, pgx and Goose, with their required transitive dependencies.
+- Update grouped web dependencies; keep TypeScript on 6 until
+  typescript-eslint supports 7 and Tailwind on 3 pending the v4 config/CSS
+  migration.
 
 ### Added
 
