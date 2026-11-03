@@ -510,9 +510,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
-- Update the grouped Go dependencies, including Rain, SQLite, OpenTelemetry,
-  Prometheus, OIDC, pgx and Goose, with their required transitive dependencies.
-
 - **Indexers — first-class torrent fields on `Result`.** Added
   `Infohash`, `MagnetURI`, and switched `Seeders`/`Peers` to `*int` on
   `internal/indexers.Result` so torrent metadata no longer rides on
