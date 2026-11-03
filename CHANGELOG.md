@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- Update the grouped Go dependencies, including Rain, SQLite, OpenTelemetry,
+  Prometheus, OIDC, pgx and Goose, with their required transitive dependencies.
+
 ### Added
 
 - Music support in Downloads / Imports: audio scanning, automatic tagged-track
