@@ -158,6 +158,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Synology package: install no longer fails when preinst runs before DSM sets
+  package paths; the install/upgrade wizard asks for media and downloads shared
+  folders so DSM grants `sc-loom` access, and granted shares become folder-picker
+  roots. `LOOM_FILESYSTEM_ALLOWED_BROWSE_ROOTS` now accepts a comma-separated list.
+- Deluge 2.x connection tests use `daemon.get_version` instead of the removed
+  `daemon.info` method.
+- External download clients (qBittorrent, Transmission, Deluge) share one
+  cached status snapshot per client with failure backoff, so frequent UI and
+  background polling no longer gets clients rate-limited. The built-in torrent
+  client is unaffected; the Downloads page shows client errors.
+- Import Existing dialogs show progress and scan errors instead of a blank dialog.
+- Album search tries the next matching release when the best one was already
+  attempted (for example after a failed import) instead of failing with
+  "acquisition deferred".
 - Monitoring a music album now also monitors its tracks. Previously, tracks
   stayed unmonitored when an album was monitored later, so searches skipped
   them.

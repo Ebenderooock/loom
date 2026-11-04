@@ -281,7 +281,7 @@ func walkFolder(root string) ([]scannedFile, error) {
 
 	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
-			return nil // skip inaccessible files
+			return err
 		}
 		if info.IsDir() {
 			if shouldIgnore(info.Name()) {

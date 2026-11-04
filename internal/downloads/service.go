@@ -411,6 +411,10 @@ func (s *Service) TestOne(ctx context.Context, id string) (Health, error) {
 	}
 	err := c.Test(checkCtx)
 	finished := s.clock.Now()
+	if err == nil {
+		// A healthy probe ends any status cooldown for this client.
+		s.registry.InvalidateStatus(id)
+	}
 
 	prev, _ := s.repo.GetHealth(ctx, id)
 	h := Health{

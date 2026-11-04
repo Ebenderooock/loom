@@ -16,11 +16,36 @@ type Registry struct {
 	mu      sync.RWMutex
 	items   map[string]DownloadClient
 	history *HistoryStore
+	status  *statusCache
 }
 
 // NewRegistry returns an empty Registry.
 func NewRegistry() *Registry {
-	return &Registry{items: make(map[string]DownloadClient)}
+	return &Registry{items: make(map[string]DownloadClient), status: newStatusCache(DefaultStatusPolicy)}
+}
+
+// SetStatusPolicy replaces the shared status policy and drops any
+// cached snapshots. Intended for wiring and tests.
+func (r *Registry) SetStatusPolicy(p StatusPolicy) {
+	r.status = newStatusCache(p)
+}
+
+// ClientStatus returns Status for one client. External clients are
+// served from the shared per-client snapshot (see StatusPolicy); the
+// built-in engine is always queried live.
+func (r *Registry) ClientStatus(ctx context.Context, c DownloadClient, ids ...string) ([]Item, error) {
+	if !usesSharedStatus(c.Kind()) {
+		return c.Status(ctx, ids...)
+	}
+	return r.status.status(ctx, c, ids)
+}
+
+// InvalidateStatus forces the next status read for id to hit the
+// client. Call after mutating a client's queue so the UI reflects the
+// change immediately. A successful mutation also proves the client is
+// reachable, so any failure cooldown is cleared.
+func (r *Registry) InvalidateStatus(id string) {
+	r.status.invalidate(id, true)
 }
 
 // Register inserts c. Duplicate IDs are an error.
@@ -53,6 +78,7 @@ func (r *Registry) Replace(c DownloadClient) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.items[c.ID()] = c
+	r.status.forget(c.ID())
 	return nil
 }
 
@@ -61,6 +87,7 @@ func (r *Registry) Remove(id string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	delete(r.items, id)
+	r.status.forget(id)
 }
 
 // Get returns the client registered under id.
@@ -136,7 +163,7 @@ func (r *Registry) Status(ctx context.Context, ids []string, opts FanOutOptions)
 	}
 	ch := make(chan partial, len(targets))
 	r.runFanOut(ctx, targets, opts, func(c DownloadClient, cctx context.Context) {
-		items, err := c.Status(cctx, ids...)
+		items, err := r.ClientStatus(cctx, c, ids...)
 		ch <- partial{id: c.ID(), items: items, err: err}
 	}, len(targets))
 	close(ch)
@@ -205,6 +232,7 @@ func (r *Registry) Test(ctx context.Context, opts FanOutOptions) AggregatedTest 
 			out.Errors[p.id] = p.err.Error()
 			continue
 		}
+		r.status.invalidate(p.id, true)
 		out.OK = append(out.OK, p.id)
 	}
 	sort.Strings(out.OK)

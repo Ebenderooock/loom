@@ -26,6 +26,7 @@ func (s *Service) Mount(r chi.Router) {
 		r.Post("/", s.handleCreate)
 		r.Post("/test", s.handleTestConfig)
 		r.Route("/{id}", func(r chi.Router) {
+			r.Use(s.invalidateStatusOnMutation)
 			r.Get("/", s.handleGet)
 			r.Put("/", s.handleReplace)
 			r.Patch("/", s.handlePatch)
@@ -580,7 +581,7 @@ func (s *Service) handleItems(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ids := splitCSV(r.URL.Query().Get("ids"))
-	items, err := c.Status(r.Context(), ids...)
+	items, err := s.registry.ClientStatus(r.Context(), c, ids...)
 	if err != nil {
 		writeError(w, http.StatusBadGateway, "status_failed", err.Error())
 		return
@@ -1010,6 +1011,7 @@ func (s *Service) handleActivityRemove(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadGateway, "operation_failed", err.Error())
 		return
 	}
+	s.registry.InvalidateStatus(req.ClientID)
 	// Cancel any workflows tracking these downloads
 	if s.orchestrator != nil {
 		s.orchestrator.NotifyDownloadRemoved(req.ClientID, req.IDs)
@@ -1036,6 +1038,7 @@ func (s *Service) handleActivityAction(w http.ResponseWriter, r *http.Request, f
 		writeError(w, http.StatusBadGateway, "operation_failed", err.Error())
 		return
 	}
+	s.registry.InvalidateStatus(req.ClientID)
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
@@ -1066,7 +1069,7 @@ func (s *Service) handleActivityDetail(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// For non-torrent clients, return basic status info.
-	items, err := c.Status(r.Context(), itemID)
+	items, err := s.registry.ClientStatus(r.Context(), c, itemID)
 	if err != nil {
 		writeError(w, http.StatusBadGateway, "status_failed", err.Error())
 		return
@@ -1214,4 +1217,44 @@ func (s *Service) handleTorrentResumeAll(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+// statusRecorder captures the response code so middleware can act on
+// the outcome of a handler.
+type statusRecorder struct {
+	http.ResponseWriter
+	code int
+}
+
+func (w *statusRecorder) WriteHeader(code int) {
+	if w.code == 0 {
+		w.code = code
+	}
+	w.ResponseWriter.WriteHeader(code)
+}
+
+func (w *statusRecorder) Write(b []byte) (int, error) {
+	if w.code == 0 {
+		w.code = http.StatusOK
+	}
+	return w.ResponseWriter.Write(b)
+}
+
+func (w *statusRecorder) Unwrap() http.ResponseWriter { return w.ResponseWriter }
+
+// invalidateStatusOnMutation refreshes the shared status snapshot after
+// a successful queue mutation (add, pause, remove, ...) so the next
+// activity poll shows the change instead of a cached view.
+func (s *Service) invalidateStatusOnMutation(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			next.ServeHTTP(w, r)
+			return
+		}
+		rec := &statusRecorder{ResponseWriter: w}
+		next.ServeHTTP(rec, r)
+		if rec.code >= 200 && rec.code < 300 {
+			s.registry.InvalidateStatus(chi.URLParam(r, "id"))
+		}
+	})
 }
