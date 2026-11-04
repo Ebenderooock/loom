@@ -368,8 +368,7 @@ export function SourceForm({
                       {
                         (
                           form.formState.errors.config as
-                            | Record<string, { message?: string }>
-                            | undefined
+                            Record<string, { message?: string }> | undefined
                         )?.item_selector?.message
                       }
                     </FormMessage>
@@ -396,8 +395,7 @@ export function SourceForm({
                       {
                         (
                           form.formState.errors.config as
-                            | Record<string, { message?: string }>
-                            | undefined
+                            Record<string, { message?: string }> | undefined
                         )?.title_selector?.message
                       }
                     </FormMessage>

@@ -6,10 +6,11 @@ export function ErrorFallback({
   error,
   reset,
 }: {
-  error: Error;
+  error: unknown;
   reset?: () => void;
 }) {
   const router = useRouter();
+  const message = error instanceof Error ? error.message : String(error);
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background p-4">
@@ -31,7 +32,7 @@ export function ErrorFallback({
           </p>
         </div>
         <pre className="max-h-40 overflow-auto rounded-lg border border-border/50 bg-card/50 p-4 text-left text-xs text-muted-foreground backdrop-blur-sm">
-          {error.message}
+          {message}
         </pre>
         <div className="flex items-center justify-center gap-3">
           <Button

@@ -80,6 +80,39 @@ func TestArtistCatalogOfficialTypesAndPagination(t *testing.T) {
 	}
 }
 
+func TestSearchAlbumPreservesMultipleArtistCredits(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/release-group" || r.URL.Query().Get("query") != "soundtrack" {
+			t.Errorf("unexpected release-group request: %s", r.URL)
+		}
+		_ = json.NewEncoder(w).Encode(SearchResponse{
+			ReleaseGroup: []ReleaseGroupFull{{
+				ID: "group-1", Title: "A Shared Record", PrimaryType: "Album",
+				Artists: []ArtistCreditResponse{
+					{Name: "First Artist", Artist: ArtistResponse{ID: "artist-1", Name: "Canonical Artist Name"}, JoinPhrase: " & "},
+					{Artist: ArtistResponse{ID: "artist-2", Name: "Second Artist"}},
+				},
+			}},
+		})
+	}))
+	defer server.Close()
+	client := NewClient(&Config{BaseURL: server.URL})
+	client.throttler = NewThrottler(0)
+
+	albums, err := NewProvider(client).SearchAlbum(context.Background(), "soundtrack", 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(albums) != 1 || len(albums[0].Artists) != 2 {
+		t.Fatalf("search result lost artist credits: %+v", albums)
+	}
+	if albums[0].Artists[0].Name != "First Artist" ||
+		albums[0].Artists[0].JoinPhrase != " & " ||
+		albums[0].Artists[1].ArtistMBID != "artist-2" {
+		t.Fatalf("unexpected credited artists: %+v", albums[0].Artists)
+	}
+}
+
 func TestArtistCatalogDoesNotReturnPartialResultsOnFailure(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Query().Get("offset") != "0" {

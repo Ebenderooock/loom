@@ -24,6 +24,7 @@ type Repository interface {
 	SoftDeleteArtist(ctx context.Context, id string) error
 
 	// Albums
+	ListAlbums(ctx context.Context) ([]*Album, error)
 	ListAlbumsByArtist(ctx context.Context, artistID string) ([]*Album, error)
 	GetAlbum(ctx context.Context, id string) (*Album, error)
 	GetAlbumByMBID(ctx context.Context, mbid string) (*Album, error)
@@ -48,6 +49,7 @@ type Repository interface {
 	// Track files (physical audio files linked to a track)
 	CreateTrackFile(ctx context.Context, tf *TrackFile) error
 	GetTrackFileByPath(ctx context.Context, path string) (*TrackFile, error)
+	ListTrackFilesByAlbum(ctx context.Context, albumID string) ([]*TrackFile, error)
 	ListTrackFilesByArtist(ctx context.Context, artistID string) ([]*TrackFile, error)
 	ListArtistFiles(ctx context.Context, artistID string) ([]*ArtistFile, error)
 	DeleteTrackFile(ctx context.Context, id string) error
@@ -136,7 +138,7 @@ func bindMusicQuery(query string, postgres bool) string {
 
 const artistColumns = `id, mbid, name, sort_name, disambiguation, artist_type, country, overview, genres, image_url, background_url, logo_url, begin_area, begin_date, end_date, ended, rating, rating_votes, links, path, library_id, quality_profile_id, metadata_profile_id, monitoring_status, metadata_provider, last_search_at, created_at, updated_at`
 
-const albumColumns = `id, mbid, artist_id, title, album_type, secondary_types, release_date, genres, cover_art_url, overview, rating, rating_votes, links, monitored, selected_release_id, last_search_at, releases_fetched_at, tracks_fetched_at, details_fetched_at, created_at, updated_at`
+const albumColumns = `id, mbid, artist_id, title, album_type, secondary_types, release_date, genres, cover_art_url, overview, rating, rating_votes, links, monitored, selected_release_id, last_search_at, releases_fetched_at, tracks_fetched_at, details_fetched_at, created_at, updated_at, artist_credits, library_id, quality_profile_id, metadata_profile_id`
 
 const releaseColumns = `id, mbid, album_id, title, disambiguation, status, release_date, country, label, format, media_count, track_count, created_at, updated_at`
 
@@ -284,24 +286,28 @@ func (r *sqlRepo) SoftDeleteArtist(ctx context.Context, id string) error {
 
 func scanAlbum(s rowScanner) (*Album, error) {
 	al := &Album{}
-	var mbid, albumType, releaseDate, coverArt, overview, selectedRelease sql.NullString
+	var mbid, artistID, albumType, releaseDate, coverArt, overview, selectedRelease sql.NullString
+	var libraryID, qualityProfileID, metadataProfileID sql.NullString
 	var secondaryBytes, genreBytes []byte
+	var artistCredits []byte
 	var lastSearch, releasesFetched, tracksFetched, detailsFetched sql.NullString
 	var rating sql.NullFloat64
 	var ratingVotes sql.NullInt64
 	var linkBytes []byte
 	var createdStr, updatedStr string
 	err := s.Scan(
-		&al.ID, &mbid, &al.ArtistID, &al.Title, &albumType, &secondaryBytes,
+		&al.ID, &mbid, &artistID, &al.Title, &albumType, &secondaryBytes,
 		&releaseDate, &genreBytes, &coverArt, &overview, &rating, &ratingVotes,
 		&linkBytes, &al.Monitored,
 		&selectedRelease, &lastSearch, &releasesFetched, &tracksFetched, &detailsFetched,
 		&createdStr, &updatedStr,
+		&artistCredits, &libraryID, &qualityProfileID, &metadataProfileID,
 	)
 	if err != nil {
 		return nil, err
 	}
 	al.MBID = mbid.String
+	al.ArtistID = artistID.String
 	al.AlbumType = albumType.String
 	al.ReleaseDate = releaseDate.String
 	al.CoverArtURL = coverArt.String
@@ -318,7 +324,31 @@ func scanAlbum(s rowScanner) (*Album, error) {
 	al.TracksFetchedAt = parseNullTime(tracksFetched)
 	al.CreatedAt = parseTime(createdStr)
 	al.UpdatedAt = parseTime(updatedStr)
+	if err := al.Artists.Scan(artistCredits); err != nil {
+		return nil, err
+	}
+	al.LibraryID = libraryID.String
+	al.QualityProfileID = qualityProfileID.String
+	al.MetadataProfileID = metadataProfileID.String
 	return al, nil
+}
+
+func (r *sqlRepo) ListAlbums(ctx context.Context) ([]*Album, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT `+albumColumns+` FROM albums WHERE deleted_at IS NULL ORDER BY release_date, title`)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	var list []*Album
+	for rows.Next() {
+		al, err := scanAlbum(rows)
+		if err != nil {
+			return nil, err
+		}
+		list = append(list, al)
+	}
+	return list, rows.Err()
 }
 
 func (r *sqlRepo) ListAlbumsByArtist(ctx context.Context, artistID string) ([]*Album, error) {
@@ -374,20 +404,40 @@ func (r *sqlRepo) CreateAlbum(ctx context.Context, al *Album) error {
 	}
 	defer func() { _ = tx.Rollback() }()
 	if _, err := tx.ExecContext(ctx,
-		`INSERT INTO albums (id, mbid, artist_id, title, album_type, secondary_types, release_date, genres, cover_art_url, overview, rating, rating_votes, links, monitored, selected_release_id, last_search_at, releases_fetched_at, tracks_fetched_at, details_fetched_at, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		al.ID, nullString(al.MBID), al.ArtistID, al.Title, al.AlbumType, al.SecondaryTypes,
+		`INSERT INTO albums (id, mbid, artist_id, title, album_type, secondary_types, release_date, genres, cover_art_url, overview, rating, rating_votes, links, monitored, selected_release_id, last_search_at, releases_fetched_at, tracks_fetched_at, details_fetched_at, created_at, updated_at, artist_credits, library_id, quality_profile_id, metadata_profile_id)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		al.ID, nullString(al.MBID), nullString(al.ArtistID), al.Title, al.AlbumType, al.SecondaryTypes,
 		al.ReleaseDate, al.Genres, al.CoverArtURL, al.Overview, al.Rating, al.RatingVotes, al.Links, al.Monitored,
 		nullString(al.SelectedReleaseID), nullTime(al.LastSearchAt),
 		nullTime(al.ReleasesFetchedAt), nullTime(al.TracksFetchedAt), nullTime(al.DetailsFetchedAt),
-		al.CreatedAt, al.UpdatedAt,
+		al.CreatedAt, al.UpdatedAt, al.Artists, nullString(al.LibraryID),
+		nullString(al.QualityProfileID), nullString(al.MetadataProfileID),
 	); err != nil {
 		return err
 	}
-	if _, err := tx.ExecContext(ctx,
-		`INSERT INTO album_artists (album_id, artist_id) VALUES (?, ?)`,
-		al.ID, al.ArtistID); err != nil {
-		return err
+	linked := make(map[string]struct{})
+	for _, credit := range al.Artists {
+		if credit.ArtistID == "" {
+			continue
+		}
+		if _, ok := linked[credit.ArtistID]; ok {
+			continue
+		}
+		linked[credit.ArtistID] = struct{}{}
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO album_artists (album_id, artist_id) VALUES (?, ?) ON CONFLICT (album_id, artist_id) DO NOTHING`,
+			al.ID, credit.ArtistID); err != nil {
+			return err
+		}
+	}
+	if al.ArtistID != "" {
+		if _, ok := linked[al.ArtistID]; !ok {
+			if _, err := tx.ExecContext(ctx,
+				`INSERT INTO album_artists (album_id, artist_id) VALUES (?, ?) ON CONFLICT (album_id, artist_id) DO NOTHING`,
+				al.ID, al.ArtistID); err != nil {
+				return err
+			}
+		}
 	}
 	return tx.Commit()
 }
@@ -425,12 +475,13 @@ func (r *sqlRepo) SetArtistAlbumCatalog(ctx context.Context, artistID string, al
 func (r *sqlRepo) UpdateAlbum(ctx context.Context, al *Album) error {
 	al.UpdatedAt = time.Now().UTC()
 	_, err := r.db.ExecContext(ctx,
-		`UPDATE albums SET mbid=?, title=?, album_type=?, secondary_types=?, release_date=?, genres=?, cover_art_url=?, overview=?, rating=?, rating_votes=?, links=?, monitored=?, selected_release_id=?, last_search_at=?, releases_fetched_at=?, tracks_fetched_at=?, details_fetched_at=?, updated_at=? WHERE id=?`,
+		`UPDATE albums SET mbid=?, title=?, album_type=?, secondary_types=?, release_date=?, genres=?, cover_art_url=?, overview=?, rating=?, rating_votes=?, links=?, monitored=?, selected_release_id=?, last_search_at=?, releases_fetched_at=?, tracks_fetched_at=?, details_fetched_at=?, artist_credits=?, library_id=?, quality_profile_id=?, metadata_profile_id=?, updated_at=? WHERE id=?`,
 		nullString(al.MBID), al.Title, al.AlbumType, al.SecondaryTypes, al.ReleaseDate,
 		al.Genres, al.CoverArtURL, al.Overview, al.Rating, al.RatingVotes, al.Links, al.Monitored,
 		nullString(al.SelectedReleaseID), nullTime(al.LastSearchAt),
 		nullTime(al.ReleasesFetchedAt), nullTime(al.TracksFetchedAt), nullTime(al.DetailsFetchedAt),
-		al.UpdatedAt, al.ID,
+		al.Artists, nullString(al.LibraryID), nullString(al.QualityProfileID),
+		nullString(al.MetadataProfileID), al.UpdatedAt, al.ID,
 	)
 	return err
 }
@@ -922,6 +973,24 @@ func (r *sqlRepo) ListTrackFilesByArtist(ctx context.Context, artistID string) (
 		files = append(files, tf)
 	}
 	return files, rows.Err()
+}
+
+func (r *sqlRepo) ListTrackFilesByAlbum(ctx context.Context, albumID string) ([]*TrackFile, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT `+trackFileColumns+` FROM track_files WHERE album_id = ? AND deleted_at IS NULL ORDER BY file_path`, albumID)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	var list []*TrackFile
+	for rows.Next() {
+		tf, err := scanTrackFile(rows)
+		if err != nil {
+			return nil, err
+		}
+		list = append(list, tf)
+	}
+	return list, rows.Err()
 }
 
 func (r *sqlRepo) DeleteTrackFile(ctx context.Context, id string) error {

@@ -25,6 +25,7 @@ import {
   Loader2,
   RefreshCw,
   FileVideo,
+  FileAudio,
   CheckCircle2,
   XCircle,
   AlertTriangle,
@@ -90,6 +91,8 @@ function actionBadge(action: string) {
           No Match
         </Badge>
       );
+    case "queued":
+      return <Badge variant="outline">Queued (not completed)</Badge>;
     default:
       return <Badge variant="outline">{action}</Badge>;
   }
@@ -108,6 +111,8 @@ function ScanTab() {
 
   const handleScan = () => {
     if (!folderPath.trim()) return;
+    manualImportMut.reset();
+    reimportMut.reset();
     scanMut.mutate(folderPath.trim(), {
       onSuccess: (data) => setResults(data),
     });
@@ -120,12 +125,25 @@ function ScanTab() {
 
   const handleReimport = (result: ScanResult) => {
     if (!result.matched_media_id || !result.media_type) return;
-    reimportMut.mutate({
-      media_type: result.media_type,
-      media_id: result.matched_media_id,
-      source_path: result.file_path,
-      conflict_policy: "replace_if_better",
-    });
+    reimportMut.mutate(
+      {
+        media_type: result.media_type,
+        media_id: result.matched_media_id,
+        source_path: result.file_path,
+        conflict_policy: "replace_if_better",
+      },
+      {
+        onSuccess: () => {
+          setResults((prev) =>
+            prev.map((r) =>
+              r.file_path === result.file_path
+                ? { ...r, suggested_action: "queued" }
+                : r,
+            ),
+          );
+        },
+      },
+    );
   };
 
   return (
@@ -140,6 +158,7 @@ function ScanTab() {
         <CardContent>
           <div className="flex gap-2">
             <Input
+              aria-label="Folder to scan"
               placeholder="/downloads/complete"
               value={folderPath}
               onChange={(e) => setFolderPath(e.target.value)}
@@ -161,7 +180,7 @@ function ScanTab() {
             </Button>
           </div>
           {scanMut.isError && (
-            <p className="mt-2 text-sm text-destructive">
+            <p role="alert" className="mt-2 text-sm text-destructive">
               {scanMut.error.message}
             </p>
           )}
@@ -180,7 +199,9 @@ function ScanTab() {
               onClick={handleImportAll}
               disabled={
                 manualImportMut.isPending ||
-                results.every((r) => r.suggested_action === "no_match")
+                results.every((r) =>
+                  ["no_match", "queued", "skip"].includes(r.suggested_action),
+                )
               }
             >
               {manualImportMut.isPending ? (
@@ -210,7 +231,17 @@ function ScanTab() {
                   <TableRow key={r.file_path}>
                     <TableCell className="max-w-[200px] truncate font-mono text-xs">
                       <div className="flex items-center gap-1">
-                        <FileVideo className="h-4 w-4 shrink-0 text-muted-foreground" />
+                        {r.media_type === "music" ? (
+                          <FileAudio
+                            aria-label="Audio file"
+                            className="h-4 w-4 shrink-0 text-muted-foreground"
+                          />
+                        ) : (
+                          <FileVideo
+                            aria-label="Video file"
+                            className="h-4 w-4 shrink-0 text-muted-foreground"
+                          />
+                        )}
                         <span className="truncate" title={r.file_path}>
                           {r.file_path.split("/").pop()}
                         </span>
@@ -229,6 +260,22 @@ function ScanTab() {
                           {String(r.detected_episode).padStart(2, "0")}
                         </span>
                       ) : null}
+                      {r.media_type === "music" && (
+                        <div className="text-xs text-muted-foreground">
+                          {[
+                            r.detected_artist,
+                            r.detected_album,
+                            r.detected_disc != null
+                              ? `Disc ${r.detected_disc}`
+                              : null,
+                            r.detected_track != null
+                              ? `Track ${r.detected_track}`
+                              : null,
+                          ]
+                            .filter(Boolean)
+                            .join(" · ")}
+                        </div>
+                      )}
                     </TableCell>
                     <TableCell>
                       {r.matched_media ? (
@@ -254,6 +301,7 @@ function ScanTab() {
                         r.suggested_action === "import") &&
                         r.matched_media_id && (
                           <Button
+                            aria-label={`Queue import for ${r.file_path.split("/").pop()}`}
                             size="sm"
                             variant="outline"
                             onClick={() => handleReimport(r)}
@@ -285,8 +333,25 @@ function ScanTab() {
               </TableBody>
             </Table>
             {manualImportMut.isSuccess && (
-              <p className="mt-2 text-sm text-green-600">
-                Import triggered successfully.
+              <p role="status" className="mt-2 text-sm text-muted-foreground">
+                Folder import queued, not completed. Check the Decision Log for
+                results.
+              </p>
+            )}
+            {manualImportMut.isError && (
+              <p role="alert" className="mt-2 text-sm text-destructive">
+                Could not queue folder import: {manualImportMut.error.message}
+              </p>
+            )}
+            {reimportMut.isSuccess && (
+              <p role="status" className="mt-2 text-sm text-muted-foreground">
+                File import queued, not completed. Check the Decision Log for
+                results.
+              </p>
+            )}
+            {reimportMut.isError && (
+              <p role="alert" className="mt-2 text-sm text-destructive">
+                Could not queue file import: {reimportMut.error.message}
               </p>
             )}
           </CardContent>
@@ -302,7 +367,7 @@ function ScanTab() {
           setResults((prev) =>
             prev.map((r) =>
               r.file_path === matchTarget?.file_path
-                ? { ...r, suggested_action: "import", matched_media: "Queued" }
+                ? { ...r, suggested_action: "queued" }
                 : r,
             ),
           );

@@ -42,6 +42,29 @@ responses expose `qualityProfileMissing`, computed against both current and
 active legacy profiles, so existing blank, deleted or dangling selections are
 highlighted without incorrectly flagging valid legacy profiles.
 
+## Manual media imports
+
+`POST /api/v1/imports/scan` and `/api/v1/imports/preview` accept `{path}` and
+include audio as well as video files. Music scan results use `media_type:
+"music"`, a **track ID** for `matched_media_id`, and optional
+`detected_artist`, `detected_album`, `detected_track`, and `detected_disc` tags.
+Scanning does not move files.
+
+`POST /api/v1/imports/manual` accepts `{path}` for automatic matching.
+`POST /api/v1/imports/manual-match` accepts `{path, media_type, media_id}`.
+For Music, use `media_type: "music"` and the selected **track ID**, not an
+artist or album ID; the path must identify one audio file.
+`POST /api/v1/imports/reimport` accepts
+`{source_path, media_type, media_id, conflict_policy?}` with the same Music
+track ID contract. Music replacements only support `replace_if_better` and
+preserve the existing file unless an audio-quality upgrade can be established.
+
+All three submission endpoints return **202 `{status: "accepted"}`**,
+not an import record or a completion guarantee. Import history uses the album
+ID for Music records and reports the actual library destination. Transfer and
+source cleanup follow the configured import mode; see
+[Downloads / Imports](downloads.md#downloads--imports).
+
 ## Versioning policy
 
 | Path prefix | Owner | Stability |
@@ -74,6 +97,9 @@ in `api/openapi/loom.yaml`.
 | `GET` | `/api/v1/discover/artist/{id}` | apiKey/bearer/cookie | `200 application/json` | MusicBrainz artist metadata and albums, without adding. |
 | `GET` | `/api/v1/discover/album/{id}` | apiKey/bearer/cookie | `200 application/json` | MusicBrainz album metadata and candidate editions. |
 | `GET` | `/api/v1/discover/release/{id}` | apiKey/bearer/cookie | `200 application/json` | MusicBrainz edition metadata and full tracks. |
+| `GET` | `/api/v1/albums` | apiKey/bearer/cookie | `200 application/json` (`Album[]`) | List managed and standalone albums, including their complete artist credits. |
+| `GET` | `/api/v1/albums/lookup` | apiKey/bearer/cookie | `200 application/json` (`AlbumLookupResult[]`) | Search MusicBrainz release groups using `q`; results include artist credits and whether the album has already been added. |
+| `POST` | `/api/v1/albums` | apiKey/bearer/cookie | `201 application/json` (`Album`) | Add a release group with `{mbid, libraryId, qualityProfileId, metadataProfileId?, monitored?}` without adding contributor artists. Multi-artist albums use the Various Artists folder. |
 | `PUT` | `/api/v1/albums/{id}/release` | apiKey/bearer/cookie | `200 application/json` (`Album`) | Select an edition using `{release_id}`; the edition must belong to this album, and selecting a different edition refreshes its tracks. |
 | `GET` | `/api/v1/music/audio-quality-definitions` | apiKey/bearer/cookie | `200 application/json` (`AudioQualityDefinition[]`) | List built-in audio quality tiers. |
 | `GET` | `/api/v1/music/audio-quality-profiles` | apiKey/bearer/cookie | `200 application/json` (`AudioQualityProfile[]`) | List audio quality profiles. |

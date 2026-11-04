@@ -72,7 +72,7 @@ export interface ExternalLink {
 export interface Album {
   id: string;
   mbid: string;
-  artist_id: string;
+  artist_id?: string;
   title: string;
   album_type?: string;
   secondary_types?: string[];
@@ -85,9 +85,57 @@ export interface Album {
   links?: ExternalLink[];
   monitored: boolean;
   selected_release_id?: string;
+  library_id?: string;
+  quality_profile_id?: string;
+  metadata_profile_id?: string;
   last_search_at?: string;
+  releases_fetched_at?: string;
+  tracks_fetched_at?: string;
+  details_fetched_at?: string;
+  created_at?: string;
+  updated_at?: string;
+  artists?: AlbumArtist[];
   releases?: AlbumRelease[];
   tracks?: Track[];
+}
+
+export interface AlbumArtist {
+  artist_id?: string;
+  mbid?: string;
+  name: string;
+  join_phrase?: string;
+}
+
+export function formatAlbumArtistCredits(
+  artists: AlbumArtist[] | undefined,
+): string {
+  if (!artists?.length) return "Various Artists";
+  return artists
+    .map((artist, index) => {
+      const phrase =
+        artist.join_phrase ?? (index < artists.length - 1 ? ", " : "");
+      return `${artist.name}${phrase}`;
+    })
+    .join("")
+    .trimEnd();
+}
+
+export interface AlbumLookupResult {
+  mbid: string;
+  title: string;
+  artists?: AlbumArtist[];
+  album_type?: string;
+  release_date?: string;
+  cover_art_url?: string;
+  already_added: boolean;
+}
+
+export interface AddAlbumRequest {
+  mbid: string;
+  qualityProfileId: string;
+  libraryId: string;
+  metadataProfileId?: string;
+  monitored?: boolean;
 }
 
 export interface Artist {
@@ -269,6 +317,7 @@ export interface ReleaseCandidate {
 
 export const musicKeys = {
   artists: ["music", "artists"] as const,
+  albums: ["music", "albums"] as const,
   artist: (id: string) => ["music", "artist", id] as const,
   artistFiles: (id: string) => ["music", "artist", id, "files"] as const,
   artistHistory: (id: string) => ["music", "artist", id, "history"] as const,
@@ -351,6 +400,10 @@ export async function fetchArtists(signal?: AbortSignal): Promise<Artist[]> {
   return getJSON<Artist[]>("/api/v1/artists", signal);
 }
 
+export async function fetchAlbums(signal?: AbortSignal): Promise<Album[]> {
+  return getJSON<Album[]>("/api/v1/albums", signal);
+}
+
 export async function fetchArtist(
   id: string,
   signal?: AbortSignal,
@@ -363,6 +416,29 @@ export async function fetchAlbum(
   signal?: AbortSignal,
 ): Promise<Album> {
   return getJSON<Album>(`/api/v1/albums/${id}`, signal);
+}
+
+export async function lookupAlbums(
+  q: string,
+  signal?: AbortSignal,
+): Promise<AlbumLookupResult[]> {
+  if (!q.trim()) return [];
+  return getJSON<AlbumLookupResult[]>(
+    `/api/v1/albums/lookup?q=${encodeURIComponent(q)}`,
+    signal,
+  );
+}
+
+export async function addAlbum(req: AddAlbumRequest): Promise<Album> {
+  const res = await apiFetch("/api/v1/albums", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(req),
+  });
+  if (!res.ok) {
+    throw new Error(`add album failed: ${res.status} ${await res.text()}`);
+  }
+  return (await res.json()) as Album;
 }
 
 export async function lookupArtists(
@@ -915,7 +991,9 @@ export function useSetAlbumMonitored() {
     mutationFn: ({ id, monitored }: { id: string; monitored: boolean }) =>
       setAlbumMonitored(id, monitored),
     onSuccess: (al) => {
-      qc.invalidateQueries({ queryKey: musicKeys.artist(al.artist_id) });
+      qc.invalidateQueries({ queryKey: musicKeys.artists });
+      qc.invalidateQueries({ queryKey: ["music", "artist"] });
+      qc.invalidateQueries({ queryKey: musicKeys.albums });
       qc.invalidateQueries({ queryKey: musicKeys.album(al.id) });
     },
   });
@@ -932,9 +1010,9 @@ export function useSetTrackMonitored() {
     }) => setTrackMonitored(vars.albumId, vars.trackId, vars.monitored),
     onSuccess: (_track, vars) => {
       qc.invalidateQueries({ queryKey: musicKeys.album(vars.albumId) });
-      if (vars.artistId) {
-        qc.invalidateQueries({ queryKey: musicKeys.artist(vars.artistId) });
-      }
+      qc.invalidateQueries({ queryKey: musicKeys.albums });
+      qc.invalidateQueries({ queryKey: musicKeys.artists });
+      qc.invalidateQueries({ queryKey: ["music", "artist"] });
     },
   });
 }
@@ -974,7 +1052,44 @@ export function useSelectAlbumRelease() {
       selectAlbumRelease(vars.albumId, vars.releaseId),
     onSuccess: (album) => {
       qc.invalidateQueries({ queryKey: musicKeys.album(album.id) });
-      qc.invalidateQueries({ queryKey: musicKeys.artist(album.artist_id) });
+      qc.invalidateQueries({ queryKey: musicKeys.albums });
+      qc.invalidateQueries({ queryKey: musicKeys.artists });
+      qc.invalidateQueries({ queryKey: ["music", "artist"] });
+    },
+  });
+}
+
+export function useAlbums() {
+  return useQuery({
+    queryKey: musicKeys.albums,
+    queryFn: ({ signal }) => fetchAlbums(signal),
+    staleTime: 15_000,
+  });
+}
+
+export function useLookupAlbums(query: string) {
+  return useQuery({
+    queryKey: ["music", "album-lookup", query],
+    queryFn: ({ signal }) => lookupAlbums(query, signal),
+    enabled: query.trim().length >= 2,
+    staleTime: 30_000,
+  });
+}
+
+export function useAddAlbum() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: addAlbum,
+    onSuccess: async (album) => {
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: musicKeys.albums }),
+        qc.invalidateQueries({ queryKey: musicKeys.artists }),
+        album.artist_id
+          ? qc.invalidateQueries({
+              queryKey: musicKeys.artist(album.artist_id),
+            })
+          : Promise.resolve(),
+      ]);
     },
   });
 }

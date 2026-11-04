@@ -1367,6 +1367,68 @@ paths:
         "404": { description: Album not found. }
         "500": { description: Album update failed. }
 
+  /api/v1/albums:
+    get:
+      tags: [music]
+      operationId: listMusicAlbums
+      summary: List all music albums.
+      security: [{ cookieAuth: [] }, { apiKey: [] }, { bearerAuth: [] }]
+      responses:
+        "200":
+          description: Active albums, including standalone multi-artist albums.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/MusicAlbum" }
+        "401": { description: Authentication required. }
+    post:
+      tags: [music]
+      operationId: addMusicAlbum
+      summary: Add a MusicBrainz release group as a standalone album.
+      description: |
+        Adds the album without creating managed artist records for contributors.
+        The complete artist credit is retained; compilations and multi-artist
+        albums are organized under the Various Artists folder.
+      security: [{ cookieAuth: [] }, { apiKey: [] }, { bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AddMusicAlbumRequest" }
+      responses:
+        "201":
+          description: Added album with releases and tracks when available.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MusicAlbum" }
+        "400": { description: "Invalid album, library, or profile request." }
+        "401": { description: Authentication required. }
+        "404": { description: MusicBrainz release group not found. }
+        "500": { description: Album could not be saved. }
+
+  /api/v1/albums/lookup:
+    get:
+      tags: [music]
+      operationId: lookupMusicAlbums
+      summary: Search MusicBrainz release groups.
+      description: Returns the full artist-credit list without adding contributors as managed artists.
+      security: [{ cookieAuth: [] }, { apiKey: [] }, { bearerAuth: [] }]
+      parameters:
+        - { name: q, in: query, required: true, schema: { type: string, minLength: 1 } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100 } }
+      responses:
+        "200":
+          description: Release-group matches and their credited artists.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/MusicAlbumLookupResult" }
+        "400": { description: Search query is required. }
+        "401": { description: Authentication required. }
+        "500": { description: Metadata lookup failed. }
+
   /api/v1/albums/{id}/tracks/{trackId}/monitoring:
     put:
       tags: [music]
@@ -3728,6 +3790,37 @@ components:
       required: [release_id]
       properties:
         release_id: { type: string, minLength: 1 }
+    AddMusicAlbumRequest:
+      type: object
+      additionalProperties: false
+      required: [mbid, qualityProfileId, libraryId]
+      properties:
+        mbid: { type: string, minLength: 1 }
+        qualityProfileId: { type: string, minLength: 1 }
+        libraryId: { type: string, minLength: 1 }
+        metadataProfileId: { type: string }
+        monitored: { type: boolean, default: true }
+    MusicAlbumArtist:
+      type: object
+      required: [name]
+      properties:
+        artist_id: { type: string, description: "Existing managed artist ID, omitted for unmanaged contributors." }
+        mbid: { type: string }
+        name: { type: string }
+        join_phrase: { type: string, description: MusicBrainz artist-credit join phrase following this artist. }
+    MusicAlbumLookupResult:
+      type: object
+      required: [mbid, title, already_added]
+      properties:
+        mbid: { type: string }
+        title: { type: string }
+        artists:
+          type: array
+          items: { $ref: "#/components/schemas/MusicAlbumArtist" }
+        album_type: { type: string }
+        release_date: { type: string }
+        cover_art_url: { type: string, format: uri }
+        already_added: { type: boolean }
     MusicExternalLink:
       type: object
       required: [type, url]
@@ -3794,11 +3887,28 @@ components:
       required: [id, title]
       properties:
         id: { type: string }
+        mbid: { type: string }
+        artist_id: { type: string, description: Optional primary managed artist; absent for standalone albums. }
         title: { type: string }
+        album_type: { type: string }
+        secondary_types:
+          type: array
+          items: { type: string }
+        release_date: { type: string }
+        genres:
+          type: array
+          items: { type: string }
         cover_art_url: { type: string }
         overview: { type: string, description: Album description from TheAudioDB when available. }
         rating: { type: number, minimum: 0, maximum: 5 }
         rating_votes: { type: integer }
+        monitored: { type: boolean }
+        library_id: { type: string }
+        quality_profile_id: { type: string }
+        metadata_profile_id: { type: string }
+        artists:
+          type: array
+          items: { $ref: "#/components/schemas/MusicAlbumArtist" }
         links:
           type: array
           items: { $ref: "#/components/schemas/MusicExternalLink" }

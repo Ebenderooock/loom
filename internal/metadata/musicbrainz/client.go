@@ -184,6 +184,28 @@ func (c *Client) SearchArtist(ctx context.Context, query string, offset, limit i
 	return results, nil
 }
 
+// SearchReleaseGroup searches for abstract albums rather than concrete
+// editions, so different pressings of the same album are returned as one hit.
+func (c *Client) SearchReleaseGroup(ctx context.Context, query string, offset, limit int) ([]*ReleaseGroupFull, error) {
+	params := url.Values{
+		"fmt":    {"json"},
+		"query":  {query},
+		"offset": {strconv.Itoa(offset)},
+		"limit":  {strconv.Itoa(limit)},
+	}
+	endpoint := fmt.Sprintf("%s/release-group?%s", c.config.BaseURL, params.Encode())
+	resp := &SearchResponse{}
+	if err := c.doRequest(ctx, endpoint, resp); err != nil {
+		return nil, err
+	}
+	results := make([]*ReleaseGroupFull, 0, len(resp.ReleaseGroup))
+	for i := range resp.ReleaseGroup {
+		group := resp.ReleaseGroup[i]
+		results = append(results, &group)
+	}
+	return results, nil
+}
+
 // SearchRelease searches for releases/albums by query string.
 // Returns a list of matching releases with pagination support.
 func (c *Client) SearchRelease(ctx context.Context, query string, offset, limit int) ([]*ReleaseMetadata, error) {

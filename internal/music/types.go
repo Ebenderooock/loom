@@ -54,31 +54,78 @@ type Artist struct {
 
 // Album represents an abstract album (MusicBrainz release-group) for an artist.
 type Album struct {
-	ID                string        `json:"id"`
-	MBID              string        `json:"mbid"`
-	ArtistID          string        `json:"artist_id"`
-	Title             string        `json:"title"`
-	AlbumType         string        `json:"album_type,omitempty"`
-	SecondaryTypes    StringSlice   `json:"secondary_types,omitempty"`
-	ReleaseDate       string        `json:"release_date,omitempty"`
-	Genres            StringSlice   `json:"genres,omitempty"`
-	CoverArtURL       string        `json:"cover_art_url,omitempty"`
-	Overview          string        `json:"overview,omitempty"`
-	Rating            float64       `json:"rating,omitempty"`
-	RatingVotes       int           `json:"rating_votes,omitempty"`
-	Links             ExternalLinks `json:"links,omitempty"`
-	Monitored         bool          `json:"monitored"`
-	SelectedReleaseID string        `json:"selected_release_id,omitempty"`
-	LastSearchAt      *time.Time    `json:"last_search_at,omitempty"`
-	ReleasesFetchedAt *time.Time    `json:"releases_fetched_at,omitempty"`
-	TracksFetchedAt   *time.Time    `json:"tracks_fetched_at,omitempty"`
-	DetailsFetchedAt  *time.Time    `json:"details_fetched_at,omitempty"`
-	CreatedAt         time.Time     `json:"created_at"`
-	UpdatedAt         time.Time     `json:"updated_at"`
+	ID                string             `json:"id"`
+	MBID              string             `json:"mbid"`
+	ArtistID          string             `json:"artist_id,omitempty"`
+	Title             string             `json:"title"`
+	AlbumType         string             `json:"album_type,omitempty"`
+	SecondaryTypes    StringSlice        `json:"secondary_types,omitempty"`
+	ReleaseDate       string             `json:"release_date,omitempty"`
+	Genres            StringSlice        `json:"genres,omitempty"`
+	CoverArtURL       string             `json:"cover_art_url,omitempty"`
+	Overview          string             `json:"overview,omitempty"`
+	Rating            float64            `json:"rating,omitempty"`
+	RatingVotes       int                `json:"rating_votes,omitempty"`
+	Links             ExternalLinks      `json:"links,omitempty"`
+	Monitored         bool               `json:"monitored"`
+	SelectedReleaseID string             `json:"selected_release_id,omitempty"`
+	LastSearchAt      *time.Time         `json:"last_search_at,omitempty"`
+	ReleasesFetchedAt *time.Time         `json:"releases_fetched_at,omitempty"`
+	TracksFetchedAt   *time.Time         `json:"tracks_fetched_at,omitempty"`
+	DetailsFetchedAt  *time.Time         `json:"details_fetched_at,omitempty"`
+	CreatedAt         time.Time          `json:"created_at"`
+	UpdatedAt         time.Time          `json:"updated_at"`
+	Artists           AlbumArtistCredits `json:"artists,omitempty"`
+	LibraryID         string             `json:"library_id,omitempty"`
+	QualityProfileID  string             `json:"quality_profile_id,omitempty"`
+	MetadataProfileID string             `json:"metadata_profile_id,omitempty"`
 
 	// Populated on read, not stored directly.
 	Releases []*AlbumRelease `json:"releases,omitempty"`
 	Tracks   []*Track        `json:"tracks,omitempty"`
+}
+
+// AlbumArtist retains the complete MusicBrainz artist credit for a release
+// group. ArtistID is populated when the credited artist is already managed.
+type AlbumArtist struct {
+	ArtistID   string `json:"artist_id,omitempty"`
+	MBID       string `json:"mbid,omitempty"`
+	Name       string `json:"name"`
+	JoinPhrase string `json:"join_phrase,omitempty"`
+}
+
+// AlbumArtistCredits is the JSON database representation of MusicBrainz
+// artist credits.
+type AlbumArtistCredits []AlbumArtist
+
+// Value implements driver.Valuer.
+func (a AlbumArtistCredits) Value() (driver.Value, error) {
+	if a == nil {
+		return json.Marshal([]AlbumArtist{})
+	}
+	return json.Marshal(a)
+}
+
+// Scan implements sql.Scanner.
+func (a *AlbumArtistCredits) Scan(value interface{}) error {
+	if value == nil {
+		*a = []AlbumArtist{}
+		return nil
+	}
+	var data []byte
+	switch v := value.(type) {
+	case []byte:
+		data = v
+	case string:
+		data = []byte(v)
+	default:
+		return nil
+	}
+	if len(data) == 0 {
+		*a = []AlbumArtist{}
+		return nil
+	}
+	return json.Unmarshal(data, a)
 }
 
 // AlbumRelease represents a concrete edition (MusicBrainz release) of an album.
@@ -254,6 +301,26 @@ type AddArtistRequest struct {
 	MetadataProfileID string `json:"metadataProfileId,omitempty"`
 	MonitoringStatus  string `json:"monitoringStatus,omitempty"`
 	Search            bool   `json:"search,omitempty"`
+}
+
+// AddAlbumRequest adds a MusicBrainz release group as a standalone album.
+type AddAlbumRequest struct {
+	MBID              string `json:"mbid"`
+	QualityProfileID  string `json:"qualityProfileId"`
+	LibraryID         string `json:"libraryId"`
+	MetadataProfileID string `json:"metadataProfileId,omitempty"`
+	Monitored         *bool  `json:"monitored,omitempty"`
+}
+
+// AlbumLookupResult is a release-group search hit.
+type AlbumLookupResult struct {
+	MBID         string        `json:"mbid"`
+	Title        string        `json:"title"`
+	Artists      []AlbumArtist `json:"artists,omitempty"`
+	AlbumType    string        `json:"album_type,omitempty"`
+	ReleaseDate  string        `json:"release_date,omitempty"`
+	CoverArtURL  string        `json:"cover_art_url,omitempty"`
+	AlreadyAdded bool          `json:"already_added"`
 }
 
 // UpdateArtistRequest is the payload for updating an artist.

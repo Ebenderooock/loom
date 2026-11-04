@@ -69,11 +69,71 @@ func WithLibraryRescan(
 // AlbumRouter mounts album endpoints (intended at /api/v1/albums).
 func AlbumRouter(svc Service) chi.Router {
 	r := chi.NewRouter()
+	r.Get("/", handleListAlbums(svc))
+	r.Post("/", handleAddAlbum(svc))
+	r.Get("/lookup", handleLookupAlbums(svc))
 	r.Get("/{id}", handleGetAlbum(svc))
 	r.Put("/{id}/monitoring", handleSetAlbumMonitored(svc))
 	r.Put("/{id}/release", handleSelectAlbumRelease(svc))
 	r.Put("/{id}/tracks/{trackId}/monitoring", handleSetTrackMonitored(svc))
 	return r
+}
+
+func handleListAlbums(svc Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		albums, err := svc.ListAlbums(r.Context())
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		if albums == nil {
+			albums = []*Album{}
+		}
+		writeJSON(w, http.StatusOK, albums)
+	}
+}
+
+func handleLookupAlbums(svc Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query().Get("q")
+		if q == "" {
+			q = r.URL.Query().Get("query")
+		}
+		limit := 0
+		if value := r.URL.Query().Get("limit"); value != "" {
+			var err error
+			limit, err = strconv.Atoi(value)
+			if err != nil || limit < 1 || limit > 100 {
+				http.Error(w, "limit must be an integer from 1 to 100", http.StatusBadRequest)
+				return
+			}
+		}
+		results, err := svc.LookupAlbums(r.Context(), q, limit)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		if results == nil {
+			results = []*AlbumLookupResult{}
+		}
+		writeJSON(w, http.StatusOK, results)
+	}
+}
+
+func handleAddAlbum(svc Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req AddAlbumRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "invalid request body", http.StatusBadRequest)
+			return
+		}
+		al, err := svc.AddAlbum(r.Context(), req)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusCreated, al)
+	}
 }
 
 // ProfileRouter mounts music profile/quality endpoints (intended at /api/v1/music).

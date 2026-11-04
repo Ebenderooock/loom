@@ -9,6 +9,7 @@ import {
   Disc3,
   FileAudio,
   History,
+  Info,
   Loader2,
   Music,
   Pencil,
@@ -49,6 +50,7 @@ import {
 } from "./artist-details";
 import { ArtistFilesList, ArtistHistoryList } from "./artist-activity";
 import { ArtistEditDialog } from "./artist-edit-dialog";
+import { AlbumDetailSheet } from "./album-detail-sheet";
 
 function trackDuration(durationMs?: number): string | undefined {
   if (!durationMs || durationMs <= 0) return undefined;
@@ -89,10 +91,12 @@ function AlbumSection({
   album,
   artistId,
   onMonitoredChange,
+  onDetails,
 }: {
   album: Album;
   artistId: string;
   onMonitoredChange: (album: Album, monitored: boolean) => void;
+  onDetails: (album: Album) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [interactiveOpen, setInteractiveOpen] = useState(false);
@@ -174,6 +178,15 @@ function AlbumSection({
             {complete ? "Complete" : "Missing"}
           </Badge>
         )}
+        <Button
+          size="icon"
+          variant="ghost"
+          aria-label={`Album details for ${album.title}`}
+          title="Album details"
+          onClick={() => onDetails(currentAlbum)}
+        >
+          <Info className="h-4 w-4" />
+        </Button>
         <Button
           size="icon"
           variant="ghost"
@@ -358,6 +371,8 @@ export function ArtistDetailSheet({
   const refreshArtist = useRefreshArtist();
   const rescanArtist = useRescanArtist();
   const [editOpen, setEditOpen] = useState(false);
+  const [detailAlbum, setDetailAlbum] = useState<Album | null>(null);
+  const [albumDetailOpen, setAlbumDetailOpen] = useState(false);
 
   if (!artist) {
     return null;
@@ -622,6 +637,10 @@ export function ArtistDetailSheet({
                         album={album}
                         artistId={artist.id}
                         onMonitoredChange={() => void refetch()}
+                        onDetails={(selected) => {
+                          setDetailAlbum(selected);
+                          setAlbumDetailOpen(true);
+                        }}
                       />
                     ))}
                 </div>
@@ -653,6 +672,11 @@ export function ArtistDetailSheet({
           />
         )}
       </SheetContent>
+      <AlbumDetailSheet
+        album={detailAlbum}
+        open={albumDetailOpen}
+        onOpenChange={setAlbumDetailOpen}
+      />
     </Sheet>
   );
 }

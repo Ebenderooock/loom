@@ -124,8 +124,38 @@ func (s *MusicScanner) runMusicScan(ctx context.Context, scanID, rootFolder stri
 	}
 
 	artistsByName := make(map[string]*music.Artist, len(artists))
+	artistsByID := make(map[string]*music.Artist, len(artists))
 	for _, a := range artists {
 		artistsByName[normalizeTitle(a.Name)] = a
+		artistsByID[a.ID] = a
+	}
+	result := s.GetMusicScanStatus(scanID)
+
+	albums, err := s.musicSvc.ListAlbums(ctx)
+	if err != nil {
+		s.failMusicScan(scanID, fmt.Sprintf("list albums: %v", err))
+		return
+	}
+	albumsByFolder := make(map[string][]*music.Album)
+	for _, album := range albums {
+		if album == nil {
+			continue
+		}
+		owner := artistsByID[album.ArtistID]
+		if album.ArtistID != "" && !music.IsVariousArtistAlbum(album) {
+			continue
+		}
+		// Standalone albums must be assigned to this configured library. Older
+		// artist-owned albums can inherit their artist's library assignment.
+		inLibrary := album.LibraryID == result.LibraryID
+		if album.ArtistID != "" && album.LibraryID == "" && owner != nil {
+			inLibrary = owner.LibraryID == result.LibraryID
+		}
+		if !inLibrary {
+			continue
+		}
+		folderName := albumOrganizationFolder(owner, album)
+		albumsByFolder[normalizeTitle(folderName)] = append(albumsByFolder[normalizeTitle(folderName)], album)
 	}
 
 	folders, err := discoverShowFolders(rootFolder)
@@ -135,13 +165,49 @@ func (s *MusicScanner) runMusicScan(ctx context.Context, scanID, rootFolder stri
 	}
 	s.logger.Info("discovered artist folders", "scanId", scanID, "count", len(folders))
 
-	result := s.GetMusicScanStatus(scanID)
 	for _, af := range folders {
 		if ctx.Err() != nil {
 			s.failMusicScan(scanID, ctx.Err().Error())
 			return
 		}
 		artist := artistsByName[normalizeTitle(af.Name)]
+		folderAlbums := albumsByFolder[normalizeTitle(af.Name)]
+		if len(folderAlbums) > 0 {
+			if normalizeTitle(af.Name) == normalizeTitle("Various Artists") {
+				s.scanKnownAlbumsFolder(ctx, scanID, result, folderAlbums, af.Path, artistsByID)
+				continue
+			}
+			standaloneAlbums := make([]*music.Album, 0, len(folderAlbums))
+			for _, album := range folderAlbums {
+				if album.ArtistID == "" {
+					standaloneAlbums = appendAlbumOnce(standaloneAlbums, album)
+				}
+			}
+			if artist != nil {
+				if artist.Path != af.Path {
+					path := af.Path
+					updated, updateErr := s.musicSvc.UpdateArtist(ctx, artist.ID, music.UpdateArtistRequest{Path: &path})
+					if updateErr != nil {
+						s.logger.Warn("music: failed to update artist path", "artist", artist.ID, "error", updateErr)
+					} else if updated != nil {
+						artist = updated
+						artistsByName[normalizeTitle(af.Name)] = artist
+						artistsByID[artist.ID] = artist
+					}
+				}
+				s.scanArtistFolder(ctx, scanID, result, artist, af.Path)
+			} else {
+				s.scanKnownAlbumsFolder(ctx, scanID, result, standaloneAlbums, af.Path, artistsByID)
+			}
+			if artist != nil && len(standaloneAlbums) > 0 {
+				s.scanKnownAlbumsFolder(ctx, scanID, result, standaloneAlbums, af.Path, artistsByID)
+			}
+			continue
+		}
+		// Various Artists is an organization folder, never a managed artist.
+		if normalizeTitle(af.Name) == normalizeTitle("Various Artists") {
+			continue
+		}
 		if artist == nil {
 			added, addErr := s.ensureArtistForFolder(ctx, result.LibraryID, af.Name)
 			if addErr != nil {
@@ -187,6 +253,24 @@ func (s *MusicScanner) runMusicScan(ctx context.Context, scanID, rootFolder stri
 		m.ScanFilesProcessed.WithLabelValues("music", "unmatched").Add(float64(unmatched))
 		m.ScanFilesProcessed.WithLabelValues("music", "error").Add(float64(len(result.Errors)))
 	}
+
+}
+
+func albumOrganizationFolder(owner *music.Artist, album *music.Album) string {
+	trackPath := music.BuildTrackPath(owner, album, nil, false, "")
+	return filepath.Base(filepath.Dir(filepath.Dir(trackPath)))
+}
+
+func appendAlbumOnce(albums []*music.Album, album *music.Album) []*music.Album {
+	if album == nil {
+		return albums
+	}
+	for _, existing := range albums {
+		if existing != nil && existing.ID == album.ID {
+			return albums
+		}
+	}
+	return append(albums, album)
 }
 
 func (s *MusicScanner) ensureArtistForFolder(ctx context.Context, libraryID, folderName string) (*music.Artist, error) {
@@ -262,7 +346,9 @@ func (s *MusicScanner) scanArtistFolder(ctx context.Context, scanID string, resu
 	}
 	albumsByTitle := make(map[string]*music.Album, len(albums))
 	for _, al := range albums {
-		albumsByTitle[normalizeTitle(al.Title)] = al
+		if al.ArtistID == artist.ID && !music.IsVariousArtistAlbum(al) {
+			albumsByTitle[normalizeTitle(al.Title)] = al
+		}
 	}
 
 	// Cache album track lists (lazy-fetched via GetAlbum) keyed by album ID.
@@ -352,6 +438,218 @@ func (s *MusicScanner) scanArtistFolder(ctx context.Context, scanID string, resu
 	}
 }
 
+// scanKnownAlbumsFolder handles folders such as a standalone credited artist
+// directory or the shared Various Artists directory without creating managed
+// artists for the folder name.
+func (s *MusicScanner) scanKnownAlbumsFolder(ctx context.Context, scanID string, result *ScanResult, albums []*music.Album, folderPath string, artistsByID map[string]*music.Artist) {
+	trackCache := make(map[string][]*music.Track)
+	files, walkErr := walkAudioFolder(ctx, folderPath)
+	if walkErr != nil {
+		s.logger.Warn("music: error walking known album folder", "path", folderPath, "error", walkErr)
+		if ctx.Err() != nil {
+			return
+		}
+	}
+
+	s.mu.Lock()
+	result.TotalFiles += len(files)
+	s.mu.Unlock()
+
+	for _, file := range files {
+		if ctx.Err() != nil {
+			return
+		}
+		tags, err := music.ReadAudioTags(file.Path)
+		if err != nil {
+			s.addMusicUnmatched(scanID, result, file.Path, file.Size, filepath.Base(folderPath), "", "")
+			continue
+		}
+		albumName := strings.TrimSpace(tags.Album)
+		candidates := matchingAlbumCandidates(albums, albumName, filepath.Base(filepath.Dir(file.Path)))
+		if len(candidates) == 0 {
+			if albumName == "" {
+				albumName = filepath.Base(filepath.Dir(file.Path))
+			}
+			s.addMusicUnmatched(scanID, result, file.Path, file.Size, filepath.Base(folderPath), albumName, tags.Title)
+			continue
+		}
+
+		type candidateMatch struct {
+			album *music.Album
+			track *music.Track
+		}
+		var matches []candidateMatch
+		metadataUnavailable := false
+		for _, candidate := range candidates {
+			tracks, ok := trackCache[candidate.ID]
+			if !ok {
+				full, loadErr := s.musicSvc.LoadAlbumTracks(ctx, candidate.ID)
+				if loadErr != nil || full == nil {
+					s.logger.Warn("music: load album tracks failed", "album", candidate.ID, "error", loadErr)
+					s.mu.Lock()
+					result.Errors = append(result.Errors, fmt.Sprintf("%s: track list for album %q is unavailable", file.Path, candidate.Title))
+					s.mu.Unlock()
+					metadataUnavailable = true
+					continue
+				}
+				tracks = full.Tracks
+				trackCache[candidate.ID] = tracks
+			}
+			if track := matchTrackForAlbum(candidate, tracks, tags); track != nil {
+				matches = append(matches, candidateMatch{album: candidate, track: track})
+			}
+		}
+		if metadataUnavailable {
+			// A candidate with unavailable metadata could be a competing
+			// same-title album, so do not import a partial-confidence match.
+			continue
+		}
+		if len(matches) != 1 {
+			if len(matches) > 1 {
+				s.mu.Lock()
+				result.Errors = append(result.Errors, fmt.Sprintf("%s: ambiguous album %q matched %d known albums", file.Path, albumName, len(matches)))
+				s.mu.Unlock()
+			}
+			if albumName == "" {
+				albumName = filepath.Base(filepath.Dir(file.Path))
+			}
+			s.addMusicUnmatched(scanID, result, file.Path, file.Size, filepath.Base(folderPath), albumName, tags.Title)
+			continue
+		}
+		album, track := matches[0].album, matches[0].track
+		s.mu.Lock()
+		result.Matched++
+		s.mu.Unlock()
+
+		if err := s.importTrackFile(ctx, artistsByID[album.ArtistID], album, track, file.Path, file.Size, tags); err != nil {
+			s.logger.Warn("music: failed to import track file", "path", file.Path, "error", err)
+			s.mu.Lock()
+			result.Errors = append(result.Errors, fmt.Sprintf("%s: %v", file.Path, err))
+			s.mu.Unlock()
+			continue
+		}
+		s.mu.Lock()
+		result.Imported++
+		s.mu.Unlock()
+	}
+
+	if walkErr == nil {
+		pruned := 0
+		for _, album := range albums {
+			if album == nil {
+				continue
+			}
+			removed, err := s.musicSvc.PruneMissingAlbumTrackFiles(ctx, album.ID, folderPath)
+			if err != nil {
+				s.logger.Warn("music: failed to prune missing track files", "album", album.ID, "error", err)
+				continue
+			}
+			pruned += removed
+		}
+		if pruned > 0 {
+			s.logger.Info("music: pruned missing track files", "path", folderPath, "count", pruned)
+		}
+	}
+}
+
+func matchingAlbumCandidates(albums []*music.Album, albumTag, albumFolder string) []*music.Album {
+	var candidates []*music.Album
+	for _, album := range albums {
+		if album == nil {
+			continue
+		}
+		matches := false
+		if strings.TrimSpace(albumTag) != "" {
+			matches = normalizeTitle(album.Title) == normalizeTitle(albumTag)
+		} else {
+			expectedFolder := filepath.Base(filepath.Dir(music.BuildTrackPath(nil, album, nil, false, "")))
+			matches = normalizeTitle(expectedFolder) == normalizeTitle(albumFolder)
+		}
+		if matches {
+			candidates = appendAlbumOnce(candidates, album)
+		}
+	}
+	return candidates
+}
+
+func albumCreditMatches(album *music.Album, artistName string) bool {
+	name := normalizeTitle(artistName)
+	if name == "" || name == normalizeTitle("Various Artists") {
+		return false
+	}
+	for _, credit := range album.Artists {
+		if normalizeTitle(credit.Name) == name {
+			return true
+		}
+	}
+	return false
+}
+
+func matchTrackForAlbum(album *music.Album, tracks []*music.Track, tags *music.AudioTags) *music.Track {
+	if album == nil || tags == nil || normalizeTitle(tags.Title) == "" {
+		return nil
+	}
+	various := music.IsVariousArtistAlbum(album)
+	albumIdentity := albumCreditMatches(album, tags.AlbumArtist)
+	if !albumIdentity && !various && strings.TrimSpace(tags.AlbumArtist) == "" {
+		albumIdentity = albumCreditMatches(album, tags.Artist)
+	}
+	requireTrackArtist := various || !albumIdentity
+	tagArtist := normalizeTitle(tags.Artist)
+	title := normalizeTitle(tags.Title)
+
+	var eligible []*music.Track
+	var exact []*music.Track
+	for _, track := range tracks {
+		if track == nil {
+			continue
+		}
+		trackArtist := normalizeTitle(track.ArtistName)
+		if tagArtist != "" && trackArtist != "" && tagArtist != trackArtist {
+			continue
+		}
+		if requireTrackArtist && (tagArtist == "" || trackArtist == "" || tagArtist != trackArtist) {
+			continue
+		}
+		eligible = append(eligible, track)
+		if normalizeTitle(track.Title) == title {
+			exact = append(exact, track)
+		}
+	}
+	if len(exact) == 1 {
+		return exact[0]
+	}
+	if len(exact) > 1 {
+		return matchTrackPosition(exact, tags)
+	}
+	return music.MatchTrackByBaseTitle(eligible, tags.Title, normalizeTitle)
+}
+
+func matchTrackPosition(tracks []*music.Track, tags *music.AudioTags) *music.Track {
+	if tags.TrackNumber <= 0 {
+		return nil
+	}
+	disc := tags.DiscNumber
+	if disc < 1 {
+		disc = 1
+	}
+	var match *music.Track
+	for _, track := range tracks {
+		trackDisc := track.DiscNumber
+		if trackDisc < 1 {
+			trackDisc = 1
+		}
+		if track.TrackNumber != tags.TrackNumber || trackDisc != disc {
+			continue
+		}
+		if match != nil {
+			return nil
+		}
+		match = track
+	}
+	return match
+}
+
 func (s *MusicScanner) importTrackFile(ctx context.Context, artist *music.Artist, album *music.Album, track *music.Track, path string, size int64, tags *music.AudioTags) error {
 	var fileDate *time.Time
 	if info, err := os.Stat(path); err == nil {
@@ -374,11 +672,19 @@ func (s *MusicScanner) importTrackFile(ctx context.Context, artist *music.Artist
 		mediaInfo["bits"] = tags.Bits
 	}
 
+	artistID := album.ArtistID
+	if artistID == "" && artist != nil {
+		artistID = artist.ID
+	}
+	artistName := albumArtistLogName(album)
+	if artist != nil && (album.ArtistID == "" || artist.ID == album.ArtistID) {
+		artistName = artist.Name
+	}
 	tf := &music.TrackFile{
 		ID:        uuid.New().String(),
 		TrackID:   track.ID,
 		AlbumID:   album.ID,
-		ArtistID:  artist.ID,
+		ArtistID:  artistID,
 		FilePath:  path,
 		Size:      size,
 		Quality:   tags.Format,
@@ -393,10 +699,22 @@ func (s *MusicScanner) importTrackFile(ctx context.Context, artist *music.Artist
 	}
 
 	s.logger.Info("imported track file",
-		"artist", artist.Name, "album", album.Title,
+		"artist", artistName, "album", album.Title,
 		"track", track.TrackNumber, "title", track.Title, "file", path,
 	)
 	return nil
+}
+
+func albumArtistLogName(album *music.Album) string {
+	if music.IsVariousArtistAlbum(album) {
+		return "Various Artists"
+	}
+	for _, credit := range album.Artists {
+		if strings.TrimSpace(credit.Name) != "" {
+			return credit.Name
+		}
+	}
+	return "Unknown Artist"
 }
 
 // matchTrack finds the best track for a tagged file: disc+track number first,

@@ -13,7 +13,7 @@ import (
 // quality" is the weakest track, mirroring how upgrade-eligibility is judged
 // per-album (the whole album is re-grabbed as a unit).
 func (e *Engine) albumCurrentTier(ctx context.Context, album *music.Album, defs []*music.AudioQualityDefinition) (tier int, hasFiles bool, err error) {
-	files, err := e.repo.ListTrackFilesByArtist(ctx, album.ArtistID)
+	files, err := e.repo.ListTrackFilesByAlbum(ctx, album.ID)
 	if err != nil {
 		return 0, false, err
 	}
@@ -57,9 +57,10 @@ func cutoffTierOf(profile *music.AudioQualityProfile, defs []*music.AudioQuality
 }
 
 // CutoffUnmetCandidates returns complete monitored albums whose on-disk quality
-// is below their artist's profile cutoff and whose profile allows upgrades. The
-// recheck interval is honoured via album.LastSearchAt so upgrades do not hammer
-// indexers.
+// is below their effective profile cutoff and whose profile allows upgrades.
+// Artist-owned albums require a monitored artist; standalone albums use their
+// own profile and monitoring state. The recheck interval is honoured via
+// album.LastSearchAt so upgrades do not hammer indexers.
 func (e *Engine) CutoffUnmetCandidates(ctx context.Context, minRecheck time.Duration) ([]*music.Album, error) {
 	artists, err := e.repo.ListArtists(ctx)
 	if err != nil {
@@ -92,29 +93,80 @@ func (e *Engine) CutoffUnmetCandidates(ctx context.Context, minRecheck time.Dura
 			continue
 		}
 		for _, al := range albums {
-			if !al.Monitored {
+			// A standalone album may appear in an artist's linked catalogue
+			// through contributor credits. Its profile and monitoring are
+			// evaluated independently below.
+			if al.ArtistID != ar.ID {
 				continue
 			}
-			if al.LastSearchAt != nil && now.Sub(*al.LastSearchAt) < minRecheck {
-				continue
-			}
-			// Only complete albums are upgrade candidates; incomplete albums are
-			// handled by the missing-search pass.
-			missing, err := e.albumMissingTracks(ctx, al.ID)
-			if err != nil || missing {
-				continue
-			}
-			tier, hasFiles, err := e.albumCurrentTier(ctx, al, defs)
+			isDue, err := e.isCutoffUnmetAlbum(ctx, al, cutoffTier, defs, minRecheck, now)
 			if err != nil {
-				return nil, fmt.Errorf("get track files for album %s: %w", al.ID, err)
+				return nil, err
 			}
-			if hasFiles && tier < cutoffTier {
+			if isDue {
 				due = append(due, al)
 			}
 		}
 	}
+	standalone, err := e.repo.ListAlbums(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for _, al := range standalone {
+		if al.ArtistID != "" || !al.Monitored || al.QualityProfileID == "" {
+			continue
+		}
+		profile, err := e.repo.GetAudioQualityProfile(ctx, al.QualityProfileID)
+		if err != nil {
+			return nil, fmt.Errorf("get audio quality profile for album %s: %w", al.ID, err)
+		}
+		if profile == nil || !profile.UpgradeAllowed {
+			continue
+		}
+		cutoffTier, validCutoff := cutoffTierOf(profile, defs)
+		if !validCutoff {
+			continue
+		}
+		isDue, err := e.isCutoffUnmetAlbum(ctx, al, cutoffTier, defs, minRecheck, now)
+		if err != nil {
+			return nil, err
+		}
+		if isDue {
+			due = append(due, al)
+		}
+	}
 	sortAlbumsByLastSearch(due)
 	return due, nil
+}
+
+func (e *Engine) isCutoffUnmetAlbum(
+	ctx context.Context,
+	album *music.Album,
+	cutoffTier int,
+	defs []*music.AudioQualityDefinition,
+	minRecheck time.Duration,
+	now time.Time,
+) (bool, error) {
+	if album == nil || !album.Monitored {
+		return false, nil
+	}
+	if album.LastSearchAt != nil && now.Sub(*album.LastSearchAt) < minRecheck {
+		return false, nil
+	}
+	// Only complete albums are upgrade candidates; incomplete albums are
+	// handled by the missing-search pass.
+	missing, err := e.albumMissingTracks(ctx, album.ID)
+	if err != nil {
+		return false, fmt.Errorf("check missing tracks for album %s: %w", album.ID, err)
+	}
+	if missing {
+		return false, nil
+	}
+	tier, hasFiles, err := e.albumCurrentTier(ctx, album, defs)
+	if err != nil {
+		return false, fmt.Errorf("get track files for album %s: %w", album.ID, err)
+	}
+	return hasFiles && tier < cutoffTier, nil
 }
 
 // AutoSearchUpgrades searches up to limit cutoff-unmet albums for upgrades,

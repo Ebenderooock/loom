@@ -7,7 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- Update the grouped Go dependencies, including Rain, SQLite, OpenTelemetry,
+  Prometheus, OIDC, pgx and Goose, with their required transitive dependencies.
+- Update grouped web dependencies; keep TypeScript on 6 until
+  typescript-eslint supports 7 and Tailwind on 3 pending the v4 config/CSS
+  migration.
+
 ### Added
+
+- Music support in Downloads / Imports: audio scanning, automatic tagged-track
+  matching, and manual album/track selection, including standalone albums and
+  compilations. Imports transfer files into the assigned media library and
+  distinguish queued work from completion. Episode re-imports now use the series
+  library root; Music imports report partial failures and preserve replacement
+  track registration when an upgrade reuses the destination path.
+
+- Standalone MusicBrainz album management for compilations and multi-artist
+  albums, preserving all credited artists without creating contributor artist
+  records. Albums can be browsed in the Albums view, show in a movie-style
+  detail drawer with editions, tracks, availability and monitoring actions, and
+  organize beneath `Various Artists`. Added `GET/POST /api/v1/albums` and
+  `GET /api/v1/albums/lookup`; migration 0100 makes the managed artist optional
+  and stores album library/profile and artist-credit metadata.
 
 - Native service installer scripts for Windows, Linux/systemd, and macOS/launchd,
   bundled into platform release archives, with Windows amd64/arm64 release builds.

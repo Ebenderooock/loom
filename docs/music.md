@@ -37,6 +37,21 @@ monitor toggle:
 - Monitoring a single track also monitors its album, so searches include it.
 - Searches only look for monitored tracks that are missing a file.
 
+Use the **Albums** view to browse the full album library, including entries
+added without a primary managed artist. **Add Album** searches MusicBrainz
+release groups and stores every credited artist on the album. Contributors are
+linked to existing managed artists when possible; adding an album never creates
+artist records for its contributors. Albums with multiple credited artists or
+a compilation type are organized beneath `Various Artists/{Album} ({Year})`.
+Single-artist standalone albums use their credited artist name as the folder.
+
+Select an album card or choose **Album details** from an artist catalogue entry
+to open the album drawer. It shows the cover, description, artist credits,
+genres, ratings, streaming links, available editions, and per-track file and
+monitoring status. From the drawer you can change the selected edition, monitor
+or unmonitor the album and its tracks, and start automatic or interactive
+release searches.
+
 The **Files** section lists imported audio files with their album, track,
 quality and size. The **History** section lists grabs and imports for the
 artist's albums. Both load when opened. Searching for a single track is not
@@ -95,7 +110,8 @@ cutoff and permit upgrades:
 
 The `format_items` list associates custom-format IDs with scores, and
 `min_format_score` sets the minimum score a release must reach. Updates change
-only supplied fields. A profile cannot be deleted while assigned to an artist.
+only supplied fields. A profile cannot be deleted while assigned to an artist
+or a standalone album.
 
 Metadata profiles filter which MusicBrainz primary types, secondary types and
 release statuses are monitored for an artist. Create and manage them under
@@ -127,9 +143,11 @@ refreshes the album's track listing.
 
 ## Imports and upgrades
 
-Music downloads are imported by matching audio tags to a monitored artist,
-album and track. Files are organized under the artist's configured music
-library. When a track already has a file, an incoming file replaces it only
+Music downloads are imported by matching audio tags to an album and track,
+using the album artist or credited artists when available. Files are organized
+under the album's selected music library; compilation and multi-artist albums
+go under the `Various Artists` directory. When a track already has a file,
+an incoming file replaces it only
 when its detected quality is higher. The previous file is sent to the recycle
 bin before replacement; upgrades are refused if the recycle bin is unavailable
 or disabled, so the existing track is not silently discarded.
@@ -141,6 +159,10 @@ one track fits. An album's track list is fetched from MusicBrainz the first
 time it is needed. If MusicBrainz is unavailable, the import fails with
 `album track list unavailable` rather than a track-match error, and a later
 retry or library scan fetches the list again.
+
+Migration 0100 preserves existing albums, editions, tracks and files while
+allowing albums without a managed artist. Downgrading below this migration is
+refused while standalone albums exist, rather than discarding their records.
 
 ## Metadata source
 
