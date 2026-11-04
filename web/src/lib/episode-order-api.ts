@@ -36,10 +36,7 @@ export interface CreateMappingRequest {
 // ─── Pack Types ─────────────────────────────────────────────────────────
 
 export type PackType =
-  | "single_season"
-  | "multi_season"
-  | "complete_series"
-  | "episode_range";
+  "single_season" | "multi_season" | "complete_series" | "episode_range";
 
 export interface DetectedPack {
   type: PackType;
