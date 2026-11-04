@@ -160,6 +160,9 @@ func (s *SeriesScanner) runSeriesScan(ctx context.Context, scanID, libraryID, ro
 		tmdbResults, err := s.seriesSvc.SearchTMDB(ctx, title)
 		if err != nil {
 			s.logger.Warn("TMDB search failed for show folder", "title", title, "error", err)
+			s.mu.Lock()
+			result.Errors = append(result.Errors, fmt.Sprintf("TMDB search for %q: %v", title, err))
+			s.mu.Unlock()
 			continue
 		}
 
@@ -230,6 +233,9 @@ func (s *SeriesScanner) runSeriesScan(ctx context.Context, scanID, libraryID, ro
 		showFiles, walkErr := walkSeriesFolder(sf.Path)
 		if walkErr != nil {
 			s.logger.Warn("error walking show folder", "path", sf.Path, "error", walkErr)
+			s.mu.Lock()
+			result.Errors = append(result.Errors, fmt.Sprintf("walk %s: %v", sf.Path, walkErr))
+			s.mu.Unlock()
 			continue
 		}
 
@@ -575,7 +581,7 @@ func walkSeriesFolder(root string) ([]seriesScannedFile, error) {
 
 	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
-			return nil
+			return err
 		}
 		if info.IsDir() {
 			if shouldIgnore(info.Name()) {

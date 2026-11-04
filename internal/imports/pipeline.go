@@ -290,9 +290,10 @@ func (p *ImportPipeline) resolveDownloadPath(ctx context.Context, ev *downloads.
 
 	var statusErr error
 	var liveItemTitle string
-	client, ok := p.downloadSvc.Registry().Get(ev.ClientID)
+	registry := p.downloadSvc.Registry()
+	client, ok := registry.Get(ev.ClientID)
 	if ok {
-		if items, err := client.Status(ctx, ev.DownloadID); err == nil {
+		if items, err := registry.ClientStatus(ctx, client, ev.DownloadID); err == nil {
 			for _, item := range items {
 				if item.ID != ev.DownloadID {
 					continue

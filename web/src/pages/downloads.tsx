@@ -27,6 +27,7 @@ import { useSetPageHeader } from "@/hooks/use-page-header";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -774,17 +775,34 @@ function ActiveDownloads() {
     null,
   );
 
+  const [clientErrors, setClientErrors] = React.useState<
+    Record<string, string>
+  >({});
+  const [requestError, setRequestError] = React.useState<string | null>(null);
+  const inFlight = React.useRef(false);
+
   const fetchActivity = React.useCallback(async (manual = false) => {
+    // Never stack requests: a slow client must not cause a backlog.
+    if (inFlight.current) return;
+    if (!manual && document.visibilityState === "hidden") return;
+    inFlight.current = true;
     if (manual) setRefreshing(true);
     try {
       const res = await apiFetch("/api/v1/activity");
-      if (res.ok) {
-        const body = await res.json();
-        setItems(body.items ?? []);
+      if (!res.ok) {
+        setRequestError(`Could not load downloads (HTTP ${res.status})`);
+        return;
       }
-    } catch {
-      // silently fail on polling
+      const body = await res.json();
+      setItems(body.items ?? []);
+      setClientErrors(body.errors ?? {});
+      setRequestError(null);
+    } catch (e: unknown) {
+      setRequestError(
+        e instanceof Error ? e.message : "Could not load downloads",
+      );
     } finally {
+      inFlight.current = false;
       setLoading(false);
       setRefreshing(false);
     }
@@ -793,8 +811,17 @@ function ActiveDownloads() {
   React.useEffect(() => {
     fetchActivity();
     const interval = setInterval(() => fetchActivity(), 2000);
-    return () => clearInterval(interval);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") fetchActivity();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, [fetchActivity]);
+
+  const errorEntries = Object.entries(clientErrors);
 
   const sorted = sortQueueItems(items, sortKey, sortDirection);
 
@@ -869,13 +896,46 @@ function ActiveDownloads() {
         </div>
       </div>
 
+      {(requestError || errorEntries.length > 0) && (
+        <Alert variant="destructive" data-testid="download-client-errors">
+          <AlertTitle>
+            {requestError
+              ? "Downloads unavailable"
+              : errorEntries.length === 1
+                ? "A download client is unreachable"
+                : `${errorEntries.length} download clients are unreachable`}
+          </AlertTitle>
+          <AlertDescription>
+            {requestError ? (
+              <p>{requestError}</p>
+            ) : (
+              <ul className="space-y-1">
+                {errorEntries.map(([clientId, message]) => (
+                  <li key={clientId} className="break-words">
+                    <span className="font-medium">{clientId}:</span> {message}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </AlertDescription>
+        </Alert>
+      )}
+
       {items.length === 0 ? (
         <Card className="border-dashed border-zinc-800 bg-zinc-900/50">
           <CardContent>
             <EmptyState
               icon={<Download className="h-10 w-10" />}
-              title="No active downloads"
-              description="Downloads will appear here when you search and grab releases"
+              title={
+                errorEntries.length > 0 || requestError
+                  ? "No downloads from reachable clients"
+                  : "No active downloads"
+              }
+              description={
+                errorEntries.length > 0 || requestError
+                  ? "Downloads on unreachable clients are not shown until they respond again"
+                  : "Downloads will appear here when you search and grab releases"
+              }
             />
           </CardContent>
         </Card>

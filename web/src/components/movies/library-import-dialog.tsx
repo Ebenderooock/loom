@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback, useRef } from "react";
-import { apiFetch } from "@/lib/fetch";
+import { useState, useEffect, useCallback } from "react";
+import { importRequest, useLibraryImport } from "@/hooks/use-library-import";
 import {
   Dialog,
   DialogContent,
@@ -22,31 +22,6 @@ import {
 import { Input } from "@/components/ui/input";
 import type { Library } from "../../lib/libraries-api";
 
-interface ScanResult {
-  id: string;
-  libraryId: string;
-  libraryPath: string;
-  status: "running" | "completed" | "failed";
-  totalFiles: number;
-  matched: number;
-  unmatched: number;
-  imported: number;
-  errors?: string[];
-  startedAt: string;
-  completedAt?: string;
-}
-
-interface UnmatchedFile {
-  id: string;
-  scanId: string;
-  filePath: string;
-  size: number;
-  parsedTitle: string;
-  parsedYear: number;
-  quality: string;
-  source: string;
-}
-
 interface TmdbResult {
   tmdb_id: string;
   title: string;
@@ -66,110 +41,63 @@ export function LibraryImportDialog({
   libraries: Library[];
   onImportComplete: () => void;
 }) {
-  const [scanning, setScanning] = useState(false);
-  const [scanResult, setScanResult] = useState<ScanResult | null>(null);
-  const [unmatchedFiles, setUnmatchedFiles] = useState<UnmatchedFile[]>([]);
+  const {
+    scanning,
+    scanResult,
+    unmatchedFiles,
+    setUnmatchedFiles,
+    error,
+    setError,
+    startScan,
+    reset,
+  } = useLibraryImport(open, "/api/v1/movies/scan", onImportComplete);
   const [selectedFolder, setSelectedFolder] = useState<string>("");
   const [matchingFile, setMatchingFile] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<TmdbResult[]>([]);
   const [searching, setSearching] = useState(false);
-  const pollTimeoutRef = useRef<ReturnType<typeof setTimeout>>(undefined);
-  const mountedRef = useRef(true);
-
-  // Clean up polling on unmount
-  useEffect(() => {
-    mountedRef.current = true;
-    return () => {
-      mountedRef.current = false;
-      clearTimeout(pollTimeoutRef.current);
-    };
-  }, []);
-
-  // Reset state when dialog opens
+  const resetDialog = () => {
+    reset();
+    setMatchingFile(null);
+    setSearchQuery("");
+    setSearchResults([]);
+  };
   useEffect(() => {
     if (open) {
-      setScanResult(null);
-      setUnmatchedFiles([]);
-      setScanning(false);
       setMatchingFile(null);
-      if (libraries.length === 1) {
-        setSelectedFolder(libraries[0]!.id);
+    }
+  }, [open]);
+
+  useEffect(() => {
+    if (!libraries.some((library) => library.id === selectedFolder)) {
+      setSelectedFolder(libraries.length === 1 ? libraries[0]!.id : "");
+    }
+  }, [libraries, selectedFolder]);
+
+  const searchTmdb = useCallback(
+    async (query: string) => {
+      if (!query.trim()) return;
+      setError(null);
+      setSearching(true);
+      try {
+        const data = await importRequest<TmdbResult[]>(
+          `/api/v1/movies/lookup?term=${encodeURIComponent(query)}`,
+        );
+        setSearchResults(Array.isArray(data) ? data : []);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "TMDB search failed");
+      } finally {
+        setSearching(false);
       }
-    }
-  }, [open, libraries]);
-
-  const startScan = useCallback(async () => {
-    if (!selectedFolder) return;
-    setScanning(true);
-    setScanResult(null);
-    setUnmatchedFiles([]);
-
-    try {
-      const res = await apiFetch("/api/v1/movies/scan", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ libraryId: selectedFolder }),
-      });
-      const data = await res.json();
-      const scanId = data.scanId;
-
-      // Poll for completion
-      const poll = async () => {
-        if (!mountedRef.current) return;
-        try {
-          const statusRes = await apiFetch(`/api/v1/movies/scan/${scanId}`);
-          const result: ScanResult = await statusRes.json();
-          if (!mountedRef.current) return;
-          setScanResult(result);
-
-          if (result.status === "running") {
-            pollTimeoutRef.current = setTimeout(poll, 1500);
-          } else {
-            setScanning(false);
-            const unmatchedRes = await apiFetch(
-              "/api/v1/movies/scan/unmatched",
-            );
-            const files: UnmatchedFile[] = await unmatchedRes.json();
-            if (mountedRef.current) {
-              setUnmatchedFiles(files);
-              onImportComplete();
-            }
-          }
-        } catch (err) {
-          if (mountedRef.current) {
-            setScanning(false);
-            console.error("Poll failed:", err);
-          }
-        }
-      };
-      pollTimeoutRef.current = setTimeout(poll, 1000);
-    } catch (err) {
-      setScanning(false);
-      console.error("Scan failed:", err);
-    }
-  }, [selectedFolder, onImportComplete]);
-
-  const searchTmdb = useCallback(async (query: string) => {
-    if (!query.trim()) return;
-    setSearching(true);
-    try {
-      const res = await apiFetch(
-        `/api/v1/movies/lookup?term=${encodeURIComponent(query)}`,
-      );
-      const data = await res.json();
-      setSearchResults(Array.isArray(data) ? data : []);
-    } catch (err) {
-      console.error("TMDB search failed:", err);
-    } finally {
-      setSearching(false);
-    }
-  }, []);
+    },
+    [setError],
+  );
 
   const matchFile = useCallback(
     async (unmatchedId: string, tmdbId: string) => {
+      setError(null);
       try {
-        await apiFetch("/api/v1/movies/scan/match", {
+        await importRequest("/api/v1/movies/scan/match", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -186,10 +114,10 @@ export function LibraryImportDialog({
         setSearchResults([]);
         onImportComplete();
       } catch (err) {
-        console.error("Match failed:", err);
+        setError(err instanceof Error ? err.message : "Match failed");
       }
     },
-    [selectedFolder, onImportComplete],
+    [selectedFolder, onImportComplete, setError, setUnmatchedFiles],
   );
 
   const progress = scanResult
@@ -210,6 +138,23 @@ export function LibraryImportDialog({
         </DialogHeader>
 
         <div className="flex-1 space-y-4 overflow-auto">
+          {error && (
+            <div className="space-y-2">
+              <p role="alert" className="text-sm text-destructive">
+                {error}
+              </p>
+              {!scanning && (
+                <Button variant="outline" onClick={resetDialog}>
+                  Try Again
+                </Button>
+              )}
+            </div>
+          )}
+          {scanning && !scanResult && (
+            <p role="status" className="flex items-center gap-2 text-sm">
+              <Loader2 className="h-4 w-4 animate-spin" /> Starting scan...
+            </p>
+          )}
           {/* Folder selection */}
           {!scanResult && !scanning && (
             <div className="space-y-4">
@@ -244,7 +189,7 @@ export function LibraryImportDialog({
               </div>
 
               <Button
-                onClick={startScan}
+                onClick={() => void startScan(selectedFolder)}
                 disabled={!selectedFolder}
                 className="w-full gap-2"
               >
@@ -259,7 +204,7 @@ export function LibraryImportDialog({
             <div className="space-y-4">
               <div className="flex items-center gap-2 text-sm">
                 <Loader2 className="h-4 w-4 animate-spin text-primary" />
-                <span>Scanning {scanResult.libraryPath}...</span>
+                <span>Scanning {scanResult.rootFolderPath}...</span>
               </div>
               <Progress value={progress} className="h-2" />
               <div className="grid grid-cols-3 gap-3 text-center">
@@ -415,14 +360,7 @@ export function LibraryImportDialog({
                   <Button variant="outline" onClick={() => onOpenChange(false)}>
                     Close
                   </Button>
-                  <Button
-                    onClick={() => {
-                      setScanResult(null);
-                      setScanning(false);
-                    }}
-                  >
-                    Scan Again
-                  </Button>
+                  <Button onClick={resetDialog}>Scan Again</Button>
                 </div>
               )}
             </div>

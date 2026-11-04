@@ -32,6 +32,7 @@ var (
 	ErrNoDownloaders          = errors.New("musicsearch: no download clients configured")
 	ErrNoCompatibleDownloader = errors.New("musicsearch: no compatible download client configured")
 	ErrInvalidReleaseLink     = errors.New("musicsearch: invalid release download link")
+	ErrAllReleasesAttempted   = errors.New("every matching release was already grabbed, blocklisted, or is awaiting retry; use Download History to retry or blocklist it, or try Interactive Search")
 )
 
 // audioCategories are the Newznab audio category families queried for music.
@@ -428,8 +429,25 @@ func (e *Engine) searchAndGrabTrack(
 	sort.SliceStable(candidates, func(i, j int) bool {
 		return candidates[i].rankScore() > candidates[j].rankScore()
 	})
-	_, err := e.grab(ctx, album.ID, &candidates[0])
+	_, err := e.grabFirstAvailable(ctx, album.ID, candidates)
 	return err
+}
+
+// grabFirstAvailable grabs the best candidate whose release has not already
+// been acquired, blocklisted, or deferred, e.g. after a failed import.
+func (e *Engine) grabFirstAvailable(ctx context.Context, albumID string, candidates []Candidate) (*GrabResult, error) {
+	for i := range candidates {
+		grab, err := e.grab(ctx, albumID, &candidates[i])
+		if err == nil {
+			return grab, nil
+		}
+		if !errors.Is(err, downloads.ErrAcquisitionDeferred) {
+			return nil, err
+		}
+		e.logger.Info("musicsearch: release already attempted, trying next",
+			"album", albumID, "title", candidates[i].Result.Title)
+	}
+	return nil, fmt.Errorf("%w (%d)", ErrAllReleasesAttempted, len(candidates))
 }
 
 func (e *Engine) searchAndGrab(ctx context.Context, albumID string, upgradeOnly bool) (*GrabResult, error) {
@@ -492,15 +510,22 @@ func (e *Engine) searchAndGrab(ctx context.Context, albumID string, upgradeOnly 
 	sort.SliceStable(candidates, func(i, j int) bool {
 		return candidates[i].rankScore() > candidates[j].rankScore()
 	})
-	best := candidates[0]
-
-	if minTier >= 0 && best.Score.Tier <= minTier {
-		e.logger.Debug("musicsearch: no upgrade available",
-			"artist", artist.Name, "album", album.Title, "current_tier", minTier, "best_tier", best.Score.Tier)
-		return nil, ErrNoResults
+	if minTier >= 0 {
+		upgrades := candidates[:0]
+		for _, c := range candidates {
+			if c.Score.Tier > minTier {
+				upgrades = append(upgrades, c)
+			}
+		}
+		if len(upgrades) == 0 {
+			e.logger.Debug("musicsearch: no upgrade available",
+				"artist", artist.Name, "album", album.Title, "current_tier", minTier, "best_tier", candidates[0].Score.Tier)
+			return nil, ErrNoResults
+		}
+		candidates = upgrades
 	}
 
-	grab, err := e.grab(ctx, albumID, &best)
+	grab, err := e.grabFirstAvailable(ctx, albumID, candidates)
 	if err != nil {
 		return nil, err
 	}

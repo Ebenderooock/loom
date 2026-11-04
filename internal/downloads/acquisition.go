@@ -165,6 +165,9 @@ func (r *Registry) Acquire(ctx context.Context, clientID string, req AddRequest,
 	if err == nil {
 		if client, ok := r.Get(clientID); ok {
 			res, err = client.Add(ctx, req)
+			if err == nil {
+				r.InvalidateStatus(clientID)
+			}
 		} else {
 			err = errors.New("download client unavailable")
 		}
