@@ -15,10 +15,39 @@ import (
 // extension should include the leading dot (e.g. ".flac"); when empty no
 // extension is appended.
 func BuildTrackPath(artist *Artist, album *Album, track *Track, multiDisc bool, ext string) string {
-	artistDir := sanitizeComponent(artistName(artist))
+	artistDir := sanitizeComponent(albumArtistFolder(artist, album))
 	albumDir := sanitizeComponent(albumFolderName(album))
 	fileName := trackFileName(track, multiDisc, ext)
 	return filepath.Join(artistDir, albumDir, fileName)
+}
+
+func albumArtistFolder(artist *Artist, album *Album) string {
+	if IsVariousArtistAlbum(album) {
+		return "Various Artists"
+	}
+	if artist != nil && strings.TrimSpace(artist.Name) != "" {
+		return artist.Name
+	}
+	if album != nil && len(album.Artists) == 1 && strings.TrimSpace(album.Artists[0].Name) != "" {
+		return album.Artists[0].Name
+	}
+	return artistName(artist)
+}
+
+// IsVariousArtistAlbum reports whether an album belongs in Various Artists.
+func IsVariousArtistAlbum(album *Album) bool {
+	if album == nil {
+		return false
+	}
+	if len(album.Artists) > 1 {
+		return true
+	}
+	for _, secondary := range album.SecondaryTypes {
+		if strings.EqualFold(strings.TrimSpace(secondary), "compilation") {
+			return true
+		}
+	}
+	return strings.EqualFold(strings.TrimSpace(album.AlbumType), "compilation")
 }
 
 func artistName(a *Artist) string {

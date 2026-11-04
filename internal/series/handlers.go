@@ -104,6 +104,7 @@ func RouterWithSearch(svc Service, indexerSvc *indexers.Service, grabStore GrabC
 	r.Post("/{id}/unarchive", unarchiveSeries(svc))
 	r.Get("/{id}/credits", getCredits(svc))
 	r.Get("/{id}/seasons", listSeasons(svc))
+	r.Put("/{id}/seasons/{seasonNum}/monitoring", setSeasonMonitoring(svc))
 	r.Get("/{id}/seasons/{seasonNum}/episodes", listEpisodesHandler(svc, grabStore))
 
 	return r
@@ -428,9 +429,9 @@ func listSeries(svc Service) http.HandlerFunc {
 		if mon := q.Get("monitored"); mon != "" {
 			filtered := list[:0]
 			for _, s := range list {
-				if mon == "true" && s.MonitoringStatus == MonitoringMonitored {
+				if mon == "true" && s.MonitoringStatus.IsMonitored() {
 					filtered = append(filtered, s)
-				} else if mon == "false" && s.MonitoringStatus != MonitoringMonitored {
+				} else if mon == "false" && !s.MonitoringStatus.IsMonitored() {
 					filtered = append(filtered, s)
 				}
 			}
@@ -760,6 +761,36 @@ func setMonitoringStatus(svc Service) http.HandlerFunc {
 		sr, _ := svc.GetSeries(r.Context(), id)
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(seriesToResponse(sr))
+	}
+}
+
+func setSeasonMonitoring(svc Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		seasonNum, err := strconv.Atoi(chi.URLParam(r, "seasonNum"))
+		if err != nil || seasonNum < 0 {
+			http.Error(w, "invalid season number", http.StatusBadRequest)
+			return
+		}
+		var req struct {
+			Monitored *bool `json:"monitored"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Monitored == nil {
+			http.Error(w, "monitored boolean required", http.StatusBadRequest)
+			return
+		}
+		season, err := svc.SetSeasonMonitoring(r.Context(), chi.URLParam(r, "id"), seasonNum, *req.Monitored)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				http.Error(w, "season not found", http.StatusNotFound)
+			} else {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(seasonToResponse(season)); err != nil {
+			slog.WarnContext(r.Context(), "series: encode season monitoring response", "error", err)
+		}
 	}
 }
 

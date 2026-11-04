@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/ebenderooock/loom/internal/mediafiles"
 )
 
 // expectedVideoExts are the file types we expect to find after download.
@@ -32,6 +34,7 @@ func NewPostValidator(cfg ReleaseValidatorConfig) *PostValidator {
 func (v *PostValidator) ValidateDownload(downloadPath string) (PostValidationResult, error) {
 	var reasons []string
 	hasVideo := false
+	hasAudio := false
 	hasExecutable := false
 
 	err := filepath.Walk(downloadPath, func(path string, info os.FileInfo, err error) error {
@@ -46,6 +49,9 @@ func (v *PostValidator) ValidateDownload(downloadPath string) (PostValidationRes
 
 		if expectedVideoExts[ext] {
 			hasVideo = true
+		}
+		if mediafiles.IsAudio(ext) {
+			hasAudio = true
 		}
 
 		if dangerousExtensions[ext] {
@@ -69,8 +75,8 @@ func (v *PostValidator) ValidateDownload(downloadPath string) (PostValidationRes
 		return PostValidationResult{Pass: false, Reasons: []string{"failed to scan download path: " + err.Error()}}, err
 	}
 
-	if !hasVideo {
-		reasons = append(reasons, "no expected video files found (.mkv, .mp4, .avi, .m4v)")
+	if !hasVideo && !hasAudio {
+		reasons = append(reasons, "no expected video or audio files found")
 	}
 
 	if hasExecutable {

@@ -4,6 +4,88 @@ Loom's Music capability manages artists, albums, editions, tracks and audio
 files using MusicBrainz metadata. Enable the `music` feature flag to expose the
 Music API and UI.
 
+## Artist catalogue
+
+The artist catalogue includes studio albums, EPs and singles with at least one
+MusicBrainz release explicitly marked **Official**. Different editions of the
+same release group appear as one entry, not as separate albums.
+
+Live releases, compilations, remixes, broadcasts, demos and other secondary
+release types are excluded for now, even when officially released. Bootleg,
+promotional, pseudo-release and unknown-status editions do not qualify a group
+for inclusion.
+
+For artists already added, use **Refresh** on the Music page to apply the
+catalogue rules, then reload after the background refresh finishes.
+Monitored artists are also refreshed periodically.
+Excluded entries no longer appear in the artist catalogue, its counts, automatic
+searches or the calendar. Their album, track and file records are retained;
+refreshing does not delete audio files. A failed metadata fetch leaves the
+existing catalogue unchanged.
+
+Select an artist card to open its detail drawer. The drawer includes artist
+monitoring, metadata refresh and folder rescan actions, and an **Edit** dialog
+for monitoring, the quality profile and the metadata profile. Changing the
+metadata profile refreshes the artist so the catalogue matches.
+
+Albums are grouped by type. For each album you can toggle monitoring, start an
+automatic search, open an interactive search to pick a release yourself, and
+expand it to see each track's file availability. Each track has its own
+monitor toggle:
+
+- Monitoring or unmonitoring an album applies to all its tracks.
+- Monitoring a single track also monitors its album, so searches include it.
+- Searches only look for monitored tracks that are missing a file.
+
+Use the **Albums** view to browse the full album library, including entries
+added without a primary managed artist. **Add Album** searches MusicBrainz
+release groups and stores every credited artist on the album. Contributors are
+linked to existing managed artists when possible; adding an album never creates
+artist records for its contributors. Albums with multiple credited artists or
+a compilation type are organized beneath `Various Artists/{Album} ({Year})`.
+Single-artist standalone albums use their credited artist name as the folder.
+
+Select an album card or choose **Album details** from an artist catalogue entry
+to open the album drawer. It shows the cover, description, artist credits,
+genres, ratings, streaming links, available editions, and per-track file and
+monitoring status. From the drawer you can change the selected edition, monitor
+or unmonitor the album and its tracks, and start automatic or interactive
+release searches.
+
+The **Files** section lists imported audio files with their album, track,
+quality and size. The **History** section lists grabs and imports for the
+artist's albums. Both load when opened. Searching for a single track is not
+supported because releases are grabbed per album.
+
+## Artwork and details
+
+Artists show a photo, background, logo and biography. Albums show their cover
+and a description when you open **Album details**. Sources, in order of
+preference:
+
+- **fanart.tv** supplies HD artist photos, backgrounds, logos and album covers.
+  It needs a free personal API key.
+- **TheAudioDB** supplies artist photos, backgrounds, logos, biographies and
+  album descriptions. Without a key, Loom uses its free shared key.
+- **MusicBrainz** supplies origin, active years, community ratings, the Cover
+  Art Archive cover and an artist image from Wikimedia Commons as a fallback.
+
+Admins add keys under **Settings → Music Profiles → Artwork**. Keys are
+write-only: the API only reports whether each one is saved. You can also set
+`LOOM_FANART_API_KEY` and `LOOM_THEAUDIODB_API_KEY` in the server environment;
+a key saved in Settings takes precedence. Use **Test keys** before saving.
+
+Artwork is fetched when an artist is added or refreshed. Use **Refresh
+Metadata** on an artist page to update one artist, or **Refresh** on the Music
+page for all of them. Album details are fetched the first time an album is
+opened. A failed artwork lookup never fails an add or refresh; Loom keeps the
+existing images.
+
+Artists and albums also link to Spotify, Apple Music, YouTube Music, TIDAL,
+Deezer, Bandcamp, the official website, Wikipedia and other services when
+MusicBrainz lists them. Loom does not call those services; the links open in
+a new tab.
+
 ## Profiles
 
 Audio quality profiles control which audio tiers are eligible for search, the
@@ -28,12 +110,15 @@ cutoff and permit upgrades:
 
 The `format_items` list associates custom-format IDs with scores, and
 `min_format_score` sets the minimum score a release must reach. Updates change
-only supplied fields. A profile cannot be deleted while assigned to an artist.
+only supplied fields. A profile cannot be deleted while assigned to an artist
+or a standalone album.
 
 Metadata profiles filter which MusicBrainz primary types, secondary types and
 release statuses are monitored for an artist. Create and manage them under
 `/api/v1/music/metadata-profiles`, then assign one when adding or updating an
-artist. An empty primary-type list permits all primary types; when an album has
+artist. Profiles control monitoring within the supported catalogue; they do not
+reintroduce excluded release types. An empty primary-type list permits all
+supported primary types; when an album has
 secondary types, each must be included in the profile's secondary-type list.
 An empty release-status list uses MusicBrainz's `official` status preference
 when choosing an edition.
@@ -58,12 +143,66 @@ refreshes the album's track listing.
 
 ## Imports and upgrades
 
-Music downloads are imported by matching audio tags to a monitored artist,
-album and track. Files are organized under the artist's configured music
-library. When a track already has a file, an incoming file replaces it only
+Music downloads are imported by matching audio tags to an album and track,
+using the album artist or credited artists when available. Files are organized
+under the album's selected music library; compilation and multi-artist albums
+go under the `Various Artists` directory. When a track already has a file,
+an incoming file replaces it only
 when its detected quality is higher. The previous file is sent to the recycle
 bin before replacement; upgrades are refused if the recycle bin is unavailable
 or disabled, so the existing track is not silently discarded.
+
+Tracks are matched by disc and track number first, then by title. If the
+titles differ only by a trailing qualifier, such as `Heavy (feat. Kiiara)`
+against `Heavy` or `Heavy (album version)`, the file still matches when exactly
+one track fits. An album's track list is fetched from MusicBrainz the first
+time it is needed. If MusicBrainz is unavailable, the import fails with
+`album track list unavailable` rather than a track-match error, and a later
+retry or library scan fetches the list again.
+
+Migration 0100 preserves existing albums, editions, tracks and files while
+allowing albums without a managed artist. Downgrading below this migration is
+refused while standalone albums exist, rather than discarding their records.
+
+## Metadata source
+
+Loom reads artist, album and track data from MusicBrainz. Admins choose the
+source under **Settings → Music Profiles → Metadata Source**:
+
+- **Public MusicBrainz** (default) uses `https://musicbrainz.org/ws/2`. The
+  public service allows about one request per second per IP address, so adding
+  a large artist or refreshing many albums takes minutes. Loom always waits at
+  least one second between requests to `musicbrainz.org`, including retries.
+- **Custom server** uses any MusicBrainz-compatible web service: your own
+  mirror or a hosted instance. Enter the base URL ending in `/ws/2`, the
+  minimum gap between requests in milliseconds (`0` for no limit), and an
+  optional authentication header such as `Authorization: Bearer …` for hosted
+  services. The header value is write-only: the API reports only whether one
+  is saved, and leaving it blank keeps the saved value.
+
+Use **Test connection** before saving. It looks up a known artist and, when
+your server also handles search, runs an artist search. Saved changes apply
+immediately without a restart.
+
+Artist search uses MusicBrainz's search indexes. A mirror built without them
+can still serve lookups but not search, so turn on **Search artists on public
+MusicBrainz** to send only searches to the public service.
+
+### Running your own mirror
+
+The [musicbrainz-docker](https://github.com/metabrainz/musicbrainz-docker)
+project runs a replicated MusicBrainz server. Its published requirements are:
+
+| Setup | Disk | Memory | CPU |
+| --- | --- | --- | --- |
+| Database only (lookups; use public search) | 100 GB | 4 GB | 2 threads |
+| With search indexes | 350 GB | 16 GB | 16 threads |
+
+Point Loom at the mirror's web service, for example
+`http://musicbrainz.lan:5000/ws/2`, with a rate limit of `0`. MusicBrainz core
+data is CC0, but replication access and commercial use are governed by the
+[MetaBrainz terms](https://metabrainz.org/supporters); check them before
+offering a hosted instance to others.
 
 See the [API reference](api.md) and
 [`api/openapi/loom.yaml`](../api/openapi/loom.yaml) for request and response

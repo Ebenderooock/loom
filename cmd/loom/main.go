@@ -29,6 +29,8 @@ func run(ctx context.Context, args []string) error {
 	switch args[0] {
 	case "serve":
 		return cmdServe(ctx, args[1:])
+	case "service":
+		return cmdService(args[1:])
 	case "version", "--version", "-v":
 		fmt.Println(buildinfo.String())
 		return nil
@@ -58,6 +60,7 @@ Usage:
 
 Commands:
   serve         Run the loom server
+  service       Run under Windows Service Control Manager (Windows only)
   migrate       Migrate from radarr/sonarr/prowlarr databases
   backup        Backup or restore database and config (create|restore)
   api-key       Manage API keys (create|list|revoke)

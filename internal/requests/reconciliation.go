@@ -176,14 +176,15 @@ func (s *Store) fileGroups(ctx context.Context, r Request, now time.Time) (map[s
 	case MediaSeries:
 		q = `SELECT e.id,COALESCE(f.file_path,'') FROM episodes e
 			JOIN seasons sn ON sn.id=e.season_id LEFT JOIN episode_files f ON f.episode_id=e.id
-			WHERE e.series_id=? AND e.monitored=true AND sn.monitored=true AND (
+			WHERE e.series_id=? AND e.monitored=true AND sn.monitored=true AND sn.season_number<>0 AND (
 				(e.air_date_utc<>'' AND e.air_date_utc<=?) OR
 				(e.air_date_utc='' AND (e.air_date IS NULL OR e.air_date='' OR e.air_date<=?)))`
 		args = append(args, now.Format(time.RFC3339), now.Format(time.DateOnly))
 	case MediaArtist:
 		q = `SELECT t.id,COALESCE(f.file_path,'') FROM tracks t
 			JOIN albums al ON al.id=t.album_id LEFT JOIN track_files f ON f.track_id=t.id AND f.deleted_at IS NULL
-			WHERE al.artist_id=? AND al.deleted_at IS NULL
+			JOIN album_artists aa ON aa.album_id=al.id AND aa.catalog_included=true
+			WHERE aa.artist_id=? AND al.deleted_at IS NULL
 			AND al.monitored=true AND t.monitored=true AND t.release_id=al.selected_release_id
 			AND (al.release_date='' OR al.release_date<=?)`
 		args = append(args, now.Format(time.DateOnly))

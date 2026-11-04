@@ -27,9 +27,10 @@ func (e *Engine) touchLastSearch(ctx context.Context, album *music.Album) {
 	}
 }
 
-// MissingAlbumCandidates returns monitored albums (under monitored artists) that
-// have at least one missing tracked file and are due for a (re)search per
-// minRecheck. Results are ordered oldest-search-first so attention rotates.
+// MissingAlbumCandidates returns monitored albums with at least one missing
+// tracked file that are due for a (re)search per minRecheck. Artist-owned
+// albums still require their artist to be monitored; standalone albums are
+// governed by their own monitoring status.
 func (e *Engine) MissingAlbumCandidates(ctx context.Context, minRecheck time.Duration) ([]*music.Album, error) {
 	artists, err := e.repo.ListArtists(ctx)
 	if err != nil {
@@ -37,6 +38,7 @@ func (e *Engine) MissingAlbumCandidates(ctx context.Context, minRecheck time.Dur
 	}
 	now := time.Now()
 	var due []*music.Album
+	seen := make(map[string]bool)
 	for _, ar := range artists {
 		if ar.MonitoringStatus != music.MonitoringMonitored {
 			continue
@@ -47,25 +49,48 @@ func (e *Engine) MissingAlbumCandidates(ctx context.Context, minRecheck time.Dur
 			continue
 		}
 		for _, al := range albums {
-			if !al.Monitored {
+			// A standalone album may be linked to managed contributors for
+			// catalogue visibility, but its monitoring and acquisition profile
+			// belong to the album itself and are handled below.
+			if al.ArtistID != ar.ID {
 				continue
 			}
-			if al.LastSearchAt != nil && now.Sub(*al.LastSearchAt) < minRecheck {
+			if seen[al.ID] {
 				continue
 			}
-			tracks, err := e.ensureAlbumTracks(ctx, al)
-			if err != nil {
-				e.logger.Debug("musicsearch: track metadata check failed", "album", al.ID, "error", err)
-				continue
-			}
-			al.Tracks = tracks
-			if anyMissingTrack(tracks) {
-				due = append(due, al)
-			}
+			seen[al.ID] = true
+			e.appendMissingCandidate(ctx, al, minRecheck, now, &due)
+		}
+	}
+	standalone, err := e.repo.ListAlbums(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for _, al := range standalone {
+		if al.ArtistID == "" {
+			e.appendMissingCandidate(ctx, al, minRecheck, now, &due)
 		}
 	}
 	sortAlbumsByLastSearch(due)
 	return due, nil
+}
+
+func (e *Engine) appendMissingCandidate(ctx context.Context, album *music.Album, minRecheck time.Duration, now time.Time, due *[]*music.Album) {
+	if album == nil || !album.Monitored {
+		return
+	}
+	if album.LastSearchAt != nil && now.Sub(*album.LastSearchAt) < minRecheck {
+		return
+	}
+	tracks, err := e.ensureAlbumTracks(ctx, album)
+	if err != nil {
+		e.logger.Debug("musicsearch: track metadata check failed", "album", album.ID, "error", err)
+		return
+	}
+	album.Tracks = tracks
+	if anyMissingTrack(tracks) {
+		*due = append(*due, album)
+	}
 }
 
 func (e *Engine) albumMissingTracks(ctx context.Context, albumID string) (bool, error) {
@@ -193,6 +218,9 @@ func (e *Engine) SearchArtistAcquisition(ctx context.Context, artistID string, l
 	for _, album := range albums {
 		if ctx.Err() != nil {
 			return ctx.Err()
+		}
+		if album.ArtistID == "" {
+			continue
 		}
 		if !album.Monitored || attempted >= limit {
 			continue

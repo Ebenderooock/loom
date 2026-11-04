@@ -141,9 +141,15 @@ can also be installed from the **Community** tab after adding
 `https://packages.synocommunity.com/` to Package Center's package sources.
 Publishing to that repository is separate from Loom's GitHub release workflow.
 
-## Option B — Docker (Container Manager)
+The packaging recipe (for contributors) lives in
+[`packaging/synology/`](../packaging/synology/) and can be submitted to
+[`SynoCommunity/spksrc`](https://github.com/SynoCommunity/spksrc).
 
-If you prefer Docker, use the published image with Container Manager:
+## Option C — Docker (Container Manager)
+
+Requires a model supported by Container Manager (or Docker on older DSM).
+The published image supports **amd64 and arm64**, not 32-bit ARM NAS models.
+Use **Container Manager → Project → Create** and paste this Compose file:
 
 ```yaml
 services:
@@ -157,9 +163,44 @@ services:
       LOOM_DATA_DIR: /config
     volumes:
       - /volume1/docker/loom:/config
-      - /volume1/media:/media
+      - /volume1/data:/data
     restart: unless-stopped
+    stop_grace_period: 60s
 ```
 
-Map your media/download shared folders into the container and ensure the
-container user can read/write them.
+Create `/volume1/docker/loom` and `/volume1/data/{media,downloads}` first. The
+image runs as UID/GID **65532:65532**. Grant that account read/write access to the
+config directory and only the required data directories using DSM permissions
+or SSH ownership/ACL tools. Do not use world-writable permissions. Unlike
+linuxserver images, Loom does not interpret `PUID`/`PGID`. To use another account,
+add `user: "UID:GID"` to the Compose service, replacing both with its numeric
+IDs from `id`, and grant that account access to config and data. See the
+[Docker guide](docker.md) for storage and shared-path details.
+
+For the container filesystem browser, use the same YAML block in
+`/volume1/docker/loom/loom.yaml`, but replace `/volume1/data` with `/data`
+(the path seen inside the container) before starting the project.
+
+Map `/volume1/data:/data` into the download client too, so it reports
+`/data/downloads` and Loom uses `/data/media`. The `/config` SQLite database should
+stay on local NAS storage, not an SMB/NFS mount. Replace `latest` with a tested
+release tag without the `v` prefix (for example `0.1.1`) or image digest for
+repeatable upgrades.
+
+## Upgrade, backup, and removal
+
+Stop Loom before copying its state directory, including `data/loom.db`, any SQLite
+`-wal`/`-shm` files, and `loom.yaml`. Keep the backup outside the package directory.
+For native installations, use Manual Install with the newer matching `.spk`, or
+Package Center Update once published. For containers, pull the chosen image and
+recreate the project without deleting its bind-mounted folders.
+If an existing project uses `/media` or a custom database path, retain those
+mounts and settings during the upgrade; the `/data` layout above is for new
+installations, not an automatic library-path migration.
+
+Database migrations can make a downgrade incompatible: roll back using the old
+binary/image **and the pre-upgrade state backup**, not just an older image.
+Verify the UI and `http://<nas-ip>:1925/readyz` after upgrading. Uninstalling a
+DSM package may delete its private state; back it up before removal. Removing a
+Container Manager project must not include deleting the host data directories
+unless you deliberately intend to erase them.

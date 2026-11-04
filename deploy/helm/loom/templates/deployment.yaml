@@ -6,8 +6,11 @@
 {{- $rainRPCPort := (get $rainRPC "port") | default 7246 -}}
 {{- $rainRPCTimeout := (get $rainRPC "timeoutSecs") | default 10 -}}
 {{- $rainDownloadDir := (get $rain "downloadDir") | default "/media/downloads" -}}
-{{- $rainDHT := (get $rain "dhtEnabled") | default true -}}
-{{- $rainPEX := (get $rain "pexEnabled") | default true -}}
+{{- $rainDHT := .Values.rain.dhtEnabled -}}
+{{- $rainPEX := .Values.rain.pexEnabled -}}
+{{- if ne (int .Values.replicaCount) 1 -}}
+{{- fail "Loom requires replicaCount=1; SQLite/shared state cannot be safely scaled with this chart" -}}
+{{- end -}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -16,6 +19,7 @@ metadata:
     {{- include "loom.labels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.replicaCount }}
+  progressDeadlineSeconds: {{ .Values.progressDeadlineSeconds }}
   strategy:
     type: Recreate
   selector:
@@ -23,16 +27,20 @@ spec:
       {{- include "loom.selectorLabels" . | nindent 6 }}
   template:
     metadata:
-      {{- with .Values.podAnnotations }}
       annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        checksum/rain-config: {{ include (print $.Template.BasePath "/configmap-rain.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
         {{- toYaml . | nindent 8 }}
-      {{- end }}
+        {{- end }}
       labels:
         {{- include "loom.labels" . | nindent 8 }}
         {{- with .Values.podLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
     spec:
+      automountServiceAccountToken: {{ .Values.serviceAccount.automount }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
       {{- if .Values.hostNetwork }}
       hostNetwork: true
       {{- end }}
@@ -54,6 +62,7 @@ spec:
         - name: {{ .Chart.Name }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: ["serve", "--config", "/etc/loom/loom.yaml"]
           {{- with .Values.securityContext }}
           securityContext:
             {{- toYaml . | nindent 12 }}
@@ -66,9 +75,9 @@ spec:
             - name: LOOM_HTTP_ADDR
               value: ":{{ .Values.service.port }}"
             - name: LOOM_CONFIG_DIR
-              value: /config
+              value: {{ .Values.config.config_dir | quote }}
             - name: LOOM_DATA_DIR
-              value: /config
+              value: {{ .Values.config.data_dir | quote }}
             {{- if $rainEnabled }}
             - name: LOOM_RAIN_RPC_HOST
               value: "{{ $rainRPCHost }}"
@@ -86,6 +95,15 @@ spec:
             {{- with .Values.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
+          {{- if .Values.probes.startup.enabled }}
+          startupProbe:
+            httpGet:
+              path: {{ .Values.probes.startup.path }}
+              port: http
+            periodSeconds: {{ .Values.probes.startup.periodSeconds }}
+            timeoutSeconds: {{ .Values.probes.startup.timeoutSeconds }}
+            failureThreshold: {{ .Values.probes.startup.failureThreshold }}
+          {{- end }}
           {{- if .Values.probes.liveness.enabled }}
           livenessProbe:
             httpGet:
@@ -94,6 +112,7 @@ spec:
             initialDelaySeconds: {{ .Values.probes.liveness.initialDelaySeconds }}
             periodSeconds: {{ .Values.probes.liveness.periodSeconds }}
             timeoutSeconds: {{ .Values.probes.liveness.timeoutSeconds }}
+            failureThreshold: {{ .Values.probes.liveness.failureThreshold }}
           {{- end }}
           {{- if .Values.probes.readiness.enabled }}
           readinessProbe:
@@ -103,30 +122,46 @@ spec:
             initialDelaySeconds: {{ .Values.probes.readiness.initialDelaySeconds }}
             periodSeconds: {{ .Values.probes.readiness.periodSeconds }}
             timeoutSeconds: {{ .Values.probes.readiness.timeoutSeconds }}
+            failureThreshold: {{ .Values.probes.readiness.failureThreshold }}
           {{- end }}
           {{- with .Values.resources }}
           resources:
             {{- toYaml . | nindent 12 }}
           {{- end }}
           volumeMounts:
+            - name: runtime-config
+              mountPath: /etc/loom
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
             - name: config
               mountPath: /config
             {{- if .Values.persistence.media.enabled }}
             - name: media
-              mountPath: /media
+              mountPath: {{ .Values.persistence.media.mountPath | quote }}
+            {{- end }}
+            {{- if .Values.persistence.downloads.enabled }}
+            - name: downloads
+              mountPath: {{ .Values.persistence.downloads.mountPath | quote }}
             {{- end }}
             {{- with .Values.extraVolumeMounts }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
         {{- if $rainEnabled }}
         - name: rain
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
-          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          image: "{{ required "rain.image.repository must contain /usr/local/bin/rain" .Values.rain.image.repository }}:{{ required "rain.image.tag must be pinned when Rain is enabled" .Values.rain.image.tag }}"
+          imagePullPolicy: {{ .Values.rain.image.pullPolicy }}
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           command: ["/usr/local/bin/rain", "server", "--config", "/etc/rain/config.yaml"]
           env:
             - name: HOME
               value: /config
           volumeMounts:
+            - name: tmp
+              mountPath: /tmp
             - name: config
               mountPath: /config
             - name: rain-config
@@ -134,13 +169,23 @@ spec:
               readOnly: true
             {{- if .Values.persistence.media.enabled }}
             - name: media
-              mountPath: /media
+              mountPath: {{ .Values.persistence.media.mountPath | quote }}
+            {{- end }}
+            {{- if .Values.persistence.downloads.enabled }}
+            - name: downloads
+              mountPath: {{ .Values.persistence.downloads.mountPath | quote }}
             {{- end }}
             {{- with .Values.extraVolumeMounts }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
         {{- end }}
       volumes:
+        - name: runtime-config
+          configMap:
+            name: {{ include "loom.fullname" . }}-config
+        - name: tmp
+          emptyDir:
+            sizeLimit: 256Mi
         - name: config
           {{- if .Values.persistence.config.enabled }}
           persistentVolumeClaim:
@@ -148,6 +193,11 @@ spec:
           {{- else }}
           emptyDir: {}
           {{- end }}
+        {{- if .Values.persistence.downloads.enabled }}
+        - name: downloads
+          persistentVolumeClaim:
+            claimName: {{ .Values.persistence.downloads.existingClaim | default (printf "%s-downloads" (include "loom.fullname" .)) }}
+        {{- end }}
         {{- if .Values.persistence.media.enabled }}
         - name: media
           persistentVolumeClaim:

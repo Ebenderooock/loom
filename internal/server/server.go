@@ -105,6 +105,8 @@ type Server struct {
 	organizerSvc      *organizer.Organizer
 	seriesSvc         series.Service
 	musicSvc          music.Service
+	musicMetadataSrc  *music.MetadataSourceService
+	musicArtworkCfg   *music.ArtworkSettingsService
 	notifSvc          notifications.Service
 	connectSvc        connect.Service
 	analyticsSvc      *analytics.Service
@@ -175,6 +177,8 @@ type Wiring struct {
 	OrganizerService  *organizer.Organizer
 	SeriesService     series.Service
 	MusicService      music.Service
+	MusicMetadataSrc  *music.MetadataSourceService  // admin-only MusicBrainz endpoint settings
+	MusicArtworkCfg   *music.ArtworkSettingsService // admin-only fanart.tv / TheAudioDB keys
 	NotificationSvc   notifications.Service
 	ConnectService    connect.Service
 	AnalyticsService  *analytics.Service
@@ -291,6 +295,8 @@ func New(cfg *config.Config, wiring Wiring) (*Server, error) {
 		organizerSvc:      wiring.OrganizerService,
 		seriesSvc:         wiring.SeriesService,
 		musicSvc:          wiring.MusicService,
+		musicMetadataSrc:  wiring.MusicMetadataSrc,
+		musicArtworkCfg:   wiring.MusicArtworkCfg,
 		notifSvc:          wiring.NotificationSvc,
 		connectSvc:        wiring.ConnectService,
 		analyticsSvc:      wiring.AnalyticsService,
@@ -925,7 +931,10 @@ func (s *Server) newMux() http.Handler {
 
 		// Music (Artists/Albums/Tracks) routes — gated behind the "music"
 		// feature flag (off by default while the capability is in development).
-		if s.musicSvc != nil && s.featureFlags != nil && s.featureFlags.Enabled(featureflags.KeyMusic) {
+		// The flag is checked per request so toggling it takes effect without
+		// a restart.
+		if s.musicSvc != nil && s.featureFlags != nil {
+			musicEnabled := requireFeature(s.featureFlags.EnabledFunc(featureflags.KeyMusic))
 			artistOpts := []music.ArtistRouterOption{}
 			if s.libStore != nil && s.libScanner != nil {
 				artistOpts = append(artistOpts, music.WithLibraryRescan(s.libStore, s.libScanner))
@@ -934,13 +943,24 @@ func (s *Server) newMux() http.Handler {
 			if s.musicScannerSvc != nil {
 				scanner.RegisterMusicRoutes(artistsRouter, s.musicScannerSvc, s.libStore)
 			}
-			r.Mount("/api/v1/artists", artistsRouter)
+			r.With(musicEnabled).Mount("/api/v1/artists", artistsRouter)
 			albumsRouter := music.AlbumRouter(s.musicSvc)
 			if s.musicSearch != nil {
 				musicsearch.RegisterRoutes(albumsRouter, s.musicSearch)
 			}
-			r.Mount("/api/v1/albums", albumsRouter)
-			r.Mount("/api/v1/music", music.ProfileRouter(s.musicSvc))
+			r.With(musicEnabled).Mount("/api/v1/albums", albumsRouter)
+			profileRouter := music.ProfileRouter(s.musicSvc)
+			adminMW := func(next http.Handler) http.Handler { return next }
+			if s.authSvc != nil {
+				adminMW = s.authSvc.RequireRole("admin")
+			}
+			if s.musicMetadataSrc != nil {
+				profileRouter.With(adminMW).Mount("/metadata-source", music.MetadataSourceRouter(s.musicMetadataSrc))
+			}
+			if s.musicArtworkCfg != nil {
+				profileRouter.With(adminMW).Mount("/artwork-settings", music.ArtworkSettingsRouter(s.musicArtworkCfg))
+			}
+			r.With(musicEnabled).Mount("/api/v1/music", profileRouter)
 		}
 
 		// Notifications routes
@@ -1206,7 +1226,15 @@ func (s *Server) newMux() http.Handler {
 	// `-tags embed`. In dev mode spaHandler() returns nil and the Vite dev
 	// server on :5173 handles the UI.
 	if spa := spaHandler(); spa != nil {
-		r.NotFound(spa.ServeHTTP)
+		r.NotFound(func(w http.ResponseWriter, req *http.Request) {
+			// Unknown API paths must not fall back to index.html, or clients
+			// get a 200 HTML page where they expect JSON.
+			if req.URL.Path == "/api" || strings.HasPrefix(req.URL.Path, "/api/") {
+				writeJSONNotFound(w)
+				return
+			}
+			spa.ServeHTTP(w, req)
+		})
 	}
 
 	return otelhttp.NewHandler(r, "loom.http.server",

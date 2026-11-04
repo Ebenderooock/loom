@@ -117,10 +117,16 @@ docker compose up -d
 # Grafana     http://localhost:3000  (admin/admin)
 ```
 
-See [`docs/deployment.md`](docs/deployment.md) for Kubernetes
-(Phase 11), bare-metal binaries, and reverse-proxy snippets
-(Traefik / Caddy / Nginx). For Synology NAS, see
-[`docs/synology.md`](docs/synology.md).
+See the [installation pathways](docs/deployment.md#installation-pathways) for
+[Windows services](docs/windows.md), [Linux/systemd](docs/linux.md),
+[macOS/launchd](docs/macos.md), [Raspberry Pi](docs/raspberry-pi.md),
+[Docker](docs/docker.md), [Kubernetes/Helm](docs/kubernetes.md),
+[Flux](docs/flux.md), and [Synology DSM](docs/synology.md).
+The updated release pipeline bundles native installer scripts with the binaries;
+older releases require scripts from this checkout, and Windows requires a
+service-aware binary. The Synology guide covers
+Container Manager and building a `.spk` for manual upload; SynoCommunity
+availability depends on upstream publication.
 
 ## Documentation
 

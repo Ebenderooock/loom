@@ -3,6 +3,11 @@ export interface QualityProfile {
   name: string;
 }
 
+/** Series monitoring is a master gate; active strategies retain season selections. */
+export function isSeriesMonitored(status: string): boolean {
+  return !["none", "unmonitored", "archived"].includes(status);
+}
+
 export interface EpisodeStats {
   totalEpisodes: number;
   downloadedEpisodes: number;
