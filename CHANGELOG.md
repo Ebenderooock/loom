@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Global appearance controls in Settings: Light, Dark, AMOLED or System theme,
+  accent presets, and a background image URL with preview and dimming. Admin
+  changes persist across devices; the header theme toggle shares these settings.
+
 - Music capability management: select an album's MusicBrainz edition, manage
   audio quality and metadata profiles, and search for missing tracks in
   partially available albums. Completed music downloads now import into the

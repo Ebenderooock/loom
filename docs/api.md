@@ -56,6 +56,27 @@ should work against Loom unchanged.
 
 ## Routes (current)
 
+### Appearance
+
+`GET /api/v1/appearance` returns the instance-wide settings to any authenticated
+role. `PUT /api/v1/appearance` requires an administrator and replaces the complete
+object, returning the saved settings. Defaults:
+
+```json
+{"theme":"system","accent":"default","backgroundUrl":"","backgroundDim":70}
+```
+
+All four fields are required for PUT. Themes: `system`, `light`, `dark`,
+`amoled`; accents: `default`, `teal`, `blue`, `rose`, `amber`. Dimming is an integer
+0–100. The background URL must be empty or absolute HTTP(S), without credentials,
+and no more than 2048 bytes. Loom does not fetch the image server-side.
+Invalid, missing, null, unknown or trailing JSON fields return 400; request
+bodies over 16 KiB return 413. Authentication failures return 401, non-admin
+writes 403, and storage failures 500. No migration or restart is required.
+See [configuration](configuration.md#instance-appearance) for a curl example.
+
+### Route reference
+
 These are the routes implemented today. They are the routes documented
 in `api/openapi/loom.yaml`.
 

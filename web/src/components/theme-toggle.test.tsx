@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ThemeProvider } from "@/hooks/use-theme";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -24,5 +24,33 @@ describe("ThemeToggle", () => {
     await user.click(dark);
     expect(document.documentElement.dataset.theme).toBe("dark");
     expect(window.localStorage.getItem("loom.theme")).toBe("dark");
+  });
+
+  it("follows device changes when the global theme is System", () => {
+    let onChange: (() => void) | undefined;
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    const query = {
+      ...media,
+      matches: false,
+      addEventListener: vi.fn((_event: string, handler: () => void) => {
+        onChange = handler;
+      }),
+      removeEventListener: vi.fn(),
+    };
+    const spy = vi.spyOn(window, "matchMedia").mockReturnValue(query);
+    const app = render(
+      <ThemeProvider theme="system">
+        <ThemeToggle />
+      </ThemeProvider>,
+    );
+    expect(document.documentElement.dataset.theme).toBe("light");
+    act(() => {
+      query.matches = true;
+      onChange?.();
+    });
+    expect(document.documentElement.dataset.theme).toBe("dark");
+    app.unmount();
+    expect(query.removeEventListener).toHaveBeenCalledWith("change", onChange);
+    spy.mockRestore();
   });
 });

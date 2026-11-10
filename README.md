@@ -53,6 +53,20 @@ Emby keep working unchanged.
 | Auth | Server-authoritative session cookies (argon2id) + API keys | OIDC + reverse-proxy header trust |
 | Frontend | React 19 + TS + Vite + TanStack Router/Query + shadcn/ui + Tailwind; **Movies, Series, Indexers, Search, Downloads, Settings, Notifications pages** | Calendar, Import Lists (Phases 8–11) |
 
+## Appearance
+
+Admins can customize **Settings > Appearance** with a Light, Dark, AMOLED,
+or System theme, an accent color preset, and an optional background image URL
+with adjustable dimming. Save applies these settings to everyone on the Loom
+instance, including other devices; open browsers refresh them within a minute
+or when the tab regains focus. System follows each device's OS preference.
+Reset to defaults, then save, restores the standard Loom appearance.
+
+Background images load directly in each browser, not through the Loom server.
+Use a trusted HTTP(S) image URL reachable from every device (HTTPS when Loom
+uses HTTPS); leave the URL empty to remove it. Items per page and default view
+remain browser-local preferences.
+
 ## Wire-compatibility (Phase 7)
 
 The following surfaces will be wire-compatible so existing clients keep

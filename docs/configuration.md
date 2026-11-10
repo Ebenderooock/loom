@@ -24,6 +24,36 @@ next restart.
 
 ## Environment variable mapping
 
+### Instance appearance
+
+Admins manage **Settings > Appearance** globally through the UI or
+`PUT /api/v1/appearance`. These settings live in the database, not YAML or
+environment variables, and require no restart or migration.
+
+| API field | Allowed values | Default |
+|---|---|---|
+| `theme` | `system`, `light`, `dark`, `amoled` | `system` |
+| `accent` | `default`, `teal`, `blue`, `rose`, `amber` | `default` |
+| `backgroundUrl` | Empty or absolute HTTP(S) image URL without credentials, up to 2048 bytes | `""` |
+| `backgroundDim` | Integer 0–100 | `70` |
+
+System follows each device's OS preference. Browsers load images directly;
+use a trusted URL accessible from every device, and HTTPS when Loom uses HTTPS.
+Higher dimming hides more of the image; 100 hides it entirely. Saving a blank
+URL removes it. Reset to defaults prepares the defaults above; save to apply.
+Open browsers refresh settings within a minute or when the tab regains focus.
+Items per page and default view remain browser-local.
+
+Example (authenticated administrator session cookie):
+
+```bash
+curl -b cookies.txt -X PUT http://localhost:1925/api/v1/appearance \
+  -H 'Content-Type: application/json' \
+  -d '{"theme":"dark","accent":"blue","backgroundUrl":"","backgroundDim":70}'
+```
+
+### YAML and environment variables
+
 The viper binding maps a YAML path `a.b.c` to env var `LOOM_A_B_C`. A few
 keys also accept legacy un-prefixed names for backwards compatibility with
 pre-Viper deployments; these are noted in the Env column.

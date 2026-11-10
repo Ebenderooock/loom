@@ -51,7 +51,6 @@ import {
   Plug,
   ExternalLink,
   Download,
-  Palette,
   LayoutGrid,
   List,
   GripVertical,
@@ -111,6 +110,7 @@ import {
 } from "@/lib/downloads-api";
 import { useAPIKeys, useCreateAPIKey } from "@/lib/api-keys-api";
 import { DownloadForm } from "@/components/downloads/download-form";
+import { AppearanceSettings } from "@/components/appearance-settings";
 
 // ─── Types ──────────────────────────────────────────────────────────────
 
@@ -2368,7 +2368,6 @@ export function DownloadSafetyPanel() {
 // ─── UI Panel ───────────────────────────────────────────────────────────
 
 export function UIPanel() {
-  const [theme, setTheme] = React.useState("dark");
   const [pageSize, setPageSize] = React.useState(() => {
     return localStorage.getItem("loom-page-size") || "25";
   });
@@ -2391,54 +2390,26 @@ export function UIPanel() {
   return (
     <div className="space-y-6">
       <div>
-        <h3 className="mb-1 text-sm font-medium text-zinc-100">
-          User Interface
-        </h3>
-        <p className="text-xs text-zinc-500">
-          Customize how Loom looks and feels. These settings are stored locally
-          in your browser.
+        <h3 className="mb-1 text-sm font-medium">User Interface</h3>
+        <p className="text-xs text-muted-foreground">
+          Customize Loom's appearance for everyone, with browsing preferences
+          stored on this device.
         </p>
       </div>
 
-      {/* Theme */}
-      <Card className="border-zinc-800 bg-zinc-900/50">
-        <CardContent className="space-y-4 p-6">
-          <div className="flex items-center gap-3">
-            <Palette className="h-4 w-4 text-teal-400" />
-            <div>
-              <Label className="text-sm text-zinc-200">Theme</Label>
-              <p className="mt-0.5 text-xs text-zinc-500">
-                Choose the appearance of the interface
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <Select value={theme} onValueChange={setTheme}>
-              <SelectTrigger className="w-40 border-zinc-700 bg-zinc-900">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="dark">Dark</SelectItem>
-                <SelectItem value="light">Light</SelectItem>
-                <SelectItem value="amoled">AMOLED</SelectItem>
-                <SelectItem value="system">System</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </CardContent>
-      </Card>
+      <AppearanceSettings />
 
       {/* Page Size */}
-      <Card className="border-zinc-800 bg-zinc-900/50">
+      <Card>
         <CardContent className="space-y-4 p-6">
           <div>
-            <Label className="text-sm text-zinc-200">Items Per Page</Label>
-            <p className="mt-0.5 text-xs text-zinc-500">
+            <Label className="text-sm">Items Per Page</Label>
+            <p className="mt-0.5 text-xs text-muted-foreground">
               Number of items to show in paginated lists
             </p>
           </div>
           <Select value={pageSize} onValueChange={handlePageSizeChange}>
-            <SelectTrigger className="w-40 border-zinc-700 bg-zinc-900">
+            <SelectTrigger className="w-40">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -2452,11 +2423,11 @@ export function UIPanel() {
       </Card>
 
       {/* Default View */}
-      <Card className="border-zinc-800 bg-zinc-900/50">
+      <Card>
         <CardContent className="space-y-4 p-6">
           <div>
-            <Label className="text-sm text-zinc-200">Default View Mode</Label>
-            <p className="mt-0.5 text-xs text-zinc-500">
+            <Label className="text-sm">Default View Mode</Label>
+            <p className="mt-0.5 text-xs text-muted-foreground">
               Default layout for the movies page
             </p>
           </div>
@@ -2466,10 +2437,9 @@ export function UIPanel() {
               size="sm"
               onClick={() => handleDefaultViewChange("grid")}
               className={cn(
-                "border-zinc-700",
                 defaultView === "grid"
-                  ? "border-teal-700 bg-teal-600/20 text-teal-300"
-                  : "text-zinc-400",
+                  ? "border-accent bg-accent/20 text-foreground"
+                  : "text-muted-foreground",
               )}
             >
               <LayoutGrid className="mr-1.5 h-4 w-4" /> Grid
@@ -2479,10 +2449,9 @@ export function UIPanel() {
               size="sm"
               onClick={() => handleDefaultViewChange("list")}
               className={cn(
-                "border-zinc-700",
                 defaultView === "list"
-                  ? "border-teal-700 bg-teal-600/20 text-teal-300"
-                  : "text-zinc-400",
+                  ? "border-accent bg-accent/20 text-foreground"
+                  : "text-muted-foreground",
               )}
             >
               <List className="mr-1.5 h-4 w-4" /> List

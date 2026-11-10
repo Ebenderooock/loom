@@ -8,6 +8,7 @@
  * fast instead of hanging on loading spinners.
  */
 import { Page, Route } from "@playwright/test";
+import { DEFAULT_APPEARANCE } from "../../src/lib/appearance-api";
 
 // ---------------------------------------------------------------------------
 // Fixture data
@@ -249,6 +250,7 @@ export async function mockBaseApp(
   await mockUnhandledApis(page);
 
   const state = await mockAuth(page, opts);
+  await mockGet(page, "appearance", DEFAULT_APPEARANCE);
 
   // System status
   await mockGet(page, "system/status", SYSTEM_STATUS);

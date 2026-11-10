@@ -236,7 +236,7 @@ function AppLayoutInner({ children }: { children?: React.ReactNode }) {
   });
 
   return (
-    <div className="flex min-h-screen w-full bg-background text-foreground">
+    <div className="app-shell flex min-h-screen w-full bg-background text-foreground">
       <aside
         aria-label="Sidebar"
         className={cn(
