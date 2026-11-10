@@ -17,6 +17,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Global appearance controls in Settings: Light, Dark, AMOLED or System theme,
+  accent presets, and a background image URL with preview and dimming. Admin
+  changes persist across devices; the header theme toggle shares these settings.
+
 - Music support in Downloads / Imports: audio scanning, automatic tagged-track
   matching, and manual album/track selection, including standalone albums and
   compilations. Imports transfer files into the assigned media library and

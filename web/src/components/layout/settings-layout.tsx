@@ -75,7 +75,7 @@ export const SETTINGS_GROUPS: SettingsNavGroup[] = [
         label: "Appearance",
         Icon: Palette,
         kind: "panel",
-        description: "Theme, language, and interface preferences.",
+        description: "Global theme, accent color, and background image.",
       },
       {
         to: "/settings/features",

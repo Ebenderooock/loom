@@ -35,6 +35,7 @@ import (
 	"github.com/ebenderooock/loom/internal/anime"
 	"github.com/ebenderooock/loom/internal/apikeys"
 	"github.com/ebenderooock/loom/internal/appconfig"
+	"github.com/ebenderooock/loom/internal/appearance"
 	"github.com/ebenderooock/loom/internal/auditlog"
 	"github.com/ebenderooock/loom/internal/auth"
 	"github.com/ebenderooock/loom/internal/autosearch"
@@ -1186,6 +1187,13 @@ func (s *Server) newMux() http.Handler {
 			}
 			r.Mount("/api/v1/features", featureflags.Router(s.featureFlags, adminMW))
 		}
+
+		// Instance-wide appearance (authenticated; mutations admin-only).
+		var appearanceAdminMW func(http.Handler) http.Handler
+		if s.authSvc != nil {
+			appearanceAdminMW = s.authSvc.RequireRole("admin")
+		}
+		r.Mount("/api/v1/appearance", appearance.Router(appearance.NewStore(s.db), s.logger, appearanceAdminMW))
 
 		// Filesystem browsing (authenticated)
 		r.Get("/api/v1/filesystem", handleFilesystemBrowse(s.cfg))

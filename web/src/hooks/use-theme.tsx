@@ -7,6 +7,7 @@ interface ThemeContextValue {
   theme: Theme;
   resolvedTheme: ResolvedTheme;
   setTheme: (t: Theme) => void;
+  canChangeTheme: boolean;
 }
 
 const ThemeContext = React.createContext<ThemeContextValue | null>(null);
@@ -26,7 +27,17 @@ function applyTheme(t: ResolvedTheme) {
   root.style.colorScheme = t === "light" ? "light" : "dark";
 }
 
-export function ThemeProvider({ children }: { children: React.ReactNode }) {
+export function ThemeProvider({
+  children,
+  theme: controlledTheme,
+  onThemeChange,
+  canChangeTheme = true,
+}: {
+  children: React.ReactNode;
+  theme?: Theme;
+  onThemeChange?: (theme: Theme) => void;
+  canChangeTheme?: boolean;
+}) {
   const [theme, setThemeState] = React.useState<Theme>(() => {
     if (typeof window === "undefined") return "system";
     const stored = window.localStorage.getItem(STORAGE_KEY);
@@ -52,20 +63,35 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     return () => mql.removeEventListener("change", handler);
   }, []);
 
-  const resolvedTheme: ResolvedTheme = theme === "system" ? systemTheme : theme;
+  const activeTheme = controlledTheme ?? theme;
+  const resolvedTheme: ResolvedTheme =
+    activeTheme === "system" ? systemTheme : activeTheme;
 
   React.useEffect(() => {
     applyTheme(resolvedTheme);
   }, [resolvedTheme]);
 
-  const setTheme = React.useCallback((t: Theme) => {
-    setThemeState(t);
-    window.localStorage.setItem(STORAGE_KEY, t);
-  }, []);
+  const setTheme = React.useCallback(
+    (t: Theme) => {
+      if (!canChangeTheme) return;
+      if (controlledTheme !== undefined) {
+        onThemeChange?.(t);
+        return;
+      }
+      setThemeState(t);
+      window.localStorage.setItem(STORAGE_KEY, t);
+    },
+    [controlledTheme, onThemeChange, canChangeTheme],
+  );
 
   const value = React.useMemo(
-    () => ({ theme, resolvedTheme, setTheme }),
-    [theme, resolvedTheme, setTheme],
+    () => ({
+      theme: activeTheme,
+      resolvedTheme,
+      setTheme,
+      canChangeTheme,
+    }),
+    [activeTheme, resolvedTheme, setTheme, canChangeTheme],
   );
 
   return (

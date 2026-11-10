@@ -90,6 +90,45 @@ tags:
       manual merges. Reads resolve merged IDs; writes through stale merged IDs
       return 409 and require reloading the canonical collection.
 paths:
+  /api/v1/appearance:
+    get:
+      tags: [system]
+      operationId: getAppearance
+      summary: Read instance-wide appearance settings.
+      security: [{ cookieAuth: [] }, { apiKey: [] }, { bearerAuth: [] }]
+      responses:
+        "200":
+          description: Saved settings or defaults when none have been saved.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Appearance" }
+        "401": { description: Authentication required. }
+        "500": { description: Appearance storage read failed. }
+    put:
+      tags: [system]
+      operationId: putAppearance
+      summary: Replace instance-wide appearance settings (admin).
+      description: |
+        All fields are required. Rejects unknown/null fields and trailing JSON.
+        Body limit is 16 KiB. Images are loaded directly by browsers; the server
+        never fetches the configured URL. No restart is required.
+      security: [{ cookieAuth: [] }, { apiKey: [] }, { bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Appearance" }
+      responses:
+        "200":
+          description: Saved settings.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Appearance" }
+        "400": { description: Invalid appearance settings or JSON body. }
+        "401": { description: Authentication required. }
+        "403": { description: Administrator required. }
+        "413": { description: Body exceeds 16 KiB. }
+        "500": { description: Appearance storage write failed. }
   /api/v1/series/{id}/seasons/{seasonNum}/monitoring:
     put:
       operationId: setSeasonMonitoring
@@ -3784,6 +3823,29 @@ paths:
 
 components:
   schemas:
+    Appearance:
+      type: object
+      additionalProperties: false
+      required: [theme, accent, backgroundUrl, backgroundDim]
+      properties:
+        theme:
+          type: string
+          enum: [system, light, dark, amoled]
+          default: system
+        accent:
+          type: string
+          enum: [default, teal, blue, rose, amber]
+          default: default
+        backgroundUrl:
+          type: string
+          maxLength: 2048
+          default: ""
+          description: Empty or absolute HTTP(S) image URL without credentials, at most 2048 bytes.
+        backgroundDim:
+          type: integer
+          minimum: 0
+          maximum: 100
+          default: 70
     SelectAlbumReleaseRequest:
       type: object
       additionalProperties: false
