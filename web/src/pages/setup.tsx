@@ -141,7 +141,7 @@ export function SetupPage() {
 
             <Button
               onClick={() => goTo("credentials")}
-              className="w-full bg-purple-rich py-2 font-medium text-white hover:bg-purple-midnight"
+              className="w-full py-2 font-medium"
             >
               Get Started
             </Button>
@@ -224,7 +224,7 @@ export function SetupPage() {
               <Button
                 onClick={completeSetup}
                 disabled={isLoading || !username.trim() || !password.trim()}
-                className="flex-1 bg-teal-electric font-medium text-neutral-dark hover:bg-teal-ocean"
+                className="flex-1 bg-accent font-medium text-accent-foreground hover:bg-accent/90"
               >
                 {isLoading ? "Setting up..." : "Create Account"}
               </Button>

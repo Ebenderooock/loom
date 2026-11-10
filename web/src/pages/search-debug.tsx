@@ -77,18 +77,18 @@ const MEDIA_TYPES = [
 function outcomeBadge(outcome: string) {
   const styles: Record<string, string> = {
     grabbed: "bg-green-500/10 text-green-500 border-0",
-    no_results: "bg-gray-500/10 text-gray-400 border-0",
+    no_results: "bg-muted/10 text-muted-foreground border-0",
     all_rejected: "bg-yellow-500/10 text-yellow-500 border-0",
     grab_failed: "bg-red-500/10 text-red-500 border-0",
     already_grabbed: "bg-blue-500/10 text-blue-400 border-0",
     profile_load_failed: "bg-red-500/10 text-red-500 border-0",
     error: "bg-red-500/10 text-red-500 border-0",
-    stale: "bg-gray-500/10 text-gray-400 border-0",
+    stale: "bg-muted/10 text-muted-foreground border-0",
   };
   return (
     <Badge
       variant="outline"
-      className={`px-1.5 text-[10px] capitalize ${styles[outcome] ?? "border-0 bg-gray-500/10 text-gray-400"}`}
+      className={`px-1.5 text-[10px] capitalize ${styles[outcome] ?? "border-0 bg-muted/10 text-muted-foreground"}`}
     >
       {outcome.replace(/_/g, " ")}
     </Badge>
@@ -102,7 +102,7 @@ function statusBadge(status: string) {
       icon: <Loader2 className="h-3 w-3 animate-spin" />,
     },
     evaluating: {
-      class: "bg-purple-500/10 text-purple-400 border-0",
+      class: "bg-primary/10 text-primary-readable border-0",
       icon: <Loader2 className="h-3 w-3 animate-spin" />,
     },
     grabbing: {
@@ -116,11 +116,11 @@ function statusBadge(status: string) {
       class: "bg-red-500/10 text-red-500 border-0",
     },
     cancelled: {
-      class: "bg-gray-500/10 text-gray-400 border-0",
+      class: "bg-muted/10 text-muted-foreground border-0",
     },
   };
   const s = styles[status] ?? {
-    class: "bg-gray-500/10 text-gray-400 border-0",
+    class: "bg-muted/10 text-muted-foreground border-0",
   };
   return (
     <Badge
@@ -416,7 +416,7 @@ function IndexerPanel({ results }: { results: IndexerResult[] }) {
                 ? "border-0 bg-green-500/10 text-green-500"
                 : ix.status === "failed"
                   ? "border-0 bg-red-500/10 text-red-500"
-                  : "border-0 bg-gray-500/10 text-gray-500"
+                  : "border-0 bg-muted/10 text-muted-foreground"
             }`}
           >
             {ix.status}

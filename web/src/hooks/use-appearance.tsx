@@ -2,7 +2,8 @@ import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
-import { ThemeProvider } from "@/hooks/use-theme";
+import { ThemeProvider, useTheme } from "@/hooks/use-theme";
+import { paletteVariables } from "@/lib/palette";
 import {
   ACCENTS,
   DEFAULT_APPEARANCE,
@@ -48,6 +49,27 @@ export function AppearanceProvider({
     if (error) toast.error(error.message);
   }, [error]);
 
+  const changeTheme = (theme: Appearance["theme"]) => {
+    mutate(
+      { ...appearance, theme },
+      { onError: (err) => toast.error(err.message) },
+    );
+  };
+
+  return (
+    <ThemeProvider
+      theme={appearance.theme}
+      onThemeChange={changeTheme}
+      canChangeTheme={user?.role === "admin" && !!data && !isPending}
+    >
+      <AppearanceStyles appearance={appearance} />
+      {children}
+    </ThemeProvider>
+  );
+}
+
+function AppearanceStyles({ appearance }: { appearance: Appearance }) {
+  const { resolvedTheme } = useTheme();
   React.useEffect(() => {
     const root = document.documentElement;
     const accent =
@@ -70,29 +92,19 @@ export function AppearanceProvider({
       "--loom-background-dim",
       `${appearance.backgroundDim}%`,
     );
+    const variables = appearance.palette
+      ? paletteVariables(appearance.palette, resolvedTheme)
+      : {};
+    for (const [key, value] of Object.entries(variables))
+      root.style.setProperty(key, value);
     return () => {
+      for (const key of Object.keys(variables)) root.style.removeProperty(key);
       delete root.dataset.accent;
       root.style.removeProperty("--personal-accent");
       root.style.removeProperty("--personal-accent-dark");
       root.style.removeProperty("--loom-background-image");
       root.style.removeProperty("--loom-background-dim");
     };
-  }, [appearance]);
-
-  const changeTheme = (theme: Appearance["theme"]) => {
-    mutate(
-      { ...appearance, theme },
-      { onError: (err) => toast.error(err.message) },
-    );
-  };
-
-  return (
-    <ThemeProvider
-      theme={appearance.theme}
-      onThemeChange={changeTheme}
-      canChangeTheme={user?.role === "admin" && !!data && !isPending}
-    >
-      {children}
-    </ThemeProvider>
-  );
+  }, [appearance, resolvedTheme]);
+  return null;
 }

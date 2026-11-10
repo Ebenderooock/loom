@@ -109,9 +109,14 @@ paths:
       operationId: putAppearance
       summary: Replace instance-wide appearance settings (admin).
       description: |
-        All fields are required. Rejects unknown/null fields and trailing JSON.
-        Body limit is 16 KiB. Images are loaded directly by browsers; the server
-        never fetches the configured URL. No restart is required.
+        theme, accent, backgroundUrl and backgroundDim are required. palette is
+        optional; omitted or null clears the custom palette (legacy clients keep
+        working). Rejects unknown/null required fields and trailing JSON. Body
+        limit is 16 KiB. External images are loaded directly by browsers; the
+        server never fetches the configured URL. When backgroundUrl references
+        an uploaded image, Save atomically promotes that pending upload to the
+        saved image; saving any other backgroundUrl retires the saved upload.
+        No restart is required.
       security: [{ cookieAuth: [] }, { apiKey: [] }, { bearerAuth: [] }]
       requestBody:
         required: true
@@ -124,11 +129,84 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Appearance" }
-        "400": { description: Invalid appearance settings or JSON body. }
+        "400": { description: Invalid appearance settings or JSON body, or backgroundUrl references an uploaded image that is no longer available. }
         "401": { description: Authentication required. }
         "403": { description: Administrator required. }
         "413": { description: Body exceeds 16 KiB. }
         "500": { description: Appearance storage write failed. }
+  /api/v1/appearance/background:
+    get:
+      tags: [system]
+      operationId: getAppearanceBackground
+      summary: Serve an uploaded background image.
+      description: |
+        With `v`, serves the saved or pending upload whose SHA-256 matches and
+        allows private immutable caching. Without `v`, serves the saved image
+        with `Cache-Control: private, no-cache` and an ETag. Responses include
+        `X-Content-Type-Options: nosniff`.
+      security: [{ cookieAuth: [] }, { apiKey: [] }, { bearerAuth: [] }]
+      parameters:
+        - name: v
+          in: query
+          required: false
+          schema: { type: string, pattern: "^[0-9a-f]{64}$" }
+        - name: If-None-Match
+          in: header
+          required: false
+          schema: { type: string }
+      responses:
+        "200":
+          description: Image bytes.
+          content:
+            image/png: { schema: { type: string, format: binary } }
+            image/jpeg: { schema: { type: string, format: binary } }
+            image/webp: { schema: { type: string, format: binary } }
+        "304": { description: ETag matched. }
+        "400": { description: v is not a lowercase hex SHA-256 digest. }
+        "401": { description: Authentication required. }
+        "404": { description: No matching uploaded image. }
+        "500": { description: Image storage read failed. }
+    post:
+      tags: [system]
+      operationId: uploadAppearanceBackground
+      summary: Upload a pending background image (admin).
+      description: |
+        Stores the image in the database as the single pending upload,
+        replacing any previous pending upload. Saved settings and the saved
+        image are unchanged until PUT /api/v1/appearance references the
+        returned URL. At most two images are stored (saved and pending).
+        The type is detected from content (client filenames/types are ignored)
+        and the image is fully decoded. Limits: 5 MiB, 8192 px per side,
+        33,177,600 px total. SVG, GIF and other formats are rejected.
+      security: [{ cookieAuth: [] }, { apiKey: [] }, { bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [image]
+              properties:
+                image: { type: string, format: binary }
+      responses:
+        "200":
+          description: Pending upload stored.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [url]
+                properties:
+                  url:
+                    type: string
+                    pattern: "^/api/v1/appearance/background\\?v=[0-9a-f]{64}$"
+        "400": { description: Not multipart, missing/duplicate/extra fields, empty, corrupt, or dimensions too large. }
+        "401": { description: Authentication required. }
+        "403": { description: Administrator required. }
+        "413": { description: Image exceeds 5 MiB. }
+        "415": { description: Image is not PNG, JPEG, or WebP. }
+        "500": { description: Image storage write failed. }
   /api/v1/series/{id}/seasons/{seasonNum}/monitoring:
     put:
       operationId: setSeasonMonitoring
@@ -3840,12 +3918,30 @@ components:
           type: string
           maxLength: 2048
           default: ""
-          description: Empty or absolute HTTP(S) image URL without credentials, at most 2048 bytes.
+          description: |
+            Empty, an absolute HTTP(S) image URL without credentials, or exactly
+            /api/v1/appearance/background with an optional ?v=<lowercase sha256>
+            query (an uploaded image). Other relative URLs are rejected. At most
+            2048 bytes.
         backgroundDim:
           type: integer
           minimum: 0
           maximum: 100
           default: 70
+        palette:
+          description: Optional custom palette overriding the accent preset. Omitted from responses when not configured.
+          oneOf:
+            - $ref: "#/components/schemas/AppearancePalette"
+            - type: "null"
+    AppearancePalette:
+      type: object
+      additionalProperties: false
+      required: [primary, secondary, accent, background]
+      properties:
+        primary: { type: string, pattern: "^#[0-9A-Fa-f]{6}$" }
+        secondary: { type: string, pattern: "^#[0-9A-Fa-f]{6}$" }
+        accent: { type: string, pattern: "^#[0-9A-Fa-f]{6}$" }
+        background: { type: string, pattern: "^#[0-9A-Fa-f]{6}$" }
     SelectAlbumReleaseRequest:
       type: object
       additionalProperties: false

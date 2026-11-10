@@ -34,13 +34,17 @@ environment variables, and require no restart or migration.
 |---|---|---|
 | `theme` | `system`, `light`, `dark`, `amoled` | `system` |
 | `accent` | `default`, `teal`, `blue`, `rose`, `amber` | `default` |
-| `backgroundUrl` | Empty or absolute HTTP(S) image URL without credentials, up to 2048 bytes | `""` |
+| `backgroundUrl` | Empty, absolute HTTP(S) image URL without credentials, or an uploaded image (`/api/v1/appearance/background?v=<sha256>`), up to 2048 bytes | `""` |
 | `backgroundDim` | Integer 0–100 | `70` |
+| `palette` | Optional `{primary, secondary, accent, background}`, each `#RRGGBB`; omit or `null` for the accent preset | unset |
 
 System follows each device's OS preference. Browsers load images directly;
 use a trusted URL accessible from every device, and HTTPS when Loom uses HTTPS.
 Higher dimming hides more of the image; 100 hides it entirely. Saving a blank
 URL removes it. Reset to defaults prepares the defaults above; save to apply.
+Uploaded images (PNG, JPEG or WebP, up to 5 MiB) are stored in the database,
+so they survive restarts without extra volumes; Loom keeps at most the saved
+image plus one pending upload. Uploading alone changes nothing until Save.
 Open browsers refresh settings within a minute or when the tab regains focus.
 Items per page and default view remain browser-local.
 
@@ -50,6 +54,14 @@ Example (authenticated administrator session cookie):
 curl -b cookies.txt -X PUT http://localhost:1925/api/v1/appearance \
   -H 'Content-Type: application/json' \
   -d '{"theme":"dark","accent":"blue","backgroundUrl":"","backgroundDim":70}'
+
+# Upload an image, then save settings referencing the returned URL.
+url=$(curl -s -b cookies.txt -F image=@background.jpg \
+  http://localhost:1925/api/v1/appearance/background | jq -r .url)
+curl -b cookies.txt -X PUT http://localhost:1925/api/v1/appearance \
+  -H 'Content-Type: application/json' \
+  -d "{\"theme\":\"dark\",\"accent\":\"default\",\"backgroundUrl\":\"$url\",\"backgroundDim\":60,
+       \"palette\":{\"primary\":\"#6d28d9\",\"secondary\":\"#0f766e\",\"accent\":\"#f59e0b\",\"background\":\"#111827\"}}"
 ```
 
 ### YAML and environment variables

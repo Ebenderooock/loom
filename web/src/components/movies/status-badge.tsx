@@ -22,7 +22,7 @@ export function StatusAccent({ status }: { status: string }) {
 
 export function MonitoringLabel({ status }: { status?: string }) {
   return status === "unmonitored" ? (
-    <span className="text-[10px] uppercase tracking-wider text-gray-500">
+    <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
       Unmonitored
     </span>
   ) : null;
@@ -31,8 +31,8 @@ export function MonitoringLabel({ status }: { status?: string }) {
 export function StatusBadge({ status }: { status: string }) {
   const cfg = STATUS_CONFIG[status] ?? {
     label: status,
-    color: "text-gray-400",
-    bg: "bg-gray-500/20",
+    color: "text-muted-foreground",
+    bg: "bg-muted/20",
   };
   return (
     <span

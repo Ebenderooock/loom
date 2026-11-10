@@ -418,7 +418,7 @@ export function ManualMatchDialog({
                         </span>
                       </span>
                       {selectedTrack?.id === track.id && (
-                        <Check className="h-4 w-4 text-primary" />
+                        <Check className="h-4 w-4 text-primary-readable" />
                       )}
                     </button>
                   ))}
@@ -455,7 +455,7 @@ export function ManualMatchDialog({
                     ) : null}
                   </div>
                   {selectedMovie?.id === m.id && (
-                    <Check className="h-4 w-4 text-primary" />
+                    <Check className="h-4 w-4 text-primary-readable" />
                   )}
                 </button>
               ))}
@@ -569,7 +569,7 @@ export function ManualMatchDialog({
                             <span className="ml-2">{ep.title}</span>
                           </div>
                           {selectedEpisode?.id === ep.id && (
-                            <Check className="h-4 w-4 text-primary" />
+                            <Check className="h-4 w-4 text-primary-readable" />
                           )}
                         </button>
                       ))

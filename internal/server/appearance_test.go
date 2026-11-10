@@ -1,8 +1,13 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"image"
+	"image/png"
+	"io"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -94,4 +99,74 @@ func TestAppearanceAuthenticatedRoutes(t *testing.T) {
 			t.Fatalf("%s GET after admin PUT = %d, %+v; want %+v", role, w.Code, got, want)
 		}
 	}
+
+	// Background upload: authenticated reads, admin-only writes, permission
+	// checked before the body is read.
+	var img bytes.Buffer
+	if err := png.Encode(&img, image.NewRGBA(image.Rect(0, 0, 2, 2))); err != nil {
+		t.Fatal(err)
+	}
+	uploadReq := func(role string, body io.Reader) *httptest.ResponseRecorder {
+		t.Helper()
+		var buf bytes.Buffer
+		mw := multipart.NewWriter(&buf)
+		part, _ := mw.CreateFormFile("image", "bg.png")
+		_, _ = part.Write(img.Bytes())
+		_ = mw.Close()
+		if body == nil {
+			body = &buf
+		}
+		r := httptest.NewRequest(http.MethodPost, "/api/v1/appearance/background", body)
+		r.Header.Set("Content-Type", mw.FormDataContentType())
+		if role != "" {
+			r.AddCookie(&http.Cookie{Name: auth.SessionCookieName, Value: cookies[role]})
+		}
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, r)
+		return w
+	}
+	getBackground := func(role, target string) *httptest.ResponseRecorder {
+		r := httptest.NewRequest(http.MethodGet, target, nil)
+		if role != "" {
+			r.AddCookie(&http.Cookie{Name: auth.SessionCookieName, Value: cookies[role]})
+		}
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, r)
+		return w
+	}
+	if w := uploadReq("", nil); w.Code != http.StatusUnauthorized {
+		t.Fatalf("anonymous upload = %d", w.Code)
+	}
+	if w := getBackground("", "/api/v1/appearance/background"); w.Code != http.StatusUnauthorized {
+		t.Fatalf("anonymous background GET = %d", w.Code)
+	}
+	for _, role := range []string{"user", "viewer"} {
+		body := &readTracker{}
+		if w := uploadReq(role, body); w.Code != http.StatusForbidden || body.read {
+			t.Fatalf("%s upload = %d, body read = %v", role, w.Code, body.read)
+		}
+	}
+	w := uploadReq("admin", nil)
+	var uploaded struct {
+		URL string `json:"url"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &uploaded); err != nil || w.Code != http.StatusOK {
+		t.Fatalf("admin upload = %d, %s", w.Code, w.Body.String())
+	}
+	if _, ok := appearance.InternalBackground(uploaded.URL); !ok || !strings.Contains(uploaded.URL, "?v=") {
+		t.Fatalf("unexpected upload URL %q", uploaded.URL)
+	}
+	for _, role := range []string{"admin", "user", "viewer"} {
+		w := getBackground(role, uploaded.URL)
+		if w.Code != http.StatusOK || !bytes.Equal(w.Body.Bytes(), img.Bytes()) || w.Header().Get("Content-Type") != "image/png" {
+			t.Fatalf("%s background GET = %d %q", role, w.Code, w.Header().Get("Content-Type"))
+		}
+	}
+}
+
+type readTracker struct{ read bool }
+
+func (r *readTracker) Read([]byte) (int, error) {
+	r.read = true
+	return 0, io.EOF
 }

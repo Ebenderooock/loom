@@ -135,9 +135,9 @@ const EPISODE_STATUS_STYLE: Record<
   missing: { bg: "bg-red-600", label: "Missing", text: "text-white" },
   unaired: { bg: "bg-blue-600", label: "Unaired", text: "text-white" },
   unmonitored: {
-    bg: "bg-zinc-600",
+    bg: "bg-muted",
     label: "Unmonitored",
-    text: "text-zinc-300",
+    text: "text-foreground",
   },
 };
 
@@ -384,7 +384,7 @@ function SeasonAccordion({
       : null);
 
   const badgeColor = !stats
-    ? "bg-zinc-600"
+    ? "bg-muted"
     : stats.percent === 100
       ? "bg-green-600"
       : stats.percent > 0
@@ -507,7 +507,7 @@ function SeasonAccordion({
             <div className="space-y-2 py-8 text-center">
               {season.episodeCount === 0 ? (
                 <>
-                  <div className="flex items-center justify-center gap-2 text-indigo-400">
+                  <div className="flex items-center justify-center gap-2 text-secondary-readable">
                     <Tv className="h-5 w-5" />
                     <span className="text-sm font-medium">Coming Soon</span>
                   </div>

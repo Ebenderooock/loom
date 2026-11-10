@@ -31,7 +31,7 @@ export function ErrorFallback({
             home page.
           </p>
         </div>
-        <pre className="max-h-40 overflow-auto rounded-lg border border-border/50 bg-card/50 p-4 text-left text-xs text-muted-foreground backdrop-blur-sm">
+        <pre className="max-h-40 overflow-auto rounded-lg border border-border/50 bg-card p-4 text-left text-xs text-muted-foreground backdrop-blur-sm">
           {message}
         </pre>
         <div className="flex items-center justify-center gap-3">

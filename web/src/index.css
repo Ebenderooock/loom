@@ -112,6 +112,12 @@
   isolation: isolate;
 }
 
+.poster-overlay {
+  --foreground: 0 0% 95%;
+  --muted-foreground: 0 0% 75%;
+  --muted: 0 0% 25%;
+}
+
 .app-shell::before {
   content: "";
   position: fixed;

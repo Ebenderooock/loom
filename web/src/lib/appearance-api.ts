@@ -1,5 +1,6 @@
 import { apiFetch } from "@/lib/fetch";
 import type { Theme } from "@/hooks/use-theme";
+import type { Palette } from "@/lib/palette";
 
 export const ACCENTS = {
   default: { label: "Loom", color: "173 100% 39%", darkColor: "173 100% 39%" },
@@ -14,6 +15,7 @@ export interface Appearance {
   accent: keyof typeof ACCENTS;
   backgroundUrl: string;
   backgroundDim: number;
+  palette?: Palette | null;
 }
 
 export const DEFAULT_APPEARANCE: Appearance = {
@@ -25,6 +27,8 @@ export const DEFAULT_APPEARANCE: Appearance = {
 
 export function backgroundUrlError(value: string): string | undefined {
   if (!value) return;
+  if (/^\/api\/v1\/appearance\/background(?:\?v=[a-f0-9]{64})?$/.test(value))
+    return;
   if (value.length > 2048)
     return "Use an image URL of 2048 characters or fewer.";
   try {
@@ -42,6 +46,48 @@ export function backgroundUrlError(value: string): string | undefined {
   return "Enter a full HTTP or HTTPS image URL without a username or password.";
 }
 
+async function appearanceError(
+  response: Response,
+  fallback: string,
+): Promise<Error> {
+  if (response.headers.get("content-type")?.includes("application/json")) {
+    const body: unknown = await response.json();
+    if (
+      body &&
+      typeof body === "object" &&
+      "error" in body &&
+      typeof body.error === "string"
+    ) {
+      return new Error(body.error);
+    }
+  }
+  return new Error(fallback);
+}
+
+export async function uploadBackground(file: File): Promise<string> {
+  if (file.size > 5 * 1024 * 1024)
+    throw new Error("Choose an image smaller than 5 MiB.");
+  if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) {
+    throw new Error("Choose a PNG, JPEG, or WebP image.");
+  }
+  const form = new FormData();
+  form.append("image", file);
+  const response = await apiFetch("/api/v1/appearance/background", {
+    method: "POST",
+    body: form,
+  });
+  if (!response.ok) {
+    throw await appearanceError(
+      response,
+      response.status === 413
+        ? "Choose an image smaller than 5 MiB."
+        : "Image upload failed. Check the image format and try again.",
+    );
+  }
+  const body: { url: string } = await response.json();
+  return body.url;
+}
+
 export async function fetchAppearance(): Promise<Appearance> {
   const res = await apiFetch("/api/v1/appearance");
   if (!res.ok) throw new Error("Failed to load appearance settings.");
@@ -55,7 +101,8 @@ export async function saveAppearance(value: Appearance): Promise<Appearance> {
     body: JSON.stringify(value),
   });
   if (!res.ok) {
-    throw new Error(
+    throw await appearanceError(
+      res,
       res.status === 403
         ? "Only admins can change the appearance for this Loom instance."
         : "Failed to save appearance settings. Try again.",

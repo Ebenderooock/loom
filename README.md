@@ -56,16 +56,26 @@ Emby keep working unchanged.
 ## Appearance
 
 Admins can customize **Settings > Appearance** with a Light, Dark, AMOLED,
-or System theme, an accent color preset, and an optional background image URL
-with adjustable dimming. Save applies these settings to everyone on the Loom
+or System theme and a coordinated app palette. Start from Loom, Ocean, Ember,
+or Forest, then use color pickers or hex values for primary, secondary, accent,
+and surface tint. The palette drives buttons, navigation, pages, sidebars,
+cards, dialogs, and focus rings; text contrast adjusts automatically. Surface
+brightness follows the theme, while the tint controls its hue.
+Individual color controls are tucked under **Customize individual colors**.
+Preview your choices, then save them for everyone or discard unsaved changes.
+
+Backgrounds can use an image URL or an uploaded PNG, JPEG, or WebP (up to 5 MiB),
+with a preview and adjustable dimming. Uploaded images persist in Loom and do
+not require external hosting. Save applies these settings to everyone on the Loom
 instance, including other devices; open browsers refresh them within a minute
 or when the tab regains focus. System follows each device's OS preference.
 Reset to defaults, then save, restores the standard Loom appearance.
 
-Background images load directly in each browser, not through the Loom server.
+External background URLs load directly in each browser, not through the Loom server.
 Use a trusted HTTP(S) image URL reachable from every device (HTTPS when Loom
 uses HTTPS); leave the URL empty to remove it. Items per page and default view
 remain browser-local preferences.
+These browsing preferences save automatically, separately from global appearance.
 
 ## Wire-compatibility (Phase 7)
 

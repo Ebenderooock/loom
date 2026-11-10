@@ -184,20 +184,22 @@ function QueueStats({ items }: { items: QueueItem[] }) {
   );
 
   return (
-    <div className="flex flex-wrap items-center gap-4 text-xs text-zinc-400">
+    <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
       {downloading.length > 0 && (
         <span className="flex items-center gap-1.5">
           <ArrowDown className="h-3.5 w-3.5 text-blue-400" />
-          <span className="font-medium text-zinc-200">
+          <span className="font-medium text-foreground">
             {formatSpeed(totalDown)}
           </span>
-          <span className="text-zinc-600">({downloading.length} active)</span>
+          <span className="text-muted-foreground">
+            ({downloading.length} active)
+          </span>
         </span>
       )}
       {totalUp > 0 && (
         <span className="flex items-center gap-1.5">
           <ArrowUp className="h-3.5 w-3.5 text-green-400" />
-          <span className="font-medium text-zinc-200">
+          <span className="font-medium text-foreground">
             {formatSpeed(totalUp)}
           </span>
         </span>
@@ -209,7 +211,7 @@ function QueueStats({ items }: { items: QueueItem[] }) {
         <span className="text-yellow-400">{queued.length} queued</span>
       )}
       {paused.length > 0 && (
-        <span className="text-zinc-500">{paused.length} paused</span>
+        <span className="text-muted-foreground">{paused.length} paused</span>
       )}
       {items.length === 0 && <span>No active downloads</span>}
     </div>
@@ -250,7 +252,7 @@ function QueueItemRow({
 
   return (
     <div
-      className="group flex cursor-pointer items-center gap-4 border-b border-zinc-800/50 px-4 py-3 transition-colors last:border-0 hover:bg-zinc-800/30"
+      className="group flex cursor-pointer items-center gap-4 border-b border-border/50 px-4 py-3 transition-colors last:border-0 hover:bg-muted/30"
       role="button"
       tabIndex={0}
       onClick={() => onSelect(item)}
@@ -264,20 +266,20 @@ function QueueItemRow({
       {/* Title + message */}
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
-          <span className="truncate text-sm font-medium text-zinc-200">
+          <span className="truncate text-sm font-medium text-foreground">
             {item.title}
           </span>
           {item.category && (
             <Badge
               variant="outline"
-              className="shrink-0 border-zinc-700 text-[10px] text-zinc-500"
+              className="shrink-0 border-border text-[10px] text-muted-foreground"
             >
               {item.category}
             </Badge>
           )}
         </div>
         {item.message && (
-          <p className="mt-0.5 truncate text-xs text-zinc-500">
+          <p className="mt-0.5 truncate text-xs text-muted-foreground">
             {item.message}
           </p>
         )}
@@ -285,8 +287,8 @@ function QueueItemRow({
         {/* Progress bar (only for downloading/queued/paused) */}
         {item.status !== "seeding" && !isCompleted && (
           <div className="mt-1.5 flex items-center gap-2">
-            <Progress value={pct} className="h-1.5 flex-1 bg-zinc-800" />
-            <span className="w-10 text-right text-[11px] tabular-nums text-zinc-500">
+            <Progress value={pct} className="h-1.5 flex-1 bg-muted" />
+            <span className="w-10 text-right text-[11px] tabular-nums text-muted-foreground">
               {pct.toFixed(0)}%
             </span>
           </div>
@@ -302,7 +304,7 @@ function QueueItemRow({
       </Badge>
 
       {/* Size */}
-      <div className="hidden w-28 text-right text-xs tabular-nums text-zinc-500 sm:block">
+      <div className="hidden w-28 text-right text-xs tabular-nums text-muted-foreground sm:block">
         {item.downloaded_bytes > 0 && item.size_bytes > 0
           ? `${formatBytes(item.downloaded_bytes)} / ${formatBytes(item.size_bytes)}`
           : item.size_bytes > 0
@@ -313,30 +315,30 @@ function QueueItemRow({
       {/* Speeds */}
       <div className="hidden w-24 flex-col items-end gap-0.5 md:flex">
         {item.download_rate > 0 && (
-          <span className="flex items-center gap-1 text-xs text-zinc-400">
+          <span className="flex items-center gap-1 text-xs text-muted-foreground">
             <ArrowDown className="h-3 w-3 text-blue-400" />
             {formatSpeed(item.download_rate)}
           </span>
         )}
         {item.upload_rate > 0 && (
-          <span className="flex items-center gap-1 text-xs text-zinc-400">
+          <span className="flex items-center gap-1 text-xs text-muted-foreground">
             <ArrowUp className="h-3 w-3 text-green-400" />
             {formatSpeed(item.upload_rate)}
           </span>
         )}
         {item.download_rate <= 0 && item.upload_rate <= 0 && (
-          <span className="text-xs text-zinc-600">—</span>
+          <span className="text-xs text-muted-foreground">—</span>
         )}
       </div>
 
       {/* ETA */}
-      <div className="hidden w-16 text-right text-xs tabular-nums text-zinc-500 lg:block">
+      <div className="hidden w-16 text-right text-xs tabular-nums text-muted-foreground lg:block">
         {isActive ? formatEta(item.eta_seconds) : "—"}
       </div>
 
       {/* Ratio (for seeding) */}
       {item.status === "seeding" && item.ratio > 0 && (
-        <div className="hidden w-14 text-right text-xs tabular-nums text-zinc-500 lg:block">
+        <div className="hidden w-14 text-right text-xs tabular-nums text-muted-foreground lg:block">
           {item.ratio.toFixed(2)}
         </div>
       )}
@@ -352,7 +354,7 @@ function QueueItemRow({
           <Button
             variant="ghost"
             size="icon"
-            className="h-7 w-7 text-zinc-400 hover:text-zinc-200"
+            className="h-7 w-7 text-muted-foreground hover:text-foreground"
             disabled={busy}
             title={isPaused ? "Resume" : "Pause"}
             onClick={() =>
@@ -376,7 +378,7 @@ function QueueItemRow({
           <Button
             variant="ghost"
             size="icon"
-            className="h-7 w-7 text-zinc-400 hover:text-emerald-400"
+            className="h-7 w-7 text-muted-foreground hover:text-emerald-400"
             disabled={busy}
             title="Force Import"
             onClick={() =>
@@ -391,7 +393,7 @@ function QueueItemRow({
         <Button
           variant="ghost"
           size="icon"
-          className="h-7 w-7 text-zinc-400 hover:text-red-400"
+          className="h-7 w-7 text-muted-foreground hover:text-red-400"
           disabled={busy}
           title="Stop &amp; remove (delete files)"
           onClick={() =>
@@ -452,7 +454,7 @@ function TorrentDetailPanel({ item }: { item: QueueItem }) {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-12 text-sm text-zinc-500">
+      <div className="flex items-center justify-center py-12 text-sm text-muted-foreground">
         Loading…
       </div>
     );
@@ -508,9 +510,9 @@ function DetailRow({
   value: React.ReactNode;
 }) {
   return (
-    <div className="flex justify-between border-b border-zinc-800/50 py-1.5 last:border-0">
-      <span className="text-xs text-zinc-500">{label}</span>
-      <span className="max-w-[60%] truncate text-right text-xs text-zinc-200">
+    <div className="flex justify-between border-b border-border/50 py-1.5 last:border-0">
+      <span className="text-xs text-muted-foreground">{label}</span>
+      <span className="max-w-[60%] truncate text-right text-xs text-foreground">
         {value}
       </span>
     </div>
@@ -536,11 +538,11 @@ function OverviewTab({
         >
           {sc.label}
         </Badge>
-        <span className="text-xs tabular-nums text-zinc-500">
+        <span className="text-xs tabular-nums text-muted-foreground">
           {pct.toFixed(1)}%
         </span>
       </div>
-      <Progress value={pct} className="h-2 bg-zinc-800" />
+      <Progress value={pct} className="h-2 bg-muted" />
 
       <div className="space-y-0">
         <DetailRow
@@ -617,7 +619,7 @@ function OverviewTab({
 function PeersTab({ detail }: { detail: TorrentDetail }) {
   if (!detail.peers || detail.peers.length === 0) {
     return (
-      <p className="py-4 text-center text-xs text-zinc-500">
+      <p className="py-4 text-center text-xs text-muted-foreground">
         No connected peers
       </p>
     );
@@ -626,16 +628,20 @@ function PeersTab({ detail }: { detail: TorrentDetail }) {
     <div className="mt-2 overflow-x-auto">
       <Table>
         <TableHeader>
-          <TableRow className="border-zinc-800">
-            <TableHead className="text-[10px] text-zinc-500">IP</TableHead>
-            <TableHead className="text-[10px] text-zinc-500">Client</TableHead>
-            <TableHead className="text-right text-[10px] text-zinc-500">
+          <TableRow className="border-border">
+            <TableHead className="text-[10px] text-muted-foreground">
+              IP
+            </TableHead>
+            <TableHead className="text-[10px] text-muted-foreground">
+              Client
+            </TableHead>
+            <TableHead className="text-right text-[10px] text-muted-foreground">
               Progress
             </TableHead>
-            <TableHead className="text-right text-[10px] text-zinc-500">
+            <TableHead className="text-right text-[10px] text-muted-foreground">
               DL
             </TableHead>
-            <TableHead className="text-right text-[10px] text-zinc-500">
+            <TableHead className="text-right text-[10px] text-muted-foreground">
               UL
             </TableHead>
           </TableRow>
@@ -644,21 +650,21 @@ function PeersTab({ detail }: { detail: TorrentDetail }) {
           {detail.peers.map((peer, i) => (
             <TableRow
               key={`${peer.ip}-${peer.port}-${i}`}
-              className="border-zinc-800/50"
+              className="border-border/50"
             >
-              <TableCell className="py-1.5 font-mono text-[11px] text-zinc-300">
+              <TableCell className="py-1.5 font-mono text-[11px] text-foreground">
                 {peer.ip}
               </TableCell>
-              <TableCell className="max-w-[120px] truncate py-1.5 text-[11px] text-zinc-400">
+              <TableCell className="max-w-[120px] truncate py-1.5 text-[11px] text-muted-foreground">
                 {peer.client || "—"}
               </TableCell>
-              <TableCell className="py-1.5 text-right text-[11px] tabular-nums text-zinc-400">
+              <TableCell className="py-1.5 text-right text-[11px] tabular-nums text-muted-foreground">
                 {(peer.progress * 100).toFixed(0)}%
               </TableCell>
-              <TableCell className="py-1.5 text-right text-[11px] tabular-nums text-zinc-400">
+              <TableCell className="py-1.5 text-right text-[11px] tabular-nums text-muted-foreground">
                 {peer.down_rate > 0 ? formatBytes(peer.down_rate) : "—"}
               </TableCell>
-              <TableCell className="py-1.5 text-right text-[11px] tabular-nums text-zinc-400">
+              <TableCell className="py-1.5 text-right text-[11px] tabular-nums text-muted-foreground">
                 {peer.up_rate > 0 ? formatBytes(peer.up_rate) : "—"}
               </TableCell>
             </TableRow>
@@ -672,7 +678,7 @@ function PeersTab({ detail }: { detail: TorrentDetail }) {
 function FilesTab({ detail }: { detail: TorrentDetail }) {
   if (!detail.files || detail.files.length === 0) {
     return (
-      <p className="py-4 text-center text-xs text-zinc-500">
+      <p className="py-4 text-center text-xs text-muted-foreground">
         No file info available
       </p>
     );
@@ -683,21 +689,21 @@ function FilesTab({ detail }: { detail: TorrentDetail }) {
         const pct = Math.min(100, (file.progress ?? 0) * 100);
         const name = file.path.split("/").pop() || file.path;
         return (
-          <div key={i} className="space-y-1 rounded bg-zinc-800/40 p-2">
+          <div key={i} className="space-y-1 rounded bg-muted/40 p-2">
             <div className="flex items-center justify-between">
               <span
-                className="mr-2 flex-1 truncate text-[11px] text-zinc-300"
+                className="mr-2 flex-1 truncate text-[11px] text-foreground"
                 title={file.path}
               >
                 {name}
               </span>
-              <span className="shrink-0 text-[10px] tabular-nums text-zinc-500">
+              <span className="shrink-0 text-[10px] tabular-nums text-muted-foreground">
                 {formatBytes(file.size)}
               </span>
             </div>
             <div className="flex items-center gap-2">
-              <Progress value={pct} className="h-1 flex-1 bg-zinc-800" />
-              <span className="w-9 text-right text-[10px] tabular-nums text-zinc-500">
+              <Progress value={pct} className="h-1 flex-1 bg-muted" />
+              <span className="w-9 text-right text-[10px] tabular-nums text-muted-foreground">
                 {pct.toFixed(0)}%
               </span>
             </div>
@@ -711,33 +717,34 @@ function FilesTab({ detail }: { detail: TorrentDetail }) {
 function TrackersTab({ detail }: { detail: TorrentDetail }) {
   if (!detail.trackers || detail.trackers.length === 0) {
     return (
-      <p className="py-4 text-center text-xs text-zinc-500">No trackers</p>
+      <p className="py-4 text-center text-xs text-muted-foreground">
+        No trackers
+      </p>
     );
   }
   return (
     <div className="mt-2 overflow-x-auto">
       <Table>
         <TableHeader>
-          <TableRow className="border-zinc-800">
-            <TableHead className="text-[10px] text-zinc-500">URL</TableHead>
-            <TableHead className="text-right text-[10px] text-zinc-500">
+          <TableRow className="border-border">
+            <TableHead className="text-[10px] text-muted-foreground">
+              URL
+            </TableHead>
+            <TableHead className="text-right text-[10px] text-muted-foreground">
               Tier
             </TableHead>
-            <TableHead className="text-right text-[10px] text-zinc-500">
+            <TableHead className="text-right text-[10px] text-muted-foreground">
               Status
             </TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {detail.trackers.map((tracker, i) => (
-            <TableRow
-              key={`${tracker.url}-${i}`}
-              className="border-zinc-800/50"
-            >
-              <TableCell className="max-w-[280px] truncate py-1.5 font-mono text-[11px] text-zinc-300">
+            <TableRow key={`${tracker.url}-${i}`} className="border-border/50">
+              <TableCell className="max-w-[280px] truncate py-1.5 font-mono text-[11px] text-foreground">
                 {tracker.url}
               </TableCell>
-              <TableCell className="py-1.5 text-right text-[11px] tabular-nums text-zinc-400">
+              <TableCell className="py-1.5 text-right text-[11px] tabular-nums text-muted-foreground">
                 {tracker.tier}
               </TableCell>
               <TableCell className="py-1.5 text-right text-[11px]">
@@ -748,7 +755,7 @@ function TrackersTab({ detail }: { detail: TorrentDetail }) {
                       ? "border-green-800 text-green-400"
                       : tracker.status === "error"
                         ? "border-red-800 text-red-400"
-                        : "border-zinc-700 text-zinc-500"
+                        : "border-border text-muted-foreground"
                   }`}
                 >
                   {tracker.status}
@@ -827,7 +834,7 @@ function ActiveDownloads() {
 
   if (loading) {
     return (
-      <Card className="border-zinc-800 bg-zinc-900/50">
+      <Card className="border-border bg-card">
         <CardContent>
           <LoadingState label="Connecting to download clients…" />
         </CardContent>
@@ -884,7 +891,7 @@ function ActiveDownloads() {
             size="sm"
             onClick={() => fetchActivity(true)}
             disabled={refreshing}
-            className="h-8 text-zinc-400 hover:text-zinc-200"
+            className="h-8 text-muted-foreground hover:text-foreground"
           >
             {refreshing ? (
               <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
@@ -922,7 +929,7 @@ function ActiveDownloads() {
       )}
 
       {items.length === 0 ? (
-        <Card className="border-dashed border-zinc-800 bg-zinc-900/50">
+        <Card className="border-dashed border-border bg-card">
           <CardContent>
             <EmptyState
               icon={<Download className="h-10 w-10" />}
@@ -940,8 +947,8 @@ function ActiveDownloads() {
           </CardContent>
         </Card>
       ) : (
-        <Card className="overflow-hidden border-zinc-800 bg-zinc-900/50">
-          <div className="divide-y divide-zinc-800/50">
+        <Card className="overflow-hidden border-border bg-card">
+          <div className="divide-y divide-border/50">
             {sorted.map((item) => (
               <QueueItemRow
                 key={JSON.stringify([item.client_id, item.id])}
@@ -987,10 +994,10 @@ function bytesToMbInput(bytes: number): string {
 function StatPill({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="flex flex-col">
-      <span className="text-[10px] uppercase tracking-wide text-zinc-500">
+      <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
         {label}
       </span>
-      <span className="text-sm font-medium tabular-nums text-zinc-100">
+      <span className="text-sm font-medium tabular-nums text-foreground">
         {value}
       </span>
     </div>
@@ -1052,17 +1059,17 @@ function TorrentEnginePanel() {
   };
 
   return (
-    <Card className="border-zinc-800 bg-zinc-900/50">
+    <Card className="border-border bg-card">
       <CardContent className="space-y-4 pt-5">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Gauge className="h-4 w-4 text-zinc-400" />
-            <span className="text-sm font-medium text-zinc-100">
+            <Gauge className="h-4 w-4 text-muted-foreground" />
+            <span className="text-sm font-medium text-foreground">
               Rain Torrent Engine
             </span>
             <Badge
               variant="outline"
-              className="border-zinc-700 text-[10px] text-zinc-400"
+              className="border-border text-[10px] text-muted-foreground"
             >
               Rain
             </Badge>
@@ -1133,28 +1140,36 @@ function TorrentEnginePanel() {
           />
         </div>
 
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-zinc-500">
-          <span className={summary?.dht ? "text-zinc-300" : "text-zinc-600"}>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+          <span
+            className={
+              summary?.dht ? "text-foreground" : "text-muted-foreground"
+            }
+          >
             DHT
           </span>
-          <span className={summary?.pex ? "text-zinc-300" : "text-zinc-600"}>
+          <span
+            className={
+              summary?.pex ? "text-foreground" : "text-muted-foreground"
+            }
+          >
             PEX
           </span>
           {summary?.save_path && (
             <span className="truncate">
               Save path{" "}
-              <span className="font-mono text-zinc-300">
+              <span className="font-mono text-foreground">
                 {summary.save_path}
               </span>
             </span>
           )}
         </div>
 
-        <div className="flex flex-wrap items-end gap-4 border-t border-zinc-800 pt-4">
+        <div className="flex flex-wrap items-end gap-4 border-t border-border pt-4">
           <div className="space-y-1">
             <Label
               htmlFor="torrent-down-limit"
-              className="text-[11px] text-zinc-400"
+              className="text-[11px] text-muted-foreground"
             >
               Download limit (MB/s, 0 = unlimited)
             </Label>
@@ -1174,7 +1189,7 @@ function TorrentEnginePanel() {
           <div className="space-y-1">
             <Label
               htmlFor="torrent-up-limit"
-              className="text-[11px] text-zinc-400"
+              className="text-[11px] text-muted-foreground"
             >
               Upload limit (MB/s, 0 = unlimited)
             </Label>
@@ -1233,10 +1248,10 @@ function OrphanRow({
   return (
     <div className="flex items-center justify-between gap-4 px-4 py-3">
       <div className="min-w-0">
-        <div className="truncate font-mono text-xs text-zinc-200">
+        <div className="truncate font-mono text-xs text-foreground">
           {orphan.path}
         </div>
-        <div className="mt-0.5 flex items-center gap-3 text-[11px] text-zinc-500">
+        <div className="mt-0.5 flex items-center gap-3 text-[11px] text-muted-foreground">
           <span className="tabular-nums">{formatBytes(orphan.size_bytes)}</span>
           <span>first seen {relativeAge(orphan.first_seen_at)}</span>
           {orphan.client_name && <span>{orphan.client_name}</span>}
@@ -1322,19 +1337,19 @@ function CleanupTab() {
 
   return (
     <div className="space-y-4">
-      <Card className="border-zinc-800 bg-zinc-900/50">
+      <Card className="border-border bg-card">
         <CardContent className="space-y-4 pt-5">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <Trash2 className="h-4 w-4 text-zinc-400" />
-              <span className="text-sm font-medium text-zinc-100">
+              <Trash2 className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm font-medium text-foreground">
                 Cleanup settings
               </span>
             </div>
             <Button
               variant="ghost"
               size="sm"
-              className="h-8 text-zinc-400 hover:text-zinc-200"
+              className="h-8 text-muted-foreground hover:text-foreground"
               disabled={scan.isPending}
               onClick={() =>
                 scan.mutate(undefined, {
@@ -1354,13 +1369,13 @@ function CleanupTab() {
             </Button>
           </div>
 
-          <p className="text-xs text-zinc-500">
+          <p className="text-xs text-muted-foreground">
             Files in your download folders that are no longer tied to any active
             download or import are listed below for review. Media libraries are
             never touched.
           </p>
 
-          <div className="flex flex-wrap items-end gap-6 border-t border-zinc-800 pt-4">
+          <div className="flex flex-wrap items-end gap-6 border-t border-border pt-4">
             <div className="flex items-center gap-2">
               <Switch
                 id="cleanup-auto-delete"
@@ -1372,7 +1387,7 @@ function CleanupTab() {
               />
               <Label
                 htmlFor="cleanup-auto-delete"
-                className="text-xs text-zinc-300"
+                className="text-xs text-foreground"
               >
                 Auto-delete orphans
               </Label>
@@ -1380,7 +1395,7 @@ function CleanupTab() {
             <div className="space-y-1">
               <Label
                 htmlFor="cleanup-retention"
-                className="text-[11px] text-zinc-400"
+                className="text-[11px] text-muted-foreground"
               >
                 Retention (days)
               </Label>
@@ -1412,13 +1427,13 @@ function CleanupTab() {
       </Card>
 
       {isLoading ? (
-        <Card className="border-zinc-800 bg-zinc-900/50">
+        <Card className="border-border bg-card">
           <CardContent>
             <LoadingState label="Scanning download folders…" />
           </CardContent>
         </Card>
       ) : !orphans || orphans.length === 0 ? (
-        <Card className="border-dashed border-zinc-800 bg-zinc-900/50">
+        <Card className="border-dashed border-border bg-card">
           <CardContent>
             <EmptyState
               icon={<Trash2 className="h-10 w-10" />}
@@ -1428,8 +1443,8 @@ function CleanupTab() {
           </CardContent>
         </Card>
       ) : (
-        <Card className="overflow-hidden border-zinc-800 bg-zinc-900/50">
-          <div className="divide-y divide-zinc-800/50">
+        <Card className="overflow-hidden border-border bg-card">
+          <div className="divide-y divide-border/50">
             {orphans.map((o) => (
               <OrphanRow
                 key={o.id}

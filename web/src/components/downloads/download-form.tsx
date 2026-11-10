@@ -363,7 +363,7 @@ export function DownloadForm({
 
       {isBuiltinKind ? (
         <>
-          <div className="rounded-md border border-zinc-800 bg-zinc-900/40 px-3 py-2 text-xs text-zinc-400">
+          <div className="rounded-md border border-border bg-card/40 px-3 py-2 text-xs text-muted-foreground">
             Rain runs as a sidecar container alongside Loom. The download
             directory and RPC connection are configured via the Helm chart and
             environment variables. Only speed limits can be adjusted at runtime

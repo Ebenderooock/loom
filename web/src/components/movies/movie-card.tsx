@@ -84,7 +84,7 @@ export function MovieCard({
       )}
 
       {/* Status bar at bottom */}
-      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/95 via-black/70 to-transparent p-3 pt-8">
+      <div className="poster-overlay absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/95 via-black/70 to-transparent p-3 pt-8">
         <div className="flex items-center justify-between gap-1">
           <StatusBadge status={movie.status} />
           <MonitoringLabel status={movie.monitoringStatus} />
@@ -92,17 +92,17 @@ export function MovieCard({
         <h3 className="mt-1 truncate text-sm font-semibold text-white">
           {movie.title}
         </h3>
-        <p className="text-xs text-gray-400">{movie.year}</p>
+        <p className="text-xs text-muted-foreground">{movie.year}</p>
         {missingProfile && (
           <MissingQualityProfileBadge onDark className="mt-1.5" />
         )}
       </div>
 
       {/* Hover overlay with details */}
-      <div className="pointer-events-none absolute inset-0 flex flex-col justify-between bg-black/80 p-4 opacity-0 backdrop-blur-sm transition-opacity duration-200 group-hover:opacity-100">
+      <div className="poster-overlay pointer-events-none absolute inset-0 flex flex-col justify-between bg-black/80 p-4 opacity-0 backdrop-blur-sm transition-opacity duration-200 group-hover:opacity-100">
         <div>
           <h3 className="text-sm font-bold text-white">{movie.title}</h3>
-          <p className="mt-0.5 text-xs text-gray-400">
+          <p className="mt-0.5 text-xs text-muted-foreground">
             {movie.year} • {movie.runtime ? `${movie.runtime}m` : "—"}
           </p>
           {movie.rating > 0 && (
@@ -114,11 +114,11 @@ export function MovieCard({
             </div>
           )}
           {movie.genres?.length > 0 && (
-            <p className="mt-1.5 text-[10px] text-gray-500">
+            <p className="mt-1.5 text-[10px] text-muted-foreground">
               {movie.genres.slice(0, 3).join(" • ")}
             </p>
           )}
-          <p className="mt-2 line-clamp-4 text-xs leading-relaxed text-gray-300">
+          <p className="mt-2 line-clamp-4 text-xs leading-relaxed text-foreground">
             {movie.overview || "No overview available."}
           </p>
         </div>
@@ -128,7 +128,7 @@ export function MovieCard({
             <MissingQualityProfileBadge onDark />
           ) : (
             profile && (
-              <p className="text-[10px] text-gray-500">
+              <p className="text-[10px] text-muted-foreground">
                 Quality: {profile.name}
               </p>
             )
