@@ -19,10 +19,12 @@ type Store struct {
 	postgres bool
 }
 
+// NewStore creates a store backed by Loom's configured database.
 func NewStore(db storage.DB) *Store {
 	return &Store{db: db.DB(), postgres: db.Engine() == storage.EnginePostgres}
 }
 
+// Get returns saved appearance settings, or defaults when none are saved.
 func (s *Store) Get(ctx context.Context) (Settings, error) {
 	var raw string
 	err := s.db.QueryRowContext(ctx, storage.RebindQuery(
@@ -43,6 +45,7 @@ func (s *Store) Get(ctx context.Context) (Settings, error) {
 	return settings, nil
 }
 
+// Set atomically replaces the saved appearance settings.
 func (s *Store) Set(ctx context.Context, settings Settings) error {
 	if err := settings.Validate(); err != nil {
 		return err
