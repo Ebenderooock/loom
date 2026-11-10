@@ -9,12 +9,7 @@ export type RequestMediaType = "movie" | "series" | "artist";
 export type RequestAvailability = "present" | "missing" | "unknown";
 
 export type RequestStatus =
-  | "pending"
-  | "approving"
-  | "approved"
-  | "available"
-  | "rejected"
-  | "failed";
+  "pending" | "approving" | "approved" | "available" | "rejected" | "failed";
 
 export interface MediaRequest {
   id: string;
@@ -111,8 +106,7 @@ async function request<T>(
   }
   if (!res.ok) {
     const env = parsed as
-      | { error?: { code?: string; message?: string } }
-      | undefined;
+      { error?: { code?: string; message?: string } } | undefined;
     const message =
       env?.error?.message ??
       `${method} ${path} failed: ${res.status} ${res.statusText}`;

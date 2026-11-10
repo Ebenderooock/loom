@@ -398,6 +398,10 @@ func applyDefaults(v *viper.Viper) {
 	v.SetDefault("http.shutdown_timeout", 30)
 	v.SetDefault("http.url_base", "")
 
+	// Registered so LOOM_FILESYSTEM_ALLOWED_BROWSE_ROOTS (comma-separated)
+	// is honoured; viper ignores env vars for unknown keys.
+	v.SetDefault("filesystem.allowed_browse_roots", []string{})
+
 	v.SetDefault("log.level", "info")
 	v.SetDefault("log.format", "json")
 	v.SetDefault("log.capture_level", "warn")

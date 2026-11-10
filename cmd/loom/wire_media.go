@@ -19,6 +19,8 @@ import (
 	"github.com/ebenderooock/loom/internal/languages"
 	"github.com/ebenderooock/loom/internal/libraries"
 	"github.com/ebenderooock/loom/internal/mediainfo"
+	"github.com/ebenderooock/loom/internal/metadata"
+	"github.com/ebenderooock/loom/internal/metadata/artwork"
 	"github.com/ebenderooock/loom/internal/metadata/musicbrainz"
 	"github.com/ebenderooock/loom/internal/metadata/tvdb"
 	"github.com/ebenderooock/loom/internal/movies"
@@ -86,9 +88,35 @@ func wireMedia(
 		mbCfg.BaseURL = stubs.MusicBrainzURL
 	}
 	mbProvider := musicbrainz.NewProvider(musicbrainz.NewClient(mbCfg))
+	mbApplier := &musicMetadataSourceApplier{provider: mbProvider, publicCfg: mbCfg, pinned: stubs != nil}
+	metadataSourceSvc := music.NewMetadataSourceService(
+		music.NewMetadataSourceStore(db.DB(), string(db.Engine())), mbApplier)
+	if src, err := metadataSourceSvc.ApplyStored(ctx); err != nil {
+		logger.Warn("music: failed to load metadata source; using public MusicBrainz", "error", err)
+	} else if src.Mode == music.MetadataSourceCustom {
+		logger.Info("music: using custom MusicBrainz metadata source", "base_url", src.BaseURL, "search_on_public", src.SearchOnPublic)
+	}
+	wiring.MusicMetadataSrc = metadataSourceSvc
 	musicRepo := music.NewRepository(db.DB(), string(db.Engine()))
 	musicSvc := music.NewService(musicRepo, mbProvider, logger)
 	wiring.MusicService = musicSvc
+	// Artwork (fanart.tv / TheAudioDB) is skipped in dev-stub mode so the
+	// stack makes no outbound requests.
+	if stubs == nil {
+		artworkProvider := artwork.New(artwork.Config{})
+		artworkCfg := music.NewArtworkSettingsService(
+			music.NewArtworkSettingsStore(db.DB(), string(db.Engine())), artworkProvider,
+			os.Getenv("LOOM_FANART_API_KEY"), os.Getenv("LOOM_THEAUDIODB_API_KEY"))
+		if _, err := artworkCfg.ApplyStored(ctx); err != nil {
+			logger.Warn("music: failed to load artwork settings; using environment keys", "error", err)
+		}
+		if setter, ok := musicSvc.(interface {
+			SetArtwork(metadata.MusicArtworkProvider)
+		}); ok {
+			setter.SetArtwork(artworkProvider)
+		}
+		wiring.MusicArtworkCfg = artworkCfg
+	}
 
 	musicScannerSvc := scanner.NewMusicScanner(musicSvc, logger)
 	wiring.MusicScanner = musicScannerSvc
@@ -226,4 +254,58 @@ func (p *libStoreProvider) ListAll(ctx context.Context) ([]scheduler.LibraryInfo
 		}
 	}
 	return out, nil
+}
+
+// musicMetadataSourceApplier points the shared MusicBrainz provider at the
+// configured metadata source. When dev stubs are active the provider stays
+// pinned to the stub server.
+type musicMetadataSourceApplier struct {
+	provider  *musicbrainz.Provider
+	publicCfg *musicbrainz.Config
+	pinned    bool
+}
+
+func (a *musicMetadataSourceApplier) configs(src music.MetadataSource) (lookup, search *musicbrainz.Config) {
+	if src.Mode != music.MetadataSourceCustom {
+		cfg := *a.publicCfg
+		return &cfg, nil
+	}
+	lookup = &musicbrainz.Config{
+		BaseURL:         src.BaseURL,
+		Timeout:         a.publicCfg.Timeout,
+		RequestInterval: time.Duration(src.RateLimitMS) * time.Millisecond,
+		AuthHeaderName:  src.AuthHeaderName,
+		AuthHeaderValue: src.AuthHeaderValue,
+	}
+	if src.SearchOnPublic {
+		cfg := *a.publicCfg
+		search = &cfg
+	}
+	return lookup, search
+}
+
+func (a *musicMetadataSourceApplier) Apply(src music.MetadataSource) {
+	if a.pinned {
+		return
+	}
+	a.provider.Configure(a.configs(src))
+}
+
+func (a *musicMetadataSourceApplier) Test(ctx context.Context, src music.MetadataSource) music.MetadataSourceTestResult {
+	lookup, search := a.configs(src)
+	checkSearch := src.Mode == music.MetadataSourceCustom && search == nil
+	lookupErr, searchErr := musicbrainz.TestEndpoint(ctx, lookup, checkSearch)
+	res := music.MetadataSourceTestResult{
+		LookupOK:     lookupErr == nil,
+		SearchTested: checkSearch,
+		SearchOK:     checkSearch && searchErr == nil,
+	}
+	if lookupErr != nil {
+		res.LookupError = lookupErr.Error()
+	}
+	if searchErr != nil {
+		res.SearchError = searchErr.Error()
+	}
+	res.OK = res.LookupOK && (!checkSearch || res.SearchOK)
+	return res
 }

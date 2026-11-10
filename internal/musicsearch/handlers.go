@@ -6,6 +6,8 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+
+	"github.com/ebenderooock/loom/internal/downloads"
 )
 
 // RegisterRoutes attaches music-search endpoints onto an existing router. It is
@@ -84,7 +86,8 @@ func writeSearchErr(w http.ResponseWriter, err error) {
 		status = http.StatusNotFound
 	case errors.Is(err, ErrNoResults):
 		status = http.StatusNotFound
-	case errors.Is(err, ErrNoDownloaders):
+	case errors.Is(err, ErrNoDownloaders), errors.Is(err, ErrAllReleasesAttempted),
+		errors.Is(err, downloads.ErrAcquisitionDeferred):
 		status = http.StatusConflict
 	case errors.Is(err, ErrInvalidReleaseLink):
 		status = http.StatusBadRequest

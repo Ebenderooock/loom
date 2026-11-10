@@ -124,8 +124,7 @@ async function request<T>(
   }
   if (!res.ok) {
     const env = parsed as
-      | { error?: { code?: string; message?: string } }
-      | undefined;
+      { error?: { code?: string; message?: string } } | undefined;
     const message =
       env?.error?.message ??
       `${method} ${path} failed: ${res.status} ${res.statusText}`;

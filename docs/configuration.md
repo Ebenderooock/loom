@@ -81,7 +81,8 @@ real values look like. Every key gets an `example:` line.
 | `telemetry.otlp_endpoint` | `LOOM_TELEMETRY_OTLP_ENDPOINT` / `LOOM_OTLP_ENDPOINT` | string | `""` | no | OTLP/HTTP collector endpoint. |
 | `database.url` | `LOOM_DATABASE_URL` | string | `""` | no | Legacy-style DSN; if set and `postgres://…`, selects Postgres. |
 | `storage.engine` | `LOOM_STORAGE_ENGINE` | string | `sqlite` | no | One of `sqlite`, `postgres`. |
-| `storage.sqlite.path` | `LOOM_STORAGE_SQLITE_PATH` | string | `/data/loom.db` | no | Path to the SQLite file. |
+| `storage.sqlite.path` | `LOOM_STORAGE_SQLITE_PATH` | string | `$LOOM_CONFIG_DIR/data/loom.db` | no | Path to the SQLite file; relative paths resolve under `config_dir`. |
+| `filesystem.allowed_browse_roots` | Configure in YAML | []string | `[]` | no | Folders the setup UI's filesystem browser may enumerate; an empty list disables browsing. |
 | `storage.postgres.dsn` | `LOOM_STORAGE_POSTGRES_DSN` | string | `""` | no | `postgres://user:pass@host:5432/loom?sslmode=…` |
 | `debug.pprof` | `LOOM_DEBUG_PPROF` | bool | `false` | no | Mount `/debug/pprof/*`. |
 | `cors.allowed_origins` | `LOOM_CORS_ALLOWED_ORIGINS` | []string | `[]` | no | Allow-list for the chi-cors middleware. |
@@ -108,6 +109,12 @@ real values look like. Every key gets an `example:` line.
 > `retry_max_attempts`) — there are no global config knobs. See
 > [`indexers-rate-limits.md`](indexers-rate-limits.md) for defaults
 > and the per-row API surface.
+
+Service installers and container manifests set explicit paths so state does not
+depend on the process working directory. Changing `data_dir` alone does not move
+the default SQLite database out of `config_dir`. When upgrading an installation,
+keep its existing database path or migrate the complete stopped database before
+changing it. See [installation pathways](deployment.md#installation-pathways).
 
 ### Per-key examples
 

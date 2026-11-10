@@ -128,6 +128,9 @@ func TestReconcileSeriesRequiresAllDueMonitoredEpisodes(t *testing.T) {
 			('future','series','season',3,'2026-10-22','2026-10-22T23:00:00Z'),
 			('unmonitored','series','season',4,'2026-10-01','')`)
 	execAvailabilitySQL(t, db, `UPDATE episodes SET monitored=false WHERE id='unmonitored'`)
+	execAvailabilitySQL(t, db, `INSERT INTO seasons(id,series_id,season_number) VALUES ('specials','series',0)`)
+	execAvailabilitySQL(t, db, `INSERT INTO episodes(id,series_id,season_id,episode_number,air_date)
+		VALUES ('bonus','series','specials',1,'2000-01-01')`)
 	assertAvailability(t, store, r.ID, StatusApproved)
 	execAvailabilitySQL(t, db, `INSERT INTO episode_files(id,episode_id,series_id,file_path)
 		VALUES ('one','first','series','/first.mkv')`)
@@ -162,6 +165,8 @@ func TestReconcileArtistRequiresCompleteSelectedReleasedAlbums(t *testing.T) {
 		VALUES ('album','artist','Album','2020-01-01'),
 			('missing','artist','Missing track list','2020-01-01'),
 			('future','artist','Future','2027-01-01')`)
+	execAvailabilitySQL(t, db, `INSERT INTO album_artists(album_id,artist_id)
+		SELECT id,artist_id FROM albums`)
 	execAvailabilitySQL(t, db, `INSERT INTO album_releases(id,album_id) VALUES ('selected','album'),('other','album')`)
 	execAvailabilitySQL(t, db, `UPDATE albums SET selected_release_id='selected' WHERE id='album'`)
 	execAvailabilitySQL(t, db, `INSERT INTO tracks(id,album_id,release_id,track_number)
@@ -175,7 +180,8 @@ func TestReconcileArtistRequiresCompleteSelectedReleasedAlbums(t *testing.T) {
 	assertAvailability(t, store, r.ID, StatusApproved)
 	execAvailabilitySQL(t, db, `UPDATE track_files SET deleted_at=NULL WHERE id='second'`)
 	assertAvailability(t, store, r.ID, StatusApproved)
-	execAvailabilitySQL(t, db, `UPDATE albums SET monitored=false WHERE id='missing'`)
+	// An excluded catalogue entry must not hold an otherwise complete request open.
+	execAvailabilitySQL(t, db, `UPDATE album_artists SET catalog_included=false WHERE album_id='missing'`)
 	assertAvailability(t, store, r.ID, StatusAvailable)
 }
 

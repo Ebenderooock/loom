@@ -13,9 +13,10 @@ import (
 // auto-searcher need real implementations; any other call panics (nil iface).
 type fakeRepo struct {
 	music.Repository
-	artists map[string][]*music.Album // artistID -> albums
-	tracks  map[string][]*music.Track // albumID -> tracks
-	artist  []*music.Artist
+	artists   map[string][]*music.Album // artistID -> albums
+	tracks    map[string][]*music.Track // albumID -> tracks
+	artist    []*music.Artist
+	allAlbums []*music.Album
 }
 
 func (f *fakeRepo) ListArtists(context.Context) ([]*music.Artist, error) {
@@ -24,6 +25,10 @@ func (f *fakeRepo) ListArtists(context.Context) ([]*music.Artist, error) {
 
 func (f *fakeRepo) ListAlbumsByArtist(_ context.Context, artistID string) ([]*music.Album, error) {
 	return f.artists[artistID], nil
+}
+
+func (f *fakeRepo) ListAlbums(context.Context) ([]*music.Album, error) {
+	return f.allAlbums, nil
 }
 
 func (f *fakeRepo) ListTracksByAlbum(_ context.Context, albumID string) ([]*music.Track, error) {
@@ -49,24 +54,26 @@ func TestMissingAlbumCandidates(t *testing.T) {
 		},
 		artists: map[string][]*music.Album{
 			"a1": {
-				{ID: "missing", Monitored: true, LastSearchAt: &old},      // due, no monitored files
-				{ID: "partial", Monitored: true, LastSearchAt: &old},      // some tracks still missing
-				{ID: "complete", Monitored: true, LastSearchAt: &old},     // all present -> skip
-				{ID: "unmonitored", Monitored: false, LastSearchAt: &old}, // skip
-				{ID: "recent", Monitored: true, LastSearchAt: &recent},    // within recheck -> skip
-				{ID: "never", Monitored: true},                            // never searched, missing
+				{ID: "missing", ArtistID: "a1", Monitored: true, LastSearchAt: &old},      // due, no monitored files
+				{ID: "partial", ArtistID: "a1", Monitored: true, LastSearchAt: &old},      // some tracks still missing
+				{ID: "complete", ArtistID: "a1", Monitored: true, LastSearchAt: &old},     // all present -> skip
+				{ID: "unmonitored", ArtistID: "a1", Monitored: false, LastSearchAt: &old}, // skip
+				{ID: "recent", ArtistID: "a1", Monitored: true, LastSearchAt: &recent},    // within recheck -> skip
+				{ID: "never", ArtistID: "a1", Monitored: true},                            // never searched, missing
+				{ID: "shared-other", ArtistID: "a2", Monitored: true, LastSearchAt: &old},
 			},
 			"a2": {
-				{ID: "other", Monitored: true, LastSearchAt: &old},
+				{ID: "other", ArtistID: "a2", Monitored: true, LastSearchAt: &old},
 			},
 		},
 		tracks: map[string][]*music.Track{
-			"missing":  trackList(false, false),
-			"partial":  trackList(true, false),
-			"complete": trackList(true, true),
-			"recent":   trackList(false),
-			"never":    trackList(false),
-			"other":    trackList(false),
+			"missing":      trackList(false, false),
+			"partial":      trackList(true, false),
+			"complete":     trackList(true, true),
+			"recent":       trackList(false),
+			"never":        trackList(false),
+			"other":        trackList(false),
+			"shared-other": trackList(false),
 		},
 	}
 
@@ -83,13 +90,33 @@ func TestMissingAlbumCandidates(t *testing.T) {
 	if !ids["missing"] || !ids["partial"] || !ids["never"] {
 		t.Errorf("expected missing+partial+never, got %v", ids)
 	}
-	if ids["complete"] || ids["unmonitored"] || ids["recent"] || ids["other"] {
+	if ids["complete"] || ids["unmonitored"] || ids["recent"] || ids["other"] || ids["shared-other"] {
 		t.Errorf("unexpected candidate included: %v", ids)
 	}
 
 	// "never" (nil LastSearchAt) should sort before "missing" (older timestamp).
 	if len(got) >= 2 && got[0].ID != "never" {
 		t.Errorf("expected never-searched album first, got %q", got[0].ID)
+	}
+}
+
+func TestMissingAlbumCandidatesIncludesStandaloneAlbums(t *testing.T) {
+	standalone := &music.Album{ID: "standalone-missing", Monitored: true}
+	repo := &fakeRepo{
+		artist: []*music.Artist{
+			{ID: "contributor", Name: "Contributor", MonitoringStatus: music.MonitoringMonitored},
+		},
+		artists:   map[string][]*music.Album{"contributor": {standalone}},
+		allAlbums: []*music.Album{standalone},
+		tracks:    map[string][]*music.Track{standalone.ID: trackList(false)},
+	}
+	eng := NewEngine(nil, nil, repo, slog.Default())
+	got, err := eng.MissingAlbumCandidates(context.Background(), 12*time.Hour)
+	if err != nil {
+		t.Fatalf("MissingAlbumCandidates: %v", err)
+	}
+	if len(got) != 1 || got[0].ID != standalone.ID {
+		t.Fatalf("standalone missing candidates = %+v, want %q", got, standalone.ID)
 	}
 }
 

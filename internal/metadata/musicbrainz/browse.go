@@ -10,51 +10,53 @@ import (
 // ReleaseGroupFull is the full release-group representation returned by the
 // /release-group lookup and browse endpoints (richer than ReleaseGroupResponse).
 type ReleaseGroupFull struct {
-	ID               string             `json:"id"`
-	Title            string             `json:"title"`
-	PrimaryType      string             `json:"primary-type,omitempty"`
-	SecondaryTypes   []string           `json:"secondary-types,omitempty"`
-	FirstReleaseDate string             `json:"first-release-date,omitempty"`
-	Disambiguation   string             `json:"disambiguation,omitempty"`
-	Artists          []ArtistResponse   `json:"artist-credit,omitempty"`
-	Genres           []GenreResponse    `json:"genres,omitempty"`
-	Releases         []ReleaseResponse  `json:"releases,omitempty"`
-	Relations        []RelationResponse `json:"relations,omitempty"`
+	ID               string                 `json:"id"`
+	Title            string                 `json:"title"`
+	PrimaryType      string                 `json:"primary-type,omitempty"`
+	SecondaryTypes   []string               `json:"secondary-types,omitempty"`
+	FirstReleaseDate string                 `json:"first-release-date,omitempty"`
+	Disambiguation   string                 `json:"disambiguation,omitempty"`
+	Artists          []ArtistCreditResponse `json:"artist-credit,omitempty"`
+	Genres           []GenreResponse        `json:"genres,omitempty"`
+	Releases         []ReleaseResponse      `json:"releases,omitempty"`
+	Relations        []RelationResponse     `json:"relations,omitempty"`
+	Rating           *RatingResponse        `json:"rating,omitempty"`
 }
 
-// releaseGroupBrowseResponse wraps a browse-by-artist response.
-type releaseGroupBrowseResponse struct {
-	Count         int                `json:"release-group-count"`
-	Offset        int                `json:"release-group-offset"`
-	ReleaseGroups []ReleaseGroupFull `json:"release-groups"`
+type releaseBrowseResponse struct {
+	Count    int               `json:"release-count"`
+	Releases []ReleaseResponse `json:"releases"`
 }
 
-// GetArtistReleaseGroups browses the release-groups (albums) for an artist.
-// Returns the page of release-groups and the total count.
-func (c *Client) GetArtistReleaseGroups(ctx context.Context, artistMBID string, offset, limit int) ([]ReleaseGroupFull, int, error) {
+// GetArtistOfficialReleases browses official editions with their release groups.
+// Status belongs to an edition, not a release group, so browsing groups alone
+// cannot establish whether an album has an official release.
+func (c *Client) GetArtistOfficialReleases(ctx context.Context, artistMBID string, offset, limit int) ([]ReleaseResponse, int, error) {
 	if limit <= 0 {
 		limit = 100
 	}
 	params := url.Values{
 		"fmt":    {"json"},
 		"artist": {artistMBID},
-		"inc":    {"genres"},
+		"inc":    {"release-groups"},
+		"status": {"official"},
+		"type":   {"album|ep|single"},
 		"offset": {strconv.Itoa(offset)},
 		"limit":  {strconv.Itoa(limit)},
 	}
-	endpoint := fmt.Sprintf("%s/release-group?%s", c.config.BaseURL, params.Encode())
+	endpoint := fmt.Sprintf("%s/release?%s", c.config.BaseURL, params.Encode())
 
-	resp := &releaseGroupBrowseResponse{}
+	resp := &releaseBrowseResponse{}
 	if err := c.doRequest(ctx, endpoint, resp); err != nil {
 		return nil, 0, err
 	}
-	return resp.ReleaseGroups, resp.Count, nil
+	return resp.Releases, resp.Count, nil
 }
 
 // GetReleaseGroup fetches a single release-group (album) including its releases
 // (editions). Track lists are NOT included; use GetReleaseRaw for tracks.
 func (c *Client) GetReleaseGroup(ctx context.Context, mbid string) (*ReleaseGroupFull, error) {
-	endpoint := fmt.Sprintf("%s/release-group/%s?fmt=json&inc=releases+artist-credits+genres",
+	endpoint := fmt.Sprintf("%s/release-group/%s?fmt=json&inc=releases+artist-credits+genres+url-rels+ratings",
 		c.config.BaseURL, url.QueryEscape(mbid))
 
 	resp := &ReleaseGroupFull{}

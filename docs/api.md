@@ -42,6 +42,29 @@ responses expose `qualityProfileMissing`, computed against both current and
 active legacy profiles, so existing blank, deleted or dangling selections are
 highlighted without incorrectly flagging valid legacy profiles.
 
+## Manual media imports
+
+`POST /api/v1/imports/scan` and `/api/v1/imports/preview` accept `{path}` and
+include audio as well as video files. Music scan results use `media_type:
+"music"`, a **track ID** for `matched_media_id`, and optional
+`detected_artist`, `detected_album`, `detected_track`, and `detected_disc` tags.
+Scanning does not move files.
+
+`POST /api/v1/imports/manual` accepts `{path}` for automatic matching.
+`POST /api/v1/imports/manual-match` accepts `{path, media_type, media_id}`.
+For Music, use `media_type: "music"` and the selected **track ID**, not an
+artist or album ID; the path must identify one audio file.
+`POST /api/v1/imports/reimport` accepts
+`{source_path, media_type, media_id, conflict_policy?}` with the same Music
+track ID contract. Music replacements only support `replace_if_better` and
+preserve the existing file unless an audio-quality upgrade can be established.
+
+All three submission endpoints return **202 `{status: "accepted"}`**,
+not an import record or a completion guarantee. Import history uses the album
+ID for Music records and reports the actual library destination. Transfer and
+source cleanup follow the configured import mode; see
+[Downloads / Imports](downloads.md#downloads--imports).
+
 ## Versioning policy
 
 | Path prefix | Owner | Stability |
@@ -95,6 +118,9 @@ in `api/openapi/loom.yaml`.
 | `GET` | `/api/v1/discover/artist/{id}` | apiKey/bearer/cookie | `200 application/json` | MusicBrainz artist metadata and albums, without adding. |
 | `GET` | `/api/v1/discover/album/{id}` | apiKey/bearer/cookie | `200 application/json` | MusicBrainz album metadata and candidate editions. |
 | `GET` | `/api/v1/discover/release/{id}` | apiKey/bearer/cookie | `200 application/json` | MusicBrainz edition metadata and full tracks. |
+| `GET` | `/api/v1/albums` | apiKey/bearer/cookie | `200 application/json` (`Album[]`) | List managed and standalone albums, including their complete artist credits. |
+| `GET` | `/api/v1/albums/lookup` | apiKey/bearer/cookie | `200 application/json` (`AlbumLookupResult[]`) | Search MusicBrainz release groups using `q`; results include artist credits and whether the album has already been added. |
+| `POST` | `/api/v1/albums` | apiKey/bearer/cookie | `201 application/json` (`Album`) | Add a release group with `{mbid, libraryId, qualityProfileId, metadataProfileId?, monitored?}` without adding contributor artists. Multi-artist albums use the Various Artists folder. |
 | `PUT` | `/api/v1/albums/{id}/release` | apiKey/bearer/cookie | `200 application/json` (`Album`) | Select an edition using `{release_id}`; the edition must belong to this album, and selecting a different edition refreshes its tracks. |
 | `GET` | `/api/v1/music/audio-quality-definitions` | apiKey/bearer/cookie | `200 application/json` (`AudioQualityDefinition[]`) | List built-in audio quality tiers. |
 | `GET` | `/api/v1/music/audio-quality-profiles` | apiKey/bearer/cookie | `200 application/json` (`AudioQualityProfile[]`) | List audio quality profiles. |
@@ -105,6 +131,16 @@ in `api/openapi/loom.yaml`.
 | `POST` | `/api/v1/music/metadata-profiles` | apiKey/bearer/cookie | `201 application/json` (`MetadataProfile`) | Create a metadata profile. |
 | `PUT` | `/api/v1/music/metadata-profiles/{id}` | apiKey/bearer/cookie | `200 application/json` (`MetadataProfile`) | Update supplied metadata profile fields. |
 | `DELETE` | `/api/v1/music/metadata-profiles/{id}` | apiKey/bearer/cookie | `204` | Delete an unassigned metadata profile; assigned profiles cannot be deleted. |
+| `GET` | `/api/v1/music/metadata-source` | apiKey/bearer/cookie (admin) | `200 application/json` (`MusicMetadataSource`) | Read the MusicBrainz metadata source. The auth header value is never returned. |
+| `PUT` | `/api/v1/music/metadata-source` | apiKey/bearer/cookie (admin) | `200 application/json` (`MusicMetadataSource`) | Save and apply the metadata source. An empty `auth_header_value` keeps the saved value unless `clear_auth_header` is true. |
+| `GET` | `/api/v1/music/artwork-settings` | apiKey/bearer/cookie (admin) | `200 application/json` (`MusicArtworkSettings`) | Report whether fanart.tv and TheAudioDB keys are saved or come from the environment. Keys are never returned. |
+| `PUT` | `/api/v1/music/artwork-settings` | apiKey/bearer/cookie (admin) | `200 application/json` (`MusicArtworkSettings`) | Save and apply artwork keys. An empty key keeps the saved value unless its `clear_*` flag is true. |
+| `POST` | `/api/v1/music/artwork-settings/test` | apiKey/bearer/cookie (admin) | `200 application/json` (`MusicArtworkTestResult`) | Check artwork keys with a known artist lookup; empty keys use the saved or environment keys. |
+| `POST` | `/api/v1/artists/{id}/refresh` | apiKey/bearer/cookie | `200 application/json` (`MusicArtist`) | Re-fetch one artist's MusicBrainz details, artwork and album catalogue. |
+| `GET` | `/api/v1/artists/{id}/files` | apiKey/bearer/cookie | `200 application/json` (`MusicArtistFile[]`) | List the artist's imported audio files with album and track titles. |
+| `GET` | `/api/v1/artists/{id}/history` | apiKey/bearer/cookie | `200 application/json` (`MusicArtistHistoryEntry[]`) | List grabs and imports for the artist's albums, newest first. Optional `limit` (1-500, default 100). |
+| `PUT` | `/api/v1/albums/{id}/tracks/{trackId}/monitoring` | apiKey/bearer/cookie | `200 application/json` (`Track`) | Set `{monitored}` for one track. Monitoring a track also monitors its album; album monitoring changes cascade to all its tracks. |
+| `POST` | `/api/v1/music/metadata-source/test` | apiKey/bearer/cookie (admin) | `200 application/json` (`MusicMetadataSourceTestResult`) | Check an unsaved source with an artist lookup and, when it serves search, an artist search. |
 | `POST` | `/api/v1/import-lists/discover/track` | apiKey/bearer/cookie | `200 application/json` | Mark `{item_id}` added only after verifying library membership; never creates media or changes list settings. |
 | `GET` | `/api/v1/libraries/{id}/health` | apiKey/bearer/cookie | `200 application/json` (`LibraryHealthReport` or `null`) | Fetch latest read-only health report snapshot. |
 | `POST` | `/api/v1/libraries/{id}/health` | apiKey/bearer/cookie | `200 application/json` (`LibraryHealthReport`) | Run a bounded, cancellable read-only health check for one library. |
@@ -167,6 +203,27 @@ verified missing files and retain normal rolling quota accounting. Administrator
 bypass quotas, not duplicate or storage checks. Reconciliation never deletes
 media/import records. See [the request lifecycle guide](requests.md) for storage
 markers, conservative unknown states, and operator recovery.
+
+## TV monitoring and completeness
+
+Show monitoring is the automatic-search master switch:
+`PUT /api/v1/series/{id}/monitoring` accepts `{"status":"monitored"}` or
+`{"status":"unmonitored"}`. Turning a show off pauses automatic acquisition
+without changing its season selections; turning it on resumes those selections.
+
+`PUT /api/v1/series/{id}/seasons/{seasonNum}/monitoring` accepts
+`{"monitored":true}` or `{"monitored":false}` and atomically updates the season
+and its episodes. It returns the updated season, `400` for an invalid season
+number or missing/non-boolean `monitored`, and `404` for a missing season.
+Season `0` is **Specials** and can be monitored independently. Newly added
+specials default to unmonitored; regular seasons default to monitored.
+Metadata refresh preserves existing season and episode choices, and new
+episodes in an existing season inherit that season's monitoring setting.
+
+Show-level episode statistics exclude season `0` from every count, including
+downloaded and aired totals, regardless of whether specials are monitored.
+The Specials row retains its own counts and completion progress. Show
+completeness therefore reflects regular episodes only, not bonus content.
 
 ## Title file management
 

@@ -18,6 +18,12 @@ type ReimportOptions struct {
 // ReimportFile forces a reimport of a source file to the library for the
 // given media item, even if a file already exists at the destination.
 func (p *ImportPipeline) ReimportFile(ctx context.Context, mediaType MediaType, mediaID, sourcePath string, opts ReimportOptions) (*ImportRecord, error) {
+	if mediaType == MediaTypeMusic {
+		if opts.ConflictPolicy != "" && opts.ConflictPolicy != ConflictReplaceIfBetter {
+			return nil, fmt.Errorf("music reimport only supports replace_if_better")
+		}
+		return p.importMusicMatch(ctx, sourcePath, mediaID)
+	}
 	if opts.ConflictPolicy == "" {
 		opts.ConflictPolicy = ConflictReplaceIfBetter
 	}
@@ -32,12 +38,23 @@ func (p *ImportPipeline) ReimportFile(ctx context.Context, mediaType MediaType, 
 	}
 
 	// Resolve destination via matcher
-	match, err := p.resolveMediaDestination(ctx, mediaType, mediaID, sourcePath)
+	match, err := p.resolveMediaDestination(ctx, mediaType, mediaID)
 	if err != nil {
 		return nil, fmt.Errorf("resolve destination: %w", err)
 	}
 
 	destFile := filepath.Join(match.DestPath, filepath.Base(sourcePath))
+	sourceAbs, err := filepath.Abs(sourcePath)
+	if err != nil {
+		return nil, fmt.Errorf("resolve source path: %w", err)
+	}
+	destAbs, err := filepath.Abs(destFile)
+	if err != nil {
+		return nil, fmt.Errorf("resolve destination path: %w", err)
+	}
+	if sourceAbs == destAbs {
+		return nil, fmt.Errorf("source is already at the library destination: %s", destFile)
+	}
 
 	// Check for existing file at destination
 	existingInfo, existsErr := os.Stat(destFile)
@@ -126,7 +143,11 @@ func (p *ImportPipeline) ReimportFile(ctx context.Context, mediaType MediaType, 
 	}
 
 	// Perform the import
-	if err := importFile(sourcePath, destFile, p.importMode); err != nil {
+	mode := p.importMode
+	if mode == ImportModeMove {
+		mode = ImportModeHardlink
+	}
+	if err := importFile(sourcePath, destFile, mode); err != nil {
 		_ = p.recordFailure(ctx, string(mediaType), mediaID, filepath.Base(sourcePath), sourcePath, err)
 		return nil, fmt.Errorf("import file: %w", err)
 	}
@@ -148,7 +169,14 @@ func (p *ImportPipeline) ReimportFile(ctx context.Context, mediaType MediaType, 
 		Status:     StatusImported,
 		ImportedAt: time.Now().UTC(),
 	}
-	_ = p.recordStatus(ctx, string(mediaType), mediaID, sourcePath, destFile, StatusImported, "reimport: "+decision.Reason)
+	if err := p.recordStatus(ctx, string(mediaType), mediaID, sourcePath, destFile, StatusImported, "reimport: "+decision.Reason); err != nil {
+		return nil, fmt.Errorf("record reimport (source preserved): %w", err)
+	}
+	if p.importMode == ImportModeMove {
+		if err := p.FinalizeImports(ctx, []string{destFile}); err != nil {
+			return nil, fmt.Errorf("reimport registered but source cleanup failed: %w", err)
+		}
+	}
 
 	p.publishNotification(ctx, match, destFile)
 
@@ -156,66 +184,6 @@ func (p *ImportPipeline) ReimportFile(ctx context.Context, mediaType MediaType, 
 }
 
 // resolveMediaDestination determines the destination directory for a given media item.
-func (p *ImportPipeline) resolveMediaDestination(ctx context.Context, mediaType MediaType, mediaID, sourcePath string) (*MatchResult, error) {
-	switch mediaType {
-	case MediaTypeMovie:
-		movie, err := p.matcher.moviesSvc.GetMovie(ctx, mediaID)
-		if err != nil {
-			return nil, fmt.Errorf("get movie %s: %w", mediaID, err)
-		}
-		lib, err := p.matcher.libStore.Get(ctx, movie.LibraryID)
-		if err != nil {
-			return nil, fmt.Errorf("get library: %w", err)
-		}
-		destDir := filepath.Join(lib.Path, sanitizeDirName(fmt.Sprintf("%s (%d)", movie.Title, movie.Year)))
-		return &MatchResult{
-			Matched:   true,
-			MediaType: MediaTypeMovie,
-			MediaID:   mediaID,
-			Title:     movie.Title,
-			Year:      movie.Year,
-			DestPath:  destDir,
-		}, nil
-
-	case MediaTypeEpisode:
-		// Find the episode by listing all episodes across seasons
-		allSeries, err := p.matcher.seriesSvc.ListSeries(ctx)
-		if err != nil {
-			return nil, fmt.Errorf("list series: %w", err)
-		}
-		for _, s := range allSeries {
-			seasons, err := p.matcher.seriesSvc.ListSeasons(ctx, s.ID)
-			if err != nil {
-				continue
-			}
-			for _, season := range seasons {
-				episodes, err := p.matcher.seriesSvc.ListEpisodes(ctx, s.ID, &season.SeasonNumber)
-				if err != nil {
-					continue
-				}
-				for _, ep := range episodes {
-					if ep.ID == mediaID {
-						destDir := filepath.Join(
-							sanitizeDirName(s.Title),
-							fmt.Sprintf("Season %02d", season.SeasonNumber),
-						)
-						return &MatchResult{
-							Matched:   true,
-							MediaType: MediaTypeEpisode,
-							MediaID:   mediaID,
-							SeriesID:  s.ID,
-							Title:     s.Title,
-							Season:    season.SeasonNumber,
-							Episode:   ep.EpisodeNumber,
-							DestPath:  destDir,
-						}, nil
-					}
-				}
-			}
-		}
-		return nil, fmt.Errorf("episode %s not found in any series", mediaID)
-
-	default:
-		return nil, fmt.Errorf("unknown media type: %s", mediaType)
-	}
+func (p *ImportPipeline) resolveMediaDestination(ctx context.Context, mediaType MediaType, mediaID string) (*MatchResult, error) {
+	return p.matcher.MatchExact(ctx, mediaType, mediaID)
 }

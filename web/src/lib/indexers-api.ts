@@ -85,9 +85,7 @@ export interface ProxyFlareSolverrConfig {
   session_mode?: "" | "none" | "shared";
 }
 export type ProxyConfig =
-  | ProxyHTTPConfig
-  | ProxySOCKS5Config
-  | ProxyFlareSolverrConfig;
+  ProxyHTTPConfig | ProxySOCKS5Config | ProxyFlareSolverrConfig;
 
 export interface Proxy {
   id: string;
@@ -229,8 +227,7 @@ async function request<T>(
     const env = parsed as
       | {
           error?:
-            | string
-            | { code?: string; message?: string; details?: unknown };
+            string | { code?: string; message?: string; details?: unknown };
         }
       | undefined;
     const error = env?.error;
@@ -511,12 +508,7 @@ export async function evaluateResults(
 // ---------- Streaming search (SSE) ----------
 
 export type IndexerStatus =
-  | "pending"
-  | "searching"
-  | "done"
-  | "error"
-  | "timeout"
-  | "skipped";
+  "pending" | "searching" | "done" | "error" | "timeout" | "skipped";
 
 export interface IndexerStreamState {
   id: string;

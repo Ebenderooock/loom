@@ -1,16 +1,9 @@
 import { useMemo, useState } from "react";
-import { Link } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
 import {
   Plus,
   Search,
@@ -18,14 +11,21 @@ import {
   Disc3,
   RefreshCw,
   FolderSync,
-  Edit,
-  Trash2,
 } from "lucide-react";
 import { useSetPageHeader } from "@/hooks/use-page-header";
 import { apiFetch } from "@/lib/fetch";
-import { useArtists, type Artist } from "@/lib/music-api";
+import {
+  useAlbums,
+  useArtists,
+  formatAlbumArtistCredits,
+  type Album,
+  type Artist,
+} from "@/lib/music-api";
 import { AddArtistDialog } from "@/components/music/add-artist-dialog";
-import { ArtistMetadata } from "@/components/titles/title-metadata";
+import { MusicArtwork } from "@/components/music/artist-details";
+import { ArtistDetailSheet } from "@/components/music/artist-detail-sheet";
+import { AddAlbumDialog } from "@/components/music/add-album-dialog";
+import { AlbumDetailSheet } from "@/components/music/album-detail-sheet";
 import { useLibraries } from "@/lib/libraries-api";
 import { toast } from "sonner";
 
@@ -44,19 +44,18 @@ function ArtistCard({
       className="group flex flex-col overflow-hidden rounded-lg border border-border bg-card transition-colors hover:border-accent/50 hover:shadow-md"
     >
       <div className="relative aspect-square overflow-hidden bg-gradient-to-br from-muted to-muted-foreground/20">
-        {artist.image_url ? (
-          <img
-            src={artist.image_url}
-            alt={artist.name}
-            loading="lazy"
-            className="h-full w-full object-cover transition-transform group-hover:scale-105"
-          />
-        ) : (
-          <div className="flex h-full w-full flex-col items-center justify-center gap-2 text-muted-foreground">
-            <Music className="h-12 w-12 opacity-40" />
-            <span className="text-xs font-medium opacity-60">No artwork</span>
-          </div>
-        )}
+        <MusicArtwork
+          src={artist.image_url}
+          alt={artist.name}
+          className="h-full w-full bg-transparent"
+          imgClassName="transition-transform group-hover:scale-105"
+          fallback={
+            <div className="flex h-full w-full flex-col items-center justify-center gap-2 text-muted-foreground">
+              <Music className="h-12 w-12 opacity-40" />
+              <span className="text-xs font-medium opacity-60">No artwork</span>
+            </div>
+          }
+        />
         {artist.monitoring_status !== "monitored" && (
           <Badge
             variant="secondary"
@@ -83,114 +82,77 @@ function ArtistCard({
   );
 }
 
-function ArtistDetailSheet({
-  artist,
-  open,
-  onOpenChange,
-  onDelete,
+function AlbumCard({
+  album,
+  onSelect,
 }: {
-  artist: Artist | null;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  onDelete: (id: string) => void;
+  album: Album;
+  onSelect: (album: Album) => void;
 }) {
-  const stats = artist?.stats;
-
+  const artists = formatAlbumArtistCredits(album.artists);
+  const isVarious =
+    (album.artists?.length ?? 0) > 1 ||
+    album.secondary_types?.some((type) =>
+      type.toLowerCase().includes("compilation"),
+    );
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="overflow-y-auto">
-        {artist && (
-          <div className="space-y-6">
-            <SheetHeader>
-              <SheetTitle>{artist.name}</SheetTitle>
-            </SheetHeader>
-
-            <div className="space-y-4">
-              {/* Artwork */}
-              {artist.image_url && (
-                <img
-                  src={artist.image_url}
-                  alt={artist.name}
-                  className="w-full rounded-lg"
-                />
-              )}
-
-              {/* Info section */}
-              <div className="space-y-3">
-                <div>
-                  <h4 className="text-xs font-semibold text-muted-foreground">
-                    MONITORING
-                  </h4>
-                  <p className="mt-1 text-sm capitalize">
-                    {artist.monitoring_status}
-                  </p>
-                </div>
-
-                {stats && (
-                  <>
-                    <div>
-                      <h4 className="text-xs font-semibold text-muted-foreground">
-                        ALBUMS
-                      </h4>
-                      <p className="mt-1 text-sm">{stats.albumCount}</p>
-                    </div>
-                    <div>
-                      <h4 className="text-xs font-semibold text-muted-foreground">
-                        TRACKS
-                      </h4>
-                      <p className="mt-1 text-sm">{stats.trackCount}</p>
-                    </div>
-                    {stats.missingTrackCount > 0 && (
-                      <div>
-                        <h4 className="text-xs font-semibold text-muted-foreground">
-                          MISSING
-                        </h4>
-                        <p className="mt-1 text-sm text-destructive">
-                          {stats.missingTrackCount} track
-                          {stats.missingTrackCount === 1 ? "" : "s"}
-                        </p>
-                      </div>
-                    )}
-                  </>
-                )}
-
-                <ArtistMetadata artist={artist} />
-              </div>
-
-              {/* Actions */}
-              <div className="space-y-2 border-t pt-4">
-                <Link
-                  to="/music/$artistId"
-                  params={{ artistId: artist.id }}
-                  className="block"
-                >
-                  <Button variant="outline" className="w-full">
-                    <Edit className="mr-2 h-4 w-4" />
-                    View Details
-                  </Button>
-                </Link>
-                <Button
-                  variant="destructive"
-                  className="w-full"
-                  onClick={() => {
-                    onDelete(artist.id);
-                    onOpenChange(false);
-                  }}
-                >
-                  <Trash2 className="mr-2 h-4 w-4" />
-                  Delete Artist
-                </Button>
-              </div>
+    <button
+      type="button"
+      onClick={() => onSelect(album)}
+      className="group flex flex-col overflow-hidden rounded-lg border border-border bg-card text-left transition-colors hover:border-accent/50 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+    >
+      <div className="relative aspect-square overflow-hidden bg-gradient-to-br from-muted to-muted-foreground/20">
+        <MusicArtwork
+          src={album.cover_art_url}
+          alt={`${album.title} cover`}
+          className="h-full w-full bg-transparent"
+          imgClassName="transition-transform group-hover:scale-105"
+          fallback={
+            <div className="flex h-full w-full items-center justify-center text-muted-foreground">
+              <Disc3 className="h-12 w-12 opacity-40" />
             </div>
-          </div>
+          }
+        />
+        {isVarious && (
+          <Badge
+            variant="secondary"
+            className="absolute left-2 top-2 text-[10px]"
+          >
+            Various Artists
+          </Badge>
         )}
-      </SheetContent>
-    </Sheet>
+        {!album.monitored && (
+          <Badge
+            variant="outline"
+            className="absolute bottom-2 left-2 text-[10px]"
+          >
+            Unmonitored
+          </Badge>
+        )}
+      </div>
+      <div className="flex min-w-0 flex-1 flex-col gap-1 p-3">
+        <span className="truncate text-sm font-medium">{album.title}</span>
+        <span className="truncate text-xs text-muted-foreground">
+          {artists}
+        </span>
+        <span className="text-[11px] text-muted-foreground">
+          {[album.album_type, album.release_date?.slice(0, 4)]
+            .filter(Boolean)
+            .join(" · ") || "Album"}
+        </span>
+      </div>
+    </button>
   );
 }
 
 export function MusicPage() {
   const { data: artists = [], isLoading, refetch } = useArtists();
+  const {
+    data: albums = [],
+    isLoading: albumsLoading,
+    isError: albumsError,
+    refetch: refetchAlbums,
+  } = useAlbums();
   const { data: allLibraries = [] } = useLibraries();
   const libraries = allLibraries.filter(
     (library) => library.media_type === "music",
@@ -201,6 +163,10 @@ export function MusicPage() {
   const [detailOpen, setDetailOpen] = useState(false);
   const [refreshingAll, setRefreshingAll] = useState(false);
   const [rescanningLibraries, setRescanningLibraries] = useState(false);
+  const [addAlbumOpen, setAddAlbumOpen] = useState(false);
+  const [activeView, setActiveView] = useState<"artists" | "albums">("artists");
+  const [selectedAlbum, setSelectedAlbum] = useState<Album | null>(null);
+  const [albumDetailOpen, setAlbumDetailOpen] = useState(false);
 
   const filtered = useMemo(() => {
     const q = filter.trim().toLowerCase();
@@ -211,6 +177,23 @@ export function MusicPage() {
       (a.sort_name || a.name).localeCompare(b.sort_name || b.name),
     );
   }, [artists, filter]);
+  const filteredAlbums = useMemo(() => {
+    const q = filter.trim().toLowerCase();
+    const list = q
+      ? albums.filter(
+          (album) =>
+            album.title.toLowerCase().includes(q) ||
+            album.artists?.some((artist) =>
+              artist.name.toLowerCase().includes(q),
+            ),
+        )
+      : albums;
+    return [...list].sort(
+      (a, b) =>
+        (b.release_date || "").localeCompare(a.release_date || "") ||
+        a.title.localeCompare(b.title),
+    );
+  }, [albums, filter]);
 
   const subtitle = artists.length
     ? `${artists.length} artist${artists.length === 1 ? "" : "s"}`
@@ -284,44 +267,75 @@ export function MusicPage() {
           <Input
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
-            placeholder="Search artists…"
+            placeholder={
+              activeView === "artists"
+                ? "Search artists…"
+                : "Search albums or artists…"
+            }
             className="pl-9"
           />
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button
-            variant="outline"
-            onClick={handleRefreshAll}
-            disabled={refreshingAll}
-            size="sm"
-          >
-            <RefreshCw className="mr-1.5 h-4 w-4" />
-            Refresh
-          </Button>
-          <Button
-            variant="outline"
-            onClick={handleRescanLibraries}
-            disabled={rescanningLibraries}
-            size="sm"
-          >
-            <FolderSync className="mr-1.5 h-4 w-4" />
-            Rescan
-          </Button>
-          <Button onClick={() => setAddOpen(true)} size="sm">
-            <Plus className="mr-1.5 h-4 w-4" />
-            Add Artist
-          </Button>
+          <div className="mr-1 flex rounded-md border border-border p-0.5">
+            <Button
+              variant={activeView === "artists" ? "secondary" : "ghost"}
+              size="sm"
+              onClick={() => setActiveView("artists")}
+            >
+              Artists
+            </Button>
+            <Button
+              variant={activeView === "albums" ? "secondary" : "ghost"}
+              size="sm"
+              onClick={() => setActiveView("albums")}
+            >
+              Albums
+            </Button>
+          </div>
+          {activeView === "artists" && (
+            <>
+              <Button
+                variant="outline"
+                onClick={handleRefreshAll}
+                disabled={refreshingAll}
+                size="sm"
+              >
+                <RefreshCw className="mr-1.5 h-4 w-4" />
+                Refresh
+              </Button>
+              <Button
+                variant="outline"
+                onClick={handleRescanLibraries}
+                disabled={rescanningLibraries}
+                size="sm"
+              >
+                <FolderSync className="mr-1.5 h-4 w-4" />
+                Rescan
+              </Button>
+            </>
+          )}
+          {activeView === "artists" ? (
+            <Button onClick={() => setAddOpen(true)} size="sm">
+              <Plus className="mr-1.5 h-4 w-4" />
+              Add Artist
+            </Button>
+          ) : (
+            <Button onClick={() => setAddAlbumOpen(true)} size="sm">
+              <Plus className="mr-1.5 h-4 w-4" />
+              Add Album
+            </Button>
+          )}
         </div>
       </div>
 
       {/* Content */}
-      {isLoading ? (
+      {activeView === "artists" && isLoading ? (
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
           {Array.from({ length: 12 }).map((_, i) => (
             <Skeleton key={i} className="aspect-square rounded-lg" />
           ))}
         </div>
-      ) : artists.length === 0 ? (
+      ) : activeView === "artists" && artists.length === 0 ? (
         <EmptyState
           icon={<Disc3 className="h-10 w-10" />}
           title="No artists yet"
@@ -333,11 +347,11 @@ export function MusicPage() {
             </Button>
           }
         />
-      ) : filtered.length === 0 ? (
+      ) : activeView === "artists" && filtered.length === 0 ? (
         <p className="py-12 text-center text-sm text-muted-foreground">
           No artists match "{filter}".
         </p>
-      ) : (
+      ) : activeView === "artists" ? (
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
           {filtered.map((a) => (
             <ArtistCard
@@ -350,14 +364,64 @@ export function MusicPage() {
             />
           ))}
         </div>
+      ) : albumsLoading ? (
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+          {Array.from({ length: 12 }).map((_, i) => (
+            <Skeleton key={i} className="aspect-square rounded-lg" />
+          ))}
+        </div>
+      ) : albumsError ? (
+        <EmptyState
+          icon={<Disc3 className="h-10 w-10" />}
+          title="Could not load albums"
+          description="The album library is unavailable. Please try again."
+          action={<Button onClick={() => void refetchAlbums()}>Retry</Button>}
+        />
+      ) : filteredAlbums.length === 0 ? (
+        <EmptyState
+          icon={<Disc3 className="h-10 w-10" />}
+          title={
+            albums.length ? "No albums match your search" : "No albums yet"
+          }
+          description={
+            albums.length
+              ? "Try another album title or credited artist."
+              : "Add an album to start building your music library."
+          }
+          action={
+            <Button onClick={() => setAddAlbumOpen(true)}>
+              <Plus className="mr-1.5 h-4 w-4" />
+              Add Album
+            </Button>
+          }
+        />
+      ) : (
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+          {filteredAlbums.map((album) => (
+            <AlbumCard
+              key={album.id}
+              album={album}
+              onSelect={(selected) => {
+                setSelectedAlbum(selected);
+                setAlbumDetailOpen(true);
+              }}
+            />
+          ))}
+        </div>
       )}
 
       <AddArtistDialog open={addOpen} onOpenChange={setAddOpen} />
+      <AddAlbumDialog open={addAlbumOpen} onOpenChange={setAddAlbumOpen} />
       <ArtistDetailSheet
         artist={selectedArtist}
         open={detailOpen}
         onOpenChange={setDetailOpen}
         onDelete={handleDeleteArtist}
+      />
+      <AlbumDetailSheet
+        album={selectedAlbum}
+        open={albumDetailOpen}
+        onOpenChange={setAlbumDetailOpen}
       />
     </div>
   );

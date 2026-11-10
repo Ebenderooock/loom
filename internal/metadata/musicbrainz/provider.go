@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/ebenderooock/loom/internal/metadata"
 )
@@ -16,7 +17,11 @@ const coverArtArchiveBase = "https://coverartarchive.org"
 // Provider implements metadata.MusicMetadataProvider backed by MusicBrainz
 // (with cover art from the Cover Art Archive).
 type Provider struct {
-	client *Client
+	mu sync.RWMutex
+	// lookup serves entity lookups and browses; search serves free-text
+	// artist search, which a database-only mirror cannot answer.
+	lookup *Client
+	search *Client
 }
 
 // NewProvider builds a MusicBrainz music metadata provider.
@@ -24,7 +29,51 @@ func NewProvider(client *Client) *Provider {
 	if client == nil {
 		client = NewClient(DefaultConfig())
 	}
-	return &Provider{client: client}
+	return &Provider{lookup: client, search: client}
+}
+
+// Configure replaces the endpoints used for lookups and for artist search.
+// A nil search config sends search to the lookup endpoint. In-flight requests
+// finish on the previous clients.
+func (p *Provider) Configure(lookup, search *Config) {
+	lookupClient := NewClient(lookup)
+	searchClient := lookupClient
+	if search != nil {
+		searchClient = NewClient(search)
+	}
+	p.mu.Lock()
+	p.lookup, p.search = lookupClient, searchClient
+	p.mu.Unlock()
+}
+
+func (p *Provider) lookupClient() *Client {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.lookup
+}
+
+func (p *Provider) searchClient() *Client {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.search
+}
+
+// connectionTestArtistMBID is the stable "Various Artists" entity.
+const connectionTestArtistMBID = "89ad4ac3-39f7-470e-963a-56509c546377"
+
+// TestEndpoint checks that cfg answers an artist lookup and, when
+// checkSearch is set, an artist search.
+func TestEndpoint(ctx context.Context, cfg *Config, checkSearch bool) (lookupErr, searchErr error) {
+	client := NewClient(cfg)
+	if _, err := client.GetArtist(ctx, connectionTestArtistMBID); err != nil {
+		lookupErr = err
+	}
+	if checkSearch {
+		if _, err := client.SearchArtist(ctx, "test", 0, 1); err != nil {
+			searchErr = err
+		}
+	}
+	return lookupErr, searchErr
 }
 
 // Name returns the provider identifier.
@@ -35,7 +84,7 @@ func (p *Provider) SearchArtist(ctx context.Context, query string, limit int) ([
 	if limit <= 0 {
 		limit = 10
 	}
-	results, err := p.client.SearchArtist(ctx, query, 0, limit)
+	results, err := p.searchClient().SearchArtist(ctx, query, 0, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -57,9 +106,27 @@ func (p *Provider) SearchArtist(ctx context.Context, query string, limit int) ([
 	return out, nil
 }
 
+// SearchAlbum returns release-group search results with all credited artists.
+func (p *Provider) SearchAlbum(ctx context.Context, query string, limit int) ([]*metadata.AlbumMetadata, error) {
+	if limit <= 0 {
+		limit = 10
+	}
+	groups, err := p.searchClient().SearchReleaseGroup(ctx, query, 0, limit)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*metadata.AlbumMetadata, 0, len(groups))
+	for _, group := range groups {
+		if group != nil {
+			out = append(out, mapReleaseGroup(group))
+		}
+	}
+	return out, nil
+}
+
 // GetArtist implements metadata.MusicMetadataProvider.
 func (p *Provider) GetArtist(ctx context.Context, mbid string) (*metadata.ArtistMetadata, error) {
-	a, err := p.client.GetArtist(ctx, mbid)
+	a, err := p.lookupClient().GetArtist(ctx, mbid)
 	if err != nil {
 		return nil, err
 	}
@@ -74,24 +141,54 @@ func (p *Provider) GetArtist(ctx context.Context, mbid string) (*metadata.Artist
 		SortName:       a.SortName,
 		Type:           a.Type,
 		Genres:         a.Genres,
+		ImageURL:       a.ImageURL,
+		BeginArea:      a.BeginArea,
+		BeginDate:      a.BeginDate,
+		EndDate:        a.EndDate,
+		Ended:          a.Ended,
+		Rating:         a.Rating,
+		RatingVotes:    a.RatingVotes,
+		Links:          a.Links,
 	}, nil
 }
 
-// GetArtistAlbums implements metadata.MusicMetadataProvider. It pages through
-// all release-groups for the artist.
+// GetArtistAlbums returns studio albums, EPs and singles with an official edition.
+// Multiple editions are collapsed to a single release-group entry.
 func (p *Provider) GetArtistAlbums(ctx context.Context, artistMBID string) ([]*metadata.AlbumMetadata, error) {
 	const pageSize = 100
 	var albums []*metadata.AlbumMetadata
+	seen := make(map[string]bool)
 	offset := 0
 	for {
-		page, total, err := p.client.GetArtistReleaseGroups(ctx, artistMBID, offset, pageSize)
+		page, total, err := p.lookupClient().GetArtistOfficialReleases(ctx, artistMBID, offset, pageSize)
 		if err != nil {
 			return nil, err
 		}
-		for i := range page {
-			albums = append(albums, mapReleaseGroup(&page[i]))
+		for _, release := range page {
+			rg := release.ReleaseGroup
+			if !strings.EqualFold(release.Status, "Official") || rg == nil || rg.ID == "" || seen[rg.ID] {
+				continue
+			}
+			switch strings.ToLower(rg.PrimaryType) {
+			case "album", "ep", "single":
+			default:
+				continue
+			}
+			if len(rg.SecondaryTypes) != 0 {
+				continue
+			}
+			seen[rg.ID] = true
+			album := mapReleaseGroup(&ReleaseGroupFull{
+				ID: rg.ID, Title: rg.Title, PrimaryType: rg.PrimaryType,
+				SecondaryTypes: rg.SecondaryTypes, FirstReleaseDate: rg.FirstReleaseDate,
+			})
+			album.ArtistMBID = artistMBID
+			albums = append(albums, album)
 		}
 		offset += len(page)
+		if len(page) == 0 && offset < total {
+			return nil, fmt.Errorf("incomplete official release catalogue: fetched %d of %d editions", offset, total)
+		}
 		if len(page) == 0 || offset >= total {
 			break
 		}
@@ -101,7 +198,7 @@ func (p *Provider) GetArtistAlbums(ctx context.Context, artistMBID string) ([]*m
 
 // GetAlbum implements metadata.MusicMetadataProvider.
 func (p *Provider) GetAlbum(ctx context.Context, releaseGroupMBID string) (*metadata.AlbumMetadata, []*metadata.AlbumReleaseMetadata, error) {
-	rg, err := p.client.GetReleaseGroup(ctx, releaseGroupMBID)
+	rg, err := p.lookupClient().GetReleaseGroup(ctx, releaseGroupMBID)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -115,7 +212,7 @@ func (p *Provider) GetAlbum(ctx context.Context, releaseGroupMBID string) (*meta
 
 // GetAlbumRelease implements metadata.MusicMetadataProvider.
 func (p *Provider) GetAlbumRelease(ctx context.Context, releaseMBID string) (*metadata.AlbumReleaseMetadata, error) {
-	r, err := p.client.GetReleaseRaw(ctx, releaseMBID)
+	r, err := p.lookupClient().GetReleaseRaw(ctx, releaseMBID)
 	if err != nil {
 		return nil, err
 	}
@@ -128,18 +225,47 @@ func mapReleaseGroup(rg *ReleaseGroupFull) *metadata.AlbumMetadata {
 	if rg == nil {
 		return nil
 	}
-	artistMBID, artistName := firstArtist(rg.Artists)
+	artists := mapArtistCredits(rg.Artists)
+	artistMBID, artistName := "", ""
+	if len(artists) > 0 {
+		artistMBID, artistName = artists[0].ArtistMBID, artists[0].Name
+	}
+	rating, votes := mapRating(rg.Rating)
+	links, _ := mapURLRelations(rg.Relations)
 	return &metadata.AlbumMetadata{
+		Rating:         rating,
+		RatingVotes:    votes,
+		Links:          links,
 		MBID:           rg.ID,
 		Title:          rg.Title,
 		ArtistMBID:     artistMBID,
 		ArtistName:     artistName,
+		Artists:        artists,
 		Type:           rg.PrimaryType,
 		SecondaryTypes: rg.SecondaryTypes,
 		ReleaseDate:    rg.FirstReleaseDate,
 		Genres:         mapGenres(rg.Genres),
 		CoverArtURL:    fmt.Sprintf("%s/release-group/%s/front", coverArtArchiveBase, rg.ID),
 	}
+}
+
+func mapArtistCredits(credits []ArtistCreditResponse) []metadata.AlbumArtistMetadata {
+	artists := make([]metadata.AlbumArtistMetadata, 0, len(credits))
+	for _, credit := range credits {
+		name := credit.Name
+		if name == "" {
+			name = credit.Artist.Name
+		}
+		if credit.Artist.ID == "" && name == "" {
+			continue
+		}
+		artists = append(artists, metadata.AlbumArtistMetadata{
+			ArtistMBID: credit.Artist.ID,
+			Name:       name,
+			JoinPhrase: credit.JoinPhrase,
+		})
+	}
+	return artists
 }
 
 func mapReleaseSummary(r *ReleaseResponse) *metadata.AlbumReleaseMetadata {

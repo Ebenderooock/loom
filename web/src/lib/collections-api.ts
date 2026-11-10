@@ -46,12 +46,7 @@ export interface LoomCollection {
 }
 
 export type BulkStatus =
-  | "eligible"
-  | "skipped"
-  | "queued"
-  | "running"
-  | "done"
-  | "failed";
+  "eligible" | "skipped" | "queued" | "running" | "done" | "failed";
 
 export interface BulkItem {
   member_id: string;
@@ -147,7 +142,7 @@ export async function loadLibraryTitles(
   signal?: AbortSignal,
 ): Promise<LibraryTitle[]> {
   const out: LibraryTitle[] = [];
-  for (let offset = 0; ; ) {
+  for (let offset = 0; ;) {
     const url =
       media === "movie"
         ? `/api/v1/movies?limit=1000&offset=${offset}`

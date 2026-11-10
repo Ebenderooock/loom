@@ -132,7 +132,7 @@ func startSeriesScan(ss *SeriesScanner, libStore *libraries.Store) http.HandlerF
 
 		scanID, err := ss.StartSeriesScan(r.Context(), lib.ID, lib.Path)
 		if err != nil {
-			writeJSONError(w, "scan failed", http.StatusInternalServerError)
+			writeJSONError(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 
@@ -254,7 +254,7 @@ func startMusicScan(ms *MusicScanner, libStore *libraries.Store) http.HandlerFun
 		}
 		scanID, err := ms.StartMusicScan(r.Context(), lib.ID, lib.Path)
 		if err != nil {
-			writeJSONError(w, "scan failed", http.StatusInternalServerError)
+			writeJSONError(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")

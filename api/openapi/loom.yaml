@@ -129,6 +129,60 @@ paths:
         "403": { description: Administrator required. }
         "413": { description: Body exceeds 16 KiB. }
         "500": { description: Appearance storage write failed. }
+  /api/v1/series/{id}/seasons/{seasonNum}/monitoring:
+    put:
+      operationId: setSeasonMonitoring
+      summary: Monitor or unmonitor a season and all its episodes.
+      description: |
+        Updates the season and its episode monitoring flags atomically.
+        Season 0 is Specials and is independent of regular seasons. Show
+        monitoring remains the automatic-search master switch and does not
+        reset season selections. Metadata refresh preserves selections;
+        newly discovered episodes inherit their season's setting. New
+        specials default to unmonitored. Show-level completeness excludes
+        all specials, even when monitored; season statistics include them.
+      security: [{ cookieAuth: [] }, { apiKey: [] }, { bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+        - in: path
+          name: seasonNum
+          required: true
+          schema: { type: integer, minimum: 0 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [monitored]
+              properties:
+                monitored: { type: boolean }
+      responses:
+        "200":
+          description: Updated season.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, seriesId, seasonNumber, monitored, episodeCount]
+                properties:
+                  id: { type: string }
+                  seriesId: { type: string }
+                  seasonNumber: { type: integer }
+                  title: { type: string }
+                  overview: { type: string }
+                  posterPath: { type: string }
+                  monitored: { type: boolean }
+                  episodeCount: { type: integer }
+                  createdAt: { type: string, format: date-time }
+                  updatedAt: { type: string, format: date-time }
+        "400": { description: Invalid season number or monitored boolean. }
+        "401": { description: Authentication required when enabled. }
+        "404": { description: Season not found for this show. }
+        "500": { description: Monitoring update failed; transaction rolled back. }
   /api/v1/collections/:
     get:
       tags: [collections]
@@ -1352,6 +1406,100 @@ paths:
         "404": { description: Album not found. }
         "500": { description: Album update failed. }
 
+  /api/v1/albums:
+    get:
+      tags: [music]
+      operationId: listMusicAlbums
+      summary: List all music albums.
+      security: [{ cookieAuth: [] }, { apiKey: [] }, { bearerAuth: [] }]
+      responses:
+        "200":
+          description: Active albums, including standalone multi-artist albums.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/MusicAlbum" }
+        "401": { description: Authentication required. }
+    post:
+      tags: [music]
+      operationId: addMusicAlbum
+      summary: Add a MusicBrainz release group as a standalone album.
+      description: |
+        Adds the album without creating managed artist records for contributors.
+        The complete artist credit is retained; compilations and multi-artist
+        albums are organized under the Various Artists folder.
+      security: [{ cookieAuth: [] }, { apiKey: [] }, { bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AddMusicAlbumRequest" }
+      responses:
+        "201":
+          description: Added album with releases and tracks when available.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MusicAlbum" }
+        "400": { description: "Invalid album, library, or profile request." }
+        "401": { description: Authentication required. }
+        "404": { description: MusicBrainz release group not found. }
+        "500": { description: Album could not be saved. }
+
+  /api/v1/albums/lookup:
+    get:
+      tags: [music]
+      operationId: lookupMusicAlbums
+      summary: Search MusicBrainz release groups.
+      description: Returns the full artist-credit list without adding contributors as managed artists.
+      security: [{ cookieAuth: [] }, { apiKey: [] }, { bearerAuth: [] }]
+      parameters:
+        - { name: q, in: query, required: true, schema: { type: string, minLength: 1 } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100 } }
+      responses:
+        "200":
+          description: Release-group matches and their credited artists.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/MusicAlbumLookupResult" }
+        "400": { description: Search query is required. }
+        "401": { description: Authentication required. }
+        "500": { description: Metadata lookup failed. }
+
+  /api/v1/albums/{id}/tracks/{trackId}/monitoring:
+    put:
+      tags: [music]
+      operationId: setMusicTrackMonitored
+      summary: Monitor or unmonitor one track.
+      description: |
+        Monitoring a track also monitors its album so album searches include
+        it. Unmonitoring a track leaves the album unchanged. Album monitoring
+        changes cascade to every track on the album.
+      security: [{ cookieAuth: [] }, { apiKey: [] }, { bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: trackId, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [monitored]
+              properties:
+                monitored: { type: boolean }
+      responses:
+        "200":
+          description: Updated track.
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        "400": { description: Invalid request body. }
+        "401": { description: Authentication required. }
+        "404": { description: Track not found on this album. }
+
   /api/v1/music/audio-quality-definitions:
     get:
       tags: [music]
@@ -1529,6 +1677,187 @@ paths:
         "401": { description: Authentication required. }
         "404": { description: Metadata profile not found. }
         "500": { description: Profile could not be deleted. }
+
+  /api/v1/music/metadata-source:
+    get:
+      tags: [music]
+      operationId: getMusicMetadataSource
+      summary: Get the MusicBrainz metadata source.
+      description: Admin only. The auth header value is never returned.
+      security: [{ cookieAuth: [] }, { apiKey: [] }, { bearerAuth: [] }]
+      responses:
+        "200":
+          description: Current metadata source.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MusicMetadataSource" }
+        "401": { description: Authentication required. }
+        "403": { description: Administrator required. }
+        "500": { description: Metadata source could not be loaded. }
+    put:
+      tags: [music]
+      operationId: updateMusicMetadataSource
+      summary: Save and apply the MusicBrainz metadata source.
+      description: Admin only. Changes apply immediately. An empty auth_header_value keeps the saved value unless clear_auth_header is true.
+      security: [{ cookieAuth: [] }, { apiKey: [] }, { bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/MusicMetadataSourceUpdate" }
+      responses:
+        "200":
+          description: Saved metadata source.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MusicMetadataSource" }
+        "400": { description: "Invalid mode, URL, rate limit or header." }
+        "401": { description: Authentication required. }
+        "403": { description: Administrator required. }
+        "500": { description: Metadata source could not be saved. }
+
+  /api/v1/music/metadata-source/test:
+    post:
+      tags: [music]
+      operationId: testMusicMetadataSource
+      summary: Check an unsaved MusicBrainz metadata source.
+      description: Admin only. Looks up a known artist and, when the server handles search, runs an artist search. An empty auth_header_value uses the saved value.
+      security: [{ cookieAuth: [] }, { apiKey: [] }, { bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/MusicMetadataSourceUpdate" }
+      responses:
+        "200":
+          description: Connection check result.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MusicMetadataSourceTestResult" }
+        "400": { description: "Invalid mode, URL, rate limit or header." }
+        "401": { description: Authentication required. }
+        "403": { description: Administrator required. }
+
+  /api/v1/artists/{id}/refresh:
+    post:
+      tags: [music]
+      operationId: refreshMusicArtist
+      summary: Refresh one artist's metadata, artwork and albums.
+      description: Re-fetches MusicBrainz details, artwork from fanart.tv and TheAudioDB, and the album catalogue. Artwork failures are logged and do not fail the refresh.
+      security: [{ cookieAuth: [] }, { apiKey: [] }, { bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Refreshed artist.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MusicArtist" }
+        "401": { description: Authentication required. }
+        "404": { description: Artist not found. }
+        "502": { description: MusicBrainz could not be reached. }
+
+  /api/v1/artists/{id}/files:
+    get:
+      tags: [music]
+      operationId: listMusicArtistFiles
+      summary: List an artist's imported audio files.
+      security: [{ cookieAuth: [] }, { apiKey: [] }, { bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Track files with their album and track titles.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/MusicArtistFile" }
+        "401": { description: Authentication required. }
+        "404": { description: Artist not found. }
+
+  /api/v1/artists/{id}/history:
+    get:
+      tags: [music]
+      operationId: listMusicArtistHistory
+      summary: List grabs and imports for an artist's albums.
+      security: [{ cookieAuth: [] }, { apiKey: [] }, { bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 500, default: 100 }
+      responses:
+        "200":
+          description: History entries, newest first.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/MusicArtistHistoryEntry" }
+        "400": { description: Invalid limit. }
+        "401": { description: Authentication required. }
+        "404": { description: Artist not found. }
+
+  /api/v1/music/artwork-settings:
+    get:
+      tags: [music]
+      operationId: getMusicArtworkSettings
+      summary: Get the music artwork API key status.
+      description: Admin only. Keys are never returned; only whether each is set.
+      security: [{ cookieAuth: [] }, { apiKey: [] }, { bearerAuth: [] }]
+      responses:
+        "200":
+          description: Current artwork settings.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MusicArtworkSettings" }
+        "401": { description: Authentication required. }
+        "403": { description: Administrator required. }
+        "500": { description: Artwork settings could not be loaded. }
+    put:
+      tags: [music]
+      operationId: updateMusicArtworkSettings
+      summary: Save and apply the music artwork API keys.
+      description: Admin only. Changes apply immediately. An empty key keeps the saved value unless its clear flag is true.
+      security: [{ cookieAuth: [] }, { apiKey: [] }, { bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/MusicArtworkSettingsUpdate" }
+      responses:
+        "200":
+          description: Saved artwork settings.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MusicArtworkSettings" }
+        "400": { description: Invalid key. }
+        "401": { description: Authentication required. }
+        "403": { description: Administrator required. }
+        "500": { description: Artwork settings could not be saved. }
+
+  /api/v1/music/artwork-settings/test:
+    post:
+      tags: [music]
+      operationId: testMusicArtworkSettings
+      summary: Check music artwork API keys.
+      description: Admin only. Looks up a known artist on fanart.tv (when a key is set) and TheAudioDB. Empty keys use the saved or environment keys.
+      security: [{ cookieAuth: [] }, { apiKey: [] }, { bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/MusicArtworkSettingsUpdate" }
+      responses:
+        "200":
+          description: Key check result.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MusicArtworkTestResult" }
+        "400": { description: Invalid key. }
+        "401": { description: Authentication required. }
+        "403": { description: Administrator required. }
 
   /api/v1/discover/artist/{id}:
     get:
@@ -3523,12 +3852,129 @@ components:
       required: [release_id]
       properties:
         release_id: { type: string, minLength: 1 }
+    AddMusicAlbumRequest:
+      type: object
+      additionalProperties: false
+      required: [mbid, qualityProfileId, libraryId]
+      properties:
+        mbid: { type: string, minLength: 1 }
+        qualityProfileId: { type: string, minLength: 1 }
+        libraryId: { type: string, minLength: 1 }
+        metadataProfileId: { type: string }
+        monitored: { type: boolean, default: true }
+    MusicAlbumArtist:
+      type: object
+      required: [name]
+      properties:
+        artist_id: { type: string, description: "Existing managed artist ID, omitted for unmanaged contributors." }
+        mbid: { type: string }
+        name: { type: string }
+        join_phrase: { type: string, description: MusicBrainz artist-credit join phrase following this artist. }
+    MusicAlbumLookupResult:
+      type: object
+      required: [mbid, title, already_added]
+      properties:
+        mbid: { type: string }
+        title: { type: string }
+        artists:
+          type: array
+          items: { $ref: "#/components/schemas/MusicAlbumArtist" }
+        album_type: { type: string }
+        release_date: { type: string }
+        cover_art_url: { type: string, format: uri }
+        already_added: { type: boolean }
+    MusicExternalLink:
+      type: object
+      required: [type, url]
+      properties:
+        type:
+          type: string
+          description: Service from MusicBrainz URL relationships.
+          enum: [website, spotify, apple_music, youtube_music, tidal, deezer, amazon_music, bandcamp, soundcloud, youtube, wikipedia, wikidata, discogs, allmusic, lastfm, instagram, facebook, twitter, tiktok]
+        url: { type: string, format: uri }
+    MusicArtist:
+      type: object
+      required: [id, mbid, name, monitoring_status]
+      properties:
+        id: { type: string }
+        mbid: { type: string }
+        name: { type: string }
+        overview: { type: string, description: Biography from TheAudioDB when available. }
+        image_url: { type: string, description: "Artist photo from fanart.tv or TheAudioDB, else Wikimedia Commons." }
+        background_url: { type: string }
+        logo_url: { type: string }
+        begin_area: { type: string }
+        begin_date: { type: string }
+        end_date: { type: string }
+        ended: { type: boolean }
+        rating: { type: number, minimum: 0, maximum: 5, description: MusicBrainz community rating. }
+        rating_votes: { type: integer }
+        links:
+          type: array
+          items: { $ref: "#/components/schemas/MusicExternalLink" }
+        monitoring_status: { type: string }
+        albums:
+          type: array
+          items: { $ref: "#/components/schemas/MusicAlbum" }
+      additionalProperties: true
+    MusicArtworkSettings:
+      type: object
+      required: [fanart_api_key_set, audiodb_api_key_set, fanart_api_key_from_env, audiodb_api_key_from_env]
+      properties:
+        fanart_api_key_set: { type: boolean }
+        audiodb_api_key_set: { type: boolean }
+        fanart_api_key_from_env: { type: boolean, description: LOOM_FANART_API_KEY is used because no key is saved. }
+        audiodb_api_key_from_env: { type: boolean, description: LOOM_THEAUDIODB_API_KEY is used because no key is saved. }
+    MusicArtworkSettingsUpdate:
+      type: object
+      additionalProperties: false
+      properties:
+        fanart_api_key: { type: string, writeOnly: true, maxLength: 256 }
+        audiodb_api_key: { type: string, writeOnly: true, maxLength: 256 }
+        clear_fanart_api_key: { type: boolean }
+        clear_audiodb_api_key: { type: boolean }
+    MusicArtworkTestResult:
+      type: object
+      required: [ok, fanart_tested, fanart_ok, audiodb_ok, audiodb_shared_key]
+      properties:
+        ok: { type: boolean }
+        fanart_tested: { type: boolean }
+        fanart_ok: { type: boolean }
+        fanart_error: { type: string }
+        audiodb_ok: { type: boolean }
+        audiodb_error: { type: string }
+        audiodb_shared_key: { type: boolean, description: The free shared TheAudioDB key was tested. }
     MusicAlbum:
       type: object
       required: [id, title]
       properties:
         id: { type: string }
+        mbid: { type: string }
+        artist_id: { type: string, description: Optional primary managed artist; absent for standalone albums. }
         title: { type: string }
+        album_type: { type: string }
+        secondary_types:
+          type: array
+          items: { type: string }
+        release_date: { type: string }
+        genres:
+          type: array
+          items: { type: string }
+        cover_art_url: { type: string }
+        overview: { type: string, description: Album description from TheAudioDB when available. }
+        rating: { type: number, minimum: 0, maximum: 5 }
+        rating_votes: { type: integer }
+        monitored: { type: boolean }
+        library_id: { type: string }
+        quality_profile_id: { type: string }
+        metadata_profile_id: { type: string }
+        artists:
+          type: array
+          items: { $ref: "#/components/schemas/MusicAlbumArtist" }
+        links:
+          type: array
+          items: { $ref: "#/components/schemas/MusicExternalLink" }
+        details_fetched_at: { type: string, format: date-time }
         selected_release_id: { type: string }
         releases:
           type: array
@@ -3537,6 +3983,39 @@ components:
           type: array
           items: { type: object, additionalProperties: true }
       additionalProperties: true
+    MusicArtistFile:
+      type: object
+      required: [id, file_path, size, date_added]
+      properties:
+        id: { type: string }
+        track_id: { type: string }
+        album_id: { type: string }
+        artist_id: { type: string }
+        file_path: { type: string }
+        size: { type: integer, format: int64 }
+        quality: { type: string }
+        format: { type: string }
+        bitrate: { type: integer }
+        date_added: { type: string, format: date-time }
+        album_title: { type: string }
+        track_title: { type: string }
+        track_number: { type: integer }
+        disc_number: { type: integer }
+      additionalProperties: true
+    MusicArtistHistoryEntry:
+      type: object
+      required: [id, type, status, date]
+      properties:
+        id: { type: string }
+        type: { type: string, enum: [grab, import] }
+        status: { type: string }
+        album_id: { type: string }
+        album_title: { type: string }
+        title: { type: string, description: Release title for grabs. }
+        reason: { type: string, description: Failure or progress detail. }
+        source_path: { type: string }
+        dest_path: { type: string }
+        date: { type: string, format: date-time }
     AudioQualityDefinition:
       type: object
       required: [id, name, vbr, lossless, tier_order]
@@ -3603,6 +4082,37 @@ components:
           type: array
           items: { $ref: "#/components/schemas/AudioFormatItem" }
         min_format_score: { type: integer }
+    MusicMetadataSource:
+      type: object
+      required: [mode, base_url, rate_limit_ms, auth_header_name, auth_header_set, search_on_public]
+      properties:
+        mode: { type: string, enum: [musicbrainz, custom] }
+        base_url: { type: string, description: Custom MusicBrainz web service root ending in /ws/2. }
+        rate_limit_ms: { type: integer, minimum: 0, maximum: 60000, description: Minimum gap between custom-server requests. musicbrainz.org is always held to 1000. }
+        auth_header_name: { type: string }
+        auth_header_set: { type: boolean, description: Whether an auth header value is saved. }
+        search_on_public: { type: boolean, description: Send artist search to public MusicBrainz in custom mode. }
+    MusicMetadataSourceUpdate:
+      type: object
+      required: [mode]
+      properties:
+        mode: { type: string, enum: [musicbrainz, custom] }
+        base_url: { type: string, format: uri }
+        rate_limit_ms: { type: integer, minimum: 0, maximum: 60000 }
+        auth_header_name: { type: string }
+        auth_header_value: { type: string, writeOnly: true }
+        clear_auth_header: { type: boolean }
+        search_on_public: { type: boolean }
+    MusicMetadataSourceTestResult:
+      type: object
+      required: [ok, lookup_ok, search_tested, search_ok]
+      properties:
+        ok: { type: boolean }
+        lookup_ok: { type: boolean }
+        lookup_error: { type: string }
+        search_tested: { type: boolean }
+        search_ok: { type: boolean }
+        search_error: { type: string }
     MetadataProfile:
       type: object
       required: [id, name, primary_types, secondary_types, release_statuses, created_at, updated_at]

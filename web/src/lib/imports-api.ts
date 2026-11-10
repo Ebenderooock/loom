@@ -25,6 +25,10 @@ export interface ScanResult {
   detected_year?: number;
   detected_season?: number;
   detected_episode?: number;
+  detected_artist?: string;
+  detected_album?: string;
+  detected_track?: number;
+  detected_disc?: number;
   matched_media?: string;
   matched_media_id?: string;
   media_type?: string;
@@ -46,6 +50,10 @@ export interface ImportDecision {
   file_size: number;
   file_quality: string;
   created_at: string;
+}
+
+export interface ImportAccepted {
+  status: "accepted";
 }
 
 // ---------- API calls ----------
@@ -88,15 +96,11 @@ export async function reimportFile(params: {
   media_id: string;
   source_path: string;
   conflict_policy?: string;
-}): Promise<ImportRecord> {
-  const r = await fetchJSON<{ data: ImportRecord }>(
-    "/api/v1/imports/reimport",
-    {
-      method: "POST",
-      body: JSON.stringify(params),
-    },
-  );
-  return r.data;
+}): Promise<ImportAccepted> {
+  return fetchJSON<ImportAccepted>("/api/v1/imports/reimport", {
+    method: "POST",
+    body: JSON.stringify(params),
+  });
 }
 
 export async function fetchImportDecisions(

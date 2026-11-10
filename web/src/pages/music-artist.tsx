@@ -20,12 +20,20 @@ import {
   Disc3,
   Loader2,
   FolderSync,
+  Info,
+  RefreshCw,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useSetPageHeader } from "@/hooks/use-page-header";
 import { AlbumSearchDialog } from "@/components/music/album-search-dialog";
 import { ArtistMetadata } from "@/components/titles/title-metadata";
 import { AlbumMetadataSummary } from "@/components/titles/album-metadata";
+import {
+  ArtistFacts,
+  MusicArtwork,
+  MusicExternalLinks,
+  MusicRating,
+} from "@/components/music/artist-details";
 import {
   fetchAlbum,
   useArtist,
@@ -35,6 +43,7 @@ import {
   useSearchAlbum,
   useDeleteArtist,
   useRescanArtist,
+  useRefreshArtist,
   type Album,
 } from "@/lib/music-api";
 
@@ -47,7 +56,8 @@ function AlbumRow({ album }: { album: Album }) {
   const selectRelease = useSelectAlbumRelease();
   const search = useSearchAlbum();
   const [searchOpen, setSearchOpen] = useState(false);
-  const [imageLoadError, setImageLoadError] = useState(false);
+  const [details, setDetails] = useState<Album | null>(null);
+  const [detailsLoading, setDetailsLoading] = useState(false);
   const [releases, setReleases] = useState<Album["releases"] | null>(null);
   const tracks = album.tracks ?? [];
   const present = tracks.filter((t) => t.has_file).length;
@@ -60,6 +70,21 @@ function AlbumRow({ album }: { album: Album }) {
       );
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Search failed");
+    }
+  };
+
+  const toggleDetails = async () => {
+    if (details) {
+      setDetails(null);
+      return;
+    }
+    setDetailsLoading(true);
+    try {
+      setDetails(await fetchAlbum(album.id));
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not load details");
+    } finally {
+      setDetailsLoading(false);
     }
   };
 
@@ -77,125 +102,170 @@ function AlbumRow({ album }: { album: Album }) {
   };
 
   return (
-    <div className="flex items-center gap-3 rounded-md border border-border px-3 py-2.5">
-      <Switch
-        checked={album.monitored}
-        onCheckedChange={(v) =>
-          setMonitored.mutate({ id: album.id, monitored: v })
-        }
-        aria-label="Monitor album"
-      />
-      <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded bg-muted">
-        {album.cover_art_url && !imageLoadError ? (
-          <img
-            src={album.cover_art_url}
-            alt=""
-            loading="lazy"
-            className="h-full w-full object-cover"
-            onError={() => setImageLoadError(true)}
-          />
-        ) : (
-          <Disc3 className="h-5 w-5 text-muted-foreground" />
-        )}
-      </div>
-      <div className="min-w-0 flex-1">
-        <AlbumMetadataSummary
-          title={album.title}
-          date={album.release_date ? albumYear(album) : undefined}
-          type={album.album_type}
+    <div className="rounded-md border border-border">
+      <div className="flex items-center gap-3 px-3 py-2.5">
+        <Switch
+          checked={album.monitored}
+          onCheckedChange={(v) =>
+            setMonitored.mutate({ id: album.id, monitored: v })
+          }
+          aria-label="Monitor album"
         />
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          {tracks.length > 0 && (
-            <span>
-              · {present}/{tracks.length} tracks
-            </span>
-          )}
+        <MusicArtwork
+          src={details?.cover_art_url || album.cover_art_url}
+          alt=""
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded"
+          fallback={<Disc3 className="h-5 w-5 text-muted-foreground" />}
+        />
+        <div className="min-w-0 flex-1">
+          <AlbumMetadataSummary
+            title={album.title}
+            date={album.release_date ? albumYear(album) : undefined}
+            type={album.album_type}
+          />
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            {tracks.length > 0 && (
+              <span>
+                · {present}/{tracks.length} tracks
+              </span>
+            )}
+            <MusicRating rating={album.rating} votes={album.rating_votes} />
+          </div>
         </div>
-      </div>
-      {tracks.length > 0 && present === tracks.length ? (
-        <Badge variant="secondary" className="text-[10px]">
-          Complete
-        </Badge>
-      ) : (
-        <Badge variant="outline" className="text-[10px]">
-          Missing
-        </Badge>
-      )}
-      <Button
-        size="sm"
-        variant="ghost"
-        disabled={search.isPending}
-        onClick={handleSearch}
-        aria-label="Auto-search album"
-        title="Auto-search and grab best"
-      >
-        {search.isPending ? (
-          <Loader2 className="h-4 w-4 animate-spin" />
+        {tracks.length > 0 && present === tracks.length ? (
+          <Badge variant="secondary" className="text-[10px]">
+            Complete
+          </Badge>
         ) : (
-          <Search className="h-4 w-4" />
+          <Badge variant="outline" className="text-[10px]">
+            Missing
+          </Badge>
         )}
-      </Button>
-      <Button
-        size="sm"
-        variant="ghost"
-        onClick={() => setSearchOpen(true)}
-        aria-label="Interactive search"
-        title="Interactive search"
-      >
-        <TextSearch className="h-4 w-4" />
-      </Button>
-      <Button
-        size="sm"
-        variant="ghost"
-        onClick={() => void openReleasePicker()}
-        aria-label="Choose album edition"
-        title="Choose album edition"
-      >
-        <Disc3 className="h-4 w-4" />
-      </Button>
-      {releases && (
-        <select
-          aria-label={`Selected edition for ${album.title}`}
-          className="max-w-40 rounded-md border bg-background px-2 py-1 text-xs"
-          value={album.selected_release_id ?? ""}
-          disabled={selectRelease.isPending}
-          onChange={(event) => {
-            const releaseId = event.target.value;
-            if (!releaseId) return;
-            selectRelease.mutate(
-              { albumId: album.id, releaseId },
-              {
-                onSuccess: () => {
-                  toast.success(`Edition updated for ${album.title}`);
-                  setReleases(null);
-                },
-                onError: (e) =>
-                  toast.error(
-                    e instanceof Error ? e.message : "Edition update failed",
-                  ),
-              },
-            );
-          }}
+        <Button
+          size="sm"
+          variant="ghost"
+          disabled={search.isPending}
+          onClick={handleSearch}
+          aria-label="Auto-search album"
+          title="Auto-search and grab best"
         >
-          <option value="" disabled>
-            Choose edition
-          </option>
-          {releases.map((release) => (
-            <option key={release.id} value={release.id}>
-              {release.title ||
-                release.disambiguation ||
-                release.status ||
-                release.id}
+          {search.isPending ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Search className="h-4 w-4" />
+          )}
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={() => setSearchOpen(true)}
+          aria-label="Interactive search"
+          title="Interactive search"
+        >
+          <TextSearch className="h-4 w-4" />
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          disabled={detailsLoading}
+          onClick={() => void toggleDetails()}
+          aria-label="Album details"
+          aria-expanded={!!details}
+          title="Album details"
+        >
+          {detailsLoading ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Info className="h-4 w-4" />
+          )}
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={() => void openReleasePicker()}
+          aria-label="Choose album edition"
+          title="Choose album edition"
+        >
+          <Disc3 className="h-4 w-4" />
+        </Button>
+        {releases && (
+          <select
+            aria-label={`Selected edition for ${album.title}`}
+            className="max-w-40 rounded-md border bg-background px-2 py-1 text-xs"
+            value={album.selected_release_id ?? ""}
+            disabled={selectRelease.isPending}
+            onChange={(event) => {
+              const releaseId = event.target.value;
+              if (!releaseId) return;
+              selectRelease.mutate(
+                { albumId: album.id, releaseId },
+                {
+                  onSuccess: () => {
+                    toast.success(`Edition updated for ${album.title}`);
+                    setReleases(null);
+                  },
+                  onError: (e) =>
+                    toast.error(
+                      e instanceof Error ? e.message : "Edition update failed",
+                    ),
+                },
+              );
+            }}
+          >
+            <option value="" disabled>
+              Choose edition
             </option>
-          ))}
-        </select>
-      )}
-      <AlbumSearchDialog
-        albumId={album.id}
-        albumTitle={album.title}
-        open={searchOpen}
-        onOpenChange={setSearchOpen}
+            {releases.map((release) => (
+              <option key={release.id} value={release.id}>
+                {release.title ||
+                  release.disambiguation ||
+                  release.status ||
+                  release.id}
+              </option>
+            ))}
+          </select>
+        )}
+        <AlbumSearchDialog
+          albumId={album.id}
+          albumTitle={album.title}
+          open={searchOpen}
+          onOpenChange={setSearchOpen}
+        />
+      </div>
+      {details && <AlbumDetails album={details} />}
+    </div>
+  );
+}
+
+function AlbumDetails({ album }: { album: Album }) {
+  const hasContent =
+    !!album.overview || !!album.links?.length || !!album.genres?.length;
+  return (
+    <div className="flex gap-4 border-t border-border px-3 py-3">
+      <MusicArtwork
+        src={album.cover_art_url}
+        alt={`${album.title} cover`}
+        className="hidden h-32 w-32 shrink-0 items-center justify-center rounded-md sm:flex"
+        fallback={<Disc3 className="h-10 w-10 text-muted-foreground" />}
       />
+      <div className="min-w-0 flex-1 space-y-3">
+        {!!album.genres?.length && (
+          <p className="text-xs text-muted-foreground">
+            {album.genres.join(" · ")}
+          </p>
+        )}
+        {album.overview && (
+          <p className="whitespace-pre-line text-sm leading-relaxed">
+            {album.overview}
+          </p>
+        )}
+        <MusicExternalLinks links={album.links} />
+        {!hasContent && (
+          <p className="text-sm text-muted-foreground">
+            No extra details are available for this album yet.
+          </p>
+        )}
+      </div>
     </div>
   );
 }
@@ -208,6 +278,7 @@ export function MusicArtistPage() {
   const searchAlbum = useSearchAlbum();
   const deleteArtist = useDeleteArtist();
   const rescanArtist = useRescanArtist();
+  const refreshArtist = useRefreshArtist();
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [bulkBusy, setBulkBusy] = useState(false);
 
@@ -307,21 +378,38 @@ export function MusicArtistPage() {
         Music
       </Link>
 
-      <div className="mb-6 flex gap-4">
-        <div className="flex h-32 w-32 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-muted">
-          {artist.image_url ? (
-            <img
-              src={artist.image_url}
-              alt={artist.name}
-              className="h-full w-full object-cover"
-            />
-          ) : (
-            <Music className="h-12 w-12 text-muted-foreground" />
-          )}
-        </div>
+      {artist.background_url && (
+        <MusicArtwork
+          src={artist.background_url}
+          alt=""
+          className="relative mb-[-4rem] h-48 w-full rounded-lg sm:h-64"
+          imgClassName="opacity-60"
+          fallback={null}
+        />
+      )}
+      <div className="relative mb-6 flex gap-4 px-1">
+        <MusicArtwork
+          src={artist.image_url}
+          alt={artist.name}
+          loading="eager"
+          className="flex h-32 w-32 shrink-0 items-center justify-center rounded-lg border border-border shadow-md"
+          fallback={<Music className="h-12 w-12 text-muted-foreground" />}
+        />
         <div className="flex flex-1 flex-col">
-          <h1 className="text-2xl font-semibold">{artist.name}</h1>
+          {artist.logo_url ? (
+            <h1 className="text-2xl font-semibold">
+              <img
+                src={artist.logo_url}
+                alt={artist.name}
+                className="max-h-16 max-w-xs object-contain"
+              />
+            </h1>
+          ) : (
+            <h1 className="text-2xl font-semibold">{artist.name}</h1>
+          )}
+          <ArtistFacts artist={artist} />
           <ArtistMetadata artist={artist} />
+          <MusicExternalLinks links={artist.links} className="mt-3" />
           <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
             {stats && (
               <span className="self-center">
@@ -373,6 +461,27 @@ export function MusicArtistPage() {
                 <FolderSync className="mr-1.5 h-4 w-4" />
               )}
               Rescan Folder
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={refreshArtist.isPending}
+              onClick={() =>
+                refreshArtist.mutate(artist.id, {
+                  onSuccess: () => toast.success("Artist metadata refreshed"),
+                  onError: (e) =>
+                    toast.error(
+                      e instanceof Error ? e.message : "Refresh failed",
+                    ),
+                })
+              }
+            >
+              {refreshArtist.isPending ? (
+                <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+              ) : (
+                <RefreshCw className="mr-1.5 h-4 w-4" />
+              )}
+              Refresh Metadata
             </Button>
             <Button
               size="sm"

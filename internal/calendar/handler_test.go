@@ -10,9 +10,51 @@ import (
 
 	"github.com/ebenderooock/loom/internal/calendar"
 	"github.com/ebenderooock/loom/internal/kernel/config"
+	"github.com/ebenderooock/loom/internal/music"
 	"github.com/ebenderooock/loom/internal/storage"
 	"github.com/ebenderooock/loom/internal/workflows"
 )
+
+func TestCalendarExcludesAlbumsOutsideArtistCatalog(t *testing.T) {
+	ctx := context.Background()
+	db, err := storage.Open(ctx, config.StorageConfig{
+		Engine: "sqlite", SQLite: config.SQLiteConfig{Path: ":memory:"},
+	}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	if err := db.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	repo := music.NewRepository(db.DB())
+	if err := repo.CreateArtist(ctx, &music.Artist{ID: "artist", Name: "Artist", MonitoringStatus: music.MonitoringMonitored}); err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []string{"studio", "live"} {
+		if err := repo.CreateAlbum(ctx, &music.Album{
+			ID: id, ArtistID: "artist", Title: id, ReleaseDate: "2026-10-01", Monitored: true,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := repo.SetArtistAlbumCatalog(ctx, "artist", []string{"studio"}); err != nil {
+		t.Fatal(err)
+	}
+	rec := httptest.NewRecorder()
+	calendar.Router(db.DB()).ServeHTTP(rec,
+		httptest.NewRequest("GET", "/?start=2026-10-01&end=2026-10-31", nil))
+	if rec.Code != 200 {
+		t.Fatalf("status %d: %s", rec.Code, rec.Body)
+	}
+	var events []calendar.Event
+	if err := json.Unmarshal(rec.Body.Bytes(), &events); err != nil {
+		t.Fatal(err)
+	}
+	if len(events) != 1 || events[0].ID != "studio" {
+		t.Fatalf("calendar includes excluded albums: %+v", events)
+	}
+}
 
 func TestCalendarMediaStatuses(t *testing.T) {
 	ctx := context.Background()
