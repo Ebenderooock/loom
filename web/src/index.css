@@ -89,6 +89,19 @@
   }
 }
 
+/* The original logo colors stay in place until the instance is personalized;
+   unset values make LoomLogo fall back to the active theme tokens. */
+:root {
+  --loom-logo-primary: 260 65% 45%;
+  --loom-logo-accent: 171 77% 41%;
+}
+
+:root[data-palette],
+:root[data-accent]:not([data-accent="default"]) {
+  --loom-logo-primary: initial;
+  --loom-logo-accent: initial;
+}
+
 :root[data-accent]:not([data-accent="default"]) {
   --accent: var(--personal-accent);
   --ring: var(--personal-accent);

@@ -23,6 +23,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   Admins can define a custom primary/secondary/accent/background palette and
   upload a PNG, JPEG or WebP background (up to 5 MiB) stored in the database
   (`POST/GET /api/v1/appearance/background`); existing settings keep working.
+  The Loom logo follows the custom palette and keeps its original colors by
+  default.
 
 - Music support in Downloads / Imports: audio scanning, automatic tagged-track
   matching, and manual album/track selection, including standalone albums and
@@ -102,7 +104,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Interactive search hides blocklisted releases by default and offers an
   **Ignore blocklist** option to show and grab them. Manual grabs of blocklisted
   releases are rejected unless `ignore_blocklist` is set; `POST
-  /api/v1/blocklist/check` reports blocklist matches for candidate releases.
+/api/v1/blocklist/check` reports blocklist matches for candidate releases.
 
 - Import IMDb Most Popular Movies/TV, Top 250 Movies/TV, and Bottom 100 Movies
   charts by pasting their URLs into the IMDb List / Chart import source.
@@ -388,7 +390,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `NZBContent`, server-side fetch on NZBGet 17+) and raw `.nzb`
   uploads (base64-encoded `NZBContent`), via NZBGet's positional
   `append(NZBFilename, NZBContent, Category, Priority, AddToTop,
-  AddPaused, DupeKey, DupeScore, DupeMode, PostProcessParameters)`
+AddPaused, DupeKey, DupeScore, DupeMode, PostProcessParameters)`
   signature; tag conventions cover `priority`, `add_to_top`,
   `add_paused`, `dupekey`, `dupescore`, `dupemode`, and
   `pp_<name>=<value>` post-process pass-through. `Status` merges
@@ -646,11 +648,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
-- *(none yet)*
+- _(none yet)_
 
 ### Security
 
-- *(none yet)*
+- _(none yet)_
 
 [Unreleased]: https://github.com/ebenderooock/loom/compare/v0.1.1...HEAD
 [0.1.1]: https://github.com/ebenderooock/loom/compare/v0.1.0...v0.1.1
