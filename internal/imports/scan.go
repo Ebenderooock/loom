@@ -50,6 +50,9 @@ func (p *ImportPipeline) ScanFolder(ctx context.Context, path string) ([]ScanRes
 			return nil, err
 		}
 		result := p.scanSingleFile(ctx, mf)
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		results = append(results, result)
 	}
 
@@ -57,6 +60,13 @@ func (p *ImportPipeline) ScanFolder(ctx context.Context, path string) ([]ScanRes
 }
 
 func scanImportFiles(ctx context.Context, path string) ([]string, error) {
+	return discoverImportFiles(ctx, path, nil)
+}
+
+func discoverImportFiles(ctx context.Context, path string, discovered func(string)) ([]string, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	info, err := os.Lstat(path)
 	if err != nil {
 		return nil, fmt.Errorf("inspect import path: %w", err)
@@ -85,6 +95,9 @@ func scanImportFiles(ctx context.Context, path string) ([]string, error) {
 		}
 		if fileInfo.Mode().IsRegular() {
 			files = append(files, path)
+			if discovered != nil {
+				discovered(path)
+			}
 		}
 		return nil
 	})

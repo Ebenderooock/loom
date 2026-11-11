@@ -82,7 +82,8 @@ type ImportPipeline struct {
 	cleaner         *FolderCleaner
 	unsub           func()
 	jobs            *jobQueue // durable, bounded manual import queue
-	contentCache    sync.Map  // sameContent results keyed by file identities
+	scans           *scanQueue
+	contentCache    sync.Map // sameContent results keyed by file identities
 }
 
 // NewPipeline creates and wires an ImportPipeline. Call Start to
@@ -152,6 +153,7 @@ func NewPipeline(opts PipelineOptions) (*ImportPipeline, error) {
 		recycler:        opts.RecycleBin,
 		cleaner:         &FolderCleaner{},
 		jobs:            newJobQueue(opts.JobWorkers),
+		scans:           &scanQueue{tasks: make(map[string]*scanTask)},
 	}
 	// Queue workers run independently of the event-bus subscription so
 	// queued and retrying imports resume after a restart. Stop halts them.
@@ -172,6 +174,7 @@ func (p *ImportPipeline) Stop() {
 	if p.unsub != nil {
 		p.unsub()
 	}
+	p.stopScans()
 	p.stopJobs()
 }
 
@@ -853,7 +856,7 @@ func (p *ImportPipeline) completedImport(ctx context.Context, source string) (st
 		srcInfo.Size() == 0 || srcInfo.Size() != destInfo.Size() {
 		return "", nil
 	}
-	same, err := p.sameContent(source, dest, srcInfo, destInfo)
+	same, err := p.sameContent(ctx, source, dest, srcInfo, destInfo)
 	if err != nil {
 		return "", err
 	}
@@ -866,7 +869,10 @@ func (p *ImportPipeline) completedImport(ctx context.Context, source string) (st
 // sameContent reports whether source and dest hold identical bytes: the
 // same inode, or equal size and SHA-256. Positive and negative results are
 // cached per (path, size, mtime) pair so repeated scans do not rehash.
-func (p *ImportPipeline) sameContent(source, dest string, srcInfo, destInfo os.FileInfo) (bool, error) {
+func (p *ImportPipeline) sameContent(ctx context.Context, source, dest string, srcInfo, destInfo os.FileInfo) (bool, error) {
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
 	if !srcInfo.Mode().IsRegular() || !destInfo.Mode().IsRegular() || srcInfo.Size() != destInfo.Size() {
 		return false, nil
 	}
@@ -885,7 +891,7 @@ func (p *ImportPipeline) sameContent(source, dest string, srcInfo, destInfo os.F
 		}
 		defer func() { _ = f.Close() }()
 		h := sha256.New()
-		if _, err := io.Copy(h, f); err != nil {
+		if _, err := io.Copy(h, contextReader{ctx: ctx, reader: f}); err != nil {
 			return [sha256.Size]byte{}, err
 		}
 		var sum [sha256.Size]byte
@@ -903,6 +909,18 @@ func (p *ImportPipeline) sameContent(source, dest string, srcInfo, destInfo os.F
 	same := srcHash == destHash
 	p.contentCache.Store(key, same)
 	return same, nil
+}
+
+type contextReader struct {
+	ctx    context.Context
+	reader io.Reader
+}
+
+func (r contextReader) Read(b []byte) (int, error) {
+	if err := r.ctx.Err(); err != nil {
+		return 0, err
+	}
+	return r.reader.Read(b)
 }
 
 // FinalizeImports consumes move sources only after the workflow has durably

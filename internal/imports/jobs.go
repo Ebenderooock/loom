@@ -1117,7 +1117,7 @@ func (p *ImportPipeline) verifiedPriorImport(ctx context.Context, path string, i
 	if err != nil {
 		return nil, false
 	}
-	same, err := p.sameContent(path, dest, info, destInfo)
+	same, err := p.sameContent(ctx, path, dest, info, destInfo)
 	if err != nil || !same {
 		return nil, false
 	}
