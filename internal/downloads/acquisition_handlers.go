@@ -27,7 +27,7 @@ func (h *HistoryStore) acquisitionAction(ctx context.Context, id, action string)
 	if err != nil {
 		return err
 	}
-	if status != "acquisition_failed" && status != "acquiring" && !(status == "acquired" && action == "retry") {
+	if status != "acquisition_failed" && status != "acquiring" && (status != "acquired" || action != "retry") {
 		return ErrAcquisitionDeferred
 	}
 	if status == "acquiring" {
