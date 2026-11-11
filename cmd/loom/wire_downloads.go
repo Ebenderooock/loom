@@ -161,6 +161,7 @@ func wireDownloads(
 		ReviewStore:     safety.NewReviewStore(db.DB()),
 		Logger:          logger,
 		ImportMode:      importMode,
+		QualityProfiles: media.qpStore,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("init import pipeline: %w", err)

@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- Pass the shared quality profile store into the production import pipeline so
+  imports can enforce assigned profiles instead of failing with an unavailable-store error.
 - Stage import copies beside their destination and publish complete files
   without blindly overwriting collisions. Matched movie and episode imports
   can replace equal or better, profile-accepted files even without a recycle
