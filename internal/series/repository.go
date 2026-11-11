@@ -358,9 +358,22 @@ func (r *sqlRepo) UpdateEpisodeAiringTime(ctx context.Context, e *Episode) error
 
 func (r *sqlRepo) CreateEpisodeFile(ctx context.Context, f *EpisodeFile) error {
 	mediaBytes, _ := json.Marshal(f.MediaInfo)
-	_, err := r.db.ExecContext(ctx,
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	_, err = tx.ExecContext(ctx,
 		`INSERT INTO episode_files (id, episode_id, series_id, file_path, file_size, quality, source, resolution, codec, media_info, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		 ON CONFLICT(episode_id, file_path) DO UPDATE SET
+		     file_size = excluded.file_size,
+		     quality = COALESCE(NULLIF(excluded.quality, ''), episode_files.quality),
+		     source = COALESCE(NULLIF(excluded.source, ''), episode_files.source),
+		     resolution = COALESCE(NULLIF(excluded.resolution, ''), episode_files.resolution),
+		     codec = COALESCE(NULLIF(excluded.codec, ''), episode_files.codec),
+		     media_info = CASE WHEN excluded.media_info IN ('null', '{}') THEN episode_files.media_info ELSE excluded.media_info END,
+		     updated_at = excluded.updated_at`,
 		f.ID, f.EpisodeID, f.SeriesID, f.FilePath, f.FileSize,
 		f.Quality, f.Source, f.Resolution, f.Codec, string(mediaBytes),
 		f.CreatedAt.Format(time.RFC3339), f.UpdatedAt.Format(time.RFC3339),
@@ -370,7 +383,7 @@ func (r *sqlRepo) CreateEpisodeFile(ctx context.Context, f *EpisodeFile) error {
 	}
 
 	// Update episode's has_file flag to true
-	_, err = r.db.ExecContext(ctx,
+	_, err = tx.ExecContext(ctx,
 		`UPDATE episodes SET has_file = true, updated_at = ? WHERE id = ?`,
 		time.Now().UTC().Format(time.RFC3339), f.EpisodeID,
 	)
@@ -379,11 +392,11 @@ func (r *sqlRepo) CreateEpisodeFile(ctx context.Context, f *EpisodeFile) error {
 	}
 
 	// Link this file to the episode in library_files for file-to-media tracking.
-	_, _ = r.db.ExecContext(ctx,
+	_, _ = tx.ExecContext(ctx,
 		`UPDATE library_files SET media_id = ? WHERE path = ?`,
 		f.EpisodeID, f.FilePath,
 	)
-	return nil
+	return tx.Commit()
 }
 
 // Bulk delete operations for refresh
