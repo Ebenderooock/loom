@@ -79,6 +79,15 @@ function actionBadge(action: string) {
           Imported
         </Badge>
       );
+    case "previously_imported":
+      return (
+        <Badge
+          variant="secondary"
+          title="Saved source and destination metadata match. Contents will be verified before an import is skipped or its source deleted."
+        >
+          Previously imported
+        </Badge>
+      );
     case "queued":
       return <Badge variant="secondary">Queued</Badge>;
     case "importing":
@@ -388,7 +397,7 @@ function ScanTab() {
   }
   const statusOf = (result: ScanResult) => {
     const job = jobsByPath.get(result.file_path);
-    // A fresh scan verifies destination/source identity. Older successful jobs
+    // A fresh scan checks destination/source metadata. Older successful jobs
     // must not hide a changed source or a file missing from the library.
     if (
       job &&
@@ -400,12 +409,15 @@ function ScanTab() {
   };
   const canQueue = (result: ScanResult) =>
     !!result.matched_media_id &&
-    ["import", "reimport", "failed"].includes(statusOf(result));
+    (["import", "reimport", "failed"].includes(statusOf(result)) ||
+      (showImported && statusOf(result) === "previously_imported"));
   const eligible = results.filter(canQueue);
   const filtered = results.filter(
     (result) =>
       (showImported ||
-        !["already_imported", "imported"].includes(statusOf(result))) &&
+        !["already_imported", "imported", "previously_imported"].includes(
+          statusOf(result),
+        )) &&
       `${result.file_path} ${result.matched_media ?? ""}`
         .toLowerCase()
         .includes(search.toLowerCase()),

@@ -1097,30 +1097,64 @@ func (p *ImportPipeline) fileImportState(ctx context.Context, path string) (stat
 // hold identical bytes (same inode or matching SHA-256). A recorded source
 // fingerprint that no longer matches rejects cheaply without hashing; it is
 // never sufficient on its own to certify the destination.
-func (p *ImportPipeline) verifiedPriorImport(ctx context.Context, path string, info os.FileInfo) (*ImportRecord, bool) {
-	if info == nil || !info.Mode().IsRegular() || info.Size() == 0 {
+func (p *ImportPipeline) verifiedPriorImport(ctx context.Context, path string, info os.FileInfo) (*ImportRecord, bool) { //nolint:unparam // Retain verified history details for callers.
+	prior, destInfo := p.priorImportMetadata(ctx, path, info, false)
+	if prior == nil {
 		return nil, false
 	}
-	var dest, mediaType, mediaID string
-	var size, mtime int64
-	var importedAt time.Time
-	err := p.db.QueryRowContext(ctx, `SELECT dest_path, media_type, media_id, COALESCE(source_size, 0), COALESCE(source_mtime, 0), imported_at
-		FROM import_history WHERE source_path = ? AND status = ? AND dest_path != ''
-		ORDER BY imported_at DESC LIMIT 1`, path, string(StatusImported)).Scan(&dest, &mediaType, &mediaID, &size, &mtime, &importedAt)
-	if err != nil {
-		return nil, false
-	}
-	if size > 0 && (size != info.Size() || mtime != info.ModTime().UnixNano()) {
-		return nil, false
-	}
-	destInfo, err := os.Lstat(dest)
-	if err != nil {
-		return nil, false
-	}
-	same, err := p.sameContent(ctx, path, dest, info, destInfo)
+	same, err := p.sameContent(ctx, path, prior.DestPath, info, destInfo)
 	if err != nil || !same {
 		return nil, false
 	}
+	return prior, true
+}
+
+// scanPriorImport never opens payloads. A history hint is deliberately
+// distinct from proof of identical content used by completedImport.
+func (p *ImportPipeline) scanPriorImport(ctx context.Context, path string, info os.FileInfo) (*ImportRecord, string) {
+	prior, destInfo := p.priorImportMetadata(ctx, path, info, true)
+	if prior == nil {
+		return nil, ""
+	}
+	if os.SameFile(info, destInfo) {
+		return prior, "already_imported"
+	}
+	return prior, "previously_imported"
+}
+
+func (p *ImportPipeline) priorImportMetadata(ctx context.Context, path string, info os.FileInfo, preview bool) (*ImportRecord, os.FileInfo) {
+	if info == nil || !info.Mode().IsRegular() || info.Size() == 0 {
+		return nil, nil
+	}
+	var dest, mediaType, mediaID string
+	var size, mtime, destSize, destMtime int64
+	var importedAt time.Time
+	err := p.db.QueryRowContext(ctx, `SELECT dest_path, media_type, media_id, COALESCE(source_size, 0), COALESCE(source_mtime, 0), dest_size, dest_mtime, imported_at
+		FROM import_history WHERE source_path = ? AND status = ? AND dest_path != ''
+		ORDER BY imported_at DESC LIMIT 1`, path, string(StatusImported)).Scan(&dest, &mediaType, &mediaID, &size, &mtime, &destSize, &destMtime, &importedAt)
+	if err != nil {
+		if !errors.Is(err, sql.ErrNoRows) {
+			p.logger.Error("read import history metadata", "path", path, "error", err)
+		}
+		return nil, nil
+	}
+	if size > 0 && (size != info.Size() || mtime != info.ModTime().UnixNano()) {
+		return nil, nil
+	}
+	destInfo, err := os.Lstat(dest)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			p.logger.Warn("inspect historical import destination", "path", dest, "error", err)
+		}
+		return nil, nil
+	}
+	if !destInfo.Mode().IsRegular() || destInfo.Size() != info.Size() {
+		return nil, nil
+	}
+	if preview && !os.SameFile(info, destInfo) &&
+		(size == 0 || destSize == 0 || destSize != destInfo.Size() || destMtime != destInfo.ModTime().UnixNano()) {
+		return nil, nil
+	}
 	return &ImportRecord{SourcePath: path, DestPath: dest, MediaType: MediaType(mediaType), MediaID: mediaID,
-		Status: StatusImported, ImportedAt: importedAt}, true
+		Status: StatusImported, ImportedAt: importedAt}, destInfo
 }

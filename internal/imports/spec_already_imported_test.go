@@ -35,21 +35,27 @@ func setupTestDB(t *testing.T) *sql.DB {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if _, err := db.Exec(`CREATE TABLE movie_files (movie_id TEXT, file_path TEXT, size INTEGER, quality TEXT, deleted_at TEXT);
+		CREATE TABLE episode_files (episode_id TEXT, file_path TEXT, file_size INTEGER, quality TEXT, created_at TEXT)`); err != nil {
+		t.Fatal(err)
+	}
 	applyImportJobsMigration(t, db)
 	return db
 }
 
-// applyImportJobsMigration runs the Up section of the real 0101 migration so
+// applyImportJobsMigration runs the import migrations so
 // the test schema cannot drift from production.
 func applyImportJobsMigration(t *testing.T, db *sql.DB) {
 	t.Helper()
-	raw, err := os.ReadFile(filepath.Join("..", "storage", "migrations", "sqlite", "0101_import_jobs.sql"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	up := strings.SplitN(string(raw), "-- +goose Down", 2)[0]
-	if _, err := db.Exec(up); err != nil {
-		t.Fatalf("apply 0101: %v", err)
+	for _, name := range []string{"0101_import_jobs.sql", "0102_import_destination_metadata.sql"} {
+		raw, err := os.ReadFile(filepath.Join("..", "storage", "migrations", "sqlite", name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		up := strings.SplitN(string(raw), "-- +goose Down", 2)[0]
+		if _, err := db.Exec(up); err != nil {
+			t.Fatalf("apply %s: %v", name, err)
+		}
 	}
 }
 

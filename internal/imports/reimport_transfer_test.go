@@ -12,16 +12,17 @@ import (
 
 type transferSeriesService struct {
 	series.Service
-	files []*series.EpisodeFile
+	files   []*series.EpisodeFile
+	profile string
 }
 
 func (*transferSeriesService) GetEpisode(context.Context, string) (*series.Episode, error) {
 	return &series.Episode{ID: "episode", SeriesID: "show", SeasonID: "season", EpisodeNumber: 3}, nil
 }
 
-func (*transferSeriesService) GetSeries(context.Context, string) (*series.Series, error) {
+func (s *transferSeriesService) GetSeries(context.Context, string) (*series.Series, error) {
 	return &series.Series{
-		ID: "show", Title: "Test Show", LibraryID: "lib",
+		ID: "show", Title: "Test Show", LibraryID: "lib", QualityProfileID: s.profile,
 		Seasons: []*series.Season{{ID: "season", SeasonNumber: 2}},
 	}, nil
 }

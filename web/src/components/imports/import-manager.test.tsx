@@ -859,6 +859,27 @@ describe("ImportManager", () => {
     );
   });
 
+  it("labels metadata-only history separately and only queues it when explicitly shown", async () => {
+    const result = scanResult(1, "previously_imported");
+    const { batches } = setup([result, scanResult(2)]);
+    const user = await scan();
+    expect(screen.queryByText("Show.S01E1.mkv")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Import all matched (1)" }),
+    ).toBeEnabled();
+    await user.click(
+      screen.getByRole("checkbox", { name: "Show already imported files" }),
+    );
+    expect(screen.getByText("Previously imported")).toHaveAttribute(
+      "title",
+      expect.stringContaining("Contents will be verified"),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Import Show.S01E1.mkv" }),
+    );
+    await waitFor(() => expect(batches).toEqual([[result.file_path]]));
+  });
+
   it("shows failed file progress and scheduled retry reasons after reopening", async () => {
     setup(
       [],

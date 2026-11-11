@@ -28,9 +28,9 @@ type ScanResult struct {
 	Confidence      float64 `json:"confidence"`
 	SuggestedAction string  `json:"suggested_action"`
 	Quality         string  `json:"quality,omitempty"`
-	// ImportStatus is the per-file import state: "imported" when history
-	// verifies this exact file was imported, otherwise the latest queue
-	// state (queued, importing, retry_pending, failed, pending_review).
+	// History reports "already_imported" for same-file identity and
+	// "previously_imported" for metadata-only hints, never content proof.
+	// Other states reflect the latest queue outcome.
 	ImportStatus string `json:"import_status,omitempty"`
 	ImportError  string `json:"import_error,omitempty"`
 	ImportJobID  string `json:"import_job_id,omitempty"`
@@ -115,15 +115,15 @@ func (p *ImportPipeline) scanSingleFile(ctx context.Context, filePath string) Sc
 	info, _ := os.Stat(filePath)
 	if mediafiles.IsAudio(strings.ToLower(filepath.Ext(filePath))) {
 		if info != nil {
-			if prior, ok := p.verifiedPriorImport(ctx, filePath, info); ok {
+			if prior, state := p.scanPriorImport(ctx, filePath, info); prior != nil {
 				return ScanResult{
 					FilePath: filePath, FileSize: info.Size(), MediaType: string(MediaTypeMusic),
 					DetectedTitle:   strings.TrimSuffix(filepath.Base(filePath), filepath.Ext(filePath)),
 					MatchedMedia:    filepath.Base(prior.DestPath),
 					MatchedMediaID:  prior.MediaID,
 					Confidence:      1,
-					SuggestedAction: "already_imported",
-					ImportStatus:    string(StatusImported),
+					SuggestedAction: state,
+					ImportStatus:    state,
 				}
 			}
 		}
@@ -148,7 +148,7 @@ func (p *ImportPipeline) scanSingleFile(ctx context.Context, filePath string) Sc
 		qualityStr += quality.Source
 	}
 
-	if prior, ok := p.verifiedPriorImport(ctx, filePath, info); ok {
+	if prior, state := p.scanPriorImport(ctx, filePath, info); prior != nil {
 		parsed := parseReleaseName(filepath.Base(filePath))
 		return ScanResult{
 			FilePath:        filePath,
@@ -161,8 +161,8 @@ func (p *ImportPipeline) scanSingleFile(ctx context.Context, filePath string) Sc
 			MatchedMediaID:  prior.MediaID,
 			MediaType:       string(prior.MediaType),
 			Confidence:      1,
-			SuggestedAction: "already_imported",
-			ImportStatus:    string(StatusImported),
+			SuggestedAction: state,
+			ImportStatus:    state,
 		}
 	}
 	importStatus, importErr, jobID := p.fileImportState(ctx, filePath)

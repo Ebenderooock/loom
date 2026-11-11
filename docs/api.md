@@ -60,6 +60,12 @@ Scans survive request disconnects but not server restarts. Two can run at once
 Completed/failed/cancelled previews expire after ten minutes, with at most eight
 sessions retained. Missing or expired IDs return 404; start a new scan explicitly.
 Status/result requests never perform filesystem scanning or content verification.
+Scan workers also avoid full-payload hashing: `previously_imported` means both
+files still match the saved size/mtime snapshots, not freshly verified content.
+`already_imported` is reserved for same-file identity (hardlinks). Legacy history
+without destination snapshots cannot establish a historical copy match. Actual
+import skipping and source deletion still require identity or fresh SHA-256;
+the scan's historical hint cannot bypass those checks.
 
 Legacy `POST /api/v1/imports/scan` and `/api/v1/imports/preview` accept `{path}` and
 include audio as well as video files. Music scan results use `media_type:
@@ -199,7 +205,7 @@ in `api/openapi/loom.yaml`.
 | `POST` | `/api/v1/imports/scans` | apiKey/bearer/cookie | `202 {"data":ImportScan}` | Start a background scan without waiting for filesystem work; reuse an active scan for the same path. |
 | `GET` | `/api/v1/imports/scans/{id}` | apiKey/bearer/cookie | `200 {"data":ImportScan}` | Poll progress and cursor-paged results using `offset` and `limit`; 404 after expiry/restart. |
 | `DELETE` | `/api/v1/imports/scans/{id}` | apiKey/bearer/cookie | `200 {"data":ImportScan}` | Cancel a preview while preserving its partial results and any queued imports. |
-| `POST` | `/api/v1/imports/scan` | apiKey/bearer/cookie | `200 {"data":[ImportScanResult]}` | Preview matches and verified file-level import status without importing. |
+| `POST` | `/api/v1/imports/scan` | apiKey/bearer/cookie | `200 {"data":[ImportScanResult]}` | Preview matches and metadata-only historical import hints without importing. |
 | `GET` | `/api/v1/media-files/{mediaType}/{id}` | admin | `200 {"files":[TitleFile],"deletionMode":"recycle"\|"permanent"}` | List every regular file in the server-resolved movie or series folder; optional `season` query scopes series files. |
 | `POST` | `/api/v1/media-files/{mediaType}/{id}/delete` | admin | `200 {"deleted":["relative/file.mkv"]}` | Delete selected files with explicit mode and `X-Confirm-Delete: true`; optional `season` query restricts scope. |
 | `POST` | `/api/v1/autosearch/evaluate` | apiKey/bearer/cookie | `200 application/json` | Production-engine dry run with decision evidence; optional unsaved policy preview. |

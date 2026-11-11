@@ -2,10 +2,135 @@ package imports
 
 import (
 	"errors"
+	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 )
+
+type copyReaderFunc func([]byte) (int, error)
+
+func (f copyReaderFunc) Read(p []byte) (int, error) { return f(p) }
+
+func TestCopyPublishesOnlyCompleteFilesAndPreservesRacingDestination(t *testing.T) {
+	for _, scenario := range []string{"success", "read error", "short source", "growing source", "racing file", "racing symlink"} {
+		t.Run(scenario, func(t *testing.T) {
+			dir := t.TempDir()
+			dst := filepath.Join(dir, "episode.mkv")
+			readErr := errors.New("connection lost")
+			first := true
+			reader := copyReaderFunc(func(p []byte) (int, error) {
+				if _, err := os.Lstat(dst); !os.IsNotExist(err) {
+					t.Fatalf("destination exposed before EOF: %v", err)
+				}
+				staged, err := filepath.Glob(filepath.Join(dir, ".loom-import-*.partial"))
+				if err != nil || len(staged) != 1 {
+					t.Fatalf("expected one staged file: %v, %v", staged, err)
+				}
+				if first {
+					first = false
+					return copy(p, "partial"), nil
+				}
+				switch scenario {
+				case "read error":
+					return 0, readErr
+				case "racing file":
+					if err := os.WriteFile(dst, []byte("existing"), 0o600); err != nil {
+						t.Fatal(err)
+					}
+				case "racing symlink":
+					target := filepath.Join(dir, "target")
+					if err := os.WriteFile(target, []byte("existing"), 0o600); err != nil {
+						t.Fatal(err)
+					}
+					if err := os.Symlink(target, dst); err != nil {
+						t.Skipf("symlinks unavailable: %v", err)
+					}
+				}
+				return 0, io.EOF
+			})
+			size := int64(len("partial"))
+			switch scenario {
+			case "short source":
+				size++
+			case "growing source":
+				size--
+			}
+			err := copyFileData(reader, dst, size)
+			switch scenario {
+			case "success":
+				if err != nil {
+					t.Fatal(err)
+				}
+				if got, err := os.ReadFile(dst); err != nil || string(got) != "partial" {
+					t.Fatalf("incomplete destination: %q, %v", got, err)
+				}
+			case "racing file", "racing symlink":
+				if !errors.Is(err, ErrDestinationExists) {
+					t.Fatalf("want collision error, got %v", err)
+				}
+				if got, err := os.ReadFile(dst); err != nil || string(got) != "existing" {
+					t.Fatalf("racing destination changed: %q, %v", got, err)
+				}
+			default:
+				if err == nil || (scenario == "read error" && !errors.Is(err, readErr)) {
+					t.Fatalf("copy failure not surfaced: %v", err)
+				}
+				if _, err := os.Lstat(dst); !os.IsNotExist(err) {
+					t.Fatalf("failed copy published destination: %v", err)
+				}
+			}
+			staged, err := filepath.Glob(filepath.Join(dir, ".loom-import-*.partial"))
+			if err != nil || len(staged) != 0 {
+				t.Fatalf("staging files leaked: %v, %v", staged, err)
+			}
+		})
+	}
+}
+
+func TestCopyCrashDoesNotLeavePartialDestinationOrBlockRetry(t *testing.T) {
+	if dir := os.Getenv("LOOM_TEST_COPY_CRASH"); dir != "" {
+		reader := io.MultiReader(strings.NewReader("partial"), copyReaderFunc(func([]byte) (int, error) {
+			os.Exit(73)
+			return 0, nil
+		}))
+		_ = copyFileData(reader, filepath.Join(dir, "episode.mkv"), 14)
+		os.Exit(74)
+	}
+	dir := t.TempDir()
+	src, dst := filepath.Join(dir, "source.mkv"), filepath.Join(dir, "episode.mkv")
+	if err := os.WriteFile(src, []byte("complete video"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	executable, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command(executable, "-test.run=^TestCopyCrashDoesNotLeavePartialDestinationOrBlockRetry$")
+	cmd.Env = append(os.Environ(), "LOOM_TEST_COPY_CRASH="+dir)
+	err = cmd.Run()
+	var exitErr *exec.ExitError
+	if !errors.As(err, &exitErr) || exitErr.ExitCode() != 73 {
+		t.Fatalf("child did not crash during copy: %v", err)
+	}
+	if _, err := os.Lstat(dst); !os.IsNotExist(err) {
+		t.Fatalf("crash exposed partial destination: %v", err)
+	}
+	staged, err := filepath.Glob(filepath.Join(dir, ".loom-import-*.partial"))
+	if err != nil || len(staged) != 1 {
+		t.Fatalf("expected abandoned staging file: %v, %v", staged, err)
+	}
+	if err := copyFile(src, dst); err != nil {
+		t.Fatalf("abandoned staging file blocked retry: %v", err)
+	}
+	for _, path := range []string{src, dst} {
+		if got, err := os.ReadFile(path); err != nil || string(got) != "complete video" {
+			t.Fatalf("source or destination incomplete: %q, %v", got, err)
+		}
+	}
+}
 
 func TestMoveFileRelocatesAndRemovesSource(t *testing.T) {
 	dir := t.TempDir()

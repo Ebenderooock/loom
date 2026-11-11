@@ -39,27 +39,59 @@ available to authenticated users.
 Edit-form tests include the saved client `id` so blank/masked credentials
 can be restored for the test without persisting unsaved changes.
 
-Imports never silently overwrite an existing file or merge into an existing
-destination folder. Collisions return an explicit error and preserve both
-files. Automatic replacements require an enabled, configured recycle bin;
-if preservation fails, the import stops. A library-update failure leaves the
-imported file at its destination for recovery rather than deleting it.
+Movie and episode imports may replace a file registered to the same matched
+item when its quality is equal or better and the assigned quality profile
+accepts the incoming quality. Downgrades and disallowed qualities are rejected;
+manual matching and reimport do not bypass these checks. If a profile or the
+incoming quality cannot be resolved, an assigned profile cannot be verified
+and the import is rejected. Without a profile, comparisons use available
+filename quality information; an unknown existing quality cannot establish a
+downgrade. Unrelated or unsafe destinations are not replaced. A recycle bin
+is optional: when enabled, the old file is kept there.
+
+File copies are written to hidden `.loom-import-*.partial` staging files in the
+destination directory, synced and closed, then published without overwriting
+collisions. For a replacement, Loom stages and verifies the incoming file
+before preserving the old file in a private `.loom-replacement-*` backup and
+replacing the live pathname in one rename. The old pathname remains available
+while staging and backing up; a crash does not leave a gap between removing it
+and publishing the new file. Backups use hardlinks where possible and otherwise
+require a verified copy. Registration failures restore the old file where
+possible; if restoration or recycling fails, the error identifies the preserved
+backup. A crash can leave an orphaned backup in that directory, but retries
+can verify the live file and finish registration. Filesystems lacking safe
+no-replace publication report an error rather than blindly overwriting.
+If a complete copy was published before history was recorded, retries verify
+its content and finish registration. Unregistered mismatched destinations,
+including possible partial files from older versions, are preserved for
+inspection instead of being assumed to belong to the matched item.
 
 ### Importing completed files
 
 In **Downloads > Imports**, scan the completed-download folder, select several
 files, then choose **Import selected**, or use **Import all matched** to queue
 every eligible match across all result pages. Search and pagination keep large
-season-pack scans manageable. Verified successful imports are hidden by default;
+season-pack scans manageable. Historical imports are hidden by default;
 enable **Show already imported files** to inspect them.
 
-Scans run in the background so slow disks, large folders, and verification of
-previously copied files do not hold a request open until a proxy returns 524.
+Scans run in the background so slow disks and large folders do not hold a
+request open until a proxy returns 524.
 The page shows discovery and matching progress and displays results as they
 become available; you can queue those results before the scan finishes or cancel
-the scan. Content verification still compares file identity or SHA-256, so a
-large copied library can take time to verify; it is not treated as imported
-merely because file sizes match.
+the scan. Scans never hash full media payloads. **Previously imported** means
+the current source and destination size/modification times match the snapshots
+saved after a successful import; it is a historical hint, not content proof.
+Hardlinks can be identified as the same underlying file without reading bytes.
+Changed or missing files are shown again. Older history without destination
+snapshots is not assumed to be a metadata match. Re-queueing those files performs
+full verification before skipping identical content and saves snapshots for
+subsequent fast scans; it does not blindly copy them again.
+
+Enable **Show already imported files** to explicitly queue a historical copy
+for verification. Normal **Import all matched** does not queue hidden historical
+matches. Before skipping an actual import or deleting its source, Loom still
+requires same-file identity or a fresh full SHA-256 comparison of both files.
+Size/mtime matches and previous hash results alone never authorize deletion.
 
 At most two scans run at once, and repeated submissions for the same running
 folder reuse that scan. Unlike the durable import queue, scan previews are
