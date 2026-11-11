@@ -94,11 +94,13 @@ and verify the resulting package version rather than reusing old build cookies.
 The resulting `.spk` files land in spksrc's top-level `packages/` directory.
 For the DSM 7.1+ x64 target, the filename is `loom_x64-7.1_0.4.1-6.spk`.
 Install it on DSM via **Package Center → Manual Install**. The separate
-`Synology package` GitHub Actions workflow runs when a GitHub release is
-published and can also be started manually for a release tag. It builds the
-x64/DSM 7.1 package by default (or aarch64/DSM 7.1 when selected) and uploads
-the `.spk` and its build-input metadata as a 30-day workflow artifact; it does
-not add packages to the GitHub release.
+`Synology package` GitHub Actions workflow runs on code pushes to `prelease/**`,
+when a GitHub release is published, and can also be started manually for a
+release tag. Prelease builds archive the pushed commit and its built web UI;
+stable builds use the curated release source. The workflow builds the x64/DSM
+7.1 package by default (or aarch64/DSM 7.1 when selected) and uploads the `.spk`
+and its build-input metadata as a 30-day artifact on that run. It does not add
+packages to GitHub releases.
 
 Run the package service setup checks from the Loom repository as a non-root
 user (no NAS or spksrc checkout required):
