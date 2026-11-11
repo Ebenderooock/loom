@@ -46,8 +46,8 @@ environment. Building on the NAS itself is not the intended path.
 
 Choose a Loom release with a curated source asset. Update `PKG_VERS` in
 `cross/loom/Makefile` and `SPK_VERS` in `spk/loom/Makefile` to that same version
-before generating digests; increment `SPK_REV` for packaging-only changes.
-The checked-in recipe and digests currently target `0.1.1`.
+before generating digests; increment `SPK_REV` for packaging-only changes. The
+checked-in recipe and digests currently target `0.4.1`.
 
 ```sh
 git clone https://github.com/SynoCommunity/spksrc
@@ -92,9 +92,13 @@ copy the directory **contents** as above, not a nested `loom/loom` directory,
 and verify the resulting package version rather than reusing old build cookies.
 
 The resulting `.spk` files land in spksrc's top-level `packages/` directory.
-For the DSM 7.1+ x64 target, the filename is `loom_x64-7.1_0.4.1-2.spk`.
-Install it on DSM via **Package Center → Manual Install**. GitHub Actions
-currently publishes the source tarball, not these `.spk` files.
+For the DSM 7.1+ x64 target, the filename is `loom_x64-7.1_0.4.1-6.spk`.
+Install it on DSM via **Package Center → Manual Install**. The separate
+`Synology package` GitHub Actions workflow runs when a GitHub release is
+published and can also be started manually for a release tag. It builds the
+x64/DSM 7.1 package by default (or aarch64/DSM 7.1 when selected) and uploads
+the `.spk` and its build-input metadata as a 30-day workflow artifact; it does
+not add packages to the GitHub release.
 
 Run the package service setup checks from the Loom repository as a non-root
 user (no NAS or spksrc checkout required):
