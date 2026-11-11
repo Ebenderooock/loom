@@ -288,7 +288,10 @@ func writeSeasonSparseFile(t *testing.T, path string, size int64, marker string)
 		t.Fatal(err)
 	}
 	defer f.Close()
-	if err := os.Truncate(path, size); err != nil {
+	if err := markSeasonFileSparse(f); err != nil {
+		t.Fatalf("mark season fixture sparse: %v", err)
+	}
+	if err := f.Truncate(size); err != nil {
 		t.Fatal(err)
 	}
 	for _, offset := range []int64{0, size - int64(len(marker))} {
