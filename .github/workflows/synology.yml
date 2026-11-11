@@ -125,6 +125,15 @@ jobs:
         run: |
           cp -R packaging/synology/cross/loom/. spksrc/cross/loom/
           cp -R packaging/synology/spk/loom/. spksrc/spk/loom/
+      - name: Configure prelease package version
+        if: steps.meta.outputs.source_mode == 'prelease'
+        env:
+          PACKAGE_VERSION: ${{ steps.meta.outputs.package_version }}
+        run: |
+          set -euo pipefail
+          sed -i "s/^PKG_VERS = .*/PKG_VERS = ${PACKAGE_VERSION}/" spksrc/cross/loom/Makefile
+          sed -i "s/^SPK_VERS = .*/SPK_VERS = ${PACKAGE_VERSION}/" spksrc/spk/loom/Makefile
+          sed -i "s/^PKG_COMMIT = .*/PKG_COMMIT = ${GITHUB_SHA}/" spksrc/cross/loom/Makefile
       - name: Set prelease source digest
         if: steps.meta.outputs.source_mode == 'prelease'
         env:
@@ -139,25 +148,15 @@ jobs:
             printf '%s MD5 %s\n' "$source_file" "$(md5sum "$source_path" | cut -d ' ' -f 1)"
           } > spksrc/cross/loom/digests
       - name: Build package
-        env:
-          SOURCE_MODE: ${{ steps.meta.outputs.source_mode }}
-          PACKAGE_VERSION: ${{ steps.meta.outputs.package_version }}
         run: |
           set -euo pipefail
           docker run --rm --platform=linux/amd64 \
             -e 'TAR_CMD=fakeroot tar' \
             -e SPK_TARGET \
-            -e SOURCE_MODE \
-            -e PACKAGE_VERSION \
-            -e PKG_COMMIT="$GITHUB_SHA" \
             -v "$GITHUB_WORKSPACE/spksrc:/spksrc" \
             -w /spksrc \
             ghcr.io/synocommunity/spksrc \
-            bash -lc 'if [ "$SOURCE_MODE" = prelease ]; then
-              make -C spk/loom "$SPK_TARGET" "PKG_VERS=$PACKAGE_VERSION" "SPK_VERS=$PACKAGE_VERSION" "PKG_COMMIT=$PKG_COMMIT"
-            else
-              make -C spk/loom "$SPK_TARGET"
-            fi'
+            bash -lc 'make -C spk/loom "$SPK_TARGET"'
       - name: Record build inputs
         env:
           BUILD_LABEL: ${{ steps.meta.outputs.build_label }}
