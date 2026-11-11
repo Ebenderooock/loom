@@ -22,9 +22,13 @@ type acquisitionClient struct {
 	calls atomic.Int32
 	fail  bool
 	err   error
+	items []Item
 }
 
 func (c *acquisitionClient) ID() string { return "client" }
+func (c *acquisitionClient) Status(context.Context, ...string) ([]Item, error) {
+	return c.items, c.err
+}
 func (c *acquisitionClient) Add(context.Context, AddRequest) (AddResult, error) {
 	c.calls.Add(1)
 	if c.err != nil {
@@ -315,6 +319,62 @@ func TestAcquisitionConcurrentAndInterruptedAdmission(t *testing.T) {
 	}
 }
 
+func TestCompletedAcquisitionExplicitRecovery(t *testing.T) {
+	ctx := context.Background()
+	store := openHistoryTestStore(t)
+	registry, client := acquisitionRegistry(t, store, false)
+	recoveries := 0
+	registry.SetReacquisitionHandler(func(ctx context.Context, clientID, downloadID string) error {
+		recoveries++
+		if clientID != "client" || downloadID != "download" {
+			t.Fatalf("recovered wrong identity: %s/%s", clientID, downloadID)
+		}
+		var status string
+		if err := store.db.QueryRowContext(ctx, `SELECT status FROM download_history ORDER BY attempt DESC LIMIT 1`).Scan(&status); err != nil || status != "acquired" {
+			t.Fatalf("recovery ran before successful acquisition persisted: %q, %v", status, err)
+		}
+		return nil
+	})
+	req := AddRequest{Title: "From Zero Deluxe 24bit", Infohash: strings.Repeat("a", 40)}
+	if _, err := registry.Acquire(ctx, "client", req, nil); err != nil {
+		t.Fatal(err)
+	}
+	_, err := registry.Acquire(ctx, "client", req, nil)
+	var conflict *AcquisitionConflict
+	if !errors.As(err, &conflict) || !conflict.RetryAllowed || conflict.HistoryID == "" {
+		t.Fatalf("missing actionable conflict: %v", err)
+	}
+	response := httptest.NewRecorder()
+	if !WriteAcquisitionConflict(response, err) || !strings.Contains(response.Body.String(), conflict.HistoryID) {
+		t.Fatalf("conflict lost recovery details: %s", response.Body.String())
+	}
+	service := &Service{historyStore: store, registry: registry}
+	for _, status := range []ItemStatus{StatusItemDownloading, StatusItemPaused, StatusItemUnknown} {
+		client.items = []Item{{ID: "download", Status: status}}
+		if err := service.checkAcquisitionRetry(ctx, conflict.HistoryID, "retry"); !errors.Is(err, ErrAcquisitionDeferred) {
+			t.Fatalf("active %s download allowed: %v", status, err)
+		}
+	}
+	client.items = []Item{{ID: "download", Status: StatusItemSeeding}}
+	if err := service.checkAcquisitionRetry(ctx, conflict.HistoryID, "retry"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.acquisitionAction(ctx, conflict.HistoryID, "retry"); err != nil {
+		t.Fatalf("completed release could not be re-armed: %v", err)
+	}
+	if _, err := registry.Acquire(ctx, "client", req, nil); err != nil {
+		t.Fatalf("authorized retry failed: %v", err)
+	}
+	if _, err := registry.Acquire(ctx, "client", req, nil); !errors.Is(err, ErrAcquisitionDeferred) {
+		t.Fatalf("retry authorized more than one attempt: %v", err)
+	}
+	if client.calls.Load() != 2 {
+		t.Fatalf("expected one initial and one authorized add, got %d", client.calls.Load())
+	}
+	if recoveries != 1 {
+		t.Fatalf("expected one explicitly authorized import recovery, got %d", recoveries)
+	}
+}
 func TestAcquisitionActionsAuthorizationAndMixedBatch(t *testing.T) {
 	store := openHistoryTestStore(t)
 	ctx := context.Background()

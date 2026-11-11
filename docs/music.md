@@ -28,6 +28,12 @@ monitoring, metadata refresh and folder rescan actions, and an **Edit** dialog
 for monitoring, the quality profile and the metadata profile. Changing the
 metadata profile refreshes the artist so the catalogue matches.
 
+Artist introductions start with a short preview. Use the understated **Read more**
+and **Read less** text controls to expand or collapse a longer biography in either
+the drawer or the full artist page. Music detail actions follow the movie and TV
+panels: compact labelled primary actions, a separator, icon-only maintenance
+actions, and the destructive artist action at the far right.
+
 Albums are grouped by type. For each album you can toggle monitoring, start an
 automatic search, open an interactive search to pick a release yourself, and
 expand it to see each track's file availability. Each track has its own
@@ -36,6 +42,15 @@ monitor toggle:
 - Monitoring or unmonitoring an album applies to all its tracks.
 - Monitoring a single track also monitors its album, so searches include it.
 - Searches only look for monitored tracks that are missing a file.
+
+Both artist views load the album's tracks on first expansion and show track
+numbers, titles, durations when known, availability and monitoring controls.
+**Album details** opens the same album drawer from either artist view, including
+the edition selector and track list. A loading indicator appears during metadata
+requests; failed or incomplete lookups offer **Retry** inline. After metadata
+confirms there are no editions to supply tracks, the album row shows that no track
+list is available and disables track expansion instead of opening an empty panel.
+Album details remain accessible.
 
 Use the **Albums** view to browse the full album library, including entries
 added without a primary managed artist. **Add Album** searches MusicBrainz
@@ -193,10 +208,10 @@ MusicBrainz** to send only searches to the public service.
 The [musicbrainz-docker](https://github.com/metabrainz/musicbrainz-docker)
 project runs a replicated MusicBrainz server. Its published requirements are:
 
-| Setup | Disk | Memory | CPU |
-| --- | --- | --- | --- |
-| Database only (lookups; use public search) | 100 GB | 4 GB | 2 threads |
-| With search indexes | 350 GB | 16 GB | 16 threads |
+| Setup                                      | Disk   | Memory | CPU        |
+| ------------------------------------------ | ------ | ------ | ---------- |
+| Database only (lookups; use public search) | 100 GB | 4 GB   | 2 threads  |
+| With search indexes                        | 350 GB | 16 GB  | 16 threads |
 
 Point Loom at the mirror's web service, for example
 `http://musicbrainz.lan:5000/ws/2`, with a rate limit of `0`. MusicBrainz core

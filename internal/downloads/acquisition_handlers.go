@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -26,7 +27,7 @@ func (h *HistoryStore) acquisitionAction(ctx context.Context, id, action string)
 	if err != nil {
 		return err
 	}
-	if status != "acquisition_failed" && status != "acquiring" {
+	if status != "acquisition_failed" && status != "acquiring" && !(status == "acquired" && action == "retry") {
 		return ErrAcquisitionDeferred
 	}
 	if status == "acquiring" {
@@ -42,7 +43,7 @@ func (h *HistoryStore) acquisitionAction(ctx context.Context, id, action string)
 	case "retry":
 		// Re-arm eligibility, not an old signed URL. The next acquisition must
 		// obtain fresh release coordinates through its normal search flow.
-		_, err = tx.ExecContext(ctx, `UPDATE download_history SET status = 'acquisition_failed',
+		_, err = tx.ExecContext(ctx, `UPDATE download_history SET status = 'acquisition_failed', stage = 'retry_authorized',
 			retry_eligible = 1, retry_count = 0, next_retry_at = '', reason = 'Retry authorized by administrator.'
 			WHERE id = ?`, id)
 	case "blocklist":
@@ -93,19 +94,54 @@ func (s *Service) handleAcquisitionActions(w http.ResponseWriter, r *http.Reques
 	results := make([]outcome, 0, len(req.IDs))
 	for _, id := range req.IDs {
 		result := outcome{ID: id}
-		err := s.historyStore.acquisitionAction(r.Context(), id, req.Action)
+		err := s.checkAcquisitionRetry(r.Context(), id, req.Action)
+		if err == nil {
+			err = s.historyStore.acquisitionAction(r.Context(), id, req.Action)
+		}
 		switch {
 		case err == nil:
 			result.OK = true
 		case errors.Is(err, sql.ErrNoRows):
 			result.Error = "History item not found or superseded."
 		case errors.Is(err, ErrAcquisitionDeferred):
-			result.Error = "Item is successful, still in its 15-minute admission window, or has no release to blocklist."
+			result.Error = "This download is still active, still in its 15-minute admission window, or has no release to blocklist."
 		default:
 			s.logger.Error("acquisition action failed", "id", id, "error", err)
-			result.Error = "Unable to persist acquisition action."
+			result.Error = "Could not authorize this action. Check the original download client's connection and try again."
 		}
 		results = append(results, result)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"results": results})
+}
+
+func (s *Service) checkAcquisitionRetry(ctx context.Context, id, action string) error {
+	if action != "retry" {
+		return nil
+	}
+	var status, clientID, downloadID string
+	if err := s.historyStore.db.QueryRowContext(ctx,
+		`SELECT status, client_id, download_id FROM download_history WHERE id = ?`, id).
+		Scan(&status, &clientID, &downloadID); err != nil {
+		return err
+	}
+	if status != "acquired" {
+		return nil
+	}
+	if s.registry == nil {
+		return errors.New("download registry unavailable")
+	}
+	client, ok := s.registry.Get(clientID)
+	if !ok {
+		return errors.New("original download client unavailable")
+	}
+	items, err := client.Status(ctx, downloadID)
+	if err != nil {
+		return fmt.Errorf("check original download: %w", err)
+	}
+	for _, item := range items {
+		if item.ID == downloadID && item.Status != StatusItemCompleted && item.Status != StatusItemSeeding && item.Status != StatusItemFailed {
+			return ErrAcquisitionDeferred
+		}
+	}
+	return nil
 }

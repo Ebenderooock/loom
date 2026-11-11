@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AlbumDetailSheet } from "@/components/music/album-detail-sheet";
@@ -110,7 +110,7 @@ describe("AlbumDetailSheet", () => {
     const user = userEvent.setup();
     renderSheet();
     await screen.findAllByText("A Shared Record");
-    await user.click(screen.getByRole("button", { name: "Monitored" }));
+    await user.click(screen.getByRole("button", { name: "Unmonitor album" }));
     await waitFor(() => {
       const request = fetchMock.mock.calls.find(
         ([url, init]) =>
@@ -121,5 +121,58 @@ describe("AlbumDetailSheet", () => {
         monitored: false,
       });
     });
+  });
+
+  it("matches the movie/TV compact action hierarchy", async () => {
+    renderSheet();
+    const actions = screen.getByRole("group", { name: "Album actions" });
+    expect(within(actions).getByRole("button", { name: "Search" })).toHaveClass(
+      "h-8",
+      "text-xs",
+    );
+    expect(
+      within(actions).getByRole("button", { name: "Manual Search" }),
+    ).toHaveClass("h-8", "text-xs");
+    expect(
+      within(actions).getByRole("button", { name: "Unmonitor album" }),
+    ).toHaveClass("h-8", "w-8");
+    await screen.findByText("Opening Theme");
+  });
+
+  it("retries metadata failures even when the API returns an empty stored album", async () => {
+    const user = userEvent.setup();
+    const normalFetch = fetchMock.getMockImplementation()!;
+    let attempts = 0;
+    fetchMock.mockImplementation((input, init) => {
+      if (
+        String(input).endsWith("/api/v1/albums/album-1") &&
+        attempts++ === 0
+      ) {
+        return Promise.resolve(json({ ...album, tracks: [] }));
+      }
+      return normalFetch(input, init);
+    });
+    renderSheet();
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Track metadata could not be loaded.",
+    );
+    await user.click(screen.getByRole("button", { name: "Retry" }));
+    expect(await screen.findByText("Opening Theme")).toBeInTheDocument();
+  });
+
+  it("shows a definite empty state without asking users to repeatedly reopen the album", async () => {
+    fetchMock.mockResolvedValue(
+      json({
+        ...album,
+        releases_fetched_at: "2024-01-01",
+      }),
+    );
+    renderSheet();
+    expect(
+      await screen.findByText(/No track list is available for this album/),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Retry" }),
+    ).not.toBeInTheDocument();
   });
 });

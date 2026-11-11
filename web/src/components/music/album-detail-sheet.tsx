@@ -41,6 +41,7 @@ import {
   MusicArtwork,
   MusicExternalLinks,
   MusicRating,
+  albumTracksAbsent,
 } from "./artist-details";
 
 function durationLabel(durationMs?: number): string {
@@ -64,7 +65,7 @@ export function AlbumDetailSheet({
 }) {
   const {
     data: albumData,
-    isLoading,
+    isFetching,
     isError,
     refetch,
   } = useAlbum(open ? (selectedAlbum?.id ?? undefined) : undefined);
@@ -152,10 +153,41 @@ export function AlbumDetailSheet({
         </header>
 
         <div className="space-y-6 px-6 py-5">
-          <div className="flex flex-wrap gap-2">
+          <div
+            role="group"
+            aria-label="Album actions"
+            className="flex flex-wrap items-center gap-1.5"
+          >
             <Button
               size="sm"
-              variant={monitored ? "secondary" : "outline"}
+              variant="outline"
+              className="h-8 gap-1.5 text-xs"
+              disabled={!monitored || searchAlbum.isPending}
+              onClick={search}
+            >
+              {searchAlbum.isPending ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Search className="h-3.5 w-3.5" />
+              )}
+              Search
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 gap-1.5 text-xs"
+              onClick={() => setInteractiveOpen(true)}
+            >
+              <TextSearch className="h-3.5 w-3.5" />
+              Manual Search
+            </Button>
+            <div aria-hidden className="mx-0.5 h-5 w-px bg-border" />
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-8 w-8"
+              aria-label={monitored ? "Unmonitor album" : "Monitor album"}
+              title={monitored ? "Unmonitor album" : "Monitor album"}
               disabled={setAlbumMonitored.isPending}
               onClick={() =>
                 setAlbumMonitored.mutate(
@@ -176,41 +208,19 @@ export function AlbumDetailSheet({
               }
             >
               {monitored ? (
-                <BookmarkCheck className="mr-1.5 h-4 w-4" />
+                <BookmarkCheck className="h-3.5 w-3.5" />
               ) : (
-                <Bookmark className="mr-1.5 h-4 w-4" />
+                <Bookmark className="h-3.5 w-3.5" />
               )}
-              {monitored ? "Monitored" : "Monitor"}
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={!monitored || searchAlbum.isPending}
-              onClick={search}
-            >
-              {searchAlbum.isPending ? (
-                <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
-              ) : (
-                <Search className="mr-1.5 h-4 w-4" />
-              )}
-              Search
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setInteractiveOpen(true)}
-            >
-              <TextSearch className="mr-1.5 h-4 w-4" />
-              Interactive search
             </Button>
             {album.links?.some((link) => link.type === "spotify") && (
               <a
                 href={album.links.find((link) => link.type === "spotify")?.url}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex h-9 items-center rounded-md border border-input px-3 text-sm hover:bg-accent hover:text-accent-foreground"
+                className="inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-xs hover:bg-accent hover:text-accent-foreground"
               >
-                <ExternalLink className="mr-1.5 h-4 w-4" />
+                <ExternalLink className="h-3.5 w-3.5" />
                 Listen
               </a>
             )}
@@ -297,14 +307,25 @@ export function AlbumDetailSheet({
               </p>
             )}
 
-            {isLoading ? (
-              <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
+            {isFetching ? (
+              <div
+                role="status"
+                className="flex items-center gap-2 py-6 text-sm text-muted-foreground"
+              >
                 <Loader2 className="h-4 w-4 animate-spin" />
                 Loading album details…
               </div>
-            ) : isError && !albumData ? (
-              <div className="flex items-center justify-between gap-3 py-4 text-sm text-muted-foreground">
-                <span>Could not load this album’s releases and tracks.</span>
+            ) : isError ||
+              (tracks.length === 0 && !albumTracksAbsent(album)) ? (
+              <div
+                role="alert"
+                className="flex items-center justify-between gap-3 py-4 text-sm text-muted-foreground"
+              >
+                <span>
+                  {isError
+                    ? "Could not load this album’s releases and tracks."
+                    : "Track metadata could not be loaded."}
+                </span>
                 <Button
                   size="sm"
                   variant="outline"
@@ -314,9 +335,8 @@ export function AlbumDetailSheet({
                 </Button>
               </div>
             ) : tracks.length === 0 ? (
-              <p className="py-4 text-sm text-muted-foreground">
-                No track list is available yet. Open the album again to retry
-                metadata loading.
+              <p role="status" className="py-4 text-sm text-muted-foreground">
+                No track list is available for this album.
               </p>
             ) : (
               <ol className="divide-y divide-border/60">
