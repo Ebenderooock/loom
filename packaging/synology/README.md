@@ -100,7 +100,10 @@ release tag. Prelease builds archive the pushed commit and its built web UI;
 stable builds use the curated release source. The workflow builds the x64/DSM
 7.1 package by default (or aarch64/DSM 7.1 when selected) and uploads the `.spk`
 and its build-input metadata as a 30-day artifact on that run. It does not add
-packages to GitHub releases.
+packages to GitHub releases. Loom's prerelease version follows the Docker
+`<branch-version>-pre.<run>.<attempt>` format. DSM uses a numeric package
+revision instead, derived from that workflow run for both prerelease and stable
+builds so a stable package can upgrade the previous prerelease.
 
 Run the package service setup checks from the Loom repository as a non-root
 user (no NAS or spksrc checkout required):
