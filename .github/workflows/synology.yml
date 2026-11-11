@@ -1,6 +1,11 @@
 name: Synology package
 
 on:
+  push:
+    branches: ["prelease/**"]
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
   release:
     types: [published]
   workflow_dispatch:
@@ -21,9 +26,13 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: synology-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
-    name: Build ${{ inputs.target || 'arch-x64-7.1' }}
+    name: Build ${{ inputs.target || 'arch-x64-7.1' }} (${{ github.ref_name }})
     runs-on: ubuntu-latest
     env:
       RELEASE_TAG: ${{ inputs.tag || github.event.release.tag_name }}
@@ -38,17 +47,41 @@ jobs:
           repository: SynoCommunity/spksrc
           path: spksrc
           fetch-depth: 1
-      - name: Validate release and target
+      - name: Identify build version
+        id: meta
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_REF" == refs/heads/prelease/* ]]; then
+            package_version="${GITHUB_REF_NAME#prelease/}"
+            if ! [[ "$package_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "::error::Expected prelease/<major>.<minor>.<patch>, got ${GITHUB_REF_NAME}"
+              exit 1
+            fi
+            echo "source_mode=prelease" >> "$GITHUB_OUTPUT"
+            echo "build_label=prelease-${package_version}-${GITHUB_SHA:0:7}-${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
+          else
+            package_version="${RELEASE_TAG#v}"
+            if ! [[ "$package_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "::error::Expected a stable release tag, got ${RELEASE_TAG}"
+              exit 1
+            fi
+            echo "source_mode=release" >> "$GITHUB_OUTPUT"
+            echo "build_label=${RELEASE_TAG}" >> "$GITHUB_OUTPUT"
+          fi
+          echo "package_version=${package_version}" >> "$GITHUB_OUTPUT"
+      - name: Validate release recipe and target
+        env:
+          SOURCE_MODE: ${{ steps.meta.outputs.source_mode }}
+          PACKAGE_VERSION: ${{ steps.meta.outputs.package_version }}
         run: |
           set -euo pipefail
           package_version="$(sed -n 's/^PKG_VERS = //p' packaging/synology/cross/loom/Makefile)"
           spk_version="$(sed -n 's/^SPK_VERS = //p' packaging/synology/spk/loom/Makefile)"
-          package_tag="v${package_version}"
           if [ "$package_version" != "$spk_version" ]; then
             echo "Cross-package version ${package_version} does not match package version ${spk_version}" >&2
             exit 1
           fi
-          if [ "$RELEASE_TAG" != "$package_tag" ]; then
+          if [ "$SOURCE_MODE" = "release" ] && [ "$PACKAGE_VERSION" != "$package_version" ]; then
             echo "Recipe version ${package_version} does not match release ${RELEASE_TAG}" >&2
             exit 1
           fi
@@ -56,20 +89,78 @@ jobs:
             arch-x64-7.1|arch-aarch64-7.1) ;;
             *) echo "Unsupported Synology target: ${SPK_TARGET}" >&2; exit 1 ;;
           esac
+      - uses: pnpm/action-setup@v6
+        if: steps.meta.outputs.source_mode == 'prelease'
+        with:
+          version: 9
+      - uses: actions/setup-node@v7
+        if: steps.meta.outputs.source_mode == 'prelease'
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      - name: Build web UI for prelease source
+        if: steps.meta.outputs.source_mode == 'prelease'
+        working-directory: web
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm run build
+          test -s dist/index.html
+      - name: Create prelease source archive
+        if: steps.meta.outputs.source_mode == 'prelease'
+        env:
+          PACKAGE_VERSION: ${{ steps.meta.outputs.package_version }}
+        run: |
+          set -euo pipefail
+          prefix="loom-${PACKAGE_VERSION}"
+          source_dir=".srcpkg/${prefix}"
+          rm -rf .srcpkg
+          mkdir -p "$source_dir" "spksrc/distrib"
+          git archive HEAD | tar -x -C "$source_dir"
+          mkdir -p "${source_dir}/web"
+          cp -R web/dist "${source_dir}/web/dist"
+          tar -czf "spksrc/distrib/loom-source-v${PACKAGE_VERSION}.tar.gz" -C .srcpkg "$prefix"
+          rm -rf .srcpkg
       - name: Install Loom package recipe
         run: |
           cp -R packaging/synology/cross/loom/. spksrc/cross/loom/
           cp -R packaging/synology/spk/loom/. spksrc/spk/loom/
-      - name: Build package
+      - name: Set prelease source digest
+        if: steps.meta.outputs.source_mode == 'prelease'
+        env:
+          PACKAGE_VERSION: ${{ steps.meta.outputs.package_version }}
         run: |
+          set -euo pipefail
+          source_file="loom-source-v${PACKAGE_VERSION}.tar.gz"
+          source_path="spksrc/distrib/${source_file}"
+          {
+            printf '%s SHA1 %s\n' "$source_file" "$(sha1sum "$source_path" | cut -d ' ' -f 1)"
+            printf '%s SHA256 %s\n' "$source_file" "$(sha256sum "$source_path" | cut -d ' ' -f 1)"
+            printf '%s MD5 %s\n' "$source_file" "$(md5sum "$source_path" | cut -d ' ' -f 1)"
+          } > spksrc/cross/loom/digests
+      - name: Build package
+        env:
+          SOURCE_MODE: ${{ steps.meta.outputs.source_mode }}
+          PACKAGE_VERSION: ${{ steps.meta.outputs.package_version }}
+        run: |
+          set -euo pipefail
           docker run --rm --platform=linux/amd64 \
             -e 'TAR_CMD=fakeroot tar' \
             -e SPK_TARGET \
+            -e SOURCE_MODE \
+            -e PACKAGE_VERSION \
+            -e PKG_COMMIT="$GITHUB_SHA" \
             -v "$GITHUB_WORKSPACE/spksrc:/spksrc" \
             -w /spksrc \
             ghcr.io/synocommunity/spksrc \
-            bash -lc 'make -C spk/loom "$SPK_TARGET"'
+            bash -lc 'if [ "$SOURCE_MODE" = prelease ]; then
+              make -C spk/loom "$SPK_TARGET" "PKG_VERS=$PACKAGE_VERSION" "SPK_VERS=$PACKAGE_VERSION" "PKG_COMMIT=$PKG_COMMIT"
+            else
+              make -C spk/loom "$SPK_TARGET"
+            fi'
       - name: Record build inputs
+        env:
+          BUILD_LABEL: ${{ steps.meta.outputs.build_label }}
         run: |
           set -euo pipefail
           package="$(find spksrc/packages -maxdepth 1 -type f -name 'loom_*.spk' -print -quit)"
@@ -78,16 +169,17 @@ jobs:
             exit 1
           fi
           {
-            echo "Loom release: ${RELEASE_TAG}"
+            echo "Loom source: ${BUILD_LABEL}"
+            echo "Loom commit: ${GITHUB_SHA}"
             echo "Target: ${SPK_TARGET}"
-            echo "Source SHA-256: $(awk '$2 == "SHA256" {print $3}' packaging/synology/cross/loom/digests)"
+            echo "Source SHA-256: $(awk '$2 == "SHA256" {print $3}' spksrc/cross/loom/digests)"
             echo "spksrc commit: $(git -C spksrc rev-parse HEAD)"
             echo "Builder image: $(docker image inspect --format='{{index .RepoDigests 0}}' ghcr.io/synocommunity/spksrc)"
             echo "Package SHA-256: $(sha256sum "$package" | cut -d ' ' -f 1)"
           } | tee spksrc/packages/loom-build-info.txt >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v7
         with:
-          name: synology-${{ env.RELEASE_TAG }}-${{ env.SPK_TARGET }}
+          name: synology-${{ steps.meta.outputs.build_label }}-${{ env.SPK_TARGET }}
           path: |
             spksrc/packages/loom_*.spk
             spksrc/packages/loom-build-info.txt
