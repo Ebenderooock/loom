@@ -692,7 +692,7 @@ func (p *ImportPipeline) importMatchedWith(ctx context.Context, ev *downloads.Do
 
 	// A crash can publish a complete copy before history is recorded.
 	// Resume only after proving identity or checking the full content.
-	replaced := false
+	registered := false
 	if destErr == nil {
 		if destInfo.Mode()&os.ModeSymlink != 0 || !destInfo.Mode().IsRegular() {
 			return "", p.recordFailure(ctx, string(match.MediaType), match.MediaID, ev.Title, mediaFile,
@@ -725,38 +725,16 @@ func (p *ImportPipeline) importMatchedWith(ctx context.Context, ev *downloads.Do
 			if err != nil {
 				return "", p.recordFailure(ctx, string(match.MediaType), match.MediaID, ev.Title, mediaFile, err)
 			}
-			if err := p.recordStatus(ctx, string(match.MediaType), match.MediaID, mediaFile, destFile, StatusImported, "already exists"); err != nil {
-				return "", fmt.Errorf("record import history: %w", err)
-			}
-			if p.importMode == ImportModeMove && ev.DownloadID == "" {
-				if err := p.FinalizeImports(ctx, []string{destFile}); err != nil {
-					return "", fmt.Errorf("import registered but source cleanup failed: %w", err)
-				}
-			}
-			if match.MediaType == "movie" && match.MediaID != "" {
-				if err := p.moviesSvc.SetMovieStatus(ctx, match.MediaID, movies.MovieStatusAvailableRightQuality); err != nil {
-					p.logger.Warn("failed to update movie status after import (existing file), will be corrected on rescan",
-						"movie_id", match.MediaID, "error", err)
-				}
-			}
-			p.publishNotification(ctx, match, destFile)
-			_ = p.bus.Publish(ctx, &ImportCompletedEvent{
-				MediaType: match.MediaType,
-				MediaID:   match.MediaID,
-				Title:     match.Title,
-				DestPath:  destFile,
-			})
-			return destFile, nil
-		}
-		if !owned {
+			registered = true
+		} else if !owned {
 			return "", p.recordFailure(ctx, string(match.MediaType), match.MediaID, ev.Title, mediaFile,
 				fmt.Errorf("%w: %s", ErrDestinationExists, destFile))
+		} else {
+			if err := p.replaceMatched(ctx, match, mediaFile, destFile, destInfo, fileSize); err != nil {
+				return "", p.recordFailure(ctx, string(match.MediaType), match.MediaID, ev.Title, mediaFile, err)
+			}
+			registered = true
 		}
-		if err := p.replaceMatched(ctx, match, mediaFile, destFile, destInfo, fileSize); err != nil {
-			return "", p.recordFailure(ctx, string(match.MediaType), match.MediaID, ev.Title, mediaFile,
-				err)
-		}
-		replaced = true
 	} else if !os.IsNotExist(destErr) {
 		return "", p.recordFailure(ctx, string(match.MediaType), match.MediaID, ev.Title, mediaFile,
 			fmt.Errorf("inspect import destination: %w", destErr))
@@ -767,7 +745,7 @@ func (p *ImportPipeline) importMatchedWith(ctx context.Context, ev *downloads.Do
 	if mode == ImportModeMove {
 		mode = ImportModeHardlink
 	}
-	if !replaced {
+	if !registered {
 		if err := importFile(mediaFile, destFile, mode); err != nil {
 			return "", p.recordFailure(ctx, string(match.MediaType), match.MediaID, ev.Title, mediaFile, err)
 		}

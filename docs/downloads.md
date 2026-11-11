@@ -117,10 +117,21 @@ item in **Activity > Reviews**, then choose **Retry after approval** in the
 import queue. Neither automatic retries nor re-submitting the path bypasses
 pending or rejected safety reviews.
 
+An unavailable source path during validation is an operational failure with
+bounded retries, not a suspicious-content review. Restore the download path or
+storage mount before retrying; a missing file is never treated as successfully
+imported merely because a destination filename exists.
+
 Success is tracked per source file, with destination verification, not per
 torrent. A partially imported season can be retried without repeating its
 successful episodes. Imports register each file with the movie or episode in
 the library; the UI refreshes library status as queued imports finish.
+
+Migration 0103 automatically consolidates old duplicate episode-file registrations
+on startup, keeping the newest record for each episode/path. It does not delete
+media files or collapse distinct file paths or separate episodes sharing a file.
+New registrations update the existing record and episode availability together,
+so repeated or concurrent imports cannot recreate those duplicates.
 
 | Method | Path | Description |
 | ------ | ---- | ----------- |
