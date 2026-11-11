@@ -137,11 +137,49 @@ See [configuration](configuration.md#instance-appearance) for a curl example.
 
 ### Route reference
 
+### Import jobs
+
+Import submission is asynchronous: HTTP 202 means durably queued, not imported.
+`POST /api/v1/imports/batch` accepts `{"paths":[...]}` (up to 1000 per request)
+and optional paired `media_type`/`media_id` for manual matching. Its response is
+`{"data":[ImportJob],"errors":[{"path":"...","error":"..."}]}`; partial acceptance
+returns 202, while a completely rejected batch returns 422. Active paths are
+deduplicated. `/manual`, `/manual-match`, and `/reimport` return
+`{"status":"accepted","job_id":"...","data":ImportJob}`.
+
+`GET /api/v1/imports/jobs?limit=100` returns every active job plus recent
+finished jobs (default 100, maximum 500). `GET /api/v1/imports/jobs/{id}` also
+includes individual file outcomes. `POST /api/v1/imports/jobs/{id}/retry` returns
+202 with the requeued job, 404 for an unknown ID, or 409 when retry is not
+allowed. Pending safety reviews must be approved first; successful files are
+not reset. See [the download guide](downloads.md#importing-completed-files) for
+queue states, recovery, and the UI workflow.
+
+```bash
+curl -H "X-Api-Key: $LOOM_API_KEY" -H "Content-Type: application/json" \
+  -d '{"paths":["/downloads/Show.S01E01.mkv","/downloads/Show.S01E02.mkv"]}' \
+  http://localhost:1925/api/v1/imports/batch
+curl -H "X-Api-Key: $LOOM_API_KEY" \
+  http://localhost:1925/api/v1/imports/jobs
+curl -H "X-Api-Key: $LOOM_API_KEY" \
+  "http://localhost:1925/api/v1/imports/jobs/$JOB_ID"
+curl -X POST -H "X-Api-Key: $LOOM_API_KEY" \
+  "http://localhost:1925/api/v1/imports/jobs/$JOB_ID/retry"
+```
+
 These are the routes implemented today. They are the routes documented
 in `api/openapi/loom.yaml`.
 
 | Method | Path | Auth | Response | Description |
 |---|---|---|---|---|
+| `POST` | `/api/v1/imports/batch` | apiKey/bearer/cookie | `202 {"data":[ImportJob],"errors":[...]}` | Independently queue selected paths; 422 if none are accepted. |
+| `GET` | `/api/v1/imports/jobs` | apiKey/bearer/cookie | `200 {"data":[ImportJob]}` | All active jobs plus bounded recent outcomes. |
+| `GET` | `/api/v1/imports/jobs/{id}` | apiKey/bearer/cookie | `200 {"data":ImportJob}` | Job detail including individual file outcomes. |
+| `POST` | `/api/v1/imports/jobs/{id}/retry` | apiKey/bearer/cookie | `202 {"data":ImportJob}` | Retry unsuccessful files; active jobs and unapproved reviews return 409. |
+| `POST` | `/api/v1/imports/manual` | apiKey/bearer/cookie | `202 {"status":"accepted","job_id":"...","data":ImportJob}` | Queue a file or folder supplied as `path`. |
+| `POST` | `/api/v1/imports/manual-match` | apiKey/bearer/cookie | `202 {"status":"accepted","job_id":"...","data":ImportJob}` | Queue `path` with explicit `media_type` and `media_id`. |
+| `POST` | `/api/v1/imports/reimport` | apiKey/bearer/cookie | `202 {"status":"accepted","job_id":"...","data":ImportJob}` | Queue `source_path` with explicit media identity and optional conflict policy. |
+| `POST` | `/api/v1/imports/scan` | apiKey/bearer/cookie | `200 {"data":[ImportScanResult]}` | Preview matches and verified file-level import status without importing. |
 | `GET` | `/api/v1/media-files/{mediaType}/{id}` | admin | `200 {"files":[TitleFile],"deletionMode":"recycle"\|"permanent"}` | List every regular file in the server-resolved movie or series folder; optional `season` query scopes series files. |
 | `POST` | `/api/v1/media-files/{mediaType}/{id}/delete` | admin | `200 {"deleted":["relative/file.mkv"]}` | Delete selected files with explicit mode and `X-Confirm-Delete: true`; optional `season` query restricts scope. |
 | `POST` | `/api/v1/autosearch/evaluate` | apiKey/bearer/cookie | `200 application/json` | Production-engine dry run with decision evidence; optional unsaved policy preview. |

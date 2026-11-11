@@ -43,6 +43,7 @@ func basePipelineOptions(t *testing.T) PipelineOptions {
 		MoviesSvc:   &moviesSvcStub{},
 		SeriesSvc:   &seriesSvcStub{},
 		Logger:      slog.New(slog.NewTextHandler(io.Discard, nil)),
+		JobWorkers:  -1, // tests drive the job queue explicitly
 	}
 }
 

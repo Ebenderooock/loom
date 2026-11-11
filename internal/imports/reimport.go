@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/ebenderooock/loom/internal/movies"
 )
 
 // ReimportOptions controls reimport behaviour.
@@ -178,6 +180,11 @@ func (p *ImportPipeline) ReimportFile(ctx context.Context, mediaType MediaType, 
 		}
 	}
 
+	if match.MediaType == MediaTypeMovie && match.MediaID != "" {
+		if err := p.moviesSvc.SetMovieStatus(ctx, match.MediaID, movies.MovieStatusAvailableRightQuality); err != nil {
+			p.logger.Warn("failed to update movie status after reimport", "movie_id", match.MediaID, "error", err)
+		}
+	}
 	p.publishNotification(ctx, match, destFile)
 
 	return record, nil

@@ -10,6 +10,22 @@ import (
 	"github.com/ebenderooock/loom/internal/downloads"
 )
 
+func TestStoppedStatesReleaseImportGate(t *testing.T) {
+	for _, tc := range []struct {
+		state string
+		want  downloads.ItemStatus
+	}{
+		{"stoppedDL", downloads.StatusItemPaused},
+		{"stoppedUP", downloads.StatusItemCompleted},
+	} {
+		t.Run(tc.state, func(t *testing.T) {
+			if got := mapState(tc.state); got != tc.want {
+				t.Fatalf("state %q = %q, want %q", tc.state, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestQueuePosition(t *testing.T) {
 	for _, tc := range []struct {
 		payload string

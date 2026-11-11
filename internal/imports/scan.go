@@ -28,6 +28,12 @@ type ScanResult struct {
 	Confidence      float64 `json:"confidence"`
 	SuggestedAction string  `json:"suggested_action"`
 	Quality         string  `json:"quality,omitempty"`
+	// ImportStatus is the per-file import state: "imported" when history
+	// verifies this exact file was imported, otherwise the latest queue
+	// state (queued, importing, retry_pending, failed, pending_review).
+	ImportStatus string `json:"import_status,omitempty"`
+	ImportError  string `json:"import_error,omitempty"`
+	ImportJobID  string `json:"import_job_id,omitempty"`
 }
 
 // ScanFolder scans a directory for media files and returns potential matches
@@ -93,10 +99,25 @@ func scanImportFiles(ctx context.Context, path string) ([]string, error) {
 
 // scanSingleFile analyses a single file and attempts to match it.
 func (p *ImportPipeline) scanSingleFile(ctx context.Context, filePath string) ScanResult {
-	if mediafiles.IsAudio(strings.ToLower(filepath.Ext(filePath))) {
-		return p.scanMusicFile(ctx, filePath)
-	}
 	info, _ := os.Stat(filePath)
+	if mediafiles.IsAudio(strings.ToLower(filepath.Ext(filePath))) {
+		if info != nil {
+			if prior, ok := p.verifiedPriorImport(ctx, filePath, info); ok {
+				return ScanResult{
+					FilePath: filePath, FileSize: info.Size(), MediaType: string(MediaTypeMusic),
+					DetectedTitle:   strings.TrimSuffix(filepath.Base(filePath), filepath.Ext(filePath)),
+					MatchedMedia:    filepath.Base(prior.DestPath),
+					MatchedMediaID:  prior.MediaID,
+					Confidence:      1,
+					SuggestedAction: "already_imported",
+					ImportStatus:    string(StatusImported),
+				}
+			}
+		}
+		result := p.scanMusicFile(ctx, filePath)
+		result.ImportStatus, result.ImportError, result.ImportJobID = p.fileImportState(ctx, filePath)
+		return result
+	}
 	var fileSize int64
 	if info != nil {
 		fileSize = info.Size()
@@ -114,7 +135,29 @@ func (p *ImportPipeline) scanSingleFile(ctx context.Context, filePath string) Sc
 		qualityStr += quality.Source
 	}
 
+	if prior, ok := p.verifiedPriorImport(ctx, filePath, info); ok {
+		parsed := parseReleaseName(filepath.Base(filePath))
+		return ScanResult{
+			FilePath:        filePath,
+			FileSize:        fileSize,
+			DetectedTitle:   parsed.Title,
+			DetectedYear:    parsed.Year,
+			DetectedSeason:  parsed.Season,
+			DetectedEpisode: parsed.Episode,
+			MatchedMedia:    filepath.Base(prior.DestPath),
+			MatchedMediaID:  prior.MediaID,
+			MediaType:       string(prior.MediaType),
+			Confidence:      1,
+			SuggestedAction: "already_imported",
+			ImportStatus:    string(StatusImported),
+		}
+	}
+	importStatus, importErr, jobID := p.fileImportState(ctx, filePath)
+
 	result := ScanResult{
+		ImportStatus:    importStatus,
+		ImportError:     importErr,
+		ImportJobID:     jobID,
 		FilePath:        filePath,
 		FileSize:        fileSize,
 		DetectedTitle:   parsed.Title,

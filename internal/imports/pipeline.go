@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -49,6 +50,10 @@ type PipelineOptions struct {
 	RecycleBin      *RecycleBin
 	QualityProfiles QualityProfileGetter
 	AltTitleStore   *alttitles.Store
+	// JobWorkers bounds concurrent queued manual imports (default 2). A
+	// negative value disables automatic worker startup (tests call
+	// StartJobs explicitly).
+	JobWorkers int
 }
 
 // ImportPipeline subscribes to download completion events, scans files,
@@ -76,7 +81,8 @@ type ImportPipeline struct {
 	recycler        *RecycleBin
 	cleaner         *FolderCleaner
 	unsub           func()
-	importSem       chan struct{} // bounds concurrent manual imports
+	jobs            *jobQueue // durable, bounded manual import queue
+	contentCache    sync.Map  // sameContent results keyed by file identities
 }
 
 // NewPipeline creates and wires an ImportPipeline. Call Start to
@@ -123,7 +129,7 @@ func NewPipeline(opts PipelineOptions) (*ImportPipeline, error) {
 		specs = append(specs, NewUpgradeSpec(opts.QualityProfiles))
 	}
 
-	return &ImportPipeline{
+	p := &ImportPipeline{
 		db:              opts.DB,
 		bus:             opts.Bus,
 		downloadSvc:     opts.DownloadSvc,
@@ -145,8 +151,14 @@ func NewPipeline(opts PipelineOptions) (*ImportPipeline, error) {
 		verifier:        &ImportVerifier{},
 		recycler:        opts.RecycleBin,
 		cleaner:         &FolderCleaner{},
-		importSem:       make(chan struct{}, 2), // max 2 concurrent manual imports
-	}, nil
+		jobs:            newJobQueue(opts.JobWorkers),
+	}
+	// Queue workers run independently of the event-bus subscription so
+	// queued and retrying imports resume after a restart. Stop halts them.
+	if opts.JobWorkers >= 0 {
+		p.StartJobs()
+	}
+	return p, nil
 }
 
 // Start subscribes to download completion events.
@@ -160,6 +172,7 @@ func (p *ImportPipeline) Stop() {
 	if p.unsub != nil {
 		p.unsub()
 	}
+	p.stopJobs()
 }
 
 // RunImport performs the import for a specific download, bypassing the event bus.
@@ -468,10 +481,11 @@ func (p *ImportPipeline) processImport(ctx context.Context, ev *downloads.Downlo
 	}
 
 	// 4. Match and import each media file
+	primaryFiles := countPrimaryMediaFiles(mediaFiles)
 	var failures []error
 	var paths []string
 	for _, mediaFile := range mediaFiles {
-		dest, err := p.importSingleFile(ctx, ev, mediaFile)
+		dest, err := p.importDownloadFile(ctx, ev, mediaFile, primaryFiles)
 		if err != nil {
 			if errors.Is(err, errImportSkipped) {
 				continue
@@ -511,21 +525,28 @@ func (p *ImportPipeline) processImport(ctx context.Context, ev *downloads.Downlo
 
 var errImportSkipped = errors.New("import skipped")
 
-// importSingleFile matches and imports a single media file.
+// importSingleFile matches and imports a single media file that is the only
+// media file of its download (or a manual import of one file).
 func (p *ImportPipeline) importSingleFile(ctx context.Context, ev *downloads.DownloadCompletedEvent, mediaFile string) (string, error) {
+	return p.importDownloadFile(ctx, ev, mediaFile, 1)
+}
+
+// importDownloadFile matches and imports one media file out of a download that
+// contains fileCount media files. Grab linkage identifies the item that was
+// searched for, not the item each file contains: a season pack grabbed for
+// one episode must still be matched file by file, so grab-based matching is
+// only trusted for single-file downloads (or movies).
+func (p *ImportPipeline) importDownloadFile(ctx context.Context, ev *downloads.DownloadCompletedEvent, mediaFile string, fileCount int) (string, error) {
 	if mediafiles.IsAudio(strings.ToLower(filepath.Ext(mediaFile))) {
 		return p.importMusicFile(ctx, ev, mediaFile)
 	}
 	if dest, err := p.completedImport(ctx, mediaFile); err != nil || dest != "" {
 		return dest, err
 	}
-	// For single-item workflows, grab-based matching is authoritative and avoids
-	// parser-related season/episode drift (especially visible with anime ordering).
-	// For multi-item workflows, grab-based matching is too coarse (all files would
-	// match the same item), so path-based matching must stay first.
 	var match *MatchResult
 	var err error
-	preferGrab := p.shouldPreferGrabMatch(ctx, ev)
+	singleFile := fileCount <= 1
+	preferGrab := singleFile && p.shouldPreferGrabMatch(ctx, ev)
 
 	if preferGrab {
 		match, err = p.matchByGrab(ctx, ev)
@@ -543,32 +564,69 @@ func (p *ImportPipeline) importSingleFile(ctx context.Context, ev *downloads.Dow
 		}
 	}
 
-	// Fall back to grab-based matching if path matching didn't work.
-	// This is reliable for Loom-originated single-file downloads.
+	// Fall back to grab-based matching if path matching didn't work. For
+	// multi-file downloads an episode grab would map every file onto the same
+	// episode, so only a movie grab is acceptable there.
 	if !preferGrab && (match == nil || !match.Matched) {
-		match, err = p.matchByGrab(ctx, ev)
-		if err != nil {
-			p.logger.Warn("grab-based match failed", "error", err)
+		grab, gErr := p.matchByGrab(ctx, ev)
+		if gErr != nil {
+			p.logger.Warn("grab-based match failed", "error", gErr)
+		}
+		if grab != nil && grab.Matched && (singleFile || grab.MediaType == MediaTypeMovie) {
+			match = grab
 		}
 	}
 
-	// Fall back to fuzzy matching by event title as last resort.
+	// Fall back to fuzzy matching by event title as last resort. A
+	// multi-file download title (e.g. a season pack) cannot identify a
+	// specific episode, so only accept a movie match from it.
 	if match == nil || !match.Matched {
 		match, err = p.matcher.Match(ctx, ev.Title)
 		if err != nil {
 			return "", p.recordFailure(ctx, "", "", ev.Title, mediaFile, fmt.Errorf("match: %w", err))
 		}
+		if match.Matched && !singleFile && match.MediaType == MediaTypeEpisode {
+			match = &MatchResult{Matched: false}
+		}
 	}
 	if !match.Matched {
-		return "", p.recordFailure(ctx, "", "", ev.Title, mediaFile, fmt.Errorf("no match found for %q", ev.Title))
+		return "", p.recordFailure(ctx, "", "", ev.Title, mediaFile,
+			fmt.Errorf("%w: no match found for %q", ErrNoMatch, filepath.Base(mediaFile)))
 	}
+	return p.importMatched(ctx, ev, match, mediaFile, buildDestFilename(match, mediaFile))
+}
 
-	if err := verifyMovieImportYear(match, ev.Title, mediaFile); err != nil {
-		return "", p.recordFailure(ctx, string(match.MediaType), match.MediaID, ev.Title, mediaFile, err)
+// countPrimaryMediaFiles counts media files that are not obvious samples, so a
+// movie with a bundled sample still counts as a single-file download.
+func countPrimaryMediaFiles(files []string) int {
+	n := 0
+	for _, f := range files {
+		if !strings.Contains(strings.ToLower(filepath.Base(f)), "sample") {
+			n++
+		}
+	}
+	return n
+}
+
+// ErrNoMatch reports that a file could not be linked to a library item.
+var ErrNoMatch = errors.New("no library match")
+
+// importMatched imports mediaFile for an already resolved match.
+func (p *ImportPipeline) importMatched(ctx context.Context, ev *downloads.DownloadCompletedEvent, match *MatchResult, mediaFile, destName string) (string, error) {
+	return p.importMatchedWith(ctx, ev, match, mediaFile, destName, false)
+}
+
+// importMatchedWith imports mediaFile for a resolved match. userMatched
+// skips release-year verification because the user chose the item.
+func (p *ImportPipeline) importMatchedWith(ctx context.Context, ev *downloads.DownloadCompletedEvent, match *MatchResult, mediaFile, destName string, userMatched bool) (string, error) {
+	if !userMatched {
+		if err := verifyMovieImportYear(match, ev.Title, mediaFile); err != nil {
+			return "", p.recordFailure(ctx, string(match.MediaType), match.MediaID, ev.Title, mediaFile, err)
+		}
 	}
 
 	// Build destination path with proper naming
-	destFile := filepath.Join(match.DestPath, buildDestFilename(match, mediaFile))
+	destFile := filepath.Join(match.DestPath, destName)
 
 	// Run import decision engine (spec-based pre-checks)
 	srcInfo, statErr := os.Stat(mediaFile)
@@ -795,34 +853,56 @@ func (p *ImportPipeline) completedImport(ctx context.Context, source string) (st
 		srcInfo.Size() == 0 || srcInfo.Size() != destInfo.Size() {
 		return "", nil
 	}
-	if !os.SameFile(srcInfo, destInfo) {
-		digest := func(path string) ([sha256.Size]byte, error) {
-			f, err := os.Open(path) //nolint:gosec // Both import paths are validated regular files before hashing.
-			if err != nil {
-				return [sha256.Size]byte{}, err
-			}
-			defer func() { _ = f.Close() }()
-			h := sha256.New()
-			if _, err := io.Copy(h, f); err != nil {
-				return [sha256.Size]byte{}, err
-			}
-			var sum [sha256.Size]byte
-			copy(sum[:], h.Sum(nil))
-			return sum, nil
-		}
-		srcHash, err := digest(source)
-		if err != nil {
-			return "", fmt.Errorf("verify previous import source: %w", err)
-		}
-		destHash, err := digest(dest)
-		if err != nil {
-			return "", fmt.Errorf("verify previous import destination: %w", err)
-		}
-		if srcHash != destHash {
-			return "", nil
-		}
+	same, err := p.sameContent(source, dest, srcInfo, destInfo)
+	if err != nil {
+		return "", err
+	}
+	if !same {
+		return "", nil
 	}
 	return dest, nil
+}
+
+// sameContent reports whether source and dest hold identical bytes: the
+// same inode, or equal size and SHA-256. Positive and negative results are
+// cached per (path, size, mtime) pair so repeated scans do not rehash.
+func (p *ImportPipeline) sameContent(source, dest string, srcInfo, destInfo os.FileInfo) (bool, error) {
+	if !srcInfo.Mode().IsRegular() || !destInfo.Mode().IsRegular() || srcInfo.Size() != destInfo.Size() {
+		return false, nil
+	}
+	if os.SameFile(srcInfo, destInfo) {
+		return true, nil
+	}
+	key := fmt.Sprintf("%s|%d|%d|%s|%d|%d", source, srcInfo.Size(), srcInfo.ModTime().UnixNano(),
+		dest, destInfo.Size(), destInfo.ModTime().UnixNano())
+	if v, ok := p.contentCache.Load(key); ok {
+		return v.(bool), nil
+	}
+	digest := func(path string) ([sha256.Size]byte, error) {
+		f, err := os.Open(path) //nolint:gosec // Both import paths are validated regular files before hashing.
+		if err != nil {
+			return [sha256.Size]byte{}, err
+		}
+		defer func() { _ = f.Close() }()
+		h := sha256.New()
+		if _, err := io.Copy(h, f); err != nil {
+			return [sha256.Size]byte{}, err
+		}
+		var sum [sha256.Size]byte
+		copy(sum[:], h.Sum(nil))
+		return sum, nil
+	}
+	srcHash, err := digest(source)
+	if err != nil {
+		return false, fmt.Errorf("verify previous import source: %w", err)
+	}
+	destHash, err := digest(dest)
+	if err != nil {
+		return false, fmt.Errorf("verify previous import destination: %w", err)
+	}
+	same := srcHash == destHash
+	p.contentCache.Store(key, same)
+	return same, nil
 }
 
 // FinalizeImports consumes move sources only after the workflow has durably
@@ -1128,11 +1208,19 @@ func (p *ImportPipeline) recordFailure(ctx context.Context, mediaType, mediaID, 
 	return importErr
 }
 
-// recordStatus inserts a row into import_history.
+// recordStatus inserts a row into import_history. The source identity
+// (size and modification time) is captured so a later scan can verify that
+// the exact same file was imported rather than trusting the pathname alone.
 func (p *ImportPipeline) recordStatus(ctx context.Context, mediaType, mediaID, sourcePath, destPath string, status ImportStatus, errMsg string) error {
+	var size, mtime int64
+	if sourcePath != "" {
+		if info, err := os.Lstat(sourcePath); err == nil && info.Mode().IsRegular() {
+			size, mtime = info.Size(), info.ModTime().UnixNano()
+		}
+	}
 	_, err := p.db.ExecContext(ctx,
-		`INSERT INTO import_history (id, media_type, media_id, source_path, dest_path, import_mode, status, error, imported_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO import_history (id, media_type, media_id, source_path, dest_path, import_mode, status, error, imported_at, source_size, source_mtime)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		uuid.New().String(),
 		mediaType,
 		mediaID,
@@ -1142,71 +1230,22 @@ func (p *ImportPipeline) recordStatus(ctx context.Context, mediaType, mediaID, s
 		string(status),
 		errMsg,
 		time.Now().UTC(),
+		size,
+		mtime,
 	)
 	return err
 }
 
-// SubmitManualImport validates the path and runs the import in a background
-// goroutine with bounded concurrency. Returns an error only if validation
-// fails or the queue is full. Import results are delivered via
-// notifications/events, not via the return value.
+// SubmitManualImport queues a manual import of a file or folder. Every
+// media file is tracked and retried independently; the request is never
+// rejected for capacity.
 func (p *ImportPipeline) SubmitManualImport(path string) error {
-	mediaFiles, err := scanImportFiles(context.Background(), path)
-	if err != nil {
-		return err
-	}
-	if len(mediaFiles) == 0 {
-		return fmt.Errorf("no media files found in %s", path)
-	}
-
-	// Try to acquire a slot; reject if full.
-	select {
-	case p.importSem <- struct{}{}:
-	default:
-		return fmt.Errorf("import queue full, try again later")
-	}
-
-	// Create a workflow so the import is trackable in the UI.
-	var wfID string
-	if p.wfEngine != nil {
-		grabTitle := filepath.Base(path)
-		wf, wfErr := p.wfEngine.StartImport(context.Background(), "", nil, grabTitle)
-		if wfErr != nil {
-			p.logger.Warn("failed to create import workflow", "path", path, "error", wfErr)
-		} else {
-			wfID = wf.ID
-		}
-	}
-
-	go func() {
-		defer func() { <-p.importSem }()
-		ctx := context.Background()
-		p.logger.Info("manual import starting (async)", "path", path, "files", len(mediaFiles))
-		if err := p.ImportManual(ctx, path); err != nil {
-			p.logger.Error("manual import failed", "path", path, "error", err)
-			if wfID != "" {
-				if fErr := p.wfEngine.FailImport(ctx, wfID, err.Error()); fErr != nil {
-					p.logger.Error("failed to mark import workflow failed", "id", wfID, "error", fErr)
-				}
-			}
-			return
-		}
-		if wfID != "" {
-			if cErr := p.wfEngine.CompleteImport(ctx, wfID); cErr != nil {
-				p.logger.Error("failed to mark import workflow completed", "id", wfID, "error", cErr)
-			}
-		}
-	}()
-	return nil
+	_, err := p.EnqueueImport(context.Background(), JobRequest{Kind: JobKindManual, Path: path})
+	return err
 }
 
-// SubmitManualMatch validates the request and runs the exact-match import
-// in a background goroutine with bounded concurrency.
+// SubmitManualMatch queues an import linked to an explicit media item.
 func (p *ImportPipeline) SubmitManualMatch(path string, mediaType MediaType, mediaID string) error {
-	// Validate path exists before queuing
-	if _, err := os.Stat(path); err != nil {
-		return fmt.Errorf("path not found: %w", err)
-	}
 	if mediaType == MediaTypeMusic {
 		if err := checkRegularSource(path); err != nil {
 			return err
@@ -1215,96 +1254,19 @@ func (p *ImportPipeline) SubmitManualMatch(path string, mediaType MediaType, med
 			return fmt.Errorf("not an audio file: %s", path)
 		}
 	}
-
-	select {
-	case p.importSem <- struct{}{}:
-	default:
-		return fmt.Errorf("import queue full, try again later")
-	}
-
-	// Create a workflow so the import is trackable in the UI.
-	var wfID string
-	if p.wfEngine != nil {
-		grabTitle := filepath.Base(path)
-		wf, wfErr := p.wfEngine.StartImport(context.Background(), string(mediaType), []string{mediaID}, grabTitle)
-		if wfErr != nil {
-			p.logger.Warn("failed to create import workflow", "path", path, "error", wfErr)
-		} else {
-			wfID = wf.ID
-		}
-	}
-
-	go func() {
-		defer func() { <-p.importSem }()
-		ctx := context.Background()
-		p.logger.Info("manual match import starting (async)",
-			"path", path, "media_type", mediaType, "media_id", mediaID)
-		if _, err := p.ImportManualMatch(ctx, path, mediaType, mediaID); err != nil {
-			p.logger.Error("manual match import failed",
-				"path", path, "media_type", mediaType, "media_id", mediaID, "error", err)
-			if wfID != "" {
-				if fErr := p.wfEngine.FailImport(ctx, wfID, err.Error()); fErr != nil {
-					p.logger.Error("failed to mark import workflow failed", "id", wfID, "error", fErr)
-				}
-			}
-			return
-		}
-		if wfID != "" {
-			if cErr := p.wfEngine.CompleteImport(ctx, wfID); cErr != nil {
-				p.logger.Error("failed to mark import workflow completed", "id", wfID, "error", cErr)
-			}
-		}
-	}()
-	return nil
+	_, err := p.EnqueueImport(context.Background(), JobRequest{
+		Kind: JobKindManualMatch, Path: path, MediaType: mediaType, MediaID: mediaID,
+	})
+	return err
 }
 
-// SubmitReimport validates the request and runs the reimport in a background
-// goroutine with bounded concurrency.
+// SubmitReimport queues a forced reimport of one source file.
 func (p *ImportPipeline) SubmitReimport(mediaType MediaType, mediaID, sourcePath string, opts ReimportOptions) error {
-	if _, err := os.Stat(sourcePath); err != nil {
-		return fmt.Errorf("path not found: %w", err)
-	}
-
-	select {
-	case p.importSem <- struct{}{}:
-	default:
-		return fmt.Errorf("import queue full, try again later")
-	}
-
-	// Create a workflow so the reimport is trackable in the UI.
-	var wfID string
-	if p.wfEngine != nil {
-		grabTitle := filepath.Base(sourcePath)
-		wf, wfErr := p.wfEngine.StartImport(context.Background(), string(mediaType), []string{mediaID}, grabTitle)
-		if wfErr != nil {
-			p.logger.Warn("failed to create reimport workflow", "source_path", sourcePath, "error", wfErr)
-		} else {
-			wfID = wf.ID
-		}
-	}
-
-	go func() {
-		defer func() { <-p.importSem }()
-		ctx := context.Background()
-		p.logger.Info("reimport starting (async)",
-			"media_type", mediaType, "media_id", mediaID, "source_path", sourcePath)
-		if _, err := p.ReimportFile(ctx, mediaType, mediaID, sourcePath, opts); err != nil {
-			p.logger.Error("reimport failed",
-				"media_type", mediaType, "media_id", mediaID, "source_path", sourcePath, "error", err)
-			if wfID != "" {
-				if fErr := p.wfEngine.FailImport(ctx, wfID, err.Error()); fErr != nil {
-					p.logger.Error("failed to mark reimport workflow failed", "id", wfID, "error", fErr)
-				}
-			}
-			return
-		}
-		if wfID != "" {
-			if cErr := p.wfEngine.CompleteImport(ctx, wfID); cErr != nil {
-				p.logger.Error("failed to mark reimport workflow completed", "id", wfID, "error", cErr)
-			}
-		}
-	}()
-	return nil
+	_, err := p.EnqueueImport(context.Background(), JobRequest{
+		Kind: JobKindReimport, Path: sourcePath, MediaType: mediaType, MediaID: mediaID,
+		ConflictPolicy: opts.ConflictPolicy,
+	})
+	return err
 }
 
 // ImportManual triggers an import for an arbitrary filesystem path.
@@ -1323,13 +1285,26 @@ func (p *ImportPipeline) ImportManual(ctx context.Context, path string) error {
 		CompletedAt: time.Now(),
 	}
 
-	var failures []error
+	primary := countPrimaryMediaFiles(mediaFiles)
+	var errs []error
+	imported := 0
 	for _, mf := range mediaFiles {
-		if _, err := p.importSingleFile(ctx, fakeEvent, mf); err != nil {
-			failures = append(failures, err)
+		if _, err := p.importDownloadFile(ctx, fakeEvent, mf, primary); err != nil {
+			if errors.Is(err, errImportSkipped) {
+				continue
+			}
+			errs = append(errs, err)
+			continue
 		}
+		imported++
 	}
-	return errors.Join(failures...)
+	if len(errs) > 0 {
+		return fmt.Errorf("import incomplete (%d of %d files failed): %w", len(errs), len(mediaFiles), errors.Join(errs...))
+	}
+	if imported == 0 {
+		return fmt.Errorf("no importable media files found in %s", path)
+	}
+	return nil
 }
 
 // ImportManualMatch imports a file or folder and directly links it to a
