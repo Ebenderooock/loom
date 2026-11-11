@@ -3,10 +3,12 @@ package downloads
 import (
 	"context"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/base32"
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"net/http"
 	"net/url"
 	"strings"
 	"time"
@@ -18,7 +20,32 @@ import (
 
 // ErrAcquisitionDeferred means the release is already admitted, blocked, or
 // awaiting a retry window or an administrator's explicit recovery decision.
-var ErrAcquisitionDeferred = errors.New("acquisition deferred; see download history")
+var ErrAcquisitionDeferred = errors.New("this release has already been attempted")
+
+// AcquisitionConflict identifies the exact admission requiring a user decision.
+type AcquisitionConflict struct {
+	HistoryID    string `json:"history_id"`
+	Title        string `json:"title"`
+	Status       string `json:"status"`
+	RetryAllowed bool   `json:"retry_allowed"`
+}
+
+func (e *AcquisitionConflict) Error() string { return ErrAcquisitionDeferred.Error() }
+func (e *AcquisitionConflict) Unwrap() error { return ErrAcquisitionDeferred }
+
+// WriteAcquisitionConflict preserves recovery details across acquisition callers.
+func WriteAcquisitionConflict(w http.ResponseWriter, err error) bool {
+	var conflict *AcquisitionConflict
+	if !errors.As(err, &conflict) {
+		return false
+	}
+	writeJSON(w, http.StatusConflict, map[string]any{
+		"error": map[string]any{
+			"code": "acquisition_deferred", "message": err.Error(), "details": conflict,
+		},
+	})
+	return true
+}
 
 const maxAcquisitionAttempts = workflows.MaxRetries
 
@@ -100,6 +127,22 @@ func (h *HistoryStore) beginAcquisition(ctx context.Context, req AddRequest, cli
 		return "", err
 	}
 	if n == 0 {
+		var conflict AcquisitionConflict
+		var admittedAt string
+		err := h.db.QueryRowContext(ctx, `SELECT id, title, status, completed_at FROM download_history
+			WHERE acquisition_key = ? ORDER BY attempt DESC LIMIT 1`, key).
+			Scan(&conflict.HistoryID, &conflict.Title, &conflict.Status, &admittedAt)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return "", fmt.Errorf("read acquisition conflict: %w", err)
+		}
+		if err == nil {
+			conflict.RetryAllowed = conflict.Status == "acquisition_failed" || conflict.Status == "acquired"
+			if conflict.Status == "acquiring" {
+				at, parseErr := time.Parse(time.RFC3339, admittedAt)
+				conflict.RetryAllowed = parseErr == nil && now.Sub(at) >= 15*time.Minute
+			}
+			return "", &conflict
+		}
 		return "", ErrAcquisitionDeferred
 	}
 	return id, nil
@@ -141,6 +184,7 @@ func (h *HistoryStore) finishAcquisition(ctx context.Context, id, stage string, 
 func (r *Registry) Acquire(ctx context.Context, clientID string, req AddRequest, prepare func(*AddRequest) error) (AddResult, error) {
 	r.mu.RLock()
 	history := r.history
+	onReacquired := r.onReacquired
 	r.mu.RUnlock()
 	var id string
 	var err error
@@ -180,14 +224,30 @@ func (r *Registry) Acquire(ctx context.Context, clientID string, req AddRequest,
 		// A canceled client call may have reached the remote client. Keep its
 		// admission pending rather than scheduling an ambiguous duplicate.
 		if stage == "client" && (errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)) {
-			return AddResult{}, errors.New("acquisition outcome unknown; check client queue and download history")
+			return AddResult{}, errors.New("download response timed out; check the client queue before retrying in 15 minutes")
 		}
 		if saveErr := history.finishAcquisition(saveCtx, id, stage, res, err != nil, permanent, time.Now()); saveErr != nil {
 			return AddResult{}, fmt.Errorf("persist acquisition outcome: %w", saveErr)
 		}
 		if err != nil {
 			// Provider/client error text can contain credentials and response bodies.
-			return AddResult{}, fmt.Errorf("acquisition %s failed; see download history", stage)
+			return AddResult{}, fmt.Errorf("acquisition %s failed; check the connection and try this release again", stage)
+		}
+		if onReacquired != nil {
+			var authorized bool
+			if err := history.db.QueryRowContext(saveCtx, `SELECT EXISTS (
+				SELECT 1 FROM download_history current JOIN download_history prior
+				ON prior.acquisition_key = current.acquisition_key AND prior.attempt < current.attempt
+				WHERE current.id = ? AND prior.stage = 'retry_authorized'
+				AND prior.client_id = ? AND prior.download_id = ?)`,
+				id, clientID, res.ItemID).Scan(&authorized); err != nil {
+				return AddResult{}, fmt.Errorf("verify re-acquisition authorization: %w", err)
+			}
+			if authorized {
+				if err := onReacquired(saveCtx, clientID, res.ItemID); err != nil {
+					return AddResult{}, fmt.Errorf("download accepted but import recovery failed: %w", err)
+				}
+			}
 		}
 	}
 	return res, err

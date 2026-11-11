@@ -322,6 +322,8 @@ func (p *ImportPipeline) scanMusicFile(ctx context.Context, source string) ScanR
 		result.Quality = tags.Format
 	}
 	if err != nil {
+		result.ImportError = err.Error()
+		result.SuggestedAction = "manual_review"
 		p.logger.Warn("music scan match failed", "file", source, "error", err)
 		return result
 	}
@@ -462,8 +464,10 @@ func (p *ImportPipeline) findMusicTrack(ctx context.Context, albumArtistName, tr
 	var matches []albumTrackMatch
 	var sameTitle []*musiclib.Album
 	var ambiguousTracks []string
+	var metadataErrors []error
 	for _, candidate := range albums {
-		if normalizeMusicText(candidate.Title) != normalizeMusicText(albumName) {
+		if normalizeMusicText(candidate.Title) != normalizeMusicText(albumName) &&
+			normalizeMusicText(musiclib.BaseAlbumTitle(candidate.Title)) != normalizeMusicText(musiclib.BaseAlbumTitle(albumName)) {
 			continue
 		}
 		sameTitle = append(sameTitle, candidate)
@@ -479,6 +483,7 @@ func (p *ImportPipeline) findMusicTrack(ctx context.Context, albumArtistName, tr
 		loaded, loadErr := p.musicSvc.LoadAlbumTracks(ctx, candidate.ID)
 		if loadErr != nil {
 			ambiguousTracks = append(ambiguousTracks, fmt.Sprintf("%s (track metadata unavailable)", candidate.ID))
+			metadataErrors = append(metadataErrors, fmt.Errorf("load album %q: %w", candidate.Title, loadErr))
 			continue
 		}
 		candidateTrack, matchErr := matchTaggedTrack(loaded.Tracks, &effectiveTags, !identityEstablished)
@@ -500,10 +505,15 @@ func (p *ImportPipeline) findMusicTrack(ctx context.Context, albumArtistName, tr
 		return nil, nil, nil, fmt.Errorf("ambiguous music album %q: matching albums %s", albumName, strings.Join(ids, ", "))
 	}
 	if len(matches) == 1 && len(ambiguousTracks) > 0 {
-		return nil, nil, nil, fmt.Errorf("ambiguous music album %q: track identity could not be verified for %s", albumName, strings.Join(ambiguousTracks, ", "))
+		return nil, nil, nil, errors.Join(
+			fmt.Errorf("ambiguous music album %q: track identity could not be verified for %s", albumName, strings.Join(ambiguousTracks, ", ")),
+			errors.Join(metadataErrors...))
 	}
 	if len(matches) == 0 {
 		if len(ambiguousTracks) > 0 {
+			if len(metadataErrors) > 0 {
+				return nil, nil, nil, errors.Join(metadataErrors...)
+			}
 			return nil, nil, nil, fmt.Errorf("ambiguous music track %q on album %q: matching track identity is unavailable or duplicated", tags.Title, albumName)
 		}
 		if len(sameTitle) > 0 {
@@ -546,8 +556,19 @@ func matchTaggedTrack(tracks []*musiclib.Track, tags *musiclib.AudioTags, requir
 			}
 		}
 		if len(candidates) == 0 {
-			if track := musiclib.MatchTrackByBaseTitle(eligible, tags.Title, normalizeMusicText); track != nil {
-				candidates = append(candidates, track)
+			base := normalizeMusicText(musiclib.BaseTrackTitle(tags.Title))
+			for _, titleOf := range []func(*musiclib.Track) string{
+				func(t *musiclib.Track) string { return t.Title },
+				func(t *musiclib.Track) string { return musiclib.BaseTrackTitle(t.Title) },
+			} {
+				for _, candidate := range eligible {
+					if base != "" && normalizeMusicText(titleOf(candidate)) == base {
+						candidates = append(candidates, candidate)
+					}
+				}
+				if len(candidates) > 0 {
+					break
+				}
 			}
 		}
 	} else if !requireArtist && tags.TrackNumber > 0 {

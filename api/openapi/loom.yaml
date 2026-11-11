@@ -1578,8 +1578,8 @@ paths:
   /api/v1/downloads/history/actions:
     post:
       tags: [download-clients]
-      summary: Authorize retry or blocklist latest failed/interrupted acquisitions.
-      description: Requires an administrator identity. Retry resets the budget for a future fresh search; it never replays stored URLs or removes a blocklist entry.
+      summary: Authorize retry or blocklist latest acquisitions.
+      description: Requires an administrator identity. Retry resets the budget for a future fresh search; it never replays stored URLs or removes a blocklist entry. Successful admissions may be retried only after the original client confirms that the download is completed, seeding, failed or removed. Active, paused and unknown downloads remain protected.
       operationId: acquisitionHistoryActions
       requestBody:
         required: true
@@ -3846,6 +3846,10 @@ paths:
             `blocklisted` when the release matches the blocklist and
             `ignore_blocklist` is not set, or `acquisition_deferred` when an
             equivalent acquisition is already in flight or awaiting retry.
+            An acquisition conflict includes `error.details` with `history_id`,
+            `title`, `status` and `retry_allowed` for an in-place recovery
+            decision. Authorize retry through the history actions endpoint
+            before submitting fresh release coordinates again.
 
   /api/v1/download-clients/{id}/pause:
     parameters:

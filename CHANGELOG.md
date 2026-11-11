@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- Confirm release retries in place across download and music search surfaces,
+  including completed downloads whose import failed, while protecting active
+  downloads and retaining blocklist checks.
+- Restore music import previews and matching for edition-qualified album tags,
+  hydrate missing album tracks, and show compact artist biographies with
+  inline expansion and movie/TV-style detail actions.
 - Use one completion path for new imports, verified existing files and replacements,
   sharing history recording, sidecar handling and source cleanup.
 - Treat unavailable download paths during import validation as retryable

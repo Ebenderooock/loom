@@ -87,6 +87,7 @@ func wireDownloads(
 		DownloadStatus: downloadSvc,
 	})
 	downloadSvc.SetOrchestrator(orchestrator)
+	downloadSvc.Registry().SetReacquisitionHandler(orchestrator.ResumeReacquiredDownload)
 
 	// Autosearch decision engine
 	cfStore := customformats.NewStore(db.DB())

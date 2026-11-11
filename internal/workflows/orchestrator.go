@@ -374,6 +374,8 @@ func (o *Orchestrator) handle(ctx context.Context, cmd Command) {
 		o.handleDownloadFailed(ctx, c)
 	case CmdRetry:
 		o.handleRetry(ctx, c)
+	case CmdDownloadReacquired:
+		o.handleDownloadReacquired(ctx, c)
 	default:
 		o.logger.Warn("unknown command type", "type", fmt.Sprintf("%T", cmd))
 	}

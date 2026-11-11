@@ -745,16 +745,25 @@ func (s *service) loadAlbum(ctx context.Context, id string) (al *Album, fetchErr
 	}
 	al.Releases = releases
 
-	// Lazily fetch the track list of the selected release.
+	tracks, err := s.repo.ListTracksByAlbum(ctx, id)
+	if err != nil {
+		return nil, nil, err
+	}
+	if len(tracks) == 0 {
+		al.TracksFetchedAt = nil
+	}
+	// A historical empty response may have stamped TracksFetchedAt without
+	// storing any tracks. Retry it rather than permanently hiding the album's
+	// tracks from details, matching and imports.
 	if al.TracksFetchedAt == nil && al.SelectedReleaseID != "" && s.provider != nil {
 		if err := s.fetchTracks(ctx, al); err != nil {
 			s.logger.Warn("music: failed to fetch album tracks", "album", al.ID, "error", err)
 			fetchErr = fmt.Errorf("fetch tracks: %w", err)
 		}
-	}
-	tracks, err := s.repo.ListTracksByAlbum(ctx, id)
-	if err != nil {
-		return nil, nil, err
+		tracks, err = s.repo.ListTracksByAlbum(ctx, id)
+		if err != nil {
+			return nil, nil, err
+		}
 	}
 	al.Tracks = tracks
 	return al, fetchErr, nil
@@ -904,16 +913,14 @@ func (s *service) fetchTracks(ctx context.Context, al *Album) error {
 		}
 	}
 	if selectedMBID == "" {
-		s.logger.Warn("music: no selected release found, skipping track fetch", "album", al.ID)
-		return nil
+		return fmt.Errorf("selected release %q is unavailable", al.SelectedReleaseID)
 	}
 	relMeta, err := s.provider.GetAlbumRelease(ctx, selectedMBID)
 	if err != nil {
 		return err
 	}
 	if relMeta == nil {
-		s.logger.Warn("music: release metadata is nil", "album", al.ID, "release", selectedMBID)
-		return nil
+		return fmt.Errorf("no metadata for release %q", selectedMBID)
 	}
 
 	tracks := make([]*Track, 0, len(relMeta.Tracks))
@@ -938,10 +945,11 @@ func (s *service) fetchTracks(ctx context.Context, al *Album) error {
 	}
 
 	if len(tracks) == 0 {
-		s.logger.Warn("music: no tracks found for release", "album", al.ID, "release", selectedMBID)
-	} else {
-		s.logger.Info("music: fetched tracks", "album", al.ID, "count", len(tracks))
+		// An empty provider response is not a successful fetch. In particular,
+		// do not remove stored tracks or prevent a later retry.
+		return fmt.Errorf("no tracks found for release %q", selectedMBID)
 	}
+	s.logger.Info("music: fetched tracks", "album", al.ID, "count", len(tracks))
 
 	if err := s.repo.ReplaceTracks(ctx, al.ID, tracks); err != nil {
 		return err
