@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- Upgrade the Go toolchain to 1.26.11 across CI and container builds to fix
+  the net/http MaxBytesReader header race (GO-2026-6859).
 - Update the grouped Go dependencies, including Rain, SQLite, OpenTelemetry,
   Prometheus, OIDC, pgx and Goose, with their required transitive dependencies.
 - Update grouped web dependencies; keep TypeScript on 6 until

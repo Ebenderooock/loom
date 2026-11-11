@@ -19,18 +19,18 @@ of the *arr stack, and every fix, doc improvement, and feature counts.
 
 ### Go (backend)
 
-Loom targets **Go 1.26** and uses the **Go 1.26.10** toolchain in `go.mod`,
-CI, and container builds. Use Go 1.26.10 or newer to include security fixes.
+Loom targets **Go 1.26** and uses the **Go 1.26.11** toolchain in `go.mod`,
+CI, and container builds. Use Go 1.26.11 or newer to include security fixes.
 
 | Platform | Install |
 |---|---|
 | **macOS** | `brew install go` |
 | **Ubuntu / Debian** | See [go.dev/doc/install](https://go.dev/doc/install) — the distro package is often outdated. Download the tarball instead. |
-| **Fedora / RHEL** | `sudo dnf install golang` (check version ≥ 1.26.10) |
+| **Fedora / RHEL** | `sudo dnf install golang` (check version ≥ 1.26.11) |
 | **Windows** | Download the MSI from [go.dev/dl](https://go.dev/dl/) or `winget install GoLang.Go` |
 | **Raspberry Pi (ARM)** | Download the `linux-arm64` or `linux-armv6l` tarball from [go.dev/dl](https://go.dev/dl/) |
 
-Verify: `go version` should print `go1.26.10` or newer.
+Verify: `go version` should print `go1.26.11` or newer.
 
 ### Node.js (frontend)
 
