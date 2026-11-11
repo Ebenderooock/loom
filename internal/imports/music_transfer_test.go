@@ -4,6 +4,9 @@ import (
 	"context"
 	"encoding/binary"
 	"errors"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -69,7 +72,8 @@ func newMusicTransferPipeline(t *testing.T, mode ImportMode, managed bool) (*Imp
 		DB: db.DB(), Bus: eventbus.NewInProc(), DownloadSvc: newDownloadsSvcForPipelineTest(t),
 		MoviesSvc: &moviesSvcStub{}, SeriesSvc: &seriesSvcStub{},
 		MusicSvc: musiclib.NewService(repo, nil, nil), LibStore: libs, ImportMode: mode,
-		PostVal: safety.NewPostValidator(safety.DefaultConfig()),
+		PostVal:    safety.NewPostValidator(safety.DefaultConfig()),
+		JobWorkers: -1, // tests drive the job queue explicitly
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -351,4 +355,140 @@ func TestMusicRunImportUsesDownloadContentPath(t *testing.T) {
 	if _, err := os.Stat(source); !os.IsNotExist(err) {
 		t.Fatalf("download source not removed after finalization: %v", err)
 	}
+}
+
+func TestMusicImportsThroughDurableQueue(t *testing.T) {
+	ctx := context.Background()
+	p, _, _, root := newMusicTransferPipeline(t, ImportModeCopy, false)
+	dest := filepath.Join(root, "Test Artist", "Test Album (2026)", "01 - Test Song.mp3")
+
+	// A folder manual import queues audio files and imports them by tags.
+	dir := t.TempDir()
+	source := filepath.Join(dir, "download.mp3")
+	content := writeTaggedMusic(t, source, "Test Song")
+	job, err := p.EnqueueImport(ctx, JobRequest{Path: dir})
+	if err != nil || job.TotalFiles != 1 {
+		t.Fatalf("enqueue music folder: %+v, %v", job, err)
+	}
+	drain(t, p)
+	if j := mustJob(t, p, job.ID); j.Status != JobImported || j.Files[0].MediaType != string(MediaTypeMusic) {
+		t.Fatalf("queued music import: %+v", j)
+	}
+	if got, err := os.ReadFile(dest); err != nil || string(got) != string(content) {
+		t.Fatalf("library copy: %q, %v", got, err)
+	}
+	results, err := p.ScanFolder(ctx, dir)
+	if err != nil || len(results) != 1 || results[0].SuggestedAction != "already_imported" {
+		t.Fatalf("scan after queued import: %+v, %v", results, err)
+	}
+
+	// Manual match accepts only a single audio file and links the chosen track.
+	if err := p.SubmitManualMatch(dir, MediaTypeMusic, "track"); err == nil {
+		t.Fatal("music manual match accepted a directory")
+	}
+	other := filepath.Join(t.TempDir(), "other.mp3")
+	writeTaggedMusic(t, other, "Unrelated Title")
+	// The track already has an equal-quality file: a deterministic rejection
+	// fails immediately instead of burning retries.
+	rejected, err := p.EnqueueImport(ctx, JobRequest{Kind: JobKindManualMatch, Path: other, MediaType: MediaTypeMusic, MediaID: "track"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	drain(t, p)
+	if j := mustJob(t, p, rejected.ID); j.Status != JobFailed || j.NextRetryAt != nil {
+		t.Fatalf("non-upgrade music match should fail without retry: %+v", j)
+	}
+
+	fresh, freshRepo, freshAlbum, _ := newMusicTransferPipeline(t, ImportModeCopy, false)
+	matched, err := fresh.EnqueueImport(ctx, JobRequest{Kind: JobKindManualMatch, Path: other, MediaType: MediaTypeMusic, MediaID: "track"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	drain(t, fresh)
+	if j := mustJob(t, fresh, matched.ID); j.Status != JobImported || j.Files[0].MediaID != freshAlbum.ID {
+		t.Fatalf("music manual match job: %+v", j)
+	}
+	if track, err := freshRepo.GetTrack(ctx, "track"); err != nil || !track.HasFile {
+		t.Fatalf("track availability: %+v, %v", track, err)
+	}
+}
+
+// The UI queues automatically matched music rows through /batch with paths
+// only; the backend must then match each track by its tags and keep the
+// quality-safe upgrade rules. Explicit track choices use /manual-match.
+func TestMusicBatchPathsOnlyKeepsTagMatchingAndQualitySafety(t *testing.T) {
+	ctx := context.Background()
+	p, repo, album, root := newMusicTransferPipeline(t, ImportModeCopy, false)
+	dest := filepath.Join(root, "Test Artist", "Test Album (2026)", "01 - Test Song.mp3")
+	post := func(path, body string) *httptest.ResponseRecorder {
+		rec := httptest.NewRecorder()
+		Router(p).ServeHTTP(rec, httptest.NewRequest(http.MethodPost, path, strings.NewReader(body)))
+		return rec
+	}
+
+	first := filepath.Join(t.TempDir(), "first.mp3")
+	content := writeTaggedMusic(t, first, "Test Song")
+	if rec := post("/batch", fmt.Sprintf(`{"paths":[%q]}`, first)); rec.Code != http.StatusAccepted {
+		t.Fatalf("batch: %d %s", rec.Code, rec.Body)
+	}
+	drain(t, p)
+	if got, err := os.ReadFile(dest); err != nil || string(got) != string(content) {
+		t.Fatalf("tag-matched import: %q, %v", got, err)
+	}
+	files, err := repo.ListTrackFilesByAlbum(ctx, album.ID)
+	if err != nil || len(files) != 1 || files[0].TrackID != "track" {
+		t.Fatalf("track file: %+v, %v", files, err)
+	}
+
+	// A second, equal-quality copy for the same track must not replace the
+	// existing file, and the rejection is final rather than retried.
+	second := filepath.Join(t.TempDir(), "second.mp3")
+	writeTaggedMusic(t, second, "Test Song")
+	if err := os.WriteFile(second, append(must(os.ReadFile(second)), 0), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	rec := post("/batch", fmt.Sprintf(`{"paths":[%q]}`, second))
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("batch: %d %s", rec.Code, rec.Body)
+	}
+	drain(t, p)
+	jobs, err := p.ListJobs(ctx, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var rejected *ImportJob
+	for _, j := range jobs {
+		if j.SourcePath == second {
+			rejected = j
+		}
+	}
+	if rejected == nil || rejected.Status != JobFailed || rejected.NextRetryAt != nil ||
+		!strings.Contains(rejected.Error, "does not improve existing track") {
+		t.Fatalf("non-upgrade should fail without retry: %+v", rejected)
+	}
+	if got, _ := os.ReadFile(dest); string(got) != string(content) {
+		t.Fatal("non-upgrade replaced the existing track file")
+	}
+
+	// Explicit track selection still goes through /manual-match.
+	fresh, freshRepo, _, _ := newMusicTransferPipeline(t, ImportModeCopy, false)
+	untagged := filepath.Join(t.TempDir(), "untagged.mp3")
+	writeTaggedMusic(t, untagged, "Something Else")
+	rec = httptest.NewRecorder()
+	Router(fresh).ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/manual-match",
+		strings.NewReader(fmt.Sprintf(`{"path":%q,"media_type":"music","media_id":"track"}`, untagged))))
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("manual-match: %d %s", rec.Code, rec.Body)
+	}
+	drain(t, fresh)
+	if track, err := freshRepo.GetTrack(ctx, "track"); err != nil || !track.HasFile {
+		t.Fatalf("explicit track not linked: %+v, %v", track, err)
+	}
+}
+
+func must[T any](v T, err error) T {
+	if err != nil {
+		panic(err)
+	}
+	return v
 }

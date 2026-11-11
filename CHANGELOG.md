@@ -69,6 +69,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   artist search on public MusicBrainz. Requests to `musicbrainz.org`, including
   retries, are always spaced at least one second apart. See
   [`docs/music.md`](docs/music.md#metadata-source).
+
+- Persistent file-level import queues with bulk selection, live progress,
+  individual file outcomes, restart recovery, and failed-file retries.
+  Season packs match each episode independently; verified successful files
+  are hidden from scans by default. Torrent-blocked imports wait for the
+  client to release files without exhausting retries, and safety-held imports
+  require review approval before retrying.
 - Music capability management: select an album's MusicBrainz edition, manage
   audio quality and metadata profiles, and search for missing tracks in
   partially available albums. Completed music downloads now import into the

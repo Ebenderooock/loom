@@ -29,7 +29,10 @@ const (
 	retryImport importRetryStrategy = iota
 	// failPermanent marks the workflow as permanently failed (non-retryable errors).
 	failPermanent
+	waitForClient
 )
+
+const metaImportWaitingForClient = "import_waiting_for_client"
 
 // ImportFunc is the function signature the orchestrator calls to run an import.
 // It receives the workflow ID, download client ID, download ID, title, and category.
@@ -53,8 +56,7 @@ type CleanupFunc func(ctx context.Context, clientID, downloadID, sourcePath stri
 // It returns the resolved on-disk content path and save (storage) directory so
 // the orchestrator can cache them in workflow metadata; the import pipeline
 // relies on these to locate files if the torrent is later gone. Returning an error
-// is non-fatal — the orchestrator logs it and proceeds with the import using
-// whatever paths were previously cached.
+// blocks the import until the client is stopped or removed.
 type PreImportFunc func(ctx context.Context, clientID, downloadID string) (contentPath, savePath string, err error)
 
 // MediaRefreshFunc is called after a successful import to refresh media
@@ -338,6 +340,7 @@ func (o *Orchestrator) Run(ctx context.Context) {
 			o.observeCommandBuffer(len(o.commands))
 			o.handle(ctx, cmd)
 		case <-ticker.C:
+			o.checkBlockedImports(ctx)
 			o.handleStale(ctx)
 			o.checkMissingDownloads(ctx)
 			o.checkPostDownloadWorkflows(ctx)
@@ -610,6 +613,23 @@ func (o *Orchestrator) handleImportResult(ctx context.Context, cmd CmdImportResu
 	})
 
 	switch strategy {
+	case waitForClient:
+		if currentWf.DownloadClientID == "" || currentWf.DownloadID == "" {
+			// A standalone filesystem import has no client to monitor.
+			strategy = retryImport
+			break
+		}
+		if err := o.store.SetError(ctx, cmd.WorkflowID, cmd.Error); err != nil {
+			o.logger.Error("failed to record blocked import", "workflow_id", cmd.WorkflowID, "error", err)
+			return
+		}
+		if err := o.store.MergeMetadata(ctx, cmd.WorkflowID, map[string]any{metaImportWaitingForClient: true}); err != nil {
+			o.logger.Error("failed to persist blocked import", "workflow_id", cmd.WorkflowID, "error", err)
+		}
+		return
+	}
+
+	switch strategy {
 	case retryImport:
 		// Look up workflow to get download info for re-dispatch.
 		wf, err := o.store.Get(ctx, cmd.WorkflowID)
@@ -648,7 +668,7 @@ func (o *Orchestrator) handleImportResult(ctx context.Context, cmd CmdImportResu
 		time.AfterFunc(importRetryDelay, func() {
 			// Re-check workflow state: it may have been cancelled while waiting.
 			latestWf, err := o.store.Get(ctx, wf.ID)
-			if err != nil || latestWf.IsTerminal() || latestWf.State != StateImporting {
+			if err != nil || latestWf.IsTerminal() || latestWf.State != StateImporting || importWaitingForClient(latestWf) {
 				o.logger.Debug("aborting scheduled import retry — workflow no longer in importing state",
 					"workflow_id", wf.ID)
 				return
@@ -737,6 +757,15 @@ func (o *Orchestrator) runPostImportCleanup(ctx context.Context, wf *Workflow, i
 func (o *Orchestrator) classifyImportError(errMsg string) importRetryStrategy {
 	lower := strings.ToLower(errMsg)
 
+	for _, s := range []string{
+		"blocked by download client", "file in use", "being used by another process",
+		"resource busy", "sharing violation",
+	} {
+		if strings.Contains(lower, s) {
+			return waitForClient
+		}
+	}
+
 	// Non-retryable errors — fail immediately.
 	for _, s := range []string{
 		"permission denied", "access denied", "unauthorized",
@@ -797,6 +826,8 @@ func (s importRetryStrategy) String() string {
 		return "retry_import"
 	case failPermanent:
 		return "fail_permanent"
+	case waitForClient:
+		return "waiting_for_client"
 	default:
 		return "unknown"
 	}
@@ -942,6 +973,18 @@ func (o *Orchestrator) handleDownloadRemoved(ctx context.Context, cmd CmdDownloa
 	}
 	if wf.IsTerminal() {
 		return // already done
+	}
+	if wf.State == StateImporting || wf.State == StateCleaningUp {
+		// Completed payloads remain recoverable from cached paths even when
+		// their torrent is removed. Do not cancel an in-flight import.
+		if importWaitingForClient(wf) {
+			o.resumeBlockedImport(ctx, wf)
+		}
+		return
+	}
+	if wf.State == StatePostDownload {
+		o.transitionToImport(ctx, wf)
+		return
 	}
 
 	err = o.engine.Cancel(ctx, wf.ID)
@@ -1393,6 +1436,61 @@ func (o *Orchestrator) transitionToImport(ctx context.Context, wf *Workflow) {
 
 // ── Import dispatch ───────────────────────────────────────────────────
 
+func importWaitingForClient(wf *Workflow) bool {
+	if wf.State != StateImporting {
+		return false
+	}
+	var metadata map[string]any
+	if json.Unmarshal([]byte(wf.Metadata), &metadata) != nil {
+		return false
+	}
+	return metadata[metaImportWaitingForClient] == true
+}
+
+func (o *Orchestrator) checkBlockedImports(ctx context.Context) {
+	if o.dlStatus == nil {
+		return
+	}
+	active, err := o.store.ListActive(ctx)
+	if err != nil {
+		o.logger.Error("failed to list blocked imports", "error", err)
+		return
+	}
+	var blocked []*Workflow
+	for _, wf := range active {
+		if importWaitingForClient(wf) {
+			blocked = append(blocked, wf)
+		}
+	}
+	if len(blocked) == 0 {
+		return
+	}
+	downloads, err := o.dlStatus.ActiveDownloads(ctx)
+	unreachable, usable := unreachableClients(err)
+	if err != nil {
+		o.logger.Warn("blocked import status check incomplete", "error", err)
+	}
+	for _, wf := range blocked {
+		if !usable || unreachable[wf.DownloadClientID] {
+			continue
+		}
+		info, exists := downloads[wf.DownloadClientID+":"+wf.DownloadID]
+		if exists && info.Status != "paused" && info.Status != "stopped" && info.Status != "completed" {
+			continue
+		}
+		o.resumeBlockedImport(ctx, wf)
+	}
+}
+
+func (o *Orchestrator) resumeBlockedImport(ctx context.Context, wf *Workflow) {
+	if err := o.store.MergeMetadata(ctx, wf.ID, map[string]any{metaImportWaitingForClient: false}); err != nil {
+		o.logger.Error("failed to resume blocked import", "workflow_id", wf.ID, "error", err)
+		return
+	}
+	o.logEvent(ctx, wf.ID, EventRetried, "Download client released files; retrying import", nil)
+	o.dispatchImport(ctx, wf.ID, wf.DownloadClientID, wf.DownloadID, wf.GrabTitle, o.categoryFromMetadata(wf.Metadata))
+}
+
 func (o *Orchestrator) dispatchImport(ctx context.Context, workflowID, clientID, downloadID, title, category string) {
 	if o.importFn == nil {
 		o.logger.Warn("no import function configured, skipping import", "workflow_id", workflowID)
@@ -1436,17 +1534,15 @@ func (o *Orchestrator) dispatchImport(ctx context.Context, workflowID, clientID,
 				}
 			}
 			if perr != nil {
-				o.logger.Warn("pre-import preparation failed (non-fatal)",
-					"workflow_id", workflowID,
-					"client_id", clientID,
-					"download_id", downloadID,
-					"error", perr,
-				)
-			} else {
-				o.logEvent(ctx, workflowID, EventImportStarted,
-					"Prepared download for import",
-					map[string]any{"content_path": contentPath, "save_path": savePath})
+				select {
+				case o.commands <- CmdImportResult{WorkflowID: workflowID, Error: "blocked by download client: " + perr.Error()}:
+				case <-ctx.Done():
+				}
+				return
 			}
+			o.logEvent(ctx, workflowID, EventImportStarted,
+				"Prepared download for import",
+				map[string]any{"content_path": contentPath, "save_path": savePath})
 		}
 
 		paths, err := o.importFn(ctx, clientID, downloadID, title, category)
@@ -1493,6 +1589,9 @@ func (o *Orchestrator) handleStale(ctx context.Context) {
 	}
 
 	for _, wf := range stale {
+		if importWaitingForClient(wf) {
+			continue
+		}
 		age := time.Since(wf.UpdatedAt)
 
 		// For downloading/grabbed workflows, attempt recovery before failing.
@@ -1638,6 +1737,10 @@ func (o *Orchestrator) reconcileOnBoot(ctx context.Context) {
 		known := clientKnown(wf.DownloadClientID)
 
 		switch {
+		case importWaitingForClient(wf):
+			// The persisted wait is serviced by checkBlockedImports; a restart
+			// must not bypass the client gate or consume another retry.
+			continue
 		case wf.State == StateImporting:
 			// Import goroutine was killed on restart — re-dispatch
 			o.logger.Info("reconcile: re-dispatching import for interrupted workflow",

@@ -3,6 +3,9 @@ package imports
 import (
 	"context"
 	"database/sql"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	_ "modernc.org/sqlite"
@@ -14,6 +17,8 @@ func setupTestDB(t *testing.T) *sql.DB {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Every new connection to :memory: is a separate database.
+	db.SetMaxOpenConns(1)
 	t.Cleanup(func() { db.Close() })
 
 	_, err = db.Exec(`CREATE TABLE import_history (
@@ -30,7 +35,22 @@ func setupTestDB(t *testing.T) *sql.DB {
 	if err != nil {
 		t.Fatal(err)
 	}
+	applyImportJobsMigration(t, db)
 	return db
+}
+
+// applyImportJobsMigration runs the Up section of the real 0101 migration so
+// the test schema cannot drift from production.
+func applyImportJobsMigration(t *testing.T, db *sql.DB) {
+	t.Helper()
+	raw, err := os.ReadFile(filepath.Join("..", "storage", "migrations", "sqlite", "0101_import_jobs.sql"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	up := strings.SplitN(string(raw), "-- +goose Down", 2)[0]
+	if _, err := db.Exec(up); err != nil {
+		t.Fatalf("apply 0101: %v", err)
+	}
 }
 
 func TestAlreadyImported_RejectsKnownFile(t *testing.T) {

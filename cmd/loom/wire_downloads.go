@@ -179,19 +179,37 @@ func wireDownloads(
 		}
 		// Resolve the on-disk paths while the torrent still exists.
 		var contentPath, savePath string
-		items, err := c.Status(ctx, downloadID)
+		found := false
+		stopped := false
+		// Query the listing: some clients return an error for a missing ID
+		// even though a removed torrent is safe to import from cached paths.
+		items, err := c.Status(ctx)
 		if err != nil {
 			return "", "", fmt.Errorf("resolve pre-import download paths: %w", err)
 		}
 		for _, item := range items {
 			if item.ID == downloadID {
+				found = true
 				contentPath = item.ContentPath
 				savePath = item.SavePath
+				stopped = item.Status == downloads.StatusItemPaused || item.Status == downloads.StatusItemCompleted
 				break
 			}
 		}
+		if !found || stopped {
+			return contentPath, savePath, nil
+		}
 		if err := c.Pause(ctx, downloadID); err != nil {
 			return contentPath, savePath, fmt.Errorf("pause download before import: %w", err)
+		}
+		items, err = c.Status(ctx)
+		if err != nil {
+			return contentPath, savePath, fmt.Errorf("confirm download stopped before import: %w", err)
+		}
+		for _, item := range items {
+			if item.ID == downloadID && item.Status != downloads.StatusItemPaused && item.Status != downloads.StatusItemCompleted {
+				return contentPath, savePath, fmt.Errorf("waiting for download to stop (status: %s)", item.Status)
+			}
 		}
 		return contentPath, savePath, nil
 	})
@@ -207,15 +225,22 @@ func wireDownloads(
 		contentPath := remotePathStore.MapPath(ctx, clientID, sourcePath)
 		// The torrent may already have been removed during pre-import; tolerate
 		// a missing item. If still present, capture its path and remove it.
-		items, err := c.Status(ctx, downloadID)
+		items, err := c.Status(ctx)
 		if err != nil {
 			return fmt.Errorf("check download before source cleanup: %w", err)
 		}
-		if len(items) > 0 {
+		var current *downloads.Item
+		for i := range items {
+			if items[i].ID == downloadID {
+				current = &items[i]
+				break
+			}
+		}
+		if current != nil {
 			if contentPath == "" {
-				p := items[0].ContentPath
+				p := current.ContentPath
 				if p == "" {
-					p = items[0].SavePath
+					p = current.SavePath
 				}
 				contentPath = remotePathStore.MapPath(ctx, clientID, p)
 			}

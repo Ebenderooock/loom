@@ -261,6 +261,210 @@ paths:
         "401": { description: Authentication required when enabled. }
         "404": { description: Season not found for this show. }
         "500": { description: Monitoring update failed; transaction rolled back. }
+  /api/v1/imports/batch:
+    post:
+      tags: [imports]
+      operationId: queueImportBatch
+      summary: Independently queue selected files or folders.
+      description: |
+        Up to 1000 paths per request. Active paths are deduplicated.
+        Supply media_type and media_id together to force a manual match.
+        Partial acceptance returns 202 with both accepted jobs and per-path errors.
+      security: [{ apiKey: [] }, { bearerAuth: [] }, { cookieAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [paths]
+              properties:
+                paths:
+                  type: array
+                  minItems: 1
+                  maxItems: 1000
+                  items: { type: string, minLength: 1 }
+                media_type:
+                  type: string
+                  enum: [movie, episode, music]
+                media_id: { type: string }
+              dependentRequired:
+                media_type: [media_id]
+                media_id: [media_type]
+      responses:
+        "202":
+          description: Jobs accepted; inspect errors for paths not queued.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ImportBatchResult" }
+        "400":
+          description: Invalid body, empty or oversized batch, or incomplete media identity.
+        "422":
+          description: No paths could be queued.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ImportBatchResult" }
+  /api/v1/imports/jobs:
+    get:
+      tags: [imports]
+      operationId: listImportJobs
+      summary: List all active jobs and recent finished jobs.
+      security: [{ apiKey: [] }, { bearerAuth: [] }, { cookieAuth: [] }]
+      parameters:
+        - in: query
+          name: limit
+          description: Maximum finished jobs; active jobs are always included.
+          schema: { type: integer, default: 100, maximum: 500, minimum: 1 }
+      responses:
+        "200":
+          description: Durable jobs with progress and retry deadlines.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/ImportJob" }
+  /api/v1/imports/jobs/{id}:
+    get:
+      tags: [imports]
+      operationId: getImportJob
+      summary: Read a job including its individual file outcomes.
+      security: [{ apiKey: [] }, { bearerAuth: [] }, { cookieAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Job detail.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/ImportJob" }
+        "404": { description: Unknown job. }
+  /api/v1/imports/jobs/{id}/retry:
+    post:
+      tags: [imports]
+      operationId: retryImportJob
+      summary: Retry unsuccessful files without resetting successful ones.
+      description: Pending safety reviews must be approved before retrying.
+      security: [{ apiKey: [] }, { bearerAuth: [] }, { cookieAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "202":
+          description: Job requeued.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/ImportJob" }
+        "404": { description: Unknown job. }
+        "409": { description: Job already active, nothing to retry, or safety review not approved. }
+  /api/v1/imports/manual:
+    post:
+      tags: [imports]
+      operationId: queueManualImport
+      summary: Queue a file or folder for automatic matching.
+      security: [{ apiKey: [] }, { bearerAuth: [] }, { cookieAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [path]
+              properties:
+                path: { type: string, minLength: 1 }
+      responses:
+        "202": { $ref: "#/components/responses/ImportAccepted" }
+        "400": { description: Invalid body or missing path. }
+        "422": { description: Path cannot be queued. }
+  /api/v1/imports/manual-match:
+    post:
+      tags: [imports]
+      operationId: queueManualMatch
+      summary: Queue an import with an explicit media match.
+      description: For music, media_id is the selected track ID.
+      security: [{ apiKey: [] }, { bearerAuth: [] }, { cookieAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [path, media_type, media_id]
+              properties:
+                path: { type: string, minLength: 1 }
+                media_type:
+                  type: string
+                  enum: [movie, episode, music]
+                media_id: { type: string, minLength: 1 }
+      responses:
+        "202": { $ref: "#/components/responses/ImportAccepted" }
+        "400": { description: Invalid body or missing required fields. }
+        "422": { description: Import cannot be queued. }
+  /api/v1/imports/reimport:
+    post:
+      tags: [imports]
+      operationId: queueReimport
+      summary: Queue a reimport using the selected conflict policy.
+      security: [{ apiKey: [] }, { bearerAuth: [] }, { cookieAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [source_path, media_type, media_id]
+              properties:
+                source_path: { type: string, minLength: 1 }
+                media_type:
+                  type: string
+                  enum: [movie, episode, music]
+                media_id: { type: string, minLength: 1 }
+                conflict_policy: { type: string, default: replace_if_better }
+      responses:
+        "202": { $ref: "#/components/responses/ImportAccepted" }
+        "400": { description: Invalid body or missing required fields. }
+        "422": { description: Reimport cannot be queued. }
+  /api/v1/imports/scan:
+    post:
+      tags: [imports]
+      operationId: scanImportFolder
+      summary: Preview file matches and verified import status without importing.
+      security: [{ apiKey: [] }, { bearerAuth: [] }, { cookieAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [path]
+              properties:
+                path: { type: string, minLength: 1 }
+      responses:
+        "200":
+          description: File matches, including already_imported only after content verification.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/ImportScanResult" }
+        "400": { description: Invalid body or missing path. }
+        "422": { description: Folder could not be scanned. }
   /api/v1/collections/:
     get:
       tags: [collections]
@@ -3942,6 +4146,88 @@ components:
         secondary: { type: string, pattern: "^#[0-9A-Fa-f]{6}$" }
         accent: { type: string, pattern: "^#[0-9A-Fa-f]{6}$" }
         background: { type: string, pattern: "^#[0-9A-Fa-f]{6}$" }
+    ImportJob:
+      type: object
+      required: [id, kind, source_path, status, attempts, total_files, processed_files, imported_files, failed_files, created_at, updated_at]
+      properties:
+        id: { type: string }
+        kind: { type: string, enum: [manual, manual_match, reimport] }
+        source_path: { type: string }
+        media_type: { type: string, enum: [movie, episode, music] }
+        media_id: { type: string }
+        status:
+          type: string
+          enum: [queued, importing, retry_pending, imported, failed, pending_review]
+        attempts: { type: integer }
+        max_attempts: { type: integer }
+        total_files: { type: integer }
+        processed_files: { type: integer }
+        imported_files: { type: integer }
+        failed_files: { type: integer }
+        skipped_files: { type: integer }
+        pending_review_files: { type: integer }
+        review_id: { type: string }
+        error: { type: string }
+        next_retry_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        completed_at: { type: string, format: date-time }
+        files:
+          type: array
+          items: { $ref: "#/components/schemas/ImportJobFile" }
+    ImportJobFile:
+      type: object
+      required: [id, job_id, source_path, status, attempts, updated_at]
+      properties:
+        id: { type: string }
+        job_id: { type: string }
+        source_path: { type: string }
+        dest_path: { type: string }
+        media_type: { type: string, enum: [movie, episode, music] }
+        media_id: { type: string }
+        status:
+          type: string
+          enum: [queued, importing, imported, failed, skipped, pending_review]
+        attempts: { type: integer }
+        error: { type: string }
+        updated_at: { type: string, format: date-time }
+    ImportBatchResult:
+      type: object
+      properties:
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/ImportJob" }
+        errors:
+          type: array
+          items:
+            type: object
+            required: [path, error]
+            properties:
+              path: { type: string }
+              error: { type: string }
+    ImportScanResult:
+      type: object
+      required: [file_path, file_size, detected_title, confidence, suggested_action]
+      properties:
+        file_path: { type: string }
+        file_size: { type: integer, format: int64 }
+        detected_title: { type: string }
+        detected_year: { type: integer }
+        detected_season: { type: integer }
+        detected_episode: { type: integer }
+        detected_artist: { type: string }
+        detected_album: { type: string }
+        detected_track: { type: string }
+        detected_disc: { type: integer }
+        matched_media: { type: string }
+        matched_media_id: { type: string }
+        media_type: { type: string, enum: [movie, episode, music] }
+        confidence: { type: number }
+        suggested_action: { type: string }
+        quality: { type: string }
+        import_status: { type: string }
+        import_error: { type: string }
+        import_job_id: { type: string }
     SelectAlbumReleaseRequest:
       type: object
       additionalProperties: false
@@ -6044,6 +6330,17 @@ components:
         type: string
 
   responses:
+    ImportAccepted:
+      description: Durably queued; not a successful-import confirmation.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [status, job_id, data]
+            properties:
+              status: { type: string, enum: [accepted] }
+              job_id: { type: string }
+              data: { $ref: "#/components/schemas/ImportJob" }
     BadRequest:
       description: The request body or parameters could not be processed.
       content:

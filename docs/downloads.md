@@ -45,7 +45,41 @@ files. Automatic replacements require an enabled, configured recycle bin;
 if preservation fails, the import stops. A library-update failure leaves the
 imported file at its destination for recovery rather than deleting it.
 
-The full schema is in [`api/openapi/loom.yaml`](../api/openapi/loom.yaml)
+### Importing completed files
+
+In **Downloads > Imports**, scan the completed-download folder, select several
+files, then choose **Import selected**, or use **Import all matched** to queue
+every eligible match across all result pages. Search and pagination keep large
+season-pack scans manageable. Verified successful imports are hidden by default;
+enable **Show already imported files** to inspect them.
+
+The import queue is persistent, not a two-file admission limit. Workers process
+queued files with bounded concurrency, and interrupted work resumes after a
+restart. The queue shows file counts, attempts, failures, and scheduled retry
+times. Expand **Show file outcomes** on a folder import to see exactly which
+episodes succeeded or failed and their destinations/errors. Fix a terminal
+failure's cause before choosing **Retry**. For safety-held imports, approve the
+item in **Activity > Reviews**, then choose **Retry after approval** in the
+import queue. Neither automatic retries nor re-submitting the path bypasses
+pending or rejected safety reviews.
+
+Success is tracked per source file, with destination verification, not per
+torrent. A partially imported season can be retried without repeating its
+successful episodes. Imports register each file with the movie or episode in
+the library; the UI refreshes library status as queued imports finish.
+
+| Method | Path | Description |
+| ------ | ---- | ----------- |
+| POST | `/api/v1/imports/batch` | Queue selected files with `{"paths":["/downloads/file.mkv"]}`. |
+| GET | `/api/v1/imports/jobs` | List active jobs and recent outcomes, including progress and retry deadlines. |
+| POST | `/api/v1/imports/jobs/{id}/retry` | Retry a failed job after correcting its cause. |
+
+Existing `/api/v1/imports/manual`, `/manual-match`, and `/reimport` actions use
+the same queue. An accepted response means queued, not imported successfully.
+Manual matching imports media files individually, with their subtitles and
+extras; it does not move unrelated loose NFO or image files with the folder.
+
+The full download-client schema is in [`api/openapi/loom.yaml`](../api/openapi/loom.yaml)
 under the `download-clients` tag.
 
 ## Downloads / Imports
