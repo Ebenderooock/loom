@@ -62,6 +62,7 @@ and surface tint. The palette drives buttons, navigation, pages, sidebars,
 cards, dialogs, and focus rings; text contrast adjusts automatically. Surface
 brightness follows the theme, while the tint controls its hue.
 Individual color controls are tucked under **Customize individual colors**.
+Invalid hex values stay visible for correction and must be fixed before saving.
 Preview your choices, then save them for everyone or discard unsaved changes.
 
 Backgrounds can use an image URL or an uploaded PNG, JPEG, or WebP (up to 5 MiB),

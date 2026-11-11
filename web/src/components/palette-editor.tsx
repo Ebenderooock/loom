@@ -40,18 +40,19 @@ const COLORS: Array<{
 
 function ColorControl({
   value,
+  hex,
   label,
   description,
   onChange,
 }: {
   value: string;
+  hex: string;
   label: string;
   description: string;
   onChange: (value: string) => void;
 }) {
-  const [hex, setHex] = React.useState<string | null>(null);
   const id = React.useId();
-  const invalid = hex !== null && !validHex(hex);
+  const invalid = !validHex(hex);
   return (
     <div className="space-y-2">
       <Label htmlFor={`${id}-picker`}>{label}</Label>
@@ -62,27 +63,17 @@ function ColorControl({
           value={value}
           aria-label={`${label} color`}
           className="h-11 w-12 shrink-0 cursor-pointer rounded-md border border-input bg-card p-1"
-          onChange={(event) => {
-            setHex(null);
-            onChange(event.target.value);
-          }}
+          onChange={(event) => onChange(event.target.value)}
         />
         <Input
           aria-label={`${label} hex`}
-          value={hex ?? value}
+          value={hex}
           maxLength={7}
           spellCheck={false}
           aria-invalid={invalid}
           aria-describedby={`${id}-help`}
           className="h-11 min-w-0 font-mono text-base"
-          onChange={(event) => {
-            const next = event.target.value;
-            if (validHex(next)) {
-              setHex(null);
-              onChange(next);
-            } else setHex(next);
-          }}
-          onBlur={() => setHex(null)}
+          onChange={(event) => onChange(event.target.value)}
         />
       </div>
       <p id={`${id}-help`} className="text-xs text-muted-foreground">
@@ -98,11 +89,15 @@ export function PaletteEditor({
   palette,
   theme,
   disabled,
+  colorInputs,
+  onColorInputChange,
   onChange,
 }: {
   palette: Palette;
   theme: Theme;
   disabled: boolean;
+  colorInputs: Partial<Palette>;
+  onColorInputChange: (key: keyof Palette, value: string) => void;
   onChange: (palette: Palette) => void;
 }) {
   const [systemDark, setSystemDark] = React.useState(
@@ -187,9 +182,10 @@ export function PaletteEditor({
               <ColorControl
                 key={key}
                 value={palette[key]}
+                hex={colorInputs[key] ?? palette[key]}
                 label={label}
                 description={description}
-                onChange={(value) => onChange({ ...palette, [key]: value })}
+                onChange={(value) => onColorInputChange(key, value)}
               />
             ))}
           </div>

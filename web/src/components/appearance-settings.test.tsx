@@ -260,6 +260,68 @@ describe("global appearance settings", () => {
     );
   });
 
+  it("blocks saving invalid colors after blur until every field is corrected", async () => {
+    const user = userEvent.setup();
+    renderAppearance();
+    await user.click(await screen.findByText("Customize individual colors"));
+    await user.click(screen.getByRole("button", { name: "Dark" }));
+    const primary = screen.getByLabelText("Primary hex");
+    const secondary = screen.getByLabelText("Secondary hex");
+    await user.clear(primary);
+    await user.type(primary, "#zzzzzz");
+    await user.clear(secondary);
+    await user.tab();
+    expect(primary).toHaveValue("#zzzzzz");
+    expect(primary).toHaveAttribute("aria-invalid", "true");
+    expect(secondary).toHaveValue("");
+    const save = screen.getByRole("button", { name: "Save appearance" });
+    expect(save).toBeDisabled();
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      /correct the invalid color/i,
+    );
+    fireEvent.submit(save.closest("form")!);
+    expect(
+      fetchMock.mock.calls.some(([, init]) => init?.method === "PUT"),
+    ).toBe(false);
+    await user.clear(primary);
+    await user.type(primary, "#e65d29");
+    expect(save).toBeDisabled();
+    fireEvent.change(screen.getByLabelText("Secondary color"), {
+      target: { value: "#663399" },
+    });
+    expect(secondary).toHaveValue("#663399");
+    expect(save).toBeEnabled();
+    await user.click(save);
+    await waitFor(() => expect(stored.palette?.primary).toBe("#e65d29"));
+    expect(stored.palette?.secondary).toBe("#663399");
+    expect(stored.theme).toBe("dark");
+  });
+
+  it.each(["Ocean", "Reset to defaults", "Discard changes"])(
+    "clears invalid color drafts when choosing %s",
+    async (action) => {
+      const user = userEvent.setup();
+      renderAppearance();
+      await user.click(await screen.findByText("Customize individual colors"));
+      await user.clear(screen.getByLabelText("Primary hex"));
+      expect(
+        screen.getByRole("button", { name: "Save appearance" }),
+      ).toBeDisabled();
+      await user.click(screen.getByRole("button", { name: action }));
+      expect(screen.getByLabelText("Primary hex")).toHaveValue(
+        action === "Ocean" ? PALETTES.Ocean.primary : PALETTES.Loom.primary,
+      );
+      expect(screen.getByLabelText("Primary hex")).toHaveAttribute(
+        "aria-invalid",
+        "false",
+      );
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+      const save = screen.getByRole("button", { name: "Save appearance" });
+      if (action === "Ocean") expect(save).toBeEnabled();
+      else expect(save).toBeDisabled();
+    },
+  );
+
   it("uploads an image and saves the returned Loom URL", async () => {
     const user = userEvent.setup();
     renderAppearance();

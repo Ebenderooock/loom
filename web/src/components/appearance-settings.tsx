@@ -13,7 +13,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PaletteEditor } from "@/components/palette-editor";
-import { PALETTES } from "@/lib/palette";
+import { PALETTES, validHex, type Palette } from "@/lib/palette";
 
 const THEMES: Array<{ value: Appearance["theme"]; label: string }> = [
   { value: "system", label: "System" },
@@ -55,6 +55,7 @@ function AppearanceForm({
   canEdit: boolean;
 }) {
   const [draft, setDraft] = React.useState(initial);
+  const [colorInputs, setColorInputs] = React.useState<Partial<Palette>>({});
   const [failedImage, setFailedImage] = React.useState<string>();
   const [uploading, setUploading] = React.useState(false);
   const [uploadError, setUploadError] = React.useState<string>();
@@ -69,7 +70,11 @@ function AppearanceForm({
   const url = draft.backgroundUrl.trim();
   const urlError = backgroundUrlError(url);
   const imageFailed = !!url && failedImage === url;
-  const dirty = JSON.stringify(draft) !== JSON.stringify(initial);
+  const invalidColors = Object.values(colorInputs).some(
+    (value) => !validHex(value),
+  );
+  const dirty =
+    invalidColors || JSON.stringify(draft) !== JSON.stringify(initial);
   const disabled = !canEdit || save.isPending || uploading;
   const palette = draft.palette ?? PALETTES.Loom;
 
@@ -93,7 +98,7 @@ function AppearanceForm({
 
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
-    if (urlError || disabled) return;
+    if (urlError || invalidColors || disabled) return;
     save.mutate(
       { ...draft, backgroundUrl: url },
       {
@@ -149,9 +154,24 @@ function AppearanceForm({
             palette={palette}
             theme={draft.theme}
             disabled={disabled}
-            onChange={(next) =>
-              setDraft({ ...draft, palette: next, accent: "default" })
-            }
+            colorInputs={colorInputs}
+            onColorInputChange={(key, value) => {
+              setColorInputs((current) => ({ ...current, [key]: value }));
+              if (validHex(value)) {
+                setDraft((current) => ({
+                  ...current,
+                  palette: {
+                    ...(current.palette ?? PALETTES.Loom),
+                    [key]: value,
+                  },
+                  accent: "default",
+                }));
+              }
+            }}
+            onChange={(next) => {
+              setColorInputs({});
+              setDraft({ ...draft, palette: next, accent: "default" });
+            }}
           />
 
           <div className="space-y-3 border-t border-border pt-6">
@@ -335,6 +355,12 @@ function AppearanceForm({
               {save.error.message}
             </p>
           )}
+          {invalidColors && (
+            <p role="alert" className="text-sm text-destructive">
+              Correct the invalid color values under Customize individual colors
+              before saving.
+            </p>
+          )}
           {canEdit && (
             <div className="space-y-3 border-t border-border pt-4">
               <p role="status" className="text-sm text-muted-foreground">
@@ -350,6 +376,7 @@ function AppearanceForm({
                   disabled={disabled}
                   onClick={() => {
                     setDraft({ ...DEFAULT_APPEARANCE });
+                    setColorInputs({});
                     setBackgroundSource("url");
                     setUploadError(undefined);
                   }}
@@ -365,6 +392,7 @@ function AppearanceForm({
                       disabled={disabled}
                       onClick={() => {
                         setDraft(initial);
+                        setColorInputs({});
                         setBackgroundSource(
                           initial.backgroundUrl.startsWith(
                             "/api/v1/appearance/background",
@@ -382,7 +410,7 @@ function AppearanceForm({
                   <Button
                     type="submit"
                     className="h-auto min-h-11 whitespace-normal py-3"
-                    disabled={disabled || !dirty || !!urlError}
+                    disabled={disabled || !dirty || !!urlError || invalidColors}
                   >
                     {save.isPending ? "Saving..." : "Save appearance"}
                   </Button>
