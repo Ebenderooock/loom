@@ -105,6 +105,16 @@ test("custom colors theme the actual app and uploaded images survive reload", as
   });
   await page.goto("/settings/appearance");
   await page.waitForLoadState("networkidle");
+  const brandLogoPrimary = page
+    .locator('[data-testid="loom-logo"]:not([aria-label="Palette preview"] *)')
+    .locator("visible=true")
+    .first()
+    .locator("span")
+    .nth(1);
+  await expect(brandLogoPrimary).toHaveCSS(
+    "background-color",
+    "rgb(90, 40, 189)",
+  );
   await page.getByRole("button", { name: "Dark", exact: true }).click();
   await page.getByRole("button", { name: "Ember", exact: true }).click();
   await expect(page.getByLabel("Primary hex")).toBeHidden();
@@ -118,6 +128,17 @@ test("custom colors theme the actual app and uploaded images survive reload", as
       .getByRole("region", { name: "Palette preview" })
       .locator(".bg-primary"),
   ).toHaveCSS("background-color", "rgb(220, 107, 50)");
+  await expect(
+    page
+      .getByRole("region", { name: "Palette preview" })
+      .getByTestId("loom-logo")
+      .locator("span")
+      .nth(1),
+  ).toHaveCSS("background-color", "rgb(220, 107, 50)");
+  await expect(brandLogoPrimary).toHaveCSS(
+    "background-color",
+    "rgb(90, 40, 189)",
+  );
   await page.getByRole("button", { name: "Upload image", exact: true }).click();
   await page.getByLabel("Choose background image").setInputFiles({
     name: "wallpaper.png",
@@ -129,6 +150,10 @@ test("custom colors theme the actual app and uploaded images survive reload", as
   await page.getByRole("button", { name: "Save appearance" }).click();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   await expect(page.getByRole("button", { name: "Save appearance" })).toHaveCSS(
+    "background-color",
+    "rgb(220, 107, 50)",
+  );
+  await expect(brandLogoPrimary).toHaveCSS(
     "background-color",
     "rgb(220, 107, 50)",
   );

@@ -43,6 +43,7 @@ import { cn } from "@/lib/utils";
 import { useFeatureEnabled } from "@/lib/features-api";
 import { useAuth } from "@/hooks/use-auth";
 import { PageHeaderProvider, usePageHeader } from "@/hooks/use-page-header";
+import { LoomLogo } from "@/components/loom-logo";
 
 interface NavItem {
   to: string;
@@ -202,12 +203,7 @@ function SidebarNav({
 function Brand({ collapsed }: { collapsed?: boolean }) {
   return (
     <div className="flex h-14 items-center gap-2.5 border-b border-border/50 px-4">
-      <img
-        src="/loom-logo.png"
-        alt=""
-        className="h-8 w-auto"
-        aria-hidden="true"
-      />
+      <LoomLogo className="h-8 w-8" />
       {!collapsed && (
         <span className="gradient-text text-lg font-bold">Loom</span>
       )}
@@ -289,12 +285,7 @@ function AppLayoutInner({ children }: { children?: React.ReactNode }) {
                 className="flex items-center gap-2 md:hidden"
                 aria-label="Loom home"
               >
-                <img
-                  src="/loom-logo.png"
-                  alt=""
-                  className="h-7 w-auto"
-                  aria-hidden="true"
-                />
+                <LoomLogo className="h-7 w-7" />
                 <span className="gradient-text text-lg font-bold">Loom</span>
               </Link>
 

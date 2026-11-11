@@ -97,9 +97,12 @@ function AppearanceStyles({ appearance }: { appearance: Appearance }) {
       : {};
     for (const [key, value] of Object.entries(variables))
       root.style.setProperty(key, value);
+    if (appearance.palette) root.dataset.palette = "custom";
+    else delete root.dataset.palette;
     return () => {
       for (const key of Object.keys(variables)) root.style.removeProperty(key);
       delete root.dataset.accent;
+      delete root.dataset.palette;
       root.style.removeProperty("--personal-accent");
       root.style.removeProperty("--personal-accent-dark");
       root.style.removeProperty("--loom-background-image");

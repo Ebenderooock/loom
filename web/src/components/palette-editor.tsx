@@ -9,6 +9,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { LoomLogo } from "@/components/loom-logo";
 import { Check } from "lucide-react";
 
 const COLORS: Array<{
@@ -111,10 +112,11 @@ export function PaletteEditor({
   }, []);
   const previewTheme =
     theme === "system" ? (systemDark ? "dark" : "light") : theme;
-  const variables: React.CSSProperties = paletteVariables(
-    palette,
-    previewTheme,
-  );
+  const variables = {
+    ...paletteVariables(palette, previewTheme),
+    "--loom-logo-primary": "initial",
+    "--loom-logo-accent": "initial",
+  } as React.CSSProperties;
   const selectedPreset = Object.entries(PALETTES).find(([, colors]) =>
     COLORS.every(
       ({ key }) => palette[key].toLowerCase() === colors[key].toLowerCase(),
@@ -198,7 +200,10 @@ export function PaletteEditor({
         className="overflow-hidden rounded-lg border border-border bg-background text-foreground"
       >
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-card px-4 py-3">
-          <span className="font-semibold text-primary-readable">Loom</span>
+          <span className="flex items-center gap-2 font-semibold text-primary-readable">
+            <LoomLogo className="h-6 w-6" />
+            Loom
+          </span>
           <span className="text-xs text-muted-foreground">Preview only</span>
         </div>
         <div className="flex">

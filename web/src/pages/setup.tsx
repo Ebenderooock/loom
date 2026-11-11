@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertCircle, CheckCircle2, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { LoomLogo } from "@/components/loom-logo";
 
 type SetupStep = "welcome" | "credentials" | "complete";
 
@@ -106,11 +107,7 @@ export function SetupPage() {
         {step === "welcome" && (
           <div className="space-y-6 rounded-lg bg-neutral-card p-8 shadow-lg">
             <div className="space-y-4 text-center">
-              <img
-                src="/loom-logo.png"
-                alt="Loom Logo"
-                className="mx-auto h-16 object-contain"
-              />
+              <LoomLogo label="Loom" className="mx-auto block h-16 w-16" />
               <div className="space-y-2">
                 <h1 className="text-3xl font-bold text-neutral-light">
                   Welcome to Loom

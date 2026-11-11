@@ -28,30 +28,30 @@ Emby keep working unchanged.
 
 ## Why Loom?
 
-| | *arr stack | Loom |
-|---|---|---|
-| Apps to deploy | 3+ (Radarr, Sonarr, Prowlarr, …) | **1** (modular monolith; split-mode optional) |
-| Databases | 3 SQLite files | 1 SQLite (or Postgres) |
-| Runtime | .NET (heavier images) | Go static binary (distroless, ~30 MB image) |
-| Observability | Ad-hoc logs | OpenTelemetry, Prometheus, structured JSON logs, pprof from day one |
-| Customisation | Forks | First-class plugin SDK (gRPC, out-of-process — Phase 10) |
-| UI | Three different UIs | One unified, mobile-first, accessible UI |
-| Migration | n/a | Built-in importer from existing arr SQLite DBs (Phase 8) |
+|                | *arr stack                       | Loom                                                                |
+| -------------- | -------------------------------- | ------------------------------------------------------------------- |
+| Apps to deploy | 3+ (Radarr, Sonarr, Prowlarr, …) | **1** (modular monolith; split-mode optional)                       |
+| Databases      | 3 SQLite files                   | 1 SQLite (or Postgres)                                              |
+| Runtime        | .NET (heavier images)            | Go static binary (distroless, ~30 MB image)                         |
+| Observability  | Ad-hoc logs                      | OpenTelemetry, Prometheus, structured JSON logs, pprof from day one |
+| Customisation  | Forks                            | First-class plugin SDK (gRPC, out-of-process — Phase 10)            |
+| UI             | Three different UIs              | One unified, mobile-first, accessible UI                            |
+| Migration      | n/a                              | Built-in importer from existing arr SQLite DBs (Phase 8)            |
 
 ## Feature highlights
 
-| Surface | Today (Phase 1) | Coming |
-|---|---|---|
-| HTTP server | chi router, request-ID, structured access logs, panic recovery, gzip, ETag, CORS | WebSocket events (Phase 1c) |
-| Storage | SQLite (default) + Postgres, embedded goose migrations (60+), sqlc-typed queries | Backup / restore CLI (Phase 11) |
-| Health probes | `/healthz`, `/livez`, `/readyz` | — |
-| Metrics | Prometheus `/metrics` (Go runtime + process collectors) | Loom-curated Grafana dashboards (Phase 11) |
-| Tracing | OpenTelemetry SDK + OTLP/HTTP exporter | Spans on every module call as modules land |
-| Profiling | `/debug/pprof/*`, gated by config | — |
-| Logging | `slog` JSON, PII-redacted | Per-module loggers (rolling) |
-| Config | Layered Viper (defaults → file → env → flags), hot-reload for safe keys | Live config UI (Phase 9) |
-| Auth | Server-authoritative session cookies (argon2id) + API keys | OIDC + reverse-proxy header trust |
-| Frontend | React 19 + TS + Vite + TanStack Router/Query + shadcn/ui + Tailwind; **Movies, Series, Indexers, Search, Downloads, Settings, Notifications pages** | Calendar, Import Lists (Phases 8–11) |
+| Surface       | Today (Phase 1)                                                                                                                                     | Coming                                     |
+| ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------ |
+| HTTP server   | chi router, request-ID, structured access logs, panic recovery, gzip, ETag, CORS                                                                    | WebSocket events (Phase 1c)                |
+| Storage       | SQLite (default) + Postgres, embedded goose migrations (60+), sqlc-typed queries                                                                    | Backup / restore CLI (Phase 11)            |
+| Health probes | `/healthz`, `/livez`, `/readyz`                                                                                                                     | —                                          |
+| Metrics       | Prometheus `/metrics` (Go runtime + process collectors)                                                                                             | Loom-curated Grafana dashboards (Phase 11) |
+| Tracing       | OpenTelemetry SDK + OTLP/HTTP exporter                                                                                                              | Spans on every module call as modules land |
+| Profiling     | `/debug/pprof/*`, gated by config                                                                                                                   | —                                          |
+| Logging       | `slog` JSON, PII-redacted                                                                                                                           | Per-module loggers (rolling)               |
+| Config        | Layered Viper (defaults → file → env → flags), hot-reload for safe keys                                                                             | Live config UI (Phase 9)                   |
+| Auth          | Server-authoritative session cookies (argon2id) + API keys                                                                                          | OIDC + reverse-proxy header trust          |
+| Frontend      | React 19 + TS + Vite + TanStack Router/Query + shadcn/ui + Tailwind; **Movies, Series, Indexers, Search, Downloads, Settings, Notifications pages** | Calendar, Import Lists (Phases 8–11)       |
 
 ## Appearance
 
@@ -59,7 +59,8 @@ Admins can customize **Settings > Appearance** with a Light, Dark, AMOLED,
 or System theme and a coordinated app palette. Start from Loom, Ocean, Ember,
 or Forest, then use color pickers or hex values for primary, secondary, accent,
 and surface tint. The palette drives buttons, navigation, pages, sidebars,
-cards, dialogs, and focus rings; text contrast adjusts automatically. Surface
+cards, dialogs, focus rings, and the Loom logo; text contrast adjusts
+automatically. Surface
 brightness follows the theme, while the tint controls its hue.
 Individual color controls are tucked under **Customize individual colors**.
 Invalid hex values stay visible for correction and must be fixed before saving.
