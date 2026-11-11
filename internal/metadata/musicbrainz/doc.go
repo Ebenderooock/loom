@@ -40,6 +40,7 @@
 //   - ErrCodeClientError: 4xx responses (client errors)
 //   - ErrCodeServerError: 5xx responses (server errors, retried)
 //   - ErrCodeNetworkError: network I/O errors
+//   - ErrCodeResponseError: invalid JSON metadata responses
 //   - ErrCodeContextError: context cancellation/timeout
 //
 // # Concurrency

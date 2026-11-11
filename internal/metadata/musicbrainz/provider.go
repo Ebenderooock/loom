@@ -289,12 +289,19 @@ func mapReleaseWithTracks(r *ReleaseResponse) *metadata.AlbumReleaseMetadata {
 	}
 	out := mapReleaseSummary(r)
 	for discIdx, m := range r.Media {
-		disc := parsePosition(m.Position, discIdx+1)
+		disc := m.Position
+		if disc <= 0 {
+			disc = discIdx + 1
+		}
 		for trackIdx, t := range m.Tracks {
+			position := t.Position
+			if position <= 0 {
+				position = trackIdx + 1
+			}
 			track := metadata.TrackMetadata{
 				TrackID:     t.ID,
 				Title:       t.Title,
-				TrackNumber: parsePosition(t.Number, parsePosition(t.Position, trackIdx+1)),
+				TrackNumber: parsePosition(t.Number, position),
 				DiscNumber:  disc,
 				DurationMs:  t.Length,
 			}
