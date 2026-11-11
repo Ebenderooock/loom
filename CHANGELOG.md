@@ -26,6 +26,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   batch, and reuse the unique existing track to resolve duplicate album matches.
 - Slide the selection highlight between main and settings navigation items.
   Respect the device's reduced-motion preference by moving it immediately.
+- Decode MusicBrainz disc and track positions as numbers so album track lists
+  and music imports load correctly. Report invalid metadata responses separately
+  from network failures.
 - Confirm release retries in place across download and music search surfaces,
   including completed downloads whose import failed, while protecting active
   downloads and retaining blocklist checks.
