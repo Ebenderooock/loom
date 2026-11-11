@@ -394,7 +394,7 @@ function EventPill({
       ? "border-blue-500/30 bg-blue-500/10"
       : isAlbum
         ? "border-pink-500/30 bg-pink-500/10"
-        : "border-purple-500/30 bg-purple-500/10",
+        : "border-primary/30 bg-primary/10",
   );
 
   return isMovie || (event.type === "episode" && event.seriesId) ? (

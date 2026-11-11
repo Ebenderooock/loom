@@ -3,6 +3,7 @@ package deluge
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -207,50 +208,21 @@ func (f *fakeServer) installCookieMintingLogin() {
 		if args[0] != f.password {
 			return false, &RPCError{Code: 4, Message: "Bad Login"}
 		}
-		// Smuggle the cookie through the response context: we
-		// store it on the context-keyed http.ResponseWriter that
-		// dispatch makes accessible via the request. Since we
-		// don't have direct access to the writer here, the
-		// dispatcher re-runs handlers in a wrapper that inspects
-		// a per-request shouldSetCookie flag.
-		shouldSetCookie.Store(true)
 		return true, nil
 	})
 }
 
-// shouldSetCookie is set by installCookieMintingLogin's auth.login
-// handler when it grants a session. The dispatcher reads it after
-// the handler returns and, if set, attaches the Set-Cookie header
-// before flushing the response.
-var shouldSetCookie atomic.Bool
-
-func init() {
-	// Wrap the default dispatch so the shouldSetCookie flag is
-	// honoured. Done at package init so every fakeServer instance
-	// participates without ceremony.
-	dispatchHook = func(w http.ResponseWriter) {
-		if shouldSetCookie.Swap(false) {
-			http.SetCookie(w, &http.Cookie{
-				Name:     sessionCookieName,
-				Value:    "test-session",
-				Path:     "/",
-				HttpOnly: true,
-			})
-		}
-	}
-}
-
-// dispatchHook is invoked by writeRPC (via init) before encoding
-// the response body. It is the seam tests use to attach
-// Set-Cookie headers based on the just-handled call.
-var dispatchHook func(http.ResponseWriter)
-
-// Override writeRPC by redirecting the helper above to call the
-// hook. We cannot redeclare writeRPC, so the hook lives inside it
-// via a small refactor: see the call to dispatchHook here.
-func writeRPCWithHook(w http.ResponseWriter, id int64, result any, rpcErr *RPCError) {
-	if dispatchHook != nil {
-		dispatchHook(w)
+// writeRPCWithHook writes an RPC envelope, issuing the session cookie
+// when the call was a successful auth.login. The cookie is set per
+// response so parallel tests cannot steal each other's sessions.
+func writeRPCWithHook(w http.ResponseWriter, method string, id int64, result any, rpcErr *RPCError) {
+	if method == "auth.login" && rpcErr == nil && result == true {
+		http.SetCookie(w, &http.Cookie{
+			Name:     sessionCookieName,
+			Value:    "test-session",
+			Path:     "/",
+			HttpOnly: true,
+		})
 	}
 	env := map[string]any{
 		"id":     id,
@@ -280,14 +252,14 @@ func (f *fakeServer) dispatchWithHook(t *testing.T) http.HandlerFunc {
 		h, ok := f.handlers[call.Method]
 		f.mu.Unlock()
 		if !ok {
-			writeRPCWithHook(w, call.ID, nil, &RPCError{
+			writeRPCWithHook(w, call.Method, call.ID, nil, &RPCError{
 				Code:    2,
 				Message: "Unknown method: " + call.Method,
 			})
 			return
 		}
 		result, rpcErr := h(t, r, call.Params)
-		writeRPCWithHook(w, call.ID, result, rpcErr)
+		writeRPCWithHook(w, call.Method, call.ID, result, rpcErr)
 	}
 }
 
@@ -310,14 +282,31 @@ func newFakeServerWithLogin(t *testing.T, password string) *fakeServer {
 
 // ----- The actual tests -----
 
+func TestTestFallsBackToDaemonInfoForDeluge1(t *testing.T) {
+	t.Parallel()
+	f := newFakeServerWithLogin(t, "secret")
+	defer f.Close()
+	f.handle("web.connected", f.requireSession(func(_ *testing.T, _ *http.Request, _ json.RawMessage) (any, *RPCError) {
+		return true, nil
+	}))
+	f.handle("daemon.info", f.requireSession(func(_ *testing.T, _ *http.Request, _ json.RawMessage) (any, *RPCError) {
+		return "1.3.15", nil
+	}))
+
+	c := newTestClient(t, f.srv, downloads.Definition{Password: "secret"})
+	if err := c.Test(context.Background()); err != nil {
+		t.Fatalf("Test: %v", err)
+	}
+}
+
 func TestLoginSuccessAndCookieReuse(t *testing.T) {
 	t.Parallel()
 	f := newFakeServerWithLogin(t, "secret")
 	defer f.Close()
 	var versionHits atomic.Int64
-	f.handle("daemon.info", f.requireSession(func(_ *testing.T, _ *http.Request, _ json.RawMessage) (any, *RPCError) {
+	f.handle("daemon.get_version", f.requireSession(func(_ *testing.T, _ *http.Request, _ json.RawMessage) (any, *RPCError) {
 		versionHits.Add(1)
-		return "2.1.1", nil
+		return "2.2.0", nil
 	}))
 	f.handle("web.connected", f.requireSession(func(_ *testing.T, _ *http.Request, _ json.RawMessage) (any, *RPCError) {
 		return true, nil
@@ -331,7 +320,7 @@ func TestLoginSuccessAndCookieReuse(t *testing.T) {
 		t.Fatalf("login calls = %d, want 1", got)
 	}
 	if got := versionHits.Load(); got != 1 {
-		t.Fatalf("daemon.info hits = %d, want 1", got)
+		t.Fatalf("daemon.get_version hits = %d, want 1", got)
 	}
 	// The cookie jar should hold the session cookie.
 	cookies := c.http.Jar.Cookies(c.cfg.baseURL)
@@ -483,4 +472,86 @@ func mustJSON(t *testing.T, v any) []byte {
 		t.Fatalf("marshal: %v", err)
 	}
 	return b
+}
+
+func TestConcurrentSessionExpiryLogsInOnce(t *testing.T) {
+	t.Parallel()
+	f := newFakeServerWithLogin(t, "secret")
+	defer f.Close()
+
+	const callers = 8
+	var expired atomic.Bool
+	var arrived sync.WaitGroup
+	arrived.Add(callers)
+	var once sync.Once
+	release := make(chan struct{})
+	f.handle("core.get_torrents_status", func(_ *testing.T, _ *http.Request, _ json.RawMessage) (any, *RPCError) {
+		if expired.Load() {
+			// Hold every caller until all of them have seen the
+			// expired session, so they race to refresh it.
+			arrived.Done()
+			<-release
+			return nil, &RPCError{Code: 1, Message: "Not authenticated"}
+		}
+		return map[string]map[string]any{}, nil
+	})
+
+	c := newTestClient(t, f.srv, downloads.Definition{Password: "secret"})
+	if err := c.login(context.Background()); err != nil {
+		t.Fatalf("seed login: %v", err)
+	}
+	preLogin := f.loginCalls.Load()
+	expired.Store(true)
+	go func() {
+		arrived.Wait()
+		expired.Store(false)
+		once.Do(func() { close(release) })
+	}()
+
+	var wg sync.WaitGroup
+	errs := make(chan error, callers)
+	for range callers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, err := c.Status(context.Background())
+			errs <- err
+		}()
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Fatalf("Status: %v", err)
+		}
+	}
+	if got := f.loginCalls.Load() - preLogin; got != 1 {
+		t.Fatalf("re-logins = %d, want 1 shared refresh", got)
+	}
+}
+
+func TestFailedLoginIsNotRetriedDuringCooldown(t *testing.T) {
+	t.Parallel()
+	f := newFakeServerWithLogin(t, "real-pw")
+	defer f.Close()
+	f.handle("core.get_torrents_status", f.requireSession(func(_ *testing.T, _ *http.Request, _ json.RawMessage) (any, *RPCError) {
+		return map[string]map[string]any{}, nil
+	}))
+
+	c := newTestClient(t, f.srv, downloads.Definition{Password: "wrong"})
+	for i := range 5 {
+		if _, err := c.Status(context.Background()); err == nil {
+			t.Fatalf("Status #%d: expected auth error", i)
+		} else if !errors.Is(err, ErrAuthFailed) {
+			t.Fatalf("Status #%d: error %v does not wrap ErrAuthFailed", i, err)
+		}
+	}
+	if got := f.loginCalls.Load(); got != 1 {
+		t.Fatalf("login calls = %d, want 1 during cooldown", got)
+	}
+	// An explicit connection test always probes the credentials.
+	_ = c.Test(context.Background())
+	if got := f.loginCalls.Load(); got != 2 {
+		t.Fatalf("login calls after Test = %d, want 2", got)
+	}
 }

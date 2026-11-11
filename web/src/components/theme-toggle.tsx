@@ -22,7 +22,7 @@ const items: Array<{
 ];
 
 export function ThemeToggle() {
-  const { theme, resolvedTheme, setTheme } = useTheme();
+  const { theme, resolvedTheme, setTheme, canChangeTheme } = useTheme();
   const Active =
     resolvedTheme === "amoled" ? Zap : resolvedTheme === "dark" ? Moon : Sun;
 
@@ -34,12 +34,14 @@ export function ThemeToggle() {
           size="icon"
           aria-label="Toggle theme"
           data-testid="theme-toggle"
+          disabled={!canChangeTheme}
+          title="Theme applies to everyone on this Loom instance"
         >
           <Active className="h-4 w-4" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        <DropdownMenuLabel>Theme</DropdownMenuLabel>
+        <DropdownMenuLabel>Instance theme</DropdownMenuLabel>
         <DropdownMenuSeparator />
         {items.map(({ value, label, Icon }) => (
           <DropdownMenuItem

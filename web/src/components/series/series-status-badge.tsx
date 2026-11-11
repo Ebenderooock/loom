@@ -3,8 +3,8 @@ import { SERIES_STATUS_CONFIG } from "./types";
 export function SeriesStatusBadge({ status }: { status: string }) {
   const cfg = SERIES_STATUS_CONFIG[status] ?? {
     label: status,
-    color: "text-gray-400",
-    bg: "bg-gray-500/20",
+    color: "text-muted-foreground",
+    bg: "bg-muted/20",
   };
   return (
     <span

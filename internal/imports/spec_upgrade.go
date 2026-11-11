@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"strings"
 
 	"github.com/ebenderooock/loom/internal/parser"
 	"github.com/ebenderooock/loom/internal/qualityprofiles"
@@ -14,8 +15,7 @@ type QualityProfileGetter interface {
 	Get(ctx context.Context, id string) (*qualityprofiles.QualityProfile, error)
 }
 
-// UpgradeSpec rejects incoming files that are not a quality upgrade over
-// the existing file, following the Radarr/Sonarr upgrade model.
+// UpgradeSpec enforces profile acceptance and prevents quality downgrades.
 type UpgradeSpec struct {
 	profiles QualityProfileGetter
 }
@@ -28,26 +28,20 @@ func NewUpgradeSpec(profiles QualityProfileGetter) *UpgradeSpec {
 func (s *UpgradeSpec) Name() string { return "UpgradeSpec" }
 
 func (s *UpgradeSpec) IsSatisfiedBy(ctx context.Context, c *ImportCandidate) *ImportRejection {
-	// No existing file — always allow (first import).
-	if c.ExistingQuality == "" {
-		return nil
-	}
-
-	// Need a quality profile to make a decision.
 	if c.QualityProfileID == "" {
-		return nil // no profile configured — allow
+		// In the absence of a profile, reject a downgrade only where both
+		// filenames/records carry enough information to compare.
+		return rejectKnownDowngrade(c)
 	}
 
+	if s.profiles == nil {
+		return &ImportRejection{Reason: RejectionNotUpgrade, Message: "quality profile store is unavailable"}
+	}
 	profile, err := s.profiles.Get(ctx, c.QualityProfileID)
 	if err != nil || profile == nil {
-		return nil // profile missing — allow rather than block
-	}
-
-	// Upgrades disabled at the profile level.
-	if !profile.UpgradeAllowed {
 		return &ImportRejection{
 			Reason:  RejectionNotUpgrade,
-			Message: fmt.Sprintf("upgrades are disabled on profile %q", profile.Name),
+			Message: fmt.Sprintf("cannot load quality profile %q", c.QualityProfileID),
 		}
 	}
 
@@ -61,33 +55,31 @@ func (s *UpgradeSpec) IsSatisfiedBy(ctx context.Context, c *ImportCandidate) *Im
 		rel := parser.Parse(filepath.Base(c.SourcePath))
 		incomingQuality = qualityprofiles.QualityNameFromRelease(rel)
 	}
-	if incomingQuality == "" {
-		return nil // can't determine quality — allow
-	}
-
-	existingRank := profile.Rank(c.ExistingQuality)
 	incomingRank := profile.Rank(incomingQuality)
-
-	// If either quality is unknown to the profile, skip upgrade check.
-	if existingRank < 0 || incomingRank < 0 {
+	if incomingRank < 0 {
+		return &ImportRejection{Reason: RejectionNotUpgrade,
+			Message: fmt.Sprintf("incoming quality %q is not allowed by profile %q", incomingQuality, profile.Name)}
+	}
+	if c.ExistingQuality == "" {
 		return nil
 	}
-
-	// Allow PROPER/REPACK of the same quality (revision upgrade).
-	if incomingRank == existingRank {
-		if c.IncomingRelease != nil && (c.IncomingRelease.IsProper || c.IncomingRelease.IsRepack) {
-			return nil
-		}
-		return &ImportRejection{
-			Reason: RejectionNotUpgrade,
-			Message: fmt.Sprintf(
-				"incoming quality %q (rank %d) is not an upgrade over existing %q (rank %d)",
-				incomingQuality, incomingRank, c.ExistingQuality, existingRank),
+	// A previously imported quality can be disallowed but still has a rank.
+	items, err := profile.ParseItems()
+	if err != nil {
+		return &ImportRejection{Reason: RejectionNotUpgrade, Message: "invalid quality profile"}
+	}
+	existingRank := -1
+	for i, item := range items {
+		if strings.EqualFold(item.Name, c.ExistingQuality) {
+			existingRank = i
+			break
 		}
 	}
-
-	// Higher rank index = better quality in the ordered items list.
-	if incomingRank < existingRank {
+	if existingRank < 0 {
+		return rejectKnownDowngrade(c)
+	}
+	// Profiles are ordered best first.
+	if incomingRank > existingRank {
 		return &ImportRejection{
 			Reason: RejectionNotUpgrade,
 			Message: fmt.Sprintf(
@@ -96,6 +88,27 @@ func (s *UpgradeSpec) IsSatisfiedBy(ctx context.Context, c *ImportCandidate) *Im
 		}
 	}
 
-	// Incoming rank > existing rank — upgrade allowed.
+	if incomingRank < existingRank && !profile.UpgradeAllowed {
+		return &ImportRejection{Reason: RejectionNotUpgrade,
+			Message: fmt.Sprintf("upgrades are disabled on profile %q", profile.Name)}
+	}
+	return nil
+}
+
+func rejectKnownDowngrade(c *ImportCandidate) *ImportRejection {
+	existing := ParseFileQuality(c.ExistingQuality)
+	incoming := ParseFileQuality(c.SourcePath)
+	if existing.Resolution == 0 || incoming.Resolution == 0 {
+		return nil
+	}
+	lower := incoming.Resolution < existing.Resolution
+	if incoming.Resolution == existing.Resolution && incoming.Source != "" && existing.Source != "" {
+		// Codec differences alone do not change the quality tier.
+		incoming.Codec, existing.Codec = "", ""
+		lower = qualityScore(incoming) < qualityScore(existing)
+	}
+	if lower {
+		return &ImportRejection{Reason: RejectionNotUpgrade, Message: "incoming quality is lower than the existing quality"}
+	}
 	return nil
 }

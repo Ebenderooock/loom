@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback, useRef } from "react";
-import { apiFetch } from "@/lib/fetch";
+import { useState, useEffect } from "react";
+import { useLibraryImport } from "@/hooks/use-library-import";
 import {
   Dialog,
   DialogContent,
@@ -19,31 +19,6 @@ import {
 } from "lucide-react";
 import type { Library } from "../../lib/libraries-api";
 
-interface ScanResult {
-  id: string;
-  libraryId: string;
-  rootFolderPath: string;
-  status: "running" | "completed" | "failed";
-  totalFiles: number;
-  matched: number;
-  unmatched: number;
-  imported: number;
-  errors?: string[];
-  startedAt: string;
-  completedAt?: string;
-}
-
-interface UnmatchedFile {
-  id: string;
-  scanId: string;
-  filePath: string;
-  size: number;
-  parsedTitle: string;
-  parsedYear: number;
-  quality: string;
-  source: string;
-}
-
 export function SeriesLibraryImportDialog({
   open,
   onOpenChange,
@@ -55,81 +30,14 @@ export function SeriesLibraryImportDialog({
   libraries: Library[];
   onImportComplete: () => void;
 }) {
-  const [scanning, setScanning] = useState(false);
-  const [scanResult, setScanResult] = useState<ScanResult | null>(null);
-  const [unmatchedFiles, setUnmatchedFiles] = useState<UnmatchedFile[]>([]);
+  const { scanning, scanResult, unmatchedFiles, error, startScan, reset } =
+    useLibraryImport(open, "/api/v1/series/scan", onImportComplete);
   const [selectedLibrary, setSelectedLibrary] = useState<string>("");
-  const pollTimeoutRef = useRef<ReturnType<typeof setTimeout>>(undefined);
-  const mountedRef = useRef(true);
-
   useEffect(() => {
-    mountedRef.current = true;
-    return () => {
-      mountedRef.current = false;
-      clearTimeout(pollTimeoutRef.current);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (open) {
-      setScanResult(null);
-      setUnmatchedFiles([]);
-      setScanning(false);
-      if (libraries.length === 1) {
-        setSelectedLibrary(libraries[0]!.id);
-      }
+    if (!libraries.some((library) => library.id === selectedLibrary)) {
+      setSelectedLibrary(libraries.length === 1 ? libraries[0]!.id : "");
     }
-  }, [open, libraries]);
-
-  const startScan = useCallback(async () => {
-    if (!selectedLibrary) return;
-    setScanning(true);
-    setScanResult(null);
-    setUnmatchedFiles([]);
-
-    try {
-      const res = await apiFetch("/api/v1/series/scan", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ libraryId: selectedLibrary }),
-      });
-      const data = await res.json();
-      const scanId = data.scanId;
-
-      const poll = async () => {
-        if (!mountedRef.current) return;
-        try {
-          const statusRes = await apiFetch(`/api/v1/series/scan/${scanId}`);
-          const result: ScanResult = await statusRes.json();
-          if (!mountedRef.current) return;
-          setScanResult(result);
-
-          if (result.status === "running") {
-            pollTimeoutRef.current = setTimeout(poll, 1500);
-          } else {
-            setScanning(false);
-            const unmatchedRes = await apiFetch(
-              "/api/v1/series/scan/unmatched",
-            );
-            const files: UnmatchedFile[] = await unmatchedRes.json();
-            if (mountedRef.current) {
-              setUnmatchedFiles(files);
-              onImportComplete();
-            }
-          }
-        } catch (err) {
-          if (mountedRef.current) {
-            setScanning(false);
-            console.error("Poll failed:", err);
-          }
-        }
-      };
-      pollTimeoutRef.current = setTimeout(poll, 1000);
-    } catch (err) {
-      setScanning(false);
-      console.error("Scan failed:", err);
-    }
-  }, [selectedLibrary, onImportComplete]);
+  }, [libraries, selectedLibrary]);
 
   const progress = scanResult
     ? scanResult.totalFiles > 0
@@ -149,6 +57,23 @@ export function SeriesLibraryImportDialog({
         </DialogHeader>
 
         <div className="flex-1 space-y-4 overflow-auto">
+          {error && (
+            <div className="space-y-2">
+              <p role="alert" className="text-sm text-destructive">
+                {error}
+              </p>
+              {!scanning && (
+                <Button variant="outline" onClick={reset}>
+                  Try Again
+                </Button>
+              )}
+            </div>
+          )}
+          {scanning && !scanResult && (
+            <p role="status" className="flex items-center gap-2 text-sm">
+              <Loader2 className="h-4 w-4 animate-spin" /> Starting scan...
+            </p>
+          )}
           {/* Library selection */}
           {!scanResult && !scanning && (
             <div className="space-y-4">
@@ -172,7 +97,7 @@ export function SeriesLibraryImportDialog({
                         onClick={() => setSelectedLibrary(lib.id)}
                         className={`w-full rounded-md px-3 py-2 text-left text-sm transition-colors ${
                           selectedLibrary === lib.id
-                            ? "border border-primary/30 bg-primary/10 text-primary"
+                            ? "border border-primary/30 bg-primary/10 text-primary-readable"
                             : "border border-transparent bg-muted/30 hover:bg-muted/50"
                         }`}
                       >
@@ -184,7 +109,7 @@ export function SeriesLibraryImportDialog({
               </div>
 
               <Button
-                onClick={startScan}
+                onClick={() => void startScan(selectedLibrary)}
                 disabled={!selectedLibrary}
                 className="w-full gap-2"
               >
@@ -198,7 +123,7 @@ export function SeriesLibraryImportDialog({
           {scanning && scanResult && (
             <div className="space-y-4">
               <div className="flex items-center gap-2 text-sm">
-                <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                <Loader2 className="h-4 w-4 animate-spin text-primary-readable" />
                 <span>Scanning for TV shows...</span>
               </div>
               <Progress value={progress} className="h-2" />
@@ -340,14 +265,7 @@ export function SeriesLibraryImportDialog({
                 <Button variant="outline" onClick={() => onOpenChange(false)}>
                   Close
                 </Button>
-                <Button
-                  onClick={() => {
-                    setScanResult(null);
-                    setScanning(false);
-                  }}
-                >
-                  Scan Again
-                </Button>
+                <Button onClick={reset}>Scan Again</Button>
               </div>
             </div>
           )}

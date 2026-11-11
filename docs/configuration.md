@@ -24,6 +24,48 @@ next restart.
 
 ## Environment variable mapping
 
+### Instance appearance
+
+Admins manage **Settings > Appearance** globally through the UI or
+`PUT /api/v1/appearance`. These settings live in the database, not YAML or
+environment variables, and require no restart or migration.
+
+| API field | Allowed values | Default |
+|---|---|---|
+| `theme` | `system`, `light`, `dark`, `amoled` | `system` |
+| `accent` | `default`, `teal`, `blue`, `rose`, `amber` | `default` |
+| `backgroundUrl` | Empty, absolute HTTP(S) image URL without credentials, or an uploaded image (`/api/v1/appearance/background?v=<sha256>`), up to 2048 bytes | `""` |
+| `backgroundDim` | Integer 0–100 | `70` |
+| `palette` | Optional `{primary, secondary, accent, background}`, each `#RRGGBB`; omit or `null` for the accent preset | unset |
+
+System follows each device's OS preference. Browsers load images directly;
+use a trusted URL accessible from every device, and HTTPS when Loom uses HTTPS.
+Higher dimming hides more of the image; 100 hides it entirely. Saving a blank
+URL removes it. Reset to defaults prepares the defaults above; save to apply.
+Uploaded images (PNG, JPEG or WebP, up to 5 MiB) are stored in the database,
+so they survive restarts without extra volumes; Loom keeps at most the saved
+image plus one pending upload. Uploading alone changes nothing until Save.
+Open browsers refresh settings within a minute or when the tab regains focus.
+Items per page and default view remain browser-local.
+
+Example (authenticated administrator session cookie):
+
+```bash
+curl -b cookies.txt -X PUT http://localhost:1925/api/v1/appearance \
+  -H 'Content-Type: application/json' \
+  -d '{"theme":"dark","accent":"blue","backgroundUrl":"","backgroundDim":70}'
+
+# Upload an image, then save settings referencing the returned URL.
+url=$(curl -s -b cookies.txt -F image=@background.jpg \
+  http://localhost:1925/api/v1/appearance/background | jq -r .url)
+curl -b cookies.txt -X PUT http://localhost:1925/api/v1/appearance \
+  -H 'Content-Type: application/json' \
+  -d "{\"theme\":\"dark\",\"accent\":\"default\",\"backgroundUrl\":\"$url\",\"backgroundDim\":60,
+       \"palette\":{\"primary\":\"#6d28d9\",\"secondary\":\"#0f766e\",\"accent\":\"#f59e0b\",\"background\":\"#111827\"}}"
+```
+
+### YAML and environment variables
+
 The viper binding maps a YAML path `a.b.c` to env var `LOOM_A_B_C`. A few
 keys also accept legacy un-prefixed names for backwards compatibility with
 pre-Viper deployments; these are noted in the Env column.
@@ -51,7 +93,8 @@ real values look like. Every key gets an `example:` line.
 | `telemetry.otlp_endpoint` | `LOOM_TELEMETRY_OTLP_ENDPOINT` / `LOOM_OTLP_ENDPOINT` | string | `""` | no | OTLP/HTTP collector endpoint. |
 | `database.url` | `LOOM_DATABASE_URL` | string | `""` | no | Legacy-style DSN; if set and `postgres://…`, selects Postgres. |
 | `storage.engine` | `LOOM_STORAGE_ENGINE` | string | `sqlite` | no | One of `sqlite`, `postgres`. |
-| `storage.sqlite.path` | `LOOM_STORAGE_SQLITE_PATH` | string | `/data/loom.db` | no | Path to the SQLite file. |
+| `storage.sqlite.path` | `LOOM_STORAGE_SQLITE_PATH` | string | `$LOOM_CONFIG_DIR/data/loom.db` | no | Path to the SQLite file; relative paths resolve under `config_dir`. |
+| `filesystem.allowed_browse_roots` | Configure in YAML | []string | `[]` | no | Folders the setup UI's filesystem browser may enumerate; an empty list disables browsing. |
 | `storage.postgres.dsn` | `LOOM_STORAGE_POSTGRES_DSN` | string | `""` | no | `postgres://user:pass@host:5432/loom?sslmode=…` |
 | `debug.pprof` | `LOOM_DEBUG_PPROF` | bool | `false` | no | Mount `/debug/pprof/*`. |
 | `cors.allowed_origins` | `LOOM_CORS_ALLOWED_ORIGINS` | []string | `[]` | no | Allow-list for the chi-cors middleware. |
@@ -78,6 +121,12 @@ real values look like. Every key gets an `example:` line.
 > `retry_max_attempts`) — there are no global config knobs. See
 > [`indexers-rate-limits.md`](indexers-rate-limits.md) for defaults
 > and the per-row API surface.
+
+Service installers and container manifests set explicit paths so state does not
+depend on the process working directory. Changing `data_dir` alone does not move
+the default SQLite database out of `config_dir`. When upgrading an installation,
+keep its existing database path or migrate the complete stopped database before
+changing it. See [installation pathways](deployment.md#installation-pathways).
 
 ### Per-key examples
 

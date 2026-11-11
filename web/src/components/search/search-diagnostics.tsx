@@ -91,7 +91,7 @@ function statusBadgeVariant(status: string) {
     case "running":
       return "bg-yellow-500/10 text-yellow-500 border-0";
     default:
-      return "bg-gray-500/10 text-gray-500 border-0";
+      return "bg-muted/10 text-muted-foreground border-0";
   }
 }
 

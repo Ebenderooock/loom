@@ -1,0 +1,12 @@
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: GitRepository
+metadata:
+  name: loom
+  namespace: media
+spec:
+  interval: 30m
+  url: https://github.com/ebenderooock/loom.git
+  ref:
+    # Replace with an existing stable Git tag that contains this chart version.
+    # Git tags use v; container tags do not.
+    tag: vREPLACE_WITH_STABLE_VERSION

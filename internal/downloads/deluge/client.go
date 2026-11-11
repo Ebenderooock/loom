@@ -72,6 +72,18 @@ type Client struct {
 	// re-logins.
 	loginMu sync.Mutex
 
+	// sessionGen increments on every successful login. A caller that
+	// saw an expired session records the generation first; if another
+	// goroutine has already logged in by the time it gets loginMu, it
+	// reuses that session instead of logging in again.
+	sessionGen atomic.Uint64
+
+	// Failed-login cooldown, guarded by loginMu. Repeated bad
+	// credentials must not turn every poll into a fresh auth.login.
+	loginFailures int
+	loginRetryAt  time.Time
+	loginErr      error
+
 	// rpcID is the monotonically increasing JSON-RPC `id` field.
 	// Deluge does not actually correlate by id (each HTTP request
 	// is its own conversation), but a unique value per call keeps
@@ -255,6 +267,7 @@ func (c *Client) call(ctx context.Context, method string, params []any, out any)
 		}
 	}
 
+	gen := c.sessionGen.Load()
 	body, status, rpcErr, err := c.rpcOnce(ctx, method, params, out)
 	if err != nil {
 		return err
@@ -265,7 +278,7 @@ func (c *Client) call(ctx context.Context, method string, params []any, out any)
 	// surface as the original auth failure rather than retry forever.
 	if !isAuthMethod && (status == http.StatusUnauthorized || status == http.StatusForbidden ||
 		(rpcErr != nil && isAuthError(rpcErr))) {
-		if loginErr := c.login(ctx); loginErr != nil {
+		if loginErr := c.refreshSession(ctx, gen); loginErr != nil {
 			return loginErr
 		}
 		_, status, rpcErr, err = c.rpcOnce(ctx, method, params, out)

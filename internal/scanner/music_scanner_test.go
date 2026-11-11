@@ -40,6 +40,26 @@ func TestMatchTrack_TitleFallback(t *testing.T) {
 	}
 }
 
+func TestMatchTrack_TitleQualifierFallback(t *testing.T) {
+	single := []*music.Track{
+		{ID: "heavy", Title: "Heavy", TrackNumber: 1, DiscNumber: 1},
+		{ID: "remix", Title: "Heavy (Nicky Romero remix)", TrackNumber: 2, DiscNumber: 1},
+	}
+	if got := matchTrack(single, &music.AudioTags{Title: "Heavy (feat. Kiiara)"}); got == nil || got.ID != "heavy" {
+		t.Fatalf("featured-artist tag should match Heavy, got %+v", got)
+	}
+	cd := []*music.Track{
+		{ID: "album", Title: "Heavy (album version)", TrackNumber: 1, DiscNumber: 1},
+		{ID: "inst", Title: "Heavy (instrumental)", TrackNumber: 2, DiscNumber: 1},
+	}
+	if got := matchTrack(cd, &music.AudioTags{Title: "Heavy"}); got != nil {
+		t.Fatalf("ambiguous base titles must not match, got %+v", got)
+	}
+	if got := matchTrack(cd[:1], &music.AudioTags{Title: "Heavy feat. Kiiara"}); got == nil || got.ID != "album" {
+		t.Fatalf("unique base title should match, got %+v", got)
+	}
+}
+
 func TestMatchTrack_NoMatch(t *testing.T) {
 	tracks := []*music.Track{
 		{ID: "a", Title: "Time", TrackNumber: 4, DiscNumber: 1},

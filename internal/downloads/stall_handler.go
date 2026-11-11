@@ -133,6 +133,7 @@ func (h *StallHandler) doPause(ctx context.Context, item Item) {
 			"item_id", item.ID, "client_id", item.ClientID, "error", err)
 		return
 	}
+	h.registry.InvalidateStatus(item.ClientID)
 	h.logger.DebugContext(ctx, "paused stalled download", "item_id", item.ID)
 }
 
@@ -148,6 +149,7 @@ func (h *StallHandler) doRemove(ctx context.Context, item Item, deleteFiles bool
 			"item_id", item.ID, "client_id", item.ClientID, "error", err)
 		return
 	}
+	h.registry.InvalidateStatus(item.ClientID)
 	h.logger.DebugContext(ctx, "removed stalled download", "item_id", item.ID, "delete_files", deleteFiles)
 }
 

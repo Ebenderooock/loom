@@ -42,6 +42,52 @@ responses expose `qualityProfileMissing`, computed against both current and
 active legacy profiles, so existing blank, deleted or dangling selections are
 highlighted without incorrectly flagging valid legacy profiles.
 
+## Manual media imports
+
+`POST /api/v1/imports/scans` accepts `{path}` and returns **202 `{data: ImportScan}`**
+before traversing the filesystem. Poll `GET /api/v1/imports/scans/{id}` with
+`offset` (default 0) and `limit` (default/maximum 1000). Each response contains
+progress, a page of `results`, and `next_offset`; append the page and continue
+from that offset. A completed scan can still have unread pages: finish reading
+when `next_offset >= processed_files`. While `status` is `running`, poll again
+even when there are no new results. `phase` distinguishes discovery from matching;
+`total_files` grows during discovery. `failed` scans expose `error` and may have
+partial results. `DELETE /api/v1/imports/scans/{id}` cancels the preview, not any
+imports already submitted.
+
+Scans survive request disconnects but not server restarts. Two can run at once
+(429 when full); submitting the same running folder reuses its scan ID.
+Completed/failed/cancelled previews expire after ten minutes, with at most eight
+sessions retained. Missing or expired IDs return 404; start a new scan explicitly.
+Status/result requests never perform filesystem scanning or content verification.
+Scan workers also avoid full-payload hashing: `previously_imported` means both
+files still match the saved size/mtime snapshots, not freshly verified content.
+`already_imported` is reserved for same-file identity (hardlinks). Legacy history
+without destination snapshots cannot establish a historical copy match. Actual
+import skipping and source deletion still require identity or fresh SHA-256;
+the scan's historical hint cannot bypass those checks.
+
+Legacy `POST /api/v1/imports/scan` and `/api/v1/imports/preview` accept `{path}` and
+include audio as well as video files. Music scan results use `media_type:
+"music"`, a **track ID** for `matched_media_id`, and optional
+`detected_artist`, `detected_album`, `detected_track`, and `detected_disc` tags.
+Scanning does not move files.
+
+`POST /api/v1/imports/manual` accepts `{path}` for automatic matching.
+`POST /api/v1/imports/manual-match` accepts `{path, media_type, media_id}`.
+For Music, use `media_type: "music"` and the selected **track ID**, not an
+artist or album ID; the path must identify one audio file.
+`POST /api/v1/imports/reimport` accepts
+`{source_path, media_type, media_id, conflict_policy?}` with the same Music
+track ID contract. Music replacements only support `replace_if_better` and
+preserve the existing file unless an audio-quality upgrade can be established.
+
+All three submission endpoints return **202 `{status: "accepted"}`**,
+not an import record or a completion guarantee. Import history uses the album
+ID for Music records and reports the actual library destination. Transfer and
+source cleanup follow the configured import mode; see
+[Downloads / Imports](downloads.md#downloads--imports).
+
 ## Versioning policy
 
 | Path prefix | Owner | Stability |
@@ -56,11 +102,110 @@ should work against Loom unchanged.
 
 ## Routes (current)
 
+### Appearance
+
+`GET /api/v1/appearance` returns the instance-wide settings to any authenticated
+role. `PUT /api/v1/appearance` requires an administrator and replaces the complete
+object, returning the saved settings. Defaults:
+
+```json
+{"theme":"system","accent":"default","backgroundUrl":"","backgroundDim":70}
+```
+
+`theme`, `accent`, `backgroundUrl` and `backgroundDim` are required for PUT.
+Themes: `system`, `light`, `dark`, `amoled`; accents: `default`, `teal`, `blue`,
+`rose`, `amber`. Dimming is an integer 0–100.
+
+An optional `palette` overrides the accent preset:
+
+```json
+{"palette":{"primary":"#6d28d9","secondary":"#0f766e","accent":"#f59e0b","background":"#111827"}}
+```
+
+All four colors are required strict `#RRGGBB` values. Omitting `palette` or
+sending `null` clears it, so older clients keep working; GET omits it when unset.
+Existing saved settings load unchanged.
+
+The background URL must be empty, absolute HTTP(S) without credentials, or
+exactly `/api/v1/appearance/background` with an optional `?v=<sha256>` query
+(lowercase hex); other relative URLs are rejected. Max 2048 bytes. Loom does not
+fetch external images server-side. Invalid, missing, null, unknown or trailing
+JSON fields return 400; request bodies over 16 KiB return 413. Saving an
+uploaded-image URL that is no longer stored returns 400 (`upload it again`).
+Authentication failures return 401, non-admin writes 403, and storage failures
+500. No migration or restart is required.
+
+#### Background image upload
+
+`POST /api/v1/appearance/background` (administrator) accepts `multipart/form-data`
+with exactly one `image` field and returns
+`{"url":"/api/v1/appearance/background?v=<sha256>"}`. The upload is stored in the
+database as the pending image and does not change settings; PUT the returned URL
+as `backgroundUrl` to apply it, which atomically promotes it to the saved image.
+A new upload replaces the previous pending upload, so at most two images (saved
+and pending) are kept. Saving a different background retires the saved upload.
+
+The type is detected from content and the image is fully decoded: PNG, JPEG or
+WebP only (415 otherwise, including SVG and GIF), at most 5 MiB (413), 8192 px
+per side and 33,177,600 px total (400). Non-multipart, missing, duplicate or
+extra fields, and corrupt images return 400.
+
+`GET /api/v1/appearance/background` (any authenticated role) serves the saved
+image; `?v=<sha256>` serves the saved or pending image with that hash. Missing
+images return 404 and malformed `v` 400. Responses set the detected
+`Content-Type`, `X-Content-Type-Options: nosniff` and an `ETag` (304 on
+`If-None-Match`); `?v=` responses are `private, max-age=31536000, immutable`,
+the bare path `private, no-cache`.
+See [configuration](configuration.md#instance-appearance) for a curl example.
+
+### Route reference
+
+### Import jobs
+
+Import submission is asynchronous: HTTP 202 means durably queued, not imported.
+`POST /api/v1/imports/batch` accepts `{"paths":[...]}` (up to 1000 per request)
+and optional paired `media_type`/`media_id` for manual matching. Its response is
+`{"data":[ImportJob],"errors":[{"path":"...","error":"..."}]}`; partial acceptance
+returns 202, while a completely rejected batch returns 422. Active paths are
+deduplicated. `/manual`, `/manual-match`, and `/reimport` return
+`{"status":"accepted","job_id":"...","data":ImportJob}`.
+
+`GET /api/v1/imports/jobs?limit=100` returns every active job plus recent
+finished jobs (default 100, maximum 500). `GET /api/v1/imports/jobs/{id}` also
+includes individual file outcomes. `POST /api/v1/imports/jobs/{id}/retry` returns
+202 with the requeued job, 404 for an unknown ID, or 409 when retry is not
+allowed. Pending safety reviews must be approved first; successful files are
+not reset. See [the download guide](downloads.md#importing-completed-files) for
+queue states, recovery, and the UI workflow.
+
+```bash
+curl -H "X-Api-Key: $LOOM_API_KEY" -H "Content-Type: application/json" \
+  -d '{"paths":["/downloads/Show.S01E01.mkv","/downloads/Show.S01E02.mkv"]}' \
+  http://localhost:1925/api/v1/imports/batch
+curl -H "X-Api-Key: $LOOM_API_KEY" \
+  http://localhost:1925/api/v1/imports/jobs
+curl -H "X-Api-Key: $LOOM_API_KEY" \
+  "http://localhost:1925/api/v1/imports/jobs/$JOB_ID"
+curl -X POST -H "X-Api-Key: $LOOM_API_KEY" \
+  "http://localhost:1925/api/v1/imports/jobs/$JOB_ID/retry"
+```
+
 These are the routes implemented today. They are the routes documented
 in `api/openapi/loom.yaml`.
 
 | Method | Path | Auth | Response | Description |
 |---|---|---|---|---|
+| `POST` | `/api/v1/imports/batch` | apiKey/bearer/cookie | `202 {"data":[ImportJob],"errors":[...]}` | Independently queue selected paths; 422 if none are accepted. |
+| `GET` | `/api/v1/imports/jobs` | apiKey/bearer/cookie | `200 {"data":[ImportJob]}` | All active jobs plus bounded recent outcomes. |
+| `GET` | `/api/v1/imports/jobs/{id}` | apiKey/bearer/cookie | `200 {"data":ImportJob}` | Job detail including individual file outcomes. |
+| `POST` | `/api/v1/imports/jobs/{id}/retry` | apiKey/bearer/cookie | `202 {"data":ImportJob}` | Retry unsuccessful files; active jobs and unapproved reviews return 409. |
+| `POST` | `/api/v1/imports/manual` | apiKey/bearer/cookie | `202 {"status":"accepted","job_id":"...","data":ImportJob}` | Queue a file or folder supplied as `path`. |
+| `POST` | `/api/v1/imports/manual-match` | apiKey/bearer/cookie | `202 {"status":"accepted","job_id":"...","data":ImportJob}` | Queue `path` with explicit `media_type` and `media_id`. |
+| `POST` | `/api/v1/imports/reimport` | apiKey/bearer/cookie | `202 {"status":"accepted","job_id":"...","data":ImportJob}` | Queue `source_path` with explicit media identity and optional conflict policy. |
+| `POST` | `/api/v1/imports/scans` | apiKey/bearer/cookie | `202 {"data":ImportScan}` | Start a background scan without waiting for filesystem work; reuse an active scan for the same path. |
+| `GET` | `/api/v1/imports/scans/{id}` | apiKey/bearer/cookie | `200 {"data":ImportScan}` | Poll progress and cursor-paged results using `offset` and `limit`; 404 after expiry/restart. |
+| `DELETE` | `/api/v1/imports/scans/{id}` | apiKey/bearer/cookie | `200 {"data":ImportScan}` | Cancel a preview while preserving its partial results and any queued imports. |
+| `POST` | `/api/v1/imports/scan` | apiKey/bearer/cookie | `200 {"data":[ImportScanResult]}` | Preview matches and metadata-only historical import hints without importing. |
 | `GET` | `/api/v1/media-files/{mediaType}/{id}` | admin | `200 {"files":[TitleFile],"deletionMode":"recycle"\|"permanent"}` | List every regular file in the server-resolved movie or series folder; optional `season` query scopes series files. |
 | `POST` | `/api/v1/media-files/{mediaType}/{id}/delete` | admin | `200 {"deleted":["relative/file.mkv"]}` | Delete selected files with explicit mode and `X-Confirm-Delete: true`; optional `season` query restricts scope. |
 | `POST` | `/api/v1/autosearch/evaluate` | apiKey/bearer/cookie | `200 application/json` | Production-engine dry run with decision evidence; optional unsaved policy preview. |
@@ -74,6 +219,9 @@ in `api/openapi/loom.yaml`.
 | `GET` | `/api/v1/discover/artist/{id}` | apiKey/bearer/cookie | `200 application/json` | MusicBrainz artist metadata and albums, without adding. |
 | `GET` | `/api/v1/discover/album/{id}` | apiKey/bearer/cookie | `200 application/json` | MusicBrainz album metadata and candidate editions. |
 | `GET` | `/api/v1/discover/release/{id}` | apiKey/bearer/cookie | `200 application/json` | MusicBrainz edition metadata and full tracks. |
+| `GET` | `/api/v1/albums` | apiKey/bearer/cookie | `200 application/json` (`Album[]`) | List managed and standalone albums, including their complete artist credits. |
+| `GET` | `/api/v1/albums/lookup` | apiKey/bearer/cookie | `200 application/json` (`AlbumLookupResult[]`) | Search MusicBrainz release groups using `q`; results include artist credits and whether the album has already been added. |
+| `POST` | `/api/v1/albums` | apiKey/bearer/cookie | `201 application/json` (`Album`) | Add a release group with `{mbid, libraryId, qualityProfileId, metadataProfileId?, monitored?}` without adding contributor artists. Multi-artist albums use the Various Artists folder. |
 | `PUT` | `/api/v1/albums/{id}/release` | apiKey/bearer/cookie | `200 application/json` (`Album`) | Select an edition using `{release_id}`; the edition must belong to this album, and selecting a different edition refreshes its tracks. |
 | `GET` | `/api/v1/music/audio-quality-definitions` | apiKey/bearer/cookie | `200 application/json` (`AudioQualityDefinition[]`) | List built-in audio quality tiers. |
 | `GET` | `/api/v1/music/audio-quality-profiles` | apiKey/bearer/cookie | `200 application/json` (`AudioQualityProfile[]`) | List audio quality profiles. |
@@ -84,6 +232,16 @@ in `api/openapi/loom.yaml`.
 | `POST` | `/api/v1/music/metadata-profiles` | apiKey/bearer/cookie | `201 application/json` (`MetadataProfile`) | Create a metadata profile. |
 | `PUT` | `/api/v1/music/metadata-profiles/{id}` | apiKey/bearer/cookie | `200 application/json` (`MetadataProfile`) | Update supplied metadata profile fields. |
 | `DELETE` | `/api/v1/music/metadata-profiles/{id}` | apiKey/bearer/cookie | `204` | Delete an unassigned metadata profile; assigned profiles cannot be deleted. |
+| `GET` | `/api/v1/music/metadata-source` | apiKey/bearer/cookie (admin) | `200 application/json` (`MusicMetadataSource`) | Read the MusicBrainz metadata source. The auth header value is never returned. |
+| `PUT` | `/api/v1/music/metadata-source` | apiKey/bearer/cookie (admin) | `200 application/json` (`MusicMetadataSource`) | Save and apply the metadata source. An empty `auth_header_value` keeps the saved value unless `clear_auth_header` is true. |
+| `GET` | `/api/v1/music/artwork-settings` | apiKey/bearer/cookie (admin) | `200 application/json` (`MusicArtworkSettings`) | Report whether fanart.tv and TheAudioDB keys are saved or come from the environment. Keys are never returned. |
+| `PUT` | `/api/v1/music/artwork-settings` | apiKey/bearer/cookie (admin) | `200 application/json` (`MusicArtworkSettings`) | Save and apply artwork keys. An empty key keeps the saved value unless its `clear_*` flag is true. |
+| `POST` | `/api/v1/music/artwork-settings/test` | apiKey/bearer/cookie (admin) | `200 application/json` (`MusicArtworkTestResult`) | Check artwork keys with a known artist lookup; empty keys use the saved or environment keys. |
+| `POST` | `/api/v1/artists/{id}/refresh` | apiKey/bearer/cookie | `200 application/json` (`MusicArtist`) | Re-fetch one artist's MusicBrainz details, artwork and album catalogue. |
+| `GET` | `/api/v1/artists/{id}/files` | apiKey/bearer/cookie | `200 application/json` (`MusicArtistFile[]`) | List the artist's imported audio files with album and track titles. |
+| `GET` | `/api/v1/artists/{id}/history` | apiKey/bearer/cookie | `200 application/json` (`MusicArtistHistoryEntry[]`) | List grabs and imports for the artist's albums, newest first. Optional `limit` (1-500, default 100). |
+| `PUT` | `/api/v1/albums/{id}/tracks/{trackId}/monitoring` | apiKey/bearer/cookie | `200 application/json` (`Track`) | Set `{monitored}` for one track. Monitoring a track also monitors its album; album monitoring changes cascade to all its tracks. |
+| `POST` | `/api/v1/music/metadata-source/test` | apiKey/bearer/cookie (admin) | `200 application/json` (`MusicMetadataSourceTestResult`) | Check an unsaved source with an artist lookup and, when it serves search, an artist search. |
 | `POST` | `/api/v1/import-lists/discover/track` | apiKey/bearer/cookie | `200 application/json` | Mark `{item_id}` added only after verifying library membership; never creates media or changes list settings. |
 | `GET` | `/api/v1/libraries/{id}/health` | apiKey/bearer/cookie | `200 application/json` (`LibraryHealthReport` or `null`) | Fetch latest read-only health report snapshot. |
 | `POST` | `/api/v1/libraries/{id}/health` | apiKey/bearer/cookie | `200 application/json` (`LibraryHealthReport`) | Run a bounded, cancellable read-only health check for one library. |
@@ -146,6 +304,27 @@ verified missing files and retain normal rolling quota accounting. Administrator
 bypass quotas, not duplicate or storage checks. Reconciliation never deletes
 media/import records. See [the request lifecycle guide](requests.md) for storage
 markers, conservative unknown states, and operator recovery.
+
+## TV monitoring and completeness
+
+Show monitoring is the automatic-search master switch:
+`PUT /api/v1/series/{id}/monitoring` accepts `{"status":"monitored"}` or
+`{"status":"unmonitored"}`. Turning a show off pauses automatic acquisition
+without changing its season selections; turning it on resumes those selections.
+
+`PUT /api/v1/series/{id}/seasons/{seasonNum}/monitoring` accepts
+`{"monitored":true}` or `{"monitored":false}` and atomically updates the season
+and its episodes. It returns the updated season, `400` for an invalid season
+number or missing/non-boolean `monitored`, and `404` for a missing season.
+Season `0` is **Specials** and can be monitored independently. Newly added
+specials default to unmonitored; regular seasons default to monitored.
+Metadata refresh preserves existing season and episode choices, and new
+episodes in an existing season inherit that season's monitoring setting.
+
+Show-level episode statistics exclude season `0` from every count, including
+downloaded and aired totals, regardless of whether specials are monitored.
+The Specials row retains its own counts and completion progress. Show
+completeness therefore reflects regular episodes only, not bonus content.
 
 ## Title file management
 

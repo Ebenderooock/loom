@@ -15,9 +15,10 @@ import (
 
 type collisionMoviesService struct {
 	movies.Service
-	movie *movies.Movie
-	files []*movies.MovieFile
-	err   error
+	movie    *movies.Movie
+	files    []*movies.MovieFile
+	existing []*movies.MovieFile
+	err      error
 }
 
 func (s *collisionMoviesService) GetMovie(context.Context, string) (*movies.Movie, error) {
@@ -27,7 +28,7 @@ func (s *collisionMoviesService) SearchMovies(context.Context, string) ([]*movie
 	return []*movies.Movie{s.movie}, nil
 }
 func (s *collisionMoviesService) ListMovieFiles(context.Context, string) ([]*movies.MovieFile, error) {
-	return nil, nil
+	return s.existing, nil
 }
 func (s *collisionMoviesService) AddMovieFile(_ context.Context, file *movies.MovieFile) error {
 	if s.err != nil {
@@ -108,7 +109,7 @@ func TestManualMatchCollisionReturnsExplicitErrorAndPreservesFiles(t *testing.T)
 func TestManualMatchedFolderPreservesNestedLayout(t *testing.T) {
 	p, svc, destDir := newCollisionPipeline(t, ImportModeMove)
 	src := t.TempDir()
-	for _, name := range []string{"part1/video.mkv", "part2/video.mkv", "part2/video.srt"} {
+	for _, name := range []string{"part1/video.mkv", "part2/video.mkv", "part2/video.srt", "part2/other.nfo"} {
 		path := filepath.Join(src, name)
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			t.Fatal(err)
@@ -120,7 +121,7 @@ func TestManualMatchedFolderPreservesNestedLayout(t *testing.T) {
 	if _, err := p.ImportManualMatch(context.Background(), src, MediaTypeMovie, "one"); err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"part1/video.mkv", "part2/video.mkv", "part2/video.srt"} {
+	for _, name := range []string{"part1/video.mkv", "part2/video.mkv", "part2/video.srt", "part2/other.nfo"} {
 		got, err := os.ReadFile(filepath.Join(destDir, name))
 		if err != nil || string(got) != name {
 			t.Fatalf("folder import failed to preserve %s", name)
@@ -139,12 +140,15 @@ func TestManualMatchLibraryFailureKeepsMovedFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err := p.ImportManualMatch(context.Background(), src, MediaTypeMovie, "one")
-	if err == nil || !strings.Contains(err.Error(), "file preserved") {
+	if err == nil || !strings.Contains(err.Error(), "source preserved") {
 		t.Fatalf("want recoverable library failure, got %v", err)
 	}
-	got, err := os.ReadFile(filepath.Join(destDir, "video.mkv"))
+	got, err := os.ReadFile(src)
 	if err != nil || string(got) != "only-copy" {
 		t.Fatal("library failure deleted the only copy")
+	}
+	if _, err := os.Stat(filepath.Join(destDir, "video.mkv")); !os.IsNotExist(err) {
+		t.Fatal("failed registration left destination")
 	}
 }
 

@@ -9,10 +9,10 @@ import type { Series, QualityProfile } from "./types";
 import { titleImage } from "@/components/titles/title-metadata";
 import {
   getEpisodeProgressInfo,
+  SeriesMonitoringLabel,
   SeriesStatusAccent,
   SeriesStatusBadge,
 } from "./series-status";
-import { MonitoringLabel } from "@/components/movies/status-badge";
 
 export function SeriesCard({
   series,
@@ -99,15 +99,15 @@ export function SeriesCard({
       )}
 
       {/* Status bar at bottom */}
-      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/60 to-transparent p-3 pt-8">
+      <div className="poster-overlay absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/60 to-transparent p-3 pt-8">
         <div className="flex items-center justify-between gap-1">
           <SeriesStatusBadge series={series} />
-          <MonitoringLabel status={series.monitoringStatus} />
+          <SeriesMonitoringLabel status={series.monitoringStatus} />
         </div>
         <h3 className="mt-1 truncate text-sm font-semibold text-white">
           {series.title}
         </h3>
-        <p className="text-xs text-gray-400">
+        <p className="text-xs text-muted-foreground">
           {series.year}
           {series.network ? ` • ${series.network}` : ""}
         </p>
@@ -117,10 +117,10 @@ export function SeriesCard({
       </div>
 
       {/* Hover overlay */}
-      <div className="pointer-events-none absolute inset-0 flex flex-col justify-between bg-black/85 p-4 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+      <div className="poster-overlay pointer-events-none absolute inset-0 flex flex-col justify-between bg-black/85 p-4 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
         <div>
           <h3 className="text-sm font-bold text-white">{series.title}</h3>
-          <p className="mt-0.5 text-xs text-gray-400">
+          <p className="mt-0.5 text-xs text-muted-foreground">
             {series.year}
             {series.network ? ` • ${series.network}` : ""}
           </p>
@@ -133,11 +133,11 @@ export function SeriesCard({
             </div>
           )}
           {series.genres?.length > 0 && (
-            <p className="mt-1.5 text-[10px] text-gray-500">
+            <p className="mt-1.5 text-[10px] text-muted-foreground">
               {series.genres.slice(0, 3).join(" • ")}
             </p>
           )}
-          <p className="mt-2 line-clamp-4 text-xs leading-relaxed text-gray-300">
+          <p className="mt-2 line-clamp-4 text-xs leading-relaxed text-foreground">
             {series.overview || "No overview available."}
           </p>
         </div>
@@ -152,11 +152,11 @@ export function SeriesCard({
                 >
                   {progress.label} episodes
                 </span>
-                <span className="text-[10px] text-gray-500">
+                <span className="text-[10px] text-muted-foreground">
                   {progress.percent}%
                 </span>
               </div>
-              <div className="h-1 w-full rounded-full bg-gray-700/50">
+              <div className="h-1 w-full rounded-full bg-muted/50">
                 <div
                   className="h-full rounded-full transition-all duration-300"
                   style={{
@@ -171,7 +171,7 @@ export function SeriesCard({
             <MissingQualityProfileBadge onDark />
           ) : (
             profile && (
-              <p className="text-[10px] text-gray-500">
+              <p className="text-[10px] text-muted-foreground">
                 Quality: {profile.name}
               </p>
             )

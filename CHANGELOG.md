@@ -7,8 +7,91 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- Pass the shared quality profile store into the production import pipeline so
+  imports can enforce assigned profiles instead of failing with an unavailable-store error.
+- Stage import copies beside their destination and publish complete files
+  without blindly overwriting collisions. Matched movie and episode imports
+  can replace equal or better, profile-accepted files even without a recycle
+  bin; downgrades and unrelated files remain protected. Recover fully copied
+  destinations after a crash even if import history was not yet recorded.
+- Avoid full-file hashing during import scans on NAS storage. Saved metadata
+  matches are labelled Previously imported, distinct from content verification;
+  actual import skipping and source deletion still verify identity or SHA-256.
+  Migration 0102 records destination metadata for new successful imports.
+- Run Downloads / Imports scans in the background with progressive, paged
+  results and cancellation instead of waiting for large scans to finish in
+  one request, avoiding reverse-proxy 524 timeouts.
+- Upgrade the Go toolchain to 1.26.11 across CI and container builds to fix
+  the net/http MaxBytesReader header race (GO-2026-6859).
+- Update the grouped Go dependencies, including Rain, SQLite, OpenTelemetry,
+  Prometheus, OIDC, pgx and Goose, with their required transitive dependencies.
+- Update grouped web dependencies; keep TypeScript on 6 until
+  typescript-eslint supports 7 and Tailwind on 3 pending the v4 config/CSS
+  migration.
+
 ### Added
 
+- Global appearance controls in Settings: Light, Dark, AMOLED or System theme,
+  accent presets, and a background image URL with preview and dimming. Admin
+  changes persist across devices; the header theme toggle shares these settings.
+  Admins can define a custom primary/secondary/accent/background palette and
+  upload a PNG, JPEG or WebP background (up to 5 MiB) stored in the database
+  (`POST/GET /api/v1/appearance/background`); existing settings keep working.
+  The Loom logo follows the custom palette and keeps its original colors by
+  default.
+
+- Music support in Downloads / Imports: audio scanning, automatic tagged-track
+  matching, and manual album/track selection, including standalone albums and
+  compilations. Imports transfer files into the assigned media library and
+  distinguish queued work from completion. Episode re-imports now use the series
+  library root; Music imports report partial failures and preserve replacement
+  track registration when an upgrade reuses the destination path.
+
+- Standalone MusicBrainz album management for compilations and multi-artist
+  albums, preserving all credited artists without creating contributor artist
+  records. Albums can be browsed in the Albums view, show in a movie-style
+  detail drawer with editions, tracks, availability and monitoring actions, and
+  organize beneath `Various Artists`. Added `GET/POST /api/v1/albums` and
+  `GET /api/v1/albums/lookup`; migration 0100 makes the managed artist optional
+  and stores album library/profile and artist-credit metadata.
+
+- Native service installer scripts for Windows, Linux/systemd, and macOS/launchd,
+  bundled into platform release archives, with Windows amd64/arm64 release builds.
+- Installation pathways for Raspberry Pi, Docker/Compose, Kubernetes/Helm,
+  Flux GitOps, and Synology Container Manager or native `.spk` manual upload,
+  with persistent storage, permissions, upgrade, and backup guidance.
+
+- Music artwork and details: artists show a photo, background, logo,
+  biography, origin, active years and MusicBrainz rating; albums show a cover,
+  description and rating. Artwork comes from fanart.tv (optional API key) and
+  TheAudioDB (free shared key by default), configured under **Settings → Music
+  Profiles → Artwork** or with `LOOM_FANART_API_KEY` and
+  `LOOM_THEAUDIODB_API_KEY`. Artists and albums link to Spotify, Apple Music,
+  YouTube Music and other services listed on MusicBrainz. A new **Refresh
+  Metadata** action updates one artist. See
+  [`docs/music.md`](docs/music.md#artwork-and-details).
+- Music artist detail drawer with artist, album and per-track monitoring,
+  metadata refresh and folder rescan actions, automatic and interactive album
+  search, expandable track availability, an edit dialog for monitoring and
+  profiles, and Files and History sections. New endpoints:
+  `GET /api/v1/artists/{id}/files`, `GET /api/v1/artists/{id}/history` and
+  `PUT /api/v1/albums/{id}/tracks/{trackId}/monitoring`.
+
+- Music metadata source setting: admins can keep the public MusicBrainz API or
+  point Loom at a self-hosted mirror or hosted MusicBrainz-compatible service,
+  with its own request rate, an optional auth header and an option to keep
+  artist search on public MusicBrainz. Requests to `musicbrainz.org`, including
+  retries, are always spaced at least one second apart. See
+  [`docs/music.md`](docs/music.md#metadata-source).
+
+- Persistent file-level import queues with bulk selection, live progress,
+  individual file outcomes, restart recovery, and failed-file retries.
+  Season packs match each episode independently; verified successful files
+  are hidden from scans by default. Torrent-blocked imports wait for the
+  client to release files without exhausting retries, and safety-held imports
+  require review approval before retrying.
 - Music capability management: select an album's MusicBrainz edition, manage
   audio quality and metadata profiles, and search for missing tracks in
   partially available albums. Completed music downloads now import into the
@@ -44,7 +127,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Interactive search hides blocklisted releases by default and offers an
   **Ignore blocklist** option to show and grab them. Manual grabs of blocklisted
   releases are rejected unless `ignore_blocklist` is set; `POST
-  /api/v1/blocklist/check` reports blocklist matches for candidate releases.
+/api/v1/blocklist/check` reports blocklist matches for candidate releases.
 
 - Import IMDb Most Popular Movies/TV, Top 250 Movies/TV, and Bottom 100 Movies
   charts by pasting their URLs into the IMDb List / Chart import source.
@@ -106,6 +189,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   (including required transitive updates) to address known vulnerabilities.
 
 ### Fixed
+
+- Synology package: install no longer fails when preinst runs before DSM sets
+  package paths; the install/upgrade wizard asks for media and downloads shared
+  folders so DSM grants `sc-loom` access, and granted shares become folder-picker
+  roots. `LOOM_FILESYSTEM_ALLOWED_BROWSE_ROOTS` now accepts a comma-separated list.
+- Deluge 2.x connection tests use `daemon.get_version` instead of the removed
+  `daemon.info` method.
+- External download clients (qBittorrent, Transmission, Deluge) share one
+  cached status snapshot per client with failure backoff, so frequent UI and
+  background polling no longer gets clients rate-limited. The built-in torrent
+  client is unaffected; the Downloads page shows client errors.
+- Import Existing dialogs show progress and scan errors instead of a blank dialog.
+- Album search tries the next matching release when the best one was already
+  attempted (for example after a failed import) instead of failing with
+  "acquisition deferred".
+- Monitoring a music album now also monitors its tracks. Previously, tracks
+  stayed unmonitored when an album was monitored later, so searches skipped
+  them.
+- Music imports no longer fail with `could not match audio track` when
+  MusicBrainz is temporarily unavailable: the import reports that the album's
+  track list could not be loaded and the next attempt fetches it again. The
+  library scanner skips such files instead of listing them as unmatched.
+  Tagged titles with qualifiers such as `(feat. Kiiara)` or `(album version)`
+  now match the MusicBrainz track when the match is unambiguous. MusicBrainz
+  requests identify Loom with its version and project URL, and retry waits
+  stop when the request is cancelled. Each failed import now sends a single
+  "Import Failed" notification instead of two.
+- Music artist catalogues now include only official studio albums, EPs and
+  singles, deduplicated across editions. Metadata refresh hides legacy excluded
+  entries without deleting existing audio files or their records.
+- Manual release search keeps Download visible without horizontal scrolling,
+  with wrapping release metadata, phone-friendly rows, compact diagnostics and
+  independently scrolling results. Download actions show sending, success and
+  retryable error states and prevent duplicate submissions.
+- Music artist search no longer fails with `Unexpected token '<'` after the
+  Music feature is enabled at runtime: the flag now gates the music API per
+  request instead of only at startup. Unknown `/api` paths return a JSON 404
+  instead of the web app's HTML, and the artist folder rescan button uses the
+  correct API path.
+- TV monitoring now works at the show and season level. Each season, including
+  Specials, has its own monitor toggle that is kept across metadata refreshes.
+  Specials no longer count toward show completeness and new specials start
+  unmonitored. See [`docs/api.md`](docs/api.md#tv-monitoring-and-completeness).
 
 - Collection and Discover cards now match library card status, including
   Downloading, Importing, Available and series episode progress, with shared
@@ -287,7 +413,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `NZBContent`, server-side fetch on NZBGet 17+) and raw `.nzb`
   uploads (base64-encoded `NZBContent`), via NZBGet's positional
   `append(NZBFilename, NZBContent, Category, Priority, AddToTop,
-  AddPaused, DupeKey, DupeScore, DupeMode, PostProcessParameters)`
+AddPaused, DupeKey, DupeScore, DupeMode, PostProcessParameters)`
   signature; tag conventions cover `priority`, `add_to_top`,
   `add_paused`, `dupekey`, `dupescore`, `dupemode`, and
   `pp_<name>=<value>` post-process pass-through. `Status` merges
@@ -545,11 +671,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
-- *(none yet)*
+- _(none yet)_
 
 ### Security
 
-- *(none yet)*
+- _(none yet)_
 
 [Unreleased]: https://github.com/ebenderooock/loom/compare/v0.1.1...HEAD
 [0.1.1]: https://github.com/ebenderooock/loom/compare/v0.1.0...v0.1.1

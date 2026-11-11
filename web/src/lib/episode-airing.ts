@@ -5,11 +5,7 @@ export interface AiringDate {
 }
 
 export type EpisodeStatus =
-  | "downloaded"
-  | "grabbed"
-  | "missing"
-  | "unaired"
-  | "unmonitored";
+  "downloaded" | "grabbed" | "missing" | "unaired" | "unmonitored";
 
 interface AiringEpisode extends AiringDate {
   monitored: boolean;

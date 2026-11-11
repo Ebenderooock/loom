@@ -250,3 +250,38 @@ func TestStartWatchNoFile(t *testing.T) {
 		t.Errorf("StartWatch should report false when no file is loaded")
 	}
 }
+
+func TestAllowedBrowseRootsFromEnvAndYAML(t *testing.T) {
+	clearEnv(t)
+	dir := t.TempDir()
+	t.Setenv("LOOM_CONFIG_DIR", dir)
+	t.Setenv("LOOM_DATA_DIR", t.TempDir())
+
+	cfg, err := Load("")
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if len(cfg.Filesystem.AllowedBrowseRoots) != 0 {
+		t.Fatalf("default roots = %q, want none", cfg.Filesystem.AllowedBrowseRoots)
+	}
+
+	if err := os.WriteFile(filepath.Join(dir, "loom.yaml"), []byte("filesystem:\n  allowed_browse_roots:\n    - /yaml/media\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err = Load("")
+	if err != nil {
+		t.Fatalf("Load yaml: %v", err)
+	}
+	if got := cfg.Filesystem.AllowedBrowseRoots; len(got) != 1 || got[0] != "/yaml/media" {
+		t.Fatalf("yaml roots = %q", got)
+	}
+
+	t.Setenv("LOOM_FILESYSTEM_ALLOWED_BROWSE_ROOTS", "/volume1/media,/volume1/downloads")
+	cfg, err = Load("")
+	if err != nil {
+		t.Fatalf("Load env: %v", err)
+	}
+	if got := cfg.Filesystem.AllowedBrowseRoots; len(got) != 2 || got[0] != "/volume1/media" || got[1] != "/volume1/downloads" {
+		t.Fatalf("env roots = %q", got)
+	}
+}

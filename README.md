@@ -28,30 +28,56 @@ Emby keep working unchanged.
 
 ## Why Loom?
 
-| | *arr stack | Loom |
-|---|---|---|
-| Apps to deploy | 3+ (Radarr, Sonarr, Prowlarr, …) | **1** (modular monolith; split-mode optional) |
-| Databases | 3 SQLite files | 1 SQLite (or Postgres) |
-| Runtime | .NET (heavier images) | Go static binary (distroless, ~30 MB image) |
-| Observability | Ad-hoc logs | OpenTelemetry, Prometheus, structured JSON logs, pprof from day one |
-| Customisation | Forks | First-class plugin SDK (gRPC, out-of-process — Phase 10) |
-| UI | Three different UIs | One unified, mobile-first, accessible UI |
-| Migration | n/a | Built-in importer from existing arr SQLite DBs (Phase 8) |
+|                | *arr stack                       | Loom                                                                |
+| -------------- | -------------------------------- | ------------------------------------------------------------------- |
+| Apps to deploy | 3+ (Radarr, Sonarr, Prowlarr, …) | **1** (modular monolith; split-mode optional)                       |
+| Databases      | 3 SQLite files                   | 1 SQLite (or Postgres)                                              |
+| Runtime        | .NET (heavier images)            | Go static binary (distroless, ~30 MB image)                         |
+| Observability  | Ad-hoc logs                      | OpenTelemetry, Prometheus, structured JSON logs, pprof from day one |
+| Customisation  | Forks                            | First-class plugin SDK (gRPC, out-of-process — Phase 10)            |
+| UI             | Three different UIs              | One unified, mobile-first, accessible UI                            |
+| Migration      | n/a                              | Built-in importer from existing arr SQLite DBs (Phase 8)            |
 
 ## Feature highlights
 
-| Surface | Today (Phase 1) | Coming |
-|---|---|---|
-| HTTP server | chi router, request-ID, structured access logs, panic recovery, gzip, ETag, CORS | WebSocket events (Phase 1c) |
-| Storage | SQLite (default) + Postgres, embedded goose migrations (60+), sqlc-typed queries | Backup / restore CLI (Phase 11) |
-| Health probes | `/healthz`, `/livez`, `/readyz` | — |
-| Metrics | Prometheus `/metrics` (Go runtime + process collectors) | Loom-curated Grafana dashboards (Phase 11) |
-| Tracing | OpenTelemetry SDK + OTLP/HTTP exporter | Spans on every module call as modules land |
-| Profiling | `/debug/pprof/*`, gated by config | — |
-| Logging | `slog` JSON, PII-redacted | Per-module loggers (rolling) |
-| Config | Layered Viper (defaults → file → env → flags), hot-reload for safe keys | Live config UI (Phase 9) |
-| Auth | Server-authoritative session cookies (argon2id) + API keys | OIDC + reverse-proxy header trust |
-| Frontend | React 19 + TS + Vite + TanStack Router/Query + shadcn/ui + Tailwind; **Movies, Series, Indexers, Search, Downloads, Settings, Notifications pages** | Calendar, Import Lists (Phases 8–11) |
+| Surface       | Today (Phase 1)                                                                                                                                     | Coming                                     |
+| ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------ |
+| HTTP server   | chi router, request-ID, structured access logs, panic recovery, gzip, ETag, CORS                                                                    | WebSocket events (Phase 1c)                |
+| Storage       | SQLite (default) + Postgres, embedded goose migrations (60+), sqlc-typed queries                                                                    | Backup / restore CLI (Phase 11)            |
+| Health probes | `/healthz`, `/livez`, `/readyz`                                                                                                                     | —                                          |
+| Metrics       | Prometheus `/metrics` (Go runtime + process collectors)                                                                                             | Loom-curated Grafana dashboards (Phase 11) |
+| Tracing       | OpenTelemetry SDK + OTLP/HTTP exporter                                                                                                              | Spans on every module call as modules land |
+| Profiling     | `/debug/pprof/*`, gated by config                                                                                                                   | —                                          |
+| Logging       | `slog` JSON, PII-redacted                                                                                                                           | Per-module loggers (rolling)               |
+| Config        | Layered Viper (defaults → file → env → flags), hot-reload for safe keys                                                                             | Live config UI (Phase 9)                   |
+| Auth          | Server-authoritative session cookies (argon2id) + API keys                                                                                          | OIDC + reverse-proxy header trust          |
+| Frontend      | React 19 + TS + Vite + TanStack Router/Query + shadcn/ui + Tailwind; **Movies, Series, Indexers, Search, Downloads, Settings, Notifications pages** | Calendar, Import Lists (Phases 8–11)       |
+
+## Appearance
+
+Admins can customize **Settings > Appearance** with a Light, Dark, AMOLED,
+or System theme and a coordinated app palette. Start from Loom, Ocean, Ember,
+or Forest, then use color pickers or hex values for primary, secondary, accent,
+and surface tint. The palette drives buttons, navigation, pages, sidebars,
+cards, dialogs, focus rings, and the Loom logo; text contrast adjusts
+automatically. Surface
+brightness follows the theme, while the tint controls its hue.
+Individual color controls are tucked under **Customize individual colors**.
+Invalid hex values stay visible for correction and must be fixed before saving.
+Preview your choices, then save them for everyone or discard unsaved changes.
+
+Backgrounds can use an image URL or an uploaded PNG, JPEG, or WebP (up to 5 MiB),
+with a preview and adjustable dimming. Uploaded images persist in Loom and do
+not require external hosting. Save applies these settings to everyone on the Loom
+instance, including other devices; open browsers refresh them within a minute
+or when the tab regains focus. System follows each device's OS preference.
+Reset to defaults, then save, restores the standard Loom appearance.
+
+External background URLs load directly in each browser, not through the Loom server.
+Use a trusted HTTP(S) image URL reachable from every device (HTTPS when Loom
+uses HTTPS); leave the URL empty to remove it. Items per page and default view
+remain browser-local preferences.
+These browsing preferences save automatically, separately from global appearance.
 
 ## Wire-compatibility (Phase 7)
 
@@ -117,10 +143,16 @@ docker compose up -d
 # Grafana     http://localhost:3000  (admin/admin)
 ```
 
-See [`docs/deployment.md`](docs/deployment.md) for Kubernetes
-(Phase 11), bare-metal binaries, and reverse-proxy snippets
-(Traefik / Caddy / Nginx). For Synology NAS, see
-[`docs/synology.md`](docs/synology.md).
+See the [installation pathways](docs/deployment.md#installation-pathways) for
+[Windows services](docs/windows.md), [Linux/systemd](docs/linux.md),
+[macOS/launchd](docs/macos.md), [Raspberry Pi](docs/raspberry-pi.md),
+[Docker](docs/docker.md), [Kubernetes/Helm](docs/kubernetes.md),
+[Flux](docs/flux.md), and [Synology DSM](docs/synology.md).
+The updated release pipeline bundles native installer scripts with the binaries;
+older releases require scripts from this checkout, and Windows requires a
+service-aware binary. The Synology guide covers
+Container Manager and building a `.spk` for manual upload; SynoCommunity
+availability depends on upstream publication.
 
 ## Documentation
 

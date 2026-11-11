@@ -32,6 +32,7 @@ var (
 	ErrNoDownloaders          = errors.New("musicsearch: no download clients configured")
 	ErrNoCompatibleDownloader = errors.New("musicsearch: no compatible download client configured")
 	ErrInvalidReleaseLink     = errors.New("musicsearch: invalid release download link")
+	ErrAllReleasesAttempted   = errors.New("every matching release was already grabbed, blocklisted, or is awaiting retry; use Download History to retry or blocklist it, or try Interactive Search")
 )
 
 // audioCategories are the Newznab audio category families queried for music.
@@ -181,9 +182,9 @@ type GrabRequest struct {
 }
 
 // ListReleases performs an interactive search for an album, returning all
-// identity-matched releases scored against the artist's profile (including
-// profile-rejected ones, flagged via Allowed) sorted best-first. It does not
-// grab anything.
+// identity-matched releases scored against the album's effective quality
+// profile (including profile-rejected ones, flagged via Allowed) sorted
+// best-first. It does not grab anything.
 func (e *Engine) ListReleases(ctx context.Context, albumID string) ([]ReleaseCandidate, error) {
 	album, artist, err := e.loadAlbumArtist(ctx, albumID)
 	if err != nil {
@@ -194,21 +195,23 @@ func (e *Engine) ListReleases(ctx context.Context, albumID string) ([]ReleaseCan
 		return nil, fmt.Errorf("list quality definitions: %w", err)
 	}
 	var profile *music.AudioQualityProfile
-	if artist.QualityProfileID != "" {
-		profile, err = e.repo.GetAudioQualityProfile(ctx, artist.QualityProfileID)
+	profileID := albumQualityProfileID(album, artist)
+	if profileID != "" {
+		profile, err = e.repo.GetAudioQualityProfile(ctx, profileID)
 		if err != nil {
 			return nil, fmt.Errorf("get audio quality profile: %w", err)
 		}
 		if profile == nil {
-			return nil, fmt.Errorf("%w: audio quality profile %q", ErrNotFound, artist.QualityProfileID)
+			return nil, fmt.Errorf("%w: audio quality profile %q", ErrNotFound, profileID)
 		}
 	}
 
 	year := albumYear(album)
+	queries := buildAlbumQueries(album, artist, year)
 
 	seen := make(map[string]bool)
 	var out []ReleaseCandidate
-	for _, q := range buildAudioQueries(artist.Name, album.Title, year) {
+	for _, q := range queries {
 		agg := e.indexerSvc.Search(ctx, q, nil, 0)
 		for _, res := range agg.Results {
 			key := res.GUID
@@ -218,12 +221,12 @@ func (e *Engine) ListReleases(ctx context.Context, albumID string) ([]ReleaseCan
 			if seen[key] {
 				continue
 			}
-			seen[key] = true
 
 			parsed := music.ParseMusic(res.Title)
-			if !identityMatch(res.Title, parsed, artist.Name, album.Title) {
+			if !albumIdentityMatch(res.Title, parsed, album, artist) {
 				continue
 			}
+			seen[key] = true
 			score := music.ScoreAudioRelease(parsed, defs, profile, seeders(res), res.Size)
 			fmtScore, fmtMatches := e.formatScore(profile, parsed, &res)
 			qn := ""
@@ -348,13 +351,14 @@ func (e *Engine) searchMissingTracks(ctx context.Context, album *music.Album, ar
 		return fmt.Errorf("list quality definitions: %w", err)
 	}
 	var profile *music.AudioQualityProfile
-	if artist.QualityProfileID != "" {
-		profile, err = e.repo.GetAudioQualityProfile(ctx, artist.QualityProfileID)
+	profileID := albumQualityProfileID(album, artist)
+	if profileID != "" {
+		profile, err = e.repo.GetAudioQualityProfile(ctx, profileID)
 		if err != nil {
 			return fmt.Errorf("get audio quality profile: %w", err)
 		}
 		if profile == nil {
-			return fmt.Errorf("%w: audio quality profile %q", ErrNotFound, artist.QualityProfileID)
+			return fmt.Errorf("%w: audio quality profile %q", ErrNotFound, profileID)
 		}
 	}
 
@@ -385,12 +389,30 @@ func (e *Engine) searchAndGrabTrack(
 	defs []*music.AudioQualityDefinition,
 	profile *music.AudioQualityProfile,
 ) error {
-	queries := buildTrackQueries(artist.Name, album.Title, track.Title)
+	trackArtists := albumSearchArtists(album, artist)
+	if track.ArtistName != "" {
+		trackArtists = []string{track.ArtistName}
+	}
+	if len(trackArtists) == 0 {
+		return ErrNoResults
+	}
+	var queries []indexers.Query
+	seenTerms := make(map[string]bool)
+	for _, trackArtist := range trackArtists {
+		for _, query := range buildTrackQueries(trackArtist, album.Title, track.Title) {
+			key := normalize(query.Term)
+			if !seenTerms[key] {
+				seenTerms[key] = true
+				queries = append(queries, query)
+			}
+		}
+	}
 	seen := make(map[string]bool)
 	var candidates []Candidate
 	for _, query := range queries {
+		requestArtist := firstTrackArtist(track, album, artist)
 		result, err := e.dlRegistry.SearchAcquisition(ctx, e.indexerSvc, query, downloads.AddRequest{
-			Title: artist.Name + " - " + track.Title, MediaType: "music", MediaID: album.ID,
+			Title: requestArtist + " - " + track.Title, MediaType: "music", MediaID: album.ID,
 		})
 		if err != nil {
 			return err
@@ -401,7 +423,7 @@ func (e *Engine) searchAndGrabTrack(
 				continue
 			}
 			seen[key] = true
-			if !trackIdentityMatch(res.Title, artist.Name, track.Title) {
+			if !trackIdentityMatchAny(res.Title, trackArtists, track.Title) {
 				continue
 			}
 			parsed := music.ParseMusic(res.Title)
@@ -428,8 +450,25 @@ func (e *Engine) searchAndGrabTrack(
 	sort.SliceStable(candidates, func(i, j int) bool {
 		return candidates[i].rankScore() > candidates[j].rankScore()
 	})
-	_, err := e.grab(ctx, album.ID, &candidates[0])
+	_, err := e.grabFirstAvailable(ctx, album.ID, candidates)
 	return err
+}
+
+// grabFirstAvailable grabs the best candidate whose release has not already
+// been acquired, blocklisted, or deferred, e.g. after a failed import.
+func (e *Engine) grabFirstAvailable(ctx context.Context, albumID string, candidates []Candidate) (*GrabResult, error) {
+	for i := range candidates {
+		grab, err := e.grab(ctx, albumID, &candidates[i])
+		if err == nil {
+			return grab, nil
+		}
+		if !errors.Is(err, downloads.ErrAcquisitionDeferred) {
+			return nil, err
+		}
+		e.logger.Info("musicsearch: release already attempted, trying next",
+			"album", albumID, "title", candidates[i].Result.Title)
+	}
+	return nil, fmt.Errorf("%w (%d)", ErrAllReleasesAttempted, len(candidates))
 }
 
 func (e *Engine) searchAndGrab(ctx context.Context, albumID string, upgradeOnly bool) (*GrabResult, error) {
@@ -452,13 +491,14 @@ func (e *Engine) searchAndGrab(ctx context.Context, albumID string, upgradeOnly 
 		return nil, fmt.Errorf("list quality definitions: %w", err)
 	}
 	var profile *music.AudioQualityProfile
-	if artist.QualityProfileID != "" {
-		profile, err = e.repo.GetAudioQualityProfile(ctx, artist.QualityProfileID)
+	profileID := albumQualityProfileID(album, artist)
+	if profileID != "" {
+		profile, err = e.repo.GetAudioQualityProfile(ctx, profileID)
 		if err != nil {
 			return nil, fmt.Errorf("get audio quality profile: %w", err)
 		}
 		if profile == nil {
-			return nil, fmt.Errorf("%w: audio quality profile %q", ErrNotFound, artist.QualityProfileID)
+			return nil, fmt.Errorf("%w: audio quality profile %q", ErrNotFound, profileID)
 		}
 	}
 
@@ -480,39 +520,47 @@ func (e *Engine) searchAndGrab(ctx context.Context, albumID string, upgradeOnly 
 	}
 
 	year := albumYear(album)
-	candidates, err := e.gatherCandidates(ctx, albumID, artist.Name, album.Title, year, defs, profile)
+	candidates, err := e.gatherCandidates(ctx, albumID, album, artist, year, defs, profile)
 	if err != nil {
 		return nil, err
 	}
 	if len(candidates) == 0 {
-		e.logger.Info("musicsearch: no matching releases", "artist", artist.Name, "album", album.Title)
+		e.logger.Info("musicsearch: no matching releases", "artist", firstAlbumArtist(album, artist), "album", album.Title)
 		return nil, ErrNoResults
 	}
 
 	sort.SliceStable(candidates, func(i, j int) bool {
 		return candidates[i].rankScore() > candidates[j].rankScore()
 	})
-	best := candidates[0]
-
-	if minTier >= 0 && best.Score.Tier <= minTier {
-		e.logger.Debug("musicsearch: no upgrade available",
-			"artist", artist.Name, "album", album.Title, "current_tier", minTier, "best_tier", best.Score.Tier)
-		return nil, ErrNoResults
+	if minTier >= 0 {
+		upgrades := candidates[:0]
+		for _, c := range candidates {
+			if c.Score.Tier > minTier {
+				upgrades = append(upgrades, c)
+			}
+		}
+		if len(upgrades) == 0 {
+			e.logger.Debug("musicsearch: no upgrade available",
+				"artist", artist.Name, "album", album.Title, "current_tier", minTier, "best_tier", candidates[0].Score.Tier)
+			return nil, ErrNoResults
+		}
+		candidates = upgrades
 	}
 
-	grab, err := e.grab(ctx, albumID, &best)
+	grab, err := e.grabFirstAvailable(ctx, albumID, candidates)
 	if err != nil {
 		return nil, err
 	}
 	e.logger.Info("musicsearch: grabbed album release",
-		"artist", artist.Name, "album", album.Title, "upgrade", upgradeOnly,
+		"artist", firstAlbumArtist(album, artist), "album", album.Title, "upgrade", upgradeOnly,
 		"title", grab.Title, "quality", grab.QualityName, "score", grab.CompositeScore,
 	)
 	return grab, nil
 }
 
-// loadAlbumArtist fetches an album and its artist, returning ErrNotFound if
-// either is missing.
+// loadAlbumArtist fetches an album and its optional managed owner. Standalone
+// albums intentionally have no managed artist record; their credited artists
+// live on the album.
 func (e *Engine) loadAlbumArtist(ctx context.Context, albumID string) (*music.Album, *music.Artist, error) {
 	album, err := e.repo.GetAlbum(ctx, albumID)
 	if err != nil {
@@ -520,6 +568,9 @@ func (e *Engine) loadAlbumArtist(ctx context.Context, albumID string) (*music.Al
 	}
 	if album == nil {
 		return nil, nil, ErrNotFound
+	}
+	if album.ArtistID == "" {
+		return album, nil, nil
 	}
 	artist, err := e.repo.GetArtist(ctx, album.ArtistID)
 	if err != nil {
@@ -534,10 +585,11 @@ func (e *Engine) loadAlbumArtist(ctx context.Context, albumID string) (*music.Al
 // gatherCandidates runs the tiered query chain and returns identity-matched,
 // profile-allowed, scored releases. It stops at the first tier that yields
 // candidates.
-func (e *Engine) gatherCandidates(ctx context.Context, albumID, artist, album string, year int, defs []*music.AudioQualityDefinition, profile *music.AudioQualityProfile) ([]Candidate, error) {
-	for _, q := range buildAudioQueries(artist, album, year) {
+func (e *Engine) gatherCandidates(ctx context.Context, albumID string, album *music.Album, artist *music.Artist, year int, defs []*music.AudioQualityDefinition, profile *music.AudioQualityProfile) ([]Candidate, error) {
+	for _, q := range buildAlbumQueries(album, artist, year) {
+		artistName := firstAlbumArtist(album, artist)
 		agg, err := e.dlRegistry.SearchAcquisition(ctx, e.indexerSvc, q, downloads.AddRequest{
-			Title: artist + " - " + album, MediaType: "music", MediaID: albumID,
+			Title: artistName + " - " + album.Title, MediaType: "music", MediaID: albumID,
 		})
 		if err != nil {
 			return nil, err
@@ -552,7 +604,7 @@ func (e *Engine) gatherCandidates(ctx context.Context, albumID, artist, album st
 			seen[key] = true
 
 			parsed := music.ParseMusic(res.Title)
-			if !identityMatch(res.Title, parsed, artist, album) {
+			if !albumIdentityMatch(res.Title, parsed, album, artist) {
 				continue
 			}
 			score := music.ScoreAudioRelease(parsed, defs, profile, seeders(res), res.Size)
@@ -573,6 +625,93 @@ func (e *Engine) gatherCandidates(ctx context.Context, albumID, artist, album st
 		}
 	}
 	return nil, nil
+}
+
+func albumQualityProfileID(album *music.Album, artist *music.Artist) string {
+	if artist != nil {
+		return artist.QualityProfileID
+	}
+	if album == nil {
+		return ""
+	}
+	return album.QualityProfileID
+}
+
+func albumSearchArtists(album *music.Album, artist *music.Artist) []string {
+	if artist != nil && strings.TrimSpace(artist.Name) != "" {
+		return []string{strings.TrimSpace(artist.Name)}
+	}
+	if album == nil {
+		return nil
+	}
+	names := make([]string, 0, len(album.Artists)+1)
+	seen := make(map[string]bool)
+	add := func(name string) {
+		name = strings.TrimSpace(name)
+		key := normalize(name)
+		if name != "" && !seen[key] {
+			seen[key] = true
+			names = append(names, name)
+		}
+	}
+	if music.IsVariousArtistAlbum(album) {
+		add("Various Artists")
+	}
+	for _, credit := range album.Artists {
+		add(credit.Name)
+	}
+	return names
+}
+
+func firstAlbumArtist(album *music.Album, artist *music.Artist) string {
+	names := albumSearchArtists(album, artist)
+	if len(names) == 0 {
+		return ""
+	}
+	return names[0]
+}
+
+func firstTrackArtist(track *music.Track, album *music.Album, artist *music.Artist) string {
+	if track != nil && strings.TrimSpace(track.ArtistName) != "" {
+		return strings.TrimSpace(track.ArtistName)
+	}
+	return firstAlbumArtist(album, artist)
+}
+
+func buildAlbumQueries(album *music.Album, artist *music.Artist, year int) []indexers.Query {
+	var queries []indexers.Query
+	seen := make(map[string]bool)
+	for _, name := range albumSearchArtists(album, artist) {
+		for _, query := range buildAudioQueries(name, album.Title, year) {
+			key := normalize(query.Term)
+			if !seen[key] {
+				seen[key] = true
+				queries = append(queries, query)
+			}
+		}
+	}
+	return queries
+}
+
+func albumIdentityMatch(title string, parsed *music.MusicRelease, album *music.Album, artist *music.Artist) bool {
+	if album == nil {
+		return false
+	}
+	for _, name := range albumSearchArtists(album, artist) {
+		if identityMatch(title, parsed, name, album.Title) {
+			return true
+		}
+	}
+	return false
+}
+
+func trackIdentityMatchAny(title string, artists []string, track string) bool {
+	for _, artist := range artists {
+		if trackIdentityMatch(title, artist, track) {
+			return true
+		}
+	}
+	return false
 }
 
 // buildAudioQueries returns the tiered free-text queries for an album. Torznab

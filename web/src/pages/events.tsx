@@ -164,7 +164,7 @@ function SearchBreakdown({ queryLogId }: { queryLogId: string }) {
                 ? "border-0 bg-green-500/10 text-green-500"
                 : ix.status === "failed"
                   ? "border-0 bg-red-500/10 text-red-500"
-                  : "border-0 bg-gray-500/10 text-gray-500"
+                  : "border-0 bg-muted/10 text-muted-foreground"
             }`}
           >
             {ix.status}

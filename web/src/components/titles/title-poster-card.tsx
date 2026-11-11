@@ -6,6 +6,7 @@ import {
   StatusBadge,
 } from "@/components/movies/status-badge";
 import {
+  SeriesMonitoringLabel,
   SeriesStatusAccent,
   SeriesStatusBadge,
 } from "@/components/series/series-status";
@@ -73,7 +74,7 @@ export function TitlePosterCard({
             </div>
           )}
         </div>
-        <div className="absolute inset-x-0 bottom-0 min-w-0 bg-gradient-to-t from-black/95 via-black/70 to-transparent p-3 pt-10">
+        <div className="poster-overlay absolute inset-x-0 bottom-0 min-w-0 bg-gradient-to-t from-black/95 via-black/70 to-transparent p-3 pt-10">
           <div className="flex items-center justify-between gap-1">
             {!displayStatus && inLibrary ? (
               <span className="rounded border border-white/20 bg-black/50 px-2 py-0.5 text-xs text-white">
@@ -84,7 +85,11 @@ export function TitlePosterCard({
             ) : (
               <StatusBadge status={displayStatus ?? "missing"} />
             )}
-            <MonitoringLabel status={monitoringStatus} />
+            {mediaType === "series" ? (
+              <SeriesMonitoringLabel status={monitoringStatus} />
+            ) : (
+              <MonitoringLabel status={monitoringStatus} />
+            )}
           </div>
           <h3
             className="mt-1 truncate text-sm font-semibold text-white"
@@ -92,7 +97,9 @@ export function TitlePosterCard({
           >
             {title}
           </h3>
-          <p className="text-xs text-gray-400">{year || "Date unknown"}</p>
+          <p className="text-xs text-muted-foreground">
+            {year || "Date unknown"}
+          </p>
         </div>
       </button>
       {onAdd && !inLibrary && (

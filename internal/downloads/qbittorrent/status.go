@@ -112,9 +112,9 @@ func mapState(state string) downloads.ItemStatus {
 		return downloads.StatusItemQueued
 	case "uploading", "forcedUP", "stalledUP", "checkingUP":
 		return downloads.StatusItemSeeding
-	case "pausedDL":
+	case "pausedDL", "stoppedDL":
 		return downloads.StatusItemPaused
-	case "pausedUP":
+	case "pausedUP", "stoppedUP":
 		// Paused-while-seeding maps to "completed" rather than
 		// "paused": the download itself is finished and the
 		// operator has chosen to stop seeding. Status dashboards

@@ -1,4 +1,10 @@
-import type { Series } from "./types";
+import { MonitoringLabel } from "@/components/movies/status-badge";
+import { isSeriesMonitored, type Series } from "./types";
+
+export function SeriesMonitoringLabel({ status }: { status?: string }) {
+  if (!status || isSeriesMonitored(status)) return null;
+  return <MonitoringLabel status="unmonitored" />;
+}
 
 type SeriesState = Pick<Series, "status" | "episodeStats">;
 
@@ -37,7 +43,7 @@ export function SeriesStatusAccent({ series }: { series: SeriesState }) {
   const progress = getEpisodeProgressInfo(series);
   return (
     <>
-      <div className="absolute left-0 right-0 top-0 z-10 h-[3px] bg-gray-700/50">
+      <div className="absolute left-0 right-0 top-0 z-10 h-[3px] bg-muted/50">
         <div
           className="h-full transition-all duration-300"
           style={{

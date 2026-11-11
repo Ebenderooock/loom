@@ -51,7 +51,6 @@ import {
   Plug,
   ExternalLink,
   Download,
-  Palette,
   LayoutGrid,
   List,
   GripVertical,
@@ -111,6 +110,7 @@ import {
 } from "@/lib/downloads-api";
 import { useAPIKeys, useCreateAPIKey } from "@/lib/api-keys-api";
 import { DownloadForm } from "@/components/downloads/download-form";
+import { AppearanceSettings } from "@/components/appearance-settings";
 
 // ─── Types ──────────────────────────────────────────────────────────────
 
@@ -246,7 +246,7 @@ function FolderBrowserDialog({
           <div className="min-h-0 flex-1 space-y-2">
             {/* Current path breadcrumb */}
             <div className="flex items-center gap-2 rounded-md bg-muted/50 px-3 py-2">
-              <FolderOpen className="h-4 w-4 shrink-0 text-primary" />
+              <FolderOpen className="h-4 w-4 shrink-0 text-primary-readable" />
               <span className="flex-1 truncate font-mono text-sm">
                 {currentPath || "/"}
               </span>
@@ -287,7 +287,7 @@ function FolderBrowserDialog({
                       onClick={() => browse(dir.path)}
                       className="flex w-full items-center gap-3 border-b border-border px-3 py-2.5 text-sm transition-colors last:border-b-0 hover:bg-accent/50"
                     >
-                      <Folder className="h-4 w-4 text-primary/70" />
+                      <Folder className="text-primary-readable/70 h-4 w-4" />
                       <span className="flex-1 truncate text-left">
                         {dir.name}
                       </span>
@@ -412,7 +412,7 @@ function AddLibraryDialog({
                   className="group flex flex-col items-center gap-3 rounded-lg border-2 border-border p-6 transition-all hover:border-primary hover:bg-primary/5"
                 >
                   <div className="rounded-full bg-primary/10 p-3 transition-colors group-hover:bg-primary/20">
-                    <Film className="h-8 w-8 text-primary" />
+                    <Film className="h-8 w-8 text-primary-readable" />
                   </div>
                   <div className="text-center">
                     <p className="text-sm font-medium">Movies</p>
@@ -427,7 +427,7 @@ function AddLibraryDialog({
                   className="group flex flex-col items-center gap-3 rounded-lg border-2 border-border p-6 transition-all hover:border-primary hover:bg-primary/5"
                 >
                   <div className="rounded-full bg-primary/10 p-3 transition-colors group-hover:bg-primary/20">
-                    <Tv className="h-8 w-8 text-primary" />
+                    <Tv className="h-8 w-8 text-primary-readable" />
                   </div>
                   <div className="text-center">
                     <p className="text-sm font-medium">TV Shows</p>
@@ -586,7 +586,7 @@ function LibrariesPanel() {
               className="group flex items-center justify-between rounded-lg border border-border bg-card px-4 py-3 transition-colors hover:border-primary/30"
             >
               <div className="flex min-w-0 items-center gap-3">
-                <Folder className="h-5 w-5 shrink-0 text-primary" />
+                <Folder className="h-5 w-5 shrink-0 text-primary-readable" />
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium">{lib.name}</p>
                   <p className="truncate font-mono text-xs text-muted-foreground">
@@ -760,13 +760,13 @@ export function GeneralPanel() {
   return (
     <div className="space-y-6">
       {/* Application Info */}
-      <Card className="border-zinc-800 bg-zinc-900/50">
+      <Card className="border-border bg-card">
         <CardContent className="space-y-4 p-6">
           <div>
-            <h3 className="mb-1 text-sm font-medium text-zinc-100">
+            <h3 className="mb-1 text-sm font-medium text-foreground">
               Application
             </h3>
-            <p className="text-xs text-zinc-500">
+            <p className="text-xs text-muted-foreground">
               General application settings
             </p>
           </div>
@@ -774,29 +774,31 @@ export function GeneralPanel() {
           <div className="grid gap-4">
             <div className="flex items-center justify-between">
               <div>
-                <Label className="text-sm text-zinc-300">App Name</Label>
-                <p className="mt-0.5 text-xs text-zinc-500">
+                <Label className="text-sm text-foreground">App Name</Label>
+                <p className="mt-0.5 text-xs text-muted-foreground">
                   Your Loom instance name
                 </p>
               </div>
               <Badge
                 variant="outline"
-                className="border-zinc-700 font-mono text-zinc-300"
+                className="border-border font-mono text-foreground"
               >
                 Loom
               </Badge>
             </div>
 
-            <div className="border-t border-zinc-800" />
+            <div className="border-t border-border" />
 
             <div className="flex items-center justify-between">
               <div>
-                <Label className="text-sm text-zinc-300">Authentication</Label>
-                <p className="mt-0.5 text-xs text-zinc-500">
+                <Label className="text-sm text-foreground">
+                  Authentication
+                </Label>
+                <p className="mt-0.5 text-xs text-muted-foreground">
                   Login is required for all API access
                 </p>
               </div>
-              <Badge className="border-teal-700 bg-teal-600/20 text-teal-400">
+              <Badge className="border-accent bg-accent/20 text-accent">
                 <Shield className="mr-1 h-3 w-3" /> Enabled
               </Badge>
             </div>
@@ -805,19 +807,21 @@ export function GeneralPanel() {
       </Card>
 
       {/* Log Level */}
-      <Card className="border-zinc-800 bg-zinc-900/50">
+      <Card className="border-border bg-card">
         <CardContent className="space-y-4 p-6">
           <div>
-            <h3 className="mb-1 text-sm font-medium text-zinc-100">Logging</h3>
-            <p className="text-xs text-zinc-500">
+            <h3 className="mb-1 text-sm font-medium text-foreground">
+              Logging
+            </h3>
+            <p className="text-xs text-muted-foreground">
               Control the verbosity of application logs
             </p>
           </div>
 
           <div className="flex items-center gap-4">
-            <Label className="w-24 text-sm text-zinc-300">Log Level</Label>
+            <Label className="w-24 text-sm text-foreground">Log Level</Label>
             <Select value={logLevel} onValueChange={setLogLevel}>
-              <SelectTrigger className="w-40 border-zinc-700 bg-zinc-900">
+              <SelectTrigger className="w-40 border-border bg-card">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -832,13 +836,13 @@ export function GeneralPanel() {
       </Card>
 
       {/* API Key */}
-      <Card className="border-zinc-800 bg-zinc-900/50">
+      <Card className="border-border bg-card">
         <CardContent className="space-y-4 p-6">
           <div>
-            <h3 className="mb-1 flex items-center gap-2 text-sm font-medium text-zinc-100">
-              <Key className="h-4 w-4 text-teal-400" /> API Key
+            <h3 className="mb-1 flex items-center gap-2 text-sm font-medium text-foreground">
+              <Key className="h-4 w-4 text-accent" /> API Key
             </h3>
-            <p className="text-xs text-zinc-500">
+            <p className="text-xs text-muted-foreground">
               Use this key for Loom clients like Radarr, Sonarr, Prowlarr, and
               Newznab integrations
             </p>
@@ -853,17 +857,17 @@ export function GeneralPanel() {
                   ? "Loading API keys..."
                   : "No API key has been generated yet"
               }
-              className="flex-1 border-zinc-700 bg-zinc-900 font-mono text-sm text-zinc-400"
+              className="flex-1 border-border bg-card font-mono text-sm text-muted-foreground"
             />
             <Button
               variant="outline"
               size="sm"
               onClick={copyApiKey}
               disabled={!canCopyApiKey}
-              className="shrink-0 border-zinc-700 text-zinc-400"
+              className="shrink-0 border-border text-muted-foreground"
             >
               {copied ? (
-                <Check className="h-4 w-4 text-teal-400" />
+                <Check className="h-4 w-4 text-accent" />
               ) : (
                 <Copy className="h-4 w-4" />
               )}
@@ -884,7 +888,7 @@ export function GeneralPanel() {
             </Button>
           </div>
 
-          <p className="text-xs text-zinc-500">
+          <p className="text-xs text-muted-foreground">
             {revealedApiKey
               ? "Copy this key now. For security, Loom only shows the full value when it is created."
               : currentApiKey
@@ -913,12 +917,12 @@ function DataManagementActionCard({
   pending?: boolean;
 }) {
   return (
-    <Card className="border-zinc-800 bg-zinc-900/50">
+    <Card className="border-border bg-card">
       <CardHeader className="pb-3">
         <CardTitle className="text-base">{title}</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        <p className="text-sm text-zinc-400">{description}</p>
+        <p className="text-sm text-muted-foreground">{description}</p>
         <ConfirmActionButton
           actionLabel={actionLabel}
           title={`${actionLabel}?`}
@@ -946,8 +950,8 @@ export function DataManagementPanel() {
 
   if (!isAdmin) {
     return (
-      <Card className="border-zinc-800 bg-zinc-900/50">
-        <CardContent className="py-8 text-center text-sm text-zinc-400">
+      <Card className="border-border bg-card">
+        <CardContent className="py-8 text-center text-sm text-muted-foreground">
           Admin access is required to clear stored history and operational data.
         </CardContent>
       </Card>
@@ -1117,17 +1121,17 @@ export function DownloadClientsPanel() {
     <div className="space-y-6">
       <div className="flex items-start justify-between">
         <div>
-          <h3 className="mb-1 text-sm font-medium text-zinc-100">
+          <h3 className="mb-1 text-sm font-medium text-foreground">
             Download Clients
           </h3>
-          <p className="text-xs text-zinc-500">
+          <p className="text-xs text-muted-foreground">
             Configure torrent and usenet clients for automated downloading.
           </p>
         </div>
         <Button
           variant="outline"
           size="sm"
-          className="border-zinc-700 text-zinc-300"
+          className="border-border text-foreground"
           onClick={() => setShowAdd(true)}
         >
           <Plus className="mr-1.5 h-3.5 w-3.5" /> Add Client
@@ -1135,16 +1139,16 @@ export function DownloadClientsPanel() {
       </div>
 
       {clients.length === 0 ? (
-        <Card className="border-dashed border-zinc-800 bg-zinc-900/50">
+        <Card className="border-dashed border-border bg-card">
           <CardContent className="py-10 text-center">
-            <Download className="mx-auto mb-3 h-10 w-10 text-zinc-700" />
-            <p className="text-sm text-zinc-500">
+            <Download className="mx-auto mb-3 h-10 w-10 text-muted-foreground" />
+            <p className="text-sm text-muted-foreground">
               No download clients configured
             </p>
-            <p className="mt-1 text-xs text-zinc-600">
+            <p className="mt-1 text-xs text-muted-foreground">
               <button
                 onClick={() => setShowAdd(true)}
-                className="text-teal-500 hover:text-teal-400"
+                className="text-accent hover:text-accent"
               >
                 Add a download client →
               </button>{" "}
@@ -1155,10 +1159,10 @@ export function DownloadClientsPanel() {
       ) : (
         <div className="grid gap-3 sm:grid-cols-2">
           {clients.map((client) => (
-            <Card key={client.id} className="border-zinc-800 bg-zinc-900/50">
+            <Card key={client.id} className="border-border bg-card">
               <CardContent className="p-4">
                 <div className="mb-2 flex items-center justify-between">
-                  <h4 className="truncate text-sm font-medium text-zinc-200">
+                  <h4 className="truncate text-sm font-medium text-foreground">
                     {client.name}
                   </h4>
                   <div className="flex items-center gap-2">
@@ -1167,15 +1171,15 @@ export function DownloadClientsPanel() {
                       className={cn(
                         "text-xs",
                         client.enabled
-                          ? "border-teal-700 text-teal-400"
-                          : "border-zinc-700 text-zinc-500",
+                          ? "border-accent text-accent"
+                          : "border-border text-muted-foreground",
                       )}
                     >
                       {client.enabled ? "Enabled" : "Disabled"}
                     </Badge>
                   </div>
                 </div>
-                <div className="mb-3 flex items-center gap-3 text-xs text-zinc-500">
+                <div className="mb-3 flex items-center gap-3 text-xs text-muted-foreground">
                   <span className="flex items-center gap-1">
                     <Download className="h-3 w-3" /> {client.kind || "Unknown"}
                   </span>
@@ -1185,7 +1189,7 @@ export function DownloadClientsPanel() {
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="h-7 text-xs text-zinc-400 hover:text-zinc-200"
+                    className="h-7 text-xs text-muted-foreground hover:text-foreground"
                     onClick={() => setEditClient(client)}
                   >
                     Edit
@@ -1252,16 +1256,16 @@ export function DownloadClientsPanel() {
       </Dialog>
 
       {/* Stall Detection Settings */}
-      <div className="border-t border-zinc-800 pt-4">
-        <h3 className="mb-1 text-sm font-medium text-zinc-100">
+      <div className="border-t border-border pt-4">
+        <h3 className="mb-1 text-sm font-medium text-foreground">
           Stall Detection
         </h3>
-        <p className="mb-4 text-xs text-zinc-500">
+        <p className="mb-4 text-xs text-muted-foreground">
           Automatically detect and handle stalled or failed downloads.
         </p>
 
         <div className="space-y-4">
-          <Card className="border-zinc-800 bg-zinc-900/50">
+          <Card className="border-border bg-card">
             <CardContent className="space-y-4 p-4">
               <div className="flex items-center gap-3">
                 <Checkbox id="check-for-stalled" defaultChecked={true} />
@@ -1272,7 +1276,7 @@ export function DownloadClientsPanel() {
                   >
                     Enable stall detection
                   </Label>
-                  <p className="text-xs text-zinc-500">
+                  <p className="text-xs text-muted-foreground">
                     Monitor downloads for lack of progress and take action
                   </p>
                 </div>
@@ -1282,7 +1286,7 @@ export function DownloadClientsPanel() {
                 <div>
                   <Label
                     htmlFor="stall-timeout"
-                    className="text-xs text-zinc-400"
+                    className="text-xs text-muted-foreground"
                   >
                     Stall Timeout (minutes)
                   </Label>
@@ -1291,13 +1295,13 @@ export function DownloadClientsPanel() {
                     type="number"
                     defaultValue={30}
                     min={5}
-                    className="mt-1 border-zinc-700 bg-zinc-900"
+                    className="mt-1 border-border bg-card"
                   />
                 </div>
                 <div>
                   <Label
                     htmlFor="max-retries"
-                    className="text-xs text-zinc-400"
+                    className="text-xs text-muted-foreground"
                   >
                     Max Retries
                   </Label>
@@ -1306,17 +1310,20 @@ export function DownloadClientsPanel() {
                     type="number"
                     defaultValue={3}
                     min={0}
-                    className="mt-1 border-zinc-700 bg-zinc-900"
+                    className="mt-1 border-border bg-card"
                   />
                 </div>
               </div>
 
               <div className="max-w-xs">
-                <Label htmlFor="stall-action" className="text-xs text-zinc-400">
+                <Label
+                  htmlFor="stall-action"
+                  className="text-xs text-muted-foreground"
+                >
                   Action on Stall
                 </Label>
                 <Select defaultValue="remove">
-                  <SelectTrigger className="mt-1 border-zinc-700 bg-zinc-900">
+                  <SelectTrigger className="mt-1 border-border bg-card">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -1404,13 +1411,13 @@ function RemotePathMappingsSection() {
   };
 
   return (
-    <div className="border-t border-zinc-800 pt-4">
+    <div className="border-t border-border pt-4">
       <div className="mb-4 flex items-start justify-between">
         <div>
-          <h3 className="mb-1 text-sm font-medium text-zinc-100">
+          <h3 className="mb-1 text-sm font-medium text-foreground">
             Remote Path Mappings
           </h3>
-          <p className="text-xs text-zinc-500">
+          <p className="text-xs text-muted-foreground">
             Map download client paths to local paths for Docker or remote
             setups.
           </p>
@@ -1418,7 +1425,7 @@ function RemotePathMappingsSection() {
         <Button
           variant="outline"
           size="sm"
-          className="border-zinc-700 text-zinc-300"
+          className="border-border text-foreground"
           onClick={() => setShowForm(true)}
         >
           <Plus className="mr-1.5 h-3.5 w-3.5" /> Add Mapping
@@ -1430,23 +1437,23 @@ function RemotePathMappingsSection() {
           <Loader2 className="h-4 w-4 animate-spin" /> Loading…
         </div>
       ) : mappings.length === 0 && !showForm ? (
-        <Card className="border-dashed border-zinc-800 bg-zinc-900/50">
+        <Card className="border-dashed border-border bg-card">
           <CardContent className="py-6 text-center">
-            <p className="text-sm text-zinc-500">
+            <p className="text-sm text-muted-foreground">
               No remote path mappings configured
             </p>
-            <p className="mt-1 text-xs text-zinc-600">
+            <p className="mt-1 text-xs text-muted-foreground">
               Add mappings if your download client reports paths different from
               what Loom sees locally.
             </p>
           </CardContent>
         </Card>
       ) : (
-        <Card className="border-zinc-800 bg-zinc-900/50">
+        <Card className="border-border bg-card">
           <CardContent className="p-0">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-zinc-800 text-xs text-zinc-400">
+                <tr className="border-b border-border text-xs text-muted-foreground">
                   <th className="p-3 text-left font-medium">Client</th>
                   <th className="p-3 text-left font-medium">Remote Path</th>
                   <th className="p-3 text-left font-medium">Local Path</th>
@@ -1457,22 +1464,22 @@ function RemotePathMappingsSection() {
                 {mappings.map((m: RemotePathMapping) => (
                   <tr
                     key={m.id}
-                    className="border-b border-zinc-800/50 last:border-0"
+                    className="border-b border-border/50 last:border-0"
                   >
-                    <td className="p-3 text-zinc-200">
+                    <td className="p-3 text-foreground">
                       {clientNameMap[m.client_id] || m.client_id}
                     </td>
-                    <td className="p-3 font-mono text-xs text-zinc-400">
+                    <td className="p-3 font-mono text-xs text-muted-foreground">
                       {m.remote_path}
                     </td>
-                    <td className="p-3 font-mono text-xs text-zinc-400">
+                    <td className="p-3 font-mono text-xs text-muted-foreground">
                       {m.local_path}
                     </td>
                     <td className="p-3">
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="h-7 w-7 p-0 text-zinc-500 hover:text-red-400"
+                        className="h-7 w-7 p-0 text-muted-foreground hover:text-red-400"
                         onClick={() =>
                           deleteMapping.mutate(m.id, {
                             onSuccess: () => toast.success("Mapping deleted"),
@@ -1500,13 +1507,16 @@ function RemotePathMappingsSection() {
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div>
-              <Label htmlFor="rpm-client" className="text-xs text-zinc-400">
+              <Label
+                htmlFor="rpm-client"
+                className="text-xs text-muted-foreground"
+              >
                 Download Client
               </Label>
               <Select value={formClientId} onValueChange={setFormClientId}>
                 <SelectTrigger
                   id="rpm-client"
-                  className="mt-1 border-zinc-700 bg-zinc-900"
+                  className="mt-1 border-border bg-card"
                 >
                   <SelectValue placeholder="Select a client" />
                 </SelectTrigger>
@@ -1520,7 +1530,10 @@ function RemotePathMappingsSection() {
               </Select>
             </div>
             <div>
-              <Label htmlFor="rpm-remote" className="text-xs text-zinc-400">
+              <Label
+                htmlFor="rpm-remote"
+                className="text-xs text-muted-foreground"
+              >
                 Remote Path
               </Label>
               <Input
@@ -1528,14 +1541,17 @@ function RemotePathMappingsSection() {
                 value={formRemotePath}
                 onChange={(e) => setFormRemotePath(e.target.value)}
                 placeholder="/downloads/movies/"
-                className="mt-1 border-zinc-700 bg-zinc-900 font-mono text-sm"
+                className="mt-1 border-border bg-card font-mono text-sm"
               />
-              <p className="mt-1 text-xs text-zinc-600">
+              <p className="mt-1 text-xs text-muted-foreground">
                 The path as reported by the download client
               </p>
             </div>
             <div>
-              <Label htmlFor="rpm-local" className="text-xs text-zinc-400">
+              <Label
+                htmlFor="rpm-local"
+                className="text-xs text-muted-foreground"
+              >
                 Local Path
               </Label>
               <Input
@@ -1543,9 +1559,9 @@ function RemotePathMappingsSection() {
                 value={formLocalPath}
                 onChange={(e) => setFormLocalPath(e.target.value)}
                 placeholder="/media/downloads/movies/"
-                className="mt-1 border-zinc-700 bg-zinc-900 font-mono text-sm"
+                className="mt-1 border-border bg-card font-mono text-sm"
               />
-              <p className="mt-1 text-xs text-zinc-600">
+              <p className="mt-1 text-xs text-muted-foreground">
                 The path as seen by Loom on its filesystem
               </p>
             </div>
@@ -1837,10 +1853,10 @@ export function ConnectPanel() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="mb-1 text-sm font-medium text-zinc-100">
+          <h3 className="mb-1 text-sm font-medium text-foreground">
             Connections
           </h3>
-          <p className="text-xs text-zinc-500">
+          <p className="text-xs text-muted-foreground">
             Connect Loom to media servers for library refresh on import.
           </p>
         </div>
@@ -1849,20 +1865,20 @@ export function ConnectPanel() {
         </Button>
       </div>
 
-      <Card className="border-zinc-800 bg-zinc-900/50">
+      <Card className="border-border bg-card">
         <CardContent className="p-0">
           {isLoading ? (
             <div className="flex justify-center py-8">
-              <Loader2 className="h-5 w-5 animate-spin text-zinc-500" />
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
             </div>
           ) : connections.length === 0 ? (
-            <div className="py-8 text-center text-sm text-zinc-500">
+            <div className="py-8 text-center text-sm text-muted-foreground">
               No connections configured. Click "Add Connection" to get started.
             </div>
           ) : (
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-zinc-800 text-xs text-zinc-400">
+                <tr className="border-b border-border text-xs text-muted-foreground">
                   <th className="px-4 py-2 text-left font-medium">Name</th>
                   <th className="px-4 py-2 text-left font-medium">Provider</th>
                   <th className="px-4 py-2 text-left font-medium">Enabled</th>
@@ -1876,13 +1892,13 @@ export function ConnectPanel() {
                 {connections.map((conn) => (
                   <tr
                     key={conn.id}
-                    className="border-b border-zinc-800/50 last:border-0"
+                    className="border-b border-border/50 last:border-0"
                   >
-                    <td className="px-4 py-3 text-zinc-200">{conn.name}</td>
+                    <td className="px-4 py-3 text-foreground">{conn.name}</td>
                     <td className="px-4 py-3">
                       <Badge
                         variant="outline"
-                        className="border-zinc-700 text-xs text-zinc-300"
+                        className="border-border text-xs text-foreground"
                       >
                         {providerLabel(conn.provider)}
                       </Badge>
@@ -1903,13 +1919,13 @@ export function ConnectPanel() {
                           "text-xs",
                           conn.enabled
                             ? "border-emerald-700 text-emerald-400"
-                            : "border-zinc-700 text-zinc-500",
+                            : "border-border text-muted-foreground",
                         )}
                       >
                         {conn.enabled ? "Yes" : "No"}
                       </Badge>
                     </td>
-                    <td className="px-4 py-3 text-zinc-400">
+                    <td className="px-4 py-3 text-muted-foreground">
                       {conn.notify_on_import ? "Yes" : "No"}
                     </td>
                     <td className="px-4 py-3 text-right">
@@ -2015,7 +2031,7 @@ export function ConnectPanel() {
                   ))}
                 </SelectContent>
               </Select>
-              <p className="text-xs text-zinc-500">
+              <p className="text-xs text-muted-foreground">
                 {
                   PROVIDER_TYPES.find((p) => p.value === formProvider)
                     ?.description
@@ -2054,8 +2070,8 @@ export function ConnectPanel() {
                 </div>
 
                 {traktAuthStep === "code" && (
-                  <div className="space-y-2 rounded-md border border-zinc-700 bg-zinc-900 p-3">
-                    <p className="text-xs text-zinc-400">
+                  <div className="space-y-2 rounded-md border border-border bg-card p-3">
+                    <p className="text-xs text-muted-foreground">
                       A new tab was opened to Trakt. Authorize the app, then
                       paste the code below.
                     </p>
@@ -2246,10 +2262,10 @@ export function DownloadSafetyPanel() {
   return (
     <div className="space-y-6">
       <div>
-        <h3 className="mb-1 text-sm font-medium text-zinc-100">
+        <h3 className="mb-1 text-sm font-medium text-foreground">
           Download Safety
         </h3>
-        <p className="text-xs text-zinc-500">
+        <p className="text-xs text-muted-foreground">
           Protect against malicious or mislabeled releases before and after
           download.
         </p>
@@ -2268,7 +2284,7 @@ export function DownloadSafetyPanel() {
               <Label htmlFor="block-dangerous" className="text-sm font-medium">
                 Block dangerous file extensions
               </Label>
-              <p className="text-xs text-zinc-500">
+              <p className="text-xs text-muted-foreground">
                 Reject releases containing .exe, .bat, .cmd, .msi, .scr, .pif,
                 .com, .vbs, .js, .wsh, .wsf, .ps1
               </p>
@@ -2283,7 +2299,7 @@ export function DownloadSafetyPanel() {
           <CardTitle className="text-sm">Suspicious Patterns</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          <p className="text-xs text-zinc-500">
+          <p className="text-xs text-muted-foreground">
             Release names matching any of these patterns will be flagged for
             manual review.
           </p>
@@ -2298,7 +2314,7 @@ export function DownloadSafetyPanel() {
                 <button
                   type="button"
                   onClick={() => removePattern(i)}
-                  className="ml-1 rounded-full p-0.5 hover:bg-zinc-700"
+                  className="ml-1 rounded-full p-0.5 hover:bg-muted"
                 >
                   <Trash2 className="h-3 w-3" />
                 </button>
@@ -2326,7 +2342,7 @@ export function DownloadSafetyPanel() {
           <CardTitle className="text-sm">Size Anomaly Detection</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          <p className="text-xs text-zinc-500">
+          <p className="text-xs text-muted-foreground">
             Flag releases outside this size range (in MB) as suspicious.
           </p>
           <div className="grid max-w-sm grid-cols-1 gap-4 sm:grid-cols-2">
@@ -2368,7 +2384,6 @@ export function DownloadSafetyPanel() {
 // ─── UI Panel ───────────────────────────────────────────────────────────
 
 export function UIPanel() {
-  const [theme, setTheme] = React.useState("dark");
   const [pageSize, setPageSize] = React.useState(() => {
     return localStorage.getItem("loom-page-size") || "25";
   });
@@ -2390,103 +2405,81 @@ export function UIPanel() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h3 className="mb-1 text-sm font-medium text-zinc-100">
-          User Interface
-        </h3>
-        <p className="text-xs text-zinc-500">
-          Customize how Loom looks and feels. These settings are stored locally
-          in your browser.
-        </p>
-      </div>
+      <AppearanceSettings />
 
-      {/* Theme */}
-      <Card className="border-zinc-800 bg-zinc-900/50">
-        <CardContent className="space-y-4 p-6">
-          <div className="flex items-center gap-3">
-            <Palette className="h-4 w-4 text-teal-400" />
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Browsing on this device</CardTitle>
+          <p className="text-sm text-muted-foreground">
+            These preferences save automatically and only affect this browser.
+          </p>
+        </CardHeader>
+        <CardContent className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,14rem),1fr))] gap-6">
+          <div className="min-w-0 space-y-3">
             <div>
-              <Label className="text-sm text-zinc-200">Theme</Label>
-              <p className="mt-0.5 text-xs text-zinc-500">
-                Choose the appearance of the interface
+              <Label htmlFor="appearance-page-size" className="text-sm">
+                Items Per Page
+              </Label>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Number of items to show in paginated lists
               </p>
             </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <Select value={theme} onValueChange={setTheme}>
-              <SelectTrigger className="w-40 border-zinc-700 bg-zinc-900">
+            <Select value={pageSize} onValueChange={handlePageSizeChange}>
+              <SelectTrigger
+                id="appearance-page-size"
+                className="h-11 w-full max-w-40"
+              >
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="dark">Dark</SelectItem>
-                <SelectItem value="light">Light</SelectItem>
-                <SelectItem value="amoled">AMOLED</SelectItem>
-                <SelectItem value="system">System</SelectItem>
+                <SelectItem value="10">10</SelectItem>
+                <SelectItem value="25">25</SelectItem>
+                <SelectItem value="50">50</SelectItem>
+                <SelectItem value="100">100</SelectItem>
               </SelectContent>
             </Select>
           </div>
-        </CardContent>
-      </Card>
-
-      {/* Page Size */}
-      <Card className="border-zinc-800 bg-zinc-900/50">
-        <CardContent className="space-y-4 p-6">
-          <div>
-            <Label className="text-sm text-zinc-200">Items Per Page</Label>
-            <p className="mt-0.5 text-xs text-zinc-500">
-              Number of items to show in paginated lists
-            </p>
-          </div>
-          <Select value={pageSize} onValueChange={handlePageSizeChange}>
-            <SelectTrigger className="w-40 border-zinc-700 bg-zinc-900">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="10">10</SelectItem>
-              <SelectItem value="25">25</SelectItem>
-              <SelectItem value="50">50</SelectItem>
-              <SelectItem value="100">100</SelectItem>
-            </SelectContent>
-          </Select>
-        </CardContent>
-      </Card>
-
-      {/* Default View */}
-      <Card className="border-zinc-800 bg-zinc-900/50">
-        <CardContent className="space-y-4 p-6">
-          <div>
-            <Label className="text-sm text-zinc-200">Default View Mode</Label>
-            <p className="mt-0.5 text-xs text-zinc-500">
-              Default layout for the movies page
-            </p>
-          </div>
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => handleDefaultViewChange("grid")}
-              className={cn(
-                "border-zinc-700",
-                defaultView === "grid"
-                  ? "border-teal-700 bg-teal-600/20 text-teal-300"
-                  : "text-zinc-400",
-              )}
+          <div className="min-w-0 space-y-3">
+            <div>
+              <p id="appearance-default-view" className="text-sm font-medium">
+                Default View Mode
+              </p>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Default layout for the movies page
+              </p>
+            </div>
+            <div
+              role="group"
+              aria-labelledby="appearance-default-view"
+              className="flex flex-wrap gap-2"
             >
-              <LayoutGrid className="mr-1.5 h-4 w-4" /> Grid
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => handleDefaultViewChange("list")}
-              className={cn(
-                "border-zinc-700",
-                defaultView === "list"
-                  ? "border-teal-700 bg-teal-600/20 text-teal-300"
-                  : "text-zinc-400",
-              )}
-            >
-              <List className="mr-1.5 h-4 w-4" /> List
-            </Button>
+              <Button
+                variant="outline"
+                aria-pressed={defaultView === "grid"}
+                onClick={() => handleDefaultViewChange("grid")}
+                className={cn(
+                  "h-11",
+                  defaultView === "grid"
+                    ? "border-accent bg-accent/20 text-foreground"
+                    : "text-muted-foreground",
+                )}
+              >
+                <LayoutGrid className="mr-1.5 h-4 w-4" /> Grid
+              </Button>
+              <Button
+                variant="outline"
+                aria-pressed={defaultView === "list"}
+                onClick={() => handleDefaultViewChange("list")}
+                className={cn(
+                  "h-11",
+                  defaultView === "list"
+                    ? "border-accent bg-accent/20 text-foreground"
+                    : "text-muted-foreground",
+                )}
+              >
+                <List className="mr-1.5 h-4 w-4" /> List
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -2598,7 +2591,7 @@ export function RollingSearchPanel() {
     <div className="space-y-6">
       {/* Status */}
       {status && (
-        <Card className="border-zinc-800 bg-zinc-900/50">
+        <Card className="border-border bg-card">
           <CardContent className="space-y-2 pt-4 text-sm">
             <div className="flex items-center justify-between">
               <span className="text-muted-foreground">Status</span>

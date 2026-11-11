@@ -18,21 +18,49 @@ type ArtistMetadata struct {
 	Genres         []string  `json:"genres,omitempty"`
 	ImageURL       string    `json:"image_url,omitempty"`
 	CachedAt       time.Time `json:"cached_at,omitempty"`
+
+	BeginArea   string         `json:"begin_area,omitempty"`
+	BeginDate   string         `json:"begin_date,omitempty"`
+	EndDate     string         `json:"end_date,omitempty"`
+	Ended       bool           `json:"ended,omitempty"`
+	Rating      float64        `json:"rating,omitempty"` // 0-5
+	RatingVotes int            `json:"rating_votes,omitempty"`
+	Links       []ExternalLink `json:"links,omitempty"`
+}
+
+// ExternalLink is a curated link to a service page for an artist or album,
+// such as Spotify, Apple Music, YouTube Music, Wikipedia or the official site.
+type ExternalLink struct {
+	Type string `json:"type"`
+	URL  string `json:"url"`
 }
 
 // AlbumMetadata represents metadata for an album. An "album" maps to a
 // MusicBrainz release-group (the abstract album), not a specific edition.
 type AlbumMetadata struct {
-	MBID           string    `json:"mbid"` // release-group MBID
-	Title          string    `json:"title"`
-	ArtistMBID     string    `json:"artist_mbid,omitempty"`
-	ArtistName     string    `json:"artist_name,omitempty"`
-	Type           string    `json:"type,omitempty"`            // Album, EP, Single, Broadcast, Other
-	SecondaryTypes []string  `json:"secondary_types,omitempty"` // Live, Compilation, Soundtrack, ...
-	ReleaseDate    string    `json:"release_date,omitempty"`    // first release date (ISO 8601)
-	Genres         []string  `json:"genres,omitempty"`
-	CoverArtURL    string    `json:"cover_art_url,omitempty"`
-	CachedAt       time.Time `json:"cached_at,omitempty"`
+	MBID           string                `json:"mbid"` // release-group MBID
+	Title          string                `json:"title"`
+	ArtistMBID     string                `json:"artist_mbid,omitempty"`
+	ArtistName     string                `json:"artist_name,omitempty"`
+	Artists        []AlbumArtistMetadata `json:"artists,omitempty"`
+	Type           string                `json:"type,omitempty"`            // Album, EP, Single, Broadcast, Other
+	SecondaryTypes []string              `json:"secondary_types,omitempty"` // Live, Compilation, Soundtrack, ...
+	ReleaseDate    string                `json:"release_date,omitempty"`    // first release date (ISO 8601)
+	Genres         []string              `json:"genres,omitempty"`
+	CoverArtURL    string                `json:"cover_art_url,omitempty"`
+	CachedAt       time.Time             `json:"cached_at,omitempty"`
+
+	Rating      float64        `json:"rating,omitempty"` // 0-5
+	RatingVotes int            `json:"rating_votes,omitempty"`
+	Links       []ExternalLink `json:"links,omitempty"`
+}
+
+// AlbumArtistMetadata preserves the full credited artist list on a release
+// group. ArtistMBID is empty when MusicBrainz has no linked artist entity.
+type AlbumArtistMetadata struct {
+	ArtistMBID string `json:"artist_mbid,omitempty"`
+	Name       string `json:"name"`
+	JoinPhrase string `json:"join_phrase,omitempty"`
 }
 
 // AlbumReleaseMetadata represents a specific edition (MusicBrainz release) of an
@@ -73,10 +101,14 @@ type MusicMetadataProvider interface {
 	// SearchArtist searches for artists by free-text query.
 	SearchArtist(ctx context.Context, query string, limit int) ([]*ArtistMetadata, error)
 
+	// SearchAlbum searches release-groups (not concrete release editions).
+	SearchAlbum(ctx context.Context, query string, limit int) ([]*AlbumMetadata, error)
+
 	// GetArtist fetches a single artist by MBID.
 	GetArtist(ctx context.Context, mbid string) (*ArtistMetadata, error)
 
-	// GetArtistAlbums returns the artist's albums (release-groups).
+	// GetArtistAlbums returns the artist's studio albums, EPs and singles that
+	// have an official release, deduplicated by release-group MBID.
 	GetArtistAlbums(ctx context.Context, artistMBID string) ([]*AlbumMetadata, error)
 
 	// GetAlbum fetches an album (release-group) and its candidate editions
@@ -86,4 +118,28 @@ type MusicMetadataProvider interface {
 
 	// GetAlbumRelease fetches a single edition (release) including its tracks.
 	GetAlbumRelease(ctx context.Context, releaseMBID string) (*AlbumReleaseMetadata, error)
+}
+
+// ArtistArtwork is artwork and descriptive text for an artist from an artwork
+// source (fanart.tv, TheAudioDB). AlbumCovers maps release-group MBIDs to cover
+// URLs when the source returns them with the artist.
+type ArtistArtwork struct {
+	ThumbURL      string            `json:"thumb_url,omitempty"`
+	BackgroundURL string            `json:"background_url,omitempty"`
+	LogoURL       string            `json:"logo_url,omitempty"`
+	Biography     string            `json:"biography,omitempty"`
+	AlbumCovers   map[string]string `json:"album_covers,omitempty"`
+}
+
+// AlbumArtwork is artwork and descriptive text for an album (release-group).
+type AlbumArtwork struct {
+	CoverURL    string `json:"cover_url,omitempty"`
+	Description string `json:"description,omitempty"`
+}
+
+// MusicArtworkProvider supplies artwork that MusicBrainz does not carry. All
+// lookups are best-effort: a nil result with a nil error means no artwork.
+type MusicArtworkProvider interface {
+	ArtistArtwork(ctx context.Context, artistMBID string) (*ArtistArtwork, error)
+	AlbumArtwork(ctx context.Context, releaseGroupMBID string) (*AlbumArtwork, error)
 }

@@ -1,5 +1,7 @@
 package musicbrainz
 
+import "github.com/ebenderooock/loom/internal/metadata"
+
 // ArtistResponse is the JSON response from MusicBrainz /artist/{mbid} endpoint.
 type ArtistResponse struct {
 	ID             string             `json:"id"`
@@ -13,6 +15,27 @@ type ArtistResponse struct {
 	EndArea        *AreaResponse      `json:"end-area,omitempty"`
 	Genres         []GenreResponse    `json:"genres,omitempty"`
 	Relations      []RelationResponse `json:"relations,omitempty"`
+	LifeSpan       *LifeSpanResponse  `json:"life-span,omitempty"`
+	Rating         *RatingResponse    `json:"rating,omitempty"`
+}
+
+// LifeSpanResponse is an artist's active period (birth/formation to death/split).
+type LifeSpanResponse struct {
+	Begin string `json:"begin,omitempty"`
+	End   string `json:"end,omitempty"`
+	Ended bool   `json:"ended,omitempty"`
+}
+
+// RatingResponse is the community rating (0-5); Value is null without votes.
+type RatingResponse struct {
+	Value      *float64 `json:"value"`
+	VotesCount int      `json:"votes-count"`
+}
+
+// URLResource is the target of a url relationship.
+type URLResource struct {
+	ID       string `json:"id,omitempty"`
+	Resource string `json:"resource"`
 }
 
 // ReleaseResponse is the JSON response from MusicBrainz /release/{mbid} endpoint.
@@ -42,10 +65,19 @@ type RecordingResponse struct {
 
 // SearchResponse wraps results from a MusicBrainz search endpoint.
 type SearchResponse struct {
-	Count    int               `json:"count"`
-	Offset   int               `json:"offset"`
-	Artists  []ArtistResponse  `json:"artists,omitempty"`
-	Releases []ReleaseResponse `json:"releases,omitempty"`
+	Count        int                `json:"count"`
+	Offset       int                `json:"offset"`
+	Artists      []ArtistResponse   `json:"artists,omitempty"`
+	Releases     []ReleaseResponse  `json:"releases,omitempty"`
+	ReleaseGroup []ReleaseGroupFull `json:"release-groups,omitempty"`
+}
+
+// ArtistCreditResponse represents one linked MusicBrainz artist in an
+// artist-credit entry. The join phrase is retained for presentation clients.
+type ArtistCreditResponse struct {
+	Name       string         `json:"name,omitempty"`
+	Artist     ArtistResponse `json:"artist"`
+	JoinPhrase string         `json:"joinphrase,omitempty"`
 }
 
 // AreaResponse represents a geographic area (country, city, etc.).
@@ -81,18 +113,22 @@ type TrackResponse struct {
 
 // RelationResponse represents a relationship between entities (artist-recording, etc.).
 type RelationResponse struct {
-	Type       string `json:"type"`
-	TypeID     string `json:"type-id,omitempty"`
-	Direction  string `json:"direction,omitempty"` // "forward" or "backward"
-	Target     string `json:"target,omitempty"`
-	TargetType string `json:"target-type,omitempty"`
+	Type       string       `json:"type"`
+	TypeID     string       `json:"type-id,omitempty"`
+	Direction  string       `json:"direction,omitempty"` // "forward" or "backward"
+	Target     string       `json:"target,omitempty"`
+	TargetType string       `json:"target-type,omitempty"`
+	URL        *URLResource `json:"url,omitempty"`
 }
 
 // ReleaseGroupResponse represents a release group (album, single, etc.).
 type ReleaseGroupResponse struct {
-	ID    string `json:"id"`
-	Type  string `json:"type,omitempty"`
-	Title string `json:"title,omitempty"`
+	ID               string   `json:"id"`
+	Type             string   `json:"type,omitempty"`
+	Title            string   `json:"title,omitempty"`
+	PrimaryType      string   `json:"primary-type,omitempty"`
+	SecondaryTypes   []string `json:"secondary-types,omitempty"`
+	FirstReleaseDate string   `json:"first-release-date,omitempty"`
 }
 
 // CoverartResponse represents cover art information.
@@ -119,6 +155,14 @@ type ArtistMetadata struct {
 	SortName       string
 	Type           string
 	Genres         []string
+	BeginArea      string
+	BeginDate      string
+	EndDate        string
+	Ended          bool
+	Rating         float64
+	RatingVotes    int
+	Links          []metadata.ExternalLink
+	ImageURL       string
 }
 
 // ReleaseMetadata represents the final mapped release metadata.

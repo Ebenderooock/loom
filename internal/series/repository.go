@@ -23,6 +23,7 @@ type Repository interface {
 	GetSeason(ctx context.Context, id string) (*Season, error)
 	CreateSeason(ctx context.Context, s *Season) error
 	UpdateSeason(ctx context.Context, s *Season) error
+	SetSeasonMonitoring(ctx context.Context, seriesID string, seasonNum int, monitored bool) (*Season, error)
 
 	ListEpisodes(ctx context.Context, seriesID string, seasonNum *int) ([]*Episode, error)
 	GetEpisode(ctx context.Context, id string) (*Episode, error)
@@ -240,6 +241,35 @@ func (r *sqlRepo) UpdateSeason(ctx context.Context, s *Season) error {
 	return err
 }
 
+func (r *sqlRepo) SetSeasonMonitoring(ctx context.Context, seriesID string, seasonNum int, monitored bool) (*Season, error) {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	season, err := scanSeason(tx.QueryRowContext(ctx,
+		`SELECT `+seasonColumns+` FROM seasons WHERE series_id = ? AND season_number = ?`, seriesID, seasonNum))
+	if err != nil {
+		return nil, err
+	}
+	season.Monitored = monitored
+	season.UpdatedAt = now()
+	stamp := season.UpdatedAt.Format(time.RFC3339)
+	if _, err := tx.ExecContext(ctx, `UPDATE seasons SET monitored = ?, updated_at = ? WHERE id = ?`,
+		monitored, stamp, season.ID); err != nil {
+		return nil, err
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE episodes SET monitored = ?, updated_at = ? WHERE series_id = ? AND season_id = ?`,
+		monitored, stamp, seriesID, season.ID); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return season, nil
+}
+
 // Episode operations
 
 const episodeColumns = `id, series_id, season_id, episode_number, title, overview, air_date, runtime, still_path, monitored, has_file, created_at, updated_at, air_date_utc`
@@ -419,14 +449,14 @@ func (r *sqlRepo) GetEpisodeStats(ctx context.Context, seriesID string) (*Episod
 	err := r.db.QueryRowContext(ctx,
 		`SELECT
 			COUNT(*) as total,
-			SUM(CASE WHEN has_file = 1 THEN 1 ELSE 0 END) as downloaded,
-			SUM(CASE WHEN e.monitored = 1 THEN 1 ELSE 0 END) as monitored,
-			SUM(CASE WHEN e.monitored = 1 AND has_file = 0 AND `+airing.SQLAired+`
-				AND s.season_number != 0 THEN 1 ELSE 0 END) as missing,
-			SUM(CASE WHEN `+airing.SQLAired+` THEN 1 ELSE 0 END) as aired
+			COALESCE(SUM(CASE WHEN has_file = 1 THEN 1 ELSE 0 END), 0) as downloaded,
+			COALESCE(SUM(CASE WHEN e.monitored = 1 THEN 1 ELSE 0 END), 0) as monitored,
+			COALESCE(SUM(CASE WHEN e.monitored = 1 AND has_file = 0 AND `+airing.SQLAired+`
+				THEN 1 ELSE 0 END), 0) as missing,
+			COALESCE(SUM(CASE WHEN `+airing.SQLAired+` THEN 1 ELSE 0 END), 0) as aired
 		 FROM episodes e
 		 JOIN seasons s ON e.season_id = s.id
-		 WHERE e.series_id = ?`, seriesID,
+		 WHERE e.series_id = ? AND s.season_number != 0`, seriesID,
 	).Scan(&stats.TotalEpisodes, &stats.DownloadedEpisodes, &stats.MonitoredEpisodes, &stats.MissingEpisodes, &stats.AiredEpisodes)
 	return stats, err
 }
@@ -443,6 +473,7 @@ func (r *sqlRepo) GetAllEpisodeStats(ctx context.Context) (map[string]*EpisodeSt
 			SUM(CASE WHEN `+airing.SQLAired+` THEN 1 ELSE 0 END) as aired
 		 FROM episodes e
 		 JOIN seasons s ON e.season_id = s.id
+		 WHERE s.season_number != 0
 		 GROUP BY e.series_id`)
 	if err != nil {
 		return nil, err
@@ -469,7 +500,7 @@ func (r *sqlRepo) GetSeasonEpisodeStats(ctx context.Context, seriesID string) (m
 			SUM(CASE WHEN has_file = 1 THEN 1 ELSE 0 END) as downloaded,
 			SUM(CASE WHEN e.monitored = 1 THEN 1 ELSE 0 END) as monitored,
 			SUM(CASE WHEN e.monitored = 1 AND has_file = 0 AND `+airing.SQLAired+`
-				AND s.season_number != 0 THEN 1 ELSE 0 END) as missing,
+				THEN 1 ELSE 0 END) as missing,
 			SUM(CASE WHEN `+airing.SQLAired+` THEN 1 ELSE 0 END) as aired
 		 FROM episodes e
 		 JOIN seasons s ON e.season_id = s.id

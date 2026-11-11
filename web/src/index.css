@@ -89,6 +89,65 @@
   }
 }
 
+/* The original logo colors stay in place until the instance is personalized;
+   unset values make LoomLogo fall back to the active theme tokens. */
+:root {
+  --loom-logo-primary: 260 65% 45%;
+  --loom-logo-accent: 171 77% 41%;
+}
+
+:root[data-palette],
+:root[data-accent]:not([data-accent="default"]) {
+  --loom-logo-primary: initial;
+  --loom-logo-accent: initial;
+}
+
+:root[data-accent]:not([data-accent="default"]) {
+  --accent: var(--personal-accent);
+  --ring: var(--personal-accent);
+  --primary: var(--personal-accent);
+  --accent-foreground: 0 0% 100%;
+  --primary-foreground: 0 0% 100%;
+}
+
+:root:is([data-theme="dark"], [data-theme="amoled"])[data-accent]:not(
+    [data-accent="default"]
+  ) {
+  --accent: var(--personal-accent-dark);
+  --ring: var(--personal-accent-dark);
+  --primary: var(--personal-accent-dark);
+  --accent-foreground: 240 17% 18%;
+  --primary-foreground: 240 17% 18%;
+}
+
+.app-shell {
+  position: relative;
+  isolation: isolate;
+}
+
+.poster-overlay {
+  --foreground: 0 0% 95%;
+  --muted-foreground: 0 0% 75%;
+  --muted: 0 0% 25%;
+}
+
+.app-shell::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image:
+    linear-gradient(
+      hsl(var(--background) / var(--loom-background-dim, 70%)),
+      hsl(var(--background) / var(--loom-background-dim, 70%))
+    ),
+    var(--loom-background-image, none);
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
 @layer base {
   * {
     @apply border-border;

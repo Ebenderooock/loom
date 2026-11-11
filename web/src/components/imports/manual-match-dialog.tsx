@@ -1,4 +1,5 @@
 import * as React from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
   Dialog,
   DialogContent,
@@ -19,7 +20,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Film, Tv, Loader2, Search, Check } from "lucide-react";
+import { Film, Tv, Music, Loader2, Search, Check } from "lucide-react";
+import {
+  fetchAlbums,
+  fetchAlbum,
+  formatAlbumArtistCredits,
+} from "@/lib/music-api";
+import type { Album, Track } from "@/lib/music-api";
 import {
   useManualMatch,
   searchLocalMovies,
@@ -49,8 +56,14 @@ export function ManualMatchDialog({
   const isSeries = !!(
     scanResult?.detected_season || scanResult?.detected_episode
   );
-  const [mediaType, setMediaType] = React.useState<"movie" | "series">(
-    isSeries ? "series" : "movie",
+  const [mediaType, setMediaType] = React.useState<
+    "movie" | "series" | "music"
+  >(
+    scanResult?.media_type === "music"
+      ? "music"
+      : isSeries
+        ? "series"
+        : "movie",
   );
   const [query, setQuery] = React.useState("");
   const [searching, setSearching] = React.useState(false);
@@ -71,6 +84,25 @@ export function ManualMatchDialog({
   const [seasonNum, setSeasonNum] = React.useState<number>(1);
   const [loadingEpisodes, setLoadingEpisodes] = React.useState(false);
 
+  const [selectedAlbum, setSelectedAlbum] = React.useState<Album | null>(null);
+  const [selectedTrack, setSelectedTrack] = React.useState<Track | null>(null);
+  const albumsQuery = useQuery({
+    queryKey: ["music", "albums"],
+    queryFn: ({ signal }) => fetchAlbums(signal),
+    enabled: open && mediaType === "music",
+  });
+  const albumQuery = useQuery({
+    queryKey: ["music", "album", selectedAlbum?.id],
+    queryFn: ({ signal }) => fetchAlbum(selectedAlbum!.id, signal),
+    enabled: open && mediaType === "music" && !!selectedAlbum,
+  });
+  const albumFilter = query.trim().toLocaleLowerCase();
+  const albums = (albumsQuery.data ?? []).filter((album) =>
+    `${album.title} ${formatAlbumArtistCredits(album.artists)}`
+      .toLocaleLowerCase()
+      .includes(albumFilter),
+  );
+
   const [error, setError] = React.useState("");
   const matchMut = useManualMatch();
 
@@ -81,21 +113,28 @@ export function ManualMatchDialog({
       const series = !!(
         scanResult.detected_season || scanResult.detected_episode
       );
-      setMediaType(series ? "series" : "movie");
-      setQuery(detected);
+      const music = scanResult.media_type === "music";
+      setMediaType(music ? "music" : series ? "series" : "movie");
+      setQuery(
+        music
+          ? scanResult.detected_album || scanResult.detected_artist || ""
+          : detected,
+      );
       setMovies([]);
       setSelectedMovie(null);
       setSeriesList([]);
       setSelectedSeries(null);
       setEpisodes([]);
       setSelectedEpisode(null);
+      setSelectedAlbum(null);
+      setSelectedTrack(null);
       setSeasonNum(scanResult.detected_season ?? 1);
       setError("");
     }
   }, [open, scanResult]);
 
   const handleSearch = async () => {
-    if (query.length < 2) return;
+    if (mediaType === "music" || query.length < 2 || searching) return;
     setSearching(true);
     setError("");
     try {
@@ -166,6 +205,10 @@ export function ManualMatchDialog({
       if (!selectedMovie) return;
       matchMediaType = "movie";
       matchMediaId = selectedMovie.id;
+    } else if (mediaType === "music") {
+      if (!selectedTrack || !selectedAlbum) return;
+      matchMediaType = "music";
+      matchMediaId = selectedTrack.id;
     } else {
       if (!selectedEpisode) return;
       matchMediaType = "episode";
@@ -181,7 +224,7 @@ export function ManualMatchDialog({
       {
         onSuccess: () => {
           toast.success("Import queued", {
-            description: `${scanResult.file_path.split("/").pop()} will be imported shortly.`,
+            description: `${scanResult.file_path.split("/").pop()} is queued, not completed. Check the Decision Log for the outcome.`,
           });
           onMatched();
           onOpenChange(false);
@@ -194,7 +237,11 @@ export function ManualMatchDialog({
   };
 
   const canConfirm =
-    mediaType === "movie" ? !!selectedMovie : !!selectedEpisode;
+    mediaType === "movie"
+      ? !!selectedMovie
+      : mediaType === "music"
+        ? !!selectedTrack && !albumQuery.isFetching && !albumQuery.isError
+        : !!selectedEpisode;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -212,13 +259,21 @@ export function ManualMatchDialog({
         <Tabs
           value={mediaType}
           onValueChange={(v) => {
-            setMediaType(v as "movie" | "series");
+            setMediaType(v as "movie" | "series" | "music");
             setMovies([]);
             setSeriesList([]);
             setSelectedMovie(null);
             setSelectedSeries(null);
             setEpisodes([]);
             setSelectedEpisode(null);
+            setSelectedAlbum(null);
+            setSelectedTrack(null);
+            setError("");
+            if (v === "music") {
+              setQuery(
+                scanResult?.detected_album || scanResult?.detected_artist || "",
+              );
+            }
           }}
         >
           <TabsList className="w-full">
@@ -230,12 +285,25 @@ export function ManualMatchDialog({
               <Tv className="mr-2 h-4 w-4" />
               Series
             </TabsTrigger>
+            <TabsTrigger value="music" className="flex-1">
+              <Music className="mr-2 h-4 w-4" />
+              Music
+            </TabsTrigger>
           </TabsList>
 
           {/* Search bar */}
           <div className="mt-4 flex gap-2">
             <Input
-              placeholder="Search your library..."
+              aria-label={
+                mediaType === "music"
+                  ? "Search local albums"
+                  : "Search your library"
+              }
+              placeholder={
+                mediaType === "music"
+                  ? "Filter albums by title or artist..."
+                  : "Search your library..."
+              }
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={(e) => {
@@ -243,18 +311,121 @@ export function ManualMatchDialog({
               }}
               className="flex-1"
             />
-            <Button
-              onClick={() => void handleSearch()}
-              disabled={searching || query.length < 2}
-              size="sm"
-            >
-              {searching ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Search className="h-4 w-4" />
-              )}
-            </Button>
+            {mediaType !== "music" && (
+              <Button
+                aria-label="Search library"
+                onClick={() => void handleSearch()}
+                disabled={searching || query.length < 2}
+                size="sm"
+              >
+                {searching ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Search className="h-4 w-4" />
+                )}
+              </Button>
+            )}
           </div>
+
+          <TabsContent value="music" className="mt-2 space-y-3">
+            {!selectedAlbum ? (
+              <div className="max-h-[300px] space-y-1 overflow-y-auto">
+                {albumsQuery.isLoading && (
+                  <p role="status">Loading albums...</p>
+                )}
+                {albumsQuery.isError && (
+                  <p role="alert" className="text-sm text-destructive">
+                    Could not load albums: {albumsQuery.error.message}
+                  </p>
+                )}
+                {!albumsQuery.isLoading &&
+                  !albumsQuery.isError &&
+                  albums.length === 0 && (
+                    <p className="py-4 text-center text-sm text-muted-foreground">
+                      No local albums found. Add the album to your library or
+                      change the search.
+                    </p>
+                  )}
+                {albums.map((album) => (
+                  <button
+                    key={album.id}
+                    type="button"
+                    onClick={() => {
+                      setSelectedAlbum(album);
+                      setSelectedTrack(null);
+                      setError("");
+                    }}
+                    className="flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm transition-colors hover:bg-muted"
+                  >
+                    <span>
+                      <span className="font-medium">{album.title}</span>
+                      <span className="ml-2 text-muted-foreground">
+                        {formatAlbumArtistCredits(album.artists)}
+                      </span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline">{selectedAlbum.title}</Badge>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setSelectedAlbum(null);
+                      setSelectedTrack(null);
+                      setError("");
+                    }}
+                  >
+                    Change album
+                  </Button>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Select the specific track for this audio file.
+                </p>
+                {albumQuery.isLoading && <p role="status">Loading tracks...</p>}
+                {albumQuery.isError && (
+                  <p role="alert" className="text-sm text-destructive">
+                    Could not load tracks: {albumQuery.error.message}
+                  </p>
+                )}
+                {!albumQuery.isLoading &&
+                  !albumQuery.isError &&
+                  (albumQuery.data?.tracks ?? []).length === 0 && (
+                    <p className="text-sm text-muted-foreground">
+                      No tracks found for this album.
+                    </p>
+                  )}
+                <div className="max-h-[200px] space-y-1 overflow-y-auto">
+                  {(albumQuery.data?.tracks ?? []).map((track) => (
+                    <button
+                      key={track.id}
+                      type="button"
+                      aria-pressed={selectedTrack?.id === track.id}
+                      onClick={() => setSelectedTrack(track)}
+                      className={`flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm transition-colors ${
+                        selectedTrack?.id === track.id
+                          ? "bg-primary/10 ring-1 ring-primary"
+                          : "hover:bg-muted"
+                      }`}
+                    >
+                      <span>
+                        Disc {track.disc_number} · Track {track.track_number}
+                        <span className="ml-2">
+                          {track.title || "Untitled track"}
+                        </span>
+                      </span>
+                      {selectedTrack?.id === track.id && (
+                        <Check className="h-4 w-4 text-primary-readable" />
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </TabsContent>
 
           {/* Movie results */}
           <TabsContent value="movie" className="mt-2">
@@ -284,7 +455,7 @@ export function ManualMatchDialog({
                     ) : null}
                   </div>
                   {selectedMovie?.id === m.id && (
-                    <Check className="h-4 w-4 text-primary" />
+                    <Check className="h-4 w-4 text-primary-readable" />
                   )}
                 </button>
               ))}
@@ -398,7 +569,7 @@ export function ManualMatchDialog({
                             <span className="ml-2">{ep.title}</span>
                           </div>
                           {selectedEpisode?.id === ep.id && (
-                            <Check className="h-4 w-4 text-primary" />
+                            <Check className="h-4 w-4 text-primary-readable" />
                           )}
                         </button>
                       ))
@@ -410,7 +581,11 @@ export function ManualMatchDialog({
           </TabsContent>
         </Tabs>
 
-        {error && <p className="text-sm text-destructive">{error}</p>}
+        {error && (
+          <p role="alert" className="text-sm text-destructive">
+            {error}
+          </p>
+        )}
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>

@@ -138,6 +138,13 @@ library destinations are persisted in workflow metadata so interrupted imports
 and cleanup can resume after a restart.
 Verification or library-registration failures retain the source for retry.
 
+If the client cannot be paused, Loom does not start moving its files. The
+workflow keeps the preparation error and waits for the client to report the
+download stopped/completed or removed. This wait survives restarts and does
+not consume the import retry budget. Unreachable clients are not mistaken for
+removed torrents. Once the client releases the download, Loom retries using
+the cached paths; removing a completed torrent no longer cancels its import.
+
 A batch is not complete if any non-sample media file fails. Review-required
 downloads remain failed/pending review rather than triggering successful
 cleanup. Copy and hardlink retries recognize previously imported files only

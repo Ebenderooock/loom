@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/ebenderooock/loom/internal/downloads"
 )
 
 // ReimportOptions controls reimport behaviour.
@@ -15,207 +17,61 @@ type ReimportOptions struct {
 	ConflictPolicy ConflictPolicy `json:"conflict_policy"`
 }
 
-// ReimportFile forces a reimport of a source file to the library for the
-// given media item, even if a file already exists at the destination.
+// ReimportFile imports to the explicitly selected media item. Even an explicit
+// replacement uses the normal profile, downgrade and recovery checks.
 func (p *ImportPipeline) ReimportFile(ctx context.Context, mediaType MediaType, mediaID, sourcePath string, opts ReimportOptions) (*ImportRecord, error) {
-	if opts.ConflictPolicy == "" {
-		opts.ConflictPolicy = ConflictReplaceIfBetter
+	if mediaType == MediaTypeMusic {
+		if opts.ConflictPolicy != "" && opts.ConflictPolicy != ConflictReplaceIfBetter {
+			return nil, fmt.Errorf("music reimport only supports replace_if_better")
+		}
+		return p.importMusicMatch(ctx, sourcePath, mediaID)
 	}
-
-	// Verify source exists
-	srcInfo, err := os.Stat(sourcePath)
-	if err != nil {
-		return nil, fmt.Errorf("source file not found: %w", err)
+	switch opts.ConflictPolicy {
+	case "", ConflictSkip, ConflictReplaceIfBetter, ConflictReplaceAlways, ConflictKeepBoth:
+	default:
+		return nil, fmt.Errorf("unknown conflict policy %q", opts.ConflictPolicy)
 	}
-	if srcInfo.IsDir() {
-		return nil, fmt.Errorf("source path is a directory, expected a file")
+	if err := checkRegularSource(sourcePath); err != nil {
+		return nil, err
 	}
-
-	// Resolve destination via matcher
-	match, err := p.resolveMediaDestination(ctx, mediaType, mediaID, sourcePath)
+	match, err := p.resolveMediaDestination(ctx, mediaType, mediaID)
 	if err != nil {
 		return nil, fmt.Errorf("resolve destination: %w", err)
 	}
-
-	destFile := filepath.Join(match.DestPath, filepath.Base(sourcePath))
-
-	// Check for existing file at destination
-	existingInfo, existsErr := os.Stat(destFile)
-	fileExists := existsErr == nil
-
-	var decision ConflictDecision
-	if fileExists {
-		existing := FileInfo{
-			Path:    destFile,
-			Size:    existingInfo.Size(),
-			Quality: ParseFileQuality(destFile),
-		}
-		incoming := FileInfo{
-			Path:    sourcePath,
-			Size:    srcInfo.Size(),
-			Quality: ParseFileQuality(sourcePath),
-		}
-
-		decision = ResolveConflict(existing, incoming, opts.ConflictPolicy)
-
-		// Log the conflict decision
-		if p.decisionLog != nil {
-			_ = p.decisionLog.Log(ctx, ImportDecision{
-				SourcePath:     sourcePath,
-				DestPath:       destFile,
-				MediaType:      string(mediaType),
-				MediaID:        mediaID,
-				Action:         string(decision.Action),
-				Reason:         decision.Reason,
-				ConflictPolicy: string(opts.ConflictPolicy),
-				FileSize:       srcInfo.Size(),
-				FileQuality:    fmt.Sprintf("%dp/%s/%s", incoming.Quality.Resolution, incoming.Quality.Source, incoming.Quality.Codec),
-			})
-		}
-
-		switch decision.Action {
-		case ActionSkip:
-			p.logger.Info("reimport skipped",
-				"source", sourcePath,
-				"dest", destFile,
-				"reason", decision.Reason,
-			)
-			return &ImportRecord{
-				ID:         uuid.New().String(),
-				MediaType:  mediaType,
-				MediaID:    mediaID,
-				SourcePath: sourcePath,
-				DestPath:   destFile,
-				ImportMode: p.importMode,
-				Status:     StatusPending,
-				Error:      "skipped: " + decision.Reason,
-				ImportedAt: time.Now().UTC(),
-			}, nil
-
-		case ActionReplace:
-			p.logger.Info("reimport replacing existing file",
-				"source", sourcePath,
-				"dest", destFile,
-				"reason", decision.Reason,
-			)
-			if err := os.Remove(destFile); err != nil && !os.IsNotExist(err) {
-				return nil, fmt.Errorf("remove existing file: %w", err)
-			}
-
-		case ActionKeep:
-			destFile = versionedPath(destFile)
-			p.logger.Info("reimport keeping both files",
-				"source", sourcePath,
-				"dest", destFile,
-			)
-		}
-	} else {
-		decision = ConflictDecision{Action: ActionImport, Reason: "no existing file at destination"}
-		if p.decisionLog != nil {
-			_ = p.decisionLog.Log(ctx, ImportDecision{
-				SourcePath:     sourcePath,
-				DestPath:       destFile,
-				MediaType:      string(mediaType),
-				MediaID:        mediaID,
-				Action:         string(ActionImport),
-				Reason:         decision.Reason,
-				ConflictPolicy: string(opts.ConflictPolicy),
-				FileSize:       srcInfo.Size(),
-			})
-		}
+	name := filepath.Base(sourcePath)
+	dest := filepath.Join(match.DestPath, name)
+	sourceAbs, err := filepath.Abs(sourcePath)
+	if err != nil {
+		return nil, err
 	}
-
-	// Perform the import
-	if err := importFile(sourcePath, destFile, p.importMode); err != nil {
-		_ = p.recordFailure(ctx, string(mediaType), mediaID, filepath.Base(sourcePath), sourcePath, err)
-		return nil, fmt.Errorf("import file: %w", err)
+	destAbs, err := filepath.Abs(dest)
+	if err != nil {
+		return nil, err
 	}
-
-	// Update library
-	if err := p.updateLibrary(ctx, match, destFile, sourcePath); err != nil {
-		_ = os.Remove(destFile)
-		return nil, fmt.Errorf("update library: %w", err)
+	if sourceAbs == destAbs {
+		return nil, fmt.Errorf("source is already at the library destination: %s", dest)
 	}
-
-	// Record success
-	record := &ImportRecord{
-		ID:         uuid.New().String(),
-		MediaType:  mediaType,
-		MediaID:    mediaID,
-		SourcePath: sourcePath,
-		DestPath:   destFile,
-		ImportMode: p.importMode,
-		Status:     StatusImported,
-		ImportedAt: time.Now().UTC(),
+	if _, err := os.Lstat(dest); err == nil {
+		if opts.ConflictPolicy == ConflictSkip {
+			return &ImportRecord{ID: uuid.New().String(), MediaType: mediaType, MediaID: mediaID,
+				SourcePath: sourcePath, DestPath: dest, ImportMode: p.importMode, Status: StatusPending,
+				Error: "skipped: policy is skip", ImportedAt: time.Now().UTC()}, nil
+		}
+		if opts.ConflictPolicy == ConflictKeepBoth {
+			dest = versionedPath(dest)
+			name = filepath.Base(dest)
+		}
+	} else if !os.IsNotExist(err) {
+		return nil, err
 	}
-	_ = p.recordStatus(ctx, string(mediaType), mediaID, sourcePath, destFile, StatusImported, "reimport: "+decision.Reason)
-
-	p.publishNotification(ctx, match, destFile)
-
-	return record, nil
+	dest, err = p.importMatchedWith(ctx, &downloads.DownloadCompletedEvent{Title: filepath.Base(sourcePath)}, match, sourcePath, name, true)
+	if err != nil {
+		return nil, err
+	}
+	return &ImportRecord{ID: uuid.New().String(), MediaType: mediaType, MediaID: mediaID,
+		SourcePath: sourcePath, DestPath: dest, ImportMode: p.importMode, Status: StatusImported, ImportedAt: time.Now().UTC()}, nil
 }
 
-// resolveMediaDestination determines the destination directory for a given media item.
-func (p *ImportPipeline) resolveMediaDestination(ctx context.Context, mediaType MediaType, mediaID, sourcePath string) (*MatchResult, error) {
-	switch mediaType {
-	case MediaTypeMovie:
-		movie, err := p.matcher.moviesSvc.GetMovie(ctx, mediaID)
-		if err != nil {
-			return nil, fmt.Errorf("get movie %s: %w", mediaID, err)
-		}
-		lib, err := p.matcher.libStore.Get(ctx, movie.LibraryID)
-		if err != nil {
-			return nil, fmt.Errorf("get library: %w", err)
-		}
-		destDir := filepath.Join(lib.Path, sanitizeDirName(fmt.Sprintf("%s (%d)", movie.Title, movie.Year)))
-		return &MatchResult{
-			Matched:   true,
-			MediaType: MediaTypeMovie,
-			MediaID:   mediaID,
-			Title:     movie.Title,
-			Year:      movie.Year,
-			DestPath:  destDir,
-		}, nil
-
-	case MediaTypeEpisode:
-		// Find the episode by listing all episodes across seasons
-		allSeries, err := p.matcher.seriesSvc.ListSeries(ctx)
-		if err != nil {
-			return nil, fmt.Errorf("list series: %w", err)
-		}
-		for _, s := range allSeries {
-			seasons, err := p.matcher.seriesSvc.ListSeasons(ctx, s.ID)
-			if err != nil {
-				continue
-			}
-			for _, season := range seasons {
-				episodes, err := p.matcher.seriesSvc.ListEpisodes(ctx, s.ID, &season.SeasonNumber)
-				if err != nil {
-					continue
-				}
-				for _, ep := range episodes {
-					if ep.ID == mediaID {
-						destDir := filepath.Join(
-							sanitizeDirName(s.Title),
-							fmt.Sprintf("Season %02d", season.SeasonNumber),
-						)
-						return &MatchResult{
-							Matched:   true,
-							MediaType: MediaTypeEpisode,
-							MediaID:   mediaID,
-							SeriesID:  s.ID,
-							Title:     s.Title,
-							Season:    season.SeasonNumber,
-							Episode:   ep.EpisodeNumber,
-							DestPath:  destDir,
-						}, nil
-					}
-				}
-			}
-		}
-		return nil, fmt.Errorf("episode %s not found in any series", mediaID)
-
-	default:
-		return nil, fmt.Errorf("unknown media type: %s", mediaType)
-	}
+func (p *ImportPipeline) resolveMediaDestination(ctx context.Context, mediaType MediaType, mediaID string) (*MatchResult, error) {
+	return p.matcher.MatchExact(ctx, mediaType, mediaID)
 }

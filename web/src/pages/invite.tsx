@@ -7,6 +7,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertCircle, Loader2 } from "lucide-react";
 import { lookupInvite, acceptInvite } from "@/lib/invites-api";
 import { ApiError } from "@/lib/users-api";
+import { LoomLogo } from "@/components/loom-logo";
 
 function ApiErrorMessage(e: unknown, fallback: string): string {
   if (e instanceof ApiError) return e.message;
@@ -83,11 +84,7 @@ export function InvitePage() {
       <div className="mx-auto w-full max-w-md px-4">
         <div className="space-y-6 rounded-lg bg-neutral-card p-8 shadow-lg">
           <div className="space-y-4 text-center">
-            <img
-              src="/loom-logo.png"
-              alt="Loom Logo"
-              className="mx-auto h-16 object-contain"
-            />
+            <LoomLogo label="Loom" className="mx-auto block h-16 w-16" />
             <div className="space-y-2">
               <h1 className="text-3xl font-bold text-neutral-light">
                 Join Loom

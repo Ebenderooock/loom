@@ -28,10 +28,12 @@ const config: Config = {
         primary: {
           DEFAULT: "hsl(var(--primary))",
           foreground: "hsl(var(--primary-foreground))",
+          readable: "hsl(var(--primary-readable, var(--primary)))",
         },
         secondary: {
           DEFAULT: "hsl(var(--secondary))",
           foreground: "hsl(var(--secondary-foreground))",
+          readable: "hsl(var(--secondary-readable, var(--secondary)))",
         },
         destructive: {
           DEFAULT: "hsl(var(--destructive))",
@@ -55,26 +57,26 @@ const config: Config = {
         },
         /* Extended color palette */
         purple: {
-          midnight: "#2D1B69",
-          rich: "#4A2C8F",
-          soft: "#6B4BA1",
+          midnight: "hsl(var(--primary) / <alpha-value>)",
+          rich: "hsl(var(--secondary) / <alpha-value>)",
+          soft: "hsl(var(--secondary) / <alpha-value>)",
         },
         teal: {
-          electric: "#00BFA6",
-          ocean: "#00897B",
-          deep: "#00695C",
+          electric: "hsl(var(--accent) / <alpha-value>)",
+          ocean: "hsl(var(--accent) / <alpha-value>)",
+          deep: "hsl(var(--accent) / <alpha-value>)",
         },
         indigo: {
-          periwinkle: "#7986CB",
-          soft: "#5C6BC0",
-          deep: "#3949AB",
+          periwinkle: "hsl(var(--secondary) / <alpha-value>)",
+          soft: "hsl(var(--secondary) / <alpha-value>)",
+          deep: "hsl(var(--secondary) / <alpha-value>)",
         },
         neutral: {
-          dark: "#1A1A2E",
-          card: "#2A2A3E",
-          light: "#F4F4F8",
-          white: "#FFFFFF",
-          muted: "#9E9E9E",
+          dark: "hsl(var(--background) / <alpha-value>)",
+          card: "hsl(var(--card) / <alpha-value>)",
+          light: "hsl(var(--foreground) / <alpha-value>)",
+          white: "hsl(var(--card) / <alpha-value>)",
+          muted: "hsl(var(--muted-foreground) / <alpha-value>)",
         },
         semantic: {
           success: "#00C853",

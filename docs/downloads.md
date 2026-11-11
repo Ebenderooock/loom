@@ -39,14 +39,134 @@ available to authenticated users.
 Edit-form tests include the saved client `id` so blank/masked credentials
 can be restored for the test without persisting unsaved changes.
 
-Imports never silently overwrite an existing file or merge into an existing
-destination folder. Collisions return an explicit error and preserve both
-files. Automatic replacements require an enabled, configured recycle bin;
-if preservation fails, the import stops. A library-update failure leaves the
-imported file at its destination for recovery rather than deleting it.
+Movie and episode imports may replace a file registered to the same matched
+item when its quality is equal or better and the assigned quality profile
+accepts the incoming quality. Downgrades and disallowed qualities are rejected;
+manual matching and reimport do not bypass these checks. If a profile or the
+incoming quality cannot be resolved, an assigned profile cannot be verified
+and the import is rejected. Without a profile, comparisons use available
+filename quality information; an unknown existing quality cannot establish a
+downgrade. Unrelated or unsafe destinations are not replaced. A recycle bin
+is optional: when enabled, the old file is kept there.
 
-The full schema is in [`api/openapi/loom.yaml`](../api/openapi/loom.yaml)
+File copies are written to hidden `.loom-import-*.partial` staging files in the
+destination directory, synced and closed, then published without overwriting
+collisions. For a replacement, Loom stages and verifies the incoming file
+before preserving the old file in a private `.loom-replacement-*` backup and
+replacing the live pathname in one rename. The old pathname remains available
+while staging and backing up; a crash does not leave a gap between removing it
+and publishing the new file. Backups use hardlinks where possible and otherwise
+require a verified copy. Registration failures restore the old file where
+possible; if restoration or recycling fails, the error identifies the preserved
+backup. A crash can leave an orphaned backup in that directory, but retries
+can verify the live file and finish registration. Filesystems lacking safe
+no-replace publication report an error rather than blindly overwriting.
+If a complete copy was published before history was recorded, retries verify
+its content and finish registration. Unregistered mismatched destinations,
+including possible partial files from older versions, are preserved for
+inspection instead of being assumed to belong to the matched item.
+
+### Importing completed files
+
+In **Downloads > Imports**, scan the completed-download folder, select several
+files, then choose **Import selected**, or use **Import all matched** to queue
+every eligible match across all result pages. Search and pagination keep large
+season-pack scans manageable. Historical imports are hidden by default;
+enable **Show already imported files** to inspect them.
+
+Scans run in the background so slow disks and large folders do not hold a
+request open until a proxy returns 524.
+The page shows discovery and matching progress and displays results as they
+become available; you can queue those results before the scan finishes or cancel
+the scan. Scans never hash full media payloads. **Previously imported** means
+the current source and destination size/modification times match the snapshots
+saved after a successful import; it is a historical hint, not content proof.
+Hardlinks can be identified as the same underlying file without reading bytes.
+Changed or missing files are shown again. Older history without destination
+snapshots is not assumed to be a metadata match. Re-queueing those files performs
+full verification before skipping identical content and saves snapshots for
+subsequent fast scans; it does not blindly copy them again.
+
+Enable **Show already imported files** to explicitly queue a historical copy
+for verification. Normal **Import all matched** does not queue hidden historical
+matches. Before skipping an actual import or deleting its source, Loom still
+requires same-file identity or a fresh full SHA-256 comparison of both files.
+Size/mtime matches and previous hash results alone never authorize deletion.
+
+At most two scans run at once, and repeated submissions for the same running
+folder reuse that scan. Unlike the durable import queue, scan previews are
+temporary: they do not survive a restart, expire ten minutes after completion,
+and only the eight most recent sessions are retained. An expired or missing
+scan is reported explicitly; start a new scan to refresh its results.
+
+The import queue is persistent, not a two-file admission limit. Workers process
+queued files with bounded concurrency, and interrupted work resumes after a
+restart. The queue shows file counts, attempts, failures, and scheduled retry
+times. Expand **Show file outcomes** on a folder import to see exactly which
+episodes succeeded or failed and their destinations/errors. Fix a terminal
+failure's cause before choosing **Retry**. For safety-held imports, approve the
+item in **Activity > Reviews**, then choose **Retry after approval** in the
+import queue. Neither automatic retries nor re-submitting the path bypasses
+pending or rejected safety reviews.
+
+Success is tracked per source file, with destination verification, not per
+torrent. A partially imported season can be retried without repeating its
+successful episodes. Imports register each file with the movie or episode in
+the library; the UI refreshes library status as queued imports finish.
+
+| Method | Path | Description |
+| ------ | ---- | ----------- |
+| POST | `/api/v1/imports/scans` | Start a background preview with `{"path":"/downloads"}`; returns 202 immediately. |
+| GET | `/api/v1/imports/scans/{id}?offset=0&limit=1000` | Poll progress and read the next page of results; continue from `next_offset`. |
+| DELETE | `/api/v1/imports/scans/{id}` | Cancel a preview without cancelling imports already queued from its results. |
+| POST | `/api/v1/imports/batch` | Queue selected files with `{"paths":["/downloads/file.mkv"]}`. |
+| GET | `/api/v1/imports/jobs` | List active jobs and recent outcomes, including progress and retry deadlines. |
+| POST | `/api/v1/imports/jobs/{id}/retry` | Retry a failed job after correcting its cause. |
+
+Existing `/api/v1/imports/manual`, `/manual-match`, and `/reimport` actions use
+the same queue. An accepted response means queued, not imported successfully.
+Manual matching imports media files individually, with their subtitles and
+extras; it does not move unrelated loose NFO or image files with the folder.
+
+The full download-client schema is in [`api/openapi/loom.yaml`](../api/openapi/loom.yaml)
 under the `download-clients` tag.
+
+## Downloads / Imports
+
+**Scan & Import** previews video and audio files recursively without changing
+them. Music matches use embedded artist, album and track tags against albums
+already added to Loom, including standalone albums and compilations. Ambiguous
+matches are not imported automatically. **Manual Match → Music** lets you
+select an existing album and its specific track when automatic matching fails.
+Add the album to Music first if it is not already in your library.
+
+Imports transfer the physical media, not just its database association:
+
+| Media | Destination |
+| --- | --- |
+| Movie | Assigned library / movie title and year |
+| Episode | Assigned series library / series / season |
+| Music | Owner's library (or standalone album's library) / artist / album and year / numbered track |
+
+Multi-artist albums and compilations use the `Various Artists` directory.
+The album's selected edition determines its track list and numbering.
+An unrelated same-title album is never selected solely by track position.
+
+`media_management.import_mode` controls source handling. The default `move`
+mode transfers media into the library and removes the source. Automatically
+matched imports and re-imports verify and register their staged destinations
+before removing source files. `copy`, `hardlink`, and `hardlink_only`
+deliberately retain the source; hardlink mode falls back to copying across
+filesystems, while hardlink-only mode reports an error. Download-triggered
+moves retain sources until the workflow reaches its durable cleanup stage.
+Automatically unmatched files remain at the source, and partial failures are
+reported rather than counted as a completed import. If an explicitly matched
+video folder was already moved before registration failed, its files remain
+at the destination for recovery.
+
+**Import queued** means the server accepted background work, not that files
+have already moved. Check the workflow and import history for the completed
+destination or failure. Scanning alone never transfers files.
 
 ## Acquisition failure history and recovery
 

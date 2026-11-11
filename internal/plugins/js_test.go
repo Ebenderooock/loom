@@ -65,7 +65,6 @@ func TestJSRuntimeErrorRecorded(t *testing.T) {
 }
 
 func TestJSTimeoutInterrupts(t *testing.T) {
-	start := time.Now()
 	run := jsRun(t, &Plugin{Name: "loop", TimeoutSecs: 1, Source: `while (true) {}`})
 	if run.Success {
 		t.Fatal("expected timeout failure")
@@ -78,7 +77,8 @@ func TestJSTimeoutInterrupts(t *testing.T) {
 	// genuine "never interrupts" hang while tolerating heavy scheduler slop —
 	// the busy loop saturates a CPU under parallel -race load, delaying the
 	// interrupt watcher far more than an IO-blocked run.
-	if elapsed := time.Since(start); elapsed > 20*time.Second {
+	// Measure execution only, excluding database setup and run persistence.
+	if elapsed := time.Duration(run.DurationMs) * time.Millisecond; elapsed > 20*time.Second {
 		t.Errorf("timeout took too long: %v", elapsed)
 	}
 }
@@ -194,7 +194,6 @@ func TestJSFetchTimeoutClassifiedAsTimeout(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	start := time.Now()
 	run := jsRun(t, &Plugin{Name: "slowfetch", TimeoutSecs: 1,
 		Source: `fetch("` + srv.URL + `");`})
 	if run.Success {
@@ -207,7 +206,8 @@ func TestJSFetchTimeoutClassifiedAsTimeout(t *testing.T) {
 	// for the full server response. Expected elapsed is ~1s; the generous bound
 	// distinguishes a fast abort from blocking for the whole serverBlock while
 	// absorbing scheduler slop under parallel -race load.
-	if elapsed := time.Since(start); elapsed > 10*time.Second {
+	// Measure execution only, excluding database setup and run persistence.
+	if elapsed := time.Duration(run.DurationMs) * time.Millisecond; elapsed > 10*time.Second {
 		t.Errorf("run did not fail fast on timeout: %v", elapsed)
 	}
 }
