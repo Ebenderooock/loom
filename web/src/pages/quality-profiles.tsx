@@ -177,13 +177,13 @@ export function QualityProfilesPage() {
             return (
               <div
                 key={qp.id}
-                className="group flex items-center justify-between rounded-lg border border-zinc-800 bg-zinc-900/50 p-4"
+                className="group flex items-center justify-between rounded-lg border border-border bg-card p-4"
               >
                 <div className="min-w-0">
-                  <h4 className="text-sm font-medium text-zinc-200">
+                  <h4 className="text-sm font-medium text-foreground">
                     {qp.name}
                   </h4>
-                  <p className="mt-0.5 text-xs text-zinc-500">
+                  <p className="mt-0.5 text-xs text-muted-foreground">
                     {allowedCount}{" "}
                     {allowedCount === 1 ? "quality" : "qualities"} allowed
                   </p>
@@ -198,7 +198,7 @@ export function QualityProfilesPage() {
                             <Badge
                               key={item.id}
                               variant="secondary"
-                              className="bg-zinc-800 px-1.5 py-0 text-[10px] text-zinc-300"
+                              className="bg-muted px-1.5 py-0 text-[10px] text-foreground"
                             >
                               {def?.title || item.name}
                             </Badge>
@@ -207,7 +207,7 @@ export function QualityProfilesPage() {
                       {allowedCount > 6 && (
                         <Badge
                           variant="secondary"
-                          className="bg-zinc-800 px-1.5 py-0 text-[10px] text-zinc-400"
+                          className="bg-muted px-1.5 py-0 text-[10px] text-muted-foreground"
                         >
                           +{allowedCount - 6} more
                         </Badge>
@@ -215,7 +215,7 @@ export function QualityProfilesPage() {
                     </div>
                   )}
                   {qp.format_items?.length > 0 && (
-                    <p className="mt-1 text-xs text-zinc-500">
+                    <p className="mt-1 text-xs text-muted-foreground">
                       {qp.format_items.length} custom format score
                       {qp.format_items.length !== 1 ? "s" : ""}
                     </p>
@@ -414,12 +414,14 @@ function ProfileDialog({
         <div className="flex-1 space-y-4 overflow-hidden">
           {/* Name */}
           <div className="space-y-2">
-            <Label className="text-sm text-zinc-400">Profile Name</Label>
+            <Label className="text-sm text-muted-foreground">
+              Profile Name
+            </Label>
             <Input
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="e.g. HD-1080p"
-              className="border-zinc-700 bg-zinc-900"
+              className="border-border bg-card"
               // eslint-disable-next-line jsx-a11y/no-autofocus -- intentional: focus the name field when the form opens
               autoFocus
             />
@@ -438,16 +440,16 @@ function ProfileDialog({
           {/* Grouped quality selector */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <Label className="text-sm text-zinc-400">
+              <Label className="text-sm text-muted-foreground">
                 Qualities{" "}
-                <span className="text-zinc-600">
+                <span className="text-muted-foreground">
                   ({selectedCount}/{definitions.length})
                 </span>
               </Label>
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-6 px-2 text-xs text-teal-500 hover:text-teal-400"
+                className="h-6 px-2 text-xs text-accent hover:text-accent"
                 onClick={toggleAll}
               >
                 {definitions.every((d) => checkedItems[d.id])
@@ -456,7 +458,7 @@ function ProfileDialog({
               </Button>
             </div>
 
-            <div className="max-h-[30vh] overflow-y-auto rounded-md border border-zinc-800">
+            <div className="max-h-[30vh] overflow-y-auto rounded-md border border-border">
               {groups.map((group) => {
                 const groupAllChecked = group.defs.every(
                   (d) => checkedItems[d.id],
@@ -467,20 +469,20 @@ function ProfileDialog({
 
                 return (
                   <div key={group.source}>
-                    <label className="sticky top-0 z-10 flex cursor-pointer items-center gap-3 border-b border-zinc-700/50 bg-zinc-800/70 px-3 py-2">
+                    <label className="sticky top-0 z-10 flex cursor-pointer items-center gap-3 border-b border-border/50 bg-muted/70 px-3 py-2">
                       <Checkbox
                         checked={groupAllChecked}
                         className={
                           groupSomeChecked
-                            ? "data-[state=unchecked]:border-teal-600 data-[state=unchecked]:bg-teal-900/40"
+                            ? "data-[state=unchecked]:border-accent data-[state=unchecked]:bg-accent/40"
                             : ""
                         }
                         onCheckedChange={() => toggleGroup(group.defs)}
                       />
-                      <span className="text-sm font-medium text-zinc-200">
+                      <span className="text-sm font-medium text-foreground">
                         {group.label}
                       </span>
-                      <span className="ml-auto text-xs text-zinc-500">
+                      <span className="ml-auto text-xs text-muted-foreground">
                         {group.defs.filter((d) => checkedItems[d.id]).length}/
                         {group.defs.length}
                       </span>
@@ -489,14 +491,14 @@ function ProfileDialog({
                     {group.defs.map((def) => (
                       <label
                         key={def.id}
-                        className="flex cursor-pointer items-center gap-3 border-b border-zinc-800/50 px-3 py-2 pl-8 last:border-0 hover:bg-zinc-800/50"
+                        className="flex cursor-pointer items-center gap-3 border-b border-border/50 px-3 py-2 pl-8 last:border-0 hover:bg-muted/50"
                       >
                         <Checkbox
                           checked={checkedItems[def.id] ?? false}
                           onCheckedChange={() => toggleItem(def.id)}
                         />
                         <div className="flex min-w-0 flex-1 items-center gap-2">
-                          <span className="text-sm text-zinc-200">
+                          <span className="text-sm text-foreground">
                             {def.title || def.name}
                           </span>
                           {def.modifier && (
@@ -508,7 +510,7 @@ function ProfileDialog({
                             </Badge>
                           )}
                         </div>
-                        <span className="text-xs tabular-nums text-zinc-500">
+                        <span className="text-xs tabular-nums text-muted-foreground">
                           {def.resolution}
                         </span>
                       </label>
@@ -517,7 +519,7 @@ function ProfileDialog({
                 );
               })}
               {definitions.length === 0 && (
-                <div className="px-3 py-6 text-center text-sm text-zinc-500">
+                <div className="px-3 py-6 text-center text-sm text-muted-foreground">
                   No quality definitions available
                 </div>
               )}
@@ -527,15 +529,15 @@ function ProfileDialog({
           {/* Cutoff selector */}
           {selectedCount > 0 && (
             <div className="space-y-2">
-              <Label className="text-sm text-zinc-400">Cutoff</Label>
-              <p className="-mt-1 text-xs text-zinc-600">
+              <Label className="text-sm text-muted-foreground">Cutoff</Label>
+              <p className="-mt-1 text-xs text-muted-foreground">
                 Once this quality is reached, no further upgrades will be
                 downloaded.
               </p>
               <select
                 value={cutoff}
                 onChange={(e) => setCutoff(e.target.value)}
-                className="w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-200"
+                className="w-full rounded-md border border-border bg-card px-3 py-2 text-sm text-foreground"
               >
                 <option value="">None (always upgrade)</option>
                 {definitions
@@ -552,19 +554,19 @@ function ProfileDialog({
           {/* Custom format scores */}
           {customFormats.length > 0 && (
             <div className="space-y-2">
-              <Label className="text-sm text-zinc-400">
+              <Label className="text-sm text-muted-foreground">
                 Custom Format Scores
               </Label>
-              <div className="max-h-40 divide-y divide-zinc-800 overflow-y-auto rounded-md border border-zinc-800">
+              <div className="max-h-40 divide-y divide-border overflow-y-auto rounded-md border border-border">
                 {customFormats.map((cf) => (
                   <div
                     key={cf.id}
                     className="flex items-center justify-between px-3 py-2"
                   >
-                    <span className="text-sm text-zinc-300">{cf.name}</span>
+                    <span className="text-sm text-foreground">{cf.name}</span>
                     <Input
                       type="number"
-                      className="h-8 w-24 border-zinc-700 bg-zinc-900 text-sm"
+                      className="h-8 w-24 border-border bg-card text-sm"
                       value={getScore(cf.id)}
                       onChange={(e) =>
                         updateFormatScore(

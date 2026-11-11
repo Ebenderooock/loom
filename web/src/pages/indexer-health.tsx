@@ -70,8 +70,8 @@ const STATUS_STYLES: Record<
     label: "Failing",
   },
   unknown: {
-    bg: "bg-gray-500/10",
-    text: "text-gray-500",
+    bg: "bg-muted/10",
+    text: "text-muted-foreground",
     label: "Unknown",
   },
 };
@@ -117,7 +117,7 @@ function SummaryBar({ items }: { items: IndexerSearchHealth[] }) {
       <SummaryCard
         label="Unknown"
         count={counts.unknown}
-        color="text-gray-500"
+        color="text-muted-foreground"
       />
     </div>
   );

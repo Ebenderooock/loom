@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AppearanceProvider } from "@/hooks/use-appearance";
 import { AppearanceSettings } from "@/components/appearance-settings";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { PALETTES, hsl, paletteVariables } from "@/lib/palette";
 import {
   DEFAULT_APPEARANCE,
   backgroundUrlError,
@@ -42,6 +43,11 @@ beforeEach(() => {
   failLoad = false;
   fetchMock.mockReset();
   fetchMock.mockImplementation(async (_input, init) => {
+    if (init?.method === "POST") {
+      return Response.json({
+        url: `/api/v1/appearance/background?v=${"a".repeat(64)}`,
+      });
+    }
     if (init?.method === "PUT") {
       if (failSave) return new Response("Save failed", { status: 500 });
       stored = JSON.parse(String(init.body));
@@ -69,7 +75,7 @@ describe("global appearance settings", () => {
     const app = renderAppearance();
     await screen.findByRole("button", { name: "Dark" });
     await user.click(screen.getByRole("button", { name: "Dark" }));
-    await user.click(screen.getByRole("button", { name: "Blue" }));
+    await user.click(screen.getByRole("button", { name: "Ocean" }));
     await user.type(
       screen.getByLabelText("Background image URL"),
       "https://example.com/image.jpg",
@@ -81,11 +87,14 @@ describe("global appearance settings", () => {
     await user.click(screen.getByRole("button", { name: "Save appearance" }));
     await waitFor(() => {
       expect(document.documentElement.dataset.theme).toBe("dark");
-      expect(document.documentElement.dataset.accent).toBe("blue");
+      expect(document.documentElement.style.getPropertyValue("--primary")).toBe(
+        hsl(PALETTES.Ocean.primary),
+      );
     });
     expect(stored).toEqual({
       theme: "dark",
-      accent: "blue",
+      accent: "default",
+      palette: PALETTES.Ocean,
       backgroundUrl: "https://example.com/image.jpg",
       backgroundDim: 82,
     });
@@ -121,11 +130,14 @@ describe("global appearance settings", () => {
     auth.role = "viewer";
     renderAppearance();
     await screen.findByText(/only admins can change these settings/i);
+    await userEvent.click(screen.getByText("Customize individual colors"));
     expect(screen.getByLabelText("Background image URL")).toBeDisabled();
     expect(screen.getByRole("button", { name: "Dark" })).toBeDisabled();
     expect(
       screen.getByRole("button", { name: /toggle theme/i }),
     ).toBeDisabled();
+    expect(screen.getByLabelText("Primary hex")).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Upload image" })).toBeDisabled();
     expect(
       screen.queryByRole("button", { name: "Save appearance" }),
     ).not.toBeInTheDocument();
@@ -154,6 +166,7 @@ describe("global appearance settings", () => {
       accent: "rose",
       backgroundUrl: "https://example.com/a.jpg",
       backgroundDim: 90,
+      palette: PALETTES.Ember,
     };
     const user = userEvent.setup();
     renderAppearance();
@@ -169,6 +182,9 @@ describe("global appearance settings", () => {
     expect(
       document.documentElement.style.getPropertyValue("--personal-accent"),
     ).toBe("");
+    expect(document.documentElement.style.getPropertyValue("--primary")).toBe(
+      "",
+    );
   });
 
   it("does not apply settings when saving fails", async () => {
@@ -205,6 +221,215 @@ describe("global appearance settings", () => {
     expect(
       await screen.findByRole("button", { name: "Save appearance" }),
     ).toBeInTheDocument();
+  });
+
+  it("previews custom color pickers and hex values without applying until Save", async () => {
+    const user = userEvent.setup();
+    renderAppearance();
+    await user.click(await screen.findByText("Customize individual colors"));
+    const primary = await screen.findByLabelText("Primary hex");
+    await user.clear(primary);
+    await user.type(primary, "#e65d29");
+    fireEvent.change(screen.getByLabelText("Secondary color"), {
+      target: { value: "#663399" },
+    });
+    fireEvent.change(screen.getByLabelText("Accent color"), {
+      target: { value: "#ffee00" },
+    });
+    fireEvent.change(screen.getByLabelText("Surface tint color"), {
+      target: { value: "#39271f" },
+    });
+    expect(
+      screen
+        .getByRole("region", { name: "Palette preview" })
+        .style.getPropertyValue("--primary"),
+    ).toBe(hsl("#e65d29"));
+    expect(document.documentElement.style.getPropertyValue("--primary")).toBe(
+      "",
+    );
+    await user.click(screen.getByRole("button", { name: "Save appearance" }));
+    await waitFor(() => expect(stored.palette?.primary).toBe("#e65d29"));
+    expect(stored.palette).toEqual({
+      primary: "#e65d29",
+      secondary: "#663399",
+      accent: "#ffee00",
+      background: "#39271f",
+    });
+    expect(document.documentElement.style.getPropertyValue("--primary")).toBe(
+      hsl("#e65d29"),
+    );
+  });
+
+  it("blocks saving invalid colors after blur until every field is corrected", async () => {
+    const user = userEvent.setup();
+    renderAppearance();
+    await user.click(await screen.findByText("Customize individual colors"));
+    await user.click(screen.getByRole("button", { name: "Dark" }));
+    const primary = screen.getByLabelText("Primary hex");
+    const secondary = screen.getByLabelText("Secondary hex");
+    await user.clear(primary);
+    await user.type(primary, "#zzzzzz");
+    await user.clear(secondary);
+    await user.tab();
+    expect(primary).toHaveValue("#zzzzzz");
+    expect(primary).toHaveAttribute("aria-invalid", "true");
+    expect(secondary).toHaveValue("");
+    const save = screen.getByRole("button", { name: "Save appearance" });
+    expect(save).toBeDisabled();
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      /correct the invalid color/i,
+    );
+    fireEvent.submit(save.closest("form")!);
+    expect(
+      fetchMock.mock.calls.some(([, init]) => init?.method === "PUT"),
+    ).toBe(false);
+    await user.clear(primary);
+    await user.type(primary, "#e65d29");
+    expect(save).toBeDisabled();
+    fireEvent.change(screen.getByLabelText("Secondary color"), {
+      target: { value: "#663399" },
+    });
+    expect(secondary).toHaveValue("#663399");
+    expect(save).toBeEnabled();
+    await user.click(save);
+    await waitFor(() => expect(stored.palette?.primary).toBe("#e65d29"));
+    expect(stored.palette?.secondary).toBe("#663399");
+    expect(stored.theme).toBe("dark");
+  });
+
+  it.each(["Ocean", "Reset to defaults", "Discard changes"])(
+    "clears invalid color drafts when choosing %s",
+    async (action) => {
+      const user = userEvent.setup();
+      renderAppearance();
+      await user.click(await screen.findByText("Customize individual colors"));
+      await user.clear(screen.getByLabelText("Primary hex"));
+      expect(
+        screen.getByRole("button", { name: "Save appearance" }),
+      ).toBeDisabled();
+      await user.click(screen.getByRole("button", { name: action }));
+      expect(screen.getByLabelText("Primary hex")).toHaveValue(
+        action === "Ocean" ? PALETTES.Ocean.primary : PALETTES.Loom.primary,
+      );
+      expect(screen.getByLabelText("Primary hex")).toHaveAttribute(
+        "aria-invalid",
+        "false",
+      );
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+      const save = screen.getByRole("button", { name: "Save appearance" });
+      if (action === "Ocean") expect(save).toBeEnabled();
+      else expect(save).toBeDisabled();
+    },
+  );
+
+  it("uploads an image and saves the returned Loom URL", async () => {
+    const user = userEvent.setup();
+    renderAppearance();
+    await user.click(
+      await screen.findByRole("button", { name: "Upload image" }),
+    );
+    const file = new File(["png"], "background.png", { type: "image/png" });
+    await user.upload(screen.getByLabelText("Choose background image"), file);
+    const imageUrl = `/api/v1/appearance/background?v=${"a".repeat(64)}`;
+    await waitFor(() =>
+      expect(document.querySelector("img")).toHaveAttribute("src", imageUrl),
+    );
+    const request = fetchMock.mock.calls.find(
+      ([, init]) => init?.method === "POST",
+    );
+    expect(request?.[1]?.body).toBeInstanceOf(FormData);
+    expect((request?.[1]?.body as FormData).get("image")).toBeInstanceOf(File);
+    expect(stored.backgroundUrl).toBe("");
+    await user.click(screen.getByRole("button", { name: "Save appearance" }));
+    await waitFor(() => expect(stored.backgroundUrl).toBe(imageUrl));
+    await user.click(screen.getByRole("button", { name: "Remove background" }));
+    await user.click(screen.getByRole("button", { name: "Save appearance" }));
+    await waitFor(() => expect(stored.backgroundUrl).toBe(""));
+  });
+
+  it("keeps detailed color controls optional and discards a draft without saving", async () => {
+    const user = userEvent.setup();
+    renderAppearance();
+    const customize = await screen.findByText("Customize individual colors");
+    expect(customize.closest("details")).not.toHaveAttribute("open");
+    await user.click(screen.getByRole("button", { name: "Ocean" }));
+    expect(screen.getByRole("status")).toHaveTextContent(/unsaved changes/i);
+    await user.click(customize);
+    expect(screen.getByLabelText("Primary hex")).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Dark" }));
+    await user.click(screen.getByRole("button", { name: "Discard changes" }));
+    expect(screen.getByRole("button", { name: "System" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.getByRole("button", { name: "Loom" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(
+      screen.getByRole("button", { name: "Save appearance" }),
+    ).toBeDisabled();
+    expect(
+      fetchMock.mock.calls.some(([, init]) => init?.method === "PUT"),
+    ).toBe(false);
+    expect(stored).toEqual(DEFAULT_APPEARANCE);
+  });
+
+  it("previews the device theme when switching from a saved Dark theme to System", async () => {
+    stored = { ...DEFAULT_APPEARANCE, theme: "dark", palette: PALETTES.Ocean };
+    const user = userEvent.setup();
+    renderAppearance();
+    await user.click(await screen.findByRole("button", { name: "System" }));
+    expect(
+      screen
+        .getByRole("region", { name: "Palette preview" })
+        .style.getPropertyValue("--background"),
+    ).toBe(paletteVariables(PALETTES.Ocean, "light")["--background"]);
+    expect(document.documentElement.dataset.theme).toBe("dark");
+  });
+
+  it("explains when a pending uploaded background must be uploaded again", async () => {
+    const user = userEvent.setup();
+    renderAppearance();
+    await user.click(await screen.findByRole("button", { name: "Ocean" }));
+    fetchMock.mockResolvedValueOnce(
+      Response.json(
+        {
+          error: "Uploaded background is no longer available; upload it again.",
+        },
+        { status: 400 },
+      ),
+    );
+    await user.click(screen.getByRole("button", { name: "Save appearance" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      /upload it again/i,
+    );
+    expect(stored).toEqual(DEFAULT_APPEARANCE);
+  });
+
+  it("reports failed uploads without changing the saved background", async () => {
+    const user = userEvent.setup();
+    renderAppearance();
+    await user.click(
+      await screen.findByRole("button", { name: "Upload image" }),
+    );
+    fetchMock.mockResolvedValueOnce(
+      Response.json(
+        { error: "Image dimensions exceed the supported limit." },
+        { status: 400 },
+      ),
+    );
+    await user.upload(
+      screen.getByLabelText("Choose background image"),
+      new File(["png"], "bad.png", { type: "image/png" }),
+    );
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      /image dimensions exceed/i,
+    );
+    expect(stored.backgroundUrl).toBe("");
+    expect(
+      screen.getByRole("button", { name: "Save appearance" }),
+    ).toBeDisabled();
   });
 });
 

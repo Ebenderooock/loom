@@ -128,7 +128,7 @@ export function OrganizeDialog({
       <DialogContent className="flex max-h-[80vh] max-w-3xl flex-col overflow-hidden">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <FolderSync className="h-5 w-5 text-teal-400" />
+            <FolderSync className="h-5 w-5 text-accent" />
             Organize Files
           </DialogTitle>
           <DialogDescription>
@@ -150,8 +150,8 @@ export function OrganizeDialog({
             <>
               {loading ? (
                 <div className="flex items-center justify-center py-12">
-                  <Loader2 className="h-6 w-6 animate-spin text-teal-400" />
-                  <span className="ml-2 text-zinc-400">
+                  <Loader2 className="h-6 w-6 animate-spin text-accent" />
+                  <span className="ml-2 text-muted-foreground">
                     Computing renames...
                   </span>
                 </div>
@@ -161,14 +161,14 @@ export function OrganizeDialog({
                   <div className="flex gap-3 text-sm">
                     <Badge
                       variant="outline"
-                      className="border-teal-500/30 text-teal-400"
+                      className="border-accent/30 text-accent"
                     >
                       {changedPreviews.length} to rename
                     </Badge>
                     {unchangedCount > 0 && (
                       <Badge
                         variant="outline"
-                        className="border-zinc-500/30 text-zinc-400"
+                        className="border-border/30 text-muted-foreground"
                       >
                         {unchangedCount} already correct
                       </Badge>
@@ -185,7 +185,7 @@ export function OrganizeDialog({
 
                   {/* File list */}
                   {changedPreviews.length === 0 ? (
-                    <div className="py-8 text-center text-zinc-500">
+                    <div className="py-8 text-center text-muted-foreground">
                       <Check className="mx-auto mb-2 h-8 w-8 text-green-400" />
                       All files are already correctly named.
                     </div>
@@ -194,10 +194,10 @@ export function OrganizeDialog({
                       {changedPreviews.map((p) => (
                         <div
                           key={p.file_id}
-                          className="space-y-1 rounded-lg border border-zinc-800 bg-zinc-900/50 p-3"
+                          className="space-y-1 rounded-lg border border-border bg-card p-3"
                         >
                           <div className="flex items-center gap-2">
-                            <span className="text-sm font-medium text-zinc-300">
+                            <span className="text-sm font-medium text-foreground">
                               {p.movie_title}
                             </span>
                             {p.collision && (
@@ -224,7 +224,7 @@ export function OrganizeDialog({
                             >
                               {shortenPath(p.current_path)}
                             </span>
-                            <ArrowRight className="h-3 w-3 flex-shrink-0 text-zinc-500" />
+                            <ArrowRight className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
                             <span
                               className="truncate font-mono text-green-400/70"
                               title={p.new_path}
@@ -244,8 +244,10 @@ export function OrganizeDialog({
           {/* Executing Step */}
           {step === "executing" && (
             <div className="flex items-center justify-center py-12">
-              <Loader2 className="h-6 w-6 animate-spin text-teal-400" />
-              <span className="ml-2 text-zinc-400">Renaming files...</span>
+              <Loader2 className="h-6 w-6 animate-spin text-accent" />
+              <span className="ml-2 text-muted-foreground">
+                Renaming files...
+              </span>
             </div>
           )}
 
@@ -288,7 +290,7 @@ export function OrganizeDialog({
                         <X className="h-3 w-3 text-red-400" />
                       )}
                       <span
-                        className="truncate font-mono text-zinc-400"
+                        className="truncate font-mono text-muted-foreground"
                         title={r.new_path}
                       >
                         {shortenPath(r.new_path)}
@@ -305,20 +307,16 @@ export function OrganizeDialog({
         </div>
 
         {/* Footer */}
-        <div className="flex justify-end gap-2 border-t border-zinc-800 pt-4">
+        <div className="flex justify-end gap-2 border-t border-border pt-4">
           <Button
             variant="outline"
             onClick={() => onOpenChange(false)}
-            className="border-zinc-700"
+            className="border-border"
           >
             {step === "done" ? "Close" : "Cancel"}
           </Button>
           {step === "preview" && changedPreviews.length > 0 && (
-            <Button
-              onClick={executeRenames}
-              disabled={loading}
-              className="bg-teal-600 hover:bg-teal-700"
-            >
+            <Button onClick={executeRenames} disabled={loading}>
               <FolderSync className="mr-2 h-4 w-4" />
               Rename {changedPreviews.length} Files
             </Button>

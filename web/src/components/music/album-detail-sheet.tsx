@@ -331,7 +331,7 @@ export function AlbumDetailSheet({
                         : track.track_number}
                     </span>
                     <Music2
-                      className={`h-3.5 w-3.5 shrink-0 ${track.has_file ? "text-primary" : "text-muted-foreground/50"}`}
+                      className={`h-3.5 w-3.5 shrink-0 ${track.has_file ? "text-primary-readable" : "text-muted-foreground/50"}`}
                     />
                     <span className="min-w-0 flex-1 truncate">
                       {track.title || "Untitled track"}

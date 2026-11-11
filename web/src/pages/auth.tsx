@@ -101,7 +101,6 @@ export function AuthPage() {
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 disabled={isLoading}
-                className="border-neutral-800 bg-neutral-900 text-neutral-light placeholder-neutral-muted"
               />
             </div>
 
@@ -119,15 +118,10 @@ export function AuthPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 disabled={isLoading}
-                className="border-neutral-800 bg-neutral-900 text-neutral-light placeholder-neutral-muted"
               />
             </div>
 
-            <Button
-              type="submit"
-              disabled={isLoading}
-              className="h-10 w-full bg-teal-500 text-white hover:bg-teal-600"
-            >
+            <Button type="submit" disabled={isLoading} className="h-10 w-full">
               {isLoading ? "Logging in..." : "Login"}
             </Button>
           </form>

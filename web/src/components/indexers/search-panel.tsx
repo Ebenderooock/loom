@@ -382,7 +382,7 @@ export function SearchPanel({
                         href={r.link}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-primary underline-offset-4 hover:underline"
+                        className="text-primary-readable underline-offset-4 hover:underline"
                       >
                         Download
                       </a>

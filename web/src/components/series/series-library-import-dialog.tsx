@@ -97,7 +97,7 @@ export function SeriesLibraryImportDialog({
                         onClick={() => setSelectedLibrary(lib.id)}
                         className={`w-full rounded-md px-3 py-2 text-left text-sm transition-colors ${
                           selectedLibrary === lib.id
-                            ? "border border-primary/30 bg-primary/10 text-primary"
+                            ? "border border-primary/30 bg-primary/10 text-primary-readable"
                             : "border border-transparent bg-muted/30 hover:bg-muted/50"
                         }`}
                       >
@@ -123,7 +123,7 @@ export function SeriesLibraryImportDialog({
           {scanning && scanResult && (
             <div className="space-y-4">
               <div className="flex items-center gap-2 text-sm">
-                <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                <Loader2 className="h-4 w-4 animate-spin text-primary-readable" />
                 <span>Scanning for TV shows...</span>
               </div>
               <Progress value={progress} className="h-2" />

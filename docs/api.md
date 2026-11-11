@@ -89,13 +89,50 @@ object, returning the saved settings. Defaults:
 {"theme":"system","accent":"default","backgroundUrl":"","backgroundDim":70}
 ```
 
-All four fields are required for PUT. Themes: `system`, `light`, `dark`,
-`amoled`; accents: `default`, `teal`, `blue`, `rose`, `amber`. Dimming is an integer
-0–100. The background URL must be empty or absolute HTTP(S), without credentials,
-and no more than 2048 bytes. Loom does not fetch the image server-side.
-Invalid, missing, null, unknown or trailing JSON fields return 400; request
-bodies over 16 KiB return 413. Authentication failures return 401, non-admin
-writes 403, and storage failures 500. No migration or restart is required.
+`theme`, `accent`, `backgroundUrl` and `backgroundDim` are required for PUT.
+Themes: `system`, `light`, `dark`, `amoled`; accents: `default`, `teal`, `blue`,
+`rose`, `amber`. Dimming is an integer 0–100.
+
+An optional `palette` overrides the accent preset:
+
+```json
+{"palette":{"primary":"#6d28d9","secondary":"#0f766e","accent":"#f59e0b","background":"#111827"}}
+```
+
+All four colors are required strict `#RRGGBB` values. Omitting `palette` or
+sending `null` clears it, so older clients keep working; GET omits it when unset.
+Existing saved settings load unchanged.
+
+The background URL must be empty, absolute HTTP(S) without credentials, or
+exactly `/api/v1/appearance/background` with an optional `?v=<sha256>` query
+(lowercase hex); other relative URLs are rejected. Max 2048 bytes. Loom does not
+fetch external images server-side. Invalid, missing, null, unknown or trailing
+JSON fields return 400; request bodies over 16 KiB return 413. Saving an
+uploaded-image URL that is no longer stored returns 400 (`upload it again`).
+Authentication failures return 401, non-admin writes 403, and storage failures
+500. No migration or restart is required.
+
+#### Background image upload
+
+`POST /api/v1/appearance/background` (administrator) accepts `multipart/form-data`
+with exactly one `image` field and returns
+`{"url":"/api/v1/appearance/background?v=<sha256>"}`. The upload is stored in the
+database as the pending image and does not change settings; PUT the returned URL
+as `backgroundUrl` to apply it, which atomically promotes it to the saved image.
+A new upload replaces the previous pending upload, so at most two images (saved
+and pending) are kept. Saving a different background retires the saved upload.
+
+The type is detected from content and the image is fully decoded: PNG, JPEG or
+WebP only (415 otherwise, including SVG and GIF), at most 5 MiB (413), 8192 px
+per side and 33,177,600 px total (400). Non-multipart, missing, duplicate or
+extra fields, and corrupt images return 400.
+
+`GET /api/v1/appearance/background` (any authenticated role) serves the saved
+image; `?v=<sha256>` serves the saved or pending image with that hash. Missing
+images return 404 and malformed `v` 400. Responses set the detected
+`Content-Type`, `X-Content-Type-Options: nosniff` and an `ETag` (304 on
+`If-None-Match`); `?v=` responses are `private, max-age=31536000, immutable`,
+the bare path `private, no-cache`.
 See [configuration](configuration.md#instance-appearance) for a curl example.
 
 ### Route reference

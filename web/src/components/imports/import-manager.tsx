@@ -83,7 +83,9 @@ function actionBadge(action: string) {
         </Badge>
       );
     case "keep_both":
-      return <Badge className="bg-purple-600 text-white">Keep Both</Badge>;
+      return (
+        <Badge className="bg-primary text-primary-foreground">Keep Both</Badge>
+      );
     case "no_match":
       return (
         <Badge variant="destructive">

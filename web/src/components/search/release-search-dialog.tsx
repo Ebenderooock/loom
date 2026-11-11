@@ -86,11 +86,11 @@ function qualityBadge(result: SearchResult): string {
 }
 
 const QUALITY_COLORS: Record<string, string> = {
-  "2160p": "bg-purple-500/15 text-purple-700 dark:text-purple-300",
+  "2160p": "bg-primary/15 text-primary-readable dark:text-primary-readable",
   "1080p": "bg-blue-500/15 text-blue-700 dark:text-blue-300",
   "720p": "bg-green-500/15 text-green-700 dark:text-green-300",
   "480p": "bg-yellow-500/15 text-yellow-700 dark:text-yellow-300",
-  SD: "bg-gray-500/15 text-gray-700 dark:text-gray-300",
+  SD: "bg-muted/15 text-muted-foreground dark:text-foreground",
 };
 
 const QUALITY_OPTIONS = ["2160p", "1080p", "720p", "480p", "SD"] as const;

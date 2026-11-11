@@ -70,7 +70,7 @@ export function SourcesTable({
                   <span className="text-sm">Enabled</span>
                 </div>
               ) : (
-                <div className="flex items-center gap-2 text-gray-500">
+                <div className="flex items-center gap-2 text-muted-foreground">
                   <XCircle className="h-4 w-4" />
                   <span className="text-sm">Disabled</span>
                 </div>

@@ -131,7 +131,7 @@ function WelcomeSection() {
       <CardHeader className="pb-2">
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/15">
-            <Rocket className="h-5 w-5 text-primary" />
+            <Rocket className="h-5 w-5 text-primary-readable" />
           </div>
           <div>
             <CardTitle className="text-xl">Welcome to Loom</CardTitle>
@@ -147,13 +147,13 @@ function WelcomeSection() {
             <Link
               key={step.number}
               to={step.href}
-              className="group flex gap-3 rounded-xl border border-border/30 bg-card/50 p-4 backdrop-blur-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-accent/30 hover:bg-accent/5 hover:shadow-lg hover:shadow-accent/5"
+              className="group flex gap-3 rounded-xl border border-border/30 bg-card p-4 backdrop-blur-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-accent/30 hover:bg-accent/5 hover:shadow-lg hover:shadow-accent/5"
             >
               <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-primary/20 to-accent/20 text-sm font-bold text-accent">
                 {step.number}
               </div>
               <div className="min-w-0">
-                <p className="font-medium leading-tight group-hover:text-primary">
+                <p className="font-medium leading-tight group-hover:text-primary-readable">
                   {step.title}
                 </p>
                 <p className="mt-1 text-xs text-muted-foreground">
@@ -256,7 +256,7 @@ function SystemHealthCard() {
             {issues.length > 3 && (
               <Link
                 to="/indexers/health"
-                className="text-xs text-muted-foreground hover:text-primary"
+                className="text-xs text-muted-foreground hover:text-primary-readable"
               >
                 + {issues.length - 3} more issue
                 {issues.length - 3 > 1 ? "s" : ""}
@@ -463,7 +463,7 @@ function ActiveDownloadsCard() {
             {active.length > 5 && (
               <Link
                 to="/downloads"
-                className="block text-center text-xs text-muted-foreground hover:text-primary"
+                className="block text-center text-xs text-muted-foreground hover:text-primary-readable"
               >
                 + {active.length - 5} more
               </Link>
@@ -524,16 +524,16 @@ export function DashboardPage() {
           icon={Tv}
           label="TV Shows"
           value={seriesCount}
-          accent="bg-purple-500/15"
-          iconColor="text-purple-400"
+          accent="bg-primary/15"
+          iconColor="text-primary-readable"
           loading={series.isLoading}
         />
         <StatCard
           icon={Radio}
           label="Indexers"
           value={indexerCount}
-          accent="bg-teal-500/15"
-          iconColor="text-teal-400"
+          accent="bg-accent/15"
+          iconColor="text-accent"
           loading={indexers.isLoading}
         />
         <StatCard
@@ -654,7 +654,7 @@ function DashboardAnalyticsRow() {
 
 function MiniStat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg border bg-card/50 p-3">
+    <div className="rounded-lg border bg-card p-3">
       <p className="text-xl font-semibold leading-none">{value}</p>
       <p className="mt-1 text-xs text-muted-foreground">{label}</p>
     </div>

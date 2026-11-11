@@ -28,7 +28,7 @@ import {
 } from "lucide-react";
 
 const LEVEL_STYLES: Record<string, { bg: string; text: string }> = {
-  debug: { bg: "bg-zinc-700", text: "text-zinc-300" },
+  debug: { bg: "bg-muted", text: "text-foreground" },
   info: { bg: "bg-blue-900/60", text: "text-blue-300" },
   warn: { bg: "bg-yellow-900/60", text: "text-yellow-300" },
   error: { bg: "bg-red-900/60", text: "text-red-300" },
@@ -233,7 +233,7 @@ function LogTable({ entries }: { entries: LogEntry[] }) {
       <div
         ref={containerRef}
         onScroll={handleScroll}
-        className="max-h-[500px] overflow-y-auto rounded-md border border-border bg-zinc-950 font-mono text-xs"
+        className="max-h-[500px] overflow-y-auto rounded-md border border-border bg-background font-mono text-xs"
       >
         {entries.map((entry) => {
           const style = (LEVEL_STYLES[entry.level] ?? LEVEL_STYLES.info)!;
@@ -244,7 +244,7 @@ function LogTable({ entries }: { entries: LogEntry[] }) {
           return (
             <div
               key={entry.id}
-              className="border-b border-border/30 px-3 py-1.5 hover:bg-zinc-900/50"
+              className="border-b border-border/30 px-3 py-1.5 hover:bg-card"
             >
               <div
                 className="flex cursor-pointer items-start gap-2"
@@ -271,7 +271,7 @@ function LogTable({ entries }: { entries: LogEntry[] }) {
                 >
                   {entry.level}
                 </Badge>
-                <span className="flex-1 break-all text-zinc-200">
+                <span className="flex-1 break-all text-foreground">
                   {entry.message}
                 </span>
                 {entry.source && (
@@ -281,7 +281,7 @@ function LogTable({ entries }: { entries: LogEntry[] }) {
                 )}
               </div>
               {expanded && hasAttrs && (
-                <pre className="ml-5 mt-1 overflow-x-auto rounded bg-zinc-900 p-2 text-[10px] text-zinc-400">
+                <pre className="ml-5 mt-1 overflow-x-auto rounded bg-card p-2 text-[10px] text-muted-foreground">
                   {JSON.stringify(JSON.parse(entry.attrs!), null, 2)}
                 </pre>
               )}
