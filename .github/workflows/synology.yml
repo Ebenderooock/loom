@@ -52,27 +52,37 @@ jobs:
         run: |
           set -euo pipefail
           if [[ "$GITHUB_REF" == refs/heads/prelease/* ]]; then
-            package_version="${GITHUB_REF_NAME#prelease/}"
-            if ! [[ "$package_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            spk_version="${GITHUB_REF_NAME#prelease/}"
+            if ! [[ "$spk_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
               echo "::error::Expected prelease/<major>.<minor>.<patch>, got ${GITHUB_REF_NAME}"
               exit 1
             fi
+            package_version="${spk_version}-pre.${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}"
             echo "source_mode=prelease" >> "$GITHUB_OUTPUT"
-            echo "build_label=prelease-${package_version}-${GITHUB_SHA:0:7}-${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
+            echo "build_label=prelease-${spk_version}-${GITHUB_SHA:0:7}-${GITHUB_RUN_NUMBER}-${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_OUTPUT"
           else
             package_version="${RELEASE_TAG#v}"
             if ! [[ "$package_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
               echo "::error::Expected a stable release tag, got ${RELEASE_TAG}"
               exit 1
             fi
+            spk_version="${package_version}"
             echo "source_mode=release" >> "$GITHUB_OUTPUT"
             echo "build_label=${RELEASE_TAG}" >> "$GITHUB_OUTPUT"
           fi
+          spk_revision=$((GITHUB_RUN_NUMBER * 1000 + GITHUB_RUN_ATTEMPT))
+          if (( spk_revision > 2147483647 )); then
+            echo "::error::Synology package revision exceeds DSM's supported range"
+            exit 1
+          fi
           echo "package_version=${package_version}" >> "$GITHUB_OUTPUT"
+          echo "spk_version=${spk_version}" >> "$GITHUB_OUTPUT"
+          echo "spk_revision=${spk_revision}" >> "$GITHUB_OUTPUT"
       - name: Validate release recipe and target
         env:
           SOURCE_MODE: ${{ steps.meta.outputs.source_mode }}
           PACKAGE_VERSION: ${{ steps.meta.outputs.package_version }}
+          SPK_VERSION: ${{ steps.meta.outputs.spk_version }}
         run: |
           set -euo pipefail
           package_version="$(sed -n 's/^PKG_VERS = //p' packaging/synology/cross/loom/Makefile)"
@@ -81,7 +91,7 @@ jobs:
             echo "Cross-package version ${package_version} does not match package version ${spk_version}" >&2
             exit 1
           fi
-          if [ "$SOURCE_MODE" = "release" ] && [ "$PACKAGE_VERSION" != "$package_version" ]; then
+          if [ "$SOURCE_MODE" = "release" ] && { [ "$PACKAGE_VERSION" != "$package_version" ] || [ "$SPK_VERSION" != "$spk_version" ]; }; then
             echo "Recipe version ${package_version} does not match release ${RELEASE_TAG}" >&2
             exit 1
           fi
@@ -125,15 +135,20 @@ jobs:
         run: |
           cp -R packaging/synology/cross/loom/. spksrc/cross/loom/
           cp -R packaging/synology/spk/loom/. spksrc/spk/loom/
-      - name: Configure prelease package version
-        if: steps.meta.outputs.source_mode == 'prelease'
+      - name: Configure package versions
         env:
+          SOURCE_MODE: ${{ steps.meta.outputs.source_mode }}
           PACKAGE_VERSION: ${{ steps.meta.outputs.package_version }}
+          SPK_VERSION: ${{ steps.meta.outputs.spk_version }}
+          SPK_REVISION: ${{ steps.meta.outputs.spk_revision }}
         run: |
           set -euo pipefail
-          sed -i "s/^PKG_VERS = .*/PKG_VERS = ${PACKAGE_VERSION}/" spksrc/cross/loom/Makefile
-          sed -i "s/^SPK_VERS = .*/SPK_VERS = ${PACKAGE_VERSION}/" spksrc/spk/loom/Makefile
-          sed -i "s/^PKG_COMMIT = .*/PKG_COMMIT = ${GITHUB_SHA}/" spksrc/cross/loom/Makefile
+          if [ "$SOURCE_MODE" = "prelease" ]; then
+            sed -i "s/^PKG_VERS = .*/PKG_VERS = ${PACKAGE_VERSION}/" spksrc/cross/loom/Makefile
+            sed -i "s/^SPK_VERS = .*/SPK_VERS = ${SPK_VERSION}/" spksrc/spk/loom/Makefile
+            sed -i "s/^PKG_COMMIT = .*/PKG_COMMIT = ${GITHUB_SHA}/" spksrc/cross/loom/Makefile
+          fi
+          sed -i "s/^SPK_REV = .*/SPK_REV = ${SPK_REVISION}/" spksrc/spk/loom/Makefile
       - name: Set prelease source digest
         if: steps.meta.outputs.source_mode == 'prelease'
         env:
@@ -160,6 +175,9 @@ jobs:
       - name: Record build inputs
         env:
           BUILD_LABEL: ${{ steps.meta.outputs.build_label }}
+          PACKAGE_VERSION: ${{ steps.meta.outputs.package_version }}
+          SPK_VERSION: ${{ steps.meta.outputs.spk_version }}
+          SPK_REVISION: ${{ steps.meta.outputs.spk_revision }}
         run: |
           set -euo pipefail
           package="$(find spksrc/packages -maxdepth 1 -type f -name 'loom_*.spk' -print -quit)"
@@ -169,7 +187,9 @@ jobs:
           fi
           {
             echo "Loom source: ${BUILD_LABEL}"
+            echo "Loom version: ${PACKAGE_VERSION}"
             echo "Loom commit: ${GITHUB_SHA}"
+            echo "DSM package version: ${SPK_VERSION}-${SPK_REVISION}"
             echo "Target: ${SPK_TARGET}"
             echo "Source SHA-256: $(awk '$2 == "SHA256" {print $3}' spksrc/cross/loom/digests)"
             echo "spksrc commit: $(git -C spksrc rev-parse HEAD)"
