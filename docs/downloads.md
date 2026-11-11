@@ -36,6 +36,14 @@ passwords, and credential-like values inside `config`; submitting blank or
 omitting those fields during an edit keeps the stored credentials unchanged.
 Download-use routes such as listing items and submitting a grab remain
 available to authenticated users.
+When a release was already attempted, grabbing it again opens an in-place
+confirmation instead of sending you to Activity history. An administrator can
+choose **Retry release**, including when downloading succeeded but importing
+failed. Loom checks the original client before re-arming a successful grab:
+active, paused or unknown-state downloads cannot be retried. Completed,
+seeding, failed or removed downloads can be submitted again after confirmation.
+Recent interrupted admissions retain their 15-minute safety window, and retry
+does not bypass the blocklist.
 Edit-form tests include the saved client `id` so blank/masked credentials
 can be restored for the test without persisting unsaved changes.
 
@@ -196,7 +204,10 @@ cancellations/timeouts also remain pending. Recovery actions on pending attempts
 are refused for the first fifteen minutes to avoid racing an in-flight add.
 
 Administrators can **Enable retry** (reset the budget, then search again with
-fresh links) or **Blocklist** a failed/interrupted acquisition. Retry does not
+fresh links) or **Blocklist** a failed/interrupted acquisition. The in-place
+**Retry release** dialog also permits retrying a successful admission after
+checking that its original download is complete, seeding, failed or removed;
+this lets an import failure recover without changing pages. Retry does not
 remove an existing blocklist entry; remove that entry in Activity → Blocklist
 first. Older superseded attempts cannot change current eligibility.
 Clearing completion history retains acquisition records and budgets.

@@ -2,6 +2,7 @@ package imports
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -15,6 +16,7 @@ type musicMatchServiceStub struct {
 	artists []*musiclib.Artist
 	albums  []*musiclib.Album
 	tracks  map[string]*musiclib.Album
+	loadErr error
 }
 
 func (s *musicMatchServiceStub) ListArtists(context.Context) ([]*musiclib.Artist, error) {
@@ -26,11 +28,75 @@ func (s *musicMatchServiceStub) ListAlbums(context.Context) ([]*musiclib.Album, 
 }
 
 func (s *musicMatchServiceStub) LoadAlbumTracks(_ context.Context, id string) (*musiclib.Album, error) {
+	if s.loadErr != nil {
+		return nil, s.loadErr
+	}
 	album := s.tracks[id]
 	if album == nil {
 		return nil, musiclib.ErrNotFound
 	}
 	return album, nil
+}
+
+func TestFindMusicTrackMatchesEditionLabelsButRejectsAmbiguousAlbums(t *testing.T) {
+	owner := &musiclib.Artist{ID: "artist", Name: "Linkin Park"}
+	album := &musiclib.Album{ID: "album", ArtistID: owner.ID, Title: "From Zero"}
+	full := &musiclib.Album{ID: album.ID, Tracks: []*musiclib.Track{
+		{ID: "track", Title: "The Emptiness Machine", TrackNumber: 2, ArtistName: owner.Name},
+	}}
+	stub := &musicMatchServiceStub{
+		artists: []*musiclib.Artist{owner}, albums: []*musiclib.Album{album},
+		tracks: map[string]*musiclib.Album{album.ID: full},
+	}
+	p := &ImportPipeline{musicSvc: stub}
+	tags := &musiclib.AudioTags{Artist: owner.Name, Title: "The Emptiness Machine", TrackNumber: 2}
+	for _, title := range []string{"From Zero", "From Zero (Deluxe Edition)", "From Zero [Deluxe] [24bit-48kHz]"} {
+		_, matched, track, err := p.findMusicTrack(context.Background(), owner.Name, owner.Name, title, tags)
+		if err != nil || matched.ID != album.ID || track.ID != "track" {
+			t.Fatalf("edition %q: album=%+v track=%+v err=%v", title, matched, track, err)
+		}
+	}
+	for _, title := range []string{"From Zero (Live)", "From Zero (Remixes)", "From Zero (Part II)"} {
+		if _, _, _, err := p.findMusicTrack(context.Background(), owner.Name, owner.Name, title, tags); err == nil {
+			t.Fatalf("meaningful qualifier incorrectly stripped: %q", title)
+		}
+	}
+	duplicate := &musiclib.Album{ID: "duplicate", ArtistID: owner.ID, Title: "From Zero (Deluxe)"}
+	stub.albums = append(stub.albums, duplicate)
+	stub.tracks[duplicate.ID] = full
+	if _, _, _, err := p.findMusicTrack(context.Background(), owner.Name, owner.Name, "From Zero (Deluxe Edition)", tags); err == nil ||
+		!strings.Contains(err.Error(), "ambiguous music album") {
+		t.Fatalf("multiple managed variants accepted: %v", err)
+	}
+	delete(stub.tracks, duplicate.ID)
+	if _, _, _, err := p.findMusicTrack(context.Background(), owner.Name, owner.Name, "From Zero (Deluxe Edition)", tags); err == nil ||
+		!strings.Contains(err.Error(), "ambiguous music album") || !errors.Is(err, musiclib.ErrNotFound) {
+		t.Fatalf("unverified alternative album allowed an unsafe match: %v", err)
+	}
+}
+
+func TestFindMusicTrackPreservesMetadataFailure(t *testing.T) {
+	cause := errors.New("metadata server unavailable")
+	stub := &musicMatchServiceStub{
+		artists: []*musiclib.Artist{{ID: "artist", Name: "Artist"}},
+		albums:  []*musiclib.Album{{ID: "album", ArtistID: "artist", Title: "Album"}},
+		loadErr: errors.Join(musiclib.ErrAlbumTracksUnavailable, cause),
+	}
+	p := &ImportPipeline{musicSvc: stub}
+	_, _, _, err := p.findMusicTrack(context.Background(), "Artist", "Artist", "Album", &musiclib.AudioTags{Title: "Song"})
+	if !errors.Is(err, musiclib.ErrAlbumTracksUnavailable) || !errors.Is(err, cause) {
+		t.Fatalf("metadata failure hidden as a match failure: %v", err)
+	}
+}
+
+func TestMatchTaggedTrackRejectsAmbiguousBaseTitles(t *testing.T) {
+	track, err := matchTaggedTrack([]*musiclib.Track{
+		{ID: "one", Title: "Song (album version)", TrackNumber: 1},
+		{ID: "two", Title: "Song (single version)", TrackNumber: 2},
+	}, &musiclib.AudioTags{Title: "Song"}, false)
+	if track != nil || err == nil {
+		t.Fatalf("ambiguous base titles not reported: track=%+v err=%v", track, err)
+	}
 }
 
 func TestNormalizeMusicTextPreservesUnicodeLetters(t *testing.T) {

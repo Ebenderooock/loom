@@ -26,6 +26,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   batch, and reuse the unique existing track to resolve duplicate album matches.
 - Slide the selection highlight between main and settings navigation items.
   Respect the device's reduced-motion preference by moving it immediately.
+- Confirm release retries in place across download and music search surfaces,
+  including completed downloads whose import failed, while protecting active
+  downloads and retaining blocklist checks.
+- Restore music import previews and matching for edition-qualified album tags,
+  hydrate missing album tracks, and show compact artist biographies with
+  inline expansion and movie/TV-style detail actions.
 - Pass the shared quality profile store into the production import pipeline so
   imports can enforce assigned profiles instead of failing with an unavailable-store error.
 - Stage import copies beside their destination and publish complete files

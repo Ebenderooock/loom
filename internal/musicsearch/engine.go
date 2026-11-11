@@ -32,7 +32,7 @@ var (
 	ErrNoDownloaders          = errors.New("musicsearch: no download clients configured")
 	ErrNoCompatibleDownloader = errors.New("musicsearch: no compatible download client configured")
 	ErrInvalidReleaseLink     = errors.New("musicsearch: invalid release download link")
-	ErrAllReleasesAttempted   = errors.New("every matching release was already grabbed, blocklisted, or is awaiting retry; use Download History to retry or blocklist it, or try Interactive Search")
+	ErrAllReleasesAttempted   = errors.New("every matching release was already grabbed, blocklisted, or is awaiting retry")
 )
 
 // audioCategories are the Newznab audio category families queried for music.
@@ -457,6 +457,8 @@ func (e *Engine) searchAndGrabTrack(
 // grabFirstAvailable grabs the best candidate whose release has not already
 // been acquired, blocklisted, or deferred, e.g. after a failed import.
 func (e *Engine) grabFirstAvailable(ctx context.Context, albumID string, candidates []Candidate) (*GrabResult, error) {
+	var deferred error
+	var recoverable error
 	for i := range candidates {
 		grab, err := e.grab(ctx, albumID, &candidates[i])
 		if err == nil {
@@ -465,8 +467,21 @@ func (e *Engine) grabFirstAvailable(ctx context.Context, albumID string, candida
 		if !errors.Is(err, downloads.ErrAcquisitionDeferred) {
 			return nil, err
 		}
+		if deferred == nil {
+			deferred = err
+		}
+		var conflict *downloads.AcquisitionConflict
+		if recoverable == nil && errors.As(err, &conflict) && conflict.RetryAllowed {
+			recoverable = err
+		}
 		e.logger.Info("musicsearch: release already attempted, trying next",
 			"album", albumID, "title", candidates[i].Result.Title)
+	}
+	if recoverable != nil {
+		deferred = recoverable
+	}
+	if deferred != nil {
+		return nil, fmt.Errorf("%w (%d): %w", ErrAllReleasesAttempted, len(candidates), deferred)
 	}
 	return nil, fmt.Errorf("%w (%d)", ErrAllReleasesAttempted, len(candidates))
 }

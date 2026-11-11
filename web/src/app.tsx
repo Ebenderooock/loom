@@ -3,6 +3,7 @@ import { RouterProvider } from "@tanstack/react-router";
 import { AppearanceProvider } from "@/hooks/use-appearance";
 import { AuthProvider } from "@/hooks/use-auth";
 import { Toaster } from "@/components/ui/sonner";
+import { AcquisitionRecovery } from "@/components/downloads/acquisition-recovery";
 import { router } from "@/routes/router";
 
 const queryClient = new QueryClient({
@@ -21,6 +22,7 @@ export function App() {
         <AppearanceProvider>
           <RouterProvider router={router} />
           <Toaster />
+          <AcquisitionRecovery />
         </AppearanceProvider>
       </QueryClientProvider>
     </AuthProvider>

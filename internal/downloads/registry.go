@@ -13,10 +13,18 @@ import (
 // DownloadClient. It is a pure in-memory structure; persistence lives
 // in Repository and the two are stitched together by Service.
 type Registry struct {
-	mu      sync.RWMutex
-	items   map[string]DownloadClient
-	history *HistoryStore
-	status  *statusCache
+	mu           sync.RWMutex
+	items        map[string]DownloadClient
+	history      *HistoryStore
+	onReacquired func(context.Context, string, string) error
+	status       *statusCache
+}
+
+// SetReacquisitionHandler reconnects explicitly retried downloads to failed imports.
+func (r *Registry) SetReacquisitionHandler(handler func(context.Context, string, string) error) {
+	r.mu.Lock()
+	r.onReacquired = handler
+	r.mu.Unlock()
 }
 
 // NewRegistry returns an empty Registry.
