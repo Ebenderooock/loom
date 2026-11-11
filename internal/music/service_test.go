@@ -671,11 +671,11 @@ func TestLoadAlbumTracksReportsUnavailableMetadataAndRetries(t *testing.T) {
 }
 
 func TestGetAlbumRetriesEmptyMetadataAndHistoricalEmptyTrackCache(t *testing.T) {
-	ctx := context.Background()
 	for _, staleTimestamp := range []bool{false, true} {
 		t.Run(fmt.Sprint(staleTimestamp), func(t *testing.T) {
 			provider := sampleProvider()
 			svc, repo := newTestService(t, provider)
+			ctx := t.Context()
 			artist, err := svc.AddArtist(ctx, AddArtistRequest{
 				MBID: "artist-1", QualityProfileID: "qp-1", LibraryID: "lib-1",
 			})

@@ -16,10 +16,6 @@ func writeTaggedFLAC(t *testing.T, path, artist, album, title string) {
 	t.Helper()
 	// STREAMINFO plus Vorbis comments exercises real FLAC tag and bit-depth
 	// parsing without an encoder or network metadata service.
-	data := make([]byte, 42)
-	copy(data, "fLaC")
-	data[7] = 34
-	binary.BigEndian.PutUint64(data[18:26], uint64(96000)<<44|uint64(1)<<41|uint64(23)<<36)
 	comments := []string{
 		"ARTIST=" + artist, "ALBUMARTIST=" + artist, "ALBUM=" + album,
 		"TITLE=" + title, "TRACKNUMBER=1", "DISCNUMBER=1",
@@ -34,6 +30,10 @@ func writeTaggedFLAC(t *testing.T, path, artist, album, title string) {
 		appendInt(len(comment))
 		block = append(block, comment...)
 	}
+	data := make([]byte, 42, 46+len(block))
+	copy(data, "fLaC")
+	data[7] = 34
+	binary.BigEndian.PutUint64(data[18:26], uint64(96000)<<44|uint64(1)<<41|uint64(23)<<36)
 	data = append(data, 0x84, byte(len(block)>>16), byte(len(block)>>8), byte(len(block)))
 	data = append(data, block...)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
