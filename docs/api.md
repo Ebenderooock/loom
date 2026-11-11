@@ -44,7 +44,24 @@ highlighted without incorrectly flagging valid legacy profiles.
 
 ## Manual media imports
 
-`POST /api/v1/imports/scan` and `/api/v1/imports/preview` accept `{path}` and
+`POST /api/v1/imports/scans` accepts `{path}` and returns **202 `{data: ImportScan}`**
+before traversing the filesystem. Poll `GET /api/v1/imports/scans/{id}` with
+`offset` (default 0) and `limit` (default/maximum 1000). Each response contains
+progress, a page of `results`, and `next_offset`; append the page and continue
+from that offset. A completed scan can still have unread pages: finish reading
+when `next_offset >= processed_files`. While `status` is `running`, poll again
+even when there are no new results. `phase` distinguishes discovery from matching;
+`total_files` grows during discovery. `failed` scans expose `error` and may have
+partial results. `DELETE /api/v1/imports/scans/{id}` cancels the preview, not any
+imports already submitted.
+
+Scans survive request disconnects but not server restarts. Two can run at once
+(429 when full); submitting the same running folder reuses its scan ID.
+Completed/failed/cancelled previews expire after ten minutes, with at most eight
+sessions retained. Missing or expired IDs return 404; start a new scan explicitly.
+Status/result requests never perform filesystem scanning or content verification.
+
+Legacy `POST /api/v1/imports/scan` and `/api/v1/imports/preview` accept `{path}` and
 include audio as well as video files. Music scan results use `media_type:
 "music"`, a **track ID** for `matched_media_id`, and optional
 `detected_artist`, `detected_album`, `detected_track`, and `detected_disc` tags.
@@ -179,6 +196,9 @@ in `api/openapi/loom.yaml`.
 | `POST` | `/api/v1/imports/manual` | apiKey/bearer/cookie | `202 {"status":"accepted","job_id":"...","data":ImportJob}` | Queue a file or folder supplied as `path`. |
 | `POST` | `/api/v1/imports/manual-match` | apiKey/bearer/cookie | `202 {"status":"accepted","job_id":"...","data":ImportJob}` | Queue `path` with explicit `media_type` and `media_id`. |
 | `POST` | `/api/v1/imports/reimport` | apiKey/bearer/cookie | `202 {"status":"accepted","job_id":"...","data":ImportJob}` | Queue `source_path` with explicit media identity and optional conflict policy. |
+| `POST` | `/api/v1/imports/scans` | apiKey/bearer/cookie | `202 {"data":ImportScan}` | Start a background scan without waiting for filesystem work; reuse an active scan for the same path. |
+| `GET` | `/api/v1/imports/scans/{id}` | apiKey/bearer/cookie | `200 {"data":ImportScan}` | Poll progress and cursor-paged results using `offset` and `limit`; 404 after expiry/restart. |
+| `DELETE` | `/api/v1/imports/scans/{id}` | apiKey/bearer/cookie | `200 {"data":ImportScan}` | Cancel a preview while preserving its partial results and any queued imports. |
 | `POST` | `/api/v1/imports/scan` | apiKey/bearer/cookie | `200 {"data":[ImportScanResult]}` | Preview matches and verified file-level import status without importing. |
 | `GET` | `/api/v1/media-files/{mediaType}/{id}` | admin | `200 {"files":[TitleFile],"deletionMode":"recycle"\|"permanent"}` | List every regular file in the server-resolved movie or series folder; optional `season` query scopes series files. |
 | `POST` | `/api/v1/media-files/{mediaType}/{id}/delete` | admin | `200 {"deleted":["relative/file.mkv"]}` | Delete selected files with explicit mode and `X-Confirm-Delete: true`; optional `season` query restricts scope. |

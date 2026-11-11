@@ -40,6 +40,22 @@ export interface ScanResult {
   import_error?: string;
 }
 
+export interface ImportScan {
+  id: string;
+  path: string;
+  status: "running" | "completed" | "failed" | "cancelled";
+  phase: "discovering" | "matching";
+  total_files: number;
+  processed_files: number;
+  current_file?: string;
+  error?: string;
+  created_at: string;
+  updated_at: string;
+  completed_at?: string;
+  results: ScanResult[];
+  next_offset: number;
+}
+
 export interface ImportJob {
   id: string;
   source_path: string;
@@ -118,8 +134,10 @@ async function fetchJSON<T>(url: string, init?: RequestInit): Promise<T> {
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     throw new Error(
-      (body as Record<string, string>).error ??
-        `${res.status} ${res.statusText}`,
+      res.status === 404 && url.startsWith("/api/v1/imports/scans/")
+        ? "Scan session not found or expired (404)"
+        : ((body as Record<string, string>).error ??
+            `${res.status} ${res.statusText}`),
     );
   }
   return (await res.json()) as T;
@@ -141,6 +159,94 @@ export async function scanFolder(path: string): Promise<ScanResult[]> {
     body: JSON.stringify({ path }),
   });
   return r.data;
+}
+
+export async function startImportScan(
+  path: string,
+  signal: AbortSignal,
+): Promise<ImportScan> {
+  const r = await fetchJSON<{ data: ImportScan }>("/api/v1/imports/scans", {
+    method: "POST",
+    body: JSON.stringify({ path }),
+    signal,
+  });
+  return r.data;
+}
+
+export async function fetchImportScan(
+  id: string,
+  offset: number,
+  signal: AbortSignal,
+): Promise<ImportScan> {
+  const r = await fetchJSON<{ data: ImportScan }>(
+    `/api/v1/imports/scans/${encodeURIComponent(id)}?offset=${offset}&limit=1000`,
+    { signal },
+  );
+  return r.data;
+}
+
+export async function cancelImportScan(
+  id: string,
+  signal: AbortSignal,
+): Promise<ImportScan> {
+  const r = await fetchJSON<{ data: ImportScan }>(
+    `/api/v1/imports/scans/${encodeURIComponent(id)}`,
+    { method: "DELETE", signal },
+  );
+  return r.data;
+}
+
+function waitForScanPoll(signal: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    signal.throwIfAborted();
+    const abort = () => {
+      clearTimeout(timer);
+      reject(signal.reason);
+    };
+    const timer = setTimeout(() => {
+      signal.removeEventListener("abort", abort);
+      resolve();
+    }, 1000);
+    signal.addEventListener("abort", abort, { once: true });
+  });
+}
+
+// Each callback contains only the newly fetched page. Never retry a failed
+// request by starting another session: sessions may expire and POST is not
+// idempotent. The caller retains partial results if polling fails.
+export async function pollImportScan({
+  path,
+  signal,
+  onProgress,
+  resume,
+}: {
+  path: string;
+  signal: AbortSignal;
+  onProgress: (scan: ImportScan) => void;
+  resume?: ImportScan;
+}): Promise<ImportScan> {
+  let scan = resume ?? (await startImportScan(path, signal));
+  signal.throwIfAborted();
+  if (!resume) onProgress(scan);
+  let offset = resume?.next_offset ?? 0;
+  for (;;) {
+    signal.throwIfAborted();
+    scan = await fetchImportScan(scan.id, offset, signal);
+    signal.throwIfAborted();
+    onProgress(scan);
+    if (scan.next_offset < scan.processed_files) {
+      if (scan.next_offset <= offset) {
+        throw new Error(
+          "Scan results could not be loaded: cursor did not advance.",
+        );
+      }
+      offset = scan.next_offset;
+      continue;
+    }
+    if (scan.status !== "running") return scan;
+    offset = scan.next_offset;
+    await waitForScanPoll(signal);
+  }
 }
 
 export async function reimportFile(params: {
@@ -332,7 +438,8 @@ export function useImportDecisions(limit = 50, offset = 0, mediaId?: string) {
 export function useScanFolder() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (path: string) => scanFolder(path),
+    mutationFn: pollImportScan,
+    retry: false,
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["imports"] });
     },

@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- Run Downloads / Imports scans in the background with progressive, paged
+  results and cancellation instead of waiting for large scans to finish in
+  one request, avoiding reverse-proxy 524 timeouts.
 - Upgrade the Go toolchain to 1.26.11 across CI and container builds to fix
   the net/http MaxBytesReader header race (GO-2026-6859).
 - Update the grouped Go dependencies, including Rain, SQLite, OpenTelemetry,

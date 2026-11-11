@@ -35,6 +35,7 @@ import {
   Link2,
 } from "lucide-react";
 import {
+  cancelImportScan,
   useScanFolder,
   useImportDecisions,
   useImportJobs,
@@ -44,6 +45,7 @@ import {
 } from "@/lib/imports-api";
 import type {
   ImportJob,
+  ImportScan,
   QueueImportResult,
   ScanResult,
 } from "@/lib/imports-api";
@@ -350,6 +352,19 @@ function ScanTab() {
   const queueMut = useQueueImportFiles();
   const jobsQuery = useImportJobs();
   const [results, setResults] = React.useState<ScanResult[]>([]);
+  const [scan, setScan] = React.useState<ImportScan | null>(null);
+  const scanController = React.useRef<AbortController | null>(null);
+  const cancelController = React.useRef<AbortController | null>(null);
+  const [cancelPending, setCancelPending] = React.useState(false);
+  const [cancelError, setCancelError] = React.useState<string | null>(null);
+  const [cancelRequested, setCancelRequested] = React.useState(false);
+  React.useEffect(
+    () => () => {
+      scanController.current?.abort();
+      cancelController.current?.abort();
+    },
+    [],
+  );
   const [scanStartedAt, setScanStartedAt] = React.useState(0);
   const [selected, setSelected] = React.useState<Set<string>>(new Set());
   const [search, setSearch] = React.useState("");
@@ -409,18 +424,90 @@ function ScanTab() {
     visibleEligible.length > 0 &&
     visibleEligible.every((result) => selected.has(result.file_path));
 
+  const watchScan = (controller: AbortController, resume?: ImportScan) => {
+    scanController.current = controller;
+    scanMut.mutate(
+      {
+        path: resume?.path ?? folderPath.trim(),
+        signal: controller.signal,
+        resume,
+        onProgress: (progress) => {
+          if (controller.signal.aborted) return;
+          setScan(progress);
+          setResults((previous) => {
+            // Keep queue/manual-match edits and selection when later pages arrive.
+            const known = new Set(previous.map((result) => result.file_path));
+            return [
+              ...previous,
+              ...progress.results.filter(
+                (result) => !known.has(result.file_path),
+              ),
+            ];
+          });
+        },
+      },
+      {
+        onSettled: () => {
+          if (scanController.current === controller)
+            scanController.current = null;
+        },
+      },
+    );
+  };
+
   const handleScan = () => {
-    if (!folderPath.trim()) return;
+    // Refs guard Enter/button submissions before React renders pending state.
+    if (
+      !folderPath.trim() ||
+      scanController.current ||
+      cancelController.current ||
+      queueMut.isPending
+    )
+      return;
     setScanStartedAt(Date.now());
     queueMut.reset();
     setQueueErrors([]);
-    scanMut.mutate(folderPath.trim(), {
-      onSuccess: (data) => {
-        setResults(data);
-        setSelected(new Set());
-        setPage(0);
-      },
-    });
+    setResults([]);
+    setScan(null);
+    setSelected(new Set());
+    setPage(0);
+    setMatchOpen(false);
+    setMatchTarget(null);
+    setCancelError(null);
+    setCancelRequested(false);
+    watchScan(new AbortController());
+  };
+
+  const handleCancel = async () => {
+    if (
+      !scan ||
+      scan.status !== "running" ||
+      cancelController.current ||
+      cancelRequested
+    )
+      return;
+    const controller = new AbortController();
+    cancelController.current = controller;
+    setCancelPending(true);
+    setCancelError(null);
+    try {
+      await cancelImportScan(scan.id, controller.signal);
+      if (controller.signal.aborted) return;
+      setCancelRequested(true);
+      // Keep the existing poller alive to drain unread cancelled pages. If
+      // polling already failed, resume this session's cursor, never POST again.
+      if (!scanController.current) watchScan(new AbortController(), scan);
+    } catch (error) {
+      if (!controller.signal.aborted) {
+        setCancelError(
+          error instanceof Error ? error.message : "Request failed",
+        );
+      }
+    } finally {
+      if (!controller.signal.aborted) setCancelPending(false);
+      if (cancelController.current === controller)
+        cancelController.current = null;
+    }
   };
 
   const queuePaths = (paths: string[]) => {
@@ -481,7 +568,12 @@ function ScanTab() {
             />
             <Button
               onClick={handleScan}
-              disabled={scanMut.isPending || !folderPath.trim()}
+              disabled={
+                scanMut.isPending ||
+                cancelPending ||
+                queueMut.isPending ||
+                !folderPath.trim()
+              }
             >
               {scanMut.isPending ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -490,10 +582,64 @@ function ScanTab() {
               )}
               Scan
             </Button>
+            {scan?.status === "running" && (
+              <Button
+                variant="outline"
+                onClick={() => void handleCancel()}
+                disabled={cancelPending || cancelRequested}
+              >
+                {cancelPending
+                  ? "Cancelling..."
+                  : cancelRequested
+                    ? "Cancellation requested"
+                    : "Cancel scan"}
+              </Button>
+            )}
           </div>
+          {cancelError && (
+            <p role="alert" className="mt-2 text-sm text-destructive">
+              Could not cancel scan: {cancelError}. You can retry cancellation.
+            </p>
+          )}
+          {(scanMut.isPending || scan) && (
+            <div
+              role="status"
+              className="mt-2 space-y-1 text-sm text-muted-foreground"
+            >
+              <p>
+                {scanMut.isError
+                  ? "Scan stopped. Partial results are still available."
+                  : !scan
+                    ? "Starting scan..."
+                    : scan.status === "running"
+                      ? scan.phase === "discovering"
+                        ? `Discovering files: ${scan.total_files} found · ${scan.processed_files} processed`
+                        : `Matching files: ${scan.processed_files} / ${scan.total_files} processed`
+                      : scanMut.isPending
+                        ? "Loading remaining scan results..."
+                        : scan.status === "completed"
+                          ? `Scan completed: ${scan.processed_files} / ${scan.total_files} files processed`
+                          : scan.status === "failed"
+                            ? "Scan failed. Partial results are still available."
+                            : "Scan cancelled. Partial results are still available."}
+              </p>
+              {scanMut.isPending &&
+                scan?.status === "running" &&
+                scan.current_file && (
+                  <p className="break-all">Current file: {scan.current_file}</p>
+                )}
+            </div>
+          )}
+          {scan?.status === "failed" && (
+            <p role="alert" className="mt-2 text-sm text-destructive">
+              {scan.error ||
+                "The scan failed before all files could be processed."}
+            </p>
+          )}
           {scanMut.isError && (
             <p role="alert" className="mt-2 text-sm text-destructive">
-              {scanMut.error.message}
+              Scan could not continue: {scanMut.error.message}. Partial results
+              are still available. Start a new scan to try again.
             </p>
           )}
         </CardContent>

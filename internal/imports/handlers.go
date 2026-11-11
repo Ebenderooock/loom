@@ -17,6 +17,9 @@ func Router(pipeline *ImportPipeline) chi.Router {
 	r.Post("/manual-match", handleManualMatch(pipeline))
 	r.Post("/reimport", handleReimport(pipeline))
 	r.Post("/scan", handleScanFolder(pipeline))
+	r.Post("/scans", handleStartFolderScan(pipeline))
+	r.Get("/scans/{id}", handleGetFolderScan(pipeline))
+	r.Delete("/scans/{id}", handleCancelFolderScan(pipeline))
 	r.Get("/decisions", handleListDecisions(pipeline))
 	r.Post("/preview", handlePreviewImport(pipeline))
 	r.Get("/jobs", handleListJobs(pipeline))
@@ -151,6 +154,64 @@ func handleScanFolder(p *ImportPipeline) http.HandlerFunc {
 			results = []ScanResult{}
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"data": results})
+	}
+}
+
+func handleStartFolderScan(p *ImportPipeline) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Path string `json:"path"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+			return
+		}
+		scan, err := p.StartFolderScan(r.Context(), req.Path)
+		if err != nil {
+			status := http.StatusBadRequest
+			if errors.Is(err, errScansBusy) {
+				status = http.StatusTooManyRequests
+			} else if errors.Is(err, errScansStopped) {
+				status = http.StatusServiceUnavailable
+			}
+			writeJSON(w, status, map[string]string{"error": err.Error()})
+			return
+		}
+		w.Header().Set("Location", "/api/v1/imports/scans/"+scan.ID)
+		writeJSON(w, http.StatusAccepted, map[string]any{"data": scan})
+	}
+}
+
+func handleGetFolderScan(p *ImportPipeline) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		offset, limit := 0, maxScanPage
+		for name, target := range map[string]*int{"offset": &offset, "limit": &limit} {
+			if raw := r.URL.Query().Get(name); raw != "" {
+				value, err := strconv.Atoi(raw)
+				if err != nil || value < 0 || (name == "limit" && value == 0) {
+					writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid " + name})
+					return
+				}
+				*target = value
+			}
+		}
+		scan := p.GetFolderScan(chi.URLParam(r, "id"), offset, limit)
+		if scan == nil {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "scan not found or expired; start a new scan"})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"data": scan})
+	}
+}
+
+func handleCancelFolderScan(p *ImportPipeline) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		scan := p.CancelFolderScan(chi.URLParam(r, "id"))
+		if scan == nil {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "scan not found or expired"})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"data": scan})
 	}
 }
 

@@ -53,6 +53,20 @@ every eligible match across all result pages. Search and pagination keep large
 season-pack scans manageable. Verified successful imports are hidden by default;
 enable **Show already imported files** to inspect them.
 
+Scans run in the background so slow disks, large folders, and verification of
+previously copied files do not hold a request open until a proxy returns 524.
+The page shows discovery and matching progress and displays results as they
+become available; you can queue those results before the scan finishes or cancel
+the scan. Content verification still compares file identity or SHA-256, so a
+large copied library can take time to verify; it is not treated as imported
+merely because file sizes match.
+
+At most two scans run at once, and repeated submissions for the same running
+folder reuse that scan. Unlike the durable import queue, scan previews are
+temporary: they do not survive a restart, expire ten minutes after completion,
+and only the eight most recent sessions are retained. An expired or missing
+scan is reported explicitly; start a new scan to refresh its results.
+
 The import queue is persistent, not a two-file admission limit. Workers process
 queued files with bounded concurrency, and interrupted work resumes after a
 restart. The queue shows file counts, attempts, failures, and scheduled retry
@@ -70,6 +84,9 @@ the library; the UI refreshes library status as queued imports finish.
 
 | Method | Path | Description |
 | ------ | ---- | ----------- |
+| POST | `/api/v1/imports/scans` | Start a background preview with `{"path":"/downloads"}`; returns 202 immediately. |
+| GET | `/api/v1/imports/scans/{id}?offset=0&limit=1000` | Poll progress and read the next page of results; continue from `next_offset`. |
+| DELETE | `/api/v1/imports/scans/{id}` | Cancel a preview without cancelling imports already queued from its results. |
 | POST | `/api/v1/imports/batch` | Queue selected files with `{"paths":["/downloads/file.mkv"]}`. |
 | GET | `/api/v1/imports/jobs` | List active jobs and recent outcomes, including progress and retry deadlines. |
 | POST | `/api/v1/imports/jobs/{id}/retry` | Retry a failed job after correcting its cause. |

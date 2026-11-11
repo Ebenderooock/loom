@@ -442,6 +442,7 @@ paths:
       tags: [imports]
       operationId: scanImportFolder
       summary: Preview file matches and verified import status without importing.
+      description: Legacy synchronous preview; use /api/v1/imports/scans for large folders to avoid proxy timeouts.
       security: [{ apiKey: [] }, { bearerAuth: [] }, { cookieAuth: [] }]
       requestBody:
         required: true
@@ -465,6 +466,81 @@ paths:
                     items: { $ref: "#/components/schemas/ImportScanResult" }
         "400": { description: Invalid body or missing path. }
         "422": { description: Folder could not be scanned. }
+  /api/v1/imports/scans:
+    post:
+      tags: [imports]
+      operationId: startImportFolderScan
+      summary: Start a background folder preview without waiting for filesystem work.
+      description: |
+        Reuses an active scan for the same path. At most two scans run at once.
+        Sessions are read-only and do not survive server restarts. Finished
+        sessions expire after ten minutes; at most eight sessions are retained.
+      security: [{ apiKey: [] }, { bearerAuth: [] }, { cookieAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [path]
+              properties:
+                path: { type: string, minLength: 1 }
+      responses:
+        "202":
+          description: Scan accepted; results are read through the status endpoint.
+          headers:
+            Location:
+              schema: { type: string }
+              description: Status endpoint for the accepted scan.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ImportScanResponse" }
+        "400": { description: Invalid body or empty path. }
+        "429": { description: Two scans are already running. }
+        "503": { description: Scanning is stopping. }
+  /api/v1/imports/scans/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      tags: [imports]
+      operationId: getImportFolderScan
+      summary: Read scan progress and the next page of preview results.
+      description: |
+        Append results and continue from next_offset. Keep polling while
+        running, and drain remaining pages even after the status becomes
+        terminal until next_offset reaches processed_files.
+      security: [{ apiKey: [] }, { bearerAuth: [] }, { cookieAuth: [] }]
+      parameters:
+        - name: offset
+          in: query
+          schema: { type: integer, minimum: 0, default: 0 }
+        - name: limit
+          in: query
+          description: Page size, clamped to 1000.
+          schema: { type: integer, minimum: 1, default: 1000 }
+      responses:
+        "200":
+          description: Progress snapshot and a bounded result page; no filesystem work.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ImportScanResponse" }
+        "400": { description: Invalid pagination. }
+        "404": { description: Scan not found, expired, evicted, or lost after restart. }
+    delete:
+      tags: [imports]
+      operationId: cancelImportFolderScan
+      summary: Cancel a scan without affecting imports already queued from its results.
+      security: [{ apiKey: [] }, { bearerAuth: [] }, { cookieAuth: [] }]
+      responses:
+        "200":
+          description: Cancellation state; partial results remain available through GET.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ImportScanResponse" }
+        "404": { description: Scan not found or expired. }
   /api/v1/collections/:
     get:
       tags: [collections]
@@ -4205,6 +4281,31 @@ components:
             properties:
               path: { type: string }
               error: { type: string }
+    ImportScanResponse:
+      type: object
+      required: [data]
+      properties:
+        data: { $ref: "#/components/schemas/ImportScan" }
+    ImportScan:
+      type: object
+      required: [id, path, status, phase, total_files, processed_files, created_at, updated_at, results, next_offset]
+      properties:
+        id: { type: string, format: uuid }
+        path: { type: string }
+        status: { type: string, enum: [running, completed, failed, cancelled] }
+        phase: { type: string, enum: [discovering, matching] }
+        total_files: { type: integer, minimum: 0 }
+        processed_files: { type: integer, minimum: 0 }
+        current_file: { type: string }
+        error: { type: string }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        completed_at: { type: string, format: date-time }
+        results:
+          type: array
+          maxItems: 1000
+          items: { $ref: "#/components/schemas/ImportScanResult" }
+        next_offset: { type: integer, minimum: 0 }
     ImportScanResult:
       type: object
       required: [file_path, file_size, detected_title, confidence, suggested_action]
