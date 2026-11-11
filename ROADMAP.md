@@ -215,9 +215,10 @@ Legend: ✅ done · 🚧 in progress · ⏳ planned
 
 ## ⏳ Phase 18 — Synology (SynoCommunity) package
 
-- ⏳ `cross/loom` cross-compile recipe (Go, `CGO_ENABLED=0`, all DSM archs)
-- ⏳ `spk/loom` package definition (icon, service, ports, AGPL-3.0)
-- ⏳ `service-setup.sh` (run `loom serve`, data dir in `${SYNOPKG_PKGVAR}`, DSM TLS)
-- ⏳ DSM 7 compliance (non-root user, privilege/resource, firewall ports)
+- ✅ `cross/loom` cross-compile recipe (Go, `CGO_ENABLED=0`)
+- ✅ `spk/loom` package definition (icon, service, ports, AGPL-3.0)
+- ✅ `service-setup.sh` (run `loom serve` with state in `${SYNOPKG_PKGVAR}`)
+- ✅ DSM 7 compliance (non-root user, privilege/resource, firewall ports)
+- ✅ Separate GitHub Actions workflow for x64 and aarch64 package artifacts
 - ⏳ PR to SynoCommunity/spksrc, pass CI & maintainer review
-- ⏳ Document Synology install in README/docs
+- ✅ Document Synology installation and local package builds
