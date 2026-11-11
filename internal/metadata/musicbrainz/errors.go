@@ -7,13 +7,15 @@ import (
 // Error types for MusicBrainz client operations.
 type ErrorCode string
 
+// Error codes distinguish transport, response and HTTP failures.
 const (
-	ErrCodeNotFound     ErrorCode = "not_found"
-	ErrCodeRateLimit    ErrorCode = "rate_limit"
-	ErrCodeClientError  ErrorCode = "client_error"
-	ErrCodeServerError  ErrorCode = "server_error"
-	ErrCodeNetworkError ErrorCode = "network_error"
-	ErrCodeContextError ErrorCode = "context_error"
+	ErrCodeNotFound      ErrorCode = "not_found"
+	ErrCodeRateLimit     ErrorCode = "rate_limit"
+	ErrCodeClientError   ErrorCode = "client_error"
+	ErrCodeServerError   ErrorCode = "server_error"
+	ErrCodeNetworkError  ErrorCode = "network_error"
+	ErrCodeContextError  ErrorCode = "context_error"
+	ErrCodeResponseError ErrorCode = "response_error"
 )
 
 // ClientError wraps MusicBrainz API errors with typed information.
@@ -23,6 +25,16 @@ type ClientError struct {
 	Message    string
 	RetryAfter int // seconds (for 429)
 	Err        error
+}
+
+// NewResponseError distinguishes invalid metadata from transport failures.
+func NewResponseError(status int, err error) *ClientError {
+	return &ClientError{
+		Code:       ErrCodeResponseError,
+		StatusCode: status,
+		Message:    "invalid MusicBrainz JSON response",
+		Err:        err,
+	}
 }
 
 func (e *ClientError) Error() string {

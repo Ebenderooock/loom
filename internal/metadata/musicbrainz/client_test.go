@@ -211,7 +211,7 @@ func TestGetRelease_Success(t *testing.T) {
 			},
 			Media: []MediaResponse{
 				{
-					Position: "1",
+					Position: 1,
 					Tracks: []TrackResponse{
 						{Title: "Come Together"},
 						{Title: "Something"},

@@ -174,6 +174,8 @@ one track fits. An album's track list is fetched from MusicBrainz the first
 time it is needed. If MusicBrainz is unavailable, the import fails with
 `album track list unavailable` rather than a track-match error, and a later
 retry or library scan fetches the list again.
+Invalid MusicBrainz JSON is reported as `response_error` with the actual HTTP
+status, not as a transport failure with HTTP 0.
 
 Migration 0100 preserves existing albums, editions, tracks and files while
 allowing albums without a managed artist. Downgrading below this migration is

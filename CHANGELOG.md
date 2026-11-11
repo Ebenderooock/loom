@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- Decode MusicBrainz disc and track positions as numbers so album track lists
+  and music imports load correctly. Report invalid metadata responses separately
+  from network failures.
 - Confirm release retries in place across download and music search surfaces,
   including completed downloads whose import failed, while protecting active
   downloads and retaining blocklist checks.

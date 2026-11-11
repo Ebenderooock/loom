@@ -69,7 +69,7 @@ func TestMapRelease_Success(t *testing.T) {
 		},
 		Media: []MediaResponse{
 			{
-				Position: "1",
+				Position: 1,
 				Tracks: []TrackResponse{
 					{Title: "Come Together"},
 					{Title: "Something"},
@@ -211,14 +211,14 @@ func TestExtractArtistNames(t *testing.T) {
 func TestExtractTrackTitles(t *testing.T) {
 	media := []MediaResponse{
 		{
-			Position: "1",
+			Position: 1,
 			Tracks: []TrackResponse{
 				{Title: "Track 1"},
 				{Title: "Track 2"},
 			},
 		},
 		{
-			Position: "2",
+			Position: 2,
 			Tracks: []TrackResponse{
 				{Title: "Track 3"},
 			},
