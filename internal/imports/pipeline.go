@@ -12,7 +12,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -83,7 +82,6 @@ type ImportPipeline struct {
 	unsub           func()
 	jobs            *jobQueue // durable, bounded manual import queue
 	scans           *scanQueue
-	contentCache    sync.Map // sameContent results keyed by file identities
 }
 
 // NewPipeline creates and wires an ImportPipeline. Call Start to
@@ -125,9 +123,7 @@ func NewPipeline(opts PipelineOptions) (*ImportPipeline, error) {
 		&FreeSpaceSpec{},
 		&UnpackingSpec{},
 		&DangerousFileSpec{},
-	}
-	if opts.QualityProfiles != nil {
-		specs = append(specs, NewUpgradeSpec(opts.QualityProfiles))
+		NewUpgradeSpec(opts.QualityProfiles),
 	}
 
 	p := &ImportPipeline{
@@ -630,6 +626,8 @@ func (p *ImportPipeline) importMatchedWith(ctx context.Context, ev *downloads.Do
 
 	// Build destination path with proper naming
 	destFile := filepath.Join(match.DestPath, destName)
+	unlock := lockImportDestination(destFile)
+	defer unlock()
 
 	// Run import decision engine (spec-based pre-checks)
 	srcInfo, statErr := os.Stat(mediaFile)
@@ -648,7 +646,25 @@ func (p *ImportPipeline) importMatchedWith(ctx context.Context, ev *downloads.Do
 	}
 
 	// Populate quality profile and existing quality for upgrade checks.
-	p.enrichCandidateQuality(ctx, candidate)
+	if err := p.enrichCandidateQuality(ctx, candidate); err != nil {
+		return "", p.recordFailure(ctx, string(match.MediaType), match.MediaID, ev.Title, mediaFile, fmt.Errorf("load import quality: %w", err))
+	}
+	destInfo, destErr := os.Lstat(destFile)
+	var owned bool
+	if destErr == nil && destInfo.Mode().IsRegular() {
+		var quality string
+		var err error
+		owned, quality, err = p.matchedDestination(ctx, match, destFile)
+		if err != nil {
+			return "", p.recordFailure(ctx, string(match.MediaType), match.MediaID, ev.Title, mediaFile, fmt.Errorf("check destination ownership: %w", err))
+		}
+		if owned {
+			if quality == "" {
+				quality = releaseQuality(destFile)
+			}
+			candidate.ExistingQuality = quality
+		}
+	}
 	eval := p.decisions.Evaluate(ctx, candidate)
 	if !eval.Approved() {
 		sampleOnly := true
@@ -674,17 +690,24 @@ func (p *ImportPipeline) importMatchedWith(ctx context.Context, ev *downloads.Do
 			fmt.Errorf("import rejected: %s", strings.Join(reasons, "; ")))
 	}
 
-	// A destination can be resumed when both paths are the same file. A same-size collision
-	// is not proof of identity and must never silently discard the source.
-	destInfo, destErr := os.Lstat(destFile)
+	// A crash can publish a complete copy before history is recorded.
+	// Resume only after proving identity or checking the full content.
+	replaced := false
 	if destErr == nil {
 		if destInfo.Mode()&os.ModeSymlink != 0 || !destInfo.Mode().IsRegular() {
 			return "", p.recordFailure(ctx, string(match.MediaType), match.MediaID, ev.Title, mediaFile,
 				fmt.Errorf("import destination is not a regular file: %s", destFile))
 		}
 		srcInfo, srcErr := os.Lstat(mediaFile)
-		sameFile := srcErr == nil && os.SameFile(srcInfo, destInfo)
-		if sameFile {
+		if srcErr != nil {
+			return "", p.recordFailure(ctx, string(match.MediaType), match.MediaID, ev.Title, mediaFile,
+				fmt.Errorf("inspect import source: %w", srcErr))
+		}
+		same, err := p.sameContent(ctx, mediaFile, destFile, srcInfo, destInfo)
+		if err != nil {
+			return "", p.recordFailure(ctx, string(match.MediaType), match.MediaID, ev.Title, mediaFile, err)
+		}
+		if same {
 			if p.verifier != nil {
 				if vr := p.verifier.Verify(destFile, fileSize); !vr.OK {
 					return "", p.recordFailure(ctx, string(match.MediaType), match.MediaID, ev.Title, mediaFile,
@@ -693,11 +716,22 @@ func (p *ImportPipeline) importMatchedWith(ctx context.Context, ev *downloads.Do
 			}
 			p.logger.Info("source already present at import destination",
 				"dest", destFile, "src", mediaFile)
-			if err := p.updateLibrary(ctx, match, destFile, mediaFile); err != nil {
+			var err error
+			if owned {
+				err = p.updateReplacementRecord(ctx, match, destFile, fileSize, releaseQuality(mediaFile))
+			} else {
+				err = p.updateLibrary(ctx, match, destFile, mediaFile)
+			}
+			if err != nil {
 				return "", p.recordFailure(ctx, string(match.MediaType), match.MediaID, ev.Title, mediaFile, err)
 			}
 			if err := p.recordStatus(ctx, string(match.MediaType), match.MediaID, mediaFile, destFile, StatusImported, "already exists"); err != nil {
 				return "", fmt.Errorf("record import history: %w", err)
+			}
+			if p.importMode == ImportModeMove && ev.DownloadID == "" {
+				if err := p.FinalizeImports(ctx, []string{destFile}); err != nil {
+					return "", fmt.Errorf("import registered but source cleanup failed: %w", err)
+				}
 			}
 			if match.MediaType == "movie" && match.MediaID != "" {
 				if err := p.moviesSvc.SetMovieStatus(ctx, match.MediaID, movies.MovieStatusAvailableRightQuality); err != nil {
@@ -714,22 +748,15 @@ func (p *ImportPipeline) importMatchedWith(ctx context.Context, ev *downloads.Do
 			})
 			return destFile, nil
 		}
-		if srcErr != nil {
-			return "", p.recordFailure(ctx, string(match.MediaType), match.MediaID, ev.Title, mediaFile,
-				fmt.Errorf("inspect import source: %w", srcErr))
-		}
-
-		// Only an explicit recycle succeeds as an upgrade path; never fall
-		// through to an overwrite if the recycle bin is unavailable or fails.
-		if p.recycler == nil || !p.recycler.Enabled || p.recycler.Path == "" {
+		if !owned {
 			return "", p.recordFailure(ctx, string(match.MediaType), match.MediaID, ev.Title, mediaFile,
 				fmt.Errorf("%w: %s", ErrDestinationExists, destFile))
 		}
-		libraryRoot := filepath.Dir(match.DestPath)
-		if err := p.recycler.Recycle(destFile, libraryRoot); err != nil {
+		if err := p.replaceMatched(ctx, match, mediaFile, destFile, destInfo, fileSize); err != nil {
 			return "", p.recordFailure(ctx, string(match.MediaType), match.MediaID, ev.Title, mediaFile,
-				fmt.Errorf("preserve existing destination before upgrade: %w", err))
+				err)
 		}
+		replaced = true
 	} else if !os.IsNotExist(destErr) {
 		return "", p.recordFailure(ctx, string(match.MediaType), match.MediaID, ev.Title, mediaFile,
 			fmt.Errorf("inspect import destination: %w", destErr))
@@ -740,33 +767,35 @@ func (p *ImportPipeline) importMatchedWith(ctx context.Context, ev *downloads.Do
 	if mode == ImportModeMove {
 		mode = ImportModeHardlink
 	}
-	if err := importFile(mediaFile, destFile, mode); err != nil {
-		return "", p.recordFailure(ctx, string(match.MediaType), match.MediaID, ev.Title, mediaFile, err)
-	}
+	if !replaced {
+		if err := importFile(mediaFile, destFile, mode); err != nil {
+			return "", p.recordFailure(ctx, string(match.MediaType), match.MediaID, ev.Title, mediaFile, err)
+		}
 
-	// Verify imported file
-	if p.verifier != nil {
-		vr := p.verifier.Verify(destFile, fileSize)
-		if !vr.OK {
-			p.logger.Error("import verification failed",
-				"dest", destFile, "reason", vr.Reason)
-			if err := os.Remove(destFile); err != nil {
-				p.logger.Error("failed to remove unverified destination", "dest", destFile, "error", err)
+		// Verify imported file
+		if p.verifier != nil {
+			vr := p.verifier.Verify(destFile, fileSize)
+			if !vr.OK {
+				p.logger.Error("import verification failed",
+					"dest", destFile, "reason", vr.Reason)
+				if err := os.Remove(destFile); err != nil {
+					p.logger.Error("failed to remove unverified destination", "dest", destFile, "error", err)
+				}
+				return "", p.recordFailure(ctx, string(match.MediaType), match.MediaID, ev.Title, mediaFile,
+					fmt.Errorf("verification failed (source preserved at %s): %s", mediaFile, vr.Reason))
+			}
+		}
+
+		// Register before consuming any source media or sidecar files.
+		if err := p.updateLibrary(ctx, match, destFile, mediaFile); err != nil {
+			p.logger.Error("library update failed after import, preserving source",
+				"error", err, "dest", destFile)
+			if removeErr := os.Remove(destFile); removeErr != nil {
+				p.logger.Error("failed to remove staged destination", "dest", destFile, "error", removeErr)
 			}
 			return "", p.recordFailure(ctx, string(match.MediaType), match.MediaID, ev.Title, mediaFile,
-				fmt.Errorf("verification failed (source preserved at %s): %s", mediaFile, vr.Reason))
+				fmt.Errorf("library update failed (source preserved at %s): %w", mediaFile, err))
 		}
-	}
-
-	// Register before consuming any source media or sidecar files.
-	if err := p.updateLibrary(ctx, match, destFile, mediaFile); err != nil {
-		p.logger.Error("library update failed after import, preserving source",
-			"error", err, "dest", destFile)
-		if removeErr := os.Remove(destFile); removeErr != nil {
-			p.logger.Error("failed to remove staged destination", "dest", destFile, "error", removeErr)
-		}
-		return "", p.recordFailure(ctx, string(match.MediaType), match.MediaID, ev.Title, mediaFile,
-			fmt.Errorf("library update failed (source preserved at %s): %w", mediaFile, err))
 	}
 
 	// Import associated subtitle files (failures are non-fatal)
@@ -831,10 +860,10 @@ func (p *ImportPipeline) importMatchedWith(ctx context.Context, ev *downloads.Do
 // completedImport makes retries of copy/hardlink imports idempotent without
 // mistaking a reused source pathname or missing destination for an import.
 func (p *ImportPipeline) completedImport(ctx context.Context, source string) (string, error) {
-	var dest string
-	err := p.db.QueryRowContext(ctx, `SELECT dest_path FROM import_history
+	var id, dest string
+	err := p.db.QueryRowContext(ctx, `SELECT id, dest_path FROM import_history
 		WHERE source_path = ? AND status = ? ORDER BY imported_at DESC LIMIT 1`,
-		source, string(StatusImported)).Scan(&dest)
+		source, string(StatusImported)).Scan(&id, &dest)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", nil
 	}
@@ -863,12 +892,16 @@ func (p *ImportPipeline) completedImport(ctx context.Context, source string) (st
 	if !same {
 		return "", nil
 	}
+	if _, err := p.db.ExecContext(ctx, `UPDATE import_history
+		SET source_size = ?, source_mtime = ?, dest_size = ?, dest_mtime = ? WHERE id = ?`,
+		srcInfo.Size(), srcInfo.ModTime().UnixNano(), destInfo.Size(), destInfo.ModTime().UnixNano(), id); err != nil {
+		return "", fmt.Errorf("save verified import metadata: %w", err)
+	}
 	return dest, nil
 }
 
-// sameContent reports whether source and dest hold identical bytes: the
-// same inode, or equal size and SHA-256. Positive and negative results are
-// cached per (path, size, mtime) pair so repeated scans do not rehash.
+// sameContent checks identity or full SHA-256 content. Metadata-only scans
+// never call this; destructive decisions must not reuse metadata-keyed results.
 func (p *ImportPipeline) sameContent(ctx context.Context, source, dest string, srcInfo, destInfo os.FileInfo) (bool, error) {
 	if err := ctx.Err(); err != nil {
 		return false, err
@@ -878,11 +911,6 @@ func (p *ImportPipeline) sameContent(ctx context.Context, source, dest string, s
 	}
 	if os.SameFile(srcInfo, destInfo) {
 		return true, nil
-	}
-	key := fmt.Sprintf("%s|%d|%d|%s|%d|%d", source, srcInfo.Size(), srcInfo.ModTime().UnixNano(),
-		dest, destInfo.Size(), destInfo.ModTime().UnixNano())
-	if v, ok := p.contentCache.Load(key); ok {
-		return v.(bool), nil
 	}
 	digest := func(path string) ([sha256.Size]byte, error) {
 		f, err := os.Open(path) //nolint:gosec // Both import paths are validated regular files before hashing.
@@ -907,7 +935,6 @@ func (p *ImportPipeline) sameContent(ctx context.Context, source, dest string, s
 		return false, fmt.Errorf("verify previous import destination: %w", err)
 	}
 	same := srcHash == destHash
-	p.contentCache.Store(key, same)
 	return same, nil
 }
 
@@ -1156,31 +1183,34 @@ func (p *ImportPipeline) updateLibrary(ctx context.Context, match *MatchResult, 
 			MovieID:   match.MediaID,
 			FilePath:  destFile,
 			Size:      info.Size(),
+			Quality:   releaseQuality(srcFile),
 			DateAdded: time.Now(),
 		}
 		if err := p.matcher.moviesSvc.AddMovieFile(ctx, mf); err != nil {
-			// If the file record already exists (e.g. rescan or retry), treat as success
 			if strings.Contains(err.Error(), "UNIQUE") || strings.Contains(err.Error(), "unique") {
-				p.logger.Debug("movie file record already exists", "path", destFile)
-				return nil
+				return p.updateReplacementRecord(ctx, match, destFile, info.Size(), mf.Quality)
 			}
 			return err
 		}
 		return nil
 
 	case MediaTypeEpisode:
+		var count int
+		if err := p.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM episode_files WHERE episode_id = ? AND file_path = ?`, match.MediaID, destFile).Scan(&count); err != nil {
+			return err
+		}
+		if count > 0 {
+			return p.updateReplacementRecord(ctx, match, destFile, info.Size(), releaseQuality(srcFile))
+		}
 		ef := &series.EpisodeFile{
 			ID:        uuid.New().String(),
 			EpisodeID: match.MediaID,
 			SeriesID:  match.SeriesID,
 			FilePath:  destFile,
 			FileSize:  info.Size(),
+			Quality:   releaseQuality(srcFile),
 		}
 		if err := p.matcher.seriesSvc.CreateEpisodeFile(ctx, ef); err != nil {
-			if strings.Contains(err.Error(), "UNIQUE") || strings.Contains(err.Error(), "unique") {
-				p.logger.Debug("episode file record already exists", "path", destFile)
-				return nil
-			}
 			return err
 		}
 		return nil
@@ -1226,9 +1256,8 @@ func (p *ImportPipeline) recordFailure(ctx context.Context, mediaType, mediaID, 
 	return importErr
 }
 
-// recordStatus inserts a row into import_history. The source identity
-// (size and modification time) is captured so a later scan can verify that
-// the exact same file was imported rather than trusting the pathname alone.
+// recordStatus stores metadata for inexpensive historical scan hints.
+// Content verification remains separate from these size/mtime snapshots.
 func (p *ImportPipeline) recordStatus(ctx context.Context, mediaType, mediaID, sourcePath, destPath string, status ImportStatus, errMsg string) error {
 	var size, mtime int64
 	if sourcePath != "" {
@@ -1236,9 +1265,20 @@ func (p *ImportPipeline) recordStatus(ctx context.Context, mediaType, mediaID, s
 			size, mtime = info.Size(), info.ModTime().UnixNano()
 		}
 	}
+	var destSize, destMtime int64
+	if status == StatusImported && destPath != "" {
+		info, err := os.Lstat(destPath)
+		if err != nil {
+			return fmt.Errorf("record import destination metadata: %w", err)
+		}
+		if !info.Mode().IsRegular() {
+			return fmt.Errorf("record import destination metadata: not a regular file: %s", destPath)
+		}
+		destSize, destMtime = info.Size(), info.ModTime().UnixNano()
+	}
 	_, err := p.db.ExecContext(ctx,
-		`INSERT INTO import_history (id, media_type, media_id, source_path, dest_path, import_mode, status, error, imported_at, source_size, source_mtime)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO import_history (id, media_type, media_id, source_path, dest_path, import_mode, status, error, imported_at, source_size, source_mtime, dest_size, dest_mtime)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		uuid.New().String(),
 		mediaType,
 		mediaID,
@@ -1250,6 +1290,8 @@ func (p *ImportPipeline) recordStatus(ctx context.Context, mediaType, mediaID, s
 		time.Now().UTC(),
 		size,
 		mtime,
+		destSize,
+		destMtime,
 	)
 	return err
 }
@@ -1362,61 +1404,50 @@ func (p *ImportPipeline) ImportManualMatch(ctx context.Context, path string, med
 	if err != nil {
 		return nil, fmt.Errorf("resolve media: %w", err)
 	}
-
-	// For directory-based imports in move mode, move the source folder to
-	// the destination folder path, preserving subtitles, NFOs, images, etc.
-	preserveLayout := info.IsDir() && filepath.Clean(path) == filepath.Clean(match.DestPath)
-	if info.IsDir() && p.importMode == ImportModeMove && path != match.DestPath {
-		if err := importFolder(path, match.DestPath); err != nil {
-			_ = p.recordFailure(ctx, string(match.MediaType), match.MediaID, filepath.Base(path), path, err)
-			return nil, fmt.Errorf("import folder %q to %q: %w", path, match.DestPath, err)
-		} else {
-			preserveLayout = true
-			p.logger.Info("renamed source folder to library folder",
-				"src", path, "dest", match.DestPath)
-			// Update media file paths to reflect the renamed folder
-			for i, mf := range mediaFiles {
-				rel, _ := filepath.Rel(path, mf)
-				mediaFiles[i] = filepath.Join(match.DestPath, rel)
+	if !info.IsDir() {
+		dest, err := p.importMatchedWith(ctx, &downloads.DownloadCompletedEvent{Title: filepath.Base(path)}, match, path, filepath.Base(path), true)
+		if err != nil {
+			return nil, err
+		}
+		return &ImportRecord{ID: uuid.New().String(), MediaType: match.MediaType, MediaID: match.MediaID,
+			SourcePath: path, DestPath: dest, ImportMode: p.importMode, Status: StatusImported, ImportedAt: time.Now().UTC()}, nil
+	}
+	moveFolder := p.importMode == ImportModeMove && filepath.Clean(path) != filepath.Clean(match.DestPath)
+	if moveFolder {
+		sourceAbs, err := filepath.Abs(path)
+		if err != nil {
+			return nil, err
+		}
+		destAbs, err := filepath.Abs(match.DestPath)
+		if err != nil {
+			return nil, err
+		}
+		for _, pair := range [][2]string{{sourceAbs, destAbs}, {destAbs, sourceAbs}} {
+			rel, err := filepath.Rel(pair[0], pair[1])
+			if err != nil {
+				return nil, err
+			}
+			if rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))) {
+				return nil, fmt.Errorf("source and destination folders must not contain one another")
 			}
 		}
-	} else {
-		// Ensure destination directory exists
-		if err := os.MkdirAll(match.DestPath, 0755); err != nil {
-			return nil, fmt.Errorf("create destination directory: %w", err)
+		if err := validateImportTree(path); err != nil {
+			return nil, err
 		}
 	}
 
 	var lastRecord *ImportRecord
 	var importErrors []error
 	for _, mf := range mediaFiles {
-		destFile := filepath.Join(match.DestPath, filepath.Base(mf))
-		if preserveLayout {
-			destFile = mf
-		}
-
-		// If source and dest are the same (folder was already renamed), skip the move
-		if mf != destFile {
-			if err := importFile(mf, destFile, p.importMode); err != nil {
-				_ = p.recordFailure(ctx, string(match.MediaType), match.MediaID, filepath.Base(mf), mf, err)
-				importErrors = append(importErrors, fmt.Errorf("import %q to %q: %w", mf, destFile, err))
-				continue
-			}
-		}
-
-		if err := p.updateLibrary(ctx, match, destFile, mf); err != nil {
-			p.logger.Error("library update failed after manual match import", "error", err)
-			_ = p.recordFailure(ctx, string(match.MediaType), match.MediaID, filepath.Base(mf), mf, err)
-			importErrors = append(importErrors, fmt.Errorf("library update failed (file preserved at %s): %w", destFile, err))
+		rel, err := filepath.Rel(path, mf)
+		if err != nil {
+			importErrors = append(importErrors, err)
 			continue
 		}
-
-		_ = p.recordStatus(ctx, string(match.MediaType), match.MediaID, mf, destFile, StatusImported, "")
-		p.publishNotification(ctx, match, destFile)
-
-		// Update movie status
-		if match.MediaType == MediaTypeMovie && match.MediaID != "" {
-			_ = p.moviesSvc.SetMovieStatus(ctx, match.MediaID, movies.MovieStatusAvailableRightQuality)
+		destFile, err := p.importMatchedWith(ctx, &downloads.DownloadCompletedEvent{Title: filepath.Base(mf)}, match, mf, rel, true)
+		if err != nil {
+			importErrors = append(importErrors, err)
+			continue
 		}
 
 		lastRecord = &ImportRecord{
@@ -1433,6 +1464,11 @@ func (p *ImportPipeline) ImportManualMatch(ctx context.Context, path string, med
 
 	if len(importErrors) > 0 {
 		return lastRecord, errors.Join(importErrors...)
+	}
+	if moveFolder {
+		if err := moveRemainingContents(path, match.DestPath); err != nil {
+			return lastRecord, fmt.Errorf("move remaining folder contents: %w", err)
+		}
 	}
 	if lastRecord == nil {
 		return nil, fmt.Errorf("all files failed to import from %s", path)
@@ -1547,20 +1583,40 @@ func (p *ImportPipeline) previewSingleFile(ctx context.Context, filePath string)
 	preview.MediaID = match.MediaID
 	preview.Title = match.Title
 
-	destFile := filepath.Join(match.DestPath, filepath.Base(filePath))
-	if _, err := os.Stat(destFile); err == nil {
-		existing := ParseFileQuality(destFile)
-		incoming := ParseFileQuality(filePath)
-		if qualityScore(incoming) > qualityScore(existing) {
-			preview.Action = "upgrade"
-			preview.Reason = fmt.Sprintf("incoming quality score %d > existing %d", qualityScore(incoming), qualityScore(existing))
-		} else {
-			preview.Action = "skip"
-			preview.Reason = fmt.Sprintf("existing quality score %d >= incoming %d", qualityScore(existing), qualityScore(incoming))
+	destFile := filepath.Join(match.DestPath, buildDestFilename(match, filePath))
+	candidate := &ImportCandidate{SourcePath: filePath, DestPath: destFile, FileSize: fileSize,
+		Match: match, ImportMode: p.importMode, IncomingRelease: parser.Parse(filepath.Base(filePath))}
+	if err := p.enrichCandidateQuality(ctx, candidate); err != nil {
+		preview.Action, preview.Reason = "error", err.Error()
+		return preview
+	}
+	if destInfo, err := os.Lstat(destFile); err == nil {
+		if !destInfo.Mode().IsRegular() {
+			preview.Action, preview.Reason = "error", "destination is not a regular file"
+			return preview
 		}
+		owned, existingQuality, err := p.matchedDestination(ctx, match, destFile)
+		if err != nil {
+			preview.Action, preview.Reason = "error", err.Error()
+			return preview
+		}
+		if !owned {
+			preview.Action, preview.Reason = "skip", "destination is not registered to this item"
+			return preview
+		}
+		if existingQuality == "" {
+			existingQuality = releaseQuality(destFile)
+		}
+		candidate.ExistingQuality = existingQuality
+		preview.Action, preview.Reason = "upgrade", "replace existing matched file if quality is accepted"
+	} else if !os.IsNotExist(err) {
+		preview.Action, preview.Reason = "error", err.Error()
+		return preview
 	} else {
-		preview.Action = "import"
-		preview.Reason = "no existing file at destination"
+		preview.Action, preview.Reason = "import", "no existing file at destination"
+	}
+	if evaluation := p.decisions.Evaluate(ctx, candidate); !evaluation.Approved() {
+		preview.Action, preview.Reason = "skip", evaluation.Rejections[0].Message
 	}
 
 	return preview
@@ -1568,40 +1624,63 @@ func (p *ImportPipeline) previewSingleFile(ctx context.Context, filePath string)
 
 // enrichCandidateQuality populates QualityProfileID and ExistingQuality
 // on the candidate so the UpgradeSpec can make informed decisions.
-func (p *ImportPipeline) enrichCandidateQuality(ctx context.Context, c *ImportCandidate) {
+func (p *ImportPipeline) enrichCandidateQuality(ctx context.Context, c *ImportCandidate) error {
 	if c.Match == nil || !c.Match.Matched {
-		return
+		return nil
 	}
 
 	switch c.Match.MediaType {
 	case MediaTypeMovie:
 		movie, err := p.moviesSvc.GetMovie(ctx, c.Match.MediaID)
 		if err != nil {
-			return
+			return err
+		}
+		if movie == nil {
+			return fmt.Errorf("movie %q not found", c.Match.MediaID)
 		}
 		c.QualityProfileID = movie.QualityProfileID
 
 		files, err := p.moviesSvc.ListMovieFiles(ctx, movie.ID)
-		if err != nil || len(files) == 0 {
-			return
+		if err != nil {
+			return err
+		}
+		if len(files) == 0 {
+			return nil
 		}
 		// Use the quality of the first (usually only) existing file.
 		c.ExistingQuality = files[0].Quality
+		if c.ExistingQuality == "" {
+			c.ExistingQuality = releaseQuality(files[0].FilePath)
+		}
 
 	case MediaTypeEpisode:
 		ep, err := p.matcher.seriesSvc.GetEpisode(ctx, c.Match.MediaID)
 		if err != nil {
-			return
+			return err
+		}
+		if ep == nil {
+			return fmt.Errorf("episode %q not found", c.Match.MediaID)
 		}
 		show, err := p.matcher.seriesSvc.GetSeries(ctx, ep.SeriesID)
 		if err != nil {
-			return
+			return err
+		}
+		if show == nil {
+			return fmt.Errorf("series %q not found", ep.SeriesID)
 		}
 		c.QualityProfileID = show.QualityProfileID
-		// Episode files don't have a list method, but HasFile indicates
-		// whether a file exists. Without file quality info, leave
-		// ExistingQuality empty so the upgrade spec allows the import.
+		var quality, path string
+		err = p.db.QueryRowContext(ctx, `SELECT COALESCE(quality, ''), file_path FROM episode_files WHERE episode_id = ? ORDER BY created_at DESC LIMIT 1`, ep.ID).Scan(&quality, &path)
+		if err == nil {
+			c.ExistingQuality = quality
+			if c.ExistingQuality == "" {
+				c.ExistingQuality = releaseQuality(path)
+			}
+		} else if !errors.Is(err, sql.ErrNoRows) {
+			return err
+		}
 	}
+	return nil
 }
 
 // metadataString extracts a string field from a JSON metadata blob.

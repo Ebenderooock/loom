@@ -99,6 +99,57 @@ func TestVerificationFailurePreservesMoveSource(t *testing.T) {
 	}
 }
 
+func TestRetryRecoversPublishedCopyWithoutHistory(t *testing.T) {
+	for _, mode := range []ImportMode{ImportModeCopy, ImportModeMove} {
+		t.Run(string(mode), func(t *testing.T) {
+			p, svc, destDir := newCollisionPipeline(t, mode)
+			src := filepath.Join(t.TempDir(), "Safety.Film.2026.mkv")
+			dest := filepath.Join(destDir, "Safety Film (2026).mkv")
+			if err := os.WriteFile(src, []byte("complete video"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if err := copyFile(src, dest); err != nil {
+				t.Fatal(err)
+			}
+			got, err := p.importSingleFile(context.Background(), &downloads.DownloadCompletedEvent{Title: "Safety Film 2026"}, src)
+			if err != nil || got != dest || len(svc.files) != 1 {
+				t.Fatalf("could not recover published copy: %q, %v, %d registrations", got, err, len(svc.files))
+			}
+			if _, err := os.Stat(src); mode == ImportModeMove && !os.IsNotExist(err) {
+				t.Fatalf("verified move source not cleaned up: %v", err)
+			} else if mode == ImportModeCopy && err != nil {
+				t.Fatalf("copy source not preserved: %v", err)
+			}
+			if got, err := os.ReadFile(dest); err != nil || string(got) != "complete video" {
+				t.Fatalf("recovered copy damaged: %q, %v", got, err)
+			}
+		})
+	}
+}
+
+func TestRetryPreservesExistingPartialDestination(t *testing.T) {
+	p, svc, destDir := newCollisionPipeline(t, ImportModeMove)
+	src := filepath.Join(t.TempDir(), "Safety.Film.2026.mkv")
+	dest := filepath.Join(destDir, "Safety Film (2026).mkv")
+	if err := os.MkdirAll(destDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for path, content := range map[string]string{src: "complete video", dest: "complete"} {
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	_, err := p.importSingleFile(context.Background(), &downloads.DownloadCompletedEvent{Title: "Safety Film 2026"}, src)
+	if !errors.Is(err, ErrDestinationExists) || len(svc.files) != 0 {
+		t.Fatalf("unproven partial collision was adopted: %v, %d registrations", err, len(svc.files))
+	}
+	for path, content := range map[string]string{src: "complete video", dest: "complete"} {
+		if got, err := os.ReadFile(path); err != nil || string(got) != content {
+			t.Fatalf("collision was not preserved: %q, %v", got, err)
+		}
+	}
+}
+
 func TestPartialDownloadImportDoesNotReportSuccess(t *testing.T) {
 	p, _, destDir := newCollisionPipeline(t, ImportModeCopy)
 	srcDir := t.TempDir()

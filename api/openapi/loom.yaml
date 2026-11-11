@@ -441,7 +441,7 @@ paths:
     post:
       tags: [imports]
       operationId: scanImportFolder
-      summary: Preview file matches and verified import status without importing.
+      summary: Preview file matches and metadata-only historical import hints.
       description: Legacy synchronous preview; use /api/v1/imports/scans for large folders to avoid proxy timeouts.
       security: [{ apiKey: [] }, { bearerAuth: [] }, { cookieAuth: [] }]
       requestBody:
@@ -455,7 +455,7 @@ paths:
                 path: { type: string, minLength: 1 }
       responses:
         "200":
-          description: File matches, including already_imported only after content verification.
+          description: File matches; previously_imported is a saved-metadata hint, while already_imported requires same-file identity. No payload hashing.
           content:
             application/json:
               schema:
@@ -4324,7 +4324,9 @@ components:
         matched_media_id: { type: string }
         media_type: { type: string, enum: [movie, episode, music] }
         confidence: { type: number }
-        suggested_action: { type: string }
+        suggested_action:
+          type: string
+          description: previously_imported is only a saved size/mtime history match; already_imported identifies the same underlying file. Actual skips/deletions verify content separately.
         quality: { type: string }
         import_status: { type: string }
         import_error: { type: string }

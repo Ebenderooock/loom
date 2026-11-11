@@ -17,8 +17,10 @@ work.
 Persist manual import jobs and individual file outcomes in SQLite. Separate
 admission from bounded worker concurrency, retry only unsuccessful files, and
 recover interrupted jobs on startup. Match season-pack files independently.
-Certify prior success using the current source and destination content, not a
-download ID or path alone. Keep client-blocked jobs waiting without spending
+Certify import skipping and source deletion using the current source and
+destination content, not a download ID or path alone. Read-only scans use
+saved metadata to display explicitly historical hints without hashing payloads.
+Keep client-blocked jobs waiting without spending
 their retry budget; safety-held jobs require review approval before retry.
 Retain the workflow orchestrator as the owner of download-triggered imports.
 
@@ -32,9 +34,12 @@ Retain the workflow orchestrator as the owner of download-triggered imports.
 
 ### Negative / trade-offs
 
-- Copy-mode verification reads file contents on the first scan; hashes are cached
-  using file metadata, while hardlinks use filesystem identity.
+- Copy-mode import skipping and source deletion require fresh full-content
+  verification; hardlinks use filesystem identity. Scans only compare saved
+  metadata and label copies as Previously imported, not content-verified.
 - Migration 0101 adds queue tables and source fingerprints to import history.
+- Migration 0102 adds destination metadata snapshots; legacy copies without
+  those snapshots are not automatically hidden by scans.
 - Manual matching imports individual media files and their subtitles/extras,
   rather than moving unrelated loose NFO and image files with a folder.
 

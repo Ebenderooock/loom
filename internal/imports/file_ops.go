@@ -38,9 +38,8 @@ func checkRegularSource(path string) error {
 	return nil
 }
 
-// copyFile creates a new regular destination file. O_EXCL prevents a racing
-// import or a symlink at dst from being followed and truncated.
-func copyFile(src, dst string) (retErr error) {
+// copyFile publishes a complete copy without replacing an existing destination.
+func copyFile(src, dst string) error {
 	if err := checkRegularSource(src); err != nil {
 		return err
 	}
@@ -49,34 +48,60 @@ func copyFile(src, dst string) (retErr error) {
 		return fmt.Errorf("open source: %w", err)
 	}
 	defer in.Close()
+	info, err := in.Stat()
+	if err != nil {
+		return fmt.Errorf("inspect opened source: %w", err)
+	}
+	return copyFileData(in, dst, info.Size())
+}
 
+func copyFileData(in io.Reader, dst string, expectedSize int64) (retErr error) {
 	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 		return fmt.Errorf("create dest dir: %w", err)
 	}
 	if err := checkDestinationAbsent(dst); err != nil {
 		return err
 	}
-	out, err := os.OpenFile(dst, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644) //nolint:gosec // Import destinations are library paths; O_EXCL rejects existing files and symlinks.
+	out, err := os.CreateTemp(filepath.Dir(dst), ".loom-import-*.partial")
 	if err != nil {
-		if os.IsExist(err) {
-			return fmt.Errorf("%w: %s", ErrDestinationExists, dst)
-		}
-		return fmt.Errorf("create dest: %w", err)
+		return fmt.Errorf("create staged copy: %w", err)
 	}
+	staged := out.Name()
+	closed := false
 	defer func() {
-		if closeErr := out.Close(); retErr == nil && closeErr != nil {
-			retErr = fmt.Errorf("close destination: %w", closeErr)
+		if !closed {
+			if err := out.Close(); err != nil {
+				retErr = errors.Join(retErr, fmt.Errorf("close staged copy: %w", err))
+			}
 		}
-		if retErr != nil {
-			_ = os.Remove(dst)
+		if err := os.Remove(staged); err != nil && !os.IsNotExist(err) { //nolint:gosec // Exact temporary path returned by CreateTemp, never the final destination.
+			retErr = errors.Join(retErr, fmt.Errorf("remove staged copy %q: %w", staged, err))
 		}
 	}()
 
-	if _, err := io.Copy(out, in); err != nil {
+	written, err := io.Copy(out, in)
+	if err != nil {
 		return fmt.Errorf("copy data: %w", err)
+	}
+	if written != expectedSize {
+		return fmt.Errorf("source size changed during copy: expected %d bytes, copied %d", expectedSize, written)
+	}
+	if err := out.Chmod(0o644); err != nil {
+		return fmt.Errorf("set destination permissions: %w", err)
 	}
 	if err := out.Sync(); err != nil {
 		return fmt.Errorf("sync destination: %w", err)
+	}
+	err = out.Close()
+	closed = true
+	if err != nil {
+		return fmt.Errorf("close destination: %w", err)
+	}
+	if err := publishCopy(staged, dst); err != nil {
+		if os.IsExist(err) {
+			return fmt.Errorf("%w: %s", ErrDestinationExists, dst)
+		}
+		return fmt.Errorf("publish staged copy: %w", err)
 	}
 	return nil
 }
@@ -197,6 +222,42 @@ func validateImportTree(root string) error {
 		}
 		return nil
 	})
+}
+
+// moveRemainingContents preserves non-media folder contents after all media
+// files have been verified and registered. Existing paths are never replaced.
+func moveRemainingContents(source, dest string) error {
+	var dirs []string
+	err := filepath.WalkDir(source, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		rel, err := filepath.Rel(source, path)
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() {
+			dirs = append(dirs, path)
+			return nil
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		if !info.Mode().IsRegular() {
+			return fmt.Errorf("unsupported remaining source entry: %s", path)
+		}
+		return moveFile(path, filepath.Join(dest, rel))
+	})
+	if err != nil {
+		return err
+	}
+	for i := len(dirs) - 1; i >= 0; i-- {
+		if err := os.Remove(dirs[i]); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+	}
+	return nil
 }
 
 // moveContents moves entries individually. Each file operation is exclusive;

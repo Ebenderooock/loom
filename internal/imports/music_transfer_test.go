@@ -378,7 +378,7 @@ func TestMusicImportsThroughDurableQueue(t *testing.T) {
 		t.Fatalf("library copy: %q, %v", got, err)
 	}
 	results, err := p.ScanFolder(ctx, dir)
-	if err != nil || len(results) != 1 || results[0].SuggestedAction != "already_imported" {
+	if err != nil || len(results) != 1 || results[0].SuggestedAction != "previously_imported" {
 		t.Fatalf("scan after queued import: %+v, %v", results, err)
 	}
 

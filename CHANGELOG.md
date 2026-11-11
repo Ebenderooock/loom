@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- Stage import copies beside their destination and publish complete files
+  without blindly overwriting collisions. Matched movie and episode imports
+  can replace equal or better, profile-accepted files even without a recycle
+  bin; downgrades and unrelated files remain protected. Recover fully copied
+  destinations after a crash even if import history was not yet recorded.
+- Avoid full-file hashing during import scans on NAS storage. Saved metadata
+  matches are labelled Previously imported, distinct from content verification;
+  actual import skipping and source deletion still verify identity or SHA-256.
+  Migration 0102 records destination metadata for new successful imports.
 - Run Downloads / Imports scans in the background with progressive, paged
   results and cancellation instead of waiting for large scans to finish in
   one request, avoiding reverse-proxy 524 timeouts.

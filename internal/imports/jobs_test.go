@@ -424,7 +424,7 @@ func TestScanMarksVerifiedImportsAndRejectsChangedFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 	r0 := f.p.scanSingleFile(context.Background(), files[0])
-	if r0.SuggestedAction != "already_imported" || r0.ImportStatus != "imported" || r0.MatchedMediaID != "ep1" {
+	if r0.SuggestedAction != "previously_imported" || r0.ImportStatus != "previously_imported" || r0.MatchedMediaID != "ep1" {
 		t.Fatalf("verified import not reported: %+v", r0)
 	}
 	r1 := f.p.scanSingleFile(context.Background(), files[1])
@@ -583,8 +583,8 @@ func TestVerifiedPriorImportRequiresIdenticalContent(t *testing.T) {
 				t.Fatalf("verifiedPriorImport = %v, want %v", ok, tc.wantOK)
 			}
 			r := f.p.scanSingleFile(ctx, src)
-			if (r.SuggestedAction == "already_imported") != tc.wantOK {
-				t.Fatalf("scan suggested %q", r.SuggestedAction)
+			if r.SuggestedAction == "already_imported" || r.SuggestedAction == "previously_imported" {
+				t.Fatalf("legacy copies without destination metadata must not be hidden: %q", r.SuggestedAction)
 			}
 			got, err := f.p.completedImport(ctx, src)
 			if err != nil {

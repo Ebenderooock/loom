@@ -34,15 +34,20 @@ func NewRecycleBin(cfg *appconfig.Config) *RecycleBin {
 // Example: libraryRoot="/movies", filePath="/movies/Film (2024)/Film.mkv"
 // → recycled to <bin>/movies/Film (2024)/Film.mkv
 func (r *RecycleBin) Recycle(filePath string, libraryRoot string) error {
+	return r.recycleAs(filePath, filePath, libraryRoot)
+}
+
+// recycleAs stores a staged backup under the original library pathname.
+func (r *RecycleBin) recycleAs(filePath, originalPath, libraryRoot string) error {
 	if !r.Enabled || r.Path == "" {
 		// Disabled — fall back to plain deletion.
 		return os.Remove(filePath)
 	}
 
-	rel, err := filepath.Rel(libraryRoot, filePath)
+	rel, err := filepath.Rel(libraryRoot, originalPath)
 	if err != nil {
 		// Can't compute relative path — use the base directory name + file.
-		rel = filepath.Join(filepath.Base(libraryRoot), filepath.Base(filePath))
+		rel = filepath.Join(filepath.Base(libraryRoot), filepath.Base(originalPath))
 	}
 
 	// Prefix with the library root's base name so files from different
