@@ -160,6 +160,25 @@
   }
 }
 
+/* iOS zooms editable controls smaller than 16px, including class overrides. */
+@media (max-width: 1023px), (pointer: coarse) {
+  input:not(
+    [type="checkbox"],
+    [type="radio"],
+    [type="range"],
+    [type="color"],
+    [type="file"],
+    [type="button"],
+    [type="submit"],
+    [type="reset"],
+    [type="hidden"]
+  ),
+  textarea,
+  select {
+    font-size: max(16px, 1rem, 1em) !important;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

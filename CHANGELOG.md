@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- Keep the settings navigation aligned and its focus indicators visible, and
+  use readable mobile form-control text to avoid involuntary input-focus zoom.
 - Decode MusicBrainz disc and track positions as numbers so album track lists
   and music imports load correctly. Report invalid metadata responses separately
   from network failures.
