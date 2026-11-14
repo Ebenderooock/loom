@@ -2,17 +2,105 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   cancelImportScan,
   fetchImportScan,
+  fetchImportHistory,
   pollImportScan,
   queueImportFiles,
   reimportFile,
   startImportScan,
 } from "./imports-api";
-import type { ImportScan, ScanResult } from "./imports-api";
+import type { ImportRecord, ImportScan, ScanResult } from "./imports-api";
 
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   vi.useRealTimers();
+});
+
+describe("scoped title import history", () => {
+  const record: ImportRecord = {
+    id: "import-1",
+    media_type: "episode",
+    media_id: "episode-1",
+    series_id: "selected-series",
+    source_path: "/source/episode.mkv",
+    dest_path: "/library/episode.mkv",
+    import_mode: "copy",
+    status: "imported",
+    imported_at: "2026-11-01",
+  };
+
+  it("accepts episode records for the selected series without changing episode identity", async () => {
+    const records = [
+      record,
+      { ...record, id: "import-2", media_id: "episode-2" },
+    ];
+    const fetch = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(Response.json({ data: records }));
+    const signal = new AbortController().signal;
+    expect(
+      await fetchImportHistory(
+        50,
+        0,
+        { mediaType: "series", mediaId: "selected-series" },
+        signal,
+      ),
+    ).toEqual(records);
+    expect(fetch).toHaveBeenCalledWith(
+      "/api/v1/imports/history?limit=50&offset=0&media_type=series&media_id=selected-series",
+      expect.objectContaining({ signal, credentials: "include" }),
+    );
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("accepts only the selected movie identity", async () => {
+    const movie = {
+      ...record,
+      media_type: "movie",
+      media_id: "selected-movie",
+    };
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      Response.json({ data: [movie] }),
+    );
+    expect(
+      await fetchImportHistory(50, 0, {
+        mediaType: "movie",
+        mediaId: "selected-movie",
+      }),
+    ).toEqual([movie]);
+  });
+
+  it.each([
+    { ...record, series_id: "other-series" },
+    { ...record, series_id: undefined },
+    { ...record, media_type: "series", media_id: "selected-series" },
+    { ...record, media_type: "movie" },
+  ])("rejects unverified or unrelated series records (%j)", async (row) => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      Response.json({ data: [record, row] }),
+    );
+    await expect(
+      fetchImportHistory(50, 0, {
+        mediaType: "series",
+        mediaId: "selected-series",
+      }),
+    ).rejects.toThrow("Import history returned records for another title");
+  });
+
+  it.each([
+    { ...record, media_id: "selected-movie" },
+    { ...record, media_type: "movie", media_id: "other-movie" },
+  ])("rejects mismatched movie records (%j)", async (row) => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      Response.json({ data: [row] }),
+    );
+    await expect(
+      fetchImportHistory(50, 0, {
+        mediaType: "movie",
+        mediaId: "selected-movie",
+      }),
+    ).rejects.toThrow("Import history returned records for another title");
+  });
 });
 
 function session(overrides: Partial<ImportScan> = {}): ImportScan {
