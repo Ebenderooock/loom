@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- Slide the selection highlight between main and settings navigation items.
+  Respect the device's reduced-motion preference by moving it immediately.
 - Pass the shared quality profile store into the production import pipeline so
   imports can enforce assigned profiles instead of failing with an unavailable-store error.
 - Stage import copies beside their destination and publish complete files
