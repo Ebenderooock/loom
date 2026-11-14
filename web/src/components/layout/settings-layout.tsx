@@ -40,6 +40,7 @@ import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
 import { useFeatureEnabled } from "@/lib/features-api";
 import { usePageHeader } from "@/hooks/use-page-header";
+import { AnimatedNav } from "@/components/layout/animated-nav";
 
 export interface SettingsNavItem {
   to: string;
@@ -361,7 +362,7 @@ export function SettingsLayout() {
         aria-label="Settings sections"
         className="scrollbar-thin hidden lg:sticky lg:top-20 lg:block lg:max-h-[calc(100vh-6rem)] lg:self-start lg:overflow-y-auto"
       >
-        <div className="flex flex-col gap-4">
+        <AnimatedNav activeKey={active?.to} className="flex flex-col gap-4">
           {groups.map((g) => (
             <div key={g.id}>
               <p className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/60">
@@ -378,7 +379,7 @@ export function SettingsLayout() {
                         className={cn(
                           "flex items-center gap-2.5 rounded-md px-3 py-1.5 text-[13px] font-medium transition-colors",
                           isActive
-                            ? "border-l-2 border-accent bg-accent/15 text-accent"
+                            ? "text-accent"
                             : "hover:bg-accent/8 text-muted-foreground hover:text-foreground",
                         )}
                       >
@@ -391,7 +392,7 @@ export function SettingsLayout() {
               </ul>
             </div>
           ))}
-        </div>
+        </AnimatedNav>
       </nav>
 
       {/* Content */}

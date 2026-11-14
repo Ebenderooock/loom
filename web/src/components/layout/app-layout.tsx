@@ -44,6 +44,7 @@ import { useFeatureEnabled } from "@/lib/features-api";
 import { useAuth } from "@/hooks/use-auth";
 import { PageHeaderProvider, usePageHeader } from "@/hooks/use-page-header";
 import { LoomLogo } from "@/components/loom-logo";
+import { AnimatedNav } from "@/components/layout/animated-nav";
 
 interface NavItem {
   to: string;
@@ -107,7 +108,7 @@ function NavLinkRow({
       className={cn(
         "flex items-center gap-2.5 rounded-md px-3 py-2 text-[13px] font-medium transition-colors",
         active
-          ? "border-l-2 border-accent bg-accent/15 text-accent shadow-sm shadow-accent/5"
+          ? "text-accent"
           : "hover:bg-accent/8 text-muted-foreground hover:text-foreground",
         collapsed && "justify-center px-2",
       )}
@@ -174,28 +175,35 @@ function SidebarNav({
   return (
     <nav
       aria-label="Primary"
-      className="scrollbar-thin flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto p-2"
+      className="scrollbar-thin min-h-0 flex-1 overflow-y-auto p-2"
     >
-      {navItems.map((item) => (
+      <AnimatedNav
+        activeKey={
+          [...navItems, SETTINGS_NAV].find((item) => isActive(item.to))?.to
+        }
+        className="flex flex-col gap-0.5"
+      >
+        {navItems.map((item) => (
+          <NavLinkRow
+            key={item.to}
+            item={item}
+            active={isActive(item.to)}
+            collapsed={collapsed}
+            onNavigate={onNavigate}
+            reviewCount={reviewCount}
+          />
+        ))}
+
+        <div className="mx-2 my-2 border-t border-border/50" />
+
         <NavLinkRow
-          key={item.to}
-          item={item}
-          active={isActive(item.to)}
+          item={SETTINGS_NAV}
+          active={isActive(SETTINGS_NAV.to)}
           collapsed={collapsed}
           onNavigate={onNavigate}
           reviewCount={reviewCount}
         />
-      ))}
-
-      <div className="mx-2 my-2 border-t border-border/50" />
-
-      <NavLinkRow
-        item={SETTINGS_NAV}
-        active={isActive(SETTINGS_NAV.to)}
-        collapsed={collapsed}
-        onNavigate={onNavigate}
-        reviewCount={reviewCount}
-      />
+      </AnimatedNav>
     </nav>
   );
 }
