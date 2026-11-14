@@ -167,11 +167,17 @@ when its detected quality is higher. The previous file is sent to the recycle
 bin before replacement; upgrades are refused if the recycle bin is unavailable
 or disabled, so the existing track is not silently discarded.
 
-Tracks are matched by disc and track number first, then by title. If the
-titles differ only by a trailing qualifier, such as `Heavy (feat. Kiiara)`
-against `Heavy` or `Heavy (album version)`, the file still matches when exactly
-one track fits. An album's track list is fetched from MusicBrainz the first
-time it is needed. If MusicBrainz is unavailable, the import fails with
+Tracks with tagged titles are matched by title and artist, not position alone.
+Known trailing album edition labels, including `Tour Edition`, can match the
+base album when artist and track identity are unambiguous. Positions cannot
+resolve duplicate titles across editions. Featuring credits may differ, but
+bonus, remix, live and session qualifiers are retained to avoid matching a
+different recording. If only the standard edition's tracks are available,
+matching standard tracks can import; missing edition tracks remain explicit
+failures, with their sources preserved. Select the matching edition and fetch
+its metadata before retrying those files. An album's track list is fetched from
+MusicBrainz the first time it is needed. If MusicBrainz is unavailable, the
+import fails with
 `album track list unavailable` rather than a track-match error, and a later
 retry or library scan fetches the list again.
 Invalid MusicBrainz JSON is reported as `response_error` with the actual HTTP
