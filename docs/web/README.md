@@ -23,6 +23,18 @@ profile, monitoring, and search-on-add choices before saving. TV retains episode
 monitoring, series type, and season folders; music retains audio quality and
 metadata profiles.
 
+Search stays open after adding a title, preserving the query and results.
+Use the selection checkboxes to collect titles across multiple searches, then
+choose **Review selected** to apply library, quality, and monitoring settings
+to the whole selection. Successful titles leave the selection; failed titles
+remain available to retry without adding successful titles again.
+
+The last successfully used quality profile becomes the default for subsequent
+adds in the same browser-tab session, including reopening the add panel.
+Movies and TV share this preference; music keeps a separate audio preference.
+Explicit source-list defaults still take precedence. The compact add view
+keeps settings ahead of metadata, with expandable synopses and cast/crew.
+
 Discover prefills settings from the source list visibly and lets you change
 them for this add without modifying the list. If source tracking fails after
 the add succeeds, use **Retry source tracking**; the title is not added twice.
