@@ -24,6 +24,7 @@ type Service interface {
 	DeleteSeries(ctx context.Context, id string) error
 	SetMonitoringStatus(ctx context.Context, seriesID string, status MonitoringStatus) error
 	RefreshSeries(ctx context.Context, id string) error
+	RefreshSeriesMetadata(ctx context.Context, id string) error
 	SetPostRefreshHook(fn PostRefreshHook)
 
 	ListSeasons(ctx context.Context, seriesID string) ([]*Season, error)
@@ -332,6 +333,15 @@ func (s *service) SetMonitoringStatus(ctx context.Context, seriesID string, stat
 }
 
 func (s *service) RefreshSeries(ctx context.Context, id string) error {
+	return s.refreshSeries(ctx, id, false)
+}
+
+// RefreshSeriesMetadata updates metadata without invoking file ingestion.
+func (s *service) RefreshSeriesMetadata(ctx context.Context, id string) error {
+	return s.refreshSeries(ctx, id, true)
+}
+
+func (s *service) refreshSeries(ctx context.Context, id string, metadataOnly bool) error {
 	sr, err := s.repo.GetSeries(ctx, id)
 	if err != nil {
 		return fmt.Errorf("series: get: %w", err)
@@ -425,6 +435,16 @@ func (s *service) RefreshSeries(ctx context.Context, id string) error {
 
 	if err := s.repo.UpdateSeries(ctx, sr); err != nil {
 		return fmt.Errorf("series: update: %w", err)
+	}
+
+	if metadataOnly {
+		// Keep episode IDs and their file links intact. The full refresh
+		// rebuilds children and depends on an ingestion hook to re-link them.
+		if err := s.repo.DeleteCreditsBySeriesID(ctx, sr.ID); err != nil {
+			return fmt.Errorf("series: delete credits: %w", err)
+		}
+		s.fetchAndStoreCredits(ctx, details, sr.ID)
+		return nil
 	}
 
 	savedAiringTimes := s.savedAiringTimes(ctx, sr.ID)

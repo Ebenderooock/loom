@@ -53,6 +53,29 @@ Emby keep working unchanged.
 | Auth          | Server-authoritative session cookies (argon2id) + API keys                                                                                          | OIDC + reverse-proxy header trust          |
 | Frontend      | React 19 + TS + Vite + TanStack Router/Query + shadcn/ui + Tailwind; **Movies, Series, Indexers, Search, Downloads, Settings, Notifications pages** | Calendar, Import Lists (Phases 8–11)       |
 
+## Title quick actions
+
+Movie and series detail views have a **More actions** (`...`) menu with
+**Sync with Plex**, **Refresh metadata**, **Rescan library files**,
+**View import history**, and **Copy folder path**.
+History is filtered to the selected movie or the selected series's episodes.
+The other actions require an administrator.
+
+Plex sync requires complete registered media in the title's library and an
+enabled Plex connection. It requests a **library-wide refresh** on each enabled
+Plex server, not a title-specific scan, download, or watched-state sync.
+Loom paths are not sent to Plex, so different Windows/Linux mount paths are safe.
+Success means Plex accepted the refresh, not that indexing has finished.
+
+The file rescan **checks registered imported files only**; it does not discover
+or ingest unregistered files. Files must still exist with their recorded,
+nonzero size. Temporary files, symbolic links, shared/ambiguous folders, and
+paths outside the title's assigned library are excluded. Copy uses the resolved
+existing title folder, never a guessed folder name. Series metadata refresh
+preserves episode IDs and file links rather than rebuilding the episode catalog
+or invoking the file-ingestion hook. None of these quick actions enqueue
+downloads or retry imports from download folders.
+
 ## Appearance
 
 Admins can customize **Settings > Appearance** with a Light, Dark, AMOLED,

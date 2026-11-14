@@ -1508,15 +1508,38 @@ func (p *ImportPipeline) ImportManualMatch(ctx context.Context, path string, med
 
 // ListHistory returns import history records.
 func (p *ImportPipeline) ListHistory(ctx context.Context, limit, offset int) ([]*ImportRecord, error) {
+	return p.ListTitleHistory(ctx, "", "", limit, offset)
+}
+
+// ListTitleHistory filters before pagination. Series history is stored against
+// episode IDs, so a series filter includes only episodes belonging to that show.
+func (p *ImportPipeline) ListTitleHistory(ctx context.Context, mediaType, mediaID string, limit, offset int) ([]*ImportRecord, error) {
 	if limit <= 0 {
 		limit = 50
 	}
+	filter := ""
+	args := []any{}
+	switch mediaType {
+	case "":
+		if mediaID != "" {
+			return nil, fmt.Errorf("media type required")
+		}
+	case "movie":
+		filter = " WHERE media_type='movie' AND media_id=?"
+		args = append(args, mediaID)
+	case "series":
+		filter = " WHERE media_type='episode' AND media_id IN (SELECT id FROM episodes WHERE series_id=?)"
+		args = append(args, mediaID)
+	default:
+		return nil, fmt.Errorf("unsupported history media type")
+	}
+	args = append(args, limit, offset)
 	rows, err := p.db.QueryContext(ctx,
 		`SELECT id, media_type, media_id, source_path, dest_path, import_mode, status, error, imported_at
-		 FROM import_history
+		 FROM import_history`+filter+`
 		 ORDER BY imported_at DESC
 		 LIMIT ? OFFSET ?`,
-		limit, offset,
+		args...,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("query import history: %w", err)
@@ -1531,6 +1554,9 @@ func (p *ImportPipeline) ListHistory(ctx context.Context, limit, offset int) ([]
 			&r.ImportMode, &r.Status, &r.Error, &r.ImportedAt,
 		); err != nil {
 			return nil, fmt.Errorf("scan import record: %w", err)
+		}
+		if mediaType == "series" {
+			r.SeriesID = mediaID
 		}
 		records = append(records, &r)
 	}
