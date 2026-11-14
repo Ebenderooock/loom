@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"path/filepath"
 	"regexp"
+	"sort"
+	"strconv"
 	"strings"
 	"unicode"
 
@@ -45,8 +47,22 @@ type parsedRelease struct {
 var (
 	// Release group suffix: -GROUP at end of name. Must be 4+ alpha chars
 	// (optionally followed by digits) to avoid stripping season markers like -S01.
-	reGroup = regexp.MustCompile(`(?i)\s*-\s*[a-z]{2,}[a-z0-9]*$`)
+	reGroup          = regexp.MustCompile(`(?i)\s*-\s*[a-z]{2,}[a-z0-9]*$`)
+	reBareEpisode    = regexp.MustCompile(`(?i)^episode[\s._-]+(\d{1,4})(?:[\s._-]+(.*))?$`)
+	reContextSeason  = regexp.MustCompile(`(?i)(?:^|[\s._-])(?:season[\s._-]*|s)(\d{1,2})(?:$|[\s._-])`)
+	reBroadcastRange = regexp.MustCompile(`\(?\b(?:19|20)\d{2}\s*[-\x{2013}\x{2014}]\s*(?:19|20)\d{2}\b\)?`)
+	reSeriesPack     = regexp.MustCompile(`(?i)[\s._-]+(?:the[\s._-]+)?complete[\s._-]+series\b`)
 )
+
+func bareEpisode(name string) (number int, title string, ok bool) {
+	name = strings.TrimSuffix(filepath.Base(name), filepath.Ext(name))
+	parts := reBareEpisode.FindStringSubmatch(name)
+	if parts == nil {
+		return 0, "", false
+	}
+	number, _ = strconv.Atoi(parts[1])
+	return number, strings.TrimSpace(parts[2]), true
+}
 
 // parseReleaseName extracts title, year, season, and episode from a release name.
 // Delegates to the canonical parser package for extraction, then maps to the
@@ -145,6 +161,10 @@ func cleanTitle(raw string) string {
 
 // Match attempts to match a file to a movie or series episode.
 func (m *Matcher) Match(ctx context.Context, filename string) (*MatchResult, error) {
+	// An episode title is not a movie or series title. Never fuzzy-match it.
+	if _, _, ok := bareEpisode(filename); ok {
+		return &MatchResult{Matched: false}, nil
+	}
 	parsed := parseReleaseName(filepath.Base(filename))
 	if parsed.Title == "" {
 		return &MatchResult{Matched: false}, nil
@@ -161,6 +181,9 @@ func (m *Matcher) Match(ctx context.Context, filename string) (*MatchResult, err
 // libraries where the folder name (e.g., "Deadpool (2016)") carries
 // more information than the filename (e.g., "movie.mkv").
 func (m *Matcher) MatchPath(ctx context.Context, filePath string) (*MatchResult, error) {
+	if _, _, ok := bareEpisode(filePath); ok {
+		return m.matchContextEpisode(ctx, filePath, "", "", "")
+	}
 	base := filepath.Base(filePath)
 	dir := filepath.Base(filepath.Dir(filePath))
 
@@ -198,6 +221,174 @@ func (m *Matcher) MatchPath(ctx context.Context, filePath string) (*MatchResult,
 	}
 
 	return &MatchResult{Matched: false}, nil
+}
+
+// MatchDownloadPath bounds episode context to this download. The download
+// title can identify a series, but never supplies an episode or a grab target.
+func (m *Matcher) MatchDownloadPath(ctx context.Context, filePath, root, title, downloadID string) (*MatchResult, error) {
+	if _, _, ok := bareEpisode(filePath); ok {
+		return m.matchContextEpisode(ctx, filePath, root, title, downloadID)
+	}
+	return m.MatchPath(ctx, filePath)
+}
+
+func (m *Matcher) matchContextEpisode(ctx context.Context, filePath, root, downloadTitle, downloadID string) (*MatchResult, error) {
+	number, episodeTitle, _ := bareEpisode(filePath)
+	noMatch := &MatchResult{Matched: false}
+	if number <= 0 {
+		return noMatch, nil
+	}
+	var names []string
+	dir := filepath.Clean(filepath.Dir(filePath))
+	root = filepath.Clean(root)
+	if root != "." {
+		rel, err := filepath.Rel(root, filePath)
+		if err != nil {
+			return nil, fmt.Errorf("resolve episode context path: %w", err)
+		}
+		if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			return noMatch, nil
+		}
+	}
+	for dir != "." && dir != string(filepath.Separator) {
+		names = append(names, filepath.Base(dir))
+		if dir == root {
+			break
+		}
+		dir = filepath.Dir(dir)
+	}
+	rootIndex := len(names) - 1
+	if downloadTitle != "" {
+		names = append(names, downloadTitle)
+	}
+
+	seasonNumber := -1
+	for i, name := range names {
+		name = reBroadcastRange.ReplaceAllString(name, "")
+		name = reSeriesPack.ReplaceAllString(name, "")
+		if loc := reContextSeason.FindStringSubmatchIndex(name); loc != nil {
+			n, _ := strconv.Atoi(name[loc[2]:loc[3]])
+			if seasonNumber < 0 {
+				seasonNumber = n
+			} else if seasonNumber != n {
+				return noMatch, nil
+			}
+			name = name[:loc[0]] + " " + name[loc[1]:]
+		}
+		p := parseReleaseName(name)
+		if p.Title == "" {
+			continue
+		}
+		candidates, err := m.seriesSvc.SearchSeries(ctx, p.Title)
+		if err != nil {
+			return nil, fmt.Errorf("search contextual series: %w", err)
+		}
+		var show *series.Series
+		for _, candidate := range candidates {
+			if normalise(candidate.Title) != normalise(p.Title) ||
+				(p.Year > 0 && candidate.Year != p.Year) {
+				continue
+			}
+			if show != nil {
+				return noMatch, nil
+			}
+			show = candidate
+		}
+		if show != nil {
+			return m.matchContextNumber(ctx, show, seasonNumber, number, episodeTitle)
+		}
+		// Do not inherit a different show's identity through an unknown
+		// subfolder. Only an opaque download root may use the event title.
+		if root == "." || i < rootIndex ||
+			(i == rootIndex && (downloadID == "" || filepath.Base(root) != downloadID)) {
+			return noMatch, nil
+		}
+	}
+	return noMatch, nil
+}
+
+func (m *Matcher) matchContextNumber(ctx context.Context, show *series.Series, seasonNumber, number int, title string) (*MatchResult, error) {
+	seasons, err := m.seriesSvc.ListSeasons(ctx, show.ID)
+	if err != nil {
+		return nil, fmt.Errorf("list contextual seasons: %w", err)
+	}
+	episodes, err := m.seriesSvc.ListEpisodes(ctx, show.ID, nil)
+	if err != nil {
+		return nil, fmt.Errorf("list contextual episodes: %w", err)
+	}
+	sort.Slice(seasons, func(i, j int) bool { return seasons[i].SeasonNumber < seasons[j].SeasonNumber })
+	noMatch := &MatchResult{Matched: false}
+	var matched *series.Episode
+	matchedSeason := -1
+	offset, expectedSeason := 0, 1
+	regularSeasons := 0
+	for _, season := range seasons {
+		if season.SeasonNumber > 0 {
+			regularSeasons++
+		}
+	}
+	for _, season := range seasons {
+		if seasonNumber < 0 && season.SeasonNumber == 0 {
+			continue
+		}
+		if seasonNumber >= 0 && season.SeasonNumber != seasonNumber {
+			continue
+		}
+		var seasonEpisodes []*series.Episode
+		for _, ep := range episodes {
+			if ep.SeasonID == season.ID {
+				seasonEpisodes = append(seasonEpisodes, ep)
+			}
+		}
+		sort.Slice(seasonEpisodes, func(i, j int) bool {
+			return seasonEpisodes[i].EpisodeNumber < seasonEpisodes[j].EpisodeNumber
+		})
+		if seasonNumber < 0 {
+			// Older catalogs have no absolute numbers. Derive aired order
+			// only from complete, contiguous regular seasons.
+			if season.SeasonNumber != expectedSeason || len(seasonEpisodes) != season.EpisodeCount {
+				return noMatch, nil
+			}
+			for i, ep := range seasonEpisodes {
+				if ep.EpisodeNumber != i+1 {
+					return noMatch, nil
+				}
+			}
+			expectedSeason++
+		}
+		for _, ep := range seasonEpisodes {
+			target := ep.EpisodeNumber
+			if seasonNumber < 0 {
+				target += offset
+			}
+			if target != number {
+				continue
+			}
+			if matched != nil {
+				return noMatch, nil
+			}
+			// Cross-season offsets require corroborating titles. A uniquely
+			// numbered single season does not depend on descriptive spelling.
+			if seasonNumber < 0 && regularSeasons > 1 && (title == "" || normalise(title) != normalise(ep.Title)) {
+				return noMatch, nil
+			}
+			matched, matchedSeason = ep, season.SeasonNumber
+		}
+		offset += len(seasonEpisodes)
+	}
+	if matched == nil {
+		return noMatch, nil
+	}
+	lib, err := m.libStore.Get(ctx, show.LibraryID)
+	if err != nil {
+		return nil, fmt.Errorf("get library: %w", err)
+	}
+	return &MatchResult{
+		Matched: true, MediaType: MediaTypeEpisode, MediaID: matched.ID,
+		SeriesID: show.ID, Title: show.Title, Year: show.Year,
+		Season: matchedSeason, Episode: matched.EpisodeNumber,
+		DestPath: filepath.Join(lib.Path, sanitizeDirName(show.Title), fmt.Sprintf("Season %02d", matchedSeason)),
+	}, nil
 }
 
 // matchMovie searches for a movie matching the parsed release name.

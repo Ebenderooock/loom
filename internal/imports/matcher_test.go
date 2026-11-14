@@ -1,11 +1,182 @@
 package imports
 
 import (
+	"context"
+	"errors"
+	"fmt"
+	"path/filepath"
 	"testing"
 
+	"github.com/ebenderooock/loom/internal/downloads"
 	"github.com/ebenderooock/loom/internal/movies"
 	"github.com/ebenderooock/loom/internal/series"
 )
+
+type contextualSeriesService struct {
+	*packSeriesService
+	shows     []*series.Series
+	seasons   []*series.Season
+	episodes  []*series.Episode
+	searchErr error
+}
+
+func (s *contextualSeriesService) SearchSeries(context.Context, string) ([]*series.Series, error) {
+	return s.shows, s.searchErr
+}
+
+func (s *contextualSeriesService) GetSeries(_ context.Context, id string) (*series.Series, error) {
+	for _, show := range s.shows {
+		if show.ID == id {
+			return show, nil
+		}
+	}
+	return nil, errors.New("series not found")
+}
+
+func (s *contextualSeriesService) GetEpisode(_ context.Context, id string) (*series.Episode, error) {
+	for _, ep := range s.episodes {
+		if ep.ID == id {
+			return ep, nil
+		}
+	}
+	return nil, errors.New("episode not found")
+}
+
+func (s *contextualSeriesService) ListSeasons(_ context.Context, id string) ([]*series.Season, error) {
+	var out []*series.Season
+	for _, season := range s.seasons {
+		if season.SeriesID == id {
+			out = append(out, season)
+		}
+	}
+	return out, nil
+}
+
+func (s *contextualSeriesService) ListEpisodes(_ context.Context, id string, number *int) ([]*series.Episode, error) {
+	var out []*series.Episode
+	for _, ep := range s.episodes {
+		if ep.SeriesID != id {
+			continue
+		}
+		for _, season := range s.seasons {
+			if ep.SeasonID == season.ID && (number == nil || season.SeasonNumber == *number) {
+				out = append(out, ep)
+			}
+		}
+	}
+	return out, nil
+}
+
+func dragonBallCatalog(f *packFixture) *contextualSeriesService {
+	s := &contextualSeriesService{
+		packSeriesService: f.svc,
+		shows: []*series.Series{
+			{ID: "db", Title: "Dragon Ball", Year: 1986, LibraryID: "tv"},
+			{ID: "dbz", Title: "Dragon Ball Z", Year: 1989, LibraryID: "tv"},
+		},
+		seasons: []*series.Season{
+			{ID: "db-specials", SeriesID: "db", SeasonNumber: 0, EpisodeCount: 1},
+			{ID: "db-s1", SeriesID: "db", SeasonNumber: 1, EpisodeCount: 13},
+			{ID: "db-s2", SeriesID: "db", SeasonNumber: 2, EpisodeCount: 140},
+			{ID: "dbz-s1", SeriesID: "dbz", SeasonNumber: 1, EpisodeCount: 1},
+		},
+	}
+	s.episodes = append(s.episodes, &series.Episode{
+		ID: "special", SeriesID: "db", SeasonID: "db-specials", EpisodeNumber: 1, Title: "Bonus",
+	}, &series.Episode{
+		ID: "z1", SeriesID: "dbz", SeasonID: "dbz-s1", EpisodeNumber: 1, Title: "The New Threat",
+	})
+	for i := 1; i <= 153; i++ {
+		season, ep := "db-s1", i
+		if i > 13 {
+			season, ep = "db-s2", i-13
+		}
+		title := fmt.Sprintf("Adventure %d", i)
+		if i == 1 {
+			title = "The Secret of the Dragon Balls"
+		}
+		s.episodes = append(s.episodes, &series.Episode{
+			ID: fmt.Sprintf("db%d", i), SeriesID: "db", SeasonID: season, EpisodeNumber: ep, Title: title,
+		})
+	}
+	f.p.matcher.seriesSvc = s
+	return s
+}
+
+func TestMatchPathBareEpisodeContext(t *testing.T) {
+	f := newPackPipeline(t, ImportModeCopy, nil)
+	s := dragonBallCatalog(f)
+	for _, tc := range []struct {
+		path            string
+		id              string
+		season, episode int
+	}{
+		{"/downloads/Dragon Ball/Episode 1 The Secret of the Dragon Balls.mkv", "db1", 1, 1},
+		{"/downloads/Dragon Ball/Season 02/Episode 1 Adventure 14.mkv", "db14", 2, 1},
+		{"/downloads/Dragon Ball The Complete Series (1995\u20132003)/Episode 1 The Secret of the Dragon Balls.mkv", "db1", 1, 1},
+		{"/downloads/Dragon Ball/Extras/Dragon Ball Z/Episode 1 The New Threat.mkv", "z1", 1, 1},
+		{"/downloads/Dragon Ball and Dragon Ball Z/Dragon Ball/Episode 14 Adventure 14.mkv", "db14", 2, 1},
+		{"/downloads/Dragon Ball and Dragon Ball Z/Episode 1 The Secret of the Dragon Balls.mkv", "", 0, 0},
+		{"/downloads/Dragon Ball The Complete Series and Dragon Ball Z/Episode 1 The Secret of the Dragon Balls.mkv", "", 0, 0},
+		{"/downloads/Dragon Ball/Episode 14 Wrong Title.mkv", "", 0, 0},
+		{"/downloads/Dragon Ball/Episode 14.mkv", "", 0, 0},
+		{"/downloads/Dragon Ball/Episode 0 Bonus.mkv", "", 0, 0},
+		{"/downloads/Dragon Ball/Season 02/Episode 1.mkv", "db14", 2, 1},
+		{"/downloads/Unknown/Episode 1 The Secret of the Dragon Balls.mkv", "", 0, 0},
+		{"/downloads/Dragon Ball/Dragon.Ball.S02E01.mkv", "db14", 2, 1},
+	} {
+		t.Run(tc.path, func(t *testing.T) {
+			got, err := f.p.matcher.MatchPath(context.Background(), tc.path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got.Matched != (tc.id != "") || got.MediaID != tc.id {
+				t.Fatalf("match = %+v, want %q", got, tc.id)
+			}
+			if got.Matched && (got.Season != tc.season || got.Episode != tc.episode ||
+				filepath.Base(got.DestPath) != fmt.Sprintf("Season %02d", tc.season)) {
+				t.Fatalf("wrong destination episode: %+v", got)
+			}
+		})
+	}
+	for _, tc := range []struct {
+		path, root, title, id string
+	}{
+		{"/downloads/hash/Episode 14 Adventure 14.mkv", "/downloads/hash", "Dragon Ball", "db14"},
+		{"/downloads/Dragon Ball/Dragon Ball Z/Episode 1 The New Threat.mkv", "/downloads/Dragon Ball", "Dragon Ball", "z1"},
+		{"/downloads/hash/Unknown/Episode 1 The Secret of the Dragon Balls.mkv", "/downloads/hash", "Dragon Ball", ""},
+		{"/downloads/elsewhere/Episode 1 The Secret of the Dragon Balls.mkv", "/downloads/hash", "Dragon Ball", ""},
+		{"/downloads/hash/Episode 1 The Secret of the Dragon Balls.mkv", "/downloads/hash", "Dragon Ball and Dragon Ball Z", ""},
+		{"/downloads/Dragon Ball and Dragon Ball Z/Episode 1 The Secret of the Dragon Balls.mkv", "/downloads/Dragon Ball and Dragon Ball Z", "Dragon Ball", ""},
+	} {
+		got, err := f.p.matcher.MatchDownloadPath(context.Background(), tc.path, tc.root, tc.title, "hash")
+		if err != nil || got.Matched != (tc.id != "") || got.MediaID != tc.id {
+			t.Fatalf("download match %q: %+v, %v; want %q", tc.path, got, err, tc.id)
+		}
+	}
+	s.shows = append(s.shows, &series.Series{ID: "remake", Title: "Dragon Ball", LibraryID: "tv"})
+	got, err := f.p.matcher.MatchPath(context.Background(), "/downloads/Dragon Ball/Episode 1 The Secret of the Dragon Balls.mkv")
+	if err != nil || got.Matched {
+		t.Fatalf("duplicate series title must not choose first: %+v, %v", got, err)
+	}
+}
+
+func TestContextEpisodeRejectsIncompleteCatalogAndPropagatesErrors(t *testing.T) {
+	f := newPackPipeline(t, ImportModeCopy, nil)
+	s := dragonBallCatalog(f)
+	s.episodes = s.episodes[:len(s.episodes)-1]
+	got, err := f.p.matcher.MatchPath(context.Background(), "/downloads/Dragon Ball/Episode 14 Adventure 14.mkv")
+	if err != nil || got.Matched {
+		t.Fatalf("incomplete absolute ordering must not be inferred: %+v, %v", got, err)
+	}
+	s.searchErr = errors.New("metadata database unavailable")
+	_, err = f.p.importDownloadFile(context.Background(), &downloads.DownloadCompletedEvent{
+		Title: "Dragon Ball",
+	}, "/downloads/Dragon Ball/Episode 14 Adventure 14.mkv", 153)
+	if !errors.Is(err, s.searchErr) {
+		t.Fatalf("metadata service failure became deterministic no-match: %v", err)
+	}
+}
 
 // ── parseReleaseName ─────────────────────────────────────────────────
 

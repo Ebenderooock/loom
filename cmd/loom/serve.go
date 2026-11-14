@@ -308,6 +308,7 @@ func cmdServe(ctx context.Context, args []string) error {
 	if err != nil {
 		return fmt.Errorf("wire infra: %w", err)
 	}
+	defer infra.connectUnsubscribe()
 	if err := scheduler.RegisterPlayHistoryPrune(ctx, sched, infra.analyticsSvc, cfg.Scheduler.PlayHistoryRetentionDays, logger); err != nil {
 		return fmt.Errorf("register play history prune: %w", err)
 	}

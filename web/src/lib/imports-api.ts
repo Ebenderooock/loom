@@ -11,6 +11,8 @@ export interface ImportRecord {
   id: string;
   media_type: string;
   media_id: string;
+  /** Parent title identity supplied on scoped series history responses. */
+  series_id?: string;
   source_path: string;
   dest_path: string;
   import_mode: string;
@@ -133,11 +135,12 @@ async function fetchJSON<T>(url: string, init?: RequestInit): Promise<T> {
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
+    const message =
+      typeof body?.error === "string" ? body.error : body?.error?.message;
     throw new Error(
       res.status === 404 && url.startsWith("/api/v1/imports/scans/")
         ? "Scan session not found or expired (404)"
-        : ((body as Record<string, string>).error ??
-            `${res.status} ${res.statusText}`),
+        : message || `${res.status} ${res.statusText}`,
     );
   }
   return (await res.json()) as T;
@@ -146,10 +149,33 @@ async function fetchJSON<T>(url: string, init?: RequestInit): Promise<T> {
 export async function fetchImportHistory(
   limit = 50,
   offset = 0,
+  title?: { mediaType: "movie" | "series"; mediaId: string },
+  signal?: AbortSignal,
 ): Promise<ImportRecord[]> {
+  const params = new URLSearchParams({
+    limit: String(limit),
+    offset: String(offset),
+  });
+  if (title) {
+    params.set("media_type", title.mediaType);
+    params.set("media_id", title.mediaId);
+  }
   const r = await fetchJSON<{ data: ImportRecord[] }>(
-    `/api/v1/imports/history?limit=${limit}&offset=${offset}`,
+    `/api/v1/imports/history?${params}`,
+    { signal },
   );
+  if (!Array.isArray(r.data))
+    throw new Error("Unexpected import history response");
+  if (
+    title &&
+    r.data.some((row) =>
+      title.mediaType === "movie"
+        ? row.media_type !== "movie" || row.media_id !== title.mediaId
+        : row.media_type !== "episode" || row.series_id !== title.mediaId,
+    )
+  ) {
+    throw new Error("Import history returned records for another title");
+  }
   return r.data;
 }
 

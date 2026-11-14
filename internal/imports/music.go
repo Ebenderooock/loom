@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 	"unicode"
@@ -466,7 +467,8 @@ func (p *ImportPipeline) findMusicTrack(ctx context.Context, albumArtistName, tr
 	var ambiguousTracks []string
 	var metadataErrors []error
 	for _, candidate := range albums {
-		if normalizeMusicText(candidate.Title) != normalizeMusicText(albumName) &&
+		editionFallback := normalizeMusicText(candidate.Title) != normalizeMusicText(albumName)
+		if editionFallback &&
 			normalizeMusicText(musiclib.BaseAlbumTitle(candidate.Title)) != normalizeMusicText(musiclib.BaseAlbumTitle(albumName)) {
 			continue
 		}
@@ -486,9 +488,20 @@ func (p *ImportPipeline) findMusicTrack(ctx context.Context, albumArtistName, tr
 			metadataErrors = append(metadataErrors, fmt.Errorf("load album %q: %w", candidate.Title, loadErr))
 			continue
 		}
-		candidateTrack, matchErr := matchTaggedTrack(loaded.Tracks, &effectiveTags, !identityEstablished)
+		candidateTags := effectiveTags
+		if editionFallback {
+			// Track positions are edition-specific, not recording identity.
+			candidateTags.TrackNumber = 0
+			candidateTags.DiscNumber = 0
+		}
+		candidateTrack, matchErr := matchTaggedTrack(loaded.Tracks, &candidateTags, !identityEstablished)
 		if matchErr != nil {
 			ambiguousTracks = append(ambiguousTracks, candidate.ID)
+			continue
+		}
+		if candidateTrack != nil && loaded.SelectedReleaseID != "" &&
+			candidateTrack.ReleaseID != "" && candidateTrack.ReleaseID != loaded.SelectedReleaseID {
+			ambiguousTracks = append(ambiguousTracks, fmt.Sprintf("%s (track belongs to a different selected release)", candidate.ID))
 			continue
 		}
 		if candidateTrack != nil {
@@ -517,7 +530,7 @@ func (p *ImportPipeline) findMusicTrack(ctx context.Context, albumArtistName, tr
 			return nil, nil, nil, fmt.Errorf("ambiguous music track %q on album %q: matching track identity is unavailable or duplicated", tags.Title, albumName)
 		}
 		if len(sameTitle) > 0 {
-			return nil, nil, nil, fmt.Errorf("music album %q has no matching credited artist and track identity", albumName)
+			return nil, nil, nil, fmt.Errorf("music album %q has no matching credited artist and track identity for %q; matching selected-release metadata is required", albumName, tags.Title)
 		}
 		return nil, nil, nil, fmt.Errorf("could not match audio track %q on album %q", tags.Title, albumName)
 	}
@@ -556,18 +569,10 @@ func matchTaggedTrack(tracks []*musiclib.Track, tags *musiclib.AudioTags, requir
 			}
 		}
 		if len(candidates) == 0 {
-			base := normalizeMusicText(musiclib.BaseTrackTitle(tags.Title))
-			for _, titleOf := range []func(*musiclib.Track) string{
-				func(t *musiclib.Track) string { return t.Title },
-				func(t *musiclib.Track) string { return musiclib.BaseTrackTitle(t.Title) },
-			} {
-				for _, candidate := range eligible {
-					if base != "" && normalizeMusicText(titleOf(candidate)) == base {
-						candidates = append(candidates, candidate)
-					}
-				}
-				if len(candidates) > 0 {
-					break
+			title = normalizeMusicText(musicTrackIdentityTitle(tags.Title))
+			for _, candidate := range eligible {
+				if title != "" && normalizeMusicText(musicTrackIdentityTitle(candidate.Title)) == title {
+					candidates = append(candidates, candidate)
 				}
 			}
 		}
@@ -613,6 +618,20 @@ func matchTaggedTrack(tracks []*musiclib.Track, tags *musiclib.AudioTags, requir
 		return positioned[0], nil
 	}
 	return nil, fmt.Errorf("multiple tracks match title and artist")
+}
+
+var musicTrackCreditSuffix = regexp.MustCompile(`(?i)\s*(?:\((?:feat\.?|ft\.?|featuring)\s+[^()]+\)|\[(?:feat\.?|ft\.?|featuring)\s+[^\[\]]+\]|\s+(?:feat\.?|ft\.?|featuring)\s+[^\(\)\[\]]+)\s*$`)
+
+// Credit spelling may vary; recording/version qualifiers must remain intact.
+func musicTrackIdentityTitle(title string) string {
+	base := strings.TrimSpace(title)
+	for {
+		next := strings.TrimSpace(musicTrackCreditSuffix.ReplaceAllString(base, ""))
+		if next == "" || next == base {
+			return base
+		}
+		base = next
+	}
 }
 
 func trackArtistMatches(track *musiclib.Track, artistName string, requireArtist bool) bool {

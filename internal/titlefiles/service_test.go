@@ -151,6 +151,44 @@ func TestListAllDiskFilesAndSeasonScope(t *testing.T) {
 	}
 }
 
+func TestActionFolderOnlyIncludesCompleteRegisteredMedia(t *testing.T) {
+	for _, mediaType := range []string{"movie", "series"} {
+		t.Run(mediaType, func(t *testing.T) {
+			f := newFixture(t, mediaType)
+			if mediaType == "movie" {
+				f.exec(t, `UPDATE movie_files SET size=5`)
+				f.movieFile(t, "partial", "movie.part.mkv")
+				f.exec(t, `UPDATE movie_files SET size=5 WHERE id='partial'`)
+			} else {
+				f.exec(t, `UPDATE episode_files SET file_size=5`)
+				f.episodeFile(t, "partial", "Season 01/show.part.S01E02.mkv", 1)
+				f.exec(t, `UPDATE episode_files SET file_size=5 WHERE id='partial'`)
+			}
+			f.write(t, "unknown.mkv")
+			folder, err := f.s.ResolveActionFolder(context.Background(), mediaType, "title")
+			if err != nil || folder.Path != f.root {
+				t.Fatalf("actual custom title folder: %+v %v", folder, err)
+			}
+			want := 1
+			if mediaType == "series" {
+				want = 2
+			}
+			if len(folder.Files) != want {
+				t.Fatalf("included untracked/temporary/sidecar files: %+v", folder.Files)
+			}
+			if mediaType == "movie" {
+				f.exec(t, `UPDATE movie_files SET size=10`)
+			} else {
+				f.exec(t, `UPDATE episode_files SET file_size=10`)
+			}
+			folder, err = f.s.ResolveActionFolder(context.Background(), mediaType, "title")
+			if err != nil || len(folder.Files) != 0 {
+				t.Fatalf("changed/incomplete files should be unavailable: %+v %v", folder, err)
+			}
+		})
+	}
+}
+
 func TestRejectUnsafeSelectionsBeforeAnyDeletion(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t, "movie")
