@@ -195,12 +195,12 @@ jobs:
             echo "spksrc commit: $(git -C spksrc rev-parse HEAD)"
             echo "Builder image: $(docker image inspect --format='{{index .RepoDigests 0}}' ghcr.io/synocommunity/spksrc)"
             echo "Package SHA-256: $(sha256sum "$package" | cut -d ' ' -f 1)"
-          } | tee spksrc/packages/loom-build-info.txt >> "$GITHUB_STEP_SUMMARY"
+          } | tee loom-build-info.txt >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v7
         with:
           name: synology-${{ steps.meta.outputs.build_label }}-${{ env.SPK_TARGET }}
           path: |
             spksrc/packages/loom_*.spk
-            spksrc/packages/loom-build-info.txt
+            loom-build-info.txt
           if-no-files-found: error
           retention-days: 30
