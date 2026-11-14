@@ -59,7 +59,7 @@ func TestMusicTourEditionImportKeepsMissingRecordingsUnmatched(t *testing.T) {
 			if err := repo.UpdateAlbum(ctx, album); err != nil {
 				t.Fatal(err)
 			}
-			var tracks []*musiclib.Track
+			tracks := make([]*musiclib.Track, 0, 12)
 			for i, title := range titles[:12] {
 				tracks = append(tracks, &musiclib.Track{
 					ID: fmt.Sprintf("studio-%d", i), AlbumID: album.ID, Title: title,
