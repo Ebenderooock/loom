@@ -22,6 +22,7 @@ export function registerAcquisitionRecovery(handler: RecoveryHandler) {
 export async function apiFetch(
   input: RequestInfo | URL,
   init?: RequestInit,
+  options?: { acquisitionRecovery?: boolean },
 ): Promise<Response> {
   // Device approval can be mounted below a reverse-proxy prefix. The rest of
   // the UI retains its existing root deployment behavior.
@@ -37,6 +38,7 @@ export async function apiFetch(
   // All grab surfaces share the same explicit recovery decision, including
   // music searches. Replay only JSON requests, never consumed request streams.
   if (
+    options?.acquisitionRecovery === false ||
     response.status !== 409 ||
     !handleRecovery ||
     typeof input !== "string" ||
