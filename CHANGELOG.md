@@ -18,6 +18,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   App-authenticated publication results without publishing credentials;
   public releases, downloads, and status/version badges remain on Loom.
   Support both `prelease/X.Y.Z` and `prerelease/X.Y.Z` image channels.
+- Keep title searches open after adding, support selections across searches
+  with shared add settings, and remember the last successful quality profile
+  for the browser-tab session. Compact mobile add views with expandable
+  synopses and cast/crew.
 - Slide the selection highlight between main and settings navigation items.
   Respect the device's reduced-motion preference by moving it immediately.
 - Pass the shared quality profile store into the production import pipeline so

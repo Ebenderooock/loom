@@ -14,20 +14,26 @@ export function titleImage(path?: string, size = "w342") {
 
 // Shared by provider details and the library sheets. Long synopses are never
 // discarded: expansion is local presentation state, not truncated metadata.
-export function TitleSynopsis({ overview }: { overview?: string }) {
+export function TitleSynopsis({
+  overview,
+  compact = false,
+}: {
+  overview?: string;
+  compact?: boolean;
+}) {
   const [expanded, setExpanded] = useState(false);
-  const long = (overview?.length ?? 0) > 280;
+  const long = (overview?.length ?? 0) > (compact ? 120 : 280);
   return (
     <div>
       <p
-        className={`whitespace-pre-line text-sm leading-relaxed text-muted-foreground ${long && !expanded ? "line-clamp-4" : ""}`}
+        className={`whitespace-pre-line text-sm leading-relaxed text-muted-foreground ${long && !expanded ? (compact ? "line-clamp-2" : "line-clamp-4") : ""}`}
       >
         {overview || "No synopsis available."}
       </p>
       {long && (
         <button
           type="button"
-          className="mt-1.5 text-xs font-medium text-accent hover:underline"
+          className="min-h-11 text-sm font-medium text-accent hover:underline"
           aria-expanded={expanded}
           onClick={() => setExpanded(!expanded)}
         >
