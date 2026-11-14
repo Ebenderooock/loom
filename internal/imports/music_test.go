@@ -89,13 +89,18 @@ func TestFindMusicTrackPreservesMetadataFailure(t *testing.T) {
 	}
 }
 
-func TestMatchTaggedTrackRejectsAmbiguousBaseTitles(t *testing.T) {
-	track, err := matchTaggedTrack([]*musiclib.Track{
+func TestMatchTaggedTrackPreservesVersionQualifiers(t *testing.T) {
+	tracks := []*musiclib.Track{
 		{ID: "one", Title: "Song (album version)", TrackNumber: 1},
 		{ID: "two", Title: "Song (single version)", TrackNumber: 2},
-	}, &musiclib.AudioTags{Title: "Song"}, false)
-	if track != nil || err == nil {
-		t.Fatalf("ambiguous base titles not reported: track=%+v err=%v", track, err)
+	}
+	track, err := matchTaggedTrack(tracks, &musiclib.AudioTags{Title: "Song"}, false)
+	if track != nil || err != nil {
+		t.Fatalf("base title matched a versioned recording: track=%+v err=%v", track, err)
+	}
+	track, err = matchTaggedTrack(tracks, &musiclib.AudioTags{Title: "Song (album version)"}, false)
+	if err != nil || track == nil || track.ID != "one" {
+		t.Fatalf("exact versioned title did not match: track=%+v err=%v", track, err)
 	}
 }
 

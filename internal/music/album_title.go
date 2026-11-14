@@ -6,8 +6,8 @@ import (
 )
 
 var (
-	albumEditionSuffix  = regexp.MustCompile(`(?i)\s+(?:[-–—]\s*)?(?:super\s+deluxe|deluxe|expanded|special|collector'?s)(?:\s+edition|\s+version)?$`)
-	albumEditionLabel   = regexp.MustCompile(`(?i)^(?:super\s+deluxe|deluxe|expanded|special|collector'?s)(?:\s+edition|\s+version)?$`)
+	albumEditionSuffix  = regexp.MustCompile(`(?i)\s+(?:[-–—]\s*)?(?:(?:super\s+deluxe|deluxe|expanded|special|collector'?s)(?:\s+edition|\s+version)?|tour\s+edition)$`)
+	albumEditionLabel   = regexp.MustCompile(`(?i)^(?:(?:super\s+deluxe|deluxe|expanded|special|collector'?s)(?:\s+edition|\s+version)?|tour\s+edition)$`)
 	albumQualityLabel   = regexp.MustCompile(`(?i)^(?:(?:16|24|32)\s*[- ]?bit(?:\s*[/, -]\s*\d+(?:\.\d+)?\s*(?:khz)?)?|hi[- ]?res(?:olution)?|flac|alac)$`)
 	albumBitDepthSuffix = regexp.MustCompile(`(?i)\s+(?:[-–—]\s*)?(?:16|24|32)\s*[- ]?bit(?:\s*[/, -]\s*\d+(?:\.\d+)?\s*(?:khz)?)?$`)
 )
