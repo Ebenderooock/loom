@@ -359,7 +359,7 @@ export function SettingsLayout() {
       <nav
         ref={navRef}
         aria-label="Settings sections"
-        className="scrollbar-thin hidden lg:sticky lg:top-20 lg:block lg:max-h-[calc(100vh-6rem)] lg:self-start lg:overflow-y-auto"
+        className="scrollbar-thin hidden lg:sticky lg:top-20 lg:block lg:max-h-[calc(100vh-6rem)] lg:self-start lg:overflow-y-auto lg:p-1"
       >
         <div className="flex flex-col gap-4">
           {groups.map((g) => (
@@ -395,7 +395,7 @@ export function SettingsLayout() {
       </nav>
 
       {/* Content */}
-      <div className="min-w-0">
+      <div className="min-w-0 lg:overflow-x-auto">
         <div key={active?.to ?? path} className="page-enter">
           {active?.kind === "panel" && (
             <header className="mb-5">

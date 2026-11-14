@@ -1,5 +1,10 @@
 import { test, expect } from "@playwright/test";
-import { mockBaseApp, mockSettings } from "./helpers/mock-api";
+import {
+  mockBaseApp,
+  mockGet,
+  mockSettings,
+  mockWorkflows,
+} from "./helpers/mock-api";
 
 // Regression test for the Settings sub-nav jumping down on tall panels.
 // Root cause was `<main>` using `overflow-x-hidden`, which forces overflow-y to
@@ -13,6 +18,64 @@ test.describe("Settings sub-nav stability", () => {
   test.beforeEach(async ({ page }) => {
     await mockBaseApp(page);
     await mockSettings(page);
+    await mockWorkflows(page);
+    await mockGet(page, "features", { features: [] });
+    await mockGet(page, "workflows/wf-3/events", []);
+  });
+
+  test("nested workflow detail keeps the same top and visible focus edges", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 600 });
+    await page.goto("/settings/general");
+    const nav = page.getByRole("navigation", { name: "Settings sections" });
+    await expect(nav).toBeVisible();
+    const generalTop = (await nav.boundingBox())!.y;
+    await page.goto("/settings/workflows/wf-3");
+    await expect(page.getByText("Test.Show.S01E05.HDTV")).toBeVisible();
+    if (process.env.LOOM_SCREENSHOT_DIR) {
+      await page.screenshot({
+        path: `${process.env.LOOM_SCREENSHOT_DIR}/sidebar-${process.env.LOOM_SCREENSHOT_PHASE}.png`,
+      });
+    }
+    expect(
+      Math.abs((await nav.boundingBox())!.y - generalTop),
+    ).toBeLessThanOrEqual(1);
+
+    const link = nav.getByRole("link", { name: "General", exact: true });
+    await link.focus();
+    const metrics = await link.evaluate((el) => {
+      const nav = el.closest("nav")!;
+      const item = el.getBoundingClientRect();
+      const bounds = nav.getBoundingClientRect();
+      return {
+        left: item.left - bounds.left,
+        right: bounds.right - item.right,
+        scrollWidth: nav.scrollWidth,
+        clientWidth: nav.clientWidth,
+        scrollHeight: nav.scrollHeight,
+        clientHeight: nav.clientHeight,
+        outlineStyle: getComputedStyle(el).outlineStyle,
+        outlineWidth: parseFloat(getComputedStyle(el).outlineWidth),
+      };
+    });
+    expect(metrics.left).toBeGreaterThanOrEqual(2);
+    expect(metrics.right).toBeGreaterThanOrEqual(2);
+    expect(metrics.scrollWidth).toBe(metrics.clientWidth);
+    expect(metrics.scrollHeight).toBeGreaterThan(metrics.clientHeight);
+    expect(metrics.outlineStyle).not.toBe("none");
+    expect(metrics.outlineWidth).toBeGreaterThanOrEqual(1);
+    await nav.evaluate((el) => (el.scrollTop = el.scrollHeight));
+    expect(await nav.evaluate((el) => el.scrollTop)).toBeGreaterThan(0);
+
+    await page.evaluate(
+      () => (document.documentElement.style.fontSize = "20px"),
+    );
+    expect(await nav.evaluate((el) => el.scrollWidth)).toBe(
+      await nav.evaluate((el) => el.clientWidth),
+    );
+    await nav.evaluate((el) => (el.scrollTop = el.scrollHeight));
+    expect(await nav.evaluate((el) => el.scrollTop)).toBeGreaterThan(0);
   });
 
   test("sub-nav top stays fixed across section switches", async ({ page }) => {
