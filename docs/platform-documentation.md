@@ -1178,6 +1178,21 @@ a later read or sync. Matching does not guess from titles.
 
 **Library refresh (NotifyAll):** On import events, iterates all enabled connections with `notifyOnImport=true`, calls provider's `NotifyLibraryUpdate` in parallel goroutines.
 
+Connect subscribes only to `imports.completed`, not download completion or failed
+imports. This is a media-server library refresh, not a user-facing push
+notification; Discord and other notification connections are separate.
+For Plex, configure `provider: "plex"`, `enabled: true`,
+`notify_on_import: true`, `settings.host` (an absolute HTTP(S) server URL, without
+embedded credentials, query, or fragment), and `settings.api_key` (the Plex token).
+Loom requests `GET /library/sections` as XML and then
+`GET /library/sections/{id}/refresh`, authenticating each request with the
+`X-Plex-Token` header. All returned sections are refreshed once; there is no
+configured section selection or import-path mapping, and no `path` query is sent.
+Missing/invalid configuration, absent or invalid section IDs, network failures,
+and unsuccessful HTTP statuses are reported as errors. Redirects are rejected to
+avoid forwarding the token. The connection test checks `/identity` only; passing
+it does not prove the token can list or refresh libraries.
+
 **Expected outcomes:**
 - Plex/Emby/Jellyfin: library auto-refreshes when new media is imported.
 - Trakt: watched status syncs, watched items auto-archive, watchlist syncs.
