@@ -774,6 +774,7 @@ func (o *Orchestrator) classifyImportError(errMsg string) importRetryStrategy {
 		"already been imported", "already imported",
 		"import rejected",
 		"pending review",
+		"no library match",
 	} {
 		if strings.Contains(lower, s) {
 			return failPermanent

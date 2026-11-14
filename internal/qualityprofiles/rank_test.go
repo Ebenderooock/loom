@@ -1,10 +1,39 @@
 package qualityprofiles
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/ebenderooock/loom/internal/parser"
 )
+
+func TestAllowsUnknownQualityRequiresUnrestrictedCatalog(t *testing.T) {
+	definition := defaultProfileDefinitions()[0]
+	items := make([]QualityItem, 0, len(definition.items))
+	for _, name := range definition.items {
+		items = append(items, QualityItem{ID: name, Name: name, Allowed: true})
+	}
+	for _, tc := range []struct {
+		name    string
+		items   []QualityItem
+		allowed bool
+	}{
+		{"all seeded tiers", items, true},
+		{"missing tier", items[1:], false},
+		{"explicit unknown exclusion", append(append([]QualityItem(nil), items...), QualityItem{Name: "unknown", Allowed: false}), false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			raw, err := json.Marshal(tc.items)
+			if err != nil {
+				t.Fatal(err)
+			}
+			profile := &QualityProfile{Name: "Any", Items: string(raw)}
+			if got := profile.AllowsUnknownQuality(); got != tc.allowed {
+				t.Fatalf("unknown quality allowed=%v, want=%v", got, tc.allowed)
+			}
+		})
+	}
+}
 
 func TestQualityProfile_Rank(t *testing.T) {
 	t.Parallel()

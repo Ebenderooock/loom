@@ -90,7 +90,7 @@ func (p *ImportPipeline) matchedDestination(ctx context.Context, match *MatchRes
 
 // replaceMatched stages and verifies the new file before replacing the old one.
 // Both files remain recoverable until library registration succeeds.
-func (p *ImportPipeline) replaceMatched(ctx context.Context, match *MatchResult, source, dest string, old os.FileInfo, size int64) (retErr error) {
+func (p *ImportPipeline) replaceMatched(ctx context.Context, match *MatchResult, source, dest string, old os.FileInfo, size int64, quality string) (retErr error) {
 	dir, err := os.MkdirTemp(filepath.Dir(dest), ".loom-replacement-*")
 	if err != nil {
 		return fmt.Errorf("create replacement staging directory: %w", err)
@@ -160,7 +160,7 @@ func (p *ImportPipeline) replaceMatched(ctx context.Context, match *MatchResult,
 		return fmt.Errorf("publish replacement: %w", err)
 	}
 	keep = true
-	if err := p.updateReplacementRecord(ctx, match, dest, size, releaseQuality(source)); err != nil {
+	if err := p.updateReplacementRecord(ctx, match, dest, size, quality); err != nil {
 		current, statErr := os.Lstat(dest)
 		if statErr != nil || !os.SameFile(stagedInfo, current) {
 			return fmt.Errorf("library update failed: %w; destination changed; old file preserved at %s", err, backup)
