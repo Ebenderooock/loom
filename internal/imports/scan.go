@@ -216,6 +216,12 @@ func (p *ImportPipeline) scanSingleFile(ctx context.Context, filePath string) Sc
 				score = 100
 			}
 		}
+		if _, _, ok := bareEpisode(filePath); ok {
+			result.DetectedTitle = match.Title
+			result.DetectedSeason = match.Season
+			result.DetectedEpisode = match.Episode
+			score = 100
+		}
 		result.Confidence = float64(score) / 100.0
 
 		// Determine suggested action

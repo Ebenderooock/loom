@@ -25,6 +25,7 @@ import (
 	musiclib "github.com/ebenderooock/loom/internal/music"
 	"github.com/ebenderooock/loom/internal/notifications"
 	"github.com/ebenderooock/loom/internal/parser"
+	"github.com/ebenderooock/loom/internal/qualityprofiles"
 	"github.com/ebenderooock/loom/internal/safety"
 	"github.com/ebenderooock/loom/internal/series"
 	"github.com/ebenderooock/loom/internal/workflows"
@@ -484,7 +485,7 @@ func (p *ImportPipeline) processImport(ctx context.Context, ev *downloads.Downlo
 	var failures []error
 	var paths []string
 	for _, mediaFile := range mediaFiles {
-		dest, err := p.importDownloadFile(ctx, ev, mediaFile, primaryFiles)
+		dest, err := p.importDownloadFileAt(ctx, ev, mediaFile, primaryFiles, scanPath)
 		if err != nil {
 			if errors.Is(err, errImportSkipped) {
 				continue
@@ -536,6 +537,14 @@ func (p *ImportPipeline) importSingleFile(ctx context.Context, ev *downloads.Dow
 // one episode must still be matched file by file, so grab-based matching is
 // only trusted for single-file downloads (or movies).
 func (p *ImportPipeline) importDownloadFile(ctx context.Context, ev *downloads.DownloadCompletedEvent, mediaFile string, fileCount int) (string, error) {
+	root := ""
+	if ev.DownloadID != "" {
+		root = filepath.Dir(mediaFile)
+	}
+	return p.importDownloadFileAt(ctx, ev, mediaFile, fileCount, root)
+}
+
+func (p *ImportPipeline) importDownloadFileAt(ctx context.Context, ev *downloads.DownloadCompletedEvent, mediaFile string, fileCount int, root string) (string, error) {
 	if mediafiles.IsAudio(strings.ToLower(filepath.Ext(mediaFile))) {
 		return p.importMusicFile(ctx, ev, mediaFile)
 	}
@@ -545,7 +554,8 @@ func (p *ImportPipeline) importDownloadFile(ctx context.Context, ev *downloads.D
 	var match *MatchResult
 	var err error
 	singleFile := fileCount <= 1
-	preferGrab := singleFile && p.shouldPreferGrabMatch(ctx, ev)
+	_, _, contextualEpisode := bareEpisode(mediaFile)
+	preferGrab := !contextualEpisode && singleFile && p.shouldPreferGrabMatch(ctx, ev)
 
 	if preferGrab {
 		match, err = p.matchByGrab(ctx, ev)
@@ -557,8 +567,11 @@ func (p *ImportPipeline) importDownloadFile(ctx context.Context, ev *downloads.D
 	// Try matching by full file path first (includes parent directory for context).
 	// This is most reliable for multi-episode folders since it resolves each file individually.
 	if match == nil || !match.Matched {
-		match, err = p.matcher.MatchPath(ctx, mediaFile)
+		match, err = p.matcher.MatchDownloadPath(ctx, mediaFile, root, ev.Title, ev.DownloadID)
 		if err != nil {
+			if contextualEpisode {
+				return "", p.recordFailure(ctx, "", "", ev.Title, mediaFile, fmt.Errorf("match: %w", err))
+			}
 			p.logger.Warn("path-based match failed", "file", mediaFile, "error", err)
 		}
 	}
@@ -566,7 +579,7 @@ func (p *ImportPipeline) importDownloadFile(ctx context.Context, ev *downloads.D
 	// Fall back to grab-based matching if path matching didn't work. For
 	// multi-file downloads an episode grab would map every file onto the same
 	// episode, so only a movie grab is acceptable there.
-	if !preferGrab && (match == nil || !match.Matched) {
+	if !contextualEpisode && !preferGrab && (match == nil || !match.Matched) {
 		grab, gErr := p.matchByGrab(ctx, ev)
 		if gErr != nil {
 			p.logger.Warn("grab-based match failed", "error", gErr)
@@ -579,7 +592,7 @@ func (p *ImportPipeline) importDownloadFile(ctx context.Context, ev *downloads.D
 	// Fall back to fuzzy matching by event title as last resort. A
 	// multi-file download title (e.g. a season pack) cannot identify a
 	// specific episode, so only accept a movie match from it.
-	if match == nil || !match.Matched {
+	if !contextualEpisode && (match == nil || !match.Matched) {
 		match, err = p.matcher.Match(ctx, ev.Title)
 		if err != nil {
 			return "", p.recordFailure(ctx, "", "", ev.Title, mediaFile, fmt.Errorf("match: %w", err))
@@ -615,6 +628,44 @@ func (p *ImportPipeline) importMatched(ctx context.Context, ev *downloads.Downlo
 	return p.importMatchedWith(ctx, ev, match, mediaFile, destName, false)
 }
 
+// importRelease fills missing quality tags only from a release identifying this
+// item. Explicit file evidence wins, including a lower resolution.
+func importRelease(file, title string, match *MatchResult) *parser.Release {
+	incoming := parser.Parse(filepath.Base(file))
+	if match == nil || !match.Matched {
+		return incoming
+	}
+	contextTitle := reBroadcastRange.ReplaceAllString(title, "")
+	contextTitle = reSeriesPack.ReplaceAllString(contextTitle, "")
+	identity := parseReleaseName(contextTitle)
+	contextTitle = reContextSeason.ReplaceAllString(identity.Title, " ")
+	if normalise(cleanTitle(contextTitle)) != normalise(match.Title) {
+		return incoming
+	}
+	switch match.MediaType {
+	case MediaTypeMovie:
+		if identity.IsSeries || !movieYearsMatch(identity.Year, match.Year) {
+			return incoming
+		}
+	case MediaTypeEpisode:
+		if (identity.Season >= 0 && identity.Season != match.Season) ||
+			(identity.Episode >= 0 && identity.Episode != match.Episode) {
+			return incoming
+		}
+	default:
+		return incoming
+	}
+	release := parser.Parse(title)
+	if incoming.Resolution == 0 {
+		incoming.Resolution = release.Resolution
+	}
+	if incoming.Source == "" {
+		incoming.Source = release.Source
+		incoming.IsRemux = release.IsRemux
+	}
+	return incoming
+}
+
 // importMatchedWith imports mediaFile for a resolved match. userMatched
 // skips release-year verification because the user chose the item.
 func (p *ImportPipeline) importMatchedWith(ctx context.Context, ev *downloads.DownloadCompletedEvent, match *MatchResult, mediaFile, destName string, userMatched bool) (string, error) {
@@ -642,13 +693,14 @@ func (p *ImportPipeline) importMatchedWith(ctx context.Context, ev *downloads.Do
 		Match:           match,
 		ImportMode:      p.importMode,
 		IsManual:        ev.DownloadID == "",
-		IncomingRelease: parser.Parse(filepath.Base(mediaFile)),
+		IncomingRelease: importRelease(mediaFile, ev.Title, match),
 	}
 
 	// Populate quality profile and existing quality for upgrade checks.
 	if err := p.enrichCandidateQuality(ctx, candidate); err != nil {
 		return "", p.recordFailure(ctx, string(match.MediaType), match.MediaID, ev.Title, mediaFile, fmt.Errorf("load import quality: %w", err))
 	}
+	incomingQuality := qualityprofiles.QualityNameFromRelease(candidate.IncomingRelease)
 	destInfo, destErr := os.Lstat(destFile)
 	var owned bool
 	if destErr == nil && destInfo.Mode().IsRegular() {
@@ -718,9 +770,9 @@ func (p *ImportPipeline) importMatchedWith(ctx context.Context, ev *downloads.Do
 				"dest", destFile, "src", mediaFile)
 			var err error
 			if owned {
-				err = p.updateReplacementRecord(ctx, match, destFile, fileSize, releaseQuality(mediaFile))
+				err = p.updateReplacementRecord(ctx, match, destFile, fileSize, incomingQuality)
 			} else {
-				err = p.updateLibrary(ctx, match, destFile, mediaFile)
+				err = p.updateLibrary(ctx, match, destFile, mediaFile, incomingQuality)
 			}
 			if err != nil {
 				return "", p.recordFailure(ctx, string(match.MediaType), match.MediaID, ev.Title, mediaFile, err)
@@ -730,7 +782,7 @@ func (p *ImportPipeline) importMatchedWith(ctx context.Context, ev *downloads.Do
 			return "", p.recordFailure(ctx, string(match.MediaType), match.MediaID, ev.Title, mediaFile,
 				fmt.Errorf("%w: %s", ErrDestinationExists, destFile))
 		} else {
-			if err := p.replaceMatched(ctx, match, mediaFile, destFile, destInfo, fileSize); err != nil {
+			if err := p.replaceMatched(ctx, match, mediaFile, destFile, destInfo, fileSize, incomingQuality); err != nil {
 				return "", p.recordFailure(ctx, string(match.MediaType), match.MediaID, ev.Title, mediaFile, err)
 			}
 			registered = true
@@ -765,7 +817,7 @@ func (p *ImportPipeline) importMatchedWith(ctx context.Context, ev *downloads.Do
 		}
 
 		// Register before consuming any source media or sidecar files.
-		if err := p.updateLibrary(ctx, match, destFile, mediaFile); err != nil {
+		if err := p.updateLibrary(ctx, match, destFile, mediaFile, incomingQuality); err != nil {
 			p.logger.Error("library update failed after import, preserving source",
 				"error", err, "dest", destFile)
 			if removeErr := os.Remove(destFile); removeErr != nil {
@@ -1144,7 +1196,7 @@ func buildDestFilename(match *MatchResult, sourceFile string) string {
 }
 
 // updateLibrary adds a file record to the appropriate service.
-func (p *ImportPipeline) updateLibrary(ctx context.Context, match *MatchResult, destFile, srcFile string) error {
+func (p *ImportPipeline) updateLibrary(ctx context.Context, match *MatchResult, destFile, srcFile, quality string) error {
 	info, err := os.Stat(destFile)
 	if err != nil {
 		// File was just imported; stat the source as fallback
@@ -1161,7 +1213,7 @@ func (p *ImportPipeline) updateLibrary(ctx context.Context, match *MatchResult, 
 			MovieID:   match.MediaID,
 			FilePath:  destFile,
 			Size:      info.Size(),
-			Quality:   releaseQuality(srcFile),
+			Quality:   quality,
 			DateAdded: time.Now(),
 		}
 		if err := p.matcher.moviesSvc.AddMovieFile(ctx, mf); err != nil {
@@ -1178,7 +1230,7 @@ func (p *ImportPipeline) updateLibrary(ctx context.Context, match *MatchResult, 
 			return err
 		}
 		if count > 0 {
-			return p.updateReplacementRecord(ctx, match, destFile, info.Size(), releaseQuality(srcFile))
+			return p.updateReplacementRecord(ctx, match, destFile, info.Size(), quality)
 		}
 		ef := &series.EpisodeFile{
 			ID:        uuid.New().String(),
@@ -1186,7 +1238,7 @@ func (p *ImportPipeline) updateLibrary(ctx context.Context, match *MatchResult, 
 			SeriesID:  match.SeriesID,
 			FilePath:  destFile,
 			FileSize:  info.Size(),
-			Quality:   releaseQuality(srcFile),
+			Quality:   quality,
 		}
 		if err := p.matcher.seriesSvc.CreateEpisodeFile(ctx, ef); err != nil {
 			return err

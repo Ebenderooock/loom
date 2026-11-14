@@ -55,6 +55,10 @@ func (s *UpgradeSpec) IsSatisfiedBy(ctx context.Context, c *ImportCandidate) *Im
 		rel := parser.Parse(filepath.Base(c.SourcePath))
 		incomingQuality = qualityprofiles.QualityNameFromRelease(rel)
 	}
+	if incomingQuality == "" && c.ExistingQuality == "" &&
+		(profile.IsAllowed("unknown") || profile.AllowsUnknownQuality()) {
+		return nil
+	}
 	incomingRank := profile.Rank(incomingQuality)
 	if incomingRank < 0 {
 		return &ImportRejection{Reason: RejectionNotUpgrade,
@@ -98,6 +102,14 @@ func (s *UpgradeSpec) IsSatisfiedBy(ctx context.Context, c *ImportCandidate) *Im
 func rejectKnownDowngrade(c *ImportCandidate) *ImportRejection {
 	existing := ParseFileQuality(c.ExistingQuality)
 	incoming := ParseFileQuality(c.SourcePath)
+	if c.IncomingRelease != nil {
+		if incoming.Resolution == 0 {
+			incoming.Resolution = c.IncomingRelease.Resolution
+		}
+		if incoming.Source == "" {
+			incoming.Source = strings.ToLower(c.IncomingRelease.Source)
+		}
+	}
 	if existing.Resolution == 0 || incoming.Resolution == 0 {
 		return nil
 	}
