@@ -71,6 +71,7 @@ beforeEach(() => {
   members = [];
   failAdd = false;
   failTracking = false;
+  sessionStorage.clear();
   api.fetch.mockReset();
   api.fetch.mockImplementation(async (url: string, init?: RequestInit) => {
     if (init?.method === "POST") {
@@ -169,6 +170,93 @@ function identity(media: TitleMedia = "movie") {
 }
 
 describe("shared title details and settings", () => {
+  it("remembers the last successfully used video quality across titles and media, but not failed adds", async () => {
+    const first = mount(
+      <TitleContent identity={identity()} initialView="add" />,
+    );
+    const add = await screen.findByRole("button", { name: "Add to library" });
+    await waitFor(() => expect(add).toBeEnabled());
+    fireEvent.change(screen.getByLabelText("Quality profile"), {
+      target: { value: "source-profile" },
+    });
+    fireEvent.click(add);
+    await screen.findByRole("button", { name: "In library" });
+    first.unmount();
+
+    const second = mount(
+      <TitleContent identity={identity("series")} initialView="add" />,
+    );
+    await waitFor(() =>
+      expect(screen.getByLabelText("Quality profile")).toHaveValue(
+        "source-profile",
+      ),
+    );
+    fireEvent.change(screen.getByLabelText("Quality profile"), {
+      target: { value: "global" },
+    });
+    failAdd = true;
+    fireEvent.click(screen.getByRole("button", { name: "Add to library" }));
+    await screen.findByRole("alert");
+    second.unmount();
+
+    const third = mount(
+      <TitleContent identity={identity()} initialView="add" />,
+    );
+    await waitFor(() =>
+      expect(screen.getByLabelText("Quality profile")).toHaveValue(
+        "source-profile",
+      ),
+    );
+    fireEvent.change(screen.getByLabelText("Quality profile"), {
+      target: { value: "global" },
+    });
+    failAdd = false;
+    fireEvent.click(screen.getByRole("button", { name: "Add to library" }));
+    await screen.findByRole("button", { name: "In library" });
+    third.unmount();
+
+    const fourth = mount(
+      <TitleContent identity={identity("series")} initialView="add" />,
+    );
+    await waitFor(() =>
+      expect(screen.getByLabelText("Quality profile")).toHaveValue("global"),
+    );
+    fourth.unmount();
+    mount(
+      <TitleContent
+        identity={{ media: "artist", id: "artist-id", title: "Test artist" }}
+        initialView="add"
+      />,
+    );
+    await waitFor(() =>
+      expect(screen.getByLabelText("Quality profile")).toHaveValue("audio"),
+    );
+  });
+
+  it("keeps explicit source defaults above session quality and ignores deleted session profiles", async () => {
+    sessionStorage.setItem("loom:add-quality:video", "global");
+    const first = mount(
+      <TitleContent
+        identity={identity()}
+        initialView="add"
+        defaults={{ quality_profile_id: "source-profile" }}
+      />,
+    );
+    await waitFor(() =>
+      expect(screen.getByLabelText("Quality profile")).toHaveValue(
+        "source-profile",
+      ),
+    );
+    first.unmount();
+    sessionStorage.setItem("loom:add-quality:video", "deleted");
+    mount(<TitleContent identity={identity()} initialView="add" />);
+    await waitFor(() =>
+      expect(screen.getByLabelText("Quality profile")).toHaveValue(
+        "library-profile",
+      ),
+    );
+  });
+
   it("loads synopsis, score, cast and crew without a library write", async () => {
     mount(<TitleContent identity={identity()} />);
     expect(await screen.findByText("A complete synopsis")).toBeInTheDocument();
@@ -448,6 +536,174 @@ describe("shared title details and settings", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Add" }));
     await screen.findByLabelText("Library");
     expect(screen.getAllByRole("dialog")).toHaveLength(1);
+    expect(writes).toEqual([]);
+  });
+
+  it("returns to the same search after adding without closing the dialog", async () => {
+    const onOpenChange = vi.fn();
+    const onAdded = vi.fn();
+    mount(
+      <TitleSearchDialog
+        media="movie"
+        open
+        onOpenChange={onOpenChange}
+        onAdded={onAdded}
+      />,
+    );
+    fireEvent.change(screen.getByRole("textbox", { name: "Search titles" }), {
+      target: { value: "Test" },
+    });
+    fireEvent.click(await screen.findByRole("button", { name: "Add" }));
+    const add = await screen.findByRole("button", { name: "Add to library" });
+    await waitFor(() => expect(add).toBeEnabled());
+    fireEvent.change(screen.getByLabelText("Quality profile"), {
+      target: { value: "global" },
+    });
+    fireEvent.click(add);
+    expect(
+      await screen.findByRole("textbox", { name: "Search titles" }),
+    ).toHaveValue("Test");
+    expect(screen.getByRole("button", { name: "In library" })).toBeDisabled();
+    expect(
+      screen.getByRole("checkbox", { name: "Select Test title" }),
+    ).toBeDisabled();
+    expect(onOpenChange).not.toHaveBeenCalled();
+    expect(onAdded).toHaveBeenCalledOnce();
+  });
+
+  it.each(["movie", "series"] as const)(
+    "adds %s selections across searches with shared settings and retries only failed titles",
+    async (media) => {
+      const original = api.fetch.getMockImplementation()!;
+      let failSecond = true;
+      api.fetch.mockImplementation(async (url: string, init?: RequestInit) => {
+        if (init?.method === "POST") {
+          const body = JSON.parse(String(init.body));
+          if ((body.tmdb_id ?? body.tmdbId) === "43" && failSecond) {
+            writes.push({ url, body });
+            return new Response("Try again later", { status: 503 });
+          }
+          return original(url, init);
+        }
+        if (url.includes("/lookup?") || url.includes("/search?"))
+          return Response.json(
+            url.includes("Other")
+              ? [{ tmdb_id: "43", title: "Other title" }]
+              : [movie],
+          );
+        if (url.endsWith("/43"))
+          return Response.json({
+            title: { ...movie, tmdb_id: "43", title: "Other title" },
+          });
+        return original(url, init);
+      });
+      const onAdded = vi.fn();
+      mount(
+        <TitleSearchDialog
+          media={media}
+          open
+          onOpenChange={vi.fn()}
+          onAdded={onAdded}
+        />,
+      );
+      const search = screen.getByRole("textbox", { name: "Search titles" });
+      fireEvent.change(search, { target: { value: "Test" } });
+      fireEvent.click(
+        await screen.findByRole("checkbox", { name: "Select Test title" }),
+      );
+      fireEvent.change(search, { target: { value: "Other" } });
+      fireEvent.click(
+        await screen.findByRole("checkbox", { name: "Select Other title" }),
+      );
+      expect(
+        screen.getByText("2 selected across searches"),
+      ).toBeInTheDocument();
+      fireEvent.change(search, { target: { value: "Test" } });
+      expect(
+        await screen.findByRole("checkbox", { name: "Select Test title" }),
+      ).toBeChecked();
+      fireEvent.click(screen.getByRole("button", { name: "Review selected" }));
+      const add = await screen.findByRole("button", { name: "Add 2 selected" });
+      await waitFor(() => expect(add).toBeEnabled());
+      fireEvent.change(screen.getByLabelText("Quality profile"), {
+        target: { value: "global" },
+      });
+      fireEvent.click(screen.getByLabelText("Search after adding"));
+      if (media === "series") {
+        fireEvent.change(screen.getByLabelText("Monitor"), {
+          target: { value: "future" },
+        });
+        fireEvent.click(screen.getByLabelText("Season folders"));
+      }
+      fireEvent.click(add);
+      fireEvent.click(add);
+      expect(await screen.findByRole("alert")).toHaveTextContent(
+        "Other title: Try again later",
+      );
+      expect(writes).toHaveLength(2);
+      expect(
+        screen.queryByRole("button", {
+          name: "Remove Test title from selection",
+        }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.getByRole("button", {
+          name: "Remove Other title from selection",
+        }),
+      ).toBeInTheDocument();
+      failSecond = false;
+      fireEvent.click(screen.getByRole("button", { name: "Add 1 selected" }));
+      expect(
+        await screen.findByRole("textbox", { name: "Search titles" }),
+      ).toHaveValue("Test");
+      expect(writes.map(({ body }) => body.tmdb_id ?? body.tmdbId)).toEqual([
+        "42",
+        "43",
+        "43",
+      ]);
+      for (const { body } of writes)
+        expect(body).toMatchObject(
+          media === "movie"
+            ? { quality_profile_id: "global", search: false }
+            : {
+                qualityProfileId: "global",
+                search: false,
+                monitoringStatus: "future",
+                seasonFolder: false,
+              },
+        );
+      expect(onAdded).toHaveBeenCalledTimes(2);
+    },
+  );
+
+  it("skips a batch title added elsewhere after selection and supports removing or clearing selections", async () => {
+    mount(<TitleSearchDialog media="movie" open onOpenChange={vi.fn()} />);
+    fireEvent.change(screen.getByRole("textbox", { name: "Search titles" }), {
+      target: { value: "Test" },
+    });
+    fireEvent.click(
+      await screen.findByRole("checkbox", { name: "Select Test title" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Clear" }));
+    expect(
+      screen.getByRole("checkbox", { name: "Select Test title" }),
+    ).not.toBeChecked();
+    fireEvent.click(
+      screen.getByRole("checkbox", { name: "Select Test title" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Review selected" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Remove Test title from selection" }),
+    );
+    fireEvent.click(
+      screen.getByRole("checkbox", { name: "Select Test title" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Review selected" }));
+    const add = await screen.findByRole("button", { name: "Add 1 selected" });
+    await waitFor(() => expect(add).toBeEnabled());
+    members = [{ id: "existing", tmdbId: "42" }];
+    fireEvent.click(add);
+    await screen.findByRole("textbox", { name: "Search titles" });
     expect(writes).toEqual([]);
   });
 });

@@ -38,6 +38,95 @@ import {
 type Profile = { id: string; name: string };
 type Membership = Record<string, string>;
 
+function qualitySessionKey(media: TitleMedia) {
+  return `loom:add-quality:${media === "artist" ? "audio" : "video"}`;
+}
+
+function readSessionQuality(media: TitleMedia) {
+  try {
+    return sessionStorage.getItem(qualitySessionKey(media)) ?? undefined;
+  } catch (error) {
+    console.warn("Unable to read session quality preference", error);
+    return undefined;
+  }
+}
+
+function rememberSessionQuality(media: TitleMedia, profileId: string) {
+  try {
+    sessionStorage.setItem(qualitySessionKey(media), profileId);
+  } catch (error) {
+    console.warn("Unable to save session quality preference", error);
+  }
+}
+
+async function createLibraryTitle(
+  identity: TitleIdentity,
+  details: TitleDetails,
+  settings: {
+    libraryId: string;
+    profileId: string;
+    metadataId: string;
+    monitoring: string;
+    seasonFolder: boolean;
+    seriesType: string;
+    search: boolean;
+  },
+) {
+  const title = details.title;
+  const providerId = identity.media === "artist" ? title.mbid : title.tmdb_id;
+  if (!providerId)
+    throw new Error("The provider did not return a valid title identity.");
+  const {
+    libraryId,
+    profileId,
+    metadataId,
+    monitoring,
+    seasonFolder,
+    seriesType,
+    search,
+  } = settings;
+  const payload =
+    identity.media === "movie"
+      ? {
+          ...title,
+          title: title.title || identity.title,
+          tmdb_id: providerId,
+          metadata_provider: "tmdb",
+          quality_profile_id: profileId,
+          library_id: libraryId,
+          monitoring_status:
+            monitoring === "none" ? "unmonitored" : "monitored",
+          search,
+        }
+      : identity.media === "series"
+        ? {
+            tmdbId: providerId,
+            qualityProfileId: profileId,
+            libraryId,
+            monitoringStatus: monitoring,
+            seasonFolder,
+            seriesType,
+            search,
+          }
+        : {
+            mbid: providerId,
+            qualityProfileId: profileId,
+            libraryId,
+            metadataProfileId: metadataId || undefined,
+            monitoringStatus:
+              monitoring === "none" ? "unmonitored" : "monitored",
+            search,
+          };
+  return titleJSON<{ id?: string; data?: { id?: string } }>(
+    `/api/v1/${identity.media === "movie" ? "movies" : identity.media === "series" ? "series" : "artists"}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
 // These controlled dialogs are opened by page cards, not DialogTrigger. Keep
 // the actual opener so closing restores keyboard focus rather than the body.
 export function useTitleDialogFocus() {
@@ -139,7 +228,7 @@ function Toggle({
   onChange: (value: boolean) => void;
 }) {
   return (
-    <label className="flex items-center gap-2 text-sm">
+    <label className="flex min-h-11 cursor-pointer items-center gap-2 text-sm">
       <input
         type="checkbox"
         checked={checked}
@@ -158,6 +247,7 @@ export interface TitleContentProps {
   sourceItemId?: string;
   sourceName?: string;
   onAdded?: () => void;
+  onPendingChange?: (pending: boolean) => void;
   onManage?: (target: LibraryMediaTarget) => void;
   onBack?: () => void;
   // Requests deliberately supply an action rather than getting library add
@@ -172,7 +262,14 @@ function AddTitleSettings({
   sourceItemId,
   sourceName,
   onAdded,
-}: TitleContentProps & { details: TitleDetails }) {
+  batchTitles,
+  onBatchTitleAdded,
+  onPendingChange,
+}: TitleContentProps & {
+  details?: TitleDetails;
+  batchTitles?: TitleIdentity[];
+  onBatchTitleAdded?: (title: TitleIdentity) => void;
+}) {
   const qc = useQueryClient();
   const librariesQuery = useLibraries();
   const { data: allLibraries = [], isLoading: librariesLoading } =
@@ -204,6 +301,8 @@ function AddTitleSettings({
   const membership = useMembership(identity.media);
   const [libraryChoice, setLibrary] = useState<string>();
   const [profileChoice, setProfile] = useState<string>();
+  const profileChosen = useRef(false);
+  const [sessionProfile] = useState(() => readSessionQuality(identity.media));
   const [metadataChoice, setMetadata] = useState<string>();
   const [monitorChoice, setMonitor] = useState<string>();
   const [search, setSearch] = useState(defaults?.search_on_add ?? true);
@@ -224,6 +323,7 @@ function AddTitleSettings({
   const preferred = [
     profileChoice,
     defaults?.quality_profile_id,
+    sessionProfile,
     library?.quality_profile_id,
     preferences?.default_quality_profile_id,
   ].find((id) => qualityProfiles.some((profile) => profile.id === id));
@@ -233,9 +333,14 @@ function AddTitleSettings({
     monitorChoice ??
     defaults?.monitor_type ??
     (library?.monitor_on_add === false ? "none" : "all");
-  const providerId =
-    identity.media === "artist" ? details.title.mbid : details.title.tmdb_id;
-  const inLibrary = identity.inLibrary || !!membership.data?.[providerId ?? ""];
+  const providerId = batchTitles
+    ? identity.id
+    : identity.media === "artist"
+      ? details?.title.mbid
+      : details?.title.tmdb_id;
+  const inLibrary =
+    !batchTitles &&
+    (identity.inLibrary || !!membership.data?.[providerId ?? ""]);
 
   const trackSource = async () => {
     if (sourceItemId)
@@ -259,8 +364,57 @@ function AddTitleSettings({
     if (lock.current) return;
     lock.current = true;
     setPending(true);
+    onPendingChange?.(true);
     setError("");
     try {
+      const settings = {
+        libraryId,
+        profileId,
+        metadataId,
+        monitoring,
+        seasonFolder,
+        seriesType,
+        search,
+      };
+      if (batchTitles) {
+        const failures: string[] = [];
+        const successful: TitleIdentity[] = [];
+        for (const item of batchTitles) {
+          try {
+            const fullDetails = await qc.fetchQuery({
+              queryKey: titleKey(item),
+              queryFn: ({ signal }) => loadTitle(item, signal),
+              staleTime: 5 * 60_000,
+            });
+            const id =
+              item.media === "artist"
+                ? fullDetails.title.mbid
+                : fullDetails.title.tmdb_id;
+            if (!id)
+              throw new Error(
+                "The provider did not return a valid title identity.",
+              );
+            const latest = await membership.refetch();
+            if (latest.error) throw latest.error;
+            if (!latest.data?.[id] && !item.inLibrary) {
+              await createLibraryTitle(item, fullDetails, settings);
+              rememberSessionQuality(item.media, profileId);
+            }
+            successful.push(item);
+          } catch (error) {
+            failures.push(
+              `${item.title}: ${error instanceof Error ? error.message : "Unable to add title"}`,
+            );
+          }
+        }
+        await qc.invalidateQueries({
+          queryKey: ["title-membership", identity.media],
+        });
+        successful.forEach((item) => onBatchTitleAdded?.(item));
+        if (successful.length) onAdded?.();
+        if (failures.length) setError(failures.join("\n"));
+        return;
+      }
       if (!persisted) {
         // Recheck identity immediately before writing, including titles added in
         // another entry point while this form was open.
@@ -271,50 +425,9 @@ function AddTitleSettings({
             "The provider did not return a valid title identity.",
           );
         if (!latest.data?.[providerId] && !identity.inLibrary) {
-          const title = details.title;
-          const payload =
-            identity.media === "movie"
-              ? {
-                  ...title,
-                  title: title.title || identity.title,
-                  tmdb_id: providerId,
-                  metadata_provider: "tmdb",
-                  quality_profile_id: profileId,
-                  library_id: libraryId,
-                  monitoring_status:
-                    monitoring === "none" ? "unmonitored" : "monitored",
-                  search,
-                }
-              : identity.media === "series"
-                ? {
-                    tmdbId: providerId,
-                    qualityProfileId: profileId,
-                    libraryId,
-                    monitoringStatus: monitoring,
-                    seasonFolder,
-                    seriesType,
-                    search,
-                  }
-                : {
-                    mbid: providerId,
-                    qualityProfileId: profileId,
-                    libraryId,
-                    metadataProfileId: metadataId || undefined,
-                    monitoringStatus:
-                      monitoring === "none" ? "unmonitored" : "monitored",
-                    search,
-                  };
-          const created = await titleJSON<{
-            id?: string;
-            data?: { id?: string };
-          }>(
-            `/api/v1/${identity.media === "movie" ? "movies" : identity.media === "series" ? "series" : "artists"}`,
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(payload),
-            },
-          );
+          if (!details) throw new Error("Title details are not loaded.");
+          const created = await createLibraryTitle(identity, details, settings);
+          rememberSessionQuality(identity.media, profileId);
           const mediaID = created.id ?? created.data?.id;
           if (mediaID) {
             qc.setQueryData<Membership>(
@@ -331,6 +444,7 @@ function AddTitleSettings({
     } finally {
       lock.current = false;
       setPending(false);
+      onPendingChange?.(false);
     }
   };
   const dataError =
@@ -353,7 +467,7 @@ function AddTitleSettings({
 
   return (
     <div
-      className="min-w-0 space-y-4 rounded-lg border bg-muted/20 p-4"
+      className="min-w-0 space-y-3 rounded-lg border bg-muted/20 p-3 sm:p-4"
       aria-label="Add settings"
     >
       {sourceName && (
@@ -369,7 +483,7 @@ function AddTitleSettings({
       {!persisted && (
         <fieldset
           disabled={pending || !!inLibrary}
-          className="min-w-0 space-y-4"
+          className="min-w-0 space-y-2"
         >
           <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2">
             <SelectField
@@ -378,18 +492,27 @@ function AddTitleSettings({
               options={libraries}
               onChange={(id) => {
                 setLibrary(id);
-                setProfile(
-                  libraries.find((l) => l.id === id)?.quality_profile_id ||
-                    preferences?.default_quality_profile_id ||
-                    qualityProfiles[0]?.id,
-                );
+                if (
+                  !profileChosen.current &&
+                  !qualityProfiles.some(
+                    (profile) => profile.id === sessionProfile,
+                  )
+                )
+                  setProfile(
+                    libraries.find((l) => l.id === id)?.quality_profile_id ||
+                      preferences?.default_quality_profile_id ||
+                      qualityProfiles[0]?.id,
+                  );
               }}
             />
             <SelectField
               label="Quality profile"
               value={profileId}
               options={qualityProfiles}
-              onChange={setProfile}
+              onChange={(id) => {
+                profileChosen.current = true;
+                setProfile(id);
+              }}
             />
             {mediaType === "music" && (
               <SelectField
@@ -428,33 +551,38 @@ function AddTitleSettings({
               </>
             )}
           </div>
-          {identity.media !== "series" && (
+          <div className="flex flex-wrap gap-x-4">
+            {identity.media !== "series" && (
+              <Toggle
+                label="Monitor for downloads"
+                checked={monitoring !== "none"}
+                onChange={(value) => setMonitor(value ? "all" : "none")}
+              />
+            )}
+            {identity.media === "series" && (
+              <Toggle
+                label="Season folders"
+                checked={seasonFolder}
+                onChange={setSeasonFolder}
+              />
+            )}
             <Toggle
-              label="Monitor for downloads"
-              checked={monitoring !== "none"}
-              onChange={(value) => setMonitor(value ? "all" : "none")}
+              label={
+                identity.media === "artist"
+                  ? "Search for albums after adding"
+                  : "Search after adding"
+              }
+              checked={search}
+              onChange={setSearch}
             />
-          )}
-          {identity.media === "series" && (
-            <Toggle
-              label="Season folders"
-              checked={seasonFolder}
-              onChange={setSeasonFolder}
-            />
-          )}
-          <Toggle
-            label={
-              identity.media === "artist"
-                ? "Search for albums after adding"
-                : "Search after adding"
-            }
-            checked={search}
-            onChange={setSearch}
-          />
+          </div>
         </fieldset>
       )}
       {!librariesLoading && !libraries.length && (
-        <p role="alert" className="text-sm text-destructive">
+        <p
+          role="alert"
+          className="whitespace-pre-line text-sm text-destructive"
+        >
           Configure a {mediaType} library in Settings → Libraries before adding.
         </p>
       )}
@@ -469,6 +597,7 @@ function AddTitleSettings({
             Unable to load add settings.
           </p>
           <Button
+            className="min-h-11 w-full sm:w-auto"
             variant="outline"
             onClick={() => {
               void librariesQuery.refetch();
@@ -483,7 +612,10 @@ function AddTitleSettings({
         </div>
       )}
       {error && (
-        <p role="alert" className="text-sm text-destructive">
+        <p
+          role="alert"
+          className="whitespace-pre-line text-sm text-destructive"
+        >
           {persisted
             ? "Title is in your library, but source tracking failed. Retry without adding again. "
             : ""}
@@ -499,13 +631,15 @@ function AddTitleSettings({
       >
         {pending
           ? "Saving…"
-          : completed
-            ? "In library"
-            : persisted
-              ? "Retry source tracking"
-              : inLibrary && sourceItemId
-                ? "Update source tracking"
-                : "Add to library"}
+          : batchTitles
+            ? `Add ${batchTitles.length} selected`
+            : completed
+              ? "In library"
+              : persisted
+                ? "Retry source tracking"
+                : inLibrary && sourceItemId
+                  ? "Update source tracking"
+                  : "Add to library"}
       </Button>
     </div>
   );
@@ -515,6 +649,8 @@ function AddTitleSettings({
 // instead of piling another modal/focus trap on top.
 export function TitleContent(props: TitleContentProps) {
   const { identity, onBack, requestAction } = props;
+  const compact = props.initialView === "add" && !requestAction;
+  const [pending, setPending] = useState(false);
   const [showAddSettings] = useState(
     !identity.inLibrary || !!props.sourceItemId,
   );
@@ -547,7 +683,13 @@ export function TitleContent(props: TitleContentProps) {
     >
       <div className="flex flex-wrap gap-2">
         {onBack && (
-          <Button variant="ghost" size="sm" onClick={onBack}>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="min-h-11"
+            disabled={pending}
+            onClick={onBack}
+          >
             Back to results
           </Button>
         )}
@@ -588,7 +730,7 @@ export function TitleContent(props: TitleContentProps) {
       )}
       {title && details.data && (
         <>
-          {title.backdrop_path && (
+          {title.backdrop_path && !compact && (
             <img
               src={titleImage(title.backdrop_path, "w780")}
               alt=""
@@ -600,11 +742,13 @@ export function TitleContent(props: TitleContentProps) {
               <img
                 src={titleImage(title.poster_path || title.image_url)}
                 alt=""
-                className={`w-20 shrink-0 self-start rounded-lg object-cover sm:w-28 ${identity.media === "artist" ? "aspect-square" : "aspect-[2/3]"}`}
+                className={`${compact ? "w-12 sm:w-20" : "w-20 sm:w-28"} shrink-0 self-start rounded-lg object-cover ${identity.media === "artist" ? "aspect-square" : "aspect-[2/3]"}`}
               />
             )}
             <div className="min-w-0 space-y-3">
-              <h2 className="text-2xl font-semibold">
+              <h2
+                className={`${compact ? "text-lg" : "text-2xl"} font-semibold`}
+              >
                 {title.title || title.name || identity.title}
               </h2>
               <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
@@ -615,16 +759,18 @@ export function TitleContent(props: TitleContentProps) {
                 {title.status && <span>{title.status}</span>}
                 {title.network && <span>{title.network}</span>}
               </div>
-              {!!title.genres?.length && identity.media !== "artist" && (
-                <div className="flex flex-wrap gap-1">
-                  {title.genres.map((genre) => (
-                    <Badge key={genre} variant="secondary">
-                      {genre}
-                    </Badge>
-                  ))}
-                </div>
-              )}
-              {title.tagline && (
+              {!compact &&
+                !!title.genres?.length &&
+                identity.media !== "artist" && (
+                  <div className="flex flex-wrap gap-1">
+                    {title.genres.map((genre) => (
+                      <Badge key={genre} variant="secondary">
+                        {genre}
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+              {!compact && title.tagline && (
                 <p className="text-sm italic text-muted-foreground">
                   {title.tagline}
                 </p>
@@ -634,7 +780,14 @@ export function TitleContent(props: TitleContentProps) {
           {!requestAction && showAddSettings && (
             <section className="min-w-0 space-y-3">
               <h3 className="text-base font-semibold">Add to library</h3>
-              <AddTitleSettings {...props} details={details.data} />
+              <AddTitleSettings
+                {...props}
+                details={details.data}
+                onPendingChange={(value) => {
+                  setPending(value);
+                  props.onPendingChange?.(value);
+                }}
+              />
             </section>
           )}
           <>
@@ -643,22 +796,28 @@ export function TitleContent(props: TitleContentProps) {
             ) : (
               <section className="space-y-2">
                 <h3 className="text-sm font-semibold">Synopsis</h3>
-                <TitleSynopsis overview={title.overview} />
+                <TitleSynopsis overview={title.overview} compact={compact} />
               </section>
             )}
-            {identity.media !== "artist" &&
-              (details.data.credits_error ? (
-                <div role="alert">
-                  <p className="text-sm text-destructive">
-                    {details.data.credits_error}
-                  </p>
-                  <Button variant="outline" onClick={() => details.refetch()}>
-                    Retry credits
-                  </Button>
-                </div>
-              ) : (
-                <TitleCredits credits={details.data.credits} />
-              ))}
+            {identity.media !== "artist" && (
+              <details open={compact ? undefined : true}>
+                <summary className="min-h-11 cursor-pointer py-3 text-sm font-medium">
+                  Cast and crew
+                </summary>
+                {details.data.credits_error ? (
+                  <div role="alert">
+                    <p className="text-sm text-destructive">
+                      {details.data.credits_error}
+                    </p>
+                    <Button variant="outline" onClick={() => details.refetch()}>
+                      Retry credits
+                    </Button>
+                  </div>
+                ) : (
+                  <TitleCredits credits={details.data.credits} />
+                )}
+              </details>
+            )}
             {identity.media === "artist" && (
               <section className="space-y-3">
                 <h3 className="text-sm font-semibold">Albums</h3>
@@ -688,6 +847,7 @@ export function TitleDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const focus = useTitleDialogFocus();
+  const [pending, setPending] = useState(false);
   const opener = useRef(
     document.activeElement instanceof HTMLElement
       ? document.activeElement
@@ -726,7 +886,12 @@ export function TitleDialog({
   };
   return (
     <>
-      <Sheet open={open && !target} onOpenChange={onOpenChange}>
+      <Sheet
+        open={open && !target}
+        onOpenChange={(value) => {
+          if (!pending) onOpenChange(value);
+        }}
+      >
         <SheetContent
           {...focus}
           className="w-full min-w-0 max-w-full overflow-y-auto p-4 sm:max-w-3xl sm:p-6"
@@ -745,6 +910,7 @@ export function TitleDialog({
             <TitleContent
               key={`${props.identity.media}:${props.identity.id}`}
               {...props}
+              onPendingChange={setPending}
               onManage={setManaging}
             />
           )}
@@ -782,10 +948,15 @@ export function TitleSearchDialog({
   onAdded?: () => void;
 }) {
   const focus = useTitleDialogFocus();
-  // Remount the contents each time, so settings and pending searches cannot
-  // leak from the previous search session.
+  const [pending, setPending] = useState(false);
+  // Closing clears the search and basket, but keeps session quality preferences.
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
+    <Sheet
+      open={open}
+      onOpenChange={(value) => {
+        if (!pending) onOpenChange(value);
+      }}
+    >
       <SheetContent
         {...focus}
         className="w-full min-w-0 max-w-full overflow-y-auto p-4 sm:max-w-3xl sm:p-6"
@@ -800,17 +971,16 @@ export function TitleSearchDialog({
                 : "artists"}
           </SheetTitle>
           <SheetDescription>
-            Choose a title to view details and add it.
+            Add a title, or select several across searches and add them
+            together.
           </SheetDescription>
         </SheetHeader>
         {open && (
           <TitleSearch
             media={media}
             existingIds={existingIds}
-            onAdded={() => {
-              onAdded?.();
-              onOpenChange(false);
-            }}
+            onAdded={onAdded ?? (() => {})}
+            onPendingChange={setPending}
           />
         )}
       </SheetContent>
@@ -822,22 +992,35 @@ function TitleSearch({
   media,
   existingIds,
   onAdded,
+  onPendingChange,
 }: {
   media: TitleMedia;
   existingIds?: Set<string>;
   onAdded: () => void;
+  onPendingChange: (pending: boolean) => void;
 }) {
   const [term, setTerm] = useState("");
   const [selection, setSelection] = useState<{
     identity: TitleIdentity;
     view: "details" | "add";
   }>();
+  const [basket, setBasket] = useState<TitleIdentity[]>([]);
+  const [reviewing, setReviewing] = useState(false);
+  const [pending, setPending] = useState(false);
+  const [addedIds, setAddedIds] = useState<Set<string>>(new Set());
+  const [notice, setNotice] = useState("");
+  const markAdded = (item: TitleIdentity) => {
+    setAddedIds((ids) => new Set(ids).add(item.id));
+    setBasket((titles) => titles.filter((title) => title.id !== item.id));
+    setNotice(`Added ${item.title} to your library.`);
+  };
   const searchInput = useRef<HTMLInputElement>(null);
   const viewedTitle = useRef(false);
+  const reviewingBasket = reviewing && basket.length > 0;
   useEffect(() => {
-    if (selection) viewedTitle.current = true;
+    if (selection || reviewingBasket) viewedTitle.current = true;
     else if (viewedTitle.current) searchInput.current?.focus();
-  }, [selection]);
+  }, [selection, reviewingBasket]);
   const results = useQuery({
     queryKey: ["title-search", media, term],
     queryFn: async ({ signal }) => {
@@ -864,11 +1047,93 @@ function TitleSearch({
         identity={selection.identity}
         initialView={selection.view}
         onBack={() => setSelection(undefined)}
-        onAdded={onAdded}
+        onPendingChange={onPendingChange}
+        onAdded={() => {
+          markAdded(selection.identity);
+          setSelection(undefined);
+          onAdded();
+        }}
       />
+    );
+  if (reviewingBasket)
+    return (
+      <div className="space-y-3">
+        <Button
+          variant="ghost"
+          className="min-h-11"
+          disabled={pending}
+          onClick={() => setReviewing(false)}
+        >
+          Back to results
+        </Button>
+        <h2 className="text-lg font-semibold">Add selected titles</h2>
+        <p className="text-sm text-muted-foreground">
+          These settings apply to all selected titles.
+        </p>
+        <ul className="max-h-40 overflow-y-auto rounded-lg border p-3 text-sm">
+          {basket.map((item) => (
+            <li
+              key={item.id}
+              className="flex min-h-11 items-center justify-between gap-2"
+            >
+              <span>
+                {item.title}
+                {item.year ? ` (${item.year})` : ""}
+              </span>
+              <Button
+                variant="ghost"
+                className="min-h-11 shrink-0"
+                disabled={pending}
+                aria-label={`Remove ${item.title} from selection`}
+                onClick={() =>
+                  setBasket((titles) =>
+                    titles.filter((title) => title.id !== item.id),
+                  )
+                }
+              >
+                Remove
+              </Button>
+            </li>
+          ))}
+        </ul>
+        <AddTitleSettings
+          identity={basket[0]!}
+          batchTitles={basket}
+          onBatchTitleAdded={markAdded}
+          onPendingChange={(value) => {
+            setPending(value);
+            onPendingChange(value);
+          }}
+          onAdded={onAdded}
+        />
+      </div>
     );
   return (
     <div className="space-y-4">
+      {notice && (
+        <p role="status" className="text-sm">
+          {notice}
+        </p>
+      )}
+      {basket.length > 0 && (
+        <div className="sticky top-0 z-10 flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-background p-3">
+          <span className="text-sm">
+            {basket.length} selected across searches
+          </span>
+          <div className="flex gap-2">
+            <Button
+              className="min-h-11"
+              variant="ghost"
+              onClick={() => setBasket([])}
+            >
+              Clear
+            </Button>
+            <Button className="min-h-11" onClick={() => setReviewing(true)}>
+              Review selected
+            </Button>
+          </div>
+        </div>
+      )}
       <Input
         ref={searchInput}
         aria-label="Search titles"
@@ -894,6 +1159,7 @@ function TitleSearch({
       {results.data?.map((identity) => {
         const inLibrary =
           identity.inLibrary ||
+          addedIds.has(identity.id) ||
           existingIds?.has(identity.id) ||
           !!membership.data?.[identity.id];
         const selected = { ...identity, inLibrary };
@@ -902,9 +1168,26 @@ function TitleSearch({
             key={identity.id}
             className="flex items-center gap-3 rounded-lg border p-3"
           >
+            <label className="flex min-h-11 min-w-11 cursor-pointer items-center justify-center">
+              <input
+                type="checkbox"
+                className="h-5 w-5 accent-accent"
+                aria-label={`Select ${identity.title}`}
+                disabled={inLibrary}
+                checked={basket.some((title) => title.id === identity.id)}
+                onChange={(event) => {
+                  setReviewing(false);
+                  setBasket((titles) =>
+                    event.target.checked
+                      ? [...titles, selected]
+                      : titles.filter((title) => title.id !== identity.id),
+                  );
+                }}
+              />
+            </label>
             <button
               type="button"
-              className="flex min-w-0 flex-1 items-center gap-3 text-left text-sm font-medium hover:underline"
+              className="flex min-h-11 min-w-0 flex-1 items-center gap-3 text-left text-sm font-medium hover:underline"
               onClick={() =>
                 setSelection({ identity: selected, view: "details" })
               }
@@ -927,6 +1210,7 @@ function TitleSearch({
             </button>
             <Button
               size="sm"
+              className="min-h-11"
               variant="outline"
               disabled={inLibrary}
               onClick={() => setSelection({ identity: selected, view: "add" })}
