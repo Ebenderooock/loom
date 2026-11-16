@@ -73,6 +73,7 @@ const fetchMock = vi.fn<typeof fetch>();
 let client: QueryClient | undefined;
 
 beforeEach(() => {
+  sessionStorage.clear();
   fetchMock.mockReset().mockImplementation(async (input) => {
     const url = String(input);
     if (url.endsWith("/credits")) return Response.json({ cast: [], crew: [] });
@@ -561,5 +562,11 @@ describe("PersonDiscoverDialog default profile", () => {
   it("preserves the library's configured profile", async () => {
     const body = await addCredit([library("qp-hd")]);
     expect(body.quality_profile_id).toBe("qp-hd");
+  });
+
+  it("uses the last successful session profile ahead of the library default", async () => {
+    sessionStorage.setItem("loom:add-quality:video", "qp-any");
+    const body = await addCredit([library("qp-hd")]);
+    expect(body.quality_profile_id).toBe("qp-any");
   });
 });
