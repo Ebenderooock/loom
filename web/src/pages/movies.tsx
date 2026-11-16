@@ -5,6 +5,7 @@ import { apiFetch } from "@/lib/fetch";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useMediaGridClass } from "@/hooks/use-media-grid";
 import {
   Dialog,
   DialogContent,
@@ -49,8 +50,9 @@ function CardSkeleton() {
 }
 
 function GridSkeletons() {
+  const gridClass = useMediaGridClass();
   return (
-    <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8">
+    <div className={gridClass}>
       {Array.from({ length: 12 }).map((_, i) => (
         <CardSkeleton key={i} />
       ))}
@@ -117,6 +119,7 @@ function BulkDeleteDialog({
 // ─── Main Page ──────────────────────────────────────────────────────────
 
 export function MoviesPage() {
+  const gridClass = useMediaGridClass();
   const { isAuthenticated, user } = useAuth();
   const [movies, setMovies] = useState<Movie[]>([]);
   const { data: allLibraries = [] } = useLibraries();
@@ -545,7 +548,7 @@ export function MoviesPage() {
           )}
         </div>
       ) : viewMode === "grid" ? (
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8">
+        <div className={gridClass}>
           {processed.map((movie) => (
             <div
               key={movie.id}
