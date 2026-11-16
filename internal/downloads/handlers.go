@@ -615,6 +615,9 @@ func (s *Service) handleAdd(w http.ResponseWriter, r *http.Request) {
 	}
 	res, err := s.registry.Acquire(r.Context(), c.ID(), req, nil)
 	if err != nil {
+		if WriteAcquisitionConflict(w, err) {
+			return
+		}
 		if errors.Is(err, ErrAcquisitionDeferred) {
 			writeError(w, http.StatusConflict, "acquisition_deferred", err.Error())
 			return

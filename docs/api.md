@@ -385,7 +385,7 @@ and request availability are reconciled. Fulfillment history is retained.
 |---|---|---|---|---|
 | `GET` | `/api/v1/downloads/history` | apiKey/bearer/cookie | `200 application/json` (`HistoryEntry[]`) | Completion and durable acquisition history, paginated with `limit`/`offset`. |
 | `DELETE` | `/api/v1/downloads/history` | admin | `204` | Clear completion history; retain acquisition admission/retry records. |
-| `POST` | `/api/v1/downloads/history/actions` | admin identity required | `200 application/json` | Enable retry or blocklist up to 100 latest failed/interrupted history items, with per-item outcomes. |
+| `POST` | `/api/v1/downloads/history/actions` | admin identity required | `200 application/json` | Enable retry or blocklist up to 100 latest failed/interrupted history items, with per-item outcomes. Successful admissions may be retried after checking that the original download is no longer active. |
 
 Acquisition history extends existing history rows with `acquisition_key`,
 `media_type`, `media_id`, `indexer_id`, `release_hash`, `stage`, `reason`,

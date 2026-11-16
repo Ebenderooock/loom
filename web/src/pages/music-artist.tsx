@@ -1,8 +1,6 @@
 import { useState } from "react";
 import { useParams, Link } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Dialog,
@@ -15,31 +13,30 @@ import {
   ArrowLeft,
   Music,
   Search,
-  TextSearch,
   Trash2,
-  Disc3,
   Loader2,
   FolderSync,
-  Info,
   RefreshCw,
+  Bookmark,
+  BookmarkCheck,
+  Pencil,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useSetPageHeader } from "@/hooks/use-page-header";
-import { AlbumSearchDialog } from "@/components/music/album-search-dialog";
-import { ArtistMetadata } from "@/components/titles/title-metadata";
-import { AlbumMetadataSummary } from "@/components/titles/album-metadata";
+import { AlbumSection } from "@/components/music/artist-detail-sheet";
+import { AlbumDetailSheet } from "@/components/music/album-detail-sheet";
+import { ArtistEditDialog } from "@/components/music/artist-edit-dialog";
 import {
   ArtistFacts,
+  ArtistBiography,
+  MusicArtistMetadata,
   MusicArtwork,
   MusicExternalLinks,
-  MusicRating,
 } from "@/components/music/artist-details";
 import {
-  fetchAlbum,
   useArtist,
   useSetArtistMonitoring,
   useSetAlbumMonitored,
-  useSelectAlbumRelease,
   useSearchAlbum,
   useDeleteArtist,
   useRescanArtist,
@@ -47,232 +44,9 @@ import {
   type Album,
 } from "@/lib/music-api";
 
-function albumYear(a: Album): string {
-  return a.release_date ? a.release_date.slice(0, 4) : "—";
-}
-
-function AlbumRow({ album }: { album: Album }) {
-  const setMonitored = useSetAlbumMonitored();
-  const selectRelease = useSelectAlbumRelease();
-  const search = useSearchAlbum();
-  const [searchOpen, setSearchOpen] = useState(false);
-  const [details, setDetails] = useState<Album | null>(null);
-  const [detailsLoading, setDetailsLoading] = useState(false);
-  const [releases, setReleases] = useState<Album["releases"] | null>(null);
-  const tracks = album.tracks ?? [];
-  const present = tracks.filter((t) => t.has_file).length;
-
-  const handleSearch = async () => {
-    try {
-      const res = await search.mutateAsync(album.id);
-      toast.success(
-        `Grabbed "${res.title}" (${res.quality_name || "unknown"})`,
-      );
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Search failed");
-    }
-  };
-
-  const toggleDetails = async () => {
-    if (details) {
-      setDetails(null);
-      return;
-    }
-    setDetailsLoading(true);
-    try {
-      setDetails(await fetchAlbum(album.id));
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Could not load details");
-    } finally {
-      setDetailsLoading(false);
-    }
-  };
-
-  const openReleasePicker = async () => {
-    if (releases) {
-      setReleases(null);
-      return;
-    }
-    try {
-      const fullAlbum = await fetchAlbum(album.id);
-      setReleases(fullAlbum.releases ?? []);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Could not load editions");
-    }
-  };
-
-  return (
-    <div className="rounded-md border border-border">
-      <div className="flex items-center gap-3 px-3 py-2.5">
-        <Switch
-          checked={album.monitored}
-          onCheckedChange={(v) =>
-            setMonitored.mutate({ id: album.id, monitored: v })
-          }
-          aria-label="Monitor album"
-        />
-        <MusicArtwork
-          src={details?.cover_art_url || album.cover_art_url}
-          alt=""
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded"
-          fallback={<Disc3 className="h-5 w-5 text-muted-foreground" />}
-        />
-        <div className="min-w-0 flex-1">
-          <AlbumMetadataSummary
-            title={album.title}
-            date={album.release_date ? albumYear(album) : undefined}
-            type={album.album_type}
-          />
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            {tracks.length > 0 && (
-              <span>
-                · {present}/{tracks.length} tracks
-              </span>
-            )}
-            <MusicRating rating={album.rating} votes={album.rating_votes} />
-          </div>
-        </div>
-        {tracks.length > 0 && present === tracks.length ? (
-          <Badge variant="secondary" className="text-[10px]">
-            Complete
-          </Badge>
-        ) : (
-          <Badge variant="outline" className="text-[10px]">
-            Missing
-          </Badge>
-        )}
-        <Button
-          size="sm"
-          variant="ghost"
-          disabled={search.isPending}
-          onClick={handleSearch}
-          aria-label="Auto-search album"
-          title="Auto-search and grab best"
-        >
-          {search.isPending ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <Search className="h-4 w-4" />
-          )}
-        </Button>
-        <Button
-          size="sm"
-          variant="ghost"
-          onClick={() => setSearchOpen(true)}
-          aria-label="Interactive search"
-          title="Interactive search"
-        >
-          <TextSearch className="h-4 w-4" />
-        </Button>
-        <Button
-          size="sm"
-          variant="ghost"
-          disabled={detailsLoading}
-          onClick={() => void toggleDetails()}
-          aria-label="Album details"
-          aria-expanded={!!details}
-          title="Album details"
-        >
-          {detailsLoading ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <Info className="h-4 w-4" />
-          )}
-        </Button>
-        <Button
-          size="sm"
-          variant="ghost"
-          onClick={() => void openReleasePicker()}
-          aria-label="Choose album edition"
-          title="Choose album edition"
-        >
-          <Disc3 className="h-4 w-4" />
-        </Button>
-        {releases && (
-          <select
-            aria-label={`Selected edition for ${album.title}`}
-            className="max-w-40 rounded-md border bg-background px-2 py-1 text-xs"
-            value={album.selected_release_id ?? ""}
-            disabled={selectRelease.isPending}
-            onChange={(event) => {
-              const releaseId = event.target.value;
-              if (!releaseId) return;
-              selectRelease.mutate(
-                { albumId: album.id, releaseId },
-                {
-                  onSuccess: () => {
-                    toast.success(`Edition updated for ${album.title}`);
-                    setReleases(null);
-                  },
-                  onError: (e) =>
-                    toast.error(
-                      e instanceof Error ? e.message : "Edition update failed",
-                    ),
-                },
-              );
-            }}
-          >
-            <option value="" disabled>
-              Choose edition
-            </option>
-            {releases.map((release) => (
-              <option key={release.id} value={release.id}>
-                {release.title ||
-                  release.disambiguation ||
-                  release.status ||
-                  release.id}
-              </option>
-            ))}
-          </select>
-        )}
-        <AlbumSearchDialog
-          albumId={album.id}
-          albumTitle={album.title}
-          open={searchOpen}
-          onOpenChange={setSearchOpen}
-        />
-      </div>
-      {details && <AlbumDetails album={details} />}
-    </div>
-  );
-}
-
-function AlbumDetails({ album }: { album: Album }) {
-  const hasContent =
-    !!album.overview || !!album.links?.length || !!album.genres?.length;
-  return (
-    <div className="flex gap-4 border-t border-border px-3 py-3">
-      <MusicArtwork
-        src={album.cover_art_url}
-        alt={`${album.title} cover`}
-        className="hidden h-32 w-32 shrink-0 items-center justify-center rounded-md sm:flex"
-        fallback={<Disc3 className="h-10 w-10 text-muted-foreground" />}
-      />
-      <div className="min-w-0 flex-1 space-y-3">
-        {!!album.genres?.length && (
-          <p className="text-xs text-muted-foreground">
-            {album.genres.join(" · ")}
-          </p>
-        )}
-        {album.overview && (
-          <p className="whitespace-pre-line text-sm leading-relaxed">
-            {album.overview}
-          </p>
-        )}
-        <MusicExternalLinks links={album.links} />
-        {!hasContent && (
-          <p className="text-sm text-muted-foreground">
-            No extra details are available for this album yet.
-          </p>
-        )}
-      </div>
-    </div>
-  );
-}
-
 export function MusicArtistPage() {
   const { artistId } = useParams({ from: "/music/$artistId" });
-  const { data: artist, isLoading } = useArtist(artistId);
+  const { data: artist, isLoading, refetch } = useArtist(artistId);
   const setMonitoring = useSetArtistMonitoring();
   const setAlbumMonitored = useSetAlbumMonitored();
   const searchAlbum = useSearchAlbum();
@@ -280,7 +54,9 @@ export function MusicArtistPage() {
   const rescanArtist = useRescanArtist();
   const refreshArtist = useRefreshArtist();
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
   const [bulkBusy, setBulkBusy] = useState(false);
+  const [detailAlbum, setDetailAlbum] = useState<Album | null>(null);
 
   useSetPageHeader(artist?.name ?? "Artist");
 
@@ -408,7 +184,8 @@ export function MusicArtistPage() {
             <h1 className="text-2xl font-semibold">{artist.name}</h1>
           )}
           <ArtistFacts artist={artist} />
-          <ArtistMetadata artist={artist} />
+          <ArtistBiography key={artist.id} overview={artist.overview} />
+          <MusicArtistMetadata artist={artist} />
           <MusicExternalLinks links={artist.links} className="mt-3" />
           <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
             {stats && (
@@ -418,10 +195,42 @@ export function MusicArtistPage() {
               </span>
             )}
           </div>
-          <div className="mt-auto flex items-center gap-2 pt-3">
+          <div
+            role="group"
+            aria-label="Artist actions"
+            className="mt-auto flex flex-wrap items-center gap-1.5 pt-3"
+          >
             <Button
               size="sm"
-              variant={monitored ? "secondary" : "outline"}
+              variant="outline"
+              className="h-8 gap-1.5 text-xs"
+              disabled={bulkBusy}
+              onClick={searchAllMissing}
+            >
+              {bulkBusy ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Search className="h-3.5 w-3.5" />
+              )}
+              Search
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 gap-1.5 text-xs"
+              onClick={() => setEditOpen(true)}
+            >
+              <Pencil className="h-3.5 w-3.5" />
+              Edit
+            </Button>
+            <div aria-hidden className="mx-0.5 h-5 w-px bg-border" />
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-8 w-8"
+              aria-label={monitored ? "Unmonitor artist" : "Monitor artist"}
+              title={monitored ? "Unmonitor artist" : "Monitor artist"}
+              disabled={setMonitoring.isPending}
               onClick={() =>
                 setMonitoring.mutate({
                   id: artist.id,
@@ -429,12 +238,19 @@ export function MusicArtistPage() {
                 })
               }
             >
-              {monitored ? "Monitored" : "Unmonitored"}
+              {monitored ? (
+                <BookmarkCheck className="h-3.5 w-3.5" />
+              ) : (
+                <Bookmark className="h-3.5 w-3.5" />
+              )}
             </Button>
             <Button
-              size="sm"
-              variant="outline"
-              disabled={rescanArtist.isPending}
+              size="icon"
+              variant="ghost"
+              className="h-8 w-8"
+              aria-label="Rescan folder"
+              title="Rescan library folder for new files"
+              disabled={rescanArtist.isPending || !artist.library_id}
               onClick={() => {
                 if (!artist.library_id) {
                   toast.error("Library ID not found");
@@ -456,15 +272,17 @@ export function MusicArtistPage() {
               }}
             >
               {rescanArtist.isPending ? (
-                <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
               ) : (
-                <FolderSync className="mr-1.5 h-4 w-4" />
+                <FolderSync className="h-3.5 w-3.5" />
               )}
-              Rescan Folder
             </Button>
             <Button
-              size="sm"
-              variant="outline"
+              size="icon"
+              variant="ghost"
+              className="h-8 w-8"
+              aria-label="Refresh metadata"
+              title="Refresh metadata"
               disabled={refreshArtist.isPending}
               onClick={() =>
                 refreshArtist.mutate(artist.id, {
@@ -477,20 +295,20 @@ export function MusicArtistPage() {
               }
             >
               {refreshArtist.isPending ? (
-                <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
               ) : (
-                <RefreshCw className="mr-1.5 h-4 w-4" />
+                <RefreshCw className="h-3.5 w-3.5" />
               )}
-              Refresh Metadata
             </Button>
             <Button
-              size="sm"
+              size="icon"
               variant="ghost"
-              className="text-destructive"
+              className="ml-auto h-8 w-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
+              aria-label="Remove artist"
+              title="Remove artist"
               onClick={() => setDeleteOpen(true)}
             >
-              <Trash2 className="mr-1.5 h-4 w-4" />
-              Remove
+              <Trash2 className="h-3.5 w-3.5" />
             </Button>
           </div>
         </div>
@@ -550,7 +368,13 @@ export function MusicArtistPage() {
                     (b.release_date || "").localeCompare(a.release_date || ""),
                   )
                   .map((al) => (
-                    <AlbumRow key={al.id} album={al} />
+                    <AlbumSection
+                      key={al.id}
+                      album={al}
+                      artistId={artist.id}
+                      onMonitoredChange={() => void refetch()}
+                      onDetails={setDetailAlbum}
+                    />
                   ))}
               </div>
             </div>
@@ -558,6 +382,18 @@ export function MusicArtistPage() {
         </div>
       )}
 
+      <AlbumDetailSheet
+        album={detailAlbum}
+        open={!!detailAlbum}
+        onOpenChange={(open) => {
+          if (!open) setDetailAlbum(null);
+        }}
+      />
+      <ArtistEditDialog
+        artist={artist}
+        open={editOpen}
+        onOpenChange={setEditOpen}
+      />
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
         <DialogContent className="max-w-sm">
           <DialogHeader>

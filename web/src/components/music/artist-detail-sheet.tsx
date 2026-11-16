@@ -20,7 +20,6 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { AlbumSearchDialog } from "@/components/music/album-search-dialog";
-import { ArtistMetadata } from "@/components/titles/title-metadata";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -44,6 +43,9 @@ import {
 } from "@/lib/music-api";
 import {
   ArtistFacts,
+  ArtistBiography,
+  MusicArtistMetadata,
+  albumTracksAbsent,
   MusicArtwork,
   MusicExternalLinks,
   MusicRating,
@@ -87,7 +89,7 @@ function DrawerSection({
   );
 }
 
-function AlbumSection({
+export function AlbumSection({
   album,
   artistId,
   onMonitoredChange,
@@ -110,7 +112,9 @@ function AlbumSection({
   const setAlbumMonitored = useSetAlbumMonitored();
   const searchAlbum = useSearchAlbum();
   const currentAlbum = details ?? album;
-  const tracks = details?.tracks ?? [];
+  const tracks = currentAlbum.tracks ?? [];
+  const tracksAbsent = albumTracksAbsent(currentAlbum);
+  const showTracks = expanded && !tracksAbsent;
   const availableTracks = tracks.filter((track) => track.has_file).length;
   const complete = tracks.length > 0 && availableTracks === tracks.length;
 
@@ -227,12 +231,25 @@ function AlbumSection({
         <Button
           size="icon"
           variant="ghost"
-          aria-label={expanded ? "Hide tracks" : "Show tracks"}
-          aria-expanded={expanded}
-          title={expanded ? "Hide tracks" : "Show tracks"}
+          aria-label={
+            tracksAbsent
+              ? "No tracks available"
+              : showTracks
+                ? "Hide tracks"
+                : "Show tracks"
+          }
+          aria-expanded={showTracks}
+          disabled={tracksAbsent}
+          title={
+            tracksAbsent
+              ? "No track list is available for this album"
+              : showTracks
+                ? "Hide tracks"
+                : "Show tracks"
+          }
           onClick={() => setExpanded((open) => !open)}
         >
-          {expanded ? (
+          {showTracks ? (
             <ChevronDown className="h-4 w-4" />
           ) : (
             <ChevronRight className="h-4 w-4" />
@@ -240,16 +257,31 @@ function AlbumSection({
         </Button>
       </div>
 
-      {expanded && (
+      {tracksAbsent && (
+        <p role="status" className="px-3 pb-3 text-xs text-muted-foreground">
+          No track list is available for this album.
+        </p>
+      )}
+      {showTracks && (
         <div className="border-t border-border/60 px-3 py-3">
           {isFetching ? (
-            <div className="flex items-center gap-2 py-2 text-sm text-muted-foreground">
+            <div
+              role="status"
+              className="flex items-center gap-2 py-2 text-sm text-muted-foreground"
+            >
               <Loader2 className="h-4 w-4 animate-spin" />
               Loading track availability…
             </div>
-          ) : isError ? (
-            <div className="flex items-center justify-between gap-3 py-1 text-sm text-muted-foreground">
-              <span>Could not load tracks.</span>
+          ) : isError || tracks.length === 0 ? (
+            <div
+              role="alert"
+              className="flex items-center justify-between gap-3 py-1 text-sm text-muted-foreground"
+            >
+              <span>
+                {isError
+                  ? "Could not load tracks."
+                  : "Track metadata could not be loaded."}
+              </span>
               <Button
                 size="sm"
                 variant="outline"
@@ -258,10 +290,6 @@ function AlbumSection({
                 Retry
               </Button>
             </div>
-          ) : tracks.length === 0 ? (
-            <p className="py-1 text-sm text-muted-foreground">
-              No track list is available yet.
-            </p>
           ) : (
             <ol className="space-y-1">
               {tracks.map((track) => (
@@ -484,10 +512,27 @@ export function ArtistDetailSheet({
 
         <div className="h-12" />
         <div className="space-y-5 px-6 pb-6">
-          <div className="flex flex-wrap items-center gap-2">
+          <div
+            role="group"
+            aria-label="Artist actions"
+            className="flex flex-wrap items-center gap-1.5"
+          >
             <Button
               size="sm"
               variant="outline"
+              className="h-8 gap-1.5 text-xs"
+              onClick={() => setEditOpen(true)}
+            >
+              <Pencil className="h-3.5 w-3.5" />
+              Edit
+            </Button>
+            <div aria-hidden className="mx-0.5 h-5 w-px bg-border" />
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-8 w-8"
+              aria-label="Refresh metadata"
+              title="Refresh metadata"
               disabled={refreshArtist.isPending}
               onClick={() =>
                 refreshArtist.mutate(artist.id, {
@@ -502,15 +547,17 @@ export function ArtistDetailSheet({
               }
             >
               {refreshArtist.isPending ? (
-                <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
               ) : (
-                <RefreshCw className="mr-1.5 h-4 w-4" />
+                <RefreshCw className="h-3.5 w-3.5" />
               )}
-              Refresh metadata
             </Button>
             <Button
-              size="sm"
-              variant="outline"
+              size="icon"
+              variant="ghost"
+              className="h-8 w-8"
+              aria-label="Rescan folder"
+              title="Rescan library folder for new files"
               disabled={rescanArtist.isPending || !artist.library_id}
               onClick={() =>
                 artist.library_id &&
@@ -530,27 +577,17 @@ export function ArtistDetailSheet({
               }
             >
               {rescanArtist.isPending ? (
-                <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
               ) : (
-                <RefreshCw className="mr-1.5 h-4 w-4" />
+                <RefreshCw className="h-3.5 w-3.5" />
               )}
-              Rescan folder
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setEditOpen(true)}
-            >
-              <Pencil className="mr-1.5 h-4 w-4" />
-              Edit
             </Button>
             <Link
               to="/music/$artistId"
               params={{ artistId: artist.id }}
               onClick={() => onOpenChange(false)}
-              className="ml-auto"
             >
-              <Button size="sm" variant="ghost">
+              <Button size="sm" variant="ghost" className="h-8 gap-1.5 text-xs">
                 Full page
                 <ArrowUpRight className="ml-1 h-4 w-4" />
               </Button>
@@ -560,7 +597,7 @@ export function ArtistDetailSheet({
               variant="ghost"
               aria-label="Delete artist"
               title="Delete artist"
-              className="text-destructive hover:text-destructive"
+              className="ml-auto h-8 w-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
               onClick={() => {
                 onDelete(artist.id);
                 onOpenChange(false);
@@ -571,12 +608,8 @@ export function ArtistDetailSheet({
           </div>
 
           <ArtistFacts artist={artist} />
-          {artist.overview && (
-            <p className="whitespace-pre-line text-sm leading-relaxed text-muted-foreground">
-              {artist.overview}
-            </p>
-          )}
-          <ArtistMetadata artist={artist} />
+          <ArtistBiography key={artist.id} overview={artist.overview} />
+          <MusicArtistMetadata artist={artist} />
           <MusicExternalLinks links={artist.links} />
 
           <section className="space-y-3 border-t border-border/60 pt-4">

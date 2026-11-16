@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ArtistDetailSheet } from "@/components/music/artist-detail-sheet";
@@ -22,6 +22,7 @@ const artist: Artist = {
   id: "artist-1",
   mbid: "mbid-1",
   name: "Linkin Park",
+  overview: "An artist biography with a long history. ".repeat(20),
   monitoring_status: "monitored",
   created_at: "",
   updated_at: "",
@@ -168,6 +169,94 @@ describe("ArtistDetailSheet", () => {
         String(url).endsWith("/api/v1/albums/album-1"),
       ),
     ).toBe(true);
+  });
+
+  it("uses compact primary actions and icon-only maintenance actions like movie/TV drawers", async () => {
+    renderSheet();
+    await screen.findByText("Hybrid Theory");
+    const actions = screen.getByRole("group", { name: "Artist actions" });
+    expect(within(actions).getByRole("button", { name: "Edit" })).toHaveClass(
+      "h-8",
+      "text-xs",
+    );
+    expect(
+      within(actions).getByRole("button", { name: "Refresh metadata" }),
+    ).toHaveClass("h-8", "w-8");
+    expect(
+      within(actions).getByRole("button", { name: "Delete artist" }),
+    ).toHaveClass("ml-auto");
+  });
+
+  it("shows only one compact biography, with text-style read more and read less", async () => {
+    const user = userEvent.setup();
+    renderSheet();
+    await screen.findByText("Hybrid Theory");
+    expect(screen.queryByText(artist.overview!.trim())).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Read more" }));
+    expect(screen.getAllByText(artist.overview!.trim())).toHaveLength(1);
+    await user.click(screen.getByRole("button", { name: "Read less" }));
+    expect(screen.queryByText(artist.overview!.trim())).not.toBeInTheDocument();
+  });
+
+  it("does not fetch tracks until expanded, and disables disclosure after a confirmed empty lookup", async () => {
+    const user = userEvent.setup();
+    const normalFetch = fetchMock.getMockImplementation()!;
+    fetchMock.mockImplementation((input, init) =>
+      String(input).endsWith("/api/v1/albums/album-1")
+        ? Promise.resolve(
+            json({
+              ...album,
+              releases_fetched_at: "2024-01-01",
+            }),
+          )
+        : normalFetch(input, init),
+    );
+    renderSheet();
+    await screen.findByText("Hybrid Theory");
+    expect(
+      fetchMock.mock.calls.some(([url]) =>
+        String(url).endsWith("/api/v1/albums/album-1"),
+      ),
+    ).toBe(false);
+    await user.click(screen.getByRole("button", { name: "Show tracks" }));
+    const disclosure = await screen.findByRole("button", {
+      name: "No tracks available",
+    });
+    expect(disclosure).toBeDisabled();
+    expect(disclosure).toHaveAttribute("aria-expanded", "false");
+    expect(
+      screen.getByText("No track list is available for this album."),
+    ).toBeInTheDocument();
+  });
+
+  it("shows loading and retry feedback for a failed lazy track request", async () => {
+    const user = userEvent.setup();
+    const normalFetch = fetchMock.getMockImplementation()!;
+    let fail: (response: Response) => void = () => {};
+    let attempts = 0;
+    fetchMock.mockImplementation((input, init) => {
+      if (
+        String(input).endsWith("/api/v1/albums/album-1") &&
+        attempts++ === 0
+      ) {
+        return new Promise<Response>((resolve) => {
+          fail = resolve;
+        });
+      }
+      return normalFetch(input, init);
+    });
+    renderSheet();
+    await screen.findByText("Hybrid Theory");
+    await user.click(screen.getByRole("button", { name: "Show tracks" }));
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "Loading track availability",
+    );
+    fail(new Response("Unavailable", { status: 503 }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Could not load tracks.",
+    );
+    await user.click(screen.getByRole("button", { name: "Retry" }));
+    expect(await screen.findByText("Papercut")).toBeInTheDocument();
   });
 
   it("updates album monitoring through the existing endpoint", async () => {

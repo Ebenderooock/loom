@@ -11,6 +11,7 @@ import {
 } from "@/lib/discovery-api";
 import { collectionKeys } from "@/lib/collections-api";
 import { useAuth } from "@/hooks/use-auth";
+import { useMediaGridClass } from "@/hooks/use-media-grid";
 import { TitleDialog } from "@/components/titles/title-experience";
 import { TitlePosterCard } from "@/components/titles/title-poster-card";
 import { Button } from "@/components/ui/button";
@@ -19,6 +20,7 @@ import { CardGridSkeleton } from "@/components/ui/skeletons";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export function RecommendationPanel() {
+  const gridClass = useMediaGridClass();
   const [mediaType, setMediaType] = useState<DiscoveryMediaType>("movie");
   const [includeUpcoming, setIncludeUpcoming] = useState(false);
   const [selected, setSelected] = useState<Recommendation | null>(null);
@@ -61,7 +63,7 @@ export function RecommendationPanel() {
         </label>
       </div>
       {query.isLoading ? (
-        <CardGridSkeleton count={6} />
+        <CardGridSkeleton count={6} className={gridClass} />
       ) : query.error ? (
         <div className="space-y-3">
           <p role="alert" className="text-sm text-destructive">
@@ -94,7 +96,7 @@ export function RecommendationPanel() {
                 build your library&apos;s connections.
               </p>
             ) : (
-              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
+              <div className={gridClass}>
                 {query.data.items.map((item) => (
                   <RecommendationCard
                     key={`${item.media_type}:${item.tmdb_id}`}

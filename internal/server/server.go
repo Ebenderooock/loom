@@ -903,6 +903,7 @@ func (s *Server) newMux() http.Handler {
 			if s.organizerSvc != nil {
 				organizer.RegisterRoutes(moviesRouter, s.organizerSvc)
 			}
+			s.registerTitleActions(moviesRouter, "movie")
 			r.Mount("/api/v1/movies", moviesRouter)
 		}
 
@@ -927,6 +928,7 @@ func (s *Server) newMux() http.Handler {
 			if s.seriesScannerSvc != nil {
 				scanner.RegisterSeriesRoutes(seriesRouter, s.seriesScannerSvc, s.libStore)
 			}
+			s.registerTitleActions(seriesRouter, "series")
 			r.Mount("/api/v1/series", seriesRouter)
 		}
 

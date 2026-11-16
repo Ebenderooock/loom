@@ -114,6 +114,13 @@ beforeEach(() => {
   api.fetch
     .mockReset()
     .mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url.endsWith("/actions"))
+        return Response.json({
+          folderPath: "/library/show",
+          unavailableReason: null,
+          rescanUnavailableReason: null,
+          plexUnavailableReason: null,
+        });
       if (url.endsWith("/credits"))
         return Response.json({ cast: [], crew: [] });
       if (url.endsWith("/seasons")) return Response.json(seasons);
@@ -219,8 +226,8 @@ describe("show monitoring master switch", () => {
 });
 
 describe.each([
-  ["refresh", "Refresh metadata from TMDB"],
-  ["rescan", "Rescan library folder for new files"],
+  ["refresh-metadata", "Refresh metadata"],
+  ["rescan-library", "Rescan library files"],
 ] as const)("same-ID metadata %s", (action, actionLabel) => {
   it("refreshes season counts, summaries, episodes and credits while preserving expansion", async () => {
     const base = api.fetch.getMockImplementation()!;
@@ -244,7 +251,17 @@ describe.each([
           },
           summary(2),
         ];
-        return Response.json({ matched: 1, imported: 1 });
+        return Response.json(
+          action === "refresh-metadata"
+            ? { message: "Metadata refreshed" }
+            : {
+                status: "completed",
+                totalFiles: 1,
+                matched: 1,
+                imported: 1,
+                errors: [],
+              },
+        );
       }
       if (url === "/api/v1/series/show") {
         return Response.json({ ...series, overview: "Refreshed synopsis" });
@@ -268,7 +285,14 @@ describe.each([
     const header = await screen.findByRole("button", { name: /^Season 1/ });
     await user.click(header);
     await screen.findByText("Missing");
-    await user.click(screen.getByRole("button", { name: actionLabel }));
+    await user.click(screen.getByRole("button", { name: "More actions" }));
+    const actionItem = await screen.findByRole("menuitem", {
+      name: actionLabel,
+    });
+    await waitFor(() =>
+      expect(actionItem).not.toHaveAttribute("aria-disabled", "true"),
+    );
+    await user.click(actionItem);
 
     await screen.findByRole("button", { name: /^Season 2/ });
     expect(screen.getByRole("button", { name: "Seasons (3)" })).toBeVisible();

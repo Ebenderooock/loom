@@ -28,13 +28,14 @@ import (
 // infraWiring holds lifecycle objects produced by wireInfra
 // so the caller can manage their shutdown.
 type infraWiring struct {
-	notifDispatcher *notifications.Dispatcher
-	rollingSearcher *scheduler.RollingSearcher
-	healthMon       *healthmonitor.Monitor
-	auditSink       *auditlog.Sink
-	analyticsSvc    *analytics.Service
-	analyticsPoller *analytics.Poller
-	pluginRunner    *plugins.Runner
+	connectUnsubscribe func()
+	notifDispatcher    *notifications.Dispatcher
+	rollingSearcher    *scheduler.RollingSearcher
+	healthMon          *healthmonitor.Monitor
+	auditSink          *auditlog.Sink
+	analyticsSvc       *analytics.Service
+	analyticsPoller    *analytics.Poller
+	pluginRunner       *plugins.Runner
 }
 
 // wireInfra constructs infrastructure services (connect, compat shims,
@@ -116,13 +117,14 @@ func wireInfra(
 	auditSink := auditlog.NewSink(wiring.Bus, auditLogger, logger)
 
 	return &infraWiring{
-		notifDispatcher: notifDispatcher,
-		rollingSearcher: rollingSearcher,
-		healthMon:       healthMon,
-		auditSink:       auditSink,
-		analyticsSvc:    analyticsSvc,
-		analyticsPoller: analyticsPoller,
-		pluginRunner:    pluginRunner,
+		connectUnsubscribe: connect.SubscribeImportEvents(ctx, wiring.Bus, connectSvc),
+		notifDispatcher:    notifDispatcher,
+		rollingSearcher:    rollingSearcher,
+		healthMon:          healthMon,
+		auditSink:          auditSink,
+		analyticsSvc:       analyticsSvc,
+		analyticsPoller:    analyticsPoller,
+		pluginRunner:       pluginRunner,
 	}, nil
 }
 

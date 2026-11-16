@@ -71,6 +71,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Switch } from "@/components/ui/switch";
 import { useAuth } from "@/hooks/use-auth";
+import { setMediaCardSize, useMediaCardSize } from "@/hooks/use-media-grid";
 import { useFeatures, useSetFeature } from "@/lib/features-api";
 import { useClearAuditLog } from "@/lib/audit-log-api";
 import { useClearSearchDebugHistory } from "@/lib/search-debug-api";
@@ -2384,6 +2385,7 @@ export function DownloadSafetyPanel() {
 // ─── UI Panel ───────────────────────────────────────────────────────────
 
 export function UIPanel() {
+  const cardSize = useMediaCardSize();
   const [pageSize, setPageSize] = React.useState(() => {
     return localStorage.getItem("loom-page-size") || "25";
   });
@@ -2403,6 +2405,16 @@ export function UIPanel() {
     toast.success(`Default view set to ${value}`);
   };
 
+  const handleCardSizeChange = (value: string) => {
+    if (value !== "small" && value !== "medium" && value !== "large") return;
+    try {
+      setMediaCardSize(value);
+      toast.success("Card size saved for this browser");
+    } catch {
+      toast.error("Could not save card size for this browser");
+    }
+  };
+
   return (
     <div className="space-y-6">
       <AppearanceSettings />
@@ -2415,6 +2427,29 @@ export function UIPanel() {
           </p>
         </CardHeader>
         <CardContent className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,14rem),1fr))] gap-6">
+          <div className="min-w-0 space-y-3">
+            <div>
+              <Label htmlFor="appearance-card-size" className="text-sm">
+                Media Card Size
+              </Label>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Applies to Discover, Movies, TV Shows, and Music.
+              </p>
+            </div>
+            <Select value={cardSize} onValueChange={handleCardSizeChange}>
+              <SelectTrigger
+                id="appearance-card-size"
+                className="h-11 w-full max-w-40"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="small">Small</SelectItem>
+                <SelectItem value="medium">Medium</SelectItem>
+                <SelectItem value="large">Large</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
           <div className="min-w-0 space-y-3">
             <div>
               <Label htmlFor="appearance-page-size" className="text-sm">
