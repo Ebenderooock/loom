@@ -45,6 +45,52 @@ without root.
 
 The full `make help` lists every target with descriptions.
 
+### Go CI shards and coverage
+
+CI runs four race/coverage shards per OS, plus a separate vet and non-race
+workflow-engine suite. PRs and branch pushes still use hosted Ubuntu only;
+release tags also use hosted macOS and Windows (at most twelve race jobs).
+The required `Go (ubuntu-latest)` check, and the corresponding tag-only OS
+checks, aggregate **all** Go jobs, including coverage merging. Any failed,
+cancelled or unexpectedly skipped prerequisite fails the gates. Builds still
+require these gates and Lint.
+
+`scripts/go-ci.py` discovers packages with `go list -tags disable_libutp`,
+subtracts the exact `./internal/workflows/...` discovery, and greedily assigns
+each remaining package once. Eight slow-package weights from job
+133605996611 seed the balance; new packages get a default weight and are
+included automatically. Weights are not elapsed-time predictions: package
+times overlap. Inspect the partition or reproduce one shard with:
+
+```bash
+CGO_ENABLED=1 python3 -B scripts/go-ci.py plan --shards 4
+CGO_ENABLED=1 python3 -B scripts/go-ci.py test --shards 4 --shard 0 --coverage coverage-0.out
+CGO_ENABLED=0 go test -tags disable_libutp -count=1 -timeout 120s ./internal/workflows/...
+python3 -B -m unittest discover -s scripts -p 'test_*.py'
+```
+
+Race runs retain `-race`, `-count=1`, `CGO_ENABLED=1` and `disable_libutp`;
+cached test results cannot substitute for execution. Ubuntu uploads uniquely
+named `coverage-shard-N` artifacts. CI validates the complete four-profile set,
+requires atomic mode, rejects overlapping blocks, and publishes one sorted
+`coverage.out` in the existing `coverage` artifact. The independent main-only
+coverage job in `integration.yml` is unchanged and does not consume this artifact.
+
+Race shards and the vet/workflows role use separate module/build cache keys,
+isolated from setup-go's general-purpose caches used by other jobs. Keys include
+OS, architecture, toolchain, role (including race build mode/tags and shard),
+`go.mod`/`go.sum` hash and commit SHA. New commits restore the latest compatible
+role-specific cache and save updated outputs rather than hitting an immutable
+shared primary key forever. Dependency or toolchain changes invalidate the
+restore prefix; bump `go-ci-v1` to discard all these caches. Go itself still
+validates build inputs, including the two build modes in the vet/workflows role.
+There is no claim that the previous shared cache lacked all race build outputs.
+
+Parallelism trades repeated setup, compilation and cache storage/transfer
+(including duplicated module caches) and potentially more runner-minutes for
+lower wall-clock time. No remote speedup has been measured yet; compare cold
+and warm CI runs before changing the four-shard limit or package weights.
+
 ## Hot-reload loop
 
 In one terminal, the backend:
