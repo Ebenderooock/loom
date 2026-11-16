@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- Split Go CI race/coverage testing into four deterministic package shards per
+  applicable OS, with role-specific rolling build caches and merged coverage.
+  Keep the existing required Go checks as fail-closed aggregate gates and run
+  workflow-engine tests separately without race instrumentation.
 - Move production publishing into the separately protected
   `Ebenderooock/loom-publisher` repository. Loom workflows observe
   App-authenticated publication results without publishing credentials;

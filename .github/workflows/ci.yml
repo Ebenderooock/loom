@@ -24,11 +24,12 @@ jobs:
           persist-credentials: false
       - run: python3 -B -m unittest discover -s scripts -p 'test_*.py'
 
-  go:
-    name: Go (${{ matrix.os }})
+  go-race:
+    name: Go race (${{ matrix.os }}, shard ${{ matrix.shard }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
+      max-parallel: 12
       matrix:
         # Day-to-day CI (push/PR) runs on GitHub-hosted Linux runners, which
         # are free for public repositories. The macOS/Windows legs that validate
@@ -39,14 +40,29 @@ jobs:
         # on `pull_request`, so a self-hosted runner would execute untrusted code
         # from forked PRs on private infrastructure.
         os: ${{ github.ref_type == 'tag' && fromJSON('["ubuntu-latest", "macos-latest", "windows-latest"]') || fromJSON('["ubuntu-latest"]') }}
+        shard: [0, 1, 2, 3]
+    env:
+      CGO_ENABLED: "1"
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
           go-version: "1.26.11"
-          cache: true
-      - run: go mod download
-      - run: go vet ./...
+          cache: false
+      - name: Locate Go caches
+        id: cache
+        shell: bash
+        run: |
+          echo "modules=$(go env GOMODCACHE)" >> "$GITHUB_OUTPUT"
+          echo "build=$(go env GOCACHE)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v5
+        with:
+          path: |
+            ${{ steps.cache.outputs.modules }}
+            ${{ steps.cache.outputs.build }}
+          key: go-ci-v1-${{ runner.os }}-${{ runner.arch }}-1.26.11-race-disable-libutp-${{ matrix.shard }}-${{ hashFiles('go.mod', 'go.sum') }}-${{ github.sha }}
+          restore-keys: |
+            go-ci-v1-${{ runner.os }}-${{ runner.arch }}-1.26.11-race-disable-libutp-${{ matrix.shard }}-${{ hashFiles('go.mod', 'go.sum') }}-
       # The race detector requires cgo + a C toolchain. GitHub-hosted runners
       # ship gcc, but the guard keeps this resilient if gcc is ever missing. The
       # disable_libutp tag drops the transitive go-libutp C++ dependency (which
@@ -60,23 +76,90 @@ jobs:
       # they are inherently timing-sensitive and produce false timeouts under
       # -race on loaded runners, so they are run without -race separately.
       - name: Run tests (with race detector)
-        # Windows runners default to PowerShell, which rejects bash syntax.
+        shell: bash
+        # "python" is on PATH on all three hosted OSes, including Windows.
+        run: python -B scripts/go-ci.py test --shards 4 --shard ${{ matrix.shard }} --coverage coverage-${{ matrix.shard }}.out
+      - if: matrix.os == 'ubuntu-latest'
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-shard-${{ matrix.shard }}
+          path: coverage-${{ matrix.shard }}.out
+          if-no-files-found: error
+
+  go-checks:
+    name: Go vet and workflows (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ${{ github.ref_type == 'tag' && fromJSON('["ubuntu-latest", "macos-latest", "windows-latest"]') || fromJSON('["ubuntu-latest"]') }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "1.26.11"
+          cache: false
+      - name: Locate Go caches
+        id: cache
         shell: bash
         run: |
-          go test -race -tags disable_libutp -count=1 \
-            $(go list ./... | grep -v 'internal/workflows') \
-            -coverprofile=coverage.out
-        env:
-          CGO_ENABLED: "1"
+          echo "modules=$(go env GOMODCACHE)" >> "$GITHUB_OUTPUT"
+          echo "build=$(go env GOCACHE)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v5
+        with:
+          path: |
+            ${{ steps.cache.outputs.modules }}
+            ${{ steps.cache.outputs.build }}
+          key: go-ci-v1-${{ runner.os }}-${{ runner.arch }}-1.26.11-vet-workflows-${{ hashFiles('go.mod', 'go.sum') }}-${{ github.sha }}
+          restore-keys: |
+            go-ci-v1-${{ runner.os }}-${{ runner.arch }}-1.26.11-vet-workflows-${{ hashFiles('go.mod', 'go.sum') }}-
+      - run: go vet ./...
       - name: Run workflows tests (without race detector)
         run: go test -tags disable_libutp -count=1 -timeout 120s ./internal/workflows/...
         env:
           CGO_ENABLED: "0"
-      - if: matrix.os == 'ubuntu-latest'
-        uses: actions/upload-artifact@v7
+
+  go-coverage:
+    name: Go coverage
+    runs-on: ubuntu-latest
+    needs: [go-race]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: coverage-shard-*
+          path: coverage-shards
+          merge-multiple: true
+      - name: Merge race coverage
+        run: python3 -B scripts/go-ci.py merge --shards 4 --directory coverage-shards
+      - uses: actions/upload-artifact@v7
         with:
           name: coverage
           path: coverage.out
+          if-no-files-found: error
+
+  go:
+    name: Go (${{ matrix.os }})
+    runs-on: ubuntu-latest
+    needs: [go-race, go-checks, go-coverage]
+    if: always()
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ${{ github.ref_type == 'tag' && fromJSON('["ubuntu-latest", "macos-latest", "windows-latest"]') || fromJSON('["ubuntu-latest"]') }}
+    steps:
+      - name: Require all Go prerequisites to succeed
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          results = json.loads(os.environ["NEEDS"])
+          expected = {"go-race", "go-checks", "go-coverage"}
+          if set(results) != expected or any(job["result"] != "success" for job in results.values()):
+              raise SystemExit(f"Go prerequisites did not all succeed: {results}")
+          PY
 
   lint:
     name: Lint
