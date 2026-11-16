@@ -1,14 +1,3 @@
-# Continuous delivery: publish a main-branch image on every merge.
-#
-# This workflow ONLY builds and pushes an image to GHCR. It does NOT touch the
-# cluster — deployment is GitOps-owned by Flux in the dr-homelab repo, where
-# image-automation watches GHCR, selects the newest `main-*` build, and rolls it
-# out automatically.
-#
-# Tag scheme: `main-<short-sha>-<committer-unix-ts>`. The trailing timestamp is
-# monotonic across linear main history, so Flux's ImagePolicy can sort builds
-# numerically and always pick the latest. `:latest` is intentionally NOT moved
-# here — that is reserved for tagged semver releases (see release.yml).
 name: Publish main image
 
 on:
@@ -17,60 +6,29 @@ on:
     paths-ignore:
       - "**.md"
       - "docs/**"
+  workflow_dispatch:
 
-# Newer merges supersede in-flight builds; we only care about the latest main.
+permissions:
+  contents: read
+  statuses: read
+
 concurrency:
   group: publish-main
   cancel-in-progress: true
 
 jobs:
   publish:
+    if: github.repository == 'Ebenderooock/loom' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
-    permissions:
-      contents: read
-      packages: write # push to ghcr.io
-
+    timeout-minutes: 190
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          fetch-depth: 0 # full history for `git describe` build metadata
-
-      - name: Compute image tag and build metadata
-        id: meta
-        run: |
-          short_sha=$(git rev-parse --short HEAD)
-          # Committer timestamp: monotonic across linear main history.
-          ts=$(git show -s --format=%ct HEAD)
-          echo "tag=main-${short_sha}-${ts}" >> "$GITHUB_OUTPUT"
-          echo "version=$(git describe --tags --always)" >> "$GITHUB_OUTPUT"
-          echo "date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
-
-      - uses: docker/setup-buildx-action@v4
-
-      - name: Log in to GHCR
-        uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build and push
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          file: deploy/docker/Dockerfile
-          platforms: linux/amd64
-          push: true
-          tags: ghcr.io/ebenderooock/loom:${{ steps.meta.outputs.tag }}
-          build-args: |
-            VERSION=${{ steps.meta.outputs.version }}
-            COMMIT=${{ github.sha }}
-            DATE=${{ steps.meta.outputs.date }}
-            TVDB_APIKEY=${{ secrets.TVDB_APIKEY }}
-            GOMAXPROCS=2
-
-      - name: Summary
-        run: |
-          echo "Published \`ghcr.io/ebenderooock/loom:${{ steps.meta.outputs.tag }}\`" >> "$GITHUB_STEP_SUMMARY"
-          echo "Flux image-automation will roll it out to the media namespace." >> "$GITHUB_STEP_SUMMARY"
+          persist-credentials: false
+      - name: Wait for the trusted publisher
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_REF: ${{ github.ref }}
+          SOURCE_SHA: ${{ github.sha }}
+          PUBLISHER_APP_SLUG: ${{ vars.PUBLISHER_APP_SLUG }}
+        run: python3 scripts/wait-for-publisher.py

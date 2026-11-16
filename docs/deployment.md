@@ -54,26 +54,114 @@ by replacing a binary: rollback needs the old version **and** its pre-upgrade
 database backup. Each platform guide covers service logs and removal without
 discarding state.
 
+## Trusted publishing
+
+Production publishing is owned by the public
+[`Ebenderooock/loom-publisher`](https://github.com/Ebenderooock/loom-publisher)
+repository. Loom's publishing workflows have read-only tokens: they wait for
+the publisher's GitHub App to report the actual result on the source commit.
+The public CI and publishing badges, GitHub releases, and downloads remain in
+this repository. Dispatching or scheduling a build is not reported as a
+successful publication.
+
+The publisher validates successful source CI and allowed source refs, then
+builds the verified commit on a runner without publishing credentials.
+Separate trusted jobs publish the outputs; they must not execute source
+scripts or load source-controlled publishing configuration.
+
+The supported streams are:
+
+| Source ref | Published output |
+|---|---|
+| `main` | Linux amd64 image, `main-<sha>-<commit timestamp>` |
+| `prelease/X.Y.Z` | Linux amd64 images, `prelease-X.Y.Z` and a pinned build tag |
+| `prerelease/X.Y.Z` | Linux amd64 images, `prerelease-X.Y.Z` and a pinned build tag |
+| `vX.Y.Z` on `main` history | Public release assets, versioned amd64/arm64 image, and stable `latest` |
+| Semver prerelease tag on `main` history | Public prerelease assets and versioned images, never stable `latest` |
+
+### Owner setup and cutover
+
+The publisher stays disabled until its owner completes setup. Public
+repositories support the necessary protections on GitHub Free.
+
+1. Restrict publisher write access to release maintainers. Protect its `main`
+   branch with required PR and CODEOWNER approval, dismissed stale approvals,
+   required checks, and blocked deletion/force pushes. Restrict bypass.
+   Protect Loom's `main`, `prelease/**`, and `prerelease/**` branches and
+   release tags too. Source CI must pass before publishing.
+2. In the publisher, create environment `production-publish`, allowing only
+   the **branch** `main`, with no permitted tags. Disallow administrator
+   bypass. PR approval can authorize routine automatic publishing; optionally
+   require environment reviewers for approval of each publishing run.
+3. Use a dedicated publishing identity with Write access only to the intended
+   GHCR package. Store its classic PAT with `write:packages` as environment
+   secret `GHCR_PUBLISH_TOKEN`, and set publisher variable
+   `GHCR_PUBLISH_USERNAME` to that identity's username. Do not store the token
+   in source repository secrets or ordinary publisher repository secrets.
+4. Create a GitHub App installed only on `Ebenderooock/loom`: Contents
+   read/write for releases, Commit statuses read/write for public results,
+   Actions read for source CI validation, and Checks read for push-diff
+   metadata. Store its App ID as publisher
+   variable `LOOM_APP_ID` and its private key as environment secret
+   `LOOM_APP_PRIVATE_KEY`. Set Loom repository variable `PUBLISHER_APP_SLUG`
+   to the actual App slug, without `[bot]`. Never put the key in this
+   repository. Configure the publisher's optional `TVDB_APIKEY` build secret
+   separately if the image should embed the existing provider key.
+   Set publisher variable `PUBLISHING_NOT_BEFORE` to the intended cutover UTC
+   timestamp (`YYYY-MM-DDTHH:MM:SSZ`); older CI runs are excluded to avoid
+   rebuilding historical releases.
+5. Once the publisher workflows and their checks are ready, coordinate the
+   cutover with the source workflow changes. In the GHCR package settings,
+   disable inherited repository permissions and remove unintended user
+   Write grants. Remove Actions Write/Admin access for **both** Loom and
+   the publisher, and any other repository that should not publish.
+   Publication uses the protected environment credential, not either
+   repository's `GITHUB_TOKEN`. Keep public image pulls enabled.
+6. Enable the publisher with its `PUBLISHING_ENABLED` repository variable
+   set to `true`. Verify each stream, release assets, public statuses, and
+   negative tests: an unapproved branch or a workflow requesting
+   `packages: write` must not be able to publish production images.
+
+Do not grant automatic package-write access to the publisher repository as
+a shortcut: that would also authorize its unapproved branch workflows.
+Environment protection is effective only when publishing credentials cannot
+be obtained through another route. Existing publishing remains in effect
+until these source workflow changes are merged; do not revoke its access
+before the replacement and cutover are ready.
+
+Documentation-only branch pushes do not publish automatically; explicit
+publisher dispatch may publish them after successful CI. New branches and
+pushes reaching GitHub's comparison-file limit conservatively publish.
+Existing public releases are never overwritten; failed attempts require an
+explicit publisher retry or a new CI attempt. Refer to the publisher's
+[operator guide](https://github.com/Ebenderooock/loom-publisher#owner-setup--cutover-administrative-access-required)
+for activation, retries, and scheduled-workflow monitoring.
+
 ## Docker
 
 ### Prerelease stream
 
-Experimental work lands through PRs into `prelease/0.3.1`, not `main`.
-CI runs on PRs and pushes to `prelease/**`. After a code change is merged,
-the separate prerelease publisher builds Linux amd64 images under:
+Experimental work lands through PRs into branches such as `prelease/0.3.1`,
+not `main`. CI runs on PRs and pushes to both `prelease/**` and
+`prerelease/**`. After a code change is merged and passes CI, the trusted
+publisher builds Linux amd64 images under:
 
 - `ghcr.io/ebenderooock/loom:prelease-0.3.1` (moving opt-in channel).
 - `ghcr.io/ebenderooock/loom:prelease-0.3.1-<sha>-<run>-<attempt>`
-  (unique build tag for pinning/rollback).
+  (unique build tag for pinning/rollback; run and attempt identify source CI).
 
 Flux image automation tracks only exact `prelease-X.Y.Z` tags and orders
 them by semver. Rebuilding the same branch updates the moving tag in place, so
 cut a new `prelease/<next patch>` branch when a build should roll out.
 
-The branch spelling is deliberately `prelease`, matching the channel name.
-Publication can also be retried using **Publish prerelease image → Run
-workflow**, selecting that branch. It only runs on `prelease/<semver>`
-branches. Documentation-only pushes do not publish images.
+The existing branch spelling `prelease` continues to work.
+`prerelease/X.Y.Z` is also supported and publishes its own
+`prerelease-X.Y.Z` channel instead of overwriting `prelease-X.Y.Z`.
+The publisher periodically discovers eligible successful CI runs. Use its
+manual workflow with the full source ref to request publication explicitly;
+the same CI and ref restrictions apply. Rerunning Loom's **Publish
+prerelease image** workflow only observes the result; it does not hold a
+publishing credential or authorize a new build.
 
 This workflow never writes `latest`, `main-*`, or stable version tags,
 creates a GitHub release, or changes a deployment. Existing stable/main

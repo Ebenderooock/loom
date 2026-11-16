@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- Move production publishing into the separately protected
+  `Ebenderooock/loom-publisher` repository. Loom workflows observe
+  App-authenticated publication results without publishing credentials;
+  public releases, downloads, and status/version badges remain on Loom.
+  Support both `prelease/X.Y.Z` and `prerelease/X.Y.Z` image channels.
 - Slide the selection highlight between main and settings navigation items.
   Respect the device's reduced-motion preference by moving it immediately.
 - Pass the shared quality profile store into the production import pipeline so

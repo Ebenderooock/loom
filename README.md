@@ -4,14 +4,19 @@
 > modern, container-native, observable platform. Single Go binary,
 > SQLite by default, Postgres-ready, K8s-native.
 
-[![CI](https://github.com/ebenderooock/loom/actions/workflows/ci.yml/badge.svg)](https://github.com/ebenderooock/loom/actions/workflows/ci.yml)
+[![CI](https://github.com/ebenderooock/loom/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/ebenderooock/loom/actions/workflows/ci.yml)
+[![Main image](https://github.com/ebenderooock/loom/actions/workflows/publish-main.yml/badge.svg?branch=main)](https://github.com/ebenderooock/loom/actions/workflows/publish-main.yml)
+[![Prerelease image](https://github.com/ebenderooock/loom/actions/workflows/publish-prerelease.yml/badge.svg)](https://github.com/ebenderooock/loom/actions/workflows/publish-prerelease.yml)
+[![Release workflow](https://github.com/ebenderooock/loom/actions/workflows/release.yml/badge.svg)](https://github.com/ebenderooock/loom/actions/workflows/release.yml)
 [![Go Report Card](https://goreportcard.com/badge/github.com/ebenderooock/loom)](https://goreportcard.com/report/github.com/ebenderooock/loom)
-[![Release](https://img.shields.io/github/v/release/ebenderooock/loom?include_prereleases&sort=semver)](https://github.com/ebenderooock/loom/releases)
+[![Latest stable](https://img.shields.io/github/v/release/ebenderooock/loom?label=latest%20stable&sort=semver)](https://github.com/ebenderooock/loom/releases/latest)
+[![Latest release including prereleases](https://img.shields.io/github/v/release/ebenderooock/loom?include_prereleases&label=latest%20release&sort=semver)](https://github.com/ebenderooock/loom/releases)
 [![License: AGPL v3](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
 [![status: alpha](https://img.shields.io/badge/status-alpha-yellow)](ROADMAP.md)
 
-> **Status: alpha.** The first tagged release ([`v0.1.0`](https://github.com/ebenderooock/loom/releases))
-> is out — published binaries and container images are available. APIs and
+> **Status: alpha.** [Tagged releases](https://github.com/ebenderooock/loom/releases)
+> provide published binaries and container images. The badges above track
+> CI, publishing status, and release versions. APIs and
 > schema may still change. See the [roadmap](ROADMAP.md) for what's done,
 > what's in flight, and what's next. Issues and PRs welcome.
 
