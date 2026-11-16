@@ -20,12 +20,13 @@
 > schema may still change. See the [roadmap](ROADMAP.md) for what's done,
 > what's in flight, and what's next. Issues and PRs welcome.
 
-Loom is a from-scratch, like-for-like replacement of the *arr stack
+Loom is a from-scratch media automation platform aiming to replace the *arr stack
 (Radarr, Sonarr, Prowlarr) with a modernised UI, first-class
 observability, and a single binary that runs anywhere. It is
-**wire-compatible** with the existing self-hosted media ecosystem, so
-Overseerr, Jellyseerr, Bazarr, Notifiarr, Tautulli, Plex, Jellyfin and
-Emby keep working unchanged.
+designed to integrate with the existing self-hosted media ecosystem.
+Selected Radarr/Sonarr/Prowlarr compatibility endpoints and media-server
+integrations exist, but full API parity and unchanged behavior in every
+downstream app are not guaranteed.
 
 > **Name rationale — "Loom":** short, catchy, evokes weaving disparate
 > threads (indexers, download clients, metadata providers, libraries)
@@ -39,24 +40,48 @@ Emby keep working unchanged.
 | Databases      | 3 SQLite files                   | 1 SQLite (or Postgres)                                              |
 | Runtime        | .NET (heavier images)            | Go static binary (distroless, ~30 MB image)                         |
 | Observability  | Ad-hoc logs                      | OpenTelemetry, Prometheus, structured JSON logs, pprof from day one |
-| Customisation  | Forks                            | First-class plugin SDK (gRPC, out-of-process — Phase 10)            |
+| Customisation  | Forks                            | Admin-defined JavaScript event plugins; external SDK/marketplace planned |
 | UI             | Three different UIs              | One unified, mobile-first, accessible UI                            |
-| Migration      | n/a                              | Built-in importer from existing arr SQLite DBs (Phase 8)            |
+| Migration      | n/a                              | Limited importer from existing arr SQLite DBs; not a lossless cutover |
 
 ## Feature highlights
 
-| Surface       | Today (Phase 1)                                                                                                                                     | Coming                                     |
-| ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------ |
-| HTTP server   | chi router, request-ID, structured access logs, panic recovery, gzip, ETag, CORS                                                                    | WebSocket events (Phase 1c)                |
-| Storage       | SQLite (default) + Postgres, embedded goose migrations (60+), sqlc-typed queries                                                                    | Backup / restore CLI (Phase 11)            |
-| Health probes | `/healthz`, `/livez`, `/readyz`                                                                                                                     | —                                          |
-| Metrics       | Prometheus `/metrics` (Go runtime + process collectors)                                                                                             | Loom-curated Grafana dashboards (Phase 11) |
-| Tracing       | OpenTelemetry SDK + OTLP/HTTP exporter                                                                                                              | Spans on every module call as modules land |
-| Profiling     | `/debug/pprof/*`, gated by config                                                                                                                   | —                                          |
-| Logging       | `slog` JSON, PII-redacted                                                                                                                           | Per-module loggers (rolling)               |
-| Config        | Layered Viper (defaults → file → env → flags), hot-reload for safe keys                                                                             | Live config UI (Phase 9)                   |
-| Auth          | Server-authoritative session cookies (argon2id) + API keys                                                                                          | OIDC + reverse-proxy header trust          |
-| Frontend      | React 19 + TS + Vite + TanStack Router/Query + shadcn/ui + Tailwind; **Movies, Series, Indexers, Search, Downloads, Settings, Notifications pages** | Calendar, Import Lists (Phases 8–11)       |
+The [reviewed roadmap](ROADMAP.md#what-can-be-tested) distinguishes published
+`v0.4.1` capabilities from later work on `main`. The summary below describes
+the current source, not a promise that an older binary includes every feature.
+
+| Surface | Current source |
+| ------- | -------------- |
+| Movies and TV | Libraries, metadata, monitoring, search/grab, download monitoring and imports |
+| Discovery | Import lists, calendar, library-expansion suggestions and mixed movie/TV collections |
+| Requests | Authenticated movie/series/artist requests, quotas, admin approval and Discord/Telegram bots |
+| Music | Feature-gated MusicBrainz catalog and acquisition; important import/profile fixes postdate `v0.4.1` |
+| Operations | SQLite or Postgres, health probes, Prometheus, OpenTelemetry, structured logs and SQLite/config backup CLI |
+| Auth | Sessions, API keys, users/invites, OIDC and opt-in reverse-proxy trust |
+| Experimental | Feature-gated Rain-sidecar torrent integration, media analytics and JavaScript event plugins |
+
+## Title quick actions
+
+Movie and series detail views have a **More actions** (`...`) menu with
+**Sync with Plex**, **Refresh metadata**, **Rescan library files**,
+**View import history**, and **Copy folder path**.
+History is filtered to the selected movie or the selected series's episodes.
+The other actions require an administrator.
+
+Plex sync requires complete registered media in the title's library and an
+enabled Plex connection. It requests a **library-wide refresh** on each enabled
+Plex server, not a title-specific scan, download, or watched-state sync.
+Loom paths are not sent to Plex, so different Windows/Linux mount paths are safe.
+Success means Plex accepted the refresh, not that indexing has finished.
+
+The file rescan **checks registered imported files only**; it does not discover
+or ingest unregistered files. Files must still exist with their recorded,
+nonzero size. Temporary files, symbolic links, shared/ambiguous folders, and
+paths outside the title's assigned library are excluded. Copy uses the resolved
+existing title folder, never a guessed folder name. Series metadata refresh
+preserves episode IDs and file links rather than rebuilding the episode catalog
+or invoking the file-ingestion hook. None of these quick actions enqueue
+downloads or retry imports from download folders.
 
 ## Appearance
 
@@ -84,25 +109,28 @@ uses HTTPS); leave the URL empty to remove it. Items per page and default view
 remain browser-local preferences.
 These browsing preferences save automatically, separately from global appearance.
 
-## Wire-compatibility (Phase 7)
+## Ecosystem integrations
 
-The following surfaces will be wire-compatible so existing clients keep
-working:
+Loom exposes selected compatibility endpoints under `/compat/radarr`,
+`/compat/sonarr` and `/compat/prowlarr`. These are partial adapters, not full
+replacements for the upstream APIs; some command and sync endpoints only
+acknowledge requests. Test the exact downstream workflow you depend on.
 
-- `/api/v3/*` — Radarr v3 (Overseerr, Jellyseerr, Notifiarr).
-- `/api/v3/*` and v4 — Sonarr (Overseerr, Bazarr).
-- `/api/v1/*` — Prowlarr v1 (used by Sonarr/Radarr-as-clients).
-- Cardigann YAML indexer definitions (Jackett / Prowlarr ecosystem) —
-  see [`docs/indexers-cardigann.md`](docs/indexers-cardigann.md).
-- Newznab / Torznab (inbound and outbound).
-- Download clients: qBittorrent, Transmission, Deluge, rTorrent, SABnzbd, NZBGet.
+Indexer integrations include Cardigann definitions and Newznab/Torznab
+(inbound and outbound). External download clients include qBittorrent,
+Transmission, Deluge, SABnzbd and NZBGet.
+
+**Usenet/NNTP has not been tested at all.** The Newznab/NZB and external
+SABnzbd/NZBGet implementations are unverified; a built-in Usenet downloader
+is not implemented.
 
 ## Quickstart
 
 > Alpha — the server boots and serves health, metrics, and the
 > `/api/v1/*` endpoints (movies, series, indexers, search, downloads,
-> settings). The end-to-end search → grab → download → import pipeline
-> works today.
+> settings). The search → grab → download → import pipeline is wired, but
+> import reliability fixes on `main` postdate `v0.4.1`. Test with copied media
+> and consult the [release boundaries](ROADMAP.md#what-can-be-tested).
 
 ### Docker (single container)
 
@@ -184,10 +212,10 @@ The [`docs/`](docs/) directory is the source of truth.
 
 ## Roadmap
 
-The 11-phase delivery plan lives in [ROADMAP.md](ROADMAP.md). The core
-media-automation pipeline (search → grab → download → import/organize for
-movies and TV) is working and shipped in `v0.1.0`; wire-compatibility
-APIs, request portal, and the migration importer are in progress.
+The capability review and remaining delivery plan live in [ROADMAP.md](ROADMAP.md).
+The movie/TV pipeline, authenticated requests, collections and several opt-in
+modules are implemented. Music and import reliability have important changes
+after `v0.4.1`; compatibility APIs and migration importers remain partial.
 
 ## Contributing
 

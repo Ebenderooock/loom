@@ -3,6 +3,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { AddToCollectionButton } from "@/components/collections/add-to-collection";
 import { apiFetch } from "@/lib/fetch";
 import { MediaFilesManager } from "@/components/media-files-manager";
+import { TitleActionsMenu } from "@/components/titles/title-actions-menu";
 import {
   getEpisodeStatus,
   getSeasonStats,
@@ -40,7 +41,6 @@ import {
   Pencil,
   Bookmark,
   BookmarkCheck,
-  RefreshCw,
   ChevronRight,
   ChevronDown,
   Users,
@@ -49,7 +49,6 @@ import {
   FolderSearch,
   Archive,
   ArchiveRestore,
-  HardDriveDownload,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -665,7 +664,6 @@ export function SeriesDetailSheet({
   const [saving, setSaving] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
   const [credits, setCredits] = useState<Credits | null>(null);
   const [creditsLoading, setCreditsLoading] = useState(false);
   const [seasons, setSeasons] = useState<Season[]>([]);
@@ -684,7 +682,6 @@ export function SeriesDetailSheet({
   } | null>(null);
   const [archiving, setArchiving] = useState(false);
   const [autoSearching, setAutoSearching] = useState(false);
-  const [rescanning, setRescanning] = useState(false);
   const [monitoringPending, setMonitoringPending] = useState(false);
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
@@ -924,62 +921,29 @@ export function SeriesDetailSheet({
     }
   };
 
-  const handleRefresh = async () => {
-    setRefreshing(true);
-    try {
-      const refreshRes = await apiFetch(`/api/v1/series/${series.id}/refresh`, {
-        method: "POST",
-      });
-      if (!refreshRes.ok) {
-        toast.error("Failed to refresh");
-        return;
-      }
-      refreshSeasonData();
-      refreshCredits();
-      const res = await apiFetch(`/api/v1/series/${series.id}`);
-      if (res.ok) {
-        const updated = await res.json();
-        onUpdated(updated);
-        toast.success("Series refreshed");
-      } else {
-        toast.error("Failed to fetch updated series");
-      }
-    } catch {
-      toast.error("Network error");
-    } finally {
-      setRefreshing(false);
+  const reloadAfterAction = async (signal: AbortSignal) => {
+    const base = `/api/v1/series/${encodeURIComponent(series.id)}`;
+    const responses = await Promise.all([
+      apiFetch(base, { signal }),
+      apiFetch(`${base}/seasons`, { signal }),
+      apiFetch(`${base}/credits`, { signal }),
+    ]);
+    if (responses.some((response) => !response.ok)) {
+      throw new Error(
+        "Action completed, but updated series details, seasons or credits could not be loaded.",
+      );
     }
-  };
-
-  const handleRescan = async () => {
-    if (!series.libraryId) {
-      toast.error("Series has no library assigned");
-      return;
-    }
-    setRescanning(true);
-    try {
-      const res = await apiFetch(`/api/v1/series/${series.id}/rescan`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ libraryId: series.libraryId }),
-      });
-      if (res.ok) {
-        const result = await res.json();
-        toast.success(
-          `Rescan complete: ${result.matched} matched, ${result.imported} imported`,
-        );
-        refreshSeasonData();
-        refreshCredits();
-        // Refresh series data to reflect any new files
-        const updated = await apiFetch(`/api/v1/series/${series.id}`);
-        if (updated.ok) onUpdated(await updated.json());
-      } else {
-        toast.error("Rescan failed");
-      }
-    } catch {
-      toast.error("Network error");
-    } finally {
-      setRescanning(false);
+    const [updated, seasonData, creditData] = await Promise.all(
+      responses.map((response) => response.json()),
+    );
+    const rows = Array.isArray(seasonData) ? seasonData : seasonData?.data;
+    if (!Array.isArray(rows)) throw new Error("Unexpected season response");
+    if (!signal.aborted) {
+      onUpdated(updated);
+      setSeasons(rows);
+      setCredits(creditData);
+      setFilesVersion((version) => version + 1);
+      onRefresh?.();
     }
   };
 
@@ -1127,34 +1091,15 @@ export function SeriesDetailSheet({
               <div className="mx-0.5 h-5 w-px bg-border" />
 
               {/* Secondary actions — icon only */}
-              <Button
-                size="icon"
-                variant="ghost"
-                className="h-8 w-8"
-                onClick={handleRefresh}
-                disabled={refreshing}
-                title="Refresh metadata from TMDB"
-              >
-                {refreshing ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <RefreshCw className="h-3.5 w-3.5" />
-                )}
-              </Button>
-              <Button
-                size="icon"
-                variant="ghost"
-                className="h-8 w-8"
-                onClick={handleRescan}
-                disabled={rescanning}
-                title="Rescan library folder for new files"
-              >
-                {rescanning ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <HardDriveDownload className="h-3.5 w-3.5" />
-                )}
-              </Button>
+              {open && !discoverPerson && (
+                <TitleActionsMenu
+                  key={`series-${series.id}-${user?.role}`}
+                  mediaType="series"
+                  id={series.id}
+                  title={series.title}
+                  onChanged={reloadAfterAction}
+                />
+              )}
               <Button
                 size="icon"
                 variant="ghost"

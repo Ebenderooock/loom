@@ -779,13 +779,18 @@ func (p *ImportPipeline) safetyGate(ctx context.Context, job *ImportJob, pending
 		return false
 	}
 	result, err := p.postVal.ValidateDownload(job.SourcePath)
-	if err == nil && result.Pass {
+	if err != nil {
+		p.logger.Warn("cannot validate import source", "job_id", job.ID, "path", job.SourcePath, "error", err)
+		for _, f := range pending {
+			p.setFileState(ctx, f.ID, FileFailed, "", "", "", true, true,
+				fmt.Sprintf("cannot validate import source (check download path and storage availability): %v", err))
+		}
+		return true
+	}
+	if result.Pass {
 		return false
 	}
 	reason := strings.Join(result.Reasons, "; ")
-	if err != nil && reason == "" {
-		reason = err.Error()
-	}
 	p.logger.Warn("manual import flagged by post-validator", "job_id", job.ID, "path", job.SourcePath, "reasons", reason)
 	reviewID := job.ReviewID
 	if p.reviewStore != nil && (reviewID == "" || p.reviewRejected(ctx, reviewID)) {

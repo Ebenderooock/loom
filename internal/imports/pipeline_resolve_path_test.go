@@ -2,14 +2,86 @@ package imports
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/ebenderooock/loom/internal/downloads"
+	"github.com/ebenderooock/loom/internal/workflows"
 )
+
+type sourceResolutionRepo struct{ resolvePathFakeRepo }
+
+func (sourceResolutionRepo) Get(_ context.Context, id string) (downloads.Definition, error) {
+	return downloads.Definition{ID: id}, nil
+}
+
+func TestResolveSing2SourceIndependentOfDestination(t *testing.T) {
+	for _, source := range []string{"live", "cached", "missing"} {
+		t.Run(source, func(t *testing.T) {
+			p, svc, oldDest := newCollisionPipeline(t, ImportModeCopy)
+			svc.movie.Title, svc.movie.Year = "Sing 2", 2021
+			dest := filepath.Join(filepath.Dir(oldDest), "Sing 2 (2021)")
+			save := filepath.Join(t.TempDir(), "opaque-download-id")
+			content := filepath.Join(save, "Sing 2 (2021) [1080p] [BluRay] [5.1] [YTS.MX]")
+			if source != "missing" {
+				if err := os.MkdirAll(content, 0o755); err != nil {
+					t.Fatal(err)
+				}
+			}
+			title := "Sing 2 (2021) 1080p BRRip 5.1 x264 -YTS"
+			client := &resolvePathFakeClient{id: "client"}
+			if source == "live" {
+				client.items = []downloads.Item{{ID: "download", Title: title, ContentPath: content, SavePath: save}}
+			}
+			dl, err := downloads.NewService(downloads.ServiceOptions{
+				Repository: sourceResolutionRepo{}, Registry: downloads.NewRegistry(), Logger: p.logger,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := dl.Registry().Register(client); err != nil {
+				t.Fatal(err)
+			}
+			p.downloadSvc = dl
+			store, err := workflows.NewStore(p.db)
+			if err != nil {
+				t.Fatal(err)
+			}
+			metadata, err := json.Marshal(map[string]string{"content_path": content, "save_path": save})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := store.Create(context.Background(), &workflows.Workflow{
+				Type: workflows.TypeManualImport, State: workflows.StateImporting,
+				DownloadClientID: "client", DownloadID: "download", GrabTitle: title, Metadata: string(metadata),
+			}); err != nil {
+				t.Fatal(err)
+			}
+			p.wfEngine = workflows.NewEngine(store, nil, p.logger)
+			ev := &downloads.DownloadCompletedEvent{ClientID: "client", DownloadID: "download", Title: title}
+			for _, createDest := range []bool{false, true} {
+				if createDest {
+					if err := os.MkdirAll(dest, 0o755); err != nil {
+						t.Fatal(err)
+					}
+				}
+				got, err := p.resolveDownloadPath(context.Background(), ev)
+				if source == "missing" {
+					if err == nil || !strings.Contains(err.Error(), "could not determine download path") {
+						t.Fatalf("missing source resolved after destination creation=%v: %q, %v", createDest, got, err)
+					}
+				} else if err != nil || got != content {
+					t.Fatalf("%s source depends on destination creation=%v: %q, %v", source, createDest, got, err)
+				}
+			}
+		})
+	}
+}
 
 func TestResolveDownloadPathPrefersExistingCandidate(t *testing.T) {
 	t.Parallel()

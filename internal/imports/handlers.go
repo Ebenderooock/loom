@@ -37,7 +37,12 @@ func handleListHistory(p *ImportPipeline) http.HandlerFunc {
 			limit = 50
 		}
 
-		records, err := p.ListHistory(r.Context(), limit, offset)
+		mediaType, mediaID := r.URL.Query().Get("media_type"), r.URL.Query().Get("media_id")
+		if (mediaType == "") != (mediaID == "") || (mediaType != "" && mediaType != "movie" && mediaType != "series") {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "media_type (movie or series) and media_id must be provided together"})
+			return
+		}
+		records, err := p.ListTitleHistory(r.Context(), mediaType, mediaID, limit, offset)
 		if err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			return

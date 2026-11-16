@@ -136,7 +136,19 @@ and are enforced at review time, not by CI bots.
 
 ## Releasing
 
-Maintainers tag `vX.Y.Z` on `main`. GoReleaser produces the multi-arch
-binaries and signed Docker images via
-[`.github/workflows/release.yml`](../.github/workflows/release.yml). Tagging
-moves the `[Unreleased]` block in `CHANGELOG.md` under the new version.
+Before tagging, prepare a release PR with a `## [X.Y.Z] - YYYY-MM-DD`
+section in `CHANGELOG.md` and leave a fresh `## [Unreleased]` section.
+Include only changes since the previous release, with user-facing details
+and upgrade guidance rather than a list of commit titles. For a prerelease
+tag such as `vX.Y.Z-rc.1`, use the exact version `## [X.Y.Z-rc.1]`.
+Tagging does not move changelog entries automatically.
+
+After merging the release PR, maintainers tag `vX.Y.Z` on `main`. The
+[trusted publisher](deployment.md#trusted-publishing) builds the release
+assets and images; Loom's
+[release workflow](../.github/workflows/release.yml) observes its result.
+The publisher reads the matching changelog section from the exact tagged
+source commit for the GitHub release description. Missing, empty or
+ambiguous version sections fail publication instead of falling back to
+generated commit notes. Ensure the corresponding publisher update is
+merged before creating a release tag.

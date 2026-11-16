@@ -1,7 +1,14 @@
 # Loom — Platform Documentation
 
 > **Single binary, modular-monolith replacement for Radarr + Sonarr + Prowlarr.**
-> Pre-alpha — not production-ready.
+> Alpha — not production-ready. For reviewed capability status and the
+> distinction between published releases and `main`, see the
+> [roadmap](../ROADMAP.md#what-can-be-tested). This reference contains older
+> design descriptions; it is not a release manifest.
+
+**Usenet/NNTP has not been tested at all.** References below to Newznab/NZB
+and external SABnzbd/NZBGet describe implementations, not verified workflows.
+There is no built-in Usenet/NNTP downloader.
 
 ---
 
@@ -72,7 +79,10 @@ Loom aims to be a **single Go binary** that replaces the trio of Radarr (movies)
 - **Ecosystem-compatible** — wire-compatible Radarr/Sonarr/Prowlarr API shims so existing tools (Overseerr, Ombi, Tautulli) can integrate.
 - **Modular monolith** — internal packages are cleanly separated so the app could theoretically be split into microservices later (Phase 11 goal).
 
-**Current state:** Phases 0–2 complete, Phases 3–7 substantially done. Phase 3 (download workflow end-to-end) is the current focus.
+**Current state:** Movie/TV automation, authenticated requests, collections,
+music infrastructure and opt-in analytics/scripts exist. Several import and
+music fixes postdate `v0.4.1`. The [reviewed roadmap](../ROADMAP.md) records
+implemented, partial and planned work without implying production readiness.
 
 ---
 
@@ -1177,6 +1187,21 @@ a later read or sync. Matching does not guess from titles.
 - **Watchlist:** Fetches `/users/me/watchlist/movies` + `/users/me/watchlist/shows`. Returns counts.
 
 **Library refresh (NotifyAll):** On import events, iterates all enabled connections with `notifyOnImport=true`, calls provider's `NotifyLibraryUpdate` in parallel goroutines.
+
+Connect subscribes only to `imports.completed`, not download completion or failed
+imports. This is a media-server library refresh, not a user-facing push
+notification; Discord and other notification connections are separate.
+For Plex, configure `provider: "plex"`, `enabled: true`,
+`notify_on_import: true`, `settings.host` (an absolute HTTP(S) server URL, without
+embedded credentials, query, or fragment), and `settings.api_key` (the Plex token).
+Loom requests `GET /library/sections` as XML and then
+`GET /library/sections/{id}/refresh`, authenticating each request with the
+`X-Plex-Token` header. All returned sections are refreshed once; there is no
+configured section selection or import-path mapping, and no `path` query is sent.
+Missing/invalid configuration, absent or invalid section IDs, network failures,
+and unsuccessful HTTP statuses are reported as errors. Redirects are rejected to
+avoid forwarding the token. The connection test checks `/identity` only; passing
+it does not prove the token can list or refresh libraries.
 
 **Expected outcomes:**
 - Plex/Emby/Jellyfin: library auto-refreshes when new media is imported.
@@ -2304,19 +2329,22 @@ separately by the media scanner
 
 | Area | Status | Notes |
 |------|--------|-------|
-| **End-to-end download→import pipeline** | ⚠️ Unreliable | The post-download and import stages have known issues. Workflows may not complete successfully. This is the current development focus (Phase 3). |
-| **Grab cleanup on import** | 🔴 Incomplete | Active grab records may not be properly cleaned up after import. |
-| **Remote path mappings** | ⚠️ Partial | Feature exists but may not be fully integrated into the import pipeline. |
+| **End-to-end download→import pipeline** | ⚠️ Alpha | Wired through the workflow engine. Persistent file jobs, asynchronous scans, quality-profile wiring and collision/replacement fixes on `main` postdate `v0.4.1`; use copied media for testing. |
+| **Grab cleanup on import** | ✅ Implemented | Post-import cleanup is wired; client outages and recovery still need real-world testing. |
+| **Remote path mappings** | ✅ Implemented | The import pipeline receives the remote-path store. Mappings translate paths; they do not transfer remote files. |
 | **Blocklist on failure** | ✅ Done | Stalled/failed downloads are blocklisted and skipped by search. Import failures are not blocklisted. |
-| **Season pack import** | ⚠️ Partial | Pack detection exists but unpacking/splitting into episodes may have gaps. |
-| **Anime episode mapping** | ⚠️ Partial | Absolute-to-season mapping exists but coverage depends on external data. |
+| **Season pack import** | ⚠️ Partial | Per-file episode matching exists. Automated search rejects ambiguous multi-season/complete-series packs. |
+| **Anime and alternate ordering** | ⚠️ Partial | Parsing/mapping helpers exist, but complete external-catalog mapping and alternate-order acquisition/import are not wired end-to-end. |
 | **Wire-compat parity** | 🔴 Incomplete | Compatibility shims exist but don't cover all Radarr/Sonarr/Prowlarr endpoints. |
-| **Migration tooling** | 🔴 Not started | No tool to import existing Radarr/Sonarr databases. |
-| **Backup/restore** | 🔴 Not started | No CLI tool for backup/restore yet. |
-| **Kubernetes/split deployment** | 🔴 Not started | Phase 11 goal. |
+| **Migration tooling** | ⚠️ Partial | SQLite importers exist for selected records, not all settings/history; see the [migration guide](migration.md). |
+| **Backup/restore** | ✅ Limited CLI | SQLite/config backup and restore exist. Check path/layout limits and stop the server for offline copies/restores. |
+| **Kubernetes deployment** | ✅ Implemented | Helm and Flux examples exist; remote Postgres does not make the scheduler distributed. |
+| **Music imports** | ⚠️ Version-dependent | Core music exists in `v0.4.1`, but download/manual audio imports and profile/track acquisition improvements require newer source. |
 | **Secrets encryption at rest** | 🔴 Not started | API keys and tokens stored as plaintext in DB. |
 | **Advanced RSS sync** | ⚠️ Partial | Basic RSS intake exists but full automated grab-on-match may have gaps. |
 
 ---
 
-*This document reflects the codebase as of May 2025. Loom is under active development.*
+*Capability summary and limitations refreshed 2026-11-17. Detailed sections
+have mixed ages; consult the reviewed roadmap and source before treating a
+design description as a current or released guarantee.*

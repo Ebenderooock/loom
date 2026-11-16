@@ -80,6 +80,9 @@ func handleGrabRelease(engine *Engine) http.HandlerFunc {
 }
 
 func writeSearchErr(w http.ResponseWriter, err error) {
+	if downloads.WriteAcquisitionConflict(w, err) {
+		return
+	}
 	status := http.StatusInternalServerError
 	switch {
 	case errors.Is(err, ErrNotFound):

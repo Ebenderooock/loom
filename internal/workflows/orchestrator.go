@@ -374,6 +374,8 @@ func (o *Orchestrator) handle(ctx context.Context, cmd Command) {
 		o.handleDownloadFailed(ctx, c)
 	case CmdRetry:
 		o.handleRetry(ctx, c)
+	case CmdDownloadReacquired:
+		o.handleDownloadReacquired(ctx, c)
 	default:
 		o.logger.Warn("unknown command type", "type", fmt.Sprintf("%T", cmd))
 	}
@@ -772,6 +774,7 @@ func (o *Orchestrator) classifyImportError(errMsg string) importRetryStrategy {
 		"already been imported", "already imported",
 		"import rejected",
 		"pending review",
+		"no library match",
 	} {
 		if strings.Contains(lower, s) {
 			return failPermanent

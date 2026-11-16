@@ -643,6 +643,41 @@ func newSafetyPipeline(t *testing.T) (*packFixture, *safety.ReviewStore) {
 	return f, store
 }
 
+func TestMissingSourceRetriesWithoutCreatingSafetyReview(t *testing.T) {
+	f, store := newSafetyPipeline(t)
+	f.p.jobs.backoff = []time.Duration{time.Hour}
+	ctx := context.Background()
+	_, files := writePack(t, t.TempDir(), 1)
+	job, err := f.p.EnqueueImport(ctx, JobRequest{Path: files[0]})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(files[0]); err != nil {
+		t.Fatal(err)
+	}
+	drain(t, f.p)
+	j := mustJob(t, f.p, job.ID)
+	if j.Status != JobRetryPending || j.ReviewID != "" || j.FailedFiles != 1 || j.NextRetryAt == nil ||
+		!strings.Contains(j.Files[0].Error, "cannot validate import source") {
+		t.Fatalf("missing source was not classified as an operational failure: %+v", j)
+	}
+	reviews, err := store.ListPending(ctx)
+	if err != nil || len(reviews) != 0 {
+		t.Fatalf("missing source created a safety review: %+v, %v", reviews, err)
+	}
+	if err := os.WriteFile(files[0], []byte("episode 1"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	f.p.jobs.backoff = []time.Duration{0}
+	if _, err := f.p.db.ExecContext(ctx, `UPDATE import_jobs SET next_retry_at = NULL WHERE id = ?`, job.ID); err != nil {
+		t.Fatal(err)
+	}
+	drain(t, f.p)
+	if j := mustJob(t, f.p, job.ID); j.Status != JobImported || j.ImportedFiles != 1 {
+		t.Fatalf("restored source did not resume without review approval: %+v", j)
+	}
+}
+
 func TestSafetyFlaggedJobIsHeldForReviewAndRetryCannotBypass(t *testing.T) {
 	f, store := newSafetyPipeline(t)
 	ctx := context.Background()

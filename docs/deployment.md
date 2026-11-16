@@ -137,6 +137,23 @@ explicit publisher retry or a new CI attempt. Refer to the publisher's
 [operator guide](https://github.com/Ebenderooock/loom-publisher#owner-setup--cutover-administrative-access-required)
 for activation, retries, and scheduled-workflow monitoring.
 
+### Release-page notes
+
+Before creating a release tag, add a matching version section to
+`CHANGELOG.md`, for example `## [0.4.2] - 2026-11-17` for `v0.4.2`.
+Leave a fresh `## [Unreleased]` section for future work. Describe user-facing
+changes since the previous release, including upgrade considerations;
+do not carry forward already-shipped features as new changes.
+
+The trusted publisher reads only that version's section from the exact
+source commit selected for the tag. It uses those notes for the GitHub
+release description, not the release PR body or generated commit notes.
+Missing, empty or duplicate version sections fail publication. Prerelease
+tags require their exact version section too, such as `[0.4.3-rc.1]`.
+Merge the publisher's changelog-note support before tagging a release that
+depends on this behavior. Release archives continue to include the full
+`CHANGELOG.md`.
+
 ## Docker
 
 ### Prerelease stream

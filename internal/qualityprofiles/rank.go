@@ -50,6 +50,32 @@ func (qp *QualityProfile) IsAllowed(qualityName string) bool {
 	return qp.Rank(qualityName) >= 0
 }
 
+// AllowsUnknownQuality reports whether no seeded quality tier is excluded.
+// The profile's name alone never grants permission to import unknown quality.
+func (qp *QualityProfile) AllowsUnknownQuality() bool {
+	items, err := qp.ParseItems()
+	if err != nil {
+		return false
+	}
+	for _, item := range items {
+		if !item.Allowed {
+			return false
+		}
+	}
+	for _, definition := range defaultProfileDefinitions() {
+		if definition.name != "Any" {
+			continue
+		}
+		for _, name := range definition.items {
+			if !qp.IsAllowed(name) {
+				return false
+			}
+		}
+		return true
+	}
+	return false
+}
+
 // CutoffRank returns the rank of the profile's cutoff quality.
 // Qualities at or above this quality level need no further upgrading (their
 // item index is less than or equal to the cutoff index).

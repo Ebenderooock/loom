@@ -285,7 +285,7 @@ func (c *Client) doRequest(ctx context.Context, endpoint string, result interfac
 		case http.StatusOK, http.StatusCreated:
 			// Success; decode and return
 			if err := json.NewDecoder(resp.Body).Decode(result); err != nil {
-				return NewNetworkError(err)
+				return NewResponseError(resp.StatusCode, err)
 			}
 			return nil
 

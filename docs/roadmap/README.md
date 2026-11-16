@@ -1,14 +1,25 @@
 # Loom — Implementation Roadmap
 
-This is the detailed implementation roadmap for Loom's upcoming features. Phase documents are design proposals, not a current capability inventory; some proposed functionality has already shipped with different schemas or APIs. See [platform documentation](../platform-documentation.md) and the implementation before treating a task as outstanding.
+These are detailed design proposals, not a current capability inventory.
+Some proposed functionality has shipped with different schemas or APIs.
+The [reviewed root roadmap](../../ROADMAP.md) records current implementation
+status and the distinction between published `v0.4.1` and later `main` work.
+The phase numbers in this directory are a separate proposal sequence, not
+the root roadmap's phase numbers.
 
 Authenticated movie, series, and artist requests, request quotas, admin approval,
 and Discord/Telegram request bots already exist. The music module includes
-artist/album/release/track management and acquisition. Guest requests, broader
-auto-approval rules, and external media-server request availability checks remain
-separate roadmap work.
+artist/album/release/track management and acquisition, with important import and
+profile fixes after `v0.4.1`. Read-only library health, basic media analytics and
+admin-defined JavaScript event plugins are also implemented. Guest requests,
+auto-approval policies, proactive requestor decision notifications, external
+media-server request availability and a script marketplace remain separate work.
 
-## User-Feedback Backlog (2026-10-23)
+**Usenet/NNTP has not been tested at all.** External SABnzbd/NZBGet and
+Newznab/NZB implementations exist but are unverified. The built-in NNTP
+downloader remains a proposal, not an available client.
+
+## User-Feedback Intake (2026-10-23; status refreshed 2026-11-17)
 
 This intake is based on a bounded review of public Arr ecosystem reports, not
 a statistical popularity ranking or proof of equivalent defects in Loom.
@@ -17,20 +28,18 @@ Overseerr/Readarr reports are needs evidence, not claims about current Seerr
 behavior or commitments from retired projects. Reddit search-index leads were
 not verified against original post bodies and do not drive implementation priority.
 
-| Order | Priority | Work | Scope |
-|-------|----------|------|-------|
-| 1 | P1 | [Durable acquisition failures](https://github.com/Ebenderooock/loom/issues/174) | Extend history/blocklist mechanisms; bounded retries and restart recovery, including pre-workflow failures. |
-| 2 | P1 | [Explainable matching and policy](https://github.com/Ebenderooock/loom/issues/171) | Actual-engine identity/ranking explanations, configuration guidance and regression fixtures; investigate safe pack-mapping previews. |
-| 3 | P1 | [Request history versus availability](https://github.com/Ebenderooock/loom/issues/172) | Preserve fulfillment history, support re-requesting missing media and protect against disconnected mounts. |
-| Design alongside 1-3 | P1 | [Independent version tracks](https://github.com/Ebenderooock/loom/issues/169) | [Proposed ADR-0027](../adr/0027-independent-version-tracks.md) defines 1080p/4K isolation, migration and implementation gates; not implemented. |
-| Later | P2 | [Provider-aware API budgets](https://github.com/Ebenderooock/loom/issues/173) | Persistent allowances, explicit shared-account groups and provider reset signals. |
-| Later | P2 | [Read-only library health](https://github.com/Ebenderooock/loom/issues/170) | Safe first slice of Phase 3, with evidence and previews; no automatic deletion. |
+| Work | Current implementation status |
+|------|-------------------------------|
+| [Durable acquisition failures](https://github.com/Ebenderooock/loom/issues/174) | Persistent acquisition failure/retry history and recovery exist; continue real-world failure testing. |
+| [Explainable matching and policy](https://github.com/Ebenderooock/loom/issues/171) | Actual-engine decision evidence and read-only policy previews exist. Ambiguous multi-season packs remain rejected; general mapping previews are not implied. |
+| [Request history versus availability](https://github.com/Ebenderooock/loom/issues/172) | Separate fulfillment/presence, missing-media re-requests and storage-aware reconciliation exist; further reconciliation refinements postdate `v0.4.1`. |
+| [Independent version tracks](https://github.com/Ebenderooock/loom/issues/169) | [Proposed ADR-0027](../adr/0027-independent-version-tracks.md); not implemented. |
+| [Provider-aware API budgets](https://github.com/Ebenderooock/loom/issues/173) | Persistent allowances, shared-account groups and reset signals are implemented. |
+| [Read-only library health](https://github.com/Ebenderooock/loom/issues/170) | Read-only untracked/missing/possible-duplicate findings and disk evidence are implemented; no general automatic cleanup. |
 
-The ordering above is a delivery recommendation, not a claim that all items
-depend on one another. These issues are not marked implemented. The baseline
-review-fix batch in [PR #175](https://github.com/Ebenderooock/loom/pull/175) covers quota admission/retry eligibility,
-file-derived request fulfillment and import collision safety, not these complete
-follow-on capabilities.
+These are capability observations, not changes to issue state or assertions
+that every original acceptance criterion is complete. Open tracking issues
+can include remaining validation even when their core workflow exists.
 
 ### Independent version-track implementation slices
 
@@ -92,14 +101,18 @@ Loom is a Go + React media automation platform. Key architectural facts relevant
 |-------|----------|--------|
 | 1 | [Usenet / NZB Built-in Client](./phase-1-usenet-nzb.md) | High-level plan (deferred) |
 | 2 | [Media Requests](./phase-2-media-requests.md) | Core implemented; expanded features remain proposed |
-| 3 | [Library Maintenance](./phase-3-library-maintenance.md) | Fully detailed |
-| 4 | [Media Server Analytics](./phase-4-media-server-analytics.md) | Fully detailed |
-| 5 | [Script Engine](./phase-5-script-engine.md) | Fully detailed |
-| 6 | [Script Marketplace](./phase-6-script-marketplace.md) | Fully detailed |
+| 3 | [Library Maintenance](./phase-3-library-maintenance.md) | Read-only health and orphan-download cleanup implemented; general maintenance proposed |
+| 4 | [Media Server Analytics](./phase-4-media-server-analytics.md) | Basic session/history/reporting implemented; richer analytics proposed |
+| 5 | [Script Engine](./phase-5-script-engine.md) | Admin JavaScript event plugins implemented; broader engine/SDK proposed |
+| 6 | [Script Marketplace](./phase-6-script-marketplace.md) | Proposed, not implemented |
 
 ---
 
-## Implementation Order
+## Original Proposal Order
+
+This diagram records the original design sequence, not today's remaining
+queue. Core requests, health reporting, analytics and event scripts already
+exist; use the root roadmap for what remains.
 
 ```
 Phase 2: Media Requests ──────────────────────┐

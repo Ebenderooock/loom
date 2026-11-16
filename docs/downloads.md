@@ -36,6 +36,14 @@ passwords, and credential-like values inside `config`; submitting blank or
 omitting those fields during an edit keeps the stored credentials unchanged.
 Download-use routes such as listing items and submitting a grab remain
 available to authenticated users.
+When a release was already attempted, grabbing it again opens an in-place
+confirmation instead of sending you to Activity history. An administrator can
+choose **Retry release**, including when downloading succeeded but importing
+failed. Loom checks the original client before re-arming a successful grab:
+active, paused or unknown-state downloads cannot be retried. Completed,
+seeding, failed or removed downloads can be submitted again after confirmation.
+Recent interrupted admissions retain their 15-minute safety window, and retry
+does not bypass the blocklist.
 Edit-form tests include the saved client `id` so blank/masked credentials
 can be restored for the test without persisting unsaved changes.
 
@@ -109,10 +117,21 @@ item in **Activity > Reviews**, then choose **Retry after approval** in the
 import queue. Neither automatic retries nor re-submitting the path bypasses
 pending or rejected safety reviews.
 
+An unavailable source path during validation is an operational failure with
+bounded retries, not a suspicious-content review. Restore the download path or
+storage mount before retrying; a missing file is never treated as successfully
+imported merely because a destination filename exists.
+
 Success is tracked per source file, with destination verification, not per
 torrent. A partially imported season can be retried without repeating its
 successful episodes. Imports register each file with the movie or episode in
 the library; the UI refreshes library status as queued imports finish.
+
+Migration 0103 automatically consolidates old duplicate episode-file registrations
+on startup, keeping the newest record for each episode/path. It does not delete
+media files or collapse distinct file paths or separate episodes sharing a file.
+New registrations update the existing record and episode availability together,
+so repeated or concurrent imports cannot recreate those duplicates.
 
 | Method | Path | Description |
 | ------ | ---- | ----------- |
@@ -196,7 +215,10 @@ cancellations/timeouts also remain pending. Recovery actions on pending attempts
 are refused for the first fifteen minutes to avoid racing an in-flight add.
 
 Administrators can **Enable retry** (reset the budget, then search again with
-fresh links) or **Blocklist** a failed/interrupted acquisition. Retry does not
+fresh links) or **Blocklist** a failed/interrupted acquisition. The in-place
+**Retry release** dialog also permits retrying a successful admission after
+checking that its original download is complete, seeding, failed or removed;
+this lets an import failure recover without changing pages. Retry does not
 remove an existing blocklist entry; remove that entry in Activity → Blocklist
 first. Older superseded attempts cannot change current eligibility.
 Clearing completion history retains acquisition records and budgets.
