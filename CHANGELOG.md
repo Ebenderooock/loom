@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- Skip equal- or lower-quality duplicate music imports without failing the
+  batch, and reuse the unique existing track to resolve duplicate album matches.
 - Slide the selection highlight between main and settings navigation items.
   Respect the device's reduced-motion preference by moving it immediately.
 - Pass the shared quality profile store into the production import pipeline so

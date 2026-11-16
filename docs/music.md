@@ -146,11 +146,15 @@ refreshes the album's track listing.
 Music downloads are imported by matching audio tags to an album and track,
 using the album artist or credited artists when available. Files are organized
 under the album's selected music library; compilation and multi-artist albums
-go under the `Various Artists` directory. When a track already has a file,
-an incoming file replaces it only
-when its detected quality is higher. The previous file is sent to the recycle
-bin before replacement; upgrades are refused if the recycle bin is unavailable
-or disabled, so the existing track is not silently discarded.
+go under the `Various Artists` directory. If multiple matching album entries
+contain the tagged track, Loom selects the entry that already has that track
+only when it is the unique existing copy; otherwise it reports the ambiguity
+rather than creating another copy. When a track already has a file, an incoming
+file replaces it only when its detected quality is higher. Equal- or lower-
+quality copies are skipped without storing duplicates. The previous file is
+sent to the recycle bin before replacement; upgrades are refused if the recycle
+bin is unavailable or disabled, so the existing track is not silently
+discarded.
 
 Tracks are matched by disc and track number first, then by title. If the
 titles differ only by a trailing qualifier, such as `Heavy (feat. Kiiara)`

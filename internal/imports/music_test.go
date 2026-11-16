@@ -156,6 +156,42 @@ func TestFindMusicTrackRejectsAmbiguousCompilation(t *testing.T) {
 	}
 }
 
+func TestFindMusicTrackUsesUniqueExistingTrackToResolveDuplicateAlbums(t *testing.T) {
+	owner := &musiclib.Artist{ID: "artist-1", Name: "Linkin Park"}
+	first := &musiclib.Album{
+		ID: "album-1", ArtistID: owner.ID, Title: "Meteora 20th Anniversary Edition",
+		Artists: musiclib.AlbumArtistCredits{{Name: owner.Name}},
+	}
+	second := &musiclib.Album{
+		ID: "album-2", ArtistID: owner.ID, Title: first.Title,
+		Artists: musiclib.AlbumArtistCredits{{Name: owner.Name}},
+	}
+	stub := &musicMatchServiceStub{
+		artists: []*musiclib.Artist{owner},
+		albums:  []*musiclib.Album{first, second},
+		tracks: map[string]*musiclib.Album{
+			first.ID: {ID: first.ID, Tracks: []*musiclib.Track{{
+				ID: "track-1", Title: "Faint", TrackNumber: 2, ArtistName: owner.Name,
+			}}},
+			second.ID: {ID: second.ID, Tracks: []*musiclib.Track{{
+				ID: "track-2", Title: "Faint", TrackNumber: 2, ArtistName: owner.Name, HasFile: true,
+			}}},
+		},
+	}
+	pipeline := &ImportPipeline{musicSvc: stub}
+	_, album, track, err := pipeline.findMusicTrack(context.Background(), owner.Name, owner.Name, first.Title,
+		&musiclib.AudioTags{
+			AlbumArtist: owner.Name, Artist: owner.Name, Album: first.Title,
+			Title: "Faint", TrackNumber: 2, DiscNumber: 1,
+		})
+	if err != nil {
+		t.Fatalf("findMusicTrack: %v", err)
+	}
+	if album.ID != second.ID || track.ID != "track-2" {
+		t.Fatalf("matched album/track = %s/%s, want %s/track-2", album.ID, track.ID, second.ID)
+	}
+}
+
 func TestMatchTaggedTrackDoesNotPreferPositionOverTitle(t *testing.T) {
 	tracks := []*musiclib.Track{
 		{ID: "position-match", Title: "Different Song", TrackNumber: 1, ArtistName: "Artist"},
