@@ -15,6 +15,19 @@ of the *arr stack, and every fix, doc improvement, and feature counts.
 
 ---
 
+## Questions, bugs, and feature requests
+
+Use [Discussions Q&A](https://github.com/Ebenderooock/loom/discussions/categories/q-a)
+for general questions, setup help, and troubleshooting. Early ideas can go in
+[Ideas](https://github.com/Ebenderooock/loom/discussions/categories/ideas).
+
+For bugs or concrete feature requests, search existing issues first, then use
+the [issue forms](https://github.com/Ebenderooock/loom/issues/new/choose).
+Bug reports should include your Loom version, deployment method, reproduction
+steps, expected and actual behavior, and relevant redacted logs or screenshots.
+Never include passwords, API keys, tokens, or other private information.
+Security-sensitive reports should follow [SECURITY.md](SECURITY.md), not a public issue.
+
 ## Prerequisites
 
 ### Go (backend)

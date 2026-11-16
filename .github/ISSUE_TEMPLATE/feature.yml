@@ -1,7 +1,15 @@
-name: feature
+name: Feature request
 description: Request a feature or enhancement
 labels: [enhancement, needs-triage]
 body:
+  - type: markdown
+    attributes:
+      value: |
+        Have a concrete feature or enhancement in mind? Describe it below after checking existing issues.
+        For general questions and setup help, use
+        [Q&A Discussions](https://github.com/Ebenderooock/loom/discussions/categories/q-a).
+        To brainstorm an idea before proposing work, start an
+        [Ideas discussion](https://github.com/Ebenderooock/loom/discussions/categories/ideas).
   - type: textarea
     id: problem
     attributes:

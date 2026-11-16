@@ -1,12 +1,16 @@
-name: bug
-description: Report a bug
+name: Bug report
+description: Report something in Loom that is not working as expected.
 labels: [bug, needs-triage]
 body:
   - type: markdown
     attributes:
       value: |
-        Thanks for reporting a bug! Please fill out the form below.
-        For security issues, do **not** open a public issue — see SECURITY.md.
+        Thanks for helping improve Loom! Search existing issues before submitting.
+        For general questions, setup help, or troubleshooting without a confirmed bug,
+        please use [Discussions](https://github.com/Ebenderooock/loom/discussions/categories/q-a).
+        For security issues, do **not** open a public issue — see the
+        [security policy](https://github.com/Ebenderooock/loom/security/policy).
+        Remove passwords, API keys, tokens, and other private information from all fields and attachments.
   - type: input
     id: version
     attributes:
@@ -22,14 +26,44 @@ body:
     validations:
       required: true
   - type: textarea
-    id: what
+    id: environment
+    attributes:
+      label: Environment
+      description: Include the host OS and architecture, browser/version for UI bugs, and relevant indexer or download client names/versions. Do not include credentials.
+      placeholder: "Ubuntu / amd64; Docker Compose; Firefox; qBittorrent"
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Describe the smallest set of steps that reproduces the problem, including relevant settings.
+      placeholder: |
+        1. Go to ...
+        2. Configure ...
+        3. Click ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What did you expect to happen?
+    validations:
+      required: true
+  - type: textarea
+    id: actual
     attributes:
       label: What happened?
-      description: Steps to reproduce, expected vs actual.
+      description: Describe the actual behavior and include any error messages.
     validations:
       required: true
   - type: textarea
     id: logs
     attributes:
       label: Logs (with sensitive values redacted)
+      description: Paste relevant logs around the failure. Remove credentials, tokens, and private information before submitting.
       render: shell
+  - type: textarea
+    id: context
+    attributes:
+      label: Screenshots and additional context
+      description: Add redacted screenshots, frequency of the problem, recent changes, or any workaround you found.
