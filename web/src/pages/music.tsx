@@ -13,6 +13,7 @@ import {
   FolderSync,
 } from "lucide-react";
 import { useSetPageHeader } from "@/hooks/use-page-header";
+import { useMediaGridClass } from "@/hooks/use-media-grid";
 import { apiFetch } from "@/lib/fetch";
 import {
   useAlbums,
@@ -146,6 +147,7 @@ function AlbumCard({
 }
 
 export function MusicPage() {
+  const gridClass = useMediaGridClass();
   const { data: artists = [], isLoading, refetch } = useArtists();
   const {
     data: albums = [],
@@ -330,7 +332,7 @@ export function MusicPage() {
 
       {/* Content */}
       {activeView === "artists" && isLoading ? (
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+        <div className={gridClass}>
           {Array.from({ length: 12 }).map((_, i) => (
             <Skeleton key={i} className="aspect-square rounded-lg" />
           ))}
@@ -352,7 +354,7 @@ export function MusicPage() {
           No artists match "{filter}".
         </p>
       ) : activeView === "artists" ? (
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+        <div className={gridClass}>
           {filtered.map((a) => (
             <ArtistCard
               key={a.id}
@@ -365,7 +367,7 @@ export function MusicPage() {
           ))}
         </div>
       ) : albumsLoading ? (
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+        <div className={gridClass}>
           {Array.from({ length: 12 }).map((_, i) => (
             <Skeleton key={i} className="aspect-square rounded-lg" />
           ))}
@@ -396,7 +398,7 @@ export function MusicPage() {
           }
         />
       ) : (
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+        <div className={gridClass}>
           {filteredAlbums.map((album) => (
             <AlbumCard
               key={album.id}
