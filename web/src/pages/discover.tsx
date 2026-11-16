@@ -7,6 +7,7 @@ import {
   type MediaType,
 } from "@/lib/import-lists-api";
 import { usePageHeader } from "@/hooks/use-page-header";
+import { useMediaGridClass } from "@/hooks/use-media-grid";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -60,6 +61,7 @@ type SortKey = "title-asc" | "title-desc" | "year-desc" | "year-asc";
 const ALL = "__all__";
 
 function DiscoverGrid({ mediaType }: { mediaType: MediaType }) {
+  const gridClass = useMediaGridClass();
   const { data: items, isLoading, isError, error } = useDiscover(mediaType);
 
   const [listFilter, setListFilter] = React.useState(ALL);
@@ -114,7 +116,7 @@ function DiscoverGrid({ mediaType }: { mediaType: MediaType }) {
   }, [items, listFilter, genreFilter, yearFilter, sort]);
 
   if (isLoading) {
-    return <CardGridSkeleton count={12} />;
+    return <CardGridSkeleton count={12} className={gridClass} />;
   }
   if (isError) {
     return (
@@ -243,7 +245,7 @@ function DiscoverGrid({ mediaType }: { mediaType: MediaType }) {
           No items match the selected filters.
         </p>
       ) : (
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+        <div className={gridClass}>
           {visible.map((item) => (
             <DiscoverCard key={item.id} item={item} mediaType={mediaType} />
           ))}
