@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- Move production publishing into the separately protected
+  `Ebenderooock/loom-publisher` repository. Loom workflows observe
+  App-authenticated publication results without publishing credentials;
+  public releases, downloads, and status/version badges remain on Loom.
+  Support both `prelease/X.Y.Z` and `prerelease/X.Y.Z` image channels.
 - Keep title searches open after adding, support selections across searches
   with shared add settings, and remember the last successful quality profile
   for the browser-tab session. Compact mobile add views with expandable
