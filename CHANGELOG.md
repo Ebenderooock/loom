@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- Expand bug reports into structured version, deployment, reproduction,
+  expected/actual behavior and redacted diagnostic fields. Direct general
+  questions and setup help to Discussions, and disable blank issue creation.
+- Refresh the roadmap and related capability/migration documentation against
+  the implementation, separating published `v0.4.1` from newer source, marking
+  experimental and incomplete workflows, and explicitly noting that
+  Usenet/NNTP has not been tested at all.
+
 ## [0.4.2] - 2026-11-17
 
 ### Changed
