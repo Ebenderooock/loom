@@ -47,11 +47,16 @@ func (p *ImportPipeline) processMusicImport(ctx context.Context, ev *downloads.D
 		}
 		dest, err := p.importMusicFile(ctx, ev, file)
 		if err != nil {
+			if errors.Is(err, errImportSkipped) {
+				continue
+			}
 			p.logger.Error("failed to import music file", "file", file, "error", err)
 			failures = append(failures, err)
 			continue
 		}
-		paths = append(paths, dest)
+		if dest != "" {
+			paths = append(paths, dest)
+		}
 	}
 	if len(failures) > 0 {
 		return paths, fmt.Errorf("music import incomplete (%d of %d files failed): %w", len(failures), len(files), errors.Join(failures...))
@@ -402,7 +407,8 @@ func (p *ImportPipeline) prepareMusicUpgrade(
 		}
 	}
 	if incoming.TierOrder <= highestExistingTier {
-		return nil, fmt.Errorf("incoming quality %q does not improve existing track %q; preserving existing file", incoming.Name, track.Title)
+		return nil, fmt.Errorf("%w: incoming quality %q does not improve existing track %q; preserving existing file",
+			errImportSkipped, incoming.Name, track.Title)
 	}
 	if p.recycler == nil || !p.recycler.Enabled || p.recycler.Path == "" {
 		return nil, fmt.Errorf("cannot replace existing track %q without an enabled recycle bin", track.Title)
@@ -511,6 +517,20 @@ func (p *ImportPipeline) findMusicTrack(ctx context.Context, albumArtistName, tr
 		}
 	}
 	if len(matches) > 1 {
+		var existingMatch *albumTrackMatch
+		for i := range matches {
+			if !matches[i].track.HasFile {
+				continue
+			}
+			if existingMatch != nil {
+				existingMatch = nil
+				break
+			}
+			existingMatch = &matches[i]
+		}
+		if existingMatch != nil {
+			return existingMatch.owner, existingMatch.full, existingMatch.track, nil
+		}
 		ids := make([]string, 0, len(matches))
 		for _, match := range matches {
 			ids = append(ids, match.album.ID)

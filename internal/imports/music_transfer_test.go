@@ -306,6 +306,47 @@ func TestMusicSamePathUpgradeKeepsReplacementRegistered(t *testing.T) {
 	}
 }
 
+func TestMusicImportSkipsEqualQualityDuplicateWithoutFailing(t *testing.T) {
+	ctx := context.Background()
+	p, repo, album, root := newMusicTransferPipeline(t, ImportModeMove, false)
+	destination := filepath.Join(root, "Test Artist", "Test Album (2026)", "01 - Test Song.mp3")
+	if err := os.MkdirAll(filepath.Dir(destination), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(destination, []byte("existing audio"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.musicSvc.ImportTrackFile(ctx, &musiclib.TrackFile{
+		ID: "existing-file", AlbumID: album.ID, TrackID: "track",
+		FilePath: destination, Format: "MP3",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	source := filepath.Join(t.TempDir(), "duplicate.mp3")
+	writeTaggedMusic(t, source, "Test Song")
+	info, err := os.Stat(source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	paths, err := p.processMusicImport(ctx, &downloads.DownloadCompletedEvent{
+		Category: "music", Title: "Test Artist - Test Album",
+	}, source, info)
+	if err != nil || len(paths) != 0 {
+		t.Fatalf("equal-quality duplicate should be skipped successfully: paths=%v err=%v", paths, err)
+	}
+	if got, err := os.ReadFile(destination); err != nil || string(got) != "existing audio" {
+		t.Fatalf("existing track changed: %q, %v", got, err)
+	}
+	if _, err := os.Stat(source); err != nil {
+		t.Fatalf("skipped source was consumed: %v", err)
+	}
+	files, err := repo.ListTrackFilesByAlbum(ctx, album.ID)
+	if err != nil || len(files) != 1 || files[0].ID != "existing-file" {
+		t.Fatalf("duplicate file record was stored: files=%+v err=%v", files, err)
+	}
+}
+
 func TestMusicOwnerWithoutLibraryDoesNotUseStaleAlbumLibrary(t *testing.T) {
 	ctx := context.Background()
 	p, repo, _, _ := newMusicTransferPipeline(t, ImportModeMove, true)

@@ -30,6 +30,9 @@ Admins manage **Settings > Appearance** globally through the UI or
 `PUT /api/v1/appearance`. These settings live in the database, not YAML or
 environment variables, and require no restart or migration.
 
+The main and settings navigation highlights slide to the selected item. Enable
+reduced motion in your device's accessibility settings to move them immediately.
+
 | API field | Allowed values | Default |
 |---|---|---|
 | `theme` | `system`, `light`, `dark`, `amoled` | `system` |
