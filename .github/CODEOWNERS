@@ -4,3 +4,9 @@
 # Replace with finer-grained ownership as modules ship in Phases 2-11.
 
 *       @loom-maintainers
+
+# Publishing controls require approval from the repository owner.
+/.github/CODEOWNERS              @Ebenderooock
+/.github/workflows/              @Ebenderooock
+/scripts/wait-for-publisher.py   @Ebenderooock
+/scripts/test_wait_for_publisher.py @Ebenderooock
