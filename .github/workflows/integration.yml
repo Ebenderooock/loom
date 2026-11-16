@@ -2,9 +2,9 @@ name: integration
 
 on:
   push:
-    branches: [main, "prelease/**"]
+    branches: [main, "prelease/**", "prerelease/**"]
   pull_request:
-    branches: [main, "prelease/**"]
+    branches: [main, "prelease/**", "prerelease/**"]
 
 permissions:
   contents: read
