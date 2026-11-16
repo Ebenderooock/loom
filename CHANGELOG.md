@@ -7,8 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-11-17
+
 ### Changed
 
+- Publish detailed release-page notes from the matching versioned section of
+  this changelog instead of generated commit lists. The trusted publisher reads
+  the tagged source commit and rejects missing or empty notes before publishing.
 - Split Go CI race/coverage testing into four deterministic package shards per
   applicable OS, with role-specific rolling build caches and merged coverage.
   Keep the existing required Go checks as fail-closed aggregate gates and run
@@ -28,6 +33,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   Respect the device's reduced-motion preference by moving it immediately.
 - Keep the settings navigation aligned and its focus indicators visible, and
   use readable mobile form-control text to avoid involuntary input-focus zoom.
+- Make movie, series, music and Discover grids responsive, with configurable
+  poster sizes that remain usable on narrow screens.
 - Decode MusicBrainz disc and track positions as numbers so album track lists
   and music imports load correctly. Report invalid metadata responses separately
   from network failures.
@@ -67,6 +74,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   migration.
 
 ### Added
+
+- Safe quick actions in movie and series details: sync registered media with
+  Plex, refresh metadata, check registered library files, view scoped import
+  history, and copy a verified folder path. These actions do not download media
+  or ingest unregistered files. Import completion refreshes connected media
+  servers.
+- Synology package builds for prerelease branches and published releases, with
+  run artifacts containing the `.spk` and build-input metadata. DSM package
+  revisions allow a stable build to upgrade a prerelease; packages remain
+  separate workflow artifacts rather than GitHub release assets.
 
 - Global appearance controls in Settings: Light, Dark, AMOLED or System theme,
   accent presets, and a background image URL with preview and dimming. Admin
@@ -132,6 +149,73 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   partially available albums. Completed music downloads now import into the
   configured library; higher-quality replacements preserve the previous file
   in the recycle bin. See [`docs/music.md`](docs/music.md).
+
+### Fixed
+
+- Synology package: install no longer fails when preinst runs before DSM sets
+  package paths; the install/upgrade wizard asks for media and downloads shared
+  folders so DSM grants `sc-loom` access, and granted shares become folder-picker
+  roots. `LOOM_FILESYSTEM_ALLOWED_BROWSE_ROOTS` now accepts a comma-separated list.
+- Deluge 2.x connection tests use `daemon.get_version` instead of the removed
+  `daemon.info` method.
+- External download clients (qBittorrent, Transmission, Deluge) share one
+  cached status snapshot per client with failure backoff, so frequent UI and
+  background polling no longer gets clients rate-limited. The built-in torrent
+  client is unaffected; the Downloads page shows client errors.
+- Import Existing dialogs show progress and scan errors instead of a blank dialog.
+- Album search tries the next matching release when the best one was already
+  attempted (for example after a failed import) instead of failing with
+  "acquisition deferred".
+- Monitoring a music album now also monitors its tracks. Previously, tracks
+  stayed unmonitored when an album was monitored later, so searches skipped
+  them.
+- Music imports no longer fail with `could not match audio track` when
+  MusicBrainz is temporarily unavailable: the import reports that the album's
+  track list could not be loaded and the next attempt fetches it again. The
+  library scanner skips such files instead of listing them as unmatched.
+  Tagged titles with qualifiers such as `(feat. Kiiara)` or `(album version)`
+  now match the MusicBrainz track when the match is unambiguous. MusicBrainz
+  requests identify Loom with its version and project URL, and retry waits
+  stop when the request is cancelled. Each failed import now sends a single
+  "Import Failed" notification instead of two.
+- Music artist catalogues now include only official studio albums, EPs and
+  singles, deduplicated across editions. Metadata refresh hides legacy excluded
+  entries without deleting existing audio files or their records.
+- Manual release search keeps Download visible without horizontal scrolling,
+  with wrapping release metadata, phone-friendly rows, compact diagnostics and
+  independently scrolling results. Download actions show sending, success and
+  retryable error states and prevent duplicate submissions.
+- Music artist search no longer fails with `Unexpected token '<'` after the
+  Music feature is enabled at runtime: the flag now gates the music API per
+  request instead of only at startup. Unknown `/api` paths return a JSON 404
+  instead of the web app's HTML, and the artist folder rescan button uses the
+  correct API path.
+- TV monitoring now works at the show and season level. Each season, including
+  Specials, has its own monitor toggle that is kept across metadata refreshes.
+  Specials no longer count toward show completeness and new specials start
+  unmonitored. See [`docs/api.md`](docs/api.md#tv-monitoring-and-completeness).
+- Collection and Discover cards now match library card status, including
+  Downloading, Importing, Available and series episode progress, with shared
+  badges and status strips instead of inferring availability from file presence.
+
+### Upgrade notes
+
+- Back up the database and configuration before upgrading. Migrations 0100,
+  0102 and 0103 update music album ownership, import metadata and duplicate
+  episode-file registrations. Migration 0103 does not delete media files.
+  Rolling back requires the previous binary and its pre-upgrade database backup.
+- Production publishing now depends on the separately protected publisher;
+  maintainers must complete the coordinated
+  [publisher cutover](docs/deployment.md#owner-setup-and-cutover).
+
+## Historical notes through 0.4.1
+
+These cumulative notes were already present in the published `v0.4.1` source.
+They are retained here as history, not changes introduced in 0.4.2; earlier
+releases did not consistently split the changelog into versioned sections.
+
+### Added
+
 - Collection management: delete collections without touching library media
   (deleted sources are not rediscovered until imported again), add real library
   or TMDB titles with a shared picker, "Add to collection" from movie/show
@@ -225,52 +309,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
-- Synology package: install no longer fails when preinst runs before DSM sets
-  package paths; the install/upgrade wizard asks for media and downloads shared
-  folders so DSM grants `sc-loom` access, and granted shares become folder-picker
-  roots. `LOOM_FILESYSTEM_ALLOWED_BROWSE_ROOTS` now accepts a comma-separated list.
-- Deluge 2.x connection tests use `daemon.get_version` instead of the removed
-  `daemon.info` method.
-- External download clients (qBittorrent, Transmission, Deluge) share one
-  cached status snapshot per client with failure backoff, so frequent UI and
-  background polling no longer gets clients rate-limited. The built-in torrent
-  client is unaffected; the Downloads page shows client errors.
-- Import Existing dialogs show progress and scan errors instead of a blank dialog.
-- Album search tries the next matching release when the best one was already
-  attempted (for example after a failed import) instead of failing with
-  "acquisition deferred".
-- Monitoring a music album now also monitors its tracks. Previously, tracks
-  stayed unmonitored when an album was monitored later, so searches skipped
-  them.
-- Music imports no longer fail with `could not match audio track` when
-  MusicBrainz is temporarily unavailable: the import reports that the album's
-  track list could not be loaded and the next attempt fetches it again. The
-  library scanner skips such files instead of listing them as unmatched.
-  Tagged titles with qualifiers such as `(feat. Kiiara)` or `(album version)`
-  now match the MusicBrainz track when the match is unambiguous. MusicBrainz
-  requests identify Loom with its version and project URL, and retry waits
-  stop when the request is cancelled. Each failed import now sends a single
-  "Import Failed" notification instead of two.
-- Music artist catalogues now include only official studio albums, EPs and
-  singles, deduplicated across editions. Metadata refresh hides legacy excluded
-  entries without deleting existing audio files or their records.
-- Manual release search keeps Download visible without horizontal scrolling,
-  with wrapping release metadata, phone-friendly rows, compact diagnostics and
-  independently scrolling results. Download actions show sending, success and
-  retryable error states and prevent duplicate submissions.
-- Music artist search no longer fails with `Unexpected token '<'` after the
-  Music feature is enabled at runtime: the flag now gates the music API per
-  request instead of only at startup. Unknown `/api` paths return a JSON 404
-  instead of the web app's HTML, and the artist folder rescan button uses the
-  correct API path.
-- TV monitoring now works at the show and season level. Each season, including
-  Specials, has its own monitor toggle that is kept across metadata refreshes.
-  Specials no longer count toward show completeness and new specials start
-  unmonitored. See [`docs/api.md`](docs/api.md#tv-monitoring-and-completeness).
-
-- Collection and Discover cards now match library card status, including
-  Downloading, Importing, Available and series episode progress, with shared
-  badges and status strips instead of inferring availability from file presence.
 - Opening a title whose local ID contains punctuation (for example `%`, `:`,
   `&`) no longer fails with a 500 after adding it from a collection; route IDs
   are encoded by the UI and decoded exactly once by the API.
@@ -712,5 +750,6 @@ AddPaused, DupeKey, DupeScore, DupeMode, PostProcessParameters)`
 
 - _(none yet)_
 
-[Unreleased]: https://github.com/ebenderooock/loom/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/ebenderooock/loom/compare/v0.4.2...HEAD
+[0.4.2]: https://github.com/ebenderooock/loom/compare/v0.4.1...v0.4.2
 [0.1.1]: https://github.com/ebenderooock/loom/compare/v0.1.0...v0.1.1
