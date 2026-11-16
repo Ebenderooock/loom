@@ -8,6 +8,24 @@ import (
 	"time"
 )
 
+func TestNoLibraryMatchFailsWithoutTransientRetries(t *testing.T) {
+	orch, store := testOrchestrator(t, &mockImporter{})
+	ctx := context.Background()
+	wf := &Workflow{Type: TypeManualImport, State: StateImporting}
+	if err := store.Create(ctx, wf); err != nil {
+		t.Fatal(err)
+	}
+	message := `import incomplete (153 of 153 files failed): no library match: no match found for "Episode 1 The Secret of the Dragon Balls.mkv"`
+	if got := orch.classifyImportError(message); got != failPermanent {
+		t.Fatalf("no match retry strategy = %v", got)
+	}
+	orch.handleImportResult(ctx, CmdImportResult{WorkflowID: wf.ID, Error: message})
+	got := mustGet(t, store, ctx, wf.ID)
+	if got.State != StateFailed || got.RetryCount != 0 || strings.Contains(got.LastError, "transient") {
+		t.Fatalf("deterministic mismatch retried: %+v", got)
+	}
+}
+
 func TestOrphanCompletionGetsRecoverableWorkflow(t *testing.T) {
 	orch, store := testOrchestrator(t, &mockImporter{})
 	ctx := context.Background()

@@ -2,11 +2,13 @@ import { describe, expect, it } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import {
   ArtistFacts,
+  ArtistBiography,
   MusicArtwork,
   MusicExternalLinks,
   artistLifespan,
+  albumTracksAbsent,
 } from "@/components/music/artist-details";
-import type { Artist } from "@/lib/music-api";
+import type { Album, Artist } from "@/lib/music-api";
 
 const baseArtist: Artist = {
   id: "a1",
@@ -16,6 +18,74 @@ const baseArtist: Artist = {
   created_at: "",
   updated_at: "",
 };
+
+describe("ArtistBiography", () => {
+  it("uses a short preview and an unobtrusive accessible disclosure", () => {
+    const overview = `${"Artist history and music. ".repeat(20)}Final paragraph.`;
+    render(<ArtistBiography overview={overview} />);
+    expect(screen.queryByText(overview)).not.toBeInTheDocument();
+    const toggle = screen.getByRole("button", { name: "Read more" });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(toggle);
+    expect(screen.getByText(overview)).toBeInTheDocument();
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    fireEvent.click(screen.getByRole("button", { name: "Read less" }));
+    expect(screen.queryByText(overview)).not.toBeInTheDocument();
+  });
+
+  it("does not offer disclosure for short or missing biographies", () => {
+    const { rerender } = render(<ArtistBiography overview="A short intro." />);
+    expect(screen.getByText("A short intro.")).toBeInTheDocument();
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+    rerender(<ArtistBiography />);
+    expect(screen.queryByText("A short intro.")).not.toBeInTheDocument();
+  });
+
+  it("resets the preview when the biography changes", () => {
+    const overview = "A longer intro. ".repeat(40);
+    const { rerender } = render(<ArtistBiography overview={overview} />);
+    fireEvent.click(screen.getByRole("button", { name: "Read more" }));
+    rerender(<ArtistBiography overview={"Another intro. ".repeat(40)} />);
+    expect(screen.getByRole("button", { name: "Read more" })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+  });
+});
+
+describe("albumTracksAbsent", () => {
+  const album: Album = {
+    id: "al1",
+    mbid: "mb1",
+    title: "Record",
+    monitored: true,
+  };
+  it("does not mistake an unloaded or failed track lookup for proven absence", () => {
+    expect(albumTracksAbsent(album)).toBe(false);
+    expect(albumTracksAbsent({ ...album, tracks: [] })).toBe(false);
+    expect(
+      albumTracksAbsent({
+        ...album,
+        tracks: [],
+        tracks_fetched_at: "2024-01-01",
+      }),
+    ).toBe(false);
+  });
+
+  it("recognizes a successful lookup with no editions", () => {
+    expect(
+      albumTracksAbsent({
+        ...album,
+        releases: [],
+        releases_fetched_at: "2024-01-01",
+      }),
+    ).toBe(true);
+    // Go's omitempty excludes zero-length releases and tracks on the wire.
+    expect(
+      albumTracksAbsent({ ...album, releases_fetched_at: "2024-01-01" }),
+    ).toBe(true);
+  });
+});
 
 describe("MusicArtwork", () => {
   it("falls back when the image fails to load", () => {

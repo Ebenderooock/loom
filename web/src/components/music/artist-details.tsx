@@ -1,7 +1,76 @@
-import { useState, type ReactNode } from "react";
+import { useId, useState, type ReactNode } from "react";
 import { ExternalLink as ExternalLinkIcon, Star } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { Artist, ExternalLink, ExternalLinkType } from "@/lib/music-api";
+import type {
+  Album,
+  Artist,
+  ExternalLink,
+  ExternalLinkType,
+} from "@/lib/music-api";
+
+/** Missing tracks are definitive only after a successful metadata lookup. */
+export function albumTracksAbsent(album: Album): boolean {
+  if (album.tracks?.length) return false;
+  return (
+    !!album.releases_fetched_at &&
+    !album.selected_release_id &&
+    (album.releases?.length ?? 0) === 0
+  );
+}
+
+/** Keep the introduction short without turning disclosure into a primary CTA. */
+export function ArtistBiography({ overview }: { overview?: string }) {
+  const id = useId();
+  const [expandedOverview, setExpandedOverview] = useState<string | null>(null);
+  if (!overview?.trim()) return null;
+  const text = overview.trim();
+  const expanded = expandedOverview === overview;
+  const needsDisclosure = text.length > 280 || text.split("\n").length > 4;
+  const excerpt = text
+    .replace(/\s+/g, " ")
+    .slice(0, 280)
+    .replace(/\s+\S*$/, "")
+    .trimEnd();
+  return (
+    <div className="text-sm leading-relaxed text-muted-foreground">
+      <p
+        id={id}
+        className={cn(
+          "whitespace-pre-line",
+          needsDisclosure && !expanded && "line-clamp-3",
+        )}
+      >
+        {needsDisclosure && !expanded ? `${excerpt}…` : text}
+      </p>
+      {needsDisclosure && (
+        <button
+          type="button"
+          aria-expanded={expanded}
+          aria-controls={id}
+          onClick={() => setExpandedOverview(expanded ? null : overview)}
+          className="rounded-sm py-1 text-sm font-medium text-foreground/80 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          {expanded ? "Read less" : "Read more"}
+        </button>
+      )}
+    </div>
+  );
+}
+
+/** Artist metadata without TitleSynopsis, which would duplicate the biography. */
+export function MusicArtistMetadata({ artist }: { artist: Artist }) {
+  const details = [artist.artist_type, artist.country, artist.disambiguation]
+    .filter(Boolean)
+    .join(" · ");
+  return (
+    <div className="space-y-3">
+      {details && <p className="text-sm text-muted-foreground">{details}</p>}
+      {!!artist.genres?.length && (
+        <p className="text-sm">{artist.genres.join(" · ")}</p>
+      )}
+    </div>
+  );
+}
 
 const LINK_LABELS: Record<ExternalLinkType, string> = {
   spotify: "Spotify",

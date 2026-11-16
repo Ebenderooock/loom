@@ -670,8 +670,11 @@ export async function searchAlbum(id: string): Promise<AlbumGrabResult> {
   if (!res.ok) {
     let msg = `${res.status}`;
     try {
-      const body = (await res.json()) as { error?: string };
-      if (body.error) msg = body.error;
+      const body = (await res.json()) as {
+        error?: string | { message?: string };
+      };
+      if (typeof body.error === "string") msg = body.error;
+      else if (body.error?.message) msg = body.error.message;
     } catch {
       /* ignore */
     }
@@ -687,8 +690,11 @@ export async function searchAlbumUpgrade(id: string): Promise<AlbumGrabResult> {
   if (!res.ok) {
     let msg = `${res.status}`;
     try {
-      const body = (await res.json()) as { error?: string };
-      if (body.error) msg = body.error;
+      const body = (await res.json()) as {
+        error?: string | { message?: string };
+      };
+      if (typeof body.error === "string") msg = body.error;
+      else if (body.error?.message) msg = body.error.message;
     } catch {
       /* ignore */
     }
@@ -724,8 +730,11 @@ export async function grabAlbumRelease(
   if (!res.ok) {
     let msg = `${res.status}`;
     try {
-      const body = (await res.json()) as { error?: string };
-      if (body.error) msg = body.error;
+      const body = (await res.json()) as {
+        error?: string | { message?: string };
+      };
+      if (typeof body.error === "string") msg = body.error;
+      else if (body.error?.message) msg = body.error.message;
     } catch {
       /* ignore */
     }

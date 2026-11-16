@@ -13,8 +13,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   with shared add settings, and remember the last successful quality profile
   for the browser-tab session. Compact mobile add views with expandable
   synopses and cast/crew.
+- Skip equal- or lower-quality duplicate music imports without failing the
+  batch, and reuse the unique existing track to resolve duplicate album matches.
 - Slide the selection highlight between main and settings navigation items.
   Respect the device's reduced-motion preference by moving it immediately.
+- Keep the settings navigation aligned and its focus indicators visible, and
+  use readable mobile form-control text to avoid involuntary input-focus zoom.
+- Decode MusicBrainz disc and track positions as numbers so album track lists
+  and music imports load correctly. Report invalid metadata responses separately
+  from network failures.
+- Confirm release retries in place across download and music search surfaces,
+  including completed downloads whose import failed, while protecting active
+  downloads and retaining blocklist checks.
+- Restore music import previews and matching for edition-qualified album tags,
+  hydrate missing album tracks, and show compact artist biographies with
+  inline expansion and movie/TV-style detail actions.
+- Use one completion path for new imports, verified existing files and replacements,
+  sharing history recording, sidecar handling and source cleanup.
+- Treat unavailable download paths during import validation as retryable
+  operational failures, not suspicious-content reviews.
+- Repair duplicate episode-file registrations with migration 0103 and enforce
+  one record per episode/path. Repeated imports update that record atomically
+  with episode availability instead of creating duplicates that block replacements.
 - Pass the shared quality profile store into the production import pipeline so
   imports can enforce assigned profiles instead of failing with an unavailable-store error.
 - Stage import copies beside their destination and publish complete files

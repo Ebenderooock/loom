@@ -39,6 +39,7 @@ type ImportRecord struct {
 	ID         string       `json:"id"`
 	MediaType  MediaType    `json:"media_type"`
 	MediaID    string       `json:"media_id"`
+	SeriesID   string       `json:"series_id,omitempty"`
 	SourcePath string       `json:"source_path"`
 	DestPath   string       `json:"dest_path"`
 	ImportMode ImportMode   `json:"import_mode"`

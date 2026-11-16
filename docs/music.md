@@ -28,6 +28,12 @@ monitoring, metadata refresh and folder rescan actions, and an **Edit** dialog
 for monitoring, the quality profile and the metadata profile. Changing the
 metadata profile refreshes the artist so the catalogue matches.
 
+Artist introductions start with a short preview. Use the understated **Read more**
+and **Read less** text controls to expand or collapse a longer biography in either
+the drawer or the full artist page. Music detail actions follow the movie and TV
+panels: compact labelled primary actions, a separator, icon-only maintenance
+actions, and the destructive artist action at the far right.
+
 Albums are grouped by type. For each album you can toggle monitoring, start an
 automatic search, open an interactive search to pick a release yourself, and
 expand it to see each track's file availability. Each track has its own
@@ -36,6 +42,15 @@ monitor toggle:
 - Monitoring or unmonitoring an album applies to all its tracks.
 - Monitoring a single track also monitors its album, so searches include it.
 - Searches only look for monitored tracks that are missing a file.
+
+Both artist views load the album's tracks on first expansion and show track
+numbers, titles, durations when known, availability and monitoring controls.
+**Album details** opens the same album drawer from either artist view, including
+the edition selector and track list. A loading indicator appears during metadata
+requests; failed or incomplete lookups offer **Retry** inline. After metadata
+confirms there are no editions to supply tracks, the album row shows that no track
+list is available and disables track expansion instead of opening an empty panel.
+Album details remain accessible.
 
 Use the **Albums** view to browse the full album library, including entries
 added without a primary managed artist. **Add Album** searches MusicBrainz
@@ -146,19 +161,31 @@ refreshes the album's track listing.
 Music downloads are imported by matching audio tags to an album and track,
 using the album artist or credited artists when available. Files are organized
 under the album's selected music library; compilation and multi-artist albums
-go under the `Various Artists` directory. When a track already has a file,
-an incoming file replaces it only
-when its detected quality is higher. The previous file is sent to the recycle
-bin before replacement; upgrades are refused if the recycle bin is unavailable
-or disabled, so the existing track is not silently discarded.
+go under the `Various Artists` directory. If multiple matching album entries
+contain the tagged track, Loom selects the entry that already has that track
+only when it is the unique existing copy; otherwise it reports the ambiguity
+rather than creating another copy. When a track already has a file, an incoming
+file replaces it only when its detected quality is higher. Equal- or lower-
+quality copies are skipped without storing duplicates. The previous file is
+sent to the recycle bin before replacement; upgrades are refused if the recycle
+bin is unavailable or disabled, so the existing track is not silently
+discarded.
 
-Tracks are matched by disc and track number first, then by title. If the
-titles differ only by a trailing qualifier, such as `Heavy (feat. Kiiara)`
-against `Heavy` or `Heavy (album version)`, the file still matches when exactly
-one track fits. An album's track list is fetched from MusicBrainz the first
-time it is needed. If MusicBrainz is unavailable, the import fails with
+Tracks with tagged titles are matched by title and artist, not position alone.
+Known trailing album edition labels, including `Tour Edition`, can match the
+base album when artist and track identity are unambiguous. Positions cannot
+resolve duplicate titles across editions. Featuring credits may differ, but
+bonus, remix, live and session qualifiers are retained to avoid matching a
+different recording. If only the standard edition's tracks are available,
+matching standard tracks can import; missing edition tracks remain explicit
+failures, with their sources preserved. Select the matching edition and fetch
+its metadata before retrying those files. An album's track list is fetched from
+MusicBrainz the first time it is needed. If MusicBrainz is unavailable, the
+import fails with
 `album track list unavailable` rather than a track-match error, and a later
 retry or library scan fetches the list again.
+Invalid MusicBrainz JSON is reported as `response_error` with the actual HTTP
+status, not as a transport failure with HTTP 0.
 
 Migration 0100 preserves existing albums, editions, tracks and files while
 allowing albums without a managed artist. Downgrading below this migration is
@@ -193,10 +220,10 @@ MusicBrainz** to send only searches to the public service.
 The [musicbrainz-docker](https://github.com/metabrainz/musicbrainz-docker)
 project runs a replicated MusicBrainz server. Its published requirements are:
 
-| Setup | Disk | Memory | CPU |
-| --- | --- | --- | --- |
-| Database only (lookups; use public search) | 100 GB | 4 GB | 2 threads |
-| With search indexes | 350 GB | 16 GB | 16 threads |
+| Setup                                      | Disk   | Memory | CPU        |
+| ------------------------------------------ | ------ | ------ | ---------- |
+| Database only (lookups; use public search) | 100 GB | 4 GB   | 2 threads  |
+| With search indexes                        | 350 GB | 16 GB  | 16 threads |
 
 Point Loom at the mirror's web service, for example
 `http://musicbrainz.lan:5000/ws/2`, with a rate limit of `0`. MusicBrainz core

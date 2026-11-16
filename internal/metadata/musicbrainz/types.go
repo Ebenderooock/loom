@@ -95,7 +95,7 @@ type GenreResponse struct {
 
 // MediaResponse represents a physical/digital medium (CD, vinyl, etc.).
 type MediaResponse struct {
-	Position string          `json:"position,omitempty"`
+	Position int             `json:"position,omitempty"`
 	Title    string          `json:"title,omitempty"`
 	Format   string          `json:"format,omitempty"`
 	Tracks   []TrackResponse `json:"tracks,omitempty"`
@@ -104,7 +104,7 @@ type MediaResponse struct {
 // TrackResponse represents a track on a media.
 type TrackResponse struct {
 	ID        string             `json:"id"`
-	Position  string             `json:"position,omitempty"`
+	Position  int                `json:"position,omitempty"`
 	Number    string             `json:"number,omitempty"`
 	Title     string             `json:"title,omitempty"`
 	Length    int                `json:"length,omitempty"` // Duration in milliseconds

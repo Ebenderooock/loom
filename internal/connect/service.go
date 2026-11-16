@@ -167,6 +167,7 @@ func (s *service) NotifyAll(ctx context.Context, eventType string) error {
 	}
 
 	var wg sync.WaitGroup
+	failures := make(chan error, len(targets))
 	for _, conn := range targets {
 		wg.Add(1)
 		go func(c *Connection) {
@@ -174,16 +175,22 @@ func (s *service) NotifyAll(ctx context.Context, eventType string) error {
 			p, err := ProviderFor(c.Provider)
 			if err != nil {
 				slog.Warn("connect: unknown provider", "provider", c.Provider, "connection", c.Name)
+				failures <- fmt.Errorf("connection %s: %w", c.Name, err)
 				return
 			}
 			if err := p.NotifyLibraryUpdate(ctx, c.Settings); err != nil {
 				slog.Warn("connect: library update failed", "connection", c.Name, "provider", c.Provider, "error", err)
+				failures <- fmt.Errorf("connection %s: %w", c.Name, err)
 			}
 		}(conn)
 	}
 	wg.Wait()
-
-	return nil
+	close(failures)
+	var errs []error
+	for err := range failures {
+		errs = append(errs, err)
+	}
+	return errors.Join(errs...)
 }
 
 // scanConnection scans a Connection from sql.Rows.

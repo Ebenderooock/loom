@@ -3,6 +3,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { AddToCollectionButton } from "@/components/collections/add-to-collection";
 import { apiFetch } from "@/lib/fetch";
 import { MediaFilesManager } from "@/components/media-files-manager";
+import { TitleActionsMenu } from "@/components/titles/title-actions-menu";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -39,7 +40,6 @@ import {
   Pencil,
   Bookmark,
   BookmarkCheck,
-  RefreshCw,
   ChevronRight,
   FolderOpen,
   HardDrive,
@@ -52,7 +52,6 @@ import {
   Clapperboard,
   Archive,
   ArchiveRestore,
-  HardDriveDownload,
 } from "lucide-react";
 import { cn, formatBytes, relativeTime } from "@/lib/utils";
 import { toast } from "sonner";
@@ -223,13 +222,11 @@ export function MovieDetailSheet({
   const [saving, setSaving] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
   const [credits, setCredits] = useState<Credits | null>(null);
   const [creditsLoading, setCreditsLoading] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [archiving, setArchiving] = useState(false);
   const [autoSearching, setAutoSearching] = useState(false);
-  const [rescanning, setRescanning] = useState(false);
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
   const [discoverPerson, setDiscoverPerson] = useState<{
@@ -430,70 +427,19 @@ export function MovieDetailSheet({
     }
   };
 
-  const handleRefresh = async () => {
-    setRefreshing(true);
-    try {
-      const refreshRes = await apiFetch(
-        `/api/v1/movies/${encodeURIComponent(movie.id)}/refresh`,
-        {
-          method: "POST",
-        },
+  const reloadAfterAction = async (signal: AbortSignal) => {
+    const res = await apiFetch(
+      `/api/v1/movies/${encodeURIComponent(movie.id)}`,
+      { signal },
+    );
+    if (!res.ok)
+      throw new Error(
+        "Action completed, but updated movie details could not be loaded.",
       );
-      if (!refreshRes.ok) {
-        toast.error("Failed to refresh");
-        return;
-      }
-      const res = await apiFetch(
-        `/api/v1/movies/${encodeURIComponent(movie.id)}`,
-      );
-      if (res.ok) {
-        const updated = await res.json();
-        onUpdated(updated);
-        toast.success("Movie refreshed");
-      } else {
-        toast.error("Failed to fetch updated movie");
-      }
-    } catch {
-      toast.error("Network error");
-    } finally {
-      setRefreshing(false);
-    }
-  };
-
-  const handleRescan = async () => {
-    const fallbackLibraryId = movie.libraryId || libraries[0]?.id || "";
-    if (!fallbackLibraryId) {
-      toast.error(
-        "Movie has no library assigned. Assign a movie library in Edit first.",
-      );
-      return;
-    }
-    setRescanning(true);
-    try {
-      const res = await apiFetch(
-        `/api/v1/movies/${encodeURIComponent(movie.id)}/rescan`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ libraryId: fallbackLibraryId }),
-        },
-      );
-      if (res.ok) {
-        const result = await res.json();
-        toast.success(
-          `Rescan complete: ${result.matched} matched, ${result.imported} imported`,
-        );
-        const updated = await apiFetch(
-          `/api/v1/movies/${encodeURIComponent(movie.id)}`,
-        );
-        if (updated.ok) onUpdated(await updated.json());
-      } else {
-        toast.error("Rescan failed");
-      }
-    } catch {
-      toast.error("Network error");
-    } finally {
-      setRescanning(false);
+    const updated = await res.json();
+    if (!signal.aborted) {
+      onUpdated(updated);
+      onRefresh?.();
     }
   };
 
@@ -625,34 +571,15 @@ export function MovieDetailSheet({
               <div className="mx-0.5 h-5 w-px bg-border" />
 
               {/* Secondary actions — icon only */}
-              <Button
-                size="icon"
-                variant="ghost"
-                className="h-8 w-8"
-                onClick={handleRefresh}
-                disabled={refreshing}
-                title="Refresh metadata from TMDB"
-              >
-                {refreshing ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <RefreshCw className="h-3.5 w-3.5" />
-                )}
-              </Button>
-              <Button
-                size="icon"
-                variant="ghost"
-                className="h-8 w-8"
-                onClick={handleRescan}
-                disabled={rescanning}
-                title="Rescan library folder for new files"
-              >
-                {rescanning ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <HardDriveDownload className="h-3.5 w-3.5" />
-                )}
-              </Button>
+              {open && !discoverPerson && (
+                <TitleActionsMenu
+                  key={`movie-${movie.id}-${user?.role}`}
+                  mediaType="movie"
+                  id={movie.id}
+                  title={movie.title}
+                  onChanged={reloadAfterAction}
+                />
+              )}
               <Button
                 size="icon"
                 variant="ghost"

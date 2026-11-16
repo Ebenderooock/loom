@@ -128,7 +128,15 @@ func (p *ImportPipeline) scanSingleFile(ctx context.Context, filePath string) Sc
 			}
 		}
 		result := p.scanMusicFile(ctx, filePath)
-		result.ImportStatus, result.ImportError, result.ImportJobID = p.fileImportState(ctx, filePath)
+		status, importErr, jobID := p.fileImportState(ctx, filePath)
+		result.ImportStatus, result.ImportJobID = status, jobID
+		if importErr != "" {
+			if result.ImportError != "" && result.ImportError != importErr {
+				result.ImportError += "; previous import: " + importErr
+			} else {
+				result.ImportError = importErr
+			}
+		}
 		return result
 	}
 	var fileSize int64
@@ -207,6 +215,12 @@ func (p *ImportPipeline) scanSingleFile(ctx context.Context, filePath string) Sc
 			if score > 100 {
 				score = 100
 			}
+		}
+		if _, _, ok := bareEpisode(filePath); ok {
+			result.DetectedTitle = match.Title
+			result.DetectedSeason = match.Season
+			result.DetectedEpisode = match.Episode
+			score = 100
 		}
 		result.Confidence = float64(score) / 100.0
 

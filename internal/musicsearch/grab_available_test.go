@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 
@@ -32,7 +33,7 @@ func (c *recordingClient) Add(_ context.Context, req downloads.AddRequest) (down
 	return downloads.AddResult{ClientID: "torrent", ItemID: req.Title}, nil
 }
 
-func historyRegistry(t *testing.T) (*downloads.Registry, *recordingClient) {
+func historyRegistry(t *testing.T, blockedHashes ...string) (*downloads.Registry, *recordingClient) {
 	t.Helper()
 	db, err := storage.Open(context.Background(), config.StorageConfig{
 		Engine: "sqlite", SQLite: config.SQLiteConfig{Path: filepath.Join(t.TempDir(), "loom.db")},
@@ -50,6 +51,12 @@ func historyRegistry(t *testing.T) (*downloads.Registry, *recordingClient) {
 		t.Fatal(err)
 	}
 	r.SetHistoryStore(downloads.NewHistoryStore(db.DB()))
+	for _, hash := range blockedHashes {
+		if _, err := db.DB().Exec(`INSERT INTO blocklist (id, title, indexer_id, release_hash, reason, created_at)
+			VALUES (?, 'Blocked release', 'indexer', ?, 'User blocked', CURRENT_TIMESTAMP)`, hash, hash); err != nil {
+			t.Fatal(err)
+		}
+	}
 	return r, client
 }
 
@@ -90,5 +97,12 @@ func TestGrabFirstAvailableSkipsAlreadyAcquiredRelease(t *testing.T) {
 	writeSearchErr(rec, err)
 	if rec.Code != 409 {
 		t.Fatalf("status = %d", rec.Code)
+	}
+	var conflict *downloads.AcquisitionConflict
+	if !errors.As(err, &conflict) || !conflict.RetryAllowed || conflict.Title != first.Result.Title {
+		t.Fatalf("automatic search lost the first release's recovery decision: %v", err)
+	}
+	if !strings.Contains(rec.Body.String(), conflict.HistoryID) || !strings.Contains(rec.Body.String(), `"acquisition_deferred"`) {
+		t.Fatalf("response does not expose in-place recovery: %s", rec.Body.String())
 	}
 }

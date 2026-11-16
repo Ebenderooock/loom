@@ -3,10 +3,12 @@ package music
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ebenderooock/loom/internal/kernel/config"
 	"github.com/ebenderooock/loom/internal/metadata"
@@ -640,6 +642,7 @@ func TestLoadAlbumTracksReportsUnavailableMetadataAndRetries(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AddArtist: %v", err)
 	}
+
 	var albumID string
 	for _, al := range artist.Albums {
 		if al.MBID == "rg-1" {
@@ -664,6 +667,77 @@ func TestLoadAlbumTracksReportsUnavailableMetadataAndRetries(t *testing.T) {
 	}
 	if len(album.Tracks) != 2 {
 		t.Fatalf("tracks after recovery = %d, want 2", len(album.Tracks))
+	}
+}
+
+func TestGetAlbumRetriesEmptyMetadataAndHistoricalEmptyTrackCache(t *testing.T) {
+	for _, staleTimestamp := range []bool{false, true} {
+		t.Run(fmt.Sprint(staleTimestamp), func(t *testing.T) {
+			provider := sampleProvider()
+			svc, repo := newTestService(t, provider)
+			ctx := t.Context()
+			artist, err := svc.AddArtist(ctx, AddArtistRequest{
+				MBID: "artist-1", QualityProfileID: "qp-1", LibraryID: "lib-1",
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			albumID := artist.Albums[0].ID
+			fullTracks := provider.tracks["rel-1a"].Tracks
+			if staleTimestamp {
+				album, err := svc.GetAlbum(ctx, albumID)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if err := repo.ReplaceTracks(ctx, albumID, nil); err != nil {
+					t.Fatal(err)
+				}
+				now := time.Now().UTC()
+				album.TracksFetchedAt = &now
+				if err := repo.UpdateAlbum(ctx, album); err != nil {
+					t.Fatal(err)
+				}
+			}
+			provider.tracks["rel-1a"].Tracks = nil
+			album, err := svc.GetAlbum(ctx, albumID)
+			if err != nil || len(album.Tracks) != 0 || album.TracksFetchedAt != nil {
+				t.Fatalf("empty metadata marked as successfully fetched: album=%+v err=%v", album, err)
+			}
+			if _, err := svc.LoadAlbumTracks(ctx, albumID); !errors.Is(err, ErrAlbumTracksUnavailable) {
+				t.Fatalf("empty track metadata must fail import explicitly: %v", err)
+			}
+			provider.tracks["rel-1a"].Tracks = fullTracks
+			album, err = svc.GetAlbum(ctx, albumID)
+			if err != nil || len(album.Tracks) != 2 || album.TracksFetchedAt == nil {
+				t.Fatalf("GET album did not recover tracks: album=%+v err=%v", album, err)
+			}
+		})
+	}
+}
+
+func TestEmptyTrackRefreshPreservesStoredTracks(t *testing.T) {
+	ctx := context.Background()
+	provider := sampleProvider()
+	svc, repo := newTestService(t, provider)
+	artist, err := svc.AddArtist(ctx, AddArtistRequest{
+		MBID: "artist-1", QualityProfileID: "qp-1", LibraryID: "lib-1",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	album, err := svc.GetAlbum(ctx, artist.Albums[0].ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	firstTrackID := album.Tracks[0].ID
+	album.TracksFetchedAt = nil
+	if err := repo.UpdateAlbum(ctx, album); err != nil {
+		t.Fatal(err)
+	}
+	provider.tracks["rel-1a"].Tracks = nil
+	album, err = svc.LoadAlbumTracks(ctx, album.ID)
+	if err != nil || len(album.Tracks) != 2 || album.Tracks[0].ID != firstTrackID {
+		t.Fatalf("empty refresh removed stored track identity: album=%+v err=%v", album, err)
 	}
 }
 
