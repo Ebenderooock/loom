@@ -1,0 +1,19 @@
+# Managed by Loom native updater installer
+[Unit]
+Description=Loom signed native update
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+ExecStart=/usr/local/lib/loom/loom-updater
+TimeoutStartSec=20min
+TimeoutStopSec=5min
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/usr/local/lib/loom /etc/loom /var/lib/loom /var/lib/loom-updater

@@ -21,6 +21,7 @@ UMask=0027
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=full
+ReadWritePaths=/etc/loom /var/lib/loom
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=loom

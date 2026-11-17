@@ -113,6 +113,23 @@ v0.4.4 release attempts.
   revisions allow a stable build to upgrade a prerelease; packages remain
   separate workflow artifacts rather than GitHub release assets.
 
+- Add admin-only native update channel settings (Stable by default, separately
+  acknowledged Prelease opt-in) and a throttled, cached signed GitHub Releases
+  notice checker using the publisher's raw-byte Ed25519 manifest contract.
+  Add restricted Linux/systemd and macOS/launchd helpers with consistent SQLite/config snapshots,
+  health-checked replacement, rollback and interrupted-update recovery.
+  macOS gates startup on authenticated recovery authorization before database
+  access. Windows and PostgreSQL remain manual-only. Production activation still
+  requires the publisher public key and privileged native upgrade/reboot validation.
+- Add an isolated, production-disabled Windows updater candidate: dedicated SCM
+  virtual account, SYSTEM helper, protected pre-database event/job gate,
+  restricted SQLite snapshot execution, NTFS descriptor-preserving transactions
+  and rollback, candidate enrollment/uninstall and Windows boundary tests.
+  Windows production archives remain manual-only pending native acceptance,
+  including protected-process quiescence and SCM reboot recovery.
+- Build seven native archive targets for `prelease/X.Y.Z` branch CI (also the
+  `prerelease/` alias), without publishing/signing credentials. Native Release
+  publication and manifest signing still require separate publisher changes.
 - Global appearance controls in Settings: Light, Dark, AMOLED or System theme,
   accent presets, and a background image URL with preview and dimming. Admin
   changes persist across devices; the header theme toggle shares these settings.

@@ -54,6 +54,19 @@ by replacing a binary: rollback needs the old version **and** its pre-upgrade
 database backup. Each platform guide covers service logs and removal without
 discarding state.
 
+### Update channels
+
+**Settings > General > Updates** defaults to Stable. Prelease requires an
+explicit risk acknowledgement and a saved opt-in. Signed notices need a
+publisher public key compiled into Loom; until it is provisioned, use GitHub
+Releases manually. Restricted Linux/systemd and macOS/launchd helpers implement stopped-service
+SQLite/config snapshots, health verification and rollback for canonical native
+installs. Production activation still needs the public key and live platform
+upgrade/reboot validation; Windows remains unsupported. PostgreSQL stays manual-only;
+containers and Kubernetes continue using image/orchestration updates.
+See [native updates](native-updates.md) for the current limits, signing contract,
+native branch-build artifacts, and separate publisher work.
+
 ## Trusted publishing
 
 Production publishing is owned by the public

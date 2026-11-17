@@ -1,0 +1,17 @@
+# Managed by Loom native updater installer
+[Unit]
+Description=Recover an interrupted Loom native update
+Before=loom.service
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+ExecStart=/usr/local/lib/loom/loom-updater recover
+TimeoutStartSec=5min
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/usr/local/lib/loom /etc/loom /var/lib/loom /var/lib/loom-updater

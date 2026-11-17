@@ -1,5 +1,30 @@
 # API
 
+## Native update notices
+
+All update routes require an authenticated administrator, including reads and
+network checks. Missing auth wiring fails closed.
+
+- `GET /api/v1/updates`: saved `settings` (`channel`, `preleaseOptIn`,
+  `autoInstall`), effective `canAutoInstall`, `installationNotice`, and
+  `verificationConfigured`.
+- `PUT /api/v1/updates`: replace preferences with the three settings fields.
+  Stable is the default. Prelease requires `preleaseOptIn: true`; returning
+  to Stable requires clearing it. Invalid settings return 400.
+  `autoInstall: true` requires an enrolled, eligible Linux/systemd or macOS/launchd SQLite helper
+  and a compiled publisher key; otherwise it returns 409. Storage failures return 500.
+- `POST /api/v1/updates/check`: demand-driven, cached signed release notice for
+  the **saved** channel. Returns `currentVersion`, optional `version`, `tag`, `sourceSha`,
+  `available`, `verified`, `url`, `checkedAt`, `nextCheck`, and optional
+  `message`. Untrusted/unavailable metadata returns 200 with `verified: false`,
+  no candidate version and manual-update guidance. No binary is downloaded.
+
+These are notice/settings endpoints, not an update executor; no apply endpoint
+exists. See [native updates](native-updates.md) for signature and cache behavior,
+the unprovisioned signing key, and the bounded Linux snapshot/helper safety gates.
+The installed helper has a separate fixed, token-authenticated runtime/readiness
+endpoint; it accepts no update commands, paths or URLs.
+
 ## Provider/account budgets
 
 `GET /api/v1/indexers/provider-budgets` returns `{ "budgets": [...] }` with

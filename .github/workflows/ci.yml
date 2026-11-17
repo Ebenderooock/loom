@@ -260,11 +260,40 @@ jobs:
       - name: Test native service lifecycle and installer
         shell: pwsh
         run: |
-          go test ./cmd/loom
+          go test ./cmd/loom ./internal/updater ./internal/updates
           if ($LASTEXITCODE -ne 0) { throw 'Go tests failed' }
+          go test -tags loom_updater_windows_candidate ./internal/updater
+          if ($LASTEXITCODE -ne 0) { throw 'Windows candidate boundary tests failed' }
+          foreach ($script in @('packaging/windows/install.ps1', 'packaging/windows/uninstall.ps1')) {
+            $tokens = $null; $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile(
+              (Join-Path $PWD $script), [ref]$tokens, [ref]$errors
+            ) | Out-Null
+            if ($errors.Count -ne 0) { throw "Invalid PowerShell: $script $errors" }
+          }
+          go build -tags loom_updater_windows_candidate -o .\loom-updater-candidate.exe ./cmd/loom-updater
+          if ($LASTEXITCODE -ne 0) { throw 'Candidate helper build failed' }
+          # Deliberately do NOT enroll unvalidated privileged candidate code.
+          # Native SCM/NTFS failure/reboot acceptance is a separate release gate.
           go build -o .\loom-test.exe ./cmd/loom
           if ($LASTEXITCODE -ne 0) { throw 'Go build failed' }
           & .\packaging\windows\smoke-test.ps1 -BinaryPath .\loom-test.exe
+
+  macos-updater:
+    name: macOS updater boundary tests (unprivileged)
+    runs-on: macos-latest
+    timeout-minutes: 15
+    env:
+      CGO_ENABLED: "0"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "1.26.11"
+          cache: true
+      - run: go test -short ./internal/updater ./internal/updates
+      - run: go build ./cmd/loom-updater
+      - run: plutil -lint packaging/macos/dev.loom.server.plist packaging/macos/dev.loom.updater.plist
 
   web:
     name: Frontend

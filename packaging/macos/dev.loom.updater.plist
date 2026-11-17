@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Managed by Loom native updater installer -->
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>dev.loom.updater</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Library/Application Support/Loom/bin/loom-updater</string>
+    <string>daemon</string>
+  </array>
+  <key>UserName</key><string>root</string>
+  <key>GroupName</key><string>wheel</string>
+  <key>WorkingDirectory</key><string>/Library/Application Support/Loom/updater</string>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>ThrottleInterval</key><integer>30</integer>
+  <key>ExitTimeOut</key><integer>300</integer>
+  <key>Umask</key><integer>63</integer>
+  <key>StandardOutPath</key><string>/Library/Application Support/Loom/updater/daemon.log</string>
+  <key>StandardErrorPath</key><string>/Library/Application Support/Loom/updater/daemon-error.log</string>
+</dict>
+</plist>
