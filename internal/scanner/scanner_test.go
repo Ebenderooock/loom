@@ -102,9 +102,6 @@ func TestWalkFoldersReportFilesystemErrors(t *testing.T) {
 				}
 			})
 			t.Run("unreadable", func(t *testing.T) {
-				if os.Geteuid() == 0 {
-					t.Skip("root can read directories without permission")
-				}
 				root := t.TempDir()
 				if err := os.Chmod(root, 0); err != nil {
 					t.Fatal(err)
@@ -114,6 +111,11 @@ func TestWalkFoldersReportFilesystemErrors(t *testing.T) {
 						t.Error(err)
 					}
 				})
+				if _, err := os.ReadDir(root); err == nil {
+					t.Skip("directory permissions are not enforced for this process")
+				} else if !errors.Is(err, os.ErrPermission) {
+					t.Fatalf("probe directory permissions: %v", err)
+				}
 				if err := walk(root); !errors.Is(err, os.ErrPermission) {
 					t.Fatalf("error = %v, want permission error", err)
 				}

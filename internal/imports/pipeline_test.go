@@ -32,7 +32,7 @@ func TestProcessImportBareEpisodePack(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	names := strings.Split(strings.TrimSpace(string(fixture)), "\n")
+	names := episodePackNames(fixture)
 	if len(names) != 153 {
 		t.Fatalf("fixture has %d filenames, want 153", len(names))
 	}
@@ -77,6 +77,29 @@ func TestProcessImportBareEpisodePack(t *testing.T) {
 		want := names[i-1]
 		if string(content) != want {
 			t.Fatalf("episode %d received wrong file: %q, want %q", i, content, want)
+		}
+	}
+}
+
+func episodePackNames(fixture []byte) []string {
+	text := strings.ReplaceAll(string(fixture), "\r\n", "\n")
+	return strings.Split(strings.TrimSuffix(text, "\n"), "\n")
+}
+
+func TestEpisodePackNamesLineEndings(t *testing.T) {
+	fixture, err := os.ReadFile("testdata/dragon_ball_episode_pack.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	lf := strings.ReplaceAll(string(fixture), "\r\n", "\n")
+	want := episodePackNames([]byte(lf))
+	crlf := episodePackNames([]byte(strings.ReplaceAll(lf, "\n", "\r\n")))
+	if len(want) != 153 || len(crlf) != len(want) {
+		t.Fatalf("fixture counts: LF=%d CRLF=%d, want 153", len(want), len(crlf))
+	}
+	for i := range want {
+		if crlf[i] != want[i] {
+			t.Fatalf("episode %d: CRLF name %q differs from LF name %q", i+1, crlf[i], want[i])
 		}
 	}
 }

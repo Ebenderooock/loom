@@ -4,8 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"testing"
+	"time"
 
 	"github.com/ebenderooock/loom/internal/downloads"
 	"github.com/ebenderooock/loom/internal/movies"
@@ -158,6 +162,37 @@ func TestMatchPathBareEpisodeContext(t *testing.T) {
 	got, err := f.p.matcher.MatchPath(context.Background(), "/downloads/Dragon Ball/Episode 1 The Secret of the Dragon Balls.mkv")
 	if err != nil || got.Matched {
 		t.Fatalf("duplicate series title must not choose first: %+v, %v", got, err)
+	}
+}
+
+func TestMatchPathBareEpisodeVolumeRoot(t *testing.T) {
+	const childEnv = "LOOM_TEST_EPISODE_ROOT_CHILD"
+	if os.Getenv(childEnv) == "1" {
+		roots := []string{filepath.VolumeName(t.TempDir()) + string(filepath.Separator)}
+		if runtime.GOOS == "windows" {
+			roots = append(roots, `\\server\share\`)
+		}
+		matcher := &Matcher{seriesSvc: &contextualSeriesService{}}
+		for _, root := range roots {
+			path := filepath.Join(root, "Unknown", "Season 01", "Episode 1 Title.mkv")
+			got, err := matcher.MatchPath(context.Background(), path)
+			if err != nil || got.Matched {
+				t.Fatalf("root %q: match = %+v, error = %v", root, got, err)
+			}
+		}
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestMatchPathBareEpisodeVolumeRoot$")
+	cmd.Env = append(os.Environ(), childEnv+"=1")
+	output, err := cmd.CombinedOutput()
+	if ctx.Err() != nil {
+		t.Fatalf("episode matching did not terminate at the filesystem root: %v", ctx.Err())
+	}
+	if err != nil {
+		t.Fatalf("root matching subprocess: %v\n%s", err, output)
 	}
 }
 
