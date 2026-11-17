@@ -6,6 +6,7 @@ import (
 	"archive/zip"
 	"crypto/sha1" // #nosec G505 -- Windows service SID derivation, not signature verification
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -87,12 +88,33 @@ func TestWindowsNTFSStreamInfoValidation(t *testing.T) {
 }
 
 func TestWindowsNTFSStreamInfoBufferAlignment(t *testing.T) {
-	streams := winStreamInfoBuffer()
-	if len(streams) != 8192 {
-		t.Fatalf("stream buffer length=%d want=8192", len(streams))
+	for _, tc := range []struct {
+		name            string
+		size, alignment int
+	}{
+		{"EA information", 4, 4},
+		{"stream information", 8192, 8},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			buffer := winAlignedNativeBuffer(tc.size, tc.alignment)
+			if len(buffer) != tc.size {
+				t.Fatalf("buffer length=%d want=%d", len(buffer), tc.size)
+			}
+			if address := uintptr(unsafe.Pointer(&buffer[0])); address%uintptr(tc.alignment) != 0 { // #nosec G103 -- inspect alignment in this regression test
+				t.Fatalf("buffer address %#x is not %d-byte aligned", address, tc.alignment)
+			}
+		})
 	}
-	if address := uintptr(unsafe.Pointer(&streams[0])); address%8 != 0 { // #nosec G103 -- inspect alignment in this regression test
-		t.Fatalf("stream buffer address %#x is not 8-byte aligned", address)
+}
+
+func TestWindowsNTQueryFailureIncludesCallAndStatus(t *testing.T) {
+	status := windows.NTStatus(0x80000002) // STATUS_DATATYPE_MISALIGNMENT
+	err := winNTQueryError("NtQueryInformationFile(FileEaInformation)", status)
+	if !strings.Contains(err.Error(), "NtQueryInformationFile(FileEaInformation), NTSTATUS 0x80000002") {
+		t.Fatalf("native query diagnostic=%q", err)
+	}
+	if !errors.Is(err, status) {
+		t.Fatal("native query diagnostic does not preserve the NTSTATUS")
 	}
 }
 

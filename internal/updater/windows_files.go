@@ -29,21 +29,21 @@ func winMetadata(f *os.File, relative string) (winMeta, error) {
 	h := windows.Handle(f.Fd())
 	var info windows.ByHandleFileInformation
 	if err := windows.GetFileInformationByHandle(h, &info); err != nil {
-		return winMeta{}, err
+		return winMeta{}, fmt.Errorf("GetFileInformationByHandle: %w", err)
 	}
 	if info.FileAttributes & ^uint32(windows.FILE_ATTRIBUTE_DIRECTORY|windows.FILE_ATTRIBUTE_ARCHIVE|windows.FILE_ATTRIBUTE_NORMAL|windows.FILE_ATTRIBUTE_NOT_CONTENT_INDEXED) != 0 {
 		return winMeta{}, errors.New("custom Windows file attributes require manual updates")
 	}
 	var ios windows.IO_STATUS_BLOCK
-	var ea [4]byte
-	if err := windows.NtQueryInformationFile(h, &ios, &ea[0], 4, windows.FileEaInformation); err != nil {
-		return winMeta{}, err
+	ea := winAlignedNativeBuffer(4, 4)
+	if err := windows.NtQueryInformationFile(h, &ios, &ea[0], uint32(len(ea)), windows.FileEaInformation); err != nil {
+		return winMeta{}, winNTQueryError("NtQueryInformationFile(FileEaInformation)", err)
 	}
-	if binary.LittleEndian.Uint32(ea[:]) != 0 {
+	if binary.LittleEndian.Uint32(ea) != 0 {
 		return winMeta{}, errors.New("NTFS extended attributes require manual updates")
 	}
 	dir := info.FileAttributes&windows.FILE_ATTRIBUTE_DIRECTORY != 0
-	streams := winStreamInfoBuffer()
+	streams := winAlignedNativeBuffer(8192, 8)
 	streamErr := windows.GetFileInformationByHandleEx(h, windows.FileStreamInfo, &streams[0], uint32(len(streams)))
 	if dir {
 		// NTFS directories have the ordinary $I30 index-allocation stream.
@@ -66,28 +66,27 @@ func winMetadata(f *os.File, relative string) (winMeta, error) {
 	}
 	sd, err := windows.GetSecurityInfo(h, windows.SE_FILE_OBJECT, winReadSD|windows.SACL_SECURITY_INFORMATION)
 	if err != nil {
-		return winMeta{}, err
+		return winMeta{}, fmt.Errorf("GetSecurityInfo(file metadata): %w", err)
 	}
 	rights := uint32(windows.FILE_GENERIC_READ | windows.FILE_GENERIC_EXECUTE)
 	if !strings.HasPrefix(strings.ToLower(f.Name()), strings.ToLower(BinDir)+`\`) {
 		rights = 0x1301bf
 	}
 	if err := winCheckSD(sd, rights, false); err != nil {
-		return winMeta{}, err
+		return winMeta{}, fmt.Errorf("validate Windows file descriptor: %w", err)
 	}
 	if _, err := windows.SecurityDescriptorFromString(sd.String()); err != nil {
-		return winMeta{}, err
+		return winMeta{}, fmt.Errorf("parse Windows file descriptor: %w", err)
 	}
 	return winMeta{Path: relative, SDDL: sd.String(), Dir: dir, Attributes: info.FileAttributes}, nil
 }
 
-// FILE_STREAM_INFO requires an 8-byte-aligned output buffer. A byte array's
-// alignment is only one byte, so align the backing allocation explicitly.
-func winStreamInfoBuffer() []byte {
-	const size = 8192
-	buffer := make([]byte, size+7)
+// Native file-information buffers have explicit ABI alignment requirements;
+// byte slices alone guarantee only byte alignment.
+func winAlignedNativeBuffer(size, alignment int) []byte {
+	buffer := make([]byte, size+alignment-1)
 	address := uintptr(unsafe.Pointer(&buffer[0])) // #nosec G103 -- inspect alignment without reconstructing the pointer
-	offset := int((8 - address%8) % 8)
+	offset := int((uintptr(alignment) - address%uintptr(alignment)) % uintptr(alignment))
 	return buffer[offset : offset+size]
 }
 
@@ -97,6 +96,14 @@ func winStreamQueryError(kind string, err error) error {
 		return fmt.Errorf("query %s NTFS streams (Windows error 0x%08x): %w", kind, uint32(code), err)
 	}
 	return fmt.Errorf("query %s NTFS streams: %w", kind, err)
+}
+
+func winNTQueryError(call string, err error) error {
+	var status windows.NTStatus
+	if errors.As(err, &status) {
+		return fmt.Errorf("%s, NTSTATUS 0x%08x: %w", call, uint32(status), err)
+	}
+	return fmt.Errorf("%s: %w", call, err)
 }
 
 // FileStreamInfo lists ordinary NTFS files as "::$DATA" and directories as
