@@ -37,6 +37,7 @@ func TestAppearanceAuthenticatedRoutes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(s.authSvc.Close)
 	cookies := map[string]string{}
 	for _, role := range []string{"admin", "user", "viewer"} {
 		user, err := store.CreateUser(context.Background(), auth.CreateUserParams{

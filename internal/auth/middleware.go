@@ -126,14 +126,20 @@ func (s *Service) identityFromAPIKey(ctx context.Context, presented string) (*Id
 	if err != nil {
 		return nil, ErrUnauthenticated
 	}
-	// best-effort touch; never fail the request because of it
-	go func() {
-		bg, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		defer cancel()
-		if err := s.store.TouchAPIKey(bg, k.ID); err != nil && s.logger != nil {
-			s.logger.Debug("auth: touch api key failed", "error", err, "key_id", k.ID)
-		}
-	}()
+	// Serialize registration with Close so no work can start after it drains.
+	s.touchMu.Lock()
+	if s.touchCtx.Err() == nil {
+		s.touchWG.Add(1)
+		go func() { //nolint:contextcheck // Usage updates follow the service lifetime, not the request.
+			defer s.touchWG.Done()
+			bg, cancel := context.WithTimeout(s.touchCtx, 2*time.Second)
+			defer cancel()
+			if err := s.store.TouchAPIKey(bg, k.ID); err != nil && s.logger != nil {
+				s.logger.Debug("auth: touch api key failed", "error", err, "key_id", k.ID)
+			}
+		}()
+	}
+	s.touchMu.Unlock()
 	return &Identity{
 		UserID:     u.ID,
 		Username:   u.Username,

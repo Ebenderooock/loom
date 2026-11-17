@@ -122,6 +122,7 @@ func New(t testing.TB) *TestServer {
 	if err != nil {
 		t.Fatalf("auth service: %v", err)
 	}
+	t.Cleanup(authSvc.Close)
 	if _, err := authSvc.ReconcileAdmin(context.Background()); err != nil {
 		t.Fatalf("reconcile admin: %v", err)
 	}

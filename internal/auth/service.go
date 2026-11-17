@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/ebenderooock/loom/internal/appconfig"
@@ -49,6 +50,10 @@ type Service struct {
 	invites         *InviteStore
 	pairing         *pairingStore
 	pairingDisabled bool
+	touchCtx        context.Context
+	cancelTouches   context.CancelFunc
+	touchMu         sync.Mutex
+	touchWG         sync.WaitGroup
 }
 
 // NewService validates options and returns the configured Service. The
@@ -72,6 +77,7 @@ func NewService(opts ServiceOptions) (*Service, error) {
 	if opts.SessionTTL <= 0 {
 		opts.SessionTTL = 30 * 24 * time.Hour
 	}
+	touchCtx, cancelTouches := context.WithCancel(context.Background())
 	return &Service{
 		store:           opts.Store,
 		logger:          opts.Logger,
@@ -85,7 +91,18 @@ func NewService(opts ServiceOptions) (*Service, error) {
 		invites:         opts.Invites,
 		pairing:         newPairingStore(),
 		pairingDisabled: opts.PairingDisabled,
+		touchCtx:        touchCtx,
+		cancelTouches:   cancelTouches,
 	}, nil
+}
+
+// Close cancels and waits for background API-key updates. Call it after stopping
+// requests and before closing the store. It is safe to call more than once.
+func (s *Service) Close() {
+	s.touchMu.Lock()
+	s.cancelTouches()
+	s.touchMu.Unlock()
+	s.touchWG.Wait()
 }
 
 // Store returns the underlying Store. Used by CLI subcommands.

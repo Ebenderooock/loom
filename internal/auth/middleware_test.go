@@ -9,6 +9,8 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -67,6 +69,7 @@ func newTestService(t *testing.T) (*auth.Service, auth.Store, int64) {
 	if err != nil {
 		t.Fatalf("NewService: %v", err)
 	}
+	t.Cleanup(svc.Close)
 	return svc, store, u.ID
 }
 
@@ -147,6 +150,137 @@ func TestRequireAuthValidAPIKey(t *testing.T) {
 	}
 	if !strings.Contains(rr.Body.String(), `"method":"apikey"`) {
 		t.Fatalf("expected apikey method, got %s", rr.Body.String())
+	}
+}
+
+type touchLifecycleStore struct {
+	auth.Store
+	touch func(context.Context, int64) error
+}
+
+func (s touchLifecycleStore) GetAPIKeyByHash(context.Context, string) (auth.APIKey, error) {
+	return auth.APIKey{ID: 1, UserID: 1}, nil
+}
+
+func (s touchLifecycleStore) GetUserByID(context.Context, int64) (auth.User, error) {
+	return auth.User{ID: 1, Username: "alice", Role: "admin"}, nil
+}
+
+func (s touchLifecycleStore) TouchAPIKey(ctx context.Context, id int64) error {
+	return s.touch(ctx, id)
+}
+
+func newTouchLifecycleService(t *testing.T, touch func(context.Context, int64) error) (*auth.Service, string) {
+	t.Helper()
+	svc, err := auth.NewService(auth.ServiceOptions{
+		Store:         touchLifecycleStore{touch: touch},
+		Logger:        quietLogger(),
+		AppConfig:     &appconfig.Config{},
+		AppConfigPath: filepath.Join(t.TempDir(), "config.json"),
+		SessionSecret: []byte("a-test-session-secret-32bytes!!!"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(svc.Close)
+	key, _, _, err := auth.GenerateAPIKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return svc, key
+}
+
+func TestServiceCloseDrainsAPIKeyTouch(t *testing.T) {
+	t.Parallel()
+	started := make(chan context.Context, 1)
+	release := make(chan struct{})
+	unblock := sync.OnceFunc(func() { close(release) })
+	defer unblock()
+	completed := make(chan struct{})
+	svc, key := newTouchLifecycleService(t, func(ctx context.Context, _ int64) error {
+		started <- ctx
+		// Hold the store call even after cancellation, as a driver may need
+		// time to release its database connection.
+		<-release
+		close(completed)
+		return ctx.Err()
+	})
+	if err := svc.VerifyAPIKey(context.Background(), key); err != nil {
+		t.Fatal(err)
+	}
+	var touchCtx context.Context
+	select {
+	case touchCtx = <-started:
+	case <-time.After(5 * time.Second):
+		t.Fatal("background update did not start")
+	}
+	closed := make(chan struct{})
+	go func() {
+		svc.Close()
+		close(closed)
+	}()
+	select {
+	case <-touchCtx.Done():
+	case <-time.After(5 * time.Second):
+		t.Fatal("Close did not cancel the update")
+	}
+	select {
+	case <-closed:
+		t.Fatal("Close returned before the store released its connection")
+	case <-time.After(50 * time.Millisecond):
+	}
+	unblock()
+	select {
+	case <-closed:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Close did not drain the update")
+	}
+	select {
+	case <-completed:
+	default:
+		t.Fatal("store update still running after Close")
+	}
+	svc.Close()
+}
+
+func TestServiceCloseConcurrentAPIKeyUse(t *testing.T) {
+	t.Parallel()
+	var active atomic.Int64
+	var touches atomic.Int64
+	svc, key := newTouchLifecycleService(t, func(ctx context.Context, _ int64) error {
+		active.Add(1)
+		defer active.Add(-1)
+		touches.Add(1)
+		<-ctx.Done()
+		return ctx.Err()
+	})
+	start := make(chan struct{})
+	var wg sync.WaitGroup
+	for range 32 {
+		wg.Go(func() {
+			<-start
+			if err := svc.VerifyAPIKey(context.Background(), key); err != nil {
+				t.Error(err)
+			}
+		})
+	}
+	wg.Go(func() {
+		<-start
+		svc.Close()
+	})
+	close(start)
+	wg.Wait()
+	svc.Close()
+	if got := active.Load(); got != 0 {
+		t.Fatalf("%d updates still active after Close", got)
+	}
+	before := touches.Load()
+	if err := svc.VerifyAPIKey(context.Background(), key); err != nil {
+		t.Fatal(err)
+	}
+	svc.Close()
+	if touches.Load() != before {
+		t.Fatal("authentication started a background update after Close")
 	}
 }
 

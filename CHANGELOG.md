@@ -7,10 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-## [0.4.4] - 2026-11-17
+## [0.4.5] - 2026-11-17
 
-Includes changes originally prepared for the unpublished v0.4.2 and v0.4.3
-release attempts.
+Includes changes originally prepared for the unpublished v0.4.2, v0.4.3 and
+v0.4.4 release attempts.
 
 ### Changed
 
@@ -167,6 +167,9 @@ release attempts.
 
 ### Fixed
 
+- Cancel and drain background API-key usage updates before closing authentication
+  storage, preventing intermittent Windows test cleanup failures on a locked
+  database without delaying authentication requests.
 - Correct Windows import regression fixtures: check live-path and byte safety
   when Windows rejects an open-target replacement, including delete-sharing
   readers, and require successful replacement after readers close. Mark large
@@ -235,7 +238,7 @@ release attempts.
 ## Historical notes through 0.4.1
 
 These cumulative notes were already present in the published `v0.4.1` source.
-They are retained here as history, not changes introduced in 0.4.4; earlier
+They are retained here as history, not changes introduced in 0.4.5; earlier
 releases did not consistently split the changelog into versioned sections.
 
 ### Added
@@ -774,6 +777,6 @@ AddPaused, DupeKey, DupeScore, DupeMode, PostProcessParameters)`
 
 - _(none yet)_
 
-[Unreleased]: https://github.com/ebenderooock/loom/compare/v0.4.4...HEAD
-[0.4.4]: https://github.com/ebenderooock/loom/compare/v0.4.1...v0.4.4
+[Unreleased]: https://github.com/ebenderooock/loom/compare/v0.4.5...HEAD
+[0.4.5]: https://github.com/ebenderooock/loom/compare/v0.4.1...v0.4.5
 [0.1.1]: https://github.com/ebenderooock/loom/compare/v0.1.0...v0.1.1
