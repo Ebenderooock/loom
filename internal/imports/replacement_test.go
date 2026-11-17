@@ -193,7 +193,22 @@ func TestReplacementSerializesConcurrentImports(t *testing.T) {
 }
 
 func TestReplacementKeepsLivePathAvailable(t *testing.T) {
+	t.Run("success", func(t *testing.T) {
+		testReplacementKeepsLivePathAvailable(t, false)
+	})
+	t.Run("registration rollback", func(t *testing.T) {
+		testReplacementKeepsLivePathAvailable(t, true)
+	})
+}
+
+func testReplacementKeepsLivePathAvailable(t *testing.T, failRegistration bool) {
+	t.Helper()
 	p, source, dest, match := replacementFixture(t, "Movie.1080p.HDTV.mkv", "hdtv-1080p", []byte("new media"))
+	if failRegistration {
+		if _, err := p.db.Exec(`CREATE TRIGGER fail_update BEFORE UPDATE ON movie_files BEGIN SELECT RAISE(FAIL, 'registration failed'); END`); err != nil {
+			t.Fatal(err)
+		}
+	}
 	alternate := filepath.Join(t.TempDir(), filepath.Base(source))
 	if err := os.WriteFile(alternate, []byte("old media"), 0o600); err != nil {
 		t.Fatal(err)
@@ -229,7 +244,7 @@ func TestReplacementKeepsLivePathAvailable(t *testing.T) {
 	for i := 0; i < 20; i++ {
 		path := source
 		wantSource := "new media"
-		if i%2 == 1 {
+		if i%2 == 1 && !failRegistration {
 			path = alternate
 			wantSource = "old media"
 		}
@@ -241,8 +256,13 @@ func TestReplacementKeepsLivePathAvailable(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := p.importMatchedWith(context.Background(), &downloads.DownloadCompletedEvent{Title: "Movie"}, match, path, filepath.Base(dest), true); err != nil {
-			if !replacementBlockedByOpenReader(err, dest) {
+		_, err = p.importMatchedWith(context.Background(), &downloads.DownloadCompletedEvent{Title: "Movie"}, match, path, filepath.Base(dest), true)
+		if failRegistration && err == nil {
+			t.Fatal("expected registration failure")
+		}
+		if err != nil {
+			rolledBack := failRegistration && strings.Contains(err.Error(), "library update failed (source preserved)")
+			if !rolledBack && !replacementBlockedByOpenReader(err, dest) {
 				t.Fatal(err)
 			}
 			current, statErr := os.Stat(dest)
@@ -258,6 +278,11 @@ func TestReplacementKeepsLivePathAvailable(t *testing.T) {
 		}
 	}
 	stopReader()
+	if failRegistration {
+		if _, err := p.db.Exec(`DROP TRIGGER fail_update`); err != nil {
+			t.Fatal(err)
+		}
+	}
 	// Force a genuine replacement after closing the reader, even if Windows
 	// rejected every concurrent attempt. A permanent publication failure fails.
 	const final = "final complete media"

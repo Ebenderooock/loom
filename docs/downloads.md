@@ -61,7 +61,11 @@ File copies are written to hidden `.loom-import-*.partial` staging files in the
 destination directory, synced and closed, then published without overwriting
 collisions. For a replacement, Loom stages and verifies the incoming file
 before preserving the old file in a private `.loom-replacement-*` backup and
-replacing the live pathname in one rename. The old pathname remains available
+publishing the new file at the live pathname. macOS uses an atomic file swap
+for publication and rollback so concurrent readers do not see a missing path;
+filesystems that do not support swaps reject replacement without removing the
+live file. Other platforms retain their existing rename behavior.
+The old pathname remains available
 while staging and backing up; a crash does not leave a gap between removing it
 and publishing the new file. Backups use hardlinks where possible and otherwise
 require a verified copy. Registration failures restore the old file where

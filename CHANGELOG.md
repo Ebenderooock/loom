@@ -21,6 +21,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   containment and incomplete-file safeguards.
 - Recognize resolution-tagged scene `WEB` releases (such as `1080p WEB H264`)
   as WebDL so imports no longer reject them as unknown quality.
+- Keep replacement destinations continuously available to macOS readers during
+  publication and registration rollback by atomically swapping files.
 
 ## [0.4.5] - 2026-11-17
 

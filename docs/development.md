@@ -104,6 +104,13 @@ Replacement never removes the live path first or promises Unix atomic-rename
 semantics on Windows; see Microsoft's
 [open-file rename restrictions](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/ntifs/ns-ntifs-_file_rename_information#remarks).
 
+On macOS, replacement publication and registration rollback use `RENAME_SWAP`
+instead of ordinary rename to avoid intermittent missing-path errors for
+concurrent APFS readers. The live-path test exercises successful replacements
+and forced registration failures, requiring complete media throughout and the
+original file identity and bytes after rollback. Unsupported swaps fail without
+removing the live destination.
+
 ## Hot-reload loop
 
 In one terminal, the backend:

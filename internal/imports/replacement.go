@@ -137,7 +137,7 @@ func (p *ImportPipeline) replaceMatched(ctx context.Context, match *MatchResult,
 		return fmt.Errorf("replacement destination changed: %s", dest)
 	}
 	// Preserve the old file without taking its live pathname away. The final
-	// rename replaces it after the new file is ready. Open Windows readers can
+	// publication replaces it after the new file is ready. Open Windows readers can
 	// block this even with delete-sharing; never remove the live file to retry.
 	if err := importFile(dest, backup, ImportModeHardlink); err != nil {
 		return fmt.Errorf("preserve existing destination: %w", err)
@@ -157,7 +157,7 @@ func (p *ImportPipeline) replaceMatched(ctx context.Context, match *MatchResult,
 	if err != nil || !os.SameFile(old, current) || old.Size() != current.Size() || !old.ModTime().Equal(current.ModTime()) {
 		return fmt.Errorf("replacement destination changed: %s", dest)
 	}
-	if err := os.Rename(staged, dest); err != nil {
+	if err := publishReplacement(staged, dest); err != nil {
 		return fmt.Errorf("publish replacement: %w", err)
 	}
 	keep = true
@@ -166,7 +166,7 @@ func (p *ImportPipeline) replaceMatched(ctx context.Context, match *MatchResult,
 		if statErr != nil || !os.SameFile(stagedInfo, current) {
 			return fmt.Errorf("library update failed: %w; destination changed; old file preserved at %s", err, backup)
 		}
-		if restoreErr := os.Rename(backup, dest); restoreErr != nil {
+		if restoreErr := publishReplacement(backup, dest); restoreErr != nil {
 			return fmt.Errorf("library update failed: %w; old file preserved at %s (restore: %w)", err, backup, restoreErr)
 		}
 		keep = false
