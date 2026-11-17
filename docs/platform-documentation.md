@@ -1281,6 +1281,14 @@ it does not prove the token can list or refresh libraries.
 8. On failure: retries up to 3 times with exponential backoff (2s, 4s, 8s).
 9. Logs history entry (success or failure) via `LogHistory`.
 
+Discord sends are serialized per webhook across notifications and connection
+tests. On HTTP 429, the sender retries up to three times using the JSON
+`retry_after` value in seconds (including fractional seconds), falling back
+to `Retry-After`, then `X-RateLimit-Reset-After`, or one second if none is
+usable. When a response reports `X-RateLimit-Remaining: 0`, subsequent sends
+wait for `X-RateLimit-Reset-After`. These waits respect the send context's
+deadline; dispatcher sends still have the 15-second timeout described above.
+
 **Template system:**
 - Default templates per event type (e.g., `Grabbed: {{.Title}} ({{.Year}}) — {{.Quality}} from {{.Indexer}}`).
 - Per-connection `TemplateOverride` field for custom Go `text/template` messages.
