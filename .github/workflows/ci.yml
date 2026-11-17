@@ -182,7 +182,7 @@ jobs:
           import json
           import os
           results = json.loads(os.environ["NEEDS"])
-          expected = {"go-race", "go-checks", "go-coverage"}
+          expected = {"changes", "go-race", "go-checks", "go-coverage"}
           if set(results) != expected or any(job["result"] != "success" for job in results.values()):
               raise SystemExit(f"Go prerequisites did not all succeed: {results}")
           PY
