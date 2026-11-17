@@ -251,11 +251,15 @@ func (m *Matcher) matchContextEpisode(ctx context.Context, filePath, root, downl
 		}
 	}
 	for dir != "." && dir != string(filepath.Separator) {
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
 		names = append(names, filepath.Base(dir))
 		if dir == root {
 			break
 		}
-		dir = filepath.Dir(dir)
+		dir = parent
 	}
 	rootIndex := len(names) - 1
 	if downloadTitle != "" {

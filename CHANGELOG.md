@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.4.3] - 2026-11-17
+
+Includes changes originally prepared for the unpublished v0.4.2 release.
+
 ### Changed
 
 - Expand bug reports into structured version, deployment, reproduction,
@@ -16,10 +20,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   the implementation, separating published `v0.4.1` from newer source, marking
   experimental and incomplete workflows, and explicitly noting that
   Usenet/NNTP has not been tested at all.
-
-## [0.4.2] - 2026-11-17
-
-### Changed
 
 - Publish detailed release-page notes from the matching versioned section of
   this changelog instead of generated commit lists. The trusted publisher reads
@@ -162,6 +162,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Stop bare-episode matching at Windows drive and UNC roots, preventing manual
+  imports from hanging while retaining ancestor series context.
+- Make Windows release tests handle CRLF episode-pack fixtures and filesystems
+  that do not enforce POSIX directory permissions.
 - Synology package: install no longer fails when preinst runs before DSM sets
   package paths; the install/upgrade wizard asks for media and downloads shared
   folders so DSM grants `sc-loom` access, and granted shares become folder-picker
@@ -221,7 +225,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## Historical notes through 0.4.1
 
 These cumulative notes were already present in the published `v0.4.1` source.
-They are retained here as history, not changes introduced in 0.4.2; earlier
+They are retained here as history, not changes introduced in 0.4.3; earlier
 releases did not consistently split the changelog into versioned sections.
 
 ### Added
@@ -760,6 +764,6 @@ AddPaused, DupeKey, DupeScore, DupeMode, PostProcessParameters)`
 
 - _(none yet)_
 
-[Unreleased]: https://github.com/ebenderooock/loom/compare/v0.4.2...HEAD
-[0.4.2]: https://github.com/ebenderooock/loom/compare/v0.4.1...v0.4.2
+[Unreleased]: https://github.com/ebenderooock/loom/compare/v0.4.3...HEAD
+[0.4.3]: https://github.com/ebenderooock/loom/compare/v0.4.1...v0.4.3
 [0.1.1]: https://github.com/ebenderooock/loom/compare/v0.1.0...v0.1.1
