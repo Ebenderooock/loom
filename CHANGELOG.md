@@ -9,10 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
-- Correct Windows import regression fixtures: live-path readers explicitly
-  permit delete-sharing, with separate coverage for safely rejected locked-file
-  replacements. Mark large metadata-scan fixtures sparse before extending them
-  on NTFS, retaining the 32 GiB no-payload-read check without allocating it.
+- Correct Windows import regression fixtures: check live-path and byte safety
+  when Windows rejects an open-target replacement, including delete-sharing
+  readers, and require successful replacement after readers close. Mark large
+  metadata-scan fixtures sparse before extending them on NTFS, retaining the
+  32 GiB no-payload-read check without allocating it.
 
 ### Changed
 

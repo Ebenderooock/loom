@@ -94,11 +94,15 @@ and warm CI runs before changing the four-shard limit or package weights.
 
 Windows fixtures mark large files sparse before extending them, using the
 shared `internal/testutil.MarkSparse` helper rather than allocating media-sized
-payloads. The live-path replacement test uses a reader with delete-sharing:
-ordinary Go file readers deny it on Windows and can block replacement.
-A separate Windows test requires a blocked replacement to preserve both files
-and leave registration unchanged. Replacement never removes the live path
-first; it does not promise Unix atomic-rename semantics on Windows.
+payloads. Windows replacement via Go's `MoveFileEx` can reject an open target
+even when its reader permits delete-sharing. The live-path test monitors every
+read for missing or incomplete media, requires unchanged identity and bytes on
+Windows publication denials, and requires a real replacement after the reader
+closes. Separate Windows tests hold ordinary and delete-sharing readers open
+and require both files and registration to survive blocked publication.
+Replacement never removes the live path first or promises Unix atomic-rename
+semantics on Windows; see Microsoft's
+[open-file rename restrictions](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/ntifs/ns-ntifs-_file_rename_information#remarks).
 
 ## Hot-reload loop
 

@@ -219,19 +219,57 @@ func TestReplacementKeepsLivePathAvailable(t *testing.T) {
 			}
 		}
 	}()
-	defer func() {
+	stopReader := sync.OnceFunc(func() {
 		close(done)
 		if err := <-observed; err != nil {
 			t.Errorf("live destination was unavailable during replacement: %v", err)
 		}
-	}()
+	})
+	defer stopReader()
 	for i := 0; i < 20; i++ {
 		path := source
+		wantSource := "new media"
 		if i%2 == 1 {
 			path = alternate
+			wantSource = "old media"
+		}
+		before, err := os.Stat(dest)
+		if err != nil {
+			t.Fatal(err)
+		}
+		previous, err := readReplacementDestination(dest)
+		if err != nil {
+			t.Fatal(err)
 		}
 		if _, err := p.importMatchedWith(context.Background(), &downloads.DownloadCompletedEvent{Title: "Movie"}, match, path, filepath.Base(dest), true); err != nil {
-			t.Fatal(err)
+			if !replacementBlockedByOpenReader(err, dest) {
+				t.Fatal(err)
+			}
+			current, statErr := os.Stat(dest)
+			if statErr != nil || !os.SameFile(before, current) {
+				t.Fatalf("blocked replacement changed the live file: %v", statErr)
+			}
+			if data, err := readReplacementDestination(dest); err != nil || string(data) != string(previous) {
+				t.Fatalf("blocked replacement changed live bytes: %q, %v", data, err)
+			}
+		}
+		if data, err := os.ReadFile(path); err != nil || string(data) != wantSource {
+			t.Fatalf("replacement changed source bytes: %q, %v", data, err)
+		}
+	}
+	stopReader()
+	// Force a genuine replacement after closing the reader, even if Windows
+	// rejected every concurrent attempt. A permanent publication failure fails.
+	const final = "final complete media"
+	if err := os.WriteFile(alternate, []byte(final), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.importMatchedWith(context.Background(), &downloads.DownloadCompletedEvent{Title: "Movie"}, match, alternate, filepath.Base(dest), true); err != nil {
+		t.Fatalf("replacement after reader stopped: %v", err)
+	}
+	for _, path := range []string{alternate, dest} {
+		if data, err := os.ReadFile(path); err != nil || string(data) != final {
+			t.Fatalf("final replacement at %s: %q, %v", path, data, err)
 		}
 	}
 }
