@@ -23,6 +23,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   as WebDL so imports no longer reject them as unknown quality.
 - Keep replacement destinations continuously available to macOS readers during
   publication and registration rollback by atomically swapping files.
+- Serialize Discord notifications per webhook and honor the response's
+  `retry_after` value and rate-limit reset headers to avoid repeated
+  rate-limit failures during alert bursts.
 
 ## [0.4.5] - 2026-11-17
 
