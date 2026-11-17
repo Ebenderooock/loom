@@ -15,8 +15,31 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  changes:
+    name: Detect code changes
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Detect code changes
+        id: filter
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+          BEFORE: ${{ github.event.before }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: python3 scripts/ci_code_changes.py
+
   publishing-observer:
     name: Publishing observer
+    needs: [changes]
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -26,6 +49,8 @@ jobs:
 
   go-race:
     name: Go race (${{ matrix.os }}, shard ${{ matrix.shard }})
+    needs: [changes]
+    if: needs.changes.outputs.code == 'true'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -87,6 +112,8 @@ jobs:
 
   go-checks:
     name: Go vet and workflows (${{ matrix.os }})
+    needs: [changes]
+    if: needs.changes.outputs.code == 'true'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -121,7 +148,7 @@ jobs:
   go-coverage:
     name: Go coverage
     runs-on: ubuntu-latest
-    needs: [go-race]
+    needs: [changes, go-race]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/download-artifact@v8
@@ -140,8 +167,8 @@ jobs:
   go:
     name: Go (${{ matrix.os }})
     runs-on: ubuntu-latest
-    needs: [go-race, go-checks, go-coverage]
-    if: always()
+    needs: [changes, go-race, go-checks, go-coverage]
+    if: always() && needs.changes.outputs.code == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -162,6 +189,8 @@ jobs:
 
   lint:
     name: Lint
+    needs: [changes]
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -204,6 +233,8 @@ jobs:
 
   vuln:
     name: govulncheck
+    needs: [changes]
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -219,7 +250,7 @@ jobs:
   build:
     name: Build matrix
     runs-on: ubuntu-latest
-    needs: [go, lint]
+    needs: [changes, go, lint]
     strategy:
       fail-fast: false
       matrix:
@@ -247,6 +278,8 @@ jobs:
 
   installers:
     name: Windows service installer
+    needs: [changes]
+    if: needs.changes.outputs.code == 'true'
     runs-on: windows-latest
     timeout-minutes: 15
     env:
@@ -268,6 +301,8 @@ jobs:
 
   web:
     name: Frontend
+    needs: [changes]
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:

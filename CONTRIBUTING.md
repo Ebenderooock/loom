@@ -148,7 +148,9 @@ docs/               # Architecture decision records, design docs
 - One concern per PR. Smaller PRs land faster.
 - Add or update tests for behavior changes. The CI bar is non-negotiable:
   `go test`, `golangci-lint`, `govulncheck`, frontend type-check,
-  and parser-fixture tests must all pass.
+  and parser-fixture tests must all pass. Full validation runs when a PR
+  changes a non-documentation file; changes limited to Markdown, `docs/`, or
+  `CHANGELOG.md` skip these checks.
 - Update relevant ADRs (`docs/adr/`) if your change crosses architectural
   boundaries.
 
