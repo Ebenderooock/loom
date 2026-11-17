@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Add Sync with Jellyfin to movie and series quick actions. Plex and Jellyfin
+  sync actions appear only when their respective connection is enabled and
+  configured, and request a library refresh without downloading media.
+
+### Fixed
+
+- Keep title-folder rescans available for missing movies and series. Discover
+  manually added library files, repair stale registrations and availability,
+  and refresh quick-action eligibility after scanning while preserving folder
+  containment and incomplete-file safeguards.
+- Serialize Discord notifications per webhook and honor the response's
+  `retry_after` value and rate-limit reset headers to avoid repeated
+  rate-limit failures during alert bursts.
+
 ## [0.4.5] - 2026-11-17
 
 Includes changes originally prepared for the unpublished v0.4.2, v0.4.3 and
