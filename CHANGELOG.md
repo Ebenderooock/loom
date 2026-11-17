@@ -19,6 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   manually added library files, repair stale registrations and availability,
   and refresh quick-action eligibility after scanning while preserving folder
   containment and incomplete-file safeguards.
+- Apply the global media card size to collection grids and their members.
+  Combined collection posters now use the same dimensions as library posters.
 
 ## [0.4.5] - 2026-11-17
 

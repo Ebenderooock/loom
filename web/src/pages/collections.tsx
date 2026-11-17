@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { usePageHeader } from "@/hooks/use-page-header";
+import { useMediaGridClass } from "@/hooks/use-media-grid";
 import { useLibraries } from "@/lib/libraries-api";
 import {
   collectionKeys,
@@ -56,9 +57,6 @@ import {
   type BulkKind,
 } from "@/components/collections/collection-bulk-sheet";
 
-const GRID =
-  "grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6";
-
 type CollectionScan = {
   total: number;
   checked: number;
@@ -80,6 +78,7 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
 const SELECT = "h-10 rounded-md border bg-background px-3 text-sm";
 
 export function CollectionsPage() {
+  const gridClass = useMediaGridClass();
   const { setHeader } = usePageHeader();
   useEffect(() => setHeader({ title: "Collections" }), [setHeader]);
   const { id, tmdb } = useSearch({ from: "/collections" });
@@ -148,7 +147,7 @@ export function CollectionsPage() {
   const selectedID = id ?? existingSet?.id;
 
   return (
-    <div className="space-y-6 p-4 sm:p-6">
+    <div className="space-y-6 px-3 py-4 sm:p-6">
       {selectedID ? (
         <CollectionDetails
           key={selectedID}
@@ -279,7 +278,7 @@ export function CollectionsPage() {
           ) : list.error ? (
             <Retry error={list.error} retry={() => void list.refetch()} />
           ) : (
-            <div className={GRID}>
+            <div className={gridClass}>
               {list.data?.items
                 .filter(
                   (c) =>
@@ -295,7 +294,7 @@ export function CollectionsPage() {
                     search={{ id: c.id }}
                     className="group overflow-hidden rounded-lg border bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
-                    <div className="flex aspect-[4/3] overflow-hidden bg-muted">
+                    <div className="flex aspect-[2/3] overflow-hidden bg-muted">
                       {c.members
                         .filter((m) => !m.excluded && m.poster_path)
                         .slice(0, 3)
@@ -440,6 +439,7 @@ function CollectionDetails({
   onBack: () => void;
   onOpen: (id?: string) => void;
 }) {
+  const gridClass = useMediaGridClass();
   const qc = useQueryClient();
   const [selected, setSelected] = useState<CollectionMember | null>(null);
   const [library, setLibrary] = useState("");
@@ -589,7 +589,7 @@ function CollectionDetails({
             <Filters
               {...{ library, setLibrary, media, setMedia, status, setStatus }}
             />
-            <div className={GRID}>
+            <div className={gridClass}>
               {visible?.map((m) => {
                 const unresolved = !m.in_library && !m.external_ids.tmdb;
                 const isChecked = checked.has(m.id);
