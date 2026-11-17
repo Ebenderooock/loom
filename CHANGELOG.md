@@ -9,8 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [0.4.4] - 2026-11-17
 
-Planned release; not yet published. Includes changes originally prepared for
-the unpublished v0.4.2 and v0.4.3 release attempts.
+Includes changes originally prepared for the unpublished v0.4.2 and v0.4.3
+release attempts.
 
 ### Changed
 
@@ -774,6 +774,6 @@ AddPaused, DupeKey, DupeScore, DupeMode, PostProcessParameters)`
 
 - _(none yet)_
 
-[Unreleased]: https://github.com/ebenderooock/loom/compare/v0.4.3...HEAD
-[0.4.3]: https://github.com/ebenderooock/loom/compare/v0.4.1...v0.4.3
+[Unreleased]: https://github.com/ebenderooock/loom/compare/v0.4.4...HEAD
+[0.4.4]: https://github.com/ebenderooock/loom/compare/v0.4.1...v0.4.4
 [0.1.1]: https://github.com/ebenderooock/loom/compare/v0.1.0...v0.1.1
