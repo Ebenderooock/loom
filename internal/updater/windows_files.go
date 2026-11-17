@@ -44,25 +44,22 @@ func winMetadata(f *os.File, relative string) (winMeta, error) {
 	var streams [8192]byte
 	streamErr := windows.GetFileInformationByHandleEx(h, windows.FileStreamInfo, &streams[0], uint32(len(streams)))
 	if dir {
-		// NTFS directories without data streams report EOF. Do not silently
-		// discard directory ADS (including an unnamed directory data stream).
-		if !errors.Is(streamErr, windows.ERROR_HANDLE_EOF) {
+		// NTFS directories have the ordinary $I30 index-allocation stream.
+		// Some filesystems report no streams instead; accept EOF, but validate
+		// any returned entry so directory ADS are not silently discarded.
+		if errors.Is(streamErr, windows.ERROR_HANDLE_EOF) {
+			// No streams were returned.
+		} else if streamErr != nil {
 			return winMeta{}, errors.New("directory streams or unsupported NTFS stream query")
+		} else if err := winValidateStreamInfo(streams[:], true); err != nil {
+			return winMeta{}, err
 		}
 	} else {
 		if streamErr != nil {
 			return winMeta{}, streamErr
 		}
-		n := binary.LittleEndian.Uint32(streams[4:8])
-		if binary.LittleEndian.Uint32(streams[:4]) != 0 || n != 14 {
-			return winMeta{}, errors.New("NTFS alternate streams require manual updates")
-		}
-		name := make([]uint16, n/2)
-		for i := range name {
-			name[i] = binary.LittleEndian.Uint16(streams[24+i*2:])
-		}
-		if string(utf16.Decode(name)) != "::$DATA" {
-			return winMeta{}, errors.New("nondefault NTFS stream")
+		if err := winValidateStreamInfo(streams[:], false); err != nil {
+			return winMeta{}, err
 		}
 	}
 	sd, err := windows.GetSecurityInfo(h, windows.SE_FILE_OBJECT, winReadSD|windows.SACL_SECURITY_INFORMATION)
@@ -80,6 +77,40 @@ func winMetadata(f *os.File, relative string) (winMeta, error) {
 		return winMeta{}, err
 	}
 	return winMeta{Path: relative, SDDL: sd.String(), Dir: dir, Attributes: info.FileAttributes}, nil
+}
+
+// FileStreamInfo lists ordinary NTFS files as "::$DATA" and directories as
+// ":$I30:$INDEX_ALLOCATION". A single exact default entry is expected; any
+// additional entry may be an alternate stream and is rejected.
+func winValidateStreamInfo(info []byte, dir bool) error {
+	const streamInfoHeaderSize = 24
+	if len(info) < streamInfoHeaderSize {
+		return errors.New("truncated NTFS stream information")
+	}
+	next := binary.LittleEndian.Uint32(info[:4])
+	nameBytes := binary.LittleEndian.Uint32(info[4:8])
+	if nameBytes == 0 || nameBytes%2 != 0 || nameBytes > uint32(len(info)-streamInfoHeaderSize) {
+		return errors.New("invalid NTFS stream name")
+	}
+	entrySize := uint32(streamInfoHeaderSize) + nameBytes
+	if next != 0 {
+		if next < entrySize || next%8 != 0 || next > uint32(len(info)) {
+			return errors.New("invalid NTFS stream entry offset")
+		}
+		return errors.New("NTFS alternate streams require manual updates")
+	}
+	name := make([]uint16, nameBytes/2)
+	for i := range name {
+		name[i] = binary.LittleEndian.Uint16(info[streamInfoHeaderSize+i*2:])
+	}
+	want := "::$DATA"
+	if dir {
+		want = ":$I30:$INDEX_ALLOCATION"
+	}
+	if string(utf16.Decode(name)) != want {
+		return errors.New("unexpected NTFS stream")
+	}
+	return nil
 }
 
 func winCopySnapshot(source, dest, relative string, limit int64) (winMeta, error) {

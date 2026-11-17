@@ -47,6 +47,44 @@ func TestWindowsFixedAccountAndPaths(t *testing.T) {
 	}
 }
 
+func TestWindowsNTFSStreamInfoValidation(t *testing.T) {
+	streamInfo := func(next uint32, name string) []byte {
+		encoded := utf16.Encode([]rune(name))
+		info := make([]byte, 24+len(encoded)*2)
+		binary.LittleEndian.PutUint32(info[:4], next)
+		binary.LittleEndian.PutUint32(info[4:8], uint32(len(encoded)*2))
+		for i, unit := range encoded {
+			binary.LittleEndian.PutUint16(info[24+i*2:], unit)
+		}
+		return info
+	}
+	multiple := make([]byte, 40+len(streamInfo(0, "::$DATA:private")))
+	copy(multiple, streamInfo(40, "::$DATA"))
+	copy(multiple[40:], streamInfo(0, "::$DATA:private"))
+
+	for _, tc := range []struct {
+		name string
+		dir  bool
+		info []byte
+		ok   bool
+	}{
+		{"ordinary-file", false, streamInfo(0, "::$DATA"), true},
+		{"ordinary-directory", true, streamInfo(0, ":$I30:$INDEX_ALLOCATION"), true},
+		{"file-alternate-stream", false, streamInfo(0, "::$DATA:private"), false},
+		{"directory-alternate-stream", true, streamInfo(0, ":private:$DATA"), false},
+		{"unexpected-directory-stream", true, streamInfo(0, "::$DATA"), false},
+		{"multiple-streams", false, multiple, false},
+		{"truncated-entry", true, []byte{1, 2, 3}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := winValidateStreamInfo(tc.info, tc.dir)
+			if (err == nil) != tc.ok {
+				t.Fatalf("validation error=%v want accepted=%v", err, tc.ok)
+			}
+		})
+	}
+}
+
 func TestWindowsTrustRoles(t *testing.T) {
 	rx := uint32(windows.FILE_GENERIC_READ | windows.FILE_GENERIC_EXECUTE)
 	for _, tc := range []struct {
