@@ -23,6 +23,7 @@ import (
 	"github.com/ebenderooock/loom/internal/series"
 	"github.com/ebenderooock/loom/internal/server"
 	"github.com/ebenderooock/loom/internal/storage"
+	"github.com/ebenderooock/loom/internal/testutil"
 )
 
 func TestWireDownloadsFullSeasonReplacementRetry(t *testing.T) {
@@ -288,7 +289,7 @@ func writeSeasonSparseFile(t *testing.T, path string, size int64, marker string)
 		t.Fatal(err)
 	}
 	defer f.Close()
-	if err := markSeasonFileSparse(f); err != nil {
+	if err := testutil.MarkSparse(f); err != nil {
 		t.Fatalf("mark season fixture sparse: %v", err)
 	}
 	if err := f.Truncate(size); err != nil {

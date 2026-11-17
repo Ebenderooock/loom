@@ -31,15 +31,14 @@ jobs:
       fail-fast: false
       max-parallel: 12
       matrix:
-        # Day-to-day CI (push/PR) runs on GitHub-hosted Linux runners, which
-        # are free for public repositories. The macOS/Windows legs that validate
-        # the published cross-platform binaries are gated to release tags (v*),
-        # so the full three-OS matrix only runs on tagged releases.
+        # PRs and main pushes validate all platforms before release tagging.
+        # Release tags (v*) retain the same full matrix; ordinary prerelease
+        # branch pushes use hosted Linux only. All runners are public hosted.
         #
         # Self-hosted runners are intentionally NOT used here: this workflow runs
         # on `pull_request`, so a self-hosted runner would execute untrusted code
         # from forked PRs on private infrastructure.
-        os: ${{ github.ref_type == 'tag' && fromJSON('["ubuntu-latest", "macos-latest", "windows-latest"]') || fromJSON('["ubuntu-latest"]') }}
+        os: ${{ (github.event_name == 'pull_request' || (github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')))) && fromJSON('["ubuntu-latest", "macos-latest", "windows-latest"]') || fromJSON('["ubuntu-latest"]') }}
         shard: [0, 1, 2, 3]
     env:
       CGO_ENABLED: "1"
@@ -92,7 +91,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: ${{ github.ref_type == 'tag' && fromJSON('["ubuntu-latest", "macos-latest", "windows-latest"]') || fromJSON('["ubuntu-latest"]') }}
+        os: ${{ (github.event_name == 'pull_request' || (github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')))) && fromJSON('["ubuntu-latest", "macos-latest", "windows-latest"]') || fromJSON('["ubuntu-latest"]') }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
@@ -146,7 +145,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: ${{ github.ref_type == 'tag' && fromJSON('["ubuntu-latest", "macos-latest", "windows-latest"]') || fromJSON('["ubuntu-latest"]') }}
+        os: ${{ (github.event_name == 'pull_request' || (github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')))) && fromJSON('["ubuntu-latest", "macos-latest", "windows-latest"]') || fromJSON('["ubuntu-latest"]') }}
     steps:
       - name: Require all Go prerequisites to succeed
         env:

@@ -139,6 +139,15 @@ for activation, retries, and scheduled-workflow monitoring.
 
 ### Release-page notes
 
+Before preparing another release version or creating its tag, require successful
+`main` push CI for the exact source commit across Linux, macOS and Windows.
+PR CI also runs all three platforms; require successful Windows PR execution
+before further release-version preparation. Cross-compilation is not Windows
+runtime validation.
+Tag CI retains the full matrix as an additional safeguard; do not move or reuse
+an existing tag to recover a failure. The trusted publisher's authoritative
+main-push CI authorization now includes the full platform suite.
+
 Before creating a release tag, add a matching version section to
 `CHANGELOG.md`, for example `## [0.4.2] - 2026-11-17` for `v0.4.2`.
 Leave a fresh `## [Unreleased]` section for future work. Describe user-facing

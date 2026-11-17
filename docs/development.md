@@ -48,9 +48,10 @@ The full `make help` lists every target with descriptions.
 ### Go CI shards and coverage
 
 CI runs four race/coverage shards per OS, plus a separate vet and non-race
-workflow-engine suite. PRs and branch pushes still use hosted Ubuntu only;
-release tags also use hosted macOS and Windows (at most twelve race jobs).
-The required `Go (ubuntu-latest)` check, and the corresponding tag-only OS
+workflow-engine suite. PRs, pushes to `main` and `v*` release tags use hosted
+Ubuntu, macOS and Windows (at most twelve race jobs). Ordinary
+`prelease/**`/`prerelease/**` branch pushes use hosted Ubuntu only.
+The required `Go (ubuntu-latest)` check, and the corresponding full-matrix OS
 checks, aggregate **all** Go jobs, including coverage merging. Any failed,
 cancelled or unexpectedly skipped prerequisite fails the gates. Builds still
 require these gates and Lint.
@@ -90,6 +91,14 @@ Parallelism trades repeated setup, compilation and cache storage/transfer
 (including duplicated module caches) and potentially more runner-minutes for
 lower wall-clock time. No remote speedup has been measured yet; compare cold
 and warm CI runs before changing the four-shard limit or package weights.
+
+Windows fixtures mark large files sparse before extending them, using the
+shared `internal/testutil.MarkSparse` helper rather than allocating media-sized
+payloads. The live-path replacement test uses a reader with delete-sharing:
+ordinary Go file readers deny it on Windows and can block replacement.
+A separate Windows test requires a blocked replacement to preserve both files
+and leave registration unchanged. Replacement never removes the live path
+first; it does not promise Unix atomic-rename semantics on Windows.
 
 ## Hot-reload loop
 

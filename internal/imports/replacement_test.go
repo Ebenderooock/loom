@@ -207,7 +207,7 @@ func TestReplacementKeepsLivePathAvailable(t *testing.T) {
 				observed <- nil
 				return
 			default:
-				data, err := os.ReadFile(dest)
+				data, err := readReplacementDestination(dest)
 				if err != nil {
 					observed <- err
 					return
