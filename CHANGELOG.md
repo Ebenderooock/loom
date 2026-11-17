@@ -19,6 +19,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   manually added library files, repair stale registrations and availability,
   and refresh quick-action eligibility after scanning while preserving folder
   containment and incomplete-file safeguards.
+- Serialize Discord notifications per webhook and honor the response's
+  `retry_after` value and rate-limit reset headers to avoid repeated
+  rate-limit failures during alert bursts.
 
 ## [0.4.5] - 2026-11-17
 
