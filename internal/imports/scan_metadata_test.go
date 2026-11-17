@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/ebenderooock/loom/internal/testutil"
 )
 
 func TestScanMetadataDoesNotReadLargeCopiedPayloads(t *testing.T) {
@@ -17,6 +19,10 @@ func TestScanMetadataDoesNotReadLargeCopiedPayloads(t *testing.T) {
 		file, err := os.Create(path)
 		if err != nil {
 			t.Fatal(err)
+		}
+		if err := testutil.MarkSparse(file); err != nil {
+			_ = file.Close()
+			t.Fatalf("mark media fixture sparse: %v", err)
 		}
 		// Sparse files make an accidental full-read scan exceed the deadline
 		// without requiring actual NAS traffic or allocating the payload.

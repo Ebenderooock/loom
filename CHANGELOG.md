@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Correct Windows import regression fixtures: check live-path and byte safety
+  when Windows rejects an open-target replacement, including delete-sharing
+  readers, and require successful replacement after readers close. Mark large
+  metadata-scan fixtures sparse before extending them on NTFS, retaining the
+  32 GiB no-payload-read check without allocating it.
+
+### Changed
+
+- Run the full Linux, macOS and Windows Go CI matrix on PRs and `main` pushes
+  before preparing release versions or tags, as well as on `v*` tags. Keep
+  ordinary prerelease branch pushes Linux-only, with four race shards per OS
+  and the existing fail-closed aggregate checks.
+
 ## [0.4.3] - 2026-11-17
 
 Includes changes originally prepared for the unpublished v0.4.2 release.

@@ -137,7 +137,8 @@ func (p *ImportPipeline) replaceMatched(ctx context.Context, match *MatchResult,
 		return fmt.Errorf("replacement destination changed: %s", dest)
 	}
 	// Preserve the old file without taking its live pathname away. The final
-	// rename then replaces it in one operation after the new file is ready.
+	// rename replaces it after the new file is ready. Open Windows readers can
+	// block this even with delete-sharing; never remove the live file to retry.
 	if err := importFile(dest, backup, ImportModeHardlink); err != nil {
 		return fmt.Errorf("preserve existing destination: %w", err)
 	}

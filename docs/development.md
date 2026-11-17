@@ -48,9 +48,10 @@ The full `make help` lists every target with descriptions.
 ### Go CI shards and coverage
 
 CI runs four race/coverage shards per OS, plus a separate vet and non-race
-workflow-engine suite. PRs and branch pushes still use hosted Ubuntu only;
-release tags also use hosted macOS and Windows (at most twelve race jobs).
-The required `Go (ubuntu-latest)` check, and the corresponding tag-only OS
+workflow-engine suite. PRs, pushes to `main` and `v*` release tags use hosted
+Ubuntu, macOS and Windows (at most twelve race jobs). Ordinary
+`prelease/**`/`prerelease/**` branch pushes use hosted Ubuntu only.
+The required `Go (ubuntu-latest)` check, and the corresponding full-matrix OS
 checks, aggregate **all** Go jobs, including coverage merging. Any failed,
 cancelled or unexpectedly skipped prerequisite fails the gates. Builds still
 require these gates and Lint.
@@ -90,6 +91,18 @@ Parallelism trades repeated setup, compilation and cache storage/transfer
 (including duplicated module caches) and potentially more runner-minutes for
 lower wall-clock time. No remote speedup has been measured yet; compare cold
 and warm CI runs before changing the four-shard limit or package weights.
+
+Windows fixtures mark large files sparse before extending them, using the
+shared `internal/testutil.MarkSparse` helper rather than allocating media-sized
+payloads. Windows replacement via Go's `MoveFileEx` can reject an open target
+even when its reader permits delete-sharing. The live-path test monitors every
+read for missing or incomplete media, requires unchanged identity and bytes on
+Windows publication denials, and requires a real replacement after the reader
+closes. Separate Windows tests hold ordinary and delete-sharing readers open
+and require both files and registration to survive blocked publication.
+Replacement never removes the live path first or promises Unix atomic-rename
+semantics on Windows; see Microsoft's
+[open-file rename restrictions](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/ntifs/ns-ntifs-_file_rename_information#remarks).
 
 ## Hot-reload loop
 
