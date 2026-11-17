@@ -137,7 +137,7 @@ func postDiscordJSON(ctx context.Context, webhookURL string, payload any) error 
 			return fmt.Errorf("send request: %w", err)
 		}
 		respBody, readErr := io.ReadAll(io.LimitReader(resp.Body, 1024))
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		if readErr != nil {
 			return fmt.Errorf("read response: %w", readErr)
 		}
