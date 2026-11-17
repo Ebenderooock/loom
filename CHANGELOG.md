@@ -7,13 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-### Fixed
+## [0.4.4] - 2026-11-17
 
-- Correct Windows import regression fixtures: check live-path and byte safety
-  when Windows rejects an open-target replacement, including delete-sharing
-  readers, and require successful replacement after readers close. Mark large
-  metadata-scan fixtures sparse before extending them on NTFS, retaining the
-  32 GiB no-payload-read check without allocating it.
+Planned release; not yet published. Includes changes originally prepared for
+the unpublished v0.4.2 and v0.4.3 release attempts.
 
 ### Changed
 
@@ -21,13 +18,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   before preparing release versions or tags, as well as on `v*` tags. Keep
   ordinary prerelease branch pushes Linux-only, with four race shards per OS
   and the existing fail-closed aggregate checks.
-
-## [0.4.3] - 2026-11-17
-
-Includes changes originally prepared for the unpublished v0.4.2 release.
-
-### Changed
-
 - Expand bug reports into structured version, deployment, reproduction,
   expected/actual behavior and redacted diagnostic fields. Direct general
   questions and setup help to Discussions, and disable blank issue creation.
@@ -177,6 +167,11 @@ Includes changes originally prepared for the unpublished v0.4.2 release.
 
 ### Fixed
 
+- Correct Windows import regression fixtures: check live-path and byte safety
+  when Windows rejects an open-target replacement, including delete-sharing
+  readers, and require successful replacement after readers close. Mark large
+  metadata-scan fixtures sparse before extending them on NTFS, retaining the
+  32 GiB no-payload-read check without allocating it.
 - Stop bare-episode matching at Windows drive and UNC roots, preventing manual
   imports from hanging while retaining ancestor series context.
 - Make Windows release tests handle CRLF episode-pack fixtures and filesystems
@@ -240,7 +235,7 @@ Includes changes originally prepared for the unpublished v0.4.2 release.
 ## Historical notes through 0.4.1
 
 These cumulative notes were already present in the published `v0.4.1` source.
-They are retained here as history, not changes introduced in 0.4.3; earlier
+They are retained here as history, not changes introduced in 0.4.4; earlier
 releases did not consistently split the changelog into versioned sections.
 
 ### Added
