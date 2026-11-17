@@ -664,6 +664,8 @@ func TestEditionExtraction(t *testing.T) {
 		{"extended", "Movie.2024.Extended.1080p.BluRay.mkv", "Extended"},
 		{"extended edition", "Movie.2024.Extended.Edition.1080p.mkv", "Extended"},
 		{"imax", "Movie.2024.IMAX.2160p.WEB-DL.mkv", "IMAX"},
+		{"named library edition", "Avengers - Endgame (2019) {edition-Encore}.mkv", "Encore"},
+		{"explicit edition before format", "Movie.2019.IMAX.2160p {edition-Encore}.mkv", "Encore"},
 		{"remastered", "Movie.2024.Remastered.1080p.BluRay.mkv", "Remastered"},
 		{"theatrical", "Movie.2024.Theatrical.Cut.720p.mkv", "Theatrical"},
 		{"unrated", "Movie.2024.Unrated.1080p.BluRay.mkv", "Unrated"},

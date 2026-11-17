@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -227,6 +228,13 @@ func TestParseReleaseName(t *testing.T) {
 		wantSeries  bool
 	}{
 		{
+			name:       "movie with IMAX and HDR metadata",
+			input:      "Avengers.Endgame.Encore.2026.2160p.IMAX.DSNP.WEB-DL.DV.HDR10+.MULTi[Ben The Men].mkv",
+			wantTitle:  "Avengers Endgame Encore",
+			wantYear:   2026,
+			wantSeries: false,
+		},
+		{
 			name:       "movie with year and quality",
 			input:      "The.Matrix.1999.1080p.BluRay.x264-GROUP.mkv",
 			wantTitle:  "The Matrix",
@@ -335,6 +343,97 @@ func TestParseReleaseName(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+type literalSearchMoviesService struct {
+	*collisionMoviesService
+	candidates []*movies.Movie
+}
+
+func (s *literalSearchMoviesService) SearchMovies(_ context.Context, query string) ([]*movies.Movie, error) {
+	var results []*movies.Movie
+	for _, movie := range s.candidates {
+		if strings.Contains(strings.ToLower(movie.Title), strings.ToLower(query)) {
+			results = append(results, movie)
+		}
+	}
+	return results, nil
+}
+
+func TestMatchMovieReleaseMetadataAndPunctuation(t *testing.T) {
+	const filename = "Avengers.Endgame.Encore.2026.2160p.IMAX.DSNP.WEB-DL.DV.HDR10+.MULTi[Ben The Men].mkv"
+	for _, tc := range []struct {
+		name       string
+		candidates []*movies.Movie
+		wantMatch  bool
+	}{
+		{"plain title", []*movies.Movie{{ID: "encore", Title: "Avengers Endgame Encore", Year: 2026, LibraryID: "lib"}}, true},
+		{"catalog punctuation", []*movies.Movie{{ID: "encore", Title: "Avengers: Endgame Encore", Year: 2026, LibraryID: "lib"}}, true},
+		{"original is not encore", []*movies.Movie{{ID: "original", Title: "Avengers: Endgame", Year: 2019, LibraryID: "lib"}}, false},
+		{"conflicting year", []*movies.Movie{{ID: "encore", Title: "Avengers: Endgame Encore", Year: 2019, LibraryID: "lib"}}, false},
+		{"different title same year", []*movies.Movie{{ID: "other", Title: "Avengers: Another Movie", Year: 2026, LibraryID: "lib"}}, false},
+		{"ambiguous title", []*movies.Movie{
+			{ID: "one", Title: "Avengers: Endgame Encore", Year: 2026, LibraryID: "lib"},
+			{ID: "two", Title: "Avengers: Endgame Encore", Year: 2026, LibraryID: "lib"},
+		}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			p, svc, _ := newCollisionPipeline(t, ImportModeCopy)
+			p.matcher.moviesSvc = &literalSearchMoviesService{collisionMoviesService: svc, candidates: tc.candidates}
+			got, err := p.matcher.Match(context.Background(), filename)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got.Matched != tc.wantMatch {
+				t.Fatalf("match = %+v, want matched %v", got, tc.wantMatch)
+			}
+			if got.Matched && (got.MediaID != "encore" || got.Year != 2026) {
+				t.Fatalf("wrong movie: %+v", got)
+			}
+		})
+	}
+}
+
+func TestImportMovieEncoreRegistersSeparateRelease(t *testing.T) {
+	p, svc, _ := newCollisionPipeline(t, ImportModeCopy)
+	svc.movie = &movies.Movie{
+		ID: "encore", Title: "Avengers: Endgame Encore", Year: 2026, LibraryID: "lib",
+	}
+	p.matcher.moviesSvc = &literalSearchMoviesService{
+		collisionMoviesService: svc,
+		candidates: []*movies.Movie{
+			{ID: "original", Title: "Avengers: Endgame", Year: 2019, LibraryID: "lib"},
+			svc.movie,
+		},
+	}
+	const filename = "Avengers.Endgame.Encore.2026.2160p.IMAX.DSNP.WEB-DL.DV.HDR10+.MULTi[Ben The Men].mkv"
+	source := filepath.Join(t.TempDir(), filename)
+	if err := os.WriteFile(source, []byte("encore movie contents"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	dest, err := p.importSingleFile(context.Background(), &downloads.DownloadCompletedEvent{Title: filename}, source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(svc.files) != 1 || svc.files[0].MovieID != "encore" || svc.files[0].FilePath != dest {
+		t.Fatalf("wrong library registration: %+v", svc.files)
+	}
+	if filepath.Base(filepath.Dir(dest)) != "Avengers - Endgame Encore (2026)" {
+		t.Fatalf("wrong destination: %s", dest)
+	}
+	for _, path := range []string{source, dest} {
+		content, err := os.ReadFile(path)
+		if err != nil || string(content) != "encore movie contents" {
+			t.Fatalf("file %q: %q, %v", path, content, err)
+		}
+	}
+	var status, mediaID string
+	if err := p.db.QueryRow(`SELECT status, media_id FROM import_history LIMIT 1`).Scan(&status, &mediaID); err != nil {
+		t.Fatal(err)
+	}
+	if status != string(StatusImported) || mediaID != "encore" {
+		t.Fatalf("import outcome: %q %q", status, mediaID)
 	}
 }
 

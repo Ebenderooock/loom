@@ -76,6 +76,29 @@ inspection instead of being assumed to belong to the matched item.
 
 ### Importing completed files
 
+Movie matching uses the title before release metadata such as resolution,
+IMAX, Dolby Vision, and HDR tags. Catalog punctuation absent from a filename
+(for example, `Avengers: Endgame Encore` versus `Avengers.Endgame.Encore`)
+can match only when the fallback finds a unique normalized title with a
+compatible year. The one-year tolerance remains in effect. A named re-release
+can use a different year only when the original movie's TMDB release records
+confirm both the full release title and that exact year. Matching provider
+notes must include the original title and an edition suffix; a bare release
+date or filename suffix alone is not enough.
+
+Named re-releases share the original movie's metadata and folder, but keep
+separate files, for example `Avengers - Endgame (2019).mkv` and
+`Avengers - Endgame (2019) {edition-Encore}.mkv`. Quality comparisons and
+replacements stay within the same edition. The organizer preserves edition
+tags, including when a naming format omits `{Edition Tags}`. Add the original
+movie to the library before retrying an edition import. An obsolete standalone provider
+entry is not automatically deleted, merged, or redirected; it must be
+corrected separately without deleting the media files.
+
+Ordinary title/year matching does not depend on a live metadata lookup. A saved
+movie whose provider entry is no longer available can still match, but importing
+its file cannot restore missing provider metadata or artwork.
+
 In **Downloads > Imports**, scan the completed-download folder, select several
 files, then choose **Import selected**, or use **Import all matched** to queue
 every eligible match across all result pages. Search and pagination keep large

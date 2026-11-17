@@ -19,6 +19,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   manually added library files, repair stale registrations and availability,
   and refresh quick-action eligibility after scanning while preserving folder
   containment and incomplete-file safeguards.
+- Match movie imports without treating IMAX, Dolby Vision, HDR, or other
+  release metadata as part of the title; tolerate catalog punctuation safely.
+- Import provider-confirmed named re-releases, such as Endgame Encore, as
+  separate editions of the original movie. Preserve both copies, keep quality
+  comparisons within each edition, and retain edition tags during renaming.
 
 ## [0.4.5] - 2026-11-17
 
