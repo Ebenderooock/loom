@@ -156,7 +156,18 @@ func winSnapshotTree(source, dest string) ([]winMeta, error) {
 }
 
 func winSafeRelative(rel string) bool {
-	return rel == "." || (filepath.IsLocal(rel) && filepath.Clean(rel) == rel && !strings.ContainsAny(rel, ":/") && !strings.HasSuffix(rel, `\`))
+	if rel == "." {
+		return true
+	}
+	if !filepath.IsLocal(rel) || filepath.Clean(rel) != rel || strings.ContainsAny(rel, ":/") || strings.HasSuffix(rel, `\`) {
+		return false
+	}
+	for _, component := range strings.Split(rel, `\`) {
+		if winReservedName(component) {
+			return false
+		}
+	}
+	return true
 }
 
 func winReplace(dest, source string, meta winMeta) error {

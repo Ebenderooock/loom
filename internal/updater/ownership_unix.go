@@ -13,5 +13,5 @@ func metadata(path string, info os.FileInfo) (fileMeta, uint64, error) {
 	if !ok {
 		return fileMeta{}, 0, errors.New("file ownership unavailable")
 	}
-	return fileMeta{Path: path, Mode: uint32(info.Mode().Perm()), UID: int(s.Uid), GID: int(s.Gid), Dir: info.IsDir()}, uint64(s.Nlink), nil
+	return fileMeta{Path: path, Mode: uint32(info.Mode().Perm()), UID: int(s.Uid), GID: int(s.Gid), Dir: info.IsDir()}, uint64(s.Nlink), nil //nolint:unconvert // Nlink is uint16 on Darwin but uint64 on Linux.
 }

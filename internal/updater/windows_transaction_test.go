@@ -95,7 +95,10 @@ func winTestTransaction(t *testing.T) (*winTransaction, *winTestControl) {
 	if err := winEnablePrivileges(); err != nil {
 		t.Fatal(err)
 	}
-	parent, err := windows.KnownFolderPath(windows.FOLDERID_ProgramData, 0)
+	// Use a system-managed root whose ancestors are not writable by ordinary
+	// accounts. ProgramData may grant users create/write rights, which is
+	// correctly rejected by winOpen's production ancestor checks.
+	parent, err := windows.KnownFolderPath(windows.FOLDERID_ProgramFiles, 0)
 	if err != nil {
 		t.Fatal(err)
 	}

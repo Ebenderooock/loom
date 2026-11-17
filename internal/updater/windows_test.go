@@ -32,7 +32,7 @@ func TestWindowsFixedAccountAndPaths(t *testing.T) {
 	if sid != winServiceSID {
 		t.Fatal("virtual-account SID drift")
 	}
-	for _, bad := range []string{`\\server\share\loom.exe`, `C:relative.exe`, `C:\foo\..\loom.exe`, `C:\foo\loom.exe:stream`, `C:\foo\file.`, `C:\foo\file `, `C:\foo/NUL`, `C:\foo\NUL`, `C:\foo\COM1.txt`} {
+	for _, bad := range []string{`\\server\share\loom.exe`, `C:relative.exe`, `C:\foo\..\loom.exe`, `C:\foo\loom.exe:stream`, `C:\foo\file.`, `C:\foo\file `, `C:\foo/NUL`, `C:\foo\NUL`, `C:\foo\COM1.txt`, `C:\foo\LPT9.log`, `C:\foo\COM¹.txt`} {
 		if winSafeAbsolute(bad) {
 			t.Errorf("accepted unsafe path %q", bad)
 		}
@@ -40,7 +40,7 @@ func TestWindowsFixedAccountAndPaths(t *testing.T) {
 	if !winSafeAbsolute(`C:\Program Files\Loom\loom.exe`) {
 		t.Fatal("fixed path rejected")
 	}
-	for _, bad := range []string{`..\outside`, `C:\absolute`, `file:ads`, `foo/bar`, `CON`} {
+	for _, bad := range []string{`..\outside`, `C:\absolute`, `file:ads`, `foo/bar`, `CON`, `nested\COM1.txt`} {
 		if winSafeRelative(bad) {
 			t.Errorf("accepted journal escape %q", bad)
 		}

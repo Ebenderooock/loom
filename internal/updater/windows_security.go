@@ -258,11 +258,30 @@ func winSafeAbsolute(path string) bool {
 		return false
 	}
 	for _, c := range strings.Split(path[3:], `\`) {
-		if c == "" || strings.TrimRight(c, ". ") != c {
+		if c == "" || strings.TrimRight(c, ". ") != c || winReservedName(c) {
 			return false
 		}
 	}
 	return true
+}
+
+// Windows reserves DOS device names even when they have an extension. Check
+// the component's basename rather than the whole string so names such as
+// "COM1.txt" cannot alias a device.
+func winReservedName(component string) bool {
+	name := strings.TrimRight(component, ". ")
+	if ext := strings.IndexByte(name, '.'); ext >= 0 {
+		name = strings.TrimRight(name[:ext], ". ")
+	}
+	switch strings.ToUpper(name) {
+	case "CON", "PRN", "AUX", "NUL", "CONIN$", "CONOUT$",
+		"COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
+		"LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
+		"COM¹", "COM²", "COM³", "LPT¹", "LPT²", "LPT³":
+		return true
+	default:
+		return false
+	}
 }
 
 func winTrusted(path string, rights uint32, private bool) error {
