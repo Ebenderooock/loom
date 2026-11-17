@@ -172,6 +172,14 @@ func TestParseSource(t *testing.T) {
 		{"bracketed WebDL", "[GROUP] Movie [WEB-DL 1080p]", "WebDL"},
 		{"bare web is ambiguous", "movie.web.mkv", ""},
 		{"web in title is not a source", "The.Web.Of.Death.1978.1080p.mkv", ""},
+		{"scene WEB", "The Body 2026 S01E01 1080p WEB H264-CAKES EZTV", "WebDL"},
+		{"dot separated WEB", "Show.S01E01.720p.WEB.H264-GROUP.mkv", "WebDL"},
+		{"bracketed WEB", "Movie [2160p WEB]", "WebDL"},
+		{"WEB substring", "Movie.1080p.Website.mkv", ""},
+		{"resolution substring", "Movie.11080p.WEB.mkv", ""},
+		{"WEB does not override WebRip", "Movie.1080p.WEB.WEBRip.mkv", "WebRip"},
+		{"WEB does not override CAM", "Movie.1080p.WEB.HDCAM.mkv", "CAM"},
+		{"WEB does not override screener", "Movie.1080p.WEB.DVDSCR.mkv", "Screener"},
 
 		// HDTV
 		{"HDTV", "movie.HDTV.mkv", "HDTV"},

@@ -19,6 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   manually added library files, repair stale registrations and availability,
   and refresh quick-action eligibility after scanning while preserving folder
   containment and incomplete-file safeguards.
+- Recognize resolution-tagged scene `WEB` releases (such as `1080p WEB H264`)
+  as WebDL so imports no longer reject them as unknown quality.
 
 ## [0.4.5] - 2026-11-17
 
