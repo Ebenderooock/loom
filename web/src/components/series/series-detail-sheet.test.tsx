@@ -119,7 +119,10 @@ beforeEach(() => {
           folderPath: "/library/show",
           unavailableReason: null,
           rescanUnavailableReason: null,
+          plexConfigured: true,
           plexUnavailableReason: null,
+          jellyfinConfigured: false,
+          jellyfinUnavailableReason: null,
         });
       if (url.endsWith("/credits"))
         return Response.json({ cast: [], crew: [] });

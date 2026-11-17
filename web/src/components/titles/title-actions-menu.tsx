@@ -34,7 +34,10 @@ interface Availability {
   folderPath: string | null;
   unavailableReason: string | null;
   rescanUnavailableReason: string | null;
+  plexConfigured: boolean;
   plexUnavailableReason: string | null;
+  jellyfinConfigured: boolean;
+  jellyfinUnavailableReason: string | null;
 }
 
 // These title maintenance requests must never enter acquisition recovery.
@@ -65,6 +68,7 @@ export function TitleActionsMenu({
   const isAdmin = user?.role === "admin";
   const base = `/api/v1/${mediaType === "movie" ? "movies" : "series"}/${encodeURIComponent(id)}`;
   const [availability, setAvailability] = useState<Availability | null>(null);
+  const [availabilityVersion, setAvailabilityVersion] = useState(0);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [pending, setPending] = useState<string | null>(null);
   const pendingRef = useRef(false);
@@ -83,6 +87,8 @@ export function TitleActionsMenu({
         .then((data) => {
           if (
             !data ||
+            typeof data.plexConfigured !== "boolean" ||
+            typeof data.jellyfinConfigured !== "boolean" ||
             !(
               data.folderPath === null || typeof data.folderPath === "string"
             ) ||
@@ -97,6 +103,10 @@ export function TitleActionsMenu({
             !(
               data.plexUnavailableReason === null ||
               typeof data.plexUnavailableReason === "string"
+            ) ||
+            !(
+              data.jellyfinUnavailableReason === null ||
+              typeof data.jellyfinUnavailableReason === "string"
             )
           ) {
             throw new Error("Unexpected title actions response");
@@ -111,7 +121,7 @@ export function TitleActionsMenu({
         });
     }
     return () => controller.abort();
-  }, [base, isAdmin]);
+  }, [base, isAdmin, availabilityVersion]);
 
   const blocked = !isAdmin
     ? "Administrator access required."
@@ -129,7 +139,6 @@ export function TitleActionsMenu({
       ? "No verified library folder is available."
       : null);
   const rescanBlocked = blocked || availability?.rescanUnavailableReason;
-  const plexBlocked = blocked || availability?.plexUnavailableReason;
 
   const run = async (
     action: string,
@@ -158,23 +167,27 @@ export function TitleActionsMenu({
     }
   };
 
-  const sync = () => {
-    if (plexBlocked) return;
-    void run("Sync with Plex", async (signal) => {
+  const sync = (server: "Plex" | "Jellyfin") => {
+    const reason =
+      server === "Plex"
+        ? availability?.plexUnavailableReason
+        : availability?.jellyfinUnavailableReason;
+    if (blocked || reason) return;
+    void run(`Sync with ${server}`, async (signal) => {
       const result = await request<{ message: string; connections: number }>(
-        `${base}/sync-plex`,
+        `${base}/sync-${server.toLowerCase()}`,
         { method: "POST", signal },
       );
       if (
-        result.message !== "Plex library refresh requested" ||
+        result.message !== `${server} library refresh requested` ||
         !Number.isInteger(result.connections) ||
         result.connections < 1
       ) {
-        throw new Error("Plex did not confirm a library refresh request");
+        throw new Error(`${server} did not confirm a library refresh request`);
       }
       if (!signal.aborted)
         toast.success(result.message, {
-          description: `${result.connections} enabled Plex connection(s). Missing media is not downloaded.`,
+          description: `${result.connections} enabled ${server} connection(s). Missing media is not downloaded.`,
         });
     });
   };
@@ -211,9 +224,10 @@ export function TitleActionsMenu({
         throw new Error("Library file rescan has not confirmed completion");
       }
       await onChanged(signal);
+      if (!signal.aborted) setAvailabilityVersion((version) => version + 1);
       if (!signal.aborted)
         toast.success(
-          `Registered library file check complete: ${result.totalFiles} checked`,
+          `Library folder rescan complete: ${result.totalFiles} checked`,
         );
     });
   };
@@ -230,14 +244,28 @@ export function TitleActionsMenu({
     });
   };
   const items = [
-    {
-      label: "Sync with Plex",
-      icon: Server,
-      reason: plexBlocked,
-      description:
-        "Refreshes enabled Plex servers’ libraries. Does not download missing media.",
-      handler: sync,
-    },
+    ...(
+      [
+        {
+          name: "Plex",
+          configured: availability?.plexConfigured,
+          reason: availability?.plexUnavailableReason,
+        },
+        {
+          name: "Jellyfin",
+          configured: availability?.jellyfinConfigured,
+          reason: availability?.jellyfinUnavailableReason,
+        },
+      ] as const
+    )
+      .filter((server) => server.configured)
+      .map((server) => ({
+        label: `Sync with ${server.name}`,
+        icon: Server,
+        reason: blocked || server.reason,
+        description: `Refreshes enabled ${server.name} servers’ libraries. Does not download missing media.`,
+        handler: () => sync(server.name),
+      })),
     {
       label: "Refresh metadata",
       icon: RefreshCw,
@@ -253,7 +281,7 @@ export function TitleActionsMenu({
       icon: FolderSearch,
       reason: rescanBlocked,
       description:
-        "Checks registered imported files only; does not discover or ingest new files.",
+        "Scans this title’s library folder for new files and updates availability. Does not download missing media.",
       handler: rescan,
     },
     {
@@ -301,7 +329,7 @@ export function TitleActionsMenu({
           {items.map(
             ({ label, icon: Icon, reason, description, handler }, index) => (
               <Fragment key={label}>
-                {index === 3 && <DropdownMenuSeparator />}
+                {label === "View import history" && <DropdownMenuSeparator />}
                 <DropdownMenuItem
                   aria-label={label}
                   aria-describedby={`${descriptionId}-${index}`}

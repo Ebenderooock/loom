@@ -9,9 +9,8 @@ import (
 	"github.com/ebenderooock/loom/internal/mediafiles"
 )
 
-// ActionFolder resolves the same contained, unshared folder used by file
-// management. Files include only complete, active registrations, not downloads
-// or untracked files found on disk.
+// ActionFolder describes the contained, unshared folder used by file management.
+// Rescan selections also include unregistered videos, with an empty MediaID.
 type ActionFolder struct {
 	Path  string
 	Files []RegisteredFile
@@ -25,6 +24,15 @@ type RegisteredFile struct {
 
 // ResolveActionFolder verifies a title folder and its complete registered files.
 func (s *Service) ResolveActionFolder(ctx context.Context, mediaType, id string) (ActionFolder, error) {
+	return s.resolveActionFolder(ctx, mediaType, id, false)
+}
+
+// ResolveRescanFolder includes unregistered videos in the verified title folder.
+func (s *Service) ResolveRescanFolder(ctx context.Context, mediaType, id string) (ActionFolder, error) {
+	return s.resolveActionFolder(ctx, mediaType, id, true)
+}
+
+func (s *Service) resolveActionFolder(ctx context.Context, mediaType, id string, discover bool) (ActionFolder, error) {
 	sc, err := s.resolve(ctx, mediaType, id, nil)
 	if err != nil {
 		return ActionFolder{}, err
@@ -36,10 +44,14 @@ func (s *Service) ResolveActionFolder(ctx context.Context, mediaType, id string)
 	result := ActionFolder{Path: sc.root}
 	unpacking := &imports.UnpackingSpec{}
 	for _, file := range files {
-		if !file.Tracked || file.Size <= 0 || !mediafiles.IsVideo(filepath.Ext(file.Path)) {
+		if (!discover && !file.Tracked) || file.Size <= 0 || !mediafiles.IsVideo(filepath.Ext(file.Path)) {
 			continue
 		}
 		if unpacking.IsSatisfiedBy(ctx, &imports.ImportCandidate{SourcePath: filepath.Join(sc.root, file.Path)}) != nil {
+			continue
+		}
+		if discover && !file.Tracked {
+			result.Files = append(result.Files, RegisteredFile{File: file})
 			continue
 		}
 		var recordedSize int64
@@ -51,7 +63,7 @@ func (s *Service) ResolveActionFolder(ctx context.Context, mediaType, id string)
 		if err := s.db.QueryRowContext(ctx, query, id, filepath.Join(sc.root, file.Path)).Scan(&recordedSize, &mediaID); err != nil {
 			return ActionFolder{}, err
 		}
-		if recordedSize <= 0 || recordedSize != file.Size {
+		if !discover && (recordedSize <= 0 || recordedSize != file.Size) {
 			continue
 		}
 		result.Files = append(result.Files, RegisteredFile{File: file, MediaID: mediaID})

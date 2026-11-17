@@ -48,6 +48,8 @@ servers:
         default: loom.example.com
 
 tags:
+  - name: titles
+    description: Movie and series quick actions.
   - name: pairing
     description: Expiring TV authorization with explicit browser approval.
   - name: health
@@ -90,6 +92,98 @@ tags:
       manual merges. Reads resolve merged IDs; writes through stale merged IDs
       return 409 and require reloading the canonical collection.
 paths:
+  /api/v1/{collection}/{id}/actions:
+    parameters:
+      - $ref: "#/components/parameters/TitleActionCollection"
+      - $ref: "#/components/parameters/TitleFileID"
+    get:
+      tags: [titles]
+      operationId: getTitleActions
+      summary: Read title quick-action availability (admin).
+      description: |
+        Checks library files and connection configuration without contacting
+        media servers. Hide each sync action unless its Configured flag is true;
+        disable visible actions when their unavailable reason is non-null.
+        Missing status or absent registrations do not block rescan.
+      security: [{ cookieAuth: [] }, { apiKey: [] }, { bearerAuth: [] }]
+      responses:
+        "200":
+          description: Current availability, including reasons for blocked actions.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TitleActionAvailability" }
+        "401": { description: Authentication required. }
+        "403": { description: Administrator required. }
+        "503": { description: Administrator authentication is not configured. }
+  /api/v1/{collection}/{id}/rescan-library:
+    parameters:
+      - $ref: "#/components/parameters/TitleActionCollection"
+      - $ref: "#/components/parameters/TitleFileID"
+    post:
+      tags: [titles]
+      operationId: rescanTitleLibrary
+      summary: Discover files in a verified title library folder (admin).
+      description: |
+        Re-resolves the selected title folder and registers eligible new videos,
+        including for missing titles with no existing registrations. Repairs
+        availability and changed registrations. Skips incomplete files, symlinks,
+        samples and undersized unregistered videos. Rejects shared, ambiguous or
+        out-of-library folders. Does not scan the whole library or retry downloads.
+      security: [{ cookieAuth: [] }, { apiKey: [] }, { bearerAuth: [] }]
+      responses:
+        "200":
+          description: Completed scan; inspect status and errors for file-level failures.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TitleRescanResult" }
+        "401": { description: Authentication required. }
+        "403": { description: Administrator required. }
+        "409": { description: Title folder is unavailable or unsafe. }
+        "500": { description: Rescan failed. }
+        "503": { description: Scanning, library configuration or authentication is unavailable. }
+  /api/v1/{collection}/{id}/sync-plex:
+    parameters:
+      - $ref: "#/components/parameters/TitleActionCollection"
+      - $ref: "#/components/parameters/TitleFileID"
+    post:
+      tags: [titles]
+      operationId: syncTitlePlex
+      summary: Request Plex library refreshes for a title (admin).
+      description: |
+        Requires complete registered library files. Refreshes libraries on every
+        enabled, configured Plex connection, independently of Notify on Import.
+        Does not send Loom paths, download missing media or sync watched state.
+      security: [{ cookieAuth: [] }, { apiKey: [] }, { bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/TitleMediaServerRefreshed" }
+        "401": { description: Authentication required. }
+        "403": { description: Administrator required. }
+        "409": { description: Complete media or configured Plex connections are unavailable. }
+        "500": { description: Plex provider is unavailable. }
+        "502": { description: One or more Plex refreshes failed; partial success is reported. }
+        "503": { description: Administrator authentication is not configured. }
+  /api/v1/{collection}/{id}/sync-jellyfin:
+    parameters:
+      - $ref: "#/components/parameters/TitleActionCollection"
+      - $ref: "#/components/parameters/TitleFileID"
+    post:
+      tags: [titles]
+      operationId: syncTitleJellyfin
+      summary: Request Jellyfin library refreshes for a title (admin).
+      description: |
+        Requires complete registered library files. Requests a library-wide
+        refresh on every enabled, configured Jellyfin connection, independently
+        of Notify on Import. Does not send Loom paths, download missing media or
+        sync watched state.
+      security: [{ cookieAuth: [] }, { apiKey: [] }, { bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/TitleMediaServerRefreshed" }
+        "401": { description: Authentication required. }
+        "403": { description: Administrator required. }
+        "409": { description: Complete media or configured Jellyfin connections are unavailable. }
+        "500": { description: Jellyfin provider is unavailable. }
+        "502": { description: One or more Jellyfin refreshes failed; partial success is reported. }
+        "503": { description: Administrator authentication is not configured. }
   /api/v1/appearance:
     get:
       tags: [system]
@@ -4185,6 +4279,36 @@ paths:
 
 components:
   schemas:
+    TitleActionAvailability:
+      type: object
+      required: [folderPath, unavailableReason, rescanUnavailableReason, plexConfigured, plexUnavailableReason, jellyfinConfigured, jellyfinUnavailableReason]
+      properties:
+        folderPath: { type: [string, "null"] }
+        unavailableReason: { type: [string, "null"] }
+        rescanUnavailableReason: { type: [string, "null"] }
+        plexConfigured:
+          type: boolean
+          description: An enabled Plex connection has a valid server URL and token.
+        plexUnavailableReason: { type: [string, "null"] }
+        jellyfinConfigured:
+          type: boolean
+          description: An enabled Jellyfin connection has a valid server URL and API key.
+        jellyfinUnavailableReason: { type: [string, "null"] }
+    TitleRescanResult:
+      type: object
+      required: [id, libraryId, rootFolderPath, status, totalFiles, matched, unmatched, imported, startedAt]
+      properties:
+        id: { type: string }
+        libraryId: { type: string }
+        rootFolderPath: { type: string }
+        status: { type: string, enum: [completed, failed] }
+        totalFiles: { type: integer, minimum: 0 }
+        matched: { type: integer, minimum: 0 }
+        unmatched: { type: integer, minimum: 0 }
+        imported: { type: integer, minimum: 0 }
+        errors: { type: array, items: { type: string } }
+        startedAt: { type: string, format: date-time }
+        completedAt: { type: string, format: date-time }
     Appearance:
       type: object
       additionalProperties: false
@@ -6384,6 +6508,11 @@ components:
           type: boolean
 
   parameters:
+    TitleActionCollection:
+      name: collection
+      in: path
+      required: true
+      schema: { type: string, enum: [movies, series] }
     CollectionID:
       name: id
       in: path
@@ -6437,6 +6566,18 @@ components:
         type: string
 
   responses:
+    TitleMediaServerRefreshed:
+      description: All selected servers accepted the refresh; indexing may still be running.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [message, connections]
+            properties:
+              message:
+                type: string
+                enum: [Plex library refresh requested, Jellyfin library refresh requested]
+              connections: { type: integer, minimum: 1 }
     ImportAccepted:
       description: Durably queued; not a successful-import confirmation.
       content:
