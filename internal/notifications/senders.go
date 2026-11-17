@@ -3,13 +3,17 @@ package notifications
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/smtp"
 	"net/url"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -84,7 +88,123 @@ func (d *DiscordSender) Send(ctx context.Context, n Notification, s ConnectionSe
 			},
 		},
 	}
-	return postJSON(ctx, s.WebhookURL, payload)
+	return postDiscordJSON(ctx, s.WebhookURL, payload)
+}
+
+const maxDiscordRetries = 3
+
+type discordWebhookState struct {
+	mu        sync.Mutex
+	waitUntil time.Time
+}
+
+var discordWebhookStates sync.Map
+
+func discordWebhookStateFor(webhookURL string) *discordWebhookState {
+	key := fmt.Sprintf("%x", sha256.Sum256([]byte(webhookURL)))
+	state, _ := discordWebhookStates.LoadOrStore(key, &discordWebhookState{})
+	return state.(*discordWebhookState)
+}
+
+func postDiscordJSON(ctx context.Context, webhookURL string, payload any) error {
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("marshal payload: %w", err)
+	}
+
+	state := discordWebhookStateFor(webhookURL)
+	state.mu.Lock()
+	defer state.mu.Unlock()
+
+	for attempt := 0; ; attempt++ {
+		if wait := time.Until(state.waitUntil); wait > 0 {
+			timer := time.NewTimer(wait)
+			select {
+			case <-ctx.Done():
+				timer.Stop()
+				return ctx.Err()
+			case <-timer.C:
+			}
+		}
+
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, webhookURL, bytes.NewReader(body))
+		if err != nil {
+			return fmt.Errorf("create request: %w", err)
+		}
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := httpClient.Do(req)
+		if err != nil {
+			return fmt.Errorf("send request: %w", err)
+		}
+		respBody, readErr := io.ReadAll(io.LimitReader(resp.Body, 1024))
+		resp.Body.Close()
+		if readErr != nil {
+			return fmt.Errorf("read response: %w", readErr)
+		}
+
+		if resp.StatusCode == http.StatusTooManyRequests {
+			wait := discordRetryAfter(resp.Header, respBody)
+			if wait <= 0 {
+				wait = time.Second
+			}
+			state.waitUntil = time.Now().Add(wait)
+			if attempt >= maxDiscordRetries {
+				return fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(respBody))
+			}
+			continue
+		}
+
+		if resp.Header.Get("X-RateLimit-Remaining") == "0" {
+			if wait := parseDiscordDuration(resp.Header.Get("X-RateLimit-Reset-After")); wait > 0 {
+				state.waitUntil = time.Now().Add(wait)
+			}
+		}
+		if resp.StatusCode >= http.StatusBadRequest {
+			return fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(respBody))
+		}
+		return nil
+	}
+}
+
+func discordRetryAfter(headers http.Header, body []byte) time.Duration {
+	var response struct {
+		RetryAfter float64 `json:"retry_after"`
+	}
+	if err := json.Unmarshal(body, &response); err == nil && response.RetryAfter > 0 {
+		if wait := durationFromDiscordSeconds(response.RetryAfter); wait > 0 {
+			return wait
+		}
+	}
+
+	for _, value := range []string{
+		headers.Get("Retry-After"),
+		headers.Get("X-RateLimit-Reset-After"),
+	} {
+		if wait := parseDiscordDuration(value); wait > 0 {
+			return wait
+		}
+		if resetAt, err := http.ParseTime(value); err == nil {
+			if wait := time.Until(resetAt); wait > 0 {
+				return wait
+			}
+		}
+	}
+	return 0
+}
+
+func parseDiscordDuration(value string) time.Duration {
+	seconds, err := strconv.ParseFloat(value, 64)
+	if err != nil {
+		return 0
+	}
+	return durationFromDiscordSeconds(seconds)
+}
+
+func durationFromDiscordSeconds(seconds float64) time.Duration {
+	if math.IsNaN(seconds) || math.IsInf(seconds, 0) || seconds <= 0 || seconds > float64((1<<63-1)/int64(time.Second)) {
+		return 0
+	}
+	return time.Duration(seconds * float64(time.Second))
 }
 
 // WebhookSender posts the notification as JSON to a generic webhook URL.
