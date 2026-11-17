@@ -114,11 +114,19 @@ docker compose up -d            # runs loom + qbittorrent + prometheus + grafana
 ### Running tests
 
 ```bash
+make preflight     # local pre-merge checks for Go, scripts, and frontend
 make test          # full test suite with race detector
 make test-short    # fast subset
 make lint          # golangci-lint
 cd web && npx tsc --noEmit   # frontend type-check
 ```
+
+Run `make preflight` before pushing to catch common failures locally without
+waiting for hosted runners. It runs tests and checks on your current machine;
+it does not replace CI's cross-platform race tests, vulnerability scan, or
+platform-specific installer/build checks, which remain required before merge.
+If frontend dependencies are not installed, run
+`pnpm --dir web install --frozen-lockfile` first.
 
 ---
 
