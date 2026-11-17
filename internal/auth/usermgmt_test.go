@@ -65,6 +65,7 @@ func newUserMgmtService(t *testing.T) (*auth.Service, auth.Store, int64) {
 	if err != nil {
 		t.Fatalf("NewService: %v", err)
 	}
+	t.Cleanup(svc.Close)
 	return svc, store, admin.ID
 }
 

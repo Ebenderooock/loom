@@ -131,6 +131,7 @@ func cmdServe(ctx context.Context, args []string) error {
 	if err != nil {
 		return fmt.Errorf("init auth: %w", err)
 	}
+	defer authSvc.Close()
 
 	// Reconcile admin user from config on startup.
 	// If setup_complete=true and admin credentials are in config, ensure DB matches.

@@ -184,6 +184,7 @@ func TestTitleActionsRequireAdministrator(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(s.authSvc.Close)
 	user, err := store.CreateUser(context.Background(), auth.CreateUserParams{Username: "reader", PasswordHash: "synthetic", Role: "user"})
 	if err != nil {
 		t.Fatal(err)

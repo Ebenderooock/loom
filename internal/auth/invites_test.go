@@ -63,6 +63,7 @@ func newInviteService(t *testing.T) (*auth.Service, *auth.InviteStore, int64) {
 	if err != nil {
 		t.Fatalf("NewService: %v", err)
 	}
+	t.Cleanup(svc.Close)
 	return svc, invites, admin.ID
 }
 
@@ -244,6 +245,7 @@ func TestInvitesDisabledWhenStoreNil(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewService: %v", err)
 	}
+	t.Cleanup(svc.Close)
 	if _, err := svc.CreateInvite(ctx, 1, "", "user", 0); !errors.Is(err, auth.ErrInvitesDisabled) {
 		t.Fatalf("expected ErrInvitesDisabled, got %v", err)
 	}

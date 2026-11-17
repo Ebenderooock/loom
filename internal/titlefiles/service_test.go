@@ -457,6 +457,7 @@ func TestRouterWithRealSessionAuthorization(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(service.Close)
 	router := Router(f.s, service.RequireRole("admin"))
 	for _, role := range []string{"", "user", "admin"} {
 		cookie := ""
