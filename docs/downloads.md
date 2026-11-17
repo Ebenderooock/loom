@@ -70,7 +70,9 @@ while staging and backing up; a crash does not leave a gap between removing it
 and publishing the new file. Backups use hardlinks where possible and otherwise
 require a verified copy. Registration failures restore the old file where
 possible; if restoration or recycling fails, the error identifies the preserved
-backup. A crash can leave an orphaned backup in that directory, but retries
+backup. On Windows, a reader opening the new file can block restoration; the
+complete new file stays live and the old file remains at the reported backup
+path. A crash can leave an orphaned backup in that directory, but retries
 can verify the live file and finish registration. Filesystems lacking safe
 no-replace publication report an error rather than blindly overwriting.
 If a complete copy was published before history was recorded, retries verify

@@ -100,6 +100,10 @@ read for missing or incomplete media, requires unchanged identity and bytes on
 Windows publication denials, and requires a real replacement after the reader
 closes. Separate Windows tests hold ordinary and delete-sharing readers open
 and require both files and registration to survive blocked publication.
+If a reader opens the newly published file before registration rollback,
+Windows can also deny restoration. The test then requires a reported backup
+containing the old bytes, a complete new live file, the unchanged source and
+registration, and a successful replacement after the reader closes.
 Replacement never removes the live path first or promises Unix atomic-rename
 semantics on Windows; see Microsoft's
 [open-file rename restrictions](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/ntifs/ns-ntifs-_file_rename_information#remarks).
@@ -108,8 +112,8 @@ On macOS, replacement publication and registration rollback use `RENAME_SWAP`
 instead of ordinary rename to avoid intermittent missing-path errors for
 concurrent APFS readers. The live-path test exercises successful replacements
 and forced registration failures, requiring complete media throughout and the
-original file identity and bytes after rollback. Unsupported swaps fail without
-removing the live destination.
+original file identity and bytes after successful rollback. Unsupported swaps
+fail without removing the live destination.
 
 ## Hot-reload loop
 

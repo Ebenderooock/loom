@@ -8,6 +8,6 @@ func readReplacementDestination(path string) ([]byte, error) {
 	return os.ReadFile(path)
 }
 
-func replacementBlockedByOpenReader(_ error, _ string) bool {
+func replacementBlockedByOpenReader(_ error, _, _ string) bool {
 	return false
 }

@@ -260,9 +260,35 @@ func testReplacementKeepsLivePathAvailable(t *testing.T, failRegistration bool) 
 		if failRegistration && err == nil {
 			t.Fatal("expected registration failure")
 		}
+		if data, err := os.ReadFile(path); err != nil || string(data) != wantSource {
+			t.Fatalf("replacement changed source bytes: %q, %v", data, err)
+		}
+		if failRegistration && replacementBlockedByOpenReader(err, dest, "previous") {
+			// A Windows reader can open the new file before rollback begins.
+			stopReader()
+			backups, globErr := filepath.Glob(filepath.Join(filepath.Dir(dest), ".loom-replacement-*", "previous"))
+			if globErr != nil || len(backups) != 1 {
+				t.Fatalf("blocked rollback lost backup: %v, %v", backups, globErr)
+			}
+			if !strings.Contains(err.Error(), backups[0]) {
+				t.Fatalf("blocked rollback did not report backup path: %v", err)
+			}
+			if data, err := os.ReadFile(backups[0]); err != nil || string(data) != string(previous) {
+				t.Fatalf("blocked rollback lost old bytes: %q, %v", data, err)
+			}
+			if data, err := os.ReadFile(dest); err != nil || string(data) != wantSource {
+				t.Fatalf("blocked rollback changed new bytes: %q, %v", data, err)
+			}
+			var quality string
+			var size int64
+			if err := p.db.QueryRow(`SELECT quality, size FROM movie_files`).Scan(&quality, &size); err != nil || quality != "hdtv-1080p" || size != 9 {
+				t.Fatalf("blocked rollback changed registration: quality=%q size=%d err=%v", quality, size, err)
+			}
+			break
+		}
 		if err != nil {
 			rolledBack := failRegistration && strings.Contains(err.Error(), "library update failed (source preserved)")
-			if !rolledBack && !replacementBlockedByOpenReader(err, dest) {
+			if !rolledBack && !replacementBlockedByOpenReader(err, dest, "incoming") {
 				t.Fatal(err)
 			}
 			current, statErr := os.Stat(dest)
@@ -272,9 +298,6 @@ func testReplacementKeepsLivePathAvailable(t *testing.T, failRegistration bool) 
 			if data, err := readReplacementDestination(dest); err != nil || string(data) != string(previous) {
 				t.Fatalf("blocked replacement changed live bytes: %q, %v", data, err)
 			}
-		}
-		if data, err := os.ReadFile(path); err != nil || string(data) != wantSource {
-			t.Fatalf("replacement changed source bytes: %q, %v", data, err)
 		}
 	}
 	stopReader()
