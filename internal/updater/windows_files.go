@@ -143,12 +143,15 @@ func winValidateStreamInfo(info []byte, dir bool) error {
 func winCopySnapshot(source, dest, relative string, limit int64) (winMeta, error) {
 	in, err := winOpen(source, windows.GENERIC_READ|windows.ACCESS_SYSTEM_SECURITY)
 	if err != nil {
-		return winMeta{}, err
+		return winMeta{}, fmt.Errorf("open Windows snapshot source %q: %w", relative, err)
 	}
 	defer func() { _ = in.Close() }()
 	meta, err := winMetadata(in, relative)
-	if err != nil || meta.Dir {
-		return meta, errors.New("invalid Windows snapshot file/security")
+	if err != nil {
+		return meta, fmt.Errorf("Windows snapshot metadata %q: %w", relative, err)
+	}
+	if meta.Dir {
+		return meta, fmt.Errorf("Windows snapshot source %q is a directory", relative)
 	}
 	info, err := in.Stat()
 	if err != nil || info.Size() > limit {
@@ -202,7 +205,7 @@ func winSnapshotTree(source, dest string) ([]winMeta, error) {
 		meta, err := winMetadata(f, rel)
 		_ = f.Close()
 		if err != nil {
-			return err
+			return fmt.Errorf("Windows snapshot directory metadata %q: %w", rel, err)
 		}
 		if err := os.Mkdir(filepath.Join(dest, rel), 0700); err != nil {
 			return err

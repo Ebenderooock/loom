@@ -32,6 +32,8 @@ type winTestControl struct {
 	failHealth bool
 }
 
+var errWinTestHealth = errors.New("simulated candidate health failure")
+
 func (c *winTestControl) validate(context.Context) error           { return nil }
 func (c *winTestControl) runtime(context.Context) (Runtime, error) { return c.r, nil }
 func (c *winTestControl) captureToken() error                      { return nil }
@@ -64,7 +66,7 @@ func (c *winTestControl) healthy(_ context.Context, want Identity) error {
 			return err
 		}
 		_, err = db.Exec("UPDATE sample SET value='migrated'")
-		return errors.Join(err, db.Close(), errors.New("simulated candidate health failure"))
+		return errors.Join(err, db.Close(), errWinTestHealth)
 	}
 	c.r.Identity = want
 	return nil
@@ -156,6 +158,25 @@ func winTestTransaction(t *testing.T) (*winTransaction, *winTestControl) {
 	if err = errors.Join(err, db.Close()); err != nil {
 		t.Fatal(err)
 	}
+	// Child files inherit DACLs, not their parent's owner. The runner's token
+	// supplies the default owner (which can be its individual user even when
+	// elevated). Model the enrolled installation explicitly instead of relying
+	// on that machine-specific default.
+	for _, file := range []struct {
+		path, serviceRights string
+		rights              uint32
+	}{
+		{filepath.Join(BinDir, "loom.exe"), "FRFX", windows.FILE_GENERIC_READ | windows.FILE_GENERIC_EXECUTE},
+		{filepath.Join(ConfigDir, "loom.yaml"), "0x1301bf", 0x1301bf},
+		{DBPath, "0x1301bf", 0x1301bf},
+	} {
+		if err := winProtect(file.path, winSDDL(file.serviceRights, false)); err != nil {
+			t.Fatalf("secure fixture file %s: %v", filepath.Base(file.path), err)
+		}
+		if err := winTrusted(file.path, file.rights, false); err != nil {
+			t.Fatalf("validate fixture file %s: %v", filepath.Base(file.path), err)
+		}
+	}
 	before := Identity{"1.0.0", strings.Repeat("a", 40), "refs/tags/v1.0.0", "stable"}
 	if err := winAtomicJSON(StateDir, "state.json", state{Installed: before}); err != nil {
 		t.Fatal(err)
@@ -189,6 +210,9 @@ func TestWindowsNTFSTransactionAndRollback(t *testing.T) {
 			err = tx.run(t.Context())
 			if (err != nil) != fail {
 				t.Fatalf("transaction=%v want rollback=%v", err, fail)
+			}
+			if fail && !errors.Is(err, errWinTestHealth) {
+				t.Fatalf("transaction failed before simulated candidate health check: %v", err)
 			}
 			want := "new executable"
 			if fail {
@@ -317,10 +341,39 @@ func TestWindowsNTFSRejectsHardlinksAndStreams(t *testing.T) {
 	if err := os.WriteFile(file, []byte("file"), 0600); err != nil {
 		t.Fatal(err)
 	}
+	if err := winProtect(file, winSDDL("0x1301bf", false)); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(file+":private", []byte("stream"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := winCopySnapshot(file, filepath.Join(StateDir, "invalid-copy"), "with-stream", 1024); err == nil {
-		t.Fatal("alternate stream accepted")
+	if _, err := winCopySnapshot(file, filepath.Join(StateDir, "invalid-copy"), "with-stream", 1024); err == nil ||
+		(!strings.Contains(err.Error(), "NTFS alternate streams require manual updates") && !strings.Contains(err.Error(), "unexpected NTFS stream")) {
+		t.Fatalf("snapshot did not reject the alternate stream: %v", err)
+	}
+}
+
+func TestWindowsNTFSSnapshotRejectsUntrustedOwner(t *testing.T) {
+	_, _ = winTestTransaction(t)
+	source := filepath.Join(BinDir, "loom.exe")
+	dest := filepath.Join(StateDir, "owner-test-copy")
+	// Force an untrusted owner regardless of the runner token's default owner.
+	// Keep the DACL unchanged to isolate the ownership check.
+	untrusted := strings.Replace(winSDDL("FRFX", false), "O:SY", "O:BU", 1)
+	if err := winProtect(source, untrusted); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := winCopySnapshot(source, dest, "loom.exe", 1024); err == nil ||
+		!strings.Contains(err.Error(), `Windows snapshot metadata "loom.exe": validate Windows file descriptor: untrusted Windows object owner`) {
+		t.Fatalf("snapshot did not report the underlying owner rejection: %v", err)
+	}
+	if _, err := os.Stat(dest); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("untrusted snapshot created a destination: %v", err)
+	}
+	if err := winProtect(source, winSDDL("FRFX", false)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := winCopySnapshot(source, dest, "loom.exe", 1024); err != nil {
+		t.Fatalf("system-owned snapshot rejected: %v", err)
 	}
 }
