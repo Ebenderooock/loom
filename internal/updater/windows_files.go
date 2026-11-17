@@ -7,11 +7,13 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"unicode/utf16"
+	"unsafe"
 
 	"golang.org/x/sys/windows"
 )
@@ -41,7 +43,7 @@ func winMetadata(f *os.File, relative string) (winMeta, error) {
 		return winMeta{}, errors.New("NTFS extended attributes require manual updates")
 	}
 	dir := info.FileAttributes&windows.FILE_ATTRIBUTE_DIRECTORY != 0
-	var streams [8192]byte
+	streams := winStreamInfoBuffer()
 	streamErr := windows.GetFileInformationByHandleEx(h, windows.FileStreamInfo, &streams[0], uint32(len(streams)))
 	if dir {
 		// NTFS directories have the ordinary $I30 index-allocation stream.
@@ -50,13 +52,13 @@ func winMetadata(f *os.File, relative string) (winMeta, error) {
 		if errors.Is(streamErr, windows.ERROR_HANDLE_EOF) {
 			// No streams were returned.
 		} else if streamErr != nil {
-			return winMeta{}, errors.New("directory streams or unsupported NTFS stream query")
+			return winMeta{}, winStreamQueryError("directory", streamErr)
 		} else if err := winValidateStreamInfo(streams[:], true); err != nil {
 			return winMeta{}, err
 		}
 	} else {
 		if streamErr != nil {
-			return winMeta{}, streamErr
+			return winMeta{}, winStreamQueryError("file", streamErr)
 		}
 		if err := winValidateStreamInfo(streams[:], false); err != nil {
 			return winMeta{}, err
@@ -77,6 +79,24 @@ func winMetadata(f *os.File, relative string) (winMeta, error) {
 		return winMeta{}, err
 	}
 	return winMeta{Path: relative, SDDL: sd.String(), Dir: dir, Attributes: info.FileAttributes}, nil
+}
+
+// FILE_STREAM_INFO requires an 8-byte-aligned output buffer. A byte array's
+// alignment is only one byte, so align the backing allocation explicitly.
+func winStreamInfoBuffer() []byte {
+	const size = 8192
+	buffer := make([]byte, size+7)
+	address := uintptr(unsafe.Pointer(&buffer[0])) // #nosec G103 -- inspect alignment without reconstructing the pointer
+	offset := int((8 - address%8) % 8)
+	return buffer[offset : offset+size]
+}
+
+func winStreamQueryError(kind string, err error) error {
+	var code windows.Errno
+	if errors.As(err, &code) {
+		return fmt.Errorf("query %s NTFS streams (Windows error 0x%08x): %w", kind, uint32(code), err)
+	}
+	return fmt.Errorf("query %s NTFS streams: %w", kind, err)
 }
 
 // FileStreamInfo lists ordinary NTFS files as "::$DATA" and directories as

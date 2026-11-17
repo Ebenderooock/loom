@@ -13,6 +13,7 @@ import (
 	"strings"
 	"testing"
 	"unicode/utf16"
+	"unsafe"
 
 	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/svc/mgr"
@@ -82,6 +83,16 @@ func TestWindowsNTFSStreamInfoValidation(t *testing.T) {
 				t.Fatalf("validation error=%v want accepted=%v", err, tc.ok)
 			}
 		})
+	}
+}
+
+func TestWindowsNTFSStreamInfoBufferAlignment(t *testing.T) {
+	streams := winStreamInfoBuffer()
+	if len(streams) != 8192 {
+		t.Fatalf("stream buffer length=%d want=8192", len(streams))
+	}
+	if address := uintptr(unsafe.Pointer(&streams[0])); address%8 != 0 { // #nosec G103 -- inspect alignment in this regression test
+		t.Fatalf("stream buffer address %#x is not 8-byte aligned", address)
 	}
 }
 
