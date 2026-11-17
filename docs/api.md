@@ -102,6 +102,51 @@ should work against Loom unchanged.
 
 ## Routes (current)
 
+### Movie and series quick actions
+
+These administrator-only routes use `movies` or `series` as the collection and
+the Loom title ID as `{id}`:
+
+| Method | Route suffix | Result |
+|---|---|---|
+| GET | `/api/v1/{collection}/{id}/actions` | Folder and action availability; no requests to media servers. |
+| POST | `/api/v1/{collection}/{id}/rescan-library` | Discover eligible videos in the verified title folder and update registrations and availability. |
+| POST | `/api/v1/{collection}/{id}/sync-plex` | Request library refreshes on enabled Plex connections. |
+| POST | `/api/v1/{collection}/{id}/sync-jellyfin` | Request library refreshes on enabled Jellyfin connections. |
+
+```bash
+curl -H "X-Api-Key: $LOOM_API_KEY" \
+  http://localhost:1925/api/v1/movies/MOVIE_ID/actions
+curl -X POST -H "X-Api-Key: $LOOM_API_KEY" \
+  http://localhost:1925/api/v1/movies/MOVIE_ID/rescan-library
+curl -X POST -H "X-Api-Key: $LOOM_API_KEY" \
+  http://localhost:1925/api/v1/movies/MOVIE_ID/sync-plex
+curl -X POST -H "X-Api-Key: $LOOM_API_KEY" \
+  http://localhost:1925/api/v1/movies/MOVIE_ID/sync-jellyfin
+```
+
+Availability includes nullable `folderPath`, `unavailableReason`,
+`rescanUnavailableReason`, `plexUnavailableReason` and
+`jellyfinUnavailableReason`, plus booleans `plexConfigured` and
+`jellyfinConfigured`. Hide each sync action unless its corresponding boolean
+is true; show it disabled when its unavailable reason is non-null.
+
+Missing status or absent registrations do not block rescan. The request resolves
+the folder again, discovers eligible new files, and returns a scan result with
+`status`, `totalFiles`, `matched`, `imported`, `unmatched` and optional `errors`.
+An HTTP 200 result can contain file-level errors with `status: "failed"`.
+Missing, shared, ambiguous or out-of-library folders return 409; no broad
+library scan or download is started. Scanning unavailable returns 503.
+
+Sync still requires complete registered files and a configured, enabled
+connection of the selected type. Success returns HTTP 200 with
+`{"message":"Jellyfin library refresh requested","connections":1}` (or the Plex
+equivalent). This confirms acceptance, not completed indexing. Refreshes are
+library-wide, do not send Loom paths, and do not depend on Notify on Import.
+Unavailable media or connections return 409; any failed server refresh returns
+502, including partial success. These actions require authentication (401)
+and administrator access (403).
+
 ### Appearance
 
 `GET /api/v1/appearance` returns the instance-wide settings to any authenticated

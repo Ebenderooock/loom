@@ -63,20 +63,24 @@ the current source, not a promise that an older binary includes every feature.
 ## Title quick actions
 
 Movie and series detail views have a **More actions** (`...`) menu with
-**Sync with Plex**, **Refresh metadata**, **Rescan library files**,
+**Sync with Plex**, **Sync with Jellyfin**, **Refresh metadata**, **Rescan library files**,
 **View import history**, and **Copy folder path**.
 History is filtered to the selected movie or the selected series's episodes.
 The other actions require an administrator.
 
-Plex sync requires complete registered media in the title's library and an
-enabled Plex connection. It requests a **library-wide refresh** on each enabled
-Plex server, not a title-specific scan, download, or watched-state sync.
-Loom paths are not sent to Plex, so different Windows/Linux mount paths are safe.
-Success means Plex accepted the refresh, not that indexing has finished.
+Plex and Jellyfin sync require complete registered media in the title's library
+and an enabled, configured connection for the respective server; each action
+is hidden without one. These actions request a **library-wide refresh** on each
+enabled server of the selected type, not a title-specific scan, download, or
+watched-state sync. Loom paths are not sent to either server, so different
+Windows/Linux mount paths are safe.
+Success means the server accepted the refresh, not that indexing has finished.
 
-The file rescan **checks registered imported files only**; it does not discover
-or ingest unregistered files. Files must still exist with their recorded,
-nonzero size. Temporary files, symbolic links, shared/ambiguous folders, and
+The file rescan **discovers new files in the title's library folder** and updates
+availability, even when the title is marked missing or has no registered files.
+It remains available when no folder is currently found; running it rechecks the
+folder and reports an error if it is still unavailable.
+Temporary files, symbolic links, shared/ambiguous folders, and
 paths outside the title's assigned library are excluded. Copy uses the resolved
 existing title folder, never a guessed folder name. Series metadata refresh
 preserves episode IDs and file links rather than rebuilding the episode catalog
