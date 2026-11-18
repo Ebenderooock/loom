@@ -8,6 +8,8 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+
+	"github.com/ebenderooock/loom/internal/qualityprofiles"
 )
 
 // Router returns a chi.Router for the /api/v1/custom-formats endpoints.
@@ -109,7 +111,8 @@ func (h *handler) delete(w http.ResponseWriter, r *http.Request) {
 // test evaluates a release title against all stored custom formats.
 func (h *handler) test(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Title string `json:"title"`
+		Title            string `json:"title"`
+		QualityProfileID string `json:"quality_profile_id"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		h.writeError(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
@@ -133,11 +136,32 @@ func (h *handler) test(w http.ResponseWriter, r *http.Request) {
 		matches = []FormatMatch{}
 	}
 
-	h.writeJSON(w, http.StatusOK, map[string]any{
+	response := map[string]any{
 		"release": ri,
 		"matches": matches,
 		"score":   TotalScore(matches),
-	})
+	}
+	if req.QualityProfileID != "" {
+		profile, err := qualityprofiles.NewStore(h.store.db).Get(r.Context(), req.QualityProfileID)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				h.writeError(w, http.StatusNotFound, "quality profile not found")
+			} else {
+				h.writeError(w, http.StatusInternalServerError, err.Error())
+			}
+			return
+		}
+		scores := make(map[string]int, len(profile.FormatItems))
+		for _, item := range profile.FormatItems {
+			scores[item.FormatID] = item.Score
+		}
+		total := ApplyScores(matches, scores)
+		response["score"] = total
+		response["quality_profile_id"] = profile.ID
+		response["minimum_score"] = profile.MinFormatScore
+		response["meets_minimum"] = total >= profile.MinFormatScore
+	}
+	h.writeJSON(w, http.StatusOK, response)
 }
 
 func (h *handler) writeJSON(w http.ResponseWriter, status int, v any) {

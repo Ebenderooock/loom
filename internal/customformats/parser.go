@@ -1,58 +1,34 @@
 package customformats
 
 import (
-	"regexp"
+	"fmt"
 	"strings"
-)
 
-var (
-	reResolution = regexp.MustCompile(`(?i)\b(2160p|1080p|720p|480p)\b`)
-	reSource     = regexp.MustCompile(`(?i)\b(blu-?ray|bdremux|bdrip|web-?dl|webrip|web|hdtv|dvdrip|dvd|cam|ts|telesync|telecine)\b`)
-	reCodec      = regexp.MustCompile(`(?i)\b(x264|h\.?264|x265|h\.?265|hevc|av1|vp9|xvid|divx|mpeg2)\b`)
-	reAudio      = regexp.MustCompile(`(?i)\b(dts-hd[. ]?ma|dts-hd|truehd|atmos|flac|aac|dd5\.?1|ddp?5\.?1|ac3|dts|lpcm|opus|eac3)\b`)
-	reGroup      = regexp.MustCompile(`-([A-Za-z0-9]+)(?:\.[a-z]{2,4})?$`)
-	reLanguage   = regexp.MustCompile(`(?i)\b(multi|dual|french|german|spanish|italian|portuguese|russian|japanese|korean|chinese|hindi|arabic|dutch|swedish|norwegian|danish|finnish|polish|czech|turkish|thai|vietnamese|english)\b`)
+	"github.com/ebenderooock/loom/internal/parser"
+	"github.com/ebenderooock/loom/internal/qualityprofiles"
 )
 
 // ParseReleaseName extracts structured metadata from a release title.
 func ParseReleaseName(title string) ReleaseInfo {
-	ri := ReleaseInfo{Title: title}
-
-	if m := reResolution.FindString(title); m != "" {
-		ri.Resolution = normaliseResolution(m)
-	}
-
-	if m := reSource.FindString(title); m != "" {
-		ri.Source = normaliseSource(m)
-	}
-
-	if m := reCodec.FindString(title); m != "" {
-		ri.Codec = normaliseCodec(m)
-	}
-
-	if m := reAudio.FindString(title); m != "" {
-		ri.Audio = normaliseAudio(m)
-	}
-
-	if m := reGroup.FindStringSubmatch(title); len(m) > 1 {
-		ri.Group = m[1]
-	}
-
-	langs := reLanguage.FindAllString(title, -1)
-	seen := make(map[string]bool, len(langs))
-	for _, l := range langs {
-		key := strings.ToUpper(l)
-		if !seen[key] {
-			seen[key] = true
-			ri.Languages = append(ri.Languages, normaliseLang(l))
-		}
-	}
-
-	return ri
+	return FromParsedRelease(parser.Parse(title))
 }
 
-func normaliseResolution(s string) string {
-	return strings.ToLower(s)
+// FromParsedRelease shares the acquisition/import parser's evidence with the
+// custom-format tester, retaining the field names used by saved format rules.
+func FromParsedRelease(release *parser.Release) ReleaseInfo {
+	ri := ReleaseInfo{
+		Title:     release.Name,
+		Quality:   qualityprofiles.QualityNameFromRelease(release),
+		Source:    normaliseSource(release.Source),
+		Codec:     normaliseCodec(release.Codec),
+		Audio:     normaliseAudio(release.Audio),
+		Group:     release.Group,
+		Languages: release.Languages,
+	}
+	if release.Resolution > 0 {
+		ri.Resolution = fmt.Sprintf("%dp", release.Resolution)
+	}
+	return ri
 }
 
 func normaliseSource(s string) string {
@@ -127,20 +103,5 @@ func normaliseAudio(s string) string {
 		return "Opus"
 	default:
 		return s
-	}
-}
-
-func normaliseLang(s string) string {
-	switch strings.ToUpper(s) {
-	case "MULTI":
-		return "MULTi"
-	case "DUAL":
-		return "DUAL"
-	default:
-		// Capitalise first letter.
-		if len(s) == 0 {
-			return s
-		}
-		return strings.ToUpper(s[:1]) + strings.ToLower(s[1:])
 	}
 }

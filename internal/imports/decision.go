@@ -17,6 +17,7 @@ const (
 	RejectionNotUpgrade        ImportRejectionReason = "not_upgrade"
 	RejectionNoAudio           ImportRejectionReason = "no_audio"
 	RejectionDangerousFile     ImportRejectionReason = "dangerous_file"
+	RejectionCustomFormat      ImportRejectionReason = "custom_format_score"
 )
 
 // ImportRejection represents a single reason a file was rejected.

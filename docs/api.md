@@ -67,6 +67,27 @@ responses expose `qualityProfileMissing`, computed against both current and
 active legacy profiles, so existing blank, deleted or dangling selections are
 highlighted without incorrectly flagging valid legacy profiles.
 
+## Custom-format testing
+
+`POST /api/v1/custom-formats/test` accepts `title` and an optional saved
+`quality_profile_id`. It returns parsed `release` metadata, matching formats
+in `matches`, and their total `score`. With a profile, each match receives that
+profile's signed points, and the response includes `quality_profile_id`,
+`minimum_score`, and `meets_minimum`. Missing profiles return 404.
+
+```json
+{
+  "title": "the.body.2026.s01e07.1080p.web.h264-cakes[EZTVx.to].mkv",
+  "quality_profile_id": "your-saved-profile-id"
+}
+```
+
+Without a profile, testing only answers which formats match; compatibility
+`score: 0` is not a calculated profile score. Unassigned formats add zero points.
+Passing the format minimum does not make an excluded base quality acceptable.
+Post-download file conditions are evaluated against file metadata during import,
+not inferred from a title-only test. See [release matching](release-matching.md#custom-format-points-and-imports).
+
 ## Manual media imports
 
 `POST /api/v1/imports/scans` accepts `{path}` and returns **202 `{data: ImportScan}`**

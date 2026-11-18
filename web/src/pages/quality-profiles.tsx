@@ -223,7 +223,11 @@ export function QualityProfilesPage() {
                 </div>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="icon">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-label={`Actions for ${qp.name}`}
+                    >
                       <MoreVertical className="h-4 w-4" />
                     </Button>
                   </DropdownMenuTrigger>
@@ -285,8 +289,16 @@ function ProfileDialog({
   const [upgradeAllowed, setUpgradeAllowed] = React.useState(
     initial?.upgrade_allowed ?? true,
   );
-  const [formatItems, setFormatItems] = React.useState<FormatItem[]>(
-    initial?.format_items ?? [],
+  // Keep numeric drafts as text so typing a minus sign or clearing an input
+  // does not immediately reset it to 0. Convert to API integers on save.
+  const [formatItems, setFormatItems] = React.useState(
+    (initial?.format_items ?? []).map((fi) => ({
+      ...fi,
+      score: String(fi.score),
+    })),
+  );
+  const [minFormatScore, setMinFormatScore] = React.useState(
+    String(initial?.min_format_score ?? 0),
   );
 
   // Parse existing items into a checked-map keyed by quality definition ID
@@ -331,20 +343,22 @@ function ProfileDialog({
 
   const selectedCount = definitions.filter((d) => checkedItems[d.id]).length;
 
-  const updateFormatScore = (cfId: string, score: number) => {
+  const updateFormatScore = (cfId: string, score: string) => {
     setFormatItems((prev) => {
-      const existing = prev.find((fi) => fi.custom_format_id === cfId);
+      const matchesFormat = (
+        fi: Pick<FormatItem, "custom_format_id" | "format_id">,
+      ) => (fi.custom_format_id || fi.format_id) === cfId;
+      const existing = prev.find(matchesFormat);
       if (existing) {
-        return prev.map((fi) =>
-          fi.custom_format_id === cfId ? { ...fi, score } : fi,
-        );
+        return prev.map((fi) => (matchesFormat(fi) ? { ...fi, score } : fi));
       }
       return [...prev, { custom_format_id: cfId, score }];
     });
   };
 
   const getScore = (cfId: string) =>
-    formatItems.find((fi) => fi.custom_format_id === cfId)?.score ?? 0;
+    formatItems.find((fi) => (fi.custom_format_id || fi.format_id) === cfId)
+      ?.score ?? "0";
 
   const handleSave = () => {
     if (!name.trim()) {
@@ -360,6 +374,10 @@ function ProfileDialog({
       allowed: checkedItems[d.id] ?? false,
     }));
     const itemsJson = JSON.stringify(itemsArray);
+    const formatScores = formatItems.map((fi) => ({
+      ...fi,
+      score: parseInt(fi.score, 10) || 0,
+    }));
 
     if (isEdit) {
       updateMut.mutate(
@@ -370,7 +388,8 @@ function ProfileDialog({
             cutoff,
             items: itemsJson,
             upgrade_allowed: upgradeAllowed,
-            format_items: formatItems,
+            format_items: formatScores,
+            min_format_score: parseInt(minFormatScore, 10) || 0,
           },
         },
         {
@@ -388,7 +407,8 @@ function ProfileDialog({
           cutoff,
           items: itemsJson,
           upgrade_allowed: upgradeAllowed,
-          format_items: formatItems,
+          format_items: formatScores,
+          min_format_score: parseInt(minFormatScore, 10) || 0,
         },
         {
           onSuccess: () => {
@@ -403,21 +423,30 @@ function ProfileDialog({
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="flex max-h-[85vh] max-w-2xl flex-col">
-        <DialogHeader>
+      <DialogContent className="flex max-h-[85vh] max-w-2xl flex-col overflow-hidden">
+        <DialogHeader className="shrink-0">
           <DialogTitle>{isEdit ? "Edit" : "Add"} Quality Profile</DialogTitle>
           <DialogDescription>
             Configure quality tiers and custom format scoring.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex-1 space-y-4 overflow-hidden">
+        {/* The scroll region is focusable for keyboard scrolling without
+            moving focus through every quality checkbox. */}
+        <div
+          role="region"
+          aria-label="Quality profile settings"
+          // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- keyboard users must be able to scroll the settings region itself
+          tabIndex={0}
+          className="relative -mx-1 min-h-0 flex-1 space-y-4 overflow-y-auto p-1"
+        >
           {/* Name */}
           <div className="space-y-2">
-            <Label className="text-sm text-muted-foreground">
+            <Label htmlFor="qp-name" className="text-sm text-muted-foreground">
               Profile Name
             </Label>
             <Input
+              id="qp-name"
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="e.g. HD-1080p"
@@ -458,7 +487,7 @@ function ProfileDialog({
               </Button>
             </div>
 
-            <div className="max-h-[30vh] overflow-y-auto rounded-md border border-border">
+            <div className="relative max-h-[30vh] overflow-y-auto rounded-md border border-border">
               {groups.map((group) => {
                 const groupAllChecked = group.defs.every(
                   (d) => checkedItems[d.id],
@@ -529,17 +558,27 @@ function ProfileDialog({
           {/* Cutoff selector */}
           {selectedCount > 0 && (
             <div className="space-y-2">
-              <Label className="text-sm text-muted-foreground">Cutoff</Label>
-              <p className="-mt-1 text-xs text-muted-foreground">
-                Once this quality is reached, no further upgrades will be
-                downloaded.
+              <Label
+                htmlFor="qp-cutoff"
+                className="text-sm text-muted-foreground"
+              >
+                Quality cutoff
+              </Label>
+              <p
+                id="qp-cutoff-help"
+                className="-mt-1 text-xs text-muted-foreground"
+              >
+                Quality tier used as the upgrade target when upgrades are
+                allowed. This is not a custom format score.
               </p>
               <select
+                id="qp-cutoff"
+                aria-describedby="qp-cutoff-help"
                 value={cutoff}
                 onChange={(e) => setCutoff(e.target.value)}
                 className="w-full rounded-md border border-border bg-card px-3 py-2 text-sm text-foreground"
               >
-                <option value="">None (always upgrade)</option>
+                <option value="">None (no quality cutoff)</option>
                 {definitions
                   .filter((d) => checkedItems[d.id])
                   .map((d) => (
@@ -554,35 +593,67 @@ function ProfileDialog({
           {/* Custom format scores */}
           {customFormats.length > 0 && (
             <div className="space-y-2">
-              <Label className="text-sm text-muted-foreground">
-                Custom Format Scores
-              </Label>
-              <div className="max-h-40 divide-y divide-border overflow-y-auto rounded-md border border-border">
+              <h3 className="text-sm text-muted-foreground">
+                Custom Format Scores (points)
+              </h3>
+              <p id="qp-format-help" className="text-xs text-muted-foreground">
+                Matching formats add their scores for this profile. Positive
+                points favor a release, negative points penalize it, and 0 is
+                neutral. Quality tiers rank first; format points rank releases
+                within the same tier. Formats do not replace the detected base
+                quality.
+              </p>
+              <div className="divide-y divide-border rounded-md border border-border">
                 {customFormats.map((cf) => (
                   <div
                     key={cf.id}
-                    className="flex items-center justify-between px-3 py-2"
+                    className="flex items-center justify-between gap-3 px-3 py-2"
                   >
-                    <span className="text-sm text-foreground">{cf.name}</span>
+                    <Label
+                      htmlFor={`qp-format-${cf.id}`}
+                      className="min-w-0 break-words text-sm text-foreground"
+                    >
+                      {cf.name}
+                      <span className="sr-only"> score (points)</span>
+                    </Label>
                     <Input
+                      id={`qp-format-${cf.id}`}
+                      aria-describedby="qp-format-help"
                       type="number"
-                      className="h-8 w-24 border-border bg-card text-sm"
+                      className="h-8 w-24 shrink-0 border-border bg-card text-sm"
                       value={getScore(cf.id)}
-                      onChange={(e) =>
-                        updateFormatScore(
-                          cf.id,
-                          parseInt(e.target.value, 10) || 0,
-                        )
-                      }
+                      onChange={(e) => updateFormatScore(cf.id, e.target.value)}
                     />
                   </div>
                 ))}
               </div>
             </div>
           )}
+
+          <div className="space-y-2">
+            <Label
+              htmlFor="qp-min-score"
+              className="text-sm text-muted-foreground"
+            >
+              Minimum custom format score (points)
+            </Label>
+            <Input
+              id="qp-min-score"
+              type="number"
+              aria-describedby="qp-min-score-help"
+              value={minFormatScore}
+              onChange={(e) => setMinFormatScore(e.target.value)}
+              className="border-border bg-card"
+            />
+            <p id="qp-min-score-help" className="text-xs text-muted-foreground">
+              A release must reach this total from matching formats. No matches
+              contribute 0 points. This is an acceptance threshold, not an
+              upgrade cutoff.
+            </p>
+          </div>
         </div>
 
-        <DialogFooter>
+        <DialogFooter className="shrink-0">
           <Button variant="outline" onClick={onClose}>
             Cancel
           </Button>

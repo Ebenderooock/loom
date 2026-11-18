@@ -15,6 +15,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Apply assigned custom-format points and minimum scores during movie and
+  episode imports and previews. Share source, codec and quality metadata between
+  format testing, acquisition and imports, and enforce post-download file rules.
+- Let the custom-format tester use a saved profile's actual points and minimum
+  instead of presenting unconfigured zeroes as a meaningful score. Keep custom
+  formats reachable in the quality-profile dialog as more qualities are selected.
 - Keep title-folder rescans available for missing movies and series. Discover
   manually added library files, repair stale registrations and availability,
   and refresh quick-action eligibility after scanning while preserving folder

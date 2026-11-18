@@ -25,9 +25,13 @@ func (e *Engine) SetFormats(formats []CustomFormat) {
 // and returns every match with its score. Total score is the sum of all
 // returned FormatMatch.Score values.
 func (e *Engine) ScoreRelease(release ReleaseInfo) []FormatMatch {
+	return e.score(release, nil)
+}
+
+func (e *Engine) score(release ReleaseInfo, file *FileMetadata) []FormatMatch {
 	var matches []FormatMatch
 	for _, cf := range e.formats {
-		if matchesFormat(cf, release) {
+		if matchesFormat(cf, release, file) {
 			matches = append(matches, FormatMatch{
 				CustomFormatID:   cf.ID,
 				CustomFormatName: cf.Name,
@@ -46,6 +50,15 @@ func TotalScore(matches []FormatMatch) int {
 	return total
 }
 
+// ApplyScores assigns the selected profile's points to each matched format.
+// Unassigned formats contribute zero; negative scores are penalties.
+func ApplyScores(matches []FormatMatch, scores map[string]int) int {
+	for i := range matches {
+		matches[i].Score = scores[matches[i].CustomFormatID]
+	}
+	return TotalScore(matches)
+}
+
 // matchesFormat uses the same semantics as Radarr/Sonarr:
 //
 //  1. Specs are GROUPED by Implementation type.
@@ -56,7 +69,7 @@ func TotalScore(matches []FormatMatch) int {
 //
 // This means two ReleaseTitleSpecification specs = "title matches A OR B".
 // To require both: set each Required=true.
-func matchesFormat(cf CustomFormat, ri ReleaseInfo) bool {
+func matchesFormat(cf CustomFormat, ri ReleaseInfo, file *FileMetadata) bool {
 	if len(cf.Specifications) == 0 {
 		return false
 	}
@@ -69,7 +82,7 @@ func matchesFormat(cf CustomFormat, ri ReleaseInfo) bool {
 
 	// Every group must pass.
 	for _, specs := range groups {
-		if !groupMatches(specs, ri) {
+		if !groupMatches(specs, ri, file) {
 			return false
 		}
 	}
@@ -79,10 +92,10 @@ func matchesFormat(cf CustomFormat, ri ReleaseInfo) bool {
 // groupMatches returns true when:
 //   - No required spec in the group fails, AND
 //   - At least one spec in the group matches (not all false).
-func groupMatches(specs []Specification, ri ReleaseInfo) bool {
+func groupMatches(specs []Specification, ri ReleaseInfo, file *FileMetadata) bool {
 	allFalse := true
 	for _, spec := range specs {
-		result := evalSpec(spec, ri)
+		result := evalSpec(spec, ri, file)
 		if spec.Required && !result {
 			return false // required spec failed → group fails
 		}
@@ -94,7 +107,17 @@ func groupMatches(specs []Specification, ri ReleaseInfo) bool {
 }
 
 // evalSpec evaluates a single specification, honouring the Negate flag.
-func evalSpec(spec Specification, ri ReleaseInfo) bool {
+func evalSpec(spec Specification, ri ReleaseInfo, file *FileMetadata) bool {
+	if spec.Implementation == ImplFileInfo {
+		if file == nil {
+			return true // Release-only evaluation has no file evidence yet.
+		}
+		result := matchFileInfo(spec.Fields, *file)
+		if spec.Negate {
+			return !result
+		}
+		return result
+	}
 	raw := specMatch(spec, ri)
 	if spec.Negate {
 		return !raw
@@ -109,13 +132,13 @@ func specMatch(spec Specification, ri ReleaseInfo) bool {
 	case ImplQuality:
 		return matchStringField(spec.Fields, "value", ri.Quality)
 	case ImplSource:
-		return matchStringField(spec.Fields, "value", ri.Source)
+		return matchNormalisedField(spec.Fields, ri.Source, normaliseSource)
 	case ImplResolution:
 		return matchStringField(spec.Fields, "value", ri.Resolution)
 	case ImplCodec:
-		return matchStringField(spec.Fields, "value", ri.Codec)
+		return matchNormalisedField(spec.Fields, ri.Codec, normaliseCodec)
 	case ImplAudio:
-		return matchStringField(spec.Fields, "value", ri.Audio)
+		return matchNormalisedField(spec.Fields, ri.Audio, normaliseAudio)
 	case ImplReleaseGroup:
 		return matchStringField(spec.Fields, "value", ri.Group)
 	case ImplLanguage:
@@ -124,12 +147,6 @@ func specMatch(spec Specification, ri ReleaseInfo) bool {
 		return matchSize(spec.Fields, ri)
 	case ImplIndexerFlag:
 		return matchIndexerFlag(spec.Fields, ri)
-	case ImplFileInfo:
-		// FileInfoSpec conditions only apply to post-download file evaluation
-		// via EvalFile/ScoreFile. During release matching they are skipped
-		// (vacuously true) so they don't block formats that mix release and
-		// file-based conditions.
-		return true
 	default:
 		return false
 	}
@@ -153,6 +170,11 @@ func matchStringField(fields map[string]any, key, actual string) bool {
 		return false
 	}
 	return strings.EqualFold(want, actual)
+}
+
+func matchNormalisedField(fields map[string]any, actual string, normalise func(string) string) bool {
+	want, _ := fields["value"].(string)
+	return want != "" && strings.EqualFold(normalise(want), normalise(actual))
 }
 
 func matchLanguage(fields map[string]any, ri ReleaseInfo) bool {

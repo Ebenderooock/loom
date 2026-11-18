@@ -64,6 +64,32 @@ uses the existing per-minute fallback. A size of 0 means unknown and is not
 size-filtered. The minimum format comparison displays expected and actual
 **points**.
 
+## Custom-format points and imports
+
+Custom formats are matching rules, not new base-quality definitions. A release
+such as `the.body.2026.s01e07.1080p.web.h264-cakes[EZTVx.to].mkv` has base quality
+`webdl-1080p`. Matching a custom format does not rename that quality or override
+the profile's allowed-quality check. Source and codec aliases such as
+`WebDL`/`WEB-DL` and `h264`/`x264` match consistently in testing, search and import.
+
+Assign points to a format in the quality profile used by the movie or series.
+For example, a matching WEB format worth 100 points and a matching codec penalty
+worth -15 total **85 points**. A profile minimum of 90 rejects that result; a
+minimum of 85 accepts its format score. Formats absent from the profile add zero.
+Imports and previews check the assigned profile's current minimum in addition
+to base-quality and downgrade checks. Rule and score edits apply to later
+imports without restarting Loom. File-info conditions also check downloaded
+file metadata; a title-only test cannot prove those conditions.
+
+In **Custom formats > Test formats**, select a saved quality profile to see its
+actual points and minimum outcome. Without a profile, the tester shows matches
+only. In the profile editor, quality selection and format scores remain in one
+scrollable body with Save/Cancel accessible below it. Negative points are valid.
+
+The minimum is an acceptance threshold, not an upgrade target or a substitute
+for quality order. Format-score cutoff storage is not currently used to trigger
+same-tier automatic upgrades; the editor does not expose it as a working cutoff.
+
 ## Preview without saving
 
 The manual-search panel starts with the media item's assigned profile. Select

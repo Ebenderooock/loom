@@ -4348,7 +4348,7 @@ paths:
   /api/v1/custom-formats/test:
     post:
       tags: [quality]
-      summary: Test if a release name matches a custom format.
+      summary: Test matching formats and optionally apply a quality profile's scores.
       operationId: testCustomFormat
       requestBody:
         required: true
@@ -6532,23 +6532,57 @@ components:
 
     TestCustomFormatRequest:
       type: object
-      required: [release_name]
+      required: [title]
       properties:
-        release_name:
+        title:
           type: string
-          description: Release name to test against the custom format.
+          description: Release title or filename to test against all saved custom formats.
+        quality_profile_id:
+          type: string
+          description: Optional saved profile whose matching format points and minimum score are applied.
 
     TestCustomFormatResponse:
       type: object
-      required: [custom_format_id, release_name, matches]
+      required: [release, matches, score]
       properties:
-        custom_format_id:
-          type: string
-        release_name:
-          type: string
+        release:
+          type: object
+          description: Parsed metadata shared with acquisition and import matching.
+          properties:
+            title: { type: string }
+            quality: { type: string }
+            source: { type: string }
+            resolution: { type: string }
+            codec: { type: string }
+            audio: { type: string }
+            group: { type: string }
+            size: { type: integer, format: int64 }
+            languages:
+              type: array
+              items: { type: string }
         matches:
+          type: array
+          items:
+            type: object
+            required: [custom_format_id, custom_format_name, score]
+            properties:
+              custom_format_id: { type: string }
+              custom_format_name: { type: string }
+              score:
+                type: integer
+                description: This profile's signed points; zero when no profile is selected or the format is unassigned.
+        score:
+          type: integer
+          description: Sum of matching profile points. Zero without a profile is match-only compatibility data, not a calculated profile score.
+        quality_profile_id:
+          type: string
+          description: Present only when a profile was selected.
+        minimum_score:
+          type: integer
+          description: The selected profile's minimum acceptable format score.
+        meets_minimum:
           type: boolean
-          description: Whether the release name matches all filters.
+          description: Present only with a profile; true when score is at least minimum_score. Does not override base-quality restrictions.
 
     LibraryHealthReport:
       type: object
