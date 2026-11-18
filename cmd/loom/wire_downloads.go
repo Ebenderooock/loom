@@ -163,6 +163,7 @@ func wireDownloads(
 		Logger:          logger,
 		ImportMode:      importMode,
 		QualityProfiles: media.qpStore,
+		MovieReleases:   media.tmdbClient,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("init import pipeline: %w", err)

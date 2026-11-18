@@ -172,6 +172,14 @@ func TestParseSource(t *testing.T) {
 		{"bracketed WebDL", "[GROUP] Movie [WEB-DL 1080p]", "WebDL"},
 		{"bare web is ambiguous", "movie.web.mkv", ""},
 		{"web in title is not a source", "The.Web.Of.Death.1978.1080p.mkv", ""},
+		{"scene WEB", "The Body 2026 S01E01 1080p WEB H264-CAKES EZTV", "WebDL"},
+		{"dot separated WEB", "Show.S01E01.720p.WEB.H264-GROUP.mkv", "WebDL"},
+		{"bracketed WEB", "Movie [2160p WEB]", "WebDL"},
+		{"WEB substring", "Movie.1080p.Website.mkv", ""},
+		{"resolution substring", "Movie.11080p.WEB.mkv", ""},
+		{"WEB does not override WebRip", "Movie.1080p.WEB.WEBRip.mkv", "WebRip"},
+		{"WEB does not override CAM", "Movie.1080p.WEB.HDCAM.mkv", "CAM"},
+		{"WEB does not override screener", "Movie.1080p.WEB.DVDSCR.mkv", "Screener"},
 
 		// HDTV
 		{"HDTV", "movie.HDTV.mkv", "HDTV"},
@@ -664,6 +672,8 @@ func TestEditionExtraction(t *testing.T) {
 		{"extended", "Movie.2024.Extended.1080p.BluRay.mkv", "Extended"},
 		{"extended edition", "Movie.2024.Extended.Edition.1080p.mkv", "Extended"},
 		{"imax", "Movie.2024.IMAX.2160p.WEB-DL.mkv", "IMAX"},
+		{"named library edition", "Avengers - Endgame (2019) {edition-Encore}.mkv", "Encore"},
+		{"explicit edition before format", "Movie.2019.IMAX.2160p {edition-Encore}.mkv", "Encore"},
 		{"remastered", "Movie.2024.Remastered.1080p.BluRay.mkv", "Remastered"},
 		{"theatrical", "Movie.2024.Theatrical.Cut.720p.mkv", "Theatrical"},
 		{"unrated", "Movie.2024.Unrated.1080p.BluRay.mkv", "Unrated"},

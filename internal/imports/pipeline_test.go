@@ -136,6 +136,34 @@ func TestImportUsesOnlyMatchingReleaseQualityContext(t *testing.T) {
 	}
 }
 
+func TestImportSceneWEBReleaseQuality(t *testing.T) {
+	for _, file := range []string{
+		"The.Body.2026.S01E01.1080p.WEB.H264-CAKES.mkv",
+		"The.Body.2026.S01E01.1080p.mkv",
+	} {
+		t.Run(file, func(t *testing.T) {
+			f := newPackPipeline(t, ImportModeCopy, nil)
+			profile := unrestrictedProfile(t)
+			f.svc.show.Title, f.svc.show.QualityProfileID = "The Body", profile.ID
+			f.p.decisions = NewDecisionMaker(&SampleSpec{}, &FreeSpaceSpec{}, &UnpackingSpec{}, &DangerousFileSpec{}, NewUpgradeSpec(&stubProfileStore{profile: profile}))
+			root := t.TempDir()
+			if err := os.WriteFile(filepath.Join(root, file), []byte("episode"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			paths, err := f.p.processImport(context.Background(), &downloads.DownloadCompletedEvent{
+				DownloadID: "scene-web",
+				Title:      "The Body 2026 S01E01 1080p WEB H264-CAKES EZTV",
+			}, root)
+			if err != nil || len(paths) != 1 {
+				t.Fatalf("scene WEB import: %v, %v", paths, err)
+			}
+			if len(f.svc.files) != 1 || f.svc.files[0].Quality != "webdl-1080p" {
+				t.Fatalf("expected webdl-1080p in library metadata: %+v", f.svc.files)
+			}
+		})
+	}
+}
+
 func TestManualBareEpisodeKeepsAncestorSeriesContext(t *testing.T) {
 	f := newPackPipeline(t, ImportModeCopy, nil)
 	dragonBallCatalog(f)

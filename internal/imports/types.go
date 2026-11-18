@@ -1,8 +1,16 @@
 package imports
 
 import (
+	"context"
 	"time"
+
+	"github.com/ebenderooock/loom/internal/metadata"
 )
+
+// MovieReleaseLookup supplies named releases from the original movie's provider.
+type MovieReleaseLookup interface {
+	GetMovieReleases(context.Context, int) ([]metadata.MovieRelease, error)
+}
 
 // ImportMode controls how files are moved from the download directory
 // into the media library.
@@ -60,6 +68,10 @@ type MatchResult struct {
 	Season    int
 	Episode   int
 	DestPath  string
+	Edition   string
+	// Only provider-confirmed named releases may authorize a different year.
+	releaseTitle string
+	releaseYear  int
 }
 
 // TopicImportCompleted is the event bus topic for completed imports.

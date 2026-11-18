@@ -50,6 +50,7 @@ type PipelineOptions struct {
 	RecycleBin      *RecycleBin
 	QualityProfiles QualityProfileGetter
 	AltTitleStore   *alttitles.Store
+	MovieReleases   MovieReleaseLookup
 	// JobWorkers bounds concurrent queued manual imports (default 2). A
 	// negative value disables automatic worker startup (tests call
 	// StartJobs explicitly).
@@ -112,6 +113,7 @@ func NewPipeline(opts PipelineOptions) (*ImportPipeline, error) {
 
 	logger := opts.Logger.With("module", "imports")
 	matcher := NewMatcher(opts.MoviesSvc, opts.SeriesSvc, opts.LibStore)
+	matcher.movieReleases = opts.MovieReleases
 
 	// Wire alternative-title matching if a store is provided.
 	if opts.AltTitleStore != nil {
@@ -569,7 +571,7 @@ func (p *ImportPipeline) importDownloadFileAt(ctx context.Context, ev *downloads
 	if match == nil || !match.Matched {
 		match, err = p.matcher.MatchDownloadPath(ctx, mediaFile, root, ev.Title, ev.DownloadID)
 		if err != nil {
-			if contextualEpisode {
+			if contextualEpisode || errors.Is(err, errMovieReleaseLookup) {
 				return "", p.recordFailure(ctx, "", "", ev.Title, mediaFile, fmt.Errorf("match: %w", err))
 			}
 			p.logger.Warn("path-based match failed", "file", mediaFile, "error", err)
@@ -625,6 +627,34 @@ var ErrNoMatch = errors.New("no library match")
 
 // importMatched imports mediaFile for an already resolved match.
 func (p *ImportPipeline) importMatched(ctx context.Context, ev *downloads.DownloadCompletedEvent, match *MatchResult, mediaFile, destName string) (string, error) {
+	// Workflow linkage still needs provider evidence for a named re-release.
+	if match.MediaType == MediaTypeMovie && match.Edition == "" && p.matcher.movieReleases != nil {
+		for _, name := range []string{filepath.Base(mediaFile), ev.Title} {
+			parsed := parseReleaseName(name)
+			if movieYearsMatch(parsed.Year, match.Year) {
+				continue
+			}
+			movie, err := p.moviesSvc.GetMovie(ctx, match.MediaID)
+			if err != nil {
+				return "", p.recordFailure(ctx, string(match.MediaType), match.MediaID, ev.Title, mediaFile, err)
+			}
+			if movie == nil {
+				return "", p.recordFailure(ctx, string(match.MediaType), match.MediaID, ev.Title, mediaFile,
+					fmt.Errorf("movie %q not found", match.MediaID))
+			}
+			edition, err := p.matcher.namedMovieEdition(ctx, movie, parsed)
+			if err != nil {
+				return "", p.recordFailure(ctx, string(match.MediaType), match.MediaID, ev.Title, mediaFile, err)
+			}
+			if edition != "" {
+				copy := *match
+				match = &copy
+				match.Edition, match.releaseTitle, match.releaseYear = edition, parsed.Title, parsed.Year
+				destName = buildDestFilename(match, mediaFile)
+				break
+			}
+		}
+	}
 	return p.importMatchedWith(ctx, ev, match, mediaFile, destName, false)
 }
 
@@ -639,12 +669,14 @@ func importRelease(file, title string, match *MatchResult) *parser.Release {
 	contextTitle = reSeriesPack.ReplaceAllString(contextTitle, "")
 	identity := parseReleaseName(contextTitle)
 	contextTitle = reContextSeason.ReplaceAllString(identity.Title, " ")
-	if normalise(cleanTitle(contextTitle)) != normalise(match.Title) {
+	matchesRelease := match.releaseYear > 0 && identity.Year == match.releaseYear &&
+		normalise(identity.Title) == normalise(match.releaseTitle)
+	if normalise(cleanTitle(contextTitle)) != normalise(match.Title) && !matchesRelease {
 		return incoming
 	}
 	switch match.MediaType {
 	case MediaTypeMovie:
-		if identity.IsSeries || !movieYearsMatch(identity.Year, match.Year) {
+		if identity.IsSeries || (!movieYearsMatch(identity.Year, match.Year) && !matchesRelease) {
 			return incoming
 		}
 	case MediaTypeEpisode:
@@ -677,6 +709,11 @@ func (p *ImportPipeline) importMatchedWith(ctx context.Context, ev *downloads.Do
 
 	// Build destination path with proper naming
 	destFile := filepath.Join(match.DestPath, destName)
+	if match.MediaType == MediaTypeMovie && match.Edition == "" {
+		copy := *match
+		match = &copy
+		match.Edition = parser.MovieEdition(filepath.Base(destName))
+	}
 	unlock := lockImportDestination(destFile)
 	defer unlock()
 
@@ -1035,10 +1072,12 @@ func verifyMovieImportYear(match *MatchResult, releaseTitle, mediaFile string) e
 		return nil
 	}
 	for _, name := range []string{releaseTitle, filepath.Base(mediaFile), filepath.Base(filepath.Dir(mediaFile))} {
-		year := parser.Parse(name).Year
-		if !movieYearsMatch(year, match.Year) {
+		parsed := parseReleaseName(name)
+		confirmedRelease := match.releaseYear > 0 && parsed.Year == match.releaseYear &&
+			normalise(parsed.Title) == normalise(match.releaseTitle)
+		if !movieYearsMatch(parsed.Year, match.Year) && !confirmedRelease {
 			return fmt.Errorf("import rejected: release year %d in %q does not match %s (%d)",
-				year, name, match.Title, match.Year)
+				parsed.Year, name, match.Title, match.Year)
 		}
 	}
 	return nil
@@ -1182,7 +1221,10 @@ func buildDestFilename(match *MatchResult, sourceFile string) string {
 	case MediaTypeMovie:
 		name := sanitizeDirName(match.Title)
 		if match.Year > 0 {
-			return fmt.Sprintf("%s (%d)%s", name, match.Year, ext)
+			name = fmt.Sprintf("%s (%d)", name, match.Year)
+		}
+		if match.Edition != "" {
+			name += " {edition-" + sanitizeDirName(match.Edition) + "}"
 		}
 		return name + ext
 
@@ -1703,10 +1745,16 @@ func (p *ImportPipeline) enrichCandidateQuality(ctx context.Context, c *ImportCa
 		if len(files) == 0 {
 			return nil
 		}
-		// Use the quality of the first (usually only) existing file.
-		c.ExistingQuality = files[0].Quality
-		if c.ExistingQuality == "" {
-			c.ExistingQuality = releaseQuality(files[0].FilePath)
+		// Different editions coexist; only compare quality within this edition.
+		for _, file := range files {
+			if !strings.EqualFold(parser.MovieEdition(filepath.Base(file.FilePath)), c.Match.Edition) {
+				continue
+			}
+			c.ExistingQuality = file.Quality
+			if c.ExistingQuality == "" {
+				c.ExistingQuality = releaseQuality(file.FilePath)
+			}
+			break
 		}
 
 	case MediaTypeEpisode:
