@@ -20,6 +20,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Stop treating numbered title segments such as `Breaking.Dawn.Part.1` as
+  unfinished downloads. Keep temporary-file suffix and unpacking-folder checks.
 - Honor an allowed Unknown quality tier for first imports with a known resolution
   but no source, such as `1080p HEVC` releases. Keep the detected `unknown-1080p`
   metadata, custom-format minimums, and protections against unknown-quality
