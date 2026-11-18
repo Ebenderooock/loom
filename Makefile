@@ -17,7 +17,7 @@ LDFLAGS := -s -w \
 # mixed dependency graphs. It is safe to leave enabled by default.
 TAGS ?= nosqlite
 
-.PHONY: all build test test-integration test-all coverage lint fmt vet tidy run dev clean docker sync-definitions help
+.PHONY: all build test test-integration test-all preflight coverage lint fmt vet tidy run dev clean docker sync-definitions help
 
 all: lint test build ## Lint, test, and build
 
@@ -40,6 +40,14 @@ test-integration: ## Run integration tests
 
 test-all: ## Run unit and integration tests
 	$(GO) test ./... && $(GO) test -v -tags integration ./internal/integration/...
+
+preflight: ## Run fast, local pre-merge checks (not a replacement for full CI)
+	python3 -B -m unittest discover -s scripts -p 'test_*.py'
+	$(GO) test -tags disable_libutp -count=1 ./...
+	CGO_ENABLED=0 $(GO) test -tags integration -count=1 -timeout 120s ./internal/integration/...
+	$(GO) vet ./...
+	CGO_ENABLED=0 $(GO) build -trimpath -o /tmp/loom-preflight ./cmd/loom
+	cd web && pnpm lint && pnpm format:check && pnpm typecheck && pnpm test && pnpm build
 
 coverage: ## Generate coverage report
 	$(GO) test -coverprofile=coverage.out ./...
