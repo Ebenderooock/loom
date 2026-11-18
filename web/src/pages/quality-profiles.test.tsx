@@ -44,10 +44,10 @@ const initialProfile = {
   upgrade_allowed: true,
   min_format_score: 25,
   format_items: [
-    { custom_format_id: "preferred", score: 100 },
+    { format_id: "preferred", score: 100 },
     { format_id: "avoid", score: -50 },
-    { custom_format_id: "neutral", score: 0 },
-    { custom_format_id: "unavailable-format", score: 17 },
+    { format_id: "neutral", score: 0 },
+    { format_id: "unavailable-format", score: 17 },
   ],
 };
 let savedProfile = structuredClone(initialProfile);
@@ -194,7 +194,7 @@ describe("Quality profile scoring", () => {
     expect(savedProfile).toEqual(initialProfile);
   });
 
-  it("creates a profile with its selected qualities, format score and minimum", async () => {
+  it("creates a profile with two canonical format IDs, signed scores and a minimum", async () => {
     const user = userEvent.setup();
     show();
     await user.click(screen.getByRole("button", { name: "Add Profile" }));
@@ -206,6 +206,8 @@ describe("Quality profile scoring", () => {
       screen.getByLabelText("Preferred group score (points)"),
       "100",
     );
+    await user.clear(screen.getByLabelText("Avoid group score (points)"));
+    await user.type(screen.getByLabelText("Avoid group score (points)"), "-25");
     await user.type(
       screen.getByLabelText("Minimum custom format score (points)"),
       "50",
@@ -221,11 +223,56 @@ describe("Quality profile scoring", () => {
     expect(body).toMatchObject({
       name: "New profile",
       min_format_score: 50,
-      format_items: [{ custom_format_id: "preferred", score: 100 }],
+      format_items: [
+        { format_id: "preferred", score: 100 },
+        { format_id: "avoid", score: -25 },
+      ],
     });
     expect(JSON.parse(body.items)).toEqual([
       expect.objectContaining({ id: "web-1080p", allowed: true }),
       expect.objectContaining({ id: "bluray-1080p", allowed: false }),
     ]);
+  });
+
+  it("adds multiple scores to an existing profile using the API field names", async () => {
+    savedProfile.format_items = [];
+    const user = userEvent.setup();
+    show();
+    await openEditor(user);
+    await user.clear(screen.getByLabelText("Preferred group score (points)"));
+    await user.type(
+      screen.getByLabelText("Preferred group score (points)"),
+      "100",
+    );
+    await user.clear(screen.getByLabelText("Avoid group score (points)"));
+    await user.type(screen.getByLabelText("Avoid group score (points)"), "-50");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(savedProfile.format_items).toEqual([
+        { format_id: "preferred", score: 100 },
+        { format_id: "avoid", score: -50 },
+      ]),
+    );
+  });
+
+  it("warns about invalid scores from failed saves and replaces them with valid IDs", async () => {
+    savedProfile.format_items = [{ format_id: "", score: 100 }];
+    const user = userEvent.setup();
+    show();
+    await openEditor(user);
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Re-enter the affected custom-format scores",
+    );
+    await user.clear(screen.getByLabelText("Preferred group score (points)"));
+    await user.type(
+      screen.getByLabelText("Preferred group score (points)"),
+      "100",
+    );
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(savedProfile.format_items).toEqual([
+        { format_id: "preferred", score: 100 },
+      ]),
+    );
   });
 });

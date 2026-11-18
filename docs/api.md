@@ -67,6 +67,18 @@ responses expose `qualityProfileMissing`, computed against both current and
 active legacy profiles, so existing blank, deleted or dangling selections are
 highlighted without incorrectly flagging valid legacy profiles.
 
+## Quality-profile format scores
+
+Quality-profile requests and responses use `format_items` entries shaped as
+`{"format_id":"saved-format-id","score":100}`. `format_id` is required and must be
+unique within the profile; `custom_format_id` is a tester match field, not a
+profile score field. Scores are signed integers.
+
+Creating or updating a profile, or replacing its `/format-scores`, rejects
+missing, blank or duplicate format IDs with 400. Profile settings and score
+assignments save atomically: a failed request leaves existing data unchanged
+and does not leave a partially created profile.
+
 ## Custom-format testing
 
 `POST /api/v1/custom-formats/test` accepts `title` and an optional saved

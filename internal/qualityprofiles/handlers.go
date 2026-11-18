@@ -66,6 +66,10 @@ func (h *qpHandler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.store.Create(r.Context(), &qp); err != nil {
+		if errors.Is(err, ErrInvalidFormatItems) {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -82,6 +86,10 @@ func (h *qpHandler) update(w http.ResponseWriter, r *http.Request) {
 	}
 	qp.ID = id
 	if err := h.store.Update(r.Context(), &qp); err != nil {
+		if errors.Is(err, ErrInvalidFormatItems) {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
 		if errors.Is(err, sql.ErrNoRows) {
 			writeError(w, http.StatusNotFound, "quality profile not found")
 			return
@@ -139,6 +147,10 @@ func (h *qpHandler) setFormatScores(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.store.SetFormatScores(r.Context(), id, items); err != nil {
+		if errors.Is(err, ErrInvalidFormatItems) {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
 		if errors.Is(err, sql.ErrNoRows) {
 			writeError(w, http.StatusNotFound, "quality profile not found")
 			return

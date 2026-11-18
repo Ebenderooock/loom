@@ -85,6 +85,10 @@ In **Custom formats > Test formats**, select a saved quality profile to see its
 actual points and minimum outcome. Without a profile, the tester shows matches
 only. In the profile editor, quality selection and format scores remain in one
 scrollable body with Save/Cancel accessible below it. Negative points are valid.
+If an earlier failed save left scores without format IDs, the editor warns you
+to re-enter the affected scores. Saving removes those invalid entries while
+preserving valid assignments. Profile settings and scores now save together;
+a rejected or failed save leaves the stored profile unchanged.
 
 The minimum is an acceptance threshold, not an upgrade target or a substitute
 for quality order. Format-score cutoff storage is not currently used to trigger

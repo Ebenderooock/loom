@@ -6,8 +6,8 @@ import { apiFetch } from "@/lib/fetch";
 // ---------- Types ----------
 
 export interface FormatItem {
-  custom_format_id: string;
-  format_id?: string;
+  format_id: string;
+  profile_id?: string;
   score: number;
 }
 
