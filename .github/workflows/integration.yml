@@ -24,7 +24,6 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - name: Detect code changes
         id: filter
         env:
