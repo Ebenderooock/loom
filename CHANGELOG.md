@@ -19,6 +19,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   manually added library files, repair stale registrations and availability,
   and refresh quick-action eligibility after scanning while preserving folder
   containment and incomplete-file safeguards.
+- Apply the global media card size to collection grids and their members.
+  Combined collection posters now use the same dimensions as library posters.
+- Recognize resolution-tagged scene `WEB` releases (such as `1080p WEB H264`)
+  as WebDL so imports no longer reject them as unknown quality.
+- Keep replacement destinations continuously available to macOS readers during
+  publication and registration rollback by atomically swapping files and using
+  the displaced original directly, without redundant backup hardlinks.
+- Match movie imports without treating IMAX, Dolby Vision, HDR, or other
+  release metadata as part of the title; tolerate catalog punctuation safely.
+- Import provider-confirmed named re-releases, such as Endgame Encore, as
+  separate editions of the original movie. Preserve both copies, keep quality
+  comparisons within each edition, and retain edition tags during renaming.
 - Serialize Discord notifications per webhook and honor the response's
   `retry_after` value and rate-limit reset headers to avoid repeated
   rate-limit failures during alert bursts.
@@ -116,6 +128,23 @@ v0.4.4 release attempts.
   revisions allow a stable build to upgrade a prerelease; packages remain
   separate workflow artifacts rather than GitHub release assets.
 
+- Add admin-only native update channel settings (Stable by default, separately
+  acknowledged Prelease opt-in) and a throttled, cached signed GitHub Releases
+  notice checker using the publisher's raw-byte Ed25519 manifest contract.
+  Add restricted Linux/systemd and macOS/launchd helpers with consistent SQLite/config snapshots,
+  health-checked replacement, rollback and interrupted-update recovery.
+  macOS gates startup on authenticated recovery authorization before database
+  access. Windows and PostgreSQL remain manual-only. Production activation still
+  requires the publisher public key and privileged native upgrade/reboot validation.
+- Add an isolated, production-disabled Windows updater candidate: dedicated SCM
+  virtual account, SYSTEM helper, protected pre-database event/job gate,
+  restricted SQLite snapshot execution, NTFS descriptor-preserving transactions
+  and rollback, candidate enrollment/uninstall and Windows boundary tests.
+  Windows production archives remain manual-only pending native acceptance,
+  including protected-process quiescence and SCM reboot recovery.
+- Build seven native archive targets for `prelease/X.Y.Z` branch CI (also the
+  `prerelease/` alias), without publishing/signing credentials. Native Release
+  publication and manifest signing still require separate publisher changes.
 - Global appearance controls in Settings: Light, Dark, AMOLED or System theme,
   accent presets, and a background image URL with preview and dimming. Admin
   changes persist across devices; the header theme toggle shares these settings.

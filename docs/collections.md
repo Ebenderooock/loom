@@ -6,6 +6,10 @@ library and titles not yet added to a library. A title can belong to any number
 of collections. Membership does not imply monitoring, imported files, or
 availability on a media server.
 
+Collection grids and their members follow **Settings > Appearance > Media Card
+Size**. Combined posters on the Collections page use the same 2:3 dimensions
+and responsive sizing as library posters.
+
 Library members use the same live card status as their library: movies retain
 acquisition and quality states (for example Downloading, Importing, Available),
 and shows use the same downloaded/aired episode counts and progress bar.

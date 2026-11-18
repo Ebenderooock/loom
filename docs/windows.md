@@ -121,6 +121,95 @@ but **preserves ProgramData, logs and media**. Close Services/Event Viewer if
 Windows marks deletion pending; reboot before reinstalling if necessary.
 Inspect and back up preserved paths before manually removing them.
 
+## Updates: manual installation only
+
+Windows does **not** ship a privileged auto-update helper. Signed Stable/Prelease
+notices can be shown when a publisher public key is provisioned, but selecting a
+channel does not enable installation. Use a freshly extracted matching release
+and this installer for manual upgrades; retain a stopped config/database backup
+when migrations may run.
+
+The isolated implementation candidate below is not production-enabled.
+Cross-compilation alone does not establish its guarantees.
+LocalService remains read/execute-only on
+the installation directory; do not grant it Modify access, run Loom as
+LocalSystem, or substitute a generic privileged scheduled task.
+
+## Windows updater candidate (not production-enabled)
+
+Source now contains a Windows-specific transaction pipeline; it is **not a
+supported auto-update release**. Standard Windows binaries fail closed and
+ordinary release/Prelease ZIPs still omit the helper. The separate
+`.goreleaser.windows-updater-candidate.yaml` builds matching amd64/arm64 pairs
+with `loom_updater_windows_candidate`, names archives `UNVALIDATED`, and disables
+release publication. Supply `CANDIDATE_VERSION` and `CANDIDATE_REF` matching a
+real release/Prelease source identity; never send these archives to the
+publisher. Do not remove the production activation barrier on cross-build or
+unit-test evidence alone.
+
+Candidate enrollment is explicit, elevated, and **disposable VM only**:
+
+```powershell
+& .\packaging\windows\install.ps1 -BinaryPath .\loom.exe -UpdaterPath .\loom-updater.exe
+```
+
+Only a fresh fixed-layout installation or an already matching virtual-account
+installation is accepted. Existing LocalService/custom services are refused,
+not silently converted: a shared SID cannot safely attribute escaped writers.
+Keep existing installations manual-only. The main account is `NT SERVICE\Loom`,
+with only traverse privilege requested from SCM; `LoomUpdater` is LocalSystem.
+Both executables and their parent are SYSTEM/Administrators-owned and
+read/execute-only for Loom. The ProgramData base is also read-only to Loom;
+only config/data/log subdirectories grant it Modify. Private updater state has
+no service ACE. Paths come from OS known-folder APIs, not environment overrides.
+
+The service wrapper waits before config/log/database access. Its fixed global
+event and no-breakaway job are authenticated by protected descriptors plus the
+live SCM helper's image/account. There is no caller-command/path/URL API.
+Maintenance uses one fixed SCM control requiring an administrator-only right.
+The helper independently verifies the same signed release manifest as Unix,
+disables SCM restarts during stop, requires an empty job and no remaining
+dedicated-account processes, and snapshots SQLite through a privilege-stripped
+captured service token. The snapshot process starts suspended and is contained
+before resumption. Root/SYSTEM never opens the service-controlled source DB
+through SQLite.
+
+The separate NTFS pipeline captures owner/group/DACL/SACL, refuses hardlinks,
+reparse points, alternate streams, EAs and unsupported attributes, preserves the
+descriptor on replacement, and uses write-through same-volume replacement plus
+volume flushes rather than Unix directory-fsync assumptions. A private durable
+journal gates replacement; restoration includes full config, SQLite, sidecar
+removal, the old executable and failed-build blocking. Startup recovery precedes
+database authorization. Unsupported ACLs/filesystems/configurations fail closed.
+Transaction staging and configuration-backup directories are created with an
+explicit SYSTEM owner and protected private DACL, independent of the creating
+token's default owner.
+
+**Exact activation blockers:** there is no Windows execution host available in
+this development environment. Native acceptance must prove SCM dependency,
+crash/reboot and queued-restart ordering; virtual-account token creation and
+restricted WAL snapshots; NTFS SACL/stream/EA handling and volume-flush durability;
+successful upgrade, migration/health rollback and interrupted recovery. In
+addition, quiescence currently refuses every unreadable process token, including
+protected Windows processes: establish whether this is satisfiable on supported
+Windows versions, or design a sound alternative before activation. Do not
+silently ignore access-denied processes. The production publisher public key
+also remains unprovided. Added Windows CI tests cover pure/native API boundaries
+and isolated elevated NTFS success, migration/health rollback and interrupted
+recovery with a fake service controller. They are cross-compiled, **not executed
+here**, and do not test real SCM enrollment, restricted-token creation, container
+exclusion or reboot/power-loss acceptance.
+
+For candidate recovery, retain both matching binaries and ProgramData state.
+After a crash, SCM restarts the helper, which replays a pending journal before
+opening the gate. If that fails, leave Loom stopped and preserve
+`ProgramData\Loom\updater` for diagnosis; never delete the journal or start a
+different binary against partially restored data. Restore a matching stopped
+config/database backup administratively if automated recovery cannot succeed.
+Installer upgrades and uninstall refuse pending recovery; uninstall retains
+config/data/private snapshots. Do not overwrite an installed helper while its
+service is active.
+
 ## Native smoke test (Windows CI or a disposable VM)
 
 Run `go test -race ./cmd/loom` on Windows to execute the SCM handler tests.

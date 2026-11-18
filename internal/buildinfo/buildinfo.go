@@ -11,9 +11,10 @@ import (
 
 // These are populated via -ldflags -X.
 var (
-	Version = "dev"
-	Commit  = "unknown"
-	Date    = "unknown"
+	Version   = "dev"
+	Commit    = "unknown"
+	Date      = "unknown"
+	SourceRef = "unknown"
 )
 
 // String renders a single-line summary suitable for `loom version`.

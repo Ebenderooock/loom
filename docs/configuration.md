@@ -24,6 +24,18 @@ next restart.
 
 ## Environment variable mapping
 
+### Update preferences
+
+Administrators manage **Settings > General > Updates** through
+`/api/v1/updates`. Preferences live in the database, not YAML or environment
+variables. Defaults are `channel: "stable"`, `preleaseOptIn: false`,
+`autoInstall: false`. Selecting Prelease requires separate consent.
+`autoInstall: true` requires the enrolled Linux/systemd or macOS/launchd helper, canonical SQLite
+configuration and a compiled publisher public key. It is rejected for unsupported
+or unprovisioned installs; PostgreSQL is always manual-only.
+There is no runtime signing-key, helper-command, or destination-path setting.
+See [native updates](native-updates.md).
+
 ### Instance appearance
 
 Admins manage **Settings > Appearance** globally through the UI or

@@ -120,7 +120,17 @@ func replaceTokens(format string, movie *movies.Movie, file *movies.MovieFile, r
 		// Parser doesn't extract release group yet; future enhancement
 	}
 	result = strings.ReplaceAll(result, "{Release Group}", rg)
-	result = strings.ReplaceAll(result, "{Edition Tags}", "")
+	editionTag := ""
+	if file != nil {
+		if edition := parser.MovieEdition(filepath.Base(file.FilePath)); edition != "" {
+			editionTag = "{edition-" + edition + "}"
+		}
+	}
+	result = strings.ReplaceAll(result, "{Edition Tags}", editionTag)
+	// Renaming must preserve edition identity even when the format omits it.
+	if editionTag != "" && !strings.Contains(result, editionTag) {
+		result += " " + editionTag
+	}
 
 	// Clean up empty brackets and excess whitespace
 	result = cleanupEmptyTokens(result)

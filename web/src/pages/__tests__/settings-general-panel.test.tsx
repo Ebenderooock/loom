@@ -6,6 +6,11 @@ import { GeneralPanel } from "../settings";
 import * as apiKeys from "@/lib/api-keys-api";
 
 vi.mock("@/lib/api-keys-api");
+// Update settings have their own provider-backed tests; keep API-key unit
+// tests independent of authentication, React Query, and update requests.
+vi.mock("@/components/update-settings", () => ({
+  UpdateSettings: () => null,
+}));
 
 describe("GeneralPanel API key card", () => {
   beforeEach(() => {

@@ -151,12 +151,33 @@ func TestReplacementRecycleFailureLeavesRecoverableBackup(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "preserved at") {
 		t.Fatalf("expected recoverable recycle failure, got %v", err)
 	}
-	backups, err := filepath.Glob(filepath.Join(filepath.Dir(dest), ".loom-replacement-*", "previous"))
+	backups, err := replacementBackups(dest)
 	if err != nil || len(backups) != 1 {
 		t.Fatalf("missing backup: %v, %v", backups, err)
 	}
 	if data, err := os.ReadFile(backups[0]); err != nil || string(data) != "old media" {
 		t.Fatalf("backup: %q, %v", data, err)
+	}
+	saved, err := os.Stat(backups[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	entries, err := os.ReadDir(filepath.Dir(backups[0]))
+	if err != nil {
+		t.Fatal(err)
+	}
+	originals := 0
+	for _, entry := range entries {
+		info, err := entry.Info()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if os.SameFile(saved, info) {
+			originals++
+		}
+	}
+	if originals != 1 {
+		t.Fatalf("expected one preserved original without redundant hardlink aliases, got %d", originals)
 	}
 	for path, want := range map[string]string{source: "new media", dest: "new media"} {
 		if data, err := os.ReadFile(path); err != nil || string(data) != want {
@@ -166,6 +187,14 @@ func TestReplacementRecycleFailureLeavesRecoverableBackup(t *testing.T) {
 	if _, err := p.importMatchedWith(context.Background(), &downloads.DownloadCompletedEvent{Title: "Movie"}, match, source, filepath.Base(dest), true); err != nil {
 		t.Fatalf("retry failed to finish registration: %v", err)
 	}
+}
+
+func replacementBackups(dest string) ([]string, error) {
+	name := "previous"
+	if replacementSwapsFiles {
+		name = "incoming"
+	}
+	return filepath.Glob(filepath.Join(filepath.Dir(dest), ".loom-replacement-*", name))
 }
 
 func TestReplacementSerializesConcurrentImports(t *testing.T) {
@@ -193,7 +222,22 @@ func TestReplacementSerializesConcurrentImports(t *testing.T) {
 }
 
 func TestReplacementKeepsLivePathAvailable(t *testing.T) {
+	t.Run("success", func(t *testing.T) {
+		testReplacementKeepsLivePathAvailable(t, false)
+	})
+	t.Run("registration rollback", func(t *testing.T) {
+		testReplacementKeepsLivePathAvailable(t, true)
+	})
+}
+
+func testReplacementKeepsLivePathAvailable(t *testing.T, failRegistration bool) {
+	t.Helper()
 	p, source, dest, match := replacementFixture(t, "Movie.1080p.HDTV.mkv", "hdtv-1080p", []byte("new media"))
+	if failRegistration {
+		if _, err := p.db.Exec(`CREATE TRIGGER fail_update BEFORE UPDATE ON movie_files BEGIN SELECT RAISE(FAIL, 'registration failed'); END`); err != nil {
+			t.Fatal(err)
+		}
+	}
 	alternate := filepath.Join(t.TempDir(), filepath.Base(source))
 	if err := os.WriteFile(alternate, []byte("old media"), 0o600); err != nil {
 		t.Fatal(err)
@@ -229,7 +273,7 @@ func TestReplacementKeepsLivePathAvailable(t *testing.T) {
 	for i := 0; i < 20; i++ {
 		path := source
 		wantSource := "new media"
-		if i%2 == 1 {
+		if i%2 == 1 && !failRegistration {
 			path = alternate
 			wantSource = "old media"
 		}
@@ -241,8 +285,39 @@ func TestReplacementKeepsLivePathAvailable(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := p.importMatchedWith(context.Background(), &downloads.DownloadCompletedEvent{Title: "Movie"}, match, path, filepath.Base(dest), true); err != nil {
-			if !replacementBlockedByOpenReader(err, dest) {
+		_, err = p.importMatchedWith(context.Background(), &downloads.DownloadCompletedEvent{Title: "Movie"}, match, path, filepath.Base(dest), true)
+		if failRegistration && err == nil {
+			t.Fatal("expected registration failure")
+		}
+		if data, err := os.ReadFile(path); err != nil || string(data) != wantSource {
+			t.Fatalf("replacement changed source bytes: %q, %v", data, err)
+		}
+		if failRegistration && replacementBlockedByOpenReader(err, dest, "previous") {
+			// A Windows reader can open the new file before rollback begins.
+			stopReader()
+			backups, globErr := replacementBackups(dest)
+			if globErr != nil || len(backups) != 1 {
+				t.Fatalf("blocked rollback lost backup: %v, %v", backups, globErr)
+			}
+			if !strings.Contains(err.Error(), backups[0]) {
+				t.Fatalf("blocked rollback did not report backup path: %v", err)
+			}
+			if data, err := os.ReadFile(backups[0]); err != nil || string(data) != string(previous) {
+				t.Fatalf("blocked rollback lost old bytes: %q, %v", data, err)
+			}
+			if data, err := os.ReadFile(dest); err != nil || string(data) != wantSource {
+				t.Fatalf("blocked rollback changed new bytes: %q, %v", data, err)
+			}
+			var quality string
+			var size int64
+			if err := p.db.QueryRow(`SELECT quality, size FROM movie_files`).Scan(&quality, &size); err != nil || quality != "hdtv-1080p" || size != 9 {
+				t.Fatalf("blocked rollback changed registration: quality=%q size=%d err=%v", quality, size, err)
+			}
+			break
+		}
+		if err != nil {
+			rolledBack := failRegistration && strings.Contains(err.Error(), "library update failed (source preserved)")
+			if !rolledBack && !replacementBlockedByOpenReader(err, dest, "incoming") {
 				t.Fatal(err)
 			}
 			current, statErr := os.Stat(dest)
@@ -253,11 +328,13 @@ func TestReplacementKeepsLivePathAvailable(t *testing.T) {
 				t.Fatalf("blocked replacement changed live bytes: %q, %v", data, err)
 			}
 		}
-		if data, err := os.ReadFile(path); err != nil || string(data) != wantSource {
-			t.Fatalf("replacement changed source bytes: %q, %v", data, err)
-		}
 	}
 	stopReader()
+	if failRegistration {
+		if _, err := p.db.Exec(`DROP TRIGGER fail_update`); err != nil {
+			t.Fatal(err)
+		}
+	}
 	// Force a genuine replacement after closing the reader, even if Windows
 	// rejected every concurrent attempt. A permanent publication failure fails.
 	const final = "final complete media"

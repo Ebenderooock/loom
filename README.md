@@ -191,6 +191,17 @@ service-aware binary. The Synology guide covers
 Container Manager and building a `.spk` for manual upload; SynoCommunity
 availability depends on upstream publication.
 
+### Testing wanted
+
+Loom is in alpha and needs testing across real-world environments and
+installation methods. If you can help, try it on your platform—Windows, Linux,
+macOS, Raspberry Pi, Docker, or Kubernetes—and
+[open an issue](https://github.com/Ebenderooock/loom/issues) with your platform
+and version, deployment method, steps tried, and any problems or relevant logs.
+See the [installation guides](docs/deployment.md#installation-pathways) to get
+started. Windows testers can use a ZIP from a release that includes one or
+build a service-aware binary from this source.
+
 ## Documentation
 
 The [`docs/`](docs/) directory is the source of truth.

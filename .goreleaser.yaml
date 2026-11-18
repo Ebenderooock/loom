@@ -36,9 +36,25 @@ builds:
       - -X github.com/ebenderooock/loom/internal/buildinfo.Version={{.Version}}
       - -X github.com/ebenderooock/loom/internal/buildinfo.Commit={{.Commit}}
       - -X github.com/ebenderooock/loom/internal/buildinfo.Date={{.Date}}
+      - -X github.com/ebenderooock/loom/internal/buildinfo.SourceRef=refs/tags/{{.Tag}}
+  - id: loom-updater
+    main: ./cmd/loom-updater
+    binary: loom-updater
+    env: [CGO_ENABLED=0]
+    goos: [linux, darwin]
+    goarch: [amd64, arm64, arm]
+    goarm: ["7"]
+    ignore:
+      - goos: darwin
+        goarch: arm
+    flags: [-trimpath]
+    ldflags: [-s -w]
 
 archives:
   - id: default
+    # Linux/macOS carry restricted helpers. Unvalidated Windows pairs are built
+    # ONLY with .goreleaser.windows-updater-candidate.yaml, never published here.
+    allow_different_binary_count: true
     formats: [tar.gz]
     name_template: >-
       {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}{{ with .Arm }}v{{ . }}{{ end }}
@@ -75,6 +91,7 @@ changelog:
 dockers:
   - image_templates:
       - "ghcr.io/ebenderooock/loom:{{ .Version }}-amd64"
+    ids: [loom]
     use: buildx
     dockerfile: deploy/docker/Dockerfile.goreleaser
     build_flag_templates:
@@ -84,6 +101,7 @@ dockers:
       - "--label=org.opencontainers.image.licenses=AGPL-3.0-only"
   - image_templates:
       - "ghcr.io/ebenderooock/loom:{{ .Version }}-arm64"
+    ids: [loom]
     use: buildx
     goarch: arm64
     dockerfile: deploy/docker/Dockerfile.goreleaser

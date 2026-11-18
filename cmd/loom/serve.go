@@ -30,6 +30,7 @@ import (
 	"github.com/ebenderooock/loom/internal/server"
 	"github.com/ebenderooock/loom/internal/storage"
 	"github.com/ebenderooock/loom/internal/systemlogs"
+	"github.com/ebenderooock/loom/internal/updater"
 	"github.com/ebenderooock/loom/internal/workflows"
 )
 
@@ -40,6 +41,11 @@ func cmdServe(ctx context.Context, args []string) error {
 	logLevel := fs.String("log-level", "", "log level: debug|info|warn|error")
 	devMode := fs.Bool("dev", false, "run in dev test mode: stubs all external APIs, uses in-memory SQLite")
 	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	// On enrolled launchd installations, recovery must authorize startup before
+	// loading/writing config or opening/migrating any database.
+	if err := updater.StartupGuard(ctx); err != nil {
 		return err
 	}
 

@@ -54,6 +54,19 @@ by replacing a binary: rollback needs the old version **and** its pre-upgrade
 database backup. Each platform guide covers service logs and removal without
 discarding state.
 
+### Update channels
+
+**Settings > General > Updates** defaults to Stable. Prelease requires an
+explicit risk acknowledgement and a saved opt-in. Signed notices need a
+publisher public key compiled into Loom; until it is provisioned, use GitHub
+Releases manually. Restricted Linux/systemd and macOS/launchd helpers implement stopped-service
+SQLite/config snapshots, health verification and rollback for canonical native
+installs. Production activation still needs the public key and live platform
+upgrade/reboot validation; Windows remains unsupported. PostgreSQL stays manual-only;
+containers and Kubernetes continue using image/orchestration updates.
+See [native updates](native-updates.md) for the current limits, signing contract,
+native branch-build artifacts, and separate publisher work.
+
 ## Trusted publishing
 
 Production publishing is owned by the public
@@ -78,6 +91,34 @@ The supported streams are:
 | `prerelease/X.Y.Z` | Linux amd64 images, `prerelease-X.Y.Z` and a pinned build tag |
 | `vX.Y.Z` on `main` history | Public release assets, versioned amd64/arm64 image, and stable `latest` |
 | Semver prerelease tag on `main` history | Public prerelease assets and versioned images, never stable `latest` |
+
+### Cutting a release
+
+A prerelease branch is a rolling channel; a version tag cuts a release.
+
+1. To start an experimental line, choose `X.Y.Z` and create
+   `prelease/X.Y.Z` from `main`. The active **Restrict publishing branch
+   creation** ruleset blocks new `prelease/**` and `prerelease/**` branches
+   and has no bypass actor. A repository ruleset owner must temporarily
+   exclude only the exact ref (for example, `refs/heads/prelease/0.4.6`),
+   create it from `main`, and then remove that exception. Keep publishing
+   branch protection enabled. Experimental changes should land through PRs
+   targeting this branch.
+2. On code pushes to the branch, the prerelease workflow builds unsigned
+   native archives and waits for the isolated publisher; documentation-only
+   pushes are ignored. The source workflow has no signing or publishing
+   credentials. The publisher validates the source ref, commit, and CI result
+   before publishing its configured outputs.
+3. When the line is ready, merge it into `main` through a PR. After required
+   checks pass, create the matching `vX.Y.Z` tag on the resulting `main`
+   commit. The **Restrict release tag creation** ruleset blocks new `v*` tags;
+   a repository ruleset owner must temporarily exclude only the exact tag
+   (for example, `refs/tags/v0.4.6`) to create it, then remove the exception.
+   The **Keep release tags immutable** ruleset prevents moving or deleting it.
+4. The tag starts `release.yml`, which only observes the publisher's result.
+   The isolated publisher verifies the eligible source and performs the
+   privileged release. Stable tags advance `latest`; SemVer prerelease tags
+   such as `vX.Y.Z-pre.N` publish as prereleases and never advance `latest`.
 
 ### Owner setup and cutover
 

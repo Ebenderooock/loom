@@ -184,6 +184,97 @@ paths:
         "500": { description: Jellyfin provider is unavailable. }
         "502": { description: One or more Jellyfin refreshes failed; partial success is reported. }
         "503": { description: Administrator authentication is not configured. }
+  /api/v1/updates:
+    get:
+      tags: [system]
+      operationId: getUpdateSettings
+      summary: Read update preferences and installation safety status (admin only)
+      description: |
+        Requires administrator authorization, including when normal auth wiring
+        is absent (fail closed). Defaults to Stable, no Prelease consent and
+        automatic installation disabled. No network request is made.
+      responses:
+        "200":
+          description: Saved preferences and current fail-closed installation gate
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [settings, canAutoInstall, installationNotice, verificationConfigured]
+                properties:
+                  settings:
+                    $ref: "#/components/schemas/UpdateSettings"
+                  canAutoInstall:
+                    type: boolean
+                    description: True only for an enrolled eligible Linux/systemd or macOS/launchd SQLite installation with a compiled publisher key
+                  installationNotice:
+                    type: string
+                  verificationConfigured:
+                    type: boolean
+                    description: Whether the binary contains a publisher public trust root
+        "401":
+          description: Authentication required
+        "403":
+          description: Administrator required or auth wiring unavailable
+        "500":
+          description: Preferences unavailable
+    put:
+      tags: [system]
+      operationId: setUpdateSettings
+      summary: Replace update channel preferences (admin only)
+      description: |
+        Prelease requires separate explicit opt-in. Stable requires clearing
+        that consent. Automatic installation requires an enrolled canonical
+        Linux/systemd or macOS/launchd SQLite helper and a compiled publisher key; other
+        installations return 409 for autoInstall true.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateSettings"
+      responses:
+        "200":
+          description: Saved preferences
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UpdateSettings"
+        "400":
+          description: Invalid settings, missing Prelease consent, unknown fields or oversized request
+        "401":
+          description: Authentication required
+        "403":
+          description: Administrator required or auth wiring unavailable
+        "409":
+          description: Automatic installation unavailable; PostgreSQL always requires manual updates
+        "500":
+          description: Preferences could not be saved
+  /api/v1/updates/check:
+    post:
+      tags: [system]
+      operationId: checkNativeUpdate
+      summary: Check signed GitHub Releases metadata for the saved channel (admin only)
+      description: |
+        No installation or binary download. Per-process, per-channel cache
+        throttles successes and failures for at least one hour, respects GitHub
+        rate-limit delays up to 24 hours, and uses API ETags on refresh.
+        No startup/background checks. Missing trust roots make no network
+        requests. Invalid, missing or untrusted signed metadata
+        returns verified false and manual-update guidance, not a candidate.
+      responses:
+        "200":
+          description: Verified notice or safe manual-update fallback
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UpdateNotice"
+        "401":
+          description: Authentication required
+        "403":
+          description: Administrator required or auth wiring unavailable
+        "500":
+          description: Saved preferences unavailable
   /api/v1/appearance:
     get:
       tags: [system]
@@ -4309,6 +4400,54 @@ components:
         errors: { type: array, items: { type: string } }
         startedAt: { type: string, format: date-time }
         completedAt: { type: string, format: date-time }
+    UpdateSettings:
+      type: object
+      additionalProperties: false
+      required: [channel]
+      properties:
+        channel:
+          type: string
+          enum: [stable, prelease]
+          default: stable
+        preleaseOptIn:
+          type: boolean
+          default: false
+          description: Must be true for Prelease and false for Stable
+        autoInstall:
+          type: boolean
+          default: false
+          description: True requires eligible enrolled Linux/systemd or macOS/launchd SQLite and a compiled publisher key; otherwise 409
+    UpdateNotice:
+      type: object
+      required: [currentVersion, available, verified, url, checkedAt, nextCheck]
+      properties:
+        currentVersion:
+          type: string
+        version:
+          type: string
+          description: Present only for verified signed metadata
+        tag:
+          type: string
+          description: GitHub release tag; Prelease tags are separate from the signed SemVer version
+        sourceSha:
+          type: string
+          description: Full commit SHA from verified signed metadata
+        available:
+          type: boolean
+          description: Verified release is newer than a recognized installed version
+        verified:
+          type: boolean
+        url:
+          type: string
+          format: uri
+        checkedAt:
+          type: string
+          format: date-time
+        nextCheck:
+          type: string
+          format: date-time
+        message:
+          type: string
     Appearance:
       type: object
       additionalProperties: false
