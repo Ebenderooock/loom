@@ -32,9 +32,10 @@ import (
 
 // existingQuality represents the quality state of an existing file on disk.
 type existingQuality struct {
-	HasFile      bool // true if a file exists for this media item
-	HasKnownTier bool // true if we could determine the quality tier
-	Tier         int  // position in profile items (lower = better quality)
+	HasFile        bool // true if a file exists for this media item
+	HasKnownTier   bool // true if we could determine the quality tier
+	Tier           int  // position in profile items (lower = better quality)
+	CustomIdentity bool // an unresolvable custom identity must not permit replacement
 }
 
 // profileItem mirrors the shape of items stored in quality_profiles_v2.items JSON.
@@ -112,6 +113,23 @@ var yearRe = regexp.MustCompile(`\b(19|20)\d{2}\b`)
 // WithBlocklist rejects search results that match the download blocklist.
 func WithBlocklist(b BlocklistChecker) EngineOption {
 	return func(e *Engine) { e.blocklist = b }
+}
+
+func (e *Engine) loadCustomTiers(ctx context.Context, profile *qualityprofiles.QualityProfile) ([]customformats.Tier, error) {
+	if !customformats.HasCustomTiers(profile) {
+		return nil, nil
+	}
+	if e.cfStore == nil {
+		return nil, fmt.Errorf("custom tier store unavailable")
+	}
+	tiers, err := e.cfStore.ListTiers(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("load custom tiers: %w", err)
+	}
+	if _, err := customformats.ResolveTier(profile, tiers, customformats.ReleaseInfo{}, ""); err != nil {
+		return nil, fmt.Errorf("invalid custom tier policy: %w", err)
+	}
+	return tiers, nil
 }
 
 // isBlocklisted reports whether a search result matches the blocklist.
@@ -197,6 +215,13 @@ func (e *Engine) Evaluate(ctx context.Context, req EvaluateRequest) (*EvaluateRe
 	if err != nil {
 		return nil, fmt.Errorf("load quality definitions: %w", err)
 	}
+	customTiers, err := e.loadCustomTiers(ctx, profile)
+	if err != nil {
+		if req.PolicyPreview != nil {
+			return nil, fmt.Errorf("%w: %w", ErrInvalidPolicyPreview, err)
+		}
+		return nil, err
+	}
 
 	allowedMap := make(map[string]int)
 	allowedDefs := make(map[string]bool)
@@ -212,7 +237,11 @@ func (e *Engine) Evaluate(ctx context.Context, req EvaluateRequest) (*EvaluateRe
 		formatScores[fi.FormatID] = fi.Score
 	}
 
-	existing := e.getExistingQuality(ctx, req.SearchRequest, qualDefs, allowedMap)
+	ranks := make(map[string]int, len(items))
+	for i, item := range items {
+		ranks[item.ID] = i
+	}
+	existing := e.getExistingQuality(ctx, req.SearchRequest, qualDefs, ranks)
 
 	cutoffTier := -1
 	if profile.Cutoff != "" {
@@ -233,7 +262,7 @@ func (e *Engine) Evaluate(ctx context.Context, req EvaluateRequest) (*EvaluateRe
 	scored := make([]ScoredRelease, 0, len(req.Results))
 	var rejected []ScoredRelease
 	for _, res := range req.Results {
-		sr := e.evaluateResult(req.SearchRequest, res, qualDefs, allowedMap, allowedDefs, formatScores, profile, existing, cutoffTier, idBased)
+		sr := e.evaluateResult(req.SearchRequest, res, qualDefs, allowedMap, allowedDefs, formatScores, profile, existing, cutoffTier, idBased, customTiers)
 		if !sr.Rejected && !req.IgnoreBlocklist && e.isBlocklisted(ctx, res) {
 			sr.Rejected = true
 			sr.RejectReason = "blocklisted"
@@ -549,6 +578,10 @@ func (e *Engine) searchAndGrabSingle(ctx context.Context, req SearchRequest) (*S
 		}
 		return nil, fmt.Errorf("load quality definitions: %w", err)
 	}
+	customTiers, err := e.loadCustomTiers(ctx, profile)
+	if err != nil {
+		return nil, err
+	}
 
 	// Build lookup: quality def ID → position in profile (tier).
 	// Lower tier = higher quality = better.
@@ -592,7 +625,11 @@ func (e *Engine) searchAndGrabSingle(ctx context.Context, req SearchRequest) (*S
 	}
 
 	// Compute existing quality once (not per-result) for upgrade logic.
-	existing := e.getExistingQuality(ctx, req, qualDefs, allowedMap)
+	ranks := make(map[string]int, len(items))
+	for i, item := range items {
+		ranks[item.ID] = i
+	}
+	existing := e.getExistingQuality(ctx, req, qualDefs, ranks)
 
 	// Resolve cutoff tier from profile.
 	cutoffTier := -1 // -1 means no cutoff configured
@@ -713,7 +750,7 @@ func (e *Engine) searchAndGrabSingle(ctx context.Context, req SearchRequest) (*S
 			if e.isBlocklisted(ctx, res) {
 				sr = ScoredRelease{Result: res, Rejected: true, RejectReason: "blocklisted"}
 			} else {
-				sr = e.evaluateResult(req, res, qualDefs, allowedMap, allowedDefs, formatScores, profile, existing, cutoffTier, tierIDsBased)
+				sr = e.evaluateResult(req, res, qualDefs, allowedMap, allowedDefs, formatScores, profile, existing, cutoffTier, tierIDsBased, customTiers)
 			}
 			if sr.Rejected {
 				rejectCounts[sr.RejectReason]++
@@ -953,6 +990,7 @@ func (e *Engine) evaluateResult(
 	existing existingQuality,
 	cutoffTier int,
 	idBasedQuery bool,
+	tierSets ...[]customformats.Tier,
 ) (sr ScoredRelease) {
 	sr = ScoredRelease{Result: res, QualityTier: -1}
 
@@ -971,7 +1009,42 @@ func (e *Engine) evaluateResult(
 
 	// Match to a quality definition.
 	qd := matchQualityDef(parsed, qualDefs)
-	addCheck(&sr, "quality definition", "known source and resolution",
+	customProfile := customformats.HasCustomTiers(profile)
+	if customProfile {
+		ri := buildReleaseInfo(parsed, &res)
+		baseID := customformats.BaseTierID(profile, ri.Quality)
+		var tiers []customformats.Tier
+		if len(tierSets) > 0 {
+			tiers = tierSets[0]
+		}
+		resolved, err := customformats.ResolveTier(profile, tiers, ri, baseID)
+		if err != nil || resolved == nil {
+			sr.Rejected = true
+			sr.RejectReason = "quality_not_allowed"
+			addCheck(&sr, "allowed quality", "matching enabled tier", ri.Quality, "quality", false)
+			return sr
+		}
+		if resolved.Kind == customformats.CustomKind {
+			customDef := &movies.QualityDefinition{ID: resolved.ID, Name: resolved.Name, Title: resolved.Name}
+			// A real known source retains its existing size limits. Unknown
+			// sources never borrow a different definition's size policy.
+			if qd != nil && strings.EqualFold(qd.Name, ri.Quality) {
+				copy := *qd
+				copy.ID, copy.Name, copy.Title = resolved.ID, resolved.Name, resolved.Name
+				customDef = &copy
+			}
+			qd = customDef
+		} else {
+			qd = nil
+			for _, def := range qualDefs {
+				if def.ID == resolved.ID {
+					qd = def
+					break
+				}
+			}
+		}
+	}
+	addCheck(&sr, "quality definition", "matching built-in or custom tier",
 		fmt.Sprintf("%s / %dp", parsed.Source, parsed.Resolution), "source / pixels", qd != nil)
 	if qd == nil {
 		sr.Rejected = true
@@ -1030,7 +1103,7 @@ func (e *Engine) evaluateResult(
 		} else {
 			// Existing file with unknown quality — reject conservatively
 			// unless upgrades are allowed (user explicitly wants to replace).
-			if !profile.UpgradeAllowed {
+			if !profile.UpgradeAllowed || customProfile || existing.CustomIdentity {
 				sr.Rejected = true
 				sr.RejectReason = "existing_quality_unknown"
 				return sr
@@ -1701,7 +1774,7 @@ func (e *Engine) getExistingQuality(
 	case "movie":
 		return e.getExistingMovieQuality(ctx, req.MediaID, qualDefs, allowedMap)
 	case "series", "episode":
-		return e.getExistingEpisodeQuality(ctx, req)
+		return e.getExistingEpisodeQuality(ctx, req, qualDefs, allowedMap)
 	}
 	return existingQuality{}
 }
@@ -1726,12 +1799,16 @@ func (e *Engine) getExistingMovieQuality(
 	// Find the best quality tier among existing files.
 	bestTier := -1
 	foundKnown := false
+	hasCustom := false
+	unresolvedCustom := false
 	for _, f := range files {
 		if f.Quality == "" {
 			continue
 		}
+		hasCustom = hasCustom || strings.HasPrefix(f.Quality, "custom-tier:")
 		// Try to match the stored quality string to a quality def.
 		tier, ok := matchStoredQualityToTier(f.Quality, qualDefs, allowedMap)
+		unresolvedCustom = unresolvedCustom || (!ok && strings.HasPrefix(f.Quality, "custom-tier:"))
 		if ok {
 			foundKnown = true
 			if bestTier < 0 || tier < bestTier {
@@ -1741,17 +1818,16 @@ func (e *Engine) getExistingMovieQuality(
 	}
 
 	return existingQuality{
-		HasFile:      true,
-		HasKnownTier: foundKnown,
-		Tier:         bestTier,
+		HasFile:        true,
+		HasKnownTier:   foundKnown && !unresolvedCustom,
+		Tier:           bestTier,
+		CustomIdentity: hasCustom,
 	}
 }
 
-// getExistingEpisodeQuality checks if the target episode already has a file.
-// Series.EpisodeFile has Source/Resolution/Codec but there's no
-// ListEpisodeFiles method yet, so we use the Episode.HasFile flag
-// as a conservative indicator.
-func (e *Engine) getExistingEpisodeQuality(ctx context.Context, req SearchRequest) existingQuality {
+// getExistingEpisodeQuality compares persisted episode file identities when
+// the series service supports the optional quality reader.
+func (e *Engine) getExistingEpisodeQuality(ctx context.Context, req SearchRequest, defs []*movies.QualityDefinition, ranks map[string]int) existingQuality {
 	if req.MediaID == "" || e.seriesSvc == nil || req.Episode <= 0 {
 		return existingQuality{}
 	}
@@ -1767,8 +1843,30 @@ func (e *Engine) getExistingEpisodeQuality(ctx context.Context, req SearchReques
 
 	for _, ep := range episodes {
 		if ep.EpisodeNumber == req.Episode && ep.HasFile {
-			// HasFile is true but we don't have structured quality info
-			// to determine tier (no ListEpisodeFiles method yet).
+			if reader, ok := e.seriesSvc.(interface {
+				EpisodeFileQualities(context.Context, string) ([]string, error)
+			}); ok {
+				qualities, err := reader.EpisodeFileQualities(ctx, ep.ID)
+				if err == nil {
+					best := -1
+					hasCustom := false
+					unresolvedCustom := false
+					for _, quality := range qualities {
+						hasCustom = hasCustom || strings.HasPrefix(quality, "custom-tier:")
+						tier, ok := matchStoredQualityToTier(quality, defs, ranks)
+						unresolvedCustom = unresolvedCustom || (!ok && strings.HasPrefix(quality, "custom-tier:"))
+						if ok && (best < 0 || tier < best) {
+							best = tier
+						}
+					}
+					if best >= 0 && !unresolvedCustom {
+						return existingQuality{HasFile: true, HasKnownTier: true, Tier: best}
+					}
+					if hasCustom {
+						return existingQuality{HasFile: true, CustomIdentity: true}
+					}
+				}
+			}
 			return existingQuality{HasFile: true, HasKnownTier: false}
 		}
 	}
@@ -1784,6 +1882,13 @@ func matchStoredQualityToTier(
 	allowedMap map[string]int,
 ) (int, bool) {
 	lower := strings.ToLower(quality)
+	if strings.HasPrefix(quality, "custom-tier:") {
+		tier, ok := allowedMap[customformats.StoredID(quality)]
+		return tier, ok
+	}
+	if strings.HasPrefix(lower, "unknown-") {
+		lower = "unknown"
+	}
 
 	// Try matching against quality definition names first (exact match).
 	for _, qd := range qualDefs {

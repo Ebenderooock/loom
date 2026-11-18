@@ -63,6 +63,44 @@ func TestUnknownQualityDoesNotBypassExclusionsOrReplaceKnownQuality(t *testing.T
 	}
 }
 
+func TestSourceUnknownQualityUsesAllowedUnknownTierForFirstImport(t *testing.T) {
+	explicitUnknown := &qualityprofiles.QualityProfile{
+		ID: "prof-1", Name: "Custom", UpgradeAllowed: true,
+		Items: `[{"id":"unknown","name":"unknown","allowed":true},{"id":"webdl-1080p","name":"webdl-1080p","allowed":false}]`,
+	}
+	excludedUnknown := *explicitUnknown
+	excludedUnknown.Items = `[{"id":"unknown","name":"unknown","allowed":false},{"id":"webdl-1080p","name":"webdl-1080p","allowed":true}]`
+	for _, tc := range []struct {
+		name     string
+		profile  *qualityprofiles.QualityProfile
+		title    string
+		existing string
+		allowed  bool
+	}{
+		{"allowed unknown tier", explicitUnknown, "The.Body.2026.S01E08.1080p.HEVC.x265-MeGusta[EZTVx.to].mkv", "", true},
+		{"unrestricted legacy profile", unrestrictedProfile(t), "The.Body.2026.S01E08.1080p.HEVC.x265-MeGusta[EZTVx.to].mkv", "", true},
+		{"unknown tier excluded", &excludedUnknown, "The.Body.2026.S01E08.1080p.HEVC.x265-MeGusta[EZTVx.to].mkv", "", false},
+		{"restricted profile without unknown", anyProfile(), "The.Body.2026.S01E08.1080p.HEVC.x265-MeGusta[EZTVx.to].mkv", "", false},
+		{"known source remains excluded", explicitUnknown, "The.Body.2026.S01E08.1080p.WEB.h264-GROUP.mkv", "", false},
+		{"known quality replacement stays rejected", explicitUnknown, "The.Body.2026.S01E08.1080p.HEVC.x265-MeGusta[EZTVx.to].mkv", "webdl-1080p", false},
+		{"resolution downgrade stays rejected", unrestrictedProfile(t), "The.Body.2026.S01E08.1080p.HEVC.x265-MeGusta[EZTVx.to].mkv", "webdl-2160p", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			for _, withRelease := range []bool{false, true} {
+				candidate := &ImportCandidate{SourcePath: tc.title, QualityProfileID: tc.profile.ID, ExistingQuality: tc.existing}
+				if withRelease {
+					candidate.IncomingRelease = parser.Parse(tc.title)
+					candidate.SourcePath = "renamed.mkv"
+				}
+				rejection := NewUpgradeSpec(&stubProfileStore{profile: tc.profile}).IsSatisfiedBy(context.Background(), candidate)
+				if (rejection == nil) != tc.allowed {
+					t.Fatalf("with release=%t: rejection=%+v; want allowed=%t", withRelease, rejection, tc.allowed)
+				}
+			}
+		})
+	}
+}
+
 // stubProfileStore is a test double for QualityProfileGetter.
 type stubProfileStore struct {
 	profile *qualityprofiles.QualityProfile

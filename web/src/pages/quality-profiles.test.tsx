@@ -51,6 +51,17 @@ const initialProfile = {
   ],
 };
 let savedProfile = structuredClone(initialProfile);
+let savedTiers: Array<{
+  id: string;
+  name: string;
+  specifications: Array<{
+    name: string;
+    implementation: string;
+    negate: boolean;
+    required: boolean;
+    fields: Record<string, unknown>;
+  }>;
+}> = [];
 const fetchMock = vi.fn<typeof fetch>();
 const json = (body: unknown) =>
   new Response(JSON.stringify(body), {
@@ -78,10 +89,32 @@ async function openEditor(user: ReturnType<typeof userEvent.setup>) {
 
 beforeEach(() => {
   savedProfile = structuredClone(initialProfile);
+  savedTiers = [];
   vi.stubGlobal("fetch", fetchMock);
   fetchMock.mockImplementation(async (input, init) => {
     const url = String(input);
     if (url.endsWith("/movies/quality-definitions")) return json(definitions);
+    if (url.endsWith("/custom-formats/tiers") && init?.method === "POST") {
+      const tier = { ...JSON.parse(String(init.body)), id: "ct_test" };
+      savedTiers.push(tier);
+      return json(tier);
+    }
+    if (
+      url.endsWith("/custom-formats/tiers/ct_test") &&
+      init?.method === "PUT"
+    ) {
+      savedTiers[0] = JSON.parse(String(init.body));
+      return json(savedTiers[0]);
+    }
+    if (
+      url.endsWith("/custom-formats/tiers/ct_test") &&
+      init?.method === "DELETE"
+    ) {
+      savedTiers = [];
+      return new Response(null, { status: 204 });
+    }
+    if (url.endsWith("/custom-formats/tiers"))
+      return json({ data: savedTiers });
     if (url.endsWith("/custom-formats")) return json({ data: formats });
     if (url.endsWith("/quality-profiles/profile") && init?.method === "PUT") {
       savedProfile = { ...savedProfile, ...JSON.parse(String(init.body)) };
@@ -102,6 +135,102 @@ afterEach(() => {
 });
 
 describe("Quality profile scoring", () => {
+  it("edits and deletes an unreferenced custom tier", async () => {
+    savedTiers = [
+      {
+        id: "ct_test",
+        name: "Original tier",
+        specifications: [
+          {
+            name: "",
+            implementation: "CodecSpec",
+            negate: false,
+            required: false,
+            fields: { value: "x265" },
+          },
+        ],
+      },
+    ];
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const user = userEvent.setup();
+    show();
+    await user.click(
+      await screen.findByRole("button", { name: "Manage custom tiers" }),
+    );
+    await user.click(
+      await screen.findByRole("button", { name: "Edit Original tier" }),
+    );
+    await user.clear(screen.getByLabelText("Tier name"));
+    await user.type(screen.getByLabelText("Tier name"), "Renamed tier");
+    await user.click(screen.getByRole("button", { name: "Save tier" }));
+    await user.click(
+      await screen.findByRole("button", { name: "Delete Renamed tier" }),
+    );
+    await waitFor(() => expect(savedTiers).toHaveLength(0));
+    vi.restoreAllMocks();
+  });
+  it("creates a matcher-backed tier and saves its profile position", async () => {
+    const user = userEvent.setup();
+    show();
+    await user.click(
+      await screen.findByRole("button", { name: "Manage custom tiers" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Add custom tier" }));
+    await user.type(
+      screen.getByLabelText("Tier name"),
+      "1080p HEVC unknown source",
+    );
+    await user.type(
+      screen.getByLabelText("Value", { selector: "#tier-value-0" }),
+      "1080p",
+    );
+    await user.click(screen.getByRole("button", { name: "Add rule" }));
+    await user.selectOptions(
+      screen.getByLabelText("Rule type", { selector: "#tier-type-1" }),
+      "CodecSpec",
+    );
+    await user.type(
+      screen.getByLabelText("Value", { selector: "#tier-value-1" }),
+      "x265",
+    );
+    await user.click(screen.getByRole("button", { name: "Add rule" }));
+    await user.selectOptions(
+      screen.getByLabelText("Rule type", { selector: "#tier-type-2" }),
+      "SourceSpec",
+    );
+    await user.type(
+      screen.getByLabelText("Value", { selector: "#tier-value-2" }),
+      "unknown",
+    );
+    await user.click(screen.getByRole("button", { name: "Save tier" }));
+    await screen.findByRole("button", {
+      name: "Edit 1080p HEVC unknown source",
+    });
+    await user.keyboard("{Escape}");
+    await openEditor(user);
+    await user.click(
+      screen.getByText("1080p HEVC unknown source", {
+        selector: "span.text-sm.text-foreground",
+      }),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Move 1080p HEVC unknown source up" }),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Move 1080p HEVC unknown source up" }),
+    );
+    await user.selectOptions(
+      screen.getByLabelText("Quality cutoff"),
+      "ct_test",
+    );
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(savedProfile.cutoff).toBe("ct_test"));
+    expect(JSON.parse(savedProfile.items)[0]).toMatchObject({
+      id: "ct_test",
+      kind: "custom",
+      allowed: true,
+    });
+  });
   it("preserves scores, format IDs and thresholds through quality selection, save and reopen", async () => {
     const user = userEvent.setup();
     show();

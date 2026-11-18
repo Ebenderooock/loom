@@ -127,7 +127,7 @@ func NewPipeline(opts PipelineOptions) (*ImportPipeline, error) {
 		&FreeSpaceSpec{},
 		&UnpackingSpec{},
 		&DangerousFileSpec{},
-		NewUpgradeSpec(opts.QualityProfiles),
+		NewUpgradeSpec(opts.QualityProfiles, customformats.NewStore(opts.DB)),
 		NewCustomFormatSpec(opts.QualityProfiles, customformats.NewStore(opts.DB)),
 	}
 
@@ -697,6 +697,18 @@ func importRelease(file, title string, match *MatchResult) *parser.Release {
 		incoming.Source = release.Source
 		incoming.IsRemux = release.IsRemux
 	}
+	if incoming.Codec == "" {
+		incoming.Codec = release.Codec
+	}
+	if incoming.Audio == "" {
+		incoming.Audio = release.Audio
+	}
+	if incoming.Group == "" {
+		incoming.Group = release.Group
+	}
+	if len(incoming.Languages) == 0 {
+		incoming.Languages = release.Languages
+	}
 	return incoming
 }
 
@@ -757,6 +769,9 @@ func (p *ImportPipeline) importMatchedWith(ctx context.Context, ev *downloads.Do
 		}
 	}
 	eval := p.decisions.Evaluate(ctx, candidate)
+	if candidate.ResolvedTier != "" {
+		incomingQuality = candidate.ResolvedTier
+	}
 	if !eval.Approved() {
 		sampleOnly := true
 		reasons := make([]string, len(eval.Rejections))

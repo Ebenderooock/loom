@@ -53,6 +53,24 @@ type sqlRepo struct {
 	db *sql.DB
 }
 
+// EpisodeFileQualities returns persisted quality identities for an episode.
+func (r *sqlRepo) EpisodeFileQualities(ctx context.Context, episodeID string) ([]string, error) {
+	rows, err := r.db.QueryContext(ctx, `SELECT COALESCE(quality, '') FROM episode_files WHERE episode_id = ?`, episodeID)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	var qualities []string
+	for rows.Next() {
+		var quality string
+		if err := rows.Scan(&quality); err != nil {
+			return nil, err
+		}
+		qualities = append(qualities, quality)
+	}
+	return qualities, rows.Err()
+}
+
 const seriesColumns = `id, title, year, imdb_id, tmdb_id, tvdb_id, overview, genres, runtime, rating, backdrop_path, poster_path, network, status, series_type, metadata_provider, quality_profile_id, library_id, monitoring_status, season_folder, release_date, created_at, updated_at, ` + movies.MissingQualityProfileSQL
 
 func scanSeries(scanner interface {

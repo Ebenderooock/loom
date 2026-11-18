@@ -493,12 +493,12 @@ paths:
     get:
       tags: [imports]
       operationId: listImportJobs
-      summary: List all active jobs and recent finished jobs.
+      summary: List all active jobs and recent undismissed inactive jobs.
       security: [{ apiKey: [] }, { bearerAuth: [] }, { cookieAuth: [] }]
       parameters:
         - in: query
           name: limit
-          description: Maximum finished jobs; active jobs are always included.
+          description: Maximum undismissed inactive jobs; active jobs are always included.
           schema: { type: integer, default: 100, maximum: 500, minimum: 1 }
       responses:
         "200":
@@ -511,6 +511,50 @@ paths:
                   data:
                     type: array
                     items: { $ref: "#/components/schemas/ImportJob" }
+  /api/v1/imports/jobs/dismiss:
+    post:
+      tags: [imports]
+      operationId: dismissImportJobs
+      summary: Hide selected inactive jobs or clear all inactive queue entries.
+      description: |
+        Dismissal preserves job details, file outcomes, import history, safety reviews,
+        media files and downloads. Queued, importing and retry-pending jobs cannot be
+        dismissed. Selected IDs are dismissed atomically. Clear-all is not limited
+        to the recent jobs returned by the list endpoint.
+      security: [{ apiKey: [] }, { bearerAuth: [] }, { cookieAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - type: object
+                  required: [ids]
+                  properties:
+                    ids:
+                      type: array
+                      minItems: 1
+                      maxItems: 1000
+                      items: { type: string, minLength: 1 }
+                    all_inactive: { type: boolean, enum: [false] }
+                - type: object
+                  required: [all_inactive]
+                  properties:
+                    all_inactive: { type: boolean, enum: [true] }
+      responses:
+        "200":
+          description: Entries dismissed; repeated dismissal returns zero for those entries.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [dismissed]
+                properties:
+                  dismissed: { type: integer, minimum: 0 }
+        "400": { description: Invalid body or selection. }
+        "404": { description: A selected job does not exist; no entries dismissed. }
+        "409": { description: A selected job is active; no entries dismissed. }
+        "500": { description: Dismissal could not be persisted. }
   /api/v1/imports/jobs/{id}:
     get:
       tags: [imports]
@@ -4345,6 +4389,74 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
+  /api/v1/custom-formats/tiers:
+    get:
+      tags: [custom-formats]
+      operationId: listCustomQualityTiers
+      summary: List reusable matcher-backed quality tiers.
+      security: [{ apiKey: [] }, { bearerAuth: [] }, { cookieAuth: [] }]
+      responses:
+        "200":
+          description: Saved tiers; profile order determines matching precedence.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/CustomQualityTier" }
+    post:
+      tags: [custom-formats]
+      operationId: createCustomQualityTier
+      summary: Create a quality tier without changing profile allowance or scores.
+      security: [{ apiKey: [] }, { bearerAuth: [] }, { cookieAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SaveCustomQualityTierRequest" }
+      responses:
+        "201":
+          description: Created tier with a server-generated immutable ID.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CustomQualityTier" }
+        "400": { description: Invalid name, rules, or title regular expression. }
+  /api/v1/custom-formats/tiers/{id}:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: string }
+    put:
+      tags: [custom-formats]
+      operationId: updateCustomQualityTier
+      summary: Edit matching rules or label without changing persisted tier identity.
+      security: [{ apiKey: [] }, { bearerAuth: [] }, { cookieAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SaveCustomQualityTierRequest" }
+      responses:
+        "200":
+          description: Updated tier.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CustomQualityTier" }
+        "400": { description: Invalid name, rules, or title regular expression. }
+        "404": { description: Tier not found. }
+    delete:
+      tags: [custom-formats]
+      operationId: deleteCustomQualityTier
+      summary: Delete an unreferenced custom tier.
+      security: [{ apiKey: [] }, { bearerAuth: [] }, { cookieAuth: [] }]
+      responses:
+        "204": { description: Tier deleted. }
+        "404": { description: Tier not found. }
+        "409": { description: A profile or imported file still references this tier. }
   /api/v1/custom-formats/test:
     post:
       tags: [quality]
@@ -6331,7 +6443,11 @@ components:
       properties:
         id:
           type: string
-          description: Quality definition ID.
+          description: Built-in quality definition ID or immutable custom tier ID.
+        kind:
+          type: string
+          enum: ["", custom]
+          description: Omit or leave empty for built-in qualities; use custom for matcher-backed tiers.
         name:
           type: string
           description: Quality definition name.
@@ -6357,7 +6473,7 @@ components:
           description: Whether upgrades are allowed after initial grab.
         cutoff:
           type: string
-          description: Quality definition ID that serves as upgrade target. Must exist in items and be allowed.
+          description: Built-in or custom tier ID that serves as upgrade target. Must exist in items and be allowed.
         language:
           type: string
           description: ISO 639-1 language code.
@@ -6421,6 +6537,59 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/QualityProfileItem"
+
+    CustomQualityTierSpecification:
+      type: object
+      required: [implementation, fields]
+      properties:
+        name: { type: string }
+        implementation:
+          type: string
+          enum: [ReleaseTitleSpec, QualitySpec, SourceSpec, ResolutionSpec, CodecSpec, AudioSpec, ReleaseGroupSpec, LanguageSpec]
+        negate: { type: boolean, default: false }
+        required: { type: boolean, default: false }
+        fields:
+          type: object
+          required: [value]
+          properties:
+            value:
+              type: string
+              minLength: 1
+              description: Matching value; ReleaseTitleSpec uses a case-insensitive regular expression. SourceSpec accepts unknown for an unspecified source.
+    SaveCustomQualityTierRequest:
+      type: object
+      required: [name, specifications]
+      properties:
+        name: { type: string, minLength: 1 }
+        specifications:
+          type: array
+          minItems: 1
+          description: Different rule types are ANDed; same-type rules are alternatives unless required.
+          items: { $ref: "#/components/schemas/CustomQualityTierSpecification" }
+    CustomQualityTier:
+      allOf:
+        - $ref: "#/components/schemas/SaveCustomQualityTierRequest"
+        - type: object
+          required: [id]
+          properties:
+            id:
+              type: string
+              description: Immutable server-generated tier identity; names and rules can change.
+    QualityTierResolution:
+      type: object
+      nullable: true
+      required: [id, name, rank]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        rank:
+          type: integer
+          minimum: 0
+          description: Position in the selected profile, best first.
+        kind:
+          type: string
+          enum: [custom]
+          description: Present for custom tiers; omitted for built-in qualities.
 
     CustomFormat:
       type: object
@@ -6545,6 +6714,8 @@ components:
       type: object
       required: [release, matches, score]
       properties:
+        quality_tier:
+          $ref: "#/components/schemas/QualityTierResolution"
         release:
           type: object
           description: Parsed metadata shared with acquisition and import matching.

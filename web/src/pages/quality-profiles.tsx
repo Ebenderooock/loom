@@ -37,7 +37,8 @@ import {
   useDeleteQualityProfile,
   type QualityProfile,
 } from "@/lib/quality-profiles-api";
-import { useCustomFormats } from "@/lib/custom-formats-api";
+import { useCustomFormats, useCustomTiers } from "@/lib/custom-formats-api";
+import { CustomTierManager } from "@/components/custom-tier-manager";
 
 // ---------- Quality definition types and grouping ----------
 
@@ -49,6 +50,7 @@ interface QualityDefinition {
   resolution: string;
   modifier?: string;
   preferred_at: number;
+  kind?: "custom";
 }
 
 interface ParsedItem {
@@ -56,6 +58,7 @@ interface ParsedItem {
   name: string;
   preferred: boolean;
   allowed: boolean;
+  kind?: "custom";
 }
 
 const SOURCE_GROUP_ORDER = [
@@ -127,6 +130,12 @@ export function QualityProfilesPage() {
   const deleteMut = useDeleteQualityProfile();
   const [editing, setEditing] = React.useState<QualityProfile | null>(null);
   const [creating, setCreating] = React.useState(false);
+  const [managingTiers, setManagingTiers] = React.useState(false);
+  const {
+    data: tiers = [],
+    isLoading: tiersLoading,
+    isError: tiersError,
+  } = useCustomTiers();
 
   // Fetch quality definitions for the editor and for display
   const [definitions, setDefinitions] = React.useState<QualityDefinition[]>([]);
@@ -136,12 +145,27 @@ export function QualityProfilesPage() {
       .then((data) => setDefinitions(Array.isArray(data) ? data : []))
       .catch((err) => console.error("fetch failed:", err));
   }, []);
+  const allDefinitions = React.useMemo(
+    () => [
+      ...definitions,
+      ...tiers.map((tier, i) => ({
+        id: tier.id,
+        name: tier.name,
+        title: tier.name,
+        source: "Custom",
+        resolution: "",
+        preferred_at: definitions.length + i,
+        kind: "custom" as const,
+      })),
+    ],
+    [definitions, tiers],
+  );
 
   const defById = React.useMemo(() => {
     const map = new Map<string, QualityDefinition>();
-    for (const d of definitions) map.set(d.id, d);
+    for (const d of allDefinitions) map.set(d.id, d);
     return map;
-  }, [definitions]);
+  }, [allDefinitions]);
 
   return (
     <div className="container mx-auto max-w-4xl space-y-6 py-8">
@@ -154,9 +178,22 @@ export function QualityProfilesPage() {
             Define quality tiers and per-profile custom format scores.
           </p>
         </div>
-        <Button onClick={() => setCreating(true)}>
-          <Plus className="mr-2 h-4 w-4" /> Add Profile
-        </Button>
+        {tiersError && (
+          <p role="alert">
+            Could not load custom tiers. Retry before editing profiles.
+          </p>
+        )}
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setManagingTiers(true)}>
+            Manage custom tiers
+          </Button>
+          <Button
+            disabled={tiersLoading || tiersError}
+            onClick={() => setCreating(true)}
+          >
+            <Plus className="mr-2 h-4 w-4" /> Add Profile
+          </Button>
+        </div>
       </div>
 
       {isLoading ? (
@@ -231,7 +268,10 @@ export function QualityProfilesPage() {
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={() => setEditing(qp)}>
+                    <DropdownMenuItem
+                      disabled={tiersLoading || tiersError}
+                      onClick={() => setEditing(qp)}
+                    >
                       <Pencil className="mr-2 h-4 w-4" /> Edit
                     </DropdownMenuItem>
                     <DropdownMenuItem
@@ -256,12 +296,15 @@ export function QualityProfilesPage() {
       {(creating || editing) && (
         <ProfileDialog
           initial={editing ?? undefined}
-          definitions={definitions}
+          definitions={allDefinitions}
           onClose={() => {
             setEditing(null);
             setCreating(false);
           }}
         />
+      )}
+      {managingTiers && (
+        <CustomTierManager onClose={() => setManagingTiers(false)} />
       )}
     </div>
   );
@@ -304,6 +347,33 @@ function ProfileDialog({
   const [minFormatScore, setMinFormatScore] = React.useState(
     String(initial?.min_format_score ?? 0),
   );
+  const [order, setOrder] = React.useState<string[]>(() => {
+    const saved = initial?.items
+      ? parseProfileItems(initial.items).map((item) => item.id)
+      : [];
+    return [
+      ...saved.filter((id) => definitions.some((d) => d.id === id)),
+      ...definitions.filter((d) => !saved.includes(d.id)).map((d) => d.id),
+    ];
+  });
+  const orderedDefinitions = order
+    .map((id) => definitions.find((d) => d.id === id))
+    .filter((d): d is QualityDefinition => !!d);
+  const missingItems = initial?.items
+    ? parseProfileItems(initial.items).filter(
+        (item) => !definitions.some((def) => def.id === item.id),
+      )
+    : [];
+
+  const moveTier = (id: string, delta: number) =>
+    setOrder((current) => {
+      const next = [...current];
+      const from = next.indexOf(id);
+      const to = from + delta;
+      if (from < 0 || to < 0 || to >= next.length) return current;
+      next.splice(to, 0, ...next.splice(from, 1));
+      return next;
+    });
 
   // Parse existing items into a checked-map keyed by quality definition ID
   const [checkedItems, setCheckedItems] = React.useState<
@@ -363,18 +433,27 @@ function ProfileDialog({
     formatItems.find((fi) => fi.format_id === cfId)?.score ?? "0";
 
   const handleSave = () => {
+    if (missingItems.length > 0) {
+      toast.error(
+        "Some profile tiers are unavailable. Restore them before saving.",
+      );
+      return;
+    }
     if (!name.trim()) {
       toast.error("Profile name is required");
       return;
     }
 
     // Build items JSON array matching the shape autosearch expects
-    const itemsArray = definitions.map((d) => ({
-      id: d.id,
-      name: d.name,
-      preferred: d.id === cutoff,
-      allowed: checkedItems[d.id] ?? false,
-    }));
+    const itemsArray = orderedDefinitions
+      .filter((d) => !d.kind || checkedItems[d.id])
+      .map((d) => ({
+        id: d.id,
+        name: d.name,
+        preferred: d.id === cutoff,
+        allowed: checkedItems[d.id] ?? false,
+        ...(d.kind ? { kind: d.kind } : {}),
+      }));
     const itemsJson = JSON.stringify(itemsArray);
     const formatScores = formatItems.map((fi) => ({
       ...fi,
@@ -387,11 +466,12 @@ function ProfileDialog({
           id: initial!.id,
           body: {
             name: name.trim(),
-            cutoff,
+            cutoff: checkedItems[cutoff] ? cutoff : "",
             items: itemsJson,
             upgrade_allowed: upgradeAllowed,
             format_items: formatScores,
             min_format_score: parseInt(minFormatScore, 10) || 0,
+            cutoff_format_score: initial!.cutoff_format_score,
           },
         },
         {
@@ -406,7 +486,7 @@ function ProfileDialog({
       createMut.mutate(
         {
           name: name.trim(),
-          cutoff,
+          cutoff: checkedItems[cutoff] ? cutoff : "",
           items: itemsJson,
           upgrade_allowed: upgradeAllowed,
           format_items: formatScores,
@@ -443,6 +523,13 @@ function ProfileDialog({
           className="relative -mx-1 min-h-0 flex-1 space-y-4 overflow-y-auto p-1"
         >
           {/* Name */}
+          {missingItems.length > 0 && (
+            <p role="alert" className="text-sm text-destructive">
+              This profile references unavailable tiers:{" "}
+              {missingItems.map((item) => item.name || item.id).join(", ")}.
+              Restore them before saving.
+            </p>
+          )}
           <div className="space-y-2">
             <Label htmlFor="qp-name" className="text-sm text-muted-foreground">
               Profile Name
@@ -557,6 +644,45 @@ function ProfileDialog({
             </div>
           </div>
 
+          <div className="space-y-2">
+            <h3 className="text-sm font-medium">Upgrade order</h3>
+            <p className="text-xs text-muted-foreground">
+              Best first. When tiers overlap, the first enabled match wins.
+            </p>
+            <div className="max-h-48 overflow-y-auto rounded-md border">
+              {orderedDefinitions.map((def, i) => (
+                <div
+                  key={def.id}
+                  className="flex items-center gap-2 border-b p-2 last:border-0"
+                >
+                  <span className="flex-1 text-sm">
+                    {def.title || def.name}
+                  </span>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={i === 0}
+                    onClick={() => moveTier(def.id, -1)}
+                    aria-label={`Move ${def.title || def.name} up`}
+                  >
+                    Up
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={i === orderedDefinitions.length - 1}
+                    onClick={() => moveTier(def.id, 1)}
+                    aria-label={`Move ${def.title || def.name} down`}
+                  >
+                    Down
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </div>
+
           {/* Cutoff selector */}
           {selectedCount > 0 && (
             <div className="space-y-2">
@@ -581,7 +707,7 @@ function ProfileDialog({
                 className="w-full rounded-md border border-border bg-card px-3 py-2 text-sm text-foreground"
               >
                 <option value="">None (no quality cutoff)</option>
-                {definitions
+                {orderedDefinitions
                   .filter((d) => checkedItems[d.id])
                   .map((d) => (
                     <option key={d.id} value={d.id}>
@@ -671,7 +797,12 @@ function ProfileDialog({
           </Button>
           <Button
             onClick={handleSave}
-            disabled={!name || createMut.isPending || updateMut.isPending}
+            disabled={
+              !name ||
+              missingItems.length > 0 ||
+              createMut.isPending ||
+              updateMut.isPending
+            }
           >
             {(createMut.isPending || updateMut.isPending) && (
               <Loader2 className="mr-1 h-4 w-4 animate-spin" />

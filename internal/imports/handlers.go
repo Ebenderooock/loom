@@ -23,6 +23,7 @@ func Router(pipeline *ImportPipeline) chi.Router {
 	r.Get("/decisions", handleListDecisions(pipeline))
 	r.Post("/preview", handlePreviewImport(pipeline))
 	r.Get("/jobs", handleListJobs(pipeline))
+	r.Post("/jobs/dismiss", handleDismissJobs(pipeline))
 	r.Get("/jobs/{id}", handleGetJob(pipeline))
 	r.Post("/jobs/{id}/retry", handleRetryJob(pipeline))
 	r.Post("/batch", handleBatchImport(pipeline))
@@ -302,6 +303,32 @@ func handleGetJob(p *ImportPipeline) http.HandlerFunc {
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"data": job})
+	}
+}
+
+func handleDismissJobs(p *ImportPipeline) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			IDs         []string `json:"ids"`
+			AllInactive bool     `json:"all_inactive"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+			return
+		}
+		count, err := p.DismissJobs(r.Context(), req.IDs, req.AllInactive)
+		switch {
+		case errors.Is(err, ErrDismissalSelection):
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		case errors.Is(err, ErrJobNotFound):
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+		case errors.Is(err, ErrJobActive):
+			writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
+		case err != nil:
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		default:
+			writeJSON(w, http.StatusOK, map[string]int64{"dismissed": count})
+		}
 	}
 }
 

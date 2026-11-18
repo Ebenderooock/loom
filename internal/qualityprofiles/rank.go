@@ -14,6 +14,7 @@ type QualityItem struct {
 	Name      string `json:"name"`
 	Preferred bool   `json:"preferred"`
 	Allowed   bool   `json:"allowed"`
+	Kind      string `json:"kind,omitempty"`
 }
 
 // ParseItems deserialises the Items JSON into a slice of QualityItem.

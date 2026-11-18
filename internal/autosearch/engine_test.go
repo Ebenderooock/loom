@@ -35,7 +35,7 @@ func TestExistingSpecialDoesNotUseRegularEpisodeFile(t *testing.T) {
 		e.seriesSvc = specialEpisodeService{specialHasFile: downloaded}
 		got := e.getExistingEpisodeQuality(context.Background(), SearchRequest{
 			MediaType: "episode", MediaID: "show", Season: 0, Episode: 1,
-		})
+		}, nil, nil)
 		if got.HasFile != downloaded {
 			t.Fatalf("special downloaded=%v, got existing=%+v", downloaded, got)
 		}

@@ -111,8 +111,10 @@ type JobRequest struct {
 var (
 	// ErrJobNotFound is returned for an unknown job ID.
 	ErrJobNotFound = errors.New("import job not found")
-	// ErrJobActive is returned when retrying a job that is still running.
+	// ErrJobActive is returned when retrying or dismissing an active job.
 	ErrJobActive = errors.New("import job is still active")
+	// ErrDismissalSelection requires either selected IDs or all inactive jobs.
+	ErrDismissalSelection = errors.New("provide 1 to 1000 non-empty job IDs or all_inactive, but not both")
 	// ErrNothingToRetry is returned when a job has no failed files.
 	ErrNothingToRetry = errors.New("import job has no failed files to retry")
 	// ErrPendingReview is returned when retrying a job blocked by a safety
@@ -334,6 +336,9 @@ func (p *ImportPipeline) EnqueueImport(ctx context.Context, req JobRequest) (*Im
 		path, string(req.Kind), string(req.MediaType), req.MediaID,
 		string(JobQueued), string(JobImporting), string(JobRetryPending), string(JobPendingReview)).Scan(&existing)
 	if err == nil {
+		if _, err := p.db.ExecContext(ctx, `UPDATE import_jobs SET dismissed_at = NULL WHERE id = ?`, existing); err != nil {
+			return nil, fmt.Errorf("restore import job to queue: %w", err)
+		}
 		return p.GetJob(ctx, existing, false)
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
@@ -422,13 +427,75 @@ func (p *ImportPipeline) RetryJob(ctx context.Context, id string) (*ImportJob, e
 			wfID = wf.ID
 		}
 	}
-	if _, err := p.db.ExecContext(ctx, `UPDATE import_jobs SET status = ?, attempts = 0, error = '', next_retry_at = NULL,
+	if _, err := p.db.ExecContext(ctx, `UPDATE import_jobs SET status = ?, attempts = 0, error = '', next_retry_at = NULL, dismissed_at = NULL,
 		completed_at = NULL, workflow_id = ?, updated_at = ? WHERE id = ?`,
 		string(JobQueued), wfID, now, id); err != nil {
 		return nil, fmt.Errorf("requeue import job: %w", err)
 	}
 	p.jobs.signal()
 	return p.GetJob(ctx, id, false)
+}
+
+// DismissJobs hides inactive jobs from the queue without altering their outcomes,
+// files, download clients, workflows, or import history. Selected IDs are atomic.
+func (p *ImportPipeline) DismissJobs(ctx context.Context, ids []string, allInactive bool) (int64, error) {
+	if allInactive == (len(ids) > 0) || len(ids) > maxBatchPaths {
+		return 0, ErrDismissalSelection
+	}
+	for _, id := range ids {
+		if strings.TrimSpace(id) == "" {
+			return 0, ErrDismissalSelection
+		}
+	}
+	now := p.jobs.now()
+	const update = `UPDATE import_jobs SET dismissed_at = ?
+		WHERE dismissed_at IS NULL AND status IN ('imported', 'failed', 'pending_review')`
+	if allInactive {
+		result, err := p.db.ExecContext(ctx, update, now)
+		if err != nil {
+			return 0, fmt.Errorf("dismiss inactive import jobs: %w", err)
+		}
+		return result.RowsAffected()
+	}
+	tx, err := p.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, fmt.Errorf("begin import dismissal: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	seen := make(map[string]bool, len(ids))
+	var count int64
+	for _, id := range ids {
+		if seen[id] {
+			continue
+		}
+		seen[id] = true
+		result, err := tx.ExecContext(ctx, update+` AND id = ?`, now, id)
+		if err != nil {
+			return 0, fmt.Errorf("dismiss import job: %w", err)
+		}
+		n, err := result.RowsAffected()
+		if err != nil {
+			return 0, fmt.Errorf("count dismissed import jobs: %w", err)
+		}
+		if n == 0 {
+			var status JobStatus
+			err := tx.QueryRowContext(ctx, `SELECT status FROM import_jobs WHERE id = ?`, id).Scan(&status)
+			if errors.Is(err, sql.ErrNoRows) {
+				return 0, fmt.Errorf("%s: %w", id, ErrJobNotFound)
+			}
+			if err != nil {
+				return 0, fmt.Errorf("check import job for dismissal: %w", err)
+			}
+			if status != JobImported && status != JobFailed && status != JobPendingReview {
+				return 0, fmt.Errorf("%s: %w", id, ErrJobActive)
+			}
+		}
+		count += n
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, fmt.Errorf("commit import dismissal: %w", err)
+	}
+	return count, nil
 }
 
 // claimJob atomically moves the oldest runnable job into importing.
@@ -1029,8 +1096,8 @@ func (p *ImportPipeline) jobFiles(ctx context.Context, jobID string) ([]ImportJo
 	return files, rows.Err()
 }
 
-// ListJobs returns every active job plus up to limit most recent finished
-// jobs, newest first.
+// ListJobs returns every active job plus up to limit most recent undismissed
+// inactive jobs, newest first.
 func (p *ImportPipeline) ListJobs(ctx context.Context, limit int) ([]*ImportJob, error) {
 	if limit <= 0 {
 		limit = 100
@@ -1061,7 +1128,7 @@ func (p *ImportPipeline) ListJobs(ctx context.Context, limit int) ([]*ImportJob,
 	if err != nil {
 		return nil, err
 	}
-	finished, err := query(`WHERE j.status NOT IN (?, ?, ?) GROUP BY j.id ORDER BY j.created_at DESC LIMIT ?`,
+	finished, err := query(`WHERE j.dismissed_at IS NULL AND j.status NOT IN (?, ?, ?) GROUP BY j.id ORDER BY j.created_at DESC LIMIT ?`,
 		append(active, limit)...)
 	if err != nil {
 		return nil, err

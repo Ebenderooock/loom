@@ -47,7 +47,7 @@ func setupTestDB(t *testing.T) *sql.DB {
 // the test schema cannot drift from production.
 func applyImportJobsMigration(t *testing.T, db *sql.DB) {
 	t.Helper()
-	for _, name := range []string{"0101_import_jobs.sql", "0102_import_destination_metadata.sql"} {
+	for _, name := range []string{"0101_import_jobs.sql", "0102_import_destination_metadata.sql", "0104_import_job_dismissal.sql"} {
 		raw, err := os.ReadFile(filepath.Join("..", "storage", "migrations", "sqlite", name))
 		if err != nil {
 			t.Fatal(err)

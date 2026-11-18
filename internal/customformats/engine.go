@@ -132,6 +132,10 @@ func specMatch(spec Specification, ri ReleaseInfo) bool {
 	case ImplQuality:
 		return matchStringField(spec.Fields, "value", ri.Quality)
 	case ImplSource:
+		want, _ := spec.Fields["value"].(string)
+		if strings.EqualFold(strings.TrimSpace(want), "unknown") {
+			return strings.TrimSpace(ri.Source) == "" || strings.EqualFold(strings.TrimSpace(ri.Source), "unknown")
+		}
 		return matchNormalisedField(spec.Fields, ri.Source, normaliseSource)
 	case ImplResolution:
 		return matchStringField(spec.Fields, "value", ri.Resolution)

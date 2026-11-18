@@ -9,12 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Add per-entry and selected import-queue dismissal plus Clear inactive. Keep
+  queued/running/retrying work, media files, downloads and import history intact.
+- Add matcher-backed custom quality tiers with per-profile allowance, ordering,
+  cutoff and stable file identities. Search, testing, previews and imports use
+  the same tier matching independently of custom-format scores.
 - Add Sync with Jellyfin to movie and series quick actions. Plex and Jellyfin
   sync actions appear only when their respective connection is enabled and
   configured, and request a library refresh without downloading media.
 
 ### Fixed
 
+- Honor an allowed Unknown quality tier for first imports with a known resolution
+  but no source, such as `1080p HEVC` releases. Keep the detected `unknown-1080p`
+  metadata, custom-format minimums, and protections against unknown-quality
+  replacements or excluded known sources.
 - Fix creating and editing quality profiles with multiple custom-format scores
   by sending the correct format IDs. Reject missing or duplicate IDs before
   replacing scores, roll back failed saves, and let profiles recover from invalid

@@ -18,6 +18,7 @@ export interface QualityProfile {
   items: string;
   upgrade_allowed: boolean;
   min_format_score?: number;
+  cutoff_format_score?: number;
   format_items: FormatItem[];
   created_at?: string;
   updated_at?: string;

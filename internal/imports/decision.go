@@ -37,6 +37,7 @@ type ImportCandidate struct {
 	QualityProfileID string          // the media item's assigned quality profile
 	ExistingQuality  string          // quality-definition name of existing file (empty if none)
 	IncomingRelease  *parser.Release // parsed release info for the incoming file
+	ResolvedTier     string          // stable custom tier identity, if selected
 }
 
 // ImportEvaluation holds the result of running all specs against a candidate.
