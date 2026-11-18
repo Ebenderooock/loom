@@ -9,6 +9,7 @@ import (
 	"database/sql"
 	"encoding/binary"
 	"encoding/hex"
+	"errors"
 	"io"
 	"net"
 	"os"
@@ -128,7 +129,7 @@ func macTestGate(t *testing.T, uid uint32) (*startGate, string) {
 	return g, path
 }
 
-func gateRequest(t *testing.T, path, request string) string {
+func gateRequest(t *testing.T, path, request string) (string, error) {
 	t.Helper()
 	c, err := net.DialUnix("unix", nil, &net.UnixAddr{Name: path, Net: "unix"})
 	if err != nil {
@@ -139,33 +140,42 @@ func gateRequest(t *testing.T, path, request string) string {
 		t.Fatal(err)
 	}
 	if _, err := io.WriteString(c, request); err != nil {
-		t.Fatal(err)
+		return "", err
 	}
 	if err := c.CloseWrite(); err != nil {
-		t.Fatal(err)
+		return "", err
 	}
-	raw, _ := io.ReadAll(c)
-	return string(raw)
+	raw, err := io.ReadAll(c)
+	return string(raw), err
+}
+
+func assertGateRejected(t *testing.T, path, request string) {
+	t.Helper()
+	got, err := gateRequest(t, path, request)
+	if got != "" {
+		t.Fatalf("rejected IPC request received a response: %q => %q", request, got)
+	}
+	// Peer authentication can close the socket before the client finishes writing.
+	if err != nil && !errors.Is(err, unix.EPIPE) && !errors.Is(err, unix.ECONNRESET) {
+		t.Fatalf("unexpected IPC rejection error: %v", err)
+	}
 }
 
 func TestMacGateIsReadOnlyAndPeerAuthenticated(t *testing.T) {
 	g, path := macTestGate(t, uint32(os.Geteuid()))
-	if got := gateRequest(t, path, "START\n"); got != "WAIT\n" {
-		t.Fatalf("startup gate initially open: %q", got)
+	if got, err := gateRequest(t, path, "START\n"); err != nil || got != "WAIT\n" {
+		t.Fatalf("startup gate initially open: response=%q error=%v", got, err)
 	}
 	g.allow.Store(true)
-	if got := gateRequest(t, path, "START\n"); got != "GO\n" {
-		t.Fatalf("authorized startup refused: %q", got)
+	if got, err := gateRequest(t, path, "START\n"); err != nil || got != "GO\n" {
+		t.Fatalf("authorized startup refused: response=%q error=%v", got, err)
 	}
 	for _, bad := range []string{"enroll\n", "START\n/evil", "START\nSTART\n", "", "START"} {
-		if got := gateRequest(t, path, bad); got != "" {
-			t.Fatalf("invalid IPC request accepted: %q => %q", bad, got)
-		}
+		assertGateRejected(t, path, bad)
 	}
-	_, wrongPeer := macTestGate(t, uint32(os.Geteuid())+1)
-	if got := gateRequest(t, wrongPeer, "START\n"); got != "" {
-		t.Fatal("wrong peer identity accepted")
-	}
+	wrongGate, wrongPeer := macTestGate(t, uint32(os.Geteuid())+1)
+	wrongGate.allow.Store(true)
+	assertGateRejected(t, wrongPeer, "START\n")
 	if os.Geteuid() != 0 {
 		if err := queryMacGate(t.Context(), path); err == nil {
 			t.Fatal("startup client accepted a non-root helper")
