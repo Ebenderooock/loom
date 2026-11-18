@@ -24,6 +24,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Keep replacement destinations continuously available to macOS readers during
   publication and registration rollback by atomically swapping files and using
   the displaced original directly, without redundant backup hardlinks.
+- Match movie imports without treating IMAX, Dolby Vision, HDR, or other
+  release metadata as part of the title; tolerate catalog punctuation safely.
+- Import provider-confirmed named re-releases, such as Endgame Encore, as
+  separate editions of the original movie. Preserve both copies, keep quality
+  comparisons within each edition, and retain edition tags during renaming.
 - Serialize Discord notifications per webhook and honor the response's
   `retry_after` value and rate-limit reset headers to avoid repeated
   rate-limit failures during alert bursts.

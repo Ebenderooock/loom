@@ -134,7 +134,10 @@ func Parse(releaseName string) *Release {
 	r.Audio = extractAudio(lower)
 
 	// Extract movie edition (Director's Cut, Extended, IMAX, etc.)
-	r.Edition = extractEdition(lower)
+	r.Edition = MovieEdition(releaseName)
+	if r.Edition == "" {
+		r.Edition = extractEdition(lower)
+	}
 
 	// Extract embedded IDs (IMDb, TMDB)
 	r.ImdbID = extractImdbID(lower)
@@ -527,6 +530,15 @@ func extractAudio(lower string) string {
 func extractSeasonEpisode(lower string) (int, int) {
 	s, e, _, _ := extractSeasonEpisodeV2(lower)
 	return s, e
+}
+
+// MovieEdition reads an explicit library edition tag, not a quality marker.
+func MovieEdition(name string) string {
+	parts := getPattern("movie_edition_tag", `(?i)\{edition-([^{}]+)\}`).FindStringSubmatch(name)
+	if parts != nil {
+		return strings.TrimSpace(parts[1])
+	}
+	return ""
 }
 
 // extractEdition extracts movie edition information from release names.

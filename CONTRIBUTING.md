@@ -114,11 +114,19 @@ docker compose up -d            # runs loom + qbittorrent + prometheus + grafana
 ### Running tests
 
 ```bash
+make preflight     # local pre-merge checks for Go, scripts, and frontend
 make test          # full test suite with race detector
 make test-short    # fast subset
 make lint          # golangci-lint
 cd web && npx tsc --noEmit   # frontend type-check
 ```
+
+Run `make preflight` before pushing to catch common failures locally without
+waiting for hosted runners. It runs tests and checks on your current machine;
+it does not replace CI's cross-platform race tests, vulnerability scan, or
+platform-specific installer/build checks, which remain required before merge.
+If frontend dependencies are not installed, run
+`pnpm --dir web install --frozen-lockfile` first.
 
 ---
 
@@ -148,7 +156,9 @@ docs/               # Architecture decision records, design docs
 - One concern per PR. Smaller PRs land faster.
 - Add or update tests for behavior changes. The CI bar is non-negotiable:
   `go test`, `golangci-lint`, `govulncheck`, frontend type-check,
-  and parser-fixture tests must all pass.
+  and parser-fixture tests must all pass. Full validation runs when a PR
+  changes a non-documentation file; changes limited to Markdown, `docs/`, or
+  `CHANGELOG.md` skip these checks.
 - Update relevant ADRs (`docs/adr/`) if your change crosses architectural
   boundaries.
 

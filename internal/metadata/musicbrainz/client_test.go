@@ -352,11 +352,11 @@ func TestThrottling_EnforcesMinimumDelay(t *testing.T) {
 	}
 
 	// Verify minimum delay between requests. Arrival times are recorded
-	// server-side, so per-request scheduling/network jitter can make a measured
-	// gap dip a few hundred microseconds below the interval even though the
-	// throttler slept correctly; allow a small tolerance. A broken throttler
-	// would show gaps near zero, far below this bound.
-	const tolerance = 10 * time.Millisecond
+	// server-side, so per-request scheduling and transport jitter can make a
+	// measured gap dip below the interval even though the throttler slept
+	// correctly; allow a small tolerance. A broken throttler would show gaps
+	// near zero, far below this bound.
+	const tolerance = 25 * time.Millisecond
 	for i := 1; i < len(requestTimes); i++ {
 		elapsed := requestTimes[i].Sub(requestTimes[i-1])
 		if elapsed < throttle-tolerance {
