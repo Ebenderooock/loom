@@ -1,6 +1,7 @@
 package customformats
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -76,14 +77,38 @@ func ExtractFileMetadata(path string) FileMetadata {
 // Returns true if the format matches the file.
 func (e *Engine) EvalFile(cf CustomFormat, filePath string) bool {
 	meta := ExtractFileMetadata(filePath)
-	ri := ReleaseInfo{
-		Title:      filepath.Base(filePath),
-		Size:       meta.Size,
-		Resolution: meta.Resolution,
-		Codec:      meta.Codec,
-		Audio:      meta.Audio,
+	ri := ParseReleaseName(filepath.Base(filePath))
+	ri.Size = meta.Size
+	return matchesFormat(cf, ri, &meta)
+}
+
+// ScoreFileMetadata evaluates release rules together with post-download file rules.
+// Callers supply the file's metadata, not metadata from a different release.
+func (e *Engine) ScoreFileMetadata(release ReleaseInfo, file FileMetadata) []FormatMatch {
+	return e.score(release, &file)
+}
+
+func matchFileInfo(fields map[string]any, file FileMetadata) bool {
+	raw, err := json.Marshal(fields)
+	if err != nil {
+		return false
 	}
-	return matchesFormat(cf, ri)
+	var spec FileInfoSpecification
+	if err := json.Unmarshal(raw, &spec); err != nil {
+		return false
+	}
+	if spec.Codec != "" && !strings.EqualFold(normaliseCodec(spec.Codec), normaliseCodec(file.Codec)) {
+		return false
+	}
+	if spec.Resolution != "" && !strings.EqualFold(spec.Resolution, file.Resolution) {
+		return false
+	}
+	if spec.Audio != "" && !strings.EqualFold(normaliseAudio(spec.Audio), normaliseAudio(file.Audio)) {
+		return false
+	}
+	sizeGB := float64(file.Size) / (1024 * 1024 * 1024)
+	return (spec.MinSizeGB <= 0 || sizeGB >= spec.MinSizeGB) &&
+		(spec.MaxSizeGB <= 0 || sizeGB <= spec.MaxSizeGB)
 }
 
 // ScoreFile evaluates all loaded custom formats against a real file

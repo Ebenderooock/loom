@@ -57,6 +57,14 @@ filename quality information; an unknown existing quality cannot establish a
 downgrade. Unrelated or unsafe destinations are not replaced. A recycle bin
 is optional: when enabled, the old file is kept there.
 
+Movie and episode imports also enforce the assigned profile's minimum combined
+custom-format points, using current saved rules and scores. The matching engine
+shares source/codec normalization with the format tester and acquisition engine.
+Custom formats supplement allowed base qualities; a positive format score
+cannot turn an excluded or unrecognized quality into an allowed one.
+See [format points and imports](release-matching.md#custom-format-points-and-imports)
+for signed-score examples and the profile-aware tester.
+
 File copies are written to hidden `.loom-import-*.partial` staging files in the
 destination directory, synced and closed, then published without overwriting
 collisions. For a replacement, Loom stages and verifies the incoming file

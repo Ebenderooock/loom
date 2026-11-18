@@ -58,6 +58,14 @@ export interface TestResult {
   release: ReleaseInfo;
   matches: FormatMatch[];
   score: number;
+  quality_profile_id?: string;
+  minimum_score?: number;
+  meets_minimum?: boolean;
+}
+
+export interface TestCustomFormatRequest {
+  title: string;
+  quality_profile_id?: string;
 }
 
 // ---------- Constants ----------
@@ -222,8 +230,14 @@ export async function deleteCustomFormat(id: string): Promise<void> {
   );
 }
 
-export async function testCustomFormat(title: string): Promise<TestResult> {
-  return request<TestResult>("POST", "/api/v1/custom-formats/test", { title });
+export async function testCustomFormat(
+  title: string,
+  qualityProfileId?: string,
+): Promise<TestResult> {
+  return request<TestResult>("POST", "/api/v1/custom-formats/test", {
+    title,
+    ...(qualityProfileId ? { quality_profile_id: qualityProfileId } : {}),
+  });
 }
 
 // ---------- React Query hooks ----------
@@ -262,6 +276,7 @@ export function useDeleteCustomFormat() {
 
 export function useTestCustomFormat() {
   return useMutation({
-    mutationFn: testCustomFormat,
+    mutationFn: ({ title, quality_profile_id }: TestCustomFormatRequest) =>
+      testCustomFormat(title, quality_profile_id),
   });
 }

@@ -1074,13 +1074,10 @@ func (e *Engine) evaluateResult(
 	matches := e.cfEngine.ScoreRelease(ri)
 	sr.FormatMatches = matches
 
-	totalFormatScore := 0
-	for i, m := range matches {
-		score := formatScores[m.CustomFormatID]
-		matches[i].Score = score
-		totalFormatScore += score
+	totalFormatScore := customformats.ApplyScores(matches, formatScores)
+	for _, m := range matches {
 		sr.Explanation.Contributions = append(sr.Explanation.Contributions, searchdebug.FormatContribution{
-			ID: m.CustomFormatID, Name: m.CustomFormatName, Score: score,
+			ID: m.CustomFormatID, Name: m.CustomFormatName, Score: m.Score,
 		})
 	}
 	sr.FormatScore = totalFormatScore
@@ -1380,17 +1377,8 @@ func normalizeSource(source string) string {
 // buildReleaseInfo converts a parsed release + indexer result into the
 // shape the custom format engine expects.
 func buildReleaseInfo(rel *parser.Release, res *indexers.Result) customformats.ReleaseInfo {
-	ri := customformats.ReleaseInfo{
-		Title:      res.Title,
-		Source:     rel.Source,
-		Resolution: fmt.Sprintf("%dp", rel.Resolution),
-		Codec:      rel.Codec,
-		Audio:      rel.Audio,
-		Size:       res.Size,
-		Indexer:    res.IndexerID,
-		Group:      rel.Group,
-		Languages:  rel.Languages,
-	}
+	ri := customformats.FromParsedRelease(rel)
+	ri.Title, ri.Size, ri.Indexer = res.Title, res.Size, res.IndexerID
 	if res.Freeleech {
 		ri.IndexerFlags = append(ri.IndexerFlags, "freeleech")
 	}

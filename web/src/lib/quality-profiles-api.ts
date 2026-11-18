@@ -29,6 +29,7 @@ export interface CreateQualityProfileRequest {
   items: string;
   upgrade_allowed: boolean;
   format_items?: FormatItem[];
+  min_format_score?: number;
 }
 
 // ---------- HTTP helpers ----------

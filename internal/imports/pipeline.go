@@ -17,6 +17,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/ebenderooock/loom/internal/alttitles"
+	"github.com/ebenderooock/loom/internal/customformats"
 	"github.com/ebenderooock/loom/internal/downloads"
 	"github.com/ebenderooock/loom/internal/kernel/eventbus"
 	"github.com/ebenderooock/loom/internal/libraries"
@@ -127,6 +128,7 @@ func NewPipeline(opts PipelineOptions) (*ImportPipeline, error) {
 		&UnpackingSpec{},
 		&DangerousFileSpec{},
 		NewUpgradeSpec(opts.QualityProfiles),
+		NewCustomFormatSpec(opts.QualityProfiles, customformats.NewStore(opts.DB)),
 	}
 
 	p := &ImportPipeline{
