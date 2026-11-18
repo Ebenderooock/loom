@@ -135,6 +135,13 @@ func winTestTransaction(t *testing.T) (*winTransaction, *winTestControl) {
 	if err := winCreateDir(StateDir, winSDDL("", true), 0, true); err != nil {
 		t.Fatal(err)
 	}
+	if err := winCreateDir(filepath.Join(ConfigDir, "nested"), winSDDL("0x1301bf", true), 0x1301bf, false); err != nil {
+		t.Fatal(err)
+	}
+	nestedConfig := filepath.Join(ConfigDir, "nested", "settings")
+	if err := os.WriteFile(nestedConfig, []byte("preserved nested configuration"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	raw := fmt.Sprintf("config_dir: '%s'\ndata_dir: '%s'\nhttp:\n  addr: '127.0.0.1:1925'\nstorage:\n  engine: sqlite\n  sqlite:\n    path: '%s'\n", ConfigDir, DataDir, DBPath)
 	if err := os.WriteFile(filepath.Join(ConfigDir, "loom.yaml"), []byte(raw), 0600); err != nil {
 		t.Fatal(err)
@@ -168,6 +175,7 @@ func winTestTransaction(t *testing.T) (*winTransaction, *winTestControl) {
 	}{
 		{filepath.Join(BinDir, "loom.exe"), "FRFX", windows.FILE_GENERIC_READ | windows.FILE_GENERIC_EXECUTE},
 		{filepath.Join(ConfigDir, "loom.yaml"), "0x1301bf", 0x1301bf},
+		{nestedConfig, "0x1301bf", 0x1301bf},
 		{DBPath, "0x1301bf", 0x1301bf},
 	} {
 		if err := winProtect(file.path, winSDDL(file.serviceRights, false)); err != nil {
@@ -229,6 +237,11 @@ func TestWindowsNTFSTransactionAndRollback(t *testing.T) {
 			if err != nil || !bytes.Equal(before, after) {
 				t.Fatal("configuration not preserved")
 			}
+			nested, err := os.ReadFile(filepath.Join(ConfigDir, "nested", "settings"))
+			if err != nil || string(nested) != "preserved nested configuration" {
+				t.Fatalf("nested configuration=%q %v", nested, err)
+			}
+			winTestStagingDirectories(t)
 			if _, err := os.Stat(filepath.Join(ConfigDir, "migration-added")); !errors.Is(err, os.ErrNotExist) {
 				t.Fatal("migration-added file survived rollback")
 			}
@@ -254,7 +267,7 @@ func TestWindowsNTFSTransactionAndRollback(t *testing.T) {
 func TestWindowsNTFSInterruptedRecovery(t *testing.T) {
 	tx, c := winTestTransaction(t)
 	work := filepath.Join(StateDir, "transaction")
-	if err := os.Mkdir(work, 0700); err != nil {
+	if err := winCreateDir(work, winSDDL("", true), 0, true); err != nil {
 		t.Fatal(err)
 	}
 
@@ -266,6 +279,7 @@ func TestWindowsNTFSInterruptedRecovery(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	winTestStagingDirectories(t)
 	if err := winAtomicJSON(StateDir, "journal.json", j); err != nil {
 		t.Fatal(err)
 	}
@@ -283,6 +297,52 @@ func TestWindowsNTFSInterruptedRecovery(t *testing.T) {
 	var saved state
 	if err := readJSON(filepath.Join(StateDir, "state.json"), &saved); err != nil || saved.FailedSHA != j.Target.SHA {
 		t.Fatal("failed build not blocked")
+	}
+}
+
+func winTestStagingDirectories(t *testing.T) {
+	t.Helper()
+	work := filepath.Join(StateDir, "transaction")
+	for _, path := range []string{work, filepath.Join(work, "config"), filepath.Join(work, "config", "nested")} {
+		if err := winTrusted(path, 0, true); err != nil {
+			t.Fatalf("untrusted staging directory %s: %v", path, err)
+		}
+		sd, err := windows.GetNamedSecurityInfo(path, windows.SE_FILE_OBJECT, winReadSD)
+		if err != nil {
+			t.Fatal(err)
+		}
+		owner, _, err := sd.Owner()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if owner.String() != "S-1-5-18" {
+			t.Fatalf("staging directory %s did not get its explicit SYSTEM owner: %s", path, owner.String())
+		}
+	}
+}
+
+func TestWindowsNTFSRejectsUntrustedStagingAncestor(t *testing.T) {
+	_, _ = winTestTransaction(t)
+	work := filepath.Join(StateDir, "transaction")
+	if err := winCreateDir(work, winSDDL("", true), 0, true); err != nil {
+		t.Fatal(err)
+	}
+	source := filepath.Join(work, "new-binary")
+	if err := os.WriteFile(source, []byte("new executable"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	untrusted := strings.Replace(winSDDL("", true), "O:SY", "O:BU", 1)
+	if err := winProtect(work, untrusted); err != nil {
+		t.Fatal(err)
+	}
+	if f, err := winOpen(source, 0); err == nil {
+		f.Close()
+		t.Fatal("untrusted staging ancestor accepted")
+	} else if !strings.Contains(err.Error(), "native Windows installation ancestor is not system-owned") {
+		t.Fatalf("unexpected ancestor rejection: %v", err)
+	}
+	if err := winCreateDir(work, winSDDL("", true), 0, true); err == nil {
+		t.Fatal("existing untrusted staging directory accepted")
 	}
 }
 

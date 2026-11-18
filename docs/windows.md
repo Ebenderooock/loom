@@ -181,6 +181,9 @@ volume flushes rather than Unix directory-fsync assumptions. A private durable
 journal gates replacement; restoration includes full config, SQLite, sidecar
 removal, the old executable and failed-build blocking. Startup recovery precedes
 database authorization. Unsupported ACLs/filesystems/configurations fail closed.
+Transaction staging and configuration-backup directories are created with an
+explicit SYSTEM owner and protected private DACL, independent of the creating
+token's default owner.
 
 **Exact activation blockers:** there is no Windows execution host available in
 this development environment. Native acceptance must prove SCM dependency,

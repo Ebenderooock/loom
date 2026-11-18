@@ -207,7 +207,7 @@ func winSnapshotTree(source, dest string) ([]winMeta, error) {
 		if err != nil {
 			return fmt.Errorf("Windows snapshot directory metadata %q: %w", rel, err)
 		}
-		if err := os.Mkdir(filepath.Join(dest, rel), 0700); err != nil {
+		if err := winCreateDir(filepath.Join(dest, rel), winSDDL("", true), 0, true); err != nil {
 			return err
 		}
 		entries = append(entries, meta)

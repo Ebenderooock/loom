@@ -82,7 +82,7 @@ func (t *winTransaction) run(ctx context.Context) error {
 	if err := os.RemoveAll(work); err != nil {
 		return err
 	}
-	if err := os.Mkdir(work, 0700); err != nil {
+	if err := winCreateDir(work, winSDDL("", true), 0, true); err != nil {
 		return err
 	}
 	archive, err := os.OpenFile(filepath.Join(work, "archive.zip"), os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600) // #nosec G304 -- fixed root-private transaction staging path
