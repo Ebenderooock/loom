@@ -22,7 +22,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Recognize resolution-tagged scene `WEB` releases (such as `1080p WEB H264`)
   as WebDL so imports no longer reject them as unknown quality.
 - Keep replacement destinations continuously available to macOS readers during
-  publication and registration rollback by atomically swapping files.
+  publication and registration rollback by atomically swapping files and using
+  the displaced original directly, without redundant backup hardlinks.
 - Serialize Discord notifications per webhook and honor the response's
   `retry_after` value and rate-limit reset headers to avoid repeated
   rate-limit failures during alert bursts.

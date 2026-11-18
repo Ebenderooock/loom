@@ -109,8 +109,13 @@ semantics on Windows; see Microsoft's
 [open-file rename restrictions](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/ntifs/ns-ntifs-_file_rename_information#remarks).
 
 On macOS, replacement publication and registration rollback use `RENAME_SWAP`
-instead of ordinary rename to avoid intermittent missing-path errors for
-concurrent APFS readers. The live-path test exercises successful replacements
+instead of ordinary rename. The swap preserves the original file at the
+incoming staging path, which is used directly for rollback or recycling.
+Do not also hardlink the live destination to a separate backup: removing those
+redundant aliases during staging cleanup can make in-flight APFS opens return
+`ENOENT`, even though the live pathname still exists. Other platforms retain
+the separate backup needed by their non-swap rename.
+The live-path test exercises successful replacements
 and forced registration failures, requiring complete media throughout and the
 original file identity and bytes after successful rollback. Unsupported swaps
 fail without removing the live destination.

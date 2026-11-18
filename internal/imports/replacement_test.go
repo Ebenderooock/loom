@@ -151,12 +151,33 @@ func TestReplacementRecycleFailureLeavesRecoverableBackup(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "preserved at") {
 		t.Fatalf("expected recoverable recycle failure, got %v", err)
 	}
-	backups, err := filepath.Glob(filepath.Join(filepath.Dir(dest), ".loom-replacement-*", "previous"))
+	backups, err := replacementBackups(dest)
 	if err != nil || len(backups) != 1 {
 		t.Fatalf("missing backup: %v, %v", backups, err)
 	}
 	if data, err := os.ReadFile(backups[0]); err != nil || string(data) != "old media" {
 		t.Fatalf("backup: %q, %v", data, err)
+	}
+	saved, err := os.Stat(backups[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	entries, err := os.ReadDir(filepath.Dir(backups[0]))
+	if err != nil {
+		t.Fatal(err)
+	}
+	originals := 0
+	for _, entry := range entries {
+		info, err := entry.Info()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if os.SameFile(saved, info) {
+			originals++
+		}
+	}
+	if originals != 1 {
+		t.Fatalf("expected one preserved original without redundant hardlink aliases, got %d", originals)
 	}
 	for path, want := range map[string]string{source: "new media", dest: "new media"} {
 		if data, err := os.ReadFile(path); err != nil || string(data) != want {
@@ -166,6 +187,14 @@ func TestReplacementRecycleFailureLeavesRecoverableBackup(t *testing.T) {
 	if _, err := p.importMatchedWith(context.Background(), &downloads.DownloadCompletedEvent{Title: "Movie"}, match, source, filepath.Base(dest), true); err != nil {
 		t.Fatalf("retry failed to finish registration: %v", err)
 	}
+}
+
+func replacementBackups(dest string) ([]string, error) {
+	name := "previous"
+	if replacementSwapsFiles {
+		name = "incoming"
+	}
+	return filepath.Glob(filepath.Join(filepath.Dir(dest), ".loom-replacement-*", name))
 }
 
 func TestReplacementSerializesConcurrentImports(t *testing.T) {
@@ -266,7 +295,7 @@ func testReplacementKeepsLivePathAvailable(t *testing.T, failRegistration bool) 
 		if failRegistration && replacementBlockedByOpenReader(err, dest, "previous") {
 			// A Windows reader can open the new file before rollback begins.
 			stopReader()
-			backups, globErr := filepath.Glob(filepath.Join(filepath.Dir(dest), ".loom-replacement-*", "previous"))
+			backups, globErr := replacementBackups(dest)
 			if globErr != nil || len(backups) != 1 {
 				t.Fatalf("blocked rollback lost backup: %v, %v", backups, globErr)
 			}

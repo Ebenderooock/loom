@@ -136,22 +136,27 @@ func (p *ImportPipeline) replaceMatched(ctx context.Context, match *MatchResult,
 	if err != nil || !os.SameFile(old, current) {
 		return fmt.Errorf("replacement destination changed: %s", dest)
 	}
-	// Preserve the old file without taking its live pathname away. The final
-	// publication replaces it after the new file is ready. Open Windows readers can
-	// block this even with delete-sharing; never remove the live file to retry.
-	if err := importFile(dest, backup, ImportModeHardlink); err != nil {
-		return fmt.Errorf("preserve existing destination: %w", err)
-	}
-	saved, err := os.Lstat(backup)
-	if err != nil {
-		return fmt.Errorf("inspect replacement backup: %w", err)
-	}
-	same, err = p.sameContent(ctx, dest, backup, old, saved)
-	if err != nil {
-		return fmt.Errorf("verify replacement backup: %w", err)
-	}
-	if !same {
-		return errors.New("replacement backup differs from the existing destination")
+	if replacementSwapsFiles {
+		// The swap itself preserves the original at staged. A redundant hardlink
+		// can make concurrent APFS opens return ENOENT when its aliases are removed.
+		backup = staged
+	} else {
+		// Preserve the old file without taking its live pathname away. Open
+		// Windows readers can block publication; never remove the live file to retry.
+		if err := importFile(dest, backup, ImportModeHardlink); err != nil {
+			return fmt.Errorf("preserve existing destination: %w", err)
+		}
+		saved, err := os.Lstat(backup)
+		if err != nil {
+			return fmt.Errorf("inspect replacement backup: %w", err)
+		}
+		same, err = p.sameContent(ctx, dest, backup, old, saved)
+		if err != nil {
+			return fmt.Errorf("verify replacement backup: %w", err)
+		}
+		if !same {
+			return errors.New("replacement backup differs from the existing destination")
+		}
 	}
 	current, err = os.Lstat(dest)
 	if err != nil || !os.SameFile(old, current) || old.Size() != current.Size() || !old.ModTime().Equal(current.ModTime()) {
