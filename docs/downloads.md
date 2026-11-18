@@ -61,12 +61,18 @@ File copies are written to hidden `.loom-import-*.partial` staging files in the
 destination directory, synced and closed, then published without overwriting
 collisions. For a replacement, Loom stages and verifies the incoming file
 before preserving the old file in a private `.loom-replacement-*` backup and
-replacing the live pathname in one rename. The old pathname remains available
+publishing the new file at the live pathname. macOS uses an atomic file swap
+for publication and rollback so concurrent readers do not see a missing path;
+filesystems that do not support swaps reject replacement without removing the
+live file. Other platforms retain their existing rename behavior.
+The old pathname remains available
 while staging and backing up; a crash does not leave a gap between removing it
 and publishing the new file. Backups use hardlinks where possible and otherwise
 require a verified copy. Registration failures restore the old file where
 possible; if restoration or recycling fails, the error identifies the preserved
-backup. A crash can leave an orphaned backup in that directory, but retries
+backup. On Windows, a reader opening the new file can block restoration; the
+complete new file stays live and the old file remains at the reported backup
+path. A crash can leave an orphaned backup in that directory, but retries
 can verify the live file and finish registration. Filesystems lacking safe
 no-replace publication report an error rather than blindly overwriting.
 If a complete copy was published before history was recorded, retries verify
@@ -75,6 +81,29 @@ including possible partial files from older versions, are preserved for
 inspection instead of being assumed to belong to the matched item.
 
 ### Importing completed files
+
+Movie matching uses the title before release metadata such as resolution,
+IMAX, Dolby Vision, and HDR tags. Catalog punctuation absent from a filename
+(for example, `Avengers: Endgame Encore` versus `Avengers.Endgame.Encore`)
+can match only when the fallback finds a unique normalized title with a
+compatible year. The one-year tolerance remains in effect. A named re-release
+can use a different year only when the original movie's TMDB release records
+confirm both the full release title and that exact year. Matching provider
+notes must include the original title and an edition suffix; a bare release
+date or filename suffix alone is not enough.
+
+Named re-releases share the original movie's metadata and folder, but keep
+separate files, for example `Avengers - Endgame (2019).mkv` and
+`Avengers - Endgame (2019) {edition-Encore}.mkv`. Quality comparisons and
+replacements stay within the same edition. The organizer preserves edition
+tags, including when a naming format omits `{Edition Tags}`. Add the original
+movie to the library before retrying an edition import. An obsolete standalone provider
+entry is not automatically deleted, merged, or redirected; it must be
+corrected separately without deleting the media files.
+
+Ordinary title/year matching does not depend on a live metadata lookup. A saved
+movie whose provider entry is no longer available can still match, but importing
+its file cannot restore missing provider metadata or artwork.
 
 In **Downloads > Imports**, scan the completed-download folder, select several
 files, then choose **Import selected**, or use **Import all matched** to queue

@@ -37,11 +37,11 @@ func readReplacementDestination(path string) ([]byte, error) {
 	return data, errors.Join(readErr, file.Close())
 }
 
-func replacementBlockedByOpenReader(err error, dest string) bool {
+func replacementBlockedByOpenReader(err error, dest, stagedName string) bool {
 	var renameErr *os.LinkError
 	return errors.As(err, &renameErr) &&
 		renameErr.Op == "rename" && renameErr.New == dest &&
-		filepath.Base(renameErr.Old) == "incoming" &&
+		filepath.Base(renameErr.Old) == stagedName &&
 		(errors.Is(renameErr.Err, windows.ERROR_ACCESS_DENIED) ||
 			errors.Is(renameErr.Err, windows.ERROR_SHARING_VIOLATION))
 }
@@ -66,7 +66,7 @@ func TestReplacementBlockedByWindowsReaderPreservesBoth(t *testing.T) {
 				t.Fatal(err)
 			}
 			_, err = p.importMatchedWith(context.Background(), &downloads.DownloadCompletedEvent{Title: "Movie"}, match, source, filepath.Base(dest), true)
-			if !replacementBlockedByOpenReader(err, dest) {
+			if !replacementBlockedByOpenReader(err, dest, "incoming") {
 				t.Fatalf("expected blocked publication, got %v", err)
 			}
 			for path, want := range map[string]string{source: "complete new media", dest: "old media"} {

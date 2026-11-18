@@ -2,12 +2,14 @@ package imports
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"regexp"
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 	"unicode"
 
 	"github.com/ebenderooock/loom/internal/libraries"
@@ -16,12 +18,15 @@ import (
 	"github.com/ebenderooock/loom/internal/series"
 )
 
+var errMovieReleaseLookup = errors.New("movie release metadata unavailable")
+
 // Matcher resolves downloaded filenames to library items.
 type Matcher struct {
-	moviesSvc  movies.Service
-	seriesSvc  series.Service
-	libStore   *libraries.Store
-	altMatcher *AltTitleMatcher
+	moviesSvc     movies.Service
+	seriesSvc     series.Service
+	libStore      *libraries.Store
+	altMatcher    *AltTitleMatcher
+	movieReleases MovieReleaseLookup
 }
 
 // NewMatcher creates a Matcher backed by the movies and series services.
@@ -41,6 +46,7 @@ type parsedRelease struct {
 	Season   int
 	Episode  int
 	IsSeries bool
+	Edition  string
 }
 
 // Patterns for matching season/episode from release names.
@@ -74,6 +80,7 @@ func parseReleaseName(name string) parsedRelease {
 	p.Year = r.Year
 	p.Season = r.Season
 	p.Episode = r.Episode
+	p.Edition = parser.MovieEdition(filepath.Base(name))
 
 	// Determine if this is a series (has season/episode info, season pack, daily date, or absolute episode)
 	if r.Season >= 0 || r.Episode >= 0 || r.IsSeasonPack || r.DailyDate != "" || r.AbsoluteEpisode >= 0 {
@@ -92,6 +99,12 @@ func parseReleaseName(name string) parsedRelease {
 func cleanTitleFromParser(name string, r *parser.Release) string {
 	// Remove file extension
 	name = strings.TrimSuffix(name, filepath.Ext(name))
+
+	// The canonical movie title stops before release metadata; stripping
+	// individual tags from the full name leaves unrecognized tags behind.
+	if r.Title != "" && r.Season < 0 && r.Episode < 0 && !r.IsSeasonPack && r.DailyDate == "" && r.AbsoluteEpisode < 0 {
+		name = r.Title
+	}
 
 	// Strip bracket-enclosed tags early: [1080p], [BluRay], etc.
 	name = regexp.MustCompile(`\[([^\]]*)\]`).ReplaceAllStringFunc(name, func(m string) string {
@@ -403,6 +416,14 @@ func (m *Matcher) matchMovie(ctx context.Context, p parsedRelease) (*MatchResult
 	}
 
 	best := fuzzyMatchMovie(results, p)
+	edition := p.Edition
+	var releaseYear int
+	if best == nil {
+		best, edition, releaseYear, err = m.matchMovieByNormalizedTitle(ctx, p)
+		if err != nil {
+			return nil, err
+		}
+	}
 	if best == nil {
 		// Fallback: try alternative titles
 		if m.altMatcher != nil {
@@ -426,13 +447,91 @@ func (m *Matcher) matchMovie(ctx context.Context, p parsedRelease) (*MatchResult
 
 	destDir := filepath.Join(lib.Path, sanitizeDirName(fmt.Sprintf("%s (%d)", best.Title, best.Year)))
 	return &MatchResult{
-		Matched:   true,
-		MediaType: MediaTypeMovie,
-		MediaID:   best.ID,
-		Title:     best.Title,
-		Year:      best.Year,
-		DestPath:  destDir,
+		Matched:      true,
+		MediaType:    MediaTypeMovie,
+		MediaID:      best.ID,
+		Title:        best.Title,
+		Year:         best.Year,
+		DestPath:     destDir,
+		Edition:      edition,
+		releaseTitle: p.Title,
+		releaseYear:  releaseYear,
 	}, nil
+}
+
+// A literal title search cannot find catalog punctuation absent from filenames.
+// Broaden candidate discovery only; require an exact normalized identity.
+func (m *Matcher) matchMovieByNormalizedTitle(ctx context.Context, p parsedRelease) (*movies.Movie, string, int, error) {
+	tokens := tokenize(p.Title)
+	if len(tokens) < 2 {
+		return nil, "", 0, nil
+	}
+	query := tokens[0]
+	candidates, err := m.moviesSvc.SearchMovies(ctx, query)
+	if err != nil {
+		return nil, "", 0, fmt.Errorf("search movies by title token: %w", err)
+	}
+	// SearchMovies caps results at 50; a truncated set cannot prove uniqueness.
+	if len(candidates) >= 50 {
+		return nil, "", 0, nil
+	}
+	var best *movies.Movie
+	for _, movie := range candidates {
+		if !movieYearsMatch(p.Year, movie.Year) || normalise(movie.Title) != normalise(p.Title) {
+			continue
+		}
+		if best != nil {
+			return nil, "", 0, nil
+		}
+		best = movie
+	}
+	if best != nil || m.movieReleases == nil || p.Year <= 0 {
+		return best, p.Edition, 0, nil
+	}
+
+	var edition string
+	for _, movie := range candidates {
+		namedEdition, err := m.namedMovieEdition(ctx, movie, p)
+		if err != nil {
+			return nil, "", 0, err
+		}
+		if namedEdition == "" {
+			continue
+		}
+		if best != nil && best.ID != movie.ID {
+			return nil, "", 0, nil
+		}
+		best, edition = movie, namedEdition
+	}
+	return best, edition, p.Year, nil
+}
+
+func (m *Matcher) namedMovieEdition(ctx context.Context, movie *movies.Movie, p parsedRelease) (string, error) {
+	suffix, ok := strings.CutPrefix(normalise(p.Title), normalise(movie.Title)+" ")
+	if !ok || suffix == "" || movie.TMDBID == nil || m.movieReleases == nil || p.Year <= 0 || p.IsSeries {
+		return "", nil
+	}
+	tmdbID, err := strconv.Atoi(*movie.TMDBID)
+	if err != nil {
+		return "", fmt.Errorf("invalid TMDB identity for %q: %w", movie.Title, err)
+	}
+	if tmdbID <= 0 {
+		return "", fmt.Errorf("invalid TMDB identity for %q: expected a positive ID", movie.Title)
+	}
+	releases, err := m.movieReleases.GetMovieReleases(ctx, tmdbID)
+	if err != nil {
+		return "", fmt.Errorf("%w for %q: %w", errMovieReleaseLookup, movie.Title, err)
+	}
+	for _, release := range releases {
+		date, err := time.Parse("2006-01-02", release.ReleaseDate)
+		if err != nil || date.Year() != p.Year || normalise(release.Title) != normalise(p.Title) {
+			continue
+		}
+		runes := []rune(suffix)
+		runes[0] = unicode.ToUpper(runes[0])
+		return string(runes), nil
+	}
+	return "", nil
 }
 
 // matchSeries searches for a series + episode matching the parsed release.

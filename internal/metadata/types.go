@@ -26,6 +26,13 @@ type MovieMetadata struct {
 	CachedAt       time.Time `json:"cached_at,omitempty"`
 }
 
+// MovieRelease is a dated, officially named release of a movie.
+// Title is the provider's release note, not the movie title.
+type MovieRelease struct {
+	Title       string `json:"title"`
+	ReleaseDate string `json:"release_date"` // YYYY-MM-DD
+}
+
 // SeriesMetadata represents metadata for a TV series from any provider.
 type SeriesMetadata struct {
 	TMDBID       *string   `json:"tmdb_id,omitempty"`
