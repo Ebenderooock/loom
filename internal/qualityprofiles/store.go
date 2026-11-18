@@ -6,9 +6,14 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"strings"
 	"time"
 )
+
+// ErrInvalidFormatItems identifies malformed profile score assignments.
+var ErrInvalidFormatItems = errors.New("invalid custom format scores")
 
 // Store provides SQLite persistence for quality profiles.
 type Store struct {
@@ -86,17 +91,28 @@ func (s *Store) Create(ctx context.Context, qp *QualityProfile) error {
 		upgradeInt = 1
 	}
 
-	_, err := s.db.ExecContext(ctx,
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin create quality profile: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	_, err = tx.ExecContext(ctx,
 		`INSERT INTO quality_profiles_v2 (id, name, cutoff, min_format_score, cutoff_format_score, upgrade_allowed, items, created_at, updated_at)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		qp.ID, qp.Name, qp.Cutoff, qp.MinFormatScore, qp.CutoffFormatScore, upgradeInt, qp.Items, now, now)
 	if err != nil {
 		return fmt.Errorf("create quality profile: %w", err)
 	}
+	if err := s.replaceFormatItems(ctx, tx, qp.ID, qp.FormatItems); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit create quality profile: %w", err)
+	}
 	qp.CreatedAt = now
 	qp.UpdatedAt = now
 
-	return s.replaceFormatItems(ctx, qp.ID, qp.FormatItems)
+	return nil
 }
 
 // Update replaces a quality profile by ID.
@@ -110,7 +126,12 @@ func (s *Store) Update(ctx context.Context, qp *QualityProfile) error {
 		upgradeInt = 1
 	}
 
-	res, err := s.db.ExecContext(ctx,
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin update quality profile: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	res, err := tx.ExecContext(ctx,
 		`UPDATE quality_profiles_v2
 		 SET name=?, cutoff=?, min_format_score=?, cutoff_format_score=?, upgrade_allowed=?, items=?, updated_at=?
 		 WHERE id=?`,
@@ -122,9 +143,15 @@ func (s *Store) Update(ctx context.Context, qp *QualityProfile) error {
 	if n == 0 {
 		return sql.ErrNoRows
 	}
+	if err := s.replaceFormatItems(ctx, tx, qp.ID, qp.FormatItems); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit update quality profile: %w", err)
+	}
 	qp.UpdatedAt = now
 
-	return s.replaceFormatItems(ctx, qp.ID, qp.FormatItems)
+	return nil
 }
 
 // Delete removes a quality profile by ID.
@@ -147,16 +174,27 @@ func (s *Store) GetFormatScores(ctx context.Context, profileID string) ([]Format
 
 // SetFormatScores replaces format scores for a profile.
 func (s *Store) SetFormatScores(ctx context.Context, profileID string, items []FormatItem) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin set format scores: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
 	// Verify profile exists
 	var exists int
-	err := s.db.QueryRowContext(ctx, `SELECT 1 FROM quality_profiles_v2 WHERE id = ?`, profileID).Scan(&exists)
+	err = tx.QueryRowContext(ctx, `SELECT 1 FROM quality_profiles_v2 WHERE id = ?`, profileID).Scan(&exists)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return sql.ErrNoRows
 		}
 		return fmt.Errorf("check profile exists: %w", err)
 	}
-	return s.replaceFormatItems(ctx, profileID, items)
+	if err := s.replaceFormatItems(ctx, tx, profileID, items); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit set format scores: %w", err)
+	}
+	return nil
 }
 
 func (s *Store) listFormatItems(ctx context.Context, profileID string) ([]FormatItem, error) {
@@ -179,13 +217,23 @@ func (s *Store) listFormatItems(ctx context.Context, profileID string) ([]Format
 	return out, rows.Err()
 }
 
-func (s *Store) replaceFormatItems(ctx context.Context, profileID string, items []FormatItem) error {
-	_, err := s.db.ExecContext(ctx, `DELETE FROM quality_profile_format_items WHERE profile_id = ?`, profileID)
+func (s *Store) replaceFormatItems(ctx context.Context, tx *sql.Tx, profileID string, items []FormatItem) error {
+	seen := make(map[string]bool, len(items))
+	for _, fi := range items {
+		if strings.TrimSpace(fi.FormatID) == "" {
+			return fmt.Errorf("%w: format_id is required for every score", ErrInvalidFormatItems)
+		}
+		if seen[fi.FormatID] {
+			return fmt.Errorf("%w: duplicate format_id %q", ErrInvalidFormatItems, fi.FormatID)
+		}
+		seen[fi.FormatID] = true
+	}
+	_, err := tx.ExecContext(ctx, `DELETE FROM quality_profile_format_items WHERE profile_id = ?`, profileID)
 	if err != nil {
 		return fmt.Errorf("clear format items: %w", err)
 	}
 	for _, fi := range items {
-		_, err := s.db.ExecContext(ctx,
+		_, err := tx.ExecContext(ctx,
 			`INSERT INTO quality_profile_format_items (profile_id, format_id, score) VALUES (?, ?, ?)`,
 			profileID, fi.FormatID, fi.Score)
 		if err != nil {

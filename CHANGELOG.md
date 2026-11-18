@@ -15,6 +15,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Fix creating and editing quality profiles with multiple custom-format scores
+  by sending the correct format IDs. Reject missing or duplicate IDs before
+  replacing scores, roll back failed saves, and let profiles recover from invalid
+  score entries left by earlier failed saves.
 - Apply assigned custom-format points and minimum scores during movie and
   episode imports and previews. Share source, codec and quality metadata between
   format testing, acquisition and imports, and enforce post-download file rules.

@@ -36,7 +36,6 @@ import {
   useUpdateQualityProfile,
   useDeleteQualityProfile,
   type QualityProfile,
-  type FormatItem,
 } from "@/lib/quality-profiles-api";
 import { useCustomFormats } from "@/lib/custom-formats-api";
 
@@ -292,10 +291,15 @@ function ProfileDialog({
   // Keep numeric drafts as text so typing a minus sign or clearing an input
   // does not immediately reset it to 0. Convert to API integers on save.
   const [formatItems, setFormatItems] = React.useState(
-    (initial?.format_items ?? []).map((fi) => ({
-      ...fi,
-      score: String(fi.score),
-    })),
+    (initial?.format_items ?? [])
+      .filter((fi) => fi.format_id.trim() !== "")
+      .map((fi) => ({
+        ...fi,
+        score: String(fi.score),
+      })),
+  );
+  const hasInvalidFormatItems = initial?.format_items?.some(
+    (fi) => fi.format_id.trim() === "",
   );
   const [minFormatScore, setMinFormatScore] = React.useState(
     String(initial?.min_format_score ?? 0),
@@ -345,20 +349,18 @@ function ProfileDialog({
 
   const updateFormatScore = (cfId: string, score: string) => {
     setFormatItems((prev) => {
-      const matchesFormat = (
-        fi: Pick<FormatItem, "custom_format_id" | "format_id">,
-      ) => (fi.custom_format_id || fi.format_id) === cfId;
-      const existing = prev.find(matchesFormat);
+      const existing = prev.find((fi) => fi.format_id === cfId);
       if (existing) {
-        return prev.map((fi) => (matchesFormat(fi) ? { ...fi, score } : fi));
+        return prev.map((fi) =>
+          fi.format_id === cfId ? { ...fi, score } : fi,
+        );
       }
-      return [...prev, { custom_format_id: cfId, score }];
+      return [...prev, { format_id: cfId, score }];
     });
   };
 
   const getScore = (cfId: string) =>
-    formatItems.find((fi) => (fi.custom_format_id || fi.format_id) === cfId)
-      ?.score ?? "0";
+    formatItems.find((fi) => fi.format_id === cfId)?.score ?? "0";
 
   const handleSave = () => {
     if (!name.trim()) {
@@ -591,6 +593,16 @@ function ProfileDialog({
           )}
 
           {/* Custom format scores */}
+          {hasInvalidFormatItems && (
+            <p
+              role="alert"
+              className="rounded-md border border-destructive/50 p-3 text-sm text-destructive"
+            >
+              An earlier failed save left scores without valid format IDs.
+              Re-enter the affected custom-format scores; saving will remove the
+              invalid entries.
+            </p>
+          )}
           {customFormats.length > 0 && (
             <div className="space-y-2">
               <h3 className="text-sm text-muted-foreground">

@@ -40,7 +40,7 @@ export function PolicyPreview({
                 ? (profile.min_format_score ?? 0)
                 : Number(minimum),
             format_items: (profile.format_items ?? []).map((fi) => ({
-              format_id: fi.format_id ?? fi.custom_format_id,
+              format_id: fi.format_id,
               score: fi.score,
             })),
           },
