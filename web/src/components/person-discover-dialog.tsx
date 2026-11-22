@@ -14,7 +14,11 @@ import {
   TitleContent,
   useTitleDialogFocus,
 } from "@/components/titles/title-experience";
-import { TitleRating, TitleSynopsis } from "@/components/titles/title-metadata";
+import {
+  titleImage,
+  TitleRating,
+  TitleSynopsis,
+} from "@/components/titles/title-metadata";
 import { titleJSON, type TitleIdentity } from "@/lib/title-api";
 import type { Library } from "@/lib/libraries-api";
 import type { QualityProfile } from "@/components/movies/types";
@@ -141,7 +145,7 @@ function PersonFilmographyContent({
       <div className="flex items-start gap-4">
         {data.data.person.profile_path && (
           <img
-            src={data.data.person.profile_path}
+            src={titleImage(data.data.person.profile_path, "w185")}
             alt=""
             className="w-24 rounded-lg"
           />
@@ -196,7 +200,7 @@ function PersonFilmographyContent({
                       >
                         {item.poster_path ? (
                           <img
-                            src={item.poster_path}
+                            src={titleImage(item.poster_path, "w342")}
                             alt=""
                             className="aspect-[2/3] w-full object-cover"
                             loading="lazy"

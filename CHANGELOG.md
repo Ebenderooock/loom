@@ -60,7 +60,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Count shared library storage once on the dashboard. Show per-volume free
   space, labelled library and other-usage segments, and low-space warnings.
   Matching NAS capacity readings are grouped with an explicit estimate notice.
-
+- Resize IMDb import-list posters for display to reduce Discover loading and
+  decoding costs. Distinguish titles not in the library from missing files.
 - Keep Discover, Collections, and Requests sections readable over custom
   background images with opaque panel surfaces. Simplify Discover cards to
   poster, status, title, and year, with compact translucent dismissal controls

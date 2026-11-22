@@ -12,6 +12,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/ui/empty-state";
+import { titleImage } from "@/components/titles/title-metadata";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   useMetadataSearch,
@@ -178,7 +179,7 @@ function ResultsGrid({
           >
             {poster && (
               <img
-                src={poster}
+                src={titleImage(poster, "w342")}
                 alt={title}
                 className="h-48 w-full object-cover"
               />
