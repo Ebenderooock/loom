@@ -39,39 +39,47 @@ func TestCustomFormatSpecUsesProfilePointsAndCurrentRules(t *testing.T) {
 	spec := NewCustomFormatSpec(&stubProfileStore{profile: profile}, formats)
 	file := "the.body.2026.s01e07.1080p.web.h264-cakes[EZTVx.to].mkv"
 	candidate := &ImportCandidate{SourcePath: file, IncomingRelease: parser.Parse(file), QualityProfileID: profile.ID}
-	if rejection := spec.IsSatisfiedBy(context.Background(), candidate); rejection != nil {
-		t.Fatalf("matching WEB-DL/x264/quality rules should score 100: %+v", rejection)
+	// Score problems never block an import; they are reported as warnings.
+	warning := func() string {
+		t.Helper()
+		candidate.QualityWarnings = nil
+		if rejection := spec.IsSatisfiedBy(context.Background(), candidate); rejection != nil {
+			t.Fatalf("custom format score must not block: %+v", rejection)
+		}
+		return strings.Join(candidate.QualityWarnings, "; ")
+	}
+	if w := warning(); w != "" {
+		t.Fatalf("matching WEB-DL/x264/quality rules should score 100: %s", w)
 	}
 	profile.FormatItems[0].Score = -10
-	if rejection := spec.IsSatisfiedBy(context.Background(), candidate); rejection == nil || !strings.Contains(rejection.Message, "score -10") {
-		t.Fatalf("negative profile points must be enforced: %+v", rejection)
+	if w := warning(); !strings.Contains(w, "score -10") {
+		t.Fatalf("negative profile points must be reported: %s", w)
 	}
 	profile.FormatItems[0].Score = 100
 	formats.formats[0].Specifications[0].Fields["value"] = "BluRay"
-	if rejection := spec.IsSatisfiedBy(context.Background(), candidate); rejection == nil {
+	if w := warning(); w == "" {
 		t.Fatal("edited custom format must apply without restarting the importer")
 	}
 	formats.err = errors.New("format storage unavailable")
-	if rejection := spec.IsSatisfiedBy(context.Background(), candidate); rejection == nil || !strings.Contains(rejection.Message, formats.err.Error()) {
-		t.Fatalf("format load errors must be explicit: %+v", rejection)
+	if w := warning(); !strings.Contains(w, formats.err.Error()) {
+		t.Fatalf("format load errors must be explicit: %s", w)
 	}
 	candidate.QualityProfileID = ""
-	if rejection := spec.IsSatisfiedBy(context.Background(), candidate); rejection != nil {
-		t.Fatalf("unassigned profiles must not apply other profiles' rules: %+v", rejection)
+	if w := warning(); w != "" {
+		t.Fatalf("unassigned profiles must not apply other profiles' rules: %s", w)
 	}
 }
 
-func TestBodyHEVCImportHonorsUnknownTierAndFormatMinimum(t *testing.T) {
+func TestBodyHEVCImportWarnsOnUnknownTierAndFormatMinimum(t *testing.T) {
 	for _, tc := range []struct {
-		name        string
-		unknown     bool
-		minimum     int
-		wantAllowed bool
-		reason      string
+		name    string
+		unknown bool
+		minimum int
+		warning string
 	}{
-		{"live profile permits first import", true, 1, true, ""},
-		{"explicit unknown exclusion", false, 1, false, "not allowed by profile"},
-		{"format minimum still enforced", true, 3, false, "score 2 is below minimum 3"},
+		{"live profile permits first import", true, 1, ""},
+		{"explicit unknown exclusion", false, 1, "not allowed by profile"},
+		{"format minimum is reported", true, 3, "score 2 is below minimum 3"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx := context.Background()
@@ -121,19 +129,16 @@ func TestBodyHEVCImportHonorsUnknownTierAndFormatMinimum(t *testing.T) {
 				t.Fatal(err)
 			}
 			preview := pipeline.previewSingleFile(ctx, source)
-			if (preview.Action == "import") != tc.wantAllowed || !strings.Contains(preview.Reason, tc.reason) {
+			warnings := strings.Join(preview.Warnings, "; ")
+			if preview.Action != "import" || (tc.warning == "") != (warnings == "") || !strings.Contains(warnings, tc.warning) {
 				t.Fatalf("unexpected preview: %+v", preview)
 			}
 			_, err = pipeline.processImport(ctx, &downloads.DownloadCompletedEvent{DownloadID: "body-hevc", Title: title}, root)
-			if (err == nil) != tc.wantAllowed {
-				t.Fatalf("import disagrees with preview: %v", err)
+			if err != nil {
+				t.Fatalf("quality must not block the import: %v", err)
 			}
-			if tc.wantAllowed {
-				if len(fixture.svc.files) != 1 || fixture.svc.files[0].Quality != "unknown-1080p" {
-					t.Fatalf("import must retain the actual source-unknown metadata: %+v", fixture.svc.files)
-				}
-			} else if len(fixture.svc.files) != 0 {
-				t.Fatal("rejected import registered a file")
+			if len(fixture.svc.files) != 1 || fixture.svc.files[0].Quality != "unknown-1080p" {
+				t.Fatalf("import must retain the actual source-unknown metadata: %+v", fixture.svc.files)
 			}
 			if _, err := os.Stat(source); err != nil {
 				t.Fatalf("source must remain available: %v", err)
@@ -142,17 +147,17 @@ func TestBodyHEVCImportHonorsUnknownTierAndFormatMinimum(t *testing.T) {
 	}
 }
 
-func TestBodyImportEnforcesCustomProfileWithoutChangingQuality(t *testing.T) {
+func TestBodyImportWarnsOnCustomProfileWithoutChangingQuality(t *testing.T) {
 	for _, tc := range []struct {
-		name        string
-		score       int
-		disallowed  bool
-		wantAllowed bool
+		name       string
+		score      int
+		disallowed bool
+		warned     bool
 	}{
-		{"matching score", 100, false, true},
-		{"below minimum", 99, false, false},
-		{"negative penalty", -100, false, false},
-		{"score cannot allow excluded quality", 10000, true, false},
+		{"matching score", 100, false, false},
+		{"below minimum", 99, false, true},
+		{"negative penalty", -100, false, true},
+		{"score cannot hide excluded quality", 10000, true, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx := context.Background()
@@ -188,21 +193,17 @@ func TestBodyImportEnforcesCustomProfileWithoutChangingQuality(t *testing.T) {
 				t.Fatal(err)
 			}
 			preview := pipeline.previewSingleFile(ctx, source)
-			if (preview.Action == "import") != tc.wantAllowed {
+			if preview.Action != "import" || (len(preview.Warnings) != 0) != tc.warned {
 				t.Fatalf("preview disagrees with profile: %+v", preview)
 			}
 			paths, err := pipeline.processImport(ctx, &downloads.DownloadCompletedEvent{
 				DownloadID: "body", Title: "The Body 2026 S01E07 1080p WEB H264-CAKES EZTV",
 			}, root)
-			if (err == nil) != tc.wantAllowed {
+			if err != nil {
 				t.Fatalf("profile import: paths=%v err=%v", paths, err)
 			}
-			if tc.wantAllowed {
-				if len(fixture.svc.files) != 1 || fixture.svc.files[0].Quality != "webdl-1080p" {
-					t.Fatalf("import must retain detected base quality: %+v", fixture.svc.files)
-				}
-			} else if len(fixture.svc.files) != 0 {
-				t.Fatal("rejected import registered a file")
+			if len(fixture.svc.files) != 1 || fixture.svc.files[0].Quality != "webdl-1080p" {
+				t.Fatalf("import must retain detected base quality: %+v", fixture.svc.files)
 			}
 			if _, err := os.Stat(source); err != nil {
 				t.Fatalf("source must remain available: %v", err)
@@ -211,14 +212,14 @@ func TestBodyImportEnforcesCustomProfileWithoutChangingQuality(t *testing.T) {
 	}
 }
 
-func TestCustomFormatSpecWarnsForGrabbedDownloads(t *testing.T) {
+func TestCustomFormatSpecWarnsInsteadOfRejecting(t *testing.T) {
 	profile := unrestrictedProfile(t)
 	profile.MinFormatScore = 100
 	profile.FormatItems = []qualityprofiles.FormatItem{{FormatID: "scene-web", Score: -10}}
 	spec := NewCustomFormatSpec(&stubProfileStore{profile: profile}, &stubCustomFormats{formats: []customformats.CustomFormat{bodyFormat()}})
 	file := "the.body.2026.s01e07.1080p.web.h264-cakes[EZTVx.to].mkv"
-	candidate := &ImportCandidate{SourcePath: file, IncomingRelease: parser.Parse(file), QualityProfileID: profile.ID, GrabApproved: true}
+	candidate := &ImportCandidate{SourcePath: file, IncomingRelease: parser.Parse(file), QualityProfileID: profile.ID}
 	if rejection := spec.IsSatisfiedBy(context.Background(), candidate); rejection != nil || len(candidate.QualityWarnings) != 1 {
-		t.Fatalf("grabbed download: rejection=%+v warnings=%v", rejection, candidate.QualityWarnings)
+		t.Fatalf("low score: rejection=%+v warnings=%v", rejection, candidate.QualityWarnings)
 	}
 }

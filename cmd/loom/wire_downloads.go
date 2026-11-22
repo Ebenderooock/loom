@@ -147,6 +147,11 @@ func wireDownloads(
 	if importMode == "" {
 		importMode = imports.ImportModeMove
 	}
+	reviewStore := wiring.ReviewStore
+	if reviewStore == nil {
+		reviewStore = safety.NewReviewStore(db.DB())
+		wiring.ReviewStore = reviewStore
+	}
 	importPipeline, err := imports.NewPipeline(imports.PipelineOptions{
 		DB:              db.DB(),
 		Bus:             wiring.Bus,
@@ -159,7 +164,7 @@ func wireDownloads(
 		WorkflowEngine:  wfEngine,
 		NotifSvc:        media.notifSvc,
 		PostVal:         safety.NewPostValidator(safety.DefaultConfig()),
-		ReviewStore:     safety.NewReviewStore(db.DB()),
+		ReviewStore:     reviewStore,
 		Logger:          logger,
 		ImportMode:      importMode,
 		QualityProfiles: media.qpStore,
@@ -172,6 +177,13 @@ func wireDownloads(
 	// Do not also subscribe the importer to the asynchronous completion event.
 	wiring.ImportPipeline = importPipeline
 	orchestrator.SetImportFn(importPipeline.RunImport)
+	downloadSvc.SetGrabQualityCheck(importPipeline.GrabDowngradeWarning)
+	// Approving a held downgrade resumes the import it blocked.
+	reviewStore.OnApproved(func(ctx context.Context, r *safety.Review) {
+		importPipeline.ResumeApprovedReview(context.WithoutCancel(ctx), r, func(id string) {
+			orchestrator.Send(workflows.CmdRetry{WorkflowID: id})
+		})
+	})
 
 	// Keep the download in the client until import succeeds so failures remain
 	// recoverable. Pause it and cache paths before touching the files.

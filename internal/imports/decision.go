@@ -15,6 +15,7 @@ const (
 	RejectionAlreadyImported   ImportRejectionReason = "already_imported"
 	RejectionUnpacking         ImportRejectionReason = "unpacking"
 	RejectionNotUpgrade        ImportRejectionReason = "not_upgrade"
+	RejectionDowngrade         ImportRejectionReason = "quality_downgrade"
 	RejectionNoAudio           ImportRejectionReason = "no_audio"
 	RejectionDangerousFile     ImportRejectionReason = "dangerous_file"
 	RejectionCustomFormat      ImportRejectionReason = "custom_format_score"
@@ -42,11 +43,12 @@ type ImportCandidate struct {
 	// import reuses it instead of detecting the quality again.
 	GrabbedQuality        string
 	GrabbedQualityAssumed bool
-	// GrabApproved means Loom grabbed this download after search checked it
-	// against the profile, or the user chose it manually. Quality specs then
-	// record QualityWarnings instead of rejecting the file.
-	GrabApproved    bool
-	GrabbedManually bool
+	GrabbedManually       bool
+	// DowngradeApproved means the user approved replacing a better existing
+	// file with this one.
+	DowngradeApproved bool
+	// QualityWarnings collects profile problems; quality never blocks an
+	// import except for an unapproved downgrade.
 	QualityWarnings []string
 }
 

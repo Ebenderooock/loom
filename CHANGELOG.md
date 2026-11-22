@@ -26,16 +26,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `1080p HEVC x265`, are assumed WEB-DL (previously search guessed HDTV and
   import rejected them as `unknown-1080p`) and are labelled "assumed". DVD
   imports now match the DVD quality.
-- Stop import from rejecting downloads Loom grabbed on quality. Search already
-  checked them, so a quality mismatch at import is now a warning in the
-  workflow timeline. Releases you download manually override the quality
-  profile and are flagged when outside the profile or below the cutoff.
+- Stop import from blocking files on quality. Profile, cutoff, disabled-upgrade
+  and custom-format score problems are now warnings in the workflow timeline and
+  import preview, including for downloads Loom did not grab. Releases you
+  download manually override the quality profile and are flagged when outside
+  the profile or below the cutoff.
+- Hold imports that would replace a better file in Activity → Reviews instead
+  of rejecting them. Approving replaces the file and resumes the import;
+  grabbing a lower-quality release warns that approval will be needed.
 - Stop treating numbered title segments such as `Breaking.Dawn.Part.1` as
   unfinished downloads. Keep temporary-file suffix and unpacking-folder checks.
 - Honor an allowed Unknown quality tier for first imports with a known resolution
   but no source, such as `1080p HEVC` releases. Keep the detected `unknown-1080p`
-  metadata, custom-format minimums, and protections against unknown-quality
-  replacements or excluded known sources.
+  metadata and require review before an unknown-quality file replaces a known
+  one.
 - Fix creating and editing quality profiles with multiple custom-format scores
   by sending the correct format IDs. Reject missing or duplicate IDs before
   replacing scores, roll back failed saves, and let profiles recover from invalid

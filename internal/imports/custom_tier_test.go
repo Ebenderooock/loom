@@ -62,15 +62,11 @@ func TestCustomTierEpisodeImportAndPreview(t *testing.T) {
 		t.Fatal(err)
 	}
 	profile.MinFormatScore = 3
-	if preview := pipeline.previewSingleFile(ctx, path); preview.Action != "skip" ||
-		!strings.Contains(preview.Reason, "score 2 is below minimum 3") {
-		t.Fatalf("format minimum must reject even a matching tier: %+v", preview)
+	if preview := pipeline.previewSingleFile(ctx, path); preview.Action != "import" ||
+		len(preview.Warnings) != 1 || !strings.Contains(preview.Warnings[0], "score 2 is below minimum 3") {
+		t.Fatalf("format minimum must warn without blocking: %+v", preview)
 	}
 	event := &downloads.DownloadCompletedEvent{DownloadID: "body", Title: title}
-	if _, err := pipeline.processImport(ctx, event, root); err == nil ||
-		!strings.Contains(err.Error(), "score 2 is below minimum 3") || len(f.svc.files) != 0 {
-		t.Fatalf("real import bypassed the score minimum: %v", err)
-	}
 	profile.MinFormatScore = 1
 	if preview := pipeline.previewSingleFile(ctx, path); preview.Action != "import" {
 		t.Fatalf("preview rejected: %+v", preview)
@@ -109,20 +105,21 @@ func TestCustomTierUpgradeProtection(t *testing.T) {
 		t.Fatalf("renamed tier did not upgrade: %+v", rejection)
 	}
 	profile.Cutoff = "ct_lower"
-	if rejection := spec.IsSatisfiedBy(context.Background(), candidate); rejection == nil {
-		t.Fatal("cutoff did not stop upgrade")
+	candidate.QualityWarnings = nil
+	if rejection := spec.IsSatisfiedBy(context.Background(), candidate); rejection != nil || len(candidate.QualityWarnings) != 1 {
+		t.Fatalf("met cutoff must warn without blocking the upgrade: %+v %v", rejection, candidate.QualityWarnings)
 	}
 }
 
-func TestCustomTierCannotBypassExcludedKnownSource(t *testing.T) {
+func TestCustomTierDoesNotHideExcludedKnownSource(t *testing.T) {
 	profile := &qualityprofiles.QualityProfile{ID: "p", Name: "Custom", UpgradeAllowed: true,
 		Items: `[{"id":"ct_test","name":"HEVC","kind":"custom","allowed":true},{"id":"web","name":"webdl-1080p","allowed":false}]`}
 	tiers := tierStub{{ID: "ct_test", Name: "HEVC", Specifications: []customformats.Specification{
 		{Implementation: customformats.ImplCodec, Fields: map[string]any{"value": "x265"}},
 	}}}
 	candidate := &ImportCandidate{SourcePath: "Film.1080p.WEB-DL.x265.mkv", QualityProfileID: "p"}
-	if rejection := NewUpgradeSpec(&stubProfileStore{profile: profile}, tiers).IsSatisfiedBy(context.Background(), candidate); rejection == nil {
-		t.Fatal("custom matcher bypassed disabled WEB quality")
+	if rejection := NewUpgradeSpec(&stubProfileStore{profile: profile}, tiers).IsSatisfiedBy(context.Background(), candidate); rejection != nil || len(candidate.QualityWarnings) != 1 {
+		t.Fatalf("disabled WEB quality must be reported as a warning: %+v %v", rejection, candidate.QualityWarnings)
 	}
 }
 
@@ -134,16 +131,16 @@ func TestGrabbedCustomTierIsRecheckedAgainstFile(t *testing.T) {
 	}}}
 	spec := NewUpgradeSpec(&stubProfileStore{profile: profile}, tiers)
 	for _, tc := range []struct {
-		file    string
-		allowed bool
+		file string
+		tier string
 	}{
-		{"Show.S01E01.1080p.x265-GROUP.mkv", true},
-		{"Show.S01E02.1080p.x264-GROUP.mkv", false},
+		{"Show.S01E01.1080p.x265-GROUP.mkv", customformats.StoredTierID("ct_test")},
+		{"Show.S01E02.1080p.x264-GROUP.mkv", "unknown-1080p"},
 	} {
 		c := &ImportCandidate{SourcePath: tc.file, QualityProfileID: "p", GrabbedQuality: customformats.StoredTierID("ct_test")}
 		c.IncomingRelease = parser.Parse(tc.file)
-		if r := spec.IsSatisfiedBy(context.Background(), c); (r == nil) != tc.allowed {
-			t.Fatalf("%s: rejection=%+v want allowed=%t", tc.file, r, tc.allowed)
+		if r := spec.IsSatisfiedBy(context.Background(), c); r != nil || c.ResolvedTier != tc.tier || (c.ResolvedTier == c.GrabbedQuality) == (len(c.QualityWarnings) != 0) {
+			t.Fatalf("%s: rejection=%+v tier=%q warnings=%v want tier %q", tc.file, r, c.ResolvedTier, c.QualityWarnings, tc.tier)
 		}
 	}
 }

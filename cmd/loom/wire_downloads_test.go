@@ -101,7 +101,7 @@ func TestWireDownloadsImportsWithAssignedQualityProfile(t *testing.T) {
 		reject     bool
 	}{
 		{name: "accepted by assigned profile", resolution: "1080p"},
-		{name: "rejected by assigned profile", resolution: "720p", reject: true},
+		{name: "downgrade held for review", resolution: "720p", reject: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			name := "Supernatural (2005) - S15E01 - Back and to the Future (" + tc.resolution + " BluRay x265 Silence).mkv"
@@ -111,11 +111,21 @@ func TestWireDownloadsImportsWithAssignedQualityProfile(t *testing.T) {
 			}
 			record, err := wired.importPipeline.ImportManualMatch(ctx, source, imports.MediaTypeEpisode, "episode")
 			if tc.reject {
-				if err == nil || !strings.Contains(err.Error(), "not allowed by profile") {
-					t.Fatalf("want assigned profile rejection, got record=%+v err=%v", record, err)
+				if err == nil || !strings.Contains(err.Error(), "pending review") {
+					t.Fatalf("want downgrade held for review, got record=%+v err=%v", record, err)
 				}
 				if _, err := os.Stat(filepath.Join(libraryRoot, "Supernatural", "Season 15", name)); !os.IsNotExist(err) {
-					t.Fatalf("disallowed episode was copied: %v", err)
+					t.Fatalf("held episode was copied: %v", err)
+				}
+				pending, err := wiring.ReviewStore.ListPending(ctx)
+				if err != nil || len(pending) != 1 {
+					t.Fatalf("pending reviews: %+v, %v", pending, err)
+				}
+				if err := wiring.ReviewStore.Approve(ctx, pending[0].ID); err != nil {
+					t.Fatal(err)
+				}
+				if _, err := wired.importPipeline.ImportManualMatch(ctx, source, imports.MediaTypeEpisode, "episode"); err != nil {
+					t.Fatalf("approved downgrade: %v", err)
 				}
 			} else {
 				if err != nil {

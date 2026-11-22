@@ -3,6 +3,7 @@ package imports
 import (
 	"context"
 	"errors"
+	"github.com/ebenderooock/loom/internal/safety"
 	"os"
 	"path/filepath"
 	"strings"
@@ -393,5 +394,107 @@ func TestEpisodeReplacementAndManualReimportEnforceProfile(t *testing.T) {
 	}
 	if got, err := os.ReadFile(dest); err != nil || string(got) != "new episode" {
 		t.Fatalf("rejected import changed episode: %q, %v", got, err)
+	}
+}
+
+func TestDowngradeWaitsForReviewApproval(t *testing.T) {
+	ctx := context.Background()
+	p, _, movieDir := newCollisionPipeline(t, ImportModeCopy)
+	applyReviewMigrations(t, p.db)
+	store := safety.NewReviewStore(p.db)
+	p.reviewStore = store
+	seriesSvc := &transferSeriesService{profile: "prof-1"}
+	p.matcher.seriesSvc = seriesSvc
+	p.decisions = NewDecisionMaker(NewUpgradeSpec(&stubProfileStore{profile: anyProfile()}))
+	destDir := filepath.Join(filepath.Dir(movieDir), "Test Show", "Season 02")
+	if err := os.MkdirAll(destDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	dest := filepath.Join(destDir, "Test.Show.1080p.HDTV.mkv")
+	if err := os.WriteFile(dest, []byte("better episode"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.db.Exec(`INSERT INTO episode_files VALUES (?, ?, ?, ?, ?)`, "episode", dest, 14, "hdtv-1080p", "2026"); err != nil {
+		t.Fatal(err)
+	}
+	var resumed []*safety.Review
+	store.OnApproved(func(_ context.Context, r *safety.Review) { resumed = append(resumed, r) })
+	lower := func(name string) string {
+		path := filepath.Join(t.TempDir(), name)
+		if err := os.WriteFile(path, []byte("lower quality"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return path
+	}
+	held := func(source string) *safety.Review {
+		t.Helper()
+		for range 2 { // a repeated import must not duplicate the review
+			if _, err := p.ReimportFile(ctx, MediaTypeEpisode, "episode", source, ReimportOptions{}); err == nil ||
+				!strings.Contains(err.Error(), "pending review") {
+				t.Fatalf("downgrade was not held for review: %v", err)
+			}
+		}
+		pending, err := store.ListPending(ctx)
+		if err != nil || len(pending) != 1 || pending[0].Kind != safety.ReviewKindQualityDowngrade || pending[0].DownloadPath != source {
+			t.Fatalf("pending reviews: %+v, %v", pending, err)
+		}
+		if got, _ := os.ReadFile(dest); string(got) != "better episode" {
+			t.Fatalf("held downgrade replaced the library file: %q", got)
+		}
+		return pending[0]
+	}
+
+	declined := lower("Test.Show.720p.HDTV.mkv")
+	if err := store.Reject(ctx, held(declined).ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.ReimportFile(ctx, MediaTypeEpisode, "episode", declined, ReimportOptions{}); err == nil ||
+		!strings.Contains(err.Error(), "replacement declined") {
+		t.Fatalf("declined downgrade: %v", err)
+	}
+
+	approved := lower("Test.Show.720p.HDTV.mkv")
+	review := held(approved)
+	if err := store.Approve(ctx, review.ID); err != nil {
+		t.Fatal(err)
+	}
+	if len(resumed) != 1 || resumed[0].ID != review.ID || resumed[0].Kind != safety.ReviewKindQualityDowngrade {
+		t.Fatalf("approval hook: %+v", resumed)
+	}
+	if _, err := p.ReimportFile(ctx, MediaTypeEpisode, "episode", approved, ReimportOptions{}); err != nil {
+		t.Fatalf("approved downgrade: %v", err)
+	}
+	if n := len(seriesSvc.files); n != 1 || seriesSvc.files[0].Quality != "hdtv-720p" {
+		t.Fatalf("approved downgrade was not registered: %+v", seriesSvc.files)
+	}
+}
+
+func TestResumeApprovedReviewRetriesOnlyDowngradeHolds(t *testing.T) {
+	f, _ := newSafetyPipeline(t)
+	var retried []string
+	retry := func(id string) { retried = append(retried, id) }
+	f.p.ResumeApprovedReview(context.Background(), &safety.Review{WorkflowID: "safety-hold"}, retry)
+	f.p.ResumeApprovedReview(context.Background(), &safety.Review{Kind: safety.ReviewKindQualityDowngrade, WorkflowID: "wf"}, retry)
+	if len(retried) != 1 || retried[0] != "wf" {
+		t.Fatalf("retried workflows: %v", retried)
+	}
+}
+
+func TestGrabDowngradeWarning(t *testing.T) {
+	p, _, movieDir := newCollisionPipeline(t, ImportModeCopy)
+	p.matcher.seriesSvc = &transferSeriesService{profile: "prof-1"}
+	p.upgradeSpec = NewUpgradeSpec(&stubProfileStore{profile: anyProfile()})
+	dest := filepath.Join(movieDir, "Test.Show.1080p.HDTV.mkv")
+	if _, err := p.db.Exec(`INSERT INTO episode_files VALUES (?, ?, ?, ?, ?)`, "episode", dest, 14, "hdtv-1080p", "2026"); err != nil {
+		t.Fatal(err)
+	}
+	for title, warned := range map[string]bool{
+		"Test.Show.S02E01.720p.HDTV-GRP":    true,
+		"Test.Show.S02E01.1080p.BluRay-GRP": false,
+		"Test.Show.S02E01.2160p.WEB-DL-GRP": false,
+	} {
+		if got := p.GrabDowngradeWarning(context.Background(), "episode", []string{"episode"}, title); (got != "") != warned {
+			t.Errorf("%s: warning %q, want warned=%v", title, got, warned)
+		}
 	}
 }

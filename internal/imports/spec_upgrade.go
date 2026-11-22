@@ -22,7 +22,7 @@ type QualityDefinitionLister interface {
 	ListQualityDefinitions(ctx context.Context) ([]*movies.QualityDefinition, error)
 }
 
-// UpgradeSpec enforces profile acceptance and prevents quality downgrades.
+// UpgradeSpec resolves the incoming quality and holds quality downgrades.
 // It reuses the quality search decided at grab time and only detects quality
 // itself, with the detector search uses, for downloads search did not grab.
 type UpgradeSpec struct {
@@ -50,20 +50,21 @@ func (s *UpgradeSpec) SetDefinitions(defs QualityDefinitionLister) { s.defs = de
 
 func (s *UpgradeSpec) Name() string { return "UpgradeSpec" }
 
-// IsSatisfiedBy checks the profile for downloads Loom did not grab. A grabbed
-// download already passed search's profile check, and a manual one is the
-// user's choice, so their quality problems become warnings, not rejections.
+// IsSatisfiedBy never blocks an import over the quality profile: Loom grabs
+// were already checked by search, manual grabs are the user's choice, and
+// files Loom did not download are taken as they are. Profile problems become
+// warnings. Only a downgrade of an existing file is rejected, and only until
+// the user approves it.
 func (s *UpgradeSpec) IsSatisfiedBy(ctx context.Context, c *ImportCandidate) *ImportRejection {
 	rejection := s.check(ctx, c)
-	if !c.GrabApproved {
-		return rejection
+	if c.ResolvedTier == "" {
+		c.ResolvedTier = fallbackQuality(c)
 	}
 	if rejection != nil {
-		c.QualityWarnings = append(c.QualityWarnings, rejection.Message)
-		if c.ResolvedTier == "" {
-			c.ResolvedTier = fallbackQuality(c)
+		if !c.DowngradeApproved {
+			return rejection
 		}
-		return nil
+		c.QualityWarnings = append(c.QualityWarnings, rejection.Message+" (replacement approved)")
 	}
 	if c.GrabbedManually {
 		if warning := s.cutoffWarning(ctx, c); warning != "" {
@@ -109,30 +110,30 @@ func (s *UpgradeSpec) cutoffWarning(ctx context.Context, c *ImportCandidate) str
 	return fmt.Sprintf("quality %q does not meet the cutoff %q of profile %q", quality, items[cutoff].Name, profile.Name)
 }
 
+// check resolves the incoming quality, records profile problems as warnings
+// and returns a rejection only when the file would downgrade an existing one.
 func (s *UpgradeSpec) check(ctx context.Context, c *ImportCandidate) *ImportRejection {
 	c.ResolvedTier = ""
+	warn := func(format string, args ...any) {
+		c.QualityWarnings = append(c.QualityWarnings, fmt.Sprintf(format, args...))
+	}
 	if c.QualityProfileID == "" {
-		if strings.HasPrefix(c.ExistingQuality, "custom-tier:") {
-			return &ImportRejection{Reason: RejectionNotUpgrade, Message: "existing custom tier cannot be compared without a profile"}
-		}
-		// In the absence of a profile, reject a downgrade only where both
-		// filenames/records carry enough information to compare.
+		// Without a profile, compare only what both filenames/records reveal.
 		return rejectKnownDowngrade(c)
 	}
-
 	if s.profiles == nil {
-		return &ImportRejection{Reason: RejectionNotUpgrade, Message: "quality profile store is unavailable"}
+		warn("quality profile store is unavailable")
+		return rejectKnownDowngrade(c)
 	}
 	profile, err := s.profiles.Get(ctx, c.QualityProfileID)
 	if err != nil || profile == nil {
-		return &ImportRejection{
-			Reason:  RejectionNotUpgrade,
-			Message: fmt.Sprintf("cannot load quality profile %q", c.QualityProfileID),
-		}
+		warn("cannot load quality profile %q", c.QualityProfileID)
+		return rejectKnownDowngrade(c)
 	}
 	items, err := profile.ParseItems()
 	if err != nil {
-		return &ImportRejection{Reason: RejectionNotUpgrade, Message: "invalid quality profile"}
+		warn("invalid quality profile %q", profile.Name)
+		return rejectKnownDowngrade(c)
 	}
 	custom := customformats.HasCustomTiers(profile)
 
@@ -145,10 +146,9 @@ func (s *UpgradeSpec) check(ctx context.Context, c *ImportCandidate) *ImportReje
 	var tiers []customformats.Tier
 	if custom {
 		if s.tiers == nil {
-			return &ImportRejection{Reason: RejectionNotUpgrade, Message: "custom tier store is unavailable"}
-		}
-		if tiers, err = s.tiers.ListTiers(ctx); err != nil {
-			return &ImportRejection{Reason: RejectionNotUpgrade, Message: fmt.Sprintf("cannot load custom tiers: %v", err)}
+			warn("custom tier store is unavailable")
+		} else if tiers, err = s.tiers.ListTiers(ctx); err != nil {
+			warn("cannot load custom tiers: %v", err)
 		}
 	}
 	ri := customformats.FromParsedRelease(release)
@@ -161,66 +161,60 @@ func (s *UpgradeSpec) check(ctx context.Context, c *ImportCandidate) *ImportReje
 
 	rank, stored := -1, ""
 	if grabbed != "" {
-		incomingQuality = grabbed
+		incomingQuality, stored = grabbed, grabbed
 		rank = qualityItemRank(items, grabbed)
 		if rank < 0 || !items[rank].Allowed {
-			return &ImportRejection{Reason: RejectionNotUpgrade,
-				Message: fmt.Sprintf("grabbed quality %q is no longer allowed by profile %q", grabbed, profile.Name)}
+			warn("grabbed quality %q is no longer allowed by profile %q", grabbed, profile.Name)
 		}
-		stored = grabbed
 	} else {
 		var defs []*movies.QualityDefinition
 		if s.defs != nil {
 			if defs, err = s.defs.ListQualityDefinitions(ctx); err != nil {
-				return &ImportRejection{Reason: RejectionNotUpgrade, Message: fmt.Sprintf("cannot load quality definitions: %v", err)}
+				warn("cannot load quality definitions: %v", err)
 			}
 		}
 		decision, err := customformats.ResolveQuality(profile, tiers, release, ri, defs)
 		if err != nil {
-			return &ImportRejection{Reason: RejectionNotUpgrade, Message: err.Error()}
-		}
-		if decision.Resolution != nil {
+			warn("%v", err)
+		} else if decision.Resolution != nil {
 			rank, stored = decision.Resolution.Rank, decision.Stored
 		}
-	}
-	if rank < 0 {
-		// A known resolution does not make an unknown source a different policy tier.
-		// Keep this fallback limited to first imports, never quality replacements.
-		unknownSource := incomingQuality == "" || strings.HasPrefix(incomingQuality, "unknown-")
-		if !custom && unknownSource && c.ExistingQuality == "" &&
-			(profile.IsAllowed("unknown") || profile.AllowsUnknownQuality()) {
-			return nil
+		if rank < 0 {
+			// A known resolution does not make an unknown source a different policy tier.
+			unknownSource := incomingQuality == "" || strings.HasPrefix(incomingQuality, "unknown-")
+			if custom || !unknownSource || !(profile.IsAllowed("unknown") || profile.AllowsUnknownQuality()) {
+				warn("incoming quality %q is not allowed by profile %q", incomingQuality, profile.Name)
+			}
+			// A disallowed quality still has a place in the profile's order.
+			rank = qualityItemRank(items, incomingQuality)
 		}
-		return &ImportRejection{Reason: RejectionNotUpgrade,
-			Message: fmt.Sprintf("incoming quality %q is not allowed by profile %q", incomingQuality, profile.Name)}
 	}
 	c.ResolvedTier = stored
 	if c.ExistingQuality == "" {
 		return nil
 	}
-	if !custom && strings.HasPrefix(c.ExistingQuality, "custom-tier:") {
-		return &ImportRejection{Reason: RejectionNotUpgrade, Message: "existing custom tier is not present in the profile"}
-	}
 	// A previously imported quality can be disallowed but still has a rank.
 	existingRank := qualityItemRank(items, c.ExistingQuality)
-	if existingRank < 0 {
-		if custom {
-			return &ImportRejection{Reason: RejectionNotUpgrade, Message: "existing quality tier cannot be compared"}
+	if rank < 0 || existingRank < 0 {
+		r := rejectKnownDowngrade(c)
+		if r != nil || existingRank < 0 || !(incomingQuality == "" || strings.HasPrefix(strings.ToLower(incomingQuality), "unknown")) {
+			return r
 		}
-		return rejectKnownDowngrade(c)
+		// A file of unknown quality cannot be shown not to downgrade a ranked one.
+		return &ImportRejection{Reason: RejectionDowngrade, Message: fmt.Sprintf(
+			"incoming quality %q cannot be compared with existing %q in profile %q",
+			incomingQuality, c.ExistingQuality, profile.Name)}
 	}
 	// Profiles are ordered best first.
 	if rank > existingRank {
 		return &ImportRejection{
-			Reason: RejectionNotUpgrade,
-			Message: fmt.Sprintf(
-				"incoming quality %q (rank %d) is lower than existing %q (rank %d)",
-				incomingQuality, rank, c.ExistingQuality, existingRank),
+			Reason: RejectionDowngrade,
+			Message: fmt.Sprintf("incoming quality %q is lower than existing %q in profile %q",
+				incomingQuality, c.ExistingQuality, profile.Name),
 		}
 	}
 	if rank < existingRank && !profile.UpgradeAllowed {
-		return &ImportRejection{Reason: RejectionNotUpgrade,
-			Message: fmt.Sprintf("upgrades are disabled on profile %q", profile.Name)}
+		warn("upgrades are disabled on profile %q", profile.Name)
 	}
 	// The Unknown tier spans resolutions, so its rank alone cannot rule out
 	// replacing an unknown-1080p file with a 720p one.
@@ -232,7 +226,7 @@ func (s *UpgradeSpec) check(ctx context.Context, c *ImportCandidate) *ImportReje
 	if custom {
 		cutoff := profile.CutoffRank()
 		if cutoff >= 0 && items[cutoff].Allowed && existingRank <= cutoff {
-			return &ImportRejection{Reason: RejectionNotUpgrade, Message: "quality cutoff already met"}
+			warn("quality cutoff of profile %q was already met", profile.Name)
 		}
 	}
 	return nil
@@ -283,7 +277,8 @@ func rejectKnownDowngrade(c *ImportCandidate) *ImportRejection {
 		lower = qualityScore(incoming) < qualityScore(existing)
 	}
 	if lower {
-		return &ImportRejection{Reason: RejectionNotUpgrade, Message: "incoming quality is lower than the existing quality"}
+		return &ImportRejection{Reason: RejectionDowngrade, Message: fmt.Sprintf(
+			"incoming file is lower quality than existing %q", c.ExistingQuality)}
 	}
 	return nil
 }

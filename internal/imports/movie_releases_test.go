@@ -214,7 +214,7 @@ func TestEncoreDowngradeCannotReplaceExistingEdition(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err := p.importSingleFile(context.Background(), &downloads.DownloadCompletedEvent{Title: filename}, source)
-	if err == nil || !strings.Contains(err.Error(), "lower than the existing quality") {
+	if err == nil || !strings.Contains(err.Error(), "lower quality than existing") {
 		t.Fatalf("edition downgrade was not rejected: %v", err)
 	}
 	for path, want := range map[string]string{

@@ -42,6 +42,9 @@ type CmdGrabbed struct {
 	// Manual marks a release the user chose. Import accepts it whatever the
 	// quality profile says and only warns when it misses the profile.
 	Manual bool
+	// QualityWarning notes a manual grab that is lower quality than the
+	// library's current file; its import needs the user's approval.
+	QualityWarning string
 }
 
 func (CmdGrabbed) commandTag() {}

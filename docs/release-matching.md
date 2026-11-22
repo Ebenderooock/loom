@@ -94,17 +94,25 @@ the quality from the file name again. When a file name contradicts the grabbed
 release, such as a different resolution inside a pack, import records the
 file's own quality using the same detector as search.
 
-Import never rejects a download Loom grabbed because of its quality: search
-already checked it against the profile, the existing file, and the custom-format
-minimum. If the file still falls outside the profile, it is imported and the
-workflow timeline shows a **quality warning**.
+Import never blocks a file because of its quality. Problems with the profile,
+the cutoff, disabled upgrades or the custom-format minimum are recorded as a
+**quality warning** in the workflow timeline (and in the import preview), and the
+file is imported.
 
-A release you download yourself from the search dialog overrides the quality
-profile. It is imported even when the profile disallows its quality, and the
-workflow timeline warns when it is outside the profile or below the cutoff.
+- Downloads Loom grabbed reuse the grabbed quality; search already checked it.
+- Releases you download yourself from the search dialog override the profile
+  and are flagged when outside the profile or below the cutoff.
+- Downloads Loom did not grab (added directly in the download client or
+  imported from a folder) have their quality detected at import, using the same
+  detector, but are not blocked either.
 
-Only downloads Loom did not grab (added directly in the download client or
-imported from a folder) are checked against the profile at import.
+The one exception is a **downgrade**: a file that would replace a better file
+already in your library, by the profile's order or by resolution and source.
+A file of unknown quality also cannot replace a file of known quality without
+approval. Such imports wait in **Activity → Reviews** as "Lower quality".
+**Replace file** retries the import and replaces the existing file; **Keep
+current** declines it and the import fails for that file. Grabbing a lower
+quality release from the search dialog shows the same warning up front.
 
 A release name that states a resolution but no source, such as
 `Chicago PD S14E06 1080p HEVC x265-MeGusta`, is **assumed** to be WEB-DL at that
@@ -114,8 +122,7 @@ The stored file quality is the assumed one, for example `webdl-1080p`. A profile
 with custom tiers first tries an enabled **Unknown** tier or a matching custom
 tier, then the assumed tier. If the assumed tier is disabled, an allowed Unknown
 tier still accepts a first import with no existing file; it never authorizes
-replacing an existing file. For downloads Loom did not grab, known-source
-exclusions and custom-format minimums still apply.
+replacing an existing file without review.
 
 ## Custom quality tiers
 

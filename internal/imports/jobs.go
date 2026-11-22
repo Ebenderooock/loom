@@ -930,7 +930,7 @@ func isRetryableImportError(err error) bool {
 		return false
 	}
 	msg := strings.ToLower(err.Error())
-	for _, s := range []string{"import rejected", "not a media file", "refusing symlink", "source file missing", "unsupported media type",
+	for _, s := range []string{"import rejected", "pending review", "not a media file", "refusing symlink", "source file missing", "unsupported media type",
 		"not an audio file", "does not improve existing track", "not in the album's selected edition"} {
 		if strings.Contains(msg, s) {
 			return false

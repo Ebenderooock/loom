@@ -27,10 +27,16 @@ const (
 	ReviewRejected ReviewStatus = "rejected"
 )
 
+// ReviewKindQualityDowngrade holds an import that would replace a file with a
+// lower quality one until the user approves it.
+const ReviewKindQualityDowngrade = "quality_downgrade"
+
 // Review is a manual-intervention record created when a release passes
 // with severity "warning".
 type Review struct {
 	ID           string       `json:"id"`
+	Kind         string       `json:"kind,omitempty"`
+	WorkflowID   string       `json:"workflow_id,omitempty"`
 	MediaType    string       `json:"media_type"`
 	MediaID      string       `json:"media_id"`
 	DownloadPath string       `json:"download_path"`
@@ -42,8 +48,15 @@ type Review struct {
 
 // ReviewStore provides persistence for manual-review entries.
 type ReviewStore struct {
-	db       *sql.DB
-	auditLog *auditlog.Logger
+	db         *sql.DB
+	auditLog   *auditlog.Logger
+	onApproved []func(context.Context, *Review)
+}
+
+// OnApproved registers a callback run after a review is approved, for example
+// to resume the import it held.
+func (s *ReviewStore) OnApproved(fn func(context.Context, *Review)) {
+	s.onApproved = append(s.onApproved, fn)
 }
 
 // NewReviewStore wraps a *sql.DB for review CRUD.
@@ -56,8 +69,16 @@ func (s *ReviewStore) SetAuditLog(l *auditlog.Logger) { s.auditLog = l }
 
 // Create inserts a new pending review.
 func (s *ReviewStore) Create(ctx context.Context, mediaType, mediaID, downloadPath, reason string) (*Review, error) {
+	return s.CreateReview(ctx, Review{MediaType: mediaType, MediaID: mediaID, DownloadPath: downloadPath, Reason: reason})
+}
+
+// CreateReview inserts a new pending review with an optional kind and workflow.
+func (s *ReviewStore) CreateReview(ctx context.Context, in Review) (*Review, error) {
+	mediaType, mediaID, downloadPath, reason := in.MediaType, in.MediaID, in.DownloadPath, in.Reason
 	r := &Review{
 		ID:           uuid.New().String(),
+		Kind:         in.Kind,
+		WorkflowID:   in.WorkflowID,
 		MediaType:    mediaType,
 		MediaID:      mediaID,
 		DownloadPath: downloadPath,
@@ -65,9 +86,9 @@ func (s *ReviewStore) Create(ctx context.Context, mediaType, mediaID, downloadPa
 		Status:       ReviewPending,
 	}
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO manual_review (id, media_type, media_id, download_path, reason, status)
-		 VALUES (?, ?, ?, ?, ?, ?)`,
-		r.ID, r.MediaType, r.MediaID, r.DownloadPath, r.Reason, string(r.Status),
+		`INSERT INTO manual_review (id, kind, workflow_id, media_type, media_id, download_path, reason, status)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		r.ID, r.Kind, r.WorkflowID, r.MediaType, r.MediaID, r.DownloadPath, r.Reason, string(r.Status),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("create review: %w", err)
@@ -85,11 +106,45 @@ func (s *ReviewStore) Create(ctx context.Context, mediaType, mediaID, downloadPa
 	return r, nil
 }
 
+// Latest returns the newest review of a kind for one file and media item.
+func (s *ReviewStore) Latest(ctx context.Context, kind, mediaType, mediaID, downloadPath string) (*Review, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT `+reviewColumns+` FROM manual_review
+		WHERE kind = ? AND media_type = ? AND media_id = ? AND download_path = ?
+		ORDER BY created_at DESC, rowid DESC LIMIT 1`, kind, mediaType, mediaID, downloadPath)
+	if err != nil {
+		return nil, fmt.Errorf("find review: %w", err)
+	}
+	defer rows.Close()
+	reviews, err := scanReviews(rows)
+	if err != nil || len(reviews) == 0 {
+		return nil, err
+	}
+	return reviews[0], nil
+}
+
+// Get returns one review by ID.
+func (s *ReviewStore) Get(ctx context.Context, id string) (*Review, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT `+reviewColumns+` FROM manual_review WHERE id = ?`, id)
+	if err != nil {
+		return nil, fmt.Errorf("get review: %w", err)
+	}
+	defer rows.Close()
+	reviews, err := scanReviews(rows)
+	if err != nil {
+		return nil, err
+	}
+	if len(reviews) == 0 {
+		return nil, ErrReviewNotFound
+	}
+	return reviews[0], nil
+}
+
+const reviewColumns = `id, kind, workflow_id, media_type, media_id, download_path, reason, status, created_at, resolved_at`
+
 // ListPending returns all reviews with status "pending".
 func (s *ReviewStore) ListPending(ctx context.Context) ([]*Review, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, media_type, media_id, download_path, reason, status, created_at, resolved_at
-		 FROM manual_review WHERE status = ? ORDER BY created_at DESC`, string(ReviewPending))
+		`SELECT `+reviewColumns+` FROM manual_review WHERE status = ? ORDER BY created_at DESC`, string(ReviewPending))
 	if err != nil {
 		return nil, fmt.Errorf("list pending reviews: %w", err)
 	}
@@ -104,9 +159,22 @@ func (s *ReviewStore) CountPending(ctx context.Context) (int, error) {
 	return count, err
 }
 
-// Approve marks a review as approved.
+// Approve marks a review as approved and runs the approval callbacks.
 func (s *ReviewStore) Approve(ctx context.Context, id string) error {
-	return s.resolve(ctx, id, ReviewApproved)
+	if err := s.resolve(ctx, id, ReviewApproved); err != nil {
+		return err
+	}
+	if len(s.onApproved) == 0 {
+		return nil
+	}
+	r, err := s.Get(ctx, id)
+	if err != nil {
+		return nil // approval is recorded; resuming is best effort
+	}
+	for _, fn := range s.onApproved {
+		fn(ctx, r)
+	}
+	return nil
 }
 
 // Reject marks a review as rejected.
@@ -144,7 +212,7 @@ func scanReviews(rows *sql.Rows) ([]*Review, error) {
 	var out []*Review
 	for rows.Next() {
 		r := &Review{}
-		if err := rows.Scan(&r.ID, &r.MediaType, &r.MediaID, &r.DownloadPath, &r.Reason, &r.Status, &r.CreatedAt, &r.ResolvedAt); err != nil {
+		if err := rows.Scan(&r.ID, &r.Kind, &r.WorkflowID, &r.MediaType, &r.MediaID, &r.DownloadPath, &r.Reason, &r.Status, &r.CreatedAt, &r.ResolvedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, r)

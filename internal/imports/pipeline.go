@@ -76,6 +76,7 @@ type ImportPipeline struct {
 	logger          *slog.Logger
 	importMode      ImportMode
 	decisions       *DecisionMaker
+	upgradeSpec     *UpgradeSpec
 	decisionLog     *DecisionLogger
 	subtitles       *SubtitleService
 	extras          *ExtraService
@@ -145,6 +146,7 @@ func NewPipeline(opts PipelineOptions) (*ImportPipeline, error) {
 		libStore:        opts.LibStore,
 		notifSvc:        opts.NotifSvc,
 		postVal:         opts.PostVal,
+		upgradeSpec:     upgradeSpec,
 		reviewStore:     opts.ReviewStore,
 		logger:          logger,
 		importMode:      opts.ImportMode,
@@ -714,8 +716,8 @@ func importRelease(file, title string, match *MatchResult) *parser.Release {
 	return incoming
 }
 
-// applyGrabbedQuality marks a download Loom grabbed as approved and reuses the
-// quality search decided for it. It returns the owning workflow ID, if any.
+// applyGrabbedQuality reuses the quality search decided for a download Loom
+// grabbed. It returns the owning workflow ID, if any.
 // A file whose own name contradicts that decision (for example a different
 // resolution inside a pack) has its quality detected again.
 func (p *ImportPipeline) applyGrabbedQuality(ctx context.Context, ev *downloads.DownloadCompletedEvent, c *ImportCandidate, fileQuality string) string {
@@ -732,7 +734,7 @@ func (p *ImportPipeline) applyGrabbedQuality(ctx context.Context, ev *downloads.
 	if quality == "" && !manual {
 		return wf.ID
 	}
-	c.GrabApproved, c.GrabbedManually = true, manual
+	c.GrabbedManually = manual
 	if quality == "" {
 		return wf.ID
 	}
@@ -762,6 +764,118 @@ func (p *ImportPipeline) reportQualityWarnings(ctx context.Context, workflowID s
 	}
 	if err := p.wfEngine.Store().LogEvent(ctx, workflowID, workflows.EventQualityWarning, message, ""); err != nil {
 		p.logger.Warn("failed to record quality warning", "workflow_id", workflowID, "error", err)
+	}
+}
+
+// errDowngradePendingReview holds an import that would replace a better file.
+var errDowngradePendingReview = errors.New("import pending review")
+
+func onlyDowngrade(rejections []ImportRejection) bool {
+	for _, r := range rejections {
+		if r.Reason != RejectionDowngrade {
+			return false
+		}
+	}
+	return len(rejections) > 0
+}
+
+func (p *ImportPipeline) downgradeReview(ctx context.Context, match *MatchResult, mediaFile string) *safety.Review {
+	if p.reviewStore == nil {
+		return nil
+	}
+	r, err := p.reviewStore.Latest(ctx, safety.ReviewKindQualityDowngrade, string(match.MediaType), match.MediaID, mediaFile)
+	if err != nil {
+		p.logger.Warn("cannot load downgrade review", "file", mediaFile, "error", err)
+		return nil
+	}
+	return r
+}
+
+// holdDowngrade asks the user to approve replacing a better existing file.
+// A declined replacement fails the import; otherwise it waits for review.
+func (p *ImportPipeline) holdDowngrade(ctx context.Context, ev *downloads.DownloadCompletedEvent, match *MatchResult, mediaFile, workflowID string, review *safety.Review, message string) error {
+	mediaType := string(match.MediaType)
+	if review != nil && review.Status == safety.ReviewRejected {
+		return p.recordFailure(ctx, mediaType, match.MediaID, ev.Title, mediaFile,
+			fmt.Errorf("import rejected: replacement declined in review: %s", message))
+	}
+	reason := "Lower quality than the file in your library: " + message + ". Approve to replace it."
+	if review == nil || review.Status != safety.ReviewPending {
+		if _, err := p.reviewStore.CreateReview(ctx, safety.Review{
+			Kind:         safety.ReviewKindQualityDowngrade,
+			WorkflowID:   workflowID,
+			MediaType:    mediaType,
+			MediaID:      match.MediaID,
+			DownloadPath: mediaFile,
+			Reason:       reason,
+		}); err != nil {
+			return p.recordFailure(ctx, mediaType, match.MediaID, ev.Title, mediaFile,
+				fmt.Errorf("import rejected: %s (cannot create review: %v)", message, err))
+		}
+	}
+	_ = p.decisionLog.Log(ctx, ImportDecision{
+		SourcePath: mediaFile,
+		MediaType:  mediaType,
+		MediaID:    match.MediaID,
+		Action:     "pending_review",
+		Reason:     string(RejectionDowngrade) + ": " + message,
+	})
+	if err := p.recordStatus(ctx, mediaType, match.MediaID, mediaFile, "", StatusPendingReview, reason); err != nil {
+		p.logger.Error("failed to record pending review", "error", err)
+	}
+	p.logger.Warn("import held for downgrade review", "file", mediaFile, "reason", message)
+	return fmt.Errorf("%w: %s; approve it in Activity → Reviews", errDowngradePendingReview, message)
+}
+
+// GrabDowngradeWarning reports when a release the user is grabbing would
+// replace a better file already in the library. Its import will then wait for
+// approval in Activity → Reviews.
+func (p *ImportPipeline) GrabDowngradeWarning(ctx context.Context, mediaType string, mediaIDs []string, title string) string {
+	release := parser.Parse(title)
+	for _, id := range mediaIDs {
+		match := &MatchResult{Matched: true, MediaType: MediaType(mediaType), MediaID: id}
+		if match.MediaType == MediaTypeMovie {
+			match.Edition = parser.MovieEdition(title)
+		}
+		c := &ImportCandidate{SourcePath: title, Match: match, IncomingRelease: release}
+		if err := p.enrichCandidateQuality(ctx, c); err != nil || c.ExistingQuality == "" {
+			continue
+		}
+		if r := p.upgradeSpec.check(ctx, c); r != nil && r.Reason == RejectionDowngrade {
+			return "Lower quality than the file in your library (" + r.Message + "). The import will wait for your approval in Activity → Reviews."
+		}
+	}
+	return ""
+}
+
+// ResumeApprovedReview re-runs imports held by an approved downgrade review.
+// Workflow imports are retried through retryWorkflow; import jobs directly.
+func (p *ImportPipeline) ResumeApprovedReview(ctx context.Context, r *safety.Review, retryWorkflow func(string)) {
+	if r == nil || r.Kind != safety.ReviewKindQualityDowngrade {
+		return
+	}
+	if r.WorkflowID != "" && retryWorkflow != nil {
+		retryWorkflow(r.WorkflowID)
+	}
+	rows, err := p.db.QueryContext(ctx, `SELECT DISTINCT j.id FROM import_jobs j
+		JOIN import_job_files f ON f.job_id = j.id
+		WHERE f.source_path = ? AND f.status = ?`, r.DownloadPath, string(FileFailed))
+	if err != nil {
+		p.logger.Warn("find import jobs held for review", "review_id", r.ID, "error", err)
+		return
+	}
+	var ids []string
+	for rows.Next() {
+		var id string
+		if rows.Scan(&id) == nil {
+			ids = append(ids, id)
+		}
+	}
+	_ = rows.Close()
+	for _, id := range ids {
+		if _, err := p.RetryJob(ctx, id); err != nil {
+			p.logger.Warn("resume import job after review", "job_id", id, "error", err)
+		}
 	}
 }
 
@@ -836,9 +950,14 @@ func (p *ImportPipeline) importMatchedWith(ctx context.Context, ev *downloads.Do
 			candidate.ExistingQuality = quality
 		}
 	}
+	downgradeReview := p.downgradeReview(ctx, match, mediaFile)
+	candidate.DowngradeApproved = downgradeReview != nil && downgradeReview.Status == safety.ReviewApproved
 	eval := p.decisions.Evaluate(ctx, candidate)
 	if candidate.ResolvedTier != "" {
 		incomingQuality = candidate.ResolvedTier
+	}
+	if onlyDowngrade(eval.Rejections) && p.reviewStore != nil {
+		return "", p.holdDowngrade(ctx, ev, match, mediaFile, grabWorkflowID, downgradeReview, eval.Rejections[0].Message)
 	}
 	if !eval.Approved() {
 		sampleOnly := true
@@ -1701,6 +1820,8 @@ type ImportPreview struct {
 	Action    string `json:"action"`
 	Reason    string `json:"reason"`
 	Quality   string `json:"quality,omitempty"`
+	// Warnings lists quality profile problems that do not block the import.
+	Warnings []string `json:"warnings,omitempty"`
 }
 
 // PreviewImport is a dry-run mode that returns what would happen without
@@ -1799,9 +1920,12 @@ func (p *ImportPipeline) previewSingleFile(ctx context.Context, filePath string)
 	} else {
 		preview.Action, preview.Reason = "import", "no existing file at destination"
 	}
-	if evaluation := p.decisions.Evaluate(ctx, candidate); !evaluation.Approved() {
+	if evaluation := p.decisions.Evaluate(ctx, candidate); onlyDowngrade(evaluation.Rejections) {
+		preview.Action, preview.Reason = "review", evaluation.Rejections[0].Message+"; needs approval to replace"
+	} else if !evaluation.Approved() {
 		preview.Action, preview.Reason = "skip", evaluation.Rejections[0].Message
 	}
+	preview.Warnings = candidate.QualityWarnings
 
 	return preview
 }

@@ -426,6 +426,10 @@ func (o *Orchestrator) handleGrabbed(ctx context.Context, cmd CmdGrabbed) {
 		message += " (manual download: quality profile rules do not block import)"
 		eventMeta["manual"] = true
 	}
+	if cmd.QualityWarning != "" {
+		message += ". " + cmd.QualityWarning
+		eventMeta["quality_warning"] = cmd.QualityWarning
+	}
 	o.logEvent(ctx, cmd.WorkflowID, EventGrabbed, message, eventMeta)
 
 	// Cache the actual on-disk path immediately at grab time so it survives
