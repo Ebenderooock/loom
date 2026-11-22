@@ -15,6 +15,7 @@ const (
 	RejectionAlreadyImported   ImportRejectionReason = "already_imported"
 	RejectionUnpacking         ImportRejectionReason = "unpacking"
 	RejectionNotUpgrade        ImportRejectionReason = "not_upgrade"
+	RejectionDowngrade         ImportRejectionReason = "quality_downgrade"
 	RejectionNoAudio           ImportRejectionReason = "no_audio"
 	RejectionDangerousFile     ImportRejectionReason = "dangerous_file"
 	RejectionCustomFormat      ImportRejectionReason = "custom_format_score"
@@ -37,6 +38,18 @@ type ImportCandidate struct {
 	QualityProfileID string          // the media item's assigned quality profile
 	ExistingQuality  string          // quality-definition name of existing file (empty if none)
 	IncomingRelease  *parser.Release // parsed release info for the incoming file
+	ResolvedTier     string          // quality identity to store, decided by UpgradeSpec
+	// GrabbedQuality is the quality search decided at grab time. When set,
+	// import reuses it instead of detecting the quality again.
+	GrabbedQuality        string
+	GrabbedQualityAssumed bool
+	GrabbedManually       bool
+	// DowngradeApproved means the user approved replacing a better existing
+	// file with this one.
+	DowngradeApproved bool
+	// QualityWarnings collects profile problems; quality never blocks an
+	// import except for an unapproved downgrade.
+	QualityWarnings []string
 }
 
 // ImportEvaluation holds the result of running all specs against a candidate.

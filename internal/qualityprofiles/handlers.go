@@ -66,7 +66,7 @@ func (h *qpHandler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.store.Create(r.Context(), &qp); err != nil {
-		if errors.Is(err, ErrInvalidFormatItems) {
+		if errors.Is(err, ErrInvalidFormatItems) || errors.Is(err, ErrInvalidQualityItems) {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
@@ -86,7 +86,7 @@ func (h *qpHandler) update(w http.ResponseWriter, r *http.Request) {
 	}
 	qp.ID = id
 	if err := h.store.Update(r.Context(), &qp); err != nil {
-		if errors.Is(err, ErrInvalidFormatItems) {
+		if errors.Is(err, ErrInvalidFormatItems) || errors.Is(err, ErrInvalidQualityItems) {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}

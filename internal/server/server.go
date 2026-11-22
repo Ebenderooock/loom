@@ -281,6 +281,9 @@ func New(cfg *config.Config, wiring Wiring) (*Server, error) {
 
 	updateSvc := updates.NewService(wiring.DB, buildinfo.Version, buildinfo.Commit)
 	updateSvc.ConfigureInstallation(func() (bool, string) { return updater.Capability(nativeBinding(cfg)) })
+	if wiring.NotificationSvc != nil {
+		updateSvc.ConfigureAlerts(updates.NewAlerts(wiring.DB, wiring.Bus))
+	}
 	s := &Server{
 		updateSvc:         updateSvc,
 		cfg:               cfg,

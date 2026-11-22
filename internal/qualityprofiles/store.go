@@ -15,6 +15,9 @@ import (
 // ErrInvalidFormatItems identifies malformed profile score assignments.
 var ErrInvalidFormatItems = errors.New("invalid custom format scores")
 
+// ErrInvalidQualityItems identifies malformed or missing custom tier references.
+var ErrInvalidQualityItems = errors.New("invalid quality tiers")
+
 // Store provides SQLite persistence for quality profiles.
 type Store struct {
 	db *sql.DB
@@ -96,6 +99,9 @@ func (s *Store) Create(ctx context.Context, qp *QualityProfile) error {
 		return fmt.Errorf("begin create quality profile: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
+	if err := validateTierItems(ctx, tx, qp); err != nil {
+		return err
+	}
 	_, err = tx.ExecContext(ctx,
 		`INSERT INTO quality_profiles_v2 (id, name, cutoff, min_format_score, cutoff_format_score, upgrade_allowed, items, created_at, updated_at)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -131,6 +137,9 @@ func (s *Store) Update(ctx context.Context, qp *QualityProfile) error {
 		return fmt.Errorf("begin update quality profile: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
+	if err := validateTierItems(ctx, tx, qp); err != nil {
+		return err
+	}
 	res, err := tx.ExecContext(ctx,
 		`UPDATE quality_profiles_v2
 		 SET name=?, cutoff=?, min_format_score=?, cutoff_format_score=?, upgrade_allowed=?, items=?, updated_at=?
@@ -139,6 +148,7 @@ func (s *Store) Update(ctx context.Context, qp *QualityProfile) error {
 	if err != nil {
 		return fmt.Errorf("update quality profile: %w", err)
 	}
+
 	n, _ := res.RowsAffected()
 	if n == 0 {
 		return sql.ErrNoRows
@@ -151,6 +161,43 @@ func (s *Store) Update(ctx context.Context, qp *QualityProfile) error {
 	}
 	qp.UpdatedAt = now
 
+	return nil
+}
+
+func validateTierItems(ctx context.Context, tx *sql.Tx, qp *QualityProfile) error {
+	if strings.TrimSpace(qp.Items) == "null" {
+		return fmt.Errorf("%w: items must be an array", ErrInvalidQualityItems)
+	}
+	items, err := qp.ParseItems()
+	if err != nil {
+		return fmt.Errorf("%w: %w", ErrInvalidQualityItems, err)
+	}
+	seen := make(map[string]bool, len(items))
+	customCutoffAllowed := false
+	for _, item := range items {
+		if item.ID == "" || seen[item.ID] {
+			return fmt.Errorf("%w: tier IDs must be non-empty and unique", ErrInvalidQualityItems)
+		}
+		seen[item.ID] = true
+		if item.Kind != "" && item.Kind != "custom" {
+			return fmt.Errorf("%w: unknown tier kind %q", ErrInvalidQualityItems, item.Kind)
+		}
+		if item.Kind == "custom" {
+			if item.ID == qp.Cutoff && item.Allowed {
+				customCutoffAllowed = true
+			}
+			var count int
+			if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM custom_quality_tiers WHERE id=?`, item.ID).Scan(&count); err != nil {
+				return fmt.Errorf("check tier: %w", err)
+			}
+			if count == 0 {
+				return fmt.Errorf("%w: custom tier %q not found", ErrInvalidQualityItems, item.ID)
+			}
+		}
+	}
+	if strings.HasPrefix(qp.Cutoff, "ct_") && !customCutoffAllowed {
+		return fmt.Errorf("%w: custom cutoff must be an allowed tier", ErrInvalidQualityItems)
+	}
 	return nil
 }
 

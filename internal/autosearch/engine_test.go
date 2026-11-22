@@ -35,7 +35,7 @@ func TestExistingSpecialDoesNotUseRegularEpisodeFile(t *testing.T) {
 		e.seriesSvc = specialEpisodeService{specialHasFile: downloaded}
 		got := e.getExistingEpisodeQuality(context.Background(), SearchRequest{
 			MediaType: "episode", MediaID: "show", Season: 0, Episode: 1,
-		})
+		}, nil, nil)
 		if got.HasFile != downloaded {
 			t.Fatalf("special downloaded=%v, got existing=%+v", downloaded, got)
 		}
@@ -197,9 +197,9 @@ func TestMatchQualityDef(t *testing.T) {
 			wantID:  "webdl-2160",
 		},
 		{
-			name:    "resolution-only fallback (unknown source, 720p)",
+			name:    "unknown source assumes WEB-DL, never HDTV (720p)",
 			release: &parser.Release{Source: "", Resolution: 720},
-			wantID:  "hdtv-720",
+			wantID:  "webdl-720",
 		},
 		{
 			name:    "known source without a definition is not relabeled",

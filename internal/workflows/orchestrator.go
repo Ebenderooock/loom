@@ -407,25 +407,50 @@ func (o *Orchestrator) handleGrabbed(ctx context.Context, cmd CmdGrabbed) {
 		return
 	}
 
-	o.logEvent(ctx, cmd.WorkflowID, EventGrabbed, "Release grabbed: "+cmd.Title, map[string]any{
+	message := "Release grabbed: " + cmd.Title
+	eventMeta := map[string]any{
 		"client_id":   cmd.ClientID,
 		"download_id": cmd.DownloadID,
 		"title":       cmd.Title,
-	})
+	}
+	if cmd.Quality != "" {
+		message += " (quality: " + cmd.Quality
+		if cmd.QualityAssumed {
+			message += ", assumed: release name has no source"
+		}
+		message += ")"
+		eventMeta["quality"] = cmd.Quality
+		eventMeta["quality_assumed"] = cmd.QualityAssumed
+	}
+	if cmd.Manual {
+		message += " (manual download: quality profile rules do not block import)"
+		eventMeta["manual"] = true
+	}
+	if cmd.QualityWarning != "" {
+		message += ". " + cmd.QualityWarning
+		eventMeta["quality_warning"] = cmd.QualityWarning
+	}
+	o.logEvent(ctx, cmd.WorkflowID, EventGrabbed, message, eventMeta)
 
 	// Cache the actual on-disk path immediately at grab time so it survives
 	// restarts and client-side removal. The builtin torrent client populates
 	// ContentPath from t.Name() right after add; external clients may leave it empty.
-	patch := map[string]any{}
+	// The grabbed quality is always written so a re-grab never keeps a stale one.
+	patch := map[string]any{
+		MetaGrabbedQuality:         cmd.Quality,
+		MetaGrabbedQualityDetected: cmd.QualityDetected,
+		MetaGrabbedQualityAssumed:  cmd.QualityAssumed,
+		MetaGrabbedManual:          cmd.Manual,
+	}
 	if cmd.ContentPath != "" {
 		patch["content_path"] = cmd.ContentPath
 	}
 	if cmd.SavePath != "" {
 		patch["save_path"] = cmd.SavePath
 	}
-	if len(patch) > 0 {
+	{
 		if err := o.store.MergeMetadata(ctx, cmd.WorkflowID, patch); err != nil {
-			o.logger.Warn("failed to cache content path at grab time", "workflow_id", cmd.WorkflowID, "error", err)
+			o.logger.Warn("failed to cache grab metadata", "workflow_id", cmd.WorkflowID, "error", err)
 		}
 	}
 

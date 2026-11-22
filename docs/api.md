@@ -21,9 +21,20 @@ network checks. Missing auth wiring fails closed.
 
 These are notice/settings endpoints, not an update executor; no apply endpoint
 exists. See [native updates](native-updates.md) for signature and cache behavior,
-the unprovisioned signing key, and the bounded Linux snapshot/helper safety gates.
+the provisioned production public trust key, and the bounded Linux
+snapshot/helper safety gates. Signed manifests are still pending.
 The installed helper has a separate fixed, token-authenticated runtime/readiness
 endpoint; it accepts no update commands, paths or URLs.
+
+## Notification connection update events
+
+Notification connections have separate boolean `on_application_update` and
+`on_update_available` subscriptions. `on_update_available` defaults to false
+and signals a verified new release; it does not report unsigned or unverified
+release information. Set it in `POST /api/v1/notifications` or
+`PUT /api/v1/notifications/{id}`; connection responses include it. Omitting it
+from an update leaves the saved value unchanged. The existing
+`on_application_update` subscription is independent.
 
 ## Provider/account budgets
 
@@ -129,7 +140,9 @@ Legacy `POST /api/v1/imports/scan` and `/api/v1/imports/preview` accept `{path}`
 include audio as well as video files. Music scan results use `media_type:
 "music"`, a **track ID** for `matched_media_id`, and optional
 `detected_artist`, `detected_album`, `detected_track`, and `detected_disc` tags.
-Scanning does not move files.
+Scanning does not move files. Preview entries include `warnings` for quality
+profile problems that do not block the import, and use `action: "review"` when
+the file would replace a better one and needs approval first.
 
 `POST /api/v1/imports/manual` accepts `{path}` for automatic matching.
 `POST /api/v1/imports/manual-match` accepts `{path, media_type, media_id}`.
@@ -514,6 +527,10 @@ grab it anyway; interactive search exposes this as **Ignore blocklist**.
 `POST /api/v1/autosearch/evaluate` accepts the same flag. Automatic search never
 ignores the blocklist. Releases are blocklisted automatically when a download
 stalls (see `downloads.stall_action` in [configuration](configuration.md)).
+
+A successful grab for a movie or episode may include `quality_warning` when the
+release is lower quality than the file already in the library. The grab still
+proceeds, but its import waits for approval in **Activity → Reviews**.
 
 `SystemStatus` is `{ version, commit, buildDate, engine }` — the database
 engine name is included so readiness tooling can confirm what backend

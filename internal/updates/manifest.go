@@ -20,8 +20,7 @@ import (
 const repository = "Ebenderooock/loom"
 
 // trusted-keys.json is compiled in, never loaded from writable runtime config.
-// Only public keys belong here. Until the isolated publisher provisions one,
-// the empty trust root intentionally prevents verified update notices.
+// Only reviewed publisher public keys belong here.
 //
 //go:embed trusted-keys.json
 var trustedKeysJSON []byte

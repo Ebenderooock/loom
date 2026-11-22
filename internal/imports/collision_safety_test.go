@@ -180,3 +180,7 @@ func TestPipelineCollisionWithDisabledRecycleBinNeverDeletesExistingFile(t *test
 		}
 	}
 }
+
+func (*collisionMoviesService) ListQualityDefinitions(context.Context) ([]*movies.QualityDefinition, error) {
+	return nil, nil
+}

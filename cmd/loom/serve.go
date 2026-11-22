@@ -15,6 +15,7 @@ import (
 	"github.com/ebenderooock/loom/internal/appconfig"
 	"github.com/ebenderooock/loom/internal/auditlog"
 	"github.com/ebenderooock/loom/internal/backup"
+	"github.com/ebenderooock/loom/internal/buildinfo"
 	"github.com/ebenderooock/loom/internal/customformats"
 	"github.com/ebenderooock/loom/internal/devmode"
 	"github.com/ebenderooock/loom/internal/featureflags"
@@ -24,6 +25,7 @@ import (
 	"github.com/ebenderooock/loom/internal/kernel/scheduler"
 	"github.com/ebenderooock/loom/internal/kernel/telemetry"
 	"github.com/ebenderooock/loom/internal/migrate"
+	"github.com/ebenderooock/loom/internal/notifications"
 	"github.com/ebenderooock/loom/internal/rss"
 	"github.com/ebenderooock/loom/internal/safety"
 	"github.com/ebenderooock/loom/internal/searchdebug"
@@ -31,6 +33,7 @@ import (
 	"github.com/ebenderooock/loom/internal/storage"
 	"github.com/ebenderooock/loom/internal/systemlogs"
 	"github.com/ebenderooock/loom/internal/updater"
+	"github.com/ebenderooock/loom/internal/updates"
 	"github.com/ebenderooock/loom/internal/workflows"
 )
 
@@ -325,6 +328,11 @@ func cmdServe(ctx context.Context, args []string) error {
 	media.collectionsSvc.SetActions(&collectionActions{db: db.DB(), movies: moviesSvc, series: media.seriesSvc, libs: media.libStore, profiles: media.qpStore, engine: dlWiring.autoSearchEngine, logger: logger.With("module", "collections")})
 	infra.notifDispatcher.Start(ctx)
 	defer infra.notifDispatcher.Stop()
+	unsubscribeNotifications := notifications.SubscribeToNotifications(bus, media.notifSvc)
+	defer unsubscribeNotifications()
+	if err := updates.NewAlerts(db, bus).Started(ctx, buildinfo.Version); err != nil {
+		logger.Error("application update notification failed", "error", err)
+	}
 	infra.rollingSearcher.Start(ctx)
 	defer infra.rollingSearcher.Stop()
 	infra.healthMon.Start(ctx)

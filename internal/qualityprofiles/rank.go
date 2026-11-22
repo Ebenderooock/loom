@@ -14,6 +14,7 @@ type QualityItem struct {
 	Name      string `json:"name"`
 	Preferred bool   `json:"preferred"`
 	Allowed   bool   `json:"allowed"`
+	Kind      string `json:"kind,omitempty"`
 }
 
 // ParseItems deserialises the Items JSON into a slice of QualityItem.
@@ -114,6 +115,51 @@ func QualityNameFromRelease(r *parser.Release) string {
 		name += "-remux"
 	}
 	return name
+}
+
+// AssumedQualityName is the single rule search and import use when a release
+// name states a resolution but no source. Such releases are almost always WEB
+// releases (remuxes are always BluRay), so the quality is assumed rather than
+// left unknown. It returns "" when the source is known or nothing can be assumed.
+func AssumedQualityName(r *parser.Release) string {
+	if r == nil || normaliseSource(r.Source) != "" {
+		return ""
+	}
+	switch res := normaliseResolution(r.Resolution); res {
+	case "2160p", "1080p", "720p", "480p":
+		if r.IsRemux {
+			if res == "480p" || res == "720p" {
+				return ""
+			}
+			return "bluray-" + res + "-remux"
+		}
+		return "webdl-" + res
+	}
+	return ""
+}
+
+// QualityNamesConflict reports whether two quality names (as produced by
+// QualityNameFromRelease) state a different resolution or a different known
+// source. Unknown parts never conflict.
+func QualityNamesConflict(a, b string) bool {
+	as, ar := splitQualityName(a)
+	bs, br := splitQualityName(b)
+	if ar != "" && br != "" && ar != br {
+		return true
+	}
+	return as != "" && bs != "" && as != bs
+}
+
+func splitQualityName(name string) (source, resolution string) {
+	name = strings.TrimSuffix(strings.ToLower(name), "-remux")
+	source, resolution, _ = strings.Cut(name, "-")
+	if source == "unknown" {
+		source = ""
+	}
+	if resolution == "unknown" {
+		resolution = ""
+	}
+	return source, resolution
 }
 
 func normaliseSource(s string) string {

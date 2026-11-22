@@ -61,6 +61,9 @@ type GrabbedRelease struct {
 	Size                 int64                       `json:"size"`
 	QualityTier          int                         `json:"quality_tier"`
 	FormatScore          int                         `json:"format_score"`
+	Quality              string                      `json:"quality,omitempty"`          // quality identity decided at grab time
+	QualityDetected      string                      `json:"quality_detected,omitempty"` // literal parse of the title
+	QualityAssumed       bool                        `json:"quality_assumed,omitempty"`  // source assumed: the title states none
 	CompositeScore       float64                     `json:"composite_score"`
 	FormatMatches        []customformats.FormatMatch `json:"format_matches,omitempty"`
 	ClientID             string                      `json:"client_id"`
@@ -79,6 +82,9 @@ type ScoredRelease struct {
 	Parsed          *parser.Release
 	QualityDef      *movies.QualityDefinition // matched quality definition, nil if unmatched
 	QualityTier     int                       // position in profile (lower = better)
+	QualityStored   string                    // quality identity import stores for this release
+	QualityDetected string                    // literal parse of the title, e.g. "unknown-1080p"
+	QualityAssumed  bool                      // source assumed because the title states none
 	FormatScore     int                       // sum of custom format scores from profile
 	FormatMatches   []customformats.FormatMatch
 	TiebreakerScore float64 // seeders + age + size + freeleech bonuses

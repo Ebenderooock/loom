@@ -497,6 +497,14 @@ function TestDialog({ onClose }: { onClose: () => void }) {
                         ? "Below minimum score"
                         : "Minimum score result unavailable"}
                   </p>
+                  {result.quality_tier !== undefined && (
+                    <p>
+                      <strong>Profile quality tier:</strong>{" "}
+                      {result.quality_tier
+                        ? `${result.quality_tier.name} (position ${result.quality_tier.rank + 1})`
+                        : "No allowed tier matched"}
+                    </p>
+                  )}
                 </div>
               ) : (
                 <p className="text-sm text-muted-foreground">

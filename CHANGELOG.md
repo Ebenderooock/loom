@@ -9,12 +9,57 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Add opt-in notifications when the running Loom version changes and when a
+  verified update check discovers a new release. Provision the publisher public
+  trust root; release alerts also require matching signed manifests.
+- Add per-entry and selected import-queue dismissal plus Clear inactive. Keep
+  queued/running/retrying work, media files, downloads and import history intact.
+- Add matcher-backed custom quality tiers with per-profile allowance, ordering,
+  cutoff and stable file identities. Search, testing, previews and imports use
+  the same tier matching independently of custom-format scores.
 - Add Sync with Jellyfin to movie and series quick actions. Plex and Jellyfin
   sync actions appear only when their respective connection is enabled and
   configured, and request a library refresh without downloading media.
+- Add admin-only native update channel settings (Stable by default, separately
+  acknowledged Prelease opt-in) and a throttled, cached signed GitHub Releases
+  notice checker using the publisher's raw-byte Ed25519 manifest contract.
+  Add restricted Linux/systemd and macOS/launchd helpers with consistent SQLite/config snapshots,
+  health-checked replacement, rollback and interrupted-update recovery.
+  macOS gates startup on authenticated recovery authorization before database
+  access. Windows and PostgreSQL remain manual-only. Production activation still
+  requires signed publisher releases and privileged native upgrade/reboot validation.
+- Add an isolated, production-disabled Windows updater candidate: dedicated SCM
+  virtual account, SYSTEM helper, protected pre-database event/job gate,
+  restricted SQLite snapshot execution, NTFS descriptor-preserving transactions
+  and rollback, candidate enrollment/uninstall and Windows boundary tests.
+  Windows production archives remain manual-only pending native acceptance,
+  including protected-process quiescence and SCM reboot recovery.
+- Build seven native archive targets for `prelease/X.Y.Z` branch CI (also the
+  `prerelease/` alias), without publishing/signing credentials. Native Release
+  publication and manifest signing still require separate publisher changes.
 
 ### Fixed
 
+- Decide release quality once at grab time and reuse it at import, so imports
+  no longer reject releases that search accepted. Search and import share one
+  quality detector. Release names with a resolution but no source, such as
+  `1080p HEVC x265`, are assumed WEB-DL (previously search guessed HDTV and
+  import rejected them as `unknown-1080p`) and are labelled "assumed". DVD
+  imports now match the DVD quality.
+- Stop import from blocking files on quality. Profile, cutoff, disabled-upgrade
+  and custom-format score problems are now warnings in the workflow timeline and
+  import preview, including for downloads Loom did not grab. Releases you
+  download manually override the quality profile and are flagged when outside
+  the profile or below the cutoff.
+- Hold imports that would replace a better file in Activity → Reviews instead
+  of rejecting them. Approving replaces the file and resumes the import;
+  grabbing a lower-quality release warns that approval will be needed.
+- Stop treating numbered title segments such as `Breaking.Dawn.Part.1` as
+  unfinished downloads. Keep temporary-file suffix and unpacking-folder checks.
+- Honor an allowed Unknown quality tier for first imports with a known resolution
+  but no source, such as `1080p HEVC` releases. Keep the detected `unknown-1080p`
+  metadata and require review before an unknown-quality file replaces a known
+  one.
 - Fix creating and editing quality profiles with multiple custom-format scores
   by sending the correct format IDs. Reject missing or duplicate IDs before
   replacing scores, roll back failed saves, and let profiles recover from invalid
@@ -138,23 +183,6 @@ v0.4.4 release attempts.
   revisions allow a stable build to upgrade a prerelease; packages remain
   separate workflow artifacts rather than GitHub release assets.
 
-- Add admin-only native update channel settings (Stable by default, separately
-  acknowledged Prelease opt-in) and a throttled, cached signed GitHub Releases
-  notice checker using the publisher's raw-byte Ed25519 manifest contract.
-  Add restricted Linux/systemd and macOS/launchd helpers with consistent SQLite/config snapshots,
-  health-checked replacement, rollback and interrupted-update recovery.
-  macOS gates startup on authenticated recovery authorization before database
-  access. Windows and PostgreSQL remain manual-only. Production activation still
-  requires the publisher public key and privileged native upgrade/reboot validation.
-- Add an isolated, production-disabled Windows updater candidate: dedicated SCM
-  virtual account, SYSTEM helper, protected pre-database event/job gate,
-  restricted SQLite snapshot execution, NTFS descriptor-preserving transactions
-  and rollback, candidate enrollment/uninstall and Windows boundary tests.
-  Windows production archives remain manual-only pending native acceptance,
-  including protected-process quiescence and SCM reboot recovery.
-- Build seven native archive targets for `prelease/X.Y.Z` branch CI (also the
-  `prerelease/` alias), without publishing/signing credentials. Native Release
-  publication and manifest signing still require separate publisher changes.
 - Global appearance controls in Settings: Light, Dark, AMOLED or System theme,
   accent presets, and a background image URL with preview and dimming. Admin
   changes persist across devices; the header theme toggle shares these settings.

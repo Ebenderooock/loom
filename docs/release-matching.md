@@ -64,6 +64,20 @@ uses the existing per-minute fallback. A size of 0 means unknown and is not
 size-filtered. The minimum format comparison displays expected and actual
 **points**.
 
+## Clearing inactive import entries
+
+In **Downloads > Imports**, use **Dismiss** on one inactive queue entry, select
+entries and choose **Dismiss selected**, or choose **Clear inactive** to hide
+all inactive entries, including older entries outside the current page. This
+works even when the source download has already been deleted.
+
+Dismissal keeps the job's outcomes, import history, safety reviews, downloads,
+and media files. Queued, importing, and retry-scheduled jobs are not dismissed.
+Selected dismissal fails without changing any entries if one selected job is
+active or no longer exists. Explicitly retrying a dismissed job restores it to
+the queue; re-enqueuing the same review-held request restores its original review
+hold, not a bypass around approval.
+
 ## Custom-format points and imports
 
 Custom formats are matching rules, not new base-quality definitions. A release
@@ -71,6 +85,72 @@ such as `the.body.2026.s01e07.1080p.web.h264-cakes[EZTVx.to].mkv` has base quali
 `webdl-1080p`. Matching a custom format does not rename that quality or override
 the profile's allowed-quality check. Source and codec aliases such as
 `WebDL`/`WEB-DL` and `h264`/`x264` match consistently in testing, search and import.
+
+### One quality decision from search to import
+
+Search decides a release's quality once, when it grabs the release, and stores
+that decision on the download's workflow. Import reuses it instead of reading
+the quality from the file name again. When a file name contradicts the grabbed
+release, such as a different resolution inside a pack, import records the
+file's own quality using the same detector as search.
+
+Import never blocks a file because of its quality. Problems with the profile,
+the cutoff, disabled upgrades or the custom-format minimum are recorded as a
+**quality warning** in the workflow timeline (and in the import preview), and the
+file is imported.
+
+- Downloads Loom grabbed reuse the grabbed quality; search already checked it.
+- Releases you download yourself from the search dialog override the profile
+  and are flagged when outside the profile or below the cutoff.
+- Downloads Loom did not grab (added directly in the download client or
+  imported from a folder) have their quality detected at import, using the same
+  detector, but are not blocked either.
+
+The one exception is a **downgrade**: a file that would replace a better file
+already in your library, by the profile's order or by resolution and source.
+A file of unknown quality also cannot replace a file of known quality without
+approval. Such imports wait in **Activity → Reviews** as "Lower quality".
+**Replace file** retries the import and replaces the existing file; **Keep
+current** declines it and the import fails for that file. Grabbing a lower
+quality release from the search dialog shows the same warning up front.
+
+A release name that states a resolution but no source, such as
+`Chicago PD S14E06 1080p HEVC x265-MeGusta`, is **assumed** to be WEB-DL at that
+resolution (remuxes are assumed BluRay). The assumption shows as
+"(assumed)" in search results and decisions and in the workflow's grab event.
+The stored file quality is the assumed one, for example `webdl-1080p`. A profile
+with custom tiers first tries an enabled **Unknown** tier or a matching custom
+tier, then the assumed tier. If the assumed tier is disabled, an allowed Unknown
+tier still accepts a first import with no existing file; it never authorizes
+replacing an existing file without review.
+
+## Custom quality tiers
+
+In **Quality Profiles > Manage custom tiers**, create a tier with matching rules.
+For example, add Resolution `1080p`, Codec `x265`, and Source `unknown` to
+match an HEVC release with no parsed source. Add the tier to the profile, enable
+it, and use **Upgrade order** to position it relative to other tiers (best
+first). The cutoff can target any enabled tier. This does not enable Unknown
+generally or change the parsed source to WEB.
+
+Rules use the custom-format matcher: different rule types must all match; rules
+of the same type are alternatives unless marked required. Negation is supported.
+An explicitly disabled known-source quality cannot be bypassed by a custom
+matcher. If multiple allowed tiers match, the first in profile order wins.
+Custom formats still supply points independently, and the minimum score remains
+an additional acceptance check. The format tester shows the selected profile
+tier as well as detected source and score; search evaluation and import previews
+use the same tier rules.
+
+Loom stores a stable tier ID for an imported file, so renaming or editing its
+matcher does not silently reclassify that existing file. Reordering the profile
+changes future comparisons and cutoff evaluation. A tier referenced by a
+profile or imported file cannot be deleted; remove its profile references and
+file registrations first. If an existing custom tier is absent from the current
+profile, replacement is rejected rather than guessed. Tiers have no size limit
+of their own; when a real known-source definition matches, its size limits still
+apply. File-only and indexer-only matcher rules are not supported for tiers
+because that evidence is not consistently available at both search and import.
 
 Assign points to a format in the quality profile used by the movie or series.
 For example, a matching WEB format worth 100 points and a matching codec penalty

@@ -14,7 +14,7 @@ type CustomFormatLister interface {
 	List(context.Context) ([]customformats.CustomFormat, error)
 }
 
-// CustomFormatSpec enforces the assigned profile's minimum format score.
+// CustomFormatSpec checks the assigned profile's minimum format score.
 // Formats supplement base quality acceptance; they do not redefine quality tiers.
 type CustomFormatSpec struct {
 	profiles QualityProfileGetter
@@ -29,8 +29,16 @@ func NewCustomFormatSpec(profiles QualityProfileGetter, formats CustomFormatList
 // Name identifies this import specification.
 func (s *CustomFormatSpec) Name() string { return "CustomFormatSpec" }
 
-// IsSatisfiedBy rejects files whose matching profile points fall below the minimum.
+// IsSatisfiedBy warns when a file's profile points fall below the minimum.
+// Search enforces the minimum when choosing releases; import never blocks on it.
 func (s *CustomFormatSpec) IsSatisfiedBy(ctx context.Context, c *ImportCandidate) *ImportRejection {
+	if rejection := s.check(ctx, c); rejection != nil {
+		c.QualityWarnings = append(c.QualityWarnings, rejection.Message)
+	}
+	return nil
+}
+
+func (s *CustomFormatSpec) check(ctx context.Context, c *ImportCandidate) *ImportRejection {
 	reject := func(message string) *ImportRejection {
 		return &ImportRejection{Reason: RejectionCustomFormat, Message: message}
 	}
