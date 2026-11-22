@@ -3,6 +3,7 @@ package imports
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/ebenderooock/loom/internal/parser"
@@ -79,8 +80,10 @@ func TestSourceUnknownQualityUsesAllowedUnknownTierForFirstImport(t *testing.T) 
 	}{
 		{"allowed unknown tier", explicitUnknown, "The.Body.2026.S01E08.1080p.HEVC.x265-MeGusta[EZTVx.to].mkv", "", true},
 		{"unrestricted legacy profile", unrestrictedProfile(t), "The.Body.2026.S01E08.1080p.HEVC.x265-MeGusta[EZTVx.to].mkv", "", true},
-		{"unknown tier excluded", &excludedUnknown, "The.Body.2026.S01E08.1080p.HEVC.x265-MeGusta[EZTVx.to].mkv", "", false},
-		{"restricted profile without unknown", anyProfile(), "The.Body.2026.S01E08.1080p.HEVC.x265-MeGusta[EZTVx.to].mkv", "", false},
+		// Like search, a source-less 1080p release is assumed WEB-DL 1080p.
+		{"unknown tier excluded assumes WEB-DL", &excludedUnknown, "The.Body.2026.S01E08.1080p.HEVC.x265-MeGusta[EZTVx.to].mkv", "", true},
+		{"restricted profile assumes WEB-DL", anyProfile(), "The.Body.2026.S01E08.1080p.HEVC.x265-MeGusta[EZTVx.to].mkv", "", true},
+		{"explicit Unknown tier accepts when the assumed tier is disabled", explicitUnknownOnly(), "Show.S01E01.720p.x265-GROUP.mkv", "", true},
 		{"known source remains excluded", explicitUnknown, "The.Body.2026.S01E08.1080p.WEB.h264-GROUP.mkv", "", false},
 		{"known quality replacement stays rejected", explicitUnknown, "The.Body.2026.S01E08.1080p.HEVC.x265-MeGusta[EZTVx.to].mkv", "webdl-1080p", false},
 		{"resolution downgrade stays rejected", unrestrictedProfile(t), "The.Body.2026.S01E08.1080p.HEVC.x265-MeGusta[EZTVx.to].mkv", "webdl-2160p", false},
@@ -98,6 +101,13 @@ func TestSourceUnknownQualityUsesAllowedUnknownTierForFirstImport(t *testing.T) 
 				}
 			}
 		})
+	}
+}
+
+func explicitUnknownOnly() *qualityprofiles.QualityProfile {
+	return &qualityprofiles.QualityProfile{
+		ID: "prof-1", Name: "Unknown only",
+		Items: `[{"id":"unknown","name":"unknown","allowed":true},{"id":"webdl-720p","name":"webdl-720p","allowed":false}]`,
 	}
 }
 
@@ -278,5 +288,101 @@ func TestUpgradeSpec_RejectsDowngradeFromQualityOmittedByProfile(t *testing.T) {
 		if r := NewUpgradeSpec(&stubProfileStore{profile: anyProfile()}).IsSatisfiedBy(context.Background(), c); r == nil {
 			t.Fatal("losing filename quality must not bypass a release-context downgrade check")
 		}
+	}
+}
+
+func TestImportUsesSearchQualityDecision(t *testing.T) {
+	const title = "Chicago PD S14E06 1080p HEVC x265-MeGusta EZTV.mkv"
+	spec := NewUpgradeSpec(&stubProfileStore{profile: anyProfile()})
+
+	// Not grabbed by search: import runs the same detector and assumption.
+	c := &ImportCandidate{SourcePath: title, QualityProfileID: "prof-1", IncomingRelease: parser.Parse(title)}
+	if r := spec.IsSatisfiedBy(context.Background(), c); r != nil || c.ResolvedTier != "webdl-1080p" {
+		t.Fatalf("detected import: rejection=%+v stored=%q", r, c.ResolvedTier)
+	}
+
+	// Grabbed by search: the tag is reused without detecting again.
+	c = &ImportCandidate{SourcePath: "renamed.mkv", QualityProfileID: "prof-1", GrabbedQuality: "hdtv-1080p", GrabApproved: true}
+	if r := spec.IsSatisfiedBy(context.Background(), c); r != nil || c.ResolvedTier != "hdtv-1080p" || len(c.QualityWarnings) != 0 {
+		t.Fatalf("grabbed import: rejection=%+v stored=%q warnings=%v", r, c.ResolvedTier, c.QualityWarnings)
+	}
+	// Search already compared against the existing file and the profile, so
+	// import only warns.
+	for _, c := range []*ImportCandidate{
+		{SourcePath: title, QualityProfileID: "prof-1", GrabbedQuality: "webdl-1080p", ExistingQuality: "bluray-1080p", GrabApproved: true},
+		{SourcePath: title, QualityProfileID: "prof-1", GrabbedQuality: "webdl-720p", GrabApproved: true},
+	} {
+		if r := spec.IsSatisfiedBy(context.Background(), c); r != nil || len(c.QualityWarnings) != 1 || c.ResolvedTier != c.GrabbedQuality {
+			t.Fatalf("%s: rejection=%+v stored=%q warnings=%v", c.GrabbedQuality, r, c.ResolvedTier, c.QualityWarnings)
+		}
+	}
+}
+
+func TestManualGrabOverridesQualityProfile(t *testing.T) {
+	profile := &qualityprofiles.QualityProfile{ID: "prof-1", Name: "HD-1080p", Cutoff: "bluray-1080p", UpgradeAllowed: true,
+		Items: `[{"id":"bluray-1080p","name":"bluray-1080p","allowed":true},{"id":"webdl-1080p","name":"webdl-1080p","allowed":true},{"id":"hdtv-720p","name":"hdtv-720p","allowed":false}]`}
+	spec := NewUpgradeSpec(&stubProfileStore{profile: profile})
+	newCandidate := func(file string, manual bool) *ImportCandidate {
+		c := &ImportCandidate{SourcePath: file, QualityProfileID: "prof-1", GrabApproved: manual, GrabbedManually: manual}
+		c.IncomingRelease = parser.Parse(file)
+		return c
+	}
+
+	// Without a grab, a disallowed quality is rejected.
+	if r := spec.IsSatisfiedBy(context.Background(), newCandidate("Show.S01E01.720p.HDTV.x264-GRP.mkv", false)); r == nil {
+		t.Fatal("ungrabbed disallowed quality was accepted")
+	}
+	// A manual grab imports it and records why it falls outside the profile.
+	c := newCandidate("Show.S01E01.720p.HDTV.x264-GRP.mkv", true)
+	if r := spec.IsSatisfiedBy(context.Background(), c); r != nil || c.ResolvedTier != "hdtv-720p" || len(c.QualityWarnings) == 0 {
+		t.Fatalf("manual disallowed: rejection=%+v stored=%q warnings=%v", r, c.ResolvedTier, c.QualityWarnings)
+	}
+	// An allowed manual grab below the cutoff is highlighted.
+	c = newCandidate("Show.S01E01.1080p.WEB-DL.x264-GRP.mkv", true)
+	if r := spec.IsSatisfiedBy(context.Background(), c); r != nil || len(c.QualityWarnings) != 1 || !strings.Contains(c.QualityWarnings[0], "cutoff") {
+		t.Fatalf("manual below cutoff: rejection=%+v warnings=%v", r, c.QualityWarnings)
+	}
+	// Meeting the cutoff needs no warning.
+	c = newCandidate("Show.S01E01.1080p.BluRay.x264-GRP.mkv", true)
+	if r := spec.IsSatisfiedBy(context.Background(), c); r != nil || len(c.QualityWarnings) != 0 {
+		t.Fatalf("manual at cutoff: rejection=%+v warnings=%v", r, c.QualityWarnings)
+	}
+}
+
+func TestImportMatchesDVDDefinition(t *testing.T) {
+	profile := &qualityprofiles.QualityProfile{ID: "prof-1", Name: "SD",
+		Items: `[{"id":"dvd","name":"dvd","allowed":true}]`}
+	c := &ImportCandidate{SourcePath: "Movie.1999.DVDRip.XviD-GROUP.avi", QualityProfileID: "prof-1"}
+	c.IncomingRelease = parser.Parse(c.SourcePath)
+	c.IncomingRelease.Resolution = 480
+	if r := NewUpgradeSpec(&stubProfileStore{profile: profile}).IsSatisfiedBy(context.Background(), c); r != nil || c.ResolvedTier != "dvd" {
+		t.Fatalf("dvd import: rejection=%+v stored=%q", r, c.ResolvedTier)
+	}
+}
+
+func TestGrabbedQualityYieldsToFileEvidence(t *testing.T) {
+	for _, tc := range []struct {
+		file, grabbed, detected string
+		want                    bool
+	}{
+		{"unknown-1080p", "webdl-1080p", "unknown-1080p", true},
+		{"webrip-1080p", "webdl-1080p", "unknown-1080p", false},
+		{"unknown-720p", "webdl-1080p", "unknown-1080p", false},
+		{"bluray-1080p-remux", "bluray-1080p", "bluray-1080p", false},
+		{"unknown-1080p", "custom-tier:ct", "unknown-1080p", true},
+	} {
+		if got := grabbedQualityFits(tc.file, tc.grabbed, tc.detected); got != tc.want {
+			t.Errorf("grabbedQualityFits(%q, %q, %q) = %t, want %t", tc.file, tc.grabbed, tc.detected, got, tc.want)
+		}
+	}
+}
+
+func TestUnknownExistingRejectsResolutionDowngrade(t *testing.T) {
+	profile := &qualityprofiles.QualityProfile{ID: "prof-1", Name: "Mixed", UpgradeAllowed: true,
+		Items: `[{"id":"webdl-720p","name":"webdl-720p","allowed":true},{"id":"unknown","name":"unknown","allowed":true}]`}
+	c := &ImportCandidate{SourcePath: "Show.S01E01.720p.WEB-DL.mkv", QualityProfileID: "prof-1", ExistingQuality: "unknown-1080p"}
+	c.IncomingRelease = parser.Parse(c.SourcePath)
+	if r := NewUpgradeSpec(&stubProfileStore{profile: profile}).IsSatisfiedBy(context.Background(), c); r == nil {
+		t.Fatal("720p must not replace an unknown-source 1080p file")
 	}
 }

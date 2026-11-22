@@ -968,6 +968,7 @@ func (s *Service) recordManualGrab(ctx context.Context, res AddResult, req AddRe
 			SavePath:             res.SavePath,
 			SeedRatioLimit:       req.SeedRatioLimit,
 			SeedTimeLimitMinutes: req.SeedTimeLimitMinutes,
+			Manual:               true,
 		})
 		s.logger.InfoContext(ctx, "recorded manual grab workflow",
 			"workflow_id", wf.ID, "client_id", res.ClientID, "item_id", res.ItemID,

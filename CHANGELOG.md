@@ -20,6 +20,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Decide release quality once at grab time and reuse it at import, so imports
+  no longer reject releases that search accepted. Search and import share one
+  quality detector. Release names with a resolution but no source, such as
+  `1080p HEVC x265`, are assumed WEB-DL (previously search guessed HDTV and
+  import rejected them as `unknown-1080p`) and are labelled "assumed". DVD
+  imports now match the DVD quality.
+- Stop import from rejecting downloads Loom grabbed on quality. Search already
+  checked them, so a quality mismatch at import is now a warning in the
+  workflow timeline. Releases you download manually override the quality
+  profile and are flagged when outside the profile or below the cutoff.
 - Stop treating numbered title segments such as `Breaking.Dawn.Part.1` as
   unfinished downloads. Keep temporary-file suffix and unpacking-folder checks.
 - Honor an allowed Unknown quality tier for first imports with a known resolution

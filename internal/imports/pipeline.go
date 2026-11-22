@@ -121,13 +121,15 @@ func NewPipeline(opts PipelineOptions) (*ImportPipeline, error) {
 		matcher.SetAltTitleMatcher(NewAltTitleMatcher(opts.AltTitleStore, opts.MoviesSvc, opts.SeriesSvc))
 	}
 
+	upgradeSpec := NewUpgradeSpec(opts.QualityProfiles, customformats.NewStore(opts.DB))
+	upgradeSpec.SetDefinitions(opts.MoviesSvc)
 	// Build the import spec chain, including the upgrade spec when profiles are available.
 	specs := []ImportSpec{
 		&SampleSpec{},
 		&FreeSpaceSpec{},
 		&UnpackingSpec{},
 		&DangerousFileSpec{},
-		NewUpgradeSpec(opts.QualityProfiles, customformats.NewStore(opts.DB)),
+		upgradeSpec,
 		NewCustomFormatSpec(opts.QualityProfiles, customformats.NewStore(opts.DB)),
 	}
 
@@ -712,6 +714,71 @@ func importRelease(file, title string, match *MatchResult) *parser.Release {
 	return incoming
 }
 
+// applyGrabbedQuality marks a download Loom grabbed as approved and reuses the
+// quality search decided for it. It returns the owning workflow ID, if any.
+// A file whose own name contradicts that decision (for example a different
+// resolution inside a pack) has its quality detected again.
+func (p *ImportPipeline) applyGrabbedQuality(ctx context.Context, ev *downloads.DownloadCompletedEvent, c *ImportCandidate, fileQuality string) string {
+	if p.wfEngine == nil || ev.ClientID == "" || ev.DownloadID == "" {
+		return ""
+	}
+	wf, err := p.wfEngine.FindByDownload(ctx, ev.ClientID, ev.DownloadID)
+	if err != nil || wf == nil {
+		return ""
+	}
+	quality, detected, assumed := wf.GrabbedQuality()
+	manual := wf.GrabbedManually()
+	// Grabs recorded before quality tagging carry neither; keep checking them.
+	if quality == "" && !manual {
+		return wf.ID
+	}
+	c.GrabApproved, c.GrabbedManually = true, manual
+	if quality == "" {
+		return wf.ID
+	}
+	if !grabbedQualityFits(fileQuality, quality, detected) {
+		p.logger.Info("file quality differs from grabbed release; detecting again",
+			"file", c.SourcePath, "file_quality", fileQuality, "grabbed_quality", quality)
+		return wf.ID
+	}
+	c.GrabbedQuality, c.GrabbedQualityAssumed = quality, assumed
+	p.logger.Info("using quality decided at grab time",
+		"file", c.SourcePath, "quality", quality, "assumed", assumed)
+	return wf.ID
+}
+
+// reportQualityWarnings records quality problems a grabbed import was allowed past.
+func (p *ImportPipeline) reportQualityWarnings(ctx context.Context, workflowID string, c *ImportCandidate) {
+	if len(c.QualityWarnings) == 0 {
+		return
+	}
+	message := "Imported " + filepath.Base(c.SourcePath) + " despite the quality profile: " + strings.Join(c.QualityWarnings, "; ")
+	if c.GrabbedManually {
+		message = "Manual download imported " + filepath.Base(c.SourcePath) + " outside the quality profile: " + strings.Join(c.QualityWarnings, "; ")
+	}
+	p.logger.Warn(message, "workflow_id", workflowID)
+	if p.wfEngine == nil || workflowID == "" {
+		return
+	}
+	if err := p.wfEngine.Store().LogEvent(ctx, workflowID, workflows.EventQualityWarning, message, ""); err != nil {
+		p.logger.Warn("failed to record quality warning", "workflow_id", workflowID, "error", err)
+	}
+}
+
+// grabbedQualityFits reports whether a file's own quality evidence agrees with
+// the grabbed decision. Explicit file evidence also overrides an assumed source
+// (a file named WEBRip is not the assumed WEB-DL) and a missing remux tag.
+func grabbedQualityFits(fileQuality, grabbed, grabbedDetected string) bool {
+	if qualityprofiles.QualityNamesConflict(fileQuality, grabbedDetected) {
+		return false
+	}
+	if customformats.StoredID(grabbed) != grabbed {
+		return true // custom tiers are re-checked against the file by UpgradeSpec
+	}
+	return !qualityprofiles.QualityNamesConflict(fileQuality, grabbed) &&
+		(!strings.HasSuffix(fileQuality, "-remux") || strings.HasSuffix(grabbed, "-remux"))
+}
+
 // importMatchedWith imports mediaFile for a resolved match. userMatched
 // skips release-year verification because the user chose the item.
 func (p *ImportPipeline) importMatchedWith(ctx context.Context, ev *downloads.DownloadCompletedEvent, match *MatchResult, mediaFile, destName string, userMatched bool) (string, error) {
@@ -752,6 +819,7 @@ func (p *ImportPipeline) importMatchedWith(ctx context.Context, ev *downloads.Do
 		return "", p.recordFailure(ctx, string(match.MediaType), match.MediaID, ev.Title, mediaFile, fmt.Errorf("load import quality: %w", err))
 	}
 	incomingQuality := qualityprofiles.QualityNameFromRelease(candidate.IncomingRelease)
+	grabWorkflowID := p.applyGrabbedQuality(ctx, ev, candidate, incomingQuality)
 	destInfo, destErr := os.Lstat(destFile)
 	var owned bool
 	if destErr == nil && destInfo.Mode().IsRegular() {
@@ -938,6 +1006,7 @@ func (p *ImportPipeline) importMatchedWith(ctx context.Context, ev *downloads.Do
 		DestPath:  destFile,
 	})
 
+	p.reportQualityWarnings(ctx, grabWorkflowID, candidate)
 	return destFile, nil
 }
 

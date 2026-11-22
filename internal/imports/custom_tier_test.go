@@ -9,6 +9,7 @@ import (
 
 	"github.com/ebenderooock/loom/internal/customformats"
 	"github.com/ebenderooock/loom/internal/downloads"
+	"github.com/ebenderooock/loom/internal/parser"
 	"github.com/ebenderooock/loom/internal/qualityprofiles"
 )
 
@@ -122,5 +123,27 @@ func TestCustomTierCannotBypassExcludedKnownSource(t *testing.T) {
 	candidate := &ImportCandidate{SourcePath: "Film.1080p.WEB-DL.x265.mkv", QualityProfileID: "p"}
 	if rejection := NewUpgradeSpec(&stubProfileStore{profile: profile}, tiers).IsSatisfiedBy(context.Background(), candidate); rejection == nil {
 		t.Fatal("custom matcher bypassed disabled WEB quality")
+	}
+}
+
+func TestGrabbedCustomTierIsRecheckedAgainstFile(t *testing.T) {
+	profile := &qualityprofiles.QualityProfile{ID: "p", Name: "Custom", UpgradeAllowed: true,
+		Items: `[{"id":"ct_test","name":"HEVC","kind":"custom","allowed":true},{"id":"web","name":"webdl-1080p","allowed":false}]`}
+	tiers := tierStub{{ID: "ct_test", Name: "HEVC", Specifications: []customformats.Specification{
+		{Implementation: customformats.ImplCodec, Fields: map[string]any{"value": "x265"}},
+	}}}
+	spec := NewUpgradeSpec(&stubProfileStore{profile: profile}, tiers)
+	for _, tc := range []struct {
+		file    string
+		allowed bool
+	}{
+		{"Show.S01E01.1080p.x265-GROUP.mkv", true},
+		{"Show.S01E02.1080p.x264-GROUP.mkv", false},
+	} {
+		c := &ImportCandidate{SourcePath: tc.file, QualityProfileID: "p", GrabbedQuality: customformats.StoredTierID("ct_test")}
+		c.IncomingRelease = parser.Parse(tc.file)
+		if r := spec.IsSatisfiedBy(context.Background(), c); (r == nil) != tc.allowed {
+			t.Fatalf("%s: rejection=%+v want allowed=%t", tc.file, r, tc.allowed)
+		}
 	}
 }

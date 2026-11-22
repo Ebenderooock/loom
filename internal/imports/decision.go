@@ -37,7 +37,17 @@ type ImportCandidate struct {
 	QualityProfileID string          // the media item's assigned quality profile
 	ExistingQuality  string          // quality-definition name of existing file (empty if none)
 	IncomingRelease  *parser.Release // parsed release info for the incoming file
-	ResolvedTier     string          // stable custom tier identity, if selected
+	ResolvedTier     string          // quality identity to store, decided by UpgradeSpec
+	// GrabbedQuality is the quality search decided at grab time. When set,
+	// import reuses it instead of detecting the quality again.
+	GrabbedQuality        string
+	GrabbedQualityAssumed bool
+	// GrabApproved means Loom grabbed this download after search checked it
+	// against the profile, or the user chose it manually. Quality specs then
+	// record QualityWarnings instead of rejecting the file.
+	GrabApproved    bool
+	GrabbedManually bool
+	QualityWarnings []string
 }
 
 // ImportEvaluation holds the result of running all specs against a candidate.

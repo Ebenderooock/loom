@@ -29,8 +29,19 @@ func NewCustomFormatSpec(profiles QualityProfileGetter, formats CustomFormatList
 // Name identifies this import specification.
 func (s *CustomFormatSpec) Name() string { return "CustomFormatSpec" }
 
-// IsSatisfiedBy rejects files whose matching profile points fall below the minimum.
+// IsSatisfiedBy rejects files whose matching profile points fall below the
+// minimum. Downloads Loom grabbed were scored by search, so a low score only
+// adds a warning.
 func (s *CustomFormatSpec) IsSatisfiedBy(ctx context.Context, c *ImportCandidate) *ImportRejection {
+	rejection := s.check(ctx, c)
+	if rejection != nil && c.GrabApproved {
+		c.QualityWarnings = append(c.QualityWarnings, rejection.Message)
+		return nil
+	}
+	return rejection
+}
+
+func (s *CustomFormatSpec) check(ctx context.Context, c *ImportCandidate) *ImportRejection {
 	reject := func(message string) *ImportRejection {
 		return &ImportRejection{Reason: RejectionCustomFormat, Message: message}
 	}

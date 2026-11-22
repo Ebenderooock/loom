@@ -5,6 +5,7 @@ import (
 
 	"github.com/ebenderooock/loom/internal/customformats"
 	"github.com/ebenderooock/loom/internal/indexers"
+	"github.com/ebenderooock/loom/internal/movies"
 	"github.com/ebenderooock/loom/internal/qualityprofiles"
 )
 
@@ -54,5 +55,33 @@ func TestCustomTierSearchPolicy(t *testing.T) {
 	sr = check(title, existingQuality{HasFile: true, HasKnownTier: true, Tier: 0})
 	if !sr.Rejected || sr.RejectReason != "not_an_upgrade" {
 		t.Fatalf("same-tier ordinary release replaced existing: %+v", sr)
+	}
+}
+
+func TestSourcelessReleaseIsAssumedWebDLNotHDTV(t *testing.T) {
+	// Seed order lists HDTV before WEB-DL; the old fallback picked HDTV.
+	defs := []*movies.QualityDefinition{
+		{ID: "hdtv-1080p", Name: "hdtv-1080p", Title: "HDTV 1080p", Source: "TV", Resolution: "1080p"},
+		{ID: "webdl-1080p", Name: "webdl-1080p", Title: "WEB-DL 1080p", Source: "Web", Resolution: "1080p"},
+		{ID: "bluray-1080p", Name: "bluray-1080p", Title: "Bluray 1080p", Source: "BluRay", Resolution: "1080p"},
+	}
+	profile := &qualityprofiles.QualityProfile{Name: "HD-1080p", UpgradeAllowed: true,
+		Items: `[{"id":"bluray-1080p","name":"bluray-1080p","allowed":true},{"id":"webdl-1080p","name":"webdl-1080p","allowed":true},{"id":"hdtv-1080p","name":"hdtv-1080p","allowed":true}]`}
+	allowed := map[string]int{"bluray-1080p": 0, "webdl-1080p": 1, "hdtv-1080p": 2}
+	enabled := map[string]bool{"bluray-1080p": true, "webdl-1080p": true, "hdtv-1080p": true}
+	engine := &Engine{cfEngine: customformats.NewEngine(nil)}
+	req := SearchRequest{Title: "Chicago PD", Season: 14, Episode: 6}
+
+	sr := engine.evaluateResult(req, indexers.Result{Title: "Chicago PD S14E06 1080p HEVC x265-MeGusta EZTV"},
+		defs, allowed, enabled, nil, profile, existingQuality{}, -1, false)
+	if sr.Rejected || sr.QualityDef.ID != "webdl-1080p" || !sr.QualityAssumed ||
+		sr.QualityStored != "webdl-1080p" || sr.QualityDetected != "unknown-1080p" {
+		t.Fatalf("source-less release: def=%v assumed=%t stored=%q detected=%q rejected=%s",
+			sr.QualityDef, sr.QualityAssumed, sr.QualityStored, sr.QualityDetected, sr.RejectReason)
+	}
+	sr = engine.evaluateResult(req, indexers.Result{Title: "Chicago PD S14E06 1080p HDTV x264-GROUP"},
+		defs, allowed, enabled, nil, profile, existingQuality{}, -1, false)
+	if sr.Rejected || sr.QualityDef.ID != "hdtv-1080p" || sr.QualityAssumed {
+		t.Fatalf("stated source must not be assumed: %+v", sr)
 	}
 }

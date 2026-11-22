@@ -210,3 +210,15 @@ func TestBodyImportEnforcesCustomProfileWithoutChangingQuality(t *testing.T) {
 		})
 	}
 }
+
+func TestCustomFormatSpecWarnsForGrabbedDownloads(t *testing.T) {
+	profile := unrestrictedProfile(t)
+	profile.MinFormatScore = 100
+	profile.FormatItems = []qualityprofiles.FormatItem{{FormatID: "scene-web", Score: -10}}
+	spec := NewCustomFormatSpec(&stubProfileStore{profile: profile}, &stubCustomFormats{formats: []customformats.CustomFormat{bodyFormat()}})
+	file := "the.body.2026.s01e07.1080p.web.h264-cakes[EZTVx.to].mkv"
+	candidate := &ImportCandidate{SourcePath: file, IncomingRelease: parser.Parse(file), QualityProfileID: profile.ID, GrabApproved: true}
+	if rejection := spec.IsSatisfiedBy(context.Background(), candidate); rejection != nil || len(candidate.QualityWarnings) != 1 {
+		t.Fatalf("grabbed download: rejection=%+v warnings=%v", rejection, candidate.QualityWarnings)
+	}
+}

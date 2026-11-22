@@ -194,6 +194,8 @@ func TestOrchestratorGrabbed(t *testing.T) {
 		ClientID:   "qbit-1",
 		DownloadID: "dl-001",
 		Title:      "Movie.2024.1080p",
+		Quality:    "webdl-1080p", QualityDetected: "unknown-1080p", QualityAssumed: true,
+		Manual: true,
 	})
 
 	// Wait for state transition to downloading (grabbed → downloading happens immediately)
@@ -211,6 +213,12 @@ func TestOrchestratorGrabbed(t *testing.T) {
 	}
 	if got.GrabTitle != "Movie.2024.1080p" {
 		t.Fatalf("expected grab title Movie.2024.1080p, got %s", got.GrabTitle)
+	}
+	if q, detected, assumed := got.GrabbedQuality(); q != "webdl-1080p" || detected != "unknown-1080p" || !assumed {
+		t.Fatalf("grabbed quality = %q %q %t", q, detected, assumed)
+	}
+	if !got.GrabbedManually() {
+		t.Fatal("manual grab flag was not stored")
 	}
 }
 

@@ -156,3 +156,7 @@ func TestAltTitleMatcher_NoMatch(t *testing.T) {
 		t.Fatalf("expected nil match for unknown title, got %+v", got)
 	}
 }
+
+func (*stubMoviesSvc) ListQualityDefinitions(context.Context) ([]*movies.QualityDefinition, error) {
+	return nil, nil
+}

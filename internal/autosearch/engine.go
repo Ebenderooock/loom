@@ -313,6 +313,9 @@ func (e *Engine) Evaluate(ctx context.Context, req EvaluateRequest) (*EvaluateRe
 
 		if sr.QualityDef != nil {
 			er.QualityName = sr.QualityDef.Title
+			if sr.QualityAssumed {
+				er.QualityName += " (assumed)"
+			}
 		}
 		if sr.Parsed != nil {
 			er.ParsedTitle = sr.Parsed.Title
@@ -1007,18 +1010,26 @@ func (e *Engine) evaluateResult(
 		return sr
 	}
 
-	// Match to a quality definition.
-	qd := matchQualityDef(parsed, qualDefs)
+	// Detect quality once with the resolver import also uses. The decision is
+	// carried on the grab so import does not detect it again.
+	var tiers []customformats.Tier
+	if len(tierSets) > 0 {
+		tiers = tierSets[0]
+	}
+	ri := buildReleaseInfo(parsed, &res)
+	decision, decisionErr := customformats.ResolveQuality(profile, tiers, parsed, ri, qualDefs)
+	qd := decision.Definition
+	sr.QualityAssumed = decision.Assumed
+	sr.QualityStored = decision.Stored
+	sr.QualityDetected = decision.Detected
+	if decision.Assumed && qd != nil {
+		addCheck(&sr, "assumed source", "release name states a source",
+			qd.Title+" (assumed: release name has no source)", "quality", true)
+	}
 	customProfile := customformats.HasCustomTiers(profile)
 	if customProfile {
-		ri := buildReleaseInfo(parsed, &res)
-		baseID := customformats.BaseTierID(profile, ri.Quality)
-		var tiers []customformats.Tier
-		if len(tierSets) > 0 {
-			tiers = tierSets[0]
-		}
-		resolved, err := customformats.ResolveTier(profile, tiers, ri, baseID)
-		if err != nil || resolved == nil {
+		resolved := decision.Resolution
+		if decisionErr != nil || resolved == nil {
 			sr.Rejected = true
 			sr.RejectReason = "quality_not_allowed"
 			addCheck(&sr, "allowed quality", "matching enabled tier", ri.Quality, "quality", false)
@@ -1143,7 +1154,6 @@ func (e *Engine) evaluateResult(
 	}
 
 	// Score custom formats.
-	ri := buildReleaseInfo(parsed, &res)
 	matches := e.cfEngine.ScoreRelease(ri)
 	sr.FormatMatches = matches
 
@@ -1342,110 +1352,16 @@ func matchesRequestedID(req SearchRequest, parsed *parser.Release) bool {
 		(req.TMDBID != "" && req.TMDBID == parsed.TmdbID)
 }
 
-// matchQualityDef maps a parsed release to a quality definition by
-// matching source and resolution.
+// matchQualityDef maps a parsed release to a quality definition using the
+// detector shared with import.
 func matchQualityDef(rel *parser.Release, defs []*movies.QualityDefinition) *movies.QualityDefinition {
-	if rel == nil {
-		return nil
-	}
-
-	parsedRes := fmt.Sprintf("%dp", rel.Resolution)
-	lowerParsedRes := strings.ToLower(parsedRes)
-	parsedSource := normalizeSource(rel.Source)
-
-	// Build the canonical slug the parser would produce (e.g., "webdl-1080p",
-	// "bluray-2160p-remux"). Match against the quality definition's Name field
-	// which uses the same convention.
-	slug := parsedSource + "-" + lowerParsedRes
-	if rel.IsRemux {
-		slug += "-remux"
-	}
-
-	// Priority 1: exact slug match against definition Name.
-	for _, d := range defs {
-		if strings.ToLower(d.Name) == slug {
-			return d
-		}
-	}
-
-	// Priority 2: normalised source + resolution + modifier match.
-	// Quality definitions may use display names for Source (e.g. "Web"
-	// for webdl, "TV" for hdtv), so normalise both sides.
-	for _, d := range defs {
-		defRes := strings.ToLower(d.Resolution)
-		defSrc := normalizeDefSource(d.Source)
-		defRemux := strings.EqualFold(d.Modifier, "REMUX")
-
-		if defRes == lowerParsedRes && defSrc == parsedSource && defRemux == rel.IsRemux {
-			return d
-		}
-	}
-
-	// Only unknown sources and non-source tags may use a resolution-based
-	// fallback. Falling back from a real source (for example CAM) could
-	// mislabel it as HDTV or BluRay.
-	switch parsedSource {
-	case "", "unknown", "uhd", "remux":
-	default:
-		return nil
-	}
-
-	// Priority 3: resolution + modifier only (unknown source).
-	for _, d := range defs {
-		defRes := strings.ToLower(d.Resolution)
-		defRemux := strings.EqualFold(d.Modifier, "REMUX")
-		if defRes == lowerParsedRes && defRemux == rel.IsRemux {
-			return d
-		}
-	}
-
-	// Priority 4: resolution only (unknown source and modifier).
-	for _, d := range defs {
-		defRes := strings.ToLower(d.Resolution)
-		if defRes == lowerParsedRes && d.Modifier == "" {
-			return d
-		}
-	}
-
-	return nil
+	def, _ := qualityprofiles.MatchDefinition(rel, defs)
+	return def
 }
 
-// normalizeDefSource maps quality definition Source display names to the
-// same canonical form that normalizeSource produces from parser output.
-func normalizeDefSource(source string) string {
-	switch strings.ToLower(source) {
-	case "web":
-		return "webdl"
-	case "tv":
-		return "hdtv"
-	default:
-		return normalizeSource(source)
-	}
-}
+func normalizeDefSource(source string) string { return qualityprofiles.NormalizeDefSource(source) }
 
-// normalizeSource maps parser source strings to quality definition source names.
-func normalizeSource(source string) string {
-	switch strings.ToLower(source) {
-	case "bluray", "blu-ray", "bdrip", "brrip":
-		return "bluray"
-	case "webdl", "web-dl", "web dl":
-		return "webdl"
-	case "webrip", "web-rip", "web rip":
-		return "webrip"
-	case "hdtv":
-		return "hdtv"
-	case "dvd", "dvdrip", "dvd-rip":
-		return "dvd"
-	case "remux":
-		return "remux"
-	case "cam", "ts", "telesync", "telecine", "tc":
-		return "cam"
-	case "screener", "dvdscr":
-		return "screener"
-	default:
-		return strings.ToLower(source)
-	}
-}
+func normalizeSource(source string) string { return qualityprofiles.NormalizeSource(source) }
 
 // buildReleaseInfo converts a parsed release + indexer result into the
 // shape the custom format engine expects.
@@ -1604,6 +1520,9 @@ func (e *Engine) grabReleaseForMedia(ctx context.Context, sr *ScoredRelease, med
 		Size:                 sr.Result.Size,
 		QualityTier:          sr.QualityTier,
 		FormatScore:          sr.FormatScore,
+		Quality:              sr.QualityStored,
+		QualityDetected:      sr.QualityDetected,
+		QualityAssumed:       sr.QualityAssumed,
 		CompositeScore:       sr.CompositeScore(),
 		FormatMatches:        sr.FormatMatches,
 		ClientID:             target.ID(),
@@ -1947,6 +1866,9 @@ func (e *Engine) recordGrabOrchestrator(ctx context.Context, req SearchRequest, 
 			SavePath:             grabbed.SavePath,
 			SeedRatioLimit:       grabbed.SeedRatioLimit,
 			SeedTimeLimitMinutes: grabbed.SeedTimeLimitMinutes,
+			Quality:              grabbed.Quality,
+			QualityDetected:      grabbed.QualityDetected,
+			QualityAssumed:       grabbed.QualityAssumed,
 		})
 
 	case "series", "episode":
@@ -1993,6 +1915,9 @@ func (e *Engine) recordGrabOrchestrator(ctx context.Context, req SearchRequest, 
 				SavePath:             grabbed.SavePath,
 				SeedRatioLimit:       grabbed.SeedRatioLimit,
 				SeedTimeLimitMinutes: grabbed.SeedTimeLimitMinutes,
+				Quality:              grabbed.Quality,
+				QualityDetected:      grabbed.QualityDetected,
+				QualityAssumed:       grabbed.QualityAssumed,
 			})
 		}
 	}

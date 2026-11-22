@@ -34,6 +34,14 @@ type CmdGrabbed struct {
 	SavePath             string // client save directory
 	SeedRatioLimit       *float64
 	SeedTimeLimitMinutes *int
+	// Quality is the identity search decided at grab time. Import reuses it
+	// instead of detecting the quality again. Empty for manual grabs.
+	Quality         string
+	QualityDetected string // literal parse of Title, e.g. "unknown-1080p"
+	QualityAssumed  bool   // source assumed because Title states none
+	// Manual marks a release the user chose. Import accepts it whatever the
+	// quality profile says and only warns when it misses the profile.
+	Manual bool
 }
 
 func (CmdGrabbed) commandTag() {}

@@ -1,6 +1,9 @@
 package workflows
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
 
 // Workflow states
 const (
@@ -161,6 +164,7 @@ const (
 	EventCancelled         = "cancelled"
 	EventDownloadFailed    = "download_failed"
 	EventCompleted         = "completed"
+	EventQualityWarning    = "quality_warning"
 )
 
 // IsTerminal returns true if the workflow is in a final state.
@@ -185,4 +189,40 @@ func CanTransitionTo(from, to string) bool {
 		}
 	}
 	return false
+}
+
+// Workflow metadata keys holding the quality search decided at grab time.
+const (
+	MetaGrabbedQuality         = "grabbed_quality"
+	MetaGrabbedQualityDetected = "grabbed_quality_detected"
+	MetaGrabbedQualityAssumed  = "grabbed_quality_assumed"
+	MetaGrabbedManual          = "grabbed_manual"
+)
+
+// GrabbedQuality returns the quality decided at grab time, if any.
+func (w *Workflow) GrabbedQuality() (quality, detected string, assumed bool) {
+	if w == nil || w.Metadata == "" {
+		return "", "", false
+	}
+	var meta map[string]any
+	if json.Unmarshal([]byte(w.Metadata), &meta) != nil {
+		return "", "", false
+	}
+	quality, _ = meta[MetaGrabbedQuality].(string)
+	detected, _ = meta[MetaGrabbedQualityDetected].(string)
+	assumed, _ = meta[MetaGrabbedQualityAssumed].(bool)
+	return quality, detected, assumed
+}
+
+// GrabbedManually reports whether the user chose the grabbed release.
+func (w *Workflow) GrabbedManually() bool {
+	if w == nil || w.Metadata == "" {
+		return false
+	}
+	var meta map[string]any
+	if json.Unmarshal([]byte(w.Metadata), &meta) != nil {
+		return false
+	}
+	manual, _ := meta[MetaGrabbedManual].(bool)
+	return manual
 }

@@ -756,3 +756,7 @@ func TestRejectedReviewKeepsJobBlocked(t *testing.T) {
 		t.Fatalf("retry after rejection: %v", err)
 	}
 }
+
+func (noMoviesService) ListQualityDefinitions(context.Context) ([]*movies.QualityDefinition, error) {
+	return nil, nil
+}

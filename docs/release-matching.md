@@ -86,15 +86,36 @@ such as `the.body.2026.s01e07.1080p.web.h264-cakes[EZTVx.to].mkv` has base quali
 the profile's allowed-quality check. Source and codec aliases such as
 `WebDL`/`WEB-DL` and `h264`/`x264` match consistently in testing, search and import.
 
-For a first import with no existing file, an allowed **Unknown** tier also covers
-source-unknown qualities such as `unknown-1080p`. A filename containing only
-`1080p HEVC x265` identifies resolution and codec, not WEB or BluRay; Loom retains
-that source-unknown metadata. Legacy profiles allowing every standard quality
-tier retain the same first-import fallback when no custom tiers are configured.
-With custom tiers, enable Unknown explicitly if it should also accept releases
-that do not match a custom tier. Restricted profiles without Unknown still
-reject such releases, and this fallback does not authorize replacing an existing
-file. Known-source exclusions and custom-format minimums still apply.
+### One quality decision from search to import
+
+Search decides a release's quality once, when it grabs the release, and stores
+that decision on the download's workflow. Import reuses it instead of reading
+the quality from the file name again. When a file name contradicts the grabbed
+release, such as a different resolution inside a pack, import records the
+file's own quality using the same detector as search.
+
+Import never rejects a download Loom grabbed because of its quality: search
+already checked it against the profile, the existing file, and the custom-format
+minimum. If the file still falls outside the profile, it is imported and the
+workflow timeline shows a **quality warning**.
+
+A release you download yourself from the search dialog overrides the quality
+profile. It is imported even when the profile disallows its quality, and the
+workflow timeline warns when it is outside the profile or below the cutoff.
+
+Only downloads Loom did not grab (added directly in the download client or
+imported from a folder) are checked against the profile at import.
+
+A release name that states a resolution but no source, such as
+`Chicago PD S14E06 1080p HEVC x265-MeGusta`, is **assumed** to be WEB-DL at that
+resolution (remuxes are assumed BluRay). The assumption shows as
+"(assumed)" in search results and decisions and in the workflow's grab event.
+The stored file quality is the assumed one, for example `webdl-1080p`. A profile
+with custom tiers first tries an enabled **Unknown** tier or a matching custom
+tier, then the assumed tier. If the assumed tier is disabled, an allowed Unknown
+tier still accepts a first import with no existing file; it never authorizes
+replacing an existing file. For downloads Loom did not grab, known-source
+exclusions and custom-format minimums still apply.
 
 ## Custom quality tiers
 

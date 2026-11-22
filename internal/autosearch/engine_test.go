@@ -197,9 +197,9 @@ func TestMatchQualityDef(t *testing.T) {
 			wantID:  "webdl-2160",
 		},
 		{
-			name:    "resolution-only fallback (unknown source, 720p)",
+			name:    "unknown source assumes WEB-DL, never HDTV (720p)",
 			release: &parser.Release{Source: "", Resolution: 720},
-			wantID:  "hdtv-720",
+			wantID:  "webdl-720",
 		},
 		{
 			name:    "known source without a definition is not relabeled",
