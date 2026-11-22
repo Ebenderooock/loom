@@ -93,4 +93,70 @@ test.describe("Dashboard", () => {
       timeout: 10000,
     });
   });
+
+  test("shared storage counts capacity once and labels library usage", async ({
+    page,
+  }, testInfo) => {
+    await mockGet(page, "libraries", {
+      data: ["Movies", "TV", "Anime"].map((name, index) => ({
+        ...SAMPLE_LIBRARY,
+        id: `lib-${index}`,
+        name,
+        size_bytes: (index + 1) * 1e12,
+        disk_space: {
+          volume_id: "shared",
+          total_bytes: 20e12,
+          free_bytes: 7.1e12,
+          used_bytes: 12.9e12,
+        },
+      })),
+    });
+    await page.goto("/");
+    const volume = page.getByRole("region", { name: "Storage volume" });
+    await expect(volume).toBeVisible();
+    await expect(page.locator("main").getByRole("region")).toHaveCount(1);
+    await expect(volume.getByRole("img")).toHaveAccessibleName(
+      "Storage volume: 6.5 TB free of 18.2 TB, 65% used",
+    );
+    for (const name of ["Movies", "TV", "Anime", "Other usage"]) {
+      await expect(volume.getByText(name, { exact: true })).toBeVisible();
+    }
+    await expect(volume).not.toContainText("estimated");
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () => document.documentElement.scrollWidth <= window.innerWidth,
+        ),
+      )
+      .toBe(true);
+    await page.screenshot({
+      path: testInfo.outputPath("shared-storage.png"),
+      fullPage: true,
+    });
+  });
+
+  test("separate storage shows a card for each volume", async ({ page }) => {
+    await mockGet(page, "libraries", {
+      data: [
+        { ...SAMPLE_LIBRARY, size_bytes: 2e11 },
+        {
+          ...SAMPLE_LIBRARY,
+          id: "tv",
+          name: "TV",
+          size_bytes: 3e11,
+          disk_space: {
+            total_bytes: 2e12,
+            free_bytes: 1e12,
+            used_bytes: 1e12,
+          },
+        },
+      ],
+    });
+    await page.goto("/");
+    await expect(page.getByRole("region", { name: "Volume 1" })).toBeVisible();
+    await expect(page.getByRole("region", { name: "Volume 2" })).toBeVisible();
+    await expect(page.getByText(/across 2 volumes/)).toHaveText(
+      "1.4 TB free of 2.7 TB across 2 volumes",
+    );
+  });
 });

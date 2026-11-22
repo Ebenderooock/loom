@@ -4,8 +4,22 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/ebenderooock/loom/internal/libraries"
 	"github.com/ebenderooock/loom/internal/series"
 )
+
+func TestRootFolderJSONUnchanged(t *testing.T) {
+	lib := libraries.Library{ID: "00000001", Path: "/shows", SizeBytes: 123,
+		DiskSpace: libraries.DiskSpace{FreeBytes: 42, VolumeID: "dev:1"}}
+	got, err := json.Marshal(rootFolderToSonarr(lib, newIDCache()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := `{"id":1,"path":"/shows","accessible":true,"freeSpace":42}`
+	if string(got) != want {
+		t.Fatalf("got %s; want %s", got, want)
+	}
+}
 
 func TestSeriesCompletenessExcludesSpecials(t *testing.T) {
 	show := &series.Series{

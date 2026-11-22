@@ -1,5 +1,17 @@
 # API
 
+## Library storage readings
+
+Library responses include `disk_space.total_bytes`, `free_bytes`, `used_bytes`
+and optional `volume_id`. Treat the ID as opaque and local to the Loom host:
+it is not a persistent global disk identifier. `size_bytes` is the sum of
+scanned library file sizes, not the volume's used space. Radarr/Sonarr
+compatibility responses retain their existing shape.
+
+The dashboard groups these readings on the client; no aggregated storage route
+is added. See [storage](storage.md#dashboard-library-storage) for the estimated
+NAS grouping rule and limitations.
+
 ## Native update notices
 
 All update routes require an authenticated administrator, including reads and

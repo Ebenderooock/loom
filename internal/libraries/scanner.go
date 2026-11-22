@@ -120,15 +120,25 @@ func (sc *Scanner) ScanLibrary(ctx context.Context, lib *Library) error {
 
 // GetDiskSpace returns disk usage for the given path.
 func GetDiskSpace(path string) (DiskSpace, error) {
+	return getDiskSpace(path, slog.Default(), diskspace.VolumeID)
+}
+
+func getDiskSpace(path string, logger *slog.Logger, volumeID func(string) (string, error)) (DiskSpace, error) {
 	total, free, err := diskspace.Get(path)
 	if err != nil {
 		return DiskSpace{}, err
 	}
 	t := int64(total) //nolint:gosec // disk byte counts fit in int64
 	f := int64(free)  //nolint:gosec // disk byte counts fit in int64
-	return DiskSpace{
+	space := DiskSpace{
 		TotalBytes: t,
 		FreeBytes:  f,
 		UsedBytes:  t - f,
-	}, nil
+	}
+	if id, err := volumeID(path); err != nil {
+		logger.Warn("volume identity error", "path", path, "error", err)
+	} else {
+		space.VolumeID = id
+	}
+	return space, nil
 }

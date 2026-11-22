@@ -57,6 +57,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   replay a completed rollback or undo a committed update after a helper restart.
   Refuse quiescence when process access is denied. Windows automatic
   installation remains blocked pending native acceptance.
+- Count shared library storage once on the dashboard. Show per-volume free
+  space, labelled library and other-usage segments, and low-space warnings.
+  Matching NAS capacity readings are grouped with an explicit estimate notice.
+
 - Keep Discover, Collections, and Requests sections readable over custom
   background images with opaque panel surfaces. Simplify Discover cards to
   poster, status, title, and year, with compact translucent dismissal controls

@@ -1,5 +1,28 @@
 # Storage
 
+## Dashboard library storage
+
+The dashboard counts each storage volume once, even when Movies, TV and Anime
+share a drive. Each volume lists its libraries, free space and total capacity.
+The stacked bar shows scanned library file sizes and other disk usage, with a
+text legend. Volumes with less than 10% free space show a warning.
+
+Loom identifies volumes using the root path's filesystem device on Unix and
+volume identity on Windows. The dashboard also estimates shared storage when
+capacity matches exactly and all free-space readings differ by at most 64 MiB,
+for example when one NAS share is mounted at two paths. Estimated groups and
+totals are labelled: separate drives with similar readings can also match.
+Free space uses the lowest reading in each group rather than adding readings.
+
+Libraries with unavailable or invalid disk readings are named but excluded from
+totals. File sizes come from library scans and can lag filesystem usage.
+Hardlinks, compression or overlapping library roots can make logical file sizes
+exceed physical usage; in that case bar segments are scaled proportionally and
+the dashboard explains the discrepancy. Unreported sizes appear as unavailable,
+not as an empty library.
+
+## Database storage
+
 Loom uses a single schema across two database engines. SQLite is the
 default — zero-config, single-file, pure-Go driver — and Postgres is a
 drop-in replacement for HA / shared / split-mode deployments.

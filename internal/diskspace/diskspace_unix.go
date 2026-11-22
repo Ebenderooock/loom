@@ -2,7 +2,19 @@
 
 package diskspace
 
-import "golang.org/x/sys/unix"
+import (
+	"fmt"
+
+	"golang.org/x/sys/unix"
+)
+
+func volumeID(path string) (string, error) {
+	var stat unix.Stat_t
+	if err := unix.Stat(path, &stat); err != nil {
+		return "", fmt.Errorf("stat volume for %q: %w", path, err)
+	}
+	return fmt.Sprintf("dev:%d", stat.Dev), nil
+}
 
 func get(path string) (total, free uint64, err error) {
 	var stat unix.Statfs_t

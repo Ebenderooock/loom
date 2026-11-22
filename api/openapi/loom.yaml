@@ -32,6 +32,11 @@ info:
     connectivity tests can supply the saved definition ID to retain credentials
     without saving the tested settings. Explicitly disabled authentication
     retains its existing access behavior.
+
+    Library storage responses include an optional opaque host-local
+    disk_space.volume_id and size_bytes (scanned library file sizes).
+    Disk capacity is per volume, not per library. Dashboard volume grouping
+    is client-side and can estimate shared NAS mounts from matching readings.
   license:
     name: AGPL-3.0-only
     identifier: AGPL-3.0-only
