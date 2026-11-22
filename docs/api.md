@@ -21,6 +21,9 @@ network checks. Missing auth wiring fails closed.
   `available`, `verified`, `url`, `checkedAt`, `nextCheck`, and optional
   `message`. Untrusted/unavailable metadata returns 200 with `verified: false`,
   no candidate version and manual-update guidance. No binary is downloaded.
+  `?force=true` (the **Check for updates** button) bypasses the hourly cache,
+  at most once per channel per minute and never while GitHub is rate limiting;
+  forced responses add `manualCheckAfter` and `throttled`.
 
 These are notice/settings endpoints, not an update executor; no apply endpoint
 exists. See [native updates](native-updates.md) for signature and cache behavior,
