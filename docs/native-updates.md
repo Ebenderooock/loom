@@ -240,9 +240,15 @@ GitHub prerelease (within the newest 100 releases), with a signed
 Its unique GitHub release tag is **separate from the signed SemVer version**.
 Only fixed HTTPS GitHub API/release URLs and GitHub asset redirects are used.
 
-UI checks are demand-driven, not startup/background polling. Concurrent checks
-share a per-channel one-hour cache, including errors; ETags refresh metadata.
-GitHub rate-limit delays are honored up to 24 hours. Missing trust roots make
+UI checks are demand-driven, not startup/background polling. Passive and
+automatic checks share a per-channel one-hour cache, including errors; ETags
+refresh metadata. The administrator's **Check for updates** button
+(`POST /api/v1/updates/check?force=true`) bypasses that cache, but at most one
+network check runs per channel per minute (concurrent clicks share the result)
+and it still sends ETag conditional requests. GitHub rate-limit delays
+(`Retry-After` / `X-RateLimit-Reset`) are honored up to 24 hours, including by
+manual checks, which then return the cached notice and the time a retry is
+allowed. Missing trust roots make
 no network requests. Checks download only metadata, never a binary.
 
 Notification connections can opt in separately to an instance-updated alert

@@ -13,6 +13,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -260,6 +261,72 @@ func TestCheckerFailsClosedAndThrottles(t *testing.T) {
 	}
 }
 
+func TestCheckNowBypassesCacheWithCooldown(t *testing.T) {
+	c, calls := fixtureChecker(t, "v1.2.3", "stable")
+	var etags []string
+	base := c.client.Transport
+	c.client.Transport = roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		if r.URL.Host == "api.github.com" {
+			etags = append(etags, r.Header.Get("If-None-Match"))
+		}
+		return base.RoundTrip(r)
+	})
+	if n := c.Check(context.Background(), "stable"); !n.Verified || n.Throttled || !n.ManualCheckAfter.IsZero() {
+		t.Fatalf("passive notice = %+v", n)
+	}
+	// Passive reads within the hour stay cached.
+	c.now = func() time.Time { return testNow.Add(30 * time.Minute) }
+	if _ = c.Check(context.Background(), "stable"); calls.Load() != 3 {
+		t.Fatalf("passive read bypassed cache: calls=%d", calls.Load())
+	}
+	// A manual check within the hour bypasses the cache and reuses the ETag.
+	n := c.CheckNow(context.Background(), "stable")
+	if !n.Verified || n.Throttled || calls.Load() != 6 || !n.ManualCheckAfter.Equal(testNow.Add(30*time.Minute+ManualCheckCooldown)) {
+		t.Fatalf("forced notice = %+v calls=%d", n, calls.Load())
+	}
+	if len(etags) != 2 || etags[1] != `"test-etag"` {
+		t.Fatalf("forced check did not reuse ETag: %q", etags)
+	}
+	// Concurrent manual checks inside the cooldown share the fresh result.
+	var wg sync.WaitGroup
+	for range 10 {
+		wg.Go(func() {
+			if n := c.CheckNow(context.Background(), "stable"); !n.Verified || !n.Throttled {
+				t.Errorf("cooldown notice = %+v", n)
+			}
+		})
+	}
+	wg.Wait()
+	if calls.Load() != 6 {
+		t.Fatalf("cooldown not shared: calls=%d", calls.Load())
+	}
+	c.now = func() time.Time { return testNow.Add(30*time.Minute + ManualCheckCooldown) }
+	if n := c.CheckNow(context.Background(), "stable"); n.Throttled || calls.Load() != 9 {
+		t.Fatalf("post-cooldown notice = %+v calls=%d", n, calls.Load())
+	}
+}
+
+func TestCheckNowHonoursRateLimit(t *testing.T) {
+	c, _ := fixtureChecker(t, "v1.2.3", "stable")
+	var count int
+	c.client.Transport = roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		count++
+		resp := response(403, nil)
+		resp.Header.Set("X-RateLimit-Reset", strconv.FormatInt(testNow.Add(20*time.Minute).Unix(), 10))
+		return resp, nil
+	})
+	if n := c.CheckNow(context.Background(), "stable"); n.Verified || count != 1 {
+		t.Fatalf("first forced check = %+v count=%d", n, count)
+	}
+	c.now = func() time.Time { return testNow.Add(5 * time.Minute) }
+	n := c.CheckNow(context.Background(), "stable")
+	reset := time.Unix(testNow.Add(20*time.Minute).Unix(), 0)
+	if count != 1 || !n.Throttled || n.Verified || !n.ManualCheckAfter.Equal(reset) ||
+		!strings.Contains(n.Message, "rate limit") || !strings.Contains(n.Message, reset.UTC().Format(time.RFC3339)) {
+		t.Fatalf("rate-limited forced check = %+v count=%d", n, count)
+	}
+}
+
 func TestCheckerRejectsTamper(t *testing.T) {
 	c, _ := fixtureChecker(t, "v1.2.3", "stable")
 	base := c.client.Transport
@@ -466,6 +533,29 @@ func TestPostgresIsNoticeOnly(t *testing.T) {
 	if w.Code != 200 || !strings.Contains(w.Body.String(), `"available":true`) ||
 		!strings.Contains(w.Body.String(), `"verified":true`) {
 		t.Fatalf("PostgreSQL signed notice = %d %s", w.Code, w.Body.String())
+	}
+}
+
+func TestCheckHTTPForceBypassesCache(t *testing.T) {
+	s := testService(t)
+	c, calls := fixtureChecker(t, "v1.2.3", "stable")
+	s.checker = c
+	router := s.Router(func(next http.Handler) http.Handler { return next })
+	post := func(path string) string {
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, httptest.NewRequest("POST", path, nil))
+		if w.Code != 200 {
+			t.Fatalf("POST %s = %d", path, w.Code)
+		}
+		return w.Body.String()
+	}
+	post("/check")
+	c.now = func() time.Time { return testNow.Add(10 * time.Minute) }
+	if post("/check"); calls.Load() != 3 {
+		t.Fatalf("passive POST bypassed cache: calls=%d", calls.Load())
+	}
+	if body := post("/check?force=true"); calls.Load() != 6 || !strings.Contains(body, `"manualCheckAfter"`) {
+		t.Fatalf("forced POST = %s calls=%d", body, calls.Load())
 	}
 }
 

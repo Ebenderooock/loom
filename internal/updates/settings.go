@@ -231,7 +231,15 @@ func (s *Service) Router(admin func(http.Handler) http.Handler) http.Handler {
 			http.Error(w, "could not load update settings", http.StatusInternalServerError)
 			return
 		}
-		notice := s.checker.Check(r.Context(), settings.Channel)
+		// force=true is the explicit "Check for updates" action: it bypasses the
+		// hourly cache subject to the per-channel manual cooldown and GitHub
+		// rate limits. Other callers keep the cached passive behaviour.
+		var notice Notice
+		if r.URL.Query().Get("force") == "true" {
+			notice = s.checker.CheckNow(r.Context(), settings.Channel)
+		} else {
+			notice = s.checker.Check(r.Context(), settings.Channel)
+		}
 		if s.alerts != nil {
 			if err := s.alerts.Available(r.Context(), notice); err != nil {
 				slog.Error("update notification failed", "error", err)

@@ -48,6 +48,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Make **Check for updates** bypass the hourly update-check cache so newly
+  published releases appear immediately. Manual checks are limited to one per
+  channel per minute, reuse ETags, never call GitHub while it is rate limiting,
+  and show when the next manual check is allowed. Automatic checks keep the
+  one-hour cache.
 - Harden the disabled Windows updater candidate's journal so recovery does not
   replay a completed rollback or undo a committed update after a helper restart.
   Refuse quiescence when process access is denied. Windows automatic

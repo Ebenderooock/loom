@@ -28,6 +28,8 @@ interface Notice {
   url: string;
   nextCheck: string;
   message?: string;
+  manualCheckAfter?: string;
+  throttled?: boolean;
 }
 
 async function request<T>(
@@ -87,7 +89,7 @@ function UpdateForm({ status }: { status: Status }) {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["update-settings"] }),
   });
   const check = useMutation({
-    mutationFn: () => request<Notice>("/check", "POST"),
+    mutationFn: () => request<Notice>("/check?force=true", "POST"),
   });
   const dirty =
     channel !== status.settings.channel ||
@@ -103,8 +105,9 @@ function UpdateForm({ status }: { status: Status }) {
       <CardContent className="space-y-4">
         <p className="text-sm text-muted-foreground">
           Native release notices come from GitHub Releases and require a trusted
-          signed manifest. Checking sends a request to GitHub; checks are cached
-          for at least one hour.
+          signed manifest. Automatic checks are cached for at least one hour;
+          Check for updates asks GitHub immediately, at most once a minute and
+          never while GitHub rate limiting is in effect.
         </p>
         <div className="space-y-2">
           <label htmlFor="update-channel" className="block text-sm font-medium">
@@ -217,6 +220,12 @@ function UpdateForm({ status }: { status: Status }) {
               </p>
             )}
             {check.data.message && <p>{check.data.message}</p>}
+            {check.data.throttled && check.data.manualCheckAfter && (
+              <p>
+                Showing the most recent result. You can check again after{" "}
+                {new Date(check.data.manualCheckAfter).toLocaleString()}.
+              </p>
+            )}
             <p>Next check: {new Date(check.data.nextCheck).toLocaleString()}</p>
           </div>
         )}

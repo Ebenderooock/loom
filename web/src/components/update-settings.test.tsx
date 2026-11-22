@@ -19,6 +19,7 @@ let settings: {
 let notice: string;
 let canInstall: boolean;
 let isPostgres: boolean;
+let checkResponse: Record<string, unknown> | undefined;
 
 function show() {
   const client = new QueryClient({
@@ -42,13 +43,15 @@ beforeEach(() => {
   notice = "Automatic installation unavailable: no helper or safe rollback.";
   canInstall = false;
   isPostgres = false;
+  checkResponse = undefined;
   fetchMock.mockReset();
   fetchMock.mockImplementation(async (input, init) => {
     if (init?.method === "PUT") {
       settings = JSON.parse(String(init.body));
       return Response.json(settings);
     }
-    if (String(input).endsWith("/check")) {
+    if (String(input).includes("/check")) {
+      if (checkResponse) return Response.json(checkResponse);
       return Response.json({
         currentVersion: "1.0.0",
         verified: false,
@@ -180,5 +183,28 @@ describe("update settings", () => {
       screen.getByRole("button", { name: "Save update settings" }),
     );
     await waitFor(() => expect(settings.autoInstall).toBe(true));
+  });
+
+  it("forces a manual check and shows when the next one is allowed", async () => {
+    checkResponse = {
+      currentVersion: "1.0.0",
+      verified: true,
+      available: true,
+      version: "1.2.0",
+      nextCheck: "2026-11-17T01:00:00Z",
+      manualCheckAfter: "2026-11-17T00:01:00Z",
+      throttled: true,
+    };
+    const user = userEvent.setup();
+    show();
+    await user.click(
+      await screen.findByRole("button", { name: "Check for updates" }),
+    );
+    expect(await screen.findByText(/You can check again after/)).toBeVisible();
+    expect(screen.getByText(/Update available/)).toHaveTextContent("1.2.0");
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/v1/updates/check?force=true",
+      expect.objectContaining({ method: "POST" }),
+    );
   });
 });
