@@ -18,6 +18,7 @@ type ListRecord struct {
 	ID         int        `json:"id"`
 	Name       string     `json:"name"`
 	Overview   string     `json:"overview"`
+	Image      string     `json:"image"`
 	IsOfficial bool       `json:"isOfficial"`
 	RemoteIDs  []RemoteID `json:"remoteIds"`
 	Entities   []struct {

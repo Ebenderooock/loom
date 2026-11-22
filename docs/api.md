@@ -59,6 +59,21 @@ page is the human summary.
 Music capability routes are available when the `music` feature is enabled.
 See the [Music guide](music.md) for profile behavior and examples.
 
+## Collection covers
+
+`PATCH /api/v1/collections/{id}` accepts an optional `cover` alongside the
+required `name`, `overview`, and current `revision`. Administrators can choose
+`{"mode":"mosaic"}`, `{"mode":"source","source_key":"tmdb:collection:10"}`, or
+`{"mode":"member","member_id":"<collection-member-id>"}`. Source and member
+choices must reference attached, available artwork; member choices must be
+active. Omitting `cover` preserves the current choice. Stale revisions return
+409, invalid choices return 400, and non-admin writes return 403.
+
+Collection reads include the saved cover and optional source `poster_path`
+captured during import or refresh. Cover preferences survive refreshes; the UI
+reports unavailable selected artwork and falls back to a mosaic. See
+[Collections](collections.md#collection-covers).
+
 ## Default quality profiles
 
 New movie and series additions, including Discovery, use the **Any** quality

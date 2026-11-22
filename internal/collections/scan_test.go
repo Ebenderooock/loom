@@ -136,7 +136,7 @@ func TestBackgroundScanRecoversFailedSource(t *testing.T) {
 				http.Error(w, "unavailable", http.StatusForbidden)
 				return
 			}
-			_, _ = w.Write([]byte(`{"id":10,"name":"Set","parts":[{"id":1,"title":"Movie"}]}`))
+			_, _ = w.Write([]byte(`{"id":10,"name":"Set","poster_path":"/set.jpg","parts":[{"id":1,"title":"Movie"}]}`))
 		default:
 			t.Errorf("unexpected provider request: %s", r.URL)
 			http.NotFound(w, r)
@@ -163,6 +163,9 @@ func TestBackgroundScanRecoversFailedSource(t *testing.T) {
 		t.Fatal(err)
 	}
 	after, err := store.FindSource(ctx, ref)
+	if err == nil && after.Sources[0].PosterPath != "/set.jpg" {
+		t.Fatalf("TMDB collection poster not persisted: %#v", after.Sources)
+	}
 	if err != nil || after.ID != before.ID || after.Sources[0].Error != "" || len(after.Members) != 1 {
 		t.Fatalf("source did not recover in place: %+v %v", after, err)
 	}

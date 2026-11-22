@@ -163,6 +163,21 @@ bg-semantic-info    /* #40C4FF */
 
 ## Component Color Usage
 
+### Page surfaces and posters
+
+- Place section headings, descriptions, filters, and empty states on opaque
+  `bg-card` surfaces so custom background images do not reduce readability.
+- Discover cards use the shared poster presentation: status, title, and year
+  over the poster, without recommendation reasons or duplicate detail buttons.
+  Dismiss controls are small and translucent, revealed on hover or keyboard
+  focus; touch devices keep them visible with a larger hit target.
+- Collection mosaics fill a 2:3 frame with a square grid (at least 2x2).
+  Grow rows and columns together as active titles increase (3x3, 4x4, etc.),
+  keeping every poster uncropped at 2:3 and unused or artwork-free cells empty.
+  Collections can instead use an attached source's poster or an active title's
+  poster, chosen in Manage collection. Missing selected artwork is reported
+  explicitly with a mosaic fallback.
+
 ### Buttons
 
 - **Primary Button**: `bg-primary text-primary-foreground` (Midnight Purple)

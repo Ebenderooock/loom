@@ -36,7 +36,7 @@ type Service struct {
 	series        SeriesLibrary
 	tmdbListToken func() string
 	// fetch is a test seam; production always uses the existing provider clients.
-	fetch  func(context.Context, Source) (string, []Member, error)
+	fetch  func(context.Context, Source) (string, []Member, string, error)
 	scanMu sync.Mutex
 
 	jobsMu     sync.Mutex
@@ -122,20 +122,22 @@ func (s *Service) resolve(ctx context.Context, m *Member) error {
 	return m.Validate()
 }
 
-func (s *Service) fetchSource(ctx context.Context, ref Source) (string, []Member, error) {
+func (s *Service) fetchSource(ctx context.Context, ref Source) (string, []Member, string, error) {
 	if err := ref.Validate(); err != nil {
-		return "", nil, err
+		return "", nil, "", err
 	}
 	name := strings.ToUpper(ref.Provider) + " " + ref.Kind + " " + ref.ExternalID
 	members := []Member{}
+	poster := ""
 	switch ref.Provider {
 	case "tmdb":
 		if ref.Kind == "collection" {
 			set, err := s.tmdb.GetCollection(ctx, number(ref.ExternalID))
 			if err != nil {
-				return "", nil, err
+				return "", nil, "", err
 			}
 			name = set.Name
+			poster = set.PosterPath
 			for _, part := range set.Parts {
 				if part.Adult {
 					continue
@@ -149,29 +151,30 @@ func (s *Service) fetchSource(ctx context.Context, ref Source) (string, []Member
 			}
 			items, err := providers.NewTMDbMixedList().Fetch(ctx, providers.ProviderConfig{URL: ref.ExternalID, APIKey: token})
 			if err != nil {
-				return "", nil, err
+				return "", nil, "", err
 			}
 			members = providerMembers(items)
 		}
 	case "imdb":
 		items, err := providers.NewIMDbList().Fetch(ctx, providers.ProviderConfig{URL: ref.ExternalID})
 		if err != nil {
-			return "", nil, err
+			return "", nil, "", err
 		}
 		members = providerMembers(items)
 	case "tvdb":
 		list, err := s.tvdb.GetList(ctx, number(ref.ExternalID))
 		if err != nil {
-			return "", nil, err
+			return "", nil, "", err
 		}
 		name = list.Name
+		poster = list.Image
 		sort.SliceStable(list.Entities, func(i, j int) bool { return list.Entities[i].Order < list.Entities[j].Order })
 		for _, entity := range list.Entities {
 			if entity.MovieID == 0 && entity.SeriesID == 0 {
 				continue
 			}
 			if entity.MovieID > 0 && entity.SeriesID > 0 {
-				return "", nil, fmt.Errorf("ambiguous TVDB list entity")
+				return "", nil, "", fmt.Errorf("ambiguous TVDB list entity")
 			}
 			media, id := "movie", entity.MovieID
 			if entity.SeriesID > 0 {
@@ -179,7 +182,7 @@ func (s *Service) fetchSource(ctx context.Context, ref Source) (string, []Member
 			}
 			title, err := s.tvdb.GetExtendedTitle(ctx, media, id)
 			if err != nil {
-				return "", nil, err
+				return "", nil, "", err
 			}
 			m := Member{MediaType: media, Title: title.Name, Year: number(title.Year), PosterPath: title.Image, Overview: title.Overview, ExternalIDs: map[string]string{"tvdb": strconv.Itoa(id)}}
 			for _, remote := range title.RemoteIDs {
@@ -194,14 +197,14 @@ func (s *Service) fetchSource(ctx context.Context, ref Source) (string, []Member
 		}
 	}
 	if len(members) > 5000 {
-		return "", nil, fmt.Errorf("source exceeds 5000 supported titles")
+		return "", nil, "", fmt.Errorf("source exceeds 5000 supported titles")
 	}
 	for i := range members {
 		if err := s.resolve(ctx, &members[i]); err != nil {
-			return "", nil, err
+			return "", nil, "", err
 		}
 	}
-	return name, members, nil
+	return name, members, poster, nil
 }
 
 func providerMembers(items []providers.Item) []Member {
@@ -240,7 +243,7 @@ func (s *Service) Refresh(ctx context.Context, c *Collection) error {
 	ctx, cancel := context.WithTimeout(ctx, 90*time.Second)
 	defer cancel()
 	for i, ref := range c.Sources {
-		_, incoming, err := s.fetch(ctx, ref)
+		_, incoming, poster, err := s.fetch(ctx, ref)
 		if err != nil {
 			c.Sources[i].Error = sourceError(ref)
 			continue
@@ -282,6 +285,7 @@ func (s *Service) Refresh(ctx context.Context, c *Collection) error {
 			}
 		}
 		c.Members = active
+		c.Sources[i].PosterPath = poster
 		c.Sources[i].Error = ""
 		c.Sources[i].LastSync = time.Now().UTC().Format(time.RFC3339)
 	}
@@ -313,12 +317,13 @@ func (s *Service) importSource(ctx context.Context, ref Source) (*Collection, er
 		return nil, err
 	}
 	fetchCtx, cancel := context.WithTimeout(ctx, 90*time.Second)
-	name, members, err := s.fetch(fetchCtx, ref)
+	name, members, poster, err := s.fetch(fetchCtx, ref)
 	cancel()
 	if err != nil {
 		name, members, ref.Error = strings.ToUpper(ref.Provider)+" "+ref.ExternalID, []Member{}, sourceError(ref)
 	} else {
 		ref.LastSync = time.Now().UTC().Format(time.RFC3339)
+		ref.PosterPath = poster
 	}
 	c := &Collection{Name: name, Sources: []Source{ref}, Members: []Member{}}
 	for _, m := range members {

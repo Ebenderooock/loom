@@ -10,7 +10,11 @@ import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CollectionsPage } from "../collections";
-import type { CollectionMember, LoomCollection } from "@/lib/collections-api";
+import type {
+  CollectionCover,
+  CollectionMember,
+  LoomCollection,
+} from "@/lib/collections-api";
 import type { TitleIdentity } from "@/lib/title-api";
 
 const state = vi.hoisted(() => ({
@@ -161,6 +165,17 @@ beforeEach(() => {
         unknown
       >;
       requests.push({ url, method, body });
+      if (
+        method === "PATCH" &&
+        url === "/api/v1/collections/loom-1" &&
+        body.cover
+      ) {
+        collection = {
+          ...collection,
+          cover: body.cover as CollectionCover,
+          revision: collection.revision + 1,
+        };
+      }
       if (method === "DELETE" && url.startsWith("/api/v1/collections/loom-1?"))
         return Response.json({ deleted: "loom-1" });
       if (url.endsWith("/bulk/add"))
@@ -293,6 +308,86 @@ function page() {
 }
 
 describe("Standalone Collections", () => {
+  it.each(["mosaic", "source", "member"] as const)(
+    "saves a %s cover without changing membership or quality",
+    async (mode) => {
+      state.search = { id: "loom-1" };
+      collection.sources[0] = {
+        ...collection.sources[0]!,
+        poster_path: "/source.jpg",
+      };
+      collection.members[0] = {
+        ...collection.members[0]!,
+        poster_path: "/member.jpg",
+      };
+      page();
+      await userEvent.click(
+        await screen.findByRole("button", { name: /^Manage$/ }),
+      );
+      const controls = screen.getByRole("region", {
+        name: /^Cover$/,
+      });
+      await userEvent.selectOptions(
+        within(controls).getByLabelText("Cover style"),
+        mode,
+      );
+      await userEvent.click(
+        within(controls).getByRole("button", { name: "Save cover" }),
+      );
+      const cover: CollectionCover =
+        mode === "source"
+          ? { mode, source_key: "tmdb:collection:1" }
+          : mode === "member"
+            ? { mode, member_id: "m1" }
+            : { mode };
+      await waitFor(() =>
+        expect(requests).toEqual([
+          {
+            url: "/api/v1/collections/loom-1",
+            method: "PATCH",
+            body: {
+              name: "Mixed universe",
+              overview: "Movies and shows",
+              revision: 3,
+              cover,
+            },
+          },
+        ]),
+      );
+      await waitFor(() =>
+        expect(within(controls).getByLabelText("Cover style")).toHaveValue(
+          mode,
+        ),
+      );
+      expect(collection.cover).toEqual(cover);
+      expect(collection.members).toHaveLength(2);
+    },
+  );
+  it("reports a removed cover title and permits choosing a mosaic instead", async () => {
+    state.search = { id: "loom-1" };
+    collection.cover = { mode: "member", member_id: "removed-member" };
+    page();
+    await userEvent.click(
+      await screen.findByRole("button", { name: /^Manage$/ }),
+    );
+    const controls = screen.getByRole("region", { name: /^Cover$/ });
+    expect(
+      within(controls).getByText("Selected cover unavailable"),
+    ).toBeVisible();
+    expect(
+      within(controls).getByRole("button", { name: "Save cover" }),
+    ).toBeDisabled();
+    await userEvent.selectOptions(
+      within(controls).getByLabelText("Cover style"),
+      "mosaic",
+    );
+    expect(
+      within(controls).queryByText("Selected cover unavailable"),
+    ).not.toBeInTheDocument();
+    expect(
+      within(controls).getByRole("button", { name: "Save cover" }),
+    ).toBeEnabled();
+  });
   it("shows automatic background progress and only queues an optional rescan", async () => {
     page();
     expect(

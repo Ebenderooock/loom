@@ -977,11 +977,15 @@ paths:
     patch:
       tags: [collections]
       operationId: editCollection
-      summary: Edit local collection name/description/quality default (admin).
+      summary: Edit local collection details, cover, or quality default (admin).
       description: |
         quality_profile_id is validated server-side and only applies to titles
         added from this collection; apply it to existing titles explicitly with
         POST /quality. An empty string clears the default.
+        cover chooses a mosaic, an attached source with artwork, or an active
+        member with artwork. Omit cover to retain the current choice. Cover
+        references survive source refreshes; unavailable artwork is reported
+        by the UI with a mosaic fallback.
       security: [{ cookieAuth: [] }, { apiKey: [] }, { bearerAuth: [] }]
       requestBody:
         required: true
@@ -996,6 +1000,7 @@ paths:
                 overview: { type: string, maxLength: 20000 }
                 revision: { type: integer, minimum: 0 }
                 quality_profile_id: { type: string }
+                cover: { $ref: "#/components/schemas/CollectionCover" }
       responses:
         "200":
           description: Updated collection.
@@ -5156,6 +5161,10 @@ components:
         kind: { type: string, enum: [collection, list] }
         external_id: { type: string }
         last_sync: { type: string, format: date-time }
+        poster_path:
+          type: string
+          readOnly: true
+          description: Provider artwork captured on import/refresh, when supplied by the source.
         error:
           type: string
           description: Safe visible source access/mapping failure; previous contribution retained.
@@ -5232,6 +5241,20 @@ components:
               media_type: { type: string, enum: [movie, series] }
               media_id: { type: string }
               message: { type: string }
+    CollectionCover:
+      type: object
+      additionalProperties: false
+      required: [mode]
+      properties:
+        mode: { type: string, enum: [mosaic, source, member] }
+        source_key:
+          type: string
+          maxLength: 100
+          description: Required only for source mode; attached provider:kind:external-ID key with artwork.
+        member_id:
+          type: string
+          maxLength: 100
+          description: Required only for member mode; active collection member ID with artwork.
     LoomCollection:
       type: object
       required: [id, name, overview, sources, members, revision, total, in_library]
@@ -5245,6 +5268,9 @@ components:
         quality_profile_id:
           type: string
           description: Default quality profile for titles added from this collection. Never changes existing titles implicitly.
+        cover:
+          $ref: "#/components/schemas/CollectionCover"
+          description: Local cover preference; absent means mosaic.
         sources:
           type: array
           items: { $ref: "#/components/schemas/CollectionSource" }

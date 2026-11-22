@@ -20,6 +20,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Add Sync with Jellyfin to movie and series quick actions. Plex and Jellyfin
   sync actions appear only when their respective connection is enabled and
   configured, and request a library refresh without downloading media.
+- Let administrators choose a saved collection cover: an adaptive poster
+  mosaic, an attached source's artwork, or a title's poster. Mosaic grids grow
+  while preserving the overall 2:3 ratio, uncropped posters, and empty cells.
 - Add admin-only native update channel settings (Stable by default, separately
   acknowledged Prelease opt-in) and a throttled, cached signed GitHub Releases
   notice checker using the publisher's raw-byte Ed25519 manifest contract.
@@ -40,6 +43,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Keep Discover, Collections, and Requests sections readable over custom
+  background images with opaque panel surfaces. Simplify Discover cards to
+  poster, status, title, and year, with compact translucent dismissal controls
+  and no redundant detail buttons.
 - Decide release quality once at grab time and reuse it at import, so imports
   no longer reject releases that search accepted. Search and import share one
   quality detector. Release names with a resolution but no source, such as

@@ -111,18 +111,24 @@ function page() {
 }
 
 describe("Discover recommendations", () => {
-  it("keeps Collections out of Discover and links to the standalone source detail", async () => {
+  it("shows only the poster, status, title and year without recommendation reasons or redundant actions", async () => {
     page();
     expect(await screen.findByText("Another adventure")).toBeInTheDocument();
     expect(
       screen.queryByRole("tab", { name: "Collections" }),
     ).not.toBeInTheDocument();
     expect(
-      screen.getByRole("link", { name: "View collection" }),
-    ).toHaveAttribute("href", "/collections?tmdb=10");
+      screen.queryByRole("link", { name: "View collection" }),
+    ).not.toBeInTheDocument();
     expect(
-      screen.getByText("You have 2 movies starring this actor"),
-    ).toBeInTheDocument();
+      screen.queryByRole("button", { name: "Add to library" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("You have 2 movies starring this actor"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "View Another adventure" }),
+    ).toHaveTextContent("2020");
     expect(state.writes).toEqual([]);
   });
   it.each(["Movies", "TV shows"])(
@@ -132,7 +138,9 @@ describe("Discover recommendations", () => {
       const user = userEvent.setup();
       await user.click(screen.getByRole("tab", { name: tab }));
       await user.click(
-        await screen.findByRole("button", { name: "Add to library" }),
+        await screen.findByRole("button", {
+          name: `View ${tab === "Movies" ? "Another adventure" : "Another show"}`,
+        }),
       );
       expect(await screen.findByRole("dialog")).toHaveTextContent(
         `${tab === "Movies" ? "movie" : "series"}:42`,
@@ -142,11 +150,11 @@ describe("Discover recommendations", () => {
       expect(state.writes).toEqual([]);
     },
   );
-  it("does not offer direct adds to non-admins", async () => {
+  it("opens poster details without offering direct adds to non-admins", async () => {
     state.role = "user";
     page();
     await userEvent.click(
-      await screen.findByRole("button", { name: "View details" }),
+      await screen.findByRole("button", { name: "View Another adventure" }),
     );
     expect(await screen.findByRole("dialog")).toHaveTextContent(
       "Ask an administrator",
