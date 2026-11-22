@@ -108,13 +108,13 @@ func (s *ReviewStore) CreateReview(ctx context.Context, in Review) (*Review, err
 
 // Latest returns the newest review of a kind for one file and media item.
 func (s *ReviewStore) Latest(ctx context.Context, kind, mediaType, mediaID, downloadPath string) (*Review, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT `+reviewColumns+` FROM manual_review
+	rows, err := s.db.QueryContext(ctx, `SELECT id, kind, workflow_id, media_type, media_id, download_path, reason, status, created_at, resolved_at FROM manual_review
 		WHERE kind = ? AND media_type = ? AND media_id = ? AND download_path = ?
 		ORDER BY created_at DESC, rowid DESC LIMIT 1`, kind, mediaType, mediaID, downloadPath)
 	if err != nil {
 		return nil, fmt.Errorf("find review: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	reviews, err := scanReviews(rows)
 	if err != nil || len(reviews) == 0 {
 		return nil, err
@@ -124,11 +124,11 @@ func (s *ReviewStore) Latest(ctx context.Context, kind, mediaType, mediaID, down
 
 // Get returns one review by ID.
 func (s *ReviewStore) Get(ctx context.Context, id string) (*Review, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT `+reviewColumns+` FROM manual_review WHERE id = ?`, id)
+	rows, err := s.db.QueryContext(ctx, `SELECT id, kind, workflow_id, media_type, media_id, download_path, reason, status, created_at, resolved_at FROM manual_review WHERE id = ?`, id)
 	if err != nil {
 		return nil, fmt.Errorf("get review: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	reviews, err := scanReviews(rows)
 	if err != nil {
 		return nil, err
@@ -139,12 +139,10 @@ func (s *ReviewStore) Get(ctx context.Context, id string) (*Review, error) {
 	return reviews[0], nil
 }
 
-const reviewColumns = `id, kind, workflow_id, media_type, media_id, download_path, reason, status, created_at, resolved_at`
-
 // ListPending returns all reviews with status "pending".
 func (s *ReviewStore) ListPending(ctx context.Context) ([]*Review, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT `+reviewColumns+` FROM manual_review WHERE status = ? ORDER BY created_at DESC`, string(ReviewPending))
+		`SELECT id, kind, workflow_id, media_type, media_id, download_path, reason, status, created_at, resolved_at FROM manual_review WHERE status = ? ORDER BY created_at DESC`, string(ReviewPending))
 	if err != nil {
 		return nil, fmt.Errorf("list pending reviews: %w", err)
 	}
@@ -167,12 +165,11 @@ func (s *ReviewStore) Approve(ctx context.Context, id string) error {
 	if len(s.onApproved) == 0 {
 		return nil
 	}
-	r, err := s.Get(ctx, id)
-	if err != nil {
-		return nil // approval is recorded; resuming is best effort
-	}
-	for _, fn := range s.onApproved {
-		fn(ctx, r)
+	// The approval is recorded; resuming is best effort.
+	if r, err := s.Get(ctx, id); err == nil {
+		for _, fn := range s.onApproved {
+			fn(ctx, r)
+		}
 	}
 	return nil
 }

@@ -182,7 +182,7 @@ func (s *UpgradeSpec) check(ctx context.Context, c *ImportCandidate) *ImportReje
 		if rank < 0 {
 			// A known resolution does not make an unknown source a different policy tier.
 			unknownSource := incomingQuality == "" || strings.HasPrefix(incomingQuality, "unknown-")
-			if custom || !unknownSource || !(profile.IsAllowed("unknown") || profile.AllowsUnknownQuality()) {
+			if custom || !unknownSource || (!profile.IsAllowed("unknown") && !profile.AllowsUnknownQuality()) {
 				warn("incoming quality %q is not allowed by profile %q", incomingQuality, profile.Name)
 			}
 			// A disallowed quality still has a place in the profile's order.
@@ -197,7 +197,7 @@ func (s *UpgradeSpec) check(ctx context.Context, c *ImportCandidate) *ImportReje
 	existingRank := qualityItemRank(items, c.ExistingQuality)
 	if rank < 0 || existingRank < 0 {
 		r := rejectKnownDowngrade(c)
-		if r != nil || existingRank < 0 || !(incomingQuality == "" || strings.HasPrefix(strings.ToLower(incomingQuality), "unknown")) {
+		if r != nil || existingRank < 0 || (incomingQuality != "" && !strings.HasPrefix(strings.ToLower(incomingQuality), "unknown")) {
 			return r
 		}
 		// A file of unknown quality cannot be shown not to downgrade a ranked one.

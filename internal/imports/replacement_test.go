@@ -3,7 +3,6 @@ package imports
 import (
 	"context"
 	"errors"
-	"github.com/ebenderooock/loom/internal/safety"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,6 +11,7 @@ import (
 
 	"github.com/ebenderooock/loom/internal/downloads"
 	"github.com/ebenderooock/loom/internal/movies"
+	"github.com/ebenderooock/loom/internal/safety"
 )
 
 func replacementFixture(t *testing.T, incoming, existing string, contents []byte) (*ImportPipeline, string, string, *MatchResult) {

@@ -469,7 +469,8 @@ func (p *ImportPipeline) DismissJobs(ctx context.Context, ids []string, allInact
 			continue
 		}
 		seen[id] = true
-		result, err := tx.ExecContext(ctx, update+` AND id = ?`, now, id)
+		result, err := tx.ExecContext(ctx, `UPDATE import_jobs SET dismissed_at = ?
+			WHERE dismissed_at IS NULL AND status IN ('imported', 'failed', 'pending_review') AND id = ?`, now, id)
 		if err != nil {
 			return 0, fmt.Errorf("dismiss import job: %w", err)
 		}

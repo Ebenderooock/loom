@@ -810,7 +810,7 @@ func (p *ImportPipeline) holdDowngrade(ctx context.Context, ev *downloads.Downlo
 			Reason:       reason,
 		}); err != nil {
 			return p.recordFailure(ctx, mediaType, match.MediaID, ev.Title, mediaFile,
-				fmt.Errorf("import rejected: %s (cannot create review: %v)", message, err))
+				fmt.Errorf("import rejected: %s (cannot create review: %w)", message, err))
 		}
 	}
 	_ = p.decisionLog.Log(ctx, ImportDecision{
