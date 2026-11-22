@@ -10,9 +10,15 @@ vi.mock("@/hooks/use-auth", () => ({
 }));
 
 const fetchMock = vi.fn<typeof fetch>();
-let settings: { channel: string; preleaseOptIn: boolean; autoInstall: boolean };
+let settings: {
+  channel: string;
+  preleaseOptIn: boolean;
+  autoInstall: boolean;
+  postgresDedicatedAck: boolean;
+};
 let notice: string;
 let canInstall: boolean;
+let isPostgres: boolean;
 
 function show() {
   const client = new QueryClient({
@@ -27,9 +33,15 @@ function show() {
 
 beforeEach(() => {
   auth.role = "admin";
-  settings = { channel: "stable", preleaseOptIn: false, autoInstall: false };
+  settings = {
+    channel: "stable",
+    preleaseOptIn: false,
+    autoInstall: false,
+    postgresDedicatedAck: false,
+  };
   notice = "Automatic installation unavailable: no helper or safe rollback.";
   canInstall = false;
+  isPostgres = false;
   fetchMock.mockReset();
   fetchMock.mockImplementation(async (input, init) => {
     if (init?.method === "PUT") {
@@ -48,6 +60,7 @@ beforeEach(() => {
     return Response.json({
       settings,
       canAutoInstall: canInstall,
+      isPostgres,
       verificationConfigured: canInstall,
       installationNotice: notice,
     });
@@ -82,17 +95,18 @@ describe("update settings", () => {
     );
     expect(screen.getByRole("alert")).toHaveTextContent("may cause data loss");
     expect(
-      screen.getByRole("button", { name: "Save update channel" }),
+      screen.getByRole("button", { name: "Save update settings" }),
     ).toBeDisabled();
     await user.click(screen.getByLabelText(/I understand the risks/));
     await user.click(
-      screen.getByRole("button", { name: "Save update channel" }),
+      screen.getByRole("button", { name: "Save update settings" }),
     );
     await waitFor(() =>
       expect(settings).toEqual({
         channel: "prelease",
         preleaseOptIn: true,
         autoInstall: false,
+        postgresDedicatedAck: false,
       }),
     );
     app.unmount();
@@ -107,22 +121,36 @@ describe("update settings", () => {
     ).toBeDisabled();
     await user.selectOptions(screen.getByLabelText("Update channel"), "stable");
     await user.click(
-      screen.getByRole("button", { name: "Save update channel" }),
+      screen.getByRole("button", { name: "Save update settings" }),
     );
     await waitFor(() =>
       expect(settings).toEqual({
         channel: "stable",
         preleaseOptIn: false,
         autoInstall: false,
+        postgresDedicatedAck: false,
       }),
     );
   });
 
   it("shows PostgreSQL manual-update fallback and handles unverified checks", async () => {
+    isPostgres = true;
     notice = "PostgreSQL installations are manual-update only.";
     const user = userEvent.setup();
     show();
     expect(await screen.findByText(notice)).toBeInTheDocument();
+    const acknowledgement = screen.getByLabelText(
+      /I confirm this local PostgreSQL database is dedicated to Loom/,
+    );
+    expect(acknowledgement).not.toBeChecked();
+    await user.click(acknowledgement);
+    await user.click(
+      screen.getByRole("button", { name: "Save update settings" }),
+    );
+    await waitFor(() => expect(settings.postgresDedicatedAck).toBe(true));
+    expect(
+      screen.getByLabelText("Automatically install native updates"),
+    ).toBeDisabled();
     await user.click(screen.getByRole("button", { name: "Check for updates" }));
     expect(
       await screen.findByText("No verified update information is available."),
@@ -149,7 +177,7 @@ describe("update settings", () => {
     await user.click(auto);
     expect(settings.autoInstall).toBe(false);
     await user.click(
-      screen.getByRole("button", { name: "Save update channel" }),
+      screen.getByRole("button", { name: "Save update settings" }),
     );
     await waitFor(() => expect(settings.autoInstall).toBe(true));
   });

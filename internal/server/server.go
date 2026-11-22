@@ -281,6 +281,12 @@ func New(cfg *config.Config, wiring Wiring) (*Server, error) {
 
 	updateSvc := updates.NewService(wiring.DB, buildinfo.Version, buildinfo.Commit)
 	updateSvc.ConfigureInstallation(func() (bool, string) { return updater.Capability(nativeBinding(cfg)) })
+	ackCtx, cancelAck := context.WithTimeout(context.Background(), 10*time.Second)
+	err := updateSvc.InitializePostgresAcknowledgement(ackCtx)
+	cancelAck()
+	if err != nil {
+		return nil, fmt.Errorf("server: initialize PostgreSQL update acknowledgement: %w", err)
+	}
 	if wiring.NotificationSvc != nil {
 		updateSvc.ConfigureAlerts(updates.NewAlerts(wiring.DB, wiring.Bus))
 	}

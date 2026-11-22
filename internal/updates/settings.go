@@ -16,6 +16,15 @@ import (
 
 // Settings records the administrator's channel consent, not installation authority.
 type Settings struct {
+	Channel              string `json:"channel"`
+	PreleaseOptIn        bool   `json:"preleaseOptIn"`
+	AutoInstall          bool   `json:"autoInstall"`
+	PostgresDedicatedAck bool   `json:"postgresDedicatedAck"`
+}
+
+// Keep the pre-existing settings record compatible with old binaries. The
+// PostgreSQL acknowledgement is stored separately with its identity binding.
+type storedSettings struct {
 	Channel       string `json:"channel"`
 	PreleaseOptIn bool   `json:"preleaseOptIn"`
 	AutoInstall   bool   `json:"autoInstall"`
@@ -35,7 +44,7 @@ func (s Settings) validate() error {
 // A writable directory or runtime preference never establishes eligibility.
 func InstallationUnavailable(engine storage.Engine) string {
 	if engine == storage.EnginePostgres {
-		return "PostgreSQL installations are manual-update only. Update notices do not enable automatic installation."
+		return "PostgreSQL automatic installation is disabled pending completion and live validation of the updater candidate. Update notices remain available."
 	}
 	return "Automatic installation requires an installer-managed Linux/systemd or macOS/launchd SQLite service and its enrolled privileged helper. Other native installs remain manual-only; containers and Kubernetes use image/orchestration updates."
 }
@@ -84,17 +93,24 @@ func (s *Service) get(ctx context.Context) (Settings, error) {
 	settings := Settings{Channel: "stable"}
 	var raw string
 	err := s.db.DB().QueryRowContext(ctx, `SELECT value FROM schema_meta WHERE key = 'updates.settings'`).Scan(&raw)
-	if errors.Is(err, sql.ErrNoRows) {
-		return settings, nil
-	}
-	if err != nil {
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return settings, err
 	}
-	if err := decodeStrict([]byte(raw), &settings); err != nil {
-		return Settings{}, err
+	if err == nil {
+		if err := decodeStrict([]byte(raw), &settings); err != nil {
+			return Settings{}, err
+		}
+		if err := settings.validate(); err != nil {
+			return Settings{}, err
+		}
 	}
-	if err := settings.validate(); err != nil {
-		return Settings{}, err
+	// Ignore any acknowledgement embedded in the legacy settings record.
+	settings.PostgresDedicatedAck = false
+	if s.db.Engine() == storage.EnginePostgres {
+		settings.PostgresDedicatedAck, err = s.postgresAcknowledged(ctx)
+		if err != nil {
+			return Settings{}, err
+		}
 	}
 	// A DB edit or a setting from a future build cannot enable installation.
 	if ok, _ := s.installation(); !ok {
@@ -112,14 +128,44 @@ func (s *Service) set(ctx context.Context, settings Settings) error {
 			return errors.New(reason)
 		}
 	}
-	raw, err := json.Marshal(settings)
+	var ackRaw []byte
+	if settings.PostgresDedicatedAck {
+		fingerprint, ok := s.postgresIdentityFingerprint()
+		if !ok {
+			return errPostgresIdentityUnavailable
+		}
+		var err error
+		ackRaw, err = json.Marshal(postgresAckRecord{Acknowledged: true, Identity: fingerprint})
+		if err != nil {
+			return err
+		}
+	}
+	raw, err := json.Marshal(storedSettings{Channel: settings.Channel, PreleaseOptIn: settings.PreleaseOptIn, AutoInstall: settings.AutoInstall})
 	if err != nil {
 		return err
 	}
-	_, err = s.db.DB().ExecContext(ctx, storage.RebindQuery(
-		`INSERT INTO schema_meta (key, value) VALUES ('updates.settings', ?)
-		 ON CONFLICT(key) DO UPDATE SET value = excluded.value`, s.db.Engine() == storage.EnginePostgres), string(raw))
-	return err
+	tx, err := s.db.DB().BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	_, err = tx.ExecContext(ctx,
+		`INSERT INTO schema_meta (key, value) VALUES ('updates.settings', $1)
+		 ON CONFLICT(key) DO UPDATE SET value = excluded.value`, string(raw))
+	if err != nil {
+		return err
+	}
+	if settings.PostgresDedicatedAck {
+		_, err = tx.ExecContext(ctx,
+			`INSERT INTO schema_meta (key, value) VALUES ('updates.postgresDedicatedAck', $1)
+			 ON CONFLICT(key) DO UPDATE SET value = excluded.value`, string(ackRaw))
+	} else {
+		_, err = tx.ExecContext(ctx, `DELETE FROM schema_meta WHERE key = 'updates.postgresDedicatedAck'`)
+	}
+	if err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // Router requires administrator authorization on all update settings and checks.
@@ -147,6 +193,7 @@ func (s *Service) Router(admin func(http.Handler) http.Handler) http.Handler {
 			"settings": settings, "canAutoInstall": canInstall,
 			"installationNotice":     reason,
 			"verificationConfigured": len(s.checker.keys) != 0,
+			"isPostgres":             s.db.Engine() == storage.EnginePostgres,
 		})
 	})
 	r.Put("/", func(w http.ResponseWriter, r *http.Request) {
@@ -169,6 +216,10 @@ func (s *Service) Router(admin func(http.Handler) http.Handler) http.Handler {
 			}
 		}
 		if err := s.set(r.Context(), settings); err != nil {
+			if errors.Is(err, errPostgresIdentityUnavailable) {
+				http.Error(w, err.Error(), http.StatusConflict)
+				return
+			}
 			http.Error(w, "could not save update settings", http.StatusInternalServerError)
 			return
 		}

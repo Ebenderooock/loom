@@ -6,13 +6,16 @@ All update routes require an authenticated administrator, including reads and
 network checks. Missing auth wiring fails closed.
 
 - `GET /api/v1/updates`: saved `settings` (`channel`, `preleaseOptIn`,
-  `autoInstall`), effective `canAutoInstall`, `installationNotice`, and
+  `autoInstall`, `postgresDedicatedAck`), `isPostgres`, effective `canAutoInstall`, `installationNotice`, and
   `verificationConfigured`.
-- `PUT /api/v1/updates`: replace preferences with the three settings fields.
+- `PUT /api/v1/updates`: replace preferences with the settings fields.
   Stable is the default. Prelease requires `preleaseOptIn: true`; returning
   to Stable requires clearing it. Invalid settings return 400.
   `autoInstall: true` requires an enrolled, eligible Linux/systemd or macOS/launchd SQLite helper
   and a compiled publisher key; otherwise it returns 409. Storage failures return 500.
+  PostgreSQL administrators may separately acknowledge a dedicated database;
+  this does not enable automatic installation. The database-local record can
+  revive after switching away and back and cannot yet authorize an update.
 - `POST /api/v1/updates/check`: demand-driven, cached signed release notice for
   the **saved** channel. Returns `currentVersion`, optional `version`, `tag`, `sourceSha`,
   `available`, `verified`, `url`, `checkedAt`, `nextCheck`, and optional

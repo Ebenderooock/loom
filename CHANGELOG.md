@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Add a production-disabled PostgreSQL updater candidate for identity,
+  preflight and snapshot orchestration, with a separate dedicated-database
+  acknowledgement. Cross-database consent invalidation, fencing, trusted tool
+  execution and rollback remain unfinished; PostgreSQL automatic installation
+  stays disabled.
 - Add opt-in notifications when the running Loom version changes and when a
   verified update check discovers a new release. Provision the publisher public
   trust root; release alerts also require matching signed manifests.

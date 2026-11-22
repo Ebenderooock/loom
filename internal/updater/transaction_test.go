@@ -44,6 +44,7 @@ type fakeControl struct {
 	paths                                         layout
 	current                                       Identity
 	target                                        Identity
+	engine                                        string
 	running                                       bool
 	failHealth, failStart, failSnapshot, failStop bool
 	starts, stops                                 int
@@ -53,7 +54,11 @@ type fakeControl struct {
 
 func (s *fakeControl) validate(context.Context) error { return nil }
 func (s *fakeControl) runtime(context.Context) (Runtime, error) {
-	return Runtime{Identity: s.current, Native: true, Ready: true, Engine: "sqlite", Settings: updates.Settings{Channel: "stable", AutoInstall: true}}, nil
+	engine := s.engine
+	if engine == "" {
+		engine = "sqlite"
+	}
+	return Runtime{Identity: s.current, Native: true, Ready: true, Engine: engine, Settings: updates.Settings{Channel: "stable", AutoInstall: true}}, nil
 }
 func (s *fakeControl) quiescent(context.Context) error {
 	if s.running {
@@ -303,7 +308,7 @@ func TestRollbackRestoresBinarySQLiteAndAllConfig(t *testing.T) {
 }
 
 func TestFailuresBeforeInstallDoNotReplaceBinary(t *testing.T) {
-	for _, failure := range []string{"download", "stop", "snapshot", "consent", "postgres", "path", "symlink", "hardlink"} {
+	for _, failure := range []string{"download", "stop", "snapshot", "consent", "path", "symlink", "hardlink"} {
 		t.Run(failure, func(t *testing.T) {
 			e, s, p := testEngine(t)
 			switch failure {
@@ -313,7 +318,7 @@ func TestFailuresBeforeInstallDoNotReplaceBinary(t *testing.T) {
 				s.failStop = true
 			case "snapshot":
 				s.failSnapshot = true
-			case "consent", "postgres":
+			case "consent":
 				db, _ := sql.Open("sqlite", filepath.Join(e.paths.data, "loom.db"))
 				_, _ = db.Exec(`UPDATE schema_meta SET value='{"channel":"stable","autoInstall":false}'`)
 				_ = db.Close()
@@ -342,6 +347,20 @@ func TestFailuresBeforeInstallDoNotReplaceBinary(t *testing.T) {
 				t.Fatal("published partial snapshot")
 			}
 		})
+	}
+}
+
+func TestPostgresRuntimeFailsClosed(t *testing.T) {
+	e, s, _ := testEngine(t)
+	s.engine = "postgres"
+	if err := e.run(context.Background()); err == nil {
+		t.Fatal("PostgreSQL runtime accepted while automatic installation is disabled")
+	}
+	if !s.running || s.stops != 0 {
+		t.Fatal("unsupported runtime stopped the service")
+	}
+	if _, err := os.Stat(filepath.Join(e.paths.state, "journal.json")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatal("unsupported runtime published a journal")
 	}
 }
 

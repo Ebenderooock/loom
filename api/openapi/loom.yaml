@@ -283,7 +283,7 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [settings, canAutoInstall, installationNotice, verificationConfigured]
+                required: [settings, canAutoInstall, installationNotice, verificationConfigured, isPostgres]
                 properties:
                   settings:
                     $ref: "#/components/schemas/UpdateSettings"
@@ -295,6 +295,9 @@ paths:
                   verificationConfigured:
                     type: boolean
                     description: Whether the binary contains a publisher public trust root
+                  isPostgres:
+                    type: boolean
+                    description: Whether the effective storage engine is PostgreSQL
         "401":
           description: Authentication required
         "403":
@@ -4648,6 +4651,10 @@ components:
           type: boolean
           default: false
           description: True requires eligible enrolled Linux/systemd or macOS/launchd SQLite and a compiled publisher key; otherwise 409
+        postgresDedicatedAck:
+          type: boolean
+          default: false
+          description: Acknowledges the current PostgreSQL database is dedicated to Loom; does not enable automatic installation
     UpdateNotice:
       type: object
       required: [currentVersion, available, verified, url, checkedAt, nextCheck]

@@ -80,6 +80,10 @@ storage:
 - Connection pool defaults follow `database/sql` (tunable knobs land
   alongside HA work in Phase 11).
 - TLS is whatever the DSN says — `sslmode=require` for production.
+- Native automatic updates remain disabled for PostgreSQL, including dedicated
+  local databases. Shared, HA, split-mode and remote databases must remain
+  manual-only. A production-disabled candidate is described in
+  [ADR-0036](adr/0036-postgresql-update-candidate.md).
 
 ## Schema migrations
 

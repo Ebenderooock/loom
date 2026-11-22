@@ -9,16 +9,41 @@ import (
 	"strings"
 	"time"
 
-	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/stdlib"
 
 	"github.com/ebenderooock/loom/internal/kernel/config"
 )
 
-const pgDriverName = "pgx"
+// PostgresIdentity identifies the configured endpoint without credentials.
+// It describes the connection configuration, not the server's physical host.
+type PostgresIdentity struct {
+	Host     string
+	Port     uint16
+	Database string
+	User     string
+}
 
 type postgresDB struct {
-	raw    *sql.DB
-	logger *slog.Logger
+	raw        *sql.DB
+	logger     *slog.Logger
+	identity   PostgresIdentity
+	identityOK bool
+}
+
+// postgresConnectionIdentity rejects failover endpoints: consent for one
+// endpoint cannot authorize a different server selected by the driver.
+func postgresConnectionIdentity(c *pgx.ConnConfig) (PostgresIdentity, bool) {
+	id := PostgresIdentity{Host: c.Host, Port: c.Port, Database: c.Database, User: c.User}
+	if id.Host == "" || id.Port == 0 || id.Database == "" || id.User == "" {
+		return PostgresIdentity{}, false
+	}
+	for _, fallback := range c.Fallbacks {
+		if fallback.Host != id.Host || fallback.Port != id.Port {
+			return PostgresIdentity{}, false
+		}
+	}
+	return id, true
 }
 
 func openPostgres(ctx context.Context, cfg config.PostgresConfig, logger *slog.Logger) (DB, error) {
@@ -27,10 +52,14 @@ func openPostgres(ctx context.Context, cfg config.PostgresConfig, logger *slog.L
 		return nil, errors.New("postgres: storage.postgres.dsn is required when storage.engine=postgres")
 	}
 
-	db, err := sql.Open(pgDriverName, dsn)
+	// Freeze pgx's environment/service-file resolution once, so every pooled
+	// connection and the acknowledgement use the same effective identity.
+	connConfig, err := pgx.ParseConfig(dsn)
 	if err != nil {
-		return nil, fmt.Errorf("postgres: open: %w", err)
+		return nil, errors.New("postgres: invalid connection configuration")
 	}
+	identity, identityOK := postgresConnectionIdentity(connConfig)
+	db := stdlib.OpenDB(*connConfig)
 	db.SetMaxOpenConns(25)
 	db.SetMaxIdleConns(5)
 	db.SetConnMaxLifetime(30 * time.Minute)
@@ -43,7 +72,7 @@ func openPostgres(ctx context.Context, cfg config.PostgresConfig, logger *slog.L
 	}
 
 	logger.Info("storage opened", "engine", "postgres")
-	return &postgresDB{raw: db, logger: logger}, nil
+	return &postgresDB{raw: db, logger: logger, identity: identity, identityOK: identityOK}, nil
 }
 
 func (p *postgresDB) DB() *sql.DB    { return p.raw }
@@ -55,3 +84,6 @@ func (p *postgresDB) Migrate(ctx context.Context) error {
 
 func (p *postgresDB) Ping(ctx context.Context) error { return p.raw.PingContext(ctx) }
 func (p *postgresDB) Close() error                   { return p.raw.Close() }
+func (p *postgresDB) PostgresIdentity() (PostgresIdentity, bool) {
+	return p.identity, p.identityOK
+}

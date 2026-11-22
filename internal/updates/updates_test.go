@@ -404,7 +404,7 @@ func TestSettingsDefaultsPersistenceAndFailClosed(t *testing.T) {
 			t.Fatal("missing installation refusal")
 		}
 	}
-	if !strings.Contains(InstallationUnavailable(storage.EnginePostgres), "manual-update only") {
+	if !strings.Contains(InstallationUnavailable(storage.EnginePostgres), "disabled") {
 		t.Fatal("missing PostgreSQL fallback")
 	}
 }
@@ -450,13 +450,13 @@ func TestPostgresIsNoticeOnly(t *testing.T) {
 	router := s.Router(func(next http.Handler) http.Handler { return next })
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, httptest.NewRequest("GET", "/", nil))
-	if w.Code != 200 || !strings.Contains(w.Body.String(), "manual-update only") ||
+	if w.Code != 200 || !strings.Contains(w.Body.String(), "disabled") ||
 		!strings.Contains(w.Body.String(), `"canAutoInstall":false`) {
 		t.Fatalf("PostgreSQL status = %d %s", w.Code, w.Body.String())
 	}
 	w = httptest.NewRecorder()
 	router.ServeHTTP(w, httptest.NewRequest("PUT", "/", strings.NewReader(`{"channel":"stable","autoInstall":true}`)))
-	if w.Code != 409 || !strings.Contains(w.Body.String(), "manual-update only") {
+	if w.Code != 409 || !strings.Contains(w.Body.String(), "disabled") {
 		t.Fatalf("PostgreSQL auto-install = %d %s", w.Code, w.Body.String())
 	}
 	c, _ := fixtureChecker(t, "v1.2.3", "stable")

@@ -16,6 +16,16 @@ See [Windows candidate and activation blockers](windows.md#windows-updater-candi
 Containers and Kubernetes continue using image/orchestration updates. PostgreSQL
 can receive signed notices but cannot enable automatic installation.
 
+A build-tagged PostgreSQL candidate contains identity, preflight and snapshot
+orchestration only; it is not connected to the updater and does not enable
+installation. Its missing connection fence, trusted tool execution, database
+recreation and crash recovery are activation blockers. See
+[ADR-0036](adr/0036-postgresql-update-candidate.md).
+The settings page can record a dedicated-database acknowledgement for the
+current connection, but this does not enable installation. Because the record is
+stored in the database itself, switching databases and then switching back can
+revive an old acknowledgement; it must not be used to authorize an update.
+
 **This is not yet a production-ready, all-platform feature.** The production
 publisher public key is compiled from `internal/updates/trusted-keys.json`;
 verified notices require matching signed manifests from the publisher.
