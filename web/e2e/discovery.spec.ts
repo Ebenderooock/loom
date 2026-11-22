@@ -5,6 +5,8 @@ import {
   SAMPLE_LIBRARY,
   SAMPLE_QUALITY_PROFILE,
 } from "./helpers/mock-api";
+import { DEFAULT_APPEARANCE } from "../src/lib/appearance-api";
+import type { CollectionCover } from "../src/lib/collections-api";
 
 const source = {
   warnings: [],
@@ -171,7 +173,10 @@ test("suggestions need no Import Lists and require an explicit add", async ({
   ).toBeVisible();
   await expect(
     page.getByText("You have 2 movies starring Ryan Reynolds"),
-  ).toBeVisible();
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Add to library", exact: true }),
+  ).toHaveCount(0);
   expect(writes).toEqual([]);
   expect(listRequests).toEqual([]);
   expect(
@@ -369,9 +374,7 @@ test("standalone mixed collections open real library management and shared exter
   await expect(
     page.getByRole("tab", { name: "Collections", exact: true }),
   ).toHaveCount(0);
-  await page
-    .getByRole("link", { name: "View collection", exact: true })
-    .click();
+  await page.goto("/collections?tmdb=10");
   await expect(
     page.getByRole("heading", { name: "Adventure collection" }),
   ).toBeVisible();
@@ -417,6 +420,7 @@ test("standalone mixed collections open real library management and shared exter
     path: testInfo.outputPath("collection.png"),
     fullPage: true,
   });
+
   await page
     .getByRole("button", { name: "All collections", exact: true })
     .click();
@@ -425,6 +429,322 @@ test("standalone mixed collections open real library management and shared exter
   ).toBeVisible();
 });
 
+test("recommendation dismissal is compact, translucent and revealed by hover or focus", async ({
+  page,
+  isMobile,
+}) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/discover");
+  const poster = page.getByRole("button", {
+    name: "View A new adventure",
+    exact: true,
+  });
+  const remove = page.getByRole("button", {
+    name: "Dismiss A new adventure",
+  });
+  await expect(poster).toBeVisible();
+  await expect(remove).toHaveCSS("opacity", isMobile ? "1" : "0");
+  if (!isMobile) {
+    await poster.hover();
+    await expect(remove).toHaveCSS("opacity", "1");
+    await expect(remove).toHaveCSS("width", "28px");
+    await page.getByRole("heading", { name: "What to add next" }).hover();
+    await expect(remove).toHaveCSS("opacity", "0");
+    await poster.focus();
+    await expect(remove).toHaveCSS("opacity", "1");
+    await page.keyboard.press("Tab");
+    await expect(remove).toBeFocused();
+  } else {
+    await expect(remove).toHaveCSS("width", "44px");
+  }
+  await expect(remove).toHaveCSS("background-color", "rgba(0, 0, 0, 0.5)");
+  await page.route("**/api/v1/discover/dismissals", (route) =>
+    route.fulfill({
+      status: 503,
+      json: { error: "Could not dismiss suggestion" },
+    }),
+  );
+  await remove.click();
+  await expect(page.getByRole("alert")).toContainText(
+    "Could not dismiss suggestion",
+  );
+  await expect(poster).toBeVisible();
+});
+
+test("collection mosaics grow square grids while retaining 2:3 posters and empty cells", async ({
+  page,
+}, testInfo) => {
+  for (const count of [2, 4, 6, 7, 10]) {
+    const members = Array.from({ length: count }, (_, index) => ({
+      ...collection.members[0],
+      id: `poster-${index}`,
+      poster_path:
+        count === 7 && index === 1 ? undefined : `/poster-${index}.jpg`,
+    }));
+    await mockGet(page, "collections/", {
+      items: [
+        {
+          ...collection,
+          total: count,
+          members: [
+            ...members,
+            { ...members[0], id: "excluded", excluded: true },
+          ],
+        },
+      ],
+    });
+    await page.goto("/collections");
+    const card = page.getByRole("link", { name: /Adventure collection/ });
+    await expect(card).toBeVisible();
+    const grid = card.locator(".grid");
+    const size = Math.max(2, Math.ceil(Math.sqrt(count)));
+    await expect(grid.locator(":scope > div")).toHaveCount(size * size);
+    await expect(grid.locator("img")).toHaveCount(
+      count === 7 ? count - 1 : count,
+    );
+    const geometry = await grid.evaluate((element) => {
+      const frame = element.parentElement!.getBoundingClientRect();
+      return {
+        frameRatio: frame.width / frame.height,
+        cells: Array.from(element.children, (cell) => {
+          const box = cell.getBoundingClientRect();
+          const img = cell.querySelector("img");
+          return {
+            ratio: box.width / box.height,
+            top: box.top,
+            left: box.left,
+            fits:
+              box.left >= frame.left - 1 &&
+              box.right <= frame.right + 1 &&
+              box.top >= frame.top - 1 &&
+              box.bottom <= frame.bottom + 1,
+            objectFit: img ? getComputedStyle(img).objectFit : null,
+          };
+        }),
+      };
+    });
+    expect(geometry.frameRatio).toBeCloseTo(2 / 3, 2);
+    for (const cell of geometry.cells) {
+      expect(cell.ratio).toBeCloseTo(2 / 3, 2);
+      expect(cell.fits).toBe(true);
+      if (cell.objectFit) expect(cell.objectFit).toBe("contain");
+    }
+    for (let row = 0; row < size; row++) {
+      for (let column = 1; column < size; column++) {
+        expect(geometry.cells[row * size]!.top).toBeCloseTo(
+          geometry.cells[row * size + column]!.top,
+          1,
+        );
+        expect(geometry.cells[row * size + column]!.left).toBeGreaterThan(
+          geometry.cells[row * size + column - 1]!.left,
+        );
+      }
+      if (row > 0)
+        expect(geometry.cells[row * size]!.top).toBeGreaterThan(
+          geometry.cells[(row - 1) * size]!.top,
+        );
+    }
+    if (count === 2) {
+      await expect(
+        grid.locator(":scope > div").nth(2).locator("img"),
+      ).toHaveCount(0);
+      await expect(
+        grid.locator(":scope > div").nth(3).locator("img"),
+      ).toHaveCount(0);
+    }
+    if (count === 7) {
+      await expect(
+        grid.locator(":scope > div").nth(1).locator("img"),
+      ).toHaveCount(0);
+      await expect(
+        grid.locator(":scope > div").nth(2).locator("img"),
+      ).toHaveAttribute("src", /poster-2.jpg/);
+    }
+  }
+  await page.screenshot({
+    path: testInfo.outputPath("collection-mosaic.png"),
+    fullPage: true,
+  });
+});
+
+test("collection cover choices persist across navigation and reload without altering titles", async ({
+  page,
+}, testInfo) => {
+  let cover: CollectionCover = { mode: "mosaic" };
+  let revision = 1;
+  let fail = false;
+  const writes: unknown[] = [];
+  const artworkCollection = () => ({
+    ...collection,
+    revision,
+    cover,
+    sources: [{ ...collection.sources[0], poster_path: "/source-cover.jpg" }],
+    members: collection.members.map((member, index) => ({
+      ...member,
+      poster_path: `/member-${index}.jpg`,
+    })),
+  });
+  await page.route("**/api/v1/collections/", (route) =>
+    route.fulfill({ json: { items: [artworkCollection()] } }),
+  );
+  await page.route("**/api/v1/collections/loom-collection", async (route) => {
+    if (route.request().method() === "PATCH") {
+      const update: { cover: CollectionCover; revision: number } = route
+        .request()
+        .postDataJSON();
+      writes.push(update);
+      if (fail) {
+        await route.fulfill({ status: 500, body: "Cover could not be saved" });
+        return;
+      }
+      expect(update.revision).toBe(revision);
+      cover = update.cover;
+      revision++;
+    }
+    await route.fulfill({ json: artworkCollection() });
+  });
+  for (const choice of [
+    { mode: "source", path: "/source-cover.jpg" },
+    { mode: "member", path: "/member-1.jpg" },
+    { mode: "mosaic", path: undefined },
+  ]) {
+    await page.goto("/collections?id=loom-collection");
+    await page.getByRole("button", { name: "Manage", exact: true }).click();
+    const controls = page.getByRole("region", { name: "Cover", exact: true });
+    await controls.getByLabel("Cover style").selectOption(choice.mode);
+    if (choice.mode === "member")
+      await controls
+        .getByRole("combobox", { name: "Title poster", exact: true })
+        .selectOption("member-2");
+    await controls
+      .getByRole("button", { name: "Save cover", exact: true })
+      .click();
+    await expect(
+      controls.getByRole("button", { name: "Save cover", exact: true }),
+    ).toBeEnabled();
+    await expect.poll(() => cover.mode).toBe(choice.mode);
+    await page.reload();
+    await page.getByRole("button", { name: "Manage", exact: true }).click();
+    await expect(controls.getByLabel("Cover style")).toHaveValue(choice.mode);
+    await page.keyboard.press("Escape");
+    await page
+      .getByRole("button", { name: "All collections", exact: true })
+      .click();
+    const card = page.getByRole("link", { name: /Adventure collection/ });
+    if (choice.path) {
+      await expect(card.locator("img")).toHaveCount(1);
+      await expect(card.locator("img")).toHaveAttribute(
+        "src",
+        new RegExp(choice.path),
+      );
+      await expect(card.locator("img")).toHaveCSS("object-fit", "contain");
+    } else {
+      await expect(card.locator(".grid")).toBeVisible();
+    }
+    await page.screenshot({
+      path: testInfo.outputPath(`collection-cover-${choice.mode}.png`),
+      fullPage: true,
+    });
+  }
+  expect(writes).toHaveLength(3);
+  expect(writes).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        cover: { mode: "source", source_key: "tmdb:collection:10" },
+      }),
+      expect.objectContaining({
+        cover: { mode: "member", member_id: "member-2" },
+      }),
+    ]),
+  );
+  fail = true;
+  await page.goto("/collections?id=loom-collection");
+  await page.getByRole("button", { name: "Manage", exact: true }).click();
+  const controls = page.getByRole("region", { name: "Cover", exact: true });
+  await controls.getByLabel("Cover style").selectOption("source");
+  await controls
+    .getByRole("button", { name: "Save cover", exact: true })
+    .click();
+  await expect(controls.getByRole("alert")).toHaveText(
+    "Cover could not be saved",
+  );
+  expect(cover.mode).toBe("mosaic");
+});
+
+for (const theme of ["light", "dark", "amoled"] as const) {
+  test(`${theme} page sections stay opaque over an undimmed background`, async ({
+    page,
+  }, testInfo) => {
+    const backgroundUrl = "https://images.loom.test/bright.svg";
+    await page.route(backgroundUrl, (route) =>
+      route.fulfill({
+        contentType: "image/svg+xml",
+        body: '<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1000"><path fill="#fff" d="M0 0h1600v1000H0z"/><path fill="#f40" d="M0 1000 1600 0v1000z"/></svg>',
+      }),
+    );
+    await mockGet(page, "appearance", {
+      ...DEFAULT_APPEARANCE,
+      theme,
+      backgroundUrl,
+      backgroundDim: 0,
+    });
+    await mockGet(page, "requests/mine", { data: [] });
+    await mockGet(page, "requests?*", { data: [] });
+    await mockGet(page, "requests/quota", {
+      window_days: 7,
+      movie: { limit: 0, used: 0, remaining: -1, unlimited: true },
+      series: { limit: 0, used: 0, remaining: -1, unlimited: true },
+      music: { limit: 0, used: 0, remaining: -1, unlimited: true },
+    });
+    await mockGet(page, "requests/quota/config", {
+      movie_limit: 0,
+      series_limit: 0,
+      music_limit: 0,
+      window_days: 7,
+    });
+    await mockGet(page, "requests/reconciliation", { data: [] });
+    await mockGet(page, "music/audio-quality-profiles", { data: [] });
+    for (const path of [
+      "/discover",
+      "/collections",
+      "/collections?id=loom-collection",
+      "/requests",
+    ]) {
+      await page.goto(path);
+      await page.waitForLoadState("networkidle");
+      await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
+      const surfaces =
+        path === "/discover"
+          ? page
+              .getByRole("heading", { name: "What to add next" })
+              .locator("../..")
+          : path === "/collections"
+            ? page
+                .getByRole("heading", { name: "Collections", exact: true })
+                .locator("../../..")
+            : path.startsWith("/collections?")
+              ? page.locator("main header")
+              : page.locator("main section");
+      const colors = await surfaces.evaluateAll((elements) =>
+        elements.map((element) => getComputedStyle(element).backgroundColor),
+      );
+      expect(colors.length).toBeGreaterThan(0);
+      for (const color of colors)
+        expect(color).toMatch(/^rgb\(\d+, \d+, \d+\)$/);
+      expect(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth <= innerWidth,
+        ),
+      ).toBe(true);
+      await page.screenshot({
+        path: testInfo.outputPath(
+          `${theme}-${path.split("?")[0]!.slice(1)}${path.includes("?") ? "-detail" : ""}.png`,
+        ),
+        fullPage: true,
+      });
+    }
+  });
+}
 test("collection management stays in one place and never overflows", async ({
   page,
 }, testInfo) => {

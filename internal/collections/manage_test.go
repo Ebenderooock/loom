@@ -97,6 +97,74 @@ func (l fileMovies) ListMovieFiles(_ context.Context, id string) ([]*movies.Movi
 
 func ptr(s string) *string { return &s }
 
+func TestCollectionCoverEditsPersistAndRejectInvalidChoices(t *testing.T) {
+	store, ctx := testStore(t), context.Background()
+	member := title("movie", "1")
+	member.PosterPath = "/member.jpg"
+	excluded := title("movie", "2")
+	excluded.Excluded, excluded.PosterPath = true, "/excluded.jpg"
+	c := saved(t, store, &Collection{
+		Name: "Artwork", Members: []Member{member, excluded, title("movie", "3")},
+		Sources: []Source{{Provider: "tmdb", Kind: "collection", ExternalID: "10", PosterPath: "/source.jpg"}},
+	})
+	router := Router(&Service{store: store})
+	patch := func(cover any, revision int, role string) *httptest.ResponseRecorder {
+		body := map[string]any{"name": c.Name, "overview": c.Overview, "revision": revision}
+		if cover != nil {
+			body["cover"] = cover
+		}
+		data, err := json.Marshal(body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		r := httptest.NewRequest(http.MethodPatch, "/"+c.ID, strings.NewReader(string(data)))
+		r = r.WithContext(auth.WithIdentity(r.Context(), &auth.Identity{UserID: 1, Roles: []string{role}}))
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, r)
+		return w
+	}
+	for _, cover := range []Cover{
+		{Mode: "source", SourceKey: "tmdb:collection:10"},
+		{Mode: "member", MemberID: member.ID},
+		{Mode: "mosaic"},
+	} {
+		w := patch(cover, c.Revision, "admin")
+		if w.Code != http.StatusOK {
+			t.Fatalf("cover edit: %d %s", w.Code, w.Body)
+		}
+		var err error
+		c, err = store.Get(ctx, c.ID)
+		if err != nil || c.Cover == nil || *c.Cover != cover {
+			t.Fatalf("cover not persisted: %#v %v", c, err)
+		}
+	}
+	for _, cover := range []Cover{
+		{Mode: "source", SourceKey: "tmdb:collection:99"},
+		{Mode: "member", MemberID: excluded.ID},
+		{Mode: "member", MemberID: "movie-3"},
+		{Mode: "member", MemberID: "unknown"},
+		{Mode: "mosaic", MemberID: member.ID},
+		{Mode: "invalid"},
+	} {
+		if w := patch(cover, c.Revision, "admin"); w.Code != http.StatusBadRequest {
+			t.Fatalf("invalid cover accepted: %#v %d %s", cover, w.Code, w.Body)
+		}
+	}
+	if w := patch(Cover{Mode: "member", MemberID: member.ID}, c.Revision-1, "admin"); w.Code != http.StatusConflict {
+		t.Fatalf("stale cover edit: %d", w.Code)
+	}
+	if w := patch(Cover{Mode: "member", MemberID: member.ID}, c.Revision, "user"); w.Code != http.StatusForbidden {
+		t.Fatalf("non-admin cover edit: %d", w.Code)
+	}
+	if w := patch(nil, c.Revision, "admin"); w.Code != http.StatusOK {
+		t.Fatalf("details edit: %d %s", w.Code, w.Body)
+	}
+	got, err := store.Get(ctx, c.ID)
+	if err != nil || got.Cover == nil || got.Cover.Mode != "mosaic" || got.Revision != c.Revision+1 {
+		t.Fatalf("omitted cover or failed write altered stored choice: %#v %v", got, err)
+	}
+}
+
 // fixtureService builds a reproducible multi-collection library: two
 // overlapping collections plus movies/shows covering every eligibility state.
 func fixtureService(t *testing.T) (*Service, *fakeActions, *Collection, *Collection) {
