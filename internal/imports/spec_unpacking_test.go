@@ -60,6 +60,7 @@ func TestUnpackingSpecDistinguishesNumberedTitlesFromPartialFiles(t *testing.T) 
 		blocked bool
 	}{
 		{"/downloads/The.Twilight.Saga.Breaking.Dawn.-.Part.1.2011.2160p.4K.BluRay.x265.10bit.AAC5.1-[YTS.MX].mkv", false},
+		{"/downloads/The.Twilight.Saga.Breaking.Dawn.-.Part.2.2012.2160p.4K.BluRay.x265.10bit.AAC5.1-[YTS.MX].mkv", false},
 		{"/downloads/Harry.Potter.And.The.Deathly.Hallows.Part.2.2011.1080p.mkv", false},
 		{"/downloads/Film.PART.01.mkv", false},
 		{"/downloads/Film.Part.1.Part.2.mkv", false},
