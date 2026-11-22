@@ -12,6 +12,7 @@ import (
 )
 
 // Alerts publishes update notifications and records which versions have been seen.
+// Both supported database drivers accept the $1-style query parameters below.
 type Alerts struct {
 	db  storage.DB
 	bus eventbus.Bus
@@ -22,18 +23,14 @@ func NewAlerts(db storage.DB, bus eventbus.Bus) *Alerts {
 	return &Alerts{db: db, bus: bus}
 }
 
-func (a *Alerts) query(query string) string {
-	return storage.RebindQuery(query, a.db.Engine() == storage.EnginePostgres)
-}
-
 // Started records the running version; the first observed version is a baseline.
 func (a *Alerts) Started(ctx context.Context, current string) error {
 	if current == "" {
 		return errors.New("cannot record an empty application version")
 	}
 	const key = "updates.last_seen_version"
-	result, err := a.db.DB().ExecContext(ctx, a.query(
-		`INSERT INTO schema_meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO NOTHING`), key, current)
+	result, err := a.db.DB().ExecContext(ctx,
+		`INSERT INTO schema_meta (key, value) VALUES ($1, $2) ON CONFLICT(key) DO NOTHING`, key, current)
 	if err != nil {
 		return fmt.Errorf("record initial version: %w", err)
 	}
@@ -46,15 +43,15 @@ func (a *Alerts) Started(ctx context.Context, current string) error {
 	}
 	for {
 		var previous string
-		err = a.db.DB().QueryRowContext(ctx, a.query(`SELECT value FROM schema_meta WHERE key = ?`), key).Scan(&previous)
+		err = a.db.DB().QueryRowContext(ctx, `SELECT value FROM schema_meta WHERE key = $1`, key).Scan(&previous)
 		if err != nil {
 			return fmt.Errorf("read previous version: %w", err)
 		}
 		if previous == current {
 			return nil
 		}
-		result, err = a.db.DB().ExecContext(ctx, a.query(
-			`UPDATE schema_meta SET value = ? WHERE key = ? AND value = ?`), current, key, previous)
+		result, err = a.db.DB().ExecContext(ctx,
+			`UPDATE schema_meta SET value = $1 WHERE key = $2 AND value = $3`, current, key, previous)
 		if err != nil {
 			return fmt.Errorf("record running version: %w", err)
 		}
@@ -71,8 +68,8 @@ func (a *Alerts) Started(ctx context.Context, current string) error {
 			Data: map[string]any{"title": message},
 		})
 		if err != nil {
-			_, rollbackErr := a.db.DB().ExecContext(ctx, a.query(
-				`UPDATE schema_meta SET value = ? WHERE key = ? AND value = ?`), previous, key, current)
+			_, rollbackErr := a.db.DB().ExecContext(ctx,
+				`UPDATE schema_meta SET value = $1 WHERE key = $2 AND value = $3`, previous, key, current)
 			return errors.Join(fmt.Errorf("publish application update: %w", err), rollbackErr)
 		}
 		return nil
@@ -88,8 +85,8 @@ func (a *Alerts) Available(ctx context.Context, notice Notice) error {
 		return errors.New("verified update notice has an invalid version")
 	}
 	key := "updates.notified_version." + strings.TrimPrefix(notice.Version, "v")
-	result, err := a.db.DB().ExecContext(ctx, a.query(
-		`INSERT INTO schema_meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO NOTHING`), key, notice.Version)
+	result, err := a.db.DB().ExecContext(ctx,
+		`INSERT INTO schema_meta (key, value) VALUES ($1, $2) ON CONFLICT(key) DO NOTHING`, key, notice.Version)
 	if err != nil {
 		return fmt.Errorf("record available version: %w", err)
 	}
@@ -106,8 +103,8 @@ func (a *Alerts) Available(ctx context.Context, notice Notice) error {
 		Data: map[string]any{"title": message},
 	})
 	if err != nil {
-		_, rollbackErr := a.db.DB().ExecContext(ctx, a.query(
-			`DELETE FROM schema_meta WHERE key = ?`), key)
+		_, rollbackErr := a.db.DB().ExecContext(ctx,
+			`DELETE FROM schema_meta WHERE key = $1`, key)
 		return errors.Join(fmt.Errorf("publish available update: %w", err), rollbackErr)
 	}
 	return nil

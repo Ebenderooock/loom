@@ -7,8 +7,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/ebenderooock/loom/internal/kernel/config"
 	"github.com/pressly/goose/v3"
+
+	"github.com/ebenderooock/loom/internal/kernel/config"
 )
 
 func TestNotificationUpdateAvailableMigration(t *testing.T) {
