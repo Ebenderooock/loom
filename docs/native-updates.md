@@ -16,16 +16,16 @@ See [Windows candidate and activation blockers](windows.md#windows-updater-candi
 Containers and Kubernetes continue using image/orchestration updates. PostgreSQL
 can receive signed notices but cannot enable automatic installation.
 
-**This is not yet a production-ready, all-platform feature.** No production
-publisher public key has been supplied: `internal/updates/trusted-keys.json`
-is intentionally empty, so this source build cannot verify notices or enable
-installation. Unit/transaction tests and an isolated Linux test of the actual
+**This is not yet a production-ready, all-platform feature.** The production
+publisher public key is compiled from `internal/updates/trusted-keys.json`;
+verified notices require matching signed manifests from the publisher.
+Unit/transaction tests and an isolated Linux test of the actual
 privilege-dropped WAL snapshot have passed. Native macOS tests cover descriptor
 ACL inspection, authenticated startup IPC, process-image checks and a consistent
 WAL snapshot, but **not privileged launchd enrollment, credential dropping,
 upgrade/reboot recovery or an Intel runtime**. Live systemd recovery also remains
 unvalidated. Keep production installations manual-only until the relevant native
-acceptance tests pass and a reviewed production trust-root build is provisioned.
+acceptance tests pass and matching publisher releases are available.
 Do not substitute test keys.
 
 The Windows candidate has not run on a Windows kernel in this development
@@ -35,7 +35,7 @@ that a stock Windows host can satisfy that quiescence check. SCM boot/crash
 ordering, restricted-token WAL snapshots, full SACL-preserving replacement and
 volume-flush/power-failure durability also need native acceptance. Cross-builds
 and added Windows CI unit tests cannot establish those guarantees. The default
-build deliberately rejects Windows enrollment even if a trust root is added.
+build deliberately rejects Windows enrollment.
 
 ## Linux installation boundary
 
@@ -141,7 +141,7 @@ executable-directory ACL is relaxed.
 Windows archives deliberately contain no updater helper. The installer continues
 to run Loom as LocalService with read/execute-only access to the install directory;
 only config/data/logs are service-writable. Signed notices remain possible once
-public keys are provisioned, but the API/UI cannot enable automatic installation.
+matching signed manifests are published, but the API/UI cannot enable automatic installation.
 
 An isolated candidate now implements these boundaries using a dedicated virtual
 account, not shared LocalService: descriptor-preserving NTFS ZIP/`.exe`
@@ -233,6 +233,16 @@ share a per-channel one-hour cache, including errors; ETags refresh metadata.
 GitHub rate-limit delays are honored up to 24 hours. Missing trust roots make
 no network requests. Checks download only metadata, never a binary.
 
+Notification connections can opt in separately to an instance-updated alert
+and an update-available alert. The first silently records the running version
+on first startup and alerts on subsequent version changes, regardless of how
+Loom was updated.
+The second alerts once per version when a demand-driven check finds a newer,
+verified release for the selected channel. It requires the compiled publisher
+trust root and matching signed manifests; unsigned GitHub metadata is not used.
+The version history is stored in the database. Delivery uses the existing
+best-effort notification system.
+
 ## Remaining isolated publisher work
 
 Source CI builds seven native Prelease targets as unsigned Actions artifacts;
@@ -246,8 +256,8 @@ The separate `Ebenderooock/loom-publisher` repository must:
   and matching source ref in main binaries (`internal/buildinfo.SourceRef`).
 - Package matching Linux/macOS helpers and canonical service files. The main and
   helper must contain the same owner-provisioned public trust roots.
-- Keep the private signing key exclusively in the isolated publisher. Supply the
-  public key for a reviewed source change; support rotation with overlapping keys.
+- Keep the private signing key exclusively in the isolated publisher. Support
+  public key rotation through reviewed source changes with overlapping keys.
 - Validate end-to-end live systemd/launchd enrollment, update, rollback and
   interrupted-boot paths before enabling production enrollment.
 

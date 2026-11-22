@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Add opt-in notifications when the running Loom version changes and when a
+  verified update check discovers a new release. Provision the publisher public
+  trust root; release alerts also require matching signed manifests.
 - Add per-entry and selected import-queue dismissal plus Clear inactive. Keep
   queued/running/retrying work, media files, downloads and import history intact.
 - Add matcher-backed custom quality tiers with per-profile allowance, ordering,
@@ -24,7 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   health-checked replacement, rollback and interrupted-update recovery.
   macOS gates startup on authenticated recovery authorization before database
   access. Windows and PostgreSQL remain manual-only. Production activation still
-  requires the publisher public key and privileged native upgrade/reboot validation.
+  requires signed publisher releases and privileged native upgrade/reboot validation.
 - Add an isolated, production-disabled Windows updater candidate: dedicated SCM
   virtual account, SYSTEM helper, protected pre-database event/job gate,
   restricted SQLite snapshot execution, NTFS descriptor-preserving transactions

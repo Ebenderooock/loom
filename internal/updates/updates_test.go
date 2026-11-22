@@ -473,6 +473,7 @@ func TestEligibleSQLiteRequiresExplicitInstallationConsent(t *testing.T) {
 	s := testService(t)
 	s.ConfigureInstallation(func() (bool, string) { return true, "enrolled Linux/systemd helper" })
 	// A helper without a publisher key is not enough.
+	s.checker.keys = nil
 	if err := s.set(context.Background(), Settings{Channel: "stable", AutoInstall: true}); err == nil {
 		t.Fatal("enabled without signing key")
 	}

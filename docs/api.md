@@ -21,9 +21,20 @@ network checks. Missing auth wiring fails closed.
 
 These are notice/settings endpoints, not an update executor; no apply endpoint
 exists. See [native updates](native-updates.md) for signature and cache behavior,
-the unprovisioned signing key, and the bounded Linux snapshot/helper safety gates.
+the provisioned production public trust key, and the bounded Linux
+snapshot/helper safety gates. Signed manifests are still pending.
 The installed helper has a separate fixed, token-authenticated runtime/readiness
 endpoint; it accepts no update commands, paths or URLs.
+
+## Notification connection update events
+
+Notification connections have separate boolean `on_application_update` and
+`on_update_available` subscriptions. `on_update_available` defaults to false
+and signals a verified new release; it does not report unsigned or unverified
+release information. Set it in `POST /api/v1/notifications` or
+`PUT /api/v1/notifications/{id}`; connection responses include it. Omitting it
+from an update leaves the saved value unchanged. The existing
+`on_application_update` subscription is independent.
 
 ## Provider/account budgets
 

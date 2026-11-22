@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log/slog"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -44,6 +45,7 @@ type Service struct {
 	db         storage.DB
 	checker    *Checker
 	capability func() (bool, string)
+	alerts     *Alerts
 }
 
 // NewService defaults to notices only until an installer capability is bound.
@@ -54,6 +56,9 @@ func NewService(db storage.DB, current string, commit ...string) *Service {
 // ConfigureInstallation binds eligibility to server-owned effective config and
 // installer state, never to request fields or database edits.
 func (s *Service) ConfigureInstallation(check func() (bool, string)) { s.capability = check }
+
+// ConfigureAlerts enables notifications for verified update checks.
+func (s *Service) ConfigureAlerts(alerts *Alerts) { s.alerts = alerts }
 
 func (s *Service) installation() (bool, string) {
 	if s.db.Engine() != storage.EngineSQLite {
@@ -175,7 +180,13 @@ func (s *Service) Router(admin func(http.Handler) http.Handler) http.Handler {
 			http.Error(w, "could not load update settings", http.StatusInternalServerError)
 			return
 		}
-		writeJSON(w, s.checker.Check(r.Context(), settings.Channel))
+		notice := s.checker.Check(r.Context(), settings.Channel)
+		if s.alerts != nil {
+			if err := s.alerts.Available(r.Context(), notice); err != nil {
+				slog.Error("update notification failed", "error", err)
+			}
+		}
+		writeJSON(w, notice)
 	})
 	return r
 }

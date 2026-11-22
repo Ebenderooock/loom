@@ -80,6 +80,8 @@ tags:
       and Radarr compatibility rationale.
   - name: music
     description: Music album editions and audio-quality / metadata profiles.
+  - name: notifications
+    description: Notification connection subscriptions.
 
   - name: discovery
     description: |
@@ -92,6 +94,87 @@ tags:
       manual merges. Reads resolve merged IDs; writes through stale merged IDs
       return 409 and require reloading the canonical collection.
 paths:
+  /api/v1/notifications:
+    get:
+      tags: [notifications]
+      operationId: listNotificationConnections
+      summary: List notification connections
+      responses:
+        "200":
+          description: Notification connections
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/NotificationConnection"
+        "500": { description: Connections unavailable }
+    post:
+      tags: [notifications]
+      operationId: createNotificationConnection
+      summary: Create a notification connection
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: "#/components/schemas/NotificationConnectionInput"
+                - type: object
+                  required: [name, type]
+                  properties:
+                    on_update_available:
+                      type: boolean
+                      default: false
+      responses:
+        "201":
+          description: Created connection
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationConnection"
+        "400": { description: Invalid request }
+        "500": { description: Connection could not be created }
+  /api/v1/notifications/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      tags: [notifications]
+      operationId: getNotificationConnection
+      summary: Read a notification connection
+      responses:
+        "200":
+          description: Notification connection
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationConnection"
+        "404": { description: Connection not found }
+        "500": { description: Connection unavailable }
+    put:
+      tags: [notifications]
+      operationId: updateNotificationConnection
+      summary: Update a notification connection
+      description: Omitted fields retain their existing values.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NotificationConnectionInput"
+      responses:
+        "200":
+          description: Updated connection
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationConnection"
+        "400": { description: Invalid request }
+        "404": { description: Connection not found }
+        "500": { description: Connection could not be updated }
   /api/v1/{collection}/{id}/actions:
     parameters:
       - $ref: "#/components/parameters/TitleActionCollection"
@@ -4482,6 +4565,37 @@ paths:
 
 components:
   schemas:
+    NotificationConnectionInput:
+      type: object
+      description: Connection settings and event subscriptions. On creation, omitted event subscriptions default to false.
+      properties:
+        name: { type: string }
+        type: { type: string, enum: [discord, slack, telegram, email, webhook, gotify, pushover, apprise, ntfy] }
+        enabled: { type: boolean }
+        settings: { type: object, additionalProperties: true }
+        tags: { type: array, items: { type: string } }
+        on_grab: { type: boolean }
+        on_download: { type: boolean }
+        on_upgrade: { type: boolean }
+        on_rename: { type: boolean }
+        on_delete: { type: boolean }
+        on_health_issue: { type: boolean }
+        on_application_update:
+          type: boolean
+          description: Existing application-update event subscription, independent of on_update_available.
+        on_update_available:
+          type: boolean
+          description: Subscribe to verified new release notices. Defaults to false on creation; unverified release information is not reported.
+        on_playback: { type: boolean }
+    NotificationConnection:
+      allOf:
+        - $ref: "#/components/schemas/NotificationConnectionInput"
+        - type: object
+          required: [id, name, type, enabled, settings, on_application_update, on_update_available, created_at, updated_at]
+          properties:
+            id: { type: string }
+            created_at: { type: string, format: date-time }
+            updated_at: { type: string, format: date-time }
     TitleActionAvailability:
       type: object
       required: [folderPath, unavailableReason, rescanUnavailableReason, plexConfigured, plexUnavailableReason, jellyfinConfigured, jellyfinUnavailableReason]

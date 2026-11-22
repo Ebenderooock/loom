@@ -58,10 +58,11 @@ discarding state.
 
 **Settings > General > Updates** defaults to Stable. Prelease requires an
 explicit risk acknowledgement and a saved opt-in. Signed notices need a
-publisher public key compiled into Loom; until it is provisioned, use GitHub
-Releases manually. Restricted Linux/systemd and macOS/launchd helpers implement stopped-service
+publisher public key compiled into Loom and matching published signed manifests.
+Until signed manifests are available, use GitHub Releases manually.
+Restricted Linux/systemd and macOS/launchd helpers implement stopped-service
 SQLite/config snapshots, health verification and rollback for canonical native
-installs. Production activation still needs the public key and live platform
+installs. Production activation still needs live platform
 upgrade/reboot validation; Windows remains unsupported. PostgreSQL stays manual-only;
 containers and Kubernetes continue using image/orchestration updates.
 See [native updates](native-updates.md) for the current limits, signing contract,

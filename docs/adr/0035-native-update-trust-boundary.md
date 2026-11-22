@@ -52,8 +52,9 @@ booting Loom. Keep root-owned anti-downgrade state and block failed SHAs.
 - The helpers, Linux installer/timer, macOS launchd enrollment/startup barrier,
   shared snapshot/rollback engine and focused tests
   are implemented; this is not complete multi-platform production support.
-- No production public key is provisioned. Real notice verification/opt-in
-  stays unavailable until a reviewed key/build and live native validation.
+- A production publisher public key is provisioned. Real notice verification
+  requires matching published signed manifests; live native validation remains
+  necessary before production activation of automatic installation.
   macOS tests currently cover unprivileged boundaries, not root launchd,
   credential dropping or reboot recovery. Windows candidate code/tests have
   only been cross-compiled here; actual SCM/token/reboot acceptance, container

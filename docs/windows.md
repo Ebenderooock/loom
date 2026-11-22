@@ -124,7 +124,7 @@ Inspect and back up preserved paths before manually removing them.
 ## Updates: manual installation only
 
 Windows does **not** ship a privileged auto-update helper. Signed Stable/Prelease
-notices can be shown when a publisher public key is provisioned, but selecting a
+notices can be shown when matching signed manifests are published, but selecting a
 channel does not enable installation. Use a freshly extracted matching release
 and this installer for manual upgrades; retain a stopped config/database backup
 when migrations may run.
@@ -193,8 +193,7 @@ successful upgrade, migration/health rollback and interrupted recovery. In
 addition, quiescence currently refuses every unreadable process token, including
 protected Windows processes: establish whether this is satisfiable on supported
 Windows versions, or design a sound alternative before activation. Do not
-silently ignore access-denied processes. The production publisher public key
-also remains unprovided. Added Windows CI tests cover pure/native API boundaries
+silently ignore access-denied processes. Added Windows CI tests cover pure/native API boundaries
 and isolated elevated NTFS success, migration/health rollback and interrupted
 recovery with a fake service controller. They are cross-compiled, **not executed
 here**, and do not test real SCM enrollment, restricted-token creation, container

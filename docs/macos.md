@@ -52,8 +52,8 @@ Private helper logs and retained snapshots live under
 `/Library/Application Support/Loom/updater`, root-owned 0700; inspect using `sudo`.
 The helper job is `system/dev.loom.updater`.
 
-This source build has no production signing public key, so actual notice
-verification/automatic installation remain unavailable. Native unprivileged
+This source build includes the production publisher public key, but verified
+notices require matching published signed manifests. Native unprivileged
 security/transaction tests are not privileged launchd acceptance testing.
 Validate enrollment, stopped-service credential-dropped snapshots, successful
 upgrade, migration/health failure rollback, helper termination during every

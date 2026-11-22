@@ -26,6 +26,7 @@ var defaultTemplates = map[EventType]string{
 	EventOnDelete:            "Deleted: {{.Title}} ({{.Year}})",
 	EventOnHealthIssue:       "Health issue: {{.Title}}",
 	EventOnApplicationUpdate: "Application updated: {{.Title}}",
+	EventOnUpdateAvailable:   "Update available: {{.Title}}",
 	EventOnPlayback:          "Playback: {{.Title}}",
 	EventOnTest:              "Test notification: {{.Title}}",
 }
