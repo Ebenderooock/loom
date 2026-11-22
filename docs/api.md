@@ -129,7 +129,9 @@ Legacy `POST /api/v1/imports/scan` and `/api/v1/imports/preview` accept `{path}`
 include audio as well as video files. Music scan results use `media_type:
 "music"`, a **track ID** for `matched_media_id`, and optional
 `detected_artist`, `detected_album`, `detected_track`, and `detected_disc` tags.
-Scanning does not move files.
+Scanning does not move files. Preview entries include `warnings` for quality
+profile problems that do not block the import, and use `action: "review"` when
+the file would replace a better one and needs approval first.
 
 `POST /api/v1/imports/manual` accepts `{path}` for automatic matching.
 `POST /api/v1/imports/manual-match` accepts `{path, media_type, media_id}`.
@@ -514,6 +516,10 @@ grab it anyway; interactive search exposes this as **Ignore blocklist**.
 `POST /api/v1/autosearch/evaluate` accepts the same flag. Automatic search never
 ignores the blocklist. Releases are blocklisted automatically when a download
 stalls (see `downloads.stall_action` in [configuration](configuration.md)).
+
+A successful grab for a movie or episode may include `quality_warning` when the
+release is lower quality than the file already in the library. The grab still
+proceeds, but its import waits for approval in **Activity → Reviews**.
 
 `SystemStatus` is `{ version, commit, buildDate, engine }` — the database
 engine name is included so readiness tooling can confirm what backend

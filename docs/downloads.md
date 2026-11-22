@@ -154,6 +154,12 @@ item in **Activity > Reviews**, then choose **Retry after approval** in the
 import queue. Neither automatic retries nor re-submitting the path bypasses
 pending or rejected safety reviews.
 
+Quality never blocks an import; profile problems appear as warnings. A file
+that would replace a better one in your library is held in **Activity >
+Reviews** as **Lower quality**. **Replace file** resumes the import (its
+workflow and any import-queue job retry automatically); **Keep current**
+declines it and the import fails for that file.
+
 An unavailable source path during validation is an operational failure with
 bounded retries, not a suspicious-content review. Restore the download path or
 storage mount before retrying; a missing file is never treated as successfully

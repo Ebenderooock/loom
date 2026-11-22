@@ -993,7 +993,7 @@ Defaults are seeded when no profiles exist. On startup, only built-in profiles w
 
 **Scoring integration:** `FormatMatch.Score` is always 0 from the engine — actual scores come from the quality profile's format items (`quality_profile_format_items` table). The autosearch engine looks up `formatScores[match.CustomFormatID]` to get the effective score per match.
 
-**File-based matching (`ScoreFile`/`EvalFile`):** Post-download evaluation against real file properties (size, codec, resolution, audio extracted from filename + stat). Used for import decisions and file organisation.
+**File-based matching (`ScoreFile`/`EvalFile`):** Post-download evaluation against real file properties (size, codec, resolution, audio extracted from filename + stat). Used for import quality warnings (a score below the profile minimum never blocks an import) and file organisation.
 
 **Expected outcomes:**
 - Releases are ranked considering both quality tier and format scores.
@@ -1560,7 +1560,7 @@ Returns `{ success: true/false, items: [...], count: N }` with up to 5 preview i
 
 ### 3.19 Download Safety / Manual Review
 
-**What it does:** Two-layer protection system: (1) automated pre-download validation that checks releases for dangerous extensions, suspicious patterns, and size anomalies, and (2) a manual review queue for releases that pass validation with warnings.
+**What it does:** Two-layer protection system: (1) automated pre-download validation that checks releases for dangerous extensions, suspicious patterns, and size anomalies, and (2) a manual review queue for releases that pass validation with warnings. The same queue holds quality downgrades: imports that would replace a better existing file (kind `quality_downgrade`). Approving one retries its workflow and import jobs; rejecting it fails the import for that file.
 
 **API Endpoints:**
 
@@ -1576,6 +1576,8 @@ Returns `{ success: true/false, items: [...], count: N }` with up to 5 preview i
 | Field | Type | Description |
 |-------|------|-------------|
 | id | string | UUID |
+| kind | string | Empty for safety reviews, `quality_downgrade` for downgrade approvals |
+| workflow_id | string | Workflow to retry after a downgrade approval |
 | media_type | string | "movie" or "episode" |
 | media_id | string | Associated media item ID |
 | download_path | string | Path of the release |
