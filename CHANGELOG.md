@@ -48,6 +48,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Harden the disabled Windows updater candidate's journal so recovery does not
+  replay a completed rollback or undo a committed update after a helper restart.
+  Refuse quiescence when process access is denied. Windows automatic
+  installation remains blocked pending native acceptance.
 - Keep Discover, Collections, and Requests sections readable over custom
   background images with opaque panel surfaces. Simplify Discover cards to
   poster, status, title, and year, with compact translucent dismissal controls

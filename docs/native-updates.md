@@ -164,6 +164,8 @@ specific activation blocker. Cross-building does not validate those boundaries.
 Do not work around this by running Loom as
 LocalSystem, granting LocalService executable write access, or installing a
 generic elevated task/command runner.
+The [Windows acceptance and activation checklist](windows.md#windows-updater-candidate-not-production-enabled)
+describes the required native evidence and the separate production change.
 
 ## Transaction and rollback
 
