@@ -26,15 +26,33 @@ TARGETS = (
 )
 
 
-def version_for(ref, sha, timestamp):
+def source_ref(ref):
     match = re.fullmatch(
-        r"(?:prelease|prerelease)/((?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*))",
+        r"(prelease|prerelease)/((?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*))",
         ref,
     )
-    if not match or not re.fullmatch(r"[0-9a-f]{40}", sha):
+    if not match:
+        raise ValueError("Expected prelease/X.Y.Z or prerelease/X.Y.Z and a full commit SHA")
+    return f"{match[1]}/{match[2]}", match[2]
+
+
+def version_for(ref, sha, timestamp):
+    _, channel_version = source_ref(ref)
+    if not re.fullmatch(r"[0-9a-f]{40}", sha):
         raise ValueError("Expected prelease/X.Y.Z or prerelease/X.Y.Z and a full commit SHA")
     date = datetime.fromtimestamp(timestamp, timezone.utc).strftime("%Y%m%d%H%M%S")
-    return f"{match[1]}-prelease.{date}.g{sha[:12]}"
+    return f"{channel_version}-prelease.{date}.g{sha[:12]}"
+
+
+def linker_flags(version, sha, date, ref):
+    values = (version, sha, date, ref)
+    if any(not re.fullmatch(r"[A-Za-z0-9._:/-]+", value) for value in values):
+        raise ValueError("Invalid native build metadata")
+    prefix = "github.com/ebenderooock/loom/internal/buildinfo"
+    return (
+        f"-s -w -X {prefix}.Version={version} -X {prefix}.Commit={sha}"
+        f" -X {prefix}.Date={date} -X {prefix}.SourceRef=refs/heads/{ref}"
+    )
 
 
 def build(ref, output):
@@ -42,6 +60,7 @@ def build(ref, output):
     timestamp = int(subprocess.check_output(
         ["git", "show", "-s", "--format=%ct", "HEAD"], cwd=ROOT, text=True
     ).strip())
+    ref, _ = source_ref(ref)
     version = version_for(ref, sha, timestamp)
     if not (ROOT / "web/dist/index.html").is_file():
         raise ValueError("Build web/dist first: cd web && pnpm install --frozen-lockfile && pnpm build")
@@ -62,10 +81,9 @@ def build(ref, output):
             env.pop("GOARM", None)
             if arm:
                 env["GOARM"] = arm
-            prefix = "github.com/ebenderooock/loom/internal/buildinfo"
             subprocess.run(
                 ["go", "build", "-trimpath", "-tags", "embed", "-ldflags",
-                 f"-s -w -X {prefix}.Version={version} -X {prefix}.Commit={sha} -X {prefix}.Date={date} -X {prefix}.SourceRef=refs/heads/{ref}",
+                 linker_flags(version, sha, date, ref),
                  "-o", str(binary), "./cmd/loom"],
                 cwd=ROOT, env=env, check=True,
             )

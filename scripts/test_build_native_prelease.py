@@ -35,11 +35,25 @@ class VersionTests(unittest.TestCase):
             )
 
     def test_invalid_ref_or_sha(self):
-        for ref in ("main", "prelease/01.2.3", "prelease/1.2.3/extra", "prelease/1.2.3;exit"):
+        for ref in ("main", "prelease/01.2.3", "prelease/1.2.3/extra",
+                    "prelease/1.2.3;exit", "prelease/1.2.3 -X attacker=value",
+                    "prelease/1.2.3\n"):
             with self.assertRaises(ValueError):
                 native.version_for(ref, "a" * 40, 1794866400)
         with self.assertRaises(ValueError):
             native.version_for("prelease/1.2.3", "not-a-sha", 1794866400)
+
+    def test_linker_metadata_rejects_argument_injection(self):
+        values = ["1.2.3-prelease.20261116220000.gaaaaaaaaaaaa", "a" * 40,
+                  "2026-11-16T22:00:00Z", "prelease/1.2.3"]
+        flags = native.linker_flags(*values)
+        self.assertIn(".SourceRef=refs/heads/prelease/1.2.3", flags)
+        for i in range(len(values)):
+            for injected in (" value", "'-X", "\n-X", "$(whoami)"):
+                altered = values.copy()
+                altered[i] += injected
+                with self.subTest(field=i, injected=injected), self.assertRaises(ValueError):
+                    native.linker_flags(*altered)
 
     def test_native_target_matrix(self):
         self.assertEqual(len(native.TARGETS), 7)
@@ -63,6 +77,11 @@ class VersionTests(unittest.TestCase):
                 self.assertEqual(command[0:2], ["go", "build"])
                 if command[-1]=="./cmd/loom":
                     self.assertIn("embed", command)
+                    flags = command[command.index("-ldflags") + 1]
+                    self.assertIn(".Version=1.2.3-prelease.20261116220000.gaaaaaaaaaaaa", flags)
+                    self.assertIn(".Commit=" + "a" * 40, flags)
+                    self.assertIn(".Date=2026-11-16T22:00:00Z", flags)
+                    self.assertIn(".SourceRef=refs/heads/prelease/1.2.3", flags)
                 Path(command[command.index("-o") + 1]).write_bytes(b"fixture binary")
 
             with patch.object(native, "ROOT", root), \
