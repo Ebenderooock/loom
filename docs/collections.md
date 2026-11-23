@@ -78,12 +78,12 @@ Unmatched titles remain external members.
 
 ## Sources and access
 
-| Source | Accepted ID | Access / limitations |
+| Source | Accepted link or ID | Access / limitations |
 |---|---|---|
-| TMDB movie collection | positive numeric collection ID | Existing `LOOM_TMDB_API_KEY` / bundled metadata key. TMDB collections cover movie sequels, not shows or entire universes. |
-| TMDB mixed list | positive numeric v4 list ID | `LOOM_TMDB_READ_TOKEN` must be a TMDB v4 API read-access token. All pages are fetched through the shared import-list adapter. Existing v3 import lists remain compatible. |
-| TVDB list | positive numeric list ID | Existing `LOOM_METADATA_TVDB_APIKEY` / bundled key and optional `LOOM_METADATA_TVDB_PIN`; uses the metadata client's login/token refresh and rate-limit handling. Movie and series IDs are read from list entities and extended title records. |
-| IMDb public list | `ls…` | Reuses Loom's existing public IMDb import-list adapter. Lists must be accessible; upstream access restrictions/errors are surfaced. IMDb free datasets do not provide franchise membership, and no new scraping endpoint or completeness claim is introduced. |
+| TMDB movie collection | `themoviedb.org/collection/…` link or numeric ID | Existing `LOOM_TMDB_API_KEY` / bundled metadata key. TMDB collections cover movie sequels, not shows or entire universes. |
+| TMDB mixed list | `themoviedb.org/list/…` link or numeric ID | `LOOM_TMDB_READ_TOKEN` must be a TMDB v4 API read-access token. All pages are fetched through the shared import-list adapter. Existing v3 import lists remain compatible. |
+| TVDB list | `thetvdb.com/lists/…` link, slug, or numeric ID | Existing `LOOM_METADATA_TVDB_APIKEY` / bundled key and optional `LOOM_METADATA_TVDB_PIN`; uses the metadata client's login/token refresh and rate-limit handling. Movie and series IDs are read from list entities and extended title records. |
+| IMDb public list | `imdb.com/list/ls…` link or `ls…` ID | Reuses Loom's existing public IMDb import-list adapter. Lists must be accessible; upstream access restrictions/errors are surfaced. IMDb free datasets do not provide franchise membership, and no new scraping endpoint or completeness claim is introduced. |
 
 TMDB's external-ID lookup supports IMDb movies/shows and TVDB shows, **not TVDB
 movie IDs**. A TVDB movie can still be a collection member; a TVDB-only movie
@@ -92,7 +92,8 @@ it. The API returns an explicit 422 for an unsupported TVDB-only movie lookup.
 Unresolvable identities or unavailable metadata show errors rather than adding
 a title guessed by name.
 
-Source inputs accept IDs only, not arbitrary URLs or per-source credentials.
+Source links are resolved to canonical IDs; arbitrary hosts and per-source credentials
+are not accepted.
 Credentials stay in server metadata configuration, not collection records or
 responses. Refreshes are bounded to 90 seconds; source payloads are bounded to
 5,000 movie/show members and collection aggregates to 8 MiB. Oversized or

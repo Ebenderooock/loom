@@ -29,6 +29,8 @@ func respond(fn endpoint) http.HandlerFunc {
 				status, message = http.StatusNotFound, "Collection or member not found."
 			case errors.Is(err, ErrInvalid):
 				status, message = http.StatusBadRequest, err.Error()
+			case errors.Is(err, errSourceLookup):
+				status, message = http.StatusBadGateway, err.Error()
 			case errors.Is(err, ErrConflict):
 				status, message = http.StatusConflict, err.Error()
 			case errors.Is(err, ErrUnavailable):
@@ -181,11 +183,12 @@ func Router(s *Service) http.Handler {
 		if err := readBody(w, r, &ref); err != nil {
 			return nil, err
 		}
-		if err := ref.Validate(); err != nil {
-			return nil, err
-		}
 		if ref.LastSync != "" || ref.Error != "" {
 			return nil, ErrInvalid
+		}
+		ref, err := s.normalizeSource(r.Context(), ref)
+		if err != nil {
+			return nil, err
 		}
 		c, err := s.getForWrite(r.Context(), chi.URLParam(r, "id"))
 		if err != nil {

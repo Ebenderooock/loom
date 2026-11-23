@@ -4656,9 +4656,10 @@ components:
         external_id:
           type: string
           description: |
-            TMDB collection/list and TVDB list IDs are positive numeric IDs.
-            IMDb lists use ls followed by digits. Only TMDB supports kind
-            collection; IMDb/TVDB require list. No arbitrary URLs.
+            Accepts the selected provider's collection/list website link or ID.
+            TMDB and TVDB IDs are numeric; TVDB list slugs are also accepted.
+            IMDb list IDs use ls followed by digits. Only TMDB supports kind
+            collection; IMDb/TVDB require list. Stored IDs are canonical.
     CollectionSource:
       type: object
       required: [provider, kind, external_id]

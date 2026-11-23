@@ -35,6 +35,95 @@ func title(media, id string) Member {
 	return Member{ID: media + "-" + id, MediaType: media, Title: media + " " + id, ExternalIDs: map[string]string{"tmdb": id}, Sources: []string{}}
 }
 
+func TestSourceInputLinksAndIDs(t *testing.T) {
+	tests := []struct {
+		provider, kind, input, want string
+	}{
+		{"tmdb", "list", " https://www.themoviedb.org/list/8924-movielist?sort=1 ", "8924"},
+		{"tmdb", "collection", "https://www.themoviedb.org/collection/10-star-wars", "10"},
+		{"tmdb", "list", "https://www.themoviedb.org/list/123-caf%C3%A9", "123"},
+		{"tvdb", "list", "https://thetvdb.com/lists/star-wars/", "star-wars"},
+		{"tvdb", "list", "https://thetvdb.com/lists/17367", "17367"},
+		{"imdb", "list", "https://www.imdb.com/list/ls123456789/?ref_=abc", "ls123456789"},
+		{"imdb", "list", "ls123456789", "ls123456789"},
+		{"tmdb", "list", "42", "42"},
+		{"tmdb", "list", "https://evil.example/list/42", ""},
+		{"tmdb", "list", "https://themoviedb.org/collection/42", ""},
+		{"tmdb", "list", "https://themoviedb.org.evil.example/list/42", ""},
+		{"imdb", "list", "https://imdb.com/list/ls1/extra", ""},
+		{"tvdb", "list", "https://thetvdb.com/lists/../../login", ""},
+		{"tvdb", "list", "999999999999999999999", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got, err := sourceInput(Source{Provider: tt.provider, Kind: tt.kind, ExternalID: tt.input})
+			if tt.want == "" {
+				if !errors.Is(err, ErrInvalid) {
+					t.Fatalf("expected invalid input, got %#v %v", got, err)
+				}
+			} else if err != nil || got.ExternalID != tt.want {
+				t.Fatalf("got %#v %v, want %q", got, err, tt.want)
+			}
+		})
+	}
+}
+
+func TestTVDBUnresolvableSlugDoesNotCreateCollection(t *testing.T) {
+	store := testStore(t)
+	s := NewService(store, nil, nil, nil, nil, nil)
+	if _, err := s.Import(context.Background(), Source{Provider: "tvdb", Kind: "list", ExternalID: "https://thetvdb.com/lists/star-wars"}); !errors.Is(err, errSourceLookup) {
+		t.Fatalf("expected source lookup error, got %v", err)
+	}
+	items, err := store.List(context.Background())
+	if err != nil || len(items) != 0 {
+		t.Fatalf("failed resolution created a collection: %#v %v", items, err)
+	}
+}
+
+func TestImportLinksUseCanonicalIDs(t *testing.T) {
+	ctx := context.Background()
+	s := NewService(testStore(t), nil, nil, nil, nil, nil)
+	s.fetch = func(_ context.Context, ref Source) (string, []Member, error) {
+		return ref.Key(), nil, nil
+	}
+	for _, tc := range []struct {
+		provider, kind, link, id string
+	}{
+		{"tmdb", "list", "https://www.themoviedb.org/list/8924-movielist", "8924"},
+		{"tmdb", "collection", "https://www.themoviedb.org/collection/10-star-wars", "10"},
+		{"imdb", "list", "https://www.imdb.com/list/ls123456789/", "ls123456789"},
+	} {
+		fromLink, err := s.Import(ctx, Source{Provider: tc.provider, Kind: tc.kind, ExternalID: tc.link})
+		if err != nil {
+			t.Fatal(err)
+		}
+		fromID, err := s.Import(ctx, Source{Provider: tc.provider, Kind: tc.kind, ExternalID: tc.id})
+		if err != nil || fromID.ID != fromLink.ID || fromLink.Sources[0].ExternalID != tc.id {
+			t.Fatalf("link and ID did not resolve to same source: %#v %v", fromID, err)
+		}
+	}
+}
+
+func TestAttachSourceNormalizesBeforeIdentityLookup(t *testing.T) {
+	store := testStore(t)
+	existing := saved(t, store, &Collection{Name: "Existing", Sources: []Source{{Provider: "tmdb", Kind: "list", ExternalID: "8924"}}})
+	other := saved(t, store, &Collection{Name: "Other"})
+	s := NewService(store, nil, nil, nil, nil, nil)
+	router := Router(s)
+	for _, tc := range []struct {
+		id     string
+		status int
+	}{{existing.ID, http.StatusOK}, {other.ID, http.StatusConflict}} {
+		req := httptest.NewRequest(http.MethodPost, "/"+tc.id+"/sources", strings.NewReader(`{"provider":"tmdb","kind":"list","external_id":"https://www.themoviedb.org/list/8924-movielist"}`))
+		req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UserID: 1, Roles: []string{"admin"}}))
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		if rec.Code != tc.status {
+			t.Fatalf("attach status %d, want %d: %s", rec.Code, tc.status, rec.Body.String())
+		}
+	}
+}
+
 func saved(t *testing.T, store *Store, c *Collection) *Collection {
 	t.Helper()
 	if err := store.Save(context.Background(), c, true); err != nil {

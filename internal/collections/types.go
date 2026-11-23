@@ -3,6 +3,7 @@ package collections
 import (
 	"errors"
 	"fmt"
+	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
@@ -18,6 +19,9 @@ var (
 	digits      = regexp.MustCompile(`^[1-9][0-9]{0,11}$`)
 	imdbTitle   = regexp.MustCompile(`^tt[0-9]{1,12}$`)
 	imdbList    = regexp.MustCompile(`^ls[0-9]{1,12}$`)
+	tmdbURLID   = regexp.MustCompile(`^([1-9][0-9]{0,11})(?:-.+)?$`)
+	tvdbSlug    = regexp.MustCompile(`^[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*$`)
+	allDigits   = regexp.MustCompile(`^[0-9]+$`)
 )
 
 // Source is one explicit provider identity and its last reconciliation outcome.
@@ -32,15 +36,58 @@ type Source struct {
 // Key is the provenance namespace; a movie set and a list never collide.
 func (s Source) Key() string { return s.Provider + ":" + s.Kind + ":" + s.ExternalID }
 
-// Validate rejects unsupported kinds and URL-shaped/unbounded source IDs.
+// Validate checks canonical source IDs used in storage.
 func (s Source) Validate() error {
 	valid := (s.Provider == "tmdb" && (s.Kind == "collection" || s.Kind == "list") && digits.MatchString(s.ExternalID)) ||
 		(s.Provider == "tvdb" && s.Kind == "list" && digits.MatchString(s.ExternalID)) ||
 		(s.Provider == "imdb" && s.Kind == "list" && imdbList.MatchString(s.ExternalID))
 	if !valid {
-		return fmt.Errorf("%w: expected TMDB collection/list ID, TVDB list ID, or IMDb ls… list ID", ErrInvalid)
+		return fmt.Errorf("%w: enter a valid link or ID for the selected source", ErrInvalid)
 	}
 	return nil
+}
+
+// sourceInput extracts an identifier from a provider website URL without ever
+// fetching that URL. TVDB slugs are resolved separately via its authenticated API.
+func sourceInput(s Source) (Source, error) {
+	s.ExternalID = strings.TrimSpace(s.ExternalID)
+	input := s.ExternalID
+	if len(input) > 2048 {
+		return s, fmt.Errorf("%w: source link is too long", ErrInvalid)
+	}
+	if strings.Contains(input, "://") || strings.HasPrefix(input, "www.") || strings.HasPrefix(input, "thetvdb.com/") || strings.HasPrefix(input, "themoviedb.org/") || strings.HasPrefix(input, "imdb.com/") {
+		if !strings.Contains(input, "://") {
+			input = "https://" + input
+		}
+		u, err := url.Parse(input)
+		if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.User != nil || u.Port() != "" {
+			return s, fmt.Errorf("%w: enter a valid provider link", ErrInvalid)
+		}
+		host := strings.ToLower(u.Hostname())
+		parts := strings.Split(strings.Trim(u.Path, "/"), "/")
+		validHost := (s.Provider == "tmdb" && (host == "themoviedb.org" || host == "www.themoviedb.org")) ||
+			(s.Provider == "tvdb" && (host == "thetvdb.com" || host == "www.thetvdb.com")) ||
+			(s.Provider == "imdb" && (host == "imdb.com" || host == "www.imdb.com"))
+		pathKind := s.Kind
+		if s.Provider == "tvdb" {
+			pathKind = "lists"
+		}
+		if !validHost || len(parts) != 2 || parts[0] != pathKind || parts[1] == "" {
+			return s, fmt.Errorf("%w: link does not match the selected source type", ErrInvalid)
+		}
+		s.ExternalID = parts[1]
+		if s.Provider == "tmdb" {
+			match := tmdbURLID.FindStringSubmatch(s.ExternalID)
+			if match == nil {
+				return s, fmt.Errorf("%w: invalid TMDB link", ErrInvalid)
+			}
+			s.ExternalID = match[1]
+		}
+	}
+	if s.Provider == "tvdb" && s.Kind == "list" && len(s.ExternalID) <= 200 && tvdbSlug.MatchString(s.ExternalID) && !allDigits.MatchString(s.ExternalID) {
+		return s, nil
+	}
+	return s, s.Validate()
 }
 
 // Member stores exact title identity and local intent, independently of files.

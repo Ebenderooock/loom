@@ -294,13 +294,34 @@ func (s *Service) Refresh(ctx context.Context, c *Collection) error {
 // joins names/overlap; known source identities return their current owner.
 // Import is an explicit user action, so it clears a deletion suppression.
 func (s *Service) Import(ctx context.Context, ref Source) (*Collection, error) {
-	if err := ref.Validate(); err != nil {
+	ref, err := s.normalizeSource(ctx, ref)
+	if err != nil {
 		return nil, err
 	}
 	if err := s.store.Unsuppress(ctx, ref); err != nil {
 		return nil, err
 	}
 	return s.importSource(ctx, ref)
+}
+
+var errSourceLookup = errors.New("TVDB list link could not be resolved; check the link and TVDB access, then retry")
+
+func (s *Service) normalizeSource(ctx context.Context, ref Source) (Source, error) {
+	ref, err := sourceInput(ref)
+	if err != nil {
+		return ref, err
+	}
+	if ref.Provider == "tvdb" && !digits.MatchString(ref.ExternalID) {
+		id, err := s.tvdb.ResolveListSlug(ctx, ref.ExternalID)
+		if err != nil {
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				return ref, err
+			}
+			return ref, errSourceLookup
+		}
+		ref.ExternalID = strconv.Itoa(id)
+	}
+	return ref, ref.Validate()
 }
 
 func (s *Service) importSource(ctx context.Context, ref Source) (*Collection, error) {
