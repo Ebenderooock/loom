@@ -158,6 +158,14 @@ func (s *Store) FileCount(ctx context.Context, libraryID string) (int, error) {
 	return count, err
 }
 
+// FileStats returns the number and total size of scanned files in a library.
+func (s *Store) FileStats(ctx context.Context, libraryID string) (int, int64, error) {
+	var count int
+	var size int64
+	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*), COALESCE(SUM(size_bytes), 0) FROM library_files WHERE library_id = ?`, libraryID).Scan(&count, &size)
+	return count, size, err
+}
+
 // ListFiles returns all files for a library.
 func (s *Store) ListFiles(ctx context.Context, libraryID string) ([]LibraryFile, error) {
 	rows, err := s.db.QueryContext(ctx, `

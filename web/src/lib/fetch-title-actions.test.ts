@@ -3,7 +3,7 @@ import { apiFetch, registerAcquisitionRecovery } from "./fetch";
 
 afterEach(() => vi.unstubAllGlobals());
 
-it.each(["refresh-metadata", "rescan-library", "sync-plex"])(
+it.each(["refresh-metadata", "rescan-library", "sync-plex", "sync-jellyfin"])(
   "never invokes acquisition recovery for title maintenance (%s)",
   async (endpoint) => {
     const recovery = vi.fn().mockResolvedValue(true);

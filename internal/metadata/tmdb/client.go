@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -289,15 +290,9 @@ func (c *Client) GetEpisode(ctx context.Context, tvID, season, episode int) (*me
 // GetReleaseDates fetches release dates for a movie from TMDB.
 // It returns the best theatrical and digital dates, preferring US releases.
 func (c *Client) GetReleaseDates(ctx context.Context, tmdbID int) (theatrical, digital string, err error) {
-	url := fmt.Sprintf("%s/movie/%d/release_dates", c.config.BaseURL, tmdbID)
-	body, err := c.doRequest(ctx, url)
+	resp, err := c.getMovieReleaseDates(ctx, tmdbID)
 	if err != nil {
 		return "", "", err
-	}
-
-	var resp ReleaseDatesResponse
-	if err := json.Unmarshal(body, &resp); err != nil {
-		return "", "", fmt.Errorf("tmdb: failed to unmarshal release_dates response: %w", err)
 	}
 
 	// Priority: US > GB > first available
@@ -350,6 +345,61 @@ func (c *Client) GetReleaseDates(ctx context.Context, tmdbID int) (theatrical, d
 	}
 
 	return bestTheatrical, bestDigital, nil
+}
+
+// GetMovieReleases returns nonblank TMDB release notes with valid release dates.
+// Notes are preserved verbatim; duplicates by case/whitespace-normalized note
+// and calendar date are collapsed in response order, regardless of country/type.
+// These notes describe releases, not separate movie identities.
+func (c *Client) GetMovieReleases(ctx context.Context, tmdbID int) ([]metadata.MovieRelease, error) {
+	resp, err := c.getMovieReleaseDates(ctx, tmdbID)
+	if err != nil {
+		return nil, err
+	}
+	if resp.ID != tmdbID {
+		return nil, fmt.Errorf("tmdb: release_dates response ID %d does not match requested movie ID %d", resp.ID, tmdbID)
+	}
+
+	releases := make([]metadata.MovieRelease, 0)
+	seen := make(map[metadata.MovieRelease]struct{})
+	for _, country := range resp.Results {
+		for _, release := range country.ReleaseDates {
+			title := strings.ToLower(strings.Join(strings.Fields(release.Note), " "))
+			if title == "" {
+				continue
+			}
+			date, err := time.Parse(time.RFC3339, release.ReleaseDate)
+			if err != nil {
+				date, err = time.Parse(time.DateOnly, release.ReleaseDate)
+				if err != nil {
+					continue
+				}
+			}
+			key := metadata.MovieRelease{Title: title, ReleaseDate: date.Format(time.DateOnly)}
+			if _, exists := seen[key]; exists {
+				continue
+			}
+			seen[key] = struct{}{}
+			releases = append(releases, metadata.MovieRelease{
+				Title:       release.Note,
+				ReleaseDate: key.ReleaseDate,
+			})
+		}
+	}
+	return releases, nil
+}
+
+func (c *Client) getMovieReleaseDates(ctx context.Context, tmdbID int) (*ReleaseDatesResponse, error) {
+	url := fmt.Sprintf("%s/movie/%d/release_dates", c.config.BaseURL, tmdbID)
+	body, err := c.doRequest(ctx, url)
+	if err != nil {
+		return nil, err
+	}
+	var resp ReleaseDatesResponse
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return nil, fmt.Errorf("tmdb: failed to unmarshal release_dates response: %w", err)
+	}
+	return &resp, nil
 }
 
 // GetPerson fetches person details by TMDb person ID.

@@ -1,0 +1,41 @@
+# Isolated, unsigned native-validation build. NEVER a publisher input/release.
+# CANDIDATE_VERSION/REF must identify a real source build; development identities
+# deliberately cannot enroll. Production .goreleaser.yaml does not use this.
+version: 2
+project_name: loom-windows-updater-candidate
+builds:
+  - id: loom
+    main: ./cmd/loom
+    binary: loom
+    env: [CGO_ENABLED=0]
+    goos: [windows]
+    goarch: [amd64, arm64]
+    tags: [embed, loom_updater_windows_candidate]
+    flags: [-trimpath]
+    ldflags:
+      - -s -w
+      - -X github.com/ebenderooock/loom/internal/buildinfo.Version={{ .Env.CANDIDATE_VERSION }}
+      - -X github.com/ebenderooock/loom/internal/buildinfo.Commit={{ .Commit }}
+      - -X github.com/ebenderooock/loom/internal/buildinfo.SourceRef={{ .Env.CANDIDATE_REF }}
+  - id: helper
+    main: ./cmd/loom-updater
+    binary: loom-updater
+    env: [CGO_ENABLED=0]
+    goos: [windows]
+    goarch: [amd64, arm64]
+    tags: [loom_updater_windows_candidate]
+    flags: [-trimpath]
+    ldflags: [-s -w]
+archives:
+  - formats: [zip]
+    name_template: "loom_windows-updater-UNVALIDATED_{{ .Arch }}"
+    files:
+      - LICENSE
+      - src: packaging/windows/*
+        dst: packaging/windows
+        strip_parent: true
+      - src: docs/*.md
+        dst: docs
+        strip_parent: true
+release:
+  disable: true

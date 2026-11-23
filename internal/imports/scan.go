@@ -200,6 +200,7 @@ func (p *ImportPipeline) scanSingleFile(ctx context.Context, filePath string) Sc
 	if err != nil {
 		p.logger.Warn("scan match error", "file", filePath, "error", err)
 		result.SuggestedAction = "manual_review"
+		result.ImportError = err.Error()
 		return result
 	}
 
@@ -225,7 +226,7 @@ func (p *ImportPipeline) scanSingleFile(ctx context.Context, filePath string) Sc
 		result.Confidence = float64(score) / 100.0
 
 		// Determine suggested action
-		destFile := filepath.Join(match.DestPath, filepath.Base(filePath))
+		destFile := filepath.Join(match.DestPath, buildDestFilename(match, filePath))
 		if _, err := os.Stat(destFile); err == nil {
 			// Destination exists
 			result.SuggestedAction = "reimport"

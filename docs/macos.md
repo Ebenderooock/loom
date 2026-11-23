@@ -30,6 +30,38 @@ it cannot authenticate an arbitrary supplied executable.
 
 Open **http://127.0.0.1:1925** and complete first-run setup.
 
+## Optional privileged updater (production activation pending)
+
+For the canonical SQLite service only, the matching `loom-updater` can be
+enrolled by supplying it as the installer's second argument:
+
+```sh
+sudo sh packaging/macos/install.sh ./loom ./loom-updater
+```
+
+This installs a separate root launchd daemon, not a writable executable directory
+or a sudoers rule. The main service remains `_loom`. Automatic installation stays
+off until separate administrator consent; Stable remains the default and Prelease
+requires an additional risk acknowledgement. PostgreSQL and custom layouts stay
+manual-only. Once enrolled, manual upgrades require **both** matching binaries.
+
+The enrolled main process waits on a root-authenticated startup barrier before
+config/database access, including crash/reboot starts. Missing helper or unsettled
+recovery means startup fails closed. Never remove the marker/journal to bypass it.
+Private helper logs and retained snapshots live under
+`/Library/Application Support/Loom/updater`, root-owned 0700; inspect using `sudo`.
+The helper job is `system/dev.loom.updater`.
+
+This source build includes the production publisher public key, but verified
+notices require matching published signed manifests. Native unprivileged
+security/transaction tests are not privileged launchd acceptance testing.
+Validate enrollment, stopped-service credential-dropped snapshots, successful
+upgrade, migration/health failure rollback, helper termination during every
+journal phase, reboot-before-recovery, escaped `_loom` descendants, custom
+ACL/xattr refusal, and recovery-preserving uninstall on disposable Apple Silicon
+and Intel systems before production activation. See
+[native updates](native-updates.md) for the exact boundary and recovery commands.
+
 ## Identity, storage and permissions
 
 | Item | Location |
@@ -99,7 +131,8 @@ files, then bootstrap to reopen them.
 
 Run `sudo sh packaging/macos/uninstall.sh` from the extracted archive. The
 script bootouts/removes the managed daemon and binaries but **preserves config,
-data, logs, _loom user/group and media**. Inspect/back up before manually deleting
+data, private updater recovery state, logs, _loom user/group and media**. Pending
+update transactions must be recovered first. Inspect/back up before manually deleting
 retained paths or accounts. Reinstalling reuses them.
 
 For native acceptance testing on a disposable Mac/VM: install, verify _loom

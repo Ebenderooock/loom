@@ -6,6 +6,7 @@ import { MediaFilesManager } from "@/components/media-files-manager";
 import { TitleActionsMenu } from "@/components/titles/title-actions-menu";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { QualityLabel } from "@/components/quality-label";
 import {
   Dialog,
   DialogContent,
@@ -949,7 +950,7 @@ export function MovieDetailSheet({
                               variant="outline"
                               className="h-4 text-[10px]"
                             >
-                              {f.quality}
+                              <QualityLabel quality={f.quality} />
                             </Badge>
                           )}
                           {f.format && <span>{f.format}</span>}

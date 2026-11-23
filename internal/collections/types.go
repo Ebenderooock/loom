@@ -31,6 +31,7 @@ type Source struct {
 	ExternalID string `json:"external_id"`
 	LastSync   string `json:"last_sync,omitempty"`
 	Error      string `json:"error,omitempty"`
+	PosterPath string `json:"poster_path,omitempty"`
 }
 
 // Key is the provenance namespace; a movie set and a list never collide.
@@ -137,6 +138,7 @@ type Collection struct {
 	// QualityProfileID is the default for titles added from this collection.
 	// It never changes existing titles unless explicitly applied.
 	QualityProfileID string   `json:"quality_profile_id,omitempty"`
+	Cover            *Cover   `json:"cover,omitempty"`
 	Sources          []Source `json:"sources"`
 	Members          []Member `json:"members"`
 	Revision         int      `json:"revision"`
@@ -144,10 +146,43 @@ type Collection struct {
 	InLibrary        int      `json:"in_library"`
 }
 
+// Cover stores a local artwork choice; source refreshes never overwrite it.
+type Cover struct {
+	Mode      string `json:"mode"`
+	SourceKey string `json:"source_key,omitempty"`
+	MemberID  string `json:"member_id,omitempty"`
+}
+
+func (c Collection) validateCoverSelection() error {
+	if c.Cover == nil || c.Cover.Mode == "mosaic" {
+		return nil
+	}
+	for _, source := range c.Sources {
+		if c.Cover.Mode == "source" && source.Key() == c.Cover.SourceKey && source.PosterPath != "" {
+			return nil
+		}
+	}
+	for _, member := range c.Members {
+		if c.Cover.Mode == "member" && member.ID == c.Cover.MemberID && !member.Excluded && member.PosterPath != "" {
+			return nil
+		}
+	}
+	return fmt.Errorf("%w: choose an available source or member poster", ErrInvalid)
+}
+
 // Validate checks user-controlled collection metadata before persistence.
 func (c Collection) Validate() error {
 	if strings.TrimSpace(c.Name) == "" || len(c.Name) > 300 || len(c.Overview) > 20000 {
 		return fmt.Errorf("%w: name is required (maximum 300 characters)", ErrInvalid)
+	}
+	if c.Cover != nil {
+		cover := c.Cover
+		valid := (cover.Mode == "mosaic" && cover.SourceKey == "" && cover.MemberID == "") ||
+			(cover.Mode == "source" && cover.SourceKey != "" && cover.MemberID == "" && len(cover.SourceKey) <= 100) ||
+			(cover.Mode == "member" && cover.MemberID != "" && cover.SourceKey == "" && len(cover.MemberID) <= 100)
+		if !valid {
+			return fmt.Errorf("%w: invalid collection cover choice", ErrInvalid)
+		}
 	}
 	return nil
 }

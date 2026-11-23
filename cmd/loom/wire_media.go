@@ -22,6 +22,7 @@ import (
 	"github.com/ebenderooock/loom/internal/metadata"
 	"github.com/ebenderooock/loom/internal/metadata/artwork"
 	"github.com/ebenderooock/loom/internal/metadata/musicbrainz"
+	"github.com/ebenderooock/loom/internal/metadata/tmdb"
 	"github.com/ebenderooock/loom/internal/metadata/tvdb"
 	"github.com/ebenderooock/loom/internal/movies"
 	"github.com/ebenderooock/loom/internal/music"
@@ -45,6 +46,7 @@ type mediaWiring struct {
 	musicRepo         music.Repository
 	musicSvc          music.Service
 	collectionsSvc    *collections.Service
+	tmdbClient        *tmdb.Client
 }
 
 // wireMedia constructs all media-related services (scanner, organizer,
@@ -232,6 +234,7 @@ func wireMedia(
 		musicRepo:         musicRepo,
 		musicSvc:          musicSvc,
 		collectionsSvc:    collectionsSvc,
+		tmdbClient:        discoverTMDB,
 	}, nil
 }
 

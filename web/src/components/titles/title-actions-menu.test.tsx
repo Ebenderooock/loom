@@ -47,7 +47,10 @@ const availability = {
   folderPath: "/library/actual-registered-folder",
   unavailableReason: null,
   rescanUnavailableReason: null,
+  plexConfigured: true,
   plexUnavailableReason: null,
+  jellyfinConfigured: false,
+  jellyfinUnavailableReason: "Configure and enable Jellyfin",
 };
 const common = {
   id: "selected/id",
@@ -87,6 +90,11 @@ function response(url: string) {
     return Response.json({
       message: "Plex library refresh requested",
       connections: 2,
+    });
+  if (url.endsWith("/sync-jellyfin"))
+    return Response.json({
+      message: "Jellyfin library refresh requested",
+      connections: 1,
     });
   if (url.endsWith("/refresh-metadata"))
     return Response.json({ message: "Metadata refreshed" });
@@ -203,7 +211,7 @@ describe.each(["movie", "series"] as const)("%s detail actions", (type) => {
     expect(screen.getByRole("separator")).toBeInTheDocument();
     expect(
       screen.getByText(
-        "Checks registered imported files only; does not discover or ingest new files.",
+        "Scans this title’s library folder for new files and updates availability. Does not download missing media.",
       ),
     ).toBeInTheDocument();
     expect(
@@ -235,7 +243,7 @@ describe.each(["movie", "series"] as const)("%s detail actions", (type) => {
     await choose("Rescan library files");
     await waitFor(() =>
       expect(state.success).toHaveBeenCalledWith(
-        "Registered library file check complete: 1 checked",
+        "Library folder rescan complete: 1 checked",
       ),
     );
     await openMenu();
@@ -434,7 +442,7 @@ describe("action safeguards", () => {
     ["series", "user"],
     ["series", "guest"],
   ] as const)(
-    "allows %s history while disabling four admin actions (%s)",
+    "allows %s history while disabling admin actions and hiding Plex (%s)",
     async (mediaType, role) => {
       state.role = role;
       render(menu(mediaType));
@@ -443,7 +451,13 @@ describe("action safeguards", () => {
           expect(item).toHaveAttribute("aria-disabled", "true");
       expect(
         screen.getAllByText("Administrator access required."),
-      ).toHaveLength(4);
+      ).toHaveLength(3);
+      expect(
+        screen.queryByRole("menuitem", { name: "Sync with Plex" }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("menuitem", { name: "Sync with Jellyfin" }),
+      ).not.toBeInTheDocument();
       expect(state.fetch).not.toHaveBeenCalled();
       await choose("View import history");
       await screen.findByText("Source: /source/file.mkv");
@@ -478,7 +492,7 @@ describe("action safeguards", () => {
       ),
     );
     expect(screen.getAllByText("Actions unavailable: Forbidden")).toHaveLength(
-      4,
+      3,
     );
     for (const item of screen.getAllByRole("menuitem"))
       if (item.getAttribute("aria-label") !== "View import history")
@@ -493,8 +507,8 @@ describe("action safeguards", () => {
         ...availability,
         folderPath: null,
         unavailableReason: "No unique folder",
-        rescanUnavailableReason: "No complete registered files",
-        plexUnavailableReason: "Plex is disabled",
+        rescanUnavailableReason: "Library file scanning is not configured.",
+        plexUnavailableReason: "No complete registered files",
       }),
     );
     render(menu());
@@ -505,13 +519,157 @@ describe("action safeguards", () => {
     expect(
       screen.getByRole("menuitem", { name: "Rescan library files" }),
     ).toHaveAccessibleDescription(
-      expect.stringContaining("No complete registered files"),
+      expect.stringContaining("Library file scanning is not configured."),
     );
     expect(
       screen.getByRole("menuitem", { name: "Sync with Plex" }),
-    ).toHaveAccessibleDescription(expect.stringContaining("Plex is disabled"));
+    ).toHaveAccessibleDescription(
+      expect.stringContaining("No complete registered files"),
+    );
     await choose("Refresh metadata");
   });
+  it.each(["movie", "series"] as const)(
+    "hides Plex sync for %s when no enabled Plex connection is configured",
+    async (mediaType) => {
+      state.fetch.mockImplementation(async (url: string) =>
+        url.endsWith("/actions")
+          ? Response.json({
+              ...availability,
+              plexConfigured: false,
+              plexUnavailableReason: "Configure and enable Plex",
+            })
+          : response(url),
+      );
+      render(menu(mediaType));
+      expect(
+        (await openMenu()).map((item) => item.getAttribute("aria-label")),
+      ).toEqual(labels.slice(1));
+      expect(screen.queryByText("Sync with Plex")).not.toBeInTheDocument();
+      expect(screen.getByRole("separator").nextElementSibling).toHaveAttribute(
+        "aria-label",
+        "View import history",
+      );
+      await choose("Rescan library files");
+      await waitFor(() => expect(onChanged).toHaveBeenCalled());
+      expect(
+        state.fetch.mock.calls.some(([url]) => url.endsWith("/sync-plex")),
+      ).toBe(false);
+    },
+  );
+  it.each([
+    ["movie", false],
+    ["series", true],
+  ] as const)(
+    "syncs %s with Jellyfin independently of Plex configuration (%s)",
+    async (mediaType, plexConfigured) => {
+      state.fetch.mockImplementation(async (url: string) =>
+        url.endsWith("/actions")
+          ? Response.json({
+              ...availability,
+              plexConfigured,
+              jellyfinConfigured: true,
+              jellyfinUnavailableReason: null,
+            })
+          : response(url),
+      );
+      render(menu(mediaType));
+      expect(
+        (await openMenu()).map((item) => item.getAttribute("aria-label")),
+      ).toEqual([
+        ...(plexConfigured ? ["Sync with Plex"] : []),
+        "Sync with Jellyfin",
+        ...labels.slice(1),
+      ]);
+      await choose("Sync with Jellyfin");
+      await waitFor(() =>
+        expect(state.success).toHaveBeenCalledWith(
+          "Jellyfin library refresh requested",
+          expect.objectContaining({
+            description: expect.stringContaining("1 enabled Jellyfin"),
+          }),
+        ),
+      );
+      expect(state.fetch).toHaveBeenCalledWith(
+        `${base(mediaType)}/sync-jellyfin`,
+        expect.objectContaining({ method: "POST" }),
+        { acquisitionRecovery: false },
+      );
+      expect(
+        state.fetch.mock.calls
+          .filter(([, init]) => init?.method === "POST")
+          .map(([url]) => url),
+      ).toEqual([`${base(mediaType)}/sync-jellyfin`]);
+      expect(onChanged).not.toHaveBeenCalled();
+    },
+  );
+  it.each(["movie", "series"] as const)(
+    "keeps Jellyfin visible but disabled for missing %s media",
+    async (mediaType) => {
+      state.fetch.mockImplementation(async (url: string) =>
+        url.endsWith("/actions")
+          ? Response.json({
+              ...availability,
+              jellyfinConfigured: true,
+              jellyfinUnavailableReason: "No complete registered files",
+            })
+          : response(url),
+      );
+      render(menu(mediaType));
+      await openMenu();
+      const item = screen.getByRole("menuitem", { name: "Sync with Jellyfin" });
+      expect(item).toHaveAttribute("aria-disabled", "true");
+      expect(item).toHaveAccessibleDescription(
+        expect.stringContaining("No complete registered files"),
+      );
+      await userEvent.click(item);
+      expect(
+        state.fetch.mock.calls.some(([, init]) => init?.method === "POST"),
+      ).toBe(false);
+    },
+  );
+  it.each(["movie", "series"] as const)(
+    "rescans a missing %s and refreshes the other actions after discovery",
+    async (mediaType) => {
+      let rescanned = false;
+      state.fetch.mockImplementation(async (url: string) => {
+        if (url.endsWith("/rescan-library")) rescanned = true;
+        if (url.endsWith("/actions") && !rescanned)
+          return Response.json({
+            ...availability,
+            folderPath: null,
+            unavailableReason: "No library folder",
+            plexUnavailableReason: "No complete registered files",
+          });
+        return response(url);
+      });
+      render(menu(mediaType));
+      await openMenu();
+      for (const label of ["Sync with Plex", "Copy folder path"]) {
+        expect(screen.getByRole("menuitem", { name: label })).toHaveAttribute(
+          "aria-disabled",
+          "true",
+        );
+      }
+      await choose("Rescan library files");
+      await waitFor(() => expect(onChanged).toHaveBeenCalled());
+      expect(state.fetch).toHaveBeenCalledWith(
+        `${base(mediaType)}/rescan-library`,
+        expect.objectContaining({ method: "POST" }),
+        { acquisitionRecovery: false },
+      );
+      await waitFor(() =>
+        expect(
+          state.fetch.mock.calls.filter(([url]) => url.endsWith("/actions")),
+        ).toHaveLength(2),
+      );
+      await openMenu();
+      for (const label of ["Sync with Plex", "Copy folder path"]) {
+        expect(
+          screen.getByRole("menuitem", { name: label }),
+        ).not.toHaveAttribute("aria-disabled", "true");
+      }
+    },
+  );
   it("prevents duplicate clicks and disables every action while pending", async () => {
     let complete!: (value: Response) => void;
     state.fetch.mockImplementation((url: string) =>
@@ -565,6 +723,20 @@ describe("action safeguards", () => {
       "Plex did not confirm",
     ],
     [
+      "Sync with Jellyfin",
+      "/sync-jellyfin",
+      { error: { message: "Provider refused" } },
+      502,
+      "Provider refused",
+    ],
+    [
+      "Sync with Jellyfin",
+      "/sync-jellyfin",
+      { message: "Jellyfin library refresh requested", connections: 0 },
+      200,
+      "Jellyfin did not confirm",
+    ],
+    [
       "Refresh metadata",
       "/refresh-metadata",
       { error: { message: "Metadata unavailable" } },
@@ -601,9 +773,15 @@ describe("action safeguards", () => {
     "reports %s failures honestly (%s, %j)",
     async (label, endpoint, body, status, message) => {
       state.fetch.mockImplementation(async (url: string) =>
-        url.endsWith(endpoint)
-          ? Response.json(body, { status })
-          : response(url),
+        url.endsWith("/actions")
+          ? Response.json({
+              ...availability,
+              jellyfinConfigured: true,
+              jellyfinUnavailableReason: null,
+            })
+          : url.endsWith(endpoint)
+            ? Response.json(body, { status })
+            : response(url),
       );
       render(menu());
       await openMenu();

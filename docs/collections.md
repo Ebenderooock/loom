@@ -6,6 +6,10 @@ library and titles not yet added to a library. A title can belong to any number
 of collections. Membership does not imply monitoring, imported files, or
 availability on a media server.
 
+Collection grids and their members follow **Settings > Appearance > Media Card
+Size**. Combined posters on the Collections page use the same 2:3 dimensions
+and responsive sizing as library posters.
+
 Library members use the same live card status as their library: movies retain
 acquisition and quality states (for example Downloading, Importing, Available),
 and shows use the same downloaded/aired episode counts and progress bar.
@@ -34,7 +38,7 @@ Administrators can:
 - **Find match**: unresolved source rows (no usable TMDB ID) stay visible and
   open the picker prefilled with their title. Loom never invents media.
 - **Manage** (one side sheet): name, description and quality for new
-  additions; sources and refresh; merge; delete.
+  additions; cover artwork; sources and refresh; merge; delete.
 - **Quality for new additions** is a default only. It preselects the profile in
   single and bulk add. **Apply to existing members** previews each affected
   library title with its current and new profile and changes only those
@@ -75,6 +79,24 @@ enrichment can bridge IMDb/TVDB/TMDB IDs; it never uses title-name search.
 Contradictory mappings are reported, not silently joined. Refresh provenance
 tracks current source membership separately from historical contributing sources.
 Unmatched titles remain external members.
+
+## Collection covers
+
+Cards keep a single poster's 2:3 ratio. The default mosaic starts at 2x2 and
+grows rows and columns together (3x3, 4x4, etc.) to fit all active titles.
+Each tile retains its poster ratio without cropping; unused cells and titles
+without artwork stay empty. Excluded titles do not appear.
+
+Administrators can choose **Manage > Cover** and save a **Poster mosaic**,
+**Source poster**, or **Title poster** for everyone. TMDB movie sets and TVDB
+lists can supply source artwork; **Refresh sources** retrieves it for existing
+collections. Title choices include active members with artwork.
+
+Cover preferences are persisted separately from provider metadata and survive
+refreshes. Source and title covers follow the referenced artwork rather than
+storing a copy of an image URL. If the chosen artwork disappears, the card
+explicitly reports it and shows a mosaic until another cover is selected.
+Merging retains the destination collection's cover choice.
 
 ## Sources and access
 

@@ -2,19 +2,39 @@
 set -eu
 [ "$(uname -s)" = Darwin ] || { echo "This installer requires macOS." >&2; exit 1; }
 [ "$(id -u)" -eq 0 ] || { echo "Run with sudo." >&2; exit 1; }
-if [ "$#" -ne 1 ] || [ ! -f "$1" ] || [ ! -x "$1" ]; then
-    echo "Supply one executable macOS Loom release binary." >&2
+if [ "$#" -lt 1 ] || [ "$#" -gt 2 ] || [ ! -f "$1" ] || [ ! -x "$1" ]; then
+    echo "Supply the macOS Loom binary and optionally its matching loom-updater." >&2
     exit 1
 fi
 source_dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
 base="/Library/Application Support/Loom"
 plist=/Library/LaunchDaemons/dev.loom.server.plist
+updater_plist=/Library/LaunchDaemons/dev.loom.updater.plist
+if [ -e "$base/bin/updater-managed" ] && [ "$#" -ne 2 ]; then
+    echo "An enrolled installation requires both matching binaries for manual upgrades." >&2
+    exit 1
+fi
+if [ "$#" -eq 2 ]; then
+    [ -f "$2" ] && [ -x "$2" ] || { echo "Invalid updater binary." >&2; exit 1; }
+    "$2" preflight
+    /usr/bin/plutil -lint "$source_dir/dev.loom.updater.plist"
+fi
+if [ -e "$base/updater/journal.json" ]; then
+    echo "Recover the pending update before manual installation." >&2
+    exit 1
+fi
 if { [ -e "$plist" ] || [ -L "$plist" ]; } && ! grep -q 'Managed by Loom native installer' "$plist"; then
     echo "Existing launch daemon is unmanaged; migrate manually." >&2
     exit 1
 fi
 /usr/bin/plutil -lint "$source_dir/dev.loom.server.plist"
 [ -r "$source_dir/loom.yaml" ] || { echo "Missing installer loom.yaml." >&2; exit 1; }
+if launchctl print system/dev.loom.updater >/dev/null 2>&1; then
+    [ "$#" -eq 2 ] || { echo "Supply the matching helper for an updater-managed install." >&2; exit 1; }
+    launchctl bootout system/dev.loom.updater
+fi
+[ ! -e "$base/updater/journal.json" ] ||
+    { echo "Updater shutdown left recovery pending; no installation performed." >&2; exit 1; }
 # Dedicated non-login account; do not reuse a normal interactive user's identity.
 if dscl . -read /Users/_loom >/dev/null 2>&1; then
     [ "$(dscl . -read /Users/_loom NFSHomeDirectory | sed 's/^NFSHomeDirectory: //')" = "$base/data" ] ||
@@ -62,6 +82,18 @@ if [ ! -e "$base/config/loom.yaml" ]; then
 fi
 install -o root -g wheel -m 0644 "$source_dir/dev.loom.server.plist" "$plist"
 launchctl enable system/dev.loom.server
-launchctl bootstrap system "$plist"
+if [ "$#" -eq 2 ]; then
+    install -o root -g wheel -m 0755 "$2" "$base/bin/loom-updater"
+    install -d -o root -g wheel -m 0700 "$base/updater"
+    install -o root -g wheel -m 0644 "$source_dir/dev.loom.updater.plist" "$updater_plist"
+    # Enrollment temporarily serves the credential-checked startup barrier and
+    # bootstraps the service itself; never start against an unserved barrier.
+    "$base/bin/loom-updater" enroll
+    launchctl enable system/dev.loom.updater
+    launchctl bootstrap system "$updater_plist"
+    echo "Privileged helper enrolled. Automatic installation remains OFF until administrator opt-in."
+else
+    launchctl bootstrap system "$plist"
+fi
 echo "Installed. Check: sudo launchctl print system/dev.loom.server"
 echo "Open http://127.0.0.1:1925 and complete setup. See docs/macos.md."

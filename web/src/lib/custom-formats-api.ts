@@ -34,6 +34,12 @@ export interface CustomFormat {
   updated_at?: string;
 }
 
+export interface CustomTier {
+  id: string;
+  name: string;
+  specifications: Specification[];
+}
+
 export interface ReleaseInfo {
   title: string;
   quality: string;
@@ -58,6 +64,20 @@ export interface TestResult {
   release: ReleaseInfo;
   matches: FormatMatch[];
   score: number;
+  quality_profile_id?: string;
+  minimum_score?: number;
+  meets_minimum?: boolean;
+  quality_tier?: {
+    id: string;
+    name: string;
+    rank: number;
+    kind?: string;
+  } | null;
+}
+
+export interface TestCustomFormatRequest {
+  title: string;
+  quality_profile_id?: string;
 }
 
 // ---------- Constants ----------
@@ -174,6 +194,46 @@ async function request<T>(
 
 // ---------- API functions ----------
 
+export function useCustomTiers() {
+  return useQuery({
+    queryKey: ["custom-tiers"],
+    queryFn: async ({ signal }) =>
+      (
+        await request<{ data: CustomTier[] }>(
+          "GET",
+          "/api/v1/custom-formats/tiers",
+          undefined,
+          signal,
+        )
+      ).data,
+  });
+}
+
+export function useSaveCustomTier() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (tier: CustomTier) =>
+      request<CustomTier>(
+        tier.id ? "PUT" : "POST",
+        `/api/v1/custom-formats/tiers${tier.id ? `/${encodeURIComponent(tier.id)}` : ""}`,
+        tier,
+      ),
+    onSuccess: () => client.invalidateQueries({ queryKey: ["custom-tiers"] }),
+  });
+}
+
+export function useDeleteCustomTier() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      request<void>(
+        "DELETE",
+        `/api/v1/custom-formats/tiers/${encodeURIComponent(id)}`,
+      ),
+    onSuccess: () => client.invalidateQueries({ queryKey: ["custom-tiers"] }),
+  });
+}
+
 export async function listCustomFormats(
   signal?: AbortSignal,
 ): Promise<CustomFormat[]> {
@@ -222,8 +282,14 @@ export async function deleteCustomFormat(id: string): Promise<void> {
   );
 }
 
-export async function testCustomFormat(title: string): Promise<TestResult> {
-  return request<TestResult>("POST", "/api/v1/custom-formats/test", { title });
+export async function testCustomFormat(
+  title: string,
+  qualityProfileId?: string,
+): Promise<TestResult> {
+  return request<TestResult>("POST", "/api/v1/custom-formats/test", {
+    title,
+    ...(qualityProfileId ? { quality_profile_id: qualityProfileId } : {}),
+  });
 }
 
 // ---------- React Query hooks ----------
@@ -262,6 +328,7 @@ export function useDeleteCustomFormat() {
 
 export function useTestCustomFormat() {
   return useMutation({
-    mutationFn: testCustomFormat,
+    mutationFn: ({ title, quality_profile_id }: TestCustomFormatRequest) =>
+      testCustomFormat(title, quality_profile_id),
   });
 }

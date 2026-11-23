@@ -42,6 +42,7 @@ import {
   useImportJob,
   useQueueImportFiles,
   useRetryImportJob,
+  useDismissImportJobs,
 } from "@/lib/imports-api";
 import type {
   ImportJob,
@@ -183,6 +184,14 @@ function ImportJobFiles({ id }: { id: string }) {
 function ImportQueue({ jobs }: { jobs: ImportJob[] }) {
   const finishedToggleId = React.useId();
   const retryMut = useRetryImportJob();
+  const dismissMut = useDismissImportJobs();
+  const [selected, setSelected] = React.useState<Set<string>>(new Set());
+  const inactive = jobs.filter((job) =>
+    ["imported", "failed", "pending_review"].includes(job.status),
+  );
+  const selectedIDs = inactive
+    .filter((job) => selected.has(job.id))
+    .map((job) => job.id);
   const active = jobs.filter((job) =>
     ["queued", "importing", "retry_pending"].includes(job.status),
   );
@@ -217,6 +226,39 @@ function ImportQueue({ jobs }: { jobs: ImportJob[] }) {
         </p>
       </CardHeader>
       <CardContent className="space-y-3">
+        <div className="flex flex-wrap gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={selectedIDs.length === 0 || dismissMut.isPending}
+            onClick={() =>
+              dismissMut.mutate(
+                { ids: selectedIDs },
+                { onSuccess: () => setSelected(new Set()) },
+              )
+            }
+          >
+            Dismiss selected ({selectedIDs.length})
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={dismissMut.isPending}
+            onClick={() =>
+              dismissMut.mutate(
+                { all_inactive: true },
+                { onSuccess: () => setSelected(new Set()) },
+              )
+            }
+          >
+            Clear inactive
+          </Button>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Dismissal only hides inactive entries from this queue. Files,
+          downloads, import history, and safety reviews are kept. Queued,
+          importing, and scheduled retries are never dismissed.
+        </p>
         <label
           htmlFor={finishedToggleId}
           className="flex items-center gap-2 text-sm"
@@ -240,6 +282,23 @@ function ImportQueue({ jobs }: { jobs: ImportJob[] }) {
             {pageJobs.map((job) => (
               <div key={job.id} className="space-y-2 border p-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
+                  {["imported", "failed", "pending_review"].includes(
+                    job.status,
+                  ) && (
+                    <Checkbox
+                      aria-label={`Select import ${job.source_path}`}
+                      checked={selected.has(job.id)}
+                      disabled={dismissMut.isPending}
+                      onCheckedChange={(checked) =>
+                        setSelected((previous) => {
+                          const next = new Set(previous);
+                          if (checked === true) next.add(job.id);
+                          else next.delete(job.id);
+                          return next;
+                        })
+                      }
+                    />
+                  )}
                   <span className="min-w-0 break-all font-mono text-xs">
                     {job.source_path}
                   </span>
@@ -279,6 +338,19 @@ function ImportQueue({ jobs }: { jobs: ImportJob[] }) {
                 )}
                 <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
                   <span>Attempts: {job.attempts}</span>
+                  {["imported", "failed", "pending_review"].includes(
+                    job.status,
+                  ) && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={dismissMut.isPending || retryMut.isPending}
+                      aria-label={`Dismiss import ${job.source_path}`}
+                      onClick={() => dismissMut.mutate({ ids: [job.id] })}
+                    >
+                      Dismiss
+                    </Button>
+                  )}
                   {job.status === "retry_pending" && job.next_retry_at && (
                     <span>
                       Next check: {new Date(job.next_retry_at).toLocaleString()}
@@ -289,7 +361,7 @@ function ImportQueue({ jobs }: { jobs: ImportJob[] }) {
                     <Button
                       size="sm"
                       variant="outline"
-                      disabled={retryMut.isPending}
+                      disabled={retryMut.isPending || dismissMut.isPending}
                       onClick={() => retryMut.mutate(job.id)}
                       aria-label={`Retry ${job.source_path}${job.status === "pending_review" ? " after approval" : ""}`}
                     >
@@ -347,6 +419,16 @@ function ImportQueue({ jobs }: { jobs: ImportJob[] }) {
         {retryMut.isError && (
           <p role="alert" className="text-sm text-destructive">
             {retryMut.error.message}
+          </p>
+        )}
+        {dismissMut.isError && (
+          <p role="alert" className="text-sm text-destructive">
+            {dismissMut.error.message}
+          </p>
+        )}
+        {dismissMut.isSuccess && (
+          <p role="status" className="text-sm text-muted-foreground">
+            {dismissMut.data.dismissed} inactive import entries dismissed.
           </p>
         )}
       </CardContent>

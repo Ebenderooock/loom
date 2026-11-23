@@ -111,18 +111,24 @@ function page() {
 }
 
 describe("Discover recommendations", () => {
-  it("keeps Collections out of Discover and links to the standalone source detail", async () => {
+  it("shows only the poster, status, title and year without recommendation reasons or redundant actions", async () => {
     page();
     expect(await screen.findByText("Another adventure")).toBeInTheDocument();
     expect(
       screen.queryByRole("tab", { name: "Collections" }),
     ).not.toBeInTheDocument();
     expect(
-      screen.getByRole("link", { name: "View collection" }),
-    ).toHaveAttribute("href", "/collections?tmdb=10");
+      screen.queryByRole("link", { name: "View collection" }),
+    ).not.toBeInTheDocument();
     expect(
-      screen.getByText("You have 2 movies starring this actor"),
-    ).toBeInTheDocument();
+      screen.queryByRole("button", { name: "Add to library" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("You have 2 movies starring this actor"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "View Another adventure" }),
+    ).toHaveTextContent("2020");
     expect(state.writes).toEqual([]);
   });
   it.each(["Movies", "TV shows"])(
@@ -132,7 +138,9 @@ describe("Discover recommendations", () => {
       const user = userEvent.setup();
       await user.click(screen.getByRole("tab", { name: tab }));
       await user.click(
-        await screen.findByRole("button", { name: "Add to library" }),
+        await screen.findByRole("button", {
+          name: `View ${tab === "Movies" ? "Another adventure" : "Another show"}`,
+        }),
       );
       expect(await screen.findByRole("dialog")).toHaveTextContent(
         `${tab === "Movies" ? "movie" : "series"}:42`,
@@ -142,11 +150,11 @@ describe("Discover recommendations", () => {
       expect(state.writes).toEqual([]);
     },
   );
-  it("does not offer direct adds to non-admins", async () => {
+  it("opens poster details without offering direct adds to non-admins", async () => {
     state.role = "user";
     page();
     await userEvent.click(
-      await screen.findByRole("button", { name: "View details" }),
+      await screen.findByRole("button", { name: "View Another adventure" }),
     );
     expect(await screen.findByRole("dialog")).toHaveTextContent(
       "Ask an administrator",
@@ -220,5 +228,75 @@ describe("Discover recommendations", () => {
     await waitFor(() => expect(card).toHaveTextContent("Downloading"));
     expect(card).not.toHaveTextContent("Missing");
     expect(state.writes).toEqual([]);
+  });
+  it("distinguishes external, missing and available titles while library status loads", async () => {
+    const original = vi.mocked(fetch).getMockImplementation()!;
+    let resolveLibrary!: (response: Response) => void;
+    const libraryResponse = new Promise<Response>((resolve) => {
+      resolveLibrary = resolve;
+    });
+    vi.mocked(fetch).mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.startsWith("/api/v1/import-lists/discover"))
+        return Response.json({
+          data: [
+            {
+              id: "external",
+              title: "External",
+              tmdb_id: "1",
+              in_library: false,
+            },
+            {
+              id: "missing",
+              title: "Missing title",
+              tmdb_id: "2",
+              in_library: true,
+            },
+            {
+              id: "available",
+              title: "Available title",
+              tmdb_id: "3",
+              in_library: true,
+            },
+          ],
+        });
+      if (url.startsWith("/api/v1/movies?")) return libraryResponse;
+      return original(input, init);
+    });
+    page();
+    await userEvent.click(screen.getByRole("tab", { name: "Import Lists" }));
+    const external = await screen.findByRole("button", {
+      name: "View details for External",
+    });
+    const missing = screen.getByRole("button", {
+      name: "View details for Missing title",
+    });
+    const available = screen.getByRole("button", {
+      name: "View details for Available title",
+    });
+    expect(external).toHaveAccessibleDescription("Not in library");
+    expect(missing).toHaveAccessibleDescription("In library");
+    expect(available).toHaveAccessibleDescription("In library");
+    resolveLibrary(
+      Response.json({
+        data: [
+          {
+            id: "missing",
+            title: "Missing title",
+            tmdbId: "2",
+            status: "missing",
+          },
+          {
+            id: "available",
+            title: "Available title",
+            tmdbId: "3",
+            status: "available_right_quality",
+          },
+        ],
+      }),
+    );
+    await waitFor(() => expect(missing).toHaveAccessibleDescription("Missing"));
+    expect(available).toHaveAccessibleDescription("Available");
+    expect(external).toHaveAccessibleDescription("Not in library");
   });
 });

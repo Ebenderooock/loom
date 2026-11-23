@@ -34,6 +34,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useQualityProfiles } from "@/lib/quality-profiles-api";
 import {
   useCustomFormats,
   useCreateCustomFormat,
@@ -231,7 +232,10 @@ function EditDialog({
       <DialogContent className="max-h-[85vh] max-w-2xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{isEdit ? "Edit" : "Add"} Custom Format</DialogTitle>
-          <DialogDescription>Define matching rules.</DialogDescription>
+          <DialogDescription>
+            Define matching rules. Assign scores in Quality Profiles; matching a
+            format does not replace the detected base quality.
+          </DialogDescription>
         </DialogHeader>
 
         <div className="grid gap-4 py-2">
@@ -387,14 +391,25 @@ function EditDialog({
 
 function TestDialog({ onClose }: { onClose: () => void }) {
   const testMut = useTestCustomFormat();
+  const {
+    data: profiles = [],
+    isLoading: profilesLoading,
+    isError: profilesError,
+  } = useQualityProfiles();
   const [title, setTitle] = React.useState("");
+  const [profileId, setProfileId] = React.useState("");
   const [result, setResult] = React.useState<TestResult | null>(null);
 
   const handleTest = () => {
-    testMut.mutate(title, {
-      onSuccess: (r) => setResult(r),
-      onError: (e) => toast.error(e.message),
-    });
+    if (testMut.isPending || !title.trim()) return;
+    setResult(null);
+    testMut.mutate(
+      { title, ...(profileId ? { quality_profile_id: profileId } : {}) },
+      {
+        onSuccess: (r) => setResult(r),
+        onError: (e) => toast.error(e.message),
+      },
+    );
   };
 
   return (
@@ -403,25 +418,104 @@ function TestDialog({ onClose }: { onClose: () => void }) {
         <DialogHeader>
           <DialogTitle>Test Release Title</DialogTitle>
           <DialogDescription>
-            Paste a release title to see which custom formats match.
+            Test matching rules and optionally preview a profile&apos;s scores.
+            Custom formats do not replace the detected base quality. Passing
+            this test does not confirm that a release can be imported.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-2">
+          <div className="space-y-2">
+            <Label htmlFor="cf-test-profile">Quality profile for scoring</Label>
+            <select
+              id="cf-test-profile"
+              aria-describedby="cf-test-profile-help"
+              className="w-full rounded-md border border-border bg-card px-3 py-2 text-sm text-foreground"
+              value={profileId}
+              disabled={testMut.isPending || profilesLoading}
+              onChange={(e) => {
+                setProfileId(e.target.value);
+                setResult(null);
+              }}
+            >
+              <option value="">No profile (match only)</option>
+              {profiles.map((profile) => (
+                <option key={profile.id} value={profile.id}>
+                  {profile.name}
+                </option>
+              ))}
+            </select>
+            <p
+              id="cf-test-profile-help"
+              className="text-xs text-muted-foreground"
+            >
+              {profilesError
+                ? "Could not load profiles. Match-only testing is still available."
+                : profilesLoading
+                  ? "Loading profiles…"
+                  : "Without a profile, only matches are tested; no profile score is calculated. Select a profile to see its assigned points and minimum score."}
+            </p>
+          </div>
           <div className="flex gap-2">
             <Input
+              aria-label="Release title"
               placeholder="Movie.Name.2024.2160p.BluRay.x265.DTS-HD.MA-GROUP"
               value={title}
-              onChange={(e) => setTitle(e.target.value)}
+              disabled={testMut.isPending}
+              onChange={(e) => {
+                setTitle(e.target.value);
+                setResult(null);
+              }}
               onKeyDown={(e) => e.key === "Enter" && handleTest()}
               className="flex-1"
             />
-            <Button onClick={handleTest} disabled={testMut.isPending || !title}>
-              Test
+            <Button
+              onClick={handleTest}
+              disabled={testMut.isPending || !title.trim()}
+            >
+              {testMut.isPending ? "Testing…" : "Test"}
             </Button>
           </div>
+          {testMut.isPending && <p role="status">Testing release title…</p>}
           {result && (
-            <div className="space-y-3">
+            <div role="status" className="space-y-3">
+              {result.quality_profile_id ? (
+                <div className="space-y-1 rounded-md border p-3 text-sm">
+                  <p>
+                    <strong>Total custom format score:</strong> {result.score}{" "}
+                    points
+                  </p>
+                  {result.minimum_score !== undefined && (
+                    <p>
+                      <strong>Minimum custom format score:</strong>{" "}
+                      {result.minimum_score} points
+                    </p>
+                  )}
+                  <p>
+                    {result.meets_minimum === true
+                      ? "Meets minimum score"
+                      : result.meets_minimum === false
+                        ? "Below minimum score"
+                        : "Minimum score result unavailable"}
+                  </p>
+                  {result.quality_tier !== undefined && (
+                    <p>
+                      <strong>Profile quality tier:</strong>{" "}
+                      {result.quality_tier
+                        ? `${result.quality_tier.name} (position ${result.quality_tier.rank + 1})`
+                        : "No allowed tier matched"}
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Match-only result — no profile score calculated.
+                </p>
+              )}
               <div className="space-y-1 rounded-md border p-3 text-sm">
+                <p>
+                  <strong>Detected base quality:</strong>{" "}
+                  {result.release.quality || "—"}
+                </p>
                 <p>
                   <strong>Resolution:</strong>{" "}
                   {result.release.resolution || "—"}
@@ -453,9 +547,16 @@ function TestDialog({ onClose }: { onClose: () => void }) {
                   {result.matches.map((m) => (
                     <div
                       key={m.custom_format_id}
-                      className="flex items-center justify-between rounded-md border px-3 py-2 text-sm"
+                      className="flex items-center justify-between gap-3 rounded-md border px-3 py-2 text-sm"
                     >
-                      <span>{m.custom_format_name}</span>
+                      <span className="min-w-0 break-words">
+                        {m.custom_format_name}
+                      </span>
+                      {result.quality_profile_id && (
+                        <span className="shrink-0 tabular-nums">
+                          {m.score} points
+                        </span>
+                      )}
                     </div>
                   ))}
                 </div>

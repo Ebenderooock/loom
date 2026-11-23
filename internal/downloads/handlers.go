@@ -627,9 +627,12 @@ func (s *Service) handleAdd(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Record grab linkage when media context is provided (interactive search).
-	s.recordManualGrab(r.Context(), res, req)
+	warning := s.recordManualGrab(r.Context(), res, req)
 
-	writeJSON(w, http.StatusAccepted, res)
+	writeJSON(w, http.StatusAccepted, struct {
+		AddResult
+		QualityWarning string `json:"quality_warning,omitempty"`
+	}{res, warning})
 }
 
 // --- pause / resume ------------------------------------------------
@@ -935,9 +938,20 @@ func (s *Service) releaseBlocked(ctx context.Context, req AddRequest) bool {
 
 // recordManualGrab records grab linkage for interactive search grabs.
 // If no media context is present or no orchestrator is configured, this is a no-op.
-func (s *Service) recordManualGrab(ctx context.Context, res AddResult, req AddRequest) {
+func (s *Service) recordManualGrab(ctx context.Context, res AddResult, req AddRequest) string {
 	if req.MediaType == "" || s.orchestrator == nil {
-		return
+		return ""
+	}
+	s.mu.RLock()
+	check := s.grabQualityCheck
+	s.mu.RUnlock()
+	var warning string
+	if check != nil {
+		ids := req.EpisodeIDs
+		if req.MediaType == "movie" {
+			ids = []string{req.MovieID}
+		}
+		warning = check(ctx, req.MediaType, ids, req.Title)
 	}
 
 	var wf *workflows.Workflow
@@ -956,7 +970,7 @@ func (s *Service) recordManualGrab(ctx context.Context, res AddResult, req AddRe
 		s.logger.WarnContext(ctx, "failed to create manual grab workflow",
 			"client_id", res.ClientID, "item_id", res.ItemID,
 			"media_type", req.MediaType, "error", err)
-		return
+		return warning
 	}
 	if wf != nil {
 		s.orchestrator.Send(workflows.CmdGrabbed{
@@ -968,11 +982,14 @@ func (s *Service) recordManualGrab(ctx context.Context, res AddResult, req AddRe
 			SavePath:             res.SavePath,
 			SeedRatioLimit:       req.SeedRatioLimit,
 			SeedTimeLimitMinutes: req.SeedTimeLimitMinutes,
+			Manual:               true,
+			QualityWarning:       warning,
 		})
 		s.logger.InfoContext(ctx, "recorded manual grab workflow",
 			"workflow_id", wf.ID, "client_id", res.ClientID, "item_id", res.ItemID,
 			"media_type", req.MediaType)
 	}
+	return warning
 }
 
 // --- Aggregate activity actions (work across all clients) ---

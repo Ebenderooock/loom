@@ -3,6 +3,7 @@ package imports
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -627,13 +628,7 @@ func newSafetyPipeline(t *testing.T) (*packFixture, *safety.ReviewStore) {
 	t.Helper()
 	var store *safety.ReviewStore
 	f := newPackPipeline(t, ImportModeCopy, func(o *PipelineOptions) {
-		raw, err := os.ReadFile(filepath.Join("..", "storage", "migrations", "sqlite", "0021_manual_review.sql"))
-		if err != nil {
-			t.Fatal(err)
-		}
-		if _, err := o.DB.Exec(strings.SplitN(string(raw), "-- +goose Down", 2)[0]); err != nil {
-			t.Fatal(err)
-		}
+		applyReviewMigrations(t, o.DB)
 		cfg := safety.DefaultConfig()
 		cfg.MinMovieSizeMB = 0
 		o.PostVal = safety.NewPostValidator(cfg)
@@ -641,6 +636,19 @@ func newSafetyPipeline(t *testing.T) (*packFixture, *safety.ReviewStore) {
 		o.ReviewStore = store
 	})
 	return f, store
+}
+
+func applyReviewMigrations(t *testing.T, db *sql.DB) {
+	t.Helper()
+	for _, name := range []string{"0021_manual_review.sql", "0106_manual_review_kind.sql"} {
+		raw, err := os.ReadFile(filepath.Join("..", "storage", "migrations", "sqlite", name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := db.Exec(strings.SplitN(string(raw), "-- +goose Down", 2)[0]); err != nil {
+			t.Fatal(err)
+		}
+	}
 }
 
 func TestMissingSourceRetriesWithoutCreatingSafetyReview(t *testing.T) {
@@ -755,4 +763,8 @@ func TestRejectedReviewKeepsJobBlocked(t *testing.T) {
 	if _, err := f.p.RetryJob(ctx, job.ID); !errors.Is(err, ErrPendingReview) {
 		t.Fatalf("retry after rejection: %v", err)
 	}
+}
+
+func (noMoviesService) ListQualityDefinitions(context.Context) ([]*movies.QualityDefinition, error) {
+	return nil, nil
 }

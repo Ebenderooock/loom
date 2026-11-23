@@ -1,4 +1,5 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
+import type { LoomCollection } from "../src/lib/collections-api";
 import {
   mockBaseApp,
   mockGet,
@@ -7,6 +8,55 @@ import {
   SAMPLE_MOVIE,
   SAMPLE_SERIES,
 } from "./helpers/mock-api";
+
+async function mockCollections(page: Page) {
+  const collection: LoomCollection = {
+    id: "collection-0",
+    name: "Collection 0",
+    overview: "",
+    revision: 1,
+    total: 20,
+    in_library: 0,
+    sources: [],
+    members: Array.from({ length: 20 }, (_, i) => ({
+      id: `member-${i}`,
+      title: `Member ${i}`,
+      media_type: "movie",
+      poster_path: `/poster-${i}.jpg`,
+      external_ids: { tmdb: String(i + 1) },
+      sources: [],
+      provenance: [],
+      local: true,
+      excluded: false,
+      monitored: false,
+      in_library: false,
+    })),
+  };
+  await mockGet(page, "libraries", []);
+  await mockGet(page, "collections/", {
+    items: Array.from({ length: 20 }, (_, i) => ({
+      ...collection,
+      id: `collection-${i}`,
+      name: `Collection ${i}`,
+      members: collection.members.slice(0, i % 4),
+    })),
+  });
+  await mockGet(page, "collections/collection-0", collection);
+  await mockGet(page, "collections/scan", {
+    total: 0,
+    checked: 0,
+    pending: 0,
+    failed: 0,
+    running: false,
+    errors: [],
+  });
+  await page.route("**/poster-*.jpg", (route) =>
+    route.fulfill({
+      contentType: "image/svg+xml",
+      body: '<svg xmlns="http://www.w3.org/2000/svg" width="200" height="300"/>',
+    }),
+  );
+}
 
 async function measurements(grid: Locator) {
   return grid.evaluate((element) => {
@@ -55,6 +105,7 @@ test("media grids keep 1080p card sizes on wider displays", async ({
   }));
   await mockMovies(page, movies);
   await mockSeriesApi(page, series);
+  await mockCollections(page);
   await mockGet(
     page,
     "artists",
@@ -99,6 +150,8 @@ test("media grids keep 1080p card sizes on wider displays", async ({
     ["/series", "Show 0"],
     ["/music", "Artist 0"],
     ["/discover", "Suggestion 0"],
+    ["/collections", "Collection 0"],
+    ["/collections?id=collection-0", "Member 0"],
   ]) {
     await page.goto(path);
     const grid = page.locator("main .grid").filter({ hasText: title }).first();
@@ -116,6 +169,62 @@ test("media grids keep 1080p card sizes on wider displays", async ({
         page,
         page.locator("main .grid").filter({ hasText: "Discovery 0" }).first(),
       );
+    }
+  }
+});
+
+test("collection posters match movie dimensions at every card size", async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== "chromium");
+  await mockBaseApp(page);
+  await mockGet(page, "features", {});
+  await mockMovies(page);
+  await mockCollections(page);
+
+  const sizeOf = (locator: Locator) =>
+    locator.evaluate((element) => {
+      const { width, height } = element.getBoundingClientRect();
+      return { width, height };
+    });
+
+  for (const size of ["Small", "Medium", "Large"]) {
+    await page.goto("/settings/appearance");
+    await page.getByLabel("Media Card Size").click();
+    await page.getByRole("option", { name: size, exact: true }).click();
+
+    for (const width of [375, 1920, 2560]) {
+      await page.setViewportSize({ width, height: 1080 });
+      await page.goto("/movies");
+      const movie = page
+        .locator("main .grid")
+        .filter({ hasText: SAMPLE_MOVIE.title })
+        .first()
+        .locator('[class~="aspect-[2/3]"]')
+        .first();
+      await expect(movie).toBeVisible();
+      const expected = await sizeOf(movie);
+
+      await page.goto("/collections");
+      for (let i = 0; i < 4; i++) {
+        const poster = page
+          .getByRole("link", { name: new RegExp(`^Collection ${i} `) })
+          .locator(":scope > div")
+          .first();
+        await expect(poster).toBeVisible();
+        const actual = await sizeOf(poster);
+        expect(actual.width).toBeCloseTo(expected.width, 0);
+        expect(actual.height).toBeCloseTo(expected.height, 0);
+      }
+
+      await page.goto("/collections?id=collection-0");
+      const member = page
+        .getByRole("button", { name: "View Member 0", exact: true })
+        .locator('[class~="aspect-[2/3]"]');
+      await expect(member).toBeVisible();
+      const actual = await sizeOf(member);
+      expect(actual.width).toBeCloseTo(expected.width, 0);
+      expect(actual.height).toBeCloseTo(expected.height, 0);
     }
   }
 });

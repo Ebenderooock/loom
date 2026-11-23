@@ -40,7 +40,7 @@ func TestTVDBSourceMixedMembersEnrichExactIDsWithoutCollisions(t *testing.T) {
 		case "/login":
 			_, _ = w.Write([]byte(`{"data":{"token":"test"}}`))
 		case "/lists/10/extended":
-			_, _ = w.Write([]byte(`{"status":"success","data":{"id":10,"name":"Mixed","entities":[{"movieId":42,"order":1},{"seriesId":42,"order":2}]}}`))
+			_, _ = w.Write([]byte(`{"status":"success","data":{"id":10,"name":"Mixed","image":"https://artworks.thetvdb.com/list.jpg","entities":[{"movieId":42,"order":1},{"seriesId":42,"order":2}]}}`))
 		case "/lists/slug/star-wars":
 			_, _ = w.Write([]byte(`{"status":"success","data":{"id":10,"name":"Mixed"}}`))
 		case "/movies/42/extended":
@@ -75,6 +75,9 @@ func TestTVDBSourceMixedMembersEnrichExactIDsWithoutCollisions(t *testing.T) {
 	again, err := s.Import(context.Background(), Source{Provider: "tvdb", Kind: "list", ExternalID: "10"})
 	if err != nil || again.ID != c.ID || c.Sources[0].ExternalID != "10" {
 		t.Fatalf("slug and ID did not resolve to same source: %#v %v", again, err)
+	}
+	if c.Sources[0].PosterPath != "https://artworks.thetvdb.com/list.jpg" {
+		t.Fatalf("missing TVDB list poster: %#v", c.Sources)
 	}
 	for _, m := range c.Members {
 		if m.ExternalIDs["tmdb"] != "42" || m.ExternalIDs["tvdb"] != "42" || len(m.Provenance) != 1 {
@@ -119,8 +122,8 @@ func TestDiscoveryUsesOnlyDeclaredOfficialCandidatesAndExactSources(t *testing.T
 	defer server.Close()
 	store := testStore(t)
 	s := NewService(store, tmdb.NewClient(tmdb.Config{APIKey: "test", BaseURL: server.URL}), tvdb.NewClient(tvdb.Config{APIKey: "test", BaseURL: server.URL}), movieLibrary{[]*movies.Movie{{ID: "movie", TMDBID: &id}}}, showLibrary{[]*series.Series{{ID: "show", TVDBID: &id}}}, nil)
-	s.fetch = func(_ context.Context, ref Source) (string, []Member, error) {
-		return "Same name", []Member{title("movie", "42")}, nil
+	s.fetch = func(_ context.Context, ref Source) (string, []Member, string, error) {
+		return "Same name", []Member{title("movie", "42")}, "", nil
 	}
 	items, warnings, err := s.Discover(context.Background())
 	if err != nil || len(warnings) != 0 || len(items) != 2 || items[0].ID == items[1].ID {

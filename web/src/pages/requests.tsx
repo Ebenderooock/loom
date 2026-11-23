@@ -1276,8 +1276,8 @@ export function RequestsPage() {
   React.useEffect(() => setHeader({ title: "Requests" }), [setHeader]);
 
   return (
-    <div className="space-y-8 p-6">
-      <section className="space-y-3">
+    <div className="space-y-6 p-4 sm:p-6">
+      <section className="space-y-3 rounded-xl border bg-card p-4 text-card-foreground shadow-sm sm:p-6">
         <h2 className="flex items-center gap-2 text-lg font-semibold">
           <Inbox className="h-5 w-5" /> Request media
         </h2>
@@ -1285,13 +1285,13 @@ export function RequestsPage() {
         <SearchAndRequest />
       </section>
 
-      <section className="space-y-3">
+      <section className="space-y-3 rounded-xl border bg-card p-4 text-card-foreground shadow-sm sm:p-6">
         <h2 className="text-lg font-semibold">My requests</h2>
         <MyRequests />
       </section>
 
       {isAdmin && (
-        <section className="space-y-3">
+        <section className="space-y-3 rounded-xl border bg-card p-4 text-card-foreground shadow-sm sm:p-6">
           <h2 className="text-lg font-semibold">Request quota</h2>
           <p className="text-sm text-muted-foreground">
             Limit how many requests each non-admin user can make in a rolling
@@ -1302,14 +1302,14 @@ export function RequestsPage() {
       )}
 
       {isAdmin && (
-        <section className="space-y-3">
+        <section className="space-y-3 rounded-xl border bg-card p-4 text-card-foreground shadow-sm sm:p-6">
           <h2 className="text-lg font-semibold">Manage requests</h2>
           <ManageRequests />
         </section>
       )}
 
       {isAdmin && (
-        <section className="space-y-3">
+        <section className="space-y-3 rounded-xl border bg-card p-4 text-card-foreground shadow-sm sm:p-6">
           <h2 className="text-lg font-semibold">Availability reconciliation</h2>
           <p className="text-sm text-muted-foreground">
             Preview or apply a refresh of current availability snapshots for

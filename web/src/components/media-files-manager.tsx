@@ -11,6 +11,7 @@ import {
 import { formatBytes } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { QualityLabel } from "@/components/quality-label";
 import {
   Dialog,
   DialogContent,
@@ -218,7 +219,9 @@ function AdminMediaFilesManager({
                         <span className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                           <span>{formatBytes(file.size)}</span>
                           {file.quality && (
-                            <Badge variant="outline">{file.quality}</Badge>
+                            <Badge variant="outline">
+                              <QualityLabel quality={file.quality} />
+                            </Badge>
                           )}
                           {file.format && <span>{file.format}</span>}
                           <Badge variant="secondary">

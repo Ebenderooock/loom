@@ -32,6 +32,11 @@ info:
     connectivity tests can supply the saved definition ID to retain credentials
     without saving the tested settings. Explicitly disabled authentication
     retains its existing access behavior.
+
+    Library storage responses include an optional opaque host-local
+    disk_space.volume_id and size_bytes (scanned library file sizes).
+    Disk capacity is per volume, not per library. Dashboard volume grouping
+    is client-side and can estimate shared NAS mounts from matching readings.
   license:
     name: AGPL-3.0-only
     identifier: AGPL-3.0-only
@@ -48,6 +53,8 @@ servers:
         default: loom.example.com
 
 tags:
+  - name: titles
+    description: Movie and series quick actions.
   - name: pairing
     description: Expiring TV authorization with explicit browser approval.
   - name: health
@@ -78,6 +85,8 @@ tags:
       and Radarr compatibility rationale.
   - name: music
     description: Music album editions and audio-quality / metadata profiles.
+  - name: notifications
+    description: Notification connection subscriptions.
 
   - name: discovery
     description: |
@@ -90,6 +99,284 @@ tags:
       manual merges. Reads resolve merged IDs; writes through stale merged IDs
       return 409 and require reloading the canonical collection.
 paths:
+  /api/v1/notifications:
+    get:
+      tags: [notifications]
+      operationId: listNotificationConnections
+      summary: List notification connections
+      responses:
+        "200":
+          description: Notification connections
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/NotificationConnection"
+        "500": { description: Connections unavailable }
+    post:
+      tags: [notifications]
+      operationId: createNotificationConnection
+      summary: Create a notification connection
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: "#/components/schemas/NotificationConnectionInput"
+                - type: object
+                  required: [name, type]
+                  properties:
+                    on_update_available:
+                      type: boolean
+                      default: false
+      responses:
+        "201":
+          description: Created connection
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationConnection"
+        "400": { description: Invalid request }
+        "500": { description: Connection could not be created }
+  /api/v1/notifications/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      tags: [notifications]
+      operationId: getNotificationConnection
+      summary: Read a notification connection
+      responses:
+        "200":
+          description: Notification connection
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationConnection"
+        "404": { description: Connection not found }
+        "500": { description: Connection unavailable }
+    put:
+      tags: [notifications]
+      operationId: updateNotificationConnection
+      summary: Update a notification connection
+      description: Omitted fields retain their existing values.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NotificationConnectionInput"
+      responses:
+        "200":
+          description: Updated connection
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationConnection"
+        "400": { description: Invalid request }
+        "404": { description: Connection not found }
+        "500": { description: Connection could not be updated }
+  /api/v1/{collection}/{id}/actions:
+    parameters:
+      - $ref: "#/components/parameters/TitleActionCollection"
+      - $ref: "#/components/parameters/TitleFileID"
+    get:
+      tags: [titles]
+      operationId: getTitleActions
+      summary: Read title quick-action availability (admin).
+      description: |
+        Checks library files and connection configuration without contacting
+        media servers. Hide each sync action unless its Configured flag is true;
+        disable visible actions when their unavailable reason is non-null.
+        Missing status or absent registrations do not block rescan.
+      security: [{ cookieAuth: [] }, { apiKey: [] }, { bearerAuth: [] }]
+      responses:
+        "200":
+          description: Current availability, including reasons for blocked actions.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TitleActionAvailability" }
+        "401": { description: Authentication required. }
+        "403": { description: Administrator required. }
+        "503": { description: Administrator authentication is not configured. }
+  /api/v1/{collection}/{id}/rescan-library:
+    parameters:
+      - $ref: "#/components/parameters/TitleActionCollection"
+      - $ref: "#/components/parameters/TitleFileID"
+    post:
+      tags: [titles]
+      operationId: rescanTitleLibrary
+      summary: Discover files in a verified title library folder (admin).
+      description: |
+        Re-resolves the selected title folder and registers eligible new videos,
+        including for missing titles with no existing registrations. Repairs
+        availability and changed registrations. Skips incomplete files, symlinks,
+        samples and undersized unregistered videos. Rejects shared, ambiguous or
+        out-of-library folders. Does not scan the whole library or retry downloads.
+      security: [{ cookieAuth: [] }, { apiKey: [] }, { bearerAuth: [] }]
+      responses:
+        "200":
+          description: Completed scan; inspect status and errors for file-level failures.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TitleRescanResult" }
+        "401": { description: Authentication required. }
+        "403": { description: Administrator required. }
+        "409": { description: Title folder is unavailable or unsafe. }
+        "500": { description: Rescan failed. }
+        "503": { description: Scanning, library configuration or authentication is unavailable. }
+  /api/v1/{collection}/{id}/sync-plex:
+    parameters:
+      - $ref: "#/components/parameters/TitleActionCollection"
+      - $ref: "#/components/parameters/TitleFileID"
+    post:
+      tags: [titles]
+      operationId: syncTitlePlex
+      summary: Request Plex library refreshes for a title (admin).
+      description: |
+        Requires complete registered library files. Refreshes libraries on every
+        enabled, configured Plex connection, independently of Notify on Import.
+        Does not send Loom paths, download missing media or sync watched state.
+      security: [{ cookieAuth: [] }, { apiKey: [] }, { bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/TitleMediaServerRefreshed" }
+        "401": { description: Authentication required. }
+        "403": { description: Administrator required. }
+        "409": { description: Complete media or configured Plex connections are unavailable. }
+        "500": { description: Plex provider is unavailable. }
+        "502": { description: One or more Plex refreshes failed; partial success is reported. }
+        "503": { description: Administrator authentication is not configured. }
+  /api/v1/{collection}/{id}/sync-jellyfin:
+    parameters:
+      - $ref: "#/components/parameters/TitleActionCollection"
+      - $ref: "#/components/parameters/TitleFileID"
+    post:
+      tags: [titles]
+      operationId: syncTitleJellyfin
+      summary: Request Jellyfin library refreshes for a title (admin).
+      description: |
+        Requires complete registered library files. Requests a library-wide
+        refresh on every enabled, configured Jellyfin connection, independently
+        of Notify on Import. Does not send Loom paths, download missing media or
+        sync watched state.
+      security: [{ cookieAuth: [] }, { apiKey: [] }, { bearerAuth: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/TitleMediaServerRefreshed" }
+        "401": { description: Authentication required. }
+        "403": { description: Administrator required. }
+        "409": { description: Complete media or configured Jellyfin connections are unavailable. }
+        "500": { description: Jellyfin provider is unavailable. }
+        "502": { description: One or more Jellyfin refreshes failed; partial success is reported. }
+        "503": { description: Administrator authentication is not configured. }
+  /api/v1/updates:
+    get:
+      tags: [system]
+      operationId: getUpdateSettings
+      summary: Read update preferences and installation safety status (admin only)
+      description: |
+        Requires administrator authorization, including when normal auth wiring
+        is absent (fail closed). Defaults to Stable, no Prelease consent and
+        automatic installation disabled. No network request is made.
+      responses:
+        "200":
+          description: Saved preferences and current fail-closed installation gate
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [settings, canAutoInstall, installationNotice, verificationConfigured, isPostgres]
+                properties:
+                  settings:
+                    $ref: "#/components/schemas/UpdateSettings"
+                  canAutoInstall:
+                    type: boolean
+                    description: True only for an enrolled eligible Linux/systemd or macOS/launchd SQLite installation with a compiled publisher key
+                  installationNotice:
+                    type: string
+                  verificationConfigured:
+                    type: boolean
+                    description: Whether the binary contains a publisher public trust root
+                  isPostgres:
+                    type: boolean
+                    description: Whether the effective storage engine is PostgreSQL
+        "401":
+          description: Authentication required
+        "403":
+          description: Administrator required or auth wiring unavailable
+        "500":
+          description: Preferences unavailable
+    put:
+      tags: [system]
+      operationId: setUpdateSettings
+      summary: Replace update channel preferences (admin only)
+      description: |
+        Prelease requires separate explicit opt-in. Stable requires clearing
+        that consent. Automatic installation requires an enrolled canonical
+        Linux/systemd or macOS/launchd SQLite helper and a compiled publisher key; other
+        installations return 409 for autoInstall true.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateSettings"
+      responses:
+        "200":
+          description: Saved preferences
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UpdateSettings"
+        "400":
+          description: Invalid settings, missing Prelease consent, unknown fields or oversized request
+        "401":
+          description: Authentication required
+        "403":
+          description: Administrator required or auth wiring unavailable
+        "409":
+          description: Automatic installation unavailable; PostgreSQL always requires manual updates
+        "500":
+          description: Preferences could not be saved
+  /api/v1/updates/check:
+    post:
+      tags: [system]
+      operationId: checkNativeUpdate
+      summary: Check signed GitHub Releases metadata for the saved channel (admin only)
+      parameters:
+        - name: force
+          in: query
+          required: false
+          description: Explicit manual check that bypasses the hourly cache
+          schema:
+            type: boolean
+      description: |
+        No installation or binary download. Per-process, per-channel cache
+        throttles successes and failures for at least one hour, respects GitHub
+        rate-limit delays up to 24 hours, and uses API ETags on refresh.
+        With force=true (the UI "Check for updates" button) the hourly cache is
+        bypassed, limited to one network check per channel per minute shared by
+        concurrent callers; while GitHub rate limiting is in effect no request
+        is made and the cached notice is returned with throttled true.
+        No startup/background checks. Missing trust roots make no network
+        requests. Invalid, missing or untrusted signed metadata
+        returns verified false and manual-update guidance, not a candidate.
+      responses:
+        "200":
+          description: Verified notice or safe manual-update fallback
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UpdateNotice"
+        "401":
+          description: Authentication required
+        "403":
+          description: Administrator required or auth wiring unavailable
+        "500":
+          description: Saved preferences unavailable
   /api/v1/appearance:
     get:
       tags: [system]
@@ -308,12 +595,12 @@ paths:
     get:
       tags: [imports]
       operationId: listImportJobs
-      summary: List all active jobs and recent finished jobs.
+      summary: List all active jobs and recent undismissed inactive jobs.
       security: [{ apiKey: [] }, { bearerAuth: [] }, { cookieAuth: [] }]
       parameters:
         - in: query
           name: limit
-          description: Maximum finished jobs; active jobs are always included.
+          description: Maximum undismissed inactive jobs; active jobs are always included.
           schema: { type: integer, default: 100, maximum: 500, minimum: 1 }
       responses:
         "200":
@@ -326,6 +613,50 @@ paths:
                   data:
                     type: array
                     items: { $ref: "#/components/schemas/ImportJob" }
+  /api/v1/imports/jobs/dismiss:
+    post:
+      tags: [imports]
+      operationId: dismissImportJobs
+      summary: Hide selected inactive jobs or clear all inactive queue entries.
+      description: |
+        Dismissal preserves job details, file outcomes, import history, safety reviews,
+        media files and downloads. Queued, importing and retry-pending jobs cannot be
+        dismissed. Selected IDs are dismissed atomically. Clear-all is not limited
+        to the recent jobs returned by the list endpoint.
+      security: [{ apiKey: [] }, { bearerAuth: [] }, { cookieAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - type: object
+                  required: [ids]
+                  properties:
+                    ids:
+                      type: array
+                      minItems: 1
+                      maxItems: 1000
+                      items: { type: string, minLength: 1 }
+                    all_inactive: { type: boolean, enum: [false] }
+                - type: object
+                  required: [all_inactive]
+                  properties:
+                    all_inactive: { type: boolean, enum: [true] }
+      responses:
+        "200":
+          description: Entries dismissed; repeated dismissal returns zero for those entries.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [dismissed]
+                properties:
+                  dismissed: { type: integer, minimum: 0 }
+        "400": { description: Invalid body or selection. }
+        "404": { description: A selected job does not exist; no entries dismissed. }
+        "409": { description: A selected job is active; no entries dismissed. }
+        "500": { description: Dismissal could not be persisted. }
   /api/v1/imports/jobs/{id}:
     get:
       tags: [imports]
@@ -665,11 +996,15 @@ paths:
     patch:
       tags: [collections]
       operationId: editCollection
-      summary: Edit local collection name/description/quality default (admin).
+      summary: Edit local collection details, cover, or quality default (admin).
       description: |
         quality_profile_id is validated server-side and only applies to titles
         added from this collection; apply it to existing titles explicitly with
         POST /quality. An empty string clears the default.
+        cover chooses a mosaic, an attached source with artwork, or an active
+        member with artwork. Omit cover to retain the current choice. Cover
+        references survive source refreshes; unavailable artwork is reported
+        by the UI with a mosaic fallback.
       security: [{ cookieAuth: [] }, { apiKey: [] }, { bearerAuth: [] }]
       requestBody:
         required: true
@@ -684,6 +1019,7 @@ paths:
                 overview: { type: string, maxLength: 20000 }
                 revision: { type: integer, minimum: 0 }
                 quality_profile_id: { type: string }
+                cover: { $ref: "#/components/schemas/CollectionCover" }
       responses:
         "200":
           description: Updated collection.
@@ -4160,10 +4496,78 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
+  /api/v1/custom-formats/tiers:
+    get:
+      tags: [custom-formats]
+      operationId: listCustomQualityTiers
+      summary: List reusable matcher-backed quality tiers.
+      security: [{ apiKey: [] }, { bearerAuth: [] }, { cookieAuth: [] }]
+      responses:
+        "200":
+          description: Saved tiers; profile order determines matching precedence.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/CustomQualityTier" }
+    post:
+      tags: [custom-formats]
+      operationId: createCustomQualityTier
+      summary: Create a quality tier without changing profile allowance or scores.
+      security: [{ apiKey: [] }, { bearerAuth: [] }, { cookieAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SaveCustomQualityTierRequest" }
+      responses:
+        "201":
+          description: Created tier with a server-generated immutable ID.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CustomQualityTier" }
+        "400": { description: Invalid name, rules, or title regular expression. }
+  /api/v1/custom-formats/tiers/{id}:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: string }
+    put:
+      tags: [custom-formats]
+      operationId: updateCustomQualityTier
+      summary: Edit matching rules or label without changing persisted tier identity.
+      security: [{ apiKey: [] }, { bearerAuth: [] }, { cookieAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SaveCustomQualityTierRequest" }
+      responses:
+        "200":
+          description: Updated tier.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CustomQualityTier" }
+        "400": { description: Invalid name, rules, or title regular expression. }
+        "404": { description: Tier not found. }
+    delete:
+      tags: [custom-formats]
+      operationId: deleteCustomQualityTier
+      summary: Delete an unreferenced custom tier.
+      security: [{ apiKey: [] }, { bearerAuth: [] }, { cookieAuth: [] }]
+      responses:
+        "204": { description: Tier deleted. }
+        "404": { description: Tier not found. }
+        "409": { description: A profile or imported file still references this tier. }
   /api/v1/custom-formats/test:
     post:
       tags: [quality]
-      summary: Test if a release name matches a custom format.
+      summary: Test matching formats and optionally apply a quality profile's scores.
       operationId: testCustomFormat
       requestBody:
         required: true
@@ -4185,6 +4589,126 @@ paths:
 
 components:
   schemas:
+    NotificationConnectionInput:
+      type: object
+      description: Connection settings and event subscriptions. On creation, omitted event subscriptions default to false.
+      properties:
+        name: { type: string }
+        type: { type: string, enum: [discord, slack, telegram, email, webhook, gotify, pushover, apprise, ntfy] }
+        enabled: { type: boolean }
+        settings: { type: object, additionalProperties: true }
+        tags: { type: array, items: { type: string } }
+        on_grab: { type: boolean }
+        on_download: { type: boolean }
+        on_upgrade: { type: boolean }
+        on_rename: { type: boolean }
+        on_delete: { type: boolean }
+        on_health_issue: { type: boolean }
+        on_application_update:
+          type: boolean
+          description: Existing application-update event subscription, independent of on_update_available.
+        on_update_available:
+          type: boolean
+          description: Subscribe to verified new release notices. Defaults to false on creation; unverified release information is not reported.
+        on_playback: { type: boolean }
+    NotificationConnection:
+      allOf:
+        - $ref: "#/components/schemas/NotificationConnectionInput"
+        - type: object
+          required: [id, name, type, enabled, settings, on_application_update, on_update_available, created_at, updated_at]
+          properties:
+            id: { type: string }
+            created_at: { type: string, format: date-time }
+            updated_at: { type: string, format: date-time }
+    TitleActionAvailability:
+      type: object
+      required: [folderPath, unavailableReason, rescanUnavailableReason, plexConfigured, plexUnavailableReason, jellyfinConfigured, jellyfinUnavailableReason]
+      properties:
+        folderPath: { type: [string, "null"] }
+        unavailableReason: { type: [string, "null"] }
+        rescanUnavailableReason: { type: [string, "null"] }
+        plexConfigured:
+          type: boolean
+          description: An enabled Plex connection has a valid server URL and token.
+        plexUnavailableReason: { type: [string, "null"] }
+        jellyfinConfigured:
+          type: boolean
+          description: An enabled Jellyfin connection has a valid server URL and API key.
+        jellyfinUnavailableReason: { type: [string, "null"] }
+    TitleRescanResult:
+      type: object
+      required: [id, libraryId, rootFolderPath, status, totalFiles, matched, unmatched, imported, startedAt]
+      properties:
+        id: { type: string }
+        libraryId: { type: string }
+        rootFolderPath: { type: string }
+        status: { type: string, enum: [completed, failed] }
+        totalFiles: { type: integer, minimum: 0 }
+        matched: { type: integer, minimum: 0 }
+        unmatched: { type: integer, minimum: 0 }
+        imported: { type: integer, minimum: 0 }
+        errors: { type: array, items: { type: string } }
+        startedAt: { type: string, format: date-time }
+        completedAt: { type: string, format: date-time }
+    UpdateSettings:
+      type: object
+      additionalProperties: false
+      required: [channel]
+      properties:
+        channel:
+          type: string
+          enum: [stable, prelease]
+          default: stable
+        preleaseOptIn:
+          type: boolean
+          default: false
+          description: Must be true for Prelease and false for Stable
+        autoInstall:
+          type: boolean
+          default: false
+          description: True requires eligible enrolled Linux/systemd or macOS/launchd SQLite and a compiled publisher key; otherwise 409
+        postgresDedicatedAck:
+          type: boolean
+          default: false
+          description: Acknowledges the current PostgreSQL database is dedicated to Loom; does not enable automatic installation
+    UpdateNotice:
+      type: object
+      required: [currentVersion, available, verified, url, checkedAt, nextCheck]
+      properties:
+        currentVersion:
+          type: string
+        version:
+          type: string
+          description: Present only for verified signed metadata
+        tag:
+          type: string
+          description: GitHub release tag; Prelease tags are separate from the signed SemVer version
+        sourceSha:
+          type: string
+          description: Full commit SHA from verified signed metadata
+        available:
+          type: boolean
+          description: Verified release is newer than a recognized installed version
+        verified:
+          type: boolean
+        url:
+          type: string
+          format: uri
+        checkedAt:
+          type: string
+          format: date-time
+        nextCheck:
+          type: string
+          format: date-time
+        message:
+          type: string
+        manualCheckAfter:
+          type: string
+          format: date-time
+          description: Forced checks only; earliest time another forced check may contact GitHub
+        throttled:
+          type: boolean
+          description: Forced check returned the cached notice because of the cooldown or GitHub rate limiting
     Appearance:
       type: object
       additionalProperties: false
@@ -4668,6 +5192,10 @@ components:
         kind: { type: string, enum: [collection, list] }
         external_id: { type: string }
         last_sync: { type: string, format: date-time }
+        poster_path:
+          type: string
+          readOnly: true
+          description: Provider artwork captured on import/refresh, when supplied by the source.
         error:
           type: string
           description: Safe visible source access/mapping failure; previous contribution retained.
@@ -4744,6 +5272,20 @@ components:
               media_type: { type: string, enum: [movie, series] }
               media_id: { type: string }
               message: { type: string }
+    CollectionCover:
+      type: object
+      additionalProperties: false
+      required: [mode]
+      properties:
+        mode: { type: string, enum: [mosaic, source, member] }
+        source_key:
+          type: string
+          maxLength: 100
+          description: Required only for source mode; attached provider:kind:external-ID key with artwork.
+        member_id:
+          type: string
+          maxLength: 100
+          description: Required only for member mode; active collection member ID with artwork.
     LoomCollection:
       type: object
       required: [id, name, overview, sources, members, revision, total, in_library]
@@ -4757,6 +5299,9 @@ components:
         quality_profile_id:
           type: string
           description: Default quality profile for titles added from this collection. Never changes existing titles implicitly.
+        cover:
+          $ref: "#/components/schemas/CollectionCover"
+          description: Local cover preference; absent means mosaic.
         sources:
           type: array
           items: { $ref: "#/components/schemas/CollectionSource" }
@@ -6069,7 +6614,11 @@ components:
       properties:
         id:
           type: string
-          description: Quality definition ID.
+          description: Built-in quality definition ID or immutable custom tier ID.
+        kind:
+          type: string
+          enum: ["", custom]
+          description: Omit or leave empty for built-in qualities; use custom for matcher-backed tiers.
         name:
           type: string
           description: Quality definition name.
@@ -6095,7 +6644,7 @@ components:
           description: Whether upgrades are allowed after initial grab.
         cutoff:
           type: string
-          description: Quality definition ID that serves as upgrade target. Must exist in items and be allowed.
+          description: Built-in or custom tier ID that serves as upgrade target. Must exist in items and be allowed.
         language:
           type: string
           description: ISO 639-1 language code.
@@ -6159,6 +6708,59 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/QualityProfileItem"
+
+    CustomQualityTierSpecification:
+      type: object
+      required: [implementation, fields]
+      properties:
+        name: { type: string }
+        implementation:
+          type: string
+          enum: [ReleaseTitleSpec, QualitySpec, SourceSpec, ResolutionSpec, CodecSpec, AudioSpec, ReleaseGroupSpec, LanguageSpec]
+        negate: { type: boolean, default: false }
+        required: { type: boolean, default: false }
+        fields:
+          type: object
+          required: [value]
+          properties:
+            value:
+              type: string
+              minLength: 1
+              description: Matching value; ReleaseTitleSpec uses a case-insensitive regular expression. SourceSpec accepts unknown for an unspecified source.
+    SaveCustomQualityTierRequest:
+      type: object
+      required: [name, specifications]
+      properties:
+        name: { type: string, minLength: 1 }
+        specifications:
+          type: array
+          minItems: 1
+          description: Different rule types are ANDed; same-type rules are alternatives unless required.
+          items: { $ref: "#/components/schemas/CustomQualityTierSpecification" }
+    CustomQualityTier:
+      allOf:
+        - $ref: "#/components/schemas/SaveCustomQualityTierRequest"
+        - type: object
+          required: [id]
+          properties:
+            id:
+              type: string
+              description: Immutable server-generated tier identity; names and rules can change.
+    QualityTierResolution:
+      type: object
+      nullable: true
+      required: [id, name, rank]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        rank:
+          type: integer
+          minimum: 0
+          description: Position in the selected profile, best first.
+        kind:
+          type: string
+          enum: [custom]
+          description: Present for custom tiers; omitted for built-in qualities.
 
     CustomFormat:
       type: object
@@ -6270,23 +6872,59 @@ components:
 
     TestCustomFormatRequest:
       type: object
-      required: [release_name]
+      required: [title]
       properties:
-        release_name:
+        title:
           type: string
-          description: Release name to test against the custom format.
+          description: Release title or filename to test against all saved custom formats.
+        quality_profile_id:
+          type: string
+          description: Optional saved profile whose matching format points and minimum score are applied.
 
     TestCustomFormatResponse:
       type: object
-      required: [custom_format_id, release_name, matches]
+      required: [release, matches, score]
       properties:
-        custom_format_id:
-          type: string
-        release_name:
-          type: string
+        quality_tier:
+          $ref: "#/components/schemas/QualityTierResolution"
+        release:
+          type: object
+          description: Parsed metadata shared with acquisition and import matching.
+          properties:
+            title: { type: string }
+            quality: { type: string }
+            source: { type: string }
+            resolution: { type: string }
+            codec: { type: string }
+            audio: { type: string }
+            group: { type: string }
+            size: { type: integer, format: int64 }
+            languages:
+              type: array
+              items: { type: string }
         matches:
+          type: array
+          items:
+            type: object
+            required: [custom_format_id, custom_format_name, score]
+            properties:
+              custom_format_id: { type: string }
+              custom_format_name: { type: string }
+              score:
+                type: integer
+                description: This profile's signed points; zero when no profile is selected or the format is unassigned.
+        score:
+          type: integer
+          description: Sum of matching profile points. Zero without a profile is match-only compatibility data, not a calculated profile score.
+        quality_profile_id:
+          type: string
+          description: Present only when a profile was selected.
+        minimum_score:
+          type: integer
+          description: The selected profile's minimum acceptable format score.
+        meets_minimum:
           type: boolean
-          description: Whether the release name matches all filters.
+          description: Present only with a profile; true when score is at least minimum_score. Does not override base-quality restrictions.
 
     LibraryHealthReport:
       type: object
@@ -6385,6 +7023,11 @@ components:
           type: boolean
 
   parameters:
+    TitleActionCollection:
+      name: collection
+      in: path
+      required: true
+      schema: { type: string, enum: [movies, series] }
     CollectionID:
       name: id
       in: path
@@ -6438,6 +7081,18 @@ components:
         type: string
 
   responses:
+    TitleMediaServerRefreshed:
+      description: All selected servers accepted the refresh; indexing may still be running.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [message, connections]
+            properties:
+              message:
+                type: string
+                enum: [Plex library refresh requested, Jellyfin library refresh requested]
+              connections: { type: integer, minimum: 1 }
     ImportAccepted:
       description: Durably queued; not a successful-import confirmation.
       content:

@@ -95,6 +95,7 @@ interface FormState {
   on_delete: boolean;
   on_health_issue: boolean;
   on_application_update: boolean;
+  on_update_available: boolean;
   on_playback: boolean;
 }
 
@@ -111,6 +112,7 @@ function defaultForm(): FormState {
     on_delete: false,
     on_health_issue: true,
     on_application_update: false,
+    on_update_available: false,
     on_playback: false,
   };
 }
@@ -128,6 +130,7 @@ function formFromConnection(c: NotificationConnection): FormState {
     on_delete: c.on_delete,
     on_health_issue: c.on_health_issue,
     on_application_update: c.on_application_update,
+    on_update_available: c.on_update_available ?? false,
     on_playback: c.on_playback,
   };
 }
@@ -533,6 +536,7 @@ export function NotificationsPage() {
       on_delete: form.on_delete,
       on_health_issue: form.on_health_issue,
       on_application_update: form.on_application_update,
+      on_update_available: form.on_update_available,
       on_playback: form.on_playback,
     };
   }
@@ -582,6 +586,7 @@ export function NotificationsPage() {
         on_delete: form.on_delete,
         on_health_issue: form.on_health_issue,
         on_application_update: form.on_application_update,
+        on_update_available: form.on_update_available,
         on_playback: form.on_playback,
       };
       await update.mutateAsync({ id: original.id, body });

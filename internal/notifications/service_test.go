@@ -30,6 +30,7 @@ CREATE TABLE notification_connections (
 	on_delete BOOLEAN DEFAULT false,
 	on_health_issue BOOLEAN DEFAULT false,
 	on_application_update BOOLEAN DEFAULT false,
+	on_update_available BOOLEAN DEFAULT false,
 	on_playback BOOLEAN DEFAULT false,
 	tags TEXT DEFAULT '[]',
 	created_at TEXT NOT NULL,

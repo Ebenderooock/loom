@@ -36,9 +36,9 @@ import {
   useUpdateQualityProfile,
   useDeleteQualityProfile,
   type QualityProfile,
-  type FormatItem,
 } from "@/lib/quality-profiles-api";
-import { useCustomFormats } from "@/lib/custom-formats-api";
+import { useCustomFormats, useCustomTiers } from "@/lib/custom-formats-api";
+import { CustomTierManager } from "@/components/custom-tier-manager";
 
 // ---------- Quality definition types and grouping ----------
 
@@ -50,6 +50,7 @@ interface QualityDefinition {
   resolution: string;
   modifier?: string;
   preferred_at: number;
+  kind?: "custom";
 }
 
 interface ParsedItem {
@@ -57,6 +58,7 @@ interface ParsedItem {
   name: string;
   preferred: boolean;
   allowed: boolean;
+  kind?: "custom";
 }
 
 const SOURCE_GROUP_ORDER = [
@@ -128,6 +130,12 @@ export function QualityProfilesPage() {
   const deleteMut = useDeleteQualityProfile();
   const [editing, setEditing] = React.useState<QualityProfile | null>(null);
   const [creating, setCreating] = React.useState(false);
+  const [managingTiers, setManagingTiers] = React.useState(false);
+  const {
+    data: tiers = [],
+    isLoading: tiersLoading,
+    isError: tiersError,
+  } = useCustomTiers();
 
   // Fetch quality definitions for the editor and for display
   const [definitions, setDefinitions] = React.useState<QualityDefinition[]>([]);
@@ -137,12 +145,27 @@ export function QualityProfilesPage() {
       .then((data) => setDefinitions(Array.isArray(data) ? data : []))
       .catch((err) => console.error("fetch failed:", err));
   }, []);
+  const allDefinitions = React.useMemo(
+    () => [
+      ...definitions,
+      ...tiers.map((tier, i) => ({
+        id: tier.id,
+        name: tier.name,
+        title: tier.name,
+        source: "Custom",
+        resolution: "",
+        preferred_at: definitions.length + i,
+        kind: "custom" as const,
+      })),
+    ],
+    [definitions, tiers],
+  );
 
   const defById = React.useMemo(() => {
     const map = new Map<string, QualityDefinition>();
-    for (const d of definitions) map.set(d.id, d);
+    for (const d of allDefinitions) map.set(d.id, d);
     return map;
-  }, [definitions]);
+  }, [allDefinitions]);
 
   return (
     <div className="container mx-auto max-w-4xl space-y-6 py-8">
@@ -155,9 +178,22 @@ export function QualityProfilesPage() {
             Define quality tiers and per-profile custom format scores.
           </p>
         </div>
-        <Button onClick={() => setCreating(true)}>
-          <Plus className="mr-2 h-4 w-4" /> Add Profile
-        </Button>
+        {tiersError && (
+          <p role="alert">
+            Could not load custom tiers. Retry before editing profiles.
+          </p>
+        )}
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setManagingTiers(true)}>
+            Manage custom tiers
+          </Button>
+          <Button
+            disabled={tiersLoading || tiersError}
+            onClick={() => setCreating(true)}
+          >
+            <Plus className="mr-2 h-4 w-4" /> Add Profile
+          </Button>
+        </div>
       </div>
 
       {isLoading ? (
@@ -223,12 +259,19 @@ export function QualityProfilesPage() {
                 </div>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="icon">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-label={`Actions for ${qp.name}`}
+                    >
                       <MoreVertical className="h-4 w-4" />
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={() => setEditing(qp)}>
+                    <DropdownMenuItem
+                      disabled={tiersLoading || tiersError}
+                      onClick={() => setEditing(qp)}
+                    >
                       <Pencil className="mr-2 h-4 w-4" /> Edit
                     </DropdownMenuItem>
                     <DropdownMenuItem
@@ -253,12 +296,15 @@ export function QualityProfilesPage() {
       {(creating || editing) && (
         <ProfileDialog
           initial={editing ?? undefined}
-          definitions={definitions}
+          definitions={allDefinitions}
           onClose={() => {
             setEditing(null);
             setCreating(false);
           }}
         />
+      )}
+      {managingTiers && (
+        <CustomTierManager onClose={() => setManagingTiers(false)} />
       )}
     </div>
   );
@@ -285,9 +331,49 @@ function ProfileDialog({
   const [upgradeAllowed, setUpgradeAllowed] = React.useState(
     initial?.upgrade_allowed ?? true,
   );
-  const [formatItems, setFormatItems] = React.useState<FormatItem[]>(
-    initial?.format_items ?? [],
+  // Keep numeric drafts as text so typing a minus sign or clearing an input
+  // does not immediately reset it to 0. Convert to API integers on save.
+  const [formatItems, setFormatItems] = React.useState(
+    (initial?.format_items ?? [])
+      .filter((fi) => fi.format_id.trim() !== "")
+      .map((fi) => ({
+        ...fi,
+        score: String(fi.score),
+      })),
   );
+  const hasInvalidFormatItems = initial?.format_items?.some(
+    (fi) => fi.format_id.trim() === "",
+  );
+  const [minFormatScore, setMinFormatScore] = React.useState(
+    String(initial?.min_format_score ?? 0),
+  );
+  const [order, setOrder] = React.useState<string[]>(() => {
+    const saved = initial?.items
+      ? parseProfileItems(initial.items).map((item) => item.id)
+      : [];
+    return [
+      ...saved.filter((id) => definitions.some((d) => d.id === id)),
+      ...definitions.filter((d) => !saved.includes(d.id)).map((d) => d.id),
+    ];
+  });
+  const orderedDefinitions = order
+    .map((id) => definitions.find((d) => d.id === id))
+    .filter((d): d is QualityDefinition => !!d);
+  const missingItems = initial?.items
+    ? parseProfileItems(initial.items).filter(
+        (item) => !definitions.some((def) => def.id === item.id),
+      )
+    : [];
+
+  const moveTier = (id: string, delta: number) =>
+    setOrder((current) => {
+      const next = [...current];
+      const from = next.indexOf(id);
+      const to = from + delta;
+      if (from < 0 || to < 0 || to >= next.length) return current;
+      next.splice(to, 0, ...next.splice(from, 1));
+      return next;
+    });
 
   // Parse existing items into a checked-map keyed by quality definition ID
   const [checkedItems, setCheckedItems] = React.useState<
@@ -331,35 +417,48 @@ function ProfileDialog({
 
   const selectedCount = definitions.filter((d) => checkedItems[d.id]).length;
 
-  const updateFormatScore = (cfId: string, score: number) => {
+  const updateFormatScore = (cfId: string, score: string) => {
     setFormatItems((prev) => {
-      const existing = prev.find((fi) => fi.custom_format_id === cfId);
+      const existing = prev.find((fi) => fi.format_id === cfId);
       if (existing) {
         return prev.map((fi) =>
-          fi.custom_format_id === cfId ? { ...fi, score } : fi,
+          fi.format_id === cfId ? { ...fi, score } : fi,
         );
       }
-      return [...prev, { custom_format_id: cfId, score }];
+      return [...prev, { format_id: cfId, score }];
     });
   };
 
   const getScore = (cfId: string) =>
-    formatItems.find((fi) => fi.custom_format_id === cfId)?.score ?? 0;
+    formatItems.find((fi) => fi.format_id === cfId)?.score ?? "0";
 
   const handleSave = () => {
+    if (missingItems.length > 0) {
+      toast.error(
+        "Some profile tiers are unavailable. Restore them before saving.",
+      );
+      return;
+    }
     if (!name.trim()) {
       toast.error("Profile name is required");
       return;
     }
 
     // Build items JSON array matching the shape autosearch expects
-    const itemsArray = definitions.map((d) => ({
-      id: d.id,
-      name: d.name,
-      preferred: d.id === cutoff,
-      allowed: checkedItems[d.id] ?? false,
-    }));
+    const itemsArray = orderedDefinitions
+      .filter((d) => !d.kind || checkedItems[d.id])
+      .map((d) => ({
+        id: d.id,
+        name: d.name,
+        preferred: d.id === cutoff,
+        allowed: checkedItems[d.id] ?? false,
+        ...(d.kind ? { kind: d.kind } : {}),
+      }));
     const itemsJson = JSON.stringify(itemsArray);
+    const formatScores = formatItems.map((fi) => ({
+      ...fi,
+      score: parseInt(fi.score, 10) || 0,
+    }));
 
     if (isEdit) {
       updateMut.mutate(
@@ -367,10 +466,12 @@ function ProfileDialog({
           id: initial!.id,
           body: {
             name: name.trim(),
-            cutoff,
+            cutoff: checkedItems[cutoff] ? cutoff : "",
             items: itemsJson,
             upgrade_allowed: upgradeAllowed,
-            format_items: formatItems,
+            format_items: formatScores,
+            min_format_score: parseInt(minFormatScore, 10) || 0,
+            cutoff_format_score: initial!.cutoff_format_score,
           },
         },
         {
@@ -385,10 +486,11 @@ function ProfileDialog({
       createMut.mutate(
         {
           name: name.trim(),
-          cutoff,
+          cutoff: checkedItems[cutoff] ? cutoff : "",
           items: itemsJson,
           upgrade_allowed: upgradeAllowed,
-          format_items: formatItems,
+          format_items: formatScores,
+          min_format_score: parseInt(minFormatScore, 10) || 0,
         },
         {
           onSuccess: () => {
@@ -403,21 +505,37 @@ function ProfileDialog({
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="flex max-h-[85vh] max-w-2xl flex-col">
-        <DialogHeader>
+      <DialogContent className="flex max-h-[85vh] max-w-2xl flex-col overflow-hidden">
+        <DialogHeader className="shrink-0">
           <DialogTitle>{isEdit ? "Edit" : "Add"} Quality Profile</DialogTitle>
           <DialogDescription>
             Configure quality tiers and custom format scoring.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex-1 space-y-4 overflow-hidden">
+        {/* The scroll region is focusable for keyboard scrolling without
+            moving focus through every quality checkbox. */}
+        <div
+          role="region"
+          aria-label="Quality profile settings"
+          // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- keyboard users must be able to scroll the settings region itself
+          tabIndex={0}
+          className="relative -mx-1 min-h-0 flex-1 space-y-4 overflow-y-auto p-1"
+        >
           {/* Name */}
+          {missingItems.length > 0 && (
+            <p role="alert" className="text-sm text-destructive">
+              This profile references unavailable tiers:{" "}
+              {missingItems.map((item) => item.name || item.id).join(", ")}.
+              Restore them before saving.
+            </p>
+          )}
           <div className="space-y-2">
-            <Label className="text-sm text-muted-foreground">
+            <Label htmlFor="qp-name" className="text-sm text-muted-foreground">
               Profile Name
             </Label>
             <Input
+              id="qp-name"
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="e.g. HD-1080p"
@@ -458,7 +576,7 @@ function ProfileDialog({
               </Button>
             </div>
 
-            <div className="max-h-[30vh] overflow-y-auto rounded-md border border-border">
+            <div className="relative max-h-[30vh] overflow-y-auto rounded-md border border-border">
               {groups.map((group) => {
                 const groupAllChecked = group.defs.every(
                   (d) => checkedItems[d.id],
@@ -526,21 +644,70 @@ function ProfileDialog({
             </div>
           </div>
 
+          <div className="space-y-2">
+            <h3 className="text-sm font-medium">Upgrade order</h3>
+            <p className="text-xs text-muted-foreground">
+              Best first. When tiers overlap, the first enabled match wins.
+            </p>
+            <div className="max-h-48 overflow-y-auto rounded-md border">
+              {orderedDefinitions.map((def, i) => (
+                <div
+                  key={def.id}
+                  className="flex items-center gap-2 border-b p-2 last:border-0"
+                >
+                  <span className="flex-1 text-sm">
+                    {def.title || def.name}
+                  </span>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={i === 0}
+                    onClick={() => moveTier(def.id, -1)}
+                    aria-label={`Move ${def.title || def.name} up`}
+                  >
+                    Up
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={i === orderedDefinitions.length - 1}
+                    onClick={() => moveTier(def.id, 1)}
+                    aria-label={`Move ${def.title || def.name} down`}
+                  >
+                    Down
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </div>
+
           {/* Cutoff selector */}
           {selectedCount > 0 && (
             <div className="space-y-2">
-              <Label className="text-sm text-muted-foreground">Cutoff</Label>
-              <p className="-mt-1 text-xs text-muted-foreground">
-                Once this quality is reached, no further upgrades will be
-                downloaded.
+              <Label
+                htmlFor="qp-cutoff"
+                className="text-sm text-muted-foreground"
+              >
+                Quality cutoff
+              </Label>
+              <p
+                id="qp-cutoff-help"
+                className="-mt-1 text-xs text-muted-foreground"
+              >
+                Quality tier used as the upgrade target when upgrades are
+                allowed. This is not a custom format score.
               </p>
               <select
+                id="qp-cutoff"
+                aria-describedby="qp-cutoff-help"
                 value={cutoff}
                 onChange={(e) => setCutoff(e.target.value)}
                 className="w-full rounded-md border border-border bg-card px-3 py-2 text-sm text-foreground"
               >
-                <option value="">None (always upgrade)</option>
-                {definitions
+                <option value="">None (no quality cutoff)</option>
+                {orderedDefinitions
                   .filter((d) => checkedItems[d.id])
                   .map((d) => (
                     <option key={d.id} value={d.id}>
@@ -552,43 +719,90 @@ function ProfileDialog({
           )}
 
           {/* Custom format scores */}
+          {hasInvalidFormatItems && (
+            <p
+              role="alert"
+              className="rounded-md border border-destructive/50 p-3 text-sm text-destructive"
+            >
+              An earlier failed save left scores without valid format IDs.
+              Re-enter the affected custom-format scores; saving will remove the
+              invalid entries.
+            </p>
+          )}
           {customFormats.length > 0 && (
             <div className="space-y-2">
-              <Label className="text-sm text-muted-foreground">
-                Custom Format Scores
-              </Label>
-              <div className="max-h-40 divide-y divide-border overflow-y-auto rounded-md border border-border">
+              <h3 className="text-sm text-muted-foreground">
+                Custom Format Scores (points)
+              </h3>
+              <p id="qp-format-help" className="text-xs text-muted-foreground">
+                Matching formats add their scores for this profile. Positive
+                points favor a release, negative points penalize it, and 0 is
+                neutral. Quality tiers rank first; format points rank releases
+                within the same tier. Formats do not replace the detected base
+                quality.
+              </p>
+              <div className="divide-y divide-border rounded-md border border-border">
                 {customFormats.map((cf) => (
                   <div
                     key={cf.id}
-                    className="flex items-center justify-between px-3 py-2"
+                    className="flex items-center justify-between gap-3 px-3 py-2"
                   >
-                    <span className="text-sm text-foreground">{cf.name}</span>
+                    <Label
+                      htmlFor={`qp-format-${cf.id}`}
+                      className="min-w-0 break-words text-sm text-foreground"
+                    >
+                      {cf.name}
+                      <span className="sr-only"> score (points)</span>
+                    </Label>
                     <Input
+                      id={`qp-format-${cf.id}`}
+                      aria-describedby="qp-format-help"
                       type="number"
-                      className="h-8 w-24 border-border bg-card text-sm"
+                      className="h-8 w-24 shrink-0 border-border bg-card text-sm"
                       value={getScore(cf.id)}
-                      onChange={(e) =>
-                        updateFormatScore(
-                          cf.id,
-                          parseInt(e.target.value, 10) || 0,
-                        )
-                      }
+                      onChange={(e) => updateFormatScore(cf.id, e.target.value)}
                     />
                   </div>
                 ))}
               </div>
             </div>
           )}
+
+          <div className="space-y-2">
+            <Label
+              htmlFor="qp-min-score"
+              className="text-sm text-muted-foreground"
+            >
+              Minimum custom format score (points)
+            </Label>
+            <Input
+              id="qp-min-score"
+              type="number"
+              aria-describedby="qp-min-score-help"
+              value={minFormatScore}
+              onChange={(e) => setMinFormatScore(e.target.value)}
+              className="border-border bg-card"
+            />
+            <p id="qp-min-score-help" className="text-xs text-muted-foreground">
+              A release must reach this total from matching formats. No matches
+              contribute 0 points. This is an acceptance threshold, not an
+              upgrade cutoff.
+            </p>
+          </div>
         </div>
 
-        <DialogFooter>
+        <DialogFooter className="shrink-0">
           <Button variant="outline" onClick={onClose}>
             Cancel
           </Button>
           <Button
             onClick={handleSave}
-            disabled={!name || createMut.isPending || updateMut.isPending}
+            disabled={
+              !name ||
+              missingItems.length > 0 ||
+              createMut.isPending ||
+              updateMut.isPending
+            }
           >
             {(createMut.isPending || updateMut.isPending) && (
               <Loader2 className="mr-1 h-4 w-4 animate-spin" />

@@ -1,4 +1,4 @@
-name: Publish prerelease image
+name: Prelease builds and publication observer
 
 on:
   push:
@@ -8,15 +8,52 @@ on:
       - "docs/**"
   workflow_dispatch:
 
-permissions:
-  contents: read
-  statuses: read
+permissions: {}
 
 concurrency:
   group: publish-prerelease-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  native:
+    # Unsigned build outputs only. Release creation and signing belong to the
+    # isolated publisher, not to source-controlled code or a privileged token.
+    if: >-
+      github.repository == 'Ebenderooock/loom' &&
+      (startsWith(github.ref, 'refs/heads/prelease/') ||
+       startsWith(github.ref, 'refs/heads/prerelease/'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7
+        with:
+          go-version: "1.26.11"
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6
+        with:
+          version: 9
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile && pnpm build
+        working-directory: web
+      - name: Build native archives without signing credentials
+        env:
+          SOURCE_REF: ${{ github.ref_name }}
+        run: python3 scripts/build-native-prelease.py --ref "$SOURCE_REF"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: native-prelease-${{ github.sha }}
+          path: dist/native-prelease/
+          if-no-files-found: error
+          retention-days: 7
+
   publish:
     if: >-
       github.repository == 'Ebenderooock/loom' &&
@@ -24,6 +61,9 @@ jobs:
        startsWith(github.ref, 'refs/heads/prerelease/'))
     runs-on: ubuntu-latest
     timeout-minutes: 190
+    permissions:
+      contents: read
+      statuses: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:

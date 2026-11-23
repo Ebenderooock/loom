@@ -6,7 +6,9 @@ No download, wrapper, MSI, signature or firewall rule is implied.
 #>
 [CmdletBinding()]
 param(
-    [string]$BinaryPath = (Join-Path $PSScriptRoot '..\..\loom.exe')
+    [string]$BinaryPath = (Join-Path $PSScriptRoot '..\..\loom.exe'),
+    # Explicit native-acceptance candidate only; ordinary releases omit it.
+    [string]$UpdaterPath = ''
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -18,6 +20,39 @@ $logDir = Join-Path $base 'logs'
 $configPath = Join-Path $configDir 'loom.yaml'
 $installedBinary = Join-Path $installDir 'loom.exe'
 $description = 'Loom native installer - media automation'
+
+# Do not let the legacy LocalService ACL code touch a managed installation.
+# Known folders are queried through the OS, not caller-overridable environment.
+$managedBin = Join-Path ([Environment]::GetFolderPath('ProgramFiles')) 'Loom'
+$managedBase = Join-Path ([Environment]::GetFolderPath('CommonApplicationData')) 'Loom'
+$managedHelper = Join-Path $managedBin 'loom-updater.exe'
+$managedMarker = Join-Path $managedBin 'updater-managed'
+if ($UpdaterPath) {
+    $UpdaterPath = (Resolve-Path -LiteralPath $UpdaterPath).ProviderPath
+    $BinaryPath = (Resolve-Path -LiteralPath $BinaryPath).ProviderPath
+    if ($UpdaterPath -eq $managedHelper -or $BinaryPath -eq (Join-Path $managedBin 'loom.exe')) {
+        throw 'Use an extracted matching candidate pair, not the installed executables.'
+    }
+    & $BinaryPath version
+    if ($LASTEXITCODE -ne 0) { throw 'The supplied candidate cannot run on this Windows host.' }
+    & $UpdaterPath preflight
+    if ($LASTEXITCODE -ne 0) { throw 'Windows candidate preflight refused; installation unchanged.' }
+    if (Get-Service -Name LoomUpdater -ErrorAction SilentlyContinue) {
+        & $managedHelper maintenance
+        if ($LASTEXITCODE -ne 0) { throw 'Pending recovery or unsafe service state; binaries retained.' }
+    }
+    & $UpdaterPath prepare
+    if ($LASTEXITCODE -ne 0) { throw 'Cannot prepare protected Windows candidate paths.' }
+    Copy-Item -LiteralPath $BinaryPath -Destination (Join-Path $managedBin 'loom.exe') -Force
+    Copy-Item -LiteralPath $UpdaterPath -Destination $managedHelper -Force
+    & $managedHelper enroll
+    if ($LASTEXITCODE -ne 0) { throw 'Candidate enrollment failed. Keep binaries/data; see docs/windows.md recovery.' }
+    Write-Host 'Native-validation candidate enrolled; automatic installation remains off until consent.'
+    return
+}
+if ((Test-Path -LiteralPath $managedMarker) -or (Get-Service -Name LoomUpdater -ErrorAction SilentlyContinue)) {
+    throw 'Managed installation requires its matching helper; refusing LocalService/ACL conversion.'
+}
 
 function Invoke-Sc {
     param([string[]]$Arguments)

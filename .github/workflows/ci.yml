@@ -15,8 +15,30 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  changes:
+    name: Detect code changes
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Detect code changes
+        id: filter
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+          BEFORE: ${{ github.event.before }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: python3 scripts/ci_code_changes.py
+
   publishing-observer:
     name: Publishing observer
+    needs: [changes]
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -26,6 +48,8 @@ jobs:
 
   go-race:
     name: Go race (${{ matrix.os }}, shard ${{ matrix.shard }})
+    needs: [changes]
+    if: needs.changes.outputs.code == 'true'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -87,6 +111,8 @@ jobs:
 
   go-checks:
     name: Go vet and workflows (${{ matrix.os }})
+    needs: [changes]
+    if: needs.changes.outputs.code == 'true'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -121,7 +147,7 @@ jobs:
   go-coverage:
     name: Go coverage
     runs-on: ubuntu-latest
-    needs: [go-race]
+    needs: [changes, go-race]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/download-artifact@v8
@@ -140,8 +166,8 @@ jobs:
   go:
     name: Go (${{ matrix.os }})
     runs-on: ubuntu-latest
-    needs: [go-race, go-checks, go-coverage]
-    if: always()
+    needs: [changes, go-race, go-checks, go-coverage]
+    if: always() && needs.changes.outputs.code == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -155,13 +181,15 @@ jobs:
           import json
           import os
           results = json.loads(os.environ["NEEDS"])
-          expected = {"go-race", "go-checks", "go-coverage"}
+          expected = {"changes", "go-race", "go-checks", "go-coverage"}
           if set(results) != expected or any(job["result"] != "success" for job in results.values()):
               raise SystemExit(f"Go prerequisites did not all succeed: {results}")
           PY
 
   lint:
     name: Lint
+    needs: [changes]
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -204,6 +232,8 @@ jobs:
 
   vuln:
     name: govulncheck
+    needs: [changes]
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -219,7 +249,7 @@ jobs:
   build:
     name: Build matrix
     runs-on: ubuntu-latest
-    needs: [go, lint]
+    needs: [changes, go, lint]
     strategy:
       fail-fast: false
       matrix:
@@ -247,6 +277,8 @@ jobs:
 
   installers:
     name: Windows service installer
+    needs: [changes]
+    if: needs.changes.outputs.code == 'true'
     runs-on: windows-latest
     timeout-minutes: 15
     env:
@@ -260,14 +292,45 @@ jobs:
       - name: Test native service lifecycle and installer
         shell: pwsh
         run: |
-          go test ./cmd/loom
+          go test ./cmd/loom ./internal/updater ./internal/updates
           if ($LASTEXITCODE -ne 0) { throw 'Go tests failed' }
+          go test -tags loom_updater_windows_candidate ./internal/updater
+          if ($LASTEXITCODE -ne 0) { throw 'Windows candidate boundary tests failed' }
+          foreach ($script in @('packaging/windows/install.ps1', 'packaging/windows/uninstall.ps1')) {
+            $tokens = $null; $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile(
+              (Join-Path $PWD $script), [ref]$tokens, [ref]$errors
+            ) | Out-Null
+            if ($errors.Count -ne 0) { throw "Invalid PowerShell: $script $errors" }
+          }
+          go build -tags loom_updater_windows_candidate -o .\loom-updater-candidate.exe ./cmd/loom-updater
+          if ($LASTEXITCODE -ne 0) { throw 'Candidate helper build failed' }
+          # Deliberately do NOT enroll unvalidated privileged candidate code.
+          # Native SCM/NTFS failure/reboot acceptance is a separate release gate.
           go build -o .\loom-test.exe ./cmd/loom
           if ($LASTEXITCODE -ne 0) { throw 'Go build failed' }
           & .\packaging\windows\smoke-test.ps1 -BinaryPath .\loom-test.exe
 
+  macos-updater:
+    name: macOS updater boundary tests (unprivileged)
+    runs-on: macos-latest
+    timeout-minutes: 15
+    env:
+      CGO_ENABLED: "0"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "1.26.11"
+          cache: true
+      - run: go test -short ./internal/updater ./internal/updates
+      - run: go build ./cmd/loom-updater
+      - run: plutil -lint packaging/macos/dev.loom.server.plist packaging/macos/dev.loom.updater.plist
+
   web:
     name: Frontend
+    needs: [changes]
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:

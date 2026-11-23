@@ -73,6 +73,7 @@ type Service struct {
 	historyStore       *HistoryStore
 	wfEngine           *workflows.Engine
 	orchestrator       *workflows.Orchestrator
+	grabQualityCheck   GrabQualityCheck
 	movieStatusUpdater MovieStatusUpdater
 	builtinTorrentOn   func() bool
 	blocklist          *BlocklistStore
@@ -138,6 +139,17 @@ func (s *Service) SetHistoryStore(h *HistoryStore) {
 func (s *Service) SetWorkflowEngine(wf *workflows.Engine) {
 	s.mu.Lock()
 	s.wfEngine = wf
+	s.mu.Unlock()
+}
+
+// GrabQualityCheck warns when a manually grabbed release is lower quality
+// than the library's existing file for the given media.
+type GrabQualityCheck func(ctx context.Context, mediaType string, mediaIDs []string, title string) string
+
+// SetGrabQualityCheck installs the check used to warn about manual downgrades.
+func (s *Service) SetGrabQualityCheck(fn GrabQualityCheck) {
+	s.mu.Lock()
+	s.grabQualityCheck = fn
 	s.mu.Unlock()
 }
 

@@ -9,6 +9,8 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
+
+	"github.com/ebenderooock/loom/internal/diskspace"
 )
 
 // Router returns a chi.Router with all library endpoints mounted.
@@ -45,7 +47,7 @@ func writeError(w http.ResponseWriter, status int, msg string) {
 }
 
 // enrichLibrary populates computed fields (disk space, file count, etc.).
-func enrichLibrary(store *Store, l *Library, r *http.Request) {
+func enrichLibrary(store *Store, l *Library, r *http.Request, logger *slog.Logger) error {
 	ctx := r.Context()
 
 	// Check accessibility.
@@ -55,15 +57,18 @@ func enrichLibrary(store *Store, l *Library, r *http.Request) {
 
 	// Disk space.
 	if l.Accessible {
-		if ds, err := GetDiskSpace(l.Path); err == nil {
+		if ds, err := getDiskSpace(l.Path, logger, diskspace.VolumeID); err == nil {
 			l.DiskSpace = ds
 		}
 	}
 
-	// File count.
-	if fc, err := store.FileCount(ctx, l.ID); err == nil {
-		l.FileCount = fc
+	// File count and total size.
+	count, size, err := store.FileStats(ctx, l.ID)
+	if err != nil {
+		return err
 	}
+	l.FileCount, l.SizeBytes = count, size
+	return nil
 }
 
 func listLibraries(store *Store, logger *slog.Logger) http.HandlerFunc {
@@ -78,7 +83,11 @@ func listLibraries(store *Store, logger *slog.Logger) http.HandlerFunc {
 			libs = []Library{}
 		}
 		for i := range libs {
-			enrichLibrary(store, &libs[i], r)
+			if err := enrichLibrary(store, &libs[i], r, logger); err != nil {
+				logger.Error("libraries: file stats", "id", libs[i].ID, "error", err)
+				writeError(w, http.StatusInternalServerError, "internal error")
+				return
+			}
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"data": libs})
 	}
@@ -139,7 +148,11 @@ func createLibrary(store *Store, logger *slog.Logger) http.HandlerFunc {
 			writeError(w, http.StatusInternalServerError, "internal error")
 			return
 		}
-		enrichLibrary(store, lib, r)
+		if err := enrichLibrary(store, lib, r, logger); err != nil {
+			logger.Error("libraries: file stats", "id", lib.ID, "error", err)
+			writeError(w, http.StatusInternalServerError, "internal error")
+			return
+		}
 		writeJSON(w, http.StatusCreated, lib)
 	}
 }
@@ -157,7 +170,11 @@ func getLibrary(store *Store, logger *slog.Logger) http.HandlerFunc {
 			writeError(w, http.StatusInternalServerError, "internal error")
 			return
 		}
-		enrichLibrary(store, lib, r)
+		if err := enrichLibrary(store, lib, r, logger); err != nil {
+			logger.Error("libraries: file stats", "id", lib.ID, "error", err)
+			writeError(w, http.StatusInternalServerError, "internal error")
+			return
+		}
 
 		// Include files in detail view.
 		files, err := store.ListFiles(r.Context(), id)
@@ -217,7 +234,11 @@ func updateLibrary(store *Store, logger *slog.Logger) http.HandlerFunc {
 			writeError(w, http.StatusInternalServerError, "internal error")
 			return
 		}
-		enrichLibrary(store, lib, r)
+		if err := enrichLibrary(store, lib, r, logger); err != nil {
+			logger.Error("libraries: file stats", "id", lib.ID, "error", err)
+			writeError(w, http.StatusInternalServerError, "internal error")
+			return
+		}
 		writeJSON(w, http.StatusOK, lib)
 	}
 }

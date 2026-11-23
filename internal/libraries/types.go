@@ -20,6 +20,7 @@ type Library struct {
 	Accessible bool      `json:"accessible"`
 	DiskSpace  DiskSpace `json:"disk_space"`
 	FileCount  int       `json:"file_count"`
+	SizeBytes  int64     `json:"size_bytes"`
 }
 
 // LibraryFile represents a media file discovered inside a library.
@@ -35,9 +36,10 @@ type LibraryFile struct {
 
 // DiskSpace holds filesystem usage for a library root path.
 type DiskSpace struct {
-	TotalBytes int64 `json:"total_bytes"`
-	FreeBytes  int64 `json:"free_bytes"`
-	UsedBytes  int64 `json:"used_bytes"`
+	TotalBytes int64  `json:"total_bytes"`
+	FreeBytes  int64  `json:"free_bytes"`
+	UsedBytes  int64  `json:"used_bytes"`
+	VolumeID   string `json:"volume_id,omitempty"`
 }
 
 // CreateLibraryRequest is the API payload for adding a library.
