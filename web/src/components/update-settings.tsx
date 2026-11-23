@@ -9,6 +9,7 @@ interface Settings {
   channel: "stable" | "prelease";
   preleaseOptIn: boolean;
   autoInstall: boolean;
+  postgresDedicatedAck: boolean;
 }
 
 interface Status {
@@ -16,6 +17,7 @@ interface Status {
   canAutoInstall: boolean;
   installationNotice: string;
   verificationConfigured: boolean;
+  isPostgres: boolean;
 }
 
 interface Notice {
@@ -26,6 +28,8 @@ interface Notice {
   url: string;
   nextCheck: string;
   message?: string;
+  manualCheckAfter?: string;
+  throttled?: boolean;
 }
 
 async function request<T>(
@@ -71,21 +75,26 @@ function UpdateForm({ status }: { status: Status }) {
     status.settings.preleaseOptIn,
   );
   const [autoInstall, setAutoInstall] = useState(status.settings.autoInstall);
+  const [postgresDedicatedAck, setPostgresDedicatedAck] = useState(
+    status.settings.postgresDedicatedAck,
+  );
   const save = useMutation({
     mutationFn: () =>
       request<Settings>("", "PUT", {
         channel,
         preleaseOptIn: channel === "prelease" && acknowledged,
         autoInstall,
+        postgresDedicatedAck,
       }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["update-settings"] }),
   });
   const check = useMutation({
-    mutationFn: () => request<Notice>("/check", "POST"),
+    mutationFn: () => request<Notice>("/check?force=true", "POST"),
   });
   const dirty =
     channel !== status.settings.channel ||
     autoInstall !== status.settings.autoInstall ||
+    postgresDedicatedAck !== status.settings.postgresDedicatedAck ||
     (channel === "prelease" && acknowledged !== status.settings.preleaseOptIn);
 
   return (
@@ -96,8 +105,9 @@ function UpdateForm({ status }: { status: Status }) {
       <CardContent className="space-y-4">
         <p className="text-sm text-muted-foreground">
           Native release notices come from GitHub Releases and require a trusted
-          signed manifest. Checking sends a request to GitHub; checks are cached
-          for at least one hour.
+          signed manifest. Automatic checks are cached for at least one hour;
+          Check for updates asks GitHub immediately, at most once a minute and
+          never while GitHub rate limiting is in effect.
         </p>
         <div className="space-y-2">
           <label htmlFor="update-channel" className="block text-sm font-medium">
@@ -144,10 +154,26 @@ function UpdateForm({ status }: { status: Status }) {
           }
           onClick={() => save.mutate()}
         >
-          Save update channel
+          Save update settings
         </Button>
         {save.error && <p role="alert">{save.error.message}</p>}
         <div className="space-y-2 border-t border-border pt-4">
+          {status.isPostgres && (
+            <label className="flex items-start gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={postgresDedicatedAck}
+                disabled={save.isPending}
+                onChange={(event) =>
+                  setPostgresDedicatedAck(event.target.checked)
+                }
+              />
+              I confirm this local PostgreSQL database is dedicated to Loom and
+              is not shared, HA or split-mode. This acknowledgement records the
+              current connection identity. Automatic installation remains
+              disabled while PostgreSQL support is under development.
+            </label>
+          )}
           <label className="flex items-center gap-2 text-sm">
             <input
               type="checkbox"
@@ -163,8 +189,8 @@ function UpdateForm({ status }: { status: Status }) {
           {status.canAutoInstall && (
             <p className="text-sm text-muted-foreground">
               Opting in permits service restarts. Failed updates restore the
-              previous binary, SQLite database and configuration. Keep
-              independent backups.
+              previous binary, database and configuration. Keep independent
+              backups.
             </p>
           )}
           {!status.verificationConfigured && (
@@ -194,6 +220,12 @@ function UpdateForm({ status }: { status: Status }) {
               </p>
             )}
             {check.data.message && <p>{check.data.message}</p>}
+            {check.data.throttled && check.data.manualCheckAfter && (
+              <p>
+                Showing the most recent result. You can check again after{" "}
+                {new Date(check.data.manualCheckAfter).toLocaleString()}.
+              </p>
+            )}
             <p>Next check: {new Date(check.data.nextCheck).toLocaleString()}</p>
           </div>
         )}

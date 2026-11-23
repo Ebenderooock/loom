@@ -32,6 +32,11 @@ info:
     connectivity tests can supply the saved definition ID to retain credentials
     without saving the tested settings. Explicitly disabled authentication
     retains its existing access behavior.
+
+    Library storage responses include an optional opaque host-local
+    disk_space.volume_id and size_bytes (scanned library file sizes).
+    Disk capacity is per volume, not per library. Dashboard volume grouping
+    is client-side and can estimate shared NAS mounts from matching readings.
   license:
     name: AGPL-3.0-only
     identifier: AGPL-3.0-only
@@ -283,7 +288,7 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [settings, canAutoInstall, installationNotice, verificationConfigured]
+                required: [settings, canAutoInstall, installationNotice, verificationConfigured, isPostgres]
                 properties:
                   settings:
                     $ref: "#/components/schemas/UpdateSettings"
@@ -295,6 +300,9 @@ paths:
                   verificationConfigured:
                     type: boolean
                     description: Whether the binary contains a publisher public trust root
+                  isPostgres:
+                    type: boolean
+                    description: Whether the effective storage engine is PostgreSQL
         "401":
           description: Authentication required
         "403":
@@ -338,10 +346,21 @@ paths:
       tags: [system]
       operationId: checkNativeUpdate
       summary: Check signed GitHub Releases metadata for the saved channel (admin only)
+      parameters:
+        - name: force
+          in: query
+          required: false
+          description: Explicit manual check that bypasses the hourly cache
+          schema:
+            type: boolean
       description: |
         No installation or binary download. Per-process, per-channel cache
         throttles successes and failures for at least one hour, respects GitHub
         rate-limit delays up to 24 hours, and uses API ETags on refresh.
+        With force=true (the UI "Check for updates" button) the hourly cache is
+        bypassed, limited to one network check per channel per minute shared by
+        concurrent callers; while GitHub rate limiting is in effect no request
+        is made and the cached notice is returned with throttled true.
         No startup/background checks. Missing trust roots make no network
         requests. Invalid, missing or untrusted signed metadata
         returns verified false and manual-update guidance, not a candidate.
@@ -4648,6 +4667,10 @@ components:
           type: boolean
           default: false
           description: True requires eligible enrolled Linux/systemd or macOS/launchd SQLite and a compiled publisher key; otherwise 409
+        postgresDedicatedAck:
+          type: boolean
+          default: false
+          description: Acknowledges the current PostgreSQL database is dedicated to Loom; does not enable automatic installation
     UpdateNotice:
       type: object
       required: [currentVersion, available, verified, url, checkedAt, nextCheck]
@@ -4679,6 +4702,13 @@ components:
           format: date-time
         message:
           type: string
+        manualCheckAfter:
+          type: string
+          format: date-time
+          description: Forced checks only; earliest time another forced check may contact GitHub
+        throttled:
+          type: boolean
+          description: Forced check returned the cached notice because of the cooldown or GitHub rate limiting
     Appearance:
       type: object
       additionalProperties: false

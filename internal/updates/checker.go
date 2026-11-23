@@ -32,7 +32,14 @@ type Notice struct {
 	CheckedAt      time.Time `json:"checkedAt"`
 	NextCheck      time.Time `json:"nextCheck"`
 	Message        string    `json:"message,omitempty"`
+	// ManualCheckAfter and Throttled are only set on explicit manual checks.
+	ManualCheckAfter time.Time `json:"manualCheckAfter,omitempty"`
+	Throttled        bool      `json:"throttled,omitempty"`
 }
+
+// ManualCheckCooldown bounds how often explicit checks may bypass the cache for
+// one channel, protecting GitHub's unauthenticated API budget.
+const ManualCheckCooldown = time.Minute
 
 type release struct {
 	Tag         string    `json:"tag_name"`
@@ -50,6 +57,9 @@ type cachedCheck struct {
 	etag      string
 	body      []byte
 	candidate *Candidate
+	// lastAttempt is the most recent network check; rateLimitedUntil is the
+	// GitHub Retry-After/reset time from the most recent attempt.
+	lastAttempt, rateLimitedUntil time.Time
 }
 
 // Candidate keeps the publisher's exact signed bytes separate from the GitHub tag.
@@ -89,10 +99,23 @@ func NewChecker(current string, commit ...string) *Checker {
 	}
 }
 
-// Check is intentionally demand-driven: there is no startup request, poller, or
-// force bypass. Both successes and failures are cached for at least one hour per
-// channel; concurrent requests share the same result.
+// Check is intentionally demand-driven: there is no startup request or poller.
+// Both successes and failures are cached for at least one hour per channel;
+// concurrent requests share the same result. Use CheckNow for explicit manual
+// checks that may bypass this cache.
 func (c *Checker) Check(ctx context.Context, channel string) Notice {
+	return c.run(ctx, channel, false)
+}
+
+// CheckNow is an explicit administrator check that bypasses the per-channel
+// cache. It is still limited to one network check per channel per
+// ManualCheckCooldown (shared by concurrent callers), never issues a request
+// while GitHub rate limiting is in effect, and reuses ETags.
+func (c *Checker) CheckNow(ctx context.Context, channel string) Notice {
+	return c.run(ctx, channel, true)
+}
+
+func (c *Checker) run(ctx context.Context, channel string, force bool) Notice {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	now := c.now().UTC()
@@ -100,7 +123,17 @@ func (c *Checker) Check(ctx context.Context, channel string) Notice {
 		return Notice{Message: "Invalid update channel.", URL: releaseURL}
 	}
 	cached := c.cache[channel]
-	if now.Before(cached.notice.NextCheck) {
+	if force && !cached.notice.CheckedAt.IsZero() {
+		if now.Before(cached.rateLimitedUntil) {
+			n := c.manual(cached, true)
+			n.Message = strings.TrimSpace(n.Message + " GitHub rate limit reached; try again after " +
+				cached.rateLimitedUntil.UTC().Format(time.RFC3339) + ".")
+			return n
+		}
+		if now.Before(cached.lastAttempt.Add(ManualCheckCooldown)) {
+			return c.manual(cached, true)
+		}
+	} else if !force && now.Before(cached.notice.NextCheck) {
 		n := cached.notice
 		n.CurrentVersion = c.current
 		return n
@@ -112,6 +145,7 @@ func (c *Checker) Check(ctx context.Context, channel string) Notice {
 	} else {
 		ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 		defer cancel()
+		cached.lastAttempt, cached.rateLimitedUntil = now, time.Time{}
 		n, cached, err = c.check(ctx, channel, n, cached)
 		if err != nil {
 			// Do not return upstream response bodies, redirect URLs, or signed
@@ -124,6 +158,23 @@ func (c *Checker) Check(ctx context.Context, channel string) Notice {
 	}
 	cached.notice = n
 	c.cache[channel] = cached
+	if force {
+		return c.manual(cached, false)
+	}
+	return n
+}
+
+// manual decorates a cached notice with the earliest next manual check time.
+func (c *Checker) manual(cached cachedCheck, throttled bool) Notice {
+	n := cached.notice
+	n.CurrentVersion = c.current
+	n.Throttled = throttled
+	if !cached.lastAttempt.IsZero() {
+		n.ManualCheckAfter = cached.lastAttempt.Add(ManualCheckCooldown)
+	}
+	if cached.rateLimitedUntil.After(n.ManualCheckAfter) {
+		n.ManualCheckAfter = cached.rateLimitedUntil
+	}
 	return n
 }
 
@@ -135,9 +186,7 @@ func (c *Checker) check(ctx context.Context, channel string, n Notice, cached ca
 		endpoint += "?per_page=100"
 	}
 	body, etag, retry, err := c.get(ctx, endpoint, cached.etag, 2<<20)
-	if retry.After(n.NextCheck) {
-		n.NextCheck = retry
-	}
+	cached.noteRetry(retry, &n)
 	if err != nil {
 		return n, cached, err
 	}
@@ -183,16 +232,12 @@ func (c *Checker) check(ctx context.Context, channel string, n Notice, cached ca
 		assets[a.Name] = expected
 	}
 	raw, _, retry, err := c.get(ctx, assets["update-manifest.json"], "", 64<<10)
-	if retry.After(n.NextCheck) {
-		n.NextCheck = retry
-	}
+	cached.noteRetry(retry, &n)
 	if err != nil {
 		return n, cached, err
 	}
 	sig, _, retry, err := c.get(ctx, assets["update-manifest.json.sig"], "", 4<<10)
-	if retry.After(n.NextCheck) {
-		n.NextCheck = retry
-	}
+	cached.noteRetry(retry, &n)
 	if err != nil {
 		return n, cached, err
 	}
@@ -212,6 +257,15 @@ func (c *Checker) check(ctx context.Context, channel string, n Notice, cached ca
 	}
 	cached.candidate = &Candidate{Manifest: m, Tag: selected.Tag, Raw: raw, Signature: sig}
 	return n, cached, nil
+}
+
+func (cached *cachedCheck) noteRetry(retry time.Time, n *Notice) {
+	if retry.After(cached.rateLimitedUntil) {
+		cached.rateLimitedUntil = retry
+	}
+	if retry.After(n.NextCheck) {
+		n.NextCheck = retry
+	}
 }
 
 // Configured reports whether this build contains any publisher trust roots.

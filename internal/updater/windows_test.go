@@ -174,7 +174,41 @@ func TestWindowsControlQuiescent(t *testing.T) {
 	}
 	defer func() { _ = windows.CloseHandle(job) }()
 	if err := (&winControl{gate: &winGate{job: job}}).quiescent(t.Context()); err != nil {
+		if errors.Is(err, windows.ERROR_ACCESS_DENIED) {
+			t.Skipf("host has unreadable processes; quiescence correctly fails closed: %v", err)
+		}
 		t.Fatal(err)
+	}
+}
+
+func TestWindowsProcessInspectionFailures(t *testing.T) {
+	for _, tc := range []struct {
+		name           string
+		openingProcess bool
+		input          error
+		skip           bool
+		wantContext    string
+	}{
+		{"exited process", true, windows.ERROR_INVALID_PARAMETER, true, ""},
+		{"wrapped exited process", true, fmt.Errorf("open: %w", windows.ERROR_INVALID_PARAMETER), true, ""},
+		{"process access denied", true, windows.ERROR_ACCESS_DENIED, false, "process"},
+		{"token access denied", false, windows.ERROR_ACCESS_DENIED, false, "token"},
+		{"token invalid parameter", false, windows.ERROR_INVALID_PARAMETER, false, "token"},
+		{"other process error", true, windows.ERROR_INVALID_HANDLE, false, "process"},
+		{"other token error", false, windows.ERROR_INVALID_HANDLE, false, "token"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := winProcessInspectionError(tc.input, tc.openingProcess)
+			if tc.skip {
+				if err != nil {
+					t.Fatalf("exited process not skipped: %v", err)
+				}
+				return
+			}
+			if err == nil || !errors.Is(err, tc.input) || !strings.Contains(err.Error(), tc.wantContext) {
+				t.Fatalf("inspection failure was not preserved with context: %v", err)
+			}
+		})
 	}
 }
 

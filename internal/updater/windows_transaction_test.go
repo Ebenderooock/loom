@@ -27,9 +27,12 @@ import (
 // Filesystem integration only: never enrolls a service, executes an update,
 // edits the real Loom layout, or bypasses the production activation barrier.
 type winTestControl struct {
-	r          Runtime
-	stopped    bool
-	failHealth bool
+	r                  Runtime
+	stopped            bool
+	failHealth         bool
+	failRollbackHealth bool
+	failStop           bool
+	starts             int
 }
 
 var errWinTestHealth = errors.New("simulated candidate health failure")
@@ -38,8 +41,18 @@ func (c *winTestControl) validate(context.Context) error           { return nil 
 func (c *winTestControl) runtime(context.Context) (Runtime, error) { return c.r, nil }
 func (c *winTestControl) captureToken() error                      { return nil }
 func (c *winTestControl) releaseToken()                            {}
-func (c *winTestControl) stop(context.Context) error               { c.stopped = true; return nil }
-func (c *winTestControl) start(context.Context) error              { c.stopped = false; return nil }
+func (c *winTestControl) stop(context.Context) error {
+	c.stopped = true
+	if c.failStop {
+		return errors.New("simulated stop failure")
+	}
+	return nil
+}
+func (c *winTestControl) start(context.Context) error {
+	c.starts++
+	c.stopped = false
+	return nil
+}
 func (c *winTestControl) quiescent(context.Context) error {
 	if !c.stopped {
 		return errors.New("test service still running")
@@ -57,6 +70,10 @@ func (c *winTestControl) snapshotDB(ctx context.Context, dest string) error {
 	return os.WriteFile(dest, data.Bytes(), 0600)
 }
 func (c *winTestControl) healthy(_ context.Context, want Identity) error {
+	if c.failRollbackHealth && want.Version == "1.0.0" {
+		c.failRollbackHealth = false
+		return errors.New("simulated rollback health failure")
+	}
 	if c.failHealth && want.Version == "1.1.0" {
 		if err := os.WriteFile(filepath.Join(ConfigDir, "migration-added"), []byte("discard"), 0600); err != nil {
 			return err
@@ -73,8 +90,10 @@ func (c *winTestControl) healthy(_ context.Context, want Identity) error {
 }
 
 type winTestPublisher struct {
-	candidate updates.Candidate
-	archive   []byte
+	candidate   updates.Candidate
+	archive     []byte
+	downloadErr error
+	downloads   int
 }
 
 func (p *winTestPublisher) Discover(context.Context, string) (updates.Candidate, error) {
@@ -82,11 +101,12 @@ func (p *winTestPublisher) Discover(context.Context, string) (updates.Candidate,
 }
 func (p *winTestPublisher) Ahead(context.Context, string, string) bool { return false }
 func (p *winTestPublisher) Download(_ context.Context, _ updates.Candidate, platform string, w io.Writer) error {
+	p.downloads++
 	if platform != "windows-"+runtime.GOARCH {
 		return errors.New("wrong Windows platform")
 	}
 	_, err := w.Write(p.archive)
-	return err
+	return errors.Join(err, p.downloadErr)
 }
 
 func winTestTransaction(t *testing.T) (*winTransaction, *winTestControl) {
@@ -158,7 +178,15 @@ func winTestTransaction(t *testing.T) (*winTransaction, *winTestControl) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = db.Exec("CREATE TABLE schema_meta (key TEXT PRIMARY KEY,value TEXT);CREATE TABLE sample(value TEXT);INSERT INTO sample VALUES('before')")
+	for _, stmt := range []string{
+		"CREATE TABLE schema_meta (key TEXT PRIMARY KEY,value TEXT)",
+		"CREATE TABLE sample(value TEXT)",
+		"INSERT INTO sample VALUES('before')",
+	} {
+		if _, err = db.Exec(stmt); err != nil {
+			break
+		}
+	}
 	if err == nil {
 		_, err = db.Exec("INSERT INTO schema_meta VALUES('updates.settings',?)", string(encoded))
 	}
@@ -297,6 +325,141 @@ func TestWindowsNTFSInterruptedRecovery(t *testing.T) {
 	var saved state
 	if err := readJSON(filepath.Join(StateDir, "state.json"), &saved); err != nil || saved.FailedSHA != j.Target.SHA {
 		t.Fatal("failed build not blocked")
+	}
+}
+
+func TestWindowsNTFSRecoveryFinishesCommittedCandidate(t *testing.T) {
+	tx, c := winTestTransaction(t)
+	work := filepath.Join(StateDir, "transaction")
+	if err := winCreateDir(work, winSDDL("", true), 0, true); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(work, "new-binary"), []byte("new executable"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	c.stopped = true
+	target := Identity{"1.1.0", strings.Repeat("b", 40), "refs/tags/v1.1.0", "stable"}
+	j, err := tx.snapshot(t.Context(), state{Installed: c.r.Identity}, target, work)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := winReplace(filepath.Join(BinDir, "loom.exe"), filepath.Join(work, "new-binary"), j.Binary); err != nil {
+		t.Fatal(err)
+	}
+	db, err := sql.Open("sqlite", DBPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = db.Exec("UPDATE sample SET value = ?", "candidate write")
+	if err = errors.Join(err, db.Close()); err != nil {
+		t.Fatal(err)
+	}
+	j.Committed = true
+	if err := winAtomicJSON(StateDir, "journal.json", j); err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.recover(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(filepath.Join(BinDir, "loom.exe"))
+	if err != nil || string(got) != "new executable" {
+		t.Fatalf("committed binary rolled back: %q, %v", got, err)
+	}
+	db, err = sql.Open("sqlite", DBPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var value string
+	err = errors.Join(db.QueryRow("SELECT value FROM sample").Scan(&value), db.Close())
+	if err != nil || value != "candidate write" {
+		t.Fatalf("committed database rolled back: %q, %v", value, err)
+	}
+	var saved state
+	if err := readJSON(filepath.Join(StateDir, "state.json"), &saved); err != nil || !sameIdentity(saved.Installed, target) {
+		t.Fatalf("committed identity not recorded: %+v, %v", saved, err)
+	}
+}
+
+func TestWindowsNTFSRecoveryDoesNotReplayAfterServiceRestart(t *testing.T) {
+	tx, c := winTestTransaction(t)
+	c.failHealth = true
+	c.failRollbackHealth = true
+	if err := tx.run(t.Context()); !errors.Is(err, errWinTestHealth) {
+		t.Fatalf("expected failed candidate and interrupted recovery, got %v", err)
+	}
+	var j winJournal
+	if err := readJSON(filepath.Join(StateDir, "journal.json"), &j); err != nil || !j.Restored {
+		t.Fatalf("rollback completion not recorded: %+v, %v", j, err)
+	}
+	// The old service is running despite its health check failing. Its writes
+	// must survive a later recovery attempt or helper restart.
+	db, err := sql.Open("sqlite", DBPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = db.Exec("UPDATE sample SET value = ?", "after restart")
+	if err = errors.Join(err, db.Close()); err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.recover(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	db, err = sql.Open("sqlite", DBPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var value string
+	err = errors.Join(db.QueryRow("SELECT value FROM sample").Scan(&value), db.Close())
+	if err != nil || value != "after restart" {
+		t.Fatalf("recovery overwrote post-rollback writes: %q, %v", value, err)
+	}
+}
+
+func TestWindowsNTFSStopFailureResumesOldService(t *testing.T) {
+	tx, c := winTestTransaction(t)
+	c.failStop = true
+	if err := tx.run(t.Context()); err == nil {
+		t.Fatal("stop failure was ignored")
+	}
+	if c.stopped || c.starts != 1 {
+		t.Fatal("old service was not resumed after stop failure")
+	}
+	got, err := os.ReadFile(filepath.Join(BinDir, "loom.exe"))
+	if err != nil || string(got) != "old executable" {
+		t.Fatalf("old executable changed: %q, %v", got, err)
+	}
+	if _, err := os.Stat(filepath.Join(StateDir, "journal.json")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("unexpected journal after stop failure: %v", err)
+	}
+}
+
+func TestWindowsNTFSVerificationFailureDoesNotStopService(t *testing.T) {
+	tx, c := winTestTransaction(t)
+	pub := tx.publisher.(*winTestPublisher)
+	pub.downloadErr = errors.New("simulated digest verification failure")
+	if err := tx.run(t.Context()); !errors.Is(err, pub.downloadErr) {
+		t.Fatalf("verification failure not propagated: %v", err)
+	}
+	if c.stopped || c.starts != 0 {
+		t.Fatal("service changed after an unverified download")
+	}
+	got, err := os.ReadFile(filepath.Join(BinDir, "loom.exe"))
+	if err != nil || string(got) != "old executable" {
+		t.Fatalf("old executable changed: %q, %v", got, err)
+	}
+	if _, err := os.Stat(filepath.Join(StateDir, "transaction", "new-binary")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("unverified archive was extracted: %v", err)
+	}
+}
+
+func TestWindowsNTFSRequiresOptInBeforeDownload(t *testing.T) {
+	tx, c := winTestTransaction(t)
+	c.r.Settings.AutoInstall = false
+	if err := tx.run(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if tx.publisher.(*winTestPublisher).downloads != 0 || c.stopped {
+		t.Fatal("update proceeded without explicit opt-in")
 	}
 }
 

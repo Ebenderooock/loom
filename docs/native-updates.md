@@ -16,6 +16,16 @@ See [Windows candidate and activation blockers](windows.md#windows-updater-candi
 Containers and Kubernetes continue using image/orchestration updates. PostgreSQL
 can receive signed notices but cannot enable automatic installation.
 
+A build-tagged PostgreSQL candidate contains identity, preflight and snapshot
+orchestration only; it is not connected to the updater and does not enable
+installation. Its missing connection fence, trusted tool execution, database
+recreation and crash recovery are activation blockers. See
+[ADR-0036](adr/0036-postgresql-update-candidate.md).
+The settings page can record a dedicated-database acknowledgement for the
+current connection, but this does not enable installation. Because the record is
+stored in the database itself, switching databases and then switching back can
+revive an old acknowledgement; it must not be used to authorize an update.
+
 **This is not yet a production-ready, all-platform feature.** The production
 publisher public key is compiled from `internal/updates/trusted-keys.json`;
 verified notices require matching signed manifests from the publisher.
@@ -154,6 +164,8 @@ specific activation blocker. Cross-building does not validate those boundaries.
 Do not work around this by running Loom as
 LocalSystem, granting LocalService executable write access, or installing a
 generic elevated task/command runner.
+The [Windows acceptance and activation checklist](windows.md#windows-updater-candidate-not-production-enabled)
+describes the required native evidence and the separate production change.
 
 ## Transaction and rollback
 
@@ -228,9 +240,15 @@ GitHub prerelease (within the newest 100 releases), with a signed
 Its unique GitHub release tag is **separate from the signed SemVer version**.
 Only fixed HTTPS GitHub API/release URLs and GitHub asset redirects are used.
 
-UI checks are demand-driven, not startup/background polling. Concurrent checks
-share a per-channel one-hour cache, including errors; ETags refresh metadata.
-GitHub rate-limit delays are honored up to 24 hours. Missing trust roots make
+UI checks are demand-driven, not startup/background polling. Passive and
+automatic checks share a per-channel one-hour cache, including errors; ETags
+refresh metadata. The administrator's **Check for updates** button
+(`POST /api/v1/updates/check?force=true`) bypasses that cache, but at most one
+network check runs per channel per minute (concurrent clicks share the result)
+and it still sends ETag conditional requests. GitHub rate-limit delays
+(`Retry-After` / `X-RateLimit-Reset`) are honored up to 24 hours, including by
+manual checks, which then return the cached notice and the time a retry is
+allowed. Missing trust roots make
 no network requests. Checks download only metadata, never a binary.
 
 Notification connections can opt in separately to an instance-updated alert

@@ -229,4 +229,74 @@ describe("Discover recommendations", () => {
     expect(card).not.toHaveTextContent("Missing");
     expect(state.writes).toEqual([]);
   });
+  it("distinguishes external, missing and available titles while library status loads", async () => {
+    const original = vi.mocked(fetch).getMockImplementation()!;
+    let resolveLibrary!: (response: Response) => void;
+    const libraryResponse = new Promise<Response>((resolve) => {
+      resolveLibrary = resolve;
+    });
+    vi.mocked(fetch).mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.startsWith("/api/v1/import-lists/discover"))
+        return Response.json({
+          data: [
+            {
+              id: "external",
+              title: "External",
+              tmdb_id: "1",
+              in_library: false,
+            },
+            {
+              id: "missing",
+              title: "Missing title",
+              tmdb_id: "2",
+              in_library: true,
+            },
+            {
+              id: "available",
+              title: "Available title",
+              tmdb_id: "3",
+              in_library: true,
+            },
+          ],
+        });
+      if (url.startsWith("/api/v1/movies?")) return libraryResponse;
+      return original(input, init);
+    });
+    page();
+    await userEvent.click(screen.getByRole("tab", { name: "Import Lists" }));
+    const external = await screen.findByRole("button", {
+      name: "View details for External",
+    });
+    const missing = screen.getByRole("button", {
+      name: "View details for Missing title",
+    });
+    const available = screen.getByRole("button", {
+      name: "View details for Available title",
+    });
+    expect(external).toHaveAccessibleDescription("Not in library");
+    expect(missing).toHaveAccessibleDescription("In library");
+    expect(available).toHaveAccessibleDescription("In library");
+    resolveLibrary(
+      Response.json({
+        data: [
+          {
+            id: "missing",
+            title: "Missing title",
+            tmdbId: "2",
+            status: "missing",
+          },
+          {
+            id: "available",
+            title: "Available title",
+            tmdbId: "3",
+            status: "available_right_quality",
+          },
+        ],
+      }),
+    );
+    await waitFor(() => expect(missing).toHaveAccessibleDescription("Missing"));
+    expect(available).toHaveAccessibleDescription("Available");
+    expect(external).toHaveAccessibleDescription("Not in library");
+  });
 });

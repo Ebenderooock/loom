@@ -2,7 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useSystemStatus } from "@/lib/api";
-import { useLibraries } from "@/lib/libraries-api";
+import { StorageCard } from "@/components/libraries/storage-card";
 import {
   useDashboardMovies,
   useDashboardSeries,
@@ -34,7 +34,6 @@ import {
   AlertTriangle,
   Rocket,
   Settings,
-  FolderOpen,
   ArrowDown,
   ArrowUp,
   Activity,
@@ -291,80 +290,6 @@ function SystemHealthCard() {
             </p>
           ) : null}
         </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Storage Overview
-// ---------------------------------------------------------------------------
-
-function StorageCard() {
-  const { data, isLoading } = useLibraries();
-  const libs = data ?? [];
-  const withSpace = libs.filter(
-    (l) => l.disk_space && l.disk_space.total_bytes > 0,
-  );
-
-  if (isLoading) {
-    return (
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">Storage</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <Skeleton className="h-4 w-full" />
-          <Skeleton className="h-4 w-3/4" />
-        </CardContent>
-      </Card>
-    );
-  }
-
-  if (withSpace.length === 0) {
-    return (
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">Storage</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <FolderOpen className="h-4 w-4" />
-            {libs.length === 0
-              ? "No libraries configured"
-              : "Storage info unavailable"}
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  return (
-    <Card>
-      <CardHeader className="pb-3">
-        <CardTitle className="text-base">Storage</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {withSpace.map((lib) => {
-          const used = lib.disk_space.used_bytes;
-          const total = lib.disk_space.total_bytes;
-          const free = lib.disk_space.free_bytes;
-          const pct = total ? Math.round((used / total) * 100) : 0;
-          return (
-            <div key={lib.id} className="space-y-1.5">
-              <div className="flex items-center justify-between text-sm">
-                <span className="truncate font-medium">{lib.name}</span>
-                <span className="ml-2 shrink-0 text-xs text-muted-foreground">
-                  {formatBytes(free)} free
-                </span>
-              </div>
-              <Progress value={pct} className="h-2" />
-              <p className="text-xs text-muted-foreground">
-                {formatBytes(used)} / {formatBytes(total)} ({pct}%)
-              </p>
-            </div>
-          );
-        })}
       </CardContent>
     </Card>
   );

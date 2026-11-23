@@ -1,4 +1,5 @@
 import { Film, Plus } from "lucide-react";
+import { useId } from "react";
 import { titleImage } from "./title-metadata";
 import {
   MonitoringLabel,
@@ -41,17 +42,19 @@ export function TitlePosterCard({
   label?: string;
   disabled?: boolean;
 }) {
+  const statusId = useId();
   const series =
     mediaType === "series" && inLibrary && status
       ? { status, episodeStats }
       : undefined;
-  const displayStatus = inLibrary ? status : "missing";
+  const displayStatus = inLibrary ? status : undefined;
   return (
     <div className="group relative min-w-0">
       <button
         type="button"
         disabled={disabled}
         aria-label={label}
+        aria-describedby={statusId}
         onClick={onOpen}
         className="relative block w-full overflow-hidden rounded-lg border border-transparent text-left shadow-lg transition-shadow hover:border-accent/20 hover:shadow-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
       >
@@ -66,6 +69,7 @@ export function TitlePosterCard({
               src={titleImage(poster, "w342")}
               alt=""
               loading="lazy"
+              decoding="async"
               className="h-full w-full object-cover"
             />
           ) : (
@@ -76,15 +80,17 @@ export function TitlePosterCard({
         </div>
         <div className="poster-overlay absolute inset-x-0 bottom-0 min-w-0 bg-gradient-to-t from-black/95 via-black/70 to-transparent p-3 pt-10">
           <div className="flex items-center justify-between gap-1">
-            {!displayStatus && inLibrary ? (
-              <span className="rounded border border-white/20 bg-black/50 px-2 py-0.5 text-xs text-white">
-                In library
-              </span>
-            ) : series ? (
-              <SeriesStatusBadge series={series} />
-            ) : (
-              <StatusBadge status={displayStatus ?? "missing"} />
-            )}
+            <span id={statusId}>
+              {!displayStatus ? (
+                <span className="rounded border border-white/40 bg-black/70 px-2 py-0.5 text-xs text-white">
+                  {inLibrary ? "In library" : "Not in library"}
+                </span>
+              ) : series ? (
+                <SeriesStatusBadge series={series} />
+              ) : (
+                <StatusBadge status={displayStatus} />
+              )}
+            </span>
             {mediaType === "series" ? (
               <SeriesMonitoringLabel status={monitoringStatus} />
             ) : (

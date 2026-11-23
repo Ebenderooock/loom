@@ -4,6 +4,7 @@ import type { MovieMetadata, SeriesMetadata } from "@/lib/metadata-api";
 import { apiFetch } from "@/lib/fetch";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { titleImage } from "@/components/titles/title-metadata";
 import {
   Sheet,
   SheetContent,
@@ -83,11 +84,7 @@ export function DiscoverDetailSheet({
           <div className="flex items-start gap-5">
             {poster && (
               <img
-                src={
-                  poster.startsWith("/")
-                    ? `https://image.tmdb.org/t/p/w342${poster}`
-                    : poster
-                }
+                src={titleImage(poster, "w342")}
                 alt={`${title} poster`}
                 className="aspect-[2/3] w-28 shrink-0 rounded-lg object-cover sm:w-44"
               />

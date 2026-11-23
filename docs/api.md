@@ -1,23 +1,41 @@
 # API
 
+## Library storage readings
+
+Library responses include `disk_space.total_bytes`, `free_bytes`, `used_bytes`
+and optional `volume_id`. Treat the ID as opaque and local to the Loom host:
+it is not a persistent global disk identifier. `size_bytes` is the sum of
+scanned library file sizes, not the volume's used space. Radarr/Sonarr
+compatibility responses retain their existing shape.
+
+The dashboard groups these readings on the client; no aggregated storage route
+is added. See [storage](storage.md#dashboard-library-storage) for the estimated
+NAS grouping rule and limitations.
+
 ## Native update notices
 
 All update routes require an authenticated administrator, including reads and
 network checks. Missing auth wiring fails closed.
 
 - `GET /api/v1/updates`: saved `settings` (`channel`, `preleaseOptIn`,
-  `autoInstall`), effective `canAutoInstall`, `installationNotice`, and
+  `autoInstall`, `postgresDedicatedAck`), `isPostgres`, effective `canAutoInstall`, `installationNotice`, and
   `verificationConfigured`.
-- `PUT /api/v1/updates`: replace preferences with the three settings fields.
+- `PUT /api/v1/updates`: replace preferences with the settings fields.
   Stable is the default. Prelease requires `preleaseOptIn: true`; returning
   to Stable requires clearing it. Invalid settings return 400.
   `autoInstall: true` requires an enrolled, eligible Linux/systemd or macOS/launchd SQLite helper
   and a compiled publisher key; otherwise it returns 409. Storage failures return 500.
+  PostgreSQL administrators may separately acknowledge a dedicated database;
+  this does not enable automatic installation. The database-local record can
+  revive after switching away and back and cannot yet authorize an update.
 - `POST /api/v1/updates/check`: demand-driven, cached signed release notice for
   the **saved** channel. Returns `currentVersion`, optional `version`, `tag`, `sourceSha`,
   `available`, `verified`, `url`, `checkedAt`, `nextCheck`, and optional
   `message`. Untrusted/unavailable metadata returns 200 with `verified: false`,
   no candidate version and manual-update guidance. No binary is downloaded.
+  `?force=true` (the **Check for updates** button) bypasses the hourly cache,
+  at most once per channel per minute and never while GitHub is rate limiting;
+  forced responses add `manualCheckAfter` and `throttled`.
 
 These are notice/settings endpoints, not an update executor; no apply endpoint
 exists. See [native updates](native-updates.md) for signature and cache behavior,

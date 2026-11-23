@@ -7,6 +7,13 @@ export function titleImage(path?: string, size = "w342") {
   if (path.startsWith("https://image.tmdb.org/t/p/")) {
     return path.replace(/\/t\/p\/[^/]+\//, `/t/p/${size}/`);
   }
+  if (["w92", "w154", "w185", "w342", "w500", "w780"].includes(size)) {
+    const imdbImage =
+      /^(https:\/\/(?:m\.media-amazon\.com|ia\.media-imdb\.com)\/images\/M\/[^/?#]+@)\._V1_[^/?#]*?(\.(?:jpe?g|png|webp)(?:[?#].*)?)$/i;
+    if (imdbImage.test(path)) {
+      return path.replace(imdbImage, `$1._V1_SX${size.slice(1)}$2`);
+    }
+  }
   return path.startsWith("/")
     ? `https://image.tmdb.org/t/p/${size}${path}`
     : path;

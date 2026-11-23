@@ -38,6 +38,13 @@ type winJournal struct {
 	Config []winMeta `json:"config"`
 	DB     winMeta   `json:"db"`
 	Binary winMeta   `json:"binary"`
+	// Once rollback is durable, the old service may write again. Never restore
+	// the snapshot a second time after that point, even if health or cleanup
+	// is interrupted.
+	Restored bool `json:"restored,omitempty"`
+	// A healthy candidate has been committed; recovery must finish the commit
+	// rather than roll back writes made by the running candidate.
+	Committed bool `json:"committed,omitempty"`
 }
 
 func (t *winTransaction) run(ctx context.Context) error {
@@ -105,7 +112,12 @@ func (t *winTransaction) run(ctx context.Context) error {
 	}
 	defer t.service.releaseToken()
 	if err := t.service.stop(ctx); err != nil {
-		return err
+		// stop may already have disabled SCM restarts or closed the gate. No
+		// installation files have changed yet, so attempt to resume the old
+		// service even if the caller cancelled the transaction.
+		resume, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Minute)
+		defer cancel()
+		return errors.Join(err, t.service.start(resume))
 	}
 	j, err := t.snapshot(ctx, before, target, work)
 	if err == nil {
@@ -128,10 +140,11 @@ func (t *winTransaction) run(ctx context.Context) error {
 		err = t.service.healthy(ctx, target)
 	}
 	if err == nil {
-		err = winAtomicJSON(StateDir, "state.json", state{Installed: target})
+		j.Committed = true
+		err = winAtomicJSON(StateDir, "journal.json", j)
 	}
 	if err == nil {
-		err = winRemoveJournal(StateDir)
+		err = t.finishCommit(ctx, j)
 	}
 	if err == nil {
 		return nil
@@ -205,6 +218,15 @@ func (t *winTransaction) recover(ctx context.Context) error {
 	if err := t.service.validate(ctx); err != nil {
 		return err
 	}
+	if j.Restored && j.Committed {
+		return errors.New("invalid Windows transaction journal phases")
+	}
+	if j.Committed {
+		return t.finishCommit(ctx, j)
+	}
+	if j.Restored {
+		return t.finishRecovery(ctx, j)
+	}
 	if err := t.service.stop(ctx); err != nil {
 		return err
 	}
@@ -241,8 +263,29 @@ func (t *winTransaction) recover(ctx context.Context) error {
 	if err := winAtomicJSON(StateDir, "state.json", j.Before); err != nil {
 		return err
 	}
-	// start announces SCM Running only after restoration. Before this point the
-	// helper dependency plus closed live gate prevent any database migrations.
+	// Persist the completed rollback before opening the gate. A crash after
+	// starting the old service must not replay its snapshot over new writes.
+	j.Restored = true
+	if err := winAtomicJSON(StateDir, "journal.json", j); err != nil {
+		return err
+	}
+	return t.finishRecovery(ctx, j)
+}
+
+func (t *winTransaction) finishCommit(ctx context.Context, j winJournal) error {
+	if err := t.service.start(ctx); err != nil {
+		return err
+	}
+	if err := t.service.healthy(ctx, j.Target); err != nil {
+		return err
+	}
+	if err := winAtomicJSON(StateDir, "state.json", state{Installed: j.Target}); err != nil {
+		return err
+	}
+	return winRemoveJournal(StateDir)
+}
+
+func (t *winTransaction) finishRecovery(ctx context.Context, j winJournal) error {
 	if err := t.service.start(ctx); err != nil {
 		return err
 	}

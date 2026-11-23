@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"path/filepath"
@@ -205,14 +206,18 @@ func (s *winControl) stop(ctx context.Context) error {
 		return err
 	}
 	for {
-		if err := s.quiescent(ctx); err == nil {
+		err := s.quiescent(ctx)
+		if err == nil {
 			return nil
+		}
+		if errors.Is(err, windows.ERROR_ACCESS_DENIED) {
+			return err
 		}
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-deadline.C:
-			return errors.New("service account/job did not quiesce")
+			return fmt.Errorf("service account/job did not quiesce: %w", err)
 		case <-time.After(100 * time.Millisecond):
 		}
 	}
@@ -233,21 +238,16 @@ func (s *winControl) quiescent(context.Context) error {
 		}
 		h, e := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION, false, entry.ProcessID)
 		if e != nil {
-			if errors.Is(e, windows.ERROR_INVALID_PARAMETER) || errors.Is(e, windows.ERROR_ACCESS_DENIED) {
-				// Exited or protected system processes cannot be inspected. Loom
-				// descendants are separately contained by the non-breakaway job.
-				continue
+			if err := winProcessInspectionError(e, true); err != nil {
+				return err
 			}
-			return errors.New("cannot establish Windows process quiescence")
+			continue
 		}
 		var token windows.Token
 		e = windows.OpenProcessToken(h, windows.TOKEN_QUERY, &token)
 		_ = windows.CloseHandle(h)
 		if e != nil {
-			if errors.Is(e, windows.ERROR_ACCESS_DENIED) {
-				continue
-			}
-			return errors.New("cannot inspect Windows process account")
+			return winProcessInspectionError(e, false)
 		}
 		uid, e := winUser(token)
 		_ = token.Close()
@@ -262,6 +262,19 @@ func (s *winControl) quiescent(context.Context) error {
 		return err
 	}
 	return nil
+}
+
+// Only OpenProcess's invalid PID error can indicate that an enumerated process
+// exited. An unreadable process or token could belong to an escaped Loom
+// account process, so all other failures must prevent a snapshot or swap.
+func winProcessInspectionError(err error, openingProcess bool) error {
+	if openingProcess && errors.Is(err, windows.ERROR_INVALID_PARAMETER) {
+		return nil
+	}
+	if openingProcess {
+		return fmt.Errorf("cannot open Windows process for quiescence: %w", err)
+	}
+	return fmt.Errorf("cannot inspect Windows process token for quiescence: %w", err)
 }
 func (s *winControl) start(context.Context) error {
 	main, err := winOpenService("Loom", windows.SERVICE_ALL_ACCESS)

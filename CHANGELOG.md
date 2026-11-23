@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Add a production-disabled PostgreSQL updater candidate for identity,
+  preflight and snapshot orchestration, with a separate dedicated-database
+  acknowledgement. Cross-database consent invalidation, fencing, trusted tool
+  execution and rollback remain unfinished; PostgreSQL automatic installation
+  stays disabled.
 - Add opt-in notifications when the running Loom version changes and when a
   verified update check discovers a new release. Provision the publisher public
   trust root; release alerts also require matching signed manifests.
@@ -43,6 +48,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Make **Check for updates** bypass the hourly update-check cache so newly
+  published releases appear immediately. Manual checks are limited to one per
+  channel per minute, reuse ETags, never call GitHub while it is rate limiting,
+  and show when the next manual check is allowed. Automatic checks keep the
+  one-hour cache.
+- Harden the disabled Windows updater candidate's journal so recovery does not
+  replay a completed rollback or undo a committed update after a helper restart.
+  Refuse quiescence when process access is denied. Windows automatic
+  installation remains blocked pending native acceptance.
+- Count shared library storage once on the dashboard. Show per-volume free
+  space, labelled library and other-usage segments, and low-space warnings.
+  Matching NAS capacity readings are grouped with an explicit estimate notice.
+- Resize IMDb import-list posters for display to reduce Discover loading and
+  decoding costs. Distinguish titles not in the library from missing files.
 - Keep Discover, Collections, and Requests sections readable over custom
   background images with opaque panel surfaces. Simplify Discover cards to
   poster, status, title, and year, with compact translucent dismissal controls

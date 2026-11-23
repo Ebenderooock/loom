@@ -199,6 +199,28 @@ recovery with a fake service controller. They are cross-compiled, **not executed
 here**, and do not test real SCM enrollment, restricted-token creation, container
 exclusion or reboot/power-loss acceptance.
 
+After those blockers are resolved, validate on disposable supported Windows
+hosts for both architectures using matching signed release archives: enroll the
+candidate, opt in as an administrator, upgrade a database with committed WAL
+data, and verify the installed version and health. Force a migration or health
+failure and verify restoration of the previous executable, configuration and
+database, including removal of candidate sidecars. Interrupt each journal phase
+and reboot; verify recovery finishes before the service opens the database.
+Verify that post-rollback writes survive a later recovery attempt and that a
+committed candidate is not reverted after interruption. Writes made by a
+candidate before its durable commit can still be lost on rollback; solve or
+explicitly accept that limitation before activation.
+Exercise SCM crash/restart ordering, access-denied process handling, protected
+ACLs, unsupported filesystems and container exclusion. Record the Windows
+versions, architecture and results; retain independent backups.
+
+Only after that evidence is reviewed should a separate production change remove
+the `supportedNative = windowsCandidate` barrier in
+`internal/updater/paths_windows.go`, include matching helpers and enrollment in
+normal Windows release archives, and update the API and documentation to match.
+The candidate build tag alone is for acceptance testing, not production
+activation.
+
 For candidate recovery, retain both matching binaries and ProgramData state.
 After a crash, SCM restarts the helper, which replays a pending journal before
 opening the gate. If that fails, leave Loom stopped and preserve
