@@ -32,6 +32,7 @@ const (
 	EventOnDelete            EventType = "on_delete"
 	EventOnHealthIssue       EventType = "on_health_issue"
 	EventOnApplicationUpdate EventType = "on_application_update"
+	EventOnUpdateAvailable   EventType = "on_update_available"
 	EventOnPlayback          EventType = "on_playback"
 	EventOnTest              EventType = "on_test"
 )
@@ -50,6 +51,7 @@ type Connection struct {
 	OnDelete            bool               `json:"on_delete"`
 	OnHealthIssue       bool               `json:"on_health_issue"`
 	OnApplicationUpdate bool               `json:"on_application_update"`
+	OnUpdateAvailable   bool               `json:"on_update_available"`
 	OnPlayback          bool               `json:"on_playback"`
 	Tags                StringSlice        `json:"tags"`
 	CreatedAt           time.Time          `json:"created_at"`
@@ -73,6 +75,8 @@ func (c *Connection) SubscribesTo(event EventType) bool {
 		return c.OnHealthIssue
 	case EventOnApplicationUpdate:
 		return c.OnApplicationUpdate
+	case EventOnUpdateAvailable:
+		return c.OnUpdateAvailable
 	case EventOnPlayback:
 		return c.OnPlayback
 	default:
@@ -180,6 +184,7 @@ type CreateConnectionRequest struct {
 	OnDelete            bool               `json:"on_delete"`
 	OnHealthIssue       bool               `json:"on_health_issue"`
 	OnApplicationUpdate bool               `json:"on_application_update"`
+	OnUpdateAvailable   bool               `json:"on_update_available"`
 	OnPlayback          bool               `json:"on_playback"`
 	Tags                []string           `json:"tags,omitempty"`
 }
@@ -197,6 +202,7 @@ type UpdateConnectionRequest struct {
 	OnDelete            *bool               `json:"on_delete,omitempty"`
 	OnHealthIssue       *bool               `json:"on_health_issue,omitempty"`
 	OnApplicationUpdate *bool               `json:"on_application_update,omitempty"`
+	OnUpdateAvailable   *bool               `json:"on_update_available,omitempty"`
 	OnPlayback          *bool               `json:"on_playback,omitempty"`
 	Tags                []string            `json:"tags,omitempty"`
 }

@@ -2,6 +2,8 @@ package customformats
 
 import (
 	"testing"
+
+	"github.com/ebenderooock/loom/internal/parser"
 )
 
 func TestParseReleaseName(t *testing.T) {
@@ -20,6 +22,51 @@ func TestParseReleaseName(t *testing.T) {
 	}
 	if ri.Group != "FraMeSToR" {
 		t.Errorf("group = %q, want FraMeSToR", ri.Group)
+	}
+}
+
+func TestTesterAndAcquisitionUseSameBodyMetadata(t *testing.T) {
+	title := "the.body.2026.s01e07.1080p.web.h264-cakes[EZTVx.to].mkv"
+	tested := ParseReleaseName(title)
+	acquired := FromParsedRelease(parser.Parse(title))
+	if tested.Source != "WEB-DL" || tested.Codec != "x264" || tested.Quality != "webdl-1080p" {
+		t.Fatalf("unexpected Body metadata: %+v", tested)
+	}
+	format := CustomFormat{ID: "body", Specifications: []Specification{
+		{Implementation: ImplSource, Fields: map[string]any{"value": "WebDL"}},
+		{Implementation: ImplCodec, Fields: map[string]any{"value": "h264"}},
+		{Implementation: ImplQuality, Fields: map[string]any{"value": "webdl-1080p"}},
+	}}
+	engine := NewEngine([]CustomFormat{format})
+	for _, release := range []ReleaseInfo{tested, acquired} {
+		matches := engine.ScoreRelease(release)
+		if len(matches) != 1 || ApplyScores(matches, map[string]int{"body": 125}) != 125 {
+			t.Fatalf("tester/acquisition rules must match and use profile points: %+v", release)
+		}
+	}
+}
+
+func TestFileInfoRulesAreEnforcedAfterDownload(t *testing.T) {
+	format := CustomFormat{ID: "file", Specifications: []Specification{{
+		Implementation: ImplFileInfo, Required: true,
+		Fields: map[string]any{"codec": "x264", "resolution": "1080p", "min_size_gb": 1.0},
+	}}}
+	engine := NewEngine([]CustomFormat{format})
+	release := ParseReleaseName("Show.S01E01.1080p.WEB.H264.mkv")
+	if len(engine.ScoreRelease(release)) != 1 {
+		t.Fatal("release-only evaluation should defer file conditions")
+	}
+	file := FileMetadata{Codec: "h264", Resolution: "1080p", Size: 2 * 1024 * 1024 * 1024}
+	if len(engine.ScoreFileMetadata(release, file)) != 1 {
+		t.Fatal("matching file properties should be accepted")
+	}
+	file.Size = 1024
+	if len(engine.ScoreFileMetadata(release, file)) != 0 {
+		t.Fatal("actual file size must enforce post-download format conditions")
+	}
+	format.Specifications[0].Negate = true
+	if len(engine.ScoreFileMetadata(release, file)) != 1 {
+		t.Fatal("file conditions must honor negation")
 	}
 }
 

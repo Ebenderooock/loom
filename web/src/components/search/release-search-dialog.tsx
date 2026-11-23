@@ -223,7 +223,7 @@ function GrabButton({
       setGrabbing(true);
       setError("");
       try {
-        await grab.mutateAsync({
+        const res = await grab.mutateAsync({
           clientId,
           torrent_url: result.link,
           magnet: result.magnet_uri,
@@ -235,7 +235,13 @@ function GrabButton({
           ...(ignoreBlocklist ? { ignore_blocklist: true } : {}),
         });
         setGrabbed(true);
-        toast.success(`Grabbed: ${result.title}`);
+        if (res?.quality_warning) {
+          toast.warning(`Grabbed: ${result.title}`, {
+            description: res.quality_warning,
+          });
+        } else {
+          toast.success(`Grabbed: ${result.title}`);
+        }
       } catch (err) {
         if (err instanceof ApiError && err.code === "blocklisted") {
           const message =

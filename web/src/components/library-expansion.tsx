@@ -1,7 +1,6 @@
 import { useState } from "react";
-import { Link } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
-import { Layers, Loader2, X } from "lucide-react";
+import { Loader2, X } from "lucide-react";
 import {
   discoveryKeys,
   useDismissRecommendation,
@@ -29,43 +28,47 @@ export function RecommendationPanel() {
   const { user } = useAuth();
   return (
     <section className="space-y-5" aria-label="Grow your library">
-      <div>
-        <h2 className="text-xl font-semibold tracking-tight">
-          What to add next
-        </h2>
-        <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-          New additions connected to your collection, cast, creators, and
-          genres. Sourced from TMDB; no Import Lists needed.
-        </p>
-      </div>
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <Tabs
-          value={mediaType}
-          onValueChange={(v) => {
-            if (v === "movie" || v === "series") setMediaType(v);
-          }}
-        >
-          <TabsList aria-label="Recommendation media type">
-            <TabsTrigger value="movie">Movies</TabsTrigger>
-            <TabsTrigger value="series">TV shows</TabsTrigger>
-          </TabsList>
-        </Tabs>
-        <label
-          htmlFor="discovery-upcoming"
-          className="flex items-center gap-2 text-sm"
-        >
-          <Checkbox
-            id="discovery-upcoming"
-            checked={includeUpcoming}
-            onCheckedChange={(checked) => setIncludeUpcoming(checked === true)}
-          />
-          Include upcoming titles
-        </label>
+      <div className="space-y-4 rounded-xl border bg-card p-4 text-card-foreground shadow-sm sm:p-6">
+        <div>
+          <h2 className="text-xl font-semibold tracking-tight">
+            What to add next
+          </h2>
+          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+            New additions connected to your collection, cast, creators, and
+            genres. Sourced from TMDB; no Import Lists needed.
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <Tabs
+            value={mediaType}
+            onValueChange={(v) => {
+              if (v === "movie" || v === "series") setMediaType(v);
+            }}
+          >
+            <TabsList aria-label="Recommendation media type">
+              <TabsTrigger value="movie">Movies</TabsTrigger>
+              <TabsTrigger value="series">TV shows</TabsTrigger>
+            </TabsList>
+          </Tabs>
+          <label
+            htmlFor="discovery-upcoming"
+            className="flex items-center gap-2 text-sm"
+          >
+            <Checkbox
+              id="discovery-upcoming"
+              checked={includeUpcoming}
+              onCheckedChange={(checked) =>
+                setIncludeUpcoming(checked === true)
+              }
+            />
+            Include upcoming titles
+          </label>
+        </div>
       </div>
       {query.isLoading ? (
         <CardGridSkeleton count={6} className={gridClass} />
       ) : query.error ? (
-        <div className="space-y-3">
+        <div className="space-y-3 rounded-xl border bg-card p-4">
           <p role="alert" className="text-sm text-destructive">
             {query.error.message}
           </p>
@@ -80,18 +83,21 @@ export function RecommendationPanel() {
               <p
                 role="status"
                 key={warning}
-                className="text-sm text-muted-foreground"
+                className="rounded-lg border bg-card p-3 text-sm text-muted-foreground"
               >
                 {warning}
               </p>
             ))}
             {query.data.stale && (
-              <p role="status" className="text-sm text-muted-foreground">
+              <p
+                role="status"
+                className="rounded-lg border bg-card p-3 text-sm text-muted-foreground"
+              >
                 Showing cached suggestions.
               </p>
             )}
             {query.data.items.length === 0 ? (
-              <p className="rounded-lg border border-dashed p-8 text-center text-muted-foreground">
+              <p className="rounded-lg border border-dashed bg-card p-8 text-center text-muted-foreground">
                 No new suggestions yet. Add movies or shows with TMDB IDs to
                 build your library&apos;s connections.
               </p>
@@ -136,7 +142,7 @@ export function RecommendationPanel() {
           }
         />
       )}
-      <p className="text-xs text-muted-foreground">
+      <p className="rounded-lg border bg-card p-3 text-xs text-muted-foreground">
         This product uses the TMDB API but is not endorsed or certified by TMDB.
       </p>
     </section>
@@ -151,21 +157,21 @@ function RecommendationCard({
   onOpen: () => void;
 }) {
   const dismiss = useDismissRecommendation();
-  const { user } = useAuth();
   return (
-    <article className="flex min-w-0 flex-col gap-3">
+    <article className="group/recommendation min-w-0 space-y-2">
       <div className="relative">
         <TitlePosterCard
           title={item.title}
           poster={item.poster_path}
           year={item.year}
+          mediaType={item.media_type}
           onOpen={onOpen}
           label={`View ${item.title}`}
         />
         <Button
-          variant="secondary"
+          variant="ghost"
           size="icon"
-          className="absolute right-2 top-2 h-11 w-11 shadow"
+          className={`absolute right-2 top-2 h-7 w-7 rounded-full border border-white/20 bg-black/50 text-white shadow transition-opacity hover:bg-black/70 hover:text-white focus-visible:ring-accent group-focus-within/recommendation:opacity-100 group-hover/recommendation:opacity-100 motion-reduce:transition-none [@media(hover:none)]:h-11 [@media(hover:none)]:w-11 [@media(hover:none)]:opacity-100 ${dismiss.isPending ? "opacity-100" : "opacity-0"}`}
           aria-label={`Dismiss ${item.title}`}
           disabled={dismiss.isPending}
           onClick={() =>
@@ -176,37 +182,20 @@ function RecommendationCard({
           }
         >
           {dismiss.isPending ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
           ) : (
-            <X className="h-4 w-4" />
+            <X className="h-3.5 w-3.5" />
           )}
         </Button>
       </div>
-      <div className="flex flex-1 flex-col gap-3 p-3">
-        {item.reasons.length > 0 && (
-          <p className="text-xs leading-relaxed text-muted-foreground">
-            {item.reasons.join(" · ")}
-          </p>
-        )}
-        <div className="mt-auto space-y-2">
-          <Button size="sm" className="w-full" onClick={onOpen}>
-            {user?.role === "admin" ? "Add to library" : "View details"}
-          </Button>
-          {item.collection_id && (
-            <Button variant="outline" size="sm" className="w-full" asChild>
-              <Link to="/collections" search={{ tmdb: item.collection_id }}>
-                <Layers className="mr-1 h-4 w-4" />
-                View collection
-              </Link>
-            </Button>
-          )}
-          {dismiss.error && (
-            <p role="alert" className="text-xs text-destructive">
-              {dismiss.error.message}
-            </p>
-          )}
-        </div>
-      </div>
+      {dismiss.error && (
+        <p
+          role="alert"
+          className="rounded-lg border bg-card p-3 text-xs text-destructive"
+        >
+          {dismiss.error.message}
+        </p>
+      )}
     </article>
   );
 }

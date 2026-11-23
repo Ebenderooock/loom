@@ -121,7 +121,7 @@ func Router(s *Service) http.Handler {
 			if body.Name != "" || body.Overview != "" {
 				return nil, ErrInvalid
 			}
-			if body.Source.LastSync != "" || body.Source.Error != "" {
+			if body.Source.LastSync != "" || body.Source.Error != "" || body.Source.PosterPath != "" {
 				return nil, ErrInvalid
 			}
 			return s.Import(r.Context(), *body.Source)
@@ -155,6 +155,7 @@ func Router(s *Service) http.Handler {
 			Overview         string  `json:"overview"`
 			Revision         *int    `json:"revision"`
 			QualityProfileID *string `json:"quality_profile_id,omitempty"`
+			Cover            *Cover  `json:"cover,omitempty"`
 		}
 		if err := readBody(w, r, &body); err != nil {
 			return nil, err
@@ -170,6 +171,12 @@ func Router(s *Service) http.Handler {
 			return nil, ErrConflict
 		}
 		c.Name, c.Overview = strings.TrimSpace(body.Name), body.Overview
+		if body.Cover != nil {
+			c.Cover = body.Cover
+			if err := c.validateCoverSelection(); err != nil {
+				return nil, err
+			}
+		}
 		if body.QualityProfileID != nil {
 			if err := s.validateProfile(r.Context(), *body.QualityProfileID); err != nil {
 				return nil, err
@@ -183,7 +190,7 @@ func Router(s *Service) http.Handler {
 		if err := readBody(w, r, &ref); err != nil {
 			return nil, err
 		}
-		if ref.LastSync != "" || ref.Error != "" {
+		if ref.LastSync != "" || ref.Error != "" || ref.PosterPath != "" {
 			return nil, ErrInvalid
 		}
 		ref, err := s.normalizeSource(r.Context(), ref)

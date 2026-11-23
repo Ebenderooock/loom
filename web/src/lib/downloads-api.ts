@@ -261,6 +261,8 @@ export interface GrabRequest {
 export interface GrabResult {
   client_id: string;
   item_id: string;
+  /** Set when the release is lower quality than the library's file. */
+  quality_warning?: string;
 }
 
 export async function grabRelease(

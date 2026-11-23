@@ -86,3 +86,20 @@ func TestQualityNameFromRelease(t *testing.T) {
 		})
 	}
 }
+
+func TestQualityNamesConflict(t *testing.T) {
+	for _, tc := range []struct {
+		a, b string
+		want bool
+	}{
+		{"unknown-1080p", "webdl-1080p", false},
+		{"webdl-1080p", "webdl-1080p-remux", false},
+		{"unknown-720p", "unknown-1080p", true},
+		{"webdl-1080p", "bluray-1080p", true},
+		{"", "webdl-1080p", false},
+	} {
+		if got := QualityNamesConflict(tc.a, tc.b); got != tc.want {
+			t.Errorf("QualityNamesConflict(%q, %q) = %t, want %t", tc.a, tc.b, got, tc.want)
+		}
+	}
+}

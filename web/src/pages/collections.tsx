@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { usePageHeader } from "@/hooks/use-page-header";
+import { useMediaGridClass } from "@/hooks/use-media-grid";
 import { useLibraries } from "@/lib/libraries-api";
 import {
   collectionKeys,
@@ -23,6 +24,7 @@ import {
   collectionRequest,
   matchesMember,
   memberIdentity,
+  type CollectionCover,
   type CollectionMember,
   type CollectionSource,
   type LoomCollection,
@@ -56,9 +58,6 @@ import {
   type BulkKind,
 } from "@/components/collections/collection-bulk-sheet";
 
-const GRID =
-  "grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6";
-
 type CollectionScan = {
   total: number;
   checked: number;
@@ -80,6 +79,7 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
 const SELECT = "h-10 rounded-md border bg-background px-3 text-sm";
 
 export function CollectionsPage() {
+  const gridClass = useMediaGridClass();
   const { setHeader } = usePageHeader();
   useEffect(() => setHeader({ title: "Collections" }), [setHeader]);
   const { id, tmdb } = useSearch({ from: "/collections" });
@@ -148,7 +148,7 @@ export function CollectionsPage() {
   const selectedID = id ?? existingSet?.id;
 
   return (
-    <div className="space-y-6 p-4 sm:p-6">
+    <div className="space-y-6 px-3 py-4 sm:p-6">
       {selectedID ? (
         <CollectionDetails
           key={selectedID}
@@ -160,79 +160,87 @@ export function CollectionsPage() {
         />
       ) : (
         <>
-          <header className="flex flex-wrap items-start justify-between gap-4">
-            <div className="max-w-2xl space-y-2">
-              <h1 className="text-2xl font-semibold tracking-tight">
-                Collections
-              </h1>
-              <p className="text-sm text-muted-foreground">
-                Movies and shows together, across libraries. Collect a sequence,
-                a franchise, or your own selection without adding every title to
-                Loom.
-              </p>
-            </div>
-            {canManage && (
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  variant="outline"
-                  disabled={discover.isPending}
-                  onClick={() => discover.mutate()}
-                >
-                  <RefreshCw
-                    className={`mr-2 h-4 w-4 ${discover.isPending ? "animate-spin" : ""}`}
-                  />
-                  Rescan library
-                </Button>
-                <Button onClick={() => setCreating(!creating)}>
-                  <Plus className="mr-2 h-4 w-4" />
-                  New collection
-                </Button>
+          <section className="space-y-4 rounded-xl border bg-card p-4 text-card-foreground shadow-sm sm:p-6">
+            <header className="flex flex-wrap items-start justify-between gap-4">
+              <div className="max-w-2xl space-y-2">
+                <h1 className="text-2xl font-semibold tracking-tight">
+                  Collections
+                </h1>
+                <p className="text-sm text-muted-foreground">
+                  Movies and shows together, across libraries. Collect a
+                  sequence, a franchise, or your own selection without adding
+                  every title to Loom.
+                </p>
               </div>
-            )}
-          </header>
-          <p className="text-xs text-muted-foreground">
-            TMDB movie sets cover sequels, not entire universes. Official TVDB
-            lists are candidates, not a completeness guarantee. Similar names or
-            shared titles never merge collections automatically.
-          </p>
-          <ErrorMessage
-            error={
-              discover.error ?? importSet.error ?? libraries.error ?? scan.error
-            }
-          />
-          {scan.data && (
-            <section
-              aria-label="Background collection discovery"
-              className="space-y-2 text-sm text-muted-foreground"
-            >
-              <p role="status">
-                Collections are found automatically in the background.{" "}
-                {scan.data.checked} of {scan.data.total} library titles checked.
-                {scan.data.running || scan.data.pending > 0
-                  ? " Scanning…"
-                  : scan.data.failed > 0
-                    ? " Waiting to retry."
-                    : " Up to date."}
-                {scan.data.failed > 0 &&
-                  ` ${scan.data.failed} titles need attention and will retry automatically.`}
-              </p>
-              {scan.data.errors.length > 0 && (
-                <details>
-                  <summary className="cursor-pointer">Discovery issues</summary>
-                  {scan.data.errors.map((error) => (
-                    <p
-                      key={`${error.media_type}:${error.media_id}`}
-                      className="break-words text-destructive"
-                    >
-                      {error.media_type} {error.media_id}: {error.message}
-                    </p>
-                  ))}
-                </details>
+              {canManage && (
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    variant="outline"
+                    disabled={discover.isPending}
+                    onClick={() => discover.mutate()}
+                  >
+                    <RefreshCw
+                      className={`mr-2 h-4 w-4 ${discover.isPending ? "animate-spin" : ""}`}
+                    />
+                    Rescan library
+                  </Button>
+                  <Button onClick={() => setCreating(!creating)}>
+                    <Plus className="mr-2 h-4 w-4" />
+                    New collection
+                  </Button>
+                </div>
               )}
-            </section>
-          )}
+            </header>
+            <p className="text-xs text-muted-foreground">
+              TMDB movie sets cover sequels, not entire universes. Official TVDB
+              lists are candidates, not a completeness guarantee. Similar names
+              or shared titles never merge collections automatically.
+            </p>
+            <ErrorMessage
+              error={
+                discover.error ??
+                importSet.error ??
+                libraries.error ??
+                scan.error
+              }
+            />
+            {scan.data && (
+              <section
+                aria-label="Background collection discovery"
+                className="space-y-2 text-sm text-muted-foreground"
+              >
+                <p role="status" className="rounded-lg border bg-card p-3">
+                  Collections are found automatically in the background.{" "}
+                  {scan.data.checked} of {scan.data.total} library titles
+                  checked.
+                  {scan.data.running || scan.data.pending > 0
+                    ? " Scanning…"
+                    : scan.data.failed > 0
+                      ? " Waiting to retry."
+                      : " Up to date."}
+                  {scan.data.failed > 0 &&
+                    ` ${scan.data.failed} titles need attention and will retry automatically.`}
+                </p>
+                {scan.data.errors.length > 0 && (
+                  <details>
+                    <summary className="cursor-pointer">
+                      Discovery issues
+                    </summary>
+                    {scan.data.errors.map((error) => (
+                      <p
+                        key={`${error.media_type}:${error.media_id}`}
+                        className="break-words text-destructive"
+                      >
+                        {error.media_type} {error.media_id}: {error.message}
+                      </p>
+                    ))}
+                  </details>
+                )}
+              </section>
+            )}
+          </section>
           {tmdb && !existingSet && !list.isPending && (
-            <section className="space-y-3 rounded-lg border p-4">
+            <section className="space-y-3 rounded-lg border bg-card p-4">
               <h2 className="font-semibold">TMDB movie set {tmdb}</h2>
               <p className="text-sm text-muted-foreground">
                 This source has not been saved in Loom yet.
@@ -253,7 +261,7 @@ export function CollectionsPage() {
             </section>
           )}
           {creating && canManage && (
-            <div className="grid gap-6 rounded-lg border p-4 md:grid-cols-2">
+            <div className="grid gap-6 rounded-lg border bg-card p-4 md:grid-cols-2">
               <CollectionForm
                 onSaved={async (c) => {
                   setCreating(false);
@@ -279,7 +287,7 @@ export function CollectionsPage() {
           ) : list.error ? (
             <Retry error={list.error} retry={() => void list.refetch()} />
           ) : (
-            <div className={GRID}>
+            <div className={gridClass}>
               {list.data?.items
                 .filter(
                   (c) =>
@@ -295,26 +303,7 @@ export function CollectionsPage() {
                     search={{ id: c.id }}
                     className="group overflow-hidden rounded-lg border bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
-                    <div className="flex aspect-[4/3] overflow-hidden bg-muted">
-                      {c.members
-                        .filter((m) => !m.excluded && m.poster_path)
-                        .slice(0, 3)
-                        .map((m) => (
-                          <img
-                            key={m.id}
-                            src={titleImage(m.poster_path) ?? ""}
-                            alt=""
-                            className="min-w-0 flex-1 object-cover"
-                            loading="lazy"
-                          />
-                        ))}
-                      {!c.members.some((m) => !m.excluded && m.poster_path) && (
-                        <Layers
-                          className="m-auto h-12 w-12 text-muted-foreground"
-                          aria-hidden
-                        />
-                      )}
-                    </div>
+                    <CollectionPoster collection={c} />
                     <div className="space-y-2 p-3">
                       <h2 className="font-semibold group-hover:underline">
                         {c.name}
@@ -332,18 +321,223 @@ export function CollectionsPage() {
             </div>
           )}
           {!list.isPending && !list.error && list.data?.items.length === 0 && (
-            <p className="rounded-lg border border-dashed p-8 text-center text-muted-foreground">
+            <p className="rounded-lg border border-dashed bg-card p-8 text-center text-muted-foreground">
               No collections yet. Create your own, import a source, or find
               provider-declared sets from your library.
             </p>
           )}
-          <p className="text-xs text-muted-foreground">
+          <p className="rounded-lg border bg-card p-3 text-xs text-muted-foreground">
             This product uses the TMDB API but is not endorsed or certified by
             TMDB.
           </p>
         </>
       )}
     </div>
+  );
+}
+
+function sourceKey(source: CollectionSource) {
+  return `${source.provider}:${source.kind}:${source.external_id}`;
+}
+
+function CollectionPoster({ collection }: { collection: LoomCollection }) {
+  const active = collection.members.filter((member) => !member.excluded);
+  const size = Math.max(2, Math.ceil(Math.sqrt(active.length)));
+  const cover = collection.cover;
+  const poster =
+    cover?.mode === "source"
+      ? collection.sources.find(
+          (source) => sourceKey(source) === cover.source_key,
+        )?.poster_path
+      : cover?.mode === "member"
+        ? active.find((member) => member.id === cover.member_id)?.poster_path
+        : undefined;
+  const unavailable = cover && cover.mode !== "mosaic" && !poster;
+  return (
+    <div className="relative aspect-[2/3] overflow-hidden bg-muted">
+      {poster ? (
+        <img
+          src={titleImage(poster)}
+          alt=""
+          className="h-full w-full object-contain"
+          loading="lazy"
+        />
+      ) : active.length ? (
+        <div
+          className="grid h-full w-full"
+          style={{
+            gridTemplateColumns: `repeat(${size}, minmax(0, 1fr))`,
+            gridTemplateRows: `repeat(${size}, minmax(0, 1fr))`,
+          }}
+        >
+          {Array.from({ length: size * size }, (_, index) => {
+            const member = active[index];
+            return (
+              <div
+                key={member?.id ?? `empty-${index}`}
+                className="min-h-0 min-w-0"
+              >
+                {member?.poster_path && (
+                  <img
+                    src={titleImage(member.poster_path) ?? ""}
+                    alt=""
+                    className="h-full w-full object-contain"
+                    loading="lazy"
+                  />
+                )}
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="flex h-full items-center justify-center">
+          <Layers className="h-12 w-12 text-muted-foreground" aria-hidden />
+        </div>
+      )}
+      {unavailable && (
+        <p className="absolute inset-x-0 bottom-0 bg-black/75 p-2 text-xs text-white">
+          Selected cover unavailable
+        </p>
+      )}
+    </div>
+  );
+}
+
+function CollectionCoverForm({
+  collection,
+  onSaved,
+}: {
+  collection: LoomCollection;
+  onSaved: (collection: LoomCollection) => void;
+}) {
+  const sources = collection.sources.filter((source) => source.poster_path);
+  const members = collection.members.filter(
+    (member) => !member.excluded && member.poster_path,
+  );
+  const current = collection.cover;
+  const [mode, setMode] = useState<CollectionCover["mode"]>(
+    current?.mode ?? "mosaic",
+  );
+  const [source, setSource] = useState(
+    current?.mode === "source"
+      ? current.source_key
+      : sources[0]
+        ? sourceKey(sources[0])
+        : "",
+  );
+  const [member, setMember] = useState(
+    current?.mode === "member" ? current.member_id : (members[0]?.id ?? ""),
+  );
+  const cover: CollectionCover =
+    mode === "source"
+      ? { mode, source_key: source }
+      : mode === "member"
+        ? { mode, member_id: member }
+        : { mode };
+  const available =
+    mode === "mosaic" ||
+    (mode === "source"
+      ? sources.some((item) => sourceKey(item) === source)
+      : members.some((item) => item.id === member));
+  const mutation = useMutation({
+    mutationFn: () =>
+      collectionRequest<LoomCollection>(
+        collectionPath(collection.id),
+        {
+          name: collection.name,
+          overview: collection.overview,
+          revision: collection.revision,
+          cover,
+        },
+        "PATCH",
+      ),
+    onSuccess: onSaved,
+  });
+  return (
+    <form
+      className="space-y-3"
+      onSubmit={(event) => {
+        event.preventDefault();
+        mutation.mutate();
+      }}
+    >
+      <Field label="Cover style">
+        <select
+          className={SELECT}
+          value={mode}
+          onChange={(event) => {
+            const value = event.target.value;
+            if (value === "mosaic" || value === "source" || value === "member")
+              setMode(value);
+          }}
+        >
+          <option value="mosaic">Poster mosaic</option>
+          <option value="source" disabled={!sources.length}>
+            Source poster
+          </option>
+          <option value="member" disabled={!members.length}>
+            Title poster
+          </option>
+        </select>
+      </Field>
+      {mode === "source" && (
+        <Field label="Source poster">
+          <select
+            className={SELECT}
+            value={source}
+            onChange={(event) => setSource(event.target.value)}
+          >
+            {!available && (
+              <option value={source}>Selected source is unavailable</option>
+            )}
+            {sources.map((item) => (
+              <option key={sourceKey(item)} value={sourceKey(item)}>
+                {item.provider.toUpperCase()} {item.kind} {item.external_id}
+              </option>
+            ))}
+          </select>
+        </Field>
+      )}
+      {mode === "member" && (
+        <Field label="Title poster">
+          <select
+            className={SELECT}
+            value={member}
+            onChange={(event) => setMember(event.target.value)}
+          >
+            {!available && (
+              <option value={member}>Selected title is unavailable</option>
+            )}
+            {members.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.title}
+                {item.year ? ` (${item.year})` : ""}
+              </option>
+            ))}
+          </select>
+        </Field>
+      )}
+      <div
+        className="max-w-40 overflow-hidden rounded-lg border"
+        aria-label="Collection cover preview"
+      >
+        <CollectionPoster collection={{ ...collection, cover }} />
+      </div>
+      {!available && (
+        <p role="status" className="text-sm text-destructive">
+          Choose another poster or switch to a mosaic.
+        </p>
+      )}
+      <p className="text-xs text-muted-foreground">
+        Saved for everyone. Source posters update when sources refresh; title
+        posters follow the selected title.
+        {!sources.length && " Refresh sources to check for collection artwork."}
+      </p>
+      <Button disabled={mutation.isPending || !available}>
+        {mutation.isPending ? "Saving cover…" : "Save cover"}
+      </Button>
+      <ErrorMessage error={mutation.error} />
+    </form>
   );
 }
 
@@ -366,7 +560,7 @@ function Filters({
 }) {
   const libraries = useLibraries();
   return (
-    <div className="flex flex-wrap gap-3">
+    <div className="flex flex-wrap gap-3 rounded-xl border bg-card p-4 shadow-sm">
       {libraries.error && (
         <div className="w-full space-y-2">
           <ErrorMessage error={libraries.error} />
@@ -440,6 +634,7 @@ function CollectionDetails({
   onBack: () => void;
   onOpen: (id?: string) => void;
 }) {
+  const gridClass = useMediaGridClass();
   const qc = useQueryClient();
   const [selected, setSelected] = useState<CollectionMember | null>(null);
   const [library, setLibrary] = useState("");
@@ -502,7 +697,7 @@ function CollectionDetails({
   const failing = c?.sources.filter((s) => s.error) ?? [];
   return (
     <section className="min-w-0 space-y-5" aria-label="Collection details">
-      <Button variant="ghost" onClick={() => onBack()}>
+      <Button variant="outline" onClick={() => onBack()}>
         <ArrowLeft className="mr-2 h-4 w-4" />
         All collections
       </Button>
@@ -521,7 +716,7 @@ function CollectionDetails({
                 </Button>
               </p>
             )}
-            <header className="flex flex-wrap items-start justify-between gap-4">
+            <header className="flex flex-wrap items-start justify-between gap-4 rounded-xl border bg-card p-4 text-card-foreground shadow-sm sm:p-6">
               <div className="min-w-0 max-w-3xl space-y-2">
                 <h1 className="break-words text-2xl font-semibold tracking-tight">
                   {c.name}
@@ -580,7 +775,10 @@ function CollectionDetails({
               )}
             </header>
             {failing.length > 0 && (
-              <p role="alert" className="text-sm text-destructive">
+              <p
+                role="alert"
+                className="rounded-lg border bg-card p-3 text-sm text-destructive"
+              >
                 {failing.length} source{failing.length === 1 ? "" : "s"} need
                 attention: {failing[0]?.error}
               </p>
@@ -589,12 +787,15 @@ function CollectionDetails({
             <Filters
               {...{ library, setLibrary, media, setMedia, status, setStatus }}
             />
-            <div className={GRID}>
+            <div className={gridClass}>
               {visible?.map((m) => {
                 const unresolved = !m.in_library && !m.external_ids.tmdb;
                 const isChecked = checked.has(m.id);
                 return (
-                  <article key={m.id} className="relative min-w-0 space-y-1.5">
+                  <article
+                    key={m.id}
+                    className="relative min-w-0 space-y-1.5 rounded-lg border bg-card pb-2"
+                  >
                     <TitlePosterCard
                       title={m.title}
                       poster={m.poster_path}
@@ -624,7 +825,7 @@ function CollectionDetails({
                         {isChecked && <Check className="h-4 w-4" />}
                       </span>
                     )}
-                    <p className="truncate text-xs text-muted-foreground">
+                    <p className="truncate px-3 text-xs text-muted-foreground">
                       {m.excluded
                         ? "Excluded"
                         : unresolved
@@ -636,7 +837,7 @@ function CollectionDetails({
                               : `${m.sources.length} source${m.sources.length === 1 ? "" : "s"}`}
                     </p>
                     {canManage && !selecting && (
-                      <div className="flex flex-wrap gap-1">
+                      <div className="flex flex-wrap gap-1 px-1">
                         {unresolved && !m.excluded && (
                           <Button
                             variant="outline"
@@ -689,7 +890,7 @@ function CollectionDetails({
               })}
             </div>
             {!visible?.length && (
-              <div className="space-y-3 py-8 text-center text-muted-foreground">
+              <div className="space-y-3 rounded-xl border bg-card p-4 py-8 text-center text-muted-foreground">
                 <p>
                   {c.members.length
                     ? "No members match these filters."
@@ -901,6 +1102,13 @@ function ManageSheet({
                 onOpenChange(false);
                 onApplyQuality();
               }}
+            />
+          </ManageSection>
+          <ManageSection title="Cover">
+            <CollectionCoverForm
+              key={c.revision}
+              collection={c}
+              onSaved={onChanged}
             />
           </ManageSection>
           <ManageSection title="Sources">
@@ -1250,7 +1458,10 @@ function SourceForm({
 
 function Loading() {
   return (
-    <p role="status" className="flex items-center gap-2 py-6">
+    <p
+      role="status"
+      className="flex items-center gap-2 rounded-xl border bg-card p-4 py-6"
+    >
       <Loader2 className="h-4 w-4 animate-spin" />
       Loading collections…
     </p>
@@ -1265,7 +1476,7 @@ function ErrorMessage({ error }: { error: Error | null | undefined }) {
 }
 function Retry({ error, retry }: { error: Error; retry: () => void }) {
   return (
-    <div className="space-y-3">
+    <div className="space-y-3 rounded-xl border bg-card p-4">
       <ErrorMessage error={error} />
       <Button variant="outline" onClick={retry}>
         Retry

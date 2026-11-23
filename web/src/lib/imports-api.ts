@@ -376,6 +376,18 @@ export async function retryImportJob(id: string): Promise<void> {
   });
 }
 
+export type DismissImportJobsRequest =
+  { ids: string[]; all_inactive?: never } | { all_inactive: true; ids?: never };
+
+export async function dismissImportJobs(
+  selection: DismissImportJobsRequest,
+): Promise<{ dismissed: number }> {
+  return fetchJSON("/api/v1/imports/jobs/dismiss", {
+    method: "POST",
+    body: JSON.stringify(selection),
+  });
+}
+
 export async function manualMatch(params: {
   path: string;
   media_type: string;
@@ -554,5 +566,13 @@ export function useRetryImportJob() {
   return useMutation({
     mutationFn: retryImportJob,
     onSuccess: () => qc.invalidateQueries({ queryKey: ["imports"] }),
+  });
+}
+
+export function useDismissImportJobs() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: dismissImportJobs,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["imports", "jobs"] }),
   });
 }

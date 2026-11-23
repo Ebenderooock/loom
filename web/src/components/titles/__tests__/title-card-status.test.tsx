@@ -198,8 +198,11 @@ describe("canonical library card status on collection/Discover posters", () => {
       </>,
     );
     expect(
-      within(getByTestId("external")).getByText("Missing"),
+      within(getByTestId("external")).getByText("Not in library"),
     ).toBeInTheDocument();
+    expect(
+      within(getByTestId("external")).getByRole("button"),
+    ).toHaveAccessibleDescription("Not in library");
     expect(
       within(getByTestId("external")).queryByText("Available"),
     ).not.toBeInTheDocument();

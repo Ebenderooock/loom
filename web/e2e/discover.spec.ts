@@ -45,6 +45,12 @@ async function openImportLists(page: import("@playwright/test").Page) {
 
 test.beforeEach(async ({ page }) => {
   await mockBaseApp(page);
+  await mockGet(page, "features", {});
+  await mockGet(page, "discover/recommendations?*", {
+    items: [],
+    warnings: [],
+    stale: false,
+  });
   await mockGet(page, "import-lists/discover?media_type=movie", {
     data: [item],
   });
@@ -59,8 +65,8 @@ test.beforeEach(async ({ page }) => {
       },
     ],
   });
-  await mockGet(page, "discover/movie/42", titleDetails);
-  await mockGet(page, "discover/series/43", {
+  await mockGet(page, "discover/movie/42?provider=tmdb", titleDetails);
+  await mockGet(page, "discover/series/43?provider=tmdb", {
     title: {
       tmdb_id: "43",
       title: "Discover Show",
@@ -134,21 +140,13 @@ test("full details are read-only until the shared add flow is explicitly submitt
   ).toBeFocused();
 });
 
-test("quick add opens shared settings without bypassing the detail flow", async ({
+test("import list posters open details without a duplicate quick-add control", async ({
   page,
 }) => {
   await openImportLists(page);
-  await page.getByRole("button", { name: "Add Discover Movie" }).click();
-  const dialog = page.getByRole("dialog");
   await expect(
-    dialog.getByRole("checkbox", { name: "Search after adding" }),
-  ).toBeVisible();
-  await expect(
-    page
-      .getByRole("button", { name: "View details for Discover Movie" })
-      .first(),
-  ).toBeVisible();
-  await dialog.getByRole("button", { name: "Close" }).click();
+    page.getByRole("button", { name: "Add Discover Movie" }),
+  ).toHaveCount(0);
   await page
     .getByRole("button", { name: "View details for Discover Movie" })
     .first()

@@ -146,6 +146,7 @@ type ReleaseDate struct {
 	Type          int    `json:"type"`
 	ReleaseDate   string `json:"release_date"` // ISO 8601 with time
 	Certification string `json:"certification"`
+	Note          string `json:"note"`
 }
 
 // PersonResponse is the JSON response from TMDb /person/{id} endpoint.

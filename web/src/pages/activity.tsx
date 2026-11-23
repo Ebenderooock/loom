@@ -84,6 +84,7 @@ interface DownloadItem {
 }
 
 interface ReviewItem {
+  kind?: string;
   id: string;
   media_type: string;
   media_id: string;
@@ -991,7 +992,9 @@ function ReviewQueue() {
                   {r.download_path || r.media_id}
                 </span>
                 <Badge variant="secondary" className="text-xs">
-                  {r.media_type}
+                  {r.kind === "quality_downgrade"
+                    ? "Lower quality"
+                    : r.media_type}
                 </Badge>
               </div>
               <p className="text-xs text-muted-foreground">{r.reason}</p>
@@ -1007,7 +1010,7 @@ function ReviewQueue() {
                 onClick={() => handleAction(r.id, "approve")}
               >
                 <CheckCircle2 className="mr-1 h-4 w-4 text-green-500" />
-                Approve
+                {r.kind === "quality_downgrade" ? "Replace file" : "Approve"}
               </Button>
               <Button
                 size="sm"
@@ -1016,7 +1019,7 @@ function ReviewQueue() {
                 onClick={() => handleAction(r.id, "reject")}
               >
                 <XCircle className="mr-1 h-4 w-4 text-red-500" />
-                Reject
+                {r.kind === "quality_downgrade" ? "Keep current" : "Reject"}
               </Button>
             </div>
           </CardContent>

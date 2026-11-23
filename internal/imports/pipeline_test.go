@@ -108,7 +108,7 @@ func TestImportUsesOnlyMatchingReleaseQualityContext(t *testing.T) {
 	title := "Dragon.Ball.Super.Beerus.S01E01.CR.1080p.WEBRip.10bits.x265-Rapta"
 	for _, tc := range []struct {
 		name, file, title string
-		allowed           bool
+		usesRelease       bool
 	}{
 		{"quality omitted", "Dragon Ball Super - Beerus - S01E01 - The God Who Destroys.mkv", title, true},
 		{"explicit lower quality", "Dragon.Ball.Super.Beerus.S01E01.720p.HDTV.mkv", title, false},
@@ -126,11 +126,40 @@ func TestImportUsesOnlyMatchingReleaseQualityContext(t *testing.T) {
 				t.Fatal(err)
 			}
 			paths, err := f.p.processImport(context.Background(), &downloads.DownloadCompletedEvent{DownloadID: "pack", Title: tc.title}, root)
-			if (err == nil) != tc.allowed {
-				t.Fatalf("release-quality import: %v, %v; allow=%v", paths, err, tc.allowed)
+			// Quality never blocks the import; only the stored quality differs.
+			if err != nil || len(f.svc.files) != 1 {
+				t.Fatalf("release-quality import: %v, %v", paths, err)
 			}
-			if tc.allowed && (len(f.svc.files) != 1 || f.svc.files[0].Quality != "webrip-1080p") {
-				t.Fatalf("release quality was not retained in library metadata: %+v", f.svc.files)
+			if (f.svc.files[0].Quality == "webrip-1080p") != tc.usesRelease {
+				t.Fatalf("stored quality %q; want release quality used=%v", f.svc.files[0].Quality, tc.usesRelease)
+			}
+		})
+	}
+}
+
+func TestImportSceneWEBReleaseQuality(t *testing.T) {
+	for _, file := range []string{
+		"The.Body.2026.S01E01.1080p.WEB.H264-CAKES.mkv",
+		"The.Body.2026.S01E01.1080p.mkv",
+	} {
+		t.Run(file, func(t *testing.T) {
+			f := newPackPipeline(t, ImportModeCopy, nil)
+			profile := unrestrictedProfile(t)
+			f.svc.show.Title, f.svc.show.QualityProfileID = "The Body", profile.ID
+			f.p.decisions = NewDecisionMaker(&SampleSpec{}, &FreeSpaceSpec{}, &UnpackingSpec{}, &DangerousFileSpec{}, NewUpgradeSpec(&stubProfileStore{profile: profile}))
+			root := t.TempDir()
+			if err := os.WriteFile(filepath.Join(root, file), []byte("episode"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			paths, err := f.p.processImport(context.Background(), &downloads.DownloadCompletedEvent{
+				DownloadID: "scene-web",
+				Title:      "The Body 2026 S01E01 1080p WEB H264-CAKES EZTV",
+			}, root)
+			if err != nil || len(paths) != 1 {
+				t.Fatalf("scene WEB import: %v, %v", paths, err)
+			}
+			if len(f.svc.files) != 1 || f.svc.files[0].Quality != "webdl-1080p" {
+				t.Fatalf("expected webdl-1080p in library metadata: %+v", f.svc.files)
 			}
 		})
 	}

@@ -8,6 +8,7 @@ export interface CollectionSource {
   external_id: string;
   last_sync?: string;
   error?: string;
+  poster_path?: string;
 }
 
 export interface CollectionMember {
@@ -33,6 +34,11 @@ export interface CollectionMember {
   episode_stats?: EpisodeStats;
 }
 
+export type CollectionCover =
+  | { mode: "mosaic" }
+  | { mode: "source"; source_key: string }
+  | { mode: "member"; member_id: string };
+
 export interface LoomCollection {
   id: string;
   name: string;
@@ -43,6 +49,7 @@ export interface LoomCollection {
   total: number;
   in_library: number;
   quality_profile_id?: string;
+  cover?: CollectionCover;
 }
 
 export type BulkStatus =

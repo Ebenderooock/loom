@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -18,10 +17,13 @@ import (
 )
 
 type titleActionAvailability struct {
-	FolderPath              *string `json:"folderPath"`
-	UnavailableReason       *string `json:"unavailableReason"`
-	RescanUnavailableReason *string `json:"rescanUnavailableReason"`
-	PlexUnavailableReason   *string `json:"plexUnavailableReason"`
+	FolderPath                *string `json:"folderPath"`
+	UnavailableReason         *string `json:"unavailableReason"`
+	RescanUnavailableReason   *string `json:"rescanUnavailableReason"`
+	PlexConfigured            bool    `json:"plexConfigured"`
+	PlexUnavailableReason     *string `json:"plexUnavailableReason"`
+	JellyfinConfigured        bool    `json:"jellyfinConfigured"`
+	JellyfinUnavailableReason *string `json:"jellyfinUnavailableReason"`
 }
 
 func (s *Server) registerTitleActions(r chi.Router, mediaType string) {
@@ -34,7 +36,8 @@ func (s *Server) registerTitleActions(r chi.Router, mediaType string) {
 		return s.authSvc.RequireRole("admin")(next)
 	}
 	r.With(admin).Get("/{id}/actions", s.titleActions(mediaType))
-	r.With(admin).Post("/{id}/sync-plex", s.syncTitlePlex(mediaType))
+	r.With(admin).Post("/{id}/sync-plex", s.syncTitleMediaServer(mediaType, connect.ProviderPlex, "Plex"))
+	r.With(admin).Post("/{id}/sync-jellyfin", s.syncTitleMediaServer(mediaType, connect.ProviderJellyfin, "Jellyfin"))
 	r.With(admin).Post("/{id}/rescan-library", s.rescanTitleLibrary(mediaType))
 	r.With(admin).Post("/{id}/refresh-metadata", s.refreshTitleMetadata(mediaType))
 }
@@ -57,14 +60,12 @@ func (s *Server) titleActions(mediaType string) http.HandlerFunc {
 		if err != nil {
 			reason := titlefiles.ActionUnavailableReason(err)
 			result.UnavailableReason = &reason
-			result.RescanUnavailableReason = &reason
 			result.PlexUnavailableReason = &reason
 			s.logger.WarnContext(r.Context(), "title action folder unavailable", "media_type", mediaType, "id", httpparam.Param(r, "id"))
 		} else {
 			result.FolderPath = &folder.Path
 			if len(folder.Files) == 0 {
 				reason := "No complete registered imported library files are available."
-				result.RescanUnavailableReason = &reason
 				result.PlexUnavailableReason = &reason
 			}
 		}
@@ -73,44 +74,51 @@ func (s *Server) titleActions(mediaType string) http.HandlerFunc {
 			reason := "Library file scanning is not configured."
 			result.RescanUnavailableReason = &reason
 		}
-		if result.PlexUnavailableReason == nil {
-			if _, err := s.plexActionConnections(r.Context()); err != nil {
-				reason := err.Error()
-				result.PlexUnavailableReason = &reason
-			}
+		result.JellyfinUnavailableReason = result.PlexUnavailableReason
+		if _, err := s.titleMediaServerConnections(r.Context(), connect.ProviderPlex, "Plex"); err != nil {
+			reason := err.Error()
+			result.PlexUnavailableReason = &reason
+		} else {
+			result.PlexConfigured = true
+		}
+		if _, err := s.titleMediaServerConnections(r.Context(), connect.ProviderJellyfin, "Jellyfin"); err != nil {
+			reason := err.Error()
+			result.JellyfinUnavailableReason = &reason
+		} else {
+			result.JellyfinConfigured = true
 		}
 		writeJSON(w, http.StatusOK, result)
 	}
 }
 
-func (s *Server) plexActionConnections(ctx context.Context) ([]*connect.Connection, error) {
+func (s *Server) titleMediaServerConnections(ctx context.Context, providerType connect.ProviderType, name string) ([]*connect.Connection, error) {
 	if s.connectSvc == nil {
-		return nil, errors.New("configure and enable a Plex connection in Settings > Connect")
+		return nil, fmt.Errorf("configure and enable a %s connection in Settings > Connect", name)
 	}
 	connections, err := s.connectSvc.ListConnections(ctx)
 	if err != nil {
-		s.logger.ErrorContext(ctx, "could not load Plex action connections")
-		return nil, errors.New("could not load Plex connection settings")
+		s.logger.ErrorContext(ctx, "could not load title action connections", "provider", providerType)
+		return nil, fmt.Errorf("could not load %s connection settings", name)
 	}
 	var targets []*connect.Connection
 	for _, c := range connections {
-		if !c.Enabled || c.Provider != connect.ProviderPlex {
+		if !c.Enabled || c.Provider != providerType {
 			continue
 		}
 		host, err := url.Parse(c.Settings.Host)
 		if err != nil || host.Host == "" || (host.Scheme != "http" && host.Scheme != "https") ||
 			host.User != nil || host.RawQuery != "" || host.Fragment != "" || strings.TrimSpace(c.Settings.APIKey) == "" {
-			return nil, errors.New("an enabled Plex connection needs a valid server URL and token in Settings > Connect")
+			return nil, fmt.Errorf("an enabled %s connection needs a valid server URL and token in Settings > Connect", name)
 		}
 		targets = append(targets, c)
 	}
 	if len(targets) == 0 {
-		return nil, errors.New("configure and enable a Plex connection in Settings > Connect")
+		return nil, fmt.Errorf("configure and enable a %s connection in Settings > Connect", name)
 	}
 	return targets, nil
 }
 
-func (s *Server) syncTitlePlex(mediaType string) http.HandlerFunc {
+func (s *Server) syncTitleMediaServer(mediaType string, providerType connect.ProviderType, name string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx, cancel := context.WithTimeout(r.Context(), time.Minute)
 		defer cancel()
@@ -123,14 +131,14 @@ func (s *Server) syncTitlePlex(mediaType string) http.HandlerFunc {
 			titleActionError(w, http.StatusConflict, "No complete registered imported library files are available.")
 			return
 		}
-		targets, err := s.plexActionConnections(ctx)
+		targets, err := s.titleMediaServerConnections(ctx, providerType, name)
 		if err != nil {
 			titleActionError(w, http.StatusConflict, err.Error())
 			return
 		}
-		provider, err := connect.ProviderFor(connect.ProviderPlex)
+		provider, err := connect.ProviderFor(providerType)
 		if err != nil {
-			titleActionError(w, http.StatusInternalServerError, "Plex refresh is unavailable.")
+			titleActionError(w, http.StatusInternalServerError, name+" refresh is unavailable.")
 			return
 		}
 		completed, failed := 0, 0
@@ -139,45 +147,46 @@ func (s *Server) syncTitlePlex(mediaType string) http.HandlerFunc {
 			// server-side and never enter responses or error logs here.
 			if err := provider.NotifyLibraryUpdate(ctx, connection.Settings); err != nil {
 				failed++
-				s.logger.WarnContext(ctx, "title Plex library refresh failed", "connection_id", connection.ID)
+				s.logger.WarnContext(ctx, "title media server library refresh failed", "provider", providerType, "connection_id", connection.ID)
 			} else {
 				completed++
 			}
 		}
 		if failed > 0 {
 			titleActionError(w, http.StatusBadGateway, fmt.Sprintf(
-				"Plex library refresh failed for %d connection(s); %d succeeded. Check the Plex server and connection settings.", failed, completed))
+				"%s library refresh failed for %d connection(s); %d succeeded. Check the %s server and connection settings.", name, failed, completed, name))
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"message": "Plex library refresh requested", "connections": completed})
+		writeJSON(w, http.StatusOK, map[string]any{"message": name + " library refresh requested", "connections": completed})
 	}
 }
 
 func (s *Server) rescanTitleLibrary(mediaType string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id := httpparam.Param(r, "id")
-		folder, err := s.actionFolder(r.Context(), mediaType, id)
-		if err != nil {
-			titleActionError(w, http.StatusConflict, titlefiles.ActionUnavailableReason(err))
+		if s.libStore == nil {
+			titleActionError(w, http.StatusServiceUnavailable, "Library configuration unavailable.")
 			return
 		}
-		if len(folder.Files) == 0 {
-			titleActionError(w, http.StatusConflict, "No complete registered imported library files are available.")
+		folder, err := titlefiles.New(s.db.DB(), s.libStore, s.appCfg, s.auditLog, nil).
+			ResolveRescanFolder(r.Context(), mediaType, id)
+		if err != nil {
+			titleActionError(w, http.StatusConflict, titlefiles.ActionUnavailableReason(err))
 			return
 		}
 		var result *scanner.ScanResult
 		switch {
 		case mediaType == "movie" && s.scannerSvc != nil:
-			result, err = s.scannerSvc.RescanRegisteredMovie(r.Context(), id, folder)
+			result, err = s.scannerSvc.RescanMovieFolder(r.Context(), id, folder)
 		case mediaType == "series" && s.seriesScannerSvc != nil:
-			result, err = s.seriesScannerSvc.RescanRegisteredSeries(r.Context(), id, folder)
+			result, err = s.seriesScannerSvc.RescanSeriesFolder(r.Context(), id, folder)
 		default:
 			titleActionError(w, http.StatusServiceUnavailable, "Library file scanning is not configured.")
 			return
 		}
 		if err != nil {
-			s.logger.ErrorContext(r.Context(), "registered file rescan failed", "media_type", mediaType, "id", id)
-			titleActionError(w, http.StatusInternalServerError, "Could not check registered library files.")
+			s.logger.ErrorContext(r.Context(), "title folder rescan failed", "media_type", mediaType, "id", id, "error", err)
+			titleActionError(w, http.StatusInternalServerError, "Could not rescan the title's library folder.")
 			return
 		}
 		writeJSON(w, http.StatusOK, result)

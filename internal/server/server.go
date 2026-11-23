@@ -80,12 +80,15 @@ import (
 	"github.com/ebenderooock/loom/internal/storage"
 	"github.com/ebenderooock/loom/internal/systemlogs"
 	"github.com/ebenderooock/loom/internal/titlefiles"
+	"github.com/ebenderooock/loom/internal/updater"
+	"github.com/ebenderooock/loom/internal/updates"
 	"github.com/ebenderooock/loom/internal/validation"
 	"github.com/ebenderooock/loom/internal/workflows"
 )
 
 // Server holds wired dependencies for the HTTP listener.
 type Server struct {
+	updateSvc         *updates.Service
 	cfg               *config.Config
 	appCfg            *appconfig.Config
 	logger            *slog.Logger
@@ -276,7 +279,19 @@ func New(cfg *config.Config, wiring Wiring) (*Server, error) {
 		wiring.HTTPMetrics = telemetry.NewHTTPMetrics(wiring.Telemetry.Registry())
 	}
 
+	updateSvc := updates.NewService(wiring.DB, buildinfo.Version, buildinfo.Commit)
+	updateSvc.ConfigureInstallation(func() (bool, string) { return updater.Capability(nativeBinding(cfg)) })
+	ackCtx, cancelAck := context.WithTimeout(context.Background(), 10*time.Second)
+	err := updateSvc.InitializePostgresAcknowledgement(ackCtx)
+	cancelAck()
+	if err != nil {
+		return nil, fmt.Errorf("server: initialize PostgreSQL update acknowledgement: %w", err)
+	}
+	if wiring.NotificationSvc != nil {
+		updateSvc.ConfigureAlerts(updates.NewAlerts(wiring.DB, wiring.Bus))
+	}
 	s := &Server{
+		updateSvc:         updateSvc,
 		cfg:               cfg,
 		appCfg:            wiring.AppConfig,
 		logger:            wiring.Logger,
@@ -824,6 +839,12 @@ func (s *Server) newMux() http.Handler {
 	})
 
 	r.Handle("/metrics", s.tel.Handler())
+	r.Get(updater.RuntimePath, updater.RuntimeHandler(nativeBinding(s.cfg), s.updateSvc.NativeSettings, func(ctx context.Context) error {
+		if !s.ready.Load() {
+			return errors.New("starting")
+		}
+		return s.db.Ping(ctx)
+	}))
 
 	if s.authSvc != nil {
 		s.authSvc.Mount(r)
@@ -1196,6 +1217,7 @@ func (s *Server) newMux() http.Handler {
 			appearanceAdminMW = s.authSvc.RequireRole("admin")
 		}
 		r.Mount("/api/v1/appearance", appearance.Router(appearance.NewStore(s.db), s.logger, appearanceAdminMW))
+		r.Mount("/api/v1/updates", s.updateSvc.Router(appearanceAdminMW))
 
 		// Filesystem browsing (authenticated)
 		r.Get("/api/v1/filesystem", handleFilesystemBrowse(s.cfg))

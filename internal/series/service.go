@@ -53,6 +53,17 @@ type service struct {
 	addMu           sync.Mutex
 }
 
+// EpisodeFileQualities provides search with persisted file quality identities.
+func (s *service) EpisodeFileQualities(ctx context.Context, episodeID string) ([]string, error) {
+	reader, ok := s.repo.(interface {
+		EpisodeFileQualities(context.Context, string) ([]string, error)
+	})
+	if !ok {
+		return nil, fmt.Errorf("episode file quality lookup unavailable")
+	}
+	return reader.EpisodeFileQualities(ctx, episodeID)
+}
+
 // SetPostRefreshHook installs the post-refresh re-link hook. It exists in
 // addition to WithPostRefreshHook because the hook (which drives the series
 // scanner) is only available after the scanner has been constructed from the

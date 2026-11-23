@@ -17,6 +17,9 @@ func (s *UnpackingSpec) IsSatisfiedBy(_ context.Context, c *ImportCandidate) *Im
 
 	unpackPatterns := []string{".!qb", ".part", "_unpack", ".downloading"}
 	for _, pat := range unpackPatterns {
+		if pat == ".part" && !hasIncompletePartMarker(name) {
+			continue
+		}
 		if strings.HasSuffix(name, pat) || strings.Contains(name, pat+".") {
 			return &ImportRejection{
 				Reason:  RejectionUnpacking,
@@ -34,4 +37,23 @@ func (s *UnpackingSpec) IsSatisfiedBy(_ context.Context, c *ImportCandidate) *Im
 	}
 
 	return nil
+}
+
+func hasIncompletePartMarker(name string) bool {
+	if strings.HasSuffix(name, ".part") {
+		return true
+	}
+	for {
+		_, rest, found := strings.Cut(name, ".part.")
+		if !found {
+			return false
+		}
+		// Part.1 is a numbered title or media part, not a transfer marker.
+		// Keep checking so a later .part marker still blocks incomplete files.
+		number, tail, separated := strings.Cut(rest, ".")
+		if !separated || tail == "" || number == "" || strings.Trim(number, "0123456789") != "" {
+			return true
+		}
+		name = rest
+	}
 }

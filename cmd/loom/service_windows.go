@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"golang.org/x/sys/windows/svc"
+
+	"github.com/ebenderooock/loom/internal/updater"
 )
 
 // cmdService is deliberately separate from serve: SCM must start this command,
@@ -32,15 +34,27 @@ func cmdService(args []string) error {
 	if !isService {
 		return fmt.Errorf("service must be launched by SCM; use 'serve' in a console")
 	}
+	return svc.Run("Loom", &loomService{
+		serve: func(ctx context.Context) error {
+			// Recover and join the protected job before any service-owned I/O.
+			if err := updater.StartupGuard(ctx); err != nil {
+				return err
+			}
+			return runServiceWorker(ctx, *configPath, *logPath)
+		},
+	})
+}
+
+func runServiceWorker(ctx context.Context, configPath, logPath string) error {
 	// Unlike ordinary serve, fail on a missing/unreadable explicit config rather
 	// than silently starting with working-directory defaults.
-	if _, err := os.ReadFile(*configPath); err != nil {
+	if _, err := os.ReadFile(configPath); err != nil {
 		return fmt.Errorf("read service config: %w", err)
 	}
-	if err := os.Chdir(filepath.Dir(*configPath)); err != nil {
+	if err := os.Chdir(filepath.Dir(configPath)); err != nil {
 		return fmt.Errorf("set service working directory: %w", err)
 	}
-	logFile, err := os.OpenFile(*logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
 	if err != nil {
 		return fmt.Errorf("open service log: %w", err)
 	}
@@ -49,11 +63,7 @@ func cmdService(args []string) error {
 	os.Stdout, os.Stderr = logFile, logFile
 	defer func() { os.Stdout, os.Stderr = oldOut, oldErr }()
 
-	return svc.Run("Loom", &loomService{
-		serve: func(ctx context.Context) error {
-			return cmdServe(ctx, []string{"--config", *configPath})
-		},
-	})
+	return cmdServe(ctx, []string{"--config", configPath})
 }
 
 type loomService struct {

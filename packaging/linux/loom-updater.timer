@@ -1,0 +1,12 @@
+# Managed by Loom native updater installer
+[Unit]
+Description=Check opted-in Loom native updates hourly
+
+[Timer]
+OnCalendar=hourly
+RandomizedDelaySec=15min
+Persistent=true
+Unit=loom-updater.service
+
+[Install]
+WantedBy=timers.target

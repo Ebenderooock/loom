@@ -83,8 +83,8 @@ func TestTVDBUnresolvableSlugDoesNotCreateCollection(t *testing.T) {
 func TestImportLinksUseCanonicalIDs(t *testing.T) {
 	ctx := context.Background()
 	s := NewService(testStore(t), nil, nil, nil, nil, nil)
-	s.fetch = func(_ context.Context, ref Source) (string, []Member, error) {
-		return ref.Key(), nil, nil
+	s.fetch = func(_ context.Context, ref Source) (string, []Member, string, error) {
+		return ref.Key(), nil, "", nil
 	}
 	for _, tc := range []struct {
 		provider, kind, link, id string
@@ -121,6 +121,24 @@ func TestAttachSourceNormalizesBeforeIdentityLookup(t *testing.T) {
 		if rec.Code != tc.status {
 			t.Fatalf("attach status %d, want %d: %s", rec.Code, tc.status, rec.Body.String())
 		}
+	}
+}
+
+func TestAttachSourceRejectsProviderMetadata(t *testing.T) {
+	store := testStore(t)
+	c := saved(t, store, &Collection{Name: "Existing"})
+	router := Router(NewService(store, nil, nil, nil, nil, nil))
+	for _, field := range []string{`"poster_path":"/source.jpg"`, `"last_sync":"today"`, `"error":"failed"`} {
+		t.Run(field, func(t *testing.T) {
+			body := `{"provider":"tmdb","kind":"list","external_id":"https://www.themoviedb.org/list/8924",` + field + `}`
+			req := httptest.NewRequest(http.MethodPost, "/"+c.ID+"/sources", strings.NewReader(body))
+			req = req.WithContext(auth.WithIdentity(req.Context(), &auth.Identity{UserID: 1, Roles: []string{"admin"}}))
+			rec := httptest.NewRecorder()
+			router.ServeHTTP(rec, req)
+			if rec.Code != http.StatusBadRequest {
+				t.Fatalf("attach status %d, want %d: %s", rec.Code, http.StatusBadRequest, rec.Body.String())
+			}
+		})
 	}
 }
 
@@ -242,11 +260,13 @@ func TestRefreshRetainsOverridesExclusionsAndOtherSources(t *testing.T) {
 	kept := title("series", "3")
 	kept.Sources = []string{other.Key()}
 	c := saved(t, store, &Collection{Name: "Mixed", Sources: []Source{ref, other}, Members: []Member{local, excluded, removed, kept}})
-	s := &Service{store: store, fetch: func(_ context.Context, source Source) (string, []Member, error) {
+	c.Cover = &Cover{Mode: "source", SourceKey: ref.Key()}
+	c.Sources[1].PosterPath = "/retained.jpg"
+	s := &Service{store: store, fetch: func(_ context.Context, source Source) (string, []Member, string, error) {
 		if source.Provider == "imdb" {
-			return "", nil, fmt.Errorf("private provider error with secret")
+			return "", nil, "", fmt.Errorf("private provider error with secret")
 		}
-		return "Provider title", []Member{title("movie", "1"), title("movie", "2"), title("series", "1")}, nil
+		return "Provider title", []Member{title("movie", "1"), title("movie", "2"), title("series", "1")}, "/updated.jpg", nil
 	}}
 	if err := s.Refresh(ctx, c); err != nil {
 		t.Fatal(err)
@@ -269,6 +289,9 @@ func TestRefreshRetainsOverridesExclusionsAndOtherSources(t *testing.T) {
 	if got.Sources[0].LastSync == "" || got.Sources[1].Error == "" || strings.Contains(got.Sources[1].Error, "secret") {
 		t.Fatalf("unsafe/hidden source failure: %#v", got.Sources)
 	}
+	if got.Cover == nil || *got.Cover != *c.Cover || got.Sources[0].PosterPath != "/updated.jpg" || got.Sources[1].PosterPath != "/retained.jpg" {
+		t.Fatalf("refresh lost artwork or local cover: %#v", got)
+	}
 }
 
 func TestConflictingMappingRefreshDoesNotPartiallyApply(t *testing.T) {
@@ -278,10 +301,10 @@ func TestConflictingMappingRefreshDoesNotPartiallyApply(t *testing.T) {
 	member.ExternalIDs["imdb"] = "tt1"
 	member.Sources = []string{ref.Key()}
 	c := saved(t, store, &Collection{Name: "A", Sources: []Source{ref}, Members: []Member{member}})
-	s := &Service{fetch: func(context.Context, Source) (string, []Member, error) {
+	s := &Service{fetch: func(context.Context, Source) (string, []Member, string, error) {
 		conflict := title("movie", "1")
 		conflict.ExternalIDs["imdb"] = "tt2"
-		return "", []Member{title("movie", "2"), conflict}, nil
+		return "", []Member{title("movie", "2"), conflict}, "", nil
 	}}
 	if err := s.Refresh(ctx, c); err != nil {
 		t.Fatal(err)
@@ -294,9 +317,9 @@ func TestConflictingMappingRefreshDoesNotPartiallyApply(t *testing.T) {
 func TestImportIsExactIdempotentAndErrorsAreVisible(t *testing.T) {
 	ctx, store := context.Background(), testStore(t)
 	calls := 0
-	s := &Service{store: store, fetch: func(context.Context, Source) (string, []Member, error) {
+	s := &Service{store: store, fetch: func(context.Context, Source) (string, []Member, string, error) {
 		calls++
-		return "", nil, fmt.Errorf("secret source response")
+		return "", nil, "", fmt.Errorf("secret source response")
 	}}
 	ref := Source{Provider: "imdb", Kind: "list", ExternalID: "ls1"}
 	first, err := s.Import(ctx, ref)

@@ -35,7 +35,7 @@ func TestExistingSpecialDoesNotUseRegularEpisodeFile(t *testing.T) {
 		e.seriesSvc = specialEpisodeService{specialHasFile: downloaded}
 		got := e.getExistingEpisodeQuality(context.Background(), SearchRequest{
 			MediaType: "episode", MediaID: "show", Season: 0, Episode: 1,
-		})
+		}, nil, nil)
 		if got.HasFile != downloaded {
 			t.Fatalf("special downloaded=%v, got existing=%+v", downloaded, got)
 		}
@@ -197,9 +197,9 @@ func TestMatchQualityDef(t *testing.T) {
 			wantID:  "webdl-2160",
 		},
 		{
-			name:    "resolution-only fallback (unknown source, 720p)",
+			name:    "unknown source assumes WEB-DL, never HDTV (720p)",
 			release: &parser.Release{Source: "", Resolution: 720},
-			wantID:  "hdtv-720",
+			wantID:  "webdl-720",
 		},
 		{
 			name:    "known source without a definition is not relabeled",
@@ -396,8 +396,8 @@ func TestBuildReleaseInfo(t *testing.T) {
 	if ri.Resolution != "1080p" {
 		t.Errorf("resolution: got %q, want %q", ri.Resolution, "1080p")
 	}
-	if ri.Codec != "h265" {
-		t.Errorf("codec: got %q, want %q", ri.Codec, "h265")
+	if ri.Codec != "x265" {
+		t.Errorf("codec: got %q, want %q", ri.Codec, "x265")
 	}
 	if ri.Group != "SPARKS" {
 		t.Errorf("group: got %q, want %q", ri.Group, "SPARKS")
@@ -601,6 +601,34 @@ func TestEvaluateResult_MinFormatScore(t *testing.T) {
 			t.Errorf("expected not rejected, got: %s", sr.RejectReason)
 		}
 	})
+}
+
+func TestEvaluateBodyUsesTesterFormatScores(t *testing.T) {
+	formats := []customformats.CustomFormat{{ID: "scene-web", Specifications: []customformats.Specification{
+		{Implementation: customformats.ImplSource, Fields: map[string]any{"value": "WEB-DL"}},
+		{Implementation: customformats.ImplCodec, Fields: map[string]any{"value": "x264"}},
+		{Implementation: customformats.ImplQuality, Fields: map[string]any{"value": "webdl-1080p"}},
+	}}}
+	engine := newEngine()
+	engine.cfEngine = customformats.NewEngine(formats)
+	defs := []*movies.QualityDefinition{{ID: "web", Name: "webdl-1080p", Source: "Web", Resolution: "1080p"}}
+	scores := map[string]int{"scene-web": 100}
+	profile := &qualityprofiles.QualityProfile{MinFormatScore: 100}
+	for _, title := range []string{
+		"The Body 2026 S01E07 1080p WEB H264-CAKES EZTV",
+		"the.body.2026.s01e07.1080p.web.h264-cakes[EZTVx.to].mkv",
+	} {
+		t.Run(title, func(t *testing.T) {
+			release := engine.evaluateResult(SearchRequest{MediaType: "episode", Title: "The Body", Season: 1, Episode: 7},
+				indexers.Result{Title: title, Seeders: intPtr(10)}, defs,
+				map[string]int{"web": 0}, map[string]bool{"web": true}, scores, profile, existingQuality{}, -1, false)
+			matches := engine.cfEngine.ScoreRelease(customformats.ParseReleaseName(title))
+			testScore := customformats.ApplyScores(matches, scores)
+			if release.Rejected || release.FormatScore != 100 || release.FormatScore != testScore {
+				t.Fatalf("acquisition and tester must agree: rejected=%t reason=%s score=%d testScore=%d", release.Rejected, release.RejectReason, release.FormatScore, testScore)
+			}
+		})
+	}
 }
 
 // ── verifyIdentity tests ──────────────────────────────────────────────────────

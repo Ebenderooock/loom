@@ -1,5 +1,59 @@
 # API
 
+## Library storage readings
+
+Library responses include `disk_space.total_bytes`, `free_bytes`, `used_bytes`
+and optional `volume_id`. Treat the ID as opaque and local to the Loom host:
+it is not a persistent global disk identifier. `size_bytes` is the sum of
+scanned library file sizes, not the volume's used space. Radarr/Sonarr
+compatibility responses retain their existing shape.
+
+The dashboard groups these readings on the client; no aggregated storage route
+is added. See [storage](storage.md#dashboard-library-storage) for the estimated
+NAS grouping rule and limitations.
+
+## Native update notices
+
+All update routes require an authenticated administrator, including reads and
+network checks. Missing auth wiring fails closed.
+
+- `GET /api/v1/updates`: saved `settings` (`channel`, `preleaseOptIn`,
+  `autoInstall`, `postgresDedicatedAck`), `isPostgres`, effective `canAutoInstall`, `installationNotice`, and
+  `verificationConfigured`.
+- `PUT /api/v1/updates`: replace preferences with the settings fields.
+  Stable is the default. Prelease requires `preleaseOptIn: true`; returning
+  to Stable requires clearing it. Invalid settings return 400.
+  `autoInstall: true` requires an enrolled, eligible Linux/systemd or macOS/launchd SQLite helper
+  and a compiled publisher key; otherwise it returns 409. Storage failures return 500.
+  PostgreSQL administrators may separately acknowledge a dedicated database;
+  this does not enable automatic installation. The database-local record can
+  revive after switching away and back and cannot yet authorize an update.
+- `POST /api/v1/updates/check`: demand-driven, cached signed release notice for
+  the **saved** channel. Returns `currentVersion`, optional `version`, `tag`, `sourceSha`,
+  `available`, `verified`, `url`, `checkedAt`, `nextCheck`, and optional
+  `message`. Untrusted/unavailable metadata returns 200 with `verified: false`,
+  no candidate version and manual-update guidance. No binary is downloaded.
+  `?force=true` (the **Check for updates** button) bypasses the hourly cache,
+  at most once per channel per minute and never while GitHub is rate limiting;
+  forced responses add `manualCheckAfter` and `throttled`.
+
+These are notice/settings endpoints, not an update executor; no apply endpoint
+exists. See [native updates](native-updates.md) for signature and cache behavior,
+the provisioned production public trust key, and the bounded Linux
+snapshot/helper safety gates. Signed manifests are still pending.
+The installed helper has a separate fixed, token-authenticated runtime/readiness
+endpoint; it accepts no update commands, paths or URLs.
+
+## Notification connection update events
+
+Notification connections have separate boolean `on_application_update` and
+`on_update_available` subscriptions. `on_update_available` defaults to false
+and signals a verified new release; it does not report unsigned or unverified
+release information. Set it in `POST /api/v1/notifications` or
+`PUT /api/v1/notifications/{id}`; connection responses include it. Omitting it
+from an update leaves the saved value unchanged. The existing
+`on_application_update` subscription is independent.
+
 ## Provider/account budgets
 
 `GET /api/v1/indexers/provider-budgets` returns `{ "budgets": [...] }` with
@@ -23,6 +77,21 @@ page is the human summary.
 Music capability routes are available when the `music` feature is enabled.
 See the [Music guide](music.md) for profile behavior and examples.
 
+## Collection covers
+
+`PATCH /api/v1/collections/{id}` accepts an optional `cover` alongside the
+required `name`, `overview`, and current `revision`. Administrators can choose
+`{"mode":"mosaic"}`, `{"mode":"source","source_key":"tmdb:collection:10"}`, or
+`{"mode":"member","member_id":"<collection-member-id>"}`. Source and member
+choices must reference attached, available artwork; member choices must be
+active. Omitting `cover` preserves the current choice. Stale revisions return
+409, invalid choices return 400, and non-admin writes return 403.
+
+Collection reads include the saved cover and optional source `poster_path`
+captured during import or refresh. Cover preferences survive refreshes; the UI
+reports unavailable selected artwork and falls back to a mosaic. See
+[Collections](collections.md#collection-covers).
+
 ## Default quality profiles
 
 New movie and series additions, including Discovery, use the **Any** quality
@@ -41,6 +110,39 @@ a title, unless an active profile actually has the ID `default`. Movie and serie
 responses expose `qualityProfileMissing`, computed against both current and
 active legacy profiles, so existing blank, deleted or dangling selections are
 highlighted without incorrectly flagging valid legacy profiles.
+
+## Quality-profile format scores
+
+Quality-profile requests and responses use `format_items` entries shaped as
+`{"format_id":"saved-format-id","score":100}`. `format_id` is required and must be
+unique within the profile; `custom_format_id` is a tester match field, not a
+profile score field. Scores are signed integers.
+
+Creating or updating a profile, or replacing its `/format-scores`, rejects
+missing, blank or duplicate format IDs with 400. Profile settings and score
+assignments save atomically: a failed request leaves existing data unchanged
+and does not leave a partially created profile.
+
+## Custom-format testing
+
+`POST /api/v1/custom-formats/test` accepts `title` and an optional saved
+`quality_profile_id`. It returns parsed `release` metadata, matching formats
+in `matches`, and their total `score`. With a profile, each match receives that
+profile's signed points, and the response includes `quality_profile_id`,
+`minimum_score`, and `meets_minimum`. Missing profiles return 404.
+
+```json
+{
+  "title": "the.body.2026.s01e07.1080p.web.h264-cakes[EZTVx.to].mkv",
+  "quality_profile_id": "your-saved-profile-id"
+}
+```
+
+Without a profile, testing only answers which formats match; compatibility
+`score: 0` is not a calculated profile score. Unassigned formats add zero points.
+Passing the format minimum does not make an excluded base quality acceptable.
+Post-download file conditions are evaluated against file metadata during import,
+not inferred from a title-only test. See [release matching](release-matching.md#custom-format-points-and-imports).
 
 ## Manual media imports
 
@@ -71,7 +173,9 @@ Legacy `POST /api/v1/imports/scan` and `/api/v1/imports/preview` accept `{path}`
 include audio as well as video files. Music scan results use `media_type:
 "music"`, a **track ID** for `matched_media_id`, and optional
 `detected_artist`, `detected_album`, `detected_track`, and `detected_disc` tags.
-Scanning does not move files.
+Scanning does not move files. Preview entries include `warnings` for quality
+profile problems that do not block the import, and use `action: "review"` when
+the file would replace a better one and needs approval first.
 
 `POST /api/v1/imports/manual` accepts `{path}` for automatic matching.
 `POST /api/v1/imports/manual-match` accepts `{path, media_type, media_id}`.
@@ -101,6 +205,51 @@ _semantically-extended_: clients that work against the upstream apps
 should work against Loom unchanged.
 
 ## Routes (current)
+
+### Movie and series quick actions
+
+These administrator-only routes use `movies` or `series` as the collection and
+the Loom title ID as `{id}`:
+
+| Method | Route suffix | Result |
+|---|---|---|
+| GET | `/api/v1/{collection}/{id}/actions` | Folder and action availability; no requests to media servers. |
+| POST | `/api/v1/{collection}/{id}/rescan-library` | Discover eligible videos in the verified title folder and update registrations and availability. |
+| POST | `/api/v1/{collection}/{id}/sync-plex` | Request library refreshes on enabled Plex connections. |
+| POST | `/api/v1/{collection}/{id}/sync-jellyfin` | Request library refreshes on enabled Jellyfin connections. |
+
+```bash
+curl -H "X-Api-Key: $LOOM_API_KEY" \
+  http://localhost:1925/api/v1/movies/MOVIE_ID/actions
+curl -X POST -H "X-Api-Key: $LOOM_API_KEY" \
+  http://localhost:1925/api/v1/movies/MOVIE_ID/rescan-library
+curl -X POST -H "X-Api-Key: $LOOM_API_KEY" \
+  http://localhost:1925/api/v1/movies/MOVIE_ID/sync-plex
+curl -X POST -H "X-Api-Key: $LOOM_API_KEY" \
+  http://localhost:1925/api/v1/movies/MOVIE_ID/sync-jellyfin
+```
+
+Availability includes nullable `folderPath`, `unavailableReason`,
+`rescanUnavailableReason`, `plexUnavailableReason` and
+`jellyfinUnavailableReason`, plus booleans `plexConfigured` and
+`jellyfinConfigured`. Hide each sync action unless its corresponding boolean
+is true; show it disabled when its unavailable reason is non-null.
+
+Missing status or absent registrations do not block rescan. The request resolves
+the folder again, discovers eligible new files, and returns a scan result with
+`status`, `totalFiles`, `matched`, `imported`, `unmatched` and optional `errors`.
+An HTTP 200 result can contain file-level errors with `status: "failed"`.
+Missing, shared, ambiguous or out-of-library folders return 409; no broad
+library scan or download is started. Scanning unavailable returns 503.
+
+Sync still requires complete registered files and a configured, enabled
+connection of the selected type. Success returns HTTP 200 with
+`{"message":"Jellyfin library refresh requested","connections":1}` (or the Plex
+equivalent). This confirms acceptance, not completed indexing. Refreshes are
+library-wide, do not send Loom paths, and do not depend on Notify on Import.
+Unavailable media or connections return 409; any failed server refresh returns
+502, including partial success. These actions require authentication (401)
+and administrator access (403).
 
 ### Appearance
 
@@ -411,6 +560,10 @@ grab it anyway; interactive search exposes this as **Ignore blocklist**.
 `POST /api/v1/autosearch/evaluate` accepts the same flag. Automatic search never
 ignores the blocklist. Releases are blocklisted automatically when a download
 stalls (see `downloads.stall_action` in [configuration](configuration.md)).
+
+A successful grab for a movie or episode may include `quality_warning` when the
+release is lower quality than the file already in the library. The grab still
+proceeds, but its import waits for approval in **Activity → Reviews**.
 
 `SystemStatus` is `{ version, commit, buildDate, engine }` — the database
 engine name is included so readiness tooling can confirm what backend

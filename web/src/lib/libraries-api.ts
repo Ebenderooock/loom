@@ -11,6 +11,7 @@ export interface DiskSpace {
   total_bytes: number;
   free_bytes: number;
   used_bytes: number;
+  volume_id?: string;
 }
 
 export interface Library {
@@ -28,6 +29,7 @@ export interface Library {
   accessible: boolean;
   disk_space: DiskSpace;
   file_count: number;
+  size_bytes?: number;
 }
 
 export interface LibraryFile {

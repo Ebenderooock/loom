@@ -6,8 +6,8 @@ import { apiFetch } from "@/lib/fetch";
 // ---------- Types ----------
 
 export interface FormatItem {
-  custom_format_id: string;
-  format_id?: string;
+  format_id: string;
+  profile_id?: string;
   score: number;
 }
 
@@ -18,6 +18,7 @@ export interface QualityProfile {
   items: string;
   upgrade_allowed: boolean;
   min_format_score?: number;
+  cutoff_format_score?: number;
   format_items: FormatItem[];
   created_at?: string;
   updated_at?: string;
@@ -29,6 +30,7 @@ export interface CreateQualityProfileRequest {
   items: string;
   upgrade_allowed: boolean;
   format_items?: FormatItem[];
+  min_format_score?: number;
 }
 
 // ---------- HTTP helpers ----------

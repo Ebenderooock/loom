@@ -112,6 +112,7 @@ import {
 import { useAPIKeys, useCreateAPIKey } from "@/lib/api-keys-api";
 import { DownloadForm } from "@/components/downloads/download-form";
 import { AppearanceSettings } from "@/components/appearance-settings";
+import { UpdateSettings } from "@/components/update-settings";
 
 // ─── Types ──────────────────────────────────────────────────────────────
 
@@ -760,6 +761,7 @@ export function GeneralPanel() {
 
   return (
     <div className="space-y-6">
+      <UpdateSettings />
       {/* Application Info */}
       <Card className="border-border bg-card">
         <CardContent className="space-y-4 p-6">

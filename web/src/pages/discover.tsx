@@ -28,9 +28,12 @@ export function DiscoverPage() {
   React.useEffect(() => setHeader({ title: "Discover" }), [setHeader]);
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="space-y-6 p-4 sm:p-6">
       <Tabs defaultValue="recommendations">
-        <TabsList className="h-auto flex-wrap" aria-label="Discovery sections">
+        <TabsList
+          className="h-auto flex-wrap border bg-card p-2 shadow-sm"
+          aria-label="Discovery sections"
+        >
           <TabsTrigger value="recommendations">Grow your library</TabsTrigger>
           <TabsTrigger value="lists">Import Lists</TabsTrigger>
         </TabsList>
@@ -39,7 +42,10 @@ export function DiscoverPage() {
         </TabsContent>
         <TabsContent value="lists" className="mt-6">
           <Tabs defaultValue="movie">
-            <TabsList aria-label="Import list media type">
+            <TabsList
+              className="border bg-card p-2 shadow-sm"
+              aria-label="Import list media type"
+            >
               <TabsTrigger value="movie">Movies</TabsTrigger>
               <TabsTrigger value="series">TV shows</TabsTrigger>
             </TabsList>
@@ -120,14 +126,14 @@ function DiscoverGrid({ mediaType }: { mediaType: MediaType }) {
   }
   if (isError) {
     return (
-      <p className="text-sm text-destructive">
+      <p className="rounded-xl border bg-card p-4 text-sm text-destructive">
         {error?.message ?? "Failed to load discover feed."}
       </p>
     );
   }
   if (!items || items.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
+      <div className="flex flex-col items-center justify-center gap-3 rounded-xl border bg-card px-4 py-16 text-center">
         <Compass className="h-10 w-10 text-muted-foreground" />
         <p className="text-sm font-medium">Nothing to discover yet</p>
         <p className="max-w-md text-xs text-muted-foreground">
@@ -145,7 +151,7 @@ function DiscoverGrid({ mediaType }: { mediaType: MediaType }) {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2 rounded-xl border bg-card p-4 shadow-sm">
         {lists.length > 1 && (
           <Select value={listFilter} onValueChange={setListFilter}>
             <SelectTrigger className="h-9 w-[160px] text-xs">
@@ -241,7 +247,7 @@ function DiscoverGrid({ mediaType }: { mediaType: MediaType }) {
       </div>
 
       {visible.length === 0 ? (
-        <p className="py-12 text-center text-sm text-muted-foreground">
+        <p className="rounded-xl border bg-card p-4 py-12 text-center text-sm text-muted-foreground">
           No items match the selected filters.
         </p>
       ) : (
@@ -301,7 +307,6 @@ function DiscoverCard({
         episodeStats={local?.episodeStats}
         monitoringStatus={local?.monitoringStatus}
         onOpen={() => setView("details")}
-        onAdd={() => setView("add")}
         disabled={!providerId}
       />
       {inLibrary && library.error && (

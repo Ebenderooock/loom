@@ -65,6 +65,7 @@ function setup(
 ) {
   let jobs = initialJobs;
   const batches: string[][] = [];
+  const dismissals: ({ ids: string[] } | { all_inactive: true })[] = [];
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
     const url = String(input);
     if (url === "/api/v1/imports/jobs") {
@@ -75,6 +76,18 @@ function setup(
         { error: "awaiting safety review approval" },
         { status: 409 },
       );
+    }
+    if (url === "/api/v1/imports/jobs/dismiss") {
+      const request = JSON.parse(String(init?.body)) as
+        { ids: string[] } | { all_inactive: true };
+      dismissals.push(request);
+      const before = jobs.length;
+      jobs = jobs.filter(
+        (job) =>
+          ["queued", "importing", "retry_pending"].includes(job.status) ||
+          ("ids" in request && !request.ids.includes(job.id)),
+      );
+      return Response.json({ dismissed: before - jobs.length });
     }
     if (url.startsWith("/api/v1/imports/jobs/")) {
       return Response.json({
@@ -154,7 +167,7 @@ function setup(
       <ImportManager />
     </QueryClientProvider>,
   );
-  return { batches, client, ...view };
+  return { batches, dismissals, client, ...view };
 }
 
 async function scan() {
@@ -169,6 +182,139 @@ async function scan() {
 }
 
 describe("ImportManager", () => {
+  it("dismisses individual and selected inactive entries, but never offers dismissal for active jobs", async () => {
+    const jobs: ImportJob[] = [
+      "failed",
+      "pending_review",
+      "queued",
+      "importing",
+      "retry_pending",
+    ].map((status, index) => ({
+      id: `job-${index}`,
+      source_path: `/deleted/download-${index}.mkv`,
+      status: status as ImportJob["status"],
+      attempts: 1,
+      total_files: 1,
+      processed_files: 1,
+      imported_files: 0,
+      failed_files: 1,
+      created_at: "2026-01-01T00:00:00Z",
+      updated_at: "2026-01-01T00:00:00Z",
+    }));
+    const { dismissals } = setup([], jobs);
+    const user = userEvent.setup();
+    await user.click(
+      await screen.findByRole("checkbox", {
+        name: "Select import /deleted/download-0.mkv",
+      }),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Dismiss selected (1)" }),
+    );
+    await waitFor(() => expect(dismissals).toEqual([{ ids: ["job-0"] }]));
+    await waitFor(() =>
+      expect(
+        screen.queryByText("/deleted/download-0.mkv"),
+      ).not.toBeInTheDocument(),
+    );
+    await user.click(
+      screen.getByRole("button", {
+        name: "Dismiss import /deleted/download-1.mkv",
+      }),
+    );
+    await waitFor(() => expect(dismissals).toHaveLength(2));
+    for (const index of [2, 3, 4]) {
+      expect(
+        screen.getByText(`/deleted/download-${index}.mkv`),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByRole("checkbox", {
+          name: `Select import /deleted/download-${index}.mkv`,
+        }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", {
+          name: `Dismiss import /deleted/download-${index}.mkv`,
+        }),
+      ).not.toBeInTheDocument();
+    }
+    expect(dismissals[1]).toEqual({ ids: ["job-1"] });
+  });
+
+  it("clears all inactive entries, including hidden successful imports", async () => {
+    const jobs: ImportJob[] = (["failed", "imported", "queued"] as const).map(
+      (status, index) => ({
+        id: `job-${index}`,
+        source_path: `/downloads/download-${index}.mkv`,
+        status,
+        attempts: 1,
+        total_files: 1,
+        processed_files: 1,
+        imported_files: status === "imported" ? 1 : 0,
+        failed_files: status === "failed" ? 1 : 0,
+        created_at: "2026-01-01T00:00:00Z",
+        updated_at: "2026-01-01T00:00:00Z",
+      }),
+    );
+    const { dismissals } = setup([], jobs);
+    const user = userEvent.setup();
+    await screen.findByText("/downloads/download-0.mkv");
+    await user.click(screen.getByRole("button", { name: "Clear inactive" }));
+    await screen.findByText("2 inactive import entries dismissed.");
+    expect(dismissals).toEqual([{ all_inactive: true }]);
+    expect(screen.getByText("/downloads/download-2.mkv")).toBeInTheDocument();
+    await user.click(
+      screen.getByRole("checkbox", {
+        name: "Show recent successful imports",
+      }),
+    );
+    expect(
+      screen.queryByText("/downloads/download-1.mkv"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("surfaces dismissal failures without removing queue entries", async () => {
+    setup(
+      [],
+      [
+        {
+          id: "job-failed",
+          source_path: "/downloads/failure.mkv",
+          status: "failed",
+          attempts: 1,
+          total_files: 1,
+          processed_files: 1,
+          imported_files: 0,
+          failed_files: 1,
+          created_at: "2026-01-01T00:00:00Z",
+          updated_at: "2026-01-01T00:00:00Z",
+        },
+      ],
+    );
+    const original = vi.mocked(globalThis.fetch).getMockImplementation();
+    if (!original) throw new Error("Missing fetch fixture");
+    vi.mocked(globalThis.fetch).mockImplementation((input, init) =>
+      String(input) === "/api/v1/imports/jobs/dismiss"
+        ? Promise.resolve(
+            Response.json(
+              { error: "import job is still active" },
+              { status: 409 },
+            ),
+          )
+        : original(input, init),
+    );
+    const user = userEvent.setup();
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Dismiss import /downloads/failure.mkv",
+      }),
+    );
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "import job is still active",
+    );
+    expect(screen.getByText("/downloads/failure.mkv")).toBeInTheDocument();
+  });
+
   it("cancels the scan, drains unread cancelled pages, and preserves queued imports and selection", async () => {
     let cancelled = false;
     const getPage = vi.fn(async (offset: number) => {

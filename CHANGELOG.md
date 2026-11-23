@@ -7,10 +7,114 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+These changes are being prepared for the next prerelease. Back up your data
+before upgrading: prerelease builds may migrate the database or trigger
+automation, and returning to an older version may require restoring that backup.
+
+### Added
+
+- Add an experimental PostgreSQL updater candidate for preflight checks and
+  snapshots. Automatic PostgreSQL updates remain disabled; important safety
+  and rollback work is still incomplete.
+- Add opt-in notifications when the running Loom version changes and when a
+  verified update check discovers a new release. Provision the publisher public
+  trust root; release alerts also require matching signed manifests.
+- Add per-entry and selected import-queue dismissal plus Clear inactive. Keep
+  queued/running/retrying work, media files, downloads and import history intact.
+- Add matcher-backed custom quality tiers with per-profile allowance, ordering,
+  cutoff and stable file identities. Search, testing, previews and imports use
+  the same tier matching independently of custom-format scores.
+- Add Sync with Jellyfin to movie and series quick actions. Plex and Jellyfin
+  sync actions appear only when their respective connection is enabled and
+  configured, and request a library refresh without downloading media.
+- Let administrators choose a saved collection cover: an adaptive poster
+  mosaic, an attached source's artwork, or a title's poster. Mosaic grids grow
+  while preserving the overall 2:3 ratio, uncropped posters, and empty cells.
+- Add administrator settings for update notifications and release channels.
+  Stable is the default; the prerelease channel requires explicit opt-in.
+  Experimental Linux and macOS update helpers include backups, health checks
+  and rollback, but production activation still requires signed releases and
+  native upgrade and reboot validation. Windows and PostgreSQL remain manual-only.
+- Add a disabled Windows updater candidate for future testing. Windows
+  production archives remain manual-only until native safety and reboot
+  recovery checks are complete.
+- Build seven native archive targets for `prelease/X.Y.Z` branch CI (also the
+  `prerelease/` alias), without publishing/signing credentials. Native Release
+  publication and manifest signing still require separate publisher changes.
+
 ### Fixed
 
 - Accept TMDB, TVDB, and IMDb collection links when importing or attaching a
   source, including TVDB list slugs.
+- Restore a movie's file record when a previously deleted file is imported
+  again, so the library reflects the newly imported file.
+- Make **Check for updates** bypass the hourly update-check cache so newly
+  published releases appear immediately. Manual checks are limited to one per
+  channel per minute, reuse ETags, never call GitHub while it is rate limiting,
+  and show when the next manual check is allowed. Automatic checks keep the
+  one-hour cache.
+- Harden the disabled Windows updater candidate's journal so recovery does not
+  replay a completed rollback or undo a committed update after a helper restart.
+  Refuse quiescence when process access is denied. Windows automatic
+  installation remains blocked pending native acceptance.
+- Count shared library storage once on the dashboard. Show per-volume free
+  space, labelled library and other-usage segments, and low-space warnings.
+  Matching NAS capacity readings are grouped with an explicit estimate notice.
+- Resize IMDb import-list posters for display to reduce Discover loading and
+  decoding costs. Distinguish titles not in the library from missing files.
+- Keep Discover, Collections, and Requests sections readable over custom
+  background images with opaque panel surfaces. Simplify Discover cards to
+  poster, status, title, and year, with compact translucent dismissal controls
+  and no redundant detail buttons.
+- Decide release quality once at grab time and reuse it at import, so imports
+  no longer reject releases that search accepted. Search and import share one
+  quality detector. Release names with a resolution but no source, such as
+  `1080p HEVC x265`, are assumed WEB-DL (previously search guessed HDTV and
+  import rejected them as `unknown-1080p`) and are labelled "assumed". DVD
+  imports now match the DVD quality.
+- Stop import from blocking files on quality. Profile, cutoff, disabled-upgrade
+  and custom-format score problems are now warnings in the workflow timeline and
+  import preview, including for downloads Loom did not grab. Releases you
+  download manually override the quality profile and are flagged when outside
+  the profile or below the cutoff.
+- Hold imports that would replace a better file in Activity → Reviews instead
+  of rejecting them. Approving replaces the file and resumes the import;
+  grabbing a lower-quality release warns that approval will be needed.
+- Stop treating numbered title segments such as `Breaking.Dawn.Part.1` as
+  unfinished downloads. Keep temporary-file suffix and unpacking-folder checks.
+- Honor an allowed Unknown quality tier for first imports with a known resolution
+  but no source, such as `1080p HEVC` releases. Keep the detected `unknown-1080p`
+  metadata and require review before an unknown-quality file replaces a known
+  one.
+- Fix creating and editing quality profiles with multiple custom-format scores
+  by sending the correct format IDs. Reject missing or duplicate IDs before
+  replacing scores, roll back failed saves, and let profiles recover from invalid
+  score entries left by earlier failed saves.
+- Apply assigned custom-format points and minimum scores during movie and
+  episode imports and previews. Share source, codec and quality metadata between
+  format testing, acquisition and imports, and enforce post-download file rules.
+- Let the custom-format tester use a saved profile's actual points and minimum
+  instead of presenting unconfigured zeroes as a meaningful score. Keep custom
+  formats reachable in the quality-profile dialog as more qualities are selected.
+- Keep title-folder rescans available for missing movies and series. Discover
+  manually added library files, repair stale registrations and availability,
+  and refresh quick-action eligibility after scanning while preserving folder
+  containment and incomplete-file safeguards.
+- Apply the global media card size to collection grids and their members.
+  Combined collection posters now use the same dimensions as library posters.
+- Recognize resolution-tagged scene `WEB` releases (such as `1080p WEB H264`)
+  as WebDL so imports no longer reject them as unknown quality.
+- Keep replacement destinations continuously available to macOS readers during
+  publication and registration rollback by atomically swapping files and using
+  the displaced original directly, without redundant backup hardlinks.
+- Match movie imports without treating IMAX, Dolby Vision, HDR, or other
+  release metadata as part of the title; tolerate catalog punctuation safely.
+- Import provider-confirmed named re-releases, such as Endgame Encore, as
+  separate editions of the original movie. Preserve both copies, keep quality
+  comparisons within each edition, and retain edition tags during renaming.
+- Serialize Discord notifications per webhook and honor the response's
+  `retry_after` value and rate-limit reset headers to avoid repeated
+  rate-limit failures during alert bursts.
 
 ## [0.4.5] - 2026-11-17
 

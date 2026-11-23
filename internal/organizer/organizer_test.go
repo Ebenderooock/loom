@@ -121,6 +121,54 @@ func TestNamingFormatAndTargetPath(t *testing.T) {
 	}
 }
 
+func TestOrganizerPreservesMovieEditions(t *testing.T) {
+	for _, format := range []string{
+		"{Movie Title} ({Release Year})",
+		"{Movie Title} ({Release Year}) {Edition Tags}",
+	} {
+		t.Run(format, func(t *testing.T) {
+			root := t.TempDir()
+			movie := &movies.Movie{ID: "endgame", Title: "Avengers: Endgame", Year: 2019, LibraryID: "lib"}
+			files := make([]*movies.MovieFile, 0, 2)
+			for _, name := range []string{"original.mkv", "movie {edition-Encore}.mkv"} {
+				path := filepath.Join(root, name)
+				if err := os.WriteFile(path, []byte(name), 0o600); err != nil {
+					t.Fatal(err)
+				}
+				files = append(files, &movies.MovieFile{ID: name, MovieID: movie.ID, FilePath: path})
+			}
+			cfg := DefaultNamingConfig()
+			cfg.MovieFileFormat = format
+			mp := &organizerMoviesStub{movie: movie, files: files, libraryPath: root}
+			org := New(mp, &organizerUpdaterStub{}, &organizerConfigStub{cfg: cfg}, testOrganizerLogger())
+			previews, err := org.PreviewMovie(context.Background(), movie.ID)
+			if err != nil || len(previews) != 2 || previews[0].Collision || previews[1].Collision {
+				t.Fatalf("edition preview collision: %+v, %v", previews, err)
+			}
+			results, err := org.OrganizeMovie(context.Background(), movie.ID)
+			if err != nil || len(results) != 2 {
+				t.Fatalf("organize editions: %+v, %v", results, err)
+			}
+			for i, result := range results {
+				if !result.Success {
+					t.Fatalf("edition rename failed: %+v", result)
+				}
+				want := "Avengers - Endgame (2019)"
+				if i == 1 {
+					want += " {edition-Encore}"
+				}
+				if filepath.Base(result.NewPath) != want+".mkv" {
+					t.Fatalf("lost edition identity: %s", result.NewPath)
+				}
+				got, err := os.ReadFile(result.NewPath)
+				if err != nil || string(got) != files[i].ID {
+					t.Fatalf("edition contents changed: %q, %v", got, err)
+				}
+			}
+		})
+	}
+}
+
 func TestOrganizeMovie_MoveMode(t *testing.T) {
 	t.Parallel()
 	tmp := t.TempDir()
@@ -132,7 +180,6 @@ func TestOrganizeMovie_MoveMode(t *testing.T) {
 	if err := os.MkdirAll(library, 0o755); err != nil {
 		t.Fatalf("mkdir library: %v", err)
 	}
-
 	src := filepath.Join(srcDir, "The.Matrix.1999.1080p.BluRay.mkv")
 	if err := os.WriteFile(src, []byte("video"), 0o644); err != nil {
 		t.Fatalf("write src: %v", err)
