@@ -2,6 +2,7 @@ package imports
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"os"
 	"path/filepath"
@@ -39,6 +40,17 @@ func (s *collisionMoviesService) AddMovieFile(_ context.Context, file *movies.Mo
 }
 func (*collisionMoviesService) SetMovieStatus(context.Context, string, movies.MovieStatus) error {
 	return nil
+}
+
+type uniquePathMoviesService struct {
+	*collisionMoviesService
+	db *sql.DB
+}
+
+func (s *uniquePathMoviesService) AddMovieFile(ctx context.Context, file *movies.MovieFile) error {
+	_, err := s.db.ExecContext(ctx, `INSERT INTO movie_files(movie_id, file_path, size, quality) VALUES (?, ?, ?, ?)`,
+		file.MovieID, file.FilePath, file.Size, file.Quality)
+	return err
 }
 
 func newCollisionPipeline(t *testing.T, mode ImportMode) (*ImportPipeline, *collisionMoviesService, string) {
@@ -149,6 +161,87 @@ func TestManualMatchLibraryFailureKeepsMovedFile(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(destDir, "video.mkv")); !os.IsNotExist(err) {
 		t.Fatal("failed registration left destination")
+	}
+}
+
+func TestImportRecoversMovieFilePathConflict(t *testing.T) {
+	for _, tt := range []struct {
+		name, owner string
+		deleted     bool
+		destPresent bool
+		wantSuccess bool
+	}{
+		{name: "deleted matching record", owner: "one", deleted: true, wantSuccess: true},
+		{name: "deleted matching record with existing copy", owner: "one", deleted: true, destPresent: true, wantSuccess: true},
+		{name: "active matching record", owner: "one", wantSuccess: true},
+		{name: "deleted different owner", owner: "other", deleted: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			p, svc, destDir := newCollisionPipeline(t, ImportModeMove)
+			if _, err := p.db.Exec(`CREATE UNIQUE INDEX movie_file_path ON movie_files(file_path)`); err != nil {
+				t.Fatal(err)
+			}
+			dbSvc := &uniquePathMoviesService{collisionMoviesService: svc, db: p.db}
+			p.moviesSvc, p.matcher.moviesSvc = dbSvc, dbSvc
+			source := filepath.Join(t.TempDir(), "Movie.1080p.WEBRip.mkv")
+			dest := filepath.Join(destDir, "Safety Film (2026).mkv")
+			if err := os.MkdirAll(destDir, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(source, []byte("incoming media"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if tt.destPresent {
+				if err := os.WriteFile(dest, []byte("incoming media"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			var deleted any
+			if tt.deleted {
+				deleted = "2026-01-01"
+			}
+			if _, err := p.db.Exec(`INSERT INTO movie_files(movie_id, file_path, size, quality, deleted_at) VALUES (?, ?, 3, 'old', ?)`, tt.owner, dest, deleted); err != nil {
+				t.Fatal(err)
+			}
+			match, err := p.matcher.MatchExact(context.Background(), MediaTypeMovie, "one")
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, err = p.importMatchedWith(context.Background(), &downloads.DownloadCompletedEvent{Title: "Movie"}, match, source, filepath.Base(dest), true)
+			if (err == nil) != tt.wantSuccess {
+				t.Fatalf("import error = %v, want success %v", err, tt.wantSuccess)
+			}
+			var owner, quality string
+			var size, count int
+			var deletedAt sql.NullString
+			if err := p.db.QueryRow(`SELECT movie_id, size, quality, deleted_at FROM movie_files WHERE file_path = ?`, dest).Scan(&owner, &size, &quality, &deletedAt); err != nil {
+				t.Fatal(err)
+			}
+			if err := p.db.QueryRow(`SELECT COUNT(*) FROM movie_files WHERE file_path = ?`, dest).Scan(&count); err != nil {
+				t.Fatal(err)
+			}
+			if count != 1 || owner != tt.owner {
+				t.Fatalf("record ownership or count changed: owner=%q count=%d", owner, count)
+			}
+			if tt.wantSuccess {
+				if deletedAt.Valid || size != len("incoming media") || quality != "webrip-1080p" {
+					t.Fatalf("record not restored: deleted=%v size=%d quality=%q", deletedAt, size, quality)
+				}
+				if data, err := os.ReadFile(dest); err != nil || string(data) != "incoming media" {
+					t.Fatalf("destination = %q, %v", data, err)
+				}
+			} else {
+				if !deletedAt.Valid || size != 3 || quality != "old" {
+					t.Fatalf("other owner's record changed: deleted=%v size=%d quality=%q", deletedAt, size, quality)
+				}
+				if data, err := os.ReadFile(source); err != nil || string(data) != "incoming media" {
+					t.Fatalf("source not preserved: %q, %v", data, err)
+				}
+				if _, err := os.Stat(dest); !os.IsNotExist(err) {
+					t.Fatalf("failed import left destination: %v", err)
+				}
+			}
+		})
 	}
 }
 
