@@ -7,7 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-These changes are being prepared for the next prerelease. Back up your data
+## [0.4.7]
+
+This prerelease includes the changes prepared since 0.4.5. Back up your data
 before upgrading: prerelease builds may migrate the database or trigger
 automation, and returning to an older version may require restoring that backup.
 
