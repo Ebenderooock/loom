@@ -617,6 +617,45 @@ describe("Standalone Collections", () => {
       search: { id: "loom-1" },
     });
   });
+  it.each([
+    [
+      "TMDB movie collection",
+      "https://www.themoviedb.org/collection/10-star-wars",
+      "tmdb",
+      "collection",
+    ],
+    [
+      "TMDB mixed list (v4)",
+      "https://www.themoviedb.org/list/8924-movielist?sort=1",
+      "tmdb",
+      "list",
+    ],
+    ["TVDB list", "https://thetvdb.com/lists/star-wars", "tvdb", "list"],
+    [
+      "IMDb public list",
+      "https://www.imdb.com/list/ls123456789/",
+      "imdb",
+      "list",
+    ],
+  ])("accepts a %s link", async (_type, link, provider, kind) => {
+    page();
+    await userEvent.click(
+      await screen.findByRole("button", { name: "New collection" }),
+    );
+    await userEvent.selectOptions(
+      screen.getByLabelText("Source type"),
+      `${provider}:${kind}`,
+    );
+    await userEvent.type(screen.getByLabelText("Source link or ID"), link);
+    await userEvent.click(
+      screen.getByRole("button", { name: "Import collection" }),
+    );
+    await waitFor(() =>
+      expect(requests[0]?.body).toEqual({
+        source: { provider, kind, external_id: link },
+      }),
+    );
+  });
   it("does not mutate when opening an unsaved recommendation collection", async () => {
     state.search = { tmdb: 99 };
     page();

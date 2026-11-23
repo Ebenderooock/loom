@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Accept TMDB, TVDB, and IMDb collection links when importing or attaching a
+  source, including TVDB list slugs.
+
 ## [0.4.5] - 2026-11-17
 
 Includes changes originally prepared for the unpublished v0.4.2, v0.4.3 and

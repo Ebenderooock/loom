@@ -1211,17 +1211,28 @@ function SourceForm({
           <option value="imdb:list">IMDb public list</option>
         </select>
       </Field>
-      <Field label="External source ID">
+      <Field label="Source link or ID">
         <Input
           required
-          maxLength={20}
+          maxLength={2048}
           value={externalID}
           onChange={(e) => setExternalID(e.target.value)}
-          placeholder={type.startsWith("imdb") ? "ls123456789" : "12345"}
-          pattern={type.startsWith("imdb") ? "ls[0-9]+" : "[1-9][0-9]*"}
+          placeholder={
+            type === "tmdb:collection"
+              ? "https://www.themoviedb.org/collection/10"
+              : type === "tmdb:list"
+                ? "https://www.themoviedb.org/list/12345"
+                : type === "tvdb:list"
+                  ? "https://thetvdb.com/lists/star-wars"
+                  : "https://www.imdb.com/list/ls123456789/"
+          }
         />
       </Field>
       <p className="text-xs text-muted-foreground">
+        Paste the link from the selected provider.{" "}
+        {type === "tmdb:list" &&
+          "Public TMDB lists require a configured v4 read token. "}
+        {type === "imdb:list" && "IMDb lists must be public. "}
         Only exact source references are linked automatically. If this source
         already belongs to another collection, merge the collections instead.
       </p>

@@ -161,7 +161,7 @@ func (p *ImportPipeline) replaceMatched(ctx context.Context, match *MatchResult,
 		return fmt.Errorf("publish replacement: %w", err)
 	}
 	keep = true
-	if err := p.updateReplacementRecord(ctx, match, dest, size, quality); err != nil {
+	if err := p.updateReplacementRecord(ctx, match, dest, size, quality, false); err != nil {
 		current, statErr := os.Lstat(dest)
 		if statErr != nil || !os.SameFile(stagedInfo, current) {
 			return fmt.Errorf("library update failed: %w; destination changed; old file preserved at %s", err, backup)
@@ -183,11 +183,15 @@ func (p *ImportPipeline) replaceMatched(ctx context.Context, match *MatchResult,
 
 // Update the matched record rather than adding a duplicate episode file or
 // retaining stale quality metadata after a same-path replacement.
-func (p *ImportPipeline) updateReplacementRecord(ctx context.Context, match *MatchResult, dest string, size int64, quality string) error {
+func (p *ImportPipeline) updateReplacementRecord(ctx context.Context, match *MatchResult, dest string, size int64, quality string, reviveDeleted bool) error {
 	var query string
 	switch match.MediaType {
 	case MediaTypeMovie:
-		query = `UPDATE movie_files SET size = ?, quality = COALESCE(NULLIF(?, ''), quality) WHERE movie_id = ? AND file_path = ? AND deleted_at IS NULL`
+		if reviveDeleted {
+			query = `UPDATE movie_files SET size = ?, quality = COALESCE(NULLIF(?, ''), quality), deleted_at = NULL WHERE movie_id = ? AND file_path = ?`
+		} else {
+			query = `UPDATE movie_files SET size = ?, quality = COALESCE(NULLIF(?, ''), quality) WHERE movie_id = ? AND file_path = ? AND deleted_at IS NULL`
+		}
 	case MediaTypeEpisode:
 		query = `UPDATE episode_files SET file_size = ?, quality = COALESCE(NULLIF(?, ''), quality) WHERE episode_id = ? AND file_path = ?`
 	default:

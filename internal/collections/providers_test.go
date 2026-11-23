@@ -41,6 +41,8 @@ func TestTVDBSourceMixedMembersEnrichExactIDsWithoutCollisions(t *testing.T) {
 			_, _ = w.Write([]byte(`{"data":{"token":"test"}}`))
 		case "/lists/10/extended":
 			_, _ = w.Write([]byte(`{"status":"success","data":{"id":10,"name":"Mixed","entities":[{"movieId":42,"order":1},{"seriesId":42,"order":2}]}}`))
+		case "/lists/slug/star-wars":
+			_, _ = w.Write([]byte(`{"status":"success","data":{"id":10,"name":"Mixed"}}`))
 		case "/movies/42/extended":
 			_, _ = w.Write([]byte(`{"status":"success","data":{"id":42,"name":"Movie","remoteIds":[{"id":"tt42","sourceName":"IMDB"}]}}`))
 		case "/series/42/extended":
@@ -66,9 +68,13 @@ func TestTVDBSourceMixedMembersEnrichExactIDsWithoutCollisions(t *testing.T) {
 	}))
 	defer server.Close()
 	s := NewService(testStore(t), tmdb.NewClient(tmdb.Config{APIKey: "test", BaseURL: server.URL}), tvdb.NewClient(tvdb.Config{APIKey: "test", BaseURL: server.URL}), movieLibrary{}, showLibrary{}, nil)
-	c, err := s.Import(context.Background(), Source{Provider: "tvdb", Kind: "list", ExternalID: "10"})
+	c, err := s.Import(context.Background(), Source{Provider: "tvdb", Kind: "list", ExternalID: "https://thetvdb.com/lists/star-wars?view=grid"})
 	if err != nil || c.Sources[0].Error != "" || len(c.Members) != 2 {
 		t.Fatalf("import: %#v %v", c, err)
+	}
+	again, err := s.Import(context.Background(), Source{Provider: "tvdb", Kind: "list", ExternalID: "10"})
+	if err != nil || again.ID != c.ID || c.Sources[0].ExternalID != "10" {
+		t.Fatalf("slug and ID did not resolve to same source: %#v %v", again, err)
 	}
 	for _, m := range c.Members {
 		if m.ExternalIDs["tmdb"] != "42" || m.ExternalIDs["tvdb"] != "42" || len(m.Provenance) != 1 {

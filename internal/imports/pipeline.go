@@ -770,7 +770,7 @@ func (p *ImportPipeline) importMatchedWith(ctx context.Context, ev *downloads.Do
 				"dest", destFile, "src", mediaFile)
 			var err error
 			if owned {
-				err = p.updateReplacementRecord(ctx, match, destFile, fileSize, incomingQuality)
+				err = p.updateReplacementRecord(ctx, match, destFile, fileSize, incomingQuality, false)
 			} else {
 				err = p.updateLibrary(ctx, match, destFile, mediaFile, incomingQuality)
 			}
@@ -1218,7 +1218,10 @@ func (p *ImportPipeline) updateLibrary(ctx context.Context, match *MatchResult, 
 		}
 		if err := p.matcher.moviesSvc.AddMovieFile(ctx, mf); err != nil {
 			if strings.Contains(err.Error(), "UNIQUE") || strings.Contains(err.Error(), "unique") {
-				return p.updateReplacementRecord(ctx, match, destFile, info.Size(), mf.Quality)
+				if updateErr := p.updateReplacementRecord(ctx, match, destFile, info.Size(), mf.Quality, true); updateErr != nil {
+					return fmt.Errorf("add movie file: %w (could not update matching record: %w)", err, updateErr)
+				}
+				return nil
 			}
 			return err
 		}
@@ -1230,7 +1233,7 @@ func (p *ImportPipeline) updateLibrary(ctx context.Context, match *MatchResult, 
 			return err
 		}
 		if count > 0 {
-			return p.updateReplacementRecord(ctx, match, destFile, info.Size(), quality)
+			return p.updateReplacementRecord(ctx, match, destFile, info.Size(), quality, false)
 		}
 		ef := &series.EpisodeFile{
 			ID:        uuid.New().String(),

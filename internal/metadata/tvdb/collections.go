@@ -5,12 +5,28 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 )
 
 // RemoteID is TVDB's explicitly declared cross-provider title identifier.
 type RemoteID struct {
 	ID         string `json:"id"`
 	SourceName string `json:"sourceName"`
+}
+
+// ResolveListSlug obtains the canonical list ID from TVDB's API.
+func (c *Client) ResolveListSlug(ctx context.Context, slug string) (int, error) {
+	var out ListRecord
+	if slug == "" {
+		return 0, fmt.Errorf("invalid TVDB list slug")
+	}
+	if err := c.extendedJSON(ctx, "/lists/slug/"+url.PathEscape(slug), &out); err != nil {
+		return 0, err
+	}
+	if out.ID <= 0 {
+		return 0, fmt.Errorf("TVDB incomplete list response")
+	}
+	return out.ID, nil
 }
 
 // ListRecord describes a TVDB movie/show list and its exact entities.
